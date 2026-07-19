@@ -88,9 +88,9 @@ static WAR_fn_Time_Ctor_t           s_war_TimeCtor         = nullptr;
 
 // Runtime type-id dwords (CRC values filled after Engine::Startup). Read via pointer
 // at call time, never inlined (they are 0 in the static image).
-static const uint32_t* s_war_pMsgId1_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 msg id, both fns)
-static const uint32_t* s_war_pMsgId2_c46b0 = nullptr; // 0x1401c46b0 (bb7b0 SendComponentMessage #2 msg id)
-static const uint32_t* s_war_pMsgId2_c7660 = nullptr; // 0x1401c7660 (beae0 SendComponentMessage #2 msg id)
+static const uint32_t* s_war_pMsgId1_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent, both fns)
+static const uint32_t* s_war_pMsgId2_c46b0 = nullptr; // 0x1401c46b0 (bb7b0 SendComponentMessage #2 target type-id = OrchardComponent)
+static const uint32_t* s_war_pMsgId2_c7660 = nullptr; // 0x1401c7660 (beae0 SendComponentMessage #2 target type-id = FishingComponent)
 // Float .rdata constants (bit-exact from read_memory).
 static const float*    s_war_pf_172280 = nullptr;     // 0x140172280 = -1.0f (MoveTo speed, both fns)
 
@@ -211,7 +211,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     WAR_IbpCtor(&ibpB, ct);              // [RBP-0x21]
     WAR_Append(list, &ibpB);
 
-    // --- SendComponentMessage #2 (entity = *param_3, msgId = [0x1401c46b0], p4=1, p6=param_9) (0x1400bb909..0x1400bb97d) ---
+    // --- SendComponentMessage #2 (entity = *param_3, targetTypeId = [0x1401c46b0]=OrchardComponent, p4=1, p6=param_9) (0x1400bb909..0x1400bb97d) ---
     obj = WAR_Alloc(0x40, 8);
     void* sm2 = nullptr;
     if (obj) {

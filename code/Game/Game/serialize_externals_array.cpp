@@ -24,7 +24,7 @@
 //
 // Validation type = "ComponentDescription" (DWORD_1401c7318, base Object::External;
 // written by ComponentDescription_Register @0x14014ea60). The engine_funcs global
-// g_TypeId_BuildComponent points at that BaseTypeInfo; *g_TypeId_BuildComponent is
+// g_TypeId_ComponentDescription_FC points at that BaseTypeInfo; *g_TypeId_ComponentDescription_FC is
 // the typeId dword the disasm reads (MOV EDX,[0x1401c7318]).
 //
 // Standalone impact: this exe addr was NULL, so Create{Removal,Bridge,Fenced}
@@ -49,7 +49,7 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(
     // standalone (raw .rdata slot — ResolveAddr(Module::Exe, dataAddr) returns
     // NULL). The generic body then resolves it lazily by name and, failing that,
     // loads WITHOUT type validation (cascade-safe, never crashes on unresolved).
-    const uint32_t* typeIdPtr = g_TypeId_BuildComponent;
+    const uint32_t* typeIdPtr = g_TypeId_ComponentDescription_FC;
 
     void** base = reinterpret_cast<void**>(arrayBase);
     for (int i = 0; i < count; ++i) {

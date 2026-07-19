@@ -379,18 +379,18 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 
 // ============================================================
 // Game_DestroyAllRawMaterials (FUN_140060000)
-// Iterates ExternalFactory for all entities with BuildComponent (DAT_1401c7318).
+// Iterates ExternalFactory for all entities with ComponentDescription (DAT_1401c7318).
 // For each entity, searches components for RawMaterialDescription (DAT_1401c7cb8).
 // If found, destroys the entity via Game_DestroyEntity.
 // ============================================================
 static void Game_DestroyAllRawMaterials_Impl() {
     void* factory = *g_pExternalFactorySingleton;
 
-    // Iterate all entities with BuildComponent type
-    void* entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, nullptr);
+    // Iterate all entities with ComponentDescription type
+    void* entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
     while (entity) {
-        // IsDerivedFrom check against BuildComponent
-        bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_BuildComponent);
+        // IsDerivedFrom check against ComponentDescription
+        bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_ComponentDescription_FC);
         void* buildEntity = isBuild ? entity : nullptr;
 
         // Search entity's components for RawMaterialDescription
@@ -417,7 +417,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
             }
         }
 
-        entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, entity);
+        entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, entity);
     }
 }
 
@@ -498,12 +498,12 @@ static void Game_SpawnCitizens_Impl() {
                             void* comp = *pComp;
                             typedef uint32_t (*fn_GetTypeId_t)(void*);
                             uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                            if (typeId == *g_TypeId_ResidenceComponent_FC) {
+                            if (typeId == *g_TypeId_InteractComponent_FC) {
                                 // Re-read and CheckPtr on the array slot
                                 pComp = (void**)(compArrayBase + cOffset * 8);
                                 fn_InternalBasePtr_CheckPtr(pComp);
                                 comp = *pComp;
-                                bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_ResidenceComponent_FC);
+                                bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_InteractComponent_FC);
                                 residenceComp = isRes ? comp : nullptr;
                                 goto found_residence;
                             }
@@ -527,7 +527,7 @@ found_residence:
 
                             // Get ResidenceDescription from component+0x18
                             void* desc = *(void**)(resComp + 0x18);
-                            bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_ResidenceDescription);
+                            bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_InteractDescription_FC);
                             void* resDesc = isResDesc ? desc : nullptr;
 
                             // Read capacity value from desc+0x30 (maxOccupants)
@@ -587,7 +587,7 @@ found_residence:
                             if (extTemplate == nullptr) {
                                 entityDesc = nullptr;
                             } else {
-                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
+                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_ComponentDescription_FC);
                                 entityDesc = isBuildDesc ? extTemplate : nullptr;
                             }
 
@@ -771,10 +771,10 @@ static void Game_SpawnTornado_Impl() {
     void* factory = *g_pExternalFactorySingleton;
     void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
 
-    // Cast to entity description (must be derived from BuildComponent type)
+    // Cast to entity description (must be derived from ComponentDescription type)
     void* entityDesc = nullptr;
     if (extTemplate) {
-        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
+        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_ComponentDescription_FC);
         if (isEntityDesc) {
             entityDesc = extTemplate;
         }
@@ -1553,12 +1553,12 @@ void DebugUI_Slot4(DebugUI* self) {
 // Every exe-.rdata type-id DebugUI dereferences is NULL in standalone (raw
 // .rdata addr -> ResolveAddr returns 0). EnsureGlobals lazy-fills them from the
 // live Runtime factory tree (post-Engine::Startup) by each id's REAL registered
-// name — the engine_funcs labels are misnomers, verified against the Ghidra
-// registration writers:
-//   g_TypeId_BuildComponent(0x1401c7318)        -> "ComponentDescription"
+// name (the engine_funcs labels now match, verified against the Ghidra
+// registration writers):
+//   g_TypeId_ComponentDescription_FC(0x1401c7318)        -> "ComponentDescription"
 //   g_TypeId_RawMaterialDescription(0x1401c7cb8)-> "RawMaterialDescription"
-//   g_TypeId_ResidenceComponent_FC(0x1401c7900) -> "InteractComponent"
-//   g_TypeId_ResidenceDescription(0x1401c7938)  -> "InteractDescription"
+//   g_TypeId_InteractComponent_FC(0x1401c7900) -> "InteractComponent"
+//   g_TypeId_InteractDescription_FC(0x1401c7938)  -> "InteractDescription"
 //   g_TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
 //   g_TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
 //   g_TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
@@ -1599,10 +1599,10 @@ void EnsureGlobals() {
     static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,
                     s_citDesc = 0, s_disease = 0, s_drawable = 0, s_internal = 0;
     static const Heal heals[] = {
-        { &g_TypeId_BuildComponent,         &s_build,     "ComponentDescription"   },
+        { &g_TypeId_ComponentDescription_FC,         &s_build,     "ComponentDescription"   },
         { &g_TypeId_RawMaterialDescription, &s_rawmat,    "RawMaterialDescription" },
-        { &g_TypeId_ResidenceComponent_FC,  &s_interactC, "InteractComponent"      },
-        { &g_TypeId_ResidenceDescription,   &s_interactD, "InteractDescription"    },
+        { &g_TypeId_InteractComponent_FC,  &s_interactC, "InteractComponent"      },
+        { &g_TypeId_InteractDescription_FC,   &s_interactD, "InteractDescription"    },
         { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
         { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
         { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },

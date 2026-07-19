@@ -102,7 +102,7 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
 }
 
 // ---- 0x140004fe0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
-// typeId @0x1401c7ba0. (Pasture "RawMaterialDescription" finder.)
+// typeId @0x1401c7ba0. (PastureComponent finder.)
 static const uint32_t* s_tid_4fe0 = nullptr; // 0x1401c7ba0
 void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
     if (!s_tid_4fe0)

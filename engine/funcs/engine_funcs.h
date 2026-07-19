@@ -599,10 +599,10 @@ extern fn_GetInputKeyName_t fn_GetInputKeyName;
 
 extern uint32_t* g_TypeId_ComponentEntity;       // DAT_1401c5d70
 extern uint32_t* g_TypeId_ProgressElement;       // exref at 0x1401515b8 (double-indirect)
-extern uint32_t* g_TypeId_BuildComponent;         // DAT_1401c7318
+extern uint32_t* g_TypeId_ComponentDescription_FC;         // DAT_1401c7318
 extern uint32_t* g_TypeId_ConsumeProduceComponent;// DAT_1401c7388
 extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
-extern uint32_t* g_TypeId_BuildRequirementComponent;// DAT_1401c7f58
+extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
 extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
 extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
 extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0
@@ -623,7 +623,7 @@ extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup com
 
 // RemovalTool-related type IDs
 extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
-// g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (DAT_1401c79e0) — already declared above
+// g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) — declared with the FindComponent type-ids below
 // g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
 extern uint32_t* g_TypeId_ModelComponent;          // DAT_1401c7a50
 extern uint32_t* g_TypeId_PickingComponent;        // DAT_1401c7c10
@@ -697,17 +697,17 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 // Type ID globals used by FindComponent variants.
 // Resolved from exe .rdata (direct DAT_ addresses, not double-indirect exrefs).
 // Names reflect which component each FindComponent function actually searches for.
-extern uint32_t* g_TypeId_BuildComponent_Slot4;     // DAT_1401c79e0 (fn_FindComponent_Build)
-extern uint32_t* g_TypeId_BuildStateComponent;      // DAT_1401c7d98 (fn_FindComponent_BuildState)
-extern uint32_t* g_TypeId_StateMachineComponent_FC; // DAT_1401c7350 (fn_FindComponent_StateMachine)
-extern uint32_t* g_TypeId_PositionComponent;        // DAT_1401c7008 (fn_FindComponent_Position)
+extern uint32_t* g_TypeId_MapComponent_FC;     // DAT_1401c79e0 (fn_FindComponent_Build)
+extern uint32_t* g_TypeId_StateMachineComponent_FC;      // DAT_1401c7d98 (fn_FindComponent_BuildState)
+extern uint32_t* g_TypeId_ConsumeProduceComponent_FC; // DAT_1401c7350 (fn_FindComponent_ConsumeProduce)
+extern uint32_t* g_TypeId_BuildComponent_FC;        // DAT_1401c7008 (fn_FindComponent_Position)
 extern uint32_t* g_TypeId_DestroyComponent_FC;      // DAT_1401c75f0 (fn_FindComponent_Destroy)
-extern uint32_t* g_TypeId_BuildingComponent;        // DAT_1401c4b80 (fn_FindComponent_Building)
+extern uint32_t* g_TypeId_TradeComponent_FC;        // DAT_1401c4b80 (fn_FindComponent_Building)
 extern uint32_t* g_TypeId_AttendanceComponent;      // DAT_1401c3f40 (fn_FindComponent_Attendance)
 extern uint32_t* g_TypeId_PastureComponent;         // DAT_1401c7ba0 (fn_FindComponent_Pasture)
 extern uint32_t* g_TypeId_AnimalDescription;        // DAT_1401c6fd0 (used by PastureCalcMaxCount)
 extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindComponent_Orchard)
-extern uint32_t* g_TypeId_SMComponent;              // DAT_1401c71c8 (fn_FindComponent_SM)
+extern uint32_t* g_TypeId_ClearAreaComponent_FC;              // DAT_1401c71c8 (fn_FindComponent_SM)
 extern uint32_t* g_TypeId_CitizenComponent_FC;      // DAT_1401c7158 — CitizenComponent's
     // BaseTypeInfo (writer CitizenComponent_RegisterType 0x14014e7b5).
     // Null unless BANISHED_LIVE_CITIZENAI_TIDS registers the slot (reg_citizenai_typeids.cpp).
@@ -717,7 +717,7 @@ extern uint32_t* g_TypeId_CemeteryComponent;        // DAT_1401c4090 (fn_FindCom
 extern uint32_t* g_TypeId_TombstoneComponent;       // DAT_1401c4a30
 extern uint32_t* g_TypeId_ImmigrationComponent;     // DAT_1401c4480 (fn_FindComponent_Immigration)
 extern uint32_t* g_TypeId_TrackerComponent;         // DAT_1401c4b10 (fn_FindComponent_Tracker)
-extern uint32_t* g_TypeId_CharacterComponent;       // DAT_1401c7a50 (fn_FindComponent_Character)
+extern uint32_t* g_TypeId_ModelComponent_FC;       // DAT_1401c7a50 (fn_FindComponent_Character)
 
 // Typedef kept for any existing code that uses fn_FindComponent_t as a type.
 typedef void (*fn_FindComponent_t)(void* entity, void* retval);
@@ -727,19 +727,19 @@ typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 
 // fn_FindComponent_Build — DAT_1401c79e0 (BuildComponent), original FUN_140004680
 inline void fn_FindComponent_Build(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildComponent_Slot4);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_MapComponent_FC);
 }
 // fn_FindComponent_BuildState — DAT_1401c7d98, original FUN_140003ea0
 inline void fn_FindComponent_BuildState(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildStateComponent);
-}
-// fn_FindComponent_StateMachine — DAT_1401c7350, original FUN_14000b6f0
-inline void fn_FindComponent_StateMachine(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StateMachineComponent_FC);
+}
+// fn_FindComponent_ConsumeProduce — DAT_1401c7350, original FUN_14000b6f0
+inline void fn_FindComponent_ConsumeProduce(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ConsumeProduceComponent_FC);
 }
 // fn_FindComponent_Position — DAT_1401c7008, original FUN_14000d6c0
 inline void fn_FindComponent_Position(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_PositionComponent);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildComponent_FC);
 }
 // fn_FindComponent_Destroy — DAT_1401c75f0, original FUN_140005780
 inline void fn_FindComponent_Destroy(void* entity, void* retval) {
@@ -747,7 +747,7 @@ inline void fn_FindComponent_Destroy(void* entity, void* retval) {
 }
 // fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140
 inline void fn_FindComponent_Building(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildingComponent);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TradeComponent_FC);
 }
 // fn_FindComponent_Workplace — DAT_1401c8070 (= g_TypeId_StorageLocationComponent), original FUN_140003050
 inline void fn_FindComponent_Workplace(void* entity, void* retval) {
@@ -771,7 +771,7 @@ inline void fn_FindComponent_BuildState2(void* entity, void* retval) {
 }
 // fn_FindComponent_SM — DAT_1401c71c8, original FUN_14000a170
 inline void fn_FindComponent_SM(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_SMComponent);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ClearAreaComponent_FC);
 }
 // fn_FindComponent_Citizen — DAT_1401c7158, original FUN_140009790
 inline void fn_FindComponent_Citizen(void* entity, void* retval) {
@@ -807,9 +807,11 @@ extern uint32_t* g_TypeId_CitizenAIComponent;
 inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StatusIconComponent);
 }
-// fn_FindComponent_Character — DAT_1401c7a50, original FUN_140003f60
+// fn_FindComponent_Character — DAT_1401c7a50 = ModelComponent (writer ModelComponent_RegisterType);
+// finds ModelComponent. Function name kept for callers; the "Character" label is historical.
+// Original FUN_140003f60.
 inline void fn_FindComponent_Character(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CharacterComponent);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ModelComponent_FC);
 }
 // fn_FindComponent_CitizenAI — DAT_1401c70e8 = g_TypeId_CitizenAIComponent,
 // CitizenAIComponent's BaseTypeInfo (writer CitizenAIComponent_RegisterType
@@ -1578,7 +1580,7 @@ extern fn_Filename_Dtor_t fn_Filename_Dtor;
 //   +0x10: void*  — cached External* result
 // If the generation counter matches the factory's, the cached result is still valid.
 // Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(g_TypeId_BuildComponent),
+// ExternalFactory::Find. If found and passes IsDerivedFrom(g_TypeId_ComponentDescription_FC),
 // caches the result; otherwise caches nullptr.
 typedef void (*fn_ResolveExternalByName_t)(void* nameString); // kept for ABI reference
 inline void ResolveExternalByName_Impl(void* nameString) {
@@ -1598,13 +1600,13 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     fn_Filename_Dtor(filename);
 
     // Validate the found object is the expected type (Description base).
-    // In standalone the exe-side type-id storage (g_TypeId_BuildComponent ->
+    // In standalone the exe-side type-id storage (g_TypeId_ComponentDescription_FC ->
     // DAT_1401c7318) is unregistered, so the global is NULL — dereferencing it
     // would fault. Per the factory-cascade strategy ([[feedback_factory_cascade_strategy]])
     // trust the FindOrLoad/Find result when the type-id check can't run.
     void* result = nullptr;
     if (found) {
-        if (!g_TypeId_BuildComponent || fn_IsDerivedFrom(found, *g_TypeId_BuildComponent)) {
+        if (!g_TypeId_ComponentDescription_FC || fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC)) {
             result = found;
         }
     }
@@ -3066,16 +3068,17 @@ extern fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity;
 typedef void (*fn_EntityList_RegisterEntity_t)(void* entityList, void* entityPtrRef, int categoryId);
 extern fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity;
 
-// ResidenceComponent type ID — DAT_1401c7900 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_ResidenceComponent_FC;
+// InteractComponent type ID — DAT_1401c7900 (used by SpawnCitizens)
+extern uint32_t* g_TypeId_InteractComponent_FC;
 
-// fn_FindComponent_ResidenceFC — searches entity for ResidenceComponent (DAT_1401c7900)
+// fn_FindComponent_ResidenceFC — searches entity for InteractComponent (DAT_1401c7900);
+// function name kept for callers.
 inline void fn_FindComponent_ResidenceFC(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ResidenceComponent_FC);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_InteractComponent_FC);
 }
 
-// ResidenceDescription type ID — DAT_1401c7938 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_ResidenceDescription;
+// InteractDescription type ID — DAT_1401c7938 (used by SpawnCitizens)
+extern uint32_t* g_TypeId_InteractDescription_FC;
 
 // ResidenceComponent_GetOccupantCount (FUN_140123070) — returns current occupant count
 // RCX=residenceComponent, EDX=mode(0=current)
@@ -4200,7 +4203,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 }
 
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
-// Iterates ExternalFactory for entities with BuildComponent (DAT_1401c7318),
+// Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
 inline void Game_TriggerDisasterByType_Impl(int disasterType) {
@@ -4212,11 +4215,11 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!gameWorld) return;
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
 
-    // Iterate all BuildComponent-type externals
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, nullptr);
+    // Iterate all ComponentDescription-type externals
+    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
     while (ext != nullptr) {
         uintptr_t e = (uintptr_t)ext;
-        if (fn_IsDerivedFrom(ext, *g_TypeId_BuildComponent)) {
+        if (fn_IsDerivedFrom(ext, *g_TypeId_ComponentDescription_FC)) {
             // Find SelectDescription sub-component
             int compCount = *(int*)(e + 0x30);
             uintptr_t compArray = *(uintptr_t*)(e + 0x28);
@@ -4255,7 +4258,7 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
             }
         }
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, ext);
+        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, ext);
     }
 }
 
@@ -4489,8 +4492,8 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
 // 3. Set camera target and snap camera to new position
 // 4. Get/create EditTool and select entity in it
 //
-// NOTE: g_TypeId_CharacterComponent (DAT_1401c7a50) is actually ModelComponent's TypeInfo,
-// not CharacterComponent. fn_FindComponent_Character finds ModelComponent.
+// NOTE: g_TypeId_ModelComponent_FC (DAT_1401c7a50) is ModelComponent's TypeInfo.
+// fn_FindComponent_Character keeps its historical name but finds ModelComponent.
 
 inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
     uintptr_t tc = (uintptr_t)toolController;
@@ -4544,7 +4547,7 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     fn_InternalBasePtr_CheckPtr(entityPtr);
     uintptr_t entityRaw = *(uintptr_t*)entityPtr;
 
-    // Try ModelComponent (DAT_1401c7a50 — misnamed as g_TypeId_CharacterComponent)
+    // Try ModelComponent (DAT_1401c7a50 = g_TypeId_ModelComponent_FC)
     uint64_t modelRef = 0;
     fn_FindComponent_Character((void*)entityRaw, &modelRef);
 

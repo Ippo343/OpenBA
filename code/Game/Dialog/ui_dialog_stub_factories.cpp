@@ -109,7 +109,7 @@ struct StubVtableInit {
 // build-tool button (verified live: valid dlgInst@+0x18 / datasource@+0x28). The
 // generic stub left Slot4 a no-op, so the build tooltip showed "????????" for the
 // name and "x x x" for the cost. Wiring Slot4 to the real BuildRequirementUI_Slot4
-// composes the title (BuildRequirementComponent+0x38 name key), the icon, and the
+// composes the title (ToolbarDescription+0x38 name key), the icon, and the
 // cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
 // base fields afterward.
 struct BuildRequirementUI;  // opaque; the reimpl casts internally
@@ -123,14 +123,14 @@ namespace uistub_BuildRequirementUI {
     }
     // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
     // In standalone these resolve from raw exe .rdata addresses → null, so the real
-    // reimpl's first `*g_TypeId_BuildComponent` would fault. Fill them from the live
+    // reimpl's first `*g_TypeId_ComponentDescription_FC` would fault. Fill them from the live
     // Factory tree (post-Engine::Startup), like ToolbarStandalone_Init. Idempotent.
     // NB: g_TypeId_ResourceComponent's engine_funcs label is misleading — the id at
     // .rdata 0x1401c7040 is actually "BuildDescription"; and Object::Internal is
     // registered under the simple name "Internal".
     void EnsureTypeIds() {
         static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
-        if (!g_TypeId_BuildComponent)        { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");        if(s_build) g_TypeId_BuildComponent=&s_build; }
+        if (!g_TypeId_ComponentDescription_FC)        { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
         if (!g_TypeId_ComponentEntity)       { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
         if (!g_TypeId_ResourceComponent)     { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
         if (!g_TypeId_RawMaterialDescription){ s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
@@ -140,8 +140,8 @@ namespace uistub_BuildRequirementUI {
         EnsureTypeIds();
         // The real reimpl unconditionally dereferences these globals; if any failed
         // to resolve, skip rather than fault.
-        if (!self || !g_TypeId_BuildComponent || !g_TypeId_ComponentEntity
-            || !g_TypeId_ObjectInternal || !g_TypeId_BuildRequirementComponent
+        if (!self || !g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
+            || !g_TypeId_ObjectInternal || !g_TypeId_ToolbarDescription_FC
             || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
         BuildRequirementUI_Slot4(reinterpret_cast<BuildRequirementUI*>(self));
     }
@@ -244,19 +244,19 @@ namespace uistub_ImmigrationUI {
     // ImmigrationUI Slot7/Slot9 dereference these exe-.rdata type-id globals (null in
     // standalone): the entity IsA check (ComponentEntity — the reimpl already guards a
     // null id), fn_FindComponent_Immigration (ImmigrationComponent), and
-    // fn_FindComponent_BuildState (DAT_1401c7d98, whose true identity is
-    // StateMachineComponent — the engine_funcs label is a historical mislabel, see
+    // fn_FindComponent_BuildState (DAT_1401c7d98 = StateMachineComponent; the
+    // engine_funcs label now matches, see
     // [[project_townhallui_promoted]]). Fill from the live factory tree post-Engine::
     // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
     void EnsureGlobals() {
         static uint32_t s_entity=0, s_immig=0, s_bstate=0;
         if (!g_TypeId_ComponentEntity)      { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
         if (!g_TypeId_ImmigrationComponent) { s_immig =::Object::ResolveTypeIdByNameLazy("ImmigrationComponent");   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
-        if (!g_TypeId_BuildStateComponent)  { s_bstate=::Object::ResolveTypeIdByNameLazy("StateMachineComponent");  if(s_bstate) g_TypeId_BuildStateComponent=&s_bstate; }
+        if (!g_TypeId_StateMachineComponent_FC)  { s_bstate=::Object::ResolveTypeIdByNameLazy("StateMachineComponent");  if(s_bstate) g_TypeId_StateMachineComponent_FC=&s_bstate; }
     }
     bool Ready() {
         return g_TypeId_ComponentEntity && g_TypeId_ImmigrationComponent &&
-               g_TypeId_BuildStateComponent &&
+               g_TypeId_StateMachineComponent_FC &&
                g_pGameWorldSingleton && *g_pGameWorldSingleton;
     }
     void Trace(const char* slot, void* self) {
@@ -574,15 +574,18 @@ namespace uistub_ToolUI {
     // Engine::Startup. Idempotent.
     void EnsureTypeIds() {
         static uint32_t s_build=0, s_entity=0, s_breq=0, s_uidesc=0, s_tab=0;
-        // NB: g_TypeId_BuildComponent maps to exe .rdata 0x1401c7318 whose real
+        // NB: g_TypeId_ComponentDescription_FC maps to exe .rdata 0x1401c7318 whose real
         // identity is ComponentDescription (verified: written by
-        // ComponentDescription_Register), NOT BuildComponent — the engine_funcs
-        // label is misleading. ToolUI::Slot4 branch-1 tests the datasource against
+        // ComponentDescription_Register; the engine_funcs label now matches).
+        // ToolUI::Slot4 branch-1 tests the datasource against
         // THIS id (a utility dialog's datasource is a ComponentDescription), so it
         // must be filled with the ComponentDescription type-id.
-        if (!g_TypeId_BuildComponent)            { s_build =::Object::ResolveTypeIdByNameLazy("ComponentDescription");      if(s_build)  g_TypeId_BuildComponent=&s_build; }
+        if (!g_TypeId_ComponentDescription_FC)            { s_build =::Object::ResolveTypeIdByNameLazy("ComponentDescription");      if(s_build)  g_TypeId_ComponentDescription_FC=&s_build; }
         if (!g_TypeId_ComponentEntity)           { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_BuildRequirementComponent) { s_breq  =::Object::ResolveTypeIdByNameLazy("BuildRequirementComponent"); if(s_breq)   g_TypeId_BuildRequirementComponent=&s_breq; }
+        // CORRECTED 2026-07-19: slot 0x1401c7f58's writer is ToolbarDescription_RegisterType;
+        // the old resolve string "BuildRequirementComponent" (an invented name) is not in the
+        // type registry, so this heal always returned 0 and silently never fired.
+        if (!g_TypeId_ToolbarDescription_FC) { s_breq  =::Object::ResolveTypeIdByNameLazy("ToolbarDescription"); if(s_breq)   g_TypeId_ToolbarDescription_FC=&s_breq; }
         if (!g_TypeId_UIDescription)             { s_uidesc=::Object::ResolveTypeIdByNameLazy("UIDescription");             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
         if (!g_TypeId_TabElement)                { s_tab   =::Object::ResolveTypeIdByNameLazy("TabElement");                if(s_tab)    g_TypeId_TabElement=&s_tab; }
     }
@@ -590,8 +593,8 @@ namespace uistub_ToolUI {
         EnsureTypeIds();
         // The reimpl unconditionally dereferences these; skip rather than fault if
         // any failed to resolve.
-        if (!self || !g_TypeId_BuildComponent || !g_TypeId_ComponentEntity
-            || !g_TypeId_BuildRequirementComponent || !g_TypeId_UIDescription
+        if (!self || !g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
+            || !g_TypeId_ToolbarDescription_FC || !g_TypeId_UIDescription
             || !g_TypeId_TabElement) return;
         static bool s_logged=false;
         if(!s_logged && std::getenv("BANISHED_MAP_TRACE")){ s_logged=true;
@@ -677,8 +680,8 @@ namespace uistub_BuildUI {
         if (!g_TypeId_ComponentEntity)        { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
         if (!g_TypeId_ResourceComponent)      { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
         if (!g_TypeId_RawMaterialDescription) { s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_PositionComponent)      { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");         if(s_build) g_TypeId_PositionComponent=&s_build; }
-        if (!g_TypeId_SMComponent)            { s_clear=::Object::ResolveTypeIdByNameLazy("ClearAreaComponent");      if(s_clear) g_TypeId_SMComponent=&s_clear; }
+        if (!g_TypeId_BuildComponent_FC)      { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");         if(s_build) g_TypeId_BuildComponent_FC=&s_build; }
+        if (!g_TypeId_ClearAreaComponent_FC)            { s_clear=::Object::ResolveTypeIdByNameLazy("ClearAreaComponent");      if(s_clear) g_TypeId_ClearAreaComponent_FC=&s_clear; }
     }
     // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
     inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }

@@ -53,8 +53,8 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
 }
 
 // Lazily-resolved type-ID storage globals (exe .rdata, filled by RegisterType).
-static const uint32_t* s_pTid_5380 = nullptr;  // 0x1401c7510  (AreaCrop / CropDescription)
-static const uint32_t* s_pTid_5440 = nullptr;  // 0x1401c46b0  (AreaOrchard / OrchardDescription)
+static const uint32_t* s_pTid_5380 = nullptr;  // 0x1401c7510  (CropFieldComponent)
+static const uint32_t* s_pTid_5440 = nullptr;  // 0x1401c46b0  (OrchardComponent)
 static const uint32_t* s_pTid_22520 = nullptr; // 0x1401c3fb0  (AutoPickupComponent)
 static bool s_tidInit = false;
 

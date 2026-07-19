@@ -758,7 +758,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 // TownHallUI::InitAgriculture (was FUN_14007ebf0)
 // ============================================================
 // Sets up the agriculture table. Iterates ExternalFactory for
-// BuildComponent entities, finds SelectDescription sub-components,
+// ComponentDescription entities, finds SelectDescription sub-components,
 // inserts matching building descriptions into BST at +0x1D8.
 // Then sizes/clones table rows and extracts LabelElement from
 // each cell into the dynamic array at +0x1C8.
@@ -778,14 +778,14 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
     fn_String_Dtor(strBuf);
 
-    // Iterate ExternalFactory for BuildComponent entities
+    // Iterate ExternalFactory for ComponentDescription entities
     void* factory = *g_pExternalFactorySingleton;
-    uint32_t buildTypeId = *g_TypeId_BuildComponent;
+    uint32_t buildTypeId = *g_TypeId_ComponentDescription_FC;
     uint32_t selectDescId = *g_TypeId_SelectDescription;
 
     void* buildDesc = fn_ExternalFactory_FindNext(factory, buildTypeId, nullptr);
     while (buildDesc) {
-        // Cast to BuildComponent (IsDerivedFrom check)
+        // Cast to ComponentDescription (IsDerivedFrom check)
         void* buildComp = nullptr;
         if (fn_IsDerivedFrom(buildDesc, buildTypeId)) {
             buildComp = buildDesc;
@@ -2170,9 +2170,9 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         uint64_t storageBP = 0;
         fn_InternalBasePtr_Ctor(&storageBP, storageComp);
 
-        // Find BuildStateComponent (DAT_1401c7cf0) — ComponentEntity layout
+        // Find StateMachineComponent (DAT_1401c7d98) — ComponentEntity layout
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-        void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_BuildStateComponent);
+        void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StateMachineComponent_FC);
         uint64_t buildStateBP = 0;
         fn_InternalBasePtr_Ctor(&buildStateBP, buildStateComp);
 
@@ -2180,9 +2180,9 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         if (buildStateBP != 0) {
             counterIndex = 2; // under construction
         } else {
-            // Check for BuildingComponent (DAT_1401c4b80) — ComponentEntity layout
+            // Check for TradeComponent (DAT_1401c4b80) — ComponentEntity layout
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-            void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_BuildingComponent);
+            void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_TradeComponent_FC);
             uint64_t buildingBP = 0;
             fn_InternalBasePtr_Ctor(&buildingBP, buildingComp);
             if (buildingBP != 0)
@@ -2478,12 +2478,11 @@ uint32_t GetTypeId(void*) {
 // ---- exe-.rdata type-id globals the TownHallUI paths dereference ----
 // All lazily filled from the live runtime type registry (valid after
 // Object::Factory::Startup). Registered names Ghidra-verified this session via the
-// .rdata name-table / RegisterType writers — several engine_funcs labels are
-// historical mislabels:
+// .rdata name-table / RegisterType writers (the engine_funcs labels now match):
 //   exref 0x1401516c8 "g_TypeId_SpinnerElement"      -> UI::NumberElement
-//   DAT   0x1401c7d98 "g_TypeId_BuildStateComponent" -> StateMachineComponent
-//   DAT   0x1401c4b80 "g_TypeId_BuildingComponent"   -> TradeComponent
-//   DAT   0x1401c7318 "g_TypeId_BuildComponent"      -> ComponentDescription
+//   DAT   0x1401c7d98 "g_TypeId_StateMachineComponent_FC" -> StateMachineComponent
+//   DAT   0x1401c4b80 "g_TypeId_TradeComponent_FC"   -> TradeComponent
+//   DAT   0x1401c7318 "g_TypeId_ComponentDescription_FC"      -> ComponentDescription
 void EnsureGlobals() {
     struct Entry { uint32_t** global; const char* name; };
     static uint32_t storage[20] = {0};
@@ -2501,9 +2500,9 @@ void EnsureGlobals() {
         { &g_TypeId_CitizenDescription,       "CitizenDescription" },
         { &g_TypeInfo_ValueDescription,       "ValueDescription" },
         { &g_TypeId_SelectDescription,        "SelectDescription" },
-        { &g_TypeId_BuildComponent,           "ComponentDescription" },
-        { &g_TypeId_BuildStateComponent,      "StateMachineComponent" },
-        { &g_TypeId_BuildingComponent,        "TradeComponent" },
+        { &g_TypeId_ComponentDescription_FC,           "ComponentDescription" },
+        { &g_TypeId_StateMachineComponent_FC,      "StateMachineComponent" },
+        { &g_TypeId_TradeComponent_FC,        "TradeComponent" },
         // belt-and-braces: normally filled via the economy type-id registry
         { &g_TypeId_RawMaterialDescription,   "RawMaterialDescription" },
         { &g_TypeId_StorageComponent_FC,      "StorageComponent" },
@@ -2524,8 +2523,8 @@ bool Ready() {
           g_TypeId_TextElement && g_TypeId_SpinnerElement && g_TypeId_NumberEditElement &&
           g_TypeId_ComboElement && g_TypeId_HelpButtonElem && g_TypeId_ImageElement &&
           g_TypeId_StringTable && g_TypeId_CitizenDescription && g_TypeInfo_ValueDescription &&
-          g_TypeId_SelectDescription && g_TypeId_BuildComponent && g_TypeId_BuildStateComponent &&
-          g_TypeId_BuildingComponent && g_TypeId_RawMaterialDescription &&
+          g_TypeId_SelectDescription && g_TypeId_ComponentDescription_FC && g_TypeId_StateMachineComponent_FC &&
+          g_TypeId_TradeComponent_FC && g_TypeId_RawMaterialDescription &&
           g_TypeId_StorageComponent_FC && g_TypeId_WorkplaceComponent &&
           g_TypeId_StorageLocationComponent))
         return false;
@@ -2616,9 +2615,9 @@ void DiagPrint(const char* where, void* self) {
         {"CitizenDescription", g_TypeId_CitizenDescription},
         {"ValueDescription", g_TypeInfo_ValueDescription},
         {"SelectDescription", g_TypeId_SelectDescription},
-        {"ComponentDescription", g_TypeId_BuildComponent},
-        {"StateMachineComponent", g_TypeId_BuildStateComponent},
-        {"TradeComponent", g_TypeId_BuildingComponent},
+        {"ComponentDescription", g_TypeId_ComponentDescription_FC},
+        {"StateMachineComponent", g_TypeId_StateMachineComponent_FC},
+        {"TradeComponent", g_TypeId_TradeComponent_FC},
         {"RawMaterialDescription", g_TypeId_RawMaterialDescription},
         {"StorageComponent", g_TypeId_StorageComponent_FC},
         {"WorkPlaceComponent", g_TypeId_WorkplaceComponent},

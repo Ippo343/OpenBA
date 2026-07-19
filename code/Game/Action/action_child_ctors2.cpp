@@ -448,7 +448,7 @@ void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
 // (vtable+0x10) == *0x1401c7350, IsDerivedFrom-confirmed → found; writes the IBP into
 // param_2 via InternalBasePtr_Ctor and returns param_2.
 // ============================================================
-void* Entity_FindStateMachine_b6f0(int64_t param_1, void* param_2) {
+void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
     EnsureInit();
     void* found = nullptr;
     uint32_t wantTid = s_pTid_StateMachine ? *s_pTid_StateMachine : 0;

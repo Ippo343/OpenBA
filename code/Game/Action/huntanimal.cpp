@@ -134,7 +134,7 @@ bool HuntAnimal_ResolveFuncs() {
 
     // Type IDs
     s_typeId_AnimalEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7890));
-    s_typeId_HerdEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    s_typeId_HerdEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158)); // 0x1401c7158 = CitizenComponent id (retail validates the herd ref against CitizenComponent)
     s_typeId_ModelDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
     s_typeId_HuntAnimalSearch = reinterpret_cast<int*>(ResolveAddr(Module::Exe, 0x1401c8000));
 

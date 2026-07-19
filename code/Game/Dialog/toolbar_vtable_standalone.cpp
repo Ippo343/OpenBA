@@ -28,7 +28,7 @@
 //
 // Type-id globals filled (engine_funcs labels in parens; Ghidra-verified true names):
 //   g_TypeId_ToolbarItem               = "Toolbar"            (0x1401c6128, ctor FindNext)
-//   g_TypeId_BuildRequirementComponent = "ToolbarDescription" (0x1401c7f58, ctor + UpdateButtons)
+//   g_TypeId_ToolbarDescription_FC = "ToolbarDescription" (0x1401c7f58, ctor + UpdateButtons)
 //   g_TypeId_HelpButtonElem            = "ButtonElement"      (exref 0x1401514f8, ctor cast)
 //   g_TypeId_ImageElement              = "ImageElement"       (exref 0x140151500, ctor sprite)
 //   g_TypeId_ToolbarElement            = "CheckElement"       (exref 0x1401516a8, Update)
@@ -145,7 +145,7 @@ extern "C" void ToolbarStandalone_Init() {
     s_tid_Check       = ::Object::ResolveTypeIdByNameLazy("CheckElement");
     s_tid_Text        = ::Object::ResolveTypeIdByNameLazy("TextElement");
     if (!g_TypeId_ToolbarItem)               g_TypeId_ToolbarItem = &s_tid_Toolbar;
-    if (!g_TypeId_BuildRequirementComponent) g_TypeId_BuildRequirementComponent = &s_tid_ToolbarDesc;
+    if (!g_TypeId_ToolbarDescription_FC) g_TypeId_ToolbarDescription_FC = &s_tid_ToolbarDesc;
     if (!g_TypeId_HelpButtonElem)            g_TypeId_HelpButtonElem = &s_tid_Button;
     if (!g_TypeId_ImageElement)              g_TypeId_ImageElement = &s_tid_Image;
     if (!g_TypeId_ToolbarElement)            g_TypeId_ToolbarElement = &s_tid_Check;

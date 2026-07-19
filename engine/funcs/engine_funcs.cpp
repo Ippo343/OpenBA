@@ -238,10 +238,10 @@ fn_GetInputKeyName_t fn_GetInputKeyName = nullptr;
 // ============================================================
 uint32_t* g_TypeId_ComponentEntity = nullptr;
 uint32_t* g_TypeId_ProgressElement = nullptr;
-uint32_t* g_TypeId_BuildComponent = nullptr;
+uint32_t* g_TypeId_ComponentDescription_FC = nullptr;
 uint32_t* g_TypeId_ConsumeProduceComponent = nullptr;
 uint32_t* g_TypeId_RadiusComponent = nullptr;
-uint32_t* g_TypeId_BuildRequirementComponent = nullptr;
+uint32_t* g_TypeId_ToolbarDescription_FC = nullptr;
 uint32_t* g_TypeId_ResourceComponent = nullptr;
 uint32_t* g_TypeId_RawMaterialDescription = nullptr;
 uint32_t* g_TypeId_DialogController = nullptr;
@@ -262,7 +262,7 @@ uint32_t* g_TypeId_ProfessionDescription = nullptr;
 uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
 // RemovalTool-related type IDs
 uint32_t* g_TypeId_RemovalDescription = nullptr;
-// g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same DAT_1401c79e0)
+// g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) defined below with the FindComponent type-ids
 uint32_t* g_TypeId_ModelComponent = nullptr;
 // g_TypeId_MultiObjectComponent already defined below (~line 444)
 uint32_t* g_TypeId_PickingComponent = nullptr;
@@ -295,17 +295,17 @@ void** g_pEngineSingleton = nullptr;
 // ============================================================
 // FindComponent functions are now inline C++ (see engine_funcs.h).
 // These globals are resolved directly from exe .rdata addresses.
-uint32_t* g_TypeId_BuildComponent_Slot4     = nullptr;  // DAT_1401c79e0
-uint32_t* g_TypeId_BuildStateComponent      = nullptr;  // DAT_1401c7d98
-uint32_t* g_TypeId_StateMachineComponent_FC = nullptr;  // DAT_1401c7350
-uint32_t* g_TypeId_PositionComponent        = nullptr;  // DAT_1401c7008
+uint32_t* g_TypeId_MapComponent_FC     = nullptr;  // DAT_1401c79e0
+uint32_t* g_TypeId_StateMachineComponent_FC      = nullptr;  // DAT_1401c7d98
+uint32_t* g_TypeId_ConsumeProduceComponent_FC = nullptr;  // DAT_1401c7350
+uint32_t* g_TypeId_BuildComponent_FC        = nullptr;  // DAT_1401c7008
 uint32_t* g_TypeId_DestroyComponent_FC      = nullptr;  // DAT_1401c75f0
-uint32_t* g_TypeId_BuildingComponent        = nullptr;  // DAT_1401c4b80
+uint32_t* g_TypeId_TradeComponent_FC        = nullptr;  // DAT_1401c4b80
 uint32_t* g_TypeId_AttendanceComponent      = nullptr;  // DAT_1401c3f40
 uint32_t* g_TypeId_PastureComponent         = nullptr;  // DAT_1401c7ba0
 uint32_t* g_TypeId_AnimalDescription        = nullptr;  // DAT_1401c6fd0
 uint32_t* g_TypeId_OrchardComponent         = nullptr;  // DAT_1401c46b0
-uint32_t* g_TypeId_SMComponent              = nullptr;  // DAT_1401c71c8
+uint32_t* g_TypeId_ClearAreaComponent_FC              = nullptr;  // DAT_1401c71c8
 uint32_t* g_TypeId_CitizenComponent_FC      = nullptr;  // DAT_1401c7158
 uint32_t* g_TypeId_StorageComponent_FC      = nullptr;  // DAT_1401c7e78
 uint32_t* g_TypeId_ResidenceComponent       = nullptr;  // DAT_1401c7cf0
@@ -313,7 +313,7 @@ uint32_t* g_TypeId_CemeteryComponent        = nullptr;  // DAT_1401c4090
 uint32_t* g_TypeId_TombstoneComponent       = nullptr;  // DAT_1401c4a30
 uint32_t* g_TypeId_ImmigrationComponent     = nullptr;  // DAT_1401c4480
 uint32_t* g_TypeId_TrackerComponent         = nullptr;  // DAT_1401c4b10
-uint32_t* g_TypeId_CharacterComponent       = nullptr;  // DAT_1401c7a50
+uint32_t* g_TypeId_ModelComponent_FC       = nullptr;  // DAT_1401c7a50
 
 fn_RadiusCalc_t fn_RadiusCalc = nullptr;
 fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove = nullptr;
@@ -853,8 +853,8 @@ fn_StorageCanAdd_t fn_StorageCanAdd = nullptr;   // 0x14012cd80
 fn_StorageAddItem_t fn_StorageAddItem = nullptr;  // 0x14012d000
 fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity = nullptr;
 fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity = nullptr;
-uint32_t* g_TypeId_ResidenceComponent_FC = nullptr;
-uint32_t* g_TypeId_ResidenceDescription = nullptr;
+uint32_t* g_TypeId_InteractComponent_FC = nullptr;
+uint32_t* g_TypeId_InteractDescription_FC = nullptr;
 fn_ResidenceComponent_GetOccupantCount_t fn_ResidenceComponent_GetOccupantCount = nullptr;
 fn_ResidenceComponent_GetSpawnPoint_t fn_ResidenceComponent_GetSpawnPoint = nullptr;
 fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup = nullptr;
@@ -2119,13 +2119,13 @@ bool EngineFuncsInit() {
             g_TypeId_ProgressElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
-    g_TypeId_BuildComponent = reinterpret_cast<uint32_t*>(
+    g_TypeId_ComponentDescription_FC = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7318));
     g_TypeId_ConsumeProduceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7388));
     g_TypeId_RadiusComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4870));
-    g_TypeId_BuildRequirementComponent = reinterpret_cast<uint32_t*>(
+    g_TypeId_ToolbarDescription_FC = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f58));
     g_TypeId_ResourceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7040));
@@ -2158,7 +2158,7 @@ bool EngineFuncsInit() {
     // RemovalTool type IDs
     g_TypeId_RemovalDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c74a0));
-    // g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same addr, already resolved above)
+    // g_TypeId_MapComponent_FC (DAT_1401c79e0) is resolved in the FindComponent block below
     g_TypeId_ModelComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7a50));
     // g_TypeId_MultiObjectComponent already resolved in Phase E below
@@ -2241,17 +2241,17 @@ bool EngineFuncsInit() {
     // All FindComponent variants are now inline C++ in engine_funcs.h.
     // fn_ExeArrayResize/2/3/Push are now pure C++ -- no exe resolution needed.
     // ================================================================
-    g_TypeId_BuildComponent_Slot4     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    g_TypeId_BuildStateComponent      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
-    g_TypeId_StateMachineComponent_FC = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
-    g_TypeId_PositionComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
+    g_TypeId_MapComponent_FC     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    g_TypeId_StateMachineComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
+    g_TypeId_ConsumeProduceComponent_FC = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
+    g_TypeId_BuildComponent_FC        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
     g_TypeId_DestroyComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
-    g_TypeId_BuildingComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
+    g_TypeId_TradeComponent_FC        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
     g_TypeId_AttendanceComponent      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f40));
     g_TypeId_PastureComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ba0));
     g_TypeId_AnimalDescription        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
     g_TypeId_OrchardComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
-    g_TypeId_SMComponent              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
+    g_TypeId_ClearAreaComponent_FC              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
     g_TypeId_CitizenComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     g_TypeId_StorageComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
     g_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(
@@ -2260,7 +2260,7 @@ bool EngineFuncsInit() {
     g_TypeId_TombstoneComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
     g_TypeId_ImmigrationComponent     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4480));
     g_TypeId_TrackerComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
-    g_TypeId_CharacterComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
+    g_TypeId_ModelComponent_FC       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
 
     fn_RadiusCalc = reinterpret_cast<fn_RadiusCalc_t>(
         ResolveAddr(Module::Exe, 0x140055430));
@@ -2531,7 +2531,7 @@ bool EngineFuncsInit() {
             reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
                 ResolveAddr(Module::Runtime, 0x1800079c0));
 
-    // fn_FindComponent_Character — inline in engine_funcs.h (uses g_TypeId_CharacterComponent)
+    // fn_FindComponent_Character — inline in engine_funcs.h (uses g_TypeId_ModelComponent_FC)
     // Input::KeyMap::Pressed — from exe dispatch table at 0x140151758
     fn_KeyMap_Pressed = reinterpret_cast<fn_KeyMap_Pressed_t>(
         ResolveExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z"));
@@ -2554,7 +2554,7 @@ bool EngineFuncsInit() {
     // EventLogUI_ToggleNotification and NavigateToEvent now inline in eventlogui.cpp
 
     // WorkplaceUI_AdjustWorkerCount/ToggleWorkplace: now static impls in workplaceui.cpp
-    // fn_FindComponent_BuildState2 — inline in engine_funcs.h (uses g_TypeId_BuildStateComponent)
+    // fn_FindComponent_BuildState2 — inline in engine_funcs.h (uses g_TypeId_StateMachineComponent_FC)
     fn_WorkplaceComp_SetMaxWorkers = reinterpret_cast<fn_WorkplaceComp_SetMaxWorkers_t>(
         ResolveAddr(Module::Exe, 0x14012fb00));
     fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
@@ -2563,7 +2563,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14008c3d0));
     fn_CitizenList_RemoveWorker = reinterpret_cast<fn_CitizenList_RemoveWorker_t>(
         ResolveAddr(Module::Exe, 0x140091180));
-    // fn_FindComponent_Position — inline in engine_funcs.h (uses g_TypeId_PositionComponent)
+    // fn_FindComponent_Position — inline in engine_funcs.h (uses g_TypeId_BuildComponent_FC)
     // EditTool type ID — from the exe exref used in EntityUI
     // The original uses _typeInfo_exref which is the same exref as EditTool's type
     // We resolve it from the address seen in EntityUI::Slot7
@@ -3489,7 +3489,7 @@ bool EngineFuncsInit() {
     }
 
     // TradeUI support
-    // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_BuildingComponent)
+    // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_TradeComponent_FC)
     fn_Element_SetNeedsSizeCalc = reinterpret_cast<fn_Element_SetNeedsSizeCalc_t>(
         ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
     fn_TradeUI_RefreshDisplay = reinterpret_cast<fn_TradeUI_RefreshDisplay_t>(
@@ -3835,9 +3835,9 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400c3720));
     fn_EntityList_RegisterEntity = reinterpret_cast<fn_EntityList_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
-    g_TypeId_ResidenceComponent_FC = reinterpret_cast<uint32_t*>(
+    g_TypeId_InteractComponent_FC = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7900));
-    g_TypeId_ResidenceDescription = reinterpret_cast<uint32_t*>(
+    g_TypeId_InteractDescription_FC = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7938));
     fn_ResidenceComponent_GetOccupantCount = reinterpret_cast<fn_ResidenceComponent_GetOccupantCount_t>(
         ResolveAddr(Module::Exe, 0x140123070));
@@ -4040,8 +4040,8 @@ bool EngineFuncsInit() {
     printf("  Label::SetSprite          = %p\n", (void*)fn_LabelElement_SetSprite);
     printf("  Text::SetText             = %p\n", (void*)fn_TextElement_SetText);
     printf("[EngineFuncs] Phase A2 — Type IDs:\n");
-    printf("  BuildComponent            = %p -> 0x%x\n", (void*)g_TypeId_BuildComponent,
-           g_TypeId_BuildComponent ? *g_TypeId_BuildComponent : 0);
+    printf("  ComponentDescription      = %p -> 0x%x\n", (void*)g_TypeId_ComponentDescription_FC,
+           g_TypeId_ComponentDescription_FC ? *g_TypeId_ComponentDescription_FC : 0);
     printf("  DestroyComponent          = %p -> 0x%x\n", (void*)g_TypeId_DestroyComponent,
            g_TypeId_DestroyComponent ? *g_TypeId_DestroyComponent : 0);
     printf("  MeshInstanceComponent     = %p -> 0x%x\n", (void*)g_TypeId_MeshInstanceComponent,
@@ -4056,8 +4056,8 @@ bool EngineFuncsInit() {
     printf("  EngineSingleton           = %p -> %p\n", (void*)g_pEngineSingleton,
            g_pEngineSingleton ? *g_pEngineSingleton : nullptr);
     printf("[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):\n");
-    printf("  BuildComponent_Slot4      = %p -> 0x%x\n", (void*)g_TypeId_BuildComponent_Slot4,
-           g_TypeId_BuildComponent_Slot4 ? *g_TypeId_BuildComponent_Slot4 : 0);
+    printf("  MapComponent              = %p -> 0x%x\n", (void*)g_TypeId_MapComponent_FC,
+           g_TypeId_MapComponent_FC ? *g_TypeId_MapComponent_FC : 0);
     printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
            g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp

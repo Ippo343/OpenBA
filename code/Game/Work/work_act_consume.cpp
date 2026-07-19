@@ -105,7 +105,7 @@ static WCP_fn_TimeCtor_t      s_wcp_TimeCtor       = nullptr;
 static WCP_fn_IsDerivedFrom_t s_wcp_IsDerivedFrom  = nullptr;
 
 // Runtime-filled globals (read live via pointer; read 0 at static-link time).
-static const uint32_t* s_wcp_pMsgId_c70e8 = nullptr;  // 0x1401c70e8 (SendComponentMessage #1 msg id)
+static const uint32_t* s_wcp_pMsgId_c70e8 = nullptr;  // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent)
 static const uint32_t* s_wcp_pTid_c7388   = nullptr;  // 0x1401c7388 (component type id for the two search loops)
 // Float .rdata constants.
 static const float* s_wcp_pf_17214c = nullptr;        // 0x14017214c == 1.0f (CreateRawMaterial XMM2)

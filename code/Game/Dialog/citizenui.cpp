@@ -786,8 +786,8 @@ void EnsureGlobals() {
     if (!g_TypeId_CitizenComponent_FC)    { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
     if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
     // ProfessionComponent's registered name doesn't resolve in the standalone factory
-    // tree (0x1401c70e8 is contested between ProfessionComponent and a CitizenAI
-    // message-id in our notes). It's used ONLY by the Slot7 action-text lookup, which
+    // tree (0x1401c70e8 is settled as CitizenAIComponent's BaseTypeInfo — writer
+    // CitizenAIComponent_RegisterType). It's used ONLY by the Slot7 action-text lookup, which
     // is now null-guarded (skips if the component isn't found). Point the global at a
     // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
     // dereferencing a null type-id pointer.

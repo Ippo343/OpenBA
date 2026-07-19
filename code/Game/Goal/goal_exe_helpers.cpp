@@ -26,7 +26,7 @@
 //
 // In standalone the type-id storage slot (0x140152870) is unregistered → null,
 // so the IsDerivedFrom check is skipped and the Find result is trusted — same
-// strategy as ResolveExternalByName_Impl's g_TypeId_BuildComponent guard.
+// strategy as ResolveExternalByName_Impl's g_TypeId_ComponentDescription_FC guard.
 void StatGoal_ResolveExternalPtr(void* externalRef) {
     uintptr_t s = reinterpret_cast<uintptr_t>(externalRef);
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;

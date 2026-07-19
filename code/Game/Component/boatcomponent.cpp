@@ -262,7 +262,7 @@ void BoatComponent_InitFuncs() {
 
     // Type IDs
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cf0));  // TypeInfo_ComponentEntity
+        ResolveAddr(Module::Exe, 0x1401c7cf0));  // 0x1401c7cf0 = ResidenceComponent (TypeInfo)
     s_TypeId_1401c7a50 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7a50));
     s_TypeId_1401c7078 = reinterpret_cast<uint32_t*>(

@@ -205,7 +205,7 @@ bool ConsumeProduce_ResolveFuncs() {
               g_pGameWorldSingleton &&
               g_TypeId_ConsumeProduceComponent &&
               g_TypeId_StatusIconComponent &&
-              g_TypeId_StateMachineComponent_FC &&
+              g_TypeId_ConsumeProduceComponent_FC &&
               g_TypeId_StorageComponent_FC &&
               g_TypeId_RawMaterialDescription &&
               g_TypeId_StorageLocationComponent;
@@ -452,12 +452,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     fn_InternalBasePtr_CheckPtr(entityFieldPtr);
     fn_Entity_FindComponent_Position(*(uintptr_t*)entityFieldPtr, &posIBP);
 
-    // --- Find StateMachineComponent (type 0x1401c7350) on work entity ---
+    // --- Find ConsumeProduceComponent (type 0x1401c7350) on work entity ---
     uintptr_t smCompIBP = 0;
     fn_InternalBasePtr_CheckPtr(entityFieldPtr);
-    fn_FindComponent_StateMachine((void*)*(uintptr_t*)entityFieldPtr, &smCompIBP);
+    fn_FindComponent_ConsumeProduce((void*)*(uintptr_t*)entityFieldPtr, &smCompIBP);
 
-    // --- Get ConsumeProduceDescription from SM component's entity +0x18 ---
+    // --- Get ConsumeProduceDescription from ConsumeProduceComponent's entity +0x18 ---
     fn_InternalBasePtr_CheckPtr(&smCompIBP);
     void* descBase = *(void**)(smCompIBP + 0x18);
     bool isDerived = fn_IsDerivedFrom(descBase, *g_TypeId_ConsumeProduceComponent);
@@ -516,10 +516,10 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     fn_InternalBasePtr_CheckPtr(&meshCompIBP);
     s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 2, resourcesDepleted ? '\x01' : '\0');
 
-    // --- Find StateMachineComponent (type 0x1401c7350) for produce check ---
+    // --- Find ConsumeProduceComponent (type 0x1401c7350) for produce check ---
     fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
     entity = *(uintptr_t*)((uintptr_t)self + 0x10);
-    void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_StateMachineComponent_FC);
+    void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
 
     uintptr_t smComp2IBP = 0;
     fn_InternalBasePtr_Ctor(&smComp2IBP, smComp2);
@@ -992,10 +992,10 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     canFinish = '\x01';
                     self->field_4c -= *(int*)(cpDescAddr + 0x40);
 
-                    // Increment produce counter on StateMachineComponent
+                    // Increment produce counter on ConsumeProduceComponent
                     fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
                     entity = *(uintptr_t*)((uintptr_t)self + 0x10);
-                    void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_StateMachineComponent_FC);
+                    void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
                     uintptr_t smComp3IBP = 0;
                     fn_InternalBasePtr_Ctor(&smComp3IBP, smComp3);
                     fn_InternalBasePtr_CheckPtr(&smComp3IBP);

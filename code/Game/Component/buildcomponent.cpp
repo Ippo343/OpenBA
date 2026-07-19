@@ -42,14 +42,14 @@ extern "C" void* g_pConstructionDemoSite;
 // Type ID globals needed by BuildComponent
 // ============================================================
 
-// DWORD_1401c7a50 — BuildComponent type ID (for IsDerivedFrom check on array1 elements)
-static uint32_t* s_TypeId_BuildComp = nullptr;
-// DAT_1401c7c10 — StorageComponent type ID (for IsDerivedFrom check on array2 elements)
-static uint32_t* s_TypeId_StorageComp = nullptr;
-// DWORD_1401c7ac0 — WorkplaceComponent type ID (for Draw function)
-static uint32_t* s_TypeId_WorkplaceComp = nullptr;
-// DWORD_1401c7a88 — MultiObjectComponent type ID
-static uint32_t* s_TypeId_MultiObj = nullptr;
+// DWORD_1401c7a50 — ModelComponent type ID (for IsDerivedFrom check on array1 elements)
+static uint32_t* s_TypeId_ModelComp2 = nullptr;
+// DAT_1401c7c10 — PickingComponent type ID (for IsDerivedFrom check on array2 elements)
+static uint32_t* s_TypeId_PickingComp = nullptr;
+// DWORD_1401c7ac0 — MultiObjectComponent type ID (for Draw function)
+static uint32_t* s_TypeId_MultiObjComp = nullptr;
+// DWORD_1401c7a88 — ModelDescription type ID
+static uint32_t* s_TypeId_ModelDesc2 = nullptr;
 
 // ============================================================
 // Helper function pointers (resolved once)
@@ -77,10 +77,10 @@ static void EnsureHelpers() {
     }
 
     // Type IDs from exe .rdata
-    s_TypeId_BuildComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
-    s_TypeId_StorageComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7c10);
-    s_TypeId_WorkplaceComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7ac0);
-    s_TypeId_MultiObj = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a88);
+    s_TypeId_ModelComp2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
+    s_TypeId_PickingComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7c10);
+    s_TypeId_MultiObjComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7ac0);
+    s_TypeId_ModelDesc2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a88);
 
     // Original Draw (0x140108D40) — delegated due to extreme complexity
     s_fn_Draw_Original = (fn_BuildComponent_Draw_Original_t)
@@ -138,8 +138,8 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
             s_fn_IBP_Serialize(ibp, ser1);
             // Validate: if non-null but wrong type, clear
             void* val = *(void**)ibp;
-            if (val != nullptr && s_TypeId_BuildComp) {
-                bool valid = fn_IsDerivedFrom(val, *s_TypeId_BuildComp);
+            if (val != nullptr && s_TypeId_ModelComp2) {
+                bool valid = fn_IsDerivedFrom(val, *s_TypeId_ModelComp2);
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -163,10 +163,10 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
         for (int i = 0; i < count2; i++) {
             void* ibp = (void*)((uintptr_t)arr2 + i * 8);
             s_fn_IBP_Serialize(ibp, ser1);
-            // Validate with StorageComponent type
+            // Validate with PickingComponent type (DAT_1401c7c10)
             void* val = *(void**)ibp;
-            if (val != nullptr && s_TypeId_StorageComp) {
-                bool valid = fn_IsDerivedFrom(val, *s_TypeId_StorageComp);
+            if (val != nullptr && s_TypeId_PickingComp) {
+                bool valid = fn_IsDerivedFrom(val, *s_TypeId_PickingComp);
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -293,12 +293,17 @@ static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
 // and the site's ModelComponent never gets appended to +0x58 (empty mesh list).
 //   0x1401c7a88 = ModelDescription (checked on the found ModelComponent's +0x18 desc)
 //   0x1401c7a50 = ModelComponent   (block 2 collects these into +0x58)
-//   0x1401c7c10 = StorageComponent (block 2 collects these into +0x68)
-//   0x1401c7ac0 = WorkPlaceComponent (block 4 reads +0x58 build multiplier)
+//   0x1401c7c10 = PickingComponent (block 2 collects these into +0x68) — CORRECTED
+//                 2026-07-19: writer is PickingComponent_RegisterType 0x14014f6f5; was
+//                 wrongly resolved by name as "StorageComponent" (wrong CRC → block-2
+//                 scan matched the wrong component type)
+//   0x1401c7ac0 = MultiObjectComponent (block 4 reads +0x58 build multiplier) —
+//                 CORRECTED 2026-07-19: writer MultiObjectComponent_RegisterType
+//                 0x14014f475; was wrongly resolved as "WorkPlaceComponent"
 static uint32_t s_tid_ModelDesc  = 0;   // DAT_1401c7a88
 static uint32_t s_tid_ModelComp  = 0;   // DWORD_1401c7a50
-static uint32_t s_tid_Storage    = 0;   // DAT_1401c7c10
-static uint32_t s_tid_Workplace  = 0;   // DWORD_1401c7ac0
+static uint32_t s_tid_Picking    = 0;   // DAT_1401c7c10
+static uint32_t s_tid_MultiObj   = 0;   // DWORD_1401c7ac0
 static bool s_bcDrawResolved = false;
 static uint32_t BC_ResolveTid(uintptr_t rdataGlobal, const char* name) {
     (void)rdataGlobal;
@@ -313,8 +318,8 @@ static void EnsureDrawHelpers() {
     s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
     s_tid_ModelDesc = BC_ResolveTid(0x1401c7a88, "ModelDescription");
     s_tid_ModelComp = BC_ResolveTid(0x1401c7a50, "ModelComponent");
-    s_tid_Storage   = BC_ResolveTid(0x1401c7c10, "StorageComponent");
-    s_tid_Workplace = BC_ResolveTid(0x1401c7ac0, "WorkPlaceComponent");
+    s_tid_Picking   = BC_ResolveTid(0x1401c7c10, "PickingComponent");
+    s_tid_MultiObj  = BC_ResolveTid(0x1401c7ac0, "MultiObjectComponent");
     s_bcDrawResolved = true;
 }
 
@@ -399,7 +404,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host2);
-            void* storeComp = BC_FindComponentByType(host2, s_tid_Storage);
+            void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib2, storeComp);
             if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &ib2);
@@ -456,12 +461,12 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // --- Stage 4: progress = 1; then read the WorkplaceComponent's progress at +0xb*8.
     *(int*)((uintptr_t)self + 0x4c) = 1;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
-    void* wp = BC_FindComponentByType(self[2], s_tid_Workplace);
+    void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
     int64_t wpIbp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp);
     if (wpIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
-        void* wp2 = BC_FindComponentByType(self[2], s_tid_Workplace);
+        void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp2);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
         // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
@@ -492,7 +497,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
 // Returns retbuf (caller passes &out).
 void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
     void* found = nullptr;
-    if (s_TypeId_StorageComp) {
+    if (s_TypeId_PickingComp) {
         int count = *(int*)(compHost + 0x38);
         int64_t arr = *(int64_t*)(compHost + 0x30);
         for (int i = 0; i < count; i++) {
@@ -501,10 +506,10 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
             void* comp = (void*)*slot;
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (tid == *s_TypeId_StorageComp) {
+            if (tid == *s_TypeId_PickingComp) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_StorageComp))
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_PickingComp))
                     found = c;
                 break;
             }
@@ -523,7 +528,7 @@ void BuildComponent_InitFuncs() {
     printf("[BuildComponent] Funcs resolved: IBP_Serialize=%p DrawOriginal=%p "
            "TypeId_Build=%p TypeId_Storage=%p\n",
            (void*)s_fn_IBP_Serialize, (void*)s_fn_Draw_Original,
-           (void*)s_TypeId_BuildComp, (void*)s_TypeId_StorageComp);
+           (void*)s_TypeId_ModelComp2, (void*)s_TypeId_PickingComp);
 #endif
 }
 

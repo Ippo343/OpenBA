@@ -34,9 +34,9 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find StateMachine component
+    // Find ConsumeProduceComponent
     uint64_t component = 0;
-    fn_FindComponent_StateMachine(entityInternal, &component);
+    fn_FindComponent_ConsumeProduce(entityInternal, &component);
 
     // Get Description at component+0x18, check ConsumeProduceComponent
     void* desc = *(void**)((uintptr_t)component + 0x18);
@@ -194,7 +194,7 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
 
     // Find component via FUN_14000b6f0 (same FindComponent used in StorageCapacityUI)
     void* component = nullptr;
-    fn_FindComponent_StateMachine(entityInternal, &component);
+    fn_FindComponent_ConsumeProduce(entityInternal, &component);
 
     // Get sub-component at +0x18 of found component, check if ConsumeProduceComponent
     void* subComp = *(void**)((uintptr_t)component + 0x18);
@@ -245,7 +245,7 @@ void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t /*param2*/,
 
     // Find component
     void* component = nullptr;
-    fn_FindComponent_StateMachine(entityInternal, &component);
+    fn_FindComponent_ConsumeProduce(entityInternal, &component);
 
     // Read selection from combo element (data30 InternalPtr) at +0x118
     void* comboElem = (void*)self->data30;

@@ -975,7 +975,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             // foundations are excluded — the live build sim drives their real state.)
             //
             // Resolve by NAME via FindComponentOnEntity: the exe-.rdata type-id global
-            // g_TypeId_BuildStateComponent is still null during world-build (raw .rdata is
+            // g_TypeId_StateMachineComponent_FC is still null during world-build (raw .rdata is
             // unresolvable in SA; it's lazily filled post-Engine::Startup), so the IBP finder
             // fn_FindComponent_BuildState returns null here. The name-based lookup matches on
             // the live vtable GetTypeId, exactly like the modelComp lookup just above.

@@ -107,8 +107,8 @@ static WAP_fn_Vec3Heading_t         s_wap_Vec3Heading     = nullptr;
 // Inline-object vtables (exe .rdata) + .rdata float/dword constants.
 static void* s_wap_vtable_Action      = nullptr;  // 0x14015faa0
 static void* s_wap_vtable_PerformWork = nullptr;  // 0x14015fea0
-static const uint32_t* s_wap_pDword_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage msg id #1 = 0)
-static const uint32_t* s_wap_pDword_c41e0 = nullptr; // 0x1401c41e0 (ba9f0 SendComponentMessage msg id #2 = 0)
+static const uint32_t* s_wap_pDword_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent)
+static const uint32_t* s_wap_pDword_c41e0 = nullptr; // 0x1401c41e0 (ba9f0 SendComponentMessage #2 target type-id = FireComponent)
 static const float*    s_wap_pf_172124    = nullptr; // 0x140172124 = 0.75f  (PerformWork Time #1)
 static const float*    s_wap_pf_172188    = nullptr; // 0x140172188 = 3.5f   (ba9f0 MoveTo speed)
 static const float*    s_wap_pf_172194    = nullptr; // 0x140172194 = 4.0f   (bffd0 PerformWork_Ctor7 Time)

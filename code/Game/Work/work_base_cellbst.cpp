@@ -239,7 +239,7 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 
 // Reimpl of FUN_140029de0 (TradeDescription_impl_9de0) — serialize the cell BST.
 // Stream order: count(int), then `count` (int key, IBP) pairs. LOAD inserts each pair
-// (IBP type-checked vs CitizenAIComponent 0x1401c7158). SAVE is an iterative in-order
+// (IBP type-checked vs CitizenComponent 0x1401c7158). SAVE is an iterative in-order
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
 void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);

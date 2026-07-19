@@ -103,7 +103,7 @@ static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
 // ============================================================
 // Finds "storageTable", "progress", "buttonPause" elements.
 // Iterates storage table rows, populating each with resource sprite,
-// label, and required amount from the BuildRequirementComponent.
+// label, and required amount from the ToolbarDescription.
 // Sets up the progress bar and pause button state.
 //
 // Original: 0x1400B1F40.
@@ -130,7 +130,7 @@ void BuildUI_Slot4(BuildUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find PositionComponent (FUN_14000d6c0) → has BuildRequirementComponent at +0x18
+    // Find PositionComponent (FUN_14000d6c0) → has ToolbarDescription at +0x18
     uint64_t posComp = 0;
     fn_FindComponent_Position((void*)entityPtr, &posComp);
 
@@ -381,7 +381,7 @@ void BuildUI_Slot7(BuildUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find PositionComponent → BuildRequirementComponent at +0x18
+    // Find PositionComponent → ToolbarDescription at +0x18
     uint64_t posComp = 0;
     fn_FindComponent_Position((void*)entityPtr, &posComp);
 

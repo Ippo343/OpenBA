@@ -151,7 +151,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 // ============================================================
 // Checks data source type: if BuildComponent, stores directly at +0x30.
 // If ComponentEntity, stores entity->description at +0x30.
-// Finds "labelTitle" element and sets title text from BuildRequirementComponent.
+// Finds "labelTitle" element and sets title text from ToolbarDescription.
 // Finds "buttonClose" and sets ID 1.
 // Finds "borderTitle" and configures drag handle (flags 0x10000, ID 0).
 // Searches description for UIDescription and registers sub-controllers.
@@ -163,12 +163,12 @@ void ToolUI_Slot4(ToolUI* self) {
 
     // Determine description source from +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isBuildComp = fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
+    bool isBuildComp = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
 
     if (isBuildComp && dataSource != nullptr) {
         // Data source IS the description — check again and store
         void* ds2 = *(void**)(s + 0x28);
-        bool check = fn_IsDerivedFrom(ds2, *g_TypeId_BuildComponent);
+        bool check = fn_IsDerivedFrom(ds2, *g_TypeId_ComponentDescription_FC);
         *(void**)(s + 0x30) = check ? ds2 : nullptr;
     } else {
         // Check if data source is a ComponentEntity
@@ -201,7 +201,7 @@ void ToolUI_Slot4(ToolUI* self) {
         fn_String_Dtor(nameStr);
     }
 
-    // Set title text from BuildRequirementComponent in description
+    // Set title text from ToolbarDescription in description
     if (*(void**)(s + 0x38) != nullptr) {
         void* desc = *(void**)(s + 0x30);
         int descCount = *(int*)((uintptr_t)desc + 0x30);
@@ -214,8 +214,8 @@ void ToolUI_Slot4(ToolUI* self) {
             void** vtbl = *(void***)entry;
             int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
 
-            if (typeId == (int)*g_TypeId_BuildRequirementComponent) {
-                bool check = fn_IsDerivedFrom(entry, *g_TypeId_BuildRequirementComponent);
+            if (typeId == (int)*g_TypeId_ToolbarDescription_FC) {
+                bool check = fn_IsDerivedFrom(entry, *g_TypeId_ToolbarDescription_FC);
                 if (check && entry != nullptr) {
                     // Create UI::String from entry's string table (+0x30) and name (+0x38)
                     uint8_t uiStrBuf[16];

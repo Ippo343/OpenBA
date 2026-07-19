@@ -18,7 +18,7 @@
 #include <cstdint>
 
 // ------------------------------------------------------------------
-// TombstoneComponent type-ID .rdata global (DAT_1401c4a68 = TombstoneDescription).
+// TombstoneDescription type-ID .rdata global (DAT_1401c4a68).
 // TombstoneComponent::OnCreate (0x140057860) does IsDerivedFrom(_unk18, *0x1401c4a68)
 // to validate the description before reading its [minTime,maxTime] lifetime fields. In
 // the original exe this global is .data filled by TombstoneDescription_Register

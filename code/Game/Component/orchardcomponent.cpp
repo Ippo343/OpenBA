@@ -116,7 +116,7 @@ static fn_BaseIsA_t s_fn_BaseIsA = nullptr;
 typedef void* (*fn_IBPAccessor_t)(int64_t entity, void* outIBP);
 static fn_IBPAccessor_t s_fn_IBPAccessor52c0 = nullptr;
 // Type-id globals referenced by the serializer (entity-ref kind filters).
-static uint32_t* s_pTypeComponentEntity = nullptr;  // TypeInfo_ComponentEntity
+static uint32_t* s_pTypeMapComp = nullptr;  // 0x1401c79e0 = MapComponent (TypeInfo)
 static uint32_t* s_pType7b30 = nullptr;             // DAT_1401c7b30
 static uint32_t* s_pType4250 = nullptr;             // DAT_1401c4250
 static void**    s_pWorldSingleton2 = nullptr;      // g_pGameWorldSingleton (0x1401c3dd8)
@@ -126,7 +126,7 @@ static void EnsureSubHelpers() {
     if (s_subResolved) return;
     s_fn_BaseIsA          = reinterpret_cast<fn_BaseIsA_t>(ResolveAddr(Module::Exe, 0x140002d40));
     s_fn_IBPAccessor52c0  = reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    s_pTypeComponentEntity= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    s_pTypeMapComp= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
     s_pType7b30           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
     s_pType4250           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4250));
     s_pWorldSingleton2    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -180,8 +180,8 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
         if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 4), nullptr);
 
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 8, serializer);
-        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
-            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeComponentEntity)))
+        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeMapComp &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeMapComp)))
             *reinterpret_cast<void**>(e + 8) = nullptr;
 
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x10, serializer);
@@ -218,8 +218,8 @@ void OrchardComponent_ValidateRefs(void* selfV) {
         bool ok = false;
         if (live) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
-            if (s_fn_BaseIsA && s_pTypeComponentEntity &&
-                s_fn_BaseIsA(live, *s_pTypeComponentEntity)) {
+            if (s_fn_BaseIsA && s_pTypeMapComp &&
+                s_fn_BaseIsA(live, *s_pTypeMapComp)) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
                 int64_t accBuf = 0;
                 void* acc = s_fn_IBPAccessor52c0 ? s_fn_IBPAccessor52c0((int64_t)live, &accBuf) : nullptr;

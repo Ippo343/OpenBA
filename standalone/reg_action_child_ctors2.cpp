@@ -20,12 +20,16 @@ extern void* ActChild_ConsumeRawCopyCtor_c63b0(void*, uint64_t*, int64_t, uint64
 extern void  ActChild_TransferToCarrier_ca230(int64_t, int64_t, int);                 // 0x1400ca230
 extern void* ActChild_PickupStoredCopyCtor_ca520(void*, uint64_t*, uint64_t*, int64_t, int, uint8_t); // 0x1400ca520
 extern void* ActChild_ConsumeRawCtor3_c6440(void*, uint64_t*);                        // 0x1400c6440
-extern void* Entity_FindStateMachine_b6f0(int64_t, void*);                            // 0x14000b6f0
+extern void* Entity_FindConsumeProduce_b6f0(int64_t, void*);                          // 0x14000b6f0
 extern uint64_t WeightedRandomIndex_119470(int64_t);                                  // 0x140119470
 
 // Type-id globals filled after Engine::Startup.
 static uint32_t g_tid_RawMaterialDescription = 0;  // 0x1401c7cb8
-static uint32_t g_tid_StateMachineComponent  = 0;  // 0x1401c7350 (bef70 component-find leaf)
+// 0x1401c7350 = ConsumeProduceComponent (writer ConsumeProduceComponent_RegisterType
+// 0x14014eaf5) — CORRECTED 2026-07-19; was filled as "StateMachineComponent", a wrong
+// CRC. The b6f0 finder scans for THIS id (it finds the ConsumeProduceComponent; the
+// real StateMachineComponent slot is 0x1401c7d98).
+static uint32_t g_tid_ConsumeProduceComponent = 0; // 0x1401c7350 (bef70 component-find leaf)
 static uint32_t g_tid_ConsumeProduceDescription = 0; // 0x1401c7388 (bef70 component search)
 // 0x1401c5d70 ComponentEntity (writer ComponentEntity_RegisterType 0x14014cff5) — the
 // shared "is this ref a ComponentEntity" Serialize validator id, read by the Action
@@ -37,7 +41,7 @@ static uint32_t g_tid_ComponentEntity = 0;         // 0x1401c5d70
 
 extern "C" void FillTypeIdGlobals_actionchild() {
     g_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
-    g_tid_StateMachineComponent  = ::Object::GetTypeIdByName("StateMachineComponent");
+    g_tid_ConsumeProduceComponent = ::Object::GetTypeIdByName("ConsumeProduceComponent");
     g_tid_ConsumeProduceDescription = ::Object::GetTypeIdByName("ConsumeProduceDescription");
     g_tid_ComponentEntity        = ::Object::GetTypeIdByName("ComponentEntity");
 }
@@ -51,11 +55,11 @@ void RegisterActionChildCtors2Batch() {
     RegisterExeAddr(0x1400ca230, reinterpret_cast<uintptr_t>(&ActChild_TransferToCarrier_ca230));
     RegisterExeAddr(0x1400ca520, reinterpret_cast<uintptr_t>(&ActChild_PickupStoredCopyCtor_ca520));
     RegisterExeAddr(0x1400c6440, reinterpret_cast<uintptr_t>(&ActChild_ConsumeRawCtor3_c6440));
-    RegisterExeAddr(0x14000b6f0, reinterpret_cast<uintptr_t>(&Entity_FindStateMachine_b6f0));
+    RegisterExeAddr(0x14000b6f0, reinterpret_cast<uintptr_t>(&Entity_FindConsumeProduce_b6f0));
     RegisterExeAddr(0x140119470, reinterpret_cast<uintptr_t>(&WeightedRandomIndex_119470));
     // type-id global storage (values filled later by FillTypeIdGlobals_actionchild)
     RegisterExeAddr(0x1401c7cb8, reinterpret_cast<uintptr_t>(&g_tid_RawMaterialDescription));
-    RegisterExeAddr(0x1401c7350, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
+    RegisterExeAddr(0x1401c7350, reinterpret_cast<uintptr_t>(&g_tid_ConsumeProduceComponent));
     RegisterExeAddr(0x1401c7388, reinterpret_cast<uintptr_t>(&g_tid_ConsumeProduceDescription));
     RegisterExeAddr(0x1401c5d70, reinterpret_cast<uintptr_t>(&g_tid_ComponentEntity));
 }

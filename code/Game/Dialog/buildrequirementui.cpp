@@ -101,7 +101,7 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 // BuildRequirementUI::Slot4 (vtable +0x20) — Setup/populate
 // ============================================================
 // Resolves the building description from the datasource,
-// finds BuildRequirementComponent for icon/title display,
+// finds ToolbarDescription for icon/title display,
 // finds ResourceComponent for material requirement list.
 // Populates label elements with resource sprites and counts.
 //
@@ -125,10 +125,10 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // dialog can leave +0x28 NULL. Skip all three IsDerivedFrom probes when null — the
     // desc stays unresolved and the function returns cleanly at `if (!desc)` below.
     // Try path 1: datasource IsA BuildComponent
-    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
+    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
     if (isBuild && dataSource) {
         // Re-verify (matches original double-check pattern)
-        isBuild = fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
+        isBuild = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
         void* desc = isBuild ? dataSource : nullptr;
         *(void**)(s + 0x30) = desc;
     }
@@ -157,14 +157,14 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
                 // Element_GetUserData can return NULL (element carries no user data);
                 // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
                 // so guard exactly as the +0x28 datasource probes above do.
-                isBuild = userData && fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent);
+                isBuild = userData && fn_IsDerivedFrom(userData, *g_TypeId_ComponentDescription_FC);
                 void* descResolved = isBuild ? userData : nullptr;
                 // Standalone divergence: the in-game Toolbar sub-item buttons store
                 // their building DESCRIPTION entity as userData (toolbardialog.cpp
                 // SetUserData(button, item+0x58)), not a BuildComponent. The retail
                 // build path passes a BuildComponent here, but downstream only uses
                 // `desc` as the object whose component array (+0x28 list / +0x30
-                // count) is scanned for the BuildRequirementComponent — which the
+                // count) is scanned for the ToolbarDescription — which the
                 // description entity also carries (verified: the toolbar override's
                 // FindCompInDesc on the same object resolves the ToolbarDescription).
                 // So accept a non-BuildComponent userData when it presents a sane
@@ -217,13 +217,13 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 #endif
     if (!desc) return;
 
-    // Find BuildRequirementComponent in description's component list
-    void* buildReqComp = FindCompInDesc(desc, *g_TypeId_BuildRequirementComponent);
+    // Find ToolbarDescription in description's component list
+    void* buildReqComp = FindCompInDesc(desc, *g_TypeId_ToolbarDescription_FC);
 
     // Get dialog instance at +0x18
     void* dialogInst = *(void**)(s + 0x18);
 
-    // --- Set icon sprite from BuildRequirementComponent ---
+    // --- Set icon sprite from ToolbarDescription ---
     {
         void* imageElem = FindDialogElem(dialogInst, "imageIcon");
         fn_InternalBasePtr_CheckPtr((void*)&imageElem);
@@ -236,7 +236,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         void* imagePtr = *(void**)ibpBuf;
 
         if (imagePtr && buildReqComp) {
-            // Create sprite from BuildRequirementComponent: SpriteSheet at +0x20, name at +0x28
+            // Create sprite from ToolbarDescription: SpriteSheet at +0x20, name at +0x28
             uintptr_t brc = (uintptr_t)buildReqComp;
             uint8_t sprite[16];
 #ifdef _DEBUG
@@ -254,7 +254,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         }
     }
 
-    // --- Set title text from BuildRequirementComponent ---
+    // --- Set title text from ToolbarDescription ---
     {
         void* textElem = FindDialogElem(dialogInst, "textTitle");
         fn_InternalBasePtr_CheckPtr((void*)&textElem);
@@ -266,7 +266,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         void* textPtr = *(void**)ibpBuf;
 
         if (textPtr && buildReqComp) {
-            // Create UI::String from BuildRequirementComponent: StringTable at +0x30, name at +0x38
+            // Create UI::String from ToolbarDescription: StringTable at +0x30, name at +0x38
             uintptr_t brc = (uintptr_t)buildReqComp;
 #if defined(_DEBUG)
             if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {

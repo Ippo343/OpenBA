@@ -224,7 +224,7 @@ void* TutorialImageToolbarIcon_Ctor(void* self) {
 // If field40->+0x58 is null (no component list), uses field40->+0x28
 // (spriteSheet) and field40->+0x38 (spriteName) directly.
 // If non-null, iterates the component list to find a matching
-// BuildRequirementComponent and uses its +0x20/+0x28.
+// ToolbarDescription and uses its +0x20/+0x28.
 void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     EnsureFuncs();
     auto p = reinterpret_cast<uint8_t*>(self);
@@ -283,7 +283,7 @@ void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
             spriteSheet = *(uint64_t*)(toolbar + 0x28);
             spriteName = (const void*)(toolbar + 0x38);
         } else {
-            // Has component list — iterate to find BuildRequirementComponent
+            // Has component list — iterate to find ToolbarDescription
             if (s_fn_ResolveToolbar)
                 s_fn_ResolveToolbar(p + 0x30);
 
@@ -302,11 +302,11 @@ void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
                 fn_GetTypeId_t getTypeId = (fn_GetTypeId_t)(*(void**)(vtbl + 0x10));
                 uint32_t typeId = getTypeId(comp);
 
-                if (g_TypeId_BuildRequirementComponent &&
-                    typeId == *g_TypeId_BuildRequirementComponent) {
+                if (g_TypeId_ToolbarDescription_FC &&
+                    typeId == *g_TypeId_ToolbarDescription_FC) {
                     // IsDerivedFrom check
                     if (fn_IsDerivedFrom &&
-                        fn_IsDerivedFrom(comp, *g_TypeId_BuildRequirementComponent)) {
+                        fn_IsDerivedFrom(comp, *g_TypeId_ToolbarDescription_FC)) {
                         matchedComp = comp;
                     }
                     break;

@@ -579,9 +579,9 @@ void DestroyUI_Slot7(DestroyUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find StateMachine component and Destroy component
+    // Find ConsumeProduceComponent and Destroy component
     void* smComp = nullptr;
-    fn_FindComponent_StateMachine(entityInternal, &smComp);
+    fn_FindComponent_ConsumeProduce(entityInternal, &smComp);
     void* destroyComp = nullptr;
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
 

@@ -116,7 +116,7 @@ static void* s_vtable_PlayAnimation = nullptr;  // 0x140158950
 static void* s_vtable_PickupRawMaterial = nullptr; // 0x14015ff10 (LEA @0x1400c9bb0)
 static const float* s_pf_172124 = nullptr;      // 0x140172124 (c0ad0 PerformWork time)
 static const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68 (PerformWork target derive check)
-static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage msg id)
+static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
 static const float* s_pf_172280 = nullptr;      // 0x140172280 (MoveTo speed)
 static const float* s_pf_172100 = nullptr;      // 0x140172100 (PlayAnimation time)
 static const float* s_pf_1721b0 = nullptr;      // 0x1401721b0 (grazing PerformWork time)

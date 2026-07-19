@@ -436,8 +436,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             void** cvtbl = *(void***)comp;
             typedef int (*fn_GetTypeId_t)(void*);
             int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
-            if ((uint32_t)tid == *g_TypeId_BuildStateComponent) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_BuildStateComponent))
+            if ((uint32_t)tid == *g_TypeId_StateMachineComponent_FC) {
+                if (fn_IsDerivedFrom(comp, *g_TypeId_StateMachineComponent_FC))
                     buildStateComp = comp;
                 break;
             }
@@ -1151,10 +1151,10 @@ void TradeUI_Serialize(TradeUI* self) {
     }
 
     int selectableCount = 0;
-    void* buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, nullptr);
+    void* buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
     while (buildExt != nullptr) {
-        // Check if this BuildComponent external has a SelectDescription sub-component
-        bool isDerivedBuild = fn_IsDerivedFrom(buildExt, *g_TypeId_BuildComponent);
+        // Check if this ComponentDescription external has a SelectDescription sub-component
+        bool isDerivedBuild = fn_IsDerivedFrom(buildExt, *g_TypeId_ComponentDescription_FC);
         void* buildComp = isDerivedBuild ? buildExt : nullptr;
         if (buildComp) {
             int compCount = *(int*)((uintptr_t)buildComp + 0x30);
@@ -1173,7 +1173,7 @@ void TradeUI_Serialize(TradeUI* self) {
                 }
             }
         }
-        buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, buildExt);
+        buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, buildExt);
     }
 
     // --- Phase 4a: Setup tableStorage ---
@@ -2630,7 +2630,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     uint64_t entityPtr[2] = {0, 0};
     fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
 
-    // Find TradeComponent (uses g_TypeId_BuildingComponent = DAT_1401c4b80)
+    // Find TradeComponent (uses g_TypeId_TradeComponent_FC = DAT_1401c4b80)
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t tradePtr[2] = {0, 0};
     fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);

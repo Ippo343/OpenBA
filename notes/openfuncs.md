@@ -279,13 +279,25 @@ Almost entirely stub/thunk except the two constant getters:
 ## 5. Suggested priority order
 
 1. **Reconcile the 4 cross-file address conflicts** (§1) — cheap, removes latent double-register / stale-defer bugs.
-2. **CitizenAI Level-2 closure** — ✔ MOSTLY DONE (audited 2026-07-19): `10dca0`/`10f1f0` +
+2. **CitizenAI Level-2 closure** — ✔ DONE (audited + closed 2026-07-19): `10dca0`/`10f1f0` +
    all 14 `CitizenAI_State_*` handlers were already registered (citizenai waves) and verified
    faithful against fresh decomp; one real bug found+fixed (LongTermPlan arrA stride,
    citizenai_growup.cpp). Ghidra renames applied: AdultTransition→Eat, ElderTransition→Drink,
-   GetHappiness→GetCarryCount. REMAINING: the deliberate global fill of msg-id/type-id
-   `.rdata` slots `c70e8`/`c7158`/`c42c0` (see §2 warning; dual-role readers — Serialize
-   type-checks want the CRC, work-action SendComponentMessage ctor sites currently rely on 0).
+   GetHappiness→GetCarryCount. The `c70e8`/`c7158`/`c42c0` type-id fill landed in
+   reg_citizenai_typeids.cpp (per-global gates, §2) and A/B-verified; the gates default OFF
+   by design — flipping them on by default is a future CitizenAI-Phase-1 decision, not an
+   open item of this step. Adjacent CitizenAI work NOT in this step's scope remains open in
+   §1: citizen lifecycle Level-2 (`302a0`/`112040`/`1168a0`/`117080` — note their blocker
+   AssignWorkplace `1163d0` has since landed via reg_citizen_assignworkplace), the
+   behavior-tick no-ops (`25a10`/`25b30`/`d62a0`/`d43b0`/`95580`), and the needs-msg helpers
+   (`10fde0`/`1117a0`/`111540`).
+2.5. **Finish remaining CitizenAI** (added 2026-07-19 — close out the subsystem before
+   moving on): (a) citizen lifecycle Level-2 `302a0`/`112040`/`1168a0`/`117080`
+   (reg_component_gap_A defers; their named blocker AssignWorkplace `1163d0` has since
+   landed — re-derive the closure before trusting the defer notes); (b) behavior-tick
+   no-ops `25a10`/`25b30`/`d62a0`/`d43b0`/`95580` (reg_citizenbehavior_tick);
+   (c) needs-msg helpers `10fde0`/`1117a0`/`111540` (reg_citizen_needsupdate — the
+   `[EatMsg]` skip path).
 3. **`AnimalComponent::Update` `0x140106420`** — remove the recursion-passthrough with a genuine reimpl.
 4. **`GUL_SaveRestore` `0x1400959c0`** — the one loop slot blocking load-from-save (everything else new-game-only).
 5. **Player-tool closures** (RemovalTool `1035e0`, PathTool `dd710`, ToolUI `f5a0`) — large but
@@ -310,4 +322,10 @@ python tools/gen_factory_registrations.py     # REIMPLEMENTED set = the 14 done;
 
 # Deferred/no-op markers in the registry:
 grep -rniE "DEFER|no-op|not registered|placeholder|can't be registered" standalone/
+
+# Type-id slot identity check ("the xref check") — joins every 0x1401cXXXX literal in
+# repo code against the RegisterType-writer truth in factory_registrations.csv; flags
+# contradicting names. Run after any wave adding type-id resolves/fills. First run
+# (2026-07-19) caught 3 fill-value bugs + ~15 misnomer symbols.
+python tools/typeid_xcheck.py
 ```

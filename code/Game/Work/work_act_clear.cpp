@@ -102,7 +102,7 @@ static void* s_wac_vtable_Action               = nullptr; // 0x14015faa0 (inline
 static void* s_wac_vtable_RemoveNaturalResource= nullptr;  // 0x140160050 (loop inline action)
 static void* s_wac_vtable_ShowTool             = nullptr;  // 0x1401589b0 (tail inline ShowTool)
 static const uint32_t* s_wac_pTid_c7b68 = nullptr;         // 0x1401c7b68 (target derive type id)
-static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage msg id)
+static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
 static const float*    s_wac_pf_172280 = nullptr;          // 0x140172280 (MoveTo speed = -1.0f)
 
 static bool s_wac_resolved = false;

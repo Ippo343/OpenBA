@@ -96,7 +96,7 @@ static WAH_fn_TimeCtor_t             s_wah_TimeCtor        = nullptr;
 static void* s_wah_vtable_Action               = nullptr;  // 0x14015faa0
 static void* s_wah_vtable_CreateNaturalResource = nullptr; // 0x14015fca0
 static void* s_wah_vtable_ShowTool             = nullptr;   // 0x1401589b0
-static const uint32_t* s_wah_pDword_c70e8 = nullptr;        // 0x1401c70e8 (SendComponentMessage msg id, =0)
+static const uint32_t* s_wah_pDword_c70e8 = nullptr;        // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
 static const float* s_wah_pf_172280  = nullptr;            // 0x140172280 = -1.0f  (MoveTo speed)
 static const float* s_wah_pf_172178  = nullptr;            // 0x140172178 =  2.1f  (PerformWork time, bdd20)
 static const float* s_wah_pf_1722a8  = nullptr;            // 0x1401722a8 = -1000.0f (PerformWork heading const)

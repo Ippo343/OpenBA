@@ -190,7 +190,7 @@ uint64_t TutorialGoalDialog_OnInit(void* self) {
 
     if (userData != nullptr) {
         // Check if it's a BuildingDescription type
-        if (fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent)) {
+        if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentDescription_FC)) {
             description = userData;
         } else {
             // Check if it's a ComponentEntity

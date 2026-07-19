@@ -28,7 +28,7 @@ void RadiusUI_Slot6(RadiusUI* self);
 // BuildRequirementUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Resolves description, finds BuildRequirementComponent,
+// Slot4 (vtable +0x20): Resolves description, finds ToolbarDescription,
 // sets icon sprite and title text, populates label elements with resource requirements.
 void BuildRequirementUI_Slot4(BuildRequirementUI* self);
 
@@ -126,7 +126,7 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id);
 // ============================================================
 
 // Serialize (vtable +0x20): Finds button element, creates sprite from
-// BuildRequirementComponent, sets on button's child image element.
+// ToolbarDescription, sets on button's child image element.
 void UpgradeUI_Serialize(UpgradeUI* self);
 
 // OnRemove (vtable +0x48): On button click (ID 33000), finds DestroyComponent,
@@ -409,7 +409,7 @@ void StorageUI_Startup(StorageUI* self);
 
 // Slot4 (vtable +0x20): Finds labelTitle/buttonClose/borderTitle elements,
 // gets BuildComponent or ComponentEntity data source, sets title text from
-// BuildRequirementComponent, configures sub-controllers from UIDescription.
+// ToolbarDescription, configures sub-controllers from UIDescription.
 void ToolUI_Slot4(ToolUI* self);
 
 // Slot8 (vtable +0x40): Input handler — reads mouse position via KeyMap,

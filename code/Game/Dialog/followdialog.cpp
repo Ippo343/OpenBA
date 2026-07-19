@@ -304,7 +304,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
     if (!entityRef) return;  // guard: followed-entity ref may be uninit/cleared
     uintptr_t entityInner = *(uintptr_t*)(entityRef + 0x10);
 
-    // Find CharacterComponent on the entity
+    // Find ModelComponent on the entity (via fn_FindComponent_Character)
     uint8_t compBuf[16];
     fn_FindComponent_Character((void*)entityInner, compBuf);
     void* charComp = *(void**)compBuf;
@@ -424,7 +424,7 @@ void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
     FollowDialog_Slot6(reinterpret_cast<FollowDialog*>(self), p2, p3, p4);
 }
 // Lazily bind the ModelComponent type-id fn_FindComponent_Character needs. The global
-// g_TypeId_CharacterComponent is DAT_1401c7a50 = ModelComponent's TypeInfo (documented
+// g_TypeId_ModelComponent_FC is DAT_1401c7a50 = ModelComponent's TypeInfo (documented
 // misnomer, engine_funcs.h:4476). Its raw exe .rdata slot is never registered in the
 // standalone build (ResolveAddr -> 0), so the finder early-returns null and the follow
 // camera never receives the citizen's ModelComponent+0x158 position -> the dialog ticks
@@ -433,10 +433,10 @@ void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
 // exe .rdata holds.
 void EnsureFollowGlobals() {
     static uint32_t s_tidModel = 0;
-    uint32_t* g = g_TypeId_CharacterComponent;
+    uint32_t* g = g_TypeId_ModelComponent_FC;
     if (!g || *g == 0 || *g == 0xFFFFFFFFu) {
         if (!s_tidModel) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
-        if (s_tidModel) g_TypeId_CharacterComponent = &s_tidModel;
+        if (s_tidModel) g_TypeId_ModelComponent_FC = &s_tidModel;
     }
 }
 

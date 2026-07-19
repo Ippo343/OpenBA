@@ -167,10 +167,10 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             subCount = *(int32_t*)(subData + 0x30);
         }
 
-        // Find the component type matching g_TypeId_BuildRequirementComponent
+        // Find the component type matching g_TypeId_ToolbarDescription_FC
         void* matchedComponent = nullptr;
-        if (g_TypeId_BuildRequirementComponent && subCount > 0) {
-            uint32_t targetType = *g_TypeId_BuildRequirementComponent;
+        if (g_TypeId_ToolbarDescription_FC && subCount > 0) {
+            uint32_t targetType = *g_TypeId_ToolbarDescription_FC;
             for (int j = 0; j < subCount; j++) {
                 void* subItem = *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8);
                 if (!subItem) continue;
@@ -1206,7 +1206,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             fn_InternalBasePtr_Ctor(&buttonRef, buttonElem);
 
             // For ShowGroup (1) and Utility (2), override string/sprite from
-            // the item's entity description (BuildRequirementComponent)
+            // the item's entity description (ToolbarDescription)
             if (actionType == 1 || actionType == 2) {
                 uint64_t entityDesc = *(uint64_t*)(item + 0x58);
                 void* buildReqComp = nullptr;
@@ -1217,8 +1217,8 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                         // Virtual call to GetTypeId (vtable[2], offset 0x10)
                         typedef uint32_t (*GetTypeIdFn)(void*);
                         uint32_t subType = ((GetTypeIdFn)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
-                        if (subType == *g_TypeId_BuildRequirementComponent) {
-                            bool derived = fn_IsDerivedFrom(subItem, *g_TypeId_BuildRequirementComponent);
+                        if (subType == *g_TypeId_ToolbarDescription_FC) {
+                            bool derived = fn_IsDerivedFrom(subItem, *g_TypeId_ToolbarDescription_FC);
                             if (derived) {
                                 buildReqComp = subItem;
                             }
@@ -1235,7 +1235,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                     *(uint64_t*)&uiString[0] = *(uint64_t*)overrideStr;
                     *(uint64_t*)&uiString[8] = *(uint64_t*)(overrideStr + 8);
 
-                    // Override sprite from BuildRequirementComponent: SpriteSheet at +0x20, name at +0x28
+                    // Override sprite from ToolbarDescription: SpriteSheet at +0x20, name at +0x28
                     uint8_t overrideSpr[16];
 #ifdef _DEBUG
                     Debug_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),

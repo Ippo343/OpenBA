@@ -15,7 +15,7 @@
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
 // ============================================================
 // Finds the upgrade button element, creates a sprite from the
-// BuildRequirementComponent on the upgrade description, and
+// ToolbarDescription on the upgrade description, and
 // sets the sprite on the button's child image element.
 //
 // Original: 0x140086d90
@@ -64,7 +64,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     // Get the sub-description from upgradeDesc+0x20
     uintptr_t subDesc = *(uintptr_t*)((uintptr_t)upgradeDesc + 0x20);
 
-    // Find BuildRequirementComponent in sub-description's component list
+    // Find ToolbarDescription in sub-description's component list
     void* buildReqComp = nullptr;
     if (subDesc && *(int*)(subDesc + 0x30) > 0) {
         int compCount = *(int*)(subDesc + 0x30);
@@ -79,8 +79,8 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
             typedef uint32_t (*fn_GetTypeId_t)(void*);
             uint32_t typeId = ((fn_GetTypeId_t)compVtable[2])(comp);
 
-            if (typeId == *g_TypeId_BuildRequirementComponent) {
-                void* checked = fn_IsDerivedFrom(comp, *g_TypeId_BuildRequirementComponent)
+            if (typeId == *g_TypeId_ToolbarDescription_FC) {
+                void* checked = fn_IsDerivedFrom(comp, *g_TypeId_ToolbarDescription_FC)
                     ? comp : nullptr;
                 buildReqComp = checked;
                 break;
@@ -88,7 +88,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
         }
     }
 
-    // Create a Sprite from the BuildRequirementComponent using proper constructor
+    // Create a Sprite from the ToolbarDescription using proper constructor
     uintptr_t brc = (uintptr_t)buildReqComp;
     uint8_t sprite[16];
     fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));

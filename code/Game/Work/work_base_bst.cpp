@@ -277,7 +277,7 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 
 // Reimpl of CitizenAI_impl_96b0 (FUN_1400296b0) — serialize the simple BST.
 // Stream order: count(int), then `count` IBP entries. LOAD path reads each IBP
-// (type-checked vs CitizenAIComponent 0x1401c7158) and inserts via RegisterWork. SAVE
+// (type-checked vs CitizenComponent 0x1401c7158) and inserts via RegisterWork. SAVE
 // path is an iterative in-order traversal using parent pointers, writing each node's
 // IBP (at node+0). Serializer read/write mode = *(int*)(*serializer + 8) == 0 (read).
 // Caller: void fn(void* bstRoot, void* serializer).

@@ -996,15 +996,15 @@ void EnsureGlobals() {
     // (single object -> use its Transform) or, failing that, its MapComponent grid
     // footprint (multi-object building). Those finders read exe .rdata type-id
     // globals that ResolveAddr leaves NULL in standalone, so fill them from the live
-    // factory tree. NB the engine_funcs labels are misleading: g_TypeId_Character-
-    // Component is actually ModelComponent (DAT_1401c7a50) and g_TypeId_BuildComponent
-    // _Slot4 is actually MapComponent (DAT_1401c79e0, written by MapComponent_Register-
-    // Type) — verified via Ghidra DATA xrefs. Without these the center button would
-    // find no component and (build path) null-deref.
+    // factory tree. The type-ids used here: g_TypeId_ModelComponent_FC is
+    // DAT_1401c7a50 = ModelComponent, and g_TypeId_MapComponent_FC is DAT_1401c79e0
+    // = MapComponent (written by MapComponent_RegisterType) — verified via Ghidra
+    // DATA xrefs. Without these the center button would find no component and
+    // (build path) null-deref.
     static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
-    if (!g_TypeId_CharacterComponent)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_CharacterComponent = &s_model; }
+    if (!g_TypeId_ModelComponent_FC)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
     if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
-    if (!g_TypeId_BuildComponent_Slot4)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_BuildComponent_Slot4 = &s_mapc; }
+    if (!g_TypeId_MapComponent_FC)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
 
     static bool s_logged = false;
     if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {

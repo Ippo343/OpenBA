@@ -15,7 +15,7 @@
 //   param_6 = altAnim byte — selects the state-8 SendComponentMessage id + tool/anim variant
 //
 // The chain (order of PUSH via TaskListAppend 0x1400c54e0; the stack is LIFO so it runs
-// bottom-to-top): a LEAD SendComponentMessage (msg 70e8) is stored at CharacterComponent
+// bottom-to-top): a LEAD SendComponentMessage (target type-id 70e8 = CitizenAIComponent) is stored at CharacterComponent
 // +0x58 (NOT pushed — it fires when the chain completes), then pushed in order:
 // CompleteTask -> SendComponentMessage(c7008 idle / c75f0 alt) -> ShowTool(-1) ->
 // PerformWork(3.0s, heading anim) -> MoveTo(Fast) -> ShowTool(Knife 7 / Saw 4). When the
@@ -128,7 +128,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
     // WIPE the action stack (start the new chain fresh).
     if (s_wipe) s_wipe(stack);
 
-    // --- LEAD SendComponentMessage (msg 70e8) -> stored at CharacterComponent+0x58 (NOT pushed) ---
+    // --- LEAD SendComponentMessage (target type-id 70e8 = CitizenAIComponent) -> stored at CharacterComponent+0x58 (NOT pushed) ---
     {
         void* mem = Alloc(0x40);
         void* act = nullptr;

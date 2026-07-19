@@ -282,7 +282,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
             void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, filenameBuf) : nullptr;
             fn_Filename_Dtor(filenameBuf);
             // Cache the result if it passes the BuildComponent type check
-            bool valid = found && g_TypeId_BuildComponent && fn_IsDerivedFrom(found, *g_TypeId_BuildComponent);
+            bool valid = found && g_TypeId_ComponentDescription_FC && fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC);
             *(void**)((uintptr_t)namePtr + 0x10) = valid ? found : nullptr;
             *(int32_t*)((uintptr_t)namePtr + 8) = *(int32_t*)((uintptr_t)factory + 8);
         }
@@ -359,9 +359,9 @@ void TutorialSetupDialog_Slot8(void* self) {
         void* basePtr = *(void**)(instance + 0x30);
 
         // Original uses IsA first (null/type-safe), then IsDerivedFrom
-        bool isBuild = fn_IsA(basePtr, *g_TypeId_BuildComponent);
+        bool isBuild = fn_IsA(basePtr, *g_TypeId_ComponentDescription_FC);
         if (isBuild) {
-            bool derived = fn_IsDerivedFrom(basePtr, *g_TypeId_BuildComponent);
+            bool derived = fn_IsDerivedFrom(basePtr, *g_TypeId_ComponentDescription_FC);
             void* entityForFollow = derived ? basePtr : nullptr;
             uint64_t retval[2] = {0, 0};
             uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);

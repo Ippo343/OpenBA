@@ -28,7 +28,7 @@ namespace {
 // Type-ID storage globals (exe .rdata, filled by RegisterType at startup).
 const uint32_t* s_pTid_c7a50 = nullptr;  // 0x1401c7a50  (FindComponent in 0x140003f60)
 const uint32_t* s_pTid_c77b0 = nullptr;  // 0x1401c77b0  (FindComponent in 0x14000c460)
-const uint32_t* s_pTid_c7a88 = nullptr;  // 0x1401c7a88  (NaturalResourceDescription? variant)
+const uint32_t* s_pTid_c7a88 = nullptr;  // 0x1401c7a88  (ModelDescription)
 const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68  (NaturalResourceDescription)
 
 // Exe sub-helpers used by the complex ports.
