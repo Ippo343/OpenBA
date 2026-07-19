@@ -65,9 +65,9 @@ where they literally appear in the source.
 |------|--------|------|--------------|
 | `0x14012ab00` + 14 `CitizenAI_State_*` | candidate handlers | reg_citizenai_candidatelist.cpp:12 | STALE — all 14 handlers registered (reg_citizenai_handlers/2/3, gather, growup, leisure, housing_idle); 0x14012ab00 is Storage_GetResourceCount2 (Gather2 helper, reg_citizenai_gather.cpp:24), not a 15th handler. Audited 2026-07-19 |
 | `0x140025a10`,`0x140025b30`,`0x1400d62a0`,`0x1400d43b0`,`0x140095580` | PathBST/PathPairs/ReassignWorkers/AssignCitizens/NotificationEvent | reg_citizenbehavior_tick.cpp:27 | ✔ RESOLVED 2026-07-19 (step 2.5b): all five live — 25a10/25b30 in action_pf_avl.cpp, d62a0+6c60 in citizen_reassign_workers.cpp, 95580 → existing EventLog_AddEvent (gameupdateloop duplicate scanner retired); d43b0 was already ported (stale note) |
-| `0x14010fde0`,`0x1401117a0`,`0x140111540` | needs-msg 1/4/5 helpers | reg_citizen_needsupdate.cpp:16 | ✔ RESOLVED 2026-07-19 (step 2.5c): ported + registered (reg_citizen_25.cpp); `[EatMsg]` skip gone. Msg-4's state-9 transition null-guards the still-unregistered AssignState `113af0` (shared Level-2 backlog item) |
+| `0x14010fde0`,`0x1401117a0`,`0x140111540` | needs-msg 1/4/5 helpers | reg_citizen_needsupdate.cpp:16 | ✔ RESOLVED 2026-07-19 (step 2.5c): ported + registered (reg_citizen_25.cpp); `[EatMsg]` skip gone. Msg-4's type-9 event post resolves since 2026-07-19: `113af0` = PostLifeEvent (ex-"AssignState" misnomer), ported via citizen_lifeevent.cpp + reg_eventlog_citizen.cpp |
 | `0x140106420` | AnimalComponent::Update | reg_component_nature.cpp:58 | still a self-resolving passthrough — registering = infinite recursion. Needs genuine 452-insn reimpl |
-| `0x1400302a0`,`0x140112040`,`0x1401168a0`,`0x140117080` | citizen lifecycle Level-2 | reg_component_gap_A.cpp:15 | ✔ RESOLVED 2026-07-19 (step 2.5a): ported in citizencomponent_lifecycle.cpp + registered (reg_citizen_25.cpp) — their blocker AssignWorkplace `1163d0` had landed earlier, making the defer stale. Remaining Level-2 backlog: AssignState `113af0` (see COMPONENT_GAP_WAVE_ADDENDUM) |
+| `0x1400302a0`,`0x140112040`,`0x1401168a0`,`0x140117080` | citizen lifecycle Level-2 | reg_component_gap_A.cpp:15 | ✔ RESOLVED 2026-07-19 (step 2.5a): ported in citizencomponent_lifecycle.cpp + registered (reg_citizen_25.cpp) — their blocker AssignWorkplace `1163d0` had landed earlier, making the defer stale. The last named Level-2 leftover, `113af0` (ex-"AssignState", really PostLifeEvent — event-log poster), CLOSED 2026-07-19 (citizen_lifeevent.cpp + eventlog.cpp AddCitizenEvent, reg_eventlog_citizen.cpp) |
 | `0x14010dca0` | BuildCandidateStateList | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:32 with all helpers (GetHappiness 115de0 / HasSufficientResources[2] / SortByPriority). Audited faithful 2026-07-19 |
 | `0x14010f1f0` | ValidateAndEnterState | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:33; all 14 handlers live. Audited faithful 2026-07-19 |
 | `0x140047200` | CemeteryComponent::Draw | reg_component_gap_B.cpp:19 | self-resolving passthrough → recursion |
@@ -299,8 +299,11 @@ Almost entirely stub/thunk except the two constant getters:
    EventLog_AddEvent with the gameupdateloop duplicate scanner retired, d43b0 was
    already live), (c) needs-msg helpers (citizen_needsupdate.cpp). Verified: 90s
    in-game, no crash, NOT-IMPLEMENTED 340→328 (−12 = exactly the registered set),
-   `[EatMsg]` skips gone. Only named CitizenAI leftover: AssignState `113af0`
-   (null-guarded shared gap, Level-2 backlog).
+   `[EatMsg]` skips gone. The last named CitizenAI leftover — `113af0`, the
+   "AssignState" misnomer (really CitizenComponent_PostLifeEvent, the event-log
+   message poster) — CLOSED 2026-07-19: ported (citizen_lifeevent.cpp +
+   eventlog.cpp EventLog_AddCitizenEvent/TileIndex) and registered
+   (reg_eventlog_citizen.cpp); all five retail call sites now resolve.
 3. **`AnimalComponent::Update` `0x140106420`** — remove the recursion-passthrough with a genuine reimpl.
 4. **`GUL_SaveRestore` `0x1400959c0`** — the one loop slot blocking load-from-save (everything else new-game-only).
 5. **Player-tool closures** (RemovalTool `1035e0`, PathTool `dd710`, ToolUI `f5a0`) — large but

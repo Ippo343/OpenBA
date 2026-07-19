@@ -43,10 +43,12 @@ static fn_RandFloat_t s_fn_RandFloat = nullptr;
 typedef char (*fn_TryFindPartner_t)(void* self, void* outIBP);
 static fn_TryFindPartner_t s_fn_TryFindPartner = nullptr;
 
-// CitizenComponent_AssignState(self, state, param2, strParam)
-// At 0x140110420
-typedef void (*fn_AssignState_t)(void* self, int state, int param2, const char* strParam);
-static fn_AssignState_t s_fn_AssignState = nullptr;
+// CitizenComponent_PostLifeEvent(self, eventType, severity, strParam)
+// At 0x140113af0 — posts a life-event message to the event log (gw+0x138).
+// Formerly misnamed "AssignState" (it assigns nothing). Ported in
+// citizen_lifeevent.cpp, registered by reg_eventlog_citizen.cpp.
+typedef void (*fn_PostLifeEvent_t)(void* self, int eventType, int severity, const char* strParam);
+static fn_PostLifeEvent_t s_fn_PostLifeEvent = nullptr;
 
 // CitizenComponent_HandleLifeEvent(self, eventType, strParam) -> char (bool)
 // At 0x140112450
@@ -243,8 +245,8 @@ static void EnsureHelpers() {
     // Direct exe addresses for CitizenComponent sub-functions
     s_fn_TryFindPartner = reinterpret_cast<fn_TryFindPartner_t>(
         ResolveAddr(Module::Exe, 0x140111840));  // CitizenComponent::TryFindPartner (CALL @140112f82 in Update); 0x14010fe40 was helper_fe40 (wrong fn)
-    s_fn_AssignState = reinterpret_cast<fn_AssignState_t>(
-        ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::AssignState (CALL @140112f9e in Update)
+    s_fn_PostLifeEvent = reinterpret_cast<fn_PostLifeEvent_t>(
+        ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::PostLifeEvent (CALL @140112f9e in Update; ex-"AssignState")
     s_fn_HandleLifeEvent = reinterpret_cast<fn_HandleLifeEvent_t>(
         ResolveAddr(Module::Exe, 0x140116dd0));  // CitizenComponent::HandleLifeEvent (6 CALLs in Update)
     s_fn_UpdateHealth = reinterpret_cast<fn_UpdateHealth_t>(
@@ -358,22 +360,22 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         *reinterpret_cast<int64_t*>(p + 0x1E8) = 0;
     }
 
-    // --- Adult transition: try to find partner or assign to work ---
+    // --- Adult transition: post became-adult event (10 = found partner, 9 = alone) ---
     if (!isAdult && adultAge <= newAge && *reinterpret_cast<int64_t*>(p + 0x208) == 0) {
-        int stateToAssign;
+        int eventType;
         if (p[0x220] == 0) {
             // Not yet had partner — try to find one
             int64_t localIBP = 0;
             fn_InternalBasePtr_Ctor(&localIBP, nullptr);
             char found = s_fn_TryFindPartner ? s_fn_TryFindPartner(self, &localIBP) : 0;
-            stateToAssign = 10;
+            eventType = 10;
             if (found == 0) {
-                stateToAssign = 9;
+                eventType = 9;
             }
         } else {
-            stateToAssign = 9;
+            eventType = 9;
         }
-        if (s_fn_AssignState) s_fn_AssignState(self, stateToAssign, 0, nullptr);
+        if (s_fn_PostLifeEvent) s_fn_PostLifeEvent(self, eventType, 0, nullptr);
     }
 
     // --- Education cap: update max education from description ---
@@ -435,20 +437,15 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
             fn_UIString_Ctor(localStr, *reinterpret_cast<uint64_t*>(profRef + 0x20),
                              reinterpret_cast<void*>(profRef + 0x40));
         }
-        // The original calls UI::String::operator_class_System__String then String::String copy
-        // Simplified: pass the string data to HandleLifeEvent
+        // UI::String -> System::String, then HandleLifeEvent(7, str). The original
+        // converts via dispatch slot [0x140151308] (UI::String::operator System::String,
+        // CALL @1401130ab). [WRONG-SLOT FIX] the previous port read slot 0x140152878,
+        // which is Achievement::GoalList::AreGoalsMetExcept — unregistered in
+        // standalone, so the conversion silently no-opped and localRes8 stayed
+        // empty. Use the resolved engine export directly (retval into localRes8).
         int64_t localRes8 = 0;
         int64_t localRes18 = 0;
-
-        // Original: UI::String -> System::String conversion + HandleLifeEvent(7, str)
-        // This is complex string conversion. Call the sub-functions directly.
-        // For now, delegate to the original pattern via a direct exe call.
-        typedef void (*fn_UIStr_ToSysStr_t)(void* uiStr);
-        uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x140152878);
-        fn_UIStr_ToSysStr_t toSysStr = nullptr;
-        if (slotAddr) toSysStr = *reinterpret_cast<fn_UIStr_ToSysStr_t*>(slotAddr);
-
-        if (toSysStr) toSysStr(localStr);
+        if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(localStr, &localRes8);
 
         // Copy construct System::String from localStr result
         void* strCopy = fn_String_Ctor_Copy ? fn_String_Ctor_Copy(&localRes18, &localRes8) : nullptr;
@@ -1307,7 +1304,7 @@ typedef int    (*fn_CalcWorkerSlots_t)(int64_t comp);                // FUN_1401
 typedef char   (*fn_CheckWorkplaceValid_t)(CitizenComponent* self, void* ibp); // 0x1401158d0
 typedef void*  (*fn_FindComp_Mat_t)(int64_t comp, void* outIBP);     // FUN_140003050
 typedef void   (*fn_helper_02a0_sort_t)(void* arr, int n, void* tmp);// CitizenComponent_helper_02a0 (0x1400302a0)
-typedef void   (*fn_AssignState_real_t)(CitizenComponent* self, int s, int p2, const char* str); // 0x140113af0
+typedef void   (*fn_PostLifeEvent_real_t)(CitizenComponent* self, int eventType, int severity, const char* str); // 0x140113af0 (ex-"AssignState")
 typedef void   (*fn_sub_2040_t)(int64_t comp, void* ibp);           // CitizenComponent_sub_2040
 typedef void   (*fn_helper_68a0_t)(void* comp, void* ibp);          // CitizenComponent_helper_68a0
 typedef void*  (*fn_CopyCtor_t)(void* dst, void* desc);             // ComponentEntity_CopyCtor
@@ -1338,7 +1335,7 @@ static fn_CalcWorkerSlots_t      s_fn_CalcWorkerSlots = nullptr;
 static fn_CheckWorkplaceValid_t  s_fn_CheckWorkplaceValid = nullptr;
 static fn_FindComp_Mat_t         s_fn_FindComp_Mat = nullptr;
 static fn_helper_02a0_sort_t     s_fn_helper_02a0 = nullptr;
-static fn_AssignState_real_t     s_fn_AssignStateReal = nullptr;
+static fn_PostLifeEvent_real_t   s_fn_PostLifeEventReal = nullptr;
 static fn_sub_2040_t             s_fn_sub_2040 = nullptr;
 static fn_helper_68a0_t          s_fn_helper_68a0 = nullptr;
 static fn_CopyCtor_t             s_fn_CopyCtor = nullptr;
@@ -1389,7 +1386,7 @@ static void EnsureCallees() {
     s_fn_CheckWorkplaceValid = reinterpret_cast<fn_CheckWorkplaceValid_t>(ResolveAddr(Module::Exe, 0x1401158d0));
     s_fn_FindComp_Mat        = reinterpret_cast<fn_FindComp_Mat_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_fn_helper_02a0         = reinterpret_cast<fn_helper_02a0_sort_t>(ResolveAddr(Module::Exe, 0x1400302a0));
-    s_fn_AssignStateReal     = reinterpret_cast<fn_AssignState_real_t>(ResolveAddr(Module::Exe, 0x140113af0));
+    s_fn_PostLifeEventReal   = reinterpret_cast<fn_PostLifeEvent_real_t>(ResolveAddr(Module::Exe, 0x140113af0));
     s_fn_sub_2040            = reinterpret_cast<fn_sub_2040_t>(ResolveAddr(Module::Exe, 0x140112040));
     s_fn_helper_68a0         = reinterpret_cast<fn_helper_68a0_t>(ResolveAddr(Module::Exe, 0x1401168a0));
     s_fn_CopyCtor            = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
@@ -1933,8 +1930,9 @@ void CitizenComp_helper_1b90(int64_t selfV) {
                            *reinterpret_cast<int*>(desc + 0x20));
     }
     fn_InternalBasePtr_CheckPtr(&aiIBP);
-    if (s_fn_AssignStateReal)
-        s_fn_AssignStateReal(reinterpret_cast<CitizenComponent*>(aiIBP), 8, 0, nullptr);
+    // Post "child born" (event type 8) for the newborn.
+    if (s_fn_PostLifeEventReal)
+        s_fn_PostLifeEventReal(reinterpret_cast<CitizenComponent*>(aiIBP), 8, 0, nullptr);
 
     *reinterpret_cast<uint32_t*>(self + 0x88) |= 0x100;
     if (*reinterpret_cast<int64_t*>(self + 0x250) != 0) {
@@ -2888,10 +2886,10 @@ char CitizenComp_TryFindPartner(CitizenComponent* param_1, int64_t* param_2) {
 void CitizenComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[CitizenComponent] Funcs resolved: AssignState=%p HandleLifeEvent=%p "
+    printf("[CitizenComponent] Funcs resolved: PostLifeEvent=%p HandleLifeEvent=%p "
            "UpdateHealth=%p ConsumeFood=%p ConsumeFuel=%p FindWorkplace=%p "
            "FindStorage=%p HealthSetFlag=%p AssignWorkplace=%p CheckPtr_slot=%p\n",
-           (void*)s_fn_AssignState, (void*)s_fn_HandleLifeEvent,
+           (void*)s_fn_PostLifeEvent, (void*)s_fn_HandleLifeEvent,
            (void*)s_fn_UpdateHealth, (void*)s_fn_ConsumeFood,
            (void*)s_fn_ConsumeFuel, (void*)s_fn_FindWorkplace,
            (void*)s_fn_FindStorage, (void*)s_fn_HealthSetFlag,

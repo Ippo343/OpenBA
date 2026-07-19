@@ -35,8 +35,10 @@ Your job is to **classify each address** and only register the **closure-safe** 
 
 ## KNOWN complex defers — do NOT spend effort porting (just confirm + document):
 - `0x140106420` AnimalComponent::Update — self-resolving passthrough, SKIP (infinite recursion).
-- citizencomponent lifecycle (Level-2 backlog, deep closures): `0x140113af0` AssignState,
-  `0x140116dd0` HandleLifeEvent, `0x140112990` ConsumeFood, `0x140112ae0` ConsumeFuel,
+- citizencomponent lifecycle (Level-2 backlog, deep closures): `0x140116dd0` HandleLifeEvent,
+  (`0x140113af0` ex-"AssignState" = PostLifeEvent CLOSED 2026-07-19 — shallow event-log
+  poster, not a deep closure; see reg_eventlog_citizen.cpp),
+  `0x140112990` ConsumeFood, `0x140112ae0` ConsumeFuel,
   `0x140111590` FindWorkplace, `0x1401116f0` FindStorage, `0x1401163d0` AssignWorkplace,
   `0x140111ee0` AssignHousing, `0x140111840` TryFindPartner, `0x1401127d0` UpdateHealth.
 - rawmaterialcomponent: `0x1400f72e0` Work_Ctor25, `0x14012ec60` register-draw-item (L2).

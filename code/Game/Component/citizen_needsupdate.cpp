@@ -61,7 +61,7 @@ typedef bool (*fn_ResidenceCheck_t)(int64_t storageComp);    // 0x14012ac30
 typedef void* (*fn_FindResidence8090_t)(int64_t entity, void* outIBP); // 0x140008090
 typedef void (*fn_TimeCtorFloat_t)(void* outTime, float secs); // dispatch slot 0x140152b00
 typedef void (*fn_releasePartner_t)(void* self, char reroll);  // 0x140115a50 (AttendanceComponent_ReleasePartnerSlot)
-typedef void (*fn_assignState_t)(void* self, int state, int p2, const char* str); // 0x140113af0
+typedef void (*fn_postLifeEvent_t)(void* self, int eventType, int severity, const char* str); // 0x140113af0 (ex-"AssignState")
 
 static fn_helper_fde0_t      s_fn_fde0 = nullptr;
 static fn_helper_17a0_t      s_fn_17a0 = nullptr;
@@ -71,7 +71,7 @@ static fn_ResidenceCheck_t   s_fn_2ac30 = nullptr;
 static fn_FindResidence8090_t s_fn_find8090 = nullptr;
 static fn_TimeCtorFloat_t    s_fn_TimeCtorF = nullptr;
 static fn_releasePartner_t   s_fn_115a50 = nullptr;   // msg-4 partner-slot release
-static fn_assignState_t      s_fn_AssignState = nullptr; // msg-4 state-9 assign (Level-2 gap, expected NULL)
+static fn_postLifeEvent_t    s_fn_PostLifeEvent = nullptr; // msg-4 type-9 event post (citizen_lifeevent.cpp)
 static const float*          s_pDAT_172114 = nullptr;  // 0.5f   (msg-3 increment)
 static const float*          s_pDAT_172234 = nullptr;  // 300.0f (msg-5/6/7 Time scale)
 static const float*          s_pDAT_17225c = nullptr;  // 3600.0f (msg-4 budget scale, SECS_PER_YEAR)
@@ -87,10 +87,10 @@ static void EnsureNeedsUpdateFuncs() {
     s_fn_2ac30   = reinterpret_cast<fn_ResidenceCheck_t>(ResolveAddr(Module::Exe, 0x14012ac30));
     s_fn_find8090 = reinterpret_cast<fn_FindResidence8090_t>(ResolveAddr(Module::Exe, 0x140008090));
     s_fn_115a50  = reinterpret_cast<fn_releasePartner_t>(ResolveAddr(Module::Exe, 0x140115a50));
-    // AssignState (0x140113af0) is a known Level-2 backlog gap — NOT ported/registered,
-    // so this stays NULL in standalone and the msg-4 state-9 assign silently no-ops
-    // (same tolerance every citizencomponent.cpp AssignState call site uses).
-    s_fn_AssignState = reinterpret_cast<fn_assignState_t>(ResolveAddr(Module::Exe, 0x140113af0));
+    // PostLifeEvent (0x140113af0, ex-"AssignState" misnomer) — ported in
+    // citizen_lifeevent.cpp and registered by reg_eventlog_citizen.cpp; posts the
+    // life-event message to the event log (gw+0x138).
+    s_fn_PostLifeEvent = reinterpret_cast<fn_postLifeEvent_t>(ResolveAddr(Module::Exe, 0x140113af0));
     // .rdata float constants — NULL in standalone unless registered; real-value
     // fallbacks are applied at the use sites (reference_standalone_rdata_null_fallback).
     s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -146,7 +146,7 @@ void CitizenComp_helper_fde0(int64_t selfV, int param) {
 // threshold (desc+0x118) AND the elapsed embedded Time (+0x218, AsSeconds) is still
 // within budget (desc+0x11c × 3600s/year), do nothing. On overrun: reset the counter
 // to the threshold, set flag +0x88 |= 0x400, release the partner slot (no reroll),
-// and force state 9 via AssignState. (Retail derefs +0x288 unguarded.)
+// and post life-event 9 via PostLifeEvent. (Retail derefs +0x288 unguarded.)
 // ============================================================
 void CitizenComp_helper_17a0(int64_t selfV) {
     EnsureNeedsUpdateFuncs();
@@ -163,9 +163,7 @@ void CitizenComp_helper_17a0(int64_t selfV) {
     *counter = threshold;
     *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x400;
     if (s_fn_115a50) s_fn_115a50(reinterpret_cast<void*>(selfV), 0);
-    // AssignState (0x140113af0) is an accepted Level-2 gap (NOT ported): the state-9
-    // assign silently no-ops until it lands, like every other AssignState call site.
-    if (s_fn_AssignState) s_fn_AssignState(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
+    if (s_fn_PostLifeEvent) s_fn_PostLifeEvent(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
 }
 
 // ============================================================

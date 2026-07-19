@@ -14,11 +14,14 @@
 //
 // Reimplements (from Application-x64.exe):
 //   AddEvent          0x140095580  — format text, build entry, append
+//   AddCitizenEvent   0x140094e00  — citizen life-event variant: extra format args
+//                                    {2}=citizen name {3}=title {4}=param string, plus
+//                                    drop-to-1x-speed tail on critical events
 //   EventArray_Grow   0x140019b70  — vector<Event>::resize/append primitive
 //   YearString        0x1400951d0  — String::Format("%i", year)
 //   SeasonString      0x140095230  — seasons table lookup by month index
 //   IconIndex         0x1400950d0  — eventType -> icon index switch
-//   (TileIndex        0x140095030  — entity -> map tile; null entity => -1)
+//   TileIndex         0x140095030  — entity -> map tile index (null entity => -1)
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -101,6 +104,61 @@ static void EventLog_SeasonString(void* gameWorld, void* eventLog, void* retStr)
     }
 }
 
+// SeverityColor: severity -> ARGB text color (shared by both AddEvent variants).
+static uint32_t EventLog_SeverityColor(int severity) {
+    switch (severity) {
+        case 1:  return 0xFFFFFF00u;  // yellow
+        case 2:  return 0xFF8080FFu;  // pink
+        case 3:  return 0xFFFF6060u;  // red
+        case 4:  return 0xFFEA7517u;  // orange
+        default: return 0xFFFFFFFFu;  // white
+    }
+}
+
+// PopupIndex: eventType -> popup icon index (0x1a/0x1c disaster start, 0x1b/0x1d
+// disaster end; -1 = no modal popup). EventNotifyDialog raises EventPopupDialog
+// when the entry's +0x20 field is >= 0.
+static int EventLog_PopupIndex(int eventType) {
+    if (eventType == 0x1a || eventType == 0x1c) return 0xc;
+    if (eventType == 0x1b || eventType == 0x1d) return 0xd;
+    return -1;
+}
+
+// TileIndex (0x140095030): entity IBP -> map tile index for the message's
+// jump-to-location, from the entity's MapComponent (FUN_140004680, registered)
+// footprint center: (y + h/2) * mapWidth + (x + w/2). mapWidth = first int of
+// Game* (gw+0xF8). Null/stale entity or missing MapComponent => -1.
+static int EventLog_TileIndex(void* entityIBP) {
+    if (!entityIBP || *(int64_t*)entityIBP == 0) return -1;
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) return -1;
+    int* game = *(int**)((uintptr_t)gameWorld + 0xF8);
+    if (!game) return -1;
+
+    typedef void* (*fn_FindCompMember_t)(int64_t self, void* outIBP);
+    static fn_FindCompMember_t s_findMap = nullptr;
+    if (!s_findMap)
+        s_findMap = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
+    if (!s_findMap || !fn_InternalBasePtr_CheckPtr) return -1;
+
+    fn_InternalBasePtr_CheckPtr(entityIBP);
+    int64_t mapIBP = 0;
+    s_findMap(*(int64_t*)entityIBP, &mapIBP);
+    if (mapIBP == 0) return -1;
+    fn_InternalBasePtr_CheckPtr(&mapIBP);
+
+    const uint8_t* mc = (const uint8_t*)mapIBP;
+    int x = *(const int16_t*)(mc + 0x28), y = *(const int16_t*)(mc + 0x2a);
+    int w = *(const int16_t*)(mc + 0x2c), h = *(const int16_t*)(mc + 0x2e);
+    return ((h >> 1) + y) * (*game) + (w >> 1) + x;
+}
+
+// ABI shim for the address registry: the original 0x140095030 is
+// (unused RCX, entityIBP RDX) — the first param is dead (stack-reuse artifact).
+extern "C" int EventLog_TileIndex_Reg(void* /*unused*/, void* entityIBP) {
+    return EventLog_TileIndex(entityIBP);
+}
+
 // IconIndex (0x1400950d0): eventType -> icon index (feeds "EventIcon%i").
 static int EventLog_IconIndex(int eventType) {
     switch (eventType) {
@@ -153,28 +211,10 @@ extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, v
         fn_String_Ctor_Copy(formatted, templateStr);
     }
 
-    // --- Colour by severity ---
-    uint32_t color;
-    switch (severity) {
-        case 1:  color = 0xFFFFFF00u; break;  // yellow
-        case 2:  color = 0xFF8080FFu; break;  // pink
-        case 3:  color = 0xFFFF6060u; break;  // red
-        case 4:  color = 0xFFEA7517u; break;  // orange
-        default: color = 0xFFFFFFFFu; break;  // white
-    }
-
-    // --- Popup flag by eventType (0x1a/0x1c -> 0xc, 0x1b/0x1d -> 0xd, else -1) ---
-    int popup;
-    if (eventType == 0x1a || eventType == 0x1c)      popup = 0xc;
-    else if (eventType == 0x1b || eventType == 0x1d) popup = 0xd;
-    else                                             popup = -1;
-
-    int iconIndex = EventLog_IconIndex(eventType);
-
-    // tileIdx: null entity -> -1 (no map location). The entity->tile port
-    // (FUN_140095030 via FUN_140004680) is not needed for location-less events.
-    int tileIdx = -1;
-    (void)entityIBP;
+    uint32_t color   = EventLog_SeverityColor(severity);
+    int popup        = EventLog_PopupIndex(eventType);
+    int iconIndex    = EventLog_IconIndex(eventType);
+    int tileIdx      = EventLog_TileIndex(entityIBP);  // null entity -> -1
 
     // --- Build the 0x28-byte entry and append ---
     uint8_t entry[0x28];
@@ -210,6 +250,94 @@ extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, v
     fn_String_Dtor(templateStr);
     fn_String_Dtor(seasonStr);
     fn_String_Dtor(yearStr);
+}
+
+// ============================================================
+// AddCitizenEvent (0x140094e00)
+// ============================================================
+// Citizen life-event variant (only exe caller: CitizenComponent_PostLifeEvent
+// 0x140113af0, the former "AssignState" misnomer). Same shape as AddEvent but the
+// format string gets three extra args — {0}=season {1}=year {2}=citizen name
+// {3}=title (Child/Student/profession) {4}=extra param string — and a tail that
+// drops the game to 1x speed on critical events (types 0xb/0xc/0x1e/0x1f) when
+// the "pause on events" settings byte (+0x17) is set.
+// nameStr/titleStr/extraStr are System::String* (data ptr at +0x00).
+extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
+                                         void* entityIBP, void* nameStr, void* titleStr,
+                                         void* extraStr) {
+    if (!eventLog) return;
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) return;
+
+    // --- Build the display text ---
+    uint8_t yearStr[8], seasonStr[8], templateStr[8], formatted[8];
+    EventLog_YearString(gameWorld, yearStr);
+    EventLog_SeasonString(gameWorld, eventLog, seasonStr);
+
+    void* eventsTable = *(void**)eventLog;  // +0x00
+    if (eventsTable && fn_StringTable_GetText) {
+        fn_StringTable_GetText(eventsTable, templateStr, eventType);
+    } else {
+        fn_String_Ctor_CStr(templateStr, "Event");
+    }
+
+    // Args are the String DATA pointers, exactly as the original passes them.
+    const char* nameData  = nameStr  ? *(const char**)nameStr  : "";
+    const char* titleData = titleStr ? *(const char**)titleStr : "";
+    const char* extraData = extraStr ? *(const char**)extraStr : "";
+    if (fn_String_FormatIndexed) {
+        fn_String_FormatIndexed(formatted, *(const char**)templateStr,
+                                *(const char**)seasonStr, *(const char**)yearStr,
+                                nameData, titleData, extraData);
+    } else {
+        fn_String_Ctor_Copy(formatted, templateStr);
+    }
+
+    uint32_t color = EventLog_SeverityColor(severity);
+    int popup      = EventLog_PopupIndex(eventType);
+    int iconIndex  = EventLog_IconIndex(eventType);
+    int tileIdx    = EventLog_TileIndex(entityIBP);  // PostLifeEvent passes a null IBP -> -1
+
+    // --- Build the 0x28-byte entry and append ---
+    uint8_t entry[0x28];
+    *(uint32_t*)(entry + 0x00) = color;
+    fn_String_Ctor_Copy(entry + 0x08, formatted);
+    *(int32_t*)(entry + 0x10) = eventType;
+    *(int32_t*)(entry + 0x14) = severity;
+    *(int32_t*)(entry + 0x18) = tileIdx;
+    *(int32_t*)(entry + 0x1c) = iconIndex;
+    *(int32_t*)(entry + 0x20) = popup;
+
+    if (std::getenv("BANISHED_EVENT_TRACE")) {
+        const char* fmtData = *(const char**)formatted;
+        int existing = *(int*)((uintptr_t)eventLog + 0x20);
+        fprintf(stderr, "[EventLog] AddCitizenEvent type=%d sev=%d icon=%d popup=%d "
+                        "(count now %d)\n           text=\"%s\" name=\"%s\" title=\"%s\" "
+                        "extra=\"%s\"\n",
+                eventType, severity, iconIndex, popup, existing,
+                fmtData ? fmtData : "(null)", nameData ? nameData : "(null)",
+                titleData ? titleData : "(null)", extraData ? extraData : "(null)");
+        fflush(stderr);
+    }
+
+    int count = *(int*)((uintptr_t)eventLog + 0x20);
+    EventArray_Grow((void*)((uintptr_t)eventLog + 0x18), count + 1, entry);
+
+    fn_String_Dtor(entry + 0x08);
+    fn_String_Dtor(formatted);
+    fn_String_Dtor(templateStr);
+    fn_String_Dtor(seasonStr);
+    fn_String_Dtor(yearStr);
+
+    // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed when
+    // the settings byte +0x17 is set. Speed lives in the EntityUI obj (gw+0x120)+0x34.
+    if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
+        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
+            *((const char*)*g_pGameSettingsPtr + 0x17) != 0) {
+            void* speedObj = *(void**)((uintptr_t)gameWorld + 0x120);
+            if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
+        }
+    }
 }
 
 // Convenience: add a location-less event to the live game's event log.

@@ -18,8 +18,9 @@
 // 0x140117080   CitizenComp_DeferredInit_117080       2.5a   per-citizen deferred init
 //
 // Closure notes:
-//   - msg-4 AssignState (0x140113af0) stays an accepted Level-2 gap (NOT ported): the
-//     state-9 assign silently no-ops until it lands (see citizen_needsupdate.cpp).
+//   - msg-4 PostLifeEvent (0x140113af0, ex-"AssignState" misnomer) was CLOSED
+//     2026-07-19: ported in citizen_lifeevent.cpp + eventlog.cpp, registered by
+//     reg_eventlog_citizen.cpp.
 //   - the sort's comparator/insertion-sort helpers (0x140110330 / 0x140030b90) are
 //     reimplemented inside the std::sort predicate, not registered (see lifecycle .cpp).
 //   - 0x140117080's name generator uses the clean C++ GenerateCitizenName rather than
