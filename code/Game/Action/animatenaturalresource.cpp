@@ -35,7 +35,8 @@ static void* (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
 static bool (*s_fn_IsAnimating)(void* meshInst) = nullptr;
 
 // TypeInfo address
-static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c4218
+static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c5d70 — ComponentEntity
+    // (was mistranscribed 0x1401c4218 = FireDescription; retail AnimateNaturalResource reads c5d70)
 
 static bool s_funcs_resolved = false;
 
@@ -62,7 +63,7 @@ bool AnimateNaturalResource_ResolveFuncs() {
     if (iatIsAnim) s_fn_IsAnimating = *reinterpret_cast<bool(**)(void*)>(iatIsAnim);
 
     // TypeInfo
-    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4218));
+    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
 
     bool ok = s_fn_IBP_Serialize && s_fn_GetNRComp && s_fn_SetAnimIndex &&
               s_fn_GetModelComp && s_fn_IsAnimating && s_TypeId_ComponentEntity &&

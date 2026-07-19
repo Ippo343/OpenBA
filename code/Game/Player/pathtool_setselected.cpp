@@ -457,7 +457,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     if (s_8090) s_8090(*(int64_t*)(param_1 + 0x28), &local_res18);
     CheckPtr((void*)(param_1 + 0x28));
     uint64_t local_2098 = 0;    // CitizenAI component
-    fn_FindComponent_CitizenAI(*(void**)(param_1 + 0x28), &local_2098);
+    fn_FindComponent_Citizen(*(void**)(param_1 + 0x28), &local_2098);
 
     int64_t* routeArr = (int64_t*)(param_1 + 0x30);   // plVar24: route array header
     // Reset the three output arrays.

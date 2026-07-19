@@ -27,11 +27,19 @@ extern uint64_t WeightedRandomIndex_119470(int64_t);                            
 static uint32_t g_tid_RawMaterialDescription = 0;  // 0x1401c7cb8
 static uint32_t g_tid_StateMachineComponent  = 0;  // 0x1401c7350 (bef70 component-find leaf)
 static uint32_t g_tid_ConsumeProduceDescription = 0; // 0x1401c7388 (bef70 component search)
+// 0x1401c5d70 ComponentEntity (writer ComponentEntity_RegisterType 0x14014cff5) — the
+// shared "is this ref a ComponentEntity" Serialize validator id, read by the Action
+// family (PlayAnimation/CompleteTask/AnimateNaturalResource/CreateRawMaterial/
+// SendComponentMessage/...) and many UI Serialize paths. Unfilled it also kept several
+// Action ResolveFuncs `ok` gates false → per-call re-resolve log spam ([PlayAnimation]
+// "ERROR: some function pointers not resolved!").
+static uint32_t g_tid_ComponentEntity = 0;         // 0x1401c5d70
 
 extern "C" void FillTypeIdGlobals_actionchild() {
     g_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
     g_tid_StateMachineComponent  = ::Object::GetTypeIdByName("StateMachineComponent");
     g_tid_ConsumeProduceDescription = ::Object::GetTypeIdByName("ConsumeProduceDescription");
+    g_tid_ComponentEntity        = ::Object::GetTypeIdByName("ComponentEntity");
 }
 
 void RegisterActionChildCtors2Batch() {
@@ -49,4 +57,5 @@ void RegisterActionChildCtors2Batch() {
     RegisterExeAddr(0x1401c7cb8, reinterpret_cast<uintptr_t>(&g_tid_RawMaterialDescription));
     RegisterExeAddr(0x1401c7350, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
     RegisterExeAddr(0x1401c7388, reinterpret_cast<uintptr_t>(&g_tid_ConsumeProduceDescription));
+    RegisterExeAddr(0x1401c5d70, reinterpret_cast<uintptr_t>(&g_tid_ComponentEntity));
 }

@@ -254,10 +254,10 @@ void StatusBarUI_Startup(StatusBarUI* self) {
             typedef int (*fn_GetTypeId_t)(void*);
             int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
 
-            if (typeId == (int)*g_TypeId_HappinessComponent) {
+            if (typeId == (int)*g_TypeId_StatusIconComponent) {
                 fn_InternalBasePtr_CheckPtr(&compArray[j]);
                 void* pComp = compArray[j];
-                bool isDerived = fn_IsDerivedFrom(pComp, *g_TypeId_HappinessComponent);
+                bool isDerived = fn_IsDerivedFrom(pComp, *g_TypeId_StatusIconComponent);
                 happyComp = nullptr;
                 if (isDerived) {
                     happyComp = pComp;
@@ -594,9 +594,9 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 typedef int (*fn_GetTypeId_t)(void*);
                 int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
 
-                if (g_TypeId_HappinessComponent && (uint32_t)compTypeId == *g_TypeId_HappinessComponent) {
+                if (g_TypeId_StatusIconComponent && (uint32_t)compTypeId == *g_TypeId_StatusIconComponent) {
                     // Confirm with IsDerivedFrom
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *g_TypeId_HappinessComponent)) {
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *g_TypeId_StatusIconComponent)) {
                         happinessComp = comp;
                     }
                     break;
@@ -741,18 +741,18 @@ uint32_t GetTypeId(void*) {
 }
 
 // Backfill the exe-.rdata type-id globals the impl paths dereference:
-//  - DAT_1401c7e08 ("g_TypeId_HappinessComponent") is actually the
-//    StatusIconComponent type id (Ghidra name-table; see statusiconui.cpp) and
-//    is unfilled (0/0xFFFFFFFF) in standalone -> resolve by TRUE name.
+//  - DAT_1401c7e08 (g_TypeId_StatusIconComponent) is the StatusIconComponent type id
+//    (Ghidra name-table; see statusiconui.cpp) and is unfilled (0/0xFFFFFFFF) in
+//    standalone -> resolve by TRUE name.
 //  - g_TypeId_CitizenDescription is normally filled by the townhall promotion's
 //    EnsureGlobals; fill it here too so the status dialog works on its own.
 void EnsureGlobals() {
     static uint32_t s_statusIconTid = 0;
-    if (!g_TypeId_HappinessComponent || *g_TypeId_HappinessComponent == 0 ||
-        *g_TypeId_HappinessComponent == 0xFFFFFFFFu) {
+    if (!g_TypeId_StatusIconComponent || *g_TypeId_StatusIconComponent == 0 ||
+        *g_TypeId_StatusIconComponent == 0xFFFFFFFFu) {
         if (!s_statusIconTid)
             s_statusIconTid = ::Object::ResolveTypeIdByNameLazy("StatusIconComponent");
-        if (s_statusIconTid) g_TypeId_HappinessComponent = &s_statusIconTid;
+        if (s_statusIconTid) g_TypeId_StatusIconComponent = &s_statusIconTid;
     }
     static uint32_t s_citDescTid = 0;
     if (!g_TypeId_CitizenDescription) {
@@ -774,7 +774,7 @@ bool Ready() {
           fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;
-    if (!(g_TypeId_HappinessComponent && g_TypeId_CitizenDescription)) return false;
+    if (!(g_TypeId_StatusIconComponent && g_TypeId_CitizenDescription)) return false;
     return true;
 }
 

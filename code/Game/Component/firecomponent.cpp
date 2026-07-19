@@ -44,8 +44,12 @@ static fn_ProbabilityCheck_t s_fn_ProbabilityCheck = nullptr;
 // +0xD8: Random* rng
 static void** s_pGameState = nullptr;
 
-// Type ID for building/structure component (DAT_1401c4218)
-static uint32_t* s_pBuildingTypeId = nullptr;
+// Type ID at DAT_1401c4218 = FireDescription's BaseTypeInfo (writer
+// FireDescription_Register 0x14014ac25) — retail FireComponent_* validate their
+// description against it. (Older comment said "building/structure component";
+// other files that resolved c4218 as "ComponentEntity" were mistranscriptions —
+// the real ComponentEntity id is 0x1401c5d70.)
+static uint32_t* s_pFireDescTypeId = nullptr;
 
 static bool s_initialized = false;
 
@@ -63,7 +67,7 @@ static void EnsureHelpers() {
 
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pBuildingTypeId = reinterpret_cast<uint32_t*>(
+    s_pFireDescTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4218));
 
     s_initialized = true;
@@ -97,8 +101,8 @@ void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
         // Get building data via IsDerivedFrom check on +0x18
         void* baseObj = self->_unk18;
         void* buildingData = nullptr;
-        if (baseObj && fn_IsDerivedFrom && s_pBuildingTypeId) {
-            bool isDerived = fn_IsDerivedFrom(baseObj, *s_pBuildingTypeId);
+        if (baseObj && fn_IsDerivedFrom && s_pFireDescTypeId) {
+            bool isDerived = fn_IsDerivedFrom(baseObj, *s_pFireDescTypeId);
             if (isDerived) {
                 buildingData = baseObj;
             }

@@ -204,7 +204,7 @@ bool ConsumeProduce_ResolveFuncs() {
               fn_Pathfinding_FindPath &&
               g_pGameWorldSingleton &&
               g_TypeId_ConsumeProduceComponent &&
-              g_TypeId_HappinessComponent &&
+              g_TypeId_StatusIconComponent &&
               g_TypeId_StateMachineComponent_FC &&
               g_TypeId_StorageComponent_FC &&
               g_TypeId_RawMaterialDescription &&
@@ -507,7 +507,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     // --- Find HappinessComponent (type 0x1401c7e08) on work entity ---
     fn_InternalBasePtr_CheckPtr(entityFieldPtr);
     uintptr_t entity = *(uintptr_t*)entityFieldPtr;
-    void* meshComp = FindComponentOnEntity(entity, *g_TypeId_HappinessComponent);
+    void* meshComp = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
 
     uintptr_t meshCompIBP = 0;
     fn_InternalBasePtr_Ctor(&meshCompIBP, meshComp);
@@ -945,7 +945,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         // Find HappinessComponent again and toggle state 3
         fn_InternalBasePtr_CheckPtr(entityFieldPtr);
         entity = *(uintptr_t*)entityFieldPtr;
-        void* meshComp2 = FindComponentOnEntity(entity, *g_TypeId_HappinessComponent);
+        void* meshComp2 = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
         uintptr_t meshComp2IBP = 0;
         fn_InternalBasePtr_Ctor(&meshComp2IBP, meshComp2);
         fn_InternalBasePtr_CheckPtr(&meshComp2IBP);

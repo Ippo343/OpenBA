@@ -81,8 +81,8 @@ static float* s_fYawMin = nullptr;
 // DAT_140172220 -- float constant 180.0f (yaw upper bound)
 static float* s_fYawMax = nullptr;
 
-// TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenAIComponent_FC)
-// Already in engine_funcs.h as g_TypeId_CitizenAIComponent_FC
+// TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenComponent_FC)
+// Already in engine_funcs.h as g_TypeId_CitizenComponent_FC
 
 // Vtable addresses for dtor chain
 static uintptr_t s_vtable_PerformWork = 0;
@@ -175,7 +175,7 @@ bool PerformWork_ResolveFuncs() {
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
               s_fConst1 && s_fYawMin && s_fYawMax &&
               s_vtable_PerformWork && s_vtable_Action &&
-              g_TypeId_CitizenAIComponent_FC &&
+              g_TypeId_CitizenComponent_FC &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_fn_Serialize_Int &&
               fn_IsDerivedFrom && fn_MemFreeStatic;
@@ -254,7 +254,7 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
     // Serialize work target entity ref (+0x20)
     s_fn_IBP_Serialize(s + 0x20, ser2);
     if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeId_CitizenAIComponent_FC)) {
+        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeId_CitizenComponent_FC)) {
             *(void**)(s + 0x20) = nullptr;
         }
     }

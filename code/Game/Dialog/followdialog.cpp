@@ -180,7 +180,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
     // Find ProfessionComponent on the entity (entity ref at ai+0x10)
     uintptr_t entityRef = *(uintptr_t*)(ai + 0x10);
     uint64_t profCompRef = 0;
-    fn_FindProfessionComponent((void*)entityRef, &profCompRef);
+    fn_FindComponent_CitizenAI((void*)entityRef, &profCompRef);
 
     // Read action index from CitizenAIComponent+0x28.
     // Guard: FindProfessionComponent yields null if the type-id is unresolved

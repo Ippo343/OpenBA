@@ -306,7 +306,7 @@ uint32_t* g_TypeId_PastureComponent         = nullptr;  // DAT_1401c7ba0
 uint32_t* g_TypeId_AnimalDescription        = nullptr;  // DAT_1401c6fd0
 uint32_t* g_TypeId_OrchardComponent         = nullptr;  // DAT_1401c46b0
 uint32_t* g_TypeId_SMComponent              = nullptr;  // DAT_1401c71c8
-uint32_t* g_TypeId_CitizenAIComponent_FC    = nullptr;  // DAT_1401c7158
+uint32_t* g_TypeId_CitizenComponent_FC      = nullptr;  // DAT_1401c7158
 uint32_t* g_TypeId_StorageComponent_FC      = nullptr;  // DAT_1401c7e78
 uint32_t* g_TypeId_ResidenceComponent       = nullptr;  // DAT_1401c7cf0
 uint32_t* g_TypeId_CemeteryComponent        = nullptr;  // DAT_1401c4090
@@ -611,8 +611,8 @@ fn_Filename_Less_t fn_Filename_Less = nullptr;
 
 // CitizenUI helpers
 uint32_t* g_TypeId_CitizenDescription = nullptr;
-uint32_t* g_TypeId_HappinessComponent = nullptr;
-uint32_t* g_TypeId_ProfessionComponent = nullptr;
+uint32_t* g_TypeId_StatusIconComponent = nullptr;
+uint32_t* g_TypeId_CitizenAIComponent = nullptr;
 void** g_FollowDialog_Vtable = nullptr;
 // fn_StatusBarUI_StatusIconHandler — REPLACED with static StatusBarUI_StatusIconHandler_Impl() in statusbarui.cpp
 
@@ -2252,7 +2252,7 @@ bool EngineFuncsInit() {
     g_TypeId_AnimalDescription        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
     g_TypeId_OrchardComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
     g_TypeId_SMComponent              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
-    g_TypeId_CitizenAIComponent_FC    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    g_TypeId_CitizenComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     g_TypeId_StorageComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
     g_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cf0));
@@ -2949,14 +2949,14 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14006c5b0));
 
     // --- CitizenUI helpers ---
-    // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent_FC)
+    // fn_FindComponent_Citizen — inline in engine_funcs.h (uses g_TypeId_CitizenComponent_FC)
     g_TypeId_CitizenDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7190));
-    g_TypeId_HappinessComponent = reinterpret_cast<uint32_t*>(
+    g_TypeId_StatusIconComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7e08));
-    g_TypeId_ProfessionComponent = reinterpret_cast<uint32_t*>(
+    g_TypeId_CitizenAIComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c70e8));
-    // fn_FindProfessionComponent — inline in engine_funcs.h (uses g_TypeId_ProfessionComponent)
+    // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent)
     g_TypeId_ProfessionDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5a98));
     g_FollowDialog_Vtable = reinterpret_cast<void**>(

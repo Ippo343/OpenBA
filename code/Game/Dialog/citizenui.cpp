@@ -36,18 +36,18 @@
 // g_FollowDialog_Vtable stays null; Slot9 uses this as the fallback.
 extern "C" void* FollowDialog_GetStandaloneVtable();
 
-// #6a: g_TypeId_ProfessionComponent (exe .rdata DAT_1401c70e8) is actually the
-// CitizenAIComponent type id — the component whose +0x28 holds the citizen's
-// current action-state index (drives the Action text on the panel and the Follow
-// dialog). It is NULL in standalone (raw .rdata constant → ResolveAddr returns 0),
-// so fn_FindProfessionComponent yields null and the Action line can't resolve.
-// Resolve it lazily from the live Runtime factory tree on first panel update.
+// #6a: g_TypeId_CitizenAIComponent (exe .rdata DAT_1401c70e8) is the CitizenAIComponent
+// type id — the component whose +0x28 holds the citizen's current action-state index
+// (drives the Action text on the panel and the Follow dialog). It is NULL in standalone
+// (raw .rdata constant → ResolveAddr returns 0), so fn_FindComponent_CitizenAI yields
+// null and the Action line can't resolve. Resolve it lazily from the live Runtime
+// factory tree on first panel update.
 static void CitizenUI_EnsureProfessionTypeId() {
-    if (g_TypeId_ProfessionComponent) return;  // already wired
+    if (g_TypeId_CitizenAIComponent) return;  // already wired
     static uint32_t s_profTid = 0;
     if (s_profTid == 0)
         s_profTid = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent");
-    if (s_profTid) g_TypeId_ProfessionComponent = &s_profTid;
+    if (s_profTid) g_TypeId_CitizenAIComponent = &s_profTid;
 }
 
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
@@ -275,7 +275,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
 
     // Find CitizenAIComponent
     uint64_t citizenAIRef = 0;
-    fn_FindComponent_CitizenAI((void*)entityRef, &citizenAIRef);
+    fn_FindComponent_Citizen((void*)entityRef, &citizenAIRef);
     uintptr_t ai = (uintptr_t)citizenAIRef;
     if (!ai) return;
 
@@ -517,11 +517,11 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Guard the entity backref (component-list walk dereferences entity+0x30/+0x38);
     // a partially-initialized standalone citizen can leave it as garbage.
     if (CitUI_OkPtr(entityFromAI))
-        fn_FindProfessionComponent((void*)entityFromAI, &profCompRef);
+        fn_FindComponent_CitizenAI((void*)entityFromAI, &profCompRef);
 
     // The profession component may be absent — profCompRef null — when the citizen
     // has no profession (child) or, in standalone, when the ProfessionComponent
-    // type-id could not be resolved from the factory tree (fn_FindProfessionComponent
+    // type-id could not be resolved from the factory tree (fn_FindComponent_CitizenAI
     // then finds nothing). Skip the action text rather than dereferencing null+0x28.
     if (profCompRef != 0) {
     // Read action index from profession component (+0x28)
@@ -600,7 +600,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         fn_InternalBasePtr_Ctor(&entityRef, entity);
 
         uint64_t aiRef = 0;
-        fn_FindComponent_CitizenAI((void*)entityRef, &aiRef);
+        fn_FindComponent_Citizen((void*)entityRef, &aiRef);
         uintptr_t ai = (uintptr_t)aiRef;
 
         uint64_t targetRef;
@@ -630,7 +630,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         fn_InternalBasePtr_Ctor(&entityRef, entity);
 
         uint64_t aiRef = 0;
-        fn_FindComponent_CitizenAI((void*)entityRef, &aiRef);
+        fn_FindComponent_Citizen((void*)entityRef, &aiRef);
         uintptr_t ai = (uintptr_t)aiRef;
 
         uintptr_t homeEntity = *(uintptr_t*)(ai + 0x238);
@@ -654,7 +654,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
         // Find CitizenAI component on entity
         uint64_t citizenAIRef = 0;
-        fn_FindComponent_CitizenAI((void*)entityRef, &citizenAIRef);
+        fn_FindComponent_Citizen((void*)entityRef, &citizenAIRef);
 
         // Load Dialog/Follow.rsc resource
         uint8_t filename[8];
@@ -771,26 +771,27 @@ static float s_ageMul = 1.0f;
 
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
-    static uint32_t s_profZero = 0;  // safe no-op type-id for FindProfessionComponent
+    static uint32_t s_profZero = 0;  // safe no-op type-id for fn_FindComponent_CitizenAI
     if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
     if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
-    // g_TypeId_CitizenAIComponent_FC is DAT_1401c7158 — despite the "CitizenAI" name,
-    // Entity_FindComponent_CitizenAI searches for type-id 1401c7158 which is the
-    // *CitizenComponent* (the name at +0x28, age +0x3c, profession +0x1f0, housing
-    // +0x248, desc +0x288 all live on it — the same component the founding path writes
-    // the generated name to). Resolving the literal "CitizenAIComponent" here finds a
-    // DIFFERENT sibling component whose +0x28 is unset, so the dialog read the wrong
-    // object. Resolve "CitizenComponent" (matching the founding writer's TypeId lookup)
-    // so the dialog reads the citizen data that was actually filled in.
-    if (!g_TypeId_CitizenAIComponent_FC)  { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenAIComponent_FC = &s_cai; }
-    if (!g_TypeId_ProfessionComponent)    { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_ProfessionComponent = &s_prof; }
+    // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
+    // now, but the finder that reads it (fn_FindComponent_Citizen) is what the AI panel
+    // actually needs: the name at +0x28, age +0x3c, profession +0x1f0, housing +0x248,
+    // desc +0x288 all live on the CitizenComponent it resolves (the same component the
+    // founding path writes the generated name to). Resolving the literal
+    // "CitizenAIComponent" here finds a DIFFERENT sibling component whose +0x28 is
+    // unset, so the dialog read the wrong object. Resolve "CitizenComponent" (matching
+    // the founding writer's TypeId lookup) so the dialog reads the citizen data that
+    // was actually filled in.
+    if (!g_TypeId_CitizenComponent_FC)    { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
+    if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
     // ProfessionComponent's registered name doesn't resolve in the standalone factory
     // tree (0x1401c70e8 is contested between ProfessionComponent and a CitizenAI
     // message-id in our notes). It's used ONLY by the Slot7 action-text lookup, which
     // is now null-guarded (skips if the component isn't found). Point the global at a
-    // static 0 so fn_FindProfessionComponent is a safe no-op (finds nothing) instead of
+    // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
     // dereferencing a null type-id pointer.
-    if (!g_TypeId_ProfessionComponent)    { g_TypeId_ProfessionComponent = &s_profZero; }
+    if (!g_TypeId_CitizenAIComponent)     { g_TypeId_CitizenAIComponent = &s_profZero; }
     if (!g_pExternalTypeId)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_pExternalTypeId = &s_ext; }
     // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
     // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
@@ -806,7 +807,7 @@ void EnsureGlobals() {
         s_logged = true;
         fprintf(stderr, "[CitizenUI] globals: CE=%p CD=%p CAI=%p Prof=%p Ext=%p\n",
                 (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_CitizenDescription,
-                (void*)g_TypeId_CitizenAIComponent_FC, (void*)g_TypeId_ProfessionComponent,
+                (void*)g_TypeId_CitizenComponent_FC, (void*)g_TypeId_CitizenAIComponent,
                 (void*)g_pExternalTypeId);
         fflush(stderr);
     }
@@ -819,7 +820,7 @@ void W_Slot7(void* self) {
     // ProfessionComponent is not required — its only use (action text) is null-guarded
     // and its global has a safe static-0 fallback (see EnsureGlobals).
     if (!self || !g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
-        || !g_TypeId_CitizenAIComponent_FC) return;
+        || !g_TypeId_CitizenComponent_FC) return;
     CitizenUI_Slot7(reinterpret_cast<CitizenUI*>(self));
 }
 void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }   // +0x40 per-frame

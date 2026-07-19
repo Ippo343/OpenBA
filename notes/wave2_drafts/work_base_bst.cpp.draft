@@ -774,7 +774,7 @@ void WorkBST_BST_Serialize_Cell_9de0(void* bstRoot, void* serializer) {
     uintptr_t ser_vtbl = *reinterpret_cast<uintptr_t*>(serializer);
     bool isLoad = (*reinterpret_cast<int*>(ser_vtbl + 8) == 0);
 
-    // Type-ID pointer (DWORD_1401c7158 = g_TypeId_CitizenAIComponent_FC)
+    // Type-ID pointer (DWORD_1401c7158 = g_TypeId_CitizenComponent_FC)
     static const uint32_t* s_pTid = nullptr;
     if (!s_pTid) {
         s_pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));

@@ -285,7 +285,7 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
     bool loading = (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0);
-    uint32_t citTid = g_TypeId_CitizenAIComponent_FC ? *g_TypeId_CitizenAIComponent_FC : 0;
+    uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
 
     if (loading) {
         for (int i = 0; i < count; i++) {

@@ -619,11 +619,11 @@ found_residence:
                                     void* comp = *pComp;
                                     typedef uint32_t (*fn_GetTypeId_t)(void*);
                                     uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                                    if (typeId == *g_TypeId_CitizenAIComponent_FC) {
+                                    if (typeId == *g_TypeId_CitizenComponent_FC) {
                                         pComp = (void**)(compArrayBase + cOffset * 8);
                                         fn_InternalBasePtr_CheckPtr(pComp);
                                         comp = *pComp;
-                                        bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenAIComponent_FC);
+                                        bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenComponent_FC);
                                         aiComp = isAI ? comp : nullptr;
                                         goto found_ai;
                                     }
@@ -1563,7 +1563,7 @@ void DebugUI_Slot4(DebugUI* self) {
 //   g_TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
 //   g_TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
 //   g_TypeId_ObjectInternal                     -> "Internal"
-//   g_TypeId_CitizenAIComponent_FC(0x1401c7158) -> "CitizenComponent"
+//   g_TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
 //     (via GetTypeIdByName, matching the proven CitizenUI heal)
 // g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
 // with `if (!g_pEngineSingleton) return;`, so the perf counters simply stay
@@ -1613,12 +1613,11 @@ void EnsureGlobals() {
         if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
         if (*h.s) *h.g = h.s;
     }
-    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI
-    // choice — DAT_1401c7158 is CitizenComponent despite the "CitizenAI" label).
-    if (!g_TypeId_CitizenAIComponent_FC) {
+    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
+    if (!g_TypeId_CitizenComponent_FC) {
         static uint32_t s_cai = 0;
         if (s_cai == 0) s_cai = ::Object::GetTypeIdByName("CitizenComponent");
-        if (s_cai) g_TypeId_CitizenAIComponent_FC = &s_cai;
+        if (s_cai) g_TypeId_CitizenComponent_FC = &s_cai;
     }
 }
 

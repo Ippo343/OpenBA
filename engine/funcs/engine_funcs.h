@@ -708,9 +708,8 @@ extern uint32_t* g_TypeId_PastureComponent;         // DAT_1401c7ba0 (fn_FindCom
 extern uint32_t* g_TypeId_AnimalDescription;        // DAT_1401c6fd0 (used by PastureCalcMaxCount)
 extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindComponent_Orchard)
 extern uint32_t* g_TypeId_SMComponent;              // DAT_1401c71c8 (fn_FindComponent_SM)
-extern uint32_t* g_TypeId_CitizenAIComponent_FC;    // DAT_1401c7158 — MISNOMER: the slot is
-    // CitizenComponent's BaseTypeInfo (writer CitizenComponent_RegisterType 0x14014e7b5);
-    // holds the CitizenComponent id, not CitizenAIComponent (see citizenui.cpp:777).
+extern uint32_t* g_TypeId_CitizenComponent_FC;      // DAT_1401c7158 — CitizenComponent's
+    // BaseTypeInfo (writer CitizenComponent_RegisterType 0x14014e7b5).
     // Null unless BANISHED_LIVE_CITIZENAI_TIDS registers the slot (reg_citizenai_typeids.cpp).
 extern uint32_t* g_TypeId_StorageComponent_FC;      // DAT_1401c7e78 (fn_FindComponent_Storage/Residence)
 extern uint32_t* g_TypeId_ResidenceComponent;        // DAT_1401c7cf0
@@ -774,9 +773,9 @@ inline void fn_FindComponent_BuildState2(void* entity, void* retval) {
 inline void fn_FindComponent_SM(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_SMComponent);
 }
-// fn_FindComponent_CitizenAI — DAT_1401c7158, original FUN_140009790
-inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenAIComponent_FC);
+// fn_FindComponent_Citizen — DAT_1401c7158, original FUN_140009790
+inline void fn_FindComponent_Citizen(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenComponent_FC);
 }
 // fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
 // NOTE: same function as fn_FindComponent_Residence (same type ID search)
@@ -800,24 +799,24 @@ inline void fn_FindComponent_Tracker(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TrackerComponent);
 }
 // Forward declarations needed by inline helpers below (defined later in this file)
-extern uint32_t* g_TypeId_HappinessComponent;
-extern uint32_t* g_TypeId_ProfessionComponent;
-// fn_FindComponent_MeshInstance — DAT_1401c7e08 (= g_TypeId_HappinessComponent — MISNOMER:
-// the slot is StatusIconComponent's BaseTypeInfo, writer StatusIconComponent_RegisterType
+extern uint32_t* g_TypeId_StatusIconComponent;
+extern uint32_t* g_TypeId_CitizenAIComponent;
+// fn_FindComponent_MeshInstance — DAT_1401c7e08 = g_TypeId_StatusIconComponent,
+// StatusIconComponent's BaseTypeInfo (writer StatusIconComponent_RegisterType
 // 0x14014fab5; real HappinessComponent id is 0x1401c42c0). Original FUN_140002f90.
 inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_HappinessComponent);
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StatusIconComponent);
 }
 // fn_FindComponent_Character — DAT_1401c7a50, original FUN_140003f60
 inline void fn_FindComponent_Character(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CharacterComponent);
 }
-// fn_FindProfessionComponent — DAT_1401c70e8 (= g_TypeId_ProfessionComponent — MISNOMER:
-// the slot is CitizenAIComponent's BaseTypeInfo, writer CitizenAIComponent_RegisterType
-// 0x14014e735; the finder returns the CitizenAIComponent, where profession data lives).
+// fn_FindComponent_CitizenAI — DAT_1401c70e8 = g_TypeId_CitizenAIComponent,
+// CitizenAIComponent's BaseTypeInfo (writer CitizenAIComponent_RegisterType
+// 0x14014e735); the finder returns the CitizenAIComponent, where profession data lives.
 // Original FUN_140011050.
-inline void fn_FindProfessionComponent(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ProfessionComponent);
+inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenAIComponent);
 }
 
 // ============================================================
@@ -1782,13 +1781,13 @@ extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used i
 // CitizenDescription type ID at DAT_1401c7190 (used for IsDerivedFrom in Slot7)
 extern uint32_t* g_TypeId_CitizenDescription;  // DAT_1401c7190
 
-// HappinessComponent type ID at DAT_1401c7e08 (used for FindComponent in StatusBarUI)
-extern uint32_t* g_TypeId_HappinessComponent;  // DAT_1401c7e08
+// StatusIconComponent type ID at DAT_1401c7e08 (used for FindComponent in StatusBarUI)
+extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
 
-// DAT_1401c70e8 (used by FindProfessionComponent). MISNOMER: the slot is
-// CitizenAIComponent's BaseTypeInfo+0, not a ProfessionComponent id — see
-// reg_citizenai_typeids.cpp. Null unless BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
-extern uint32_t* g_TypeId_ProfessionComponent;  // DAT_1401c70e8 (= CitizenAIComponent id)
+// DAT_1401c70e8 = g_TypeId_CitizenAIComponent, CitizenAIComponent's BaseTypeInfo+0
+// (writer CitizenAIComponent_RegisterType) — see reg_citizenai_typeids.cpp. Null unless
+// BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
+extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
 extern uint32_t* g_TypeId_ProfessionDescription;  // DAT_1401c5a98 (profession type in TutorialGoalCount)
 
 // FollowDialog vtable pointer (resolved from 0x14015be00)

@@ -305,9 +305,9 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
     void* obj = *reinterpret_cast<void**>(taskIBP);
-    uint32_t ciTid = g_TypeId_CitizenAIComponent_FC ? *g_TypeId_CitizenAIComponent_FC : 0;
-    // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenAIComponent_FC, actually the
-    // CitizenComponent type-id — see citizenui.cpp:794). That raw .rdata global is null in
+    uint32_t ciTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
+    // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenComponent_FC, CitizenComponent's
+    // type-id — see citizenui.cpp:794). That raw .rdata global is null in
     // the standalone exe unless some other path (e.g. the citizen UI dialog) has already
     // healed it, so heal it here too — otherwise ciTid==0 makes CanStartWork bail (return 0)
     // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset

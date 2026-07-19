@@ -49,7 +49,8 @@ static void (*s_fn_TaskReassign)(void* taskMgr, void* entityRef, int taskIdx, vo
 
 // TypeInfo addresses
 static uint32_t* s_TypeId_1401c7158 = nullptr;       // DAT_1401c7158 — work entity type
-static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c4218 — ComponentEntity
+static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c5d70 — ComponentEntity
+    // (was mistranscribed 0x1401c4218 = FireDescription; retail CompleteTask serialize reads c5d70)
 
 // Game state singleton
 static void** s_pGameState = nullptr;  // DAT_1401c3dd8
@@ -79,7 +80,7 @@ bool CompleteTask_ResolveFuncs() {
     // save/load validation still works, and — crucially — so they do NOT gate the exec
     // paths below (AbstractImpl/CheckEntity/GetTarget never touch them).
     s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4218));
+    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
     if (!s_TypeId_1401c7158) {
         s_healCitizen = ::Object::GetTypeIdByName("CitizenComponent");   // workEntity (+0x20)

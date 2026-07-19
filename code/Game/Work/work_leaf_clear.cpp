@@ -240,7 +240,7 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
     const uint32_t* tidEntity =
         g_TypeId_ComponentEntity;          // DAT_1401c5d70
     const uint32_t* tidCitizenAI =
-        g_TypeId_CitizenAIComponent_FC;    // DAT_1401c7158
+        g_TypeId_CitizenComponent_FC;    // DAT_1401c7158
 
     if (mode == 0) {
         // ---- reading ----

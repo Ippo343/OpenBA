@@ -52,7 +52,9 @@ bool PlayAnimation_ResolveFuncs() {
     uintptr_t iatEntry = ResolveAddr(Module::Exe, 0x140152ab0);
     if (iatEntry) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatEntry);
 
-    s_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4218);
+    // 0x1401c5d70 = ComponentEntity (retail PlayAnimation serialize reads TypeInfo_ComponentEntity
+    // there). Was mistranscribed as 0x1401c4218 — that slot is FireDescription's BaseTypeInfo.
+    s_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5d70);
     s_AnimFloat = (float*)ResolveAddr(Module::Exe, 0x14017214c);
     s_fn_FindFamily = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400012d0));
