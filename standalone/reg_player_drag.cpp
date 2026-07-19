@@ -24,16 +24,17 @@ extern void  DragTool_PlayErrorSound_100140(uint64_t);         // 0x140100140
 // dragplacementtool.cpp helper (tool_base_drag.cpp)
 extern void  DragPlacementTool_ClearPathEntities_1018d0(void*, int, int, int, int, int64_t); // 0x1401018d0
 
-// NOTE — DEFERRED (NOT registered; bodies intentionally absent from tool_base_drag.cpp):
-//   0x1400ff9e0 OpenToolDialog  — sets dialog vtable to g_ToolUI_ChildDialog_Vtable, which
-//                                 resolves to exe vtable 0x14015f5a0 (UNregistered → 0 in
-//                                 standalone → broken vtable). Register once 0x14015f5a0 lands.
-//   0x1400ffc60 UpdateToolUI    — deep unregistered closure (e600/e700/e420/e360/ebb0/ec70/fe960).
-//   0x140101270 ScreenToCell    — unregistered FUN_1401005a0 + QuarryComponent_impl_a530(->aa20).
+// NOTE — the P1 defers below have all since been REGISTERED by later waves:
+//   0x1400ff9e0 OpenToolDialog  — reg_player_toolui.cpp (r2c): registered with a
+//       faithful standalone child-dialog vtable written directly by the reimpl; the
+//       exe vtable 0x14015f5a0 stays DELIBERATELY unregistered forever (registering
+//       it poisons the menu's BuildId child — see reg_player_toolui.cpp).
+//   0x1400ffc60 UpdateToolUI    — reg_player_createbar.cpp (GUI Phase 3B).
+//   0x140101270 ScreenToCell    — reg_player_ray.cpp (r2).
 //
-// LEVEL-1 caller bug (report only; out of this batch's file scope):
-//   0x1400ff5d0 in dragplacementtool.cpp is MID-FUNCTION. True callee is
-//   CharacterComponent_impl_f5d0 @ 0x14009f5d0. Fix the ResolveAddr literal there.
+// LEVEL-1 caller bug — FIXED: dragplacementtool.cpp's mid-function literal 0x1400ff5d0
+//   was corrected to the true callee CharacterComponent_impl_f5d0 @ 0x14009f5d0
+//   (see dragplacementtool.cpp:146).
 
 void RegisterPlayerDragBatch() {
     RegisterExeAddr(0x140005160, reinterpret_cast<uintptr_t>(&DragTool_FindDescription_5160));

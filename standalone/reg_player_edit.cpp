@@ -29,27 +29,22 @@ extern uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t, uint32_t*, uint32_t
                                                   uint32_t*, uint32_t*, float*, uint32_t*); // 0x1400dbf90
 
 // ----------------------------------------------------------------------------
-// DEFERRED (bodies NOT written / NOT registered — unregistered exe sub-callee in
-// the closure; a half-null port is silent corruption, strictly worse than the
-// safe no-op skip):
-//   0x140066800 EditTool_helper_6800 — tail-calls 0x1400666b0, whose closure pulls
-//       in TradeWork_impl_2e30 + TradeWork_impl_c690 (both UNREG).
-//   0x1400fcc90 Entity_impl_cc90 — exe sub-callee 0x1400fcb40 (Entity_impl_cb40)
-//       whose closure is FUN_140004740 + thunk_helper_d250_sub_7080 + Entity_impl_c4a0
-//       (all UNREG).
-//   0x140100380 Entity_impl_0380 — exe sub-callees 0x1400fec70 + 0x1400fe960 (UNREG),
-//       plus Volume::Box::GetCorners / Math::Transform::operator* bounding-box math
-//       (no fn_ exports yet).
-//   0x1401005a0 FUN_1401005a0 (camera mouse ray) — no exe sub-callees, but its body
-//       needs Volume::Frustum::GetScreenDirection + Math::Transform3::operator* +
-//       Math::Transform3::Rotate exports that have no fn_ pointer yet (intricate
-//       48-byte Transform3 / 112-byte Frustum stack-struct math; dormant on autostart).
+// Status of the addresses this wave originally DEFERRED (all since reconciled):
+//   0x140066800 EditTool_helper_6800 — REGISTERED by reg_player_trade.cpp (r2c trade;
+//       the "2e30/c690" blockers were typos for 102e30/2c690, both registered there).
+//   0x1400fcc90 Entity_impl_cc90 — DELIBERATELY UNREGISTERED, permanently: it doubles
+//       as the EditTool per-frame deactivate vtable slot, so a registered body would
+//       wipe a just-set selection outline every frame. Canonical rationale in
+//       reg_player_render.cpp (the closure that blocked it here has since been ported
+//       in tool_base_render.cpp — closure is no longer the reason).
+//   0x140100380 Entity_impl_0380 — REGISTERED by reg_player_screenrect.cpp (r2d) with
+//       its full closure (fec70/098210/fe960; value-return Math via ResolveExport).
+//   0x1401005a0 GetMouseRay — REGISTERED by reg_player_ray.cpp (r2; resolves its
+//       Frustum/Transform3 exports locally).
 //
-// LEVEL-1 CALLER BUG (do NOT register — reported for the lead to fix the literal):
-//   edittool.cpp resolves "MapHitTest" at 0x14010a530, which is MID-FUNCTION
-//   (entry 0x14010a2b0 CitizenAI_State_Wander). The TRUE callee is 0x1400aa530
-//   (QuarryComponent_impl_a530), confirmed by the CALL at 0x1400fd12a in the original
-//   EditTool OnKey/Draw (0x1400fd030). pathtool.cpp already uses 0x1400aa530 correctly.
+// LEVEL-1 CALLER BUG — FIXED: edittool.cpp's "MapHitTest" literal 0x14010a530
+//   (mid-function in CitizenAI_State_Wander) was corrected to the true callee
+//   0x1400aa530 (QuarryComponent_impl_a530); see edittool.cpp:145.
 // ----------------------------------------------------------------------------
 
 void RegisterPlayerEditBatch() {

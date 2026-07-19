@@ -493,7 +493,7 @@ extern void RegisterPlayerPathBatch();     // Player wave (path): RemovalTool ch
 extern void RegisterPlayerTileBatch();     // Player wave r2 (tile): 003870 SetTransformFromYaw, d580 TileValidity, fd650 ValidateCreate
 extern void RegisterPlayerRayBatch();      // Player wave r2 (ray): aa530 TerrainMarch, 1005a0 GetMouseRay, 101270 ScreenToCell, fda00 PlacementPos
 extern void RegisterPlayerTradeBatch();    // Player wave r2c (trade): EditTool 66800 + EntityUI 666b0 + AVL tree family (102e30/2c690/25740/25920/15000/14ed0)
-extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 + child-dialog vtable 0x14015f5a0
+extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 REGISTERED; exe vtable 0x14015f5a0 deliberately NOT (menu-poison — see reg_player_toolui.cpp)
 extern void RegisterToolbarUtilityBatch(); // GUI Phase 4: utility-dialog helpers (140100270 FindDialogByCtrlType + 140014890 BST insert)
 extern void RegisterEditToolSelectBatch(); // EditTool select-entity->open-info-dialog (fd3b0 Entity_impl_d3b0)
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
@@ -636,10 +636,12 @@ static void RegisterCodeFunctions() {
     RegisterPlayerHighlightBatch();// wave 5: 55430 HighlightAdd closure (b0d80 slot-mgr + ace40
     //   radius tessellation + BST family 1f6b0/1fc00/4b40/1f850/14b00). Worker-thread-free;
     //   shares AVL rotations 15000/14ed0 (reg_player_trade) + fa80/1f8d0/ee40/acc10/ae180 (pf waves).
-    RegisterPlayerToolUIBatch();   // r2c toolui — NO-OP (DEFERRED): ff9e0 + shared vtable
-    //   0x14015f5a0 can't be registered without crashing the menu at startup (the menu's
-    //   BuildId child in mainmenudialog.cpp assumes that shared vtable resolves null).
-    //   See reg_player_toolui.cpp header. Kept wired as a no-op for when the fix lands.
+    RegisterPlayerToolUIBatch();   // r2c toolui — REGISTERS OpenToolDialog ff9e0 (the reimpl
+    //   writes the static standalone child-dialog vtable directly, so it is self-sufficient)
+    //   and fills the g_ToolUI_ChildDialog_Vtable engine_funcs global by direct assignment.
+    //   The exe vtable 0x14015f5a0 stays deliberately UNregistered forever: registering it
+    //   makes the menu's BuildId child dispatch a real OnOpened on a half-built dialog
+    //   (A/B-bisected startup crash). See reg_player_toolui.cpp.
     RegisterPlayerCreateBarBatch();// GUI Phase 3B: ffc60 CreateBar populate+position — fills the
     //   placement dialog's textSize/textStatus/imageIcon + SetUpperLeft over the footprint.
     //   Closure fully satisfied (sub-helpers same-TU; ec70/fe960 via reg_player_screenrect).
@@ -656,7 +658,9 @@ static void RegisterCodeFunctions() {
     RegisterEditToolSelectBatch(); // EditTool click-to-select: fd3b0 Entity_impl_d3b0 opens the
     //   clicked entity's info DialogInstance (routes fn_EditTool_SelectEntity from edittool.cpp
     //   OnKey). Same DialogInstance ctor + g_ToolUI_ChildDialog_Vtable + AddDialog wiring as the
-    //   Phase-4 utility path; teardown/refresh helpers fcc90/fc9e0 deferred (null-guarded).
+    //   Phase-4 utility path; teardown/refresh helpers null-guarded: fc9e0 gated on
+    //   BANISHED_SELECTION_OUTLINE (reg_player_render), fcc90 deliberately never
+    //   registered (per-frame EditTool deactivate slot — see reg_player_render.cpp).
 
     RegisterComponentGap_C();      // Component GAP batch C visuals leaves — 0x1400b0d00
     //   TerrainDecalSystem release-one-slot (DecalComponent::OnCreate detach; without it every

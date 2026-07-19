@@ -2,8 +2,7 @@
 // Player registration wave (round 2c — tool-ui) registration.
 //
 // Registers the OpenToolDialog exe helper (0x1400ff9e0, resolved from
-// code/Game/Player/dragtool.cpp + placementtool.cpp) and the child-dialog vtable
-// it installs (0x14015f5a0), to the reimplementations in
+// code/Game/Player/dragtool.cpp + placementtool.cpp) to its reimplementation in
 // code/Game/Player/tool_base_toolui.cpp. The integrator wires
 // RegisterPlayerToolUIBatch() into RegisterCodeFunctions() in
 // standalone/address_registry.cpp.
@@ -12,20 +11,21 @@
 //   0x1400ff9e0 OpenToolDialog — verified real function ENTRY (get_function_by_address
 //     Entry == 0x1400ff9e0). Its only non-Runtime/non-engine_funcs dependency was the
 //     child-dialog vtable at 0x14015f5a0 (unregistered → 0 in standalone → broken
-//     dialog vtable), which is the reason it was DEFERRED in the P1 wave. We satisfy
-//     the closure by registering a faithful standalone replacement vtable
+//     dialog vtable), which is the reason it was DEFERRED in the P1 wave. The closure
+//     is satisfied by a faithful standalone replacement vtable
 //     (g_ToolUI_ChildDialog_Vtable_Standalone) whose 10 slots forward to the SAME
-//     Runtime-x64.dll DialogInstance virtuals the exe thunks JMP to. With the vtable
-//     present the whole closure is satisfied (engine_funcs exports + singleton
-//     globals + Runtime DLL), so OpenToolDialog is now closure-safe to register.
-//   0x14015f5a0 g_ToolUI_ChildDialog_Vtable — registered to the static C++ array so
-//     ResolveAddr(Module::Exe, 0x14015f5a0) returns it (mirrors how mainmenudialog.cpp
-//     registers its standalone dialog vtable at 0x14015f550).
+//     Runtime-x64.dll DialogInstance virtuals the exe thunks JMP to; the reimpl writes
+//     that static array directly, so OpenToolDialog is closure-safe to register.
+//   0x14015f5a0 — the exe vtable address itself is DELIBERATELY NOT registered in the
+//     address registry (see the RESOLVED note below: registering it poisons the menu's
+//     BuildId child). Only the engine_funcs global g_ToolUI_ChildDialog_Vtable is
+//     filled, by direct assignment.
 #include "resolve.h"
 #include <cstdint>
 
-// OpenToolDialog reimpl + the child-dialog vtable (tool_base_toolui.cpp). Kept for the
-// dedicated fix; NOT registered (see DEFER note below).
+// OpenToolDialog reimpl + the child-dialog vtable (tool_base_toolui.cpp). ff9e0 IS
+// registered below; only the vtable address 0x14015f5a0 stays unregistered (see the
+// RESOLVED note).
 extern "C" void* ToolUI_OpenToolDialog_ff9e0(void*, void*, uint64_t);  // 0x1400ff9e0
 extern void* g_ToolUI_ChildDialog_Vtable_Standalone[10];              // 0x14015f5a0
 extern "C" void ToolUI_InitChildDialogVtable();                       // eager slot-fill

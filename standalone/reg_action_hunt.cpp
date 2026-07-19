@@ -26,11 +26,11 @@ extern void  ActHunt_DynArraySetCount_3110(void*, int, void*);   // 0x140003110
 extern void  ActHunt_MarkEntityRemoval_c2ea0(void*);        // 0x1400c2ea0
 extern void  ActHunt_NotifyEntityChanged_c3470(void*);      // 0x1400c3470  HIGH-REUSE
 
-// Road-tile completion — void fn(void* terrain, int tile, uint8_t dir, uint32_t roadType)
-// DEFERRED (body present, NOT registered): 0x14009c640 calls unregistered sub-helpers
-// 0x14009f2f0 / 0x14009e0e0 / 0x1400af370 and mutates terrain cell + connectivity state —
-// registering it would refresh tiles but skip connectivity (drift). Register once those land.
-extern void  ActHunt_CompleteRoadTile_c640(void*, int, uint8_t, uint32_t);  // 0x14009c640 (deferred)
+// Road-tile completion 0x14009c640 — RESOLVED elsewhere: registered by
+// reg_pf_roots_road.cpp as Pf_FinalizeRoadTile_9c640 (action_pf_roots_road.cpp),
+// together with its former blockers 0x14009f2f0 / 0x14009e0e0. 0x1400af370 (road-mesh
+// rebuild) stays a safe no-op via ResolveAddr until its own pass. The earlier
+// ActHunt_CompleteRoadTile_c640 port here was retired as a duplicate.
 
 void RegisterActionHuntBatch() {
     RegisterExeAddr(0x140005500, reinterpret_cast<uintptr_t>(&ActHunt_FindComponent_5500));
@@ -39,7 +39,8 @@ void RegisterActionHuntBatch() {
     RegisterExeAddr(0x140003110, reinterpret_cast<uintptr_t>(&ActHunt_DynArraySetCount_3110));
     RegisterExeAddr(0x1400c2ea0, reinterpret_cast<uintptr_t>(&ActHunt_MarkEntityRemoval_c2ea0));
     RegisterExeAddr(0x1400c3470, reinterpret_cast<uintptr_t>(&ActHunt_NotifyEntityChanged_c3470));
-    // 0x14009c640 deferred (see note above). 0x1400bbea0 RemoveAnimal_Action_Ctor SKIPPED
+    // 0x14009c640 registered by RegisterPfRootsRoadBatch (see note above).
+    // 0x1400bbea0 RemoveAnimal_Action_Ctor SKIPPED
     // (609-insn builder; child actions via unregistered CopyCtors → no gain, crash risk).
     // 0x140122340 HerdComponent_StartMigration SKIPPED (no-migration branch infinite-loops
     // single-threaded in standalone — needs the async removal-queue drain).

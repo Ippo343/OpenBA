@@ -224,71 +224,7 @@ void ActHunt_NotifyEntityChanged_c3470(void* self) {
 }
 
 // ============================================================
-// CompleteRoad_helper_c640 (0x14009c640) — apply a road-tile change to the terrain
-// grid and refresh the adjacent-cell connectivity / overlay queues.
+// CompleteRoad_helper_c640 (0x14009c640) — RETIRED duplicate. The registered port is
+// Pf_FinalizeRoadTile_9c640 in action_pf_roots_road.cpp (wired by reg_pf_roots_road.cpp),
+// which calls its sub-helpers 9f2f0/9e0e0/1a6e0 directly as registered ports.
 // ============================================================
-// grid layout: [0]=gridWidth(uint at param_1[0]); cell array base at *(grid+0x20),
-// stride 0x30. For roadType==2 (remove): decrement cell+0x28, set cell+0x2a..0x2b=0xff,
-// FUN_14009f2f0(grid,tile,2). Else: write direction to cell+0x2b, FUN_14009f2f0(grid,
-// tile,roadType&0xff), then refresh the 2x2 cell block via CitizenAI_impl_e0e0.
-// Finally walk an int-keyed BST at grid+0x3a (key=tile): if a node with key==tile is
-// found, remove it (CitizenAI_impl_a6e0). Always TradeWork_impl_f370(world+0x110, grid).
-//
-// Caller signature: void fn(void* terrain, int tileIndex, uint8_t direction, uint32_t roadType)
-typedef void (*fn_RoadConnRefresh_t)(int* grid, int tile, uint32_t mode);
-typedef void (*fn_RoadBlockRefresh_t)(uint32_t* grid, int c0, int r0, int c1, int r1);
-typedef void (*fn_RoadBstRemove_t)(int64_t* tree, int* node);
-typedef void (*fn_RoadTradeRefresh_t)(int64_t mgr, uint32_t* grid);
-void ActHunt_CompleteRoadTile_c640(void* terrainV, int tile, uint8_t direction, uint32_t roadType) {
-    static fn_RoadConnRefresh_t  s_conn  = nullptr;  // FUN_14009f2f0
-    static fn_RoadBlockRefresh_t s_block = nullptr;  // CitizenAI_impl_e0e0 (14009e0e0)
-    static fn_RoadBstRemove_t    s_brem  = nullptr;  // CitizenAI_impl_a6e0 (14001a6e0)
-    static fn_RoadTradeRefresh_t s_trade = nullptr;  // TradeWork_impl_f370 (1400af370)
-    static bool init = false;
-    if (!init) {
-        s_conn  = reinterpret_cast<fn_RoadConnRefresh_t >(ResolveAddr(Module::Exe, 0x14009f2f0));
-        s_block = reinterpret_cast<fn_RoadBlockRefresh_t>(ResolveAddr(Module::Exe, 0x14009e0e0));
-        s_brem  = reinterpret_cast<fn_RoadBstRemove_t   >(ResolveAddr(Module::Exe, 0x14001a6e0));
-        s_trade = reinterpret_cast<fn_RoadTradeRefresh_t>(ResolveAddr(Module::Exe, 0x1400af370));
-        init = true;
-    }
-
-    uint32_t* grid = reinterpret_cast<uint32_t*>(terrainV);
-    uintptr_t cell = static_cast<uintptr_t>(static_cast<int64_t>(tile)) * 0x30
-                     + *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(grid) + 0x20);
-
-    if (roadType == 2) {
-        *reinterpret_cast<int8_t*>(cell + 0x28) -= 1;
-        *reinterpret_cast<uint16_t*>(cell + 0x2a) = 0xff;
-        if (s_conn) s_conn(reinterpret_cast<int*>(grid), tile, 2);
-    } else {
-        *reinterpret_cast<uint8_t*>(cell + 0x2b) = direction;
-        if (s_conn) s_conn(reinterpret_cast<int*>(grid), tile, roadType & 0xff);
-        int gridW = static_cast<int>(*grid);
-        int row = tile / gridW;
-        int col = tile % gridW;
-        if (s_block) s_block(grid, col, row, col + 1, row + 1);
-    }
-
-    // int-keyed BST root at grid byte +0xe8 (uint32_t* index 0x3a); node key at +0,
-    // left child at +0x10, right child at +0x18.
-    uintptr_t treeRoot = reinterpret_cast<uintptr_t>(grid) + 0xe8;
-    int* node = *reinterpret_cast<int**>(treeRoot);
-    while (node != nullptr) {
-        if (*node <= tile) {
-            if (tile <= *node) {
-                if (s_brem) s_brem(reinterpret_cast<int64_t*>(treeRoot), node);
-                break;
-            }
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);   // right child
-        } else {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x10);   // left child
-        }
-    }
-
-    if (s_trade && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        int64_t mgr = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110);
-        s_trade(mgr, grid);
-    }
-}

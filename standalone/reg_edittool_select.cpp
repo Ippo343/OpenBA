@@ -14,12 +14,15 @@
 // fn_UI_AddDialog, fn_IsDerivedFrom, fn_InternalBasePtr_Ctor/_CheckPtr, fn_MemAlloc) plus
 // g_ToolUI_ChildDialog_Vtable (RegisterPlayerToolUIBatch) and the EntityUI/UIDescription/
 // UIComponent type-ids (filled lazily via Object::GetTypeIdByName inside the body).
-// The two teardown/refresh helpers 0x1400fcc90 (Entity_impl_cc90, deselect/clear) and
-// 0x1400fc9e0 (Entity_impl_c9e0, select/paint) are ported in tool_base_render.cpp and
-// registered by RegisterPlayerRenderBatch — but only under BANISHED_SELECTION_OUTLINE
-// (their closure transits the Entity_impl_c4a0 EdgeMesh render family). The body resolves
-// them as exe pointers and null-guards them, so with the outline off the dialog still
-// opens with those steps skipped. See the body header for the full rationale.
+// The body resolves the two teardown/refresh helpers as exe pointers and null-guards
+// them, so the dialog opens fine with either unresolved:
+//   0x1400fc9e0 (Entity_impl_c9e0, select/paint) — ported in tool_base_render.cpp,
+//     registered by RegisterPlayerRenderBatch only under BANISHED_SELECTION_OUTLINE;
+//     with the outline off it stays null and that step is skipped.
+//   0x1400fcc90 (Entity_impl_cc90, deselect/clear) — DELIBERATELY NEVER registered:
+//     it doubles as the EditTool per-frame deactivate vtable slot and would wipe the
+//     outline every frame (see reg_player_render.cpp); clear-on-reselect is done via
+//     cb40 in this body's d3b0 step 6 instead.
 #include "resolve.h"
 #include <cstdint>
 
