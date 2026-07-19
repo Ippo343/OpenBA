@@ -177,6 +177,16 @@ static uint32_t g_tid_BuildRoad                = 0;  // 0x1401c6860
 // default sa-run); A/B the default build after adding.
 static uint32_t g_tid_CreateDragDescription    = 0;  // 0x1401c7430
 
+// 0x1401c3f78 AttendanceDescription — read by CitizenComp_sub_40f0 (0x1400440f0, the
+// free-worker-slot / reachability gate shared by FindWorkplace 0x140111590,
+// FindStorage 0x1401116f0, TryFindPartner 0x140111840 via sub_1930) and dereferenced
+// UNGUARDED by attendanceui.cpp:51 (g_TypeId_AttendanceSubComp — same address).
+// Previously unregistered -> ResolveAddr returned 0 -> sub_40f0's IsDerivedFrom got
+// id 0 -> capacity 0 -> gate always false -> all three finders silently no-op'd
+// (latent: their driver CitizenComponent::Update is not live-wired yet), and the
+// AttendanceUI deref was a null-pointer crash-in-waiting. Audit 2026-07-19.
+static uint32_t g_tid_AttendanceDescription    = 0;  // 0x1401c3f78
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -199,6 +209,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c75f0, reinterpret_cast<uintptr_t>(&g_tid_DestroyComponent));
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
     RegisterExeAddr(0x1401c7430, reinterpret_cast<uintptr_t>(&g_tid_CreateDragDescription));
+    RegisterExeAddr(0x1401c3f78, reinterpret_cast<uintptr_t>(&g_tid_AttendanceDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -223,5 +234,6 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
     g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
+    g_tid_AttendanceDescription    = ::Object::GetTypeIdByName("AttendanceDescription");
 }
 

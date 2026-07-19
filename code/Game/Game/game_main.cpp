@@ -70,6 +70,8 @@ extern "C" void FillTypeIdGlobals_worktail_trade();
 // storage gated on BANISHED_LIVE_CITIZENAI_TIDS, fill is a harmless no-op when off).
 extern "C" void FillTypeIdGlobals_citizenai();
 extern "C" void FillTypeIdGlobals_worktail_fire();
+// step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
+extern "C" void FillTypeIdGlobals_citizen_lifeevent();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
@@ -407,6 +409,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
     FillTypeIdGlobals_citizenai();         // openfuncs step 2 — CitizenAI/Citizen/Happiness ids (c70e8/c7158/c42c0, gated)
+    FillTypeIdGlobals_citizen_lifeevent(); // step 2.5 defer close — TombstoneComponent/CemeteryDescription ids (c4a30/c40c8)
 
     if (ok != 0) {
         // Relativize the engine FileSystem resource directories. This was a

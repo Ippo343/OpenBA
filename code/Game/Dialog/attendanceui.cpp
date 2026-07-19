@@ -48,7 +48,7 @@ void AttendanceUI_Slot4(AttendanceUI* self) {
 
     // Get sub-component at +0x18, check type
     void* subComp = *(void**)((uintptr_t)attendComp + 0x18);
-    bool isType = fn_IsDerivedFrom(subComp, *g_TypeId_AttendanceSubComp);
+    bool isType = fn_IsDerivedFrom(subComp, *g_TypeId_AttendanceDescription);
     void* typedComp = isType ? subComp : nullptr;
 
     // Set progress maximum from sub-component's capacity field (+0x20)

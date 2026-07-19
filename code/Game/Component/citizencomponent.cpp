@@ -159,34 +159,10 @@ static fn_ReleaseWork_t s_fn_ReleaseWork = nullptr;
 typedef void* (*fn_FindPartner_t)(int64_t self, void* outIBP);
 static fn_FindPartner_t s_fn_FindPartner = nullptr;
 
-// CitizenComponent_helper_1b90 — handle reproduction
-// At 0x140111b90
-// NOTE: This is NOT UpdateHealth — it's the repro helper.
-// Re-checking decompilation: at offset +0x1b90 relative to base.
-// Actually let me re-read: the decompilation calls "CitizenComponent_helper_1b90" which
-// is the reproduction helper at 0x140111b90. But wait, 0x140111b90 is UpdateHealth.
-// The reproduction helper is at a different address. Let me resolve from the decompilation.
-// In the Ghidra output line: CitizenComponent_helper_1b90((Internal *)param_1);
-// This corresponds to the "handle reproduction" sub-function. Address = base + offset.
-// Looking at the decompilation context: it's inside the "happiness/reproduction" block.
-
-// CitizenComponent_helper_1b90 — handle reproduction/procreation
-// At 0x140111b90 — wait, that's UpdateHealth. Let me re-check.
-// The decompilation at line ~370 says CitizenComponent_helper_1b90 in the happiness block.
-// But 0x140111b90 IS UpdateHealth based on the function header address.
-// Re-reading: the Ghidra function name "helper_1b90" uses offset from the base of
-// CitizenComponent functions (0x140110000 region). So 0x140110000 + 0x1b90 = 0x140111b90.
-// Hmm, that conflicts. The actual reproduction helper must be at a different address.
-// Let me check the decompilation more carefully — it's actually CitizenComponent_helper_1b90
-// which IS 0x140111b90 = same as UpdateHealth. The Ghidra naming may be wrong here.
-// Actually no — the function CitizenComponent_UpdateHealth is explicitly called earlier
-// in the decompilation as a separate call. And "helper_1b90" is called in the reproduction
-// block. This suggests they are different functions at different addresses OR Ghidra
-// has named them confusingly.
-// To be safe, let me just resolve the actual address from the call site.
-
-// After careful review: the reproduction handler is at 0x140111b90 which Ghidra may
-// show differently depending on naming. Let me use the decompilation address directly.
+// CitizenComponent_helper_1b90 (0x140111b90–0x140111ecb) — partner-candidate scan
+// over the citizen list (partner link +0x250 empty, age +0x3c <= desc+0x4c): the
+// reproduction helper. NOT UpdateHealth — UpdateHealth is 0x1401127d0, ported in
+// citizen_updatehealth.cpp (disambiguated 2026-07-19).
 typedef void (*fn_HandleRepro_t)(void* self);
 
 // CitizenComponent_helper_a4f0 — check storage has capacity for item type
@@ -1359,7 +1335,7 @@ static fn_AttachWorkplacea20_t   s_fn_AttachWorkplacea20 = nullptr;
 static fn_PathCost8830_t         s_fn_PathCost8830 = nullptr;
 static fn_GrowArray3110_t        s_fn_GrowArray3110 = nullptr;
 static fn_Entity_FindPos_ed0_t   s_fn_Entity_FindPos_ed0 = nullptr;
-static uint32_t*                 s_TypeId_Residence3f78 = nullptr; // DWORD_1401c3f78 (sub_40f0)
+static uint32_t*                 s_TypeId_AttendanceDesc3f78 = nullptr; // DWORD_1401c3f78 = AttendanceDescription (factory_registrations.csv:9), NOT Residence (sub_40f0)
 // .rdata float/double constants used by ConsumeFood / ConsumeFuel.
 static float*  s_DAT_140172180 = nullptr;
 static float*  s_DAT_1401721a8 = nullptr;
@@ -1415,7 +1391,7 @@ static void EnsureCallees() {
     s_fn_PathCost8830        = reinterpret_cast<fn_PathCost8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_fn_GrowArray3110       = reinterpret_cast<fn_GrowArray3110_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_TypeId_Residence3f78   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
+    s_TypeId_AttendanceDesc3f78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78)); // AttendanceDescription; registered+filled in reg_economy_typeids.cpp
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
     {
         uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a80); // Time::Time(float)
@@ -2681,8 +2657,8 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     EnsureCallees();
     uint8_t* cp = reinterpret_cast<uint8_t*>(param_1);
     void* obj = *reinterpret_cast<void**>(cp + 0x18);
-    uint32_t resTid = s_TypeId_Residence3f78 ? *s_TypeId_Residence3f78 : 0;
-    void* res = (obj && fn_IsDerivedFrom(obj, resTid)) ? obj : nullptr;
+    uint32_t attTid = s_TypeId_AttendanceDesc3f78 ? *s_TypeId_AttendanceDesc3f78 : 0;
+    void* res = (obj && attTid && fn_IsDerivedFrom(obj, attTid)) ? obj : nullptr;
     int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
     if (*reinterpret_cast<int*>(cp + 0x30) >= cap) return false;
 

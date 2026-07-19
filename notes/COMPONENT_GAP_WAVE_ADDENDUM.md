@@ -33,16 +33,28 @@ Your job is to **classify each address** and only register the **closure-safe** 
    serialize/ctor cascades. Do NOT register — a wrong/half-null port is SILENT corruption,
    strictly worse than the safe no-op skip.
 
-## KNOWN complex defers — do NOT spend effort porting (just confirm + document):
-- `0x140106420` AnimalComponent::Update — self-resolving passthrough, SKIP (infinite recursion).
-- citizencomponent lifecycle (Level-2 backlog, deep closures): `0x140116dd0` HandleLifeEvent,
-  (`0x140113af0` ex-"AssignState" = PostLifeEvent CLOSED 2026-07-19 — shallow event-log
-  poster, not a deep closure; see reg_eventlog_citizen.cpp),
-  `0x140112990` ConsumeFood, `0x140112ae0` ConsumeFuel,
-  `0x140111590` FindWorkplace, `0x1401116f0` FindStorage, `0x1401163d0` AssignWorkplace,
-  `0x140111ee0` AssignHousing, `0x140111840` TryFindPartner, `0x1401127d0` UpdateHealth.
-- rawmaterialcomponent: `0x1400f72e0` Work_Ctor25, `0x14012ec60` register-draw-item (L2).
-Still decompile them briefly to CONFIRM the closure is unsafe, but don't port.
+## KNOWN complex defers — STATUS 2026-07-19: ALL CLOSED except the permanent skip.
+- `0x140106420` AnimalComponent::Update — PERMANENT SKIP (self-resolving passthrough;
+  registering it to itself = infinite recursion, and no faithful body exists — a real
+  closure needs the full 452-inst Update + FindHabitat/SetBounds/MoveTo-action chain).
+  Re-confirmed by audit 2026-07-19; the guarded null passthrough is the correct no-op.
+- citizencomponent lifecycle — CLOSED (all ported + registered):
+  `0x140112990` ConsumeFood, `0x140112ae0` ConsumeFuel, `0x140111590` FindWorkplace,
+  `0x1401116f0` FindStorage, `0x140111840` TryFindPartner, `0x140111ee0` AssignHousing
+  (reg_component_gap_A.cpp), `0x1401163d0` AssignWorkplace (reg_citizen_assignworkplace.cpp),
+  `0x140113af0` PostLifeEvent (reg_eventlog_citizen.cpp),
+  `0x140116dd0` HandleLifeEvent — ported 2026-07-19, death/cemetery/tombstone chain,
+  7 fns (citizen_lifeevent_handler.cpp + reg_citizen_lifeevent_handler.cpp),
+  `0x1401127d0` UpdateHealth — ported 2026-07-19, full disease subsystem, 8 fns
+  (citizen_updatehealth.cpp + reg_citizen_updatehealth.cpp).
+  Audit 2026-07-19 found + fixed one latent gap: type-id 0x1401c3f78 (AttendanceDescription,
+  was misnamed "Residence"/"AttendanceSubComp") was unregistered, making the sub_40f0
+  worker-slot gate always-false and silently defeating FindWorkplace/FindStorage/
+  TryFindPartner. Now registered + filled in reg_economy_typeids.cpp.
+- rawmaterialcomponent — CLOSED: `0x1400f72e0` Work_Ctor25 (reg_work_base.cpp),
+  `0x14012ec60` work-post (citizenai_work_scheduler.cpp). Both audit-verified faithful.
+- NOTE `0x140111b90` is the partner-candidate/repro helper, NOT UpdateHealth
+  (disambiguated; stale comments in citizencomponent.cpp cleaned).
 
 ## Allocator / engine func gotchas (from base brief)
 - Alloc: `fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align)`; free: `fn_MemFreeStatic(ptr)`.

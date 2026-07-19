@@ -614,7 +614,7 @@ extern uint32_t* g_TypeId_StorageLocationComponent;// DAT_1401c8070
 extern uint32_t* g_TypeId_StorageComponent;       // (TBD)
 extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
 extern uint32_t* g_TypeId_WorkplaceJobType;       // DAT_1401c80a8
-extern uint32_t* g_TypeId_AttendanceSubComp;      // DAT_1401c3f78
+extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
 extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
 

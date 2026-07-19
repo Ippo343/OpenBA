@@ -253,7 +253,7 @@ uint32_t* g_TypeId_StorageLocationComponent = nullptr;
 uint32_t* g_TypeId_StorageComponent = nullptr;
 uint32_t* g_TypeId_StateMachineComponent = nullptr;
 uint32_t* g_TypeId_WorkplaceJobType = nullptr;
-uint32_t* g_TypeId_AttendanceSubComp = nullptr;
+uint32_t* g_TypeId_AttendanceDescription = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
 uint32_t* g_TypeId_ToolUI = nullptr;
 uint32_t* g_TypeId_ProfessionDescription = nullptr;
@@ -2145,7 +2145,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c8070));
     g_TypeId_WorkplaceJobType = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c80a8));
-    g_TypeId_AttendanceSubComp = reinterpret_cast<uint32_t*>(
+    g_TypeId_AttendanceDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c3f78));
     g_TypeId_ResourceLimitType = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5520));
