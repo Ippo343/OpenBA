@@ -30,9 +30,12 @@ extern "C" void* TradeWork_NodeAlloc_c830(void* unused, uint64_t* src, int64_t p
 struct TradeWork;
 int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t param3, uint64_t param4); // 0x1400f5d40
 
-// Type-id read by the c8a0 IsDerivedFrom. DWORD_1401c7158 = CitizenAIComponent
-// (confirmed: Entity_FindComponent_CitizenAI @0x1400097a0 reads this slot to match the
-// CitizenAI component; the firework/Entity child-scans use the same pattern).
+// Type-id read by the c8a0 IsDerivedFrom. DWORD_1401c7158 = CitizenComponent
+// (CORRECTED 2026-07-19: the slot's [DATA] writer is CitizenComponent_RegisterType
+// @0x14014e7b5 — Object::BaseTypeInfo(&DWORD_1401c7158, "CitizenComponent", ...).
+// The earlier "CitizenAIComponent" claim came from the 0x1400097a0 finder's Ghidra
+// name, which inherited the same wrong assumption. BaseTypeInfo is 0x70 bytes;
+// CitizenAIComponent's block is the adjacent one at 0x1401c70e8.)
 //
 // IMPORTANT: this is a PRIVATE static for c8a0 only — we deliberately do NOT
 // RegisterExeAddr(0x1401c7158) to the global registry. ~30 existing reimpls (completetask,
@@ -49,7 +52,10 @@ uint32_t g_tid_TradeWork_CitizenComponent = 0;  // private c8a0 copy of DWORD_14
 }
 
 extern "C" void FillTypeIdGlobals_worktail_trade() {
-    g_tid_TradeWork_CitizenComponent = ::Object::GetTypeIdByName("CitizenAIComponent");
+    // "CitizenComponent", matching the retail slot value (see corrected note above);
+    // was "CitizenAIComponent" — a latent wrong-id in the (autostart-unexercised)
+    // c8a0 serialize validation.
+    g_tid_TradeWork_CitizenComponent = ::Object::GetTypeIdByName("CitizenComponent");
 }
 
 void RegisterWorkTailTradeBatch() {

@@ -490,6 +490,8 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     void* cdesc = *reinterpret_cast<void**>(*self + 0x18);
     void* citDesc = (cdesc && fn_IsDerivedFrom && fn_IsDerivedFrom(cdesc, s_tid_CitizenDescription)) ? cdesc : nullptr;
     int64_t holderCitizen = *self;
+    // [STANDALONE GUARD] the citDesc null-check is ours; the original derefs +0x124
+    // unconditionally (would fault if the description type-check failed).
     float walkTime = citDesc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(citDesc) + 0x124) : 0.0f;
     if (s_walk) s_walk(&holderCitizen, 0xffffffff, reinterpret_cast<uint32_t*>(walkOut), 5, walkTime, 1);
 

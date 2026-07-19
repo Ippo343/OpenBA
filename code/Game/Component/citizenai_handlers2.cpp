@@ -454,6 +454,8 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
         void* desc = (descRaw && fn_IsDerivedFrom && fn_IsDerivedFrom(descRaw, s_tid_CitizenDescription))
                      ? descRaw : nullptr;
         int64_t ibpHolder = *self;
+        // [STANDALONE GUARD] the desc null-check is ours; the original derefs +0x120
+        // unconditionally (would fault if the description type-check failed).
         float walkTime = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x120) : 0.0f;
         if (s_fn_walk)
             s_fn_walk(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);

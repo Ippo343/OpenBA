@@ -63,13 +63,13 @@ where they literally appear in the source.
 ### CitizenAI / Component
 | Addr | Symbol | File | Why deferred |
 |------|--------|------|--------------|
-| `0x14012ab00` + 14 `CitizenAI_State_*` | candidate handlers | reg_citizenai_candidatelist.cpp:12 | ValidateAndEnterState null-guards each handler |
+| `0x14012ab00` + 14 `CitizenAI_State_*` | candidate handlers | reg_citizenai_candidatelist.cpp:12 | STALE — all 14 handlers registered (reg_citizenai_handlers/2/3, gather, growup, leisure, housing_idle); 0x14012ab00 is Storage_GetResourceCount2 (Gather2 helper, reg_citizenai_gather.cpp:24), not a 15th handler. Audited 2026-07-19 |
 | `0x140025a10`,`0x140025b30`,`0x1400d62a0`,`0x1400d43b0`,`0x140095580` | PathBST/PathPairs/ReassignWorkers/AssignCitizens/NotificationEvent | reg_citizenbehavior_tick.cpp:27 | fire as dispatcher-guarded no-ops |
 | `0x14010fde0`,`0x1401117a0`,`0x140111540` | needs-msg 1/4/5 helpers | reg_citizen_needsupdate.cpp:16 | dispatcher resolves NULL, skips with `[EatMsg]` trace |
 | `0x140106420` | AnimalComponent::Update | reg_component_nature.cpp:58 | still a self-resolving passthrough — registering = infinite recursion. Needs genuine 452-insn reimpl |
 | `0x1400302a0`,`0x140112040`,`0x1401168a0`,`0x140117080` | citizen lifecycle Level-2 | reg_component_gap_A.cpp:15 | call unregistered sub-callees (AssignWorkplace `1163d0` etc.); ~10 known Level-2 defers |
-| `0x14010dca0` | BuildCandidateStateList | reg_component_gap_B.cpp:19 | calls unregistered GetHappiness/HasSufficientResources/SortByPriority |
-| `0x14010f1f0` | ValidateAndEnterState | reg_component_gap_B.cpp:19 | all 15 `CitizenAI_State_*` still unregistered |
+| `0x14010dca0` | BuildCandidateStateList | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:32 with all helpers (GetHappiness 115de0 / HasSufficientResources[2] / SortByPriority). Audited faithful 2026-07-19 |
+| `0x14010f1f0` | ValidateAndEnterState | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:33; all 14 handlers live. Audited faithful 2026-07-19 |
 | `0x140047200` | CemeteryComponent::Draw | reg_component_gap_B.cpp:19 | self-resolving passthrough → recursion |
 | `0x140102b60` | NomadComp_RebuildController | reg_component_gap_B.cpp:51 | Factory::CreateObject + controller-vtable Startup; crashes on `g_ToolUI_ChildDialog_Vtable 0x14015f5a0` |
 
@@ -122,6 +122,23 @@ defers `0x1400ffc60` (reg_player_createbar) and `0x140101270` (reg_player_ray); 
 Level-1 caller-bug literals (`0x14010a530`, `0x1400ff5d0`) were already fixed in
 edittool.cpp/dragplacementtool.cpp — notes updated to say so.
 
+### ✔ CitizenAI Level-2 audit — DONE 2026-07-19 (openfuncs step 2)
+The §1 CitizenAI rows above were stale: BuildCandidateStateList, ValidateAndEnterState, all
+14 state handlers, and the candidate-list helpers were already registered and A/B-green
+(un-gated 2026-06-20). Four parallel decomp-vs-port audits verified every function faithful
+offset-by-offset. Findings:
+- **Real bug fixed**: `CitizenAI_State_LongTermPlan` port used a 16-byte stride in the
+  candidate-array grow/append/dispatch vs the correct 8-byte stride in alloc/search/retail —
+  dedup break + 8-byte heap OOB write at the 4th candidate (citizenai_growup.cpp, fixed).
+- **Benign divergence documented**: Leisure's zone-refresh call passes different args than
+  retail; proven dead (callee ignores/dead-stores them).
+- **Ghidra renames applied** (with plate-comment evidence): `AdultTransition`→`CitizenAI_State_Eat`
+  (hunger +0x44 vs desc +0xcc), `ElderTransition`→`CitizenAI_State_Drink` (thirst +0x48 vs
+  desc +0xec), `GetHappiness` 115de0→`CitizenComponent_GetCarryCount` (Storage QueryCount,
+  gates state 0xd haul planning).
+- Stale defer comments rewritten in reg_citizenai_candidatelist.cpp and reg_component_gap_B.cpp.
+The remaining open item from priority #2 is the `c70e8`/`c7158`/`c42c0` global fill (§2).
+
 *Note: several other agent-flagged defers are STALE (already resolved by a later wave):
 `0x140129760`/`0x140088ef0` (rawmat), `0x140122340` (herd migration), `0x140092260` (spatial),
 `0x1400a8ba0` (region path), `0x140111840` (TryFindPartner), workplace Attach/Detach
@@ -144,15 +161,28 @@ unconditionally but their *runtime effect* is gated at call sites.
 | `0x1401c4918` | SpawnDescription | `BANISHED_LIVE_SPAWN` | SpawnComponent Update/Startup; TileFree `120c30` | reg_component_spawn.cpp:29 |
 | `0x1401c77e8` | GrowthDescription | `BANISHED_LIVE_SPAWN` | SpawnComponent spawn-interval template | reg_component_spawn.cpp:30 |
 
-### Intentionally never mapped (0/sentinel forever — read 0 + null-guarded)
-| Addr | Type-id | File | Note |
-|------|---------|------|------|
-| `0x1401c70e8`, `0x1401c7158` | SendComponentMessage msg-ids | reg_citizenai_actionctors.cpp:33 | self-contained-brick pattern |
-| `0x1401c42c0` | HappinessComponent | reg_citizenai_actionctors.cpp:33 | CitizenAI happiness lookup |
+### ~~Intentionally never mapped~~ → registration-gated as of 2026-07-19 (openfuncs step 2)
+| Addr | Retail identity (corrected) | Gate | File |
+|------|----------------------------|------|------|
+| `0x1401c70e8` | CitizenAIComponent BaseTypeInfo+0 (`CitizenAIComponent_RegisterType` 0x14014e735) | `BANISHED_LIVE_CITIZENAI_TIDS` or `_AIID` | reg_citizenai_typeids.cpp |
+| `0x1401c7158` | **CitizenComponent** BaseTypeInfo+0 (`CitizenComponent_RegisterType` 0x14014e7b5) — NOT CitizenAIComponent as older notes claimed | `BANISHED_LIVE_CITIZENAI_TIDS` or `_CITID` | reg_citizenai_typeids.cpp |
+| `0x1401c42c0` | HappinessComponent BaseTypeInfo+0 (`HappinessComponent_RegisterType` 0x14014ace5) | `BANISHED_LIVE_CITIZENAI_TIDS` or `_HAPPYID` | reg_citizenai_typeids.cpp |
 
-**Careful:** filling `0x1401c7158` (CitizenAIComponent) *globally* is a deliberate separate
-task — reg_work_tail_trade.cpp:40 warns it would activate all `[CitizenAI]` checks at once
-(cross-cutting regression risk). `c8a0` uses a private static copy instead.
+(The gate is deliberately NOT the pre-existing `BANISHED_LIVE_CITIZENAI` — `make sa-run` sets
+that one, and the fills must stay opt-in on the standard test path.)
+
+These were never "msg-ids": all three are `Object::BaseTypeInfo` base slots (0x70 bytes
+each), and the SendComponentMessage action ctor (0x1400cb1d0) copies exactly one dword —
+the arg is a component-TYPE selector for message delivery. With the gate OFF (default)
+nothing is registered and every reader keeps its null-guarded skip. With it ON, the fill
+runs post-Factory-Startup from game_main.cpp (`FillTypeIdGlobals_citizenai`). The 2026-07-19
+reader sweep found every Action/Work-side `c7158` consumer is Serialize/Validate-only
+(autostart-inert, save/load-correct); the SendComponentMessage ctor sites construct actions
+that carry the real target-type id — receive-side maturity is what the A/B gate probes.
+Bonus fix in the same pass: reg_work_tail_trade's private `c8a0` copy filled the WRONG id
+("CitizenAIComponent" → corrected to "CitizenComponent"); Ghidra renames
+`Entity_FindComponent_CitizenAI`→`Entity_FindComponent_Citizen`, labels
+`g_BaseTypeInfo_{CitizenAIComponent,CitizenComponent,HappinessComponent}`.
 
 ### Registered unconditionally, but runtime-behavior gated at call sites
 - `0x1401c7c80` RawMaterialComponent → ClearArea::Execute Phase 3, gated `BANISHED_LIVE_CLEARCTRL`
@@ -249,8 +279,13 @@ Almost entirely stub/thunk except the two constant getters:
 ## 5. Suggested priority order
 
 1. **Reconcile the 4 cross-file address conflicts** (§1) — cheap, removes latent double-register / stale-defer bugs.
-2. **CitizenAI Level-2 closure** (`10dca0`/`10f1f0` + the 14–15 `CitizenAI_State_*` + msg-id
-   globals `c70e8`/`c7158`) — unlocks organic citizen behavior; currently the largest coherent gap.
+2. **CitizenAI Level-2 closure** — ✔ MOSTLY DONE (audited 2026-07-19): `10dca0`/`10f1f0` +
+   all 14 `CitizenAI_State_*` handlers were already registered (citizenai waves) and verified
+   faithful against fresh decomp; one real bug found+fixed (LongTermPlan arrA stride,
+   citizenai_growup.cpp). Ghidra renames applied: AdultTransition→Eat, ElderTransition→Drink,
+   GetHappiness→GetCarryCount. REMAINING: the deliberate global fill of msg-id/type-id
+   `.rdata` slots `c70e8`/`c7158`/`c42c0` (see §2 warning; dual-role readers — Serialize
+   type-checks want the CRC, work-action SendComponentMessage ctor sites currently rely on 0).
 3. **`AnimalComponent::Update` `0x140106420`** — remove the recursion-passthrough with a genuine reimpl.
 4. **`GUL_SaveRestore` `0x1400959c0`** — the one loop slot blocking load-from-save (everything else new-game-only).
 5. **Player-tool closures** (RemovalTool `1035e0`, PathTool `dd710`, ToolUI `f5a0`) — large but

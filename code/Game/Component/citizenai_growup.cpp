@@ -426,13 +426,15 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                     float* nb = reinterpret_cast<float*>(fn_MemAlloc
                         ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) << 3, 8) : nullptr);
                     // copy old
+                    // 8-byte stride (one int64 per entry, alloc is newCap << 3) — matches the
+                    // search loop's `arrA + k*2` float arithmetic and the original's pfVar14 += 2.
                     for (int c = 0; c < arrACount; ++c) {
-                        reinterpret_cast<int64_t*>(nb)[c * 2] = reinterpret_cast<int64_t*>(arrA)[c * 2];
+                        reinterpret_cast<int64_t*>(nb)[c] = reinterpret_cast<int64_t*>(arrA)[c];
                     }
                     if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
                     arrA = nb;
                 }
-                reinterpret_cast<int64_t*>(arrA)[arrACount * 2] = outBest;
+                reinterpret_cast<int64_t*>(arrA)[arrACount] = outBest;
                 arrACount = newCount;
             }
         }
@@ -479,7 +481,7 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
 
         // remaining candidates (the original loops uVar16 times over arrA/arrB).
         for (int i = 0; i < arrACount; ++i) {
-            int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i * 2];  // local_res8 = *pfVar11
+            int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i];  // local_res8 = *pfVar11
             int64_t citizenIBP = 0;     // local_res10
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&citizenIBP, reinterpret_cast<void*>(param_1));
             float* destB = &arrB[i * 3];

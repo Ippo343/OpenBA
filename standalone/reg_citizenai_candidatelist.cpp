@@ -10,9 +10,11 @@
 // NOTE: the sub-callees these functions invoke (0x140008090, 0x14012a9d0,
 // 0x14012cf10, 0x140115be0) are registered ELSEWHERE (reg_component_people.cpp)
 // and are intentionally NOT re-registered here. 0x14012ab00
-// (Storage_GetResourceCount2) and the 14 CitizenAI_State_* handlers are NOT yet
-// registered in standalone — the ValidateAndEnterState dispatch null-guards each
-// handler and the HasSufficientResources2 path guards GetResourceCount2.
+// (Storage_GetResourceCount2) is registered by reg_citizenai_gather.cpp, and all
+// 14 CitizenAI_State_* handlers are registered across the citizenai waves
+// (reg_citizenai_handlers/handlers2/handlers3/gather/growup/leisure/housing_idle)
+// — ValidateAndEnterState dispatches into real reimpls. (An earlier revision of
+// this note predated those waves; audited faithful vs Ghidra 2026-07-19.)
 #include "resolve.h"
 #include <cstdint>
 

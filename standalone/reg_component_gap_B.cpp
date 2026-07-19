@@ -16,12 +16,15 @@
 //                  its only unregistered callee 0x1400889e0 (pure leaf, grid-cell int-array
 //                  compaction). Closure now bottoms out (FUN_140004680 reg, CheckPtr/IBP-ctor
 //                  engine). Both ported in wellcomponent.cpp.
-//   DEFER (NOT registered — re-confirmed against notes/_reg_snapshot3.txt):
-//                  0x14010dca0 BuildCandidateStateList (calls unregistered GetHappiness 0x140115de0/
-//                      HasSufficientResources 0x1401156e0/HasSufficientResources2 0x1401157f0/
-//                      SortByPriority 0x14002fe10),
-//                  0x14010f1f0 ValidateAndEnterState (all 15 CitizenAI_State_* still unregistered),
+//   DEFER (NOT registered):
 //                  0x140047200 CemeteryComponent::Draw (self-resolving passthrough -> recursion).
+//   RESOLVED since this wave (registrations live elsewhere — do not re-add here):
+//                  0x14010dca0 BuildCandidateStateList + 0x14010f1f0 ValidateAndEnterState and
+//                      their helpers (GetHappiness/HasSufficientResources[2]/SortByPriority)
+//                      -> reg_citizenai_candidatelist.cpp; all 14 CitizenAI_State_* handlers
+//                      (14, not 15 — 0x14012ab00 is Storage_GetResourceCount2, a Gather2
+//                      helper) -> reg_citizenai_handlers/2/3, gather, growup, leisure,
+//                      housing_idle waves. Audited faithful vs Ghidra 2026-07-19.
 #include "resolve.h"
 #include <cstdint>
 

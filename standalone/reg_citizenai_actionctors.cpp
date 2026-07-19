@@ -28,9 +28,11 @@
 // anywhere else): 0x140172124=0.75, 0x140172174=2.0, 0x140172194=4.0, 0x140172198=5.0,
 // 0x14017214c=1.0. (0x140172280=-1.0 already in reg_citizenai_handlers.)
 //
-// NOT registered (intentional self-contained-brick pattern, read 0 + null-guarded in the
-// reimpl, matching ~30 existing action reimpls): the SendComponentMessage message-id
-// globals 0x1401c70e8 / 0x1401c7158 and the HappinessComponent id 0x1401c42c0. The
+// NOT registered HERE (read 0 + null-guarded in the reimpl when the gate is off):
+// 0x1401c70e8 / 0x1401c7158 / 0x1401c42c0 are BaseTypeInfo type-id slots
+// (CitizenAIComponent / CitizenComponent / HappinessComponent — not "msg-ids"; the
+// SendComponentMessage arg is a component-type selector). As of 2026-07-19 they are
+// registration-gated in reg_citizenai_typeids.cpp (BANISHED_LIVE_CITIZENAI_TIDS). The
 // RawMaterialDescription id 0x1401c7cb8 is already registered+filled elsewhere.
 #include "resolve.h"
 #include <cstdint>

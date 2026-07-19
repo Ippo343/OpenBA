@@ -66,6 +66,9 @@ extern "C" void FillTypeIdGlobals_actionchild();
 // Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
 // fire=InteractComponent c7900; serialize=Pasture/Animal ids).
 extern "C" void FillTypeIdGlobals_worktail_trade();
+// openfuncs step 2 — CitizenAI/Citizen/Happiness type-id globals (c70e8/c7158/c42c0;
+// storage gated on BANISHED_LIVE_CITIZENAI_TIDS, fill is a harmless no-op when off).
+extern "C" void FillTypeIdGlobals_citizenai();
 extern "C" void FillTypeIdGlobals_worktail_fire();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
@@ -403,6 +406,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
+    FillTypeIdGlobals_citizenai();         // openfuncs step 2 — CitizenAI/Citizen/Happiness ids (c70e8/c7158/c42c0, gated)
 
     if (ok != 0) {
         // Relativize the engine FileSystem resource directories. This was a

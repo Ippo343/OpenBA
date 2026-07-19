@@ -440,6 +440,7 @@ extern void RegisterActionChildCtorsBatch(); // Phase 2 Keystone B: 5 missing ac
 extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work action-ctors
 extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
 extern void RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3: CitizenAI candidate-selection
+extern void RegisterCitizenAITypeIds();      // openfuncs step 2: c70e8/c7158/c42c0 type-id fill (BANISHED_LIVE_CITIZENAI_TIDS)
 extern void RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b: CitizenAI state handlers
 extern void RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b: CitizenAI find-best-target (dd30)
 extern void RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b: CitizenAI action-ctor family
@@ -562,6 +563,7 @@ static void RegisterCodeFunctions() {
     RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2 — 4 Work action-ctors
     RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
     RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3 — CitizenAI candidate-selection
+    RegisterCitizenAITypeIds();      // openfuncs step 2 — c70e8/c7158/c42c0 fill (gated BANISHED_LIVE_CITIZENAI_TIDS)
     RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b — CitizenAI state handlers (Wander+)
     RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b — CitizenAI find-best-target (dd30+78c0)
     RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b — CitizenAI action-ctor family (9 ctors)
