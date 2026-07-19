@@ -12,9 +12,10 @@
 // Closure: sub-callees are already registered — 0x140008090 (reg_component_people),
 // 0x14012ac30 (reg_citizenai_findhelpers), 0x1401152e0 EatFromStorage/"ReleaseWorkplace"
 // (reg_component_people), Time::Time(float) dispatch slot 0x140152b00
-// (address_registry), CheckPtr slot. msg 1/4/5 helpers (0x14010fde0 / 0x1401117a0 /
-// 0x140111540) are intentionally NOT ported — the dispatcher resolves them (NULL in
-// standalone) and skips with a one-time [EatMsg] trace.
+// (address_registry), CheckPtr slot. The msg 1/4/5 helpers (0x14010fde0 / 0x1401117a0 /
+// 0x140111540) are now ported in citizen_needsupdate.cpp and registered by
+// standalone/reg_citizen_25.cpp (openfuncs step 2.5c) — the dispatcher resolves them
+// (non-NULL) and calls each like every other msg.
 //
 // rdata float consts registered here (real retail values read with
 // inspect_memory_content; not registered anywhere else):

@@ -64,10 +64,10 @@ where they literally appear in the source.
 | Addr | Symbol | File | Why deferred |
 |------|--------|------|--------------|
 | `0x14012ab00` + 14 `CitizenAI_State_*` | candidate handlers | reg_citizenai_candidatelist.cpp:12 | STALE — all 14 handlers registered (reg_citizenai_handlers/2/3, gather, growup, leisure, housing_idle); 0x14012ab00 is Storage_GetResourceCount2 (Gather2 helper, reg_citizenai_gather.cpp:24), not a 15th handler. Audited 2026-07-19 |
-| `0x140025a10`,`0x140025b30`,`0x1400d62a0`,`0x1400d43b0`,`0x140095580` | PathBST/PathPairs/ReassignWorkers/AssignCitizens/NotificationEvent | reg_citizenbehavior_tick.cpp:27 | fire as dispatcher-guarded no-ops |
-| `0x14010fde0`,`0x1401117a0`,`0x140111540` | needs-msg 1/4/5 helpers | reg_citizen_needsupdate.cpp:16 | dispatcher resolves NULL, skips with `[EatMsg]` trace |
+| `0x140025a10`,`0x140025b30`,`0x1400d62a0`,`0x1400d43b0`,`0x140095580` | PathBST/PathPairs/ReassignWorkers/AssignCitizens/NotificationEvent | reg_citizenbehavior_tick.cpp:27 | ✔ RESOLVED 2026-07-19 (step 2.5b): all five live — 25a10/25b30 in action_pf_avl.cpp, d62a0+6c60 in citizen_reassign_workers.cpp, 95580 → existing EventLog_AddEvent (gameupdateloop duplicate scanner retired); d43b0 was already ported (stale note) |
+| `0x14010fde0`,`0x1401117a0`,`0x140111540` | needs-msg 1/4/5 helpers | reg_citizen_needsupdate.cpp:16 | ✔ RESOLVED 2026-07-19 (step 2.5c): ported + registered (reg_citizen_25.cpp); `[EatMsg]` skip gone. Msg-4's state-9 transition null-guards the still-unregistered AssignState `113af0` (shared Level-2 backlog item) |
 | `0x140106420` | AnimalComponent::Update | reg_component_nature.cpp:58 | still a self-resolving passthrough — registering = infinite recursion. Needs genuine 452-insn reimpl |
-| `0x1400302a0`,`0x140112040`,`0x1401168a0`,`0x140117080` | citizen lifecycle Level-2 | reg_component_gap_A.cpp:15 | call unregistered sub-callees (AssignWorkplace `1163d0` etc.); ~10 known Level-2 defers |
+| `0x1400302a0`,`0x140112040`,`0x1401168a0`,`0x140117080` | citizen lifecycle Level-2 | reg_component_gap_A.cpp:15 | ✔ RESOLVED 2026-07-19 (step 2.5a): ported in citizencomponent_lifecycle.cpp + registered (reg_citizen_25.cpp) — their blocker AssignWorkplace `1163d0` had landed earlier, making the defer stale. Remaining Level-2 backlog: AssignState `113af0` (see COMPONENT_GAP_WAVE_ADDENDUM) |
 | `0x14010dca0` | BuildCandidateStateList | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:32 with all helpers (GetHappiness 115de0 / HasSufficientResources[2] / SortByPriority). Audited faithful 2026-07-19 |
 | `0x14010f1f0` | ValidateAndEnterState | reg_component_gap_B.cpp:19 | STALE — registered by reg_citizenai_candidatelist.cpp:33; all 14 handlers live. Audited faithful 2026-07-19 |
 | `0x140047200` | CemeteryComponent::Draw | reg_component_gap_B.cpp:19 | self-resolving passthrough → recursion |
@@ -291,13 +291,16 @@ Almost entirely stub/thunk except the two constant getters:
    AssignWorkplace `1163d0` has since landed via reg_citizen_assignworkplace), the
    behavior-tick no-ops (`25a10`/`25b30`/`d62a0`/`d43b0`/`95580`), and the needs-msg helpers
    (`10fde0`/`1117a0`/`111540`).
-2.5. **Finish remaining CitizenAI** (added 2026-07-19 — close out the subsystem before
-   moving on): (a) citizen lifecycle Level-2 `302a0`/`112040`/`1168a0`/`117080`
-   (reg_component_gap_A defers; their named blocker AssignWorkplace `1163d0` has since
-   landed — re-derive the closure before trusting the defer notes); (b) behavior-tick
-   no-ops `25a10`/`25b30`/`d62a0`/`d43b0`/`95580` (reg_citizenbehavior_tick);
-   (c) needs-msg helpers `10fde0`/`1117a0`/`111540` (reg_citizen_needsupdate — the
-   `[EatMsg]` skip path).
+2.5. **Finish remaining CitizenAI** — ✔ DONE 2026-07-19: all three groups analyzed
+   (fresh closure derivation; two more defer notes proved stale) and landed via
+   reg_citizen_25.cpp + reg_citizen_25_tick.cpp: (a) lifecycle Level-2 quartet
+   (citizencomponent_lifecycle.cpp), (b) behavior-tick five (25a10/25b30 →
+   action_pf_avl.cpp, d62a0+6c60 → citizen_reassign_workers.cpp, 95580 → existing
+   EventLog_AddEvent with the gameupdateloop duplicate scanner retired, d43b0 was
+   already live), (c) needs-msg helpers (citizen_needsupdate.cpp). Verified: 90s
+   in-game, no crash, NOT-IMPLEMENTED 340→328 (−12 = exactly the registered set),
+   `[EatMsg]` skips gone. Only named CitizenAI leftover: AssignState `113af0`
+   (null-guarded shared gap, Level-2 backlog).
 3. **`AnimalComponent::Update` `0x140106420`** — remove the recursion-passthrough with a genuine reimpl.
 4. **`GUL_SaveRestore` `0x1400959c0`** — the one loop slot blocking load-from-save (everything else new-game-only).
 5. **Player-tool closures** (RemovalTool `1035e0`, PathTool `dd710`, ToolUI `f5a0`) — large but

@@ -36,10 +36,10 @@ extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* e
 // Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
 // gameWorld+0x138 event log (formatted from the events/seasons StringTables).
 extern "C" void EventLog_AddSimple(int eventType, int severity);
-// Resource-shortage scanner (code/Game/Game/eventlog.cpp) — port of FUN_14008c100;
-// scans the town-manager shortage tables and fires low-reserve / storage-full
-// warnings (event types 0x11-0x18, sev 3) with per-entry 120s cooldowns.
-extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta);
+// NOTE: EventLog_CheckResourceShortages (code/Game/Game/eventlog.cpp, port of
+// FUN_14008c100) is intentionally NOT called from here anymore — see the retirement
+// note at its former call site below. The scan now runs once per tick from
+// CitizenBehavior_CheckThresholds via the registered fn_NotificationEvent path.
 
 // GUI_PLAN Keystone F Phase 3 — player tool activation + per-frame tick
 // (code/Game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
@@ -705,35 +705,17 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
     s_frameNum++;
 
-    // [EVENTS] BANISHED_LIVE_EVENTS: drive the faithful event-log sources each tick.
-    // Only the resource-shortage scanner runs here — the earlier population-watch
-    // "settlers arrived" (0xe) demo fired at game start (founding 0 -> N), which retail
-    // does NOT do, so it was removed (nomad arrival is a specific immigration event,
-    // not every population bump). The scenario/achievement popup (0x1a-0x1d) is driven
-    // by the faithful source op_6830 (0x140096830) via GameUpdateLoop+0x150
-    // AchievementInstance IsMet()/HasFailed() — dormant in a sandbox game. Both the
-    // ribbon and the EventPopupDialog creation path stay live for any real event.
-    {
-        static int s_evGate = -1;
-        if (s_evGate < 0) {
-            const char* e = std::getenv("BANISHED_LIVE_EVENTS");
-            s_evGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
-        }
-        // ~120 frames lets the ribbon settle (Slot7 self-corrects its +0xC4 last-seen
-        // index to -1 while the log is empty) before the first event is appended.
-        if (s_evGate && s_frameNum > 120) {
-            void* gw = self;  // GameUpdateLoop == g_pGameWorldSingleton target
-            void* eventLog = *(void**)((uintptr_t)gw + 0x138);
-            void* townMgr  = *(void**)((uintptr_t)gw + 0xF0);
-            if (eventLog && townMgr) {
-                // [SHORTAGE] Per-tick resource-shortage warnings (event types
-                // 0x11-0x18, sev 3). Faithful port of FUN_14008c100 scanning the
-                // town-manager shortage tables; self-gated so it stays silent until a
-                // resource genuinely runs low or a storage pool nears capacity.
-                EventLog_CheckResourceShortages(townMgr, time);
-            }
-        }
-    }
+    // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
+    // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
+    // It is superseded by the registered tick path: CitizenBehavior_CheckThresholds
+    // (citizenbehavior.cpp) scans the SAME townMgr+0x170/+0x180 shortage tables every
+    // tick and, now that 0x140095580 (EventLog_AddEvent) is registered as
+    // fn_NotificationEvent, fires the same 0x11-0x18 sev-3 events. Keeping this block
+    // would double-decrement those shared cooldown timers and double-log each
+    // shortage, so it is removed — following the "retire stale duplicate" precedent.
+    // EventLog_CheckResourceShortages stays defined (faithful port) but uncalled.
+    // The scenario/achievement popup (0x1a-0x1d) source op_6830 (0x140096830) and the
+    // ribbon / EventPopupDialog paths are unaffected and stay live for any real event.
 
     // [FPS TRACE] env BANISHED_FPS_TRACE: wall-clock fps over 120-frame windows (entry-to-
     // entry period). Also reports the entity count so we can correlate fps with world size.

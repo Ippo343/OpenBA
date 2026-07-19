@@ -7,10 +7,10 @@
 // per-category stock table from the storage-location list at +0x00 and the
 // market list at +0x10 — the values the StatusBar "town status" dialog and the
 // TownHallUI production/inventory tabs display), CheckThresholds (shortage
-// notifications; fn_NotificationEvent 0x140095580 resolves NULL in standalone
-// so those fire as guarded no-ops), the 300s path-distance-graph phase, and
-// the 75s CollectStats history recorder that feeds the town-hall GRAPH tab
-// series at townMgr+0x150.
+// notifications; fn_NotificationEvent 0x140095580 is now registered to
+// EventLog_AddEvent via reg_citizen_25_tick.cpp, so those events fire), the 300s
+// path-distance-graph phase, and the 75s CollectStats history recorder that feeds
+// the town-hall GRAPH tab series at townMgr+0x150.
 //
 // Before this registration, gameupdateloop.cpp's fn_CitizenList_Update
 // (ResolveAddr 0x14008c2b0) was NULL and the whole tick was silently skipped —
@@ -24,9 +24,13 @@
 //     type-ids c7e78 StorageComponent / c7cb8 RawMaterialDescription
 //     (reg_economy_typeids / reg_action_child_ctors2), c7190 CitizenDescription
 //     (added to reg_economy_typeids alongside this file).
-//   NULL -> no-op: 0x140025a10 PathBST_Insert, 0x140025b30 PathPairs_Clear,
-//     0x1400d62a0 ReassignWorkers, 0x1400d43b0 AssignCitizens,
-//     0x140095580 NotificationEvent.
+//   drain-path callees — ALL now ported & registered (were the stale "NULL -> no-op"
+//   list; corrected 2026-07-19):
+//     0x140025a10 PathBST_Insert     -> action_pf_avl.cpp        (reg_citizen_25_tick.cpp)
+//     0x140025b30 PathPairs_Clear    -> action_pf_avl.cpp        (reg_citizen_25_tick.cpp)
+//     0x1400d62a0 ReassignWorkers    -> citizen_reassign_workers.cpp (reg_citizen_25_tick.cpp)
+//     0x1400d43b0 AssignCitizens     -> citizen_assign_citizens.cpp  (RegisterCitizenAssignCitizens)
+//     0x140095580 EventLog_AddEvent  -> eventlog.cpp              (reg_citizen_25_tick.cpp)
 //
 // rdata float const registered here (real retail value read with read_memory;
 // not registered anywhere else):

@@ -1,0 +1,343 @@
+// code/Game/Component/citizencomponent_lifecycle.cpp
+// Citizen-lifecycle quartet (openfuncs step 2.5a) — sibling of the (huge)
+// citizencomponent.cpp. Faithful ports, Ghidra-verified against Application-x64.exe:
+//
+//   0x140112040  CitizenComp_LeaveRoster_2040     — unlink from the workplace worker
+//                roster (doubly-linked ring at node +0x268/+0x270, head cache self
+//                +0x260), then clear the workplace slot (AssignWorkplace(null,-1)) and
+//                the current-workplace link (+0x258).
+//   0x1401168a0  CitizenComp_JoinRoster_68a0      — inverse: splice a citizen into the
+//                roster before the head (or seed a singleton ring), then read the
+//                workplace descriptor (self +0x238 IBP / +0x240 slot) and AssignWorkplace.
+//   0x1400302a0  CitizenComp_SortByProfession_02a0 — sort an entity-handle array by
+//                profession priority (see note on the introsort below).
+//   0x140117080  CitizenComp_DeferredInit_117080  — per-citizen deferred init:
+//                name/age/gender/appearance-variant/lifespan/housing/employment.
+//
+// Registered by standalone/reg_citizen_25.cpp; the callers already ResolveAddr these
+// four addresses in citizencomponent.cpp (s_fn_sub_2040 / s_fn_helper_68a0 /
+// s_fn_helper_02a0 / s_fn_FUN_140117080), so registering wires them live.
+//
+// The 0x1400302a0 sort is MSVC's inlined std::sort over 8-byte entity handles:
+// median-of-3 introsort with an explicit range stack, comparator 0x140110330 and an
+// insertion-sort fallback 0x140030b90 for ranges <= 8. Both comparator and fallback
+// reduce a handle to a profession priority (resolve the entity's WorkComponent, read
+// its profession key at comp+0x28, look that key up in the world priority RB-tree at
+// GameWorld+0x118 and read priority at record+0x24). Both the introsort and the
+// fallback are unstable, so a std::sort over the same strict-weak priority ordering
+// reproduces the result exactly — only equal-priority tie order may differ, which no
+// caller observes (same rationale/precedent as Pickup_SortByDistance in pickup.cpp).
+// 0x140110330 / 0x140030b90 are therefore reimplemented (their shared priority
+// predicate is ProfessionPriorityOf below), not registered.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+
+// Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
+// name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
+extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
+
+// ============================================================
+// Local resolutions (exe sub-callees; all registered elsewhere — see file header).
+// ============================================================
+typedef void  (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIndex); // 0x1401163d0
+typedef void* (*fn_FindComp3050_t)(int64_t entity, void* outIBP);                     // 0x140003050
+typedef void* (*fn_ClearPathQueue_t)(uintptr_t entity, void* outIBP);                 // 0x140003f60
+typedef void  (*fn_SetVariant_t)(int64_t* modelComp, uint16_t variant, int16_t z);    // 0x1401253d0
+typedef void  (*fn_SetTransform_t)(uintptr_t modelComp, const void* offset, float yaw); // 0x140003870
+typedef void  (*fn_LinkFamily_t)(int64_t self, void* parentIBP);                      // 0x140111fa0
+typedef void  (*fn_SetupAge_t)(void* self);                                           // 0x140115110 / 0x140115230
+typedef void  (*fn_AssignHousing_t)(void* self, int64_t* housingIBP);                 // 0x140111ee0
+typedef void  (*fn_AnimInit_t)(void* animalComp, uint32_t a, float uv, float b);      // 0x14010a1f0
+
+static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;
+static fn_FindComp3050_t    s_fn_FindComp_3050   = nullptr;
+static fn_ClearPathQueue_t  s_fn_ClearPathQueue  = nullptr;
+static fn_SetVariant_t      s_fn_SetVariant      = nullptr;
+static fn_SetTransform_t    s_fn_SetTransform    = nullptr;
+static fn_LinkFamily_t      s_fn_sub_1fa0        = nullptr;
+static fn_SetupAge_t        s_fn_SetupYoung      = nullptr;
+static fn_SetupAge_t        s_fn_SetupElder      = nullptr;
+static fn_AssignHousing_t   s_fn_AssignHousing   = nullptr;
+static fn_AnimInit_t        s_fn_AnimA1f0        = nullptr;
+static const uint32_t*      s_pTid_WorkComp      = nullptr;  // 0x1401c8070 (WorkComponent type-id; unused directly — see note)
+static bool s_lifecycleResolved = false;
+
+static void EnsureLifecycleFuncs() {
+    if (s_lifecycleResolved) return;
+    s_lifecycleResolved = true;
+    s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
+    s_fn_FindComp_3050   = reinterpret_cast<fn_FindComp3050_t>(ResolveAddr(Module::Exe, 0x140003050));
+    s_fn_ClearPathQueue  = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_SetVariant      = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
+    s_fn_SetTransform    = reinterpret_cast<fn_SetTransform_t>(ResolveAddr(Module::Exe, 0x140003870));
+    s_fn_sub_1fa0        = reinterpret_cast<fn_LinkFamily_t>(ResolveAddr(Module::Exe, 0x140111fa0));
+    s_fn_SetupYoung      = reinterpret_cast<fn_SetupAge_t>(ResolveAddr(Module::Exe, 0x140115110));
+    s_fn_SetupElder      = reinterpret_cast<fn_SetupAge_t>(ResolveAddr(Module::Exe, 0x140115230));
+    s_fn_AssignHousing   = reinterpret_cast<fn_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
+    s_fn_AnimA1f0        = reinterpret_cast<fn_AnimInit_t>(ResolveAddr(Module::Exe, 0x14010a1f0));
+    s_pTid_WorkComp      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
+}
+
+static inline void Ck(void* p) {
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
+}
+
+// ============================================================
+// CitizenComp_LeaveRoster_2040 (0x140112040)
+// Unlink the citizen (param2 = InternalBasePtr* -> node) from the workplace worker
+// roster (ring links node +0x268/+0x270, head cache self +0x260), re-init its own
+// links to empty IBPs, clear its workplace assignment and its +0x258 workplace link.
+// ============================================================
+void CitizenComp_LeaveRoster_2040(int64_t selfV, void* param2V) {
+    EnsureLifecycleFuncs();
+    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
+    int64_t* ibp  = reinterpret_cast<int64_t*>(param2V);   // *ibp == citizen node ptr
+    uint64_t empty = 0;
+
+    Ck(ibp);
+    if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
+        Ck(ibp);
+        *reinterpret_cast<int64_t*>(base + 0x260) = *reinterpret_cast<int64_t*>(*ibp + 0x268);
+    }
+    // node.prev.next = node.next
+    Ck(ibp);
+    int64_t nextLink = *reinterpret_cast<int64_t*>(*ibp + 0x268);
+    Ck(ibp);
+    int64_t node = *ibp;
+    Ck(reinterpret_cast<void*>(node + 0x270));
+    *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = nextLink;
+    // node.next.prev = node.prev
+    Ck(ibp);
+    int64_t prevLink = *reinterpret_cast<int64_t*>(*ibp + 0x270);
+    Ck(ibp);
+    node = *ibp;
+    Ck(reinterpret_cast<void*>(node + 0x268));
+    *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x268) + 0x270) = prevLink;
+    // node's own links -> empty IBPs
+    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    *reinterpret_cast<int64_t*>(*ibp + 0x270) = (int64_t)empty;
+    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    *reinterpret_cast<int64_t*>(*ibp + 0x268) = (int64_t)empty;
+    // if this node was the head, clear the head cache
+    Ck(ibp);
+    if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
+        fn_InternalBasePtr_Ctor(&empty, nullptr);
+        *reinterpret_cast<int64_t*>(base + 0x260) = (int64_t)empty;
+    }
+    // clear the workplace slot + the current-workplace link (+0x258)
+    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(reinterpret_cast<void*>(*ibp), &empty, -1);
+    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)empty;
+}
+
+// ============================================================
+// CitizenComp_JoinRoster_68a0 (0x1401168a0)
+// Inverse of LeaveRoster: splice the citizen (param2) into the roster before the
+// current head (or seed a singleton ring when empty), store self as the citizen's
+// +0x258 workplace link, then AssignWorkplace using self's +0x238 IBP / +0x240 slot.
+// ============================================================
+void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
+    EnsureLifecycleFuncs();
+    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
+    int64_t* ibp  = reinterpret_cast<int64_t*>(param2V);
+    int64_t head  = *reinterpret_cast<int64_t*>(base + 0x260);
+    int64_t v, node;
+
+    if (head == 0) {
+        // empty roster -> singleton ring (prev = next = node)
+        *reinterpret_cast<int64_t*>(base + 0x260) = *ibp;
+        v = *ibp;
+        Ck(ibp);
+        *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;
+        v = *ibp;
+        Ck(ibp);
+        node = *ibp;
+    } else {
+        Ck(base + 0x260);
+        v = *reinterpret_cast<int64_t*>(head + 0x270);      // head.prev
+        Ck(ibp);
+        *reinterpret_cast<int64_t*>(*ibp + 0x270) = v;      // node.prev = head.prev
+        v = *reinterpret_cast<int64_t*>(base + 0x260);      // head
+        Ck(ibp);
+        *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;      // node.next = head
+        v = *ibp;
+        Ck(ibp);
+        node = *ibp;
+        Ck(reinterpret_cast<void*>(node + 0x270));
+        *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = v; // node.prev.next = node
+        v = *ibp;
+        Ck(ibp);
+        node = *ibp;
+        Ck(reinterpret_cast<void*>(node + 0x268));
+        node = *reinterpret_cast<int64_t*>(node + 0x268);   // node.next
+    }
+    *reinterpret_cast<int64_t*>(node + 0x270) = v;
+
+    // store self as an IBP at node +0x258, then AssignWorkplace via self's descriptor
+    uint64_t selfIBP = 0;
+    fn_InternalBasePtr_Ctor(&selfIBP, base);
+    Ck(ibp);
+    *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)selfIBP;
+    Ck(ibp);
+    int64_t slotHost = *ibp;
+    Ck(reinterpret_cast<void*>(slotHost + 0x258));
+    slotHost = *reinterpret_cast<int64_t*>(slotHost + 0x258);   // self (deref stored IBP)
+    Ck(ibp);
+    int64_t wpHost = *ibp;
+    Ck(reinterpret_cast<void*>(wpHost + 0x258));
+    uint64_t wpIBP = (uint64_t)*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(wpHost + 0x258) + 0x238);
+    Ck(ibp);
+    if (s_fn_AssignWorkplace)
+        s_fn_AssignWorkplace(reinterpret_cast<void*>(*ibp), &wpIBP,
+                             *reinterpret_cast<int32_t*>(slotHost + 0x240));
+}
+
+// ============================================================
+// Profession-priority predicate (shared by comparator 0x140110330 and insertion-sort
+// fallback 0x140030b90). Resolve the entity's WorkComponent, read its profession key
+// (comp+0x28), then look that key up in the world priority RB-tree (GameWorld+0x118).
+// ============================================================
+static int ProfessionKeyOfEntity(uint64_t handle) {
+    if (!s_fn_FindComp_3050) return 0;
+    int64_t outIBP = 0;
+    void* ibp = s_fn_FindComp_3050(static_cast<int64_t>(handle), &outIBP);  // returns &outIBP
+    Ck(ibp);
+    int64_t comp = ibp ? *reinterpret_cast<int64_t*>(ibp) : 0;
+    return comp ? *reinterpret_cast<int32_t*>(comp + 0x28) : 0;
+}
+
+// GameWorld+0x118 is a red-black tree keyed on profession id; node key at node[0],
+// left node+0x18, right node+0x20, value ptr node+0x8, priority at value+0x24.
+static int LookupProfessionPriority(int key) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int64_t tree = *reinterpret_cast<int64_t*>(world + 0x118);
+    if (!tree) return 0;
+    int* node = *reinterpret_cast<int**>(tree + 0x30);   // root
+    while (node) {
+        if (key < node[0])      node = *reinterpret_cast<int**>(node + 6);   // left  (node+0x18)
+        else if (key > node[0]) node = *reinterpret_cast<int**>(node + 8);   // right (node+0x20)
+        else {
+            int64_t value = *reinterpret_cast<int64_t*>(node + 2);           // node+0x8
+            Ck(&value);
+            return value ? *reinterpret_cast<int*>(value + 0x24) : 0;
+        }
+    }
+    return 0;   // absent: retail builds an empty IBP and derefs; guarded to 0 here
+}
+
+static inline int ProfessionPriorityOf(uint64_t handle) {
+    return LookupProfessionPriority(ProfessionKeyOfEntity(handle));
+}
+
+// ============================================================
+// CitizenComp_SortByProfession_02a0 (0x1400302a0) — see file-header note.
+// ============================================================
+void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
+    EnsureLifecycleFuncs();
+    uint64_t* array = reinterpret_cast<uint64_t*>(arrV);
+    if (!array || n < 2) return;
+    std::sort(array, array + n, [](uint64_t a, uint64_t b) {
+        return ProfessionPriorityOf(a) < ProfessionPriorityOf(b);
+    });
+}
+
+// ============================================================
+// CitizenComp_DeferredInit_117080 (0x140117080)
+// Per-citizen deferred init. Signature matches the citizencomponent.cpp typedef
+// fn_FUN_140117080_t: (self, spawnPos, gender, isElder, arg5, forceEmploy,
+// parentIBP, spawnKey). Callers: reproduction/birth path (citizencomponent.cpp),
+// Game_SpawnCitizens. Turning it on gives colonists real names/ages/lifespans.
+// ============================================================
+void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
+                                     char isElder, int arg5, char forceEmploy,
+                                     int64_t* parentIBP, int64_t spawnKey) {
+    EnsureLifecycleFuncs();
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* rng = world ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(world) + 0xd8) : nullptr;
+
+    // 1-3. reset path/target, set gender mesh variant, place at spawn transform
+    void* modelIBP = nullptr;
+    Ck(p + 0x10);
+    if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(p + 0x10), &modelIBP);
+    Ck(&modelIBP);
+    if (s_fn_SetVariant && modelIBP)
+        s_fn_SetVariant(reinterpret_cast<int64_t*>(modelIBP), static_cast<uint16_t>(gender == 0), 0);
+    Ck(&modelIBP);
+    if (s_fn_SetTransform && modelIBP)
+        s_fn_SetTransform(reinterpret_cast<uintptr_t>(modelIBP), pos, 0.0f);
+
+    // 4. gender
+    *reinterpret_cast<int32_t*>(p + 0x38) = static_cast<int32_t>(gender);
+
+    // 5. random name -> self+0x28 (faithful: temp String, operator=, ~String)
+    char nameBuf[0x100] = {0};
+    if (rng) GenerateCitizenName(rng, gender == 0, nameBuf, static_cast<int>(sizeof(nameBuf)));
+    if (fn_String_Ctor_CStr && fn_String_Assign && fn_String_Dtor) {
+        void* tmpStr = nullptr;
+        fn_String_Ctor_CStr(&tmpStr, nameBuf);
+        fn_String_Assign(reinterpret_cast<void*>(p + 0x28), &tmpStr);
+        fn_String_Dtor(&tmpStr);
+    }
+
+    // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
+    if (fn_Random_Rand && rng)
+        *reinterpret_cast<uint32_t*>(p + 0x34) = (fn_Random_Rand(rng, 8) + fn_Random_Rand(rng, 8)) & 7;
+
+    // 7. employment: unemployed unless forced or the world "start-employed" flag (bit 9) is set
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    uint32_t worldFlags = world ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(world) + 0xd0) : 0;
+    if (forceEmploy == 0 && ((worldFlags >> 9) & 1) == 0) {
+        *(p + 0x220) = 0;
+        *reinterpret_cast<int32_t*>(p + 0x210) = 0;
+    } else {
+        *(p + 0x220) = 1;
+        *reinterpret_cast<int32_t*>(p + 0x210) = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
+    }
+
+    // 8. arg5
+    *reinterpret_cast<int32_t*>(p + 0x3c) = arg5;
+
+    // 9. link into family (parent IBP dereffed once, as retail does)
+    if (s_fn_sub_1fa0) {
+        int64_t parentVal = parentIBP ? *parentIBP : 0;
+        s_fn_sub_1fa0(selfV, &parentVal);
+    }
+
+    // 10. age-mesh setup
+    if (isElder == 0) { if (s_fn_SetupYoung) s_fn_SetupYoung(reinterpret_cast<void*>(selfV)); }
+    else              { if (s_fn_SetupElder) s_fn_SetupElder(reinterpret_cast<void*>(selfV)); }
+
+    // 11. housing: (re)assign unless spawn-key and housing IBP already match
+    uint64_t housingIBP = 0;
+    fn_InternalBasePtr_Ctor(&housingIBP, nullptr);
+    bool needAssign = (*reinterpret_cast<int64_t*>(p + 0x1f0) != spawnKey);
+    if (!needAssign) {
+        Ck(&housingIBP);
+        needAssign = (*reinterpret_cast<int64_t*>(p + 0x248) != static_cast<int64_t>(housingIBP));
+    }
+    if (needAssign) {
+        uint64_t arg = housingIBP;
+        if (s_fn_AssignHousing) s_fn_AssignHousing(reinterpret_cast<void*>(selfV),
+                                                   reinterpret_cast<int64_t*>(&arg));
+        *reinterpret_cast<int64_t*>(p + 0x1f0) = spawnKey;
+    }
+
+    // 12. lifespan = RandFloatTol(rng) * desc+0x3c (age span) + desc+0x38 (base age)
+    float rf    = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
+    float baseA = desc ? *reinterpret_cast<float*>(desc + 0x38) : 0.0f;
+    float spanA = desc ? *reinterpret_cast<float*>(desc + 0x3c) : 0.0f;
+    *reinterpret_cast<float*>(p + 0x40) = rf * spanA + baseA;
+
+    // 13. sprite/anim init on the AnimalComponent (+0x278)
+    Ck(p + 0x278);
+    if (s_fn_AnimA1f0)
+        s_fn_AnimA1f0(*reinterpret_cast<void**>(p + 0x278), 0,
+                      g_fUVScale ? *g_fUVScale : 1.0f, 0.0f);
+}

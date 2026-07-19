@@ -16,10 +16,12 @@
 // target's StorageComponent, one unit per g_fUVScale). A named alias
 // CitizenComp_EatFromStorage is provided below.
 //
-// NOT ported here (skip-with-one-time-trace when unresolved — standalone):
-//   0x14010fde0  helper_fde0 (msg 1)
-//   0x1401117a0  helper_17a0 (msg 4)
-//   0x140111540  helper_1540 (msg 5)
+// Ported here + registered by standalone/reg_citizen_25.cpp (openfuncs step 2.5c):
+//   0x14010fde0  CitizenComp_helper_fde0 (msg 1: happiness credit)
+//   0x1401117a0  CitizenComp_helper_17a0 (msg 4: attendance/schedule budget)
+//   0x140111540  CitizenComp_helper_1540 (msg 5: countdown decay)
+//   The dispatcher resolves each via ResolveAddr (now non-NULL) and calls it like
+//   every other msg; the msg-1 inline duplicate was retired in favour of the port.
 // Already ported/registered elsewhere (NOT duplicated):
 //   0x1401152e0  CitizenComp_ReleaseWorkplace   (citizencomponent.cpp, reg_component_people)
 //   0x140088f90  GetResourceCategory            (action_base_rawmat.cpp, reg_action_rawmat)
@@ -58,16 +60,21 @@ typedef void (*fn_statusIcon_t)(void* statusIconComp, int mode, int flag); // 0x
 typedef bool (*fn_ResidenceCheck_t)(int64_t storageComp);    // 0x14012ac30
 typedef void* (*fn_FindResidence8090_t)(int64_t entity, void* outIBP); // 0x140008090
 typedef void (*fn_TimeCtorFloat_t)(void* outTime, float secs); // dispatch slot 0x140152b00
+typedef void (*fn_releasePartner_t)(void* self, char reroll);  // 0x140115a50 (AttendanceComponent_ReleasePartnerSlot)
+typedef void (*fn_assignState_t)(void* self, int state, int p2, const char* str); // 0x140113af0
 
 static fn_helper_fde0_t      s_fn_fde0 = nullptr;
 static fn_helper_17a0_t      s_fn_17a0 = nullptr;
 static fn_helper_1540_t      s_fn_1540 = nullptr;
-static fn_statusIcon_t       s_fn_12c3f0 = nullptr;   // StatusIcon mesh finalize (for the msg-1 inline port)
+static fn_statusIcon_t       s_fn_12c3f0 = nullptr;   // StatusIcon mesh finalize (for the msg-1 port)
 static fn_ResidenceCheck_t   s_fn_2ac30 = nullptr;
 static fn_FindResidence8090_t s_fn_find8090 = nullptr;
 static fn_TimeCtorFloat_t    s_fn_TimeCtorF = nullptr;
-static const float*          s_pDAT_172114 = nullptr;  // 0.5f  (msg-3 increment)
-static const float*          s_pDAT_172234 = nullptr;  // 300.0f (msg-6/7 Time scale)
+static fn_releasePartner_t   s_fn_115a50 = nullptr;   // msg-4 partner-slot release
+static fn_assignState_t      s_fn_AssignState = nullptr; // msg-4 state-9 assign (Level-2 gap, expected NULL)
+static const float*          s_pDAT_172114 = nullptr;  // 0.5f   (msg-3 increment)
+static const float*          s_pDAT_172234 = nullptr;  // 300.0f (msg-5/6/7 Time scale)
+static const float*          s_pDAT_17225c = nullptr;  // 3600.0f (msg-4 budget scale, SECS_PER_YEAR)
 static bool s_resolved = false;
 
 static void EnsureNeedsUpdateFuncs() {
@@ -79,10 +86,16 @@ static void EnsureNeedsUpdateFuncs() {
     s_fn_12c3f0  = reinterpret_cast<fn_statusIcon_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
     s_fn_2ac30   = reinterpret_cast<fn_ResidenceCheck_t>(ResolveAddr(Module::Exe, 0x14012ac30));
     s_fn_find8090 = reinterpret_cast<fn_FindResidence8090_t>(ResolveAddr(Module::Exe, 0x140008090));
+    s_fn_115a50  = reinterpret_cast<fn_releasePartner_t>(ResolveAddr(Module::Exe, 0x140115a50));
+    // AssignState (0x140113af0) is a known Level-2 backlog gap — NOT ported/registered,
+    // so this stays NULL in standalone and the msg-4 state-9 assign silently no-ops
+    // (same tolerance every citizencomponent.cpp AssignState call site uses).
+    s_fn_AssignState = reinterpret_cast<fn_assignState_t>(ResolveAddr(Module::Exe, 0x140113af0));
     // .rdata float constants — NULL in standalone unless registered; real-value
     // fallbacks are applied at the use sites (reference_standalone_rdata_null_fallback).
     s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_pDAT_172234 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
+    s_pDAT_17225c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c)); // 3600.0f (reg_component_fruit)
     // System::Time::Time(float) — read the fn ptr out of the dispatch slot.
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_TimeCtorF = *reinterpret_cast<fn_TimeCtorFloat_t*>(slot);
@@ -107,6 +120,70 @@ static void SkipTraceOnce(const char* which) {
         fprintf(stderr, "[EatMsg] NeedsUpdate: helper %s unresolved — msg skipped\n", which);
         fflush(stderr);
     }
+}
+
+// ============================================================
+// CitizenComp_helper_fde0 (0x14010fde0) — msg 1: happiness credit.
+// Refresh the citizen's StatusIconComponent (+0x280, mode 4 = happiness icon) then
+// accumulate the credit: +0xac is the running happiness total, +0xa8 the last delta.
+// (Retail derefs +0x280 unconditionally; the != 0 guard is a standalone-only safety
+// for a citizen whose StatusIconComponent is not yet live — a no-op in practice.)
+// ============================================================
+void CitizenComp_helper_fde0(int64_t selfV, int param) {
+    EnsureNeedsUpdateFuncs();
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    if (s_fn_12c3f0 && *reinterpret_cast<void**>(p + 0x280)) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x280);
+        s_fn_12c3f0(*reinterpret_cast<void**>(p + 0x280), 4, 0);
+    }
+    *reinterpret_cast<int32_t*>(p + 0xac) += param;
+    *reinterpret_cast<int32_t*>(p + 0xa8)  = param;
+}
+
+// ============================================================
+// CitizenComp_helper_17a0 (0x1401117a0) — msg 4: attendance/schedule budget check.
+// +0x210 is a tick counter, bumped every call. If it is still under the descriptor's
+// threshold (desc+0x118) AND the elapsed embedded Time (+0x218, AsSeconds) is still
+// within budget (desc+0x11c × 3600s/year), do nothing. On overrun: reset the counter
+// to the threshold, set flag +0x88 |= 0x400, release the partner slot (no reroll),
+// and force state 9 via AssignState. (Retail derefs +0x288 unguarded.)
+// ============================================================
+void CitizenComp_helper_17a0(int64_t selfV) {
+    EnsureNeedsUpdateFuncs();
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    int32_t* counter = reinterpret_cast<int32_t*>(p + 0x210);
+    *counter += 1;
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    int32_t threshold  = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
+    float   perUnitSec = desc ? *reinterpret_cast<float*>(desc + 0x11c)   : 0.0f;
+    float budgetSecs = perUnitSec * (s_pDAT_17225c ? *s_pDAT_17225c : 3600.0f);
+    float elapsed = fn_Time_AsSeconds ? fn_Time_AsSeconds(p + 0x218) : 0.0f;
+    if (*counter < threshold && elapsed <= budgetSecs) return;
+
+    *counter = threshold;
+    *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x400;
+    if (s_fn_115a50) s_fn_115a50(reinterpret_cast<void*>(selfV), 0);
+    // AssignState (0x140113af0) is an accepted Level-2 gap (NOT ported): the state-9
+    // assign silently no-ops until it lands, like every other AssignState call site.
+    if (s_fn_AssignState) s_fn_AssignState(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
+}
+
+// ============================================================
+// CitizenComp_helper_1540 (0x140111540) — msg 5: countdown decay.
+// Gated on +0x68 (an active link/target). When set, build a Time of
+// desc+0x12c × 300s and subtract its raw 8-byte tick value from the +0x70
+// accumulator (same "Time as raw uint64" representation the msg-6/7 tail uses).
+// ============================================================
+void CitizenComp_helper_1540(int64_t selfV) {
+    EnsureNeedsUpdateFuncs();
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    if (*reinterpret_cast<int64_t*>(p + 0x68) == 0) return;
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);   // retail: unguarded
+    float base = desc ? *reinterpret_cast<float*>(desc + 0x12c) : 0.0f;
+    uint64_t t = 0;
+    if (s_fn_TimeCtorF)
+        s_fn_TimeCtorF(&t, base * (s_pDAT_172234 ? *s_pDAT_172234 : 300.0f));
+    *reinterpret_cast<int64_t*>(p + 0x70) -= static_cast<int64_t>(t);
 }
 
 // ============================================================
@@ -186,19 +263,9 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
         CitizenComp_helper_21e0(reinterpret_cast<int64_t>(selfV), &local);
         return;
     }
-    case 1: {   // happiness credit — helper_fde0 (0x14010fde0)
-        if (s_fn_fde0) { s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4); return; }
-        // 0x14010fde0 is NOT registered in standalone, so the SeekHappiness credit was
-        // silently dropped (SkipTrace) -> citizen+0xac stayed 0 -> SeekHappiness (candidate
-        // prio 5) validated forever and starved Idle/build. Inline the tiny helper:
-        //   FUN_14012c3f0(+0x280 StatusIconComponent, 4, 0)  [status-icon refresh; 12c3f0 IS registered]
-        //   citizen+0xac += param  (happiness) ; citizen+0xa8 = param
-        if (s_fn_12c3f0 && *reinterpret_cast<void**>(p + 0x280)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x280);
-            s_fn_12c3f0(*reinterpret_cast<void**>(p + 0x280), 4, 0);
-        }
-        *reinterpret_cast<int32_t*>(p + 0xac) += param_4;
-        *reinterpret_cast<int32_t*>(p + 0xa8)  = param_4;
+    case 1: {   // happiness credit — helper_fde0 (0x14010fde0), now ported + registered
+        if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4);
+        else SkipTraceOnce("fde0");
         if (std::getenv("BANISHED_BUILD_TRACE")) {
             static int n = 0;
             if (n < 20) { ++n;

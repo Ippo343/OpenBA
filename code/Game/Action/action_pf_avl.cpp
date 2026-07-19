@@ -612,3 +612,109 @@ LAB_14001a5b5:
     *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
     return param_2;
 }
+
+// ===========================================================================
+// PathGraph cost-cache helpers (CitizenBehavior path-distance graph)
+// ===========================================================================
+// These two live with the AVL/BST family because they operate on the same
+// Layout-B (0x30) nodes and the pairs scratch header used by the pathgraph.
+// Consumed by CitizenBehavior_ProcessPaths / _BuildPathGraph
+// (code/Game/Entity/citizenbehavior.cpp), registered via
+// standalone/reg_citizen_25_tick.cpp.
+
+namespace {
+typedef void (*fn_rebE_t)(int64_t*, int64_t*);   // e360 (AVL rebalance walker, Layout B)
+
+static fn_newB_t s_pg_new_cc40 = nullptr;   // 0x14001cc40
+static fn_rebE_t s_pg_reb_e360 = nullptr;   // 0x14000e360
+static bool s_pgInit = false;
+
+static void EnsurePgDeps() {
+    if (s_pgInit) return;
+    s_pg_new_cc40 = reinterpret_cast<fn_newB_t>(ResolveAddr(Module::Exe, 0x14001cc40));
+    s_pg_reb_e360 = reinterpret_cast<fn_rebE_t>(ResolveAddr(Module::Exe, 0x14000e360));
+    s_pgInit = true;
+}
+} // namespace
+
+// 0x140025a10 — PathBST_Insert: insert-or-find in the region-pair cost-cache tree
+// at pg+0x18 (Layout B 0x30-node). param_1 = tree head {root@+0, count@+8};
+// param_2 = out-node; param_3 = 3-int key {regionHigh, regionLow, cost}. Ordered by
+// (key0, key1). Structurally identical to Pf_BstInsertB_c940 but allocates via cc40
+// and rebalances via TradeDescription_impl_e360 (0x14000e360) rather than 13480.
+extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3)
+{
+    uint32_t  key;
+    int32_t   curKey;
+    int32_t*  cur;
+    int32_t*  walk;
+    uint32_t* fresh;
+    uint32_t* nn;
+    int32_t*  local_res8;
+
+    EnsurePgDeps();
+
+    if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
+        fresh = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+        if (fresh == nullptr) {
+            *param_1 = 0;
+            *param_2 = 0;
+        } else {
+            key = *param_3;
+            *param_2 = reinterpret_cast<uint64_t>(fresh);
+            fresh[0] = key;
+            fresh[1] = param_3[1];
+            fresh[2] = param_3[2];
+            fresh[4] = 0;   // +0x10 parent
+            fresh[5] = 0;
+            fresh[6] = 0;   // +0x18 left
+            fresh[7] = 0;
+            fresh[8] = 0;   // +0x20 right
+            fresh[9] = 0;
+            fresh[10] = 0;  // +0x28 balance/height
+            *param_1 = reinterpret_cast<int64_t>(fresh);
+        }
+    } else {
+        key = *param_3;
+        walk = reinterpret_cast<int32_t*>(*param_1);
+        do {
+            while (local_res8 = walk, cur = local_res8, curKey = *local_res8,
+                   curKey <= (int32_t)key) {
+                if ((int32_t)key <= curKey) {
+                    if ((int32_t)param_3[1] < local_res8[1]) break;
+                    if (((int32_t)key <= curKey) &&
+                        (((int32_t)key < curKey) || ((int32_t)param_3[1] <= local_res8[1]))) {
+                        *param_2 = reinterpret_cast<uint64_t>(local_res8);
+                        return param_2;
+                    }
+                }
+                walk = *reinterpret_cast<int32_t**>(local_res8 + 8);   // +0x20 right
+                if (*reinterpret_cast<int32_t**>(local_res8 + 8) == nullptr) {
+                    nn = s_pg_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+                    *reinterpret_cast<uint32_t**>(cur + 8) = nn;       // cur->right = nn
+                    goto LAB_140025afa;
+                }
+            }
+            walk = *reinterpret_cast<int32_t**>(local_res8 + 6);       // +0x18 left
+        } while (*reinterpret_cast<int32_t**>(local_res8 + 6) != nullptr);
+        nn = s_pg_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+        *reinterpret_cast<uint32_t**>(cur + 6) = nn;                   // cur->left = nn
+LAB_140025afa:
+        s_pg_reb_e360(param_1, reinterpret_cast<int64_t*>(&local_res8));
+        *param_2 = reinterpret_cast<uint64_t>(nn);
+    }
+    *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
+    return param_2;
+}
+
+// 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
+// {data@+0, count@+8, capacity@+0xC}) count to 0. Ghidra dropped the second
+// parameter (newCount, EDX); both live callers (ProcessPaths @1400d70aa,
+// BuildPathGraph @1400d7266) pass newCount==0, for which the faithful behavior is
+// a single count reset — capacity (>=0) is never < newCount(0), so there is no
+// realloc/copy/free and the decompiled `< 0` growth loops are pure signedness
+// artifacts of the lost argument (intentionally NOT transcribed).
+extern "C" void PathPairs_Clear_25b30(int64_t* param_1)
+{
+    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x8) = 0;
+}

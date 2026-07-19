@@ -12,20 +12,23 @@
 //   0x14008ef40  Entity_impl_ef40 (pick free production slot) -> CitizenComp_Entity_impl_ef40
 //                  callees: 0x140006270(reg), IsDerivedFrom(engine), Rand(runtime), CheckPtr slot
 //
-// DEFERRED (unregistered exe sub-callees -> complex defers, NOT registered):
-//   0x1400302a0  helper_02a0      -> calls 0x140110330 + 0x140030b90 (both unregistered)
-//   0x140112040  sub_2040         -> calls 0x1401163d0 AssignWorkplace (unregistered, Level-2)
-//   0x1401168a0  helper_68a0      -> calls 0x1401163d0 AssignWorkplace (unregistered, Level-2)
-//   0x140117080  FUN_140117080    -> calls 0x140111ee0/115230/115110/0x1400a4c60 (unregistered)
-//   (plus the 10 KNOWN citizencomponent lifecycle Level-2 defers per the addendum)
+// FORMERLY DEFERRED — now PORTED + registered by standalone/reg_citizen_25.cpp
+// (openfuncs step 2.5a); their former blockers all landed (AssignWorkplace 0x1401163d0,
+// SetupYoung/Elder 115110/115230, AssignHousing 0x140111ee0), and 0x140110330 /
+// 0x140030b90 fold into the sort's std::sort predicate, name-gen uses clean C++:
+//   0x1400302a0  helper_02a0   -> CitizenComp_SortByProfession_02a0
+//   0x140112040  sub_2040      -> CitizenComp_LeaveRoster_2040
+//   0x1401168a0  helper_68a0   -> CitizenComp_JoinRoster_68a0
+//   0x140117080  FUN_140117080 -> CitizenComp_DeferredInit_117080
+//   (the 10 KNOWN citizencomponent lifecycle Level-2 defers per the addendum remain)
 //
 // attendancecomponent (worker-release link helpers consumed by ProcessQueue):
 //   0x140111650 Entity_impl_1650 -> AttendanceComponent_ReleaseLink1650  (CLOSURE-SAFE:
 //                 callees 0x140002cc0/0x140002f90/0x14012c3f0 all registered)
 //   0x1401159b0 Entity_impl_59b0 -> AttendanceComponent_ReleaseLink59b0  (CLOSURE-SAFE,
 //                 identical body, slot +0x228 vs +0x230)
-//   0x140115a50 FUN_140115a50    -> DEFER: calls 0x140111840 TryFindPartner (unregistered,
-//                 KNOWN citizencomponent Level-2 lifecycle defer) -> NOT registered.
+//   0x140115a50 FUN_140115a50    -> AttendanceComponent_ReleasePartnerSlot, REGISTERED at
+//                 line ~99 below (TryFindPartner 0x140111840 landed in the cascade round).
 #include "resolve.h"
 #include <cstdint>
 
