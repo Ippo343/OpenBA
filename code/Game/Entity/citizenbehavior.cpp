@@ -1257,9 +1257,16 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
         }
     }
 
-    // Part 2: Check resource notify entries (2 entries at +0x180, food/firewood storage)
+    // Part 2: Check resource notify entries (2 entries, food/firewood storage).
+    // [DEREF FIX] +0x180 is a POINTER to the heap-allocated 2-entry array
+    // (fn_SummaryArray_Init(self->data + 0x180, 2) in the ctor; original:
+    // `lVar3 = *(longlong*)(param_1 + 0x180)`). The previous code used the field
+    // address itself as the array, so "current" read the pointer's low dword
+    // (huge -> 95%-full always true) and the "timer" writes stomped +0x188 —
+    // that was the type-24 event spam (thousands of storage-full posts/minute).
     for (int i = 0; i < 2; i++) {
-        uintptr_t notifyBase = reinterpret_cast<uintptr_t>(self->data + 0x180);
+        uintptr_t notifyBase = *reinterpret_cast<uintptr_t*>(self->data + 0x180);
+        if (!notifyBase) break;
         int64_t* timer = reinterpret_cast<int64_t*>(notifyBase + i * 0x10 + 0x08);
 
         // Decrement timer
