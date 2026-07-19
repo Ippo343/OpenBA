@@ -29,6 +29,7 @@ extern "C" void* CitizenEmploy_Strat_cbf0(int64_t, void*, int64_t*, int64_t); //
 extern "C" void* CitizenEmploy_Strat_ca20(int64_t, void*, int64_t*, int64_t); // 0x14008ca20
 extern "C" void* CitizenEmploy_Strat_c5f0(int64_t, void*, int64_t*, int64_t); // 0x14008c5f0
 extern "C" void* CitizenEmploy_Strat_c4b0(int64_t, void*, int64_t*, int64_t); // 0x14008c4b0
+extern "C" void* CitizenList_AssignWorker_c3d0(int64_t, void*, int64_t*, int64_t); // 0x14008c3d0 (top-level cascade)
 
 void RegisterTownHallBatch() {
     RegisterExeAddr(0x14006abf0, reinterpret_cast<uintptr_t>(&TownHall_GroupRatingInit));
@@ -44,4 +45,5 @@ void RegisterTownHallBatch() {
     RegisterExeAddr(0x14008ca20, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_ca20));
     RegisterExeAddr(0x14008c5f0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c5f0));
     RegisterExeAddr(0x14008c4b0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c4b0));
+    RegisterExeAddr(0x14008c3d0, reinterpret_cast<uintptr_t>(&CitizenList_AssignWorker_c3d0));
 }

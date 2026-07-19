@@ -43,6 +43,10 @@
 #include <cstdint>
 #include <cstdlib>
 
+// code/Game/Component/component_factory_base.cpp — central live-feature gate
+// (default-on table + env kill-switch). Fwd-declared to avoid the include path.
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
+
 // Clean reimpls in code/Game/Game/gameupdateloop.cpp. Declared extern "C" there;
 // void* self here is ABI-identical to the real GameUpdateLoop* and avoids
 // pulling in the type header.
@@ -114,8 +118,7 @@ const char* GUL_GetResourceFilename(void* self) {
     // fixed and the full preload terminates) with BANISHED_GAME_PRELOAD=1.
     static int s_preload = -1;
     if (s_preload < 0) {
-        const char* e = getenv("BANISHED_GAME_PRELOAD");
-        s_preload = (e && *e && e[0] != '0') ? 1 : 0;
+        s_preload = ::ComponentFactory::LiveEnabled("BANISHED_GAME_PRELOAD") ? 1 : 0;
         printf("[GUL::GetResourceFilename] preload=%s -> returning %s\n",
                s_preload ? "ON (BANISHED_GAME_PRELOAD)" : "off (default)",
                s_preload ? "\"Game/Game\" (engine will recursively preload the "

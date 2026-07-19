@@ -54,8 +54,7 @@ extern "C" void TownStorage_TraceDump();
 static bool LiveStorageEnabled() {
     static int v = -1;
     if (v < 0) {
-        const char* e = getenv("BANISHED_LIVE_STORAGE");
-        v = (e && *e && e[0] != '0') ? 1 : 0;
+        v = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE") ? 1 : 0;
     }
     return v == 1;
 }
@@ -1861,8 +1860,7 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
 static void CitizenCarryStorageInit(void* ent) {
     static int s_on = -1;
     if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_CARRY");
-        s_on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        s_on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_CARRY") ? 1 : 0;
     }
     if (s_on != 1 || !ent || !fn_InternalBasePtr_CheckPtr) return;
 
@@ -1966,8 +1964,7 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
 static bool HousingEnvOn() {
     static int en = -1;
     if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_HOUSING");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HOUSING") ? 1 : 0;
     }
     return en == 1;
 }

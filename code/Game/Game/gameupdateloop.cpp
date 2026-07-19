@@ -19,6 +19,7 @@
 
 #include "GameUpdateLoop.h"
 #include "Entity/entitylist_funcs.h"
+#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
@@ -53,7 +54,7 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
 extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);
 static bool LiveToolsEnabled() {
     static int g = -1;
-    if (g < 0) { const char* e = getenv("BANISHED_LIVE_TOOLS"); g = (e && e[0] && !(e[0]=='0' && e[1]=='\0')) ? 1 : 0; }
+    if (g < 0) { g = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOOLS") ? 1 : 0; }
     return g != 0;
 }
 
@@ -1611,8 +1612,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // the dialog is present but empty (itemCount=0).
     static int s_toolbarGate = -1;
     if (s_toolbarGate < 0) {
-        const char* e = getenv("BANISHED_LIVE_TOOLBAR");
-        s_toolbarGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
+        s_toolbarGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOOLBAR") ? 1 : 0;
     }
     const bool kCreateToolbar = (s_toolbarGate != 0);
 
@@ -1773,8 +1773,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
     static int s_eventsGate = -1;
     if (s_eventsGate < 0) {
-        const char* e = getenv("BANISHED_LIVE_EVENTS");
-        s_eventsGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
+        s_eventsGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_EVENTS") ? 1 : 0;
     }
     if (s_eventsGate && g_ribbonParentToolbar != nullptr) {
         uint8_t filename[8];

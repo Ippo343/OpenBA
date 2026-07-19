@@ -197,8 +197,7 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     // early-returns before ever writing the ModelComponent transform.
     static int mtEn = -1;
     if (mtEn < 0) {
-        const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
-        mtEn = (e && e[0] && e[0] != '0') ? 1 : 0;
+        mtEn = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK") ? 1 : 0;
     }
     if (mtEn) {
         // PickingComponent (+0x70) is COMPONENT_INERT_FACTORY in standalone: its memory is
@@ -260,8 +259,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
 static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* time) {
     static int en = -1;
     if (en < 0) {
-        const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK") ? 1 : 0;
     }
     if (!en || !self) return;
     CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);

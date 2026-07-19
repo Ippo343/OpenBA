@@ -151,42 +151,22 @@ sa-deploy: standalone-debug
 	rm -f "$(BANISHED_DIR)/standalone_debug.log"
 	@echo "Deployed to $(BANISHED_DIR)/reimpl-x64.exe"
 
-# Live-feature defaults for the standalone test driver. These feature groups are
-# user-verified working and enabled by default on every sa-run so the game
-# launches with the GUI, citizen status-icon sprites, the full live citizen-AI
-# stack, and housed founding families without having to set envs by hand. To A/B
-# against a bare run, override on the command line (e.g.
-# `BANISHED_LIVE_CITIZENAI=0 mingw32-make sa-run`) or launch reimpl-x64.exe
-# directly — the code gates keep their byte-faithful default-off semantics; this
-# only sets them at launch.
-#
-# Economy Phase 2 (housing): BANISHED_LIVE_RESIDENCE graduates the per-type
-# ResidenceComponent factory + runs the WoodHouse OnCreate pass (captures the
-# founding houses); BANISHED_LIVE_HOUSING then drives the faithful AssignHousing
-# primitive so each founding family is rostered into a WoodHouse (citizen+0x248
-# residence ref + house WorkPlaceComponent occupant roster +0x60 + occupied
-# mesh visual). Verified live: 6 houses, ~21-25 members housed, crash-free.
-SA_LIVE_ENV = \
-	BANISHED_LIVE_TOOLBAR=1 BANISHED_GAME_PRELOAD=1 \
-	BANISHED_LIVE_STATUSICON=1 BANISHED_LIVE_STATUSICON_DRAW=1 BANISHED_LIVE_CITIZEN_STATUSICON=1 \
-	BANISHED_LIVE_CITIZEN=1 BANISHED_LIVE_CITIZEN_UPDATE=1 BANISHED_LIVE_CITIZENAI=1 \
-	BANISHED_LIVE_CHARACTER=1 BANISHED_LIVE_CHARACTER_MOVETICK=1 BANISHED_LIVE_STATEMACHINE=1 \
-	BANISHED_LIVE_RESIDENCE=1 BANISHED_LIVE_HOUSING=1 \
-	BANISHED_LIVE_STORAGE=1 BANISHED_LIVE_REGIONMAP=1 \
-	BANISHED_LIVE_STORAGEDISPLAY=1 BANISHED_LIVE_DECAL=1 \
-	BANISHED_LIVE_TOOLS=1 BANISHED_LIVE_PICKING=1 \
-	BANISHED_LIVE_PARTICLE=1 BANISHED_SELECTION_OUTLINE=1 \
-	BANISHED_LIVE_EVENTS=1
+# 2026-07-19: the former SA_LIVE_ENV flag block is GONE — every verified live
+# feature is now DEFAULT-ON in code (kDefaultOnFlags in
+# code/Game/Component/component_factory_base.cpp). Env vars remain as
+# kill-switches only: `BANISHED_LIVE_CITIZENAI=0 mingw32-make sa-run` disables
+# one feature for an A/B run. New features start opt-in (NOT in the table) and
+# get promoted into kDefaultOnFlags once verified.
 
 sa-run: sa-deploy
-	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 $(SA_LIVE_ENV) start reimpl-x64.exe
-	@echo "Launched standalone reimpl (autostart + GUI/sprites/citizen-AI live)"
+	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
+	@echo "Launched standalone reimpl (autostart; live features default-on)"
 
 # Same as sa-run but stops at the main menu (no auto-new-game). Use when you
-# want to exercise the menu itself. Still enables the live-feature defaults.
+# want to exercise the menu itself.
 sa-run-menu: sa-deploy
-	cd "$(BANISHED_DIR)" && $(SA_LIVE_ENV) start reimpl-x64.exe
-	@echo "Launched standalone reimpl (menu only; GUI/sprites/citizen-AI live)"
+	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
+	@echo "Launched standalone reimpl (menu only; live features default-on)"
 
 # Include auto-generated header dependency files
 -include $(SA_OBJECTS:.o=.d)

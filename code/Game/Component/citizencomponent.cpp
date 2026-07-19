@@ -110,11 +110,12 @@ static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
         StatusIcon_Toggle(reinterpret_cast<StatusIconComponent*>(icon), flagIndex, value != 0);
 }
 
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }  // fwd (full include is further down)
+
 static bool CitizenStatusIconEnabled() {
     static int cached = -1;
     if (cached < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_STATUSICON");
-        cached = (e && e[0] && e[0] != '0') ? 1 : 0;
+        cached = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_STATUSICON") ? 1 : 0;
     }
     return cached != 0;
 }
@@ -1270,7 +1271,7 @@ static uint32_t* s_TypeId_StorageLoc  = nullptr; // DAT_1401c8070 (StorageLocati
 static uint32_t* s_TypeId_Residence   = nullptr; // DAT_1401c7cf0 (ResidenceComponent)
 static uint32_t* s_TypeId_Position    = nullptr; // DAT_1401c7900
 static uint32_t* s_TypeId_AIComp      = nullptr; // DAT_1401c7158 (CitizenAIComponent)
-static uint32_t* s_TypeId_Storage1c7d28 = nullptr; // DAT_1401c7d28
+static uint32_t* s_TypeId_ResidenceDesc7d28 = nullptr; // DAT_1401c7d28
 static uint32_t* s_TypeId_RawMat1c7cb8  = nullptr; // DAT_1401c7cb8 (RawMaterialDescription)
 static uint32_t* s_TypeId_1c7cb8b     = nullptr; // DAT_1401c7cb8 (workplace-job in ReleaseWorkplace)
 static uint32_t* s_pDAT_1401722b0     = nullptr; // abs-value mask used by helper_fe40
@@ -1352,7 +1353,7 @@ static void EnsureCallees() {
     s_TypeId_Residence   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
     s_TypeId_Position    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
     s_TypeId_AIComp      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    s_TypeId_Storage1c7d28 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d28));
+    s_TypeId_ResidenceDesc7d28 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d28));
     s_TypeId_RawMat1c7cb8  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_TypeId_1c7cb8b     = s_TypeId_RawMat1c7cb8;
     s_pDAT_1401722b0     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
@@ -1492,7 +1493,7 @@ bool CitizenComp_helper_a4f0(int64_t self, int param2) {
     EnsureCallees();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* res = (s_TypeId_Storage1c7d28 && fn_IsDerivedFrom(obj, *s_TypeId_Storage1c7d28)) ? obj : nullptr;
+    void* res = (s_TypeId_ResidenceDesc7d28 && fn_IsDerivedFrom(obj, *s_TypeId_ResidenceDesc7d28)) ? obj : nullptr;
     int eduLevel = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x24) : 0;
     int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(s + 0x50) + 8 + (int64_t)param2 * 0x10);
     return eduLevel <= cap;
@@ -3047,8 +3048,7 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
 static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time) {
     static int en = -1;
     if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_UPDATE");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_UPDATE") ? 1 : 0;
     }
     if (!en || !self) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(self);

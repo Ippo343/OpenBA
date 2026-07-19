@@ -29,14 +29,16 @@
 #include <cstdint>
 #include <cstdlib>
 
+// central live-feature gate (default-on table + env kill-switch)
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
+
 extern "C" void HighlightSelect_Impl(void*);    // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void*);     // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(void*);   // 0x14004c4a0
 extern "C" void HighlightDeselect_Impl(void*);  // 0x1400fcc90
 
 void RegisterPlayerRenderBatch() {
-    const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
-    if (!e || !e[0] || e[0] == '0') return;   // default OFF -> leave everything unregistered
+    if (!::ComponentFactory::LiveEnabled("BANISHED_SELECTION_OUTLINE")) return;  // kill-switch: =0
 
     RegisterExeAddr(0x1400fc9e0, reinterpret_cast<uintptr_t>(&HighlightSelect_Impl));
     RegisterExeAddr(0x1400fcb40, reinterpret_cast<uintptr_t>(&HighlightClear_Impl));

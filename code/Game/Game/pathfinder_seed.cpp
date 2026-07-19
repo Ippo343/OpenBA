@@ -22,6 +22,7 @@
 // executor — the only consumer); default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
+#include "Component/component_factory_base.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -96,8 +97,7 @@ static void* g_pf_vtable[2] = { reinterpret_cast<void*>(&Pf_WorkerLoop_a6360),
                                 reinterpret_cast<void*>(&Pf_OnCompleted_noop) };
 
 static bool MoveTickEnabled() {
-    const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
-    return e && e[0] && e[0] != '0';
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK");
 }
 
 // Async is the real (shipping) pathfinder mode. Default ON when seeded; BANISHED_PF_SYNC=1

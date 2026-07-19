@@ -105,15 +105,49 @@ void* MakeInertTyped(size_t size, uint32_t flags,
     return p;
 }
 
-// Live opt-in check for COMPONENT_LIVE_FACTORY. Returns true when either the
-// component's specific env var OR the global BANISHED_LIVE_COMPONENTS is set to a
-// non-empty value other than "0"/"false". Default (neither set) => inert => the
-// default run is byte-for-byte unchanged.
+// Live-feature check for COMPONENT_LIVE_FACTORY and every BANISHED_LIVE_* gate.
+// Policy (2026-07-19): once a feature is verified working it goes DEFAULT-ON via
+// kDefaultOnFlags below; the env var then only serves as a kill-switch (=0/false).
+// Flags NOT in the table keep the original opt-in behavior (env var or the master
+// BANISHED_LIVE_COMPONENTS must be set), so unproven/harness gates stay dormant.
 static bool EnvOn(const char* v) {
     return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
 }
+// Verified-working features: the Makefile's former SA_LIVE_ENV set (all
+// "user-verified working" per its comment) + BANISHED_LIVE_CITIZEN_CARRY
+// (promoted per its own "fold into SA_LIVE_ENV once verified" note).
+static const char* const kDefaultOnFlags[] = {
+    "BANISHED_LIVE_TOOLBAR",
+    "BANISHED_GAME_PRELOAD",
+    "BANISHED_LIVE_STATUSICON",
+    "BANISHED_LIVE_STATUSICON_DRAW",
+    "BANISHED_LIVE_CITIZEN_STATUSICON",
+    "BANISHED_LIVE_CITIZEN",
+    "BANISHED_LIVE_CITIZEN_UPDATE",
+    "BANISHED_LIVE_CITIZENAI",
+    "BANISHED_LIVE_CHARACTER",
+    "BANISHED_LIVE_CHARACTER_MOVETICK",
+    "BANISHED_LIVE_STATEMACHINE",
+    "BANISHED_LIVE_RESIDENCE",
+    "BANISHED_LIVE_HOUSING",
+    "BANISHED_LIVE_STORAGE",
+    "BANISHED_LIVE_REGIONMAP",
+    "BANISHED_LIVE_STORAGEDISPLAY",
+    "BANISHED_LIVE_DECAL",
+    "BANISHED_LIVE_TOOLS",
+    "BANISHED_LIVE_PICKING",
+    "BANISHED_LIVE_PARTICLE",
+    "BANISHED_SELECTION_OUTLINE",
+    "BANISHED_LIVE_EVENTS",
+    "BANISHED_LIVE_CITIZEN_CARRY",
+};
 bool LiveEnabled(const char* envVar) {
-    if (envVar && EnvOn(std::getenv(envVar))) return true;
+    if (envVar) {
+        const char* v = std::getenv(envVar);
+        if (v && v[0]) return EnvOn(v);  // explicit setting wins, on OR off
+        for (const char* f : kDefaultOnFlags)
+            if (std::strcmp(f, envVar) == 0) return true;
+    }
     return EnvOn(std::getenv("BANISHED_LIVE_COMPONENTS"));
 }
 

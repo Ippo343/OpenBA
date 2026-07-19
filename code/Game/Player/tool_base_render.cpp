@@ -84,10 +84,10 @@ static inline bool OTrace() {
 // The per-frame follow re-sync (Impl_HighlightFollow) is instead reached by a
 // direct cross-TU call from EditTool_Startup_Impl, so it self-gates on the same
 // env var to stay a no-op on the shipping default path.
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
 static int s_outlineEnabled = -1;
 static inline bool OutlineEnabled() {
-    if (s_outlineEnabled < 0) { const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
-                                s_outlineEnabled = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (s_outlineEnabled < 0) { s_outlineEnabled = ::ComponentFactory::LiveEnabled("BANISHED_SELECTION_OUTLINE") ? 1 : 0; }
     return s_outlineEnabled != 0;
 }
 

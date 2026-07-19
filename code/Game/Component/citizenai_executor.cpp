@@ -45,6 +45,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "component_factory_base.h"        // ::ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -629,8 +630,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         if (static_cast<int>(pickId) < 0) {
             static int s_pickOn = -1;
             if (s_pickOn < 0) {
-                const char* e = std::getenv("BANISHED_LIVE_PICKING");
-                s_pickOn = (e && e[0] && e[0] != '0') ? 1 : 0;
+                s_pickOn = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_PICKING") ? 1 : 0;
             }
             if (s_pickOn == 1) {
                 int newId = RegisterCitizenPickMesh(self);

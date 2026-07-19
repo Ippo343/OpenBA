@@ -187,6 +187,12 @@ static uint32_t g_tid_CreateDragDescription    = 0;  // 0x1401c7430
 // AttendanceUI deref was a null-pointer crash-in-waiting. Audit 2026-07-19.
 static uint32_t g_tid_AttendanceDescription    = 0;  // 0x1401c3f78
 
+// 0x1401c7d28 ResidenceDescription — read by CitizenComp_helper_a4f0's cast gate
+// (citizencomponent.cpp:1495, education-vs-capacity check: null id -> res null ->
+// eduLevel forced 0 -> gate always passes) and residencecomponent.cpp:102. Same
+// silent-null class as the 3f78 fix above. Found by the 2026-07-19 final sweep.
+static uint32_t g_tid_ResidenceDescription     = 0;  // 0x1401c7d28
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -210,6 +216,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
     RegisterExeAddr(0x1401c7430, reinterpret_cast<uintptr_t>(&g_tid_CreateDragDescription));
     RegisterExeAddr(0x1401c3f78, reinterpret_cast<uintptr_t>(&g_tid_AttendanceDescription));
+    RegisterExeAddr(0x1401c7d28, reinterpret_cast<uintptr_t>(&g_tid_ResidenceDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -235,5 +242,6 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
     g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
     g_tid_AttendanceDescription    = ::Object::GetTypeIdByName("AttendanceDescription");
+    g_tid_ResidenceDescription     = ::Object::GetTypeIdByName("ResidenceDescription");
 }
 

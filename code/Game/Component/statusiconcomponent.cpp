@@ -432,8 +432,7 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     // Graphics::Geometry (Runtime base ctor → base vtable + InterpolatedState/bounds
     // fields) and install a standalone billboard vtable that overrides only the two
     // draw slots (Draw=2, AddDrawItems=3). Otherwise keep the Phase A no-op vtable.
-    static bool drawMode = [](){ const char* e = getenv("BANISHED_LIVE_STATUSICON_DRAW");
-                                 return e && e[0] && e[0] != '0'; }();
+    static bool drawMode = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATUSICON_DRAW");
     if (drawMode) {
         EnsureDrawHelpers();
         if (s_fn_Geometry_BaseCtor) {

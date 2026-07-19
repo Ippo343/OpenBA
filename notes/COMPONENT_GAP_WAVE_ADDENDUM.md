@@ -56,6 +56,29 @@ Your job is to **classify each address** and only register the **closure-safe** 
 - NOTE `0x140111b90` is the partner-candidate/repro helper, NOT UpdateHealth
   (disambiguated; stale comments in citizencomponent.cpp cleaned).
 
+## FINAL citizen-subsystem sweep (2026-07-19) — SUBSYSTEM CLOSED
+Full two-direction audit (192 Ghidra citizen-prefix fns vs 810 registered addrs +
+every ResolveAddr site in citizen files). Result: everything registered, inlined,
+vtable-wired (LiveVtable/REGISTER_TYPE), or dead — after closing the two real gaps:
+- `0x14008c3d0` CitizenList::AssignWorker — the top-level 4-strategy seat cascade
+  (cbf0→ca20→c5f0→c4b0); was the ONLY live-gameplay null (unguarded call from
+  workplaceui worker-add id 0x1450). Ported in citizen_employ_cascade.cpp,
+  registered in reg_townhallui.cpp. (notes/component_goals.md:136 +
+  entity_goals.md:91 said "already resolved" — that was stale until now.)
+- `0x1401c7d28` ResidenceDescription type-id — second instance of the
+  unregistered-tid silent-gate bug (defeated the education/residence cast gate in
+  CitizenComp_helper_a4f0 + residencecomponent). Registered + filled in
+  reg_economy_typeids.cpp; `s_TypeId_Storage1c7d28` renamed `s_TypeId_ResidenceDesc7d28`.
+
+Known non-citizen leftovers deliberately NOT closed here (out of scope):
+- Teardown dtors `0x1400c3d30`/`0x1400f8ff0`/`0x1401024d0` (fn_EntityList_Shutdown
+  UNGUARDED at gameupdateloop.cpp:1965 — return-to-menu/exit path would crash;
+  the other two are member-guarded). Ghidra names carry Citizen* prefixes but they
+  are consumed as engine dtors — name-vs-use discrepancy to reconcile whenever the
+  shutdown path gets ported.
+- `0x140021ba0` bucket-tree serialize (save path), `0x14005fe10`/`0x140060000`/
+  `0x140060380` debug cheats — resolved-but-null, fine until those paths are live.
+
 ## Allocator / engine func gotchas (from base brief)
 - Alloc: `fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align)`; free: `fn_MemFreeStatic(ptr)`.
   NO `fn_MemAllocStatic`. `fn_MemFree` is always NULL — use `fn_MemFreeStatic`.

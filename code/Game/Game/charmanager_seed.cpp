@@ -27,6 +27,7 @@
 // Default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
+#include "Component/component_factory_base.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -35,8 +36,7 @@
 
 namespace {
 static bool MoveTickEnabled() {
-    const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
-    return e && e[0] && e[0] != '0';
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK");
 }
 constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps are <= 1024 tiles
 } // namespace

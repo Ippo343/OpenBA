@@ -108,6 +108,9 @@ mingw32-make standalone-debug  # build debug standalone exe
 mingw32-make sa-deploy         # build debug + copy to Banished directory
 mingw32-make sa-run            # build debug + copy + launch (AUTO-STARTS a new game)
 mingw32-make sa-run-menu       # same, but stops at the main menu (no autostart)
+# Live features are DEFAULT-ON in code (kDefaultOnFlags in
+# code/Game/Component/component_factory_base.cpp). BANISHED_LIVE_* env vars are
+# kill-switches (=0) for A/B runs; new unproven features start opt-in outside the table.
 # Output: standalone/build/reimpl-x64.exe
 
 mingw32-make clean     # remove all build artifacts (both modes)
@@ -220,7 +223,7 @@ Defined in `.vscode/launch.json`:
 |---------------|------|-------------|
 | **Attach to Banished** | attach | Attach GDB to a running game process (pick from list) |
 | **Launch Standalone (debug)** | launch | Builds + deploys `reimpl-x64.exe`, stops at the main menu |
-| **Launch Standalone (debug, autostart new game)** | launch | Same, but sets `BANISHED_AUTOSTART` + live-feature envs — lands in-game |
+| **Launch Standalone (debug, autostart new game)** | launch | Same, but sets `BANISHED_AUTOSTART` — lands in-game |
 | **Launch Standalone (debug, tool harness)** | launch | Autostart + `BANISHED_TOOL_HARNESS` for placement-tool testing |
 | **Launch Standalone (debug, redzone)** | launch | Autostart + `BANISHED_REDZONE=1` heap red-zone allocator |
 | **Launch Standalone (release)** | launch | Release build, no debugger stops |

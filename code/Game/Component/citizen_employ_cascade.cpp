@@ -580,3 +580,37 @@ extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* a
 extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
     EnsureFns(); return Strat_c4b0(townMgr, out, availPtr, profKey);
 }
+
+// CitizenList::AssignWorker (0x14008c3d0) — the top-level seat cascade the exe's
+// worker-add UI calls (fn_CitizenList_AssignWorker, workplaceui.cpp id 0x1450).
+// Tries the four strategies in order on a FRESH copy of *availPtr each time:
+// cbf0 (distance-optimized relocate) -> ca20 (nearest employed laborer, skipped if
+// *availPtr is 0) -> c5f0 (most-laborer house) -> c4b0 (first idle laborer, writes
+// `out` itself). First nonzero winner's 8-byte result is copied into out+0x0 only,
+// exactly like the original (out+0x8 is left untouched on those paths).
+extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+    EnsureFns();
+    alignas(8) uint8_t local[16] = {0};
+    int64_t avail = *availPtr;
+    void* r = Strat_cbf0(townMgr, local, &avail, profKey);
+    int64_t won = *reinterpret_cast<int64_t*>(r);
+    if (won == 0) {
+        avail = *availPtr;
+        if (avail != 0) {
+            r = Strat_ca20(townMgr, local, &avail, profKey);
+            won = *reinterpret_cast<int64_t*>(r);
+        }
+        if (won == 0) {
+            avail = *availPtr;
+            r = Strat_c5f0(townMgr, local, &avail, profKey);
+            won = *reinterpret_cast<int64_t*>(r);
+            if (won == 0) {
+                avail = *availPtr;
+                Strat_c4b0(townMgr, out, &avail, profKey);
+                return out;
+            }
+        }
+    }
+    *reinterpret_cast<int64_t*>(out) = won;
+    return out;
+}
