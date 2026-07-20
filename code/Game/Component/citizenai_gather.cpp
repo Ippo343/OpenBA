@@ -687,6 +687,14 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         CheckPtr(self);
         int citCap = s_116540 ? s_116540(*self) : 0;
         int capLeft = (townCap < citCap) ? citCap : townCap;
+        // Distribution diagnostic (firewood-evenness): the per-trip take budget is
+        // max(town default, citizen free carry) in WEIGHT units — degenerate values
+        // here (garbage townCap from an unfilled gw+0xb0 chain, or a huge citizen
+        // storage capacity) make single citizens drain the barn.
+        { static int n = 0; if (n < 12) { ++n;
+            fprintf(stderr, "[Gather2] budget: townCap=%d citCap=%d -> capLeft=%d\n",
+                    townCap, citCap, capLeft);
+            fflush(stderr); } }
 
         // Gather2's resource-slot SELECTION loop (decompile LAB_14010b92f .. LAB_14010baf1):
         //   pass 1 — count carrier rows whose RawMaterialDescription +0x5c bit6 set and have

@@ -346,6 +346,11 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
 static uint32_t* s_TypeId_ResidenceComponent = nullptr; // DAT_1401c7cf0
 static uint32_t* s_TypeId_RawMaterial = nullptr;         // DAT_1401c7cb8
 
+// The REAL StorageComponent finder (0x140006270, tid c7e78) — the exe's
+// Storage_GetResourceCount (0x14012a9d0) calls THIS, not the misnamed
+// 0x140008090 residence finder (disasm 0x14012a9ef: CALL 0x140006270).
+static fn_FindComponentStorage_t s_fn_FindStorage6270 = nullptr;
+
 // CheckAge sub-deps (CitizenComponent setup helpers).
 typedef void (*fn_SetupYoung_t)(void* citizen);
 typedef void (*fn_SetupAdult_t)(void* citizen);
@@ -381,6 +386,8 @@ static void EnsureCallees() {
         if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = ::Object::GetTypeIdByName("RawMaterialDescription");
         s_TypeId_RawMaterial = &s_tidRawMaterial_local;
     }
+    s_fn_FindStorage6270 = reinterpret_cast<fn_FindComponentStorage_t>(
+        ResolveAddr(Module::Exe, 0x140006270));
     s_fn_SetupYoung = reinterpret_cast<fn_SetupYoung_t>(ResolveAddr(Module::Exe, 0x140115110));
     s_fn_SetupAdult = reinterpret_cast<fn_SetupAdult_t>(ResolveAddr(Module::Exe, 0x1401151a0));
     s_fn_SetupElder = reinterpret_cast<fn_SetupElder_t>(ResolveAddr(Module::Exe, 0x140115230));
@@ -527,16 +534,25 @@ int CitizenComp_StorageComponent_QueryCount(int64_t self) {
 }
 
 // Reimpl of Storage_GetResourceCount (0x14012a9d0):
-// finds the entity's residence/storage component then sums (capacity - reserved)
-// of inventory rows whose material has the "is food/resource" flag (bit 5 at +0x5c).
+// walks to the owner entity's StorageComponent (finder 0x140006270 — NOT the
+// 0x140008090 residence finder; disasm-verified) then sums (count - reserved)
+// of inventory rows whose material has the EDIBLE flag (bit 5 at +0x5c).
+// [MISPORT FIX 2026-07-19] This used to call the residence finder and read the
+// ResidenceComponent's +0x28/+0x30 as inventory rows — which only "worked"
+// because the controller state node at +0x28 was absent (inert factory) and the
+// start-town food seed hacked rows into it. With the real residence state node
+// wired (heat tick bring-up), +0x28 is the node vtable; the exe-faithful path
+// reads the sibling StorageComponent.
 int CitizenComp_Storage_GetResourceCount(int64_t self) {
     EnsureCallees();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     int64_t outIBP = 0;
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
-    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(s + 0x10), &outIBP);
+    if (s_fn_FindStorage6270)
+        s_fn_FindStorage6270(*reinterpret_cast<int64_t*>(s + 0x10), &outIBP);
     int total = 0;
     fn_InternalBasePtr_CheckPtr(&outIBP);
+    if (outIBP == 0) return 0;   // guard: entity without a StorageComponent
     int rowCount = *reinterpret_cast<int*>(outIBP + 0x30);
     if (0 < rowCount) {
         int64_t off = 0;

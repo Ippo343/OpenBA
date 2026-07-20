@@ -17,6 +17,7 @@ extern uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc);
 extern void     ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);
 extern void     ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr);
 extern void     ResidenceComponent_ResidenceInit(void* self);
+extern "C" char ResidenceComponent_HeatTick(void* comp, void* sm, void* dt);
 
 extern void     StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount);
 extern void     StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
@@ -62,6 +63,8 @@ void RegisterComponentBatch_economy() {
     RegisterExeAddr(0x140037ad0, reinterpret_cast<uintptr_t>(&ResidenceComponent_ResizeResidentArray));
     RegisterExeAddr(0x140037c50, reinterpret_cast<uintptr_t>(&ResidenceComponent_SerializeResidentArray));
     RegisterExeAddr(0x140129ef0, reinterpret_cast<uintptr_t>(&ResidenceComponent_ResidenceInit));
+    // residence_heattick.cpp — state-2 per-frame heat/firewood-burn tick
+    RegisterExeAddr(0x140129970, reinterpret_cast<uintptr_t>(&ResidenceComponent_HeatTick));
 
     // storagedisplaycomponent.cpp
     RegisterExeAddr(0x14000ca10, reinterpret_cast<uintptr_t>(&StorageDisplayComponent_MeshArrayResize));

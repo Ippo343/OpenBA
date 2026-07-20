@@ -856,11 +856,15 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 // at +0x170 (profResources). Before counting, previousCount is set to
 // currentCount and currentCount is zeroed for each entry.
 //
-// Also tracks food/fuel vs tools/health/clothing/textile totals in the
+// Also tracks food vs durable-goods totals (flags & 0x1c40 split) in the
 // notification summary at +0x180 (param_1[0x30] in Ghidra longlong* indexing).
 //
-// The RawMaterialFlags -> profession entry mapping:
-//   bit 5  (Fuel)      -> entry 5  (Gatherer)     offset 0xa0
+// The RawMaterialFlags -> entry mapping (the bit->offset chain below is
+// DISASM-FAITHFUL — verified against 0x140089ed0 on 2026-07-19. NOTE: the
+// flag/profession NAMES were derived from the old wrong toolkit-order flag
+// table; the real bit 5 = EDIBLE (not Fuel), bit 6 = Fuel — and bit 6 is not
+// tallied here at all. See engine/types/RawMaterialDescription.h.):
+//   bit 5  (Edible)    -> entry 5                  offset 0xa0
 //   bit 7  (Wood)      -> entry 3  (Fisherman)    offset 0x60
 //   bit 8  (Stone)     -> entry 9  (Stonecutter)  offset 0x120
 //   bit 9  (Iron)      -> entry 4  (Hunter)       offset 0x80
@@ -940,7 +944,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
     auto addToProfession = [&](uint32_t flags, int32_t itemCount) {
         int offset = -1;
         if (flags & 0x20) {
-            // bit 5 (Fuel) -> entry 5, offset 0xa0
+            // bit 5 (Edible) -> entry 5, offset 0xa0
             offset = 0xa0;
         } else if (flags & 0x80) {
             // bit 7 (Wood) -> entry 3, offset 0x60

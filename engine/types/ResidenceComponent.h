@@ -34,14 +34,20 @@ struct ResidenceComponent {
     void*    selfPtr;           // +0x40
 
     // ResidenceComponent own fields
-    void*    field48;           // +0x48: zeroed
-    void*    field50;           // +0x50: zeroed
-    void*    field58;           // +0x58: zeroed
+    int64_t  heatRemaining;     // +0x48: System::Time countdown; heat tick 0x140129970
+                                //        does -= dt each frame, refills to
+                                //        Time(desc->fuelBurnDuration +0x2C) on a burn.
+                                //        Warm-house check 0x14012ac30: warm <=> > 0
+                                //        (or worldTemp >= desc->heatThreshold +0x28).
+    void*    residentSlots;     // +0x50: resident slot array (0x10 stride)
+    int32_t  residentSlotCount; // +0x58: slot count (desc capacity +0x20)
+    uint8_t  _pad5c[4];         // +0x5c
 };
 
 static_assert(sizeof(ResidenceComponent) == 0x60, "ResidenceComponent size mismatch");
 static_assert(offsetof(ResidenceComponent, vtable) == 0x00, "");
 static_assert(offsetof(ResidenceComponent, controllerVtable) == 0x28, "");
 static_assert(offsetof(ResidenceComponent, selfPtr) == 0x40, "");
-static_assert(offsetof(ResidenceComponent, field48) == 0x48, "");
-static_assert(offsetof(ResidenceComponent, field58) == 0x58, "");
+static_assert(offsetof(ResidenceComponent, heatRemaining) == 0x48, "");
+static_assert(offsetof(ResidenceComponent, residentSlots) == 0x50, "");
+static_assert(offsetof(ResidenceComponent, residentSlotCount) == 0x58, "");

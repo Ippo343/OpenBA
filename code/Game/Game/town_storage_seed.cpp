@@ -428,8 +428,14 @@ extern "C" void StartTown_SeedStartingResources(void* startConfig) {
         return;
     }
     uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
-    STG_TRACE("SeedStartingResources counts: wood(0x400)=%d stone(0x800)=%d "
-              "iron(0x1000)=%d fuel(0x200)=%d food(0x20)=%d herb(0x40)=%d tool(0x4000)=%d",
+    // Mask labels corrected 2026-07-19 (binary-verified flag values, see
+    // engine/types/RawMaterialDescription.h): 0x20 = EDIBLE food, 0x40 = FUEL
+    // firewood. The 0x400/0x800/0x1000/0x200/0x4000 class names below are the
+    // best current guesses for the remaining start-resource classes
+    // (logs/stone/iron/tools/clothing) — amounts and masks are exe-faithful
+    // regardless of naming.
+    STG_TRACE("SeedStartingResources counts: m400=%d m800=%d "
+              "m1000=%d m200=%d food(0x20)=%d firewood(0x40)=%d m4000=%d",
               *reinterpret_cast<int*>(sc + 0xfc),  *reinterpret_cast<int*>(sc + 0x100),
               *reinterpret_cast<int*>(sc + 0x104), *reinterpret_cast<int*>(sc + 0x108),
               *reinterpret_cast<int*>(sc + 0x10c), *reinterpret_cast<int*>(sc + 0x110),

@@ -242,6 +242,13 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
 
     int iVar3 = s_fn_GetResourceCount2 ? s_fn_GetResourceCount2(lVar2) : 0;
     float threshold = *reinterpret_cast<float*>(lVar1desc + 0xd4);
+    // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
+    // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
+    { static int n = 0; if (n < 12) { ++n;
+        fprintf(stderr, "[HSR2] residence=%llx occupied=%d perOcc=%.1f have=%d -> %s\n",
+                (unsigned long long)local_res8, iVar6, threshold, iVar3,
+                ((float)iVar6 * threshold <= (float)iVar3) ? "sufficient" : "FETCH");
+        fflush(stderr); } }
     // COMISS XMM1(=(float)iVar3), XMM0(=(float)iVar6*threshold); SETNC -> iVar3 >= product
     return ((float)iVar6 * threshold <= (float)iVar3) ? 1 : 0;
 }

@@ -1410,23 +1410,12 @@ static void StartTown_RegisterTownCitizens() {
     fflush(stderr);
 }
 
-// Houses: ResidenceComponent::OnCreate's list op on townMgr+0x20 is a REMOVE
-// (FUN_140002cc0); the ADD retail runs at build-complete never fires in
-// standalone. Register the captured founding-house IBPs (the exact +0x10 value
-// helper_9de0 appends) once, after the OnCreate pass has run.
-static void StartTown_RegisterTownResidences() {
-    static bool s_done = false;
-    if (s_done) return;
-    s_done = true;
-    int n = 0;
-    for (int64_t ibp : g_foundingHouseIBPs) {
-        if (!ibp) continue;
-        TownRegistry_RegisterResidence(ibp);
-        ++n;
-    }
-    fprintf(stderr, "[startTown::registry] registered %d founding houses into townMgr+0x20\n", n);
-    fflush(stderr);
-}
+// Houses: registration into townMgr+0x20 is now RETAIL-DRIVEN. The stamped SM
+// pendingState=2 (see the +0x52 stamp in StartTown_SpawnStructures) makes the
+// first StateMachine::Tick run the ResidenceComponent state-2 Enter — the
+// helper_9de0 append (ResidenceComponent_EnterBuilt in residencecomponent.cpp).
+// The former StartTown_RegisterTownResidences manual append was removed: with
+// the real state table wired it would double-register every founding house.
 
 // ============================================================================
 // Phase 4 ASSIGN half (env BANISHED_LIVE_WORKPLACE) — seat laborers at the lodge.
@@ -2117,26 +2106,26 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
     fflush(stderr);
 }
 
-// ---- Founding-house household inventory + home-food reserve (BANISHED_LIVE_HOUSING) --------
-// Two edible-food seeds per founding WoodHouse, using AddItem FUN_14012d000 (append/increment
-// a storage slot at comp+0x28; no Scene op, build-time safe). MUST run AFTER
-// StartTown_SeedStartingResources so the town raw-material TEMPLATE pool (townMgr+0x110) — the
-// same edible templates the barn seeder uses — is populated. Gated on BANISHED_LIVE_HOUSING.
+// ---- Founding-house household food inventory (BANISHED_LIVE_HOUSING) -----------------------
+// Seed edible food into each founding WoodHouse's plain StorageComponent (c7e78), using
+// AddItem FUN_14012d000 (append/increment a storage slot at comp+0x28; no Scene op,
+// build-time safe). MUST run AFTER StartTown_SeedStartingResources so the town raw-material
+// TEMPLATE pool (townMgr+0x110) — the same edible templates the barn seeder uses — is
+// populated. Gated on BANISHED_LIVE_HOUSING.
 //
-// (A) DISPLAY container — the plain StorageComponent (c7e78, cap/flag-inited to 1000/mask 0x60
-//     by StartTown_WireStorage's 7ff0 pass): a small token stock so a clicked house shows a
-//     non-empty inventory in whichever panel reads c7e78.
+// The StorageComponent is the ONE household container (exe-faithful): the eat loop,
+// Storage_GetResourceCount (0x14012a9d0 — walks owner→c7e78 via finder 0x140006270),
+// the residence heat tick's firewood burn, and CitizenComp_HasSufficientResources
+// (0x1401156e0, whose GetResourceCount sums the EDIBLE units here) all read it.
+// HasSufficientResources compares `occupiedRows * residentsInSlot * (int)(CitizenDesc+0xc4)`
+// against that sum, so we seed `residents * factor` + margin per house — otherwise it
+// returns "insufficient" and spams GatherResources(id6).
 //
-// (B) HOME-FOOD reserve — the ResidenceComponent (c7cf0) OWN storage slots at +0x28. This is
-//     the container CitizenComp_HasSufficientResources (0x1401156e0) actually reads: it finds
-//     c7cf0 via 0x140008090, then Storage_GetResourceCount (0x14012a9d0) sums the EDIBLE units
-//     in c7cf0+0x28 and compares `iVar7(occupiedResidentSlots=1) * iVar2(residentsInSlot) *
-//     (int)(CitizenDesc+0xc4)` against it. Once we roster residents (+0x50 slot[0]), that
-//     product is nonzero, so an EMPTY c7cf0 store would return "insufficient" and spam
-//     GatherResources(id6). We seed c7cf0 with `residents * (int)(CitizenDesc+0xc4)` edible
-//     units + a margin so the check returns "sufficient" → NO Gather spam. Crash-safe:
-//     GetResourceCount matches the food's RawMaterialDescription via DWORD_1401c7cb8 (filled
-//     in SA by reg_action_child_ctors2), so no null-deref on the +0x5c edible-flag read.
+// [MISPORT FIX 2026-07-19] This used to ALSO AddItem into the ResidenceComponent's +0x28
+// ("home-food reserve") — a misreading: the exe residence has NO own storage; +0x28 is its
+// controller STATE NODE. That write only "worked" while the node was absent (inert
+// factory); with the real residence state table wired (heat-tick bring-up) AddItem would
+// grow/free the node vtable as if it were a slot array → Runtime FreeLocked crash.
 static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     if (!HousingEnvOn() || g_foundingHouseIBPs.empty()) return;
     void* townMgr = nullptr;
@@ -2175,47 +2164,48 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     int seeded = 0;
     for (int64_t houseIBP : g_foundingHouseIBPs) {
         if (!houseIBP) continue;
-        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
-        if (sc) {
-            // (A) DISPLAY container c7e78. Faithful accept gate (StorageComponent_helper_c560):
-            // the storage flag mask (+0x3c) must intersect the material's flags (+0x5c).
-            uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
-            if ((mask & foodFlags) != 0) {
-                addItem(reinterpret_cast<int64_t>(sc), foodTmpl, unitsPerHouse);
-                int rows = *(int32_t*)((uint8_t*)sc + 0x30);
-                int64_t rowArr = *(int64_t*)((uint8_t*)sc + 0x28);
-                int slot0cnt = (rows > 0 && rowArr) ? *(int32_t*)(rowArr + 8) : 0;
-                ++seeded;
-                fprintf(stderr, "[startTown::housing] house food(c7e78 display): storage=%p +%d "
-                        "units -> rows=%d slot0count=%d cap(+0x38)=%d mask=0x%x\n",
-                        sc, unitsPerHouse, rows, slot0cnt, *(int32_t*)((uint8_t*)sc + 0x38), mask);
-                fflush(stderr);
+
+        // Per-house need: `residents * (int)(CitizenDescription+0xc4)` + margin — the
+        // HasSufficientResources threshold. Resident slots at rescomp+0x50/+0x58 (the
+        // state node at +0x28 is NOT touched).
+        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        int residents = 0, reqInt = 0;
+        if (rescomp) {
+            int64_t slotArr = *(int64_t*)((uint8_t*)rescomp + 0x50);
+            residents = slotArr ? *(int32_t*)(slotArr + 8) : 0;   // slot[0].count
+            if (slotArr) {
+                int64_t slot0data = *(int64_t*)slotArr;                    // slot[0].data
+                int64_t resident = slot0data ? *(int64_t*)slot0data : 0;   // data[0]
+                int64_t cd = resident ? *(int64_t*)(resident + 0x288) : 0; // CitizenDescription
+                if (cd) reqInt = (int)*(float*)(cd + 0xc4);
             }
         }
-
-        // (B) HOME-FOOD reserve into the ResidenceComponent (c7cf0) OWN storage slots (+0x28) —
-        // the container HasSufficientResources reads. Seed `residents * (int)(CitizenDesc+0xc4)`
-        // + margin edible units so the hunger check returns "sufficient" (no Gather spam).
-        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
-        if (!rescomp) continue;
-        int64_t slotArr = *(int64_t*)((uint8_t*)rescomp + 0x50);
-        int residents = slotArr ? *(int32_t*)(slotArr + 8) : 0;   // slot[0].count
-        int reqInt = 0;                                            // (int)(CitizenDescription+0xc4)
-        if (slotArr) {
-            int64_t slot0data = *(int64_t*)slotArr;               // slot[0].data (resident ptr array)
-            int64_t resident = slot0data ? *(int64_t*)slot0data : 0;   // data[0] = first resident comp
-            int64_t cd = resident ? *(int64_t*)(resident + 0x288) : 0; // CitizenDescription
-            if (cd) reqInt = (int)*(float*)(cd + 0xc4);
-        }
-        int threshold = residents * reqInt;                       // iVar7(1) * residents * factor
+        int threshold = residents * reqInt;
         int seedN = threshold + (residents > 0 ? residents : 0);  // strictly exceed the threshold
+        if (seedN < unitsPerHouse) seedN = unitsPerHouse;
         if (seedN < 8) seedN = 8;                                 // minimum visible reserve
         if (seedN > 500) seedN = 500;                             // sanity clamp
-        addItem(reinterpret_cast<int64_t>(rescomp), foodTmpl, seedN);
-        int have = getResCount ? getResCount(reinterpret_cast<int64_t>(rescomp)) : -1;
-        fprintf(stderr, "[startTown::housing] house food(c7cf0 home): residence=%p residents=%d "
-                "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount=%d %s\n",
-                rescomp, residents, reqInt, threshold, seedN, have,
+
+        // Seed the ONE household container (StorageComponent c7e78). Faithful accept gate
+        // (StorageComponent_helper_c560): the storage flag mask (+0x3c) must intersect the
+        // material's flags (+0x5c).
+        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
+        if (!sc) continue;
+        uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
+        if ((mask & foodFlags) == 0) {
+            fprintf(stderr, "[startTown::housing] house storage=%p mask=0x%x rejects edible "
+                    "0x%x — no food seed\n", sc, mask, foodFlags);
+            fflush(stderr);
+            continue;
+        }
+        addItem(reinterpret_cast<int64_t>(sc), foodTmpl, seedN);
+        ++seeded;
+        // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
+        // owner→StorageComponent and sums the edible units we just added.
+        int have = (getResCount && rescomp) ? getResCount(reinterpret_cast<int64_t>(rescomp)) : -1;
+        fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
+                "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d %s\n",
+                sc, residents, reqInt, threshold, seedN, have,
                 (have >= threshold) ? "(SUFFICIENT: no Gather)" : "(WARN: still insufficient)");
         fflush(stderr);
     }
@@ -3246,10 +3236,10 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     StartTown_SeedLaborerProfessions();
 
     // Town-manager registry (ungated) — register the founding citizens into
-    // townMgr+0xa0 and the founding houses into townMgr+0x20, the two lists the
-    // town-hall statistics dialog reads (was: General tab all zeros).
+    // townMgr+0xa0 (the town-hall statistics list). Houses register into
+    // townMgr+0x20 via the ResidenceComponent state-2 Enter on the first SM tick
+    // (retail flow) — no manual append here anymore.
     StartTown_RegisterTownCitizens();
-    StartTown_RegisterTownResidences();
 
     // PHASE 4 ASSIGN half — seat laborers at the lodge (env BANISHED_LIVE_WORKPLACE) now
     // that citizens + founding housing exist. Sets citizen+0x238 -> Gather/Work candidates.

@@ -192,18 +192,23 @@ struct Dispatcher {
         if (!h) return 0;
         return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
     }
-    // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm)
+    // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm, time)
     // ⚠ This is the PER-FRAME handler. StateMachineComponent::Update calls
     // StateMachine::Tick(sm, time, useAltDraw=1, doDraw=1) every frame, and Tick's
     // DRAW phase (useAltDraw=1) invokes node slot +0x38 every frame — whereas the
     // UPDATE phase (slot +0x20) only runs when a transition is pending. So the real
     // per-tick state work (BuildDescription sub_76e0/sub_81e0 proportional build +
-    // transition-request) lives in the trans38Handler, and it receives (data, sm).
-    static char Trans38(void* node, void* sm, void* /*time*/, int idx) {
+    // transition-request) lives in the trans38Handler.
+    // The exe slot-7 dispatcher (e.g. ResidenceComponent's 0x140037a00) tail-JMPs
+    // with RCX=[node+0x18] and RDX/R8 passing through — so handlers receive
+    // (data, sm, Time* dt). Handlers that don't need dt (2-arg ports like the
+    // BuildComponent state work) simply ignore R8; the ResidenceComponent heat
+    // tick (0x140129970) dereferences it for its heat countdown.
+    static char Trans38(void* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].trans38Handler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
+        return reinterpret_cast<char (*)(void*, void*, void*)>(h)(NodeData(node), sm, time);
     }
     // Any other slot (dtor/GetTypeId/Serialize/…) — safe no-op.
     static void* Stub(void*, ...) { return nullptr; }
