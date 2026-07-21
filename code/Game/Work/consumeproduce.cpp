@@ -726,7 +726,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                                 &worldEntityList, &destEntityRef,
                                 *(int*)((uintptr_t)self + 0x20), &destEntity,
                                 searchPos, &entityRef, (float*)&terrainPos,
-                                (long)matEntity, available, slot, 0, '\x01', 0, 0);
+                                (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);
 
                             int priority = *(int*)((uintptr_t)self + 0x20);
                             fn_InternalBasePtr_CheckPtr(entityIBP);
@@ -831,7 +831,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                                             &foundStorage, &worldEntityList,
                                             *(int*)((uintptr_t)self + 0x20), &pathSrc,
                                             (float*)&fetchPos, &fetchDest, searchPos2,
-                                            (long)matEntity2, -1, slot, 1, '\0', 0, 0);
+                                            (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = *(int*)((uintptr_t)self + 0x20);
                                         fn_InternalBasePtr_CheckPtr(entityIBP);

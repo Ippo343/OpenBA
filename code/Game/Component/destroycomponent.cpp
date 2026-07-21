@@ -188,9 +188,94 @@ void DestroyComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ===== Standalone factory (Foundation D → upgrade-path live states) =====
+// Inert by default. BANISHED_LIVE_DESTROY (opt-in; deliberately NOT in
+// kDefaultOnFlags — unproven) graduates:
+//   * vtable index 4 (+0x20, 0x14011DB00 Serialize/Startup) — copies the
+//     DestroyDescription's default target (desc+0x20) into +0x60, dispatched at
+//     spawn by ComponentEntity_StartupComponents (flags 0x80 → bit 7 set).
+//   * vtable index 3 (+0x18, 0x14011DB50 Shutdown) — save serialization.
+//   * vtable index 16/17 (GetDefaultState / CreateState=&node@+0x28) + the REAL
+//     state table (destroycomponent_states.cpp) — the retail mechanism that
+//     lets the entity's StateMachineComponent link + tick the destroy node, and
+//     the 0x14011dfa0 pump (UpgradeUI click) drive states 3→4→5 (demolish →
+//     haul-away → refund + stone-house spawn).
+// GetDefaultState: Ghidra-verified — retail vtable slot 16 (0x1401631a0)
+// points at 0x140033c00 = `mov eax,4 ; ret`, and slot 17 (0x1401631a8) at
+// 0x140004080 = `lea rax,[rcx+0x28] ; ret`. We return 4 to match.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(DestroyComponent, 0x68, 0x80)
+#include "Component/controller_state_table.h"
+
+extern "C" void** DestroyCtrl_NodeVtable();     // destroycomponent_states.cpp
+extern "C" void   DestroyCtrl_PopulateTable();
+
+static uint32_t DestroyComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("DestroyComponent");
+    return cached;
+}
+static void* DestroyComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void DestroyComponent_ShutdownVSlot(void* s, void* stream) {   // idx 3 (+0x18)
+    DestroyComponent_Shutdown(reinterpret_cast<DestroyComponent*>(s), stream);
+}
+static void DestroyComponent_SerializeVSlot(void* s) {                // idx 4 (+0x20)
+    DestroyComponent_Serialize(reinterpret_cast<DestroyComponent*>(s));
+}
+// Retail slot 16 returns 4 (Ghidra-verified). That is only safe under retail's
+// first-controller consult order, where the build controller precedes destroy
+// in every building template. Our SM startup adopts the default from the FIRST
+// controller with a non-null CreateState — with the build controller inert
+// (BANISHED_LIVE_BUILDCTRL off), destroy would be "first" and 4 (haul-away)
+// demolishes every fresh building at world start (observed live 2026-07-20:
+// four start-town yards queued ClearStorage; also kills residence heat).
+// So: faithful 4 only when the build controller is live (retail ordering
+// restored — this also enables the starting supply cart's haul-away-then-
+// vanish behavior); otherwise 2 ("built") — destroy's table has no state 2,
+// so its node no-ops and the residence/build siblings handle the state.
+static int DestroyComponent_GetDefaultState(void*) {
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL") ? 4 : 2;
+}
+static void* DestroyComponent_CreateState(void* self) {               // idx 17
+    return reinterpret_cast<uint8_t*>(self) + 0x28;
+}
+
+static void DestroyComponent_FinishLiveVtable(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY")) return;
+    DestroyComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&DestroyComponent_ShutdownVSlot);
+    DestroyComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&DestroyComponent_SerializeVSlot);
+    DestroyComponent_LiveVtable[16] =
+        reinterpret_cast<void*>(&DestroyComponent_GetDefaultState);
+    DestroyComponent_LiveVtable[17] =
+        reinterpret_cast<void*>(&DestroyComponent_CreateState);
+    DestroyCtrl_PopulateTable();
+    if (mem) {
+        // Embedded node at +0x28: dispatcher vtable + node+0x18 back-pointer.
+        // node+0x18 == comp+0x40, exactly the selfPtr the retail ctor writes —
+        // the tail-call handlers receive it as their component argument.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
+            reinterpret_cast<void*>(DestroyCtrl_NodeVtable());
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
+    }
+}
+
+extern "C" void* DestroyComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x80,
+        DestroyComponent_LiveVtable,
+        reinterpret_cast<void*>(&DestroyComponent_LiveGetTypeId));
+    DestroyComponent_FinishLiveVtable(p);
+    return p;
+}
+static void* DestroyComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x80,
+        DestroyComponent_LiveVtable,
+        reinterpret_cast<void*>(&DestroyComponent_LiveGetTypeId));
+    DestroyComponent_FinishLiveVtable(mem);
+    return mem;
+}
+
 REGISTER_TYPE(DestroyComponent, "ControllerComponent",
               &DestroyComponent_Factory, &DestroyComponent_CreateInPlace);

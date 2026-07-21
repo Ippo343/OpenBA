@@ -95,6 +95,12 @@ fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad = nullptr;
 fn_ExternalFactory_Find_t fn_ExternalFactory_Find = nullptr;
 fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean = nullptr;
 fn_IsDerivedFrom_t fn_IsDerivedFrom = nullptr;
+// Null-safe trampoline installed over the Runtime IsDerivedFrom (see EngineFuncsInit).
+static fn_IsDerivedFrom_t s_fn_IsDerivedFrom_real = nullptr;
+static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
+    if (!self) return false;
+    return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
+}
 uint32_t* g_pExternalTypeId = nullptr;
 fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters = nullptr;
 fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
@@ -385,7 +391,7 @@ fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
 // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
 // UpgradeUI helpers
-uint32_t* g_TypeId_UpgradeDescription = nullptr;
+uint32_t* g_TypeId_UpgradeUIConfig = nullptr;
 // fn_DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
 // fn_ResidenceUI_GoToCitizen — now inline in residenceui.cpp ResidenceUI_GoToCitizen
@@ -1674,6 +1680,16 @@ bool EngineFuncsInit() {
         fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
             ResolveAddr(Module::Runtime, 0x1800c0390));
     }
+    // Null-safe trampoline: the Runtime impl derefs obj unguarded. Retail never
+    // passes null (the dialog framework closes panels before their entity
+    // dies), but standalone dialogs keep ticking after the weak-ref at +0x28
+    // is nulled by entity destruction — dozens of ported call sites pass the
+    // ref straight in (crashed live 2026-07-20: house panel open across the
+    // upgrade demolition). null → false is the semantics every caller expects.
+    if (fn_IsDerivedFrom) {
+        s_fn_IsDerivedFrom_real = fn_IsDerivedFrom;
+        fn_IsDerivedFrom = &IsDerivedFrom_NullSafe;
+    }
 
     // Type ID for External resource (dialog resources)
     g_pExternalTypeId = reinterpret_cast<uint32_t*>(
@@ -2543,8 +2559,9 @@ bool EngineFuncsInit() {
 
     // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7 (FUN_140068f00)
 
-    // UpgradeDescription type ID at DAT_1401c5868
-    g_TypeId_UpgradeDescription = reinterpret_cast<uint32_t*>(
+    // UpgradeUIConfig type ID at DAT_1401c5868 (UI::DialogControllerConfig;
+    // its +0x20 holds the upgrade target ComponentEntity template)
+    g_TypeId_UpgradeUIConfig = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5868));
 
     // DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp

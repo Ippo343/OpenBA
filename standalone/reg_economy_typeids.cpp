@@ -193,6 +193,21 @@ static uint32_t g_tid_AttendanceDescription    = 0;  // 0x1401c3f78
 // silent-null class as the 3f78 fix above. Found by the 2026-07-19 final sweep.
 static uint32_t g_tid_ResidenceDescription     = 0;  // 0x1401c7d28
 
+// 0x1401c7d98 StateMachineComponent — the FindComponent slot used by
+// FUN_140003ea0 (tool_base_path.cpp, keystone_a_removalcalcpath.cpp),
+// fn_FindComponent_BuildState, and statemachinecomponent.cpp. Previously
+// unregistered -> the SM pump 0x14011dfa0 (UpgradeUI click) got a null
+// component and crashed reading state byte +0x52 (live 2026-07-20, first
+// upgrade-button click). Same silent-null class as 3f78/7d28 above.
+static uint32_t g_tid_StateMachineComponent    = 0;  // 0x1401c7d98
+
+// 0x1401c7628 DestroyDescription — dereferenced by destroyui.cpp's
+// CanRebuild (g_TypeId_DestroyComponent — misleading engine_funcs name, the
+// slot is the DESCRIPTION's) and destroycomponent_states.cpp's e600 guard.
+// Crashed DestroyUI_Slot7 live 2026-07-20 before the dialog-local fallback;
+// registered centrally so every reader benefits.
+static uint32_t g_tid_DestroyDescription       = 0;  // 0x1401c7628
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -217,6 +232,8 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7430, reinterpret_cast<uintptr_t>(&g_tid_CreateDragDescription));
     RegisterExeAddr(0x1401c3f78, reinterpret_cast<uintptr_t>(&g_tid_AttendanceDescription));
     RegisterExeAddr(0x1401c7d28, reinterpret_cast<uintptr_t>(&g_tid_ResidenceDescription));
+    RegisterExeAddr(0x1401c7d98, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
+    RegisterExeAddr(0x1401c7628, reinterpret_cast<uintptr_t>(&g_tid_DestroyDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -243,5 +260,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
     g_tid_AttendanceDescription    = ::Object::GetTypeIdByName("AttendanceDescription");
     g_tid_ResidenceDescription     = ::Object::GetTypeIdByName("ResidenceDescription");
+    g_tid_StateMachineComponent    = ::Object::GetTypeIdByName("StateMachineComponent");
+    g_tid_DestroyDescription       = ::Object::GetTypeIdByName("DestroyDescription");
 }
 

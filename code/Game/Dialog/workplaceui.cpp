@@ -807,7 +807,7 @@ void PopulateCounts(void* self) {
 // worker/builder counts (roster grows as builders are seated).
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
 }
@@ -815,7 +815,7 @@ void W_OnUpdate(void* self, void* /*time*/) {
 // idx7 (+0x38): Startup — same visibility decision + count refresh on setup.
 void W_Startup(void* self) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
 }
@@ -829,7 +829,7 @@ void W_Startup(void* self) {
 // (READ of 0x10) — is skipped, exactly like the town-hall path and the builder pool.
 void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     if (msg != 0x12) return;                       // button click
     if (id != 0x1450 && id != 0x1451) return;      // workerCountUp / workerCountDown
 

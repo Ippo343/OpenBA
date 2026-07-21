@@ -1235,18 +1235,39 @@ extern fn_KeyMap_Pressed_t fn_KeyMap_Pressed;
 // fn_FollowDialog_Close — now inline in followdialog.cpp Slot7 (Escape key handler)
 
 // ============================================================
+// Shared SA dialog guard
+// ============================================================
+// Is a DialogController's data-source entity (+0x28) still safe to read? The
+// weak ref is nulled when the entity is destroyed, and while the
+// marked-for-removal flag (entity+0x40 bit 0x400) is set the entity survives
+// until the EntityList drain with its components already torn down. Reading a
+// roster/storage in either state crashed live 2026-07-20 (upgrade path
+// demolishing a house with its panel open). Wrappers bail — the panel freezes
+// until the dialog closes.
+inline bool SA_DialogEntityAlive(void* self) {
+    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+    if (!e) return false;
+    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+        return false;
+    return true;
+}
+
+// ============================================================
 // UpgradeUI helpers
 // ============================================================
 
-// UpgradeDescription type ID at DAT_1401c5868
-extern uint32_t* g_TypeId_UpgradeDescription;
+// UpgradeUIConfig type ID at DAT_1401c5868 (registered by 0x14014ca00 as
+// "UpgradeUIConfig" / "UI::DialogControllerConfig"). No "UpgradeDescription"
+// class exists in retail — the upgrade target at UpgradeUIConfig+0x20 is a
+// plain ComponentEntity template pointer, not a description struct.
+extern uint32_t* g_TypeId_UpgradeUIConfig;
 
-// DestroyComponent_StartUpgrade — drives state machine through upgrade transition
-// NOW REIMPLEMENTED in code/Game/Dialog/destroyui.cpp as DestroyComponent_StartUpgrade_Impl()
-// Old typedef kept for reference:
-// typedef void (*fn_DestroyComponent_StartUpgrade_t)(void* destroyComp);
-// extern fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade;
-void DestroyComponent_StartUpgrade_Impl(void* destroyComp);
+// 0x14011dfa0 ("StartUpgrade" — misnomer; the generic BuildState state-machine
+// driver): ported disasm-faithfully as RemovalCalc_StateMachine_dfa0 in
+// code/Game/Player/keystone_a_removalcalcpath.cpp and registered for that
+// address. Callers (UpgradeUI_OnRemove) reach it via
+// ResolveAddr(Module::Exe, 0x14011dfa0). An earlier divergent port in
+// destroyui.cpp was removed 2026-07-20.
 
 // ============================================================
 // ResidenceUI helpers
@@ -4830,10 +4851,13 @@ typedef bool (*fn_Work_ValidateAssignment_t)(void* work, void* citizenIBP, uint3
     uint32_t srcCell, void* time);
 extern fn_Work_ValidateAssignment_t fn_Work_ValidateAssignment;
 
-// FUN_1400bf790: Pathfinding_FindPath — sets up pathfinding for citizen work route.
+// FUN_1400bf790: Pathfinding_FindPath — misnomer; the citizen work-action-chain
+// builder. Arg 8 is the raw-material template ENTITY POINTER (64-bit!) — it was
+// `long` (32-bit on Win64) until 2026-07-20, which truncated the pointer at the
+// call boundary and crashed the first ClearStorage haul (upgrade path test).
 typedef void (*fn_Pathfinding_FindPath_t)(void* outResult, void* citizenPtr, int pathType,
     void* destEntityIBP, float* destPos, void* srcEntityIBP, float* srcPos,
-    long sourceEntity, int itemCount, int flags, int param11, char param12,
+    int64_t materialDescEntity, int itemCount, int flags, int param11, char param12,
     int param13, int param14);
 extern fn_Pathfinding_FindPath_t fn_Pathfinding_FindPath;
 

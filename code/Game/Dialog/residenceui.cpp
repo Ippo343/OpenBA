@@ -619,10 +619,25 @@ void W_Slot4(void* self) {
     ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
 }
 
+// SA-guard: the dialog's data-source entity ref (+0x28) is nulled by entity
+// destruction (verified live 2026-07-20: house demolished via the upgrade path
+// with its panel open → IsDerivedFrom(null) crashed in Runtime). Bail when the
+// entity is gone — the panel just stops refreshing.
+static bool DataSourceAlive(void* self) {
+    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+    if (!e) return false;
+    // Marked-for-removal (entity+0x40 bit 0x400): the entity survives until the
+    // EntityList drain, but its components/roster may already be torn down —
+    // reading them crashed live 2026-07-20 (garbage into IsDerivedFrom).
+    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+        return false;
+    return true;
+}
+
 // idx7 (+0x38): populate the rows from the residence roster.
 void W_Slot7(void* self) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
     if (std::getenv("BANISHED_DIALOG_TRACE")) {
         static int n = 0;
         if (n++ < 5) {
@@ -639,7 +654,7 @@ void W_Slot7(void* self) {
 // roster display live by re-populating every frame.
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<int*>(s + 0x38) == 0) {
         ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
@@ -649,7 +664,7 @@ void W_OnUpdate(void* self, void* /*time*/) {
 
 // idx9 (+0x48): resident-row click. Dispatched (self, &elementPtr, msg, id, x, y).
 void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
     ResidenceUI_Slot9(reinterpret_cast<ResidenceUI*>(self), p2, msg, id);
 }
 

@@ -41,6 +41,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
 
 // PlayerPath removability checks (sub_48a0/4770/4670) are defined with C++ linkage in
 // tool_base_path.cpp. Declare them at FILE SCOPE so the linkage matches — declaring them
@@ -262,6 +263,7 @@ extern "C" void RemovalCalc_helper_e4d0(int64_t param_1) {
     if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), resIBP);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(resIBP);
     int64_t state = resIBP[0];
+    if (!state) return;  // SA-guard: entity has no StateMachineComponent
     int64_t* stackHead = *reinterpret_cast<int64_t**>(state + 0x48);
     (*reinterpret_cast<void(**)(int64_t*, void*, int, int)>(*stackHead + 0x10))(
         stackHead, reinterpret_cast<void*>(state + 0x48),
@@ -288,8 +290,12 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, int32_t* outState
             if (-1 < *reinterpret_cast<char*>(state + 0x50)) {
                 int it = (int)*reinterpret_cast<char*>(state + 0x51);
                 int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
+                // FIX(lead 2026-07-20, bug-class #6): the node ABI carries the
+                // state index in R8D (Ghidra drops it) — slot +0x20 is
+                // Update(node, sm, idx). Without `it` the ControllerLive
+                // dispatcher read garbage and bounds-rejected every dispatch.
                 while (((it < 0) ||
-                        ((*reinterpret_cast<char(**)(int64_t*, int64_t*)>(*p + 0x20))(p, stackPtrField) == 0)) &&
+                        ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int)>(*p + 0x20))(p, stackPtrField, it) == 0)) &&
                        ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
                     it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
                         p, (int)*reinterpret_cast<char*>(state + 0x50));
@@ -331,8 +337,10 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, int32_t* outState
             int it = (int)*reinterpret_cast<char*>(state + 0x51);
             int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
             *reinterpret_cast<int16_t*>(state + 0x52) = (int16_t)0xffff;
+            // FIX(lead 2026-07-20, bug-class #6): slot +0x18 is
+            // Enter(node, sm, idx) — idx rides R8D, dropped by the decompile.
             while (((it < 0) ||
-                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*)>(*p + 0x18))(p, stackPtrField) == 0)) &&
+                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int)>(*p + 0x18))(p, stackPtrField, it) == 0)) &&
                    ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
                 it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
                     p, (int)*reinterpret_cast<char*>(state + 0x50));
@@ -345,9 +353,11 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, int32_t* outState
             // FIX(lead-verify vs disasm 0x14011e199 / 0x14011e369): BOTH phases' +0x30
             // call pass &outState (LEA R8,[RBP+0x20] in each). The prior "phase 1 =
             // 2-arg" form was a decompiler artifact that left R8 uninitialized.
+            // FIX(lead 2026-07-20, bug-class #6): slot +0x30 is
+            // Transition(node, sm, time/out, idx) — idx rides R9D, also dropped.
             while (((it < 0) ||
-                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int32_t*)>(*p + 0x30))(
-                        p, stackPtrField, outState) == 0)) &&
+                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int32_t*, int)>(*p + 0x30))(
+                        p, stackPtrField, outState, it) == 0)) &&
                    ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
                 it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
                     p, (int)*reinterpret_cast<char*>(state + 0x50));
@@ -381,6 +391,17 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     }
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t st0 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
+    if (!st0) {  // SA-guard: no StateMachineComponent on the entity (crashed
+                 // live 2026-07-20 on the first upgrade click, pre-7d98 fill)
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            fprintf(stderr, "[SM-dfa0] entity has no StateMachineComponent — "
+                            "pump skipped\n");
+            fflush(stderr);
+        }
+        return;
+    }
     char cVar5 = *reinterpret_cast<char*>(st0 + 0x52);
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st0 + 0x50);
     if (cVar5 == 6) return;

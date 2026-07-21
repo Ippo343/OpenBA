@@ -1019,9 +1019,13 @@ void EnsureGlobals() {
 void W_Slot4(void* self) {
     EnsureGlobals();
     if (!self || !g_TypeId_ComponentEntity || !g_TypeId_ToolUI) return;
+    if (!SA_DialogEntityAlive(self)) return;
     EntityUI_Slot4(reinterpret_cast<EntityUI*>(self));
 }
-void W_Slot6(void* self) { if (self) EntityUI_Slot6(reinterpret_cast<EntityUI*>(self)); }
+void W_Slot6(void* self) {
+    if (!self || !SA_DialogEntityAlive(self)) return;
+    EntityUI_Slot6(reinterpret_cast<EntityUI*>(self));
+}
 // Slot7 = page switching. The info panel's element tree has the entity/citizen
 // content on a non-default page of the "pages" PageElement (e.g. the tabbed
 // "pageTabGroup" for citizens). Slot7 reads the entity's default page and calls
@@ -1032,6 +1036,7 @@ void W_Slot6(void* self) { if (self) EntityUI_Slot6(reinterpret_cast<EntityUI*>(
 void W_Slot7(void* self) {
     EnsureGlobals();
     if (!self || !g_TypeId_UIDescription) return;
+    if (!SA_DialogEntityAlive(self)) return;
     EntityUI_Slot7(reinterpret_cast<EntityUI*>(self));
 }
 // +0x40 per-frame: the framework dispatches only vtable+0x40 each frame, so drive

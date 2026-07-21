@@ -10,10 +10,16 @@
 //   serialized fields at +0x20..+0x2c are left uninitialised by the exe and
 //   filled by Serialize on load. We zero them for safety.)
 // Serialize (vtable +0x28, 0x14012a3d0), stream order:
-//   int   @ +0x20   (maxFamilies / capacity)
-//   int   @ +0x24   (max occupants)
-//   float @ +0x28
-//   float @ +0x2c
+//   int   @ +0x20   maxFamilies — family-slot count; ResidenceComponent's
+//                    Serialize resizes the slot array (+0x50/+0x58) to this.
+//                    Boarding house = maxFamilies > 1; wood/stone house = 1.
+//                    No special boarding-house code exists in retail.
+//   int   @ +0x24   maxResidentsPerFamily — read by the slot-full test
+//                    0x14012a4f0 (citizencomponent.cpp): slot is full when
+//                    occupantCount >= this.
+//   float @ +0x28   coldThreshold — temp below which the house burns fuel
+//                    (stone houses ship lower values in data = less fuel)
+//   float @ +0x2c   heatInterval — fuel-consumption period (heat tick)
 // GetVersion (vtable +0x18, 0x14012a460): mov eax,2; ret -> file version 2.
 // Dtor (vtable +0x00, 0x1400375b0): vtable reset + External::~External + free
 //   (no owned String/array fields).

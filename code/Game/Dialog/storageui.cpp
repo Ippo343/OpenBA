@@ -703,7 +703,7 @@ static void Trace(const char* what, void* self) {
 // idx4 (+0x20): setup — build+size the table, cache row ptrs, then Startup.
 void W_Serialize(void* self) {
     EnsureGlobals();
-    if (!self || !Ready()) { Trace("Serialize SKIP", self); return; }
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) { Trace("Serialize SKIP", self); return; }
     Trace("Serialize", self);
     StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));
 }
@@ -712,7 +712,7 @@ void W_Serialize(void* self) {
 // StorageUI_Serialize via vtable[7]).
 void W_Startup(void* self) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
 }
 
@@ -721,7 +721,7 @@ void W_Startup(void* self) {
 // the item counts stay live.
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
-    if (!self || !Ready()) return;
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<int*>(s + 0x38) == 0) {
         StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));

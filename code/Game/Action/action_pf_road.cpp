@@ -582,6 +582,25 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     void* build = nullptr;
     if (fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, tid)) build = buildRaw;
 
+    // [SA-GUARD 2026-07-20] Retail reads build+((p3+3)*0x10) unguarded — its
+    // data guarantees the +0x18 component passes the 1c7938 check. Standalone
+    // component wiring can miss it (crashed live: ClearStorage_Execute on the
+    // upgrade haul-away resolving the house position). Zero-vec fallback,
+    // same policy as the ModelComponent fallback below.
+    if (!build) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            std::fprintf(stderr, "[Pf2e20] +0x18 comp failed 1c7938 check "
+                         "(self=%p raw=%p tid=0x%x) — zero-vec fallback\n",
+                         self, buildRaw, tid);
+            std::fflush(stderr);
+        }
+        int zero = 0;
+        if (s_fn_Vec3CtorScalar) s_fn_Vec3CtorScalar(retVec3, &zero);
+        return retVec3;
+    }
+
     int local_68 = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(build) +
                                            (static_cast<int64_t>(p3) + 3) * 0x10);
 

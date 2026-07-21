@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Local function pointers (resolved once on first use)
@@ -329,10 +330,20 @@ found_dest_storage:
         void* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
+        if (std::getenv("BANISHED_DESTROY_TRACE")) {
+            std::fprintf(stderr, "[ClearStorage] FindPath args: citizen=%p pathType=%d "
+                         "dest=%p work=%p matDesc=%p count=%d src=(%.1f,%.1f,%.1f) "
+                         "dst=(%.1f,%.1f,%.1f)\n",
+                         citizenVal, pathType, destEntity, workEntity,
+                         (void*)itemEntity, availCount,
+                         searchPos[0], searchPos[1], searchPos[2],
+                         destPos[0], destPos[1], destPos[2]);
+            std::fflush(stderr);
+        }
         uint32_t pathResult = 0;
         fn_Pathfinding_FindPath(&pathResult, &citizenVal, pathType, &destEntityCopy,
                                 searchPos, &workEntity, (float*)&destPos,
-                                (long)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
+                                (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
         // Get the Slot10 result (vtable +0x50)
         fn_InternalBasePtr_CheckPtr(citizenAI);

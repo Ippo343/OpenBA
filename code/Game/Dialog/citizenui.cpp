@@ -813,14 +813,22 @@ void EnsureGlobals() {
     }
 }
 
-void W_Slot4(void* self) { EnsureGlobals(); if (self) CitizenUI_Slot4(reinterpret_cast<CitizenUI*>(self)); }
-void W_Slot6(void* self) { if (self) CitizenUI_Slot6(reinterpret_cast<CitizenUI*>(self)); }
+void W_Slot4(void* self) {
+    EnsureGlobals();
+    if (!self || !SA_DialogEntityAlive(self)) return;
+    CitizenUI_Slot4(reinterpret_cast<CitizenUI*>(self));
+}
+void W_Slot6(void* self) {
+    if (!self || !SA_DialogEntityAlive(self)) return;
+    CitizenUI_Slot6(reinterpret_cast<CitizenUI*>(self));
+}
 void W_Slot7(void* self) {
     EnsureGlobals();
     // ProfessionComponent is not required — its only use (action text) is null-guarded
     // and its global has a safe static-0 fallback (see EnsureGlobals).
     if (!self || !g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
         || !g_TypeId_CitizenComponent_FC) return;
+    if (!SA_DialogEntityAlive(self)) return;
     CitizenUI_Slot7(reinterpret_cast<CitizenUI*>(self));
 }
 void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }   // +0x40 per-frame

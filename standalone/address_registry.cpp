@@ -511,6 +511,7 @@ extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 C
 extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
 extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); GATED default-OFF on BANISHED_SELECTION_OUTLINE
 extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
+extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers + UpgradeUIConfig vtable (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY).
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -641,6 +642,9 @@ static void RegisterCodeFunctions() {
     RegisterKeystoneARemovalBatch();// RemovalTool::CalcPath 1035e0 + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0).
     //   Lead-verified offset-by-offset vs disasm (dfa0 had 2 crash bugs + 2 fidelity bugs, all fixed).
     //   Player clearance tool — not autostart-reached, so registering only affects the removal path.
+    RegisterDestroySmBatch();      // Upgrade path: DestroyComponent state handlers (11d7b0/11cfd0/
+    //   11cec0/11cc70/11c120) + guards (11da80/11e600/11e5b0) + vtable_UpgradeUIConfig 14015df60.
+    //   Runtime behavior gated by BANISHED_LIVE_DESTROY (opt-in); see reg_destroy_sm.cpp.
     RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
     RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
     RegisterPlayerTradeBatch();    // r2c trade: 66800 EditTool + 666b0 EntityUI + AVL family (retrace disasm-verified, typo 2e30/c690->102e30/2c690 caught)

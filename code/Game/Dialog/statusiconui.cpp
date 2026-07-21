@@ -267,13 +267,17 @@ void EnsureGlobals() {
 }
 
 // +0x20 setup: cache the "icons" group child elements into self+0x30 (array) / +0x38 (count).
-void W_Serialize(void* self) { EnsureGlobals(); if (self) StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self)); }
+void W_Serialize(void* self) {
+    EnsureGlobals();
+    if (!self || !SA_DialogEntityAlive(self)) return;
+    StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self));
+}
 
 // +0x38: the visibility update. Lazily runs Serialize once if the setup slot didn't populate
 // the icon array (self+0x30 null), so the per-frame path is robust even if idx4 never fired.
 void W_Startup(void* self) {
     EnsureGlobals();
-    if (!self || !g_TypeId_ComponentEntity) return;
+    if (!self || !g_TypeId_ComponentEntity || !SA_DialogEntityAlive(self)) return;
     if (*reinterpret_cast<uint64_t*>((char*)self + 0x30) == 0)
         StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self));
     StatusIconUI_Startup(reinterpret_cast<StatusIconUI*>(self));

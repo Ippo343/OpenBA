@@ -19,6 +19,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Sub-callee / dispatch-slot typedefs
@@ -432,6 +434,13 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     if (obj) {
         uint64_t dstInner = (dstLoc) ? reinterpret_cast<uint64_t>(*dstLoc) : 0; // *dstLoc (0xbfd5b)
         uint64_t entInner = *reinterpret_cast<uint64_t*>(entity);              // *(entity) (0xbfd66)
+        if (std::getenv("BANISHED_DESTROY_TRACE")) {
+            std::fprintf(stderr, "[WAP2] Pickup ctor: ent=%llx dst=%llx matDesc=%llx "
+                         "count=%d animal=%d\n",
+                         (unsigned long long)entInner, (unsigned long long)dstInner,
+                         (unsigned long long)materialDesc, matCount, (int)useAnimal);
+            std::fflush(stderr);
+        }
         if (s_wap2_Pickup)
             pick = s_wap2_Pickup(obj, &entInner, &dstInner,
                                  static_cast<int64_t>(materialDesc),

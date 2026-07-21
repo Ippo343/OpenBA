@@ -208,7 +208,10 @@ UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
 // to avoid a duplicate REGISTER_TYPE(DebugUI).
 // CitizenUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/citizenui.cpp
 // (wires Slot4/6/7/9 so the clicked-citizen panel shows name/age/profession/hearts).
-UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
+// DestroyUI: PROMOTED to a real per-class standalone vtable in
+// code/Game/Dialog/destroyui.cpp (wires Slot4/7/8/9 — demolish/reclaim/rebuild
+// panel with live progress bars). Stub registration removed to avoid a
+// duplicate REGISTER_TYPE(DestroyUI).
 // EntityUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/entityui.cpp
 // (wires Slot4 so the entity panel gets its +0x30 entity ref → correct positioning).
 // EventLogUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/eventlogui.cpp
@@ -631,7 +634,11 @@ REGISTER_TYPE(ToolUI, "UI::DialogController",
 //      General statistics / Professions / Production / Inventory / Graph /
 //      Agriculture panel now populates from the full reimplementation. ----
 UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
-UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
+// UpgradeUI: PROMOTED to a real per-class standalone vtable in
+// code/Game/Dialog/upgradeui.cpp (wires Slot4/8/9 — the wood→stone upgrade
+// button; click writes the target template into DestroyComponent+0x60 and
+// pumps the BuildState state machine). Stub registration removed to avoid a
+// duplicate REGISTER_TYPE(UpgradeUI).
 // ---- WorkPlaceUI: PROMOTED to real SA vtable (workplaceui.cpp) — the construction
 //      workplace spinner panel now self-hides once a building is complete (its
 //      profession clears), so finished houses/barns/piles show only center/pin/close
@@ -690,7 +697,7 @@ namespace uistub_BuildUI {
     }
     void Slot4(void* self) {
         EnsureTypeIds();
-        if (!self || !HardIdsReady()) return;
+        if (!self || !HardIdsReady() || !SA_DialogEntityAlive(self)) return;
         // Idempotent: the framework dispatches setup on attach; a re-drive would
         // append a second copy of the storage rows to self+0x30 (count never reset)
         // — exactly the ProfessionUI double-populate class. Skip if already set up.
@@ -712,11 +719,12 @@ namespace uistub_BuildUI {
         // Per-frame update: the framework fires this every tick, including before
         // Slot4 populates (self+0x40 progress / self+0x30 rows still null). Guard.
         if (!IsSetUp(self) || !HardIdsReady()) return;
+        if (!SA_DialogEntityAlive(self)) return;
         BuildUI_Slot7(reinterpret_cast<BuildUI*>(self));
     }
     void Slot9(void* self, uint64_t p2, int p3, int p4) {
         EnsureTypeIds();
-        if (!self || !g_TypeId_ComponentEntity) return;
+        if (!self || !g_TypeId_ComponentEntity || !SA_DialogEntityAlive(self)) return;
         BuildUI_Slot9(reinterpret_cast<BuildUI*>(self), p2, p3, p4);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
@@ -780,7 +788,11 @@ UI_DIALOG_STUB(ControlUIConfig,       "UI::DialogControllerConfig", 0x28);
 // code/Game/Dialog/resourcelimitui.cpp.
 UI_DIALOG_STUB(ResourceLimitUIConfig, "UI::DialogControllerConfig", 0x28);
 UI_DIALOG_STUB(StatusIconUIConfig,    "UI::DialogControllerConfig", 0x28);
-UI_DIALOG_STUB(UpgradeUIConfig,       "UI::DialogControllerConfig", 0x28);
+// UpgradeUIConfig: PROMOTED to the real config class in
+// code/Game/Dialog/upgradeuiconfig.cpp (Serialize deserializes the upgrade
+// target ComponentEntity template into +0x20 — the zero-fill stub left it null,
+// so the upgrade button could never resolve a target). Stub registration
+// removed to avoid a duplicate REGISTER_TYPE(UpgradeUIConfig).
 
 // ---- External-based tutorial dialogs (parents are abstract External bases) --
 UI_DIALOG_STUB(TutorialGoalDialog,  "TutorialGoal",         0x40);

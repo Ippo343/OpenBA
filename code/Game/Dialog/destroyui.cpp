@@ -1,4 +1,4 @@
-// engine/src/ui/destroyui.cpp
+// code/Game/Dialog/destroyui.cpp
 // Clean reimplementation of DestroyUI game logic.
 //
 // DestroyUI (0x78 bytes) — building destruction/reclaim panel.
@@ -13,6 +13,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -62,6 +64,7 @@ static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
 static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
 {
     if (!destroyComp) return false;
+    if (!g_TypeId_DestroyComponent) return false;  // SA-guard (see EnsureGlobals)
 
     // Check if description is of upgrade type
     void* desc = *(void**)((uintptr_t)destroyComp + 0x18);
@@ -184,289 +187,21 @@ static void DestroyComponent_Destroy_Impl(void* destroyComp)
 }
 
 // ============================================================
-// StateMachine_Tick — resolved locally for StartUpgrade
+// 0x14011dfa0 state-machine driver — moved (2026-07-20)
 // ============================================================
-// Located at 0x1400a9660 in Application-x64.exe.
-// Signature: (stateMachine*, Time*, bool processTransitions, bool processActions)
-// NOTE: Second arg is a POINTER to Time (LEA RDX), not a Time value.
-typedef void (*fn_StateMachine_Tick_Local_t)(void* stateMachine, void* timePtr,
-                                             char param3, char param4);
-static fn_StateMachine_Tick_Local_t g_StateMachine_Tick = nullptr;
-
-// ============================================================
-// State machine node vtable layout (linked list at BuildState+0x48)
-// ============================================================
-// Each node in the state machine linked list has:
-//   vtable+0x00: CanHandle(node, fromState) -> int (state index, or -1 if can't handle)
-//   vtable+0x08: (next pointer access, offset +0x08 = node->prev)
-//   vtable+0x10: (linked list next, offset +0x10 = node->next)
-//   vtable+0x18: HasExitHandler(node, smRef) -> bool
-//   vtable+0x20: CanTransition(node, smRef) -> bool
-//   vtable+0x28: DoTransition(node, smRef, fromState [, targetState]) -> void
-//   vtable+0x30: OnFirstEntry(node, smRef [, time]) -> bool
+// An earlier decompile-based port of 0x14011dfa0 ("StartUpgrade" — really the
+// generic BuildState state-machine driver) lived here as
+// DestroyComponent_StartUpgrade_Impl + a ProcessStateMachine helper. It
+// diverged from the disassembly on the damaged-building short-circuit: per the
+// disasm, state 6 is a plain no-op return and state 7 only dispatches
+// 0x14011e4d0 — the old port ran the full upgrade pump for both. The
+// authoritative, disasm-verified port is RemovalCalc_StateMachine_dfa0 in
+// code/Game/Player/keystone_a_removalcalcpath.cpp, registered for 0x14011dfa0;
+// UpgradeUI_OnRemove reaches it via ResolveAddr(Module::Exe, 0x14011dfa0).
 //
-// State bytes in BuildState:
-//   +0x50: previousState (int8)
-//   +0x51: currentSubState (int8) — returned by CanHandle
-//   +0x52: targetState (int8) — -1 (0xFF) = needs processing
-//   +0x53: transitionTarget (int8)
-
-// ============================================================
-// ProcessStateMachine — inner state machine transition loop
-// ============================================================
-// Runs the state machine through its transition cycle.
-// This is the core loop that appears twice in StartUpgrade:
-// once to exit the current state, and once to enter the new state.
-//
-// Parameters:
-//   buildState: pointer to BuildState component
-//   smPtrAddr: address of the state machine head pointer (BuildState+0x48)
-//   isFirstCall: true on first invocation (triggers OnFirstEntry call)
-//   time: optional Time value (only used with OnFirstEntry on second call)
-static void ProcessStateMachine(uintptr_t buildState, uintptr_t* smPtrAddr,
-                                 bool isFirstCall, void* time) {
-    if (*(int8_t*)(buildState + 0x52) < 0) goto first_entry_check;
-
-    do {
-        do {
-            // --- Exit current state if state is valid ---
-            if (*(int8_t*)(buildState + 0x50) >= 0) {
-                int subState = (int)*(int8_t*)(buildState + 0x51);
-                uintptr_t node = *smPtrAddr;
-
-                // Walk linked list to find handler that can handle current state
-                // and has CanTransition returning true
-                while (true) {
-                    if (subState >= 0) {
-                        // vtable+0x20: CanTransition(node, smRef, subState) -> bool
-                        // NOTE: R8 carries subState as implicit 3rd arg (dispatch index).
-                        typedef bool (*fn_CanTransition_t)(void* node, void* smRef, int subState);
-                        bool canTrans = ((fn_CanTransition_t)(*(void**)(*(uintptr_t*)node + 0x20)))
-                                        ((void*)node, (void*)smPtrAddr, subState);
-                        if (canTrans) break;
-                    }
-                    // Move to next node in linked list (offset +0x08)
-                    node = *(uintptr_t*)(node + 0x08);
-                    if (node == 0) break;
-                    // vtable+0x00: CanHandle(node, fromState) -> int
-                    typedef int (*fn_CanHandle_t)(void* node, int fromState);
-                    subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
-                               ((void*)node, (int)*(int8_t*)(buildState + 0x50));
-                }
-
-                // If target state is valid, call DoTransition
-                if (*(int8_t*)(buildState + 0x53) >= 0) {
-                    // vtable+0x28: DoTransition(node, smRef, fromState [, targetState])
-                    typedef void (*fn_DoTransition_t)(void* node, void* smRef,
-                                                       int fromState, int targetState);
-                    uintptr_t headNode = *smPtrAddr;
-                    ((fn_DoTransition_t)(*(void**)(*(uintptr_t*)headNode + 0x28)))
-                        ((void*)headNode, (void*)smPtrAddr,
-                         (int)*(int8_t*)(buildState + 0x51),
-                         (int)*(int8_t*)(buildState + 0x53));
-                }
-            }
-
-            // --- Update previousState from targetState ---
-            *(int8_t*)(buildState + 0x50) = *(int8_t*)(buildState + 0x52);
-
-            // --- Walk to tail of linked list ---
-            uintptr_t current = *smPtrAddr;
-            uintptr_t next = *(uintptr_t*)(current + 0x10);  // offset +0x10 = next
-            while (next != 0) {
-                current = next;
-                next = *(uintptr_t*)(current + 0x10);
-            }
-            *smPtrAddr = current;
-
-            // --- Call CanHandle on tail node with targetState ---
-            {
-                typedef int8_t (*fn_CanHandle_t)(void* node, int fromState);
-                int8_t result = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)current)))
-                                ((void*)current, (int)*(int8_t*)(buildState + 0x52));
-                *(int8_t*)(buildState + 0x51) = result;
-
-                // If can't handle, walk back through prev pointers
-                while (result < 0) {
-                    uintptr_t prev = *(uintptr_t*)(*smPtrAddr + 0x08);
-                    *smPtrAddr = prev;
-                    result = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)prev)))
-                             ((void*)prev, (int)*(int8_t*)(buildState + 0x50));
-                    *(int8_t*)(buildState + 0x51) = result;
-                }
-            }
-
-            // --- Walk list to check HasExitHandler for new state ---
-            {
-                int subState = (int)*(int8_t*)(buildState + 0x51);
-                uintptr_t node = *smPtrAddr;
-                *(uint16_t*)(buildState + 0x52) = 0xFFFF;  // reset target+transition
-
-                while (true) {
-                    if (subState >= 0) {
-                        // vtable+0x18: HasExitHandler(node, smRef, subState) -> bool
-                        // NOTE: R8 carries subState as implicit 3rd arg (dispatch index).
-                        typedef bool (*fn_HasExit_t)(void* node, void* smRef, int subState);
-                        bool hasExit = ((fn_HasExit_t)(*(void**)(*(uintptr_t*)node + 0x18)))
-                                       ((void*)node, (void*)smPtrAddr, subState);
-                        if (hasExit) break;
-                    }
-                    node = *(uintptr_t*)(node + 0x08);
-                    if (node == 0) break;
-                    typedef int (*fn_CanHandle_t)(void* node, int fromState);
-                    subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
-                               ((void*)node, (int)*(int8_t*)(buildState + 0x50));
-                }
-            }
-        } while (*(int8_t*)(buildState + 0x52) >= 0);
-
-first_entry_check:
-        // --- OnFirstEntry callback (only on first invocation) ---
-        if (isFirstCall && *(int8_t*)(buildState + 0x50) >= 0) {
-            int subState = (int)*(int8_t*)(buildState + 0x51);
-            uintptr_t node = *smPtrAddr;
-
-            while (true) {
-                if (subState >= 0) {
-                    // vtable+0x30: OnFirstEntry(node, smRef, time, subState) -> bool
-                    // NOTE: Original passes 4 args — Ghidra drops both R8 (time) and R9 (subState).
-                    // R9 is the state dispatch index used by the controller's jump table.
-                    typedef bool (*fn_OnFirstEntry_t)(void* node, void* smRef, void* time, int subState);
-                    bool result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
-                                  ((void*)node, (void*)smPtrAddr, time, subState);
-                    if (result) break;
-                }
-                node = *(uintptr_t*)(node + 0x08);
-                if (node == 0) break;
-                typedef int (*fn_CanHandle_t)(void* node, int fromState);
-                subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
-                           ((void*)node, (int)*(int8_t*)(buildState + 0x50));
-            }
-            isFirstCall = false;
-        }
-    } while (*(int8_t*)(buildState + 0x52) >= 0);
-}
-
-// ============================================================
-// DestroyComponent_StartUpgrade (0x14011dfa0)
-// ============================================================
-// Initiates an upgrade on a building by forcing its BuildState
-// state machine to transition to upgrade state (state 3).
-//
-// Logic:
-// 1. Find BuildState on the entity at destroyComp+0x10
-// 2. Read current state byte:
-//    - If state == 6 (damaged): check again, if still 6 or 7, call Destroy instead
-//    - Otherwise: proceed with upgrade transition
-// 3. Run the state machine exit sequence (process current state exit)
-// 4. If sub-state is negative after exit: call StateMachine_Tick to settle
-// 5. Request transition to state 3 (upgrade) via sm->vtable[1]
-// 6. Run the state machine entry sequence (process new state entry)
-//
-// Original: 0x14011dfa0 (177 lines in Ghidra).
-void DestroyComponent_StartUpgrade_Impl(void* destroyComp) {
-    // --- Resolve StateMachine_Tick if not already done ---
-    if (!g_StateMachine_Tick) {
-        g_StateMachine_Tick = reinterpret_cast<fn_StateMachine_Tick_Local_t>(
-            ResolveAddr(Module::Exe, 0x1400a9660));
-    }
-
-    // --- Find BuildState component on entity ---
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
-    uint64_t bsRef = 0;
-    fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef);
-    fn_InternalBasePtr_CheckPtr(&bsRef);
-
-    uintptr_t buildState = bsRef;
-
-    // --- Read current state byte ---
-    int8_t stateByte = *(int8_t*)(buildState + 0x52);
-    if (stateByte < 0) {
-        stateByte = *(int8_t*)(buildState + 0x50);
-    }
-
-    if (stateByte == 6) {
-        // State is 6 (damaged) — double-check
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
-        fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef);
-        fn_InternalBasePtr_CheckPtr(&bsRef);
-        buildState = bsRef;
-
-        stateByte = *(int8_t*)(buildState + 0x52);
-        if (stateByte < 0) {
-            stateByte = *(int8_t*)(buildState + 0x50);
-        }
-
-        if (stateByte == 6) {
-            // Still state 6 — check for state 7
-            fn_InternalBasePtr_CheckPtr(&bsRef);
-            stateByte = *(int8_t*)(buildState + 0x52);
-            if (stateByte < 0) {
-                stateByte = *(int8_t*)(buildState + 0x50);
-            }
-            if (stateByte != 7) {
-                // Not state 7 either — proceed with upgrade (fall through below)
-                goto do_upgrade;
-            }
-        }
-        // State is 6 or 7 — destroy instead of upgrade
-        DestroyComponent_Destroy_Impl(destroyComp);
-        return;
-    }
-
-do_upgrade:
-    // --- Phase 1: Exit current state ---
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
-    uint64_t bsRef2 = 0;
-    fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef2);
-
-    // Create zero Time for state machine operations
-    int64_t zeroTime = 0;
-    fn_Time_Ctor_Float((void*)&zeroTime, 0.0f);
-
-    fn_InternalBasePtr_CheckPtr(&bsRef2);
-    buildState = bsRef2;
-    uintptr_t* smPtrAddr = (uintptr_t*)(buildState + 0x48);
-
-    // Run the state machine exit sequence
-    // NOTE: Original always passes &zeroTime to OnFirstEntry (Ghidra drops R8).
-    ProcessStateMachine(buildState, smPtrAddr, true, &zeroTime);
-
-    // --- Phase 2: Settle state machine if sub-state is negative ---
-    fn_InternalBasePtr_CheckPtr(&bsRef2);
-    buildState = bsRef2;
-
-    if (*(int8_t*)(buildState + 0x51) < 0) {
-        int64_t tickTime = 0;
-        fn_Time_Ctor_Float((void*)&tickTime, 0.0f);
-        if (g_StateMachine_Tick) {
-            g_StateMachine_Tick((void*)(buildState + 0x48), &tickTime, 0, 0);
-        }
-    }
-
-    // --- Phase 3: Request transition to state 3 (upgrade) ---
-    int targetState = 3;
-    // vtable[1]: RequestTransition(node, currentSubState, &targetState)
-    uintptr_t headNode = *(uintptr_t*)(buildState + 0x48);
-    typedef int (*fn_RequestTransition_t)(void* node, int currentState, int* targetState);
-    int result = ((fn_RequestTransition_t)(*(void**)(*(uintptr_t*)headNode + 0x08)))
-                 ((void*)headNode, (int)*(int8_t*)(buildState + 0x51), &targetState);
-
-    if (result >= 0) {
-        *(int8_t*)(buildState + 0x53) = (int8_t)result;
-        *(int8_t*)(buildState + 0x52) = (int8_t)targetState;
-    }
-
-    // --- Phase 4: Enter new state ---
-    int64_t entryTime = 0;
-    fn_Time_Ctor_Float((void*)&entryTime, 0.0f);
-
-    fn_InternalBasePtr_CheckPtr(&bsRef2);
-    buildState = bsRef2;
-    smPtrAddr = (uintptr_t*)(buildState + 0x48);
-
-    ProcessStateMachine(buildState, smPtrAddr, true, &entryTime);
-}
+// BuildState state bytes (used by the helpers in this file):
+//   +0x50 previousState, +0x51 currentSubState,
+//   +0x52 targetState (-1 = needs processing), +0x53 transitionTarget
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -508,12 +243,13 @@ void DestroyUI_Slot4(DestroyUI* self) {
 
     // progressRemove → +0x30
     self->data30 = FindElemByName(dialogElem, "progressRemove");
-    // Set progress max at element +0x124
-    *(float*)(*(uintptr_t*)&self->data30 + 0x124) = 1.0f;
+    // Set progress max at element +0x124 (SA-guard: retail derefs blindly;
+    // skip when the element is missing from the bound dialog)
+    if (self->data30) *(float*)(*(uintptr_t*)&self->data30 + 0x124) = 1.0f;
 
     // progressDestruct → +0x38
     self->data38 = FindElemByName(dialogElem, "progressDestruct");
-    *(float*)(*(uintptr_t*)&self->data38 + 0x124) = 1.0f;
+    if (self->data38) *(float*)(*(uintptr_t*)&self->data38 + 0x124) = 1.0f;
 
     // --- Text elements (stored as InternalBasePtr) ---
     self->data40 = FindElemAsBasePtr(dialogElem, "textRemove");
@@ -549,7 +285,8 @@ void DestroyUI_Slot4(DestroyUI* self) {
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
 
     bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
-    bool compFlag = *(uint8_t*)((uintptr_t)destroyComp + 0x50) != 0;
+    // SA-guard: entity may have no DestroyComponent in standalone
+    bool compFlag = destroyComp && *(uint8_t*)((uintptr_t)destroyComp + 0x50) != 0;
 
     if (canReclaim || compFlag) {
         // Hide the reclaim button (SetFlagsOnOff: set flag 1 = hidden)
@@ -579,11 +316,14 @@ void DestroyUI_Slot7(DestroyUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find ConsumeProduceComponent and Destroy component
+    // Find StorageComponent and Destroy component. (Ghidra-verified: retail
+    // 0x140065b00 calls FUN_140006270, the StorageComponent finder — the
+    // original port's ConsumeProduce finder was wrong.)
     void* smComp = nullptr;
-    fn_FindComponent_ConsumeProduce(entityInternal, &smComp);
+    fn_FindComponent_Storage(entityInternal, &smComp);
     void* destroyComp = nullptr;
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
+    if (!destroyComp) return;  // SA-guard: +0x54/+0x58 are read blindly below
 
     // Check if building can be reclaimed
     bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
@@ -774,6 +514,12 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
     // Find DestroyComponent on entity
     void* destroyComp = nullptr;
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
+    if (std::getenv("BANISHED_DESTROY_TRACE")) {
+        std::fprintf(stderr, "[DestroyUI] click id=0x%x destroyComp=%p\n",
+                     param4, destroyComp);
+        std::fflush(stderr);
+    }
+    if (!destroyComp) return;  // SA-guard
 
     // Dispatch based on button ID
     if (param4 == 0x1771) {
@@ -784,3 +530,149 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
         DestroyComponent_Destroy_Impl(destroyComp);
     }
 }
+
+// ============================================================
+// Standalone promotion — real DestroyUI vtable (2026-07-20)
+// ============================================================
+// Retail vtable @ 0x14015bb00 (11 slots): overrides 0,1,2,4,7,9; slots
+// 3,5,6,8,10 are inherited UI::DialogController base thunks in the exe. In
+// standalone we mirror the residenceui_sa promotion pattern: wire the ported
+// Slot4/7/9 and drive the refresh from slot 8 (OnUpdate) — element cache is
+// built once (Slot4, guarded on +0x30 still null), then the visibility state
+// machine (Slot7) runs every frame. Replaces the UI_DIALOG_STUB(DestroyUI, ...)
+// no-op registration in ui_dialog_stub_factories.cpp.
+#include "Object/factory_registration.h"
+
+namespace destroyui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+// Standalone-local fallbacks for exe-.rdata type-id globals that resolve NULL.
+static uint32_t s_ceTid = 0;
+static uint32_t s_ddTid = 0;   // DestroyDescription (slot 0x1401c7628 — the
+                               // misleadingly-named g_TypeId_DestroyComponent)
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("DestroyUI");
+    return c;
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    // Fields +0x30..+0x70 are unowned element references — nothing to free.
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void EnsureGlobals() {
+    if (!g_TypeId_ComponentEntity) {
+        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
+    }
+    // CanRebuild_Impl derefs *g_TypeId_DestroyComponent (= DestroyDescription's
+    // slot 0x1401c7628, null in standalone) — crashed live 2026-07-20 once
+    // Slot7 started running per-frame. Point it at the name-resolved id.
+    if (!g_TypeId_DestroyComponent) {
+        s_ddTid = ::Object::ResolveTypeIdByNameLazy("DestroyDescription");
+        if (s_ddTid) g_TypeId_DestroyComponent = &s_ddTid;
+    }
+}
+
+bool Ready() {
+    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
+        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor
+        && fn_InternalBasePtr_CheckPtr && fn_Element_SetFlagsOnOff;
+}
+
+// SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction
+// (upgrade demolishes the house while its panel is open). IsDerivedFrom(null)
+// crashes in Runtime — bail instead; the panel simply stops refreshing.
+bool DataSourceAlive(void* self) {
+    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+    if (!e) return false;
+    // Marked-for-removal (entity+0x40 bit 0x400): components may already be
+    // torn down while the entity awaits the EntityList drain.
+    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+        return false;
+    return true;
+}
+
+// idx4 (+0x20): find + cache the named elements, set button ids.
+void W_Slot4(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x20))
+        return;  // dialog element tree not bound yet
+    DestroyUI_Slot4(reinterpret_cast<DestroyUI*>(self));
+}
+
+// idx7 (+0x38): visibility/progress state machine.
+void W_Slot7(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
+    DestroyUI_Slot7(reinterpret_cast<DestroyUI*>(self));
+}
+
+// idx8 (+0x40): per-frame. Build the element cache once (+0x30 still 0), then
+// keep the panel visibility/progress live every frame.
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
+        W_Slot4(self);
+        if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) return;  // build failed
+    }
+    DestroyUI_Slot7(reinterpret_cast<DestroyUI*>(self));
+}
+
+// idx9 (+0x48): button-click dispatch (reclaim 0x1771 / rebuild 0x1772 /
+// destroy 0x1773). Dispatched (self, &elementPtr, msg, id, x, y).
+void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
+    EnsureGlobals();
+    if (!self || !Ready() || !DataSourceAlive(self)) return;
+    DestroyUI_Slot9(reinterpret_cast<DestroyUI*>(self),
+                    reinterpret_cast<uint64_t>(p2), msg, id);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x78); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x78), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace destroyui_sa
+
+REGISTER_TYPE(DestroyUI, "UI::DialogController",
+              &destroyui_sa::Factory, &destroyui_sa::InPlace);
