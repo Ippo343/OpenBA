@@ -80,10 +80,15 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
 
 void PickingComponent_OnCreate(PickingComponent* self) {
     if ((int)self->pickingId >= 0) {
+        bool removed = false;
         if (s_fn_RemoveMesh && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
             s_fn_RemoveMesh(pickingScene, (uint32_t)self->pickingId);
+            removed = true;
         }
+        if (std::getenv("BANISHED_DESTROY_TRACE"))
+            std::fprintf(stderr, "[PickMesh] OnCreate: meshId=%d removed=%d RemoveMeshFn=%p\n",
+                         (int)self->pickingId, removed, (void*)s_fn_RemoveMesh);
         self->pickingId = -1;
     }
 }
@@ -270,9 +275,20 @@ void PickingComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
-    // Picking::Scene::RemoveMesh — dispatch slot at 0x140152438
-    slot = ResolveAddr(Module::Exe, 0x140152438);
-    if (slot) s_fn_RemoveMesh = *reinterpret_cast<fn_RemoveMesh_t*>(slot);
+    // Picking::Scene::RemoveMesh. The exe dispatch slot 0x140152438 is NOT registered
+    // in standalone, so ResolveAddr(Exe, slot) returned 0 and s_fn_RemoveMesh stayed
+    // null — OnCreate then reset pickingId WITHOUT removing the mesh, so a removed
+    // building's pick mesh dangled in Picking::Scene with userData=freed entity and the
+    // foundation click crashed in EditTool_SelectEntity_Impl (2026-07-21). Resolve the
+    // Runtime export directly instead (verified 0x180125290 = Picking::Scene::RemoveMesh
+    // (Scene*, uint) — the pair of the AddMesh 0x1801252e0 that RegisterMesh uses; the
+    // other RemoveMesh 0x18010c3c0 is Collision::Scene, wrong one).
+    s_fn_RemoveMesh = reinterpret_cast<fn_RemoveMesh_t>(
+        ResolveAddr(Module::Runtime, 0x180125290));
+    if (!s_fn_RemoveMesh) {  // fallback: exe dispatch slot, if it ever gets registered
+        slot = ResolveAddr(Module::Exe, 0x140152438);
+        if (slot) s_fn_RemoveMesh = *reinterpret_cast<fn_RemoveMesh_t*>(slot);
+    }
 
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
