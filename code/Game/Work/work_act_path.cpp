@@ -333,7 +333,9 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
 
     // ============================================================
     // DropOffRawMaterial (0xbfab7-0xbfb1c)
-    //   p2 = &*srcLoc, p3 = &*entity, p4 = materialDesc, p5 = matCount, p6 = 1
+    //   p2 = &*entity (citizen, 0xbfad6→RDX@0xbfaf7), p3 = &*srcLoc (dropoff
+    //   target, 0xbface→R8@0xbfaf3), p4 = materialDesc, p5 = matCount, p6 = 1
+    //   (disasm-verified 2026-07-20; an earlier comment here had p2/p3 swapped)
     // ============================================================
     obj = WAP2_Alloc(0x40, 8);                                         // size 0x40 (0xbfabc LEA ECX,[RDX+0x38])
     void* drop = nullptr;

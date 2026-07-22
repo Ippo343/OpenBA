@@ -882,7 +882,34 @@ static void StorageDisplayComponent_TickVSlot(void* s, void* /*time*/) {
 static void StorageDisplayComponent_OnUpdate2VSlot(void* s) {
     StorageDisplayComponent_OnUpdate2(reinterpret_cast<StorageDisplayComponent*>(s));
 }
+// index 7 (+0x38) — removed-from-world: Scene::RemoveObject every pile-display
+// entry (ids at entry+0x120). Entity teardown dispatches this via MarkForRemoval
+// (0x1400c2ea0: for each component with capability bit 1 — our flags 0xCB have
+// it — call vtable+0x38, THEN set the 0x400 bit). Leaving this slot inert
+// crashed live 2026-07-20: demolishing a building freed the component while its
+// pile meshes stayed registered in the renderer's draw list, and the next
+// GameUpdateLoop::Draw died in Renderer::DrawItemList -> EdgeMeshInstance::Draw
+// -> MeshInstance::GetNodeToWorld -> Transform::Lerp on the freed entries.
+// Wired UNCONDITIONALLY (not only when the display is live): the handler
+// no-ops on an empty/never-populated display array, and teardown safety must
+// not depend on the display feature flag.
+static void StorageDisplayComponent_OnRemovedVSlot(void* s) {
+    if (std::getenv("BANISHED_DESTROY_TRACE")) {
+        uintptr_t a = reinterpret_cast<uintptr_t>(s);
+        int count = *reinterpret_cast<int*>(a + 0x30);
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(a + 0x28);
+        int live = 0;
+        for (int i = 0; i < count && arr; i++)
+            if (*reinterpret_cast<int32_t*>(arr + (uintptr_t)i * 0x128 + 0x120) >= 0) ++live;
+        std::fprintf(stderr, "[StorageDisplay] removed-from-world comp=%p entries=%d "
+                     "sceneObjs=%d\n", s, count, live);
+        std::fflush(stderr);
+    }
+    StorageDisplayComponent_OnCreate(reinterpret_cast<StorageDisplayComponent*>(s));
+}
 static void StorageDisplayComponent_FinishLiveVtable() {
+    StorageDisplayComponent_LiveVtable[7]  =
+        reinterpret_cast<void*>(&StorageDisplayComponent_OnRemovedVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGEDISPLAY")) {
         StorageDisplayComponent_LiveVtable[6]  =
             reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);

@@ -294,26 +294,40 @@ found_dest_storage:
         float destPos[3] = {0.0f, 0.0f, 0.0f};
         uint32_t destCell = 0;
 
+        int dbgBranch = -1, dbgSlot = 0;   // trace: 0=position, 1=findslot
         if (unknownCompIBP == 0) {
             // No position component variant — use positionIBP
             if (positionIBP == 0) {
+                if (std::getenv("BANISHED_DESTROY_TRACE"))
+                    std::fprintf(stderr, "[ClearStorage] EARLY-RET: unknownComp==0 && positionIBP==0 (no dest)\n");
                 return 1;
             }
+            dbgBranch = 0;
             fn_InternalBasePtr_CheckPtr(&positionIBP);
             fn_Entity_GetPosition((void*)*(uintptr_t*)&positionIBP,
                                   &destPos, 0, 0, nullptr);
             destCell = WorldToCell(destPos[0], destPos[1], gridSize);
         } else {
             // Use search position
+            dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
             fn_InternalBasePtr_CheckPtr(&unknownCompIBP);
             void* unkComp = *(void**)&unknownCompIBP;
             int slotIdx = fn_Storage_FindSlot(unkComp, destCell, (float*)&destPos, workTypeId);
+            dbgSlot = slotIdx;
             if (slotIdx < 0) {
+                if (std::getenv("BANISHED_DESTROY_TRACE"))
+                    std::fprintf(stderr, "[ClearStorage] EARLY-RET: FindSlot<0 (destCell=%u searchPos=%.1f,%.1f)\n",
+                                 destCell, searchPos[0], searchPos[1]);
                 return 1;
             }
         }
+        if (std::getenv("BANISHED_DESTROY_TRACE"))
+            std::fprintf(stderr, "[ClearStorage] destPos branch=%d (0=pos/1=slot) slotIdx=%d "
+                         "positionIBP=%p unknownCompIBP=%p destCell=%u destPos=(%.1f,%.1f,%.1f)\n",
+                         dbgBranch, dbgSlot, (void*)positionIBP, (void*)unknownCompIBP,
+                         destCell, destPos[0], destPos[1], destPos[2]);
 
         // Validate the work assignment
         fn_InternalBasePtr_CheckPtr(citizenAI);

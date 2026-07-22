@@ -26,5 +26,15 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2);
 // Startup (vtable +0x38, Slot7): Initialization and dialog positioning.
 // Gets dialog controller, finds ToolUI and PageToggleUI controllers,
 // positions dialog near clicked entity using entity screen rect.
+// Also runs the retail close-on-entity-death branch: an unpinned info panel
+// whose entity died is deselected + closed via EditTool_CloseInfoDialog.
 // Original: 0x1400fcda0
 void EditTool_Startup_Impl(EditTool* self);
+
+// Deselect + close the open info dialog — port of Entity_impl_cc90 (0x1400fcc90).
+// Clears the selection highlight, drops tool+0x28/+0x30, closes the dialog via
+// UI::UserInterface::CloseDialog (which destroys the DialogInstance + controllers).
+// NOT registered at the exe address (it doubles as the per-frame deactivate slot;
+// see standalone/reg_player_render.cpp). dialogPtr = resolved DialogInstance*.
+// Original: 0x1400fcc90
+void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr);

@@ -24,6 +24,9 @@
 void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
+    if (!SA_DialogEntityAlive(self)) return;
+
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -178,6 +181,12 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
 // Original: 0x14005F1F0.
 
 void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
+    // Bail if the datasource entity is gone or marked-for-removal — otherwise the
+    // IsDerivedFrom below runs on a dying entity (crash class 2026-07-21). Reliable
+    // now that removals are one-frame-deferred (entitylist.cpp Step 0): the entity
+    // is valid marked-but-alive memory whenever this per-frame slot fires.
+    if (!SA_DialogEntityAlive(self)) return;
+
     // data38 = progress element InternalPtr
     void* progressElem = (void*)self->data38;
     if (!progressElem) return;

@@ -27,6 +27,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved function pointers (exe-internal, resolved lazily)
@@ -64,6 +65,10 @@ static bool s_initialized = false;
 
 // Forward declaration (non-static: address registered for standalone exe resolution)
 void EntityList_PostUpdateStaging(EntityList* self);
+
+// One-frame-deferred removal drain (relocated retail step-5 tail — see
+// EntityList_Update Step 0). Defined below EntityList_Update, used at its top.
+void EntityList_DrainRemovals(EntityList* self);
 
 // ============================================================
 // EntityList_InitFuncs — resolve all function pointers
@@ -428,6 +433,30 @@ static EntityTreeNode* TreeSuccessor(EntityTreeNode* node) {
 //   4. 5-bucket round-robin: for each bucket, tick processCount entities with vtable[+0x48]
 //   5. If removal list non-empty: PreUpdate again, PostUpdateStaging, then process removals
 void EntityList_Update(EntityList* self, void* time) {
+    // Step 0 (SA DEVIATION — one-frame removal deferral): drain the removal list
+    // that was BUILT LAST FRAME, at the TOP of this frame's update, instead of at
+    // the bottom of the same frame it was built (retail drains at the end — the
+    // 0x1400c4090 `param_1[0x1b]` block after the component loop).
+    //
+    // WHY: an entity is marked-for-removal (0x400) + pushed onto removalList during
+    // its own component tick (destroy SM state-5 -> Destroy_MarkAndPushRemoval).
+    // Retail relies on the open info dialog's STRONG datasource ref to keep the
+    // entity's memory alive (marked-but-alive) until the dialog closes, so retail's
+    // unguarded per-frame dialog slots (e.g. ResidenceUI::Slot7 0x1400B51F0) only
+    // ever read valid memory. In standalone the dialog controllers don't hold that
+    // strong ref, so an end-of-frame drain FREES the entity in the same frame it is
+    // marked — and this frame's later UI pump (GameUpdateLoop step 9) + EditTool
+    // tick (step ~984) then read freed memory (ACCESS_VIOLATION in IsDerivedFrom,
+    // ResidenceUI_Slot7 <- freed entity, 2026-07-21).
+    //
+    // Deferring the free by one frame restores the "marked but alive" window every
+    // SA_DialogEntityAlive guard and the EditTool close-on-entity-death path (Task
+    // #1) depend on: frame N marks; frame N's UI pump + EditTool tick see 0x400 ->
+    // guards bail and the tool closes the panel; frame N+1 drains + frees with no
+    // dialog left pointing at it. Marked entities are inert meanwhile — every update
+    // loop above already skips bit-10 (0x400) entities.
+    EntityList_DrainRemovals(self);
+
     // Step 1: Accumulate time
     self->accumulatedTime += *(int64_t*)time;
 
@@ -562,22 +591,28 @@ void EntityList_Update(EntityList* self, void* time) {
         self->cursor[bucket] = cursorVal;
     }
 
-    // Step 5: Process removal list
-    // Original: if (param_1[0x1b] > 0) { PreUpdate; PostUpdateStaging; then remove each }
+    // Step 5: removal drain DEFERRED to the TOP of the NEXT EntityList_Update (see
+    // EntityList_DrainRemovals call + rationale at the head of this function). What
+    // state-5 pushed onto removalList this frame stays marked-but-alive through this
+    // frame's UI pump + EditTool tick, and is freed at the next frame's Step 0.
+}
+
+// The retail step-5 body (0x1400c4090 tail), relocated so it drains the PRIOR
+// frame's removalList. Faithful otherwise: PreUpdate + PostUpdateStaging then
+// RemoveEntity per pending IBP, then clear the list.
+void EntityList_DrainRemovals(EntityList* self) {
     int32_t removalCount = self->removalList.count;
-    if (removalCount > 0) {
-        EntityList_PreUpdate(self);
-        EntityList_PostUpdateStaging(self);
+    if (removalCount <= 0) return;
 
-        // Process each removal
-        for (int64_t i = 0; i < removalCount; i++) {
-            void* entityIBP = (void*)(*(int64_t*)((uintptr_t)self->removalList.data + i * 8));
-            EntityList_RemoveEntity(self, &entityIBP);
-        }
+    EntityList_PreUpdate(self);
+    EntityList_PostUpdateStaging(self);
 
-        // Clear removal list
-        fn_ExeArrayResize(&self->removalList, 0);
+    for (int64_t i = 0; i < removalCount; i++) {
+        void* entityIBP = (void*)(*(int64_t*)((uintptr_t)self->removalList.data + i * 8));
+        EntityList_RemoveEntity(self, &entityIBP);
     }
+
+    fn_ExeArrayResize(&self->removalList, 0);
 }
 
 // ============================================================
@@ -759,6 +794,16 @@ void EntityList_PostUpdate(EntityList* self) {
 void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     fn_InternalBasePtr_CheckPtr(entityIBP);
     int64_t entity = *(int64_t*)entityIBP;
+
+    // Diagnostic (BANISHED_DESTROY_TRACE): the final DeletePtr below is what drops
+    // the last strong ref and frees the entity + its component block. Log the block
+    // so a post-crash fault address can be matched against the freed range
+    // (compCount/compArray give the component-block neighborhood).
+    if (std::getenv("BANISHED_DESTROY_TRACE")) {
+        std::fprintf(stderr, "[EntityDrain] freeing entity=%p compArray=%p compCount=%d\n",
+                     (void*)entity, *(void**)(entity + 0x30), *(int*)(entity + 0x38));
+        std::fflush(stderr);
+    }
 
     // Read bucket index from entity+0x1F
     int8_t bucketIdx = *(int8_t*)(entity + 0x1F);

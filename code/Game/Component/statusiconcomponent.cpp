@@ -415,6 +415,31 @@ static void StatusIcon_OnRemove_VSlot(void* self, void* /*time*/) {
 }
 
 
+// Removed-from-world handler (component vtable +0x38, idx 7). Entity teardown
+// dispatches this via MarkForRemoval (0x1400c2ea0: every component with
+// capability bit 1 — ours has 0xC2 — gets vtable+0x38 before the 0x400 bit is
+// set). Remove the icon's scene object so the renderer's draw list never holds
+// freed geometry — same crash class as the StorageDisplay pile meshes fixed
+// 2026-07-20 (demolition → Draw-phase Transform::Lerp on freed memory). Retail
+// additionally strips icons at demolition start (state-3 enter → helper_c2a0);
+// this teardown-time removal is the safety net that must always run.
+static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
+    EnsureHelpers();
+    uintptr_t c = (uintptr_t)self;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+    int32_t sceneId = *(int32_t*)(c + 0x100);
+    if (getenv("BANISHED_DESTROY_TRACE")) {
+        fprintf(stderr, "[StatusIcon] removed-from-world comp=%p sceneId=%d\n",
+                self, sceneId);
+        fflush(stderr);
+    }
+    if (sceneId >= 0 && scene && s_fn_Scene_RemoveObject) {
+        s_fn_Scene_RemoveObject(scene, (uint32_t)sceneId);
+        *(int32_t*)(c + 0x100) = -1;
+    }
+}
+
 // StatusIconComponent_StartupInit — the spawn-time body init the inert factory skips.
 // Routed to the component's Startup/Serialize slot (vtable +0x20 / index 4) so it runs
 // during ComponentEntity::StartupComponents, exactly where the original dispatches the
@@ -450,10 +475,11 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
         // the icon after AddObject, so it MUST point at OnRemove_Standalone or the icon
         // is added at the origin (un-positioned). The component vtable ptr at offset 0 is
         // the shared per-type LiveVtable (installed by InitInertTyped); writing slot 8 once
-        // is idempotent across instances. (+0x38 OnCreate / +0x58 Slot11 are intentionally
-        // left inert: +0x48 Update is a bare `ret` so there is no per-tick path, and +0x58's
+        // is idempotent across instances. (+0x58 Slot11 is intentionally left inert:
+        // +0x48 Update is a bare `ret` so there is no per-tick path, and +0x58's
         // only dispatcher is the event-driven entity-notify FUN_1400c2bf0 which never sets
-        // the occupancy flag — the warning bit is owned solely by the +0x40-driving toggle.)
+        // the occupancy flag — the warning bit is owned solely by the +0x40-driving toggle.
+        // +0x38 removed-from-world IS wired below — teardown scene-object removal.)
         void** vt = *(void***)s;
         if (vt) vt[8] = reinterpret_cast<void*>(&StatusIcon_OnRemove_VSlot);
     } else {
@@ -463,6 +489,15 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
         *(void**)(s + 0x28) = g_StatusIconGeometryVtable;
     }
     *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;   // sceneObjId = -1 (NOT scene-registered)
+
+    // Teardown safety (both phases): route component vtable +0x38 (idx 7,
+    // removed-from-world) to the scene-object removal above. The vtable ptr is
+    // the shared per-type LiveVtable — writing once per instance is idempotent.
+    {
+        void** vtAll = *(void***)s;
+        if (vtAll)
+            vtAll[7] = reinterpret_cast<void*>(&StatusIcon_OnRemovedFromWorld_VSlot);
+    }
 
     // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
     // — no-ops if desc/spriteSheet absent). The icon's warning bit is now raised/cleared

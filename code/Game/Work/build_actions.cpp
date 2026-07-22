@@ -92,6 +92,11 @@ void EnsureInit() {
     // c7008 = BuildComponent type-id (the state-8 message target); heal it so the message
     // routes to the site's BuildComponent (the raw .rdata id is 0 in standalone).
     if (s_msg7008 == 0) s_msg7008 = ::Object::GetTypeIdByName("BuildComponent");
+    // c75f0 = DestroyComponent type-id (Ghidra: written by DestroyComponent_RegisterType
+    // 0x14014ee75) — the altAnim/demolition variant of the same state-8 message. Without
+    // this heal the destroy-mode SendComponentMessage carries id 0, matches no component,
+    // and DestroyComponent+0x54 demolition progress never advances.
+    if (s_msg75f0 == 0) s_msg75f0 = ::Object::GetTypeIdByName("DestroyComponent");
     s_init = true;
 }
 

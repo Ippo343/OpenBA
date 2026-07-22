@@ -138,6 +138,12 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId) {
     if (!dataSource)
         return;
 
+    // Don't start an upgrade on a building that is already dead / marked-for-removal
+    // (the panel can linger one marked-but-alive frame under the removal deferral —
+    // entitylist.cpp Step 0 — during which a click must not re-arm its DestroyComponent).
+    if (!SA_DialogEntityAlive(self))
+        return;
+
     // Check if data source is a ComponentEntity
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity))
         return;

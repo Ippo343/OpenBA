@@ -370,6 +370,53 @@ static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* ou
     return true;
 }
 
+// ============================================================
+// EditTool close-info-dialog — port of Entity_impl_cc90 (0x1400fcc90)
+// ============================================================
+// Retail sequence: (1) Entity_impl_cb40 clears the selection highlight (it reads
+// the entity from tool+0x30, so it runs BEFORE the refs drop), (2) tool+0x28
+// (dialog IBP) and tool+0x30 (entity IBP) are nulled, (3) the dialog's ToolUI
+// controller pin flag (+0x40) is read and, when unpinned, the dialog is closed
+// through UI::UserInterface::CloseDialog — which releases the DialogInstance and
+// runs every controller's dtor slot, so the panel objects are actually destroyed
+// (no stale entity context survives).
+//
+// DELIBERATELY NOT registered at 0x1400fcc90 — that address doubles as the
+// EditTool per-frame deactivate vtable slot, which would wipe the selection
+// outline every frame (see standalone/reg_player_render.cpp). Direct callers
+// only: the per-frame tick's dead-entity branch in EditTool_Startup_Impl.
+void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
+    // (1) clear selection highlight — resolves only when BANISHED_SELECTION_OUTLINE
+    // registered the cb40 port; NULL -> no outline to clear (same as toolui.cpp).
+    typedef void (*fn_cb40_t)(void*);
+    static fn_cb40_t s_fn_cb40 = nullptr;
+    static bool s_cb40Resolved = false;
+    if (!s_cb40Resolved) {
+        s_fn_cb40 = (fn_cb40_t)ResolveAddr(Module::Exe, 0x1400fcb40);
+        s_cb40Resolved = true;
+    }
+    if (s_fn_cb40) s_fn_cb40(self);
+
+    // (2) drop the tool's dialog + selected-entity refs so the tick early-outs and
+    // the same footprint can be re-selected later.
+    self->entityRef = 0;
+    self->lastEntityRef = 0;
+
+    // (3) close the dialog. The caller ran the pin check (retail cc90 re-checks it;
+    // we are only reached from the unpinned branch). CloseDialog takes the
+    // UserInterface (dialog+0x10) and an InternalPtr<DialogInstance>& — pass a
+    // stack copy, matching the toolui.cpp close-button path.
+    if (!fn_UI_CloseDialog || !dialogPtr) return;
+    if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
+    void* userInterface = *(void**)(dialogPtr + 0x10);
+    if (!userInterface) return;
+    uint64_t dialogRef = dialogPtr;
+    fn_UI_CloseDialog(userInterface, (void*)&dialogRef);
+    // Rare event (entity died with its panel open) — always log one line.
+    printf("[EditTool] entity died -> closed its info dialog %p\n", (void*)dialogPtr);
+    fflush(stdout);
+}
+
 // One-shot bounded reposition tracer (BANISHED_SELECT_DIAG). Startup runs every
 // frame, so cap output to a handful of lines.
 static bool RepoDiag() {
@@ -413,6 +460,10 @@ void EditTool_Startup_Impl(EditTool* self) {
         uintptr_t resolved = *(uintptr_t*)entityIBP;
         if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {
             self->entityRef = 0;
+            // Drop the selected-entity ref too: leaving +0x30 set blocks re-selecting
+            // the same building (EditTool::OnKey's `lastEntityRef != foundEntity`
+            // guard and d3b0's step-1 early-out both see it as still selected).
+            self->lastEntityRef = 0;
             return;
         }
     }
@@ -477,6 +528,21 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (*(char*)(toolUIIBP + 0x40) != 0) {
         // Flag is set — skip positioning
         REPO_DIAG("[Repos] BAIL: toolUI+0x40 pinned flag set\n");
+        return;
+    }
+
+    // Retail close-on-entity-death (0x1400fcda0 -> Entity_impl_cc90): for an
+    // UNPINNED info panel, when the entity can no longer produce a screen rect the
+    // tool deselects and closes the dialog. In retail that fires because a dying
+    // entity's model/footprint components disappear and Entity_impl_0380 fails. We
+    // detect death directly — datasource weak-ref nulled or marked-for-removal
+    // (entity+0x40 bit 0x400) via SA_DialogEntityAlive on the EntityUI controller —
+    // BEFORE touching the entity's component array below. Without this, standalone
+    // kept dead-entity panels open forever (the upgrade-path crash class the
+    // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
+    // backstop for PINNED panels, which retail also leaves open).
+    if (!SA_DialogEntityAlive((void*)pageToggleIBP)) {
+        EditTool_CloseInfoDialog(self, dialogPtr);
         return;
     }
 

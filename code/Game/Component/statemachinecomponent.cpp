@@ -575,13 +575,27 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
 // Standalone variant of the controller-linker (real linker =
 // StateMachineComponent_Startup 0x14012b6a0). Walks the owner entity's components
 // and links each *live* ControllerComponent's embedded state node into the SM
-// chain. Detection differs from the original: instead of
-// IsDerivedFrom(comp, ControllerComponent) — which is unreliable in standalone's
-// partial factory tree — it calls the component's CreateState (vtable +0x88) and
-// treats a non-null, non-self return as "this is a controller, here is its node".
-// Inert components' slot +0x88 is a stub returning null, so they are skipped.
-// Mirrors the original's effect: GetDefaultState -> SM+0x52, node+0x08 = parent,
-// prev+0x10 = node.
+// chain (a live controller = CreateState (vtable +0x88) returns a non-null,
+// non-self node; inert components' +0x88 stub returns null and links nothing).
+//
+// DEFAULT-STATE selection: retail 0x14012b6a0 reads GetDefaultState (+0x80) from
+// the FIRST component in array order that IsDerivedFrom(ControllerComponent) —
+// liveness is not a concept there. In standalone most controllers are inert
+// (their +0x80 is Inert_Stub), so we keep taking the default from the first
+// LIVE controller — with one retail-ordering constraint that fixes the
+// 2026-07-20 stockpile regression: a live DESTROYCOMPONENT may supply the
+// default ONLY when it is also the first ControllerComponent-derived component
+// in array order (registry-chain test, Object::IsTypeDerivedFromByName). On a
+// stockpile (no BuildComponent; StorageLocationComponent-family controller
+// first but inert) the old first-LIVE rule made DestroyComponent "first" and
+// its default of 4 booted the fresh entity straight into haul-away demolition.
+// Retail gives destroy's 4 only to entities where destroy genuinely is the
+// first controller (the starting supply cart's haul-away-then-vanish); for a
+// destroy-preceded-by-inert entity we leave +0x52 = 0 (BodyInit value) — a
+// state no live table registers, so every node stays dormant until a real
+// request (the removal tool's state-3 pump) arrives. +0x52 is the Tick block's
+// PENDING field: whatever lands here is ENTERED (enter-handler and all) on the
+// first tick, which is why a wrong default here demolishes buildings.
 static void StateMachineComponent_LinkControllers_Standalone(StateMachineComponent* self) {
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
@@ -592,6 +606,8 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
 
     uint8_t* controllerNode = base + 0x28;  // SM root node (controllerSelf target)
     bool gotDefault = false;
+    bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
+    uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;
     for (int i = 0; i < cnt; ++i) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
@@ -604,17 +620,35 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         if (!comp) continue;
 
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*GetTypeId_t)(void*);
+        auto gt = *reinterpret_cast<GetTypeId_t*>(vt + 0x10);
+        uint32_t tid = gt ? gt(comp) : 0;
+        bool isController =
+            ::Object::IsTypeDerivedFromByName(tid, "ControllerComponent");
+
         typedef void* (*CreateState_t)(void*);
         auto cs = *reinterpret_cast<CreateState_t*>(vt + 0x88);
         void* node = cs ? cs(comp) : nullptr;
-        if (node == nullptr || node == comp) continue;  // not a live controller
+        bool isLive = (node != nullptr && node != comp);
 
-        if (!gotDefault) {
-            typedef int (*GetDefaultState_t)(void*);
-            auto gd = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
-            *(base + 0x52) = static_cast<uint8_t>(gd ? gd(comp) : 0);
-            gotDefault = true;
+        if (!gotDefault && isLive) {
+            // Retail-order constraint (destroy only): skip a live destroy that
+            // is not the entity's first controller; its 4 must never become the
+            // spawn default of an ordinary building.
+            bool destroyOutOfOrder =
+                (tidDestroy != 0 && tid == tidDestroy && sawEarlierController);
+            if (!destroyOutOfOrder) {
+                typedef int (*GetDefaultState_t)(void*);
+                auto gd = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
+                *(base + 0x52) = static_cast<uint8_t>(gd ? gd(comp) : 0);
+                gotDefault = true;
+            }
         }
+        if (isController && !isLive) sawEarlierController = true;
+        if (isLive) sawEarlierController = true;
+
+        if (!isLive) continue;  // inert / not a controller: nothing to link
+
         *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x08) = controllerNode;  // node parent
         *reinterpret_cast<void**>(controllerNode + 0x10) = node;                              // prev child
         controllerNode = reinterpret_cast<uint8_t*>(node);

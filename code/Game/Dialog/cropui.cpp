@@ -66,6 +66,9 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
         reinterpret_cast<fn_GetCategoryFilter_t>(vtable[0x68 / 8]);
     int categoryFilter = fnGetCategory(self);
 
+    // Bail on a dead / marked-for-removal datasource before probing it (see Slot7);
+    // returns "no resources" (0) for this iterate helper.
+    if (!SA_DialogEntityAlive(self)) return 0;
     // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
     void* entity = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -226,6 +229,10 @@ void CropUI_Slot4(CropUI* self) {
 // Original: 0x140078CB0.
 
 void CropUI_Slot7(CropUI* self) {
+    // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
+    // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
+    // entitylist.cpp Step 0).
+    if (!SA_DialogEntityAlive(self)) return;
     // Wrap entity in InternalBasePtr (base class requirement, not used directly)
     void* entity = *(void**)((uintptr_t)self + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);

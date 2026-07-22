@@ -17,6 +17,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // FindComponent family (same shape as work_base_reimpl.cpp FindComponentByTypeId)
@@ -158,8 +160,17 @@ void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
 void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     uint32_t* pFlags = reinterpret_cast<uint32_t*>(s + 0x40);
+    // Diagnostic: the +0x38 removed-from-world broadcast is the engine's dangling-
+    // drawable protection (each drawable component RemoveObject's its scene geometry
+    // here). Trace which components it visits/skips so a live run pins any leak.
+    const bool trace = std::getenv("BANISHED_DESTROY_TRACE") != nullptr;
     if ((*reinterpret_cast<uint8_t*>(s + 0x40) & 2) != 0) {
         int count = *reinterpret_cast<int*>(s + 0x38);
+        if (trace) {
+            std::fprintf(stderr, "[MarkForRemoval] entity=%p flags=0x%x compCount=%d "
+                         "(broadcasting +0x38)\n", self, *pFlags, count);
+            std::fflush(stderr);
+        }
         if (count >= 1) {
             uintptr_t base = *reinterpret_cast<uintptr_t*>(s + 0x30);
             for (int64_t i = 0; i < count; i++) {
@@ -167,12 +178,26 @@ void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&node);
                 // component flags at node+0x20 (uint), bit 1 (>>1 & 1)
                 uint32_t cflags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(node) + 0x20);
-                if (((cflags >> 1) & 1) != 0) {
+                bool visits = ((cflags >> 1) & 1) != 0;
+                if (trace) {
+                    void* vt = *reinterpret_cast<void**>(node);
+                    void* slot7 = vt ? *reinterpret_cast<void**>(
+                        reinterpret_cast<uintptr_t>(vt) + 0x38) : nullptr;
+                    std::fprintf(stderr, "[MarkForRemoval]   comp[%lld]=%p flags=0x%x "
+                                 "%s slot7=%p\n", (long long)i, node, cflags,
+                                 visits ? "CALL+0x38" : "skip", slot7);
+                    std::fflush(stderr);
+                }
+                if (visits) {
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&node);
                     (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(node) + 0x38))(node);
                 }
             }
         }
+    } else if (trace) {
+        std::fprintf(stderr, "[MarkForRemoval] entity=%p flags=0x%x — bit1 CLEAR, "
+                     "NO +0x38 broadcast\n", self, *pFlags);
+        std::fflush(stderr);
     }
     *pFlags |= 0x400u;
 }

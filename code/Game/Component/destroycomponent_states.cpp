@@ -18,7 +18,9 @@
 //   state 5 (build/replace):    enter 0x14011cc70 — half-materials refund into
 //           +0x58 + queue a BuildStructure work (type 0x2001), or (nothing to
 //           build from) scatter contents + mark entity for removal;
-//           tick 0x14011c120 — ★ THE REPLACEMENT SPAWN ★: capture the old
+//           tick 0x14011c120 — ★ THE REPLACEMENT SPAWN ★: GATED on demolition
+//           progress (+0x54, credited per builder work unit via vtable slot 15
+//           0x14011daf0) reaching the +0x58 target; then capture the old
 //           footprint/transform, release workers, mark old entity for removal,
 //           clone the target template (ComponentEntity_CopyCtor 0x1400c3720)
 //           onto the old footprint and register it into the world
@@ -454,8 +456,39 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     EnsureResolved();
     (void)sm;
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+
+    // 0) RETAIL GATE (0x14011c120 first branch): wait for the demolition work.
+    // +0x54 = progress (credited one unit per completed builder PerformWork via
+    // vtable slot 15 / DestroyComponent_MsgReceive), +0x58 = the target the
+    // state-5 enter computed. Until progress reaches the target the tick is a
+    // pure no-op — no worker release, no trade notify, no mark-for-removal, no
+    // spawn. Missing this gate raced the whole teardown on the first tick
+    // (observed live 2026-07-20: instant mark-for-removal froze the open panel
+    // via the 0x400 bit and the upgrade spawn logic misfired).
+    if (*reinterpret_cast<int*>(comp + 0x54) <
+        static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58))) {
+        if (Trace()) {
+            static int throttle = 0;
+            if ((throttle++ & 0x3f) == 0) {
+                std::fprintf(stderr, "[DestroySM] state-5 tick: waiting demolition "
+                                     "progress %d/%u\n",
+                             *reinterpret_cast<int*>(comp + 0x54),
+                             *reinterpret_cast<uint32_t*>(comp + 0x58));
+                std::fflush(stderr);
+            }
+        }
+        return 1;
+    }
+
     int64_t entity = OwnerEntity(comp);
     if (!entity) return 1;
+
+    // 0b) Retail: stop the yard's pending work now that demolition is complete
+    // (FUN_140003050 -> FUN_14012eb50) before capturing the footprint.
+    {
+        int64_t yard = FindOn(entity, s_find3050);
+        if (yard && s_eb50) s_eb50(yard);
+    }
 
     // 1) Capture the OLD footprint (grid cell + rotation) and world transform.
     int64_t fp = FindOn(entity, s_find4680);
@@ -511,8 +544,10 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
         bool ready = (prod && Yard_Delivered(prod) >= Yard_Required(prod)) ||
                      (*reinterpret_cast<int8_t*>(comp + 0x50) != 0);
         if (ready) {
+            // Retail 0x14011c3xx: scatter when e600 != 0 OR e5b0 != 0 (the
+            // previous port had the e600 sense inverted).
             if (*reinterpret_cast<int8_t*>(comp + 0x51)) {
-                if (!Destroy_TargetDiffers_e600(static_cast<int64_t>(comp)) ||
+                if (Destroy_TargetDiffers_e600(static_cast<int64_t>(comp)) ||
                     Destroy_TargetIsCurrent_e5b0(static_cast<int64_t>(comp)))
                     Destroy_ScatterContents_c530(static_cast<int64_t>(comp));
             }

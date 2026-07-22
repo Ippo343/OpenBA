@@ -25,6 +25,9 @@
 #include <cstdlib>
 #include "resolve.h"
 
+// code/Game/Object/factory_registration.cpp
+namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
+
 // Forward declaration — defined in entityui.cpp
 extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                         uint32_t x, uint32_t y);
@@ -302,6 +305,27 @@ void ToolUI_Slot4(ToolUI* self) {
     }
 }
 
+// Dialog-side "is this an entity info panel?" — probes the DIALOG for an
+// EntityUI controller instead of type-checking the datasource entity. During
+// demolition teardown (upgrade path, destroy SM state 4->5) the datasource
+// pointer at controller+0x28 stays non-null while the entity's class-info is
+// already torn down, so fn_IsDerivedFrom(datasource, ...) reads a nulled
+// typeinfo (+0x10) inside Runtime — AV'd live 2026-07-20. Retail never probes
+// the datasource in per-frame dialog slots; its drag-arm (EntityUI::Slot8,
+// 0x140066AD0) is scoped by construction: EntityUI exists only on entity
+// dialogs. This helper reproduces that scoping dialog-side, entity untouched.
+static bool ToolUI_DialogHasEntityUI(uintptr_t s) {
+    static uint32_t s_tidEntityUI = 0;
+    if (!s_tidEntityUI) s_tidEntityUI = ::Object::ResolveTypeIdByNameLazy("EntityUI");
+    if (!s_tidEntityUI || !fn_DialogInstance_GetController) return false;
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+    uintptr_t di = *(uintptr_t*)(s + 0x18);
+    if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return false;
+    uint64_t ctrlBuf = 0;
+    fn_DialogInstance_GetController((void*)di, &ctrlBuf, s_tidEntityUI);
+    return ctrlBuf != 0;
+}
+
 // ============================================================
 // ToolUI::Slot8 (vtable +0x40) — Mouse drag handler
 // ============================================================
@@ -328,14 +352,20 @@ void ToolUI_Slot8(ToolUI* self) {
     //
     // Mirror EntityUI's drag-enable here, in ToolUI's OWN per-frame slot (this
     // function is g_vt[8], dispatched every frame by DialogInstance::OnUpdate), but
-    // only for entity dialogs (datasource at +0x28 is a ComponentEntity). This arms
-    // the pending-drag path that Slot9's mouse-down triggers and this function then
-    // follows. (The original relies on the real EntityUI handler for this.)
-    if (g_TypeId_ComponentEntity) {
-        void* ds = *(void**)(s + 0x28);
-        if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity))
-            *(uint8_t*)(s + 0x4C) = 1;
-    }
+    // only for entity dialogs. This arms the pending-drag path that Slot9's
+    // mouse-down triggers and this function then follows.
+    //
+    // Scope it DIALOG-side — "does this dialog carry an EntityUI controller?" via
+    // GetController — never by type-checking the datasource entity. Retail's own
+    // drag-arm (EntityUI::Slot8, 0x140066AD0) works the same way: it exists only on
+    // entity dialogs and sets ToolUI+0x4C without ever touching the entity. The
+    // previous IsDerivedFrom(*(s+0x28)) here crashed live 2026-07-20: during the
+    // upgrade-path demolition teardown (state-4 "storage drained -> 5") the entity
+    // pointer at +0x28 is still non-null while its class-info is already torn
+    // down, so IsDerivedFrom read a nulled typeinfo (+0x10) inside Runtime.
+    bool entityDialog = ToolUI_DialogHasEntityUI(s);
+    if (entityDialog)
+        *(uint8_t*)(s + 0x4C) = 1;
 
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
@@ -427,9 +457,17 @@ void ToolUI_Slot8(ToolUI* self) {
             }
         }
 
-        // If entity is a ComponentEntity, update via SelectEntity
+        // If entity is a ComponentEntity, update via SelectEntity.
+        // Same landmine as the drag-arm block above: IsDerivedFrom on a datasource
+        // whose entity is mid-teardown reads nulled class-info. Only reachable
+        // mid-drag, but a demolition can complete during a drag — gate on the
+        // dialog-side entityDialog fact (so description datasources are never
+        // probed) and on SA_DialogEntityAlive (weak-ref null / 0x400 marked), which
+        // is only meaningful/safe once we know the datasource is an entity.
         void* dataSource = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+        bool isEntity = entityDialog && dataSource != nullptr &&
+                        SA_DialogEntityAlive((void*)s) &&
+                        fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
         if (isEntity && dataSource != nullptr) {
             void* ds2 = *(void**)(s + 0x28);
             bool check = fn_IsDerivedFrom(ds2, *g_TypeId_ComponentEntity);
@@ -512,7 +550,13 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         // early-out (it bails when entityRef == 0). Scoped to entity dialogs
         // (this ToolUI's datasource at +0x28 is a ComponentEntity) so utility dialogs
         // (map/help) that share this close path don't lose the user's active tool.
-        if (g_TypeId_ComponentEntity && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        // Entity-ness established dialog-side + aliveness-gated before the
+        // IsDerivedFrom probe: clicking close during the demolition-teardown window
+        // would otherwise hit the nulled-class-info AV (see ToolUI_DialogHasEntityUI).
+        // On a dead entity the ref-drop is skipped — the EditTool tick's -1-sentinel
+        // guard clears the stale tool refs next frame — and the dialog still closes.
+        if (g_TypeId_ComponentEntity && g_pGameWorldSingleton && *g_pGameWorldSingleton &&
+            ToolUI_DialogHasEntityUI(s) && SA_DialogEntityAlive((void*)s)) {
             void* ds = *(void**)(s + 0x28);
             if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity)) {
                 uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);

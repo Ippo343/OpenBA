@@ -112,6 +112,17 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 // standalone.
 bool IsDerivedFromOrTrust(void* obj, uint32_t typeId);
 
+// Registry-based type-derivation test: true when the registered type whose
+// typeId matches `typeId` has `ancestorName` anywhere in its REGISTER_TYPE
+// parent-name chain (inclusive: a type "derives from" its own name). This is
+// the standalone-reliable substitute for the engine's IsDerivedFrom when the
+// question is about EXE-side classes (all 310 are registered with full parent
+// chains in factory_registrations_bulk.cpp) — e.g. the StateMachineComponent
+// controller scan replicating retail 0x14012b6a0's
+// IsDerivedFrom(comp, ControllerComponent). Returns false for typeId 0 /
+// unregistered ids.
+bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName);
+
 }  // namespace Object
 
 // Convenience macros. Expand to a static-init FactoryRegistration object.

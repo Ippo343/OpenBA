@@ -102,6 +102,8 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
     fn_InternalBasePtr_Ctor(basePtrBuf, progressPtr);
     self->data30 = *(uint64_t*)basePtrBuf;
 
+    // Setup: bail on a dead / marked-for-removal datasource (see Slot7).
+    if (!SA_DialogEntityAlive(self)) return;
     // Get entity, find CemeteryComponent
     void* entity = *(void**)((uintptr_t)self + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -128,6 +130,10 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
 // Original: 0x14005EF50.
 
 void CemeteryUI_Slot7(CemeteryUI* self) {
+    // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
+    // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
+    // entitylist.cpp Step 0).
+    if (!SA_DialogEntityAlive(self)) return;
     // Get entity, find CemeteryComponent
     void* entity = *(void**)((uintptr_t)self + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);

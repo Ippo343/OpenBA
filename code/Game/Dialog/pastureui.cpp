@@ -91,6 +91,8 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
 static void PastureUI_UpdateSlider_Impl(void* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // Reached from per-frame + event slots; bail on a dead / marked datasource.
+    if (!SA_DialogEntityAlive(self)) return;
     // Get entity from self+0x28, wrap in InternalBasePtr
     void* entity = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -179,6 +181,10 @@ void PastureUI_Slot4(PastureUI* self) {
 void PastureUI_Slot7(PastureUI* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
+    // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
+    // entitylist.cpp Step 0).
+    if (!SA_DialogEntityAlive(self)) return;
     // Get entity → find PastureComponent
     void* dataSource = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
@@ -226,6 +232,8 @@ void PastureUI_Slot7(PastureUI* self) {
 void PastureUI_Slot11(PastureUI* self, int64_t param2) {
     uintptr_t s = (uintptr_t)self;
 
+    // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
+    if (!SA_DialogEntityAlive(self)) return;
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;

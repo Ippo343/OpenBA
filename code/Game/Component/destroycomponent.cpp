@@ -240,6 +240,19 @@ static int DestroyComponent_GetDefaultState(void*) {
 static void* DestroyComponent_CreateState(void* self) {               // idx 17
     return reinterpret_cast<uint8_t*>(self) + 0x28;
 }
+// Vtable slot 15 (+0x78 "OnMessage") — retail DestroyComponent_Slot15 0x14011daf0:
+//   if (msgCode == 0) ++*(int*)(self + 0x54);
+// The demolition-progress credit, destroy-side twin of BuildComponent_MsgReceive
+// (buildcomponent.cpp). The demolition action chain (BuildStructure_SetupBuildActions,
+// altAnim=1) pushes a SendComponentMessage carrying the DestroyComponent type-id
+// (DAT_1401c75f0); each completed PerformWork routes here and advances +0x54 toward
+// the +0x58 target that gates the state-5 tick.
+static void DestroyComponent_MsgReceive(void* self, int msgCode,
+                                        void* /*srcEntityRef*/,
+                                        uint32_t /*p1*/, uint32_t /*p2*/) {
+    if (msgCode == 0)
+        ++*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0x54);
+}
 
 static void DestroyComponent_FinishLiveVtable(void* mem) {
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY")) return;
@@ -247,6 +260,8 @@ static void DestroyComponent_FinishLiveVtable(void* mem) {
         reinterpret_cast<void*>(&DestroyComponent_ShutdownVSlot);
     DestroyComponent_LiveVtable[4] =
         reinterpret_cast<void*>(&DestroyComponent_SerializeVSlot);
+    DestroyComponent_LiveVtable[15] =
+        reinterpret_cast<void*>(&DestroyComponent_MsgReceive);
     DestroyComponent_LiveVtable[16] =
         reinterpret_cast<void*>(&DestroyComponent_GetDefaultState);
     DestroyComponent_LiveVtable[17] =

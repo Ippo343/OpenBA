@@ -122,6 +122,38 @@ bool IsDerivedFromOrTrust(void* obj, uint32_t typeId) {
     return obj != nullptr;
 }
 
+bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName) {
+    if (typeId == 0 || typeId == 0xFFFFFFFF || !ancestorName || !*ancestorName)
+        return false;
+    // Find the registration owning this typeId.
+    const FactoryRegistration* r = nullptr;
+    for (const FactoryRegistration* it = g_pending; it != nullptr; it = it->next) {
+        if (*reinterpret_cast<const uint32_t*>(&it->storage) == typeId) {
+            r = it;
+            break;
+        }
+    }
+    // Walk the parent-name chain (bounded — the deepest real chain is ~6).
+    for (int depth = 0; r != nullptr && depth < 16; ++depth) {
+        if (r->typeName && std::strcmp(r->typeName, ancestorName) == 0)
+            return true;
+        const char* parent = r->parentName;
+        if (!parent || !*parent) return false;
+        const FactoryRegistration* next = nullptr;
+        for (const FactoryRegistration* it = g_pending; it != nullptr; it = it->next) {
+            if (it->typeName && std::strcmp(it->typeName, parent) == 0) {
+                next = it;
+                break;
+            }
+        }
+        // Parent names may refer to engine-side classes that are not in the
+        // exe registry (e.g. "Object::Internal") — chain ends there.
+        if (next == nullptr) return std::strcmp(parent, ancestorName) == 0;
+        r = next;
+    }
+    return false;
+}
+
 }  // namespace Object
 
 // ============================================================

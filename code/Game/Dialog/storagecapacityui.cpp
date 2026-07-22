@@ -51,6 +51,11 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
 // Original: 0x14007b4d0.
 
 void StorageCapacityUI_Startup(StorageCapacityUI* self) {
+    // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
+    // IsDerivedFrom probe. Reliable now that removals are one-frame-deferred
+    // (entitylist.cpp Step 0) — the entity is valid marked-but-alive memory here.
+    if (!SA_DialogEntityAlive(self)) return;
+
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)self + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
