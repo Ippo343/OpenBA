@@ -117,6 +117,10 @@ extern "C" int StartTown_GetFoundingHouseCount() {
     return (int)g_foundingHouseIBPs.size();
 }
 
+// (defined below; needed here to arm the MapComponent removal-clear inside MarkBuildingCells)
+static uint32_t TypeId(const char* name);
+static void* FindComponentOnEntity(void* entity, uint32_t typeId);
+
 // GUI click-to-select: mark a building's footprint cells as occupied by the building ENTITY
 // (cell+0x08), reproducing the net effect of the real game's MapComponent::Draw ->
 // FUN_14009dc20. The region-map cell array lives at Game+0x80 (0x30 bytes/cell, dim from
@@ -148,8 +152,31 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
             *(uintptr_t*)(cells + (size_t)idx * 0x30 + 0x08) = entIBP;  // dc20: cell+0x08 = entity
             marked++;
         }
-    fprintf(stderr, "[startTown::pickmap] marked %d footprint cells @ (%d,%d) %dx%d entity=%p\n",
-            marked, tileX, tileY, fpW, fpH, (void*)entIBP);
+
+    // ARM THE REMOVAL-SIDE CLEAR (M-B parity with the resource path @ ~L2684).
+    // We just wrote the building entity into cell+0x08 for click-picking, bypassing
+    // the (inert) MapComponent. On removal, FUN_1400c2ea0 broadcasts vtable+0x38 to
+    // the entity's removable components -> MapComponent_DetachVSlot ->
+    // MapComponent_DetachOccupancy_4750, which nulls cell+0x08 over the +0x28..+0x2e
+    // footprint but is GATED on the "occupancy-written" bit 0x100000 of comp+0x20.
+    // Placement already stamps the footprint tile fields, but nothing set that bit for
+    // buildings, so the detach no-oped and the upgraded/demolished building's cell+0x08
+    // kept pointing at the FREED entity -> the CitizenAI leisure box scan (and forester
+    // scan) faulted on it (FloorComponent_FindResData READ of freed compArray, crash
+    // 2026-07-21). Record the footprint we actually marked and set the bit here, so the
+    // invariant "cell+0x08 written <=> bit set" holds exactly, same as the resource path.
+    void* mapComp = FindComponentOnEntity((void*)entIBP, TypeId("MapComponent"));
+    if (mapComp) {
+        uint8_t* mc = reinterpret_cast<uint8_t*>(mapComp);
+        *(int16_t*)(mc + 0x28) = (int16_t)tileX;
+        *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
+        *(int16_t*)(mc + 0x2c) = (int16_t)fpW;
+        *(int16_t*)(mc + 0x2e) = (int16_t)fpH;
+        *(uint32_t*)(mc + 0x20) |= 0x100000u;   // detach-clear armed
+    }
+
+    fprintf(stderr, "[startTown::pickmap] marked %d footprint cells @ (%d,%d) %dx%d entity=%p mc=%p\n",
+            marked, tileX, tileY, fpW, fpH, (void*)entIBP, mapComp);
     fflush(stderr);
 }
 

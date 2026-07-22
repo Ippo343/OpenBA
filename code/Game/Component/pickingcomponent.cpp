@@ -283,6 +283,56 @@ void PickingComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(PickingComponent, 0x38, 0xC3)
+
+// Hand-expanded from COMPONENT_INERT_FACTORY(PickingComponent, 0x38, 0xC3) so the
+// per-type vtable's +0x38 slot (index 7 = OnRemovedFromWorld, retail 0x140128b50 =
+// PickingComponent_OnCreate; verified as vtable 0x140164040[+0x38]) routes to the
+// mesh teardown. Retail: entity mark-removal FUN_1400c2ea0 broadcasts vtable+0x38 to
+// every component whose capability flags (+0x20) have bit 1 (PickingComponent 0xC3
+// qualifies) BEFORE the entity is freed; OnCreate removes the picking mesh from
+// Picking::Scene (gw+0x70) and resets pickingId to -1. Without this the removed/
+// upgraded building's mesh dangled in the scene with userData = the freed entity, so
+// EditTool_SelectEntity_Impl's mesh pick (Picking::Scene::GetUserData) returned the
+// freed pointer and crashed when the now-empty foundation was clicked (2026-07-21).
+// This is the Picking-scene twin of the map-cell-occupancy fix (MapComponent +
+// starttown.cpp StartTown_MarkBuildingCells).
+static uint32_t PickingComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("PickingComponent");
+    return cached;
+}
+static void* PickingComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void PickingComponent_DetachVSlot(void* s) {
+    PickingComponent_InitFuncs();   // ensure s_fn_RemoveMesh (dispatch 0x140152438) resolved
+    PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(s));
+}
+static void PickingComponent_FinishVtable() {
+    PickingComponent_InertVtable[7] =
+        reinterpret_cast<void*>(&PickingComponent_DetachVSlot);
+}
+// Retail Startup (0x140128c30) stamps pickingId(+0x28) = -1 so OnCreate's
+// `pickingId >= 0` guard skips the RemoveMesh for a component that never registered a
+// mesh. The inert factory zero-fills the body (pickingId = 0, which would wrongly
+// RemoveMesh(0)), so replicate that -1 init per instance. RegisterMesh overwrites it
+// with the real meshId when a mesh is actually added.
+static inline void PickingComponent_InitBody(void* inst) {
+    if (inst) *(int32_t*)((uint8_t*)inst + 0x28) = -1;
+}
+extern "C" void* PickingComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xC3,
+        PickingComponent_InertVtable,
+        reinterpret_cast<void*>(&PickingComponent_InertGetTypeId));
+    PickingComponent_FinishVtable();
+    PickingComponent_InitBody(p);
+    return p;
+}
+static void* PickingComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xC3,
+        PickingComponent_InertVtable,
+        reinterpret_cast<void*>(&PickingComponent_InertGetTypeId));
+    PickingComponent_FinishVtable();
+    PickingComponent_InitBody(mem);
+    return mem;
+}
 REGISTER_TYPE(PickingComponent, "Component",
               &PickingComponent_Factory, &PickingComponent_CreateInPlace);
