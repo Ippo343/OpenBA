@@ -1066,6 +1066,13 @@ void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
     // (id 0x65) tolerates null component type-ids (finders just return "not found").
     if (id == 100 && !g_TypeId_ToolUI) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    // Gate the entity read like every other EntityUI slot wrapper (W_Slot4/6/7):
+    // EntityUI_Slot9 reads the cached datasource copy (s+0x30) for center (0x65) and
+    // toggles tracking on it for pin (100). On a just-demolished building's still-open
+    // panel that +0x30 weak-ref dangles, so a center/pin click would deref freed
+    // memory (fn_FindComponent_Character). SA_DialogEntityAlive checks the +0x28
+    // datasource (of which +0x30 is a copy) for null / marked-for-removal (0x400).
+    if (!SA_DialogEntityAlive(self)) return;
     EntityUI_Slot9(reinterpret_cast<EntityUI*>(self), p2, msg, id);
 }
 

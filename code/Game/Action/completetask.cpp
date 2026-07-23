@@ -221,6 +221,15 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
         self->taskIndex = *(int32_t*)(workEnt + 0x30);
     }
 
+    // taskIdx < 0 is EXPECTED, not a gap. The build-material haul tree
+    // (GatherRawMaterials_Serialize 0x1400ec406) stamps CompleteTask+0x30 from the
+    // Work item's +0x20 field ("pathType", reused as workId), which is -1 for hauls
+    // that are NOT registered as a task-manager BST node — i.e. a building's ongoing
+    // "needs N stone" that any number of builders may service. Retail runs the very
+    // same no-op here (its own epilogue guards `-1 < Work+0x20` before setting the
+    // citizen +0x88 flag, and citizenai_gather stamps citizen+0x30 = -1). Delivery is
+    // credited via the BUILDCTRL MsgReceive path, not this manager completion. Verified
+    // 2026-07-22 against the live BUILD_TRACE (taskIdx=-1, taskMgr live) — do not "fix".
     int32_t taskIdx = self->taskIndex;
     if (taskIdx >= 0) {
         void* entityRef28 = self->targetEntity;

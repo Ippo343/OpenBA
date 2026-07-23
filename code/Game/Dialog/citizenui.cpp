@@ -837,8 +837,11 @@ void W_Slot9(void* self, void* p2, int msg, int id) {
     // Follow button (0x228) builds a FollowDialog whose vtable is g_FollowDialog_Vtable
     // — null in standalone. CitizenUI_Slot9 handles profession/home unconditionally;
     // guard the follow path by skipping if the vtable is unresolved (leave a no-op).
-    if (self) CitizenUI_Slot9(reinterpret_cast<CitizenUI*>(self),
-                              reinterpret_cast<uint64_t>(p2), msg, id);
+    // Also gate on datasource-alive like the sibling slots (W_Slot4/6/7): a click on a
+    // dead citizen's still-open panel must not drive CitizenUI_Slot9 into a freed entity.
+    if (self && SA_DialogEntityAlive(self))
+        CitizenUI_Slot9(reinterpret_cast<CitizenUI*>(self),
+                        reinterpret_cast<uint64_t>(p2), msg, id);
 }
 
 struct Init {
