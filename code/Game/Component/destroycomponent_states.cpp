@@ -404,6 +404,22 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
     int64_t entity = OwnerEntity(comp);
     int64_t prod = FindOn(entity, s_findD6c0);
 
+    // Diagnostic: the refund+BuildStructure branch (which sets the +0x58 progress
+    // target that gates the replacement spawn) fires ONLY when the building has a
+    // live BuildComponent (d6c0) with Delivered(+0x48) != 0. When it doesn't, we
+    // fall to the ELSE branch: scatter + immediate mark-for-removal, NO spawn — the
+    // "building just vanishes" symptom. Log the decision inputs so a live upgrade
+    // shows exactly why (prod null vs Delivered==0).
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] state-5 enter DECIDE: buildComp(d6c0)=%llx "
+                     "delivered(+0x48)=%d required=%d target(+0x60)=%llx -> %s branch\n",
+                     static_cast<unsigned long long>(prod),
+                     Yard_Delivered(prod), Yard_Required(prod),
+                     static_cast<unsigned long long>(*reinterpret_cast<int64_t*>(comp + 0x60)),
+                     (prod && Yard_Delivered(prod) != 0) ? "REFUND+BUILD" : "REMOVE(no-spawn)");
+        std::fflush(stderr);
+    }
+
     if (prod && Yard_Delivered(prod) != 0) {
         // Half-materials refund into +0x58.
         int64_t yard0 = FindOn(entity, s_find4740);

@@ -279,7 +279,21 @@ found_dest_storage:
                                   searchPos, &entityIBP);
 
         if (destEntity == nullptr) {
-            // No destination found, continue to next item
+            // No destination found, continue to next item. This is the suspected
+            // count=100 stall path: a slot whose resource has no accepting storage
+            // with room -> the item never drains and the citizen is re-assigned
+            // forever. Log the resource identity + flags so the stuck slot is
+            // identifiable across runs (resource flags live at rawMatDesc+0x5c;
+            // FindStorageDestination ANDs them with each storage's accept mask).
+            if (std::getenv("BANISHED_DESTROY_TRACE")) {
+                int rawFlags = rawMatDesc ? *(int*)((uintptr_t)rawMatDesc + 0x5c) : -1;
+                std::fprintf(stderr, "[ClearStorage] NO-DEST: slot=%d resType=%u availCount=%d "
+                             "resourceSize=%d itemEntity=%p rawMatDesc=%p rawFlags(+0x5c)=0x%x "
+                             "(no accepting storage with room)\n",
+                             i, resourceTypeId, availCount, resourceSize,
+                             (void*)itemEntity, rawMatDesc, rawFlags);
+                std::fflush(stderr);
+            }
             continue;
         }
 
