@@ -752,9 +752,30 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
     EnsureInit();
     int iVar4 = -1;
 
+    int64_t rawAnchorEntity = *reinterpret_cast<int64_t*>(param_1IBP);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1IBP);
+    int64_t resolvedAnchorEntity = *reinterpret_cast<int64_t*>(param_1IBP);
+    // DIAGNOSTIC (BUILDCTRL builder-employment crash): retail Entity_impl_7fb0 derefs
+    // *param_1 unconditionally, so a null/dead entity here is always a crash — meaning
+    // retail never reaches this with one. Our BUILDCTRL employ path does (a just-placed
+    // foundation's work IBP, or a citizen's residence pointing at a deconstructed
+    // building). Log the identity (raw = pre-CheckPtr value; resolved==0 => CheckPtr
+    // nulled a dead weak-ref) and return the legitimate -1 "no anchor cell" sentinel so
+    // the caller degrades gracefully instead of reading null+0x38. This is INSTRUMENTATION
+    // to locate the upstream null — not the final fix (do not leave a silent guard here).
+    if (resolvedAnchorEntity == 0) {
+        static int s_anchorNullHits = 0;
+        if ((s_anchorNullHits++ & 0x3f) == 0) {
+            std::fprintf(stderr, "[EmployCrash] Pf_EntityAnchorCell_7fb0 NULL entity: "
+                         "IBPptr=%p raw=0x%llx resolved=0 (hit #%d) -> return -1\n",
+                         param_1IBP, static_cast<unsigned long long>(rawAnchorEntity),
+                         s_anchorNullHits);
+            std::fflush(stderr);
+        }
+        return -1;
+    }
     uintptr_t posIBP = 0;   // local_res8
-    if (s_fn_FindCompPos) s_fn_FindCompPos(*reinterpret_cast<int64_t*>(param_1IBP), &posIBP);
+    if (s_fn_FindCompPos) s_fn_FindCompPos(resolvedAnchorEntity, &posIBP);
 
     bool handled = false;
     if (posIBP != 0) {

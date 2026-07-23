@@ -171,6 +171,12 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int* game = GameObj();
     int64_t availAnchorArg = *availPtr;
     uint32_t availCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&availAnchorArg, nullptr) : 0xffffffff;
+    if (availCell == 0xffffffff && std::getenv("BANISHED_DESTROY_TRACE")) {
+        std::fprintf(stderr, "[EmployCrash] Strat_ca20 AVAIL anchor null: availPtr=%p "
+                     "*availPtr=0x%llx profKey=0x%llx\n", (void*)availPtr,
+                     (unsigned long long)availAnchorArg, (unsigned long long)profKey);
+        std::fflush(stderr);
+    }
     int bestDist = 0x7ffffff;
     int64_t best = 0;
     int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
@@ -185,6 +191,12 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
                 if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
                     int64_t resAnchor = *reinterpret_cast<int64_t*>(cz + 0x238);
                     uint32_t czCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&resAnchor, nullptr) : 0;
+                    if (czCell == 0xffffffff && std::getenv("BANISHED_DESTROY_TRACE")) {
+                        std::fprintf(stderr, "[EmployCrash] Strat_ca20 RESIDENCE anchor null: "
+                                     "cz=0x%llx res(+0x238)=0x%llx\n",
+                                     (unsigned long long)cz, (unsigned long long)resAnchor);
+                        std::fflush(stderr);
+                    }
                     int d = s_calcDist8830 ? s_calcDist8830(game, czCell, availCell) : 0x7ffffff;
                     if (d <= bestDist) { best = cz; bestDist = d; }
                 }

@@ -865,7 +865,14 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
             uint8_t fb[8] = {0};
             void* result = fn_CitizenList_FindIdle(citizenList, fb, &slotCopy, profId);
             int64_t found = *reinterpret_cast<int64_t*>(result);
-            if (found == 0 && fn_CitizenList_FindWorking) {
+            // Faithful to retail driver dd10 (0x14007dd10): FindWorking (Strat_ca20,
+            // 0x14008ca20) unconditionally anchors *availPtr, so retail gates it behind
+            // `if (uVar4 != 0)` — only call it when RequestWorker/FindAvailableBuilding
+            // returned a real building (slot != 0). Without this guard, a null building
+            // (e.g. a just-placed foundation not yet a staffable workplace under BUILDCTRL)
+            // reaches Strat_ca20's anchor -> null deref. FindIdle(cbf0)/FindStudent(c5f0)/
+            // FindAny(c4b0) all guard *availPtr==0 themselves, so they stay in the chain.
+            if (found == 0 && slot != 0 && fn_CitizenList_FindWorking) {
                 slotCopy = slot; uint8_t fb2[8] = {0};
                 result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
                 found = *reinterpret_cast<int64_t*>(result);
