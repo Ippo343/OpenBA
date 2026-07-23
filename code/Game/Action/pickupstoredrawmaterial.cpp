@@ -226,6 +226,20 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
+    // [PICKUP-DIAG] gated (BANISHED_BUILD_TRACE): did the citizen's executor actually RUN a
+    // stored-material pickup, and with what src(+0x28)/dst(+0x20)/matCount(+0x38)?
+    static int s_pkTrace = -1;
+    if (s_pkTrace < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        const char* d = std::getenv("BANISHED_DELIVER_TRACE");
+        s_pkTrace = ((e && e[0] && e[0] != '0') || (d && d[0] && d[0] != '0')) ? 1 : 0;
+    }
+    if (s_pkTrace == 1) {
+        std::fprintf(stderr, "[BuildTrace] PickupStored::AbstractImpl RUN self=%p src(+0x28)=%p dstBldg(+0x20)=%p matCount(+0x38)=%d partial(+0x40)=%d\n",
+                     (void*)self, *(void**)(s + 0x28), *(void**)(s + 0x20), *(int*)(s + 0x38), (int)*(uint8_t*)(s + 0x40));
+        std::fflush(stderr);
+    }
+
     // Find storage component on pickup entity (+0x28)
     fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t storageIBP = 0;
@@ -290,6 +304,11 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
         // Check availability
         bool partialAllowed = *(uint8_t*)(s + 0x40) != 0;
+        if (s_pkTrace == 1) {
+            std::fprintf(stderr, "[BuildTrace] PickupStored mat[%d] requested=%d available=%d partial=%d slotCount=%d\n",
+                         matIdx, requestedCount, availableCount, (int)partialAllowed, *(int*)(storageIBP + 0x30));
+            std::fflush(stderr);
+        }
         if (!partialAllowed) {
             if (availableCount < requestedCount) {
                 return 2;  // Insufficient, fail

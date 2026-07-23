@@ -799,13 +799,13 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 // Index selectable via BANISHED_BUILD_DEMO_INDEX (default 0 = first structure).
 extern "C" void* g_pConstructionDemoSite;
 extern "C" void* g_pConstructionDemoEntity;   // the demo foundation's OWNER entity (force-harness work-area)
+// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
+// NOTE: this only enables the demo-foundation CAPABILITY — the actual "leave a start-town
+// building unbuilt" behaviour still requires the opt-in test sub-gates BuildDemoIndex()>=0
+// or BuildDemoWantsHouse() (both default off), so a normal default run force-completes
+// every start-town building as before.
 static bool BuildDemoEnabled() {
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_BUILDCTRL");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return en == 1;
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
 }
 static int BuildDemoIndex() {
     static int idx = -2;

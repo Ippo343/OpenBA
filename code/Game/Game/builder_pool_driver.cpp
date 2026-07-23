@@ -27,6 +27,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -49,13 +50,9 @@ extern bool g_wpcRosterOnly;
 
 namespace {
 
-int s_natural = -1;
+// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
 bool BuilderNaturalOn() {
-    if (s_natural < 0) {
-        const char* e = std::getenv("BANISHED_BUILDER_NATURAL");
-        s_natural = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_natural == 1;
+    return ::ComponentFactory::LiveEnabled("BANISHED_BUILDER_NATURAL");
 }
 
 // The auto-increment pool (this file's tick auto-seating construction sites up to capacity)

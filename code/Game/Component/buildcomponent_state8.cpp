@@ -36,6 +36,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -77,18 +78,13 @@ static bool BC8_DemoForce() {
 }
 static bool BC8_IsDemo(void* bc) { return g_pConstructionDemoSite && bc == g_pConstructionDemoSite; }
 
-// Natural builder-flow gate (BANISHED_BUILDER_NATURAL, opt-in). When on, the site was
-// registered into townMgr+0x100 at State1Enter and the tick-driven Builder pool
-// (BuilderPool_Tick) seats builders via FindAvailableBuilding — so State8Enter must NOT
-// also run the hardcoded-entity direct seat (CitizenEmploy_SeatWorkersAt), or the site would
-// be double-staffed. Off = legacy path (direct seat here).
-static int s_bc8_builderNatural = -1;
+// Natural builder-flow gate. When on, the site was registered into townMgr+0x100 at
+// State1Enter and the tick-driven Builder pool (BuilderPool_Tick) seats builders via
+// FindAvailableBuilding — so State8Enter must NOT also run the hardcoded-entity direct
+// seat (CitizenEmploy_SeatWorkersAt), or the site would be double-staffed. Off (=0
+// kill-switch) = legacy path (direct seat here). Default-ON via kDefaultOnFlags (2026-07-22).
 static bool BC8_BuilderNatural() {
-    if (s_bc8_builderNatural < 0) {
-        const char* e = std::getenv("BANISHED_BUILDER_NATURAL");
-        s_bc8_builderNatural = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_bc8_builderNatural == 1;
+    return ::ComponentFactory::LiveEnabled("BANISHED_BUILDER_NATURAL");
 }
 
 // ---- type ids (runtime registry) ----------------------------
@@ -315,14 +311,10 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         // + CitizenAI_impl_ec60(worker, 0x2001, 1, &bsIBP) to enqueue the construct work,
         // so citizens claim it and do timed BuildStructure labor (BuildStructure::Execute
         // assigns each to a build position; PerformWork accumulates progress into bc+0x48).
-        // Faithful to sub_7ae0's STAGED tail. Gated behind BANISHED_BUILD_LIVE_HAUL (needs
-        // the live-citizen action stack + task manager, same as the gather post).
-        static int s_liveLabor = -1;
-        if (s_liveLabor < 0) {
-            const char* e = std::getenv("BANISHED_BUILD_LIVE_HAUL");
-            s_liveLabor = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_liveLabor) {
+        // Faithful to sub_7ae0's STAGED tail. Default-ON via kDefaultOnFlags (2026-07-22);
+        // env var BANISHED_BUILD_LIVE_HAUL is a kill-switch (=0). Needs the live-citizen
+        // action stack + task manager (same as the gather post), both default-on.
+        if (::ComponentFactory::LiveEnabled("BANISHED_BUILD_LIVE_HAUL")) {
             void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
                             ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
             // Construct via the FULL retail ctor (0x1400e59c0): it routes base init through

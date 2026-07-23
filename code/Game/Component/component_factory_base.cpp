@@ -140,6 +140,12 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_SELECTION_OUTLINE",
     "BANISHED_LIVE_EVENTS",
     "BANISHED_LIVE_CITIZEN_CARRY",
+    // Organic construction pipeline — verified end-to-end 2026-07-22 (foundation ->
+    // real gather/haul -> real build labor via MsgReceive -> completion -> staffed).
+    // The three were formerly independent opt-ins; graduated together as one feature.
+    "BANISHED_LIVE_BUILDCTRL",     // BuildComponent state machine (foundation->1->8->2)
+    "BANISHED_BUILD_LIVE_HAUL",    // posts gather + build work to the citizen ledger
+    "BANISHED_BUILDER_NATURAL",    // site->profession BST + tick-driven Builder pool
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

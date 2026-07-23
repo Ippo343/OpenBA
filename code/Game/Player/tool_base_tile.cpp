@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
+#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled (default-on gates)
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
@@ -354,13 +355,9 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
 }
 
 // Organic construction is available when the live BuildComponent state machine is enabled.
+// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
 static bool ToolTile_OrganicConstruction() {
-    static int s_v = -1;
-    if (s_v < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_BUILDCTRL");
-        s_v = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_v == 1;
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
 }
 
 unsigned long long ToolTile_ValidateCreate_fd650(

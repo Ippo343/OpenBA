@@ -31,6 +31,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
@@ -98,13 +99,9 @@ static bool BCS1_Trace() {
 // to retail's WPC OnCreate FUN_14012f520), so the tick-driven Builder pool (BuilderPool_Tick)
 // finds them via FindAvailableBuilding and seats idle laborers as Builders — instead of the
 // State8Enter hardcoded-entity direct seat. Off = the existing direct-seat/force-harness path.
-static int s_bcs1_builderNatural = -1;
+// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
 static bool BCS1_BuilderNatural() {
-    if (s_bcs1_builderNatural < 0) {
-        const char* e = std::getenv("BANISHED_BUILDER_NATURAL");
-        s_bcs1_builderNatural = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_bcs1_builderNatural == 1;
+    return ::ComponentFactory::LiveEnabled("BANISHED_BUILDER_NATURAL");
 }
 
 // ---- Construction-demo gating (standalone) ---------------------------------------
@@ -292,14 +289,10 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // gather work into the gw+0x118 priority AVL (via 0x1400f88a0) keyed by the
         // WorkComponent, so an idle citizen claims it and runs GatherRawMaterials::Execute
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
-        // Gated behind BANISHED_BUILD_LIVE_HAUL so it can be A/B'd independently of the
-        // state-machine harness (it needs the live-citizen action stack + pathfinder).
-        static int s_liveHaul = -1;
-        if (s_liveHaul < 0) {
-            const char* e = std::getenv("BANISHED_BUILD_LIVE_HAUL");
-            s_liveHaul = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_liveHaul && s_postEc60 && workCompIbp != 0) {
+        // Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
+        // Needs the live-citizen action stack + pathfinder (both default-on).
+        const bool liveHaul = ::ComponentFactory::LiveEnabled("BANISHED_BUILD_LIVE_HAUL");
+        if (liveHaul && s_postEc60 && workCompIbp != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
             s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
             if (BCS1_Trace())
@@ -307,7 +300,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                              *reinterpret_cast<void**>(workCompIbp), work);
         } else if (BCS1_Trace()) {
             std::fprintf(stderr, "[BuildTrace] (gather post skipped: liveHaul=%d postFn=%p workComp=%p)\n",
-                         s_liveHaul, (void*)s_postEc60, (void*)workCompIbp);
+                         (int)liveHaul, (void*)s_postEc60, (void*)workCompIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity
