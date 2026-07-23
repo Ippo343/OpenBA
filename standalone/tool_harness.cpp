@@ -19,6 +19,7 @@
 #include "tool_harness.h"
 #include "resolve.h"
 #include "engine_funcs.h"   // fn_String_Ctor_CStr/Dtor for the operator_fc60 probe
+#include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (pinpanel controller lookup)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -548,6 +549,12 @@ uint64_t s_mr_entity     = 0;    // the marked entity ptr (post-CheckPtr)
 uintptr_t s_mr_tileSlot  = 0;    // address of the tile slot it came from
 int      s_mr_fireFrame  = 0;
 
+// Pinned-panel residual-risk observer state (see FirePinPanel).
+bool     s_pin_fired     = false;
+void*    s_pin_ctrl      = nullptr;  // EntityUI controller (its +0x28 = datasource IBP)
+uint64_t s_pin_entity    = 0;        // the marked-then-freed house entity ptr
+int      s_pin_fireFrame = 0;
+
 inline void* GetGW() { return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr; }
 
 // Read component[0]'s type-id (best-effort, for identifying what we marked).
@@ -648,6 +655,99 @@ void FireMarkRemoval() {
                "(scanned=%d occupied=%d) — try a denser (forested) area\n",
                lo, hi, scanned, occupied);
     }
+}
+
+// ============================================================
+// Pinned-panel-on-dying-entity residual-risk test ("pinpanel")
+// ============================================================
+// The dialogs-on-dying-entities guard (SA_DialogEntityAlive) rests on a 3-part
+// interlock: one-frame removal deferral + EditTool close-on-death + per-panel
+// guards. For a PINNED panel the close-on-death is SUPPRESSED — EditTool's
+// reposition bails on ToolUI+0x40 (the pin flag) before ever reaching the close
+// (edittool.cpp:528 vs :544). So on the frame AFTER the entity is freed, the
+// controller's +0x28 datasource weak-ref dangles and the guard reads freed memory.
+//
+// This scenario reproduces exactly that window: open a founding-house info dialog,
+// force the pin (ToolUI+0x40=1), mark+push the house for removal (freed on the next
+// drain), then each frame compare the RAW +0x28 read (what the guard does today)
+// against a CheckPtr-hardened read (the proposed fix). If, once the entity frees,
+// rawDS stays non-null (dangling) while checkedDS goes null, that proves (a) the
+// current guard would deref freed memory and (b) a CheckPtr at the top of
+// SA_DialogEntityAlive is the correct, sufficient fix. The Tick never derefs rawDS
+// past +0x28, so the observation itself stays crash-free.
+void* GetControllerByName(void* dialog, const char* name) {
+    if (!dialog || !fn_DialogInstance_GetController) return nullptr;
+    uint32_t tid = ::Object::GetTypeIdByName(name);
+    if (tid == 0 || tid == 0xFFFFFFFFu) return nullptr;
+    uintptr_t buf[2] = {};
+    fn_DialogInstance_GetController(dialog, buf, tid);
+    void* ctrl = reinterpret_cast<void*>(buf[0]);
+    if (ctrl && fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrl);
+    return ctrl;
+}
+
+void FirePinPanel(void* entityUI) {
+    if (!entityUI) { printf("[PinPanel] ERROR: entityUI null\n"); return; }
+
+    // 1. Activate the default EditTool (mode-tree needs BANISHED_LIVE_TOOLS=1).
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        printf("[PinPanel] installing default EditTool via SetEditMode(pc,0)...\n");
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) { printf("[PinPanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
+
+    // 2. Open a founding-house info dialog.
+    int houses = StartTown_GetFoundingHouseCount();
+    void* house = nullptr; int opened = 0;
+    for (int i = 0; i < houses && !opened; ++i) {
+        house = StartTown_GetFoundingHouseEntity(i);
+        if (house) opened = EditTool_HarnessSelectEntity(tool, house);
+    }
+    if (!opened || !house) { printf("[PinPanel] no house info dialog opened (houses=%d)\n", houses); return; }
+    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+
+    // 3. Grab the EntityUI (guard target) + ToolUI (pin flag) controllers.
+    void* entCtrl  = GetControllerByName(dialog, "EntityUI");
+    void* toolCtrl = GetControllerByName(dialog, "ToolUI");
+    void* ds = entCtrl ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entCtrl) + 0x28) : nullptr;
+    printf("[PinPanel] house=%p dialog=%p EntityUIctrl=%p(+0x28 ds=%p) ToolUIctrl=%p\n",
+           house, dialog, entCtrl, ds, toolCtrl);
+    if (!entCtrl) { printf("[PinPanel] no EntityUI controller — cannot probe guard\n"); return; }
+
+    // 4. Force the PINNED condition so EditTool's close-on-death can't save us.
+    if (toolCtrl) {
+        *reinterpret_cast<char*>(static_cast<uint8_t*>(toolCtrl) + 0x40) = 1;
+        printf("[PinPanel] set ToolUI+0x40=1 (pinned) — close-on-death now suppressed\n");
+    } else {
+        printf("[PinPanel] WARN: no ToolUI controller; close-on-death may still fire if EditTool is ticked\n");
+    }
+
+    // 5. Mark the house for removal (freed on the next EntityList drain).
+    void* gw = GetGW();
+    void* entityList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : nullptr;
+    auto c2ea0   = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c2ea0));
+    auto push3110 = reinterpret_cast<void(*)(void*, int, void*)>(ResolveAddr(Module::Exe, 0x140003110));
+    void* local = house;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
+    if (!local || !c2ea0 || !push3110 || !entityList) {
+        printf("[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
+               local, (void*)c2ea0, (void*)push3110, entityList);
+        return;
+    }
+    c2ea0(local);
+    uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
+    int cntBefore = *reinterpret_cast<int*>(rl + 8);
+    push3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
+    printf("[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
+           "across the free (rawDS vs CheckPtr-hardened)...\n",
+           *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(local) + 0x40),
+           cntBefore, *reinterpret_cast<int*>(rl + 8));
+
+    s_pin_ctrl      = entCtrl;
+    s_pin_entity    = reinterpret_cast<uint64_t>(local);
+    s_pin_fired     = true;
 }
 
 // Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
@@ -952,6 +1052,37 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         }
     }
 
+    // pinpanel: after the mark fires, each frame compare the RAW datasource read
+    // (+0x28, what SA_DialogEntityAlive does) against a CheckPtr-hardened read, and
+    // track when the entity actually frees. rawDS staying non-null while checkedDS
+    // nulls == the current guard would read freed memory; the CheckPtr is the fix.
+    if (s_pin_fired && s_pin_ctrl) {
+        int rel = frameNum - s_pin_fireFrame;
+        if (rel >= 0 && rel <= 14) {
+            void* gw = GetGW();
+            void* el = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : nullptr;
+            int cnt = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+            uint8_t* ctrl = static_cast<uint8_t*>(s_pin_ctrl);
+            // RAW +0x28 (guard's read) — pointer only, never dereferenced here.
+            void* rawDS = *reinterpret_cast<void**>(ctrl + 0x28);
+            // CheckPtr-hardened read: CheckPtr a COPY of the +0x28 IBP so the probe
+            // is non-destructive; it nulls if the weak-ref's target was freed.
+            uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(ctrl + 0x28);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpCopy);
+            void* checkedDS = reinterpret_cast<void*>(ibpCopy);
+            // NOTE: CheckPtr does NOT null this dangling ref (the datasource weak-ref
+            // isn't generation-invalidated by a raw free) — so a guard-side CheckPtr is
+            // NOT the fix. The real fix closes the dialog at the drain when its entity is
+            // marked-for-removal (EntityList_CloseDialogsForDyingEntities). With that in
+            // place this brute-force harness no longer crashes either — the drain closes
+            // the panel. Kept as a headless regression probe. checkedDS is logged only to
+            // show CheckPtr's (in)effectiveness, not as a fix signal.
+            printf("[PinPanel] +%2d frames: removalCount=%d rawDS=%p checkedDS=%p entity=%p%s\n",
+                   rel, cnt, rawDS, checkedDS, reinterpret_cast<void*>(s_pin_entity),
+                   (rawDS == nullptr) ? "  (datasource cleared — dialog closed)" : "");
+        }
+    }
+
     // Delayed re-scan: 90 frames after the initial fire, re-enumerate the open
     // dialogs and drive MapUI again. The UIDescription controller inserts the
     // Map.rsc:content sub-tree (imageMap/imageOverlay/frustum) on a LATER frame
@@ -990,6 +1121,9 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "markremoval") == 0) {
         s_mr_fireFrame = frameNum;
         FireMarkRemoval();
+    } else if (std::strcmp(s_toolName, "pinpanel") == 0) {
+        s_pin_fireFrame = frameNum;
+        FirePinPanel(entityUI);
     } else if (std::strcmp(s_toolName, "clearfootprint") == 0) {
         s_mr_fireFrame = frameNum;
         FireClearFootprint();

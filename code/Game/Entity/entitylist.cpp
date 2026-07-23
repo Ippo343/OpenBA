@@ -25,6 +25,7 @@
 #include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (dying-entity dialog close)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -600,9 +601,71 @@ void EntityList_Update(EntityList* self, void* time) {
 // The retail step-5 body (0x1400c4090 tail), relocated so it drains the PRIOR
 // frame's removalList. Faithful otherwise: PreUpdate + PostUpdateStaging then
 // RemoveEntity per pending IBP, then clear the list.
+// Close any still-open info dialog whose data-source entity is marked-for-removal
+// (0x400) this drain, BEFORE the entity is freed below. A PINNED info panel is driven
+// by the UI pump, NOT by EditTool, so EditTool's close-on-death (edittool.cpp:544) can
+// never reach it; next frame the panel would read its dangling +0x28, and because the
+// freed entity's +0x40 no longer has the 0x400 bit it FALSE-POSITIVES the per-panel
+// guard and dereferences freed memory. Confirmed crash 2026-07-22 (pin a house panel,
+// demolish it -> ResidenceUI_Slot7 -> IsDerivedFrom(freed)). We close during the marked
+// window (entity still ALIVE here — reading data-source+0x40 is safe) so the free frame
+// has no dialog pointing at it. This is what retail's strong data-source ref achieves;
+// the standalone dialog holds only a weak ref, so we close explicitly. Fixes every
+// entity panel (pinned or not), not just ResidenceUI.
+static void EntityList_CloseDialogsForDyingEntities() {
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw || !fn_UI_GetFirstDialog || !fn_UI_CloseDialog || !fn_DialogInstance_GetController)
+        return;
+    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
+    if (!ui) return;
+
+    // EntityUI is the shared frame controller on every entity info dialog; its +0x28 is
+    // the data-source entity (raw .rdata type-id is null in standalone -> resolve by name).
+    static uint32_t s_tidEntityUI = 0;
+    if (s_tidEntityUI == 0 || s_tidEntityUI == 0xFFFFFFFFu)
+        s_tidEntityUI = ::Object::GetTypeIdByName("EntityUI");
+    if (s_tidEntityUI == 0 || s_tidEntityUI == 0xFFFFFFFFu) return;
+
+    // Collect first, close after — fn_UI_CloseDialog mutates the list we're walking.
+    void* toClose[16];
+    int nClose = 0;
+
+    uintptr_t nodeBuf[4] = {};
+    fn_UI_GetFirstDialog(ui, nodeBuf);
+    uintptr_t node = nodeBuf[0];
+    while (node != 0 && nClose < 16) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)node);
+        void* dialog = *reinterpret_cast<void**>(node);            // node[0] = DialogInstance*
+        if (dialog) {
+            uintptr_t ctrlBuf[2] = {};
+            fn_DialogInstance_GetController(dialog, ctrlBuf, s_tidEntityUI);
+            if (ctrlBuf[0] != 0) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf[0]);
+                void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
+                void* ds = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x28);
+                if (ds && ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ds) + 0x40) >> 10) & 1))
+                    toClose[nClose++] = dialog;
+            }
+        }
+        node = *reinterpret_cast<uintptr_t*>(node + 0x10);          // node+0x10 = next
+    }
+
+    for (int i = 0; i < nClose; i++) {
+        void* dlgUI = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(toClose[i]) + 0x10);
+        if (!dlgUI) dlgUI = ui;
+        uint64_t dialogRef = reinterpret_cast<uint64_t>(toClose[i]);
+        fn_UI_CloseDialog(dlgUI, &dialogRef);
+        std::printf("[EntityList] closed info dialog %p on dying (marked-for-removal) entity\n",
+                    toClose[i]);
+    }
+}
+
 void EntityList_DrainRemovals(EntityList* self) {
     int32_t removalCount = self->removalList.count;
     if (removalCount <= 0) return;
+
+    // Close dialogs bound to the entities we're about to free (see helper above).
+    EntityList_CloseDialogsForDyingEntities();
 
     EntityList_PreUpdate(self);
     EntityList_PostUpdateStaging(self);
