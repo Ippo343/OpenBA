@@ -377,9 +377,10 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
 // ============================================================
 void Destructor(ImageBufferData* self, const Imports* im) {
     // MSVC's "restore this class's vptr before running the dtor body". The
-    // vtable is the live one in the shipped DLL — i.e. the seam's table, so a
-    // later virtual call still reaches whichever slots we have installed.
-    self->vptr = reinterpret_cast<void*>(ResolveAddr(Module::VideoDX11, 0x180018790));
+    // live vtable, so a later virtual call reaches whichever slots are
+    // installed — our exe-owned array in Standalone mode, the shipped DLL's
+    // patched .rdata in AB mode.
+    self->vptr = Dx11LiveVtable(Vt::ImageBufferData);
 
     void* const ib = self->imageBuffer;
 

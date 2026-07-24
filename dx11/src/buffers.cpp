@@ -175,12 +175,13 @@ bool EnsureDeps() {
     g_deps.SerializeBytes = Exp<void (*)(void*, int, void*, const char*)>(
         "?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z");
 
-    g_deps.vtVertexBufferData =
-        reinterpret_cast<void*>(ResolveAddr(Module::VideoDX11, 0x180018830));
-    g_deps.vtIndexBufferData =
-        reinterpret_cast<void*>(ResolveAddr(Module::VideoDX11, 0x1800187c8));
-    g_deps.vtConstantBufferData =
-        reinterpret_cast<void*>(ResolveAddr(Module::VideoDX11, 0x1800185d0));
+    // The LIVE vtables, not ResolveAddr(Module::VideoDX11, 0x1800188xx). In
+    // Standalone mode these are our exe-owned arrays and the shipped DLL is
+    // never mapped, so resolving the .rdata addresses directly would store a
+    // vptr into nothing.
+    g_deps.vtVertexBufferData   = Dx11LiveVtable(Vt::VertexBufferData);
+    g_deps.vtIndexBufferData    = Dx11LiveVtable(Vt::IndexBufferData);
+    g_deps.vtConstantBufferData = Dx11LiveVtable(Vt::ConstantBufferData);
 
     g_deps.ok = g_deps.videoDeviceSingleton && g_deps.DeviceLock && g_deps.DeviceUnlock &&
                 g_deps.VertexBufferDataDtor && g_deps.IndexBufferDataDtor &&

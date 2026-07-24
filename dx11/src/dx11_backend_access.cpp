@@ -13,8 +13,12 @@ void* Dx11ResolveRuntimeImport(const char* mangled, uintptr_t iatGhidra) {
 
     // Fallback: read VideoDX11's own IAT slot. This is the pointer the shipped
     // code CALLs through, so it is by construction the right target — it just
-    // requires the loader to have bound the DLL, which it always has by the
-    // time any *Data object exists.
+    // requires the loader to have bound the DLL.
+    //
+    // Only available in AB mode. In Standalone mode the DLL is never mapped,
+    // ResolveAddr returns 0, and this degrades to the FAILED path below, which
+    // is correct: a Runtime export we cannot resolve by name is a real problem
+    // and must not be papered over.
     uintptr_t slot = ResolveAddr(Module::VideoDX11, iatGhidra);
     if (slot) {
         fn = *reinterpret_cast<void**>(slot);

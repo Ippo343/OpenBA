@@ -6,6 +6,8 @@
 
 #include "resolve.h"
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <unordered_map>
 
 // ============================================================
@@ -109,9 +111,21 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         return 0;
     }
 
-    // Runtime/VideoDX11 — standard ASLR delta
+    // Runtime/VideoDX11 — standard ASLR delta.
+    //
+    // Return 0 when the module is not mapped. Without this the delta is 0 and
+    // the function hands back `ghidra_addr` unchanged — 0x1800187c8 and the
+    // like — which is not null, looks like a perfectly good pointer, and points
+    // at nothing. That is strictly worse than null for every caller, all of
+    // which either null-check or crash immediately. It became reachable when
+    // VideoDX11-x64.dll stopped being loaded in Standalone mode.
+    //
+    // Guard on the handle, not the delta: a module CAN legitimately load at its
+    // preferred base and have delta == 0.
+    const ModuleInfo& mi = g_modules[static_cast<int>(mod)];
+    if (!mi.handle) return 0;
     return static_cast<uintptr_t>(
-        static_cast<intptr_t>(ghidra_addr) + g_modules[static_cast<int>(mod)].delta
+        static_cast<intptr_t>(ghidra_addr) + mi.delta
     );
 }
 
@@ -136,10 +150,24 @@ bool ResolveInit() {
     g_modules[1].delta = static_cast<intptr_t>(g_modules[1].runtimeBase)
                        - static_cast<intptr_t>(g_modules[1].preferredBase);
 
-    // VideoDX11-x64.dll: optional
-    g_modules[2].handle = GetModuleHandleA(g_modules[2].name);
-    if (!g_modules[2].handle) {
-        g_modules[2].handle = LoadLibraryA(g_modules[2].name);
+    // VideoDX11-x64.dll: optional, and in the default Standalone renderer mode
+    // deliberately NOT loaded — that is the point of the mode. Our own vtables
+    // and our ports of the two exports replace it entirely, and
+    // InstallVideoInterfacePrefill stops Runtime LoadLibrary'ing it too.
+    //
+    // Only BANISHED_DX11_AB=1 (the verification mode that patches the shipped
+    // .rdata and can A/B a single slot) needs it mapped. The env var is read
+    // here rather than asked of the seam because ResolveInit runs first —
+    // Dx11SeamInstall cannot have decided the mode yet. Both readers use the
+    // same name; see dx11/funcs/dx11_seam.h.
+    {
+        const char* ab = getenv("BANISHED_DX11_AB");
+        const bool  wantAB = ab && ab[0] && strcmp(ab, "0") != 0 &&
+                             strcmp(ab, "false") != 0;
+        g_modules[2].handle = GetModuleHandleA(g_modules[2].name);
+        if (!g_modules[2].handle && wantAB) {
+            g_modules[2].handle = LoadLibraryA(g_modules[2].name);
+        }
     }
     if (g_modules[2].handle) {
         g_modules[2].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[2].handle);

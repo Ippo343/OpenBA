@@ -343,8 +343,13 @@ inline void Dx11MemFree(void* p) {
 // back the address of the *live* vtable is what keeps a partially-ported class
 // consistent: the seam patches slots inside that same array.
 inline void* Dx11VtableAddress(Vt v) {
-    return reinterpret_cast<void*>(
-        ResolveAddr(Module::VideoDX11, VtGhidraAddr(v)));
+    // Was ResolveAddr(Module::VideoDX11, VtGhidraAddr(v)) — i.e. always the
+    // shipped .rdata array. Dx11LiveVtable() returns our exe-owned array in
+    // Standalone mode and the shipped one in AB mode, which is the whole of
+    // what distinguishes the two. Do not reintroduce the direct ResolveAddr:
+    // in Standalone mode the DLL is not mapped and it would yield a vptr into
+    // nothing.
+    return Dx11LiveVtable(v);
 }
 
 // COM Release() through the IUnknown vtable (index 2, byte offset 0x10) —

@@ -51,6 +51,33 @@
 
 namespace VideoDX11 {
 
+// ============================================================
+// Two ways to make our 84 slots the live ones
+// ============================================================
+//
+// Standalone (default) — the vtables are OURS, twelve arrays in the exe's
+//   .data built from the same DX11_REGISTER_SLOT entries. Nothing is patched
+//   and VideoDX11-x64.dll is never loaded: Runtime is stopped from
+//   LoadLibrary'ing it by pre-filling Video::Device+0xc8/+0xd0/+0xd8 (see
+//   standalone/video_interface.cpp). This is the real replacement.
+//
+// AB (BANISHED_DX11_AB=1) — the original arrangement: load the shipped DLL,
+//   verify all 84 live slot pointers against the map below, and patch its
+//   .rdata in place. Kept solely because it is the only way to A/B a single
+//   slot against the shipped implementation (Dx11SetSlotEnabled), which is how
+//   every lane in this port was verified and how per-draw state equality will
+//   have to be verified. Not used in a normal run.
+//
+// The difference is confined to Dx11LiveVtable() and to what Dx11SeamInstall()
+// does; no ported slot knows which mode it is running under.
+enum class Mode {
+    Standalone = 0,
+    AB         = 1,
+};
+
+Mode        Dx11ActiveMode();
+const char* Dx11ModeName();
+
 // The twelve vtables. Order matches Dx11SeamInstall()'s report output.
 enum class Vt : int {
     DeviceData = 0,       // 0x180018bb0, 20 slots
@@ -74,6 +101,17 @@ const char* VtName(Vt v);
 int         VtSlotCount(Vt v);
 uintptr_t   VtGhidraAddr(Vt v);
 
+// The vtable a *Data object's vptr must point at: our array in Standalone
+// mode, the shipped DLL's .rdata array in AB mode. Every ported destructor
+// re-seats `this` on it before running the Runtime base destructor, and every
+// factory stores it into the object it just allocated.
+//
+// Null before Dx11SeamInstall(). There is deliberately no fallback to
+// ResolveAddr(Module::VideoDX11, ...): in Standalone mode the DLL is not
+// mapped, so a caller that reached past this function would silently produce a
+// vptr into nothing.
+void** Dx11LiveVtable(Vt v);
+
 // The original slot target, captured before any override was installed.
 // Valid after Dx11SeamInstall(). This is how a ported slot calls through to
 // the original for the parts it has not taken over yet.
@@ -87,6 +125,12 @@ uintptr_t   VtGhidraAddr(Vt v);
 // fire. Each call is therefore counted and the first one per slot is reported
 // on stderr, so that Dx11ForwardCount() == 0 is positive evidence that no
 // shipped renderer code ran, rather than an absence of evidence.
+//
+// **In Standalone mode this always returns null**, because there is no shipped
+// code to fall back to. Most call sites invoke the result without a null check,
+// so a fallback that fires becomes a null-call crash preceded by the log line
+// above. That is the intended outcome: the alternative would be to silently run
+// the shipped implementation, which is the thing this branch exists to stop.
 void* Dx11OriginalSlot(Vt v, int slot);
 
 // Number of times a ported slot has fallen back to the shipped implementation.

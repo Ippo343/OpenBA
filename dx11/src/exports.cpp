@@ -154,17 +154,17 @@ DeviceData* Dx11_CreateDeviceData(void* device) {
 // ============================================================
 // 0x180001230 — GetDeviceName() -> "DirectX 11"
 //
-// Returns the shipped DLL's own .rdata string rather than a literal of ours.
-// The bytes are identical either way, but this keeps the returned POINTER
-// identical too, which costs nothing and removes the need to reason about
-// whether any Runtime caller compares addresses. Reading the DLL's .rdata is
-// not executing its code — the seam already reads all twelve vtables from
-// there.
+// Our own literal. An earlier revision returned the shipped DLL's .rdata string
+// at 0x1800185c0 to keep the returned POINTER identical as well as the bytes;
+// that is not available in Standalone mode, where the DLL is never mapped.
+// Nothing compares the address — Runtime copies the result into a System::String
+// — so the bytes are the whole of the contract.
+//
+// Dx11FuncsInit still cross-checks against 0x1800185c0 when the DLL happens to
+// be loaded, which is where a divergence would show up.
 // ============================================================
 const char* Dx11_GetDeviceName() {
-    static const char* name = reinterpret_cast<const char*>(
-        ResolveAddr(Module::VideoDX11, 0x1800185c0));
-    return name ? name : "DirectX 11";
+    return "DirectX 11";
 }
 
 }  // namespace VideoDX11

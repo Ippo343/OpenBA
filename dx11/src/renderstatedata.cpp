@@ -383,8 +383,7 @@ RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsig
         return orig ? orig(self, flags) : self;
     }
 
-    self->vptr = reinterpret_cast<void*>(
-        ResolveAddr(Module::VideoDX11, 0x180018818));
+    self->vptr = Dx11LiveVtable(Vt::RenderStateData);
 
     if (self->blendState) {
         static_cast<ID3D11BlendState*>(self->blendState)->Release();

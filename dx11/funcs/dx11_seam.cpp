@@ -104,6 +104,37 @@ static SlotEntry s_slots[static_cast<int>(Vt::kVtCount)][kMaxSlots];
 static void**    s_vtable[static_cast<int>(Vt::kVtCount)] = { nullptr };
 static bool      s_installed = false;
 
+// ============================================================
+// Our own vtables (Standalone mode)
+// ============================================================
+//
+// The leading `rtti` word is not padding. MSVC puts the RTTI Complete Object
+// Locator at vtable[-1], and the shipped DLL's arrays have a zero there
+// (checked at 0x180018ba8 for DeviceData and 0x1800186e8 for ContextData — the
+// DLL carries no object locators). Reproducing the zero keeps our arrays
+// shaped like the ones they replace, so anything that reads [-1] reads what it
+// read before rather than the tail of the previous array.
+struct OurVtable {
+    void* rtti;
+    void* slot[kMaxSlots];
+};
+static OurVtable s_ourVt[static_cast<int>(Vt::kVtCount)];
+
+static Mode s_mode = Mode::Standalone;
+
+Mode Dx11ActiveMode() { return s_mode; }
+const char* Dx11ModeName() {
+    return s_mode == Mode::AB ? "AB (patch the shipped DLL)"
+                              : "Standalone (our own vtables)";
+}
+
+void** Dx11LiveVtable(Vt v) {
+    if (!s_installed) return nullptr;
+    int vi = static_cast<int>(v);
+    if (vi < 0 || vi >= static_cast<int>(Vt::kVtCount)) return nullptr;
+    return s_mode == Mode::AB ? s_vtable[vi] : s_ourVt[vi].slot;
+}
+
 bool Dx11SeamReady() { return s_installed; }
 
 static bool ValidSlot(Vt v, int slot) {
@@ -128,11 +159,19 @@ void* Dx11OriginalSlot(Vt v, int slot) {
 
     ++s_forwardTotal;
     if (s_forward[static_cast<int>(v)][slot]++ == 0) {
-        fprintf(stderr,
-                "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) -> %p. A "
-                "Runtime import failed to resolve; shipped VideoDX11 code is "
-                "now running for this slot.\n",
-                VtName(v), slot, e.label ? e.label : "?", e.original);
+        if (s_mode == Mode::Standalone) {
+            fprintf(stderr,
+                    "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) — but "
+                    "Standalone mode has no original. Returning null; the "
+                    "caller will fault. A Runtime import failed to resolve.\n",
+                    VtName(v), slot, e.label ? e.label : "?");
+        } else {
+            fprintf(stderr,
+                    "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) -> %p. A "
+                    "Runtime import failed to resolve; shipped VideoDX11 code "
+                    "is now running for this slot.\n",
+                    VtName(v), slot, e.label ? e.label : "?", e.original);
+        }
         fflush(stderr);
     }
     return e.original;
@@ -335,8 +374,80 @@ static void ApplyDetours() {
     }
 }
 
+// ============================================================
+// Standalone install — build our twelve vtables from the registrations
+// ============================================================
+//
+// There is nothing to verify against here: in AB mode the 84-slot check
+// re-proves the map against the live DLL every boot, and losing that was the
+// main cost of owning the vtables. The equivalent check available in this mode
+// is completeness — every slot of every vtable must have a registered
+// implementation, because an unregistered slot is a null function pointer that
+// Runtime will eventually dispatch through. A hole is refused, not zero-filled.
+static bool InstallStandalone() {
+    int total = 0, holes = 0, forced = 0;
+
+    for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
+        s_ourVt[vi].rtti = nullptr;
+        for (int slot = 0; slot < kVtables[vi].slots; ++slot) {
+            SlotEntry& e = s_slots[vi][slot];
+            ++total;
+            if (!e.impl) {
+                fprintf(stderr,
+                        "[Dx11Seam] HOLE: %s slot %d has no reimplementation. "
+                        "Standalone mode cannot fill it — there is no shipped "
+                        "code to fall back to.\n",
+                        kVtables[vi].name, slot);
+                ++holes;
+                continue;
+            }
+            // Per-slot kill switches are an AB-mode concept: "run the shipped
+            // version of this one instead". In Standalone mode there is no
+            // shipped version, so a =0 flag cannot be honoured. Say so rather
+            // than silently ignoring it.
+            if (!SlotEnabled(e)) {
+                fprintf(stderr,
+                        "[Dx11Seam] %s slot %d (%s): %s is off, but Standalone "
+                        "mode has no original to fall back to — using ours "
+                        "anyway. Set BANISHED_DX11_AB=1 to A/B this slot.\n",
+                        kVtables[vi].name, slot, e.label ? e.label : "?",
+                        e.envFlag ? e.envFlag : "(flag)");
+                ++forced;
+            }
+            s_ourVt[vi].slot[slot] = e.impl;
+            e.live = true;
+        }
+    }
+
+    if (holes) {
+        fprintf(stderr,
+                "[Dx11Seam] ABORT: %d/%d slots unimplemented. Not installing.\n",
+                holes, total);
+        return false;
+    }
+
+    s_installed = true;
+    printf("[Dx11Seam] Standalone: %d/%d slots ours, in %d exe-owned vtables. "
+           "VideoDX11-x64.dll is not required.%s\n",
+           total, total, static_cast<int>(Vt::kVtCount),
+           forced ? "  (kill switches ignored — see stderr)" : "");
+    for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
+        printf("[Dx11Seam]   %-19s -> %p (%d slots)\n",
+               kVtables[vi].name, static_cast<void*>(s_ourVt[vi].slot),
+               kVtables[vi].slots);
+    }
+    std::atexit(Dx11SeamReport);
+    fflush(stdout);
+    return true;
+}
+
 bool Dx11SeamInstall() {
     if (s_installed) return true;
+
+    s_mode = Enabled("BANISHED_DX11_AB", false) ? Mode::AB : Mode::Standalone;
+    printf("[Dx11Seam] mode: %s\n", Dx11ModeName());
+
+    if (s_mode == Mode::Standalone) return InstallStandalone();
 
     const ModuleInfo* info = GetModuleInfo(Module::VideoDX11);
     if (!info || !info->handle) {
@@ -451,11 +562,11 @@ void Dx11SeamReport() {
         printf("[Dx11Seam] not installed\n");
         return;
     }
-    printf("\n[Dx11Seam] === slot table ===\n");
+    printf("\n[Dx11Seam] === slot table (%s) ===\n", Dx11ModeName());
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
         const VtDesc& d = kVtables[vi];
         printf("[Dx11Seam] %-19s @ %p (%d slots)\n",
-               d.name, (void*)s_vtable[vi], d.slots);
+               d.name, (void*)Dx11LiveVtable(static_cast<Vt>(vi)), d.slots);
         for (int slot = 0; slot < d.slots; ++slot) {
             const SlotEntry& e = s_slots[vi][slot];
             if (!e.impl) continue;   // un-ported slots are the silent majority

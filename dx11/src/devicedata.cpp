@@ -118,6 +118,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 
 namespace VideoDX11 {
@@ -273,25 +274,49 @@ const Imports* GetImports() {
         { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
         { (void**)&g_im.deviceSingleton,        "?_singleton@Device@Video@@0PEAV12@EA",                          0x1800134b8 },
     };
-    for (const Entry& e : table)
-        *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
-
-    const void* const* p = reinterpret_cast<const void* const*>(&g_im);
     g_imOk = true;
-    for (size_t i = 0; i < sizeof(Imports) / sizeof(void*); ++i)
-        if (p[i] == nullptr) g_imOk = false;
+    for (const Entry& e : table) {
+        *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
+        // Name the casualty. The whole-struct scan below can only say "some
+        // field is null", which cost a debugging session when Standalone mode
+        // removed the VideoDX11 IAT fallback and one import started failing:
+        // the symptom was DeviceData::EnumerateInterfaces silently declining to
+        // enumerate, three layers away from the cause.
+        if (!*e.dst) {
+            fprintf(stderr, "[Dx11] devicedata import UNRESOLVED: %s\n", e.mangled);
+            g_imOk = false;
+        }
+    }
+
+    // Also catch a field that has no table entry at all — that one is a
+    // straightforward coding error and shows up as a permanent null.
+    const void* const* p = reinterpret_cast<const void* const*>(&g_im);
+    for (size_t i = 0; i < sizeof(Imports) / sizeof(void*); ++i) {
+        if (p[i] == nullptr) {
+            fprintf(stderr, "[Dx11] devicedata Imports field #%zu is null "
+                            "(no table entry?)\n", i);
+            g_imOk = false;
+        }
+    }
+    if (!g_imOk) fflush(stderr);
     return g_imOk ? &g_im : nullptr;
 }
 
 // ============================================================
 // d3d11.dll / dxgi.dll entry points
 //
-// These are the only two non-COM graphics imports the DLL has. We read them out
-// of VideoDX11's OWN import address table — the exact pointers the shipped code
-// CALLs through — rather than linking d3d11.lib/dxgi.lib, which would need a
-// Makefile change this lane is not allowed to make. GetProcAddress on an
-// already-loaded module is the fallback; it cannot be reached in practice
-// because VideoDX11 could not have loaded without these imports resolving.
+// These are the only two non-COM graphics imports the DLL has.
+//
+// They used to be read out of VideoDX11's OWN import address table — the exact
+// pointers the shipped code CALLs through — with GetProcAddress as a fallback
+// that the comment claimed was unreachable "because VideoDX11 could not have
+// loaded without these imports resolving". Standalone mode made it not merely
+// reachable but the only path: the DLL is never loaded, so there is no IAT.
+//
+// The order is therefore inverted. LoadLibrary (not GetModuleHandle) is what
+// makes this work standalone: with VideoDX11 absent, nothing else in the
+// process has pulled d3d11.dll or dxgi.dll in yet, so asking for a handle to an
+// already-loaded module returns null and the renderer never comes up.
 // ============================================================
 typedef HRESULT (WINAPI *CreateDXGIFactory1_t)(REFIID, void**);
 typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
@@ -300,13 +325,28 @@ typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HM
                                               ID3D11DeviceContext**);
 
 void* ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name) {
+    // Primary: the system DLL, loading it if necessary. Same function either
+    // way — the shipped DLL's IAT slot holds exactly what GetProcAddress
+    // returns, since that is what the loader wrote into it.
+    HMODULE m = GetModuleHandleW(dll);
+    if (!m) m = LoadLibraryW(dll);
+    if (m) {
+        if (void* fn = reinterpret_cast<void*>(GetProcAddress(m, name)))
+            return fn;
+    }
+
+    // Fallback: VideoDX11's IAT, when it happens to be mapped (AB mode).
     uintptr_t slot = ResolveAddr(Module::VideoDX11, iatGhidra);
     if (slot) {
-        void* fn = *reinterpret_cast<void**>(slot);
-        if (fn) return fn;
+        if (void* fn = *reinterpret_cast<void**>(slot)) {
+            fprintf(stderr, "[Dx11] %ls!%s came from the VideoDX11 IAT, not the "
+                            "system DLL\n", dll, name);
+            return fn;
+        }
     }
-    if (HMODULE m = GetModuleHandleW(dll))
-        return reinterpret_cast<void*>(GetProcAddress(m, name));
+
+    fprintf(stderr, "[Dx11] FAILED to resolve %ls!%s — the renderer cannot start\n",
+            dll, name);
     return nullptr;
 }
 

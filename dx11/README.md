@@ -104,6 +104,69 @@ default-on and its env var becomes a `=0` kill switch only.
 
 ---
 
+## Two modes: Standalone (default) and AB (verification)
+
+The port replaces the shipped DLL outright. `VideoDX11-x64.dll` is not loaded,
+not patched, and does not need to be present.
+
+| | Standalone (default) | AB (`BANISHED_DX11_AB=1`) |
+|---|---|---|
+| The twelve vtables | twelve arrays in `reimpl-x64.exe` | the shipped DLL's `.rdata`, patched in place |
+| `VideoDX11-x64.dll` | never loaded | `LoadLibrary`'d and verified 84/84 |
+| The two exports | on `Video::Device` directly | inline detours over the DLL's entries |
+| `Dx11SetSlotEnabled` A/B | unavailable (no original to switch to) | works |
+| Install-time check | every slot of every vtable has an implementation | 84 live slot pointers match the map below |
+
+Standalone is what a normal run does. AB exists because comparing one slot
+against the shipped implementation is how every lane in this port was verified,
+and how per-draw state equality will have to be verified — that needs the
+original mapped, so the capability is kept rather than deleted.
+
+### How Standalone stops Runtime loading the DLL
+
+`Video::Device::InitializeInterfaces` (Runtime `0x1800f79f0`) walks three
+interface slots and, for each, **skips it if the HMODULE word is already
+non-zero**. So we do not reimplement it, hook `LoadLibrary`, or ship a stub DLL
+— we get there first. `standalone/video_interface.cpp` detours it, fills
+`Device+0xc8/+0xd0/+0xd8` with a sentinel handle and our two exports, then
+chains to the original, which now skips DX11 and probes DX9/GL exactly as
+before. `CreateVideoInterface` (`0x1800f7930`) then requires only that all three
+words be non-zero; the HMODULE is never called through.
+
+Two things had to be untangled before that worked, both invisible while the DLL
+was mapped:
+
+- **`ResolveAddr` returned the Ghidra address unchanged for an unloaded module**
+  (delta 0), i.e. a plausible non-null pointer into nothing rather than null.
+  Fixed to return 0, guarded on the handle rather than the delta.
+- **`CreateDXGIFactory1` and `D3D11CreateDevice` were read out of VideoDX11's
+  own IAT**, with `GetProcAddress` as a fallback the comment called unreachable.
+  Standalone made it the only path, so the order is inverted and it uses
+  `LoadLibrary` — with VideoDX11 absent, nothing else has pulled `d3d11.dll` in
+  yet, so `GetModuleHandle` alone returns null and the renderer never comes up.
+
+Verified 2026-07-24 with `VideoDX11-x64.dll` **renamed off disk**: autostart
+reaches the in-game world and renders terrain, foliage, buildings, alpha-blended
+icons, UI and smoke, with an empty crash log, zero fallbacks, and
+
+```
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Dx11Seam] mode: Standalone (our own vtables)
+[Dx11Seam] Standalone: 84/84 slots ours, in 12 exe-owned vtables.
+[VideoInterface] DX11 slot pre-filled — Runtime will not LoadLibrary VideoDX11-x64.dll
+[VideoProbe]   +0x04 interface = 1 (VideoDX11)
+[VideoProbe]   active vtable lives in: reimpl-x64.exe
+```
+
+`DumpVideoState` shouts on stderr whenever the active `DeviceData` vtable is not
+in the module the current mode expects — `reimpl-x64.exe` in Standalone,
+`VideoDX11-x64.dll` in AB. That guard exists because `Video::Device` answers a
+failed interface bring-up by silently falling back to interface 0 and rendering
+the whole session on the original `VideoDX9-x64.dll`, which looks like success.
+**If you see it, any A/B measured from that run is meaningless.**
+
+---
+
 ## Is the shipped DLL actually unreachable? (verification pass, 2026-07-24)
 
 `[Dx11Seam] Installed: 84 slot(s) ours` is **not** the claim "no shipped code
@@ -175,36 +238,15 @@ attach/detach, `_freefls` on every thread exit, and the `_calloc_impl` /
   of `.rdata`. `DllMain` at load and CRT teardown at detach are outside any
   armed window and cannot be removed while that is true.
 
-### Do not "test" this by renaming the DLL — it silently disables the port
+### Superseded: the port no longer needs the DLL at all
 
-Tried 2026-07-24, because "rename it so there is no way to load it" sounds like
-the strongest possible version of the claim. It is not a stronger test; it tests
-something else, and it fails in the most misleading way available.
+The paragraphs above describe **AB mode**, which is now the opt-in verification
+mode rather than the default. See "Two modes" below. In the default Standalone
+mode the shipped DLL is never loaded, so there is no shipped renderer code in
+the process to reach and the tripwire has nothing to watch.
 
-The port is **hosted in** the shipped DLL. The twelve vtables our slots occupy
-are its `.rdata`; every ported class sets `self->vptr` to an address inside it;
-Runtime takes `Device+0xd0`/`+0xd8` from `GetProcAddress` on it. Remove the file
-and there is nothing to patch — and Runtime does not fail. It falls back to
-interface 0, loads **`VideoDX9-x64.dll`**, and the game reaches the in-game world
-build and renders correctly with an empty crash log:
-
-```
-[Resolve-Standalone] VideoDX11-x64.dll: not loaded
-[Dx11Seam] VideoDX11-x64.dll not loaded — seam not installed
-[VideoProbe]   +0x04 interface = 0 (VideoDX9)
-[VideoProbe]   active vtable lives in: VideoDX9-x64.dll
-```
-
-Every draw in that session was original DX9 code and not one line of ours ran.
-The only clue in a 10,000-line log was a single "seam not installed" line.
-
-Both failure modes now shout on stderr — `Dx11SeamInstall` when the module is
-absent, and `DumpVideoState` whenever the active `DeviceData` vtable does not
-live in `VideoDX11-x64.dll`. Checked by re-running with the DLL renamed: both
-fire. **If you see either, any A/B measured from that run is meaningless.**
-
-The real test of unreachability is the tripwire above, which measures what
-executes with the DLL present and the port live.
+The tripwire remains the right instrument for AB mode, and AB mode remains the
+only way to compare a single slot against the shipped implementation.
 - **`0x180001000`** (`MemFree` import thunk) and **`0x180001520`** (free-and-null
   helper, reached only from EH unwind funclets) remain un-ported. Both are now
   provably dead rather than assumed dead: they are inside the armed range and

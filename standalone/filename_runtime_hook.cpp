@@ -359,6 +359,16 @@ void* DetourRuntimeFunc(uintptr_t addr, void* wrapper, int patchLen,
 
 } // namespace
 
+// Shared entry point to the detour helper above, for other translation units
+// that need to interpose a Runtime function (see standalone/runtime_detour.h).
+// The implementation stays in the anonymous namespace where it grew up; this is
+// only a linkage bridge, deliberately not a second copy.
+void* RuntimeDetourInstall(uintptr_t addr, void* wrapper, int patchLen,
+                           const uint8_t* expected, int expectedLen,
+                           const char* name) {
+    return DetourRuntimeFunc(addr, wrapper, patchLen, expected, expectedLen, name);
+}
+
 extern "C" void InstallFilenameRuntimeHook() {
     const char* e = getenv("BANISHED_FNHOOK");
     if (!e || !e[0] || e[0] == '0' || e[0] == 'f' || e[0] == 'F') return;
