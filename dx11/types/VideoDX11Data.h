@@ -35,30 +35,62 @@ static_assert(offsetof(DataBase, owner) == 0x08, "DataBase::owner");
 // DeviceData — 0x70 bytes, vtable 0x180018bb0 (20 slots)
 // Created by the CreateDeviceData export (0x1800011a0).
 //
+// REIMPLEMENTED — dx11/src/devicedata.cpp (slots 0/1/2/3/8 + the 11 factories,
+// lane L6) and dx11/src/devicedata_stubs.cpp (slots 4-7).
+//
 // Field meanings recovered from:
 //   slot 0  dtor      0x180004270  (frees +0x60 array)
+//   slot 2  create    0x180004e10  (writes +0x10/+0x18/+0x20/+0x28, then +0x30/+0x38)
 //   slot 3  shutdown  0x1800051c0  (releases +0x18/+0x20/+0x28/+0x30/+0x38,
 //                                   DestroyCursor(+0x48), reads +0x40)
 //   slot 8  cursor    0x180005450  (writes +0x48/+0x50/+0x58/+0x5c)
+//   0x180004340        resize      (releases and rebuilds +0x30/+0x38, reads +0x40)
+//   0x1800042d0        WM_ACTIVATE (the only writer of +0x40)
 // ============================================================
 struct DeviceData {
     void*     vptr;              // +0x00
     void*     device;            // +0x08  Video::Device* owner
 
-    void*     unk10;             // +0x10  COM interface released on shutdown — IDXGIFactory1* (TBD)
+    // +0x10 IDXGIFactory1* — CONFIRMED (L6), no longer TBD. Created by slot 2's
+    // CreateDXGIFactory1(IID at 0x180018b98 = IID_IDXGIFactory1, &this[0x10]),
+    // and used for EnumAdapters1 (vtable +0x60 = index 12), MakeWindowAssociation
+    // (+0x40 = 8) and CreateSwapChain (+0x50 = 10).
+    //
+    // It is NOT released on shutdown, contrary to the earlier note: slot 2
+    // releases it at 0x1800050c2 as soon as the swap chain exists and never
+    // nulls the field, so this dangles for the rest of the session. Slot 3 does
+    // not touch it, which is correct — releasing it again would be a double
+    // release.
+    void*     unk10;             // +0x10  IDXGIFactory1*, dangling after slot 2
     void*     swapChain;         // +0x18  IDXGISwapChain* (SetFullscreenState(FALSE) before release)
     void*     d3dDevice;         // +0x20  ID3D11Device*        (CreateTexture2D callee in 0x1800052b0)
     void*     d3dContext;        // +0x28  ID3D11DeviceContext* (every resource Bind reads this)
     void*     depthBuffer;       // +0x30  ID3D11Texture2D* D24_UNORM_S8_UINT, BIND_DEPTH_STENCIL
     void*     colorBuffer;       // +0x38  ID3D11Texture2D* B8G8R8A8_UNORM,    BIND_RENDER_TARGET
 
-    uint8_t   wasFullscreen;     // +0x40  mirrored into Application::_singleton+0x40 on shutdown
+    // +0x40 "was fullscreen, restore it when focus returns" — NOT "is
+    // fullscreen". The live fullscreen flag is Video::Configuration+0x40; this
+    // is the backup the WM_ACTIVATE handler (0x1800042d0) parks it in:
+    //
+    //   WA_INACTIVE : wasFullscreen = 1; Configuration.fullscreen = 0; resize
+    //   WA_ACTIVE   : if (wasFullscreen) { wasFullscreen = 0;
+    //                                      Configuration.fullscreen = 1; resize }
+    //
+    // Slot 3 mirrors it back into **Video::Configuration+0x40** on shutdown
+    // (0x18000520f loads IAT 0x180013480 = ?_singleton@Configuration@Video@@),
+    // so quitting while alt-tabbed still saves VideoFullscreen=true. An earlier
+    // revision of this comment and of decomp/videodx11.md said
+    // Application::_singleton+0x40 — that was one of the three
+    // `_singleton_exref` mix-ups L6 corrected.
+    uint8_t   wasFullscreen;     // +0x40  restore-fullscreen-on-refocus latch
     uint8_t   pad41[7];          // +0x41
 
-    void*     cursor;            // +0x48  HCURSOR
+    // Slot 3 DestroyCursor()s +0x48 without nulling it, so it dangles after
+    // shutdown; slot 8's identity check then compares against a stale handle.
+    void*     cursor;            // +0x48  HCURSOR built by slot 8 from a 32x32 ImageBuffer
     void*     cursorImage;       // +0x50  Video::ImageBuffer* the cursor was built from
-    int32_t   cursorHotspotX;    // +0x58
-    int32_t   cursorHotspotY;    // +0x5c
+    int32_t   cursorHotspotX;    // +0x58  CreateCursor xHotSpot
+    int32_t   cursorHotspotY;    // +0x5c  CreateCursor yHotSpot
 
     // Registry of the Video::ImageBuffer*s that must be released and recreated
     // across a device / swap-chain reset. Membership test (from ~ImageBufferData):
@@ -87,11 +119,19 @@ static_assert(offsetof(DeviceData, trackedCount)    == 0x68, "DeviceData::tracke
 static_assert(offsetof(DeviceData, trackedCapacity) == 0x6c, "DeviceData::trackedCapacity");
 
 // DeviceData vtable slot indices — see ../README.md status board.
+//
+// Slots 0-3 and 8-19 are named from what the code demonstrably does; the
+// Runtime-side Video::DeviceData interface names are NOT recoverable the way
+// ContextData's were (Video::Device does not tail-jump through its DeviceData*
+// one-method-per-thunk, so there is no name table to read off). Slot 8 is the
+// exception and IS a recovered name: Runtime exports
+// ?SetImageBuffer@Context@Video@@ and the DX11 body takes exactly
+// (ImageBuffer*, int, int).
 enum DeviceDataSlot : int {
-    kSlot_Dtor                    = 0,   // 0x180004270
-    kSlot_EnumerateInterfaces     = 1,   // 0x180004690
-    kSlot_CreateDevice            = 2,   // 0x180004e10
-    kSlot_Shutdown                = 3,   // 0x1800051c0
+    kSlot_Dtor                    = 0,   // 0x180004270  scalar deleting dtor
+    kSlot_EnumerateInterfaces     = 1,   // 0x180004690  DXGI adapter/output/mode walk
+    kSlot_CreateDevice            = 2,   // 0x180004e10  D3D11 device + swap chain + buffers
+    kSlot_Shutdown                = 3,   // 0x1800051c0  unregister, DestroyCursor, release
     // Slots 4-7 are one-liner stubs; their *names* are still unknown (they are
     // pure virtuals on the Runtime-side Video::DeviceData that DX11 declines to
     // implement), but their bodies are fully decoded.
@@ -99,18 +139,23 @@ enum DeviceDataSlot : int {
     kSlot_Stub5_ZeroFloat         = 5,   // 0x180005430  `xorps xmm0,xmm0; ret`
     kSlot_Stub6_False             = 6,   // 0x180005440  `xor al,al; ret`
     kSlot_Stub7_True              = 7,   // 0x180001060  `mov al,1; ret`
-    kSlot_SetImageBuffer          = 8,   // 0x180005450  (HCURSOR from ImageBuffer)
-    kSlot_CreateContextData       = 9,   // 0x180005650
-    kSlot_CreateImageBufferData   = 10,  // 0x1800056c0
-    kSlot_CreateConstantBufferData= 11,  // 0x180005730
-    kSlot_CreateIndexBufferData   = 12,  // 0x1800057a0
-    kSlot_CreateVertexBufferData  = 13,  // 0x180005810
-    kSlot_CreateVertexLayoutData  = 14,  // 0x180005880
-    kSlot_CreateVertexProgramData = 15,  // 0x1800058f0
-    kSlot_CreatePixelProgramData  = 16,  // 0x180005960
-    kSlot_CreateRenderStateData   = 17,  // 0x1800059d0
-    kSlot_CreateVideoProgramData  = 18,  // 0x180005a40
-    kSlot_CreateRenderBufferData  = 19,  // 0x180005aa0
+    kSlot_SetImageBuffer          = 8,   // 0x180005450  HCURSOR from a 32x32 ImageBuffer
+    // The eleven resource factories. The address <-> class pairing below was
+    // verified independently of the slot ORDER: each factory's base-ctor CALL
+    // resolves through the VideoDX11 Runtime-import IAT (base 0x180013218) to
+    // the matching ??0<Class>Data@Video@@ mangled name. See the table in
+    // dx11/src/devicedata.cpp.
+    kSlot_CreateContextData       = 9,   // 0x180005650  0x20 bytes, vt 0x1800186f0
+    kSlot_CreateImageBufferData   = 10,  // 0x1800056c0  0x38 bytes, vt 0x180018790
+    kSlot_CreateConstantBufferData= 11,  // 0x180005730  0x28 bytes, vt 0x1800185d0
+    kSlot_CreateIndexBufferData   = 12,  // 0x1800057a0  0x20 bytes, vt 0x1800187c8
+    kSlot_CreateVertexBufferData  = 13,  // 0x180005810  0x20 bytes, vt 0x180018830
+    kSlot_CreateVertexLayoutData  = 14,  // 0x180005880  0x18 bytes, vt 0x180018878
+    kSlot_CreateVertexProgramData = 15,  // 0x1800058f0  0x30 bytes, vt 0x180018890
+    kSlot_CreatePixelProgramData  = 16,  // 0x180005960  0x30 bytes, vt 0x180018800
+    kSlot_CreateRenderStateData   = 17,  // 0x1800059d0  0x28 bytes, vt 0x180018818
+    kSlot_CreateVideoProgramData  = 18,  // 0x180005a40  0x10 bytes, vt 0x1800185a8
+    kSlot_CreateRenderBufferData  = 19,  // 0x180005aa0  0x10 bytes, vt 0x180018588
     kDeviceDataSlotCount          = 20
 };
 
