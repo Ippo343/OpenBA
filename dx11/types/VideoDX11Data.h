@@ -131,15 +131,72 @@ enum DeviceDataSlot : int {
 // ============================================================
 
 // 0x20, vtable 0x1800186f0 (20 slots), factory 0x180005650
+//
+// REIMPLEMENTED — dx11/src/contextdata.cpp (all 20 slots, lane L5).
+//
+// The one class in the DLL that CACHES the immediate context instead of
+// re-walking g_Device->[0x100]->[0x28] on every call. The cache is filled by
+// slot 1 (BeginCommands, 0x18000170f) from exactly that chain, and every other
+// slot reads `this->d3dContext`. It is a borrowed pointer: nothing AddRefs it
+// and slot 0 does not Release it.
+//
+// +0x10 is the *last primitive topology handed to IASetPrimitiveTopology*, a
+// redundant-call filter. The factory (0x180005650) writes 0 there, which is
+// D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED and therefore never equal to a value the
+// class would set — so the first draw always issues the call. Proven by
+// 0x180001de4 (`CMP [RBX+0x10],4` guarding `[ctxvt+0xc0]` = index 24 =
+// IASetPrimitiveTopology) and by slots 15/19 which do the same for topology 2.
 struct ContextData {
     void*   vptr;       // +0x00
     void*   context;    // +0x08  Video::Context*
-    int32_t unk10;      // +0x10  zeroed by factory
+    int32_t topology;   // +0x10  last D3D11_PRIMITIVE_TOPOLOGY set; factory writes 0
     int32_t pad14;
-    void*   d3dContext; // +0x18  ID3D11DeviceContext* (slot 10 calls IASetIndexBuffer on it)
+    void*   d3dContext; // +0x18  ID3D11DeviceContext*, cached by slot 1
 };
 static_assert(sizeof(ContextData) == 0x20, "ContextData size");
+static_assert(offsetof(ContextData, context)    == 0x08, "ContextData::context");
+static_assert(offsetof(ContextData, topology)   == 0x10, "ContextData::topology");
 static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContext");
+
+// ContextData vtable slot indices (0x1800186f0, 20 slots).
+//
+// These names are NOT inferred from the DX11 code — every one is the Runtime
+// method that dispatches to the slot. Runtime's Video::Context keeps its
+// Video::ContextData* at Context+0x2160 and each public method is a two-load
+// tail-jump through it, so the (name -> byte offset) pairing is read straight
+// out of the thunk. Examples:
+//     Video::Context::BindTransforms          0x1800f22a0  jmp [platform+0x40]
+//     Video::Context::GetMaxDynamicInstances  0x1800f21d0  jmp [platform+0x68]
+//     Video::Context::EndInstancedIndexedVertices 0x1800f2110 jmp [platform+0x98]
+// All twenty were checked this way; see dx11/src/contextdata.cpp.
+enum ContextDataSlot : int {
+    kCtx_Dtor                          = 0,   // 0x180001600  scalar deleting dtor
+    kCtx_BeginCommands                 = 1,   // 0x180001650  bool BeginCommands()
+    kCtx_EndCommands                   = 2,   // 0x180001720  void EndCommands()
+    kCtx_Finish                        = 3,   // 0x1800017c0  void Finish()  (Present + device-lost)
+    kCtx_Clear                         = 4,   // 0x180001920  void Clear(uint,uint,float,int)
+    kCtx_BindRenderBuffer              = 5,   // 0x180001ad0  void BindRenderBuffer()
+    kCtx_BindViewport                  = 6,   // 0x180001b60  void BindViewport()
+    kCtx_BindScissor                   = 7,   // 0x180001be0  void BindScissor()
+    kCtx_BindTransforms                = 8,   // 0x180001c40  void BindTransforms()
+    kCtx_BindTextureNone               = 9,   // 0x180001cb0  void BindTextureNone(int)
+    kCtx_BindIndexNone                 = 10,  // 0x180001d10* void BindIndexNone()
+    kCtx_BindVertexNone                = 11,  // 0x180001d30  void BindVertexNone(int)
+    kCtx_DrawIndexed                   = 12,  // 0x180001d80  void DrawIndexed(PrimitiveType,int×5)
+    kCtx_GetMaxDynamicInstances        = 13,  // 0x180001ef0* int  GetMaxDynamicInstances(int,int,int)
+    kCtx_BeginVertices                 = 14,  // 0x180001e60  bool BeginVertices(int,int)
+    kCtx_EndVertices                   = 15,  // 0x180001f00  void EndVertices(PrimitiveType)
+    kCtx_BeginIndexedVertices          = 16,  // 0x180002000  bool BeginIndexedVertices(int,int,int)
+    kCtx_EndIndexedVertices            = 17,  // 0x180002020* void EndIndexedVertices(PrimitiveType)
+    kCtx_BeginInstancedIndexedVertices = 18,  // 0x180002030  bool (int,int,int,int)
+    kCtx_EndInstancedIndexedVertices   = 19,  // 0x180002150  void EndInstancedIndexedVertices(PT)
+    kContextDataSlotCount              = 20
+};
+// * = not a Ghidra function; a tail inside the preceding function's body.
+//     Slot 17 (0x180002020) is `jmp 0x180002150`, i.e. it IS slot 19 — the DX11
+//     backend implements EndIndexedVertices and EndInstancedIndexedVertices
+//     with one body, which works because slot 18 stores the instance count on
+//     the Context and slot 16 passes 1.
 
 // 0x38, vtable 0x180018790, factory 0x1800056c0
 //
