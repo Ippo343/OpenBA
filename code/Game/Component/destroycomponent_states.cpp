@@ -153,6 +153,60 @@ static bool Trace() {
     return t;
 }
 
+// ============================================================
+// Demolition-labor progress bridge (BANISHED_DESTROY_SYNC_LABOR, default ON when
+// LIVE_DESTROY is up; only "=0" disables). Destroy-side twin of the construction
+// pipeline's BANISHED_BUILD_SYNC_LABOR (construction_force_harness.cpp
+// CreditBuildProgress).
+//
+// In retail, DestroyComponent+0x54 (demolition progress) is raised one unit per
+// completed builder demolish-PerformWork, which posts a SendComponentMessage
+// carrying the DestroyComponent type-id → vtable slot 15 (DestroyComponent_MsgReceive
+// 0x14011daf0) → ++comp+0x54. The standalone CitizenAI executor never reaches that
+// timed-work completion node (the identical gap the gather/build halves hit at
+// DropOff→CompleteTask and PerformWork→component-message), so +0x54 stays 0 and the
+// state-5 tick (0x14011c120) wedges forever at its progress<target gate — the
+// "deconstruction stuck at N%" symptom.
+//
+// Stand in for the missing message: credit +0x54 toward the +0x58 target computed by
+// state-5 enter, each tick, ramped over BANISHED_DESTROY_DEMO_FRAMES (default 600 ≈
+// 10s) so the bar is watchable. Runs only inside the state-5 tick (progress<target),
+// exactly where the real labor message would fire. Faithful to the retail end-state:
+// once +0x54 reaches +0x58 the tick proceeds to worker-release + spawn/scatter.
+static bool DemoSyncLaborOn() {
+    static const int s = [] {
+        const char* e = std::getenv("BANISHED_DESTROY_SYNC_LABOR");
+        return (e && e[0] == '0') ? 0 : 1;   // default ON; only "=0" disables
+    }();
+    return s == 1;
+}
+static void CreditDemolitionProgress(uintptr_t comp) {
+    int target = static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58));
+    if (target <= 0) return;   // no labor requirement (e.g. REMOVE branch) → nothing to credit
+
+    static const int rampFrames = [] {
+        const char* e = std::getenv("BANISHED_DESTROY_DEMO_FRAMES");
+        int n = (e && e[0]) ? std::atoi(e) : 600;
+        return n < 1 ? 600 : n;
+    }();
+    int inc = target / rampFrames;
+    if (inc < 1) inc = 1;
+    int* prog = reinterpret_cast<int*>(comp + 0x54);
+    int before = *prog;
+    int p = before + inc;
+    if (p > target) p = target;
+    *prog = p;
+    if (Trace()) {
+        static int s_last = -0x7fffffff;
+        if (p != s_last) {
+            s_last = p;
+            std::fprintf(stderr, "[DestroySM] demo-labor bridge comp+0x54 %d -> %d / target %d (inc %d)\n",
+                         before, p, target, inc);
+            std::fflush(stderr);
+        }
+    }
+}
+
 // Owner-entity value from the component's IBP at +0x10.
 static int64_t OwnerEntity(uintptr_t comp) {
     if (fn_InternalBasePtr_CheckPtr)
@@ -712,6 +766,12 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     // spawn. Missing this gate raced the whole teardown on the first tick
     // (observed live 2026-07-20: instant mark-for-removal froze the open panel
     // via the 0x400 bit and the upgrade spawn logic misfired).
+    //
+    // Executor-gap bridge: the organic +0x54 credit (a completed builder demolish
+    // PerformWork → SendComponentMessage → slot 15) never fires in standalone, so
+    // credit it here toward the target, standing in for the missing labor message.
+    if (DemoSyncLaborOn()) CreditDemolitionProgress(comp);
+
     if (*reinterpret_cast<int*>(comp + 0x54) <
         static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58))) {
         if (Trace()) {
