@@ -26,7 +26,7 @@ RUNTIME_FUNC_SRCS = runtime/funcs/runtime_funcs.cpp
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
 
 # VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
-DX11_FUNC_SRCS = dx11/funcs/dx11_funcs.cpp
+DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)
 DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)
 
 # ============================================================

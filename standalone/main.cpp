@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "dx11_funcs.h"
+#include "dx11_seam.h"
 #include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
@@ -1207,12 +1208,21 @@ static bool Init() {
     }
     RuntimeFuncsInit();
 
-    // 4b. Resolve the shipped VideoDX11-x64.dll entry points. Nothing calls
-    //     these yet — see dx11/README.md — but resolving here validates the
-    //     addresses and logs the ASLR delta, and the delegating DeviceData
-    //     (phase 0) will forward through them. Failure is non-fatal: the game
-    //     runs on the original plugin either way.
+    // 4b. Resolve the shipped VideoDX11-x64.dll entry points, then install the
+    //     renderer seam: verify all 84 vtable slots against the map in
+    //     dx11/README.md and patch in whichever reimplementations are enabled.
+    //
+    //     Must run here — after ResolveInit has LoadLibrary'd VideoDX11-x64.dll
+    //     (so the vtables exist) and before Engine::Startup (so no *Data object
+    //     has been created yet). There is no window inside Engine::Startup:
+    //     Video::Device::InitializeInterfaces and CreateVideoInterface both run
+    //     within that one call, which is why the seam is the vtables rather
+    //     than the Device+0xd0/+0xd8 function pointers.
+    //
+    //     Both are non-fatal: if either fails the game runs entirely on the
+    //     original plugin, unmodified.
     Dx11FuncsInit();
+    VideoDX11::Dx11SeamInstall();
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB

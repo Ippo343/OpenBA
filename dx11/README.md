@@ -46,31 +46,56 @@ Device+0xd0  GetDeviceName    -> "DirectX 11"
 Device+0xd8  CreateDeviceData -> Video::DeviceData* (Video::Device*)
 ```
 
-**So the seam is those two slots.** After `InitializeInterfaces` runs and before
-`CreateVideoInterface` picks one, overwrite `+0xd0` / `+0xd8` with our own
-functions. From that point every D3D11 call in the process goes through code we
-compiled — no shim DLL, no renaming the shipped file, no changes to how the game
-is deployed. Same spirit as `SkipPlatformConfigure()` in `standalone/main.cpp`,
-which already patches the loaded Runtime image in place.
+**Those two slots are not usable as the seam.** The scaffold originally proposed
+overwriting `+0xd0`/`+0xd8` between `InitializeInterfaces` and
+`CreateVideoInterface`, with a hybrid "delegating `DeviceData`" behind them.
+Implementing Phase 0 killed that plan on three counts:
 
-### Incremental porting: the delegating DeviceData
+1. **There is no window.** `InitializeInterfaces` *and* `CreateVideoInterface`
+   both run inside a single `Engine::Startup` call. The exe never gets control
+   between them, so there is no point at which the slots can be swapped.
+2. **A delegate splits the object.** Every resource `Bind` in the DLL reads
+   `g_Device->[0x100]->[0x28]` to find the D3D11 context — i.e. un-ported
+   original code reads fields out of whichever `DeviceData` Runtime was handed.
+   With two objects, ported and un-ported slots would read different state.
+3. **`DeviceData+0x60` is a live registry** of `ImageBuffer*`s, appended by
+   `0x180002300` and swap-removed by `~ImageBufferData`. Split across two
+   objects it stops being a registry.
 
-Replacing all 85 functions before anything runs would be a big-bang rewrite. The
-plan instead is a **hybrid `DeviceData`**:
+### The seam that works: patch the vtable slots
 
-1. Our `CreateDeviceData` calls the *original* export first, keeping the real
-   `DeviceData` as a delegate.
-2. We allocate our own object with our own 20-slot vtable.
-3. Each slot either runs our reimplementation, or tail-calls the original
-   object's corresponding vtable slot.
+The twelve vtables sit in the shipped DLL's `.rdata`. Phase 0 `VirtualProtect`s
+them writable, snapshots all 84 original slot targets, and overwrites individual
+slots with our reimplementations.
 
-That gives per-function granularity — the same thing `standalone/address_registry.cpp`
-gives us for the exe — and every slot can be A/B tested against the original by
-flipping one entry back.
+```
+Dx11RegisterSlot(Vt::IndexBufferData, 5, &IndexBufferData_Bind,
+                 "BANISHED_DX11_IB_BIND", /*defaultOn=*/false,
+                 "IndexBufferData::Bind");
+...
+Dx11SeamInstall();   // verify 84/84, then apply the enabled ones
+```
 
-The same trick nests: our `DeviceData::CreateContextData` can hand back either
-our `ContextData` or the original's, so the 11 resource classes can be ported
-independently of each other.
+This is strictly better than the delegate:
+
+- **One object, the real one.** Our slot receives the genuine `DeviceData` with
+  the genuine fields, so ported and un-ported slots share state by construction.
+- **No ordering constraint.** Install any time after the DLL is loaded. We do it
+  in `standalone/main.cpp` right after `Dx11FuncsInit()`, before `Engine::Startup`.
+- **Works for all twelve classes** without touching any factory.
+- **One slot = one unit of work**, exactly like an entry in
+  `standalone/address_registry.cpp`. `Dx11SetSlotEnabled()` flips a single slot
+  at runtime, so two RenderDoc captures differ by exactly one function.
+
+`Dx11OriginalSlot(vt, slot)` returns the captured original, so a partially-ported
+slot can still call through.
+
+**Install-time verification.** `Dx11SeamInstall()` checks all 84 live slot
+pointers against the address map in this file *before writing anything*, and
+aborts the whole install on a single mismatch. That re-proves the vtable walk
+against the shipped DLL on every boot, and makes a wrong ASLR delta or a
+different build of `VideoDX11-x64.dll` a logged refusal instead of a corrupted
+vtable. First run: `[Dx11Seam] Verified 84/84 vtable slots`.
 
 **Kill-switch convention** (per project policy — see `kDefaultOnFlags` in
 `code/Game/Component/component_factory_base.cpp`): new, unproven DX11 slots start
@@ -101,7 +126,7 @@ Ordered by "unblocks the most, risks the least". Nothing here is committed to ye
 
 | Phase | What | Why first / why later |
 |-------|------|-----------------------|
-| 0 | Seam installer + delegating `DeviceData` with **all 20 slots forwarding** | Pure infrastructure. Verifiable by "game still looks identical". Must land before any real port. |
+| **0 ✅** | **Seam installer — DONE.** `dx11/funcs/dx11_seam.{h,cpp}`, installed from `standalone/main.cpp`. Verifies 84/84 slots, patches none. | Pure infrastructure. Verified in-game 2026-07-24: `Verified 84/84`, `0 slot(s) ours`, autostart reached the world build, empty crash log. |
 | 1 | `GetDeviceName`, dtor (slot 0), the 4 small stubs (slots 4–7) | Trivial, low blast radius, exercises the seam. |
 | 2 | The 11 resource factories (slots 9–19) | Each is a ~15-line `MemAlloc` + base ctor + vptr store. Porting these transfers *ownership* of the 11 resource classes to us without yet porting their vtables. |
 | 3 | Per-resource vtables, cheapest first: `RenderBufferData` and `VideoProgramData` (0 private bytes), then `VertexLayoutData` (0x08) | Small structs, few D3D11 objects each. |
