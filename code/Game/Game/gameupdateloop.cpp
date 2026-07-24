@@ -20,6 +20,7 @@
 #include "GameUpdateLoop.h"
 #include "Entity/entitylist_funcs.h"
 #include "Component/component_factory_base.h"
+#include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
@@ -705,6 +706,25 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     EnsureInit();
 
     s_frameNum++;
+
+    // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
+    // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
+    // still registered. A growing `count` with a flat live-object count means stale entries
+    // are accumulating; `bad>0` means the table is already corrupt. Interval is
+    // BANISHED_OBJAUDIT_FRAMES (default 300).
+    if (ObjAudit::Enabled()) {
+        static int interval = 0;
+        if (interval == 0) {
+            const char* v = std::getenv("BANISHED_OBJAUDIT_FRAMES");
+            interval = (v && std::atoi(v) > 0) ? std::atoi(v) : 300;
+        }
+        if (s_frameNum % interval == 0) {
+            char tag[32];
+            std::snprintf(tag, sizeof(tag), "frame%d", s_frameNum);
+            ObjAudit::Scan(tag);
+            ObjAudit::ReportLeaks(tag);
+        }
+    }
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
