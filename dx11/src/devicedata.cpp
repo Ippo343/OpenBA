@@ -1811,34 +1811,34 @@ void* Factory_RenderBufferData(DeviceData* self, void* owner) {
 #define DX11_DEVICE_FLAG "BANISHED_DX11_DEVICE"
 
 DX11_REGISTER_SLOT(DeviceData, 0,  &::VideoDX11::DeviceData_Dtor,
-                   DX11_DEVICE_FLAG, false, "DeviceData::~DeviceData (scalar deleting)");
+                   DX11_DEVICE_FLAG, true, "DeviceData::~DeviceData (scalar deleting)");
 DX11_REGISTER_SLOT(DeviceData, 1,  &::VideoDX11::DeviceData_EnumerateInterfaces,
-                   DX11_DEVICE_FLAG, false, "DeviceData::EnumerateInterfaces");
+                   DX11_DEVICE_FLAG, true, "DeviceData::EnumerateInterfaces");
 DX11_REGISTER_SLOT(DeviceData, 2,  &::VideoDX11::DeviceData_CreateDevice,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateDevice");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateDevice");
 DX11_REGISTER_SLOT(DeviceData, 3,  &::VideoDX11::DeviceData_Shutdown,
-                   DX11_DEVICE_FLAG, false, "DeviceData::Shutdown");
+                   DX11_DEVICE_FLAG, true, "DeviceData::Shutdown");
 DX11_REGISTER_SLOT(DeviceData, 8,  &::VideoDX11::DeviceData_SetImageBuffer,
-                   DX11_DEVICE_FLAG, false, "DeviceData::SetImageBuffer (HCURSOR)");
+                   DX11_DEVICE_FLAG, true, "DeviceData::SetImageBuffer (HCURSOR)");
 DX11_REGISTER_SLOT(DeviceData, 9,  &::VideoDX11::Factory_ContextData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateContextData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateContextData");
 DX11_REGISTER_SLOT(DeviceData, 10, &::VideoDX11::Factory_ImageBufferData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateImageBufferData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateImageBufferData");
 DX11_REGISTER_SLOT(DeviceData, 11, &::VideoDX11::Factory_ConstantBufferData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateConstantBufferData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateConstantBufferData");
 DX11_REGISTER_SLOT(DeviceData, 12, &::VideoDX11::Factory_IndexBufferData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateIndexBufferData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateIndexBufferData");
 DX11_REGISTER_SLOT(DeviceData, 13, &::VideoDX11::Factory_VertexBufferData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateVertexBufferData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateVertexBufferData");
 DX11_REGISTER_SLOT(DeviceData, 14, &::VideoDX11::Factory_VertexLayoutData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateVertexLayoutData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateVertexLayoutData");
 DX11_REGISTER_SLOT(DeviceData, 15, &::VideoDX11::Factory_VertexProgramData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateVertexProgramData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateVertexProgramData");
 DX11_REGISTER_SLOT(DeviceData, 16, &::VideoDX11::Factory_PixelProgramData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreatePixelProgramData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreatePixelProgramData");
 DX11_REGISTER_SLOT(DeviceData, 17, &::VideoDX11::Factory_RenderStateData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateRenderStateData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateRenderStateData");
 DX11_REGISTER_SLOT(DeviceData, 18, &::VideoDX11::Factory_VideoProgramData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateVideoProgramData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateVideoProgramData");
 DX11_REGISTER_SLOT(DeviceData, 19, &::VideoDX11::Factory_RenderBufferData,
-                   DX11_DEVICE_FLAG, false, "DeviceData::CreateRenderBufferData");
+                   DX11_DEVICE_FLAG, true, "DeviceData::CreateRenderBufferData");
