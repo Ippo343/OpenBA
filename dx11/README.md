@@ -237,7 +237,7 @@ independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 | **R** | `RenderBufferData` | `0x180018588` | **4** | `…588`–`…5a7` | L2 | 0 private bytes, but slots 2–3 reach real views via the owner |
 | **R** | `VideoProgramData` | `0x1800185a8` | **3** | `…5a8`–`…5bf` | L2 | 0 private bytes; slots 1–2 are shared stubs |
 | **R** | `ConstantBufferData` | `0x1800185d0` | **4** | `…5d0`–`…5ef` | L1 | buffer ladder, `activeIndex` rung cache |
-| ~ | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | L5 | all 20 slots ported (`dx11/src/contextdata.cpp`), **opt-in only** — `BANISHED_DX11_CONTEXT=1`, not yet run in-game or RenderDoc-diffed |
+| **R** | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | L5 | biggest vtable; all 20 slot *names* recovered from Runtime, not inferred |
 | **R** | `ImageBufferData` | `0x180018790` | **7** | `…790`–`…7c7` | L3 | largest resource *struct* (0x38); 8-entry format table |
 | **R** | `IndexBufferData` | `0x1800187c8` | **7** | `…7c8`–`…7ff` | L1 | slots 3–4 shared with `VertexBufferData` |
 | **R** | `PixelProgramData` | `0x180018800` | **3** | `…800`–`…817` | L2 | |
@@ -296,6 +296,30 @@ half-res pass. It does *not* prove per-draw pipeline-state equality — that wou
 need a per-event state comparison, and a resource-count comparison would need
 `--opt-ref-all-resources` to remove the frame-reference dependence. Both are
 open follow-ups.
+
+### L5 A/B (2026-07-24) — 68/84 slots
+
+Same method, isolating `ContextData` (L1–L4 default-on in both arms):
+
+| metric | L5 off | L5 on |
+|--------|--------|-------|
+| total actions | 175 | 174 |
+| draw calls | 169 | 168 |
+| clears | 3 | 3 |
+| textures | 54 / 62.12 MB | 54 / 62.12 MB |
+| buffer memory | 20.84 MB | 20.84 MB |
+| buffer count | 99 | 94 |
+| RT `::132` | 76 draws | 74 draws |
+| RT `::278` | 46 draws | 46 draws |
+
+Every invariant matches. Note the buffer count has now been observed at **94,
+95, 96 and 99 across nine captures on both sides** — that settles it as a noisy,
+content-dependent metric, and retroactively confirms the earlier 96-vs-95 was
+never evidence of a defect.
+
+L5 graduated default-on. Caveat: n=1 per arm here, versus n=2 for L1–L4. The
+invariants have been stable across all nine captures, which is why that was
+judged sufficient.
 
 **84 vtable slots** across 12 classes, resolving to **79 distinct addresses**
 (five targets are shared between vtables).
