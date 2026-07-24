@@ -206,3 +206,282 @@ ParticleSystem,Sprite,…}` (641 symbols) and the `Video::` GPU abstraction itse
 
 VideoDX11 is roughly 1% of the render-side code by symbol count. It is, however,
 the *whole* platform boundary: port it and every D3D11 call in the process is ours.
+
+---
+
+# RenderState → D3D11 state objects
+
+Full recovery of `RenderStateData` (vtable `0x180018818`, 3 slots), the class
+that translates the engine's render-state *description* into the three
+immutable D3D11 state objects. Reimplementation:
+[`dx11/src/renderstatedata.cpp`](../dx11/src/renderstatedata.cpp).
+
+Recovered 2026-07-24 from `VideoDX11-x64.dll` disassembly plus five
+corroborating `Runtime-x64.dll` functions. Every value below is transcribed
+from an instruction, not inferred from behaviour.
+
+## The three slots
+
+| Slot | Address | Role | Driven from (Runtime) |
+|------|---------|------|-----------------------|
+| 0 | `0x1800036e0` | scalar deleting dtor: `Release` ×3, base dtor, `MemFree` | `Video::RenderState::PlatformDestruct` `0x1800f4e80` → `vtable[0](this, 1)` |
+| 1 | `0x180003760` | **Create** — the three `CreateXxxState` calls | `Video::RenderState::PlatformCreate` `0x1800f4ea0` → `vtable[1]()` |
+| 2 | `0x180003a90` | **Bind** — `OMSetBlendState` / `OMSetDepthStencilState` / `RSSetState` | `Video::RenderState::Bind(Context&)` `0x1800f4ec0` → `vtable[2]()` |
+
+`Bind` is declared as taking a `Video::Context&`, and Runtime does pass it in
+RDX, but slot 2 never reads it — it walks to the global immediate context like
+every other resource `Bind` in the DLL.
+
+## `RenderStateData` layout (0x28 bytes)
+
+| Offset | Type | Written by | Read by |
+|--------|------|-----------|---------|
+| `+0x00` | vptr | slot 0 restores `0x180018818` | — |
+| `+0x08` | `Video::RenderState*` | base ctor | slots 1, 2 |
+| `+0x10` | `ID3D11BlendState*` | `CreateBlendState` (`0x180003a3f`) | `OMSetBlendState` (`0x180003ad9`) |
+| `+0x18` | `ID3D11DepthStencilState*` | `CreateDepthStencilState` (`0x180003a68`) | `OMSetDepthStencilState` (`0x180003af2`) |
+| `+0x20` | `ID3D11RasterizerState*` | `CreateRasterizerState` (`0x180003a53`) | `RSSetState` (`0x180003b03`) |
+
+Slot 0 releases in *field* order (blend, depth-stencil, rasterizer), which is
+**not** the creation order (blend, rasterizer, depth-stencil). Neither slot 0
+nor slot 1 nulls a field, and slot 1 does not release a previous object.
+
+## COM vtable offsets used
+
+Index = position in `ID3D11DeviceVtbl` / `ID3D11DeviceContextVtbl` counted from
+`QueryInterface` = 0. All confirmed against mingw-w64's `d3d11.h`.
+
+| Interface | Idx | Byte off | Method | Call site |
+|-----------|-----|----------|--------|-----------|
+| `ID3D11Device` | 20 | `+0xa0` | `CreateBlendState` | `0x180003a3f` |
+| `ID3D11Device` | 21 | `+0xa8` | `CreateDepthStencilState` | `0x180003a68` |
+| `ID3D11Device` | 22 | `+0xb0` | `CreateRasterizerState` | `0x180003a53` |
+| `ID3D11DeviceContext` | 35 | `+0x118` | `OMSetBlendState` | `0x180003ad9` |
+| `ID3D11DeviceContext` | 36 | `+0x120` | `OMSetDepthStencilState` | `0x180003af2` |
+| `ID3D11DeviceContext` | 43 | `+0x158` | `RSSetState` | `0x180003b03` |
+| `IUnknown` | 2 | `+0x10` | `Release` | `0x180003713`/`722`/`731` |
+
+## `Video::RenderState` field map
+
+The description object at `RenderStateData+0x08`. Layout proven independently
+of the DX11 reads by:
+
+- `Video::RenderState::RenderState()` `0x1800f4b60` — default values
+- `Video::RenderState::Serialize(IO::Stream&)` `0x1800f4c90` — field order + widths
+- `…::AlphaBlend::Serialize` `0x1800f4aa0`, `…::Depth::Serialize` `0x1800f4a00`,
+  `…::Stencil::Serialize` `0x1800f48e0`
+- the public signature `RenderState::Initialize(const AlphaBlend&, const Depth&,
+  const Stencil&, CullMode, FillMode, bool)` (mangled string at `0x1801dfe97`)
+
+Serializer virtual → width: `+0x78` = bool, `+0x80` = float, `+0x98` = int/enum,
+`+0xb8` = byte.
+
+| Offset | Width | Field | Default | Consumed as |
+|--------|-------|-------|---------|-------------|
+| `+0x20` | bool | `alphaBlend.enabled` | `false` | `RenderTarget[0].BlendEnable` |
+| `+0x24` | enum | `alphaBlend.srcBlend` | `1` (One) | `SrcBlend` **and** `SrcBlendAlpha` |
+| `+0x28` | enum | `alphaBlend.destBlend` | `0` (Zero) | `DestBlend` **and** `DestBlendAlpha` |
+| `+0x2c` | enum | `alphaBlend.blendOp` | `0` (Add) | `BlendOp` **and** `BlendOpAlpha` |
+| `+0x30` | int | `alphaBlend.colorWriteMask` | `0xF` | `RenderTargetWriteMask` (low nibble only) |
+| `+0x34` | bool | `depth.enabled` | `true` | `DepthEnable` |
+| `+0x35` | bool | `depth.writeEnabled` | `true` | `DepthWriteMask` |
+| `+0x38` | enum | `depth.compareFunc` | `4` (LessEqual) | `DepthFunc` |
+| `+0x3c` | float | `depth.bias` | `0.0f` | `DepthBias` (×16777215) |
+| `+0x40` | float | `depth.slopeScaledBias` | `0.0f` | `SlopeScaledDepthBias` (×4096) |
+| `+0x44` | bool | `stencil.enabled` | `false` | `StencilEnable` |
+| `+0x45` | bool | `stencil.twoSided` | `false` | selects the back-face branch |
+| `+0x48` | enum | `stencil.compareFunc` | `0` | `FrontFace.StencilFunc` **and** `BackFace.StencilFunc` |
+| `+0x4c` | byte | `stencil.reference` | `0` | `OMSetDepthStencilState` StencilRef |
+| `+0x50` | enum | `stencil.front.failOp` | `0` (Keep) | `FrontFace.StencilFailOp` |
+| `+0x54` | enum | `stencil.front.depthFailOp` | `0` | `FrontFace.StencilDepthFailOp` |
+| `+0x58` | enum | `stencil.front.passOp` | `0` | `FrontFace.StencilPassOp` |
+| `+0x5c` | enum | `stencil.back.failOp` | `0` | `BackFace.StencilFailOp` (two-sided only) |
+| `+0x60` | enum | `stencil.back.depthFailOp` | `0` | `BackFace.StencilDepthFailOp` (two-sided only) |
+| `+0x64` | enum | `stencil.back.passOp` | `0` | `BackFace.StencilPassOp` (two-sided only) |
+| `+0x68` | enum | `cullMode` | `1` (Back) | `CullMode` |
+| `+0x6c` | enum | `fillMode` | `0` (Solid) | `FillMode` |
+| `+0x70` | bool | `scissorEnabled` | `false` | `ScissorEnable` |
+| `+0x78` | ptr | `platformData` | — | the `RenderStateData*` itself |
+
+`+0x00`–`+0x1f` is the `Object::External` base (vptr, `System::Filename` at
+`+0x08`, an `{ptr,count}` array at `+0x10`/`+0x18`).
+
+**There is exactly one stencil compare function.** The back face re-reads
+`+0x48` (`0x180003a10`), the same field the front face uses. That is not a bug
+in the DX11 layer — `Stencil::Serialize` shows a single int for the whole
+sub-struct.
+
+**Alpha blending is not separately configurable.** The alpha triplet re-loads
+`+0x24`/`+0x28`/`+0x2c` (`0x180003935`, `0x180003940`, `0x18000394b`).
+
+## Enum translation tables
+
+Six lookup tables built on the stack at the top of `0x180003760`. Values are
+exact; the engine-side *names* are inferred from the D3D11 constant each slot
+maps to, corroborated by the ctor defaults and by
+`Video::RenderState::IsWireframe` (`0x18004b730`, literally `return fillMode == 1`).
+
+None of the six lookups is bounds-checked.
+
+### Blend factor — `[RSP+0x20]`, 10 entries, written `0x180003783`–`0x1800037cb`
+
+| Engine | D3D11 value | `D3D11_BLEND` |
+|--------|-------------|---------------|
+| 0 Zero | 1 | `ZERO` |
+| 1 One | 2 | `ONE` |
+| 2 SrcColor | 3 | `SRC_COLOR` |
+| 3 InvSrcColor | 4 | `INV_SRC_COLOR` |
+| 4 SrcAlpha | 5 | `SRC_ALPHA` |
+| 5 InvSrcAlpha | 6 | `INV_SRC_ALPHA` |
+| 6 DestColor | 9 | `DEST_COLOR` |
+| 7 InvDestColor | 10 | `INV_DEST_COLOR` |
+| 8 DestAlpha | 7 | `DEST_ALPHA` |
+| 9 InvDestAlpha | 8 | `INV_DEST_ALPHA` |
+
+`SRC_ALPHA_SAT`, `BLEND_FACTOR` and the `SRC1_*` dual-source factors are
+unreachable from the engine enum.
+
+### Blend op — `[RSP+0x78]`, 3 entries, written `0x18000382c`/`834`/`83c`
+
+| Engine | D3D11 value | `D3D11_BLEND_OP` |
+|--------|-------------|------------------|
+| 0 Add | 1 | `ADD` |
+| 1 Subtract | 2 | `SUBTRACT` |
+| 2 ReverseSubtract | 3 | `REV_SUBTRACT` |
+
+`MIN`/`MAX` unreachable.
+
+### Compare func — `[RBP-0x78]`, 8 entries, written `0x180003857`–`0x1800038ae`
+
+Used for both `DepthFunc` and `StencilFunc`.
+
+| Engine | D3D11 value | `D3D11_COMPARISON_FUNC` |
+|--------|-------------|-------------------------|
+| 0 Never | 1 | `NEVER` |
+| 1 Always | 8 | `ALWAYS` |
+| 2 Equal | 3 | `EQUAL` |
+| 3 Less | 2 | `LESS` |
+| 4 LessEqual | 4 | `LESS_EQUAL` |
+| 5 Greater | 5 | `GREATER` |
+| 6 GreaterEqual | 7 | `GREATER_EQUAL` |
+| 7 NotEqual | 6 | `NOT_EQUAL` |
+
+### Stencil op — `[RSP+0x58]`, 8 entries, written `0x1800038b8`–`0x1800038f0`
+
+| Engine | D3D11 value | `D3D11_STENCIL_OP` |
+|--------|-------------|--------------------|
+| 0 Keep | 1 | `KEEP` |
+| 1 Zero | 2 | `ZERO` |
+| 2 Increment | 7 | `INCR` (wrapping) |
+| 3 Decrement | 8 | `DECR` (wrapping) |
+| 4 IncrementClamp | 4 | `INCR_SAT` |
+| 5 DecrementClamp | 5 | `DECR_SAT` |
+| 6 Replace | 3 | `REPLACE` |
+| 7 Invert | 6 | `INVERT` |
+
+Note 2/3 are the *wrapping* variants and 4/5 the saturating ones — easy to swap.
+
+### Cull mode — `[RBP-0x58]`, 3 entries, written `0x1800037f7`/`808`/`80f`
+
+| Engine | D3D11 value | `D3D11_CULL_MODE` |
+|--------|-------------|-------------------|
+| 0 Front | 2 | `FRONT` |
+| 1 Back | 3 | `BACK` (ctor default) |
+| 2 None | 1 | `NONE` |
+
+The engine's ordering is Front/Back/None, not the more usual None-first.
+
+### Fill mode — `[RBP+0x100]` (the *caller's shadow space*), 2 entries, written `0x1800037dc`/`7e6`
+
+| Engine | D3D11 value | `D3D11_FILL_MODE` |
+|--------|-------------|-------------------|
+| 0 Solid | 3 | `SOLID` (ctor default) |
+| 1 Wireframe | 2 | `WIREFRAME` (== `IsWireframe()`) |
+
+## Slot 1 — the three descs, field by field
+
+`D3D11_BLEND_DESC` — `memset` 0x108 bytes at `0x180003821`
+(`mov r8d,0x108` → `sizeof(D3D11_BLEND_DESC)`), then nine fields.
+`RenderTarget[1..7]` stay zero and are unused (`IndependentBlendEnable` FALSE).
+
+| Field | Source | Site |
+|-------|--------|------|
+| `AlphaToCoverageEnable` | hard `FALSE` | `0x180003905` |
+| `IndependentBlendEnable` | hard `FALSE` | `0x180003905` |
+| `RenderTarget[0].BlendEnable` | `RS+0x20 != 0` | `0x18000390b` |
+| `RenderTarget[0].SrcBlend` | `blendTbl[RS+0x24]` | `0x180003914` |
+| `RenderTarget[0].DestBlend` | `blendTbl[RS+0x28]` | `0x18000391f` |
+| `RenderTarget[0].BlendOp` | `opTbl[RS+0x2c]` | `0x18000392a` |
+| `RenderTarget[0].SrcBlendAlpha` | `blendTbl[RS+0x24]` (again) | `0x180003935` |
+| `RenderTarget[0].DestBlendAlpha` | `blendTbl[RS+0x28]` (again) | `0x180003940` |
+| `RenderTarget[0].BlendOpAlpha` | `opTbl[RS+0x2c]` (again) | `0x18000394b` |
+| `RenderTarget[0].RenderTargetWriteMask` | `(byte)RS+0x30 & 0xF` | `0x180003956` |
+
+`D3D11_RASTERIZER_DESC` — no `memset`, all ten fields assigned.
+
+| Field | Source | Site |
+|-------|--------|------|
+| `FillMode` | `fillTbl[RS+0x6c]` | `0x1800037d3` |
+| `CullMode` | `cullTbl[RS+0x68]` | `0x180003801` |
+| `FrontCounterClockwise` | hard `FALSE` | `0x180003805` |
+| `DepthBias` | `(INT)(RS+0x3c × 16777215.0f)` via `cvttss2si` | `0x180003827`–`0x18000384b` |
+| `DepthBiasClamp` | hard `0.0f` (`xorps`) | `0x18000385e` |
+| `SlopeScaledDepthBias` | `RS+0x40 × 4096.0f` | `0x180003863`–`0x180003885` |
+| `DepthClipEnable` | hard `TRUE` | `0x180003868` |
+| `ScissorEnable` | `RS+0x70 != 0` | `0x18000388a` |
+| `MultisampleEnable` | hard `TRUE` | `0x1800038f8` (`mov qword,1`) |
+| `AntialiasedLineEnable` | hard `FALSE` | `0x1800038f8` (same store) |
+
+The two float constants: `0x180018c5c` = `0x4B7FFFFF` = `16777215.0f` (2²⁴−1 —
+the D24 depth range, matching the `D24_UNORM_S8_UINT` depth buffer this backend
+creates) and `0x180018c58` = `0x45800000` = `4096.0f`.
+
+`D3D11_DEPTH_STENCIL_DESC` — no `memset`; every field written except the two
+padding bytes at `+0x12`/`+0x13`, which the original leaves as uninitialised
+stack (only a `WORD 0xFFFF` is stored at `+0x10`).
+
+| Field | Source | Site |
+|-------|--------|------|
+| `DepthEnable` | `RS+0x34 != 0` | `0x180003961` |
+| `DepthWriteMask` | `RS+0x35 != 0` (`ZERO`=0 / `ALL`=1) | `0x18000396d` |
+| `DepthFunc` | `cmpTbl[RS+0x38]` | `0x180003977` |
+| `StencilEnable` | `RS+0x44 != 0` | `0x180003983` |
+| `StencilReadMask` / `StencilWriteMask` | hard `0xFF` / `0xFF` | `0x180003986` (one `WORD 0xFFFF`) |
+| `FrontFace.StencilFailOp` | `stencilTbl[RS+0x50]` | `0x180003994` |
+| `FrontFace.StencilDepthFailOp` | `stencilTbl[RS+0x54]` | `0x1800039a0` |
+| `FrontFace.StencilPassOp` | `stencilTbl[RS+0x58]` | `0x1800039ac` |
+| `FrontFace.StencilFunc` | `cmpTbl[RS+0x48]` | `0x1800039b8` |
+| `BackFace.*` when `RS+0x45 == 0` | `KEEP, KEEP, KEEP, ALWAYS` | `0x1800039ca`–`0x1800039e2` |
+| `BackFace.StencilFailOp` when two-sided | `stencilTbl[RS+0x5c]` | `0x1800039ec` |
+| `BackFace.StencilDepthFailOp` when two-sided | `stencilTbl[RS+0x60]` | `0x1800039f8` |
+| `BackFace.StencilPassOp` when two-sided | `stencilTbl[RS+0x64]` | `0x180003a04` |
+| `BackFace.StencilFunc` when two-sided | `cmpTbl[RS+0x48]` (front's field) | `0x180003a10` |
+
+Creation order is fixed: **Blend → Rasterizer → DepthStencil**. All three
+`HRESULT`s are discarded and the slot returns `true` unconditionally
+(`mov al,1` at `0x180003a76`).
+
+## Slot 2 — the bind
+
+```
+OMSetBlendState(this[0x10], {0.0f,0.0f,0.0f,0.0f}, 0xFFFFFFFF)
+OMSetDepthStencilState(this[0x18], (UINT)(BYTE)renderState[0x4c])
+RSSetState(this[0x20])
+```
+
+The blend factor is sixteen zero bytes assembled at `[RSP+0x20]`
+(`movss` of an `xorps`'d XMM0, then a zero qword at `+0x24` and a zero dword at
+`+0x2c`). The sample mask is `or r9d,-1`. The stencil reference is a **byte**
+load (`movzx r8d, byte [rax+0x4c]`), consistent with Runtime serializing that
+field through the byte virtual.
+
+## Runtime-side imports used by slot 0
+
+Read straight out of VideoDX11's import name table, so the mangled strings are
+exact:
+
+| VideoDX11 slot | Mangled name | Runtime addr |
+|----------------|--------------|--------------|
+| `0x180013348` | `??1RenderStateData@Video@@UEAA@XZ` | `0x1800f8d70` |
+| `0x1800134d0` | `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` | — |
+| `0x1800134b8` | `?_singleton@Device@Video@@0PEAV12@EA` | `0x1801fe7a8` |

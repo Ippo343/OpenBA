@@ -236,14 +236,48 @@ static_assert(sizeof(PixelProgramData) == 0x30, "PixelProgramData size");
 static_assert(offsetof(PixelProgramData, variants) == 0x10, "PixelProgramData::variants");
 
 // 0x28, vtable 0x180018818 (3 slots), factory 0x1800059d0
+//
+// The three COM slots are pinned in both directions, so there is no ambiguity
+// about which is which:
+//   slot 1 "Create" (0x180003760) writes them via
+//     CreateBlendState        -> &this[0x10]   (device vtable +0xa0, @0x180003a3f)
+//     CreateRasterizerState   -> &this[0x20]   (device vtable +0xb0, @0x180003a53)
+//     CreateDepthStencilState -> &this[0x18]   (device vtable +0xa8, @0x180003a68)
+//   slot 2 "Bind"   (0x180003a90) reads them back through the matching setters
+//     OMSetBlendState(this[0x10], {0,0,0,0}, 0xFFFFFFFF)   (ctx +0x118)
+//     OMSetDepthStencilState(this[0x18], renderState[0x4c])(ctx +0x120)
+//     RSSetState(this[0x20])                               (ctx +0x158)
+//
+// slot 0 (0x1800036e0) releases them in *field* order — blend, depth-stencil,
+// rasterizer — which is deliberately not the creation order.
+//
+// The +0x08 owner is a Video::RenderState; its field map (the source of every
+// state-desc value) is documented in dx11/src/renderstatedata.cpp and in the
+// "RenderState -> D3D11 state objects" section of ../../decomp/videodx11.md.
 struct RenderStateData {
-    void* vptr;        // +0x00
-    void* renderState; // +0x08  Video::RenderState*
-    void* unk10;       // +0x10  ID3D11RasterizerState* / BlendState* / DepthStencilState*
-    void* unk18;       // +0x18
-    void* unk20;       // +0x20
+    void* vptr;              // +0x00
+    void* renderState;       // +0x08  Video::RenderState*
+    void* blendState;        // +0x10  ID3D11BlendState*
+    void* depthStencilState; // +0x18  ID3D11DepthStencilState*
+    void* rasterizerState;   // +0x20  ID3D11RasterizerState*
 };
 static_assert(sizeof(RenderStateData) == 0x28, "RenderStateData size");
+static_assert(offsetof(RenderStateData, renderState)       == 0x08, "RenderStateData::renderState");
+static_assert(offsetof(RenderStateData, blendState)        == 0x10, "RenderStateData::blendState");
+static_assert(offsetof(RenderStateData, depthStencilState) == 0x18, "RenderStateData::depthStencilState");
+static_assert(offsetof(RenderStateData, rasterizerState)   == 0x20, "RenderStateData::rasterizerState");
+
+// RenderStateData vtable slot indices (vtable 0x180018818).
+// Roles confirmed from the Runtime side, not inferred:
+//   Video::RenderState::PlatformDestruct 0x1800f4e80 -> vtable[0](this, 1)
+//   Video::RenderState::PlatformCreate   0x1800f4ea0 -> vtable[1]()
+//   Video::RenderState::Bind(Context&)   0x1800f4ec0 -> vtable[2]()
+enum RenderStateDataSlot : int {
+    kRS_Dtor   = 0,  // 0x1800036e0  scalar deleting dtor
+    kRS_Create = 1,  // 0x180003760  build the three D3D11 state objects
+    kRS_Bind   = 2,  // 0x180003a90  OMSetBlendState / OMSetDepthStencilState / RSSetState
+    kRenderStateDataSlotCount = 3
+};
 
 // 0x10, vtable 0x1800185a8 (3 slots), factory 0x180005a40 — no private fields.
 // Slots 1 and 2 are the shared `return true` / `ret` stubs, so only the dtor is
