@@ -149,6 +149,42 @@ bug becomes a priority.
 
 ---
 
+## Porting lanes
+
+The port runs as six dependency-ordered lanes. L1–L4 are mutually independent —
+each owns its own `dx11/src/*.cpp` and its own struct block in
+`dx11/types/VideoDX11Data.h`, and registers its slots from a static initializer
+via `DX11_REGISTER_SLOT`, so no lane edits a file another lane owns.
+
+| Lane | Classes | Slots | Env flag | Depends on |
+|------|---------|-------|----------|------------|
+| L1 Buffers | `VertexBufferData`, `IndexBufferData`, `ConstantBufferData` | 18 | `BANISHED_DX11_BUFFERS` | — |
+| L2 Shaders | `VertexProgramData`, `PixelProgramData`, `VertexLayoutData`, `VideoProgramData`, `RenderBufferData` | 16 | `BANISHED_DX11_SHADERS` | — |
+| L3 Images | `ImageBufferData` | 7 | `BANISHED_DX11_IMAGES` | — |
+| L4 State | `RenderStateData` | 3 | `BANISHED_DX11_STATE` | — |
+| L5 Context | `ContextData` | 20 | `BANISHED_DX11_CONTEXT` | L1–L4 |
+| L6 Device | `DeviceData` slots 1/2/3 + 8 helpers | 4 + helpers | `BANISHED_DX11_DEVICE` | L1–L5 |
+
+`VertexBufferData` and `IndexBufferData` **must** share a lane: their vtable
+slots 3 and 4 are the same two addresses (`0x180003290`, `0x180003340`), so
+splitting them would produce two competing ports of identical code.
+
+### Integration protocol
+
+Lanes implement and compile; they do **not** run the game. `C:/GOG Games/Banished/`
+is a single shared install, so in-game verification is serialized:
+
+1. Merge the lane branch, confirm `mingw32-make standalone-debug` is clean.
+2. Baseline run with the lane's env flag **unset** — expect
+   `Installed: N dormant`, and the game unchanged.
+3. Run with the flag `=1`. Check `[Dx11Seam] Installed: N slot(s) ours, 0 failed`,
+   then that autostart reaches the world build with an empty
+   `standalone_crash.log`.
+4. RenderDoc-diff the frame against the baseline capture. Draw calls, pipeline
+   state and render targets must match.
+5. Only then flip the registration to `defaultOn=true` — the env var becomes a
+   `=0` kill switch, per `kDefaultOnFlags` policy.
+
 ## Status board
 
 Status key matches `decomp/README.md`: `-` not started, `~` partial,
@@ -169,10 +205,10 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 | ~ | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
 | - | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
 | x | 3 | `0x1800051c0` | shutdown / release |
-| x | 4 | `0x180001190` | `ret` — no-op (shared with `VideoProgramData` slot 2) |
-| x | 5 | `0x180005430` | `xorps xmm0,xmm0; ret` — returns `0.0f` |
-| x | 6 | `0x180005440` | `xor al,al; ret` — returns `false` |
-| x | 7 | `0x180001060` | `mov al,1; ret` — returns `true` (shared with `RenderBufferData`/`VideoProgramData` slot 1) |
+| **R** | 4 | `0x180001190` | `ret` — no-op (shared with `VideoProgramData` slot 2) |
+| **R** | 5 | `0x180005430` | `xorps xmm0,xmm0; ret` — returns `0.0f` |
+| **R** | 6 | `0x180005440` | `xor al,al; ret` — returns `false` |
+| **R** | 7 | `0x180001060` | `mov al,1; ret` — returns `true` (shared with `RenderBufferData`/`VideoProgramData` slot 1) |
 | x | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
 | x | 9 | `0x180005650` | create `ContextData` |
 | x | 10 | `0x1800056c0` | create `ImageBufferData` |
