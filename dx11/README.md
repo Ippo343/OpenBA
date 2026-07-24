@@ -254,9 +254,48 @@ lane was run alone and all four were run together — `Installed: 48 slot(s) our
 rendered frame was correct (terrain, BC-compressed textures, alpha foliage,
 water, shadows, smoke, selection outline, UI).
 
-They remain **opt-in** (`defaultOn=false`) pending the RenderDoc frame diff — a
-correct-looking screenshot proves no gross error, not that every state bit
-matches. Graduating them is step 5 of the integration protocol above.
+**GRADUATED default-on 2026-07-24** after the RenderDoc A/B pass below. Each
+`BANISHED_DX11_*` flag is now a `=0` kill switch only.
+
+### RenderDoc A/B result
+
+Captured in-game frame 150 with `BANISHED_SEED=12345` pinning the world, via
+`renderdoccmd capture`. **Two baseline runs and two ported runs**, because the
+first baseline-vs-ported diff showed a delta and the noise floor had to be
+measured before it could be interpreted:
+
+| metric | base #1 | base #2 | ours #1 | ours #2 |
+|--------|---------|---------|---------|---------|
+| total actions | 176 | 173 | 175 | 175 |
+| draw calls | 170 | 167 | 169 | 169 |
+| clears | 3 | 3 | 3 | 3 |
+| textures | 54 / 62.12 MB | 54 / 62.12 MB | 54 / 62.12 MB | 54 / 62.12 MB |
+| buffer memory | 20.84 MB | 20.84 MB | 20.84 MB | 20.84 MB |
+| buffer count | 96 | 96 | 95 | 95 |
+| RT `::132` 1280×720 | 76 draws | 73 draws | 75 draws | 75 draws |
+| RT `::278` 640×360 | 46 draws | 46 draws | 46 draws | 46 draws |
+
+**The simulation is not frame-deterministic** even with the seed pinned —
+baseline-to-baseline varies by 3 draw calls, and the ported runs land *inside*
+that range. Everything content-independent is identical across all four runs:
+resolution, both render targets (same `ResourceId`s, same `B8G8R8A8_UNORM`
+formats), clear count, texture count and texture memory to the byte, buffer
+memory, and the 640×360 target's draw count.
+
+The buffer count (96/96 vs 95/95) looked like a real signal and was chased. It
+is not a missing constant-buffer ladder rung: comparing the actual sets, ours
+has four rungs baseline lacks (960, 1792, 1920, 2688) and lacks five baseline
+has (1664, 1856, 1984, 2816, 3072) — a two-directional difference netting −1,
+i.e. a different mix of rungs *referenced by the captured frame*, not an
+omission. RenderDoc lists only frame-referenced resources, so this metric is
+content-dependent like the draw counts.
+
+**What this pass did and did not establish.** It rules out a systematic
+difference in render-target setup, texture creation, clears and the shadow/
+half-res pass. It does *not* prove per-draw pipeline-state equality — that would
+need a per-event state comparison, and a resource-count comparison would need
+`--opt-ref-all-resources` to remove the frame-reference dependence. Both are
+open follow-ups.
 
 **84 vtable slots** across 12 classes, resolving to **79 distinct addresses**
 (five targets are shared between vtables).

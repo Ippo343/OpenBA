@@ -219,6 +219,22 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
 
     fn_InternalBasePtr_CheckPtr(editSeedPtr);
     void* seedElem = *(void**)editSeedPtr;
+
+    // BANISHED_SEED pins the world seed instead of randomising it. Needed for
+    // A/B testing: a RenderDoc capture is only comparable against another
+    // capture if both runs generated the same world, and autostart otherwise
+    // rolls a fresh seed every launch. Purely additive — unset behaves exactly
+    // like the original.
+    const char* envSeed = std::getenv("BANISHED_SEED");
+    if (envSeed && envSeed[0]) {
+        uint32_t fixed = (uint32_t)strtoul(envSeed, nullptr, 0);
+        if (maxVal > 0) fixed %= (uint32_t)(maxVal + 1);
+        fn_NumberEditElement_SetValue(seedElem, fixed);
+        printf("[NewGameDialog] BANISHED_SEED=%s -> seed pinned to %u\n",
+               envSeed, fixed);
+        return;
+    }
+
     uint32_t seed = fn_Random_Rand(random, (uint32_t)(maxVal + 1));
     fn_NumberEditElement_SetValue(seedElem, seed);
 }

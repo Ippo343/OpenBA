@@ -219,8 +219,8 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
 #define DX11_SHADERS_FLAG "BANISHED_DX11_SHADERS"
 
 DX11_REGISTER_SLOT(VertexLayoutData, 0, &::VideoDX11::VertexLayoutData_Dtor,
-                   DX11_SHADERS_FLAG, false, "VertexLayoutData::~ (scalar deleting)");
+                   DX11_SHADERS_FLAG, true, "VertexLayoutData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(VertexLayoutData, 1, &::VideoDX11::VertexLayoutData_Bind,
-                   DX11_SHADERS_FLAG, false, "VertexLayoutData::Bind");
+                   DX11_SHADERS_FLAG, true, "VertexLayoutData::Bind");
 DX11_REGISTER_SLOT(VertexLayoutData, 2, &::VideoDX11::VertexLayoutData_PlatformCreate,
-                   DX11_SHADERS_FLAG, false, "VertexLayoutData::PlatformCreate");
+                   DX11_SHADERS_FLAG, true, "VertexLayoutData::PlatformCreate");

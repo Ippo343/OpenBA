@@ -235,15 +235,15 @@ static void PixelProgramData_Bind(PixelProgramData* self,
 #define DX11_SHADERS_FLAG "BANISHED_DX11_SHADERS"
 
 DX11_REGISTER_SLOT(VertexProgramData, 0, &::VideoDX11::VertexProgramData_Dtor,
-                   DX11_SHADERS_FLAG, false, "VertexProgramData::~ (scalar deleting)");
+                   DX11_SHADERS_FLAG, true, "VertexProgramData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(VertexProgramData, 1, &::VideoDX11::VertexProgramData_PlatformCreate,
-                   DX11_SHADERS_FLAG, false, "VertexProgramData::PlatformCreate");
+                   DX11_SHADERS_FLAG, true, "VertexProgramData::PlatformCreate");
 DX11_REGISTER_SLOT(VertexProgramData, 2, &::VideoDX11::VertexProgramData_Bind,
-                   DX11_SHADERS_FLAG, false, "VertexProgramData::Bind");
+                   DX11_SHADERS_FLAG, true, "VertexProgramData::Bind");
 
 DX11_REGISTER_SLOT(PixelProgramData, 0, &::VideoDX11::PixelProgramData_Dtor,
-                   DX11_SHADERS_FLAG, false, "PixelProgramData::~ (scalar deleting)");
+                   DX11_SHADERS_FLAG, true, "PixelProgramData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(PixelProgramData, 1, &::VideoDX11::PixelProgramData_PlatformCreate,
-                   DX11_SHADERS_FLAG, false, "PixelProgramData::PlatformCreate");
+                   DX11_SHADERS_FLAG, true, "PixelProgramData::PlatformCreate");
 DX11_REGISTER_SLOT(PixelProgramData, 2, &::VideoDX11::PixelProgramData_Bind,
-                   DX11_SHADERS_FLAG, false, "PixelProgramData::Bind");
+                   DX11_SHADERS_FLAG, true, "PixelProgramData::Bind");

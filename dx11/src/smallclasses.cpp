@@ -211,17 +211,17 @@ static_assert(static_cast<int>(DXGI_FORMAT_B8G8R8A8_UNORM) == 0x57,
 #define DX11_SHADERS_FLAG "BANISHED_DX11_SHADERS"
 
 DX11_REGISTER_SLOT(VideoProgramData, 0, &::VideoDX11::VideoProgramData_Dtor,
-                   DX11_SHADERS_FLAG, false, "VideoProgramData::~ (scalar deleting)");
+                   DX11_SHADERS_FLAG, true, "VideoProgramData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(VideoProgramData, 1, &::VideoDX11::VideoProgramData_StubTrue,
-                   DX11_SHADERS_FLAG, false, "VideoProgramData::Stub1 (true)");
+                   DX11_SHADERS_FLAG, true, "VideoProgramData::Stub1 (true)");
 DX11_REGISTER_SLOT(VideoProgramData, 2, &::VideoDX11::VideoProgramData_StubVoid,
-                   DX11_SHADERS_FLAG, false, "VideoProgramData::Stub2 (void)");
+                   DX11_SHADERS_FLAG, true, "VideoProgramData::Stub2 (void)");
 
 DX11_REGISTER_SLOT(RenderBufferData, 0, &::VideoDX11::RenderBufferData_Dtor,
-                   DX11_SHADERS_FLAG, false, "RenderBufferData::~ (scalar deleting)");
+                   DX11_SHADERS_FLAG, true, "RenderBufferData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(RenderBufferData, 1, &::VideoDX11::RenderBufferData_StubTrue,
-                   DX11_SHADERS_FLAG, false, "RenderBufferData::Stub1 (true)");
+                   DX11_SHADERS_FLAG, true, "RenderBufferData::Stub1 (true)");
 DX11_REGISTER_SLOT(RenderBufferData, 2, &::VideoDX11::RenderBufferData_Bind,
-                   DX11_SHADERS_FLAG, false, "RenderBufferData::Bind");
+                   DX11_SHADERS_FLAG, true, "RenderBufferData::Bind");
 DX11_REGISTER_SLOT(RenderBufferData, 3, &::VideoDX11::RenderBufferData_Resolve,
-                   DX11_SHADERS_FLAG, false, "RenderBufferData::Resolve");
+                   DX11_SHADERS_FLAG, true, "RenderBufferData::Resolve");

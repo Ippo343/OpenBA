@@ -806,16 +806,16 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
 #define DX11_IMAGES_FLAG "BANISHED_DX11_IMAGES"
 
 DX11_REGISTER_SLOT(ImageBufferData, 0, &::VideoDX11::ImageBufferData_ScalarDeletingDtor,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::~ImageBufferData (deleting)");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::~ImageBufferData (deleting)");
 DX11_REGISTER_SLOT(ImageBufferData, 1, &::VideoDX11::ImageBufferData_AttachColorBuffer,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::AttachColorBuffer");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::AttachColorBuffer");
 DX11_REGISTER_SLOT(ImageBufferData, 2, &::VideoDX11::ImageBufferData_AttachDepthBuffer,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::AttachDepthBuffer");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::AttachDepthBuffer");
 DX11_REGISTER_SLOT(ImageBufferData, 3, &::VideoDX11::ImageBufferData_Create,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::Create");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::Create");
 DX11_REGISTER_SLOT(ImageBufferData, 4, &::VideoDX11::ImageBufferData_Bind,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::Bind");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::Bind");
 DX11_REGISTER_SLOT(ImageBufferData, 5, &::VideoDX11::ImageBufferData_Update,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::Update");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::Update");
 DX11_REGISTER_SLOT(ImageBufferData, 6, &::VideoDX11::ImageBufferData_Read,
-                   DX11_IMAGES_FLAG, false, "ImageBufferData::Read");
+                   DX11_IMAGES_FLAG, true, "ImageBufferData::Read");

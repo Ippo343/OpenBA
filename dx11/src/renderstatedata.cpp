@@ -562,8 +562,8 @@ void RenderStateData_Bind(RenderStateData* self, void* /*videoContext — unused
 #define DX11_STATE_FLAG "BANISHED_DX11_STATE"
 
 DX11_REGISTER_SLOT(RenderStateData, 0, &::VideoDX11::RenderStateData_ScalarDeletingDtor,
-                   DX11_STATE_FLAG, false, "RenderStateData::~RenderStateData");
+                   DX11_STATE_FLAG, true, "RenderStateData::~RenderStateData");
 DX11_REGISTER_SLOT(RenderStateData, 1, &::VideoDX11::RenderStateData_Create,
-                   DX11_STATE_FLAG, false, "RenderStateData::Create");
+                   DX11_STATE_FLAG, true, "RenderStateData::Create");
 DX11_REGISTER_SLOT(RenderStateData, 2, &::VideoDX11::RenderStateData_Bind,
-                   DX11_STATE_FLAG, false, "RenderStateData::Bind");
+                   DX11_STATE_FLAG, true, "RenderStateData::Bind");
