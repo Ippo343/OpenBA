@@ -104,6 +104,92 @@ default-on and its env var becomes a `=0` kill switch only.
 
 ---
 
+## Is the shipped DLL actually unreachable? (verification pass, 2026-07-24)
+
+`[Dx11Seam] Installed: 84 slot(s) ours` is **not** the claim "no shipped code
+runs". It is a claim about vtable dispatch only, and the ways into the DLL that
+are not vtable dispatch are exactly the ones that stay invisible. Three of them
+turned out to be live:
+
+1. **The two exports.** Reached through `Video::Device+0xd8`/`+0xd0`, which the
+   seam never patches, so `CreateDeviceData` ran the shipped body on *every*
+   boot — it is what allocated the `DeviceData` whose vtable we then patched.
+   Closed by porting both and installing them as detours (see Exports below).
+2. **`ContextData::BeginCommands` -> `0x180004340`.** A near `CALL`, not a
+   vtable dispatch, so the seam had no way to redirect it. L5 resolved it with
+   `ResolveAddr(Module::VideoDX11, 0x180004340)` on the reasoning that L6 owned
+   the function and both callers would converge once L6 landed. They did not:
+   L6's `WM_ACTIVATE` handler called L6's port while this call kept entering the
+   shipped body — which then called the shipped `CreateColorBuffer`
+   (`0x1800052b0`) beneath it. Closed by binding L5 to `Dx11_DeviceData_Resize`,
+   the one function in the port with external linkage.
+3. **`Dx11FuncsInit`'s sanity check** *called* the shipped `GetDeviceName` to
+   prove the ASLR delta. Closed by reading the `.rdata` literal it would have
+   returned (`0x1800185c0`) and comparing it to `"DirectX 11"` — same proof,
+   nothing executed.
+
+### How it is measured, not argued
+
+Two instruments, because reading the code is what produced the wrong answer
+above:
+
+- **Fallback counter.** Every `Dx11OriginalSlot()` call site is a "a Runtime
+  import failed to resolve, run the shipped slot instead" branch. That function
+  is the single choke point for all 27 of them, so it counts calls and names the
+  first per slot on stderr. `[Dx11Seam] fallbacks to shipped code: 0` is printed
+  at exit unconditionally — a check nobody has to remember to switch on.
+- **DEP tripwire** (`BANISHED_DX11_TRIPWIRE=1`, off by default,
+  `dx11/funcs/dx11_tripwire.h`). Withdraws execute permission from the shipped
+  `.text`; a vectored handler catches the DEP fault, records the address and the
+  apparent caller, reopens the 4 KiB page that faulted, and
+  `ContextData::BeginCommands` re-closes every reopened page each frame.
+  Findings are classified against `decomp/videodx11.md`'s partition of the DLL:
+  below `0x180005b7f` is renderer code and a finding, `0x180005c24`+ is MSVC
+  CRT/EH/locale and expected.
+
+The tripwire is the instrument that found #2 — it is not a formality. Its
+positive control is equally real: with the export detours off it reports
+`0x1800011a0` (`CreateDeviceData`) with a caller inside Runtime, which is the
+residual the notes predicted.
+
+### Result
+
+A full autostart session to the in-game world build, with everything enabled:
+
+```
+[Dx11Seam] Installed: 84 slot(s) ours, 0 dormant, 0 failed, 0 still original
+[Dx11Seam] detour OURS: CreateDeviceData (0x1800011a0)
+[Dx11Seam] detour OURS: GetDeviceName (0x180001230)
+[Dx11Seam] fallbacks to shipped code: 0 (expected 0)
+[Dx11Tripwire] CLEAN: no shipped VideoDX11 RENDERER code executed while armed
+```
+
+The seven "expected" entries are all CRT: `_DllMainCRTStartup` on every thread
+attach/detach, `_freefls` on every thread exit, and the `_calloc_impl` /
+`__removelocaleref` chain beneath them.
+
+### What is irreducible, and what is still untested
+
+- **The DLL is loaded, and its CRT initialises.** Runtime is what
+  `LoadLibrary`s it, and the seam needs it mapped to read the twelve vtables out
+  of `.rdata`. `DllMain` at load and CRT teardown at detach are outside any
+  armed window and cannot be removed while that is true.
+- **`0x180001000`** (`MemFree` import thunk) and **`0x180001520`** (free-and-null
+  helper, reached only from EH unwind funclets) remain un-ported. Both are now
+  provably dead rather than assumed dead: they are inside the armed range and
+  never reported.
+- **Coverage limits.** A hit reopens its page until the next frame, so counts
+  are lower bounds — zero findings still means zero entries, but a non-zero
+  count is not a total. A second thread executing DLL code during that window
+  would be missed; nothing in VideoDX11 creates threads, but that is an
+  argument, not a measurement.
+- **Still open from before this pass:** per-draw pipeline-state equality is not
+  proven for any lane (needs a per-event RenderDoc comparison, not the
+  frame-level A/B), and a resource comparison needs `--opt-ref-all-resources` to
+  remove frame-reference dependence.
+
+---
+
 ## Verification is unusually good here
 
 This is the one subsystem where we can diff our output against the original
@@ -192,39 +278,45 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 ### Exports
 
+Reimplemented in `dx11/src/exports.cpp` and installed as **seam detours**, not
+vtable slots: Runtime reaches both through `Video::Device+0xd8`/`+0xd0`, filled
+by `InitializeInterfaces` and consumed by `CreateVideoInterface` inside a single
+`Engine::Startup` call, so there is no window in which to overwrite the fields.
+A detour rewrites the first 12 bytes of the export itself with
+`MOV RAX,imm64; JMP RAX`, after checking the existing bytes against the
+decompiled prologue. See the "Detours" section of `dx11/funcs/dx11_seam.h`.
+
 | Status | Address | Name |
 |--------|---------|------|
-| x | `0x1800011a0` | `CreateDeviceData` |
-| x | `0x180001230` | `GetDeviceName` |
+| R | `0x1800011a0` | `CreateDeviceData` |
+| R | `0x180001230` | `GetDeviceName` |
 
 ### `DeviceData` vtable (20 slots @ `0x180018bb0`)
 
-All 20 slots are now ported (L6). Slots 4–7 are graduated default-on; the other
-16 are **written and compiled but NOT yet run** — they register with
-`defaultOn=false` behind `BANISHED_DX11_DEVICE`.
+All 20 slots are ported, verified in-game and graduated default-on (L6).
 
 | Status | Slot | Address | Role |
 |--------|------|---------|------|
-| **P** | 0 | `0x180004270` | scalar deleting dtor |
-| **P** | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
-| **P** | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
-| **P** | 3 | `0x1800051c0` | shutdown / release |
+| **R** | 0 | `0x180004270` | scalar deleting dtor |
+| **R** | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
+| **R** | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
+| **R** | 3 | `0x1800051c0` | shutdown / release |
 | **R** | 4 | `0x180001190` | `ret` — no-op (shared with `VideoProgramData` slot 2) |
 | **R** | 5 | `0x180005430` | `xorps xmm0,xmm0; ret` — returns `0.0f` |
 | **R** | 6 | `0x180005440` | `xor al,al; ret` — returns `false` |
 | **R** | 7 | `0x180001060` | `mov al,1; ret` — returns `true` (shared with `RenderBufferData`/`VideoProgramData` slot 1) |
-| **P** | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
-| **P** | 9 | `0x180005650` | create `ContextData` (0x20, vt `…86f0`, ctor IAT `…13478`) |
-| **P** | 10 | `0x1800056c0` | create `ImageBufferData` (0x38, vt `…8790`, ctor IAT `…133e8`) |
-| **P** | 11 | `0x180005730` | create `ConstantBufferData` (0x28, vt `…85d0`, ctor IAT `…13490`) |
-| **P** | 12 | `0x1800057a0` | create `IndexBufferData` (0x20, vt `…87c8`, ctor IAT `…13390`) |
-| **P** | 13 | `0x180005810` | create `VertexBufferData` (0x20, vt `…8830`, ctor IAT `…13340`) |
-| **P** | 14 | `0x180005880` | create `VertexLayoutData` (0x18, vt `…8878`, ctor IAT `…13330`) |
-| **P** | 15 | `0x1800058f0` | create `VertexProgramData` (0x30, vt `…8890`, ctor IAT `…13320`) |
-| **P** | 16 | `0x180005960` | create `PixelProgramData` (0x30, vt `…8800`, ctor IAT `…13360`) |
-| **P** | 17 | `0x1800059d0` | create `RenderStateData` (0x28, vt `…8818`, ctor IAT `…13350`) |
-| **P** | 18 | `0x180005a40` | create `VideoProgramData` (0x10, vt `…85a8`, ctor IAT `…134a0`) |
-| **P** | 19 | `0x180005aa0` | create `RenderBufferData` (0x10, vt `…8588`, ctor IAT `…134b0`) |
+| **R** | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
+| **R** | 9 | `0x180005650` | create `ContextData` (0x20, vt `…86f0`, ctor IAT `…13478`) |
+| **R** | 10 | `0x1800056c0` | create `ImageBufferData` (0x38, vt `…8790`, ctor IAT `…133e8`) |
+| **R** | 11 | `0x180005730` | create `ConstantBufferData` (0x28, vt `…85d0`, ctor IAT `…13490`) |
+| **R** | 12 | `0x1800057a0` | create `IndexBufferData` (0x20, vt `…87c8`, ctor IAT `…13390`) |
+| **R** | 13 | `0x180005810` | create `VertexBufferData` (0x20, vt `…8830`, ctor IAT `…13340`) |
+| **R** | 14 | `0x180005880` | create `VertexLayoutData` (0x18, vt `…8878`, ctor IAT `…13330`) |
+| **R** | 15 | `0x1800058f0` | create `VertexProgramData` (0x30, vt `…8890`, ctor IAT `…13320`) |
+| **R** | 16 | `0x180005960` | create `PixelProgramData` (0x30, vt `…8800`, ctor IAT `…13360`) |
+| **R** | 17 | `0x1800059d0` | create `RenderStateData` (0x28, vt `…8818`, ctor IAT `…13350`) |
+| **R** | 18 | `0x180005a40` | create `VideoProgramData` (0x10, vt `…85a8`, ctor IAT `…134a0`) |
+| **R** | 19 | `0x180005aa0` | create `RenderBufferData` (0x10, vt `…8588`, ctor IAT `…134b0`) |
 
 `P` = ported and compiling, **not yet run**. The factory ↔ class pairing was
 verified two independent ways: Ghidra's recovered return type per factory, and
@@ -265,7 +357,7 @@ independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 | **R** | `VertexBufferData` | `0x180018830` | **7** | `…830`–`…867` | L1 | slots 3–4 shared with `IndexBufferData` |
 | **R** | `VertexLayoutData` | `0x180018878` | **3** | `…878`–`…88f` | L2 | the only `"TEXCOORD"` user |
 | **R** | `VertexProgramData` | `0x180018890` | **3** | `…890`–`…8a7` | L2 | |
-| **P** | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | L6 | slots 4–7 live; other 16 ported, awaiting first run |
+| **R** | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | L6 | slots 4–7 live; other 16 ported, awaiting first run |
 
 **48 of 84 slots (57%) are ported and verified running in-game** as of 2026-07-24:
 the 4 `DeviceData` stubs plus all of L1 (18), L2 (16), L3 (7) and L4 (3). Each

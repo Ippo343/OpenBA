@@ -33,6 +33,19 @@ an address, and every address mapped to a class — is the status board in
 DX11 vtable at `0x180018bb0` and zeroes the DX11 fields. Everything else in the
 DLL is reached through that one vtable.
 
+Two encoding details matter to a reimplementation and are invisible in a
+mnemonic listing:
+
+- `PUSH RDI` at `0x1800011a0` is encoded `40 57` — a REX prefix with no bits
+  set, which MSVC emits anyway. Two bytes, not one.
+- `+0x58` is written as a **qword** `-1`, so it initialises `cursorHotspotX`
+  *and* `cursorHotspotY`; `+0x40` is written as a single **byte**, leaving
+  `+0x41..+0x47` as the base ctor left them.
+
+Both exports are reimplemented in `dx11/src/exports.cpp` (2026-07-24) and
+installed as byte-verified inline detours, because `Video::Device+0xd0`/`+0xd8`
+cannot be patched — see `dx11/README.md`.
+
 ## How Runtime loads it
 
 `Video::Device::InitializeInterfaces` (Runtime `0x1800f79f0`) calls

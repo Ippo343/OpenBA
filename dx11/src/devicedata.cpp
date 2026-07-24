@@ -1771,6 +1771,16 @@ void* Factory_RenderBufferData(DeviceData* self, void* owner) {
 #undef DX11_FACTORY_PROLOGUE
 
 }  // namespace
+
+// The one function in this lane with a caller outside it. 0x180004340 is a near
+// CALL from ContextData::BeginCommands, not a vtable dispatch, so the seam has
+// no way to redirect it — L5 has to name our port directly, and it can only do
+// that through a declaration with external linkage. Everything else here stays
+// in the anonymous namespace.
+int Dx11_DeviceData_Resize(void* deviceData) {
+    return DeviceData_Resize(static_cast<DeviceData*>(deviceData));
+}
+
 }  // namespace VideoDX11
 
 // ============================================================

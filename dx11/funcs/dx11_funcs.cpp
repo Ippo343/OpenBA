@@ -6,6 +6,7 @@
 #include "resolve.h"
 
 #include <cstdio>
+#include <cstring>
 
 fn_DX11_CreateDeviceData_t fn_DX11_CreateDeviceData = nullptr;
 fn_DX11_GetDeviceName_t    fn_DX11_GetDeviceName    = nullptr;
@@ -63,15 +64,26 @@ bool Dx11FuncsInit() {
 
     s_ready = (fn_DX11_CreateDeviceData != nullptr);
 
-    // Sanity check the resolution: GetDeviceName is a two-instruction function
-    // returning a literal, so calling it is safe and proves the ASLR delta.
-    if (s_ready && fn_DX11_GetDeviceName) {
-        const char* name = fn_DX11_GetDeviceName();
+    // Sanity check the resolution against a known byte pattern: 0x1800185c0 is
+    // the .rdata literal GetDeviceName returns, so a correct ASLR delta lands
+    // on the exact string "DirectX 11".
+    //
+    // This used to CALL fn_DX11_GetDeviceName instead, on the reasoning that a
+    // two-instruction function returning a literal is safe to call. It is —
+    // but it is also shipped renderer code executing in our process, which is
+    // exactly what this branch is supposed to have eliminated, and it ran
+    // before the tripwire arms so nothing caught it. Reading the datum the
+    // function would have returned proves the same thing and executes nothing.
+    if (s_ready) {
+        const char* name = reinterpret_cast<const char*>(
+            ResolveAddr(Module::VideoDX11, 0x1800185c0));
+        bool ok = name && std::strcmp(name, "DirectX 11") == 0;
         printf("[Dx11Funcs] Resolved VideoDX11-x64.dll @ %p (delta %+lld), "
-               "GetDeviceName() = \"%s\"\n",
+               "device-name literal = \"%s\"%s\n",
                reinterpret_cast<void*>(info->runtimeBase),
                static_cast<long long>(info->delta),
-               name ? name : "(null)");
+               name ? name : "(null)",
+               ok ? "" : "  *** UNEXPECTED — ASLR delta or DLL build is wrong ***");
     }
 
     return s_ready;

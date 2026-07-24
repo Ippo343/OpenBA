@@ -321,6 +321,14 @@ typedef void (*Dx11MemFree_t)(void* ptr);
 // iatGhidra: the VideoDX11 .rdata IAT slot the original calls through
 void* Dx11ResolveRuntimeImport(const char* mangled, uintptr_t iatGhidra);
 
+// L6's port of 0x180004340, the DeviceData swap-chain resize/recreate helper.
+// Declared here because it is the one cross-lane call in the port: L5's
+// ContextData::BeginCommands reaches it with a near CALL rather than a vtable
+// dispatch, so the seam cannot redirect it and L5 must name our version.
+// `deviceData` is a Video::DeviceData* (void* to keep this declaration free of
+// L6's internal types).
+int Dx11_DeviceData_Resize(void* deviceData);
+
 // System::MemoryAllocator::MemFree(void*) — VideoDX11 IAT slot 0x1800134d0.
 // Called by every *Data scalar-deleting destructor when (flags & 1).
 inline void Dx11MemFree(void* p) {

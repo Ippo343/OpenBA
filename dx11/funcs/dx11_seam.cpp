@@ -112,9 +112,30 @@ static bool ValidSlot(Vt v, int slot) {
            slot >= 0 && slot < kVtables[vi].slots;
 }
 
+// Fallback accounting. Every Dx11OriginalSlot() call site is a "our port could
+// not resolve a Runtime import, run the shipped code" branch, so a non-zero
+// count here is the same class of finding as a tripwire hit: shipped renderer
+// code executed. Counting is unconditional (not env-gated) because the cost is
+// one increment on a path that is meant to be dead.
+static unsigned s_forward[static_cast<int>(Vt::kVtCount)][kMaxSlots];
+static unsigned s_forwardTotal = 0;
+
+unsigned Dx11ForwardCount() { return s_forwardTotal; }
+
 void* Dx11OriginalSlot(Vt v, int slot) {
     if (!ValidSlot(v, slot)) return nullptr;
-    return s_slots[static_cast<int>(v)][slot].original;
+    const SlotEntry& e = s_slots[static_cast<int>(v)][slot];
+
+    ++s_forwardTotal;
+    if (s_forward[static_cast<int>(v)][slot]++ == 0) {
+        fprintf(stderr,
+                "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) -> %p. A "
+                "Runtime import failed to resolve; shipped VideoDX11 code is "
+                "now running for this slot.\n",
+                VtName(v), slot, e.label ? e.label : "?", e.original);
+        fflush(stderr);
+    }
+    return e.original;
 }
 
 // Same semantics as ComponentFactory::LiveEnabled: an explicit env setting wins
@@ -123,13 +144,14 @@ void* Dx11OriginalSlot(Vt v, int slot) {
 static bool EnvOn(const char* v) {
     return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
 }
-static bool SlotEnabled(const SlotEntry& e) {
-    if (e.envFlag) {
-        const char* v = std::getenv(e.envFlag);
+static bool Enabled(const char* envFlag, bool defaultOn) {
+    if (envFlag) {
+        const char* v = std::getenv(envFlag);
         if (v && v[0]) return EnvOn(v);
     }
-    return e.defaultOn;
+    return defaultOn;
 }
+static bool SlotEnabled(const SlotEntry& e) { return Enabled(e.envFlag, e.defaultOn); }
 
 bool Dx11RegisterSlot(Vt v, int slot, void* impl,
                       const char* envFlag, bool defaultOn, const char* label) {
@@ -153,6 +175,60 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
     e.envFlag   = envFlag;
     e.label     = label;
     e.defaultOn = defaultOn;
+    return true;
+}
+
+// ============================================================
+// Detour registration (see dx11_seam.h for why these exist)
+// ============================================================
+struct DetourEntry {
+    uintptr_t      ghidra;
+    uintptr_t      stubAddr;   // where the trampoline actually landed, once live
+    void*          impl;
+    const uint8_t* expected;
+    int            expectedLen;
+    const char*    envFlag;
+    const char*    label;
+    bool           defaultOn;
+    bool           live;
+};
+
+// Two exports today. The cap exists only so the table is POD in .bss for the
+// same reason s_slots is — lanes register from static initializers.
+constexpr int kMaxDetours = 8;
+static DetourEntry s_detours[kMaxDetours];
+static int         s_detourCount = 0;
+
+bool Dx11RegisterDetour(uintptr_t ghidraAddr, void* impl,
+                        const uint8_t* expectedBytes, int expectedLen,
+                        const char* envFlag, bool defaultOn, const char* label) {
+    if (s_installed) {
+        fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): registered after install\n",
+                static_cast<unsigned long long>(ghidraAddr), label ? label : "?");
+        return false;
+    }
+    if (!impl || !expectedBytes || expectedLen < kDetourSize ||
+        s_detourCount >= kMaxDetours) {
+        fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): bad registration\n",
+                static_cast<unsigned long long>(ghidraAddr), label ? label : "?");
+        return false;
+    }
+    for (int i = 0; i < s_detourCount; ++i) {
+        if (s_detours[i].ghidra == ghidraAddr) {
+            fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): already claimed by %s\n",
+                    static_cast<unsigned long long>(ghidraAddr), label ? label : "?",
+                    s_detours[i].label ? s_detours[i].label : "?");
+            return false;
+        }
+    }
+    DetourEntry& d = s_detours[s_detourCount++];
+    d.ghidra      = ghidraAddr;
+    d.impl        = impl;
+    d.expected    = expectedBytes;
+    d.expectedLen = expectedLen;
+    d.envFlag     = envFlag;
+    d.label       = label;
+    d.defaultOn   = defaultOn;
     return true;
 }
 
@@ -184,6 +260,79 @@ bool Dx11SetSlotEnabled(Vt v, int slot, bool useOurs) {
     printf("[Dx11Seam] %s slot %2d -> %s (%s)\n", VtName(v), slot,
            useOurs ? "OURS" : "original", e.label ? e.label : "?");
     return true;
+}
+
+bool Dx11IsDetourStub(uintptr_t addr) {
+    for (int i = 0; i < s_detourCount; ++i) {
+        const DetourEntry& d = s_detours[i];
+        if (d.live && addr >= d.stubAddr &&
+            addr < d.stubAddr + static_cast<uintptr_t>(kDetourSize))
+            return true;
+    }
+    return false;
+}
+
+// Overwrite the first kDetourSize bytes of `target` with an absolute jump to
+// `impl`, after proving the bytes there are the ones we decompiled.
+static bool WriteDetour(uint8_t* target, void* impl,
+                        const uint8_t* expected, int expectedLen,
+                        const char* label) {
+    if (std::memcmp(target, expected, static_cast<size_t>(expectedLen)) != 0) {
+        fprintf(stderr, "[Dx11Seam] detour REFUSED for %s @ %p: prologue does not "
+                        "match the decompiled bytes\n", label ? label : "?", target);
+        fprintf(stderr, "[Dx11Seam]   expected:");
+        for (int i = 0; i < expectedLen; ++i) fprintf(stderr, " %02x", expected[i]);
+        fprintf(stderr, "\n[Dx11Seam]   found:   ");
+        for (int i = 0; i < expectedLen; ++i) fprintf(stderr, " %02x", target[i]);
+        fprintf(stderr, "\n");
+        return false;
+    }
+
+    uint8_t patch[kDetourSize];
+    patch[0] = 0x48;                                   // MOV RAX, imm64
+    patch[1] = 0xB8;
+    std::memcpy(patch + 2, &impl, sizeof(void*));
+    patch[10] = 0xFF;                                  // JMP RAX
+    patch[11] = 0xE0;
+
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(target, kDetourSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        fprintf(stderr, "[Dx11Seam] VirtualProtect failed for detour %s @ %p\n",
+                label ? label : "?", target);
+        return false;
+    }
+    std::memcpy(target, patch, kDetourSize);
+    DWORD ignored = 0;
+    VirtualProtect(target, kDetourSize, oldProtect, &ignored);
+    // This one IS code, so the icache does need flushing.
+    FlushInstructionCache(GetCurrentProcess(), target, kDetourSize);
+    return true;
+}
+
+static void ApplyDetours() {
+    for (int i = 0; i < s_detourCount; ++i) {
+        DetourEntry& d = s_detours[i];
+        if (!Enabled(d.envFlag, d.defaultOn)) {
+            printf("[Dx11Seam] detour dormant: %s (0x%llx)\n",
+                   d.label ? d.label : "?",
+                   static_cast<unsigned long long>(d.ghidra));
+            continue;
+        }
+        uint8_t* target = reinterpret_cast<uint8_t*>(
+            ResolveAddr(Module::VideoDX11, d.ghidra));
+        if (!target) {
+            fprintf(stderr, "[Dx11Seam] could not resolve detour target 0x%llx (%s)\n",
+                    static_cast<unsigned long long>(d.ghidra), d.label ? d.label : "?");
+            continue;
+        }
+        if (WriteDetour(target, d.impl, d.expected, d.expectedLen, d.label)) {
+            d.live    = true;
+            d.stubAddr = reinterpret_cast<uintptr_t>(target);
+            printf("[Dx11Seam] detour OURS: %s (0x%llx @ %p -> %p)\n",
+                   d.label ? d.label : "?",
+                   static_cast<unsigned long long>(d.ghidra), target, d.impl);
+        }
+    }
 }
 
 bool Dx11SeamInstall() {
@@ -264,6 +413,20 @@ bool Dx11SeamInstall() {
     printf("[Dx11Seam] Installed: %d slot(s) ours, %d dormant, %d failed, "
            "%d still original\n",
            applied, dormant, failed, checked - applied);
+
+    // --- Pass 3: apply the detours ---------------------------------------
+    // Deliberately after the vtable pass. A detour rewrites .text, so it is the
+    // more invasive of the two; running it only once the 84-slot verification
+    // has already agreed with dx11/README.md means a stale map cannot get us
+    // as far as writing code bytes.
+    ApplyDetours();
+
+    // Print the slot table (and, crucially, the fallback count) at exit. The
+    // count is only evidence if it is always reported: a verification pass that
+    // has to be remembered to be switched on proves nothing about the runs
+    // where nobody remembered.
+    std::atexit(Dx11SeamReport);
+
     fflush(stdout);
     return true;
 }
@@ -281,10 +444,20 @@ void Dx11SeamReport() {
         for (int slot = 0; slot < d.slots; ++slot) {
             const SlotEntry& e = s_slots[vi][slot];
             if (!e.impl) continue;   // un-ported slots are the silent majority
-            printf("[Dx11Seam]     slot %2d  %-7s  %s\n", slot,
-                   e.live ? "OURS" : "orig", e.label ? e.label : "?");
+            printf("[Dx11Seam]     slot %2d  %-7s  %s%s\n", slot,
+                   e.live ? "OURS" : "orig", e.label ? e.label : "?",
+                   s_forward[vi][slot] ? "   *** FORWARDED TO ORIGINAL ***" : "");
         }
     }
+    printf("[Dx11Seam] %-19s (%d)\n", "detours", s_detourCount);
+    for (int i = 0; i < s_detourCount; ++i) {
+        printf("[Dx11Seam]     0x%llx  %-7s  %s\n",
+               static_cast<unsigned long long>(s_detours[i].ghidra),
+               s_detours[i].live ? "OURS" : "orig",
+               s_detours[i].label ? s_detours[i].label : "?");
+    }
+    printf("[Dx11Seam] fallbacks to shipped code: %u (expected 0)\n",
+           s_forwardTotal);
     fflush(stdout);
 }
 

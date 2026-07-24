@@ -130,9 +130,10 @@
 // What this lane deliberately does NOT do
 // ---------------------------------------------------------------------------
 // Slot 1 calls 0x180004340, the DeviceData swap-chain resize/recreate helper.
-// That function belongs to lane L6 and is NOT ported here — it is reached
-// through ResolveAddr(Module::VideoDX11, 0x180004340), i.e. the shipped code,
-// exactly as the original slot 1 reaches it.
+// That function belongs to lane L6 and is NOT ported here — it is called
+// through L6's port, Dx11_DeviceData_Resize. It is a near CALL in the original
+// (0x1800016a3), not a vtable dispatch, so the seam cannot redirect it and the
+// binding has to be explicit; see GetImports().
 //
 // Slot 3 calls DeviceData vtable slots 3 (shutdown) and 2 (create device). It
 // calls them THROUGH the live vtable, so it picks up whatever the seam has
@@ -140,6 +141,7 @@
 // registered by this file.
 
 #include "dx11_seam.h"
+#include "dx11_tripwire.h"
 #include "dx11_backend_access.h"
 
 #include <windows.h>
@@ -202,8 +204,8 @@ struct Imports {
 
     // NOT a Runtime import: VideoDX11's own DeviceData swap-chain resize helper
     // at 0x180004340, owned by lane L6. Slot 1 calls it directly (0x1800016a3
-    // is a near CALL, not a vtable dispatch), so it is resolved as a plain
-    // VideoDX11 address rather than through the seam.
+    // is a near CALL, not a vtable dispatch), so the seam cannot redirect it —
+    // it is bound to L6's port explicitly in GetImports().
     int   (*DeviceDataResize)(void*);
 };
 
@@ -245,8 +247,15 @@ const Imports* GetImports() {
         for (const Entry& e : table)
             *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
 
-        g_im.DeviceDataResize = reinterpret_cast<int (*)(void*)>(
-            ResolveAddr(Module::VideoDX11, 0x180004340));
+        // OUR port of 0x180004340, not ResolveAddr(Module::VideoDX11, ...).
+        // This used to be the shipped address, on the reasoning that L6 owned
+        // the function and both callers would converge once L6 landed. They
+        // did not: L6's WM_ACTIVATE handler calls its own port, while this one
+        // kept calling the shipped body — and the shipped body then called the
+        // shipped CreateColorBuffer (0x1800052b0) beneath it. The DLL-execution
+        // tripwire caught both; "84/84 vtable slots are ours" could not, because
+        // neither call is a vtable dispatch.
+        g_im.DeviceDataResize = &Dx11_DeviceData_Resize;
 
         const void* const* p = reinterpret_cast<const void* const*>(&g_im);
         g_imOk = true;
@@ -480,6 +489,11 @@ void* ContextData_Dtor(ContextData* self, unsigned flags) {
 // the path writes ContextData+0x08.
 // ============================================================
 bool ContextData_BeginCommands(ContextData* self) {
+    // Not part of the port: this is the frame boundary, so it is where the
+    // (normally disabled) DLL-execution tripwire re-arms itself after a hit.
+    // No-op unless BANISHED_DX11_TRIPWIRE is set. See dx11/funcs/dx11_tripwire.h.
+    Dx11TripwireRearm();
+
     const Imports* im = GetImports();
     if (!im) return Orig<bool (*)(ContextData*)>(1)(self);
 

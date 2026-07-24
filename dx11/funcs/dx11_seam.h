@@ -81,7 +81,17 @@ uintptr_t   VtGhidraAddr(Vt v);
 // NOTE: five targets are shared between vtables (e.g. 0x180001060 is slot 1 of
 // RenderBufferData AND VideoProgramData AND slot 7 of DeviceData), so identical
 // return values from different (Vt, slot) pairs are expected, not a bug.
+//
+// EVERY caller of this is a fallback path — "a Runtime import failed to
+// resolve, so run the shipped code for this slot instead". None is supposed to
+// fire. Each call is therefore counted and the first one per slot is reported
+// on stderr, so that Dx11ForwardCount() == 0 is positive evidence that no
+// shipped renderer code ran, rather than an absence of evidence.
 void* Dx11OriginalSlot(Vt v, int slot);
+
+// Number of times a ported slot has fallen back to the shipped implementation.
+// Must be 0 for the "the original DLL is unreachable" claim to hold.
+unsigned Dx11ForwardCount();
 
 // Register a reimplementation for one vtable slot. Call before
 // Dx11SeamInstall() — registrations afterwards are rejected.
@@ -111,6 +121,59 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
         ::VideoDX11::Vt::vtName, (slot), reinterpret_cast<void*>(impl),    \
         (envFlag), (defaultOn), (label));                                  \
     }
+
+// ============================================================
+// Detours — for the code the vtables cannot reach
+// ============================================================
+//
+// The twelve vtables cover everything the DLL does *after* it has an object.
+// They do not cover the two exports, `CreateDeviceData` (0x1800011a0) and
+// `GetDeviceName` (0x180001230), which Runtime calls through
+// Video::Device+0xd8 / +0xd0. Those fields are filled by
+// Video::Device::InitializeInterfaces and consumed by CreateVideoInterface,
+// both inside one Engine::Startup call, so the exe never gets a window in which
+// to overwrite them — the same reason the seam is the vtables and not
+// Device+0xd0/+0xd8 in the first place.
+//
+// What we *can* do is replace the functions those fields point at. A detour
+// overwrites the first 12 bytes of the export with
+//
+//     48 B8 <imm64>   MOV RAX, our_impl
+//     FF E0           JMP RAX
+//
+// which is position-independent (a rel32 JMP cannot span exe->DLL) and clobbers
+// only RAX, dead at function entry and the return register for both exports.
+//
+// Because this rewrites *code*, it is verified harder than a vtable slot: the
+// original bytes must match `expectedBytes` exactly, or nothing is written.
+// That catches a different build of the DLL, a wrong ASLR delta, and — unlike
+// the vtable check — another detour already sitting on the same address.
+//
+// kDetourSize bytes are overwritten, so the target must be at least that long
+// including its 0xCC alignment padding. GetDeviceName is 8 bytes of code
+// followed by 8 bytes of padding; CreateDeviceData's prologue alone is 14.
+constexpr int kDetourSize = 12;
+
+// Register a detour. Same envFlag/defaultOn semantics as Dx11RegisterSlot.
+// Call before Dx11SeamInstall().
+bool Dx11RegisterDetour(uintptr_t ghidraAddr, void* impl,
+                        const uint8_t* expectedBytes, int expectedLen,
+                        const char* envFlag, bool defaultOn, const char* label);
+
+// Register from a lane's own .cpp, with no edit to any shared file.
+#define DX11_REGISTER_DETOUR(tag, ghidraAddr, impl, expectedBytes, envFlag,   \
+                             defaultOn, label)                               \
+    namespace {                                                              \
+    const bool kDx11Detour_##tag = ::VideoDX11::Dx11RegisterDetour(          \
+        (ghidraAddr), reinterpret_cast<void*>(impl), (expectedBytes),        \
+        static_cast<int>(sizeof(expectedBytes)), (envFlag), (defaultOn),     \
+        (label));                                                            \
+    }
+
+// True if `addr` falls inside a live detour's 12-byte trampoline. Those bytes
+// are OURS even though they live at a VideoDX11 address, so the tripwire
+// (dx11_tripwire.h) must not report executing them as "shipped code ran".
+bool Dx11IsDetourStub(uintptr_t runtimeAddr);
 
 // Snapshot every original slot, verify it against the address recorded in
 // dx11/README.md, and apply each enabled override.

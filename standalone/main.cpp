@@ -14,6 +14,7 @@
 #include "runtime_funcs.h"
 #include "dx11_funcs.h"
 #include "dx11_seam.h"
+#include "dx11_tripwire.h"
 #include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
@@ -417,6 +418,13 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     RedzoneAlloc_SetDumpSink(nullptr);
 
     PrintStackTrace(ctx);
+
+    // The DX11 verification evidence, printed here as well as from atexit:
+    // this handler ends in ExitProcess, which skips atexit entirely, and a
+    // session that dies on the way out is exactly the one whose "did any
+    // shipped renderer code run?" answer is worth having.
+    VideoDX11::Dx11SeamReport();
+    VideoDX11::Dx11TripwireReport();
 
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();
@@ -1223,6 +1231,15 @@ static bool Init() {
     //     original plugin, unmodified.
     Dx11FuncsInit();
     VideoDX11::Dx11SeamInstall();
+
+    //     Optional (BANISHED_DX11_TRIPWIRE): withdraw execute permission from
+    //     the shipped DLL's .text so that any entry into renderer code we did
+    //     not replace reports itself instead of running silently. This is the
+    //     measurement behind the "no shipped VideoDX11 code executes" claim —
+    //     see dx11/funcs/dx11_tripwire.h for exactly what it does and does not
+    //     cover. Must come after the seam: the detours have to be in place
+    //     before their trampolines can be recognised as ours.
+    VideoDX11::Dx11TripwireInstall();
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB
