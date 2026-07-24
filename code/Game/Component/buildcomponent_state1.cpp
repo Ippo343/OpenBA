@@ -378,16 +378,22 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                     // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
                     // workplace's required profession (+0x48), so +0x48 must read Builder.
                     //
-                    // NOTE: we deliberately do NOT register the site into the townMgr+0x100
-                    // profession BST here. Doing so makes BuildPathGraph (0x1400d70c0) produce
+                    // NOTE (legacy off-path rationale): registering the site into the
+                    // townMgr+0x100 profession BST makes BuildPathGraph (0x1400d70c0) produce
                     // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
-                    // its Phase-5B, which calls AssignHousing(null) on EVERY idle laborer and can
-                    // deadlock the WPC Scene mesh-visual toggle (game hangs). The builder SEAT is
-                    // driven directly against the site entity in State8Enter (CitizenEmploy_
-                    // SeatWorkersAt), so the townMgr+0x100 lookup is unnecessary. Builder seating
-                    // is also deferred to State8Enter (after gather 1->8): seating at construction
-                    // start would convert the idle Laborers that HAUL the raw materials into
-                    // Builders before any hauling. Laborers haul; Builders build.
+                    // its Phase-5B AssignHousing(null) churn over every idle laborer. That churn
+                    // was ORIGINALLY believed to deadlock the WPC Scene mesh-visual toggle, which
+                    // is why the off-path defers the SEAT to State8Enter (direct CitizenEmploy_
+                    // SeatWorkersAt against the site entity) instead of registering. That deadlock
+                    // is now neutralized by g_wpcRosterOnly (held across the allocator body, the
+                    // builder pool, and the profession spinner), so the NATURAL register path below
+                    // is default-on and verified safe: a 30s autostart run with a registered site
+                    // stays hang-free and the town-hall Professions panel shows the site's real
+                    // Builder capacity ("X of 3" via the CapProbe in builder_pool_driver.cpp — the
+                    // same WorkPlaceComponent/WorkComponent/CalcMaxWorkers path ProfessionUI_Slot8
+                    // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
+                    // way: seating at construction start would convert the idle Laborers that HAUL
+                    // the raw materials into Builders before any hauling. Laborers haul; Builders build.
                     uintptr_t gwPtr = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
                     uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
                     uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;

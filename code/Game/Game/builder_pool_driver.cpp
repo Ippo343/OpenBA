@@ -28,6 +28,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Object/factory_registration.h"        // ::Object::GetTypeIdByName (capacity probe)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -125,12 +126,100 @@ int64_t SeatOneAt(int64_t townMgr, int64_t avail, int64_t builderKey) {
     return result[0];
 }
 
+// --- Headless Builder-capacity probe (BANISHED_BUILD_TRACE, diagnostic-only) ------
+// Computes what the town-hall Professions panel (ProfessionUI_Slot8, 0x1400765a0) would
+// show as the Builder row's "M" (available worker slots) WITHOUT needing the dialog open.
+// Slot8's per-profession capacity walk and FindAvailableBuilding use the SAME component
+// path — WorkPlaceComponent (c80e0, +0x50 accepting / +0x10 owner) -> the owner's
+// WorkComponent (c8070, capacity +0x30 / CalcMaxWorkers 0x14012e5c0). The globals Slot8
+// reads (g_TypeId_WorkplaceComponent / g_TypeId_StorageLocationComponent) are bound to
+// the type NAMES "WorkPlaceComponent" / "WorkComponent" (see townhallui.cpp 2509-2510),
+// so this walk is byte-faithful to what the UI sums. Confirms the site's capacity is
+// visible to the UI now that BUILDER_NATURAL registers it into townMgr+0x100 by default.
+typedef uint32_t (*ProbeGetTypeId_t)(void*);
+static void* ProbeFindCompByTid(uintptr_t entity, uint32_t tid) {
+    if (!entity || !tid) return nullptr;
+    int count = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    if (!arr) return nullptr;
+    for (int i = 0; i < count; ++i) {
+        void* slot = reinterpret_cast<void*>(arr + static_cast<int64_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *reinterpret_cast<void**>(slot);
+        if (!comp) continue;
+        uint32_t t = ((ProbeGetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (t == tid)
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
+typedef int (*ProbeCalcMaxWorkers_t)(void* workComp);
+static void ProbeBuilderCapacity(uintptr_t gw) {
+    if (!Trace()) return;
+    static int probeThrottle = 0;
+    if (++probeThrottle < 120) return;   // ~every 120 ticks — cheap, but not per-frame
+    probeThrottle = 0;
+
+    uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
+    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    if (!profReg || !townMgr) return;
+    uint64_t builderKey = *reinterpret_cast<uint64_t*>(profReg + 0x38);
+    if (!builderKey) return;
+
+    static uint32_t tidWpc = 0, tidWc = 0;
+    if (!tidWpc) tidWpc = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    if (!tidWc)  tidWc  = ::Object::GetTypeIdByName("WorkComponent");
+    static ProbeCalcMaxWorkers_t calcMax = nullptr;
+    static bool calcRes = false;
+    if (!calcRes) { calcMax = reinterpret_cast<ProbeCalcMaxWorkers_t>(ResolveAddr(Module::Exe, 0x14012e5c0)); calcRes = true; }
+
+    // Walk townMgr+0x100 profession BST for the Builder key (same walk as FAB/Slot8).
+    uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
+    uint64_t* found = nullptr;
+    while (node) {
+        if (builderKey < node[0])       node = reinterpret_cast<uint64_t*>(node[4]);
+        else if (builderKey <= node[0]) { found = node; break; }
+        else                            node = reinterpret_cast<uint64_t*>(node[5]);
+    }
+    if (!found) {
+        std::fprintf(stderr, "[BuildTrace][CapProbe] Builder key=0x%llx NOT in townMgr+0x100 -> UI 'of 0'\n",
+                     (unsigned long long)builderKey);
+        return;
+    }
+
+    int count = static_cast<int>(found[2]);
+    uintptr_t list = static_cast<uintptr_t>(found[1]);
+    int totalCap = 0, enabled = 0;
+    for (int i = 0; i < count; ++i) {
+        void* entity = *reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        if (!entity) continue;
+        void* wpc = ProbeFindCompByTid(reinterpret_cast<uintptr_t>(entity), tidWpc);
+        if (!wpc) continue;
+        if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) == 0) continue;  // Slot8 skips !accepting
+        ++enabled;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(wpc) + 0x10));
+        uintptr_t parent = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x10);
+        if (!parent) continue;
+        void* wc = ProbeFindCompByTid(parent, tidWc);
+        if (!wc) continue;
+        int cap = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(wc) + 0x30);
+        if (cap == 0 && calcMax) cap = calcMax(wc);   // lazily, but DON'T persist in a probe
+        totalCap += cap;
+    }
+    std::fprintf(stderr, "[BuildTrace][CapProbe] Builder key=0x%llx registeredSites=%d accepting=%d totalCapacity=%d -> UI would show 'X of %d'\n",
+                 (unsigned long long)builderKey, count, enabled, totalCap, totalCap);
+}
+
 }  // namespace
 
 // Called from CitizenBehavior_Update (the town tick, 0x14008c2b0). Lightly throttled.
 extern "C" void BuilderPool_Tick() {
-    if (!BuilderNaturalOn() || !AutoPoolOn()) return;   // auto-increment off by default (spinner-driven now)
+    if (!BuilderNaturalOn()) return;                    // registration gate (default-on)
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    ProbeBuilderCapacity(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton));  // diagnostic (trace-gated)
+    if (!AutoPoolOn()) return;                          // auto-increment off by default (spinner-driven now)
 
     // Throttle: seating is cheap once sites are full (FindAvailableBuilding returns null fast),
     // but the BST walk + component scans need not run at full frame rate. ~every 20 ticks.

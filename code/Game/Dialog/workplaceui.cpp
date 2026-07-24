@@ -669,8 +669,32 @@ void UpdateVisibility(void* self) {
 // not just under-construction sites. `workComp` here is the WorkPlaceComponent
 // (fn_FindComponent_BuildState2 → g_TypeId_WorkplaceComponent), matching retail's
 // local_res18 — its +0x48 is the active profession, +0x60 the live roster.
+// One-shot recursive element-tree dump: name (+0x10 = char* with length at [-8]),
+// id (+0x88), child array (+0xa0) / count (+0xa8). Reveals the real panel structure so
+// we can see which element carries the click and its assigned id.
+void DumpTree(void* elem, int depth) {
+    if (!elem || depth > 6) return;
+    uintptr_t e = reinterpret_cast<uintptr_t>(elem);
+    char* nm = *reinterpret_cast<char**>(e + 0x10);
+    int id  = *reinterpret_cast<int*>(e + 0x88);
+    int cc  = *reinterpret_cast<int*>(e + 0xa8);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0xa0);
+    fprintf(stderr, "[Tree] %*selem=%p name='%s' id=0x%x children=%d\n",
+            depth * 2, "", elem, nm ? nm : "", id, cc);
+    if (cc > 0 && cc <= 64 && arr)
+        for (int i = 0; i < cc; ++i) {
+            void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+            if (c) DumpTree(c, depth + 1);
+        }
+}
+
 void PopulateCounts(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        static int dumped = 0;
+        void* pe = *reinterpret_cast<void**>(s + 0x20);
+        if (pe && dumped++ < 1) { fprintf(stderr, "[Tree] === WorkPlaceUI panel dump ===\n"); DumpTree(pe, 0); fflush(stderr); }
+    }
 
     void* panelElem = *reinterpret_cast<void**>(s + 0x20);
     if (!panelElem) return;
@@ -702,21 +726,44 @@ void PopulateCounts(void* self) {
     void* elem30 = *reinterpret_cast<void**>(s + 0x30);   // workPlaceCount
     void* elem38 = *reinterpret_cast<void**>(s + 0x38);   // maxCount
 
-    // Arm the worker up/down spinner buttons (self+0x40/+0x48) so their clicks route to
-    // OnRemove (vtable slot 9) as ids 0x1450/0x1451 — the per-building equivalent of the
-    // town-hall Professions spinner. Element ids are set once on discovery. The retail
-    // laborer-availability enable math is skipped (needs exe helpers); the buttons keep
-    // their .rsc-default clickable state and a click with no convertible laborer / no
-    // seated worker simply no-ops in the seat cascade.
-    if (*reinterpret_cast<void**>(s + 0x40) == nullptr) {
-        *reinterpret_cast<uint64_t*>(s + 0x40) = FindElemAsBasePtr(panelElem, "workerCountUp");
-        void* up = *reinterpret_cast<void**>(s + 0x40);
-        if (up && fn_Element_SetElementId) fn_Element_SetElementId(up, 0x1450);
-    }
-    if (*reinterpret_cast<void**>(s + 0x48) == nullptr) {
-        *reinterpret_cast<uint64_t*>(s + 0x48) = FindElemAsBasePtr(panelElem, "workerCountDown");
-        void* down = *reinterpret_cast<void**>(s + 0x48);
-        if (down && fn_Element_SetElementId) fn_Element_SetElementId(down, 0x1451);
+    // Arm ALL FIVE interactive controls so their clicks route to OnRemove (vtable slot 9)
+    // with the retail ids — matching WorkplaceUI_Serialize (0x140087940), which the SA
+    // promotion skips. The panel has TWO spinners plus the cycle button, and the ORIGINAL
+    // SA bug was arming only workerCountUp/Down: the visible spinner is jobsUpDown
+    // (jobCountUp/Down) and the profession-icon cycle is workPlaceButton, so those clicks
+    // arrived with element-id -1 and OnRemove ignored them. Element-id lives at +0x88; the
+    // named ButtonElement is itself the element that fires (verified via a per-element id
+    // stamp — the click carried the parent button's id, not a child's), so setting the id
+    // on the found element is sufficient (no child recursion needed).
+    //   +0x40 workerCountUp 0x1450   +0x48 workerCountDown 0x1451   (assign/unassign worker)
+    //   +0x50 jobCountUp    0x1452   +0x58 jobCountDown    0x1453   (raise/lower job slots)
+    //   workPlaceButton     0x1454   (cycle workplaces / center camera)
+    struct ArmOne {
+        static void go(uintptr_t self, int off, void* panel, const char* name, int id) {
+            void** slot = reinterpret_cast<void**>(self + off);
+            if (*slot != nullptr) return;
+            *reinterpret_cast<uint64_t*>(self + off) = FindElemAsBasePtr(panel, name);
+            void* e = *slot;
+            if (e && fn_Element_SetElementId) fn_Element_SetElementId(e, id);
+            if (std::getenv("BANISHED_DIALOG_TRACE")) {
+                static int n = 0; if (n++ < 12)
+                    fprintf(stderr, "[WorkPlaceUI] arm %-16s -> %p id(+0x88)=0x%x (%s)\n",
+                            name, e, e ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(e) + 0x88) : 0,
+                            e ? "SET" : "NOT-FOUND"), fflush(stderr);
+            }
+        }
+    };
+    ArmOne::go(s, 0x40, panelElem, "workerCountUp",   0x1450);
+    ArmOne::go(s, 0x48, panelElem, "workerCountDown", 0x1451);
+    ArmOne::go(s, 0x50, panelElem, "jobCountUp",      0x1452);
+    ArmOne::go(s, 0x58, panelElem, "jobCountDown",    0x1453);
+    // workPlaceButton has no dedicated self slot in retail; find+arm it directly each pass
+    // until it takes (idempotent — SetElementId just writes +0x88).
+    {
+        void* wpb = reinterpret_cast<void*>(FindElemAsBasePtr(panelElem, "workPlaceButton"));
+        if (wpb && fn_Element_SetElementId &&
+            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(wpb) + 0x88) != 0x1454)
+            fn_Element_SetElementId(wpb, 0x1454);
     }
 
     // Roster = seated workers/builders at this site (WorkPlaceComponent+0x60).
@@ -828,10 +875,30 @@ void W_Startup(void* self) {
 // mesh-visual block in WorkplaceComponent Attach/Detach — which faults on inert SA objects
 // (READ of 0x10) — is skipped, exactly like the town-hall path and the builder pool.
 void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
+    // Trace only button-command events (msg 0x12); the panel also receives a stream of
+    // hover/enter/leave events on this slot which would otherwise flood the log.
+    if (msg == 0x12 && (std::getenv("BANISHED_BUILD_TRACE") || std::getenv("BANISHED_DIALOG_TRACE"))) {
+        fprintf(stderr, "[WorkPlaceUI] OnRemove cmd self=%p id=0x%x\n", self, id);
+        fflush(stderr);
+    }
     EnsureGlobals();
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    if (msg != 0x12) return;                       // button click
-    if (id != 0x1450 && id != 0x1451) return;      // workerCountUp / workerCountDown
+    if (msg != 0x12) return;                        // button click
+    if (id < 0x1450 || id > 0x1454) return;         // one of the 5 armed controls
+
+    // workPlaceButton (0x1454): cycle through this profession's workplaces / center camera.
+    // No roster mutation, so no g_wpcRosterOnly guard needed.
+    if (id == 0x1454) { WorkplaceUI_ToggleWorkplace_Impl(self); return; }
+
+    // Both spinners (workerCountUp/Down 0x1450/0x1451 AND the visible jobsUpDown pair
+    // jobCountUp/Down 0x1452/0x1453) staff/unstaff the site. Retail routes jobCount to
+    // SetMaxWorkers (raise the slot cap) and lets the employment allocator auto-fill; but
+    // that allocator never seats the FIRST worker at an empty site (Phase-2 skips roster==0
+    // — see builder_pool_driver.cpp), so a fresh construction site would never fill. To make
+    // the building dialog actually staff a foundation, the up arrow directly runs the seat
+    // cascade (the per-building equivalent of the town-hall Professions spinner), and the
+    // down arrow pulls one — capacity-bounded (FindAvailableBuilding returns null when full).
+    const bool add = (id == 0x1450 || id == 0x1452);
 
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
@@ -855,7 +922,11 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     bool prevRoster = ::g_wpcRosterOnly;
     ::g_wpcRosterOnly = true;
 
-    if (id == 0x1450) {
+    // Roster before the seat/pull, so the trace can show whether the click stuck.
+    uint32_t rosterBefore = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(wpc) + 0x60);
+    const char* who = "none";
+
+    if (add) {
         // Add one worker: request a slot, then convert idle -> working -> student -> any.
         if (fn_CitizenList_RequestWorker && fn_CitizenList_FindIdle) {
             uint64_t retBuf[2] = {0, 0};
@@ -865,6 +936,7 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
             uint8_t fb[8] = {0};
             void* result = fn_CitizenList_FindIdle(citizenList, fb, &slotCopy, profId);
             int64_t found = *reinterpret_cast<int64_t*>(result);
+            if (found) who = "idle";
             // Faithful to retail driver dd10 (0x14007dd10): FindWorking (Strat_ca20,
             // 0x14008ca20) unconditionally anchors *availPtr, so retail gates it behind
             // `if (uVar4 != 0)` — only call it when RequestWorker/FindAvailableBuilding
@@ -876,22 +948,34 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
                 slotCopy = slot; uint8_t fb2[8] = {0};
                 result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
                 found = *reinterpret_cast<int64_t*>(result);
+                if (found) who = "working";
             }
             if (found == 0 && fn_CitizenList_FindStudent) {
                 slotCopy = slot; uint8_t fb3[8] = {0};
                 result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
                 found = *reinterpret_cast<int64_t*>(result);
+                if (found) who = "student";
             }
             if (found == 0 && fn_CitizenList_FindAny) {
                 slotCopy = slot; uint64_t anyBuf = 0;
                 fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+                if (anyBuf) who = "any";
             }
         }
-    } else {  // 0x1451 — remove one worker of this profession
+    } else {  // 0x1451 / 0x1453 — remove one worker of this profession
+        who = "remove";
         if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
     }
 
     ::g_wpcRosterOnly = prevRoster;
+
+    // Diagnostic: did the click move the site roster? (BUILD_TRACE or DIALOG_TRACE)
+    if (std::getenv("BANISHED_BUILD_TRACE") || std::getenv("BANISHED_DIALOG_TRACE")) {
+        uint32_t rosterAfter = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(wpc) + 0x60);
+        fprintf(stderr, "[WorkPlaceUI] OnRemove id=0x%x profId=0x%llx via=%s roster %u->%u\n",
+                id, (unsigned long long)profId, who, rosterBefore, rosterAfter);
+        fflush(stderr);
+    }
 }
 
 struct Init {
