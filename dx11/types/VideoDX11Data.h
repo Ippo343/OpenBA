@@ -201,39 +201,82 @@ static_assert(sizeof(VertexBufferData) == 0x20, "VertexBufferData size");
 static_assert(offsetof(VertexBufferData, buffer) == 0x10, "VertexBufferData::buffer");
 
 // 0x18, vtable 0x180018878 (3 slots), factory 0x180005880
-// Slot 1 (0x180003fc0) is IASetInputLayout(this->inputLayout).
+//
+// REIMPLEMENTED — dx11/src/vertexlayoutdata.cpp (all 3 slots).
+//
+//   slot 0  0x180003f60  scalar deleting dtor: releases inputLayout, chains
+//                        ??1VertexLayoutData@Video@@UEAA@XZ
+//   slot 1  0x180003fc0  Bind(Context&)   -> IASetInputLayout(this->inputLayout)
+//   slot 2  0x180003ff0  PlatformCreate() -> CreateInputLayout; this is the DLL's
+//                        only user of the "TEXCOORD" string at 0x180018868, and
+//                        it names element i "TEXCOORD" with SemanticIndex i,
+//                        ignoring the Usage/usageIndex the layout carries.
+//
+// Owner type confirmed by the Runtime ctor export
+// ??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z. The Video::VertexLayout
+// fields slot 2 reads (element array @ +0x20/+0x28, input signature @
+// +0x38/+0x40) and the 0x20-byte Element layout are pinned with static_asserts
+// in dx11/src/dx11_backend_access.h.
 struct VertexLayoutData {
     void* vptr;         // +0x00
     void* vertexLayout; // +0x08  Video::VertexLayout*
     void* inputLayout;  // +0x10  ID3D11InputLayout* (built with the "TEXCOORD" semantic string)
 };
 static_assert(sizeof(VertexLayoutData) == 0x18, "VertexLayoutData size");
+static_assert(offsetof(VertexLayoutData, vertexLayout) == 0x08, "VertexLayoutData::vertexLayout");
 static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData::inputLayout");
 
 // 0x30, vtable 0x180018890 (3 slots), factory 0x1800058f0
 //
-// Slot 2 (0x180004230) is the bind:
-//     VSSetShader(this->variants[i] ? this->variants[i] : this->variants[0],
-//                 nullptr, 0)
-// i.e. a 4-entry array of shader-permutation objects at +0x10, with index 0 as
-// the fallback when the requested permutation was never compiled.
+// REIMPLEMENTED — dx11/src/shaderprograms.cpp (all 3 slots).
+//
+//   slot 0  0x180004110  scalar deleting dtor: releases all 4 variants, chains
+//                        ??1VertexProgramData@Video@@UEAA@XZ
+//   slot 1  0x1800041a0  PlatformCreate() -> bool. Loops i in [0,4), skipping
+//                        i >= owner->byteCode.length, and calls
+//                        CreateVertexShader(blob[i].data, blob[i].length,
+//                        nullptr, &variants[i]). Any non-zero HRESULT returns
+//                        false immediately.
+//   slot 2  0x180004230  Bind(Context&, int permutation):
+//                        VSSetShader(variants[variants[p] ? p : 0], nullptr, 0)
+//
+// So +0x10 is a 4-entry array of shader-permutation objects with index 0 as the
+// fallback when the requested permutation was never compiled. The permutation
+// byte code lives on the owner: Video::ShaderProgram+0x40 is a
+// Collection::Array<Collection::Array<unsigned char>>, one blob per
+// permutation, pinned with static_asserts in dx11/src/dx11_backend_access.h.
+// Owner type confirmed by the Runtime ctor export
+// ??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z.
 struct VertexProgramData {
     void* vptr;          // +0x00
     void* vertexProgram; // +0x08  Video::VertexProgram*
     void* variants[4];   // +0x10  ID3D11VertexShader*[4]
 };
 static_assert(sizeof(VertexProgramData) == 0x30, "VertexProgramData size");
+static_assert(offsetof(VertexProgramData, vertexProgram) == 0x08, "VertexProgramData::vertexProgram");
 static_assert(offsetof(VertexProgramData, variants) == 0x10, "VertexProgramData::variants");
+static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutations");
 
 // 0x30, vtable 0x180018800 (3 slots), factory 0x180005960
-// Mirror of VertexProgramData; slot 2 (0x1800036a0) calls PSSetShader.
+//
+// REIMPLEMENTED — dx11/src/shaderprograms.cpp (all 3 slots).
+//
+// Mirror of VertexProgramData in every respect; the three functions differ only
+// in the vtable they store, the Runtime base dtor they chain
+// (??1PixelProgramData@Video@@UEAA@XZ), and CreatePixelShader (device vtable
+// index 15) / PSSetShader (context vtable index 9) in place of the vertex
+// equivalents. Owner type confirmed by
+// ??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z; it derives from the
+// same Video::ShaderProgram, and slot 1 reads the identical +0x40/+0x48 fields.
 struct PixelProgramData {
     void* vptr;         // +0x00
     void* pixelProgram; // +0x08  Video::PixelProgram*
     void* variants[4];  // +0x10  ID3D11PixelShader*[4]
 };
 static_assert(sizeof(PixelProgramData) == 0x30, "PixelProgramData size");
+static_assert(offsetof(PixelProgramData, pixelProgram) == 0x08, "PixelProgramData::pixelProgram");
 static_assert(offsetof(PixelProgramData, variants) == 0x10, "PixelProgramData::variants");
+static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations");
 
 // 0x28, vtable 0x180018818 (3 slots), factory 0x1800059d0
 struct RenderStateData {
@@ -248,18 +291,50 @@ static_assert(sizeof(RenderStateData) == 0x28, "RenderStateData size");
 // 0x10, vtable 0x1800185a8 (3 slots), factory 0x180005a40 — no private fields.
 // Slots 1 and 2 are the shared `return true` / `ret` stubs, so only the dtor is
 // real: this class exists purely to satisfy the Runtime-side interface.
+//
+// REIMPLEMENTED — dx11/src/smallclasses.cpp (all 3 slots).
+//
+//   slot 0  0x180001140  scalar deleting dtor, chains
+//                        ??1VideoProgramData@Video@@UEAA@XZ
+//   slot 1  0x180001060  `mov al,1; ret` — shared with RenderBufferData[1] and
+//                        DeviceData[7]
+//   slot 2  0x180001190  `ret`           — shared with DeviceData[4]
+//
+// Owner type confirmed by ??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z.
 struct VideoProgramData {
     void* vptr;         // +0x00
     void* videoProgram; // +0x08  Video::VideoProgram*
 };
 static_assert(sizeof(VideoProgramData) == 0x10, "VideoProgramData size");
+static_assert(offsetof(VideoProgramData, videoProgram) == 0x08, "VideoProgramData::videoProgram");
 
 // 0x10, vtable 0x180018588 (4 slots), factory 0x180005aa0 — no private fields.
+//
+// REIMPLEMENTED — dx11/src/smallclasses.cpp (all 4 slots).
+//
+//   slot 0  0x180001010  scalar deleting dtor, chains
+//                        ??1RenderBufferData@Video@@UEAA@XZ. Releases nothing:
+//                        the views belong to the ImageBufferData of each
+//                        Video::ImageBuffer, not to this object.
+//   slot 1  0x180001060  `mov al,1; ret` (shared address, separate slot)
+//   slot 2  0x180001070  Bind(Context&) -> OMSetRenderTargets(1, &rtv, dsv)
+//   slot 3  0x1800010e0  Resolve(Context&, RenderBuffer*, bool) ->
+//                        ResolveSubresource(this.colour, 0, other.colour, 0,
+//                                           B8G8R8A8_UNORM)
+//
+// "0 private bytes" is true of the struct but NOT of the code: slots 2 and 3
+// reach real D3D11 views through the owner. Video::RenderBuffer is a
+// (colour, depth) Video::ImageBuffer pair at +0x00/+0x08 and each ImageBuffer
+// carries its VideoDX11::ImageBufferData at +0x60 — all pinned with
+// static_asserts in dx11/src/dx11_backend_access.h. Owner type confirmed by
+// ??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z, and the pair shape by
+// ?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z.
 struct RenderBufferData {
     void* vptr;         // +0x00
     void* renderBuffer; // +0x08  Video::RenderBuffer*
 };
 static_assert(sizeof(RenderBufferData) == 0x10, "RenderBufferData size");
+static_assert(offsetof(RenderBufferData, renderBuffer) == 0x08, "RenderBufferData::renderBuffer");
 
 // ============================================================
 // Vtable slot counts, walked from .rdata 0x180018580-0x180018c60 on
