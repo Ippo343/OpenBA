@@ -230,20 +230,19 @@ static void PixelProgramData_Bind(PixelProgramData* self,
 
 }  // namespace VideoDX11
 
-// Unproven until run in-game: registered opt-in per the kill-switch convention
-// in dx11/README.md. BANISHED_DX11_SHADERS=1 installs the whole lane.
-#define DX11_SHADERS_FLAG "BANISHED_DX11_SHADERS"
+// All live. Verified in-game and RenderDoc-diffed against the shipped DLL —
+// see dx11/README.md §"Per-draw pipeline-state equality".
 
 DX11_REGISTER_SLOT(VertexProgramData, 0, &::VideoDX11::VertexProgramData_Dtor,
-                   DX11_SHADERS_FLAG, true, "VertexProgramData::~ (scalar deleting)");
+                   "VertexProgramData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(VertexProgramData, 1, &::VideoDX11::VertexProgramData_PlatformCreate,
-                   DX11_SHADERS_FLAG, true, "VertexProgramData::PlatformCreate");
+                   "VertexProgramData::PlatformCreate");
 DX11_REGISTER_SLOT(VertexProgramData, 2, &::VideoDX11::VertexProgramData_Bind,
-                   DX11_SHADERS_FLAG, true, "VertexProgramData::Bind");
+                   "VertexProgramData::Bind");
 
 DX11_REGISTER_SLOT(PixelProgramData, 0, &::VideoDX11::PixelProgramData_Dtor,
-                   DX11_SHADERS_FLAG, true, "PixelProgramData::~ (scalar deleting)");
+                   "PixelProgramData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(PixelProgramData, 1, &::VideoDX11::PixelProgramData_PlatformCreate,
-                   DX11_SHADERS_FLAG, true, "PixelProgramData::PlatformCreate");
+                   "PixelProgramData::PlatformCreate");
 DX11_REGISTER_SLOT(PixelProgramData, 2, &::VideoDX11::PixelProgramData_Bind,
-                   DX11_SHADERS_FLAG, true, "PixelProgramData::Bind");
+                   "PixelProgramData::Bind");

@@ -1277,53 +1277,49 @@ void ContextData_EndInstancedIndexedVertices(ContextData* self, int primitiveTyp
 // ---------------------------------------------------------------------------
 // Registration
 //
-// Unproven — every slot is opt-in behind BANISHED_DX11_CONTEXT with
-// defaultOn=false, per the kill-switch convention in dx11/funcs/dx11_seam.h.
-// Graduation to defaultOn=true happens only after an in-game run and a
-// RenderDoc A/B pass, which this lane does not perform.
+// All 20 slots are live and unconditional. They were verified in-game and
+// RenderDoc-diffed against the shipped DLL — see dx11/README.md §"Per-draw
+// pipeline-state equality".
 //
 // Slots 17 and 19 share one implementation because 0x180002020 is a `jmp` to
 // 0x180002150 — see the comment on the function.
 // ---------------------------------------------------------------------------
-#define DX11_CONTEXT_FLAG "BANISHED_DX11_CONTEXT"
 
-DX11_REGISTER_SLOT(ContextData,  0, &::VideoDX11::ContextData_Dtor,
-                   DX11_CONTEXT_FLAG, true, "ContextData::~ (scalar deleting)");
-DX11_REGISTER_SLOT(ContextData,  1, &::VideoDX11::ContextData_BeginCommands,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BeginCommands");
-DX11_REGISTER_SLOT(ContextData,  2, &::VideoDX11::ContextData_EndCommands,
-                   DX11_CONTEXT_FLAG, true, "ContextData::EndCommands");
-DX11_REGISTER_SLOT(ContextData,  3, &::VideoDX11::ContextData_Finish,
-                   DX11_CONTEXT_FLAG, true, "ContextData::Finish");
-DX11_REGISTER_SLOT(ContextData,  4, &::VideoDX11::ContextData_Clear,
-                   DX11_CONTEXT_FLAG, true, "ContextData::Clear");
-DX11_REGISTER_SLOT(ContextData,  5, &::VideoDX11::ContextData_BindRenderBuffer,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindRenderBuffer");
-DX11_REGISTER_SLOT(ContextData,  6, &::VideoDX11::ContextData_BindViewport,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindViewport");
-DX11_REGISTER_SLOT(ContextData,  7, &::VideoDX11::ContextData_BindScissor,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindScissor");
-DX11_REGISTER_SLOT(ContextData,  8, &::VideoDX11::ContextData_BindTransforms,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindTransforms");
-DX11_REGISTER_SLOT(ContextData,  9, &::VideoDX11::ContextData_BindTextureNone,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindTextureNone");
+DX11_REGISTER_SLOT(ContextData, 0, &::VideoDX11::ContextData_Dtor,
+                   "ContextData::~ (scalar deleting)");
+DX11_REGISTER_SLOT(ContextData, 1, &::VideoDX11::ContextData_BeginCommands,
+                   "ContextData::BeginCommands");
+DX11_REGISTER_SLOT(ContextData, 2, &::VideoDX11::ContextData_EndCommands,
+                   "ContextData::EndCommands");
+DX11_REGISTER_SLOT(ContextData, 3, &::VideoDX11::ContextData_Finish, "ContextData::Finish");
+DX11_REGISTER_SLOT(ContextData, 4, &::VideoDX11::ContextData_Clear, "ContextData::Clear");
+DX11_REGISTER_SLOT(ContextData, 5, &::VideoDX11::ContextData_BindRenderBuffer,
+                   "ContextData::BindRenderBuffer");
+DX11_REGISTER_SLOT(ContextData, 6, &::VideoDX11::ContextData_BindViewport,
+                   "ContextData::BindViewport");
+DX11_REGISTER_SLOT(ContextData, 7, &::VideoDX11::ContextData_BindScissor,
+                   "ContextData::BindScissor");
+DX11_REGISTER_SLOT(ContextData, 8, &::VideoDX11::ContextData_BindTransforms,
+                   "ContextData::BindTransforms");
+DX11_REGISTER_SLOT(ContextData, 9, &::VideoDX11::ContextData_BindTextureNone,
+                   "ContextData::BindTextureNone");
 DX11_REGISTER_SLOT(ContextData, 10, &::VideoDX11::ContextData_BindIndexNone,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindIndexNone");
+                   "ContextData::BindIndexNone");
 DX11_REGISTER_SLOT(ContextData, 11, &::VideoDX11::ContextData_BindVertexNone,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BindVertexNone");
+                   "ContextData::BindVertexNone");
 DX11_REGISTER_SLOT(ContextData, 12, &::VideoDX11::ContextData_DrawIndexed,
-                   DX11_CONTEXT_FLAG, true, "ContextData::DrawIndexed");
+                   "ContextData::DrawIndexed");
 DX11_REGISTER_SLOT(ContextData, 13, &::VideoDX11::ContextData_GetMaxDynamicInstances,
-                   DX11_CONTEXT_FLAG, true, "ContextData::GetMaxDynamicInstances (52)");
+                   "ContextData::GetMaxDynamicInstances (52)");
 DX11_REGISTER_SLOT(ContextData, 14, &::VideoDX11::ContextData_BeginVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BeginVertices");
+                   "ContextData::BeginVertices");
 DX11_REGISTER_SLOT(ContextData, 15, &::VideoDX11::ContextData_EndVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::EndVertices");
+                   "ContextData::EndVertices");
 DX11_REGISTER_SLOT(ContextData, 16, &::VideoDX11::ContextData_BeginIndexedVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BeginIndexedVertices");
+                   "ContextData::BeginIndexedVertices");
 DX11_REGISTER_SLOT(ContextData, 17, &::VideoDX11::ContextData_EndInstancedIndexedVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::EndIndexedVertices (= slot 19)");
+                   "ContextData::EndIndexedVertices (= slot 19)");
 DX11_REGISTER_SLOT(ContextData, 18, &::VideoDX11::ContextData_BeginInstancedIndexedVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::BeginInstancedIndexedVertices");
+                   "ContextData::BeginInstancedIndexedVertices");
 DX11_REGISTER_SLOT(ContextData, 19, &::VideoDX11::ContextData_EndInstancedIndexedVertices,
-                   DX11_CONTEXT_FLAG, true, "ContextData::EndInstancedIndexedVertices");
+                   "ContextData::EndInstancedIndexedVertices");

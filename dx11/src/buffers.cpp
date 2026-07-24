@@ -70,10 +70,9 @@
 //
 // Registration
 // ------------
-// All 18 slots are opt-in behind BANISHED_DX11_BUFFERS with defaultOn=false —
-// none of this has been run in-game yet. Graduating them to default-on is a
-// separate, evidence-backed change (see the kill-switch convention in
-// dx11/README.md).
+// All 18 slots are live and unconditional. They were verified in-game and
+// RenderDoc-diffed against the shipped DLL — see dx11/README.md §"Per-draw
+// pipeline-state equality".
 
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
@@ -928,48 +927,47 @@ int32_t ConstantBufferData_SlotIndexPlusOne(ConstantBufferData* self) {
 }  // namespace VideoDX11
 
 // ============================================================
-// Registration — 18 slots, all opt-in, all unproven.
+// Registration — 18 slots, live.
 //
 // Slots 3 and 4 register the SAME two functions against both vtables, which is
 // exactly what the original does by putting the same address in both.
 // ============================================================
-#define DX11_BUFFERS_FLAG "BANISHED_DX11_BUFFERS"
 
 DX11_REGISTER_SLOT(VertexBufferData, 0, &::VideoDX11::VertexBufferData_ScalarDeletingDtor,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::ScalarDeletingDtor");
+                   "VertexBufferData::ScalarDeletingDtor");
 DX11_REGISTER_SLOT(VertexBufferData, 1, &::VideoDX11::VertexBufferData_Create,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::Create");
+                   "VertexBufferData::Create");
 DX11_REGISTER_SLOT(VertexBufferData, 2, &::VideoDX11::VertexBufferData_SetData,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::SetData");
+                   "VertexBufferData::SetData");
 DX11_REGISTER_SLOT(VertexBufferData, 3, &::VideoDX11::BufferData_Lock_Entry,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::Lock (shared)");
+                   "VertexBufferData::Lock (shared)");
 DX11_REGISTER_SLOT(VertexBufferData, 4, &::VideoDX11::BufferData_Unlock_Entry,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::Unlock (shared)");
+                   "VertexBufferData::Unlock (shared)");
 DX11_REGISTER_SLOT(VertexBufferData, 5, &::VideoDX11::VertexBufferData_Bind,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::Bind");
+                   "VertexBufferData::Bind");
 DX11_REGISTER_SLOT(VertexBufferData, 6, &::VideoDX11::VertexBufferData_Serialize,
-                   DX11_BUFFERS_FLAG, true, "VertexBufferData::Serialize");
+                   "VertexBufferData::Serialize");
 
 DX11_REGISTER_SLOT(IndexBufferData, 0, &::VideoDX11::IndexBufferData_ScalarDeletingDtor,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::ScalarDeletingDtor");
+                   "IndexBufferData::ScalarDeletingDtor");
 DX11_REGISTER_SLOT(IndexBufferData, 1, &::VideoDX11::IndexBufferData_Create,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::Create");
+                   "IndexBufferData::Create");
 DX11_REGISTER_SLOT(IndexBufferData, 2, &::VideoDX11::IndexBufferData_SetData,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::SetData");
+                   "IndexBufferData::SetData");
 DX11_REGISTER_SLOT(IndexBufferData, 3, &::VideoDX11::BufferData_Lock_Entry,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::Lock (shared)");
+                   "IndexBufferData::Lock (shared)");
 DX11_REGISTER_SLOT(IndexBufferData, 4, &::VideoDX11::BufferData_Unlock_Entry,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::Unlock (shared)");
+                   "IndexBufferData::Unlock (shared)");
 DX11_REGISTER_SLOT(IndexBufferData, 5, &::VideoDX11::IndexBufferData_Bind,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::Bind");
+                   "IndexBufferData::Bind");
 DX11_REGISTER_SLOT(IndexBufferData, 6, &::VideoDX11::IndexBufferData_Serialize,
-                   DX11_BUFFERS_FLAG, true, "IndexBufferData::Serialize");
+                   "IndexBufferData::Serialize");
 
 DX11_REGISTER_SLOT(ConstantBufferData, 0, &::VideoDX11::ConstantBufferData_ScalarDeletingDtor,
-                   DX11_BUFFERS_FLAG, true, "ConstantBufferData::ScalarDeletingDtor");
+                   "ConstantBufferData::ScalarDeletingDtor");
 DX11_REGISTER_SLOT(ConstantBufferData, 1, &::VideoDX11::ConstantBufferData_Create,
-                   DX11_BUFFERS_FLAG, true, "ConstantBufferData::Create");
+                   "ConstantBufferData::Create");
 DX11_REGISTER_SLOT(ConstantBufferData, 2, &::VideoDX11::ConstantBufferData_Bind,
-                   DX11_BUFFERS_FLAG, true, "ConstantBufferData::Bind");
+                   "ConstantBufferData::Bind");
 DX11_REGISTER_SLOT(ConstantBufferData, 3, &::VideoDX11::ConstantBufferData_SlotIndexPlusOne,
-                   DX11_BUFFERS_FLAG, true, "ConstantBufferData::SlotIndex+1");
+                   "ConstantBufferData::SlotIndex+1");

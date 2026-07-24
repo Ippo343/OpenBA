@@ -107,16 +107,17 @@ unsigned Dx11ForwardCount();
 // Register a reimplementation for one vtable slot. Call before
 // Dx11SeamInstall() — registrations afterwards are rejected.
 //
-//   envFlag   BANISHED_DX11_* name, or nullptr for unconditional. Retained as
-//             lane-ownership metadata; a =0 kill switch can no longer be
-//             honoured (there is no original to fall back to) and is reported
-//             on stderr rather than silently ignored.
-//   defaultOn kept for the same reason.
-//   label     shown in the seam report, e.g. "IndexBufferData::Bind".
+//   label   shown in the seam report, e.g. "IndexBufferData::Bind".
+//
+// There is no per-slot enable flag. Each slot used to carry a BANISHED_DX11_*
+// name and a defaultOn bool, because while the shipped DLL was mapped a slot
+// could be switched back to its implementation. Once that went (see "AB mode,
+// and why it is gone" in dx11/README.md) the flags could not do anything: there
+// is no original to fall back to, so every slot is unconditionally ours and a
+// registration that could be declined would just be a null vtable entry.
 //
 // Returns false on a bad (Vt, slot) pair or a duplicate registration.
-bool Dx11RegisterSlot(Vt v, int slot, void* impl,
-                      const char* envFlag, bool defaultOn, const char* label);
+bool Dx11RegisterSlot(Vt v, int slot, void* impl, const char* label);
 
 // Register from a porting lane's own .cpp with NO edit to any shared file —
 // this is how the six lanes stayed collision-free. The static initializer runs
@@ -125,14 +126,14 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
 // table is zero-initialized POD in .bss.
 //
 //   DX11_REGISTER_SLOT(IndexBufferData, 5, &IndexBufferData_Bind,
-//                      "BANISHED_DX11_IB_BIND", true, "IndexBufferData::Bind");
+//                      "IndexBufferData::Bind");
 //
 // `slot` must be an integer literal (it is pasted into the guard variable name).
-#define DX11_REGISTER_SLOT(vtName, slot, impl, envFlag, defaultOn, label)  \
-    namespace {                                                            \
-    const bool kDx11Reg_##vtName##_##slot = ::VideoDX11::Dx11RegisterSlot(  \
-        ::VideoDX11::Vt::vtName, (slot), reinterpret_cast<void*>(impl),    \
-        (envFlag), (defaultOn), (label));                                  \
+#define DX11_REGISTER_SLOT(vtName, slot, impl, label)                       \
+    namespace {                                                             \
+    const bool kDx11Reg_##vtName##_##slot = ::VideoDX11::Dx11RegisterSlot(   \
+        ::VideoDX11::Vt::vtName, (slot), reinterpret_cast<void*>(impl),     \
+        (label));                                                          \
     }
 
 // Build the twelve vtables from the registrations.

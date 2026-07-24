@@ -799,24 +799,20 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
 }  // namespace
 }  // namespace VideoDX11
 
-// Unproven: never run in-game as of this commit. All seven register opt-in
-// behind one env var so a single BANISHED_DX11_IMAGES=1 run flips the whole
-// class, and the seam report shows "7 slot(s) ours". Per project policy
-// (kDefaultOnFlags in component_factory_base.cpp) these graduate to
-// defaultOn=true once verified, after which the var is a =0 kill switch.
-#define DX11_IMAGES_FLAG "BANISHED_DX11_IMAGES"
+// All seven live. Verified in-game and RenderDoc-diffed against the shipped
+// DLL — see dx11/README.md §"Per-draw pipeline-state equality".
 
 DX11_REGISTER_SLOT(ImageBufferData, 0, &::VideoDX11::ImageBufferData_ScalarDeletingDtor,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::~ImageBufferData (deleting)");
+                   "ImageBufferData::~ImageBufferData (deleting)");
 DX11_REGISTER_SLOT(ImageBufferData, 1, &::VideoDX11::ImageBufferData_AttachColorBuffer,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::AttachColorBuffer");
+                   "ImageBufferData::AttachColorBuffer");
 DX11_REGISTER_SLOT(ImageBufferData, 2, &::VideoDX11::ImageBufferData_AttachDepthBuffer,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::AttachDepthBuffer");
+                   "ImageBufferData::AttachDepthBuffer");
 DX11_REGISTER_SLOT(ImageBufferData, 3, &::VideoDX11::ImageBufferData_Create,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::Create");
+                   "ImageBufferData::Create");
 DX11_REGISTER_SLOT(ImageBufferData, 4, &::VideoDX11::ImageBufferData_Bind,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::Bind");
+                   "ImageBufferData::Bind");
 DX11_REGISTER_SLOT(ImageBufferData, 5, &::VideoDX11::ImageBufferData_Update,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::Update");
+                   "ImageBufferData::Update");
 DX11_REGISTER_SLOT(ImageBufferData, 6, &::VideoDX11::ImageBufferData_Read,
-                   DX11_IMAGES_FLAG, true, "ImageBufferData::Read");
+                   "ImageBufferData::Read");

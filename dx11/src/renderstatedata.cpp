@@ -555,14 +555,12 @@ void RenderStateData_Bind(RenderStateData* self, void* /*videoContext — unused
 }  // namespace
 }  // namespace VideoDX11
 
-// Unproven: nothing here has been run in-game yet (in-game testing for this
-// wave is serialized through the lane owner). Opt-in only, per the seam's
-// kill-switch convention — set BANISHED_DX11_STATE=1 to enable all three.
-#define DX11_STATE_FLAG "BANISHED_DX11_STATE"
+// All three live. Verified in-game and RenderDoc-diffed against the shipped
+// DLL — see dx11/README.md §"Per-draw pipeline-state equality".
 
 DX11_REGISTER_SLOT(RenderStateData, 0, &::VideoDX11::RenderStateData_ScalarDeletingDtor,
-                   DX11_STATE_FLAG, true, "RenderStateData::~RenderStateData");
+                   "RenderStateData::~RenderStateData");
 DX11_REGISTER_SLOT(RenderStateData, 1, &::VideoDX11::RenderStateData_Create,
-                   DX11_STATE_FLAG, true, "RenderStateData::Create");
+                   "RenderStateData::Create");
 DX11_REGISTER_SLOT(RenderStateData, 2, &::VideoDX11::RenderStateData_Bind,
-                   DX11_STATE_FLAG, true, "RenderStateData::Bind");
+                   "RenderStateData::Bind");

@@ -56,18 +56,14 @@ static bool DeviceData_Stub7_True(void* /*self*/) {
 
 }  // namespace VideoDX11
 
-// GRADUATED default-on 2026-07-24: verified in-game with all four installed
-// ("4 slot(s) ours, 0 failed"), autostart reached the world build, process
-// responding, empty crash log. Per project policy (kDefaultOnFlags in
-// component_factory_base.cpp) the env var is now a kill switch only —
-// BANISHED_DX11_DEVICE_STUBS=0 puts all four back to the original code.
-#define DX11_STUBS_FLAG "BANISHED_DX11_DEVICE_STUBS"
+// All four live. Verified in-game 2026-07-24: autostart reached the world
+// build, process responding, empty crash log.
 
 DX11_REGISTER_SLOT(DeviceData, 4, &::VideoDX11::DeviceData_Stub4_Void,
-                   DX11_STUBS_FLAG, true, "DeviceData::Stub4 (void)");
+                   "DeviceData::Stub4 (void)");
 DX11_REGISTER_SLOT(DeviceData, 5, &::VideoDX11::DeviceData_Stub5_ZeroFloat,
-                   DX11_STUBS_FLAG, true, "DeviceData::Stub5 (0.0f)");
+                   "DeviceData::Stub5 (0.0f)");
 DX11_REGISTER_SLOT(DeviceData, 6, &::VideoDX11::DeviceData_Stub6_False,
-                   DX11_STUBS_FLAG, true, "DeviceData::Stub6 (false)");
+                   "DeviceData::Stub6 (false)");
 DX11_REGISTER_SLOT(DeviceData, 7, &::VideoDX11::DeviceData_Stub7_True,
-                   DX11_STUBS_FLAG, true, "DeviceData::Stub7 (true)");
+                   "DeviceData::Stub7 (true)");

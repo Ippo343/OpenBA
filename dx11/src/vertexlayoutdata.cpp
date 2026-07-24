@@ -216,11 +216,10 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
 }  // namespace VideoDX11
 
 // Unproven until run in-game — opt-in, shared with the rest of lane L2.
-#define DX11_SHADERS_FLAG "BANISHED_DX11_SHADERS"
 
 DX11_REGISTER_SLOT(VertexLayoutData, 0, &::VideoDX11::VertexLayoutData_Dtor,
-                   DX11_SHADERS_FLAG, true, "VertexLayoutData::~ (scalar deleting)");
+                   "VertexLayoutData::~ (scalar deleting)");
 DX11_REGISTER_SLOT(VertexLayoutData, 1, &::VideoDX11::VertexLayoutData_Bind,
-                   DX11_SHADERS_FLAG, true, "VertexLayoutData::Bind");
+                   "VertexLayoutData::Bind");
 DX11_REGISTER_SLOT(VertexLayoutData, 2, &::VideoDX11::VertexLayoutData_PlatformCreate,
-                   DX11_SHADERS_FLAG, true, "VertexLayoutData::PlatformCreate");
+                   "VertexLayoutData::PlatformCreate");

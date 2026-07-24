@@ -70,7 +70,6 @@ store as vptrs.
 
 ```
 Dx11RegisterSlot(Vt::IndexBufferData, 5, &IndexBufferData_Bind,
-                 "BANISHED_DX11_IB_BIND", /*defaultOn=*/true,
                  "IndexBufferData::Bind");
 ...
 Dx11SeamInstall();   // refuse on any hole, then publish the twelve vtables
@@ -98,12 +97,15 @@ aborts. First run: `[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables`.
 > slot could be flipped between ours and the shipped code. See "AB mode, and why
 > it is gone" below.
 
-**Kill-switch convention** (per project policy — see `kDefaultOnFlags` in
-`code/Game/Component/component_factory_base.cpp`): new, unproven DX11 slots start
-opt-in behind `BANISHED_DX11_*`; once a slot is verified in-game it graduates to
-default-on and its env var becomes a `=0` kill switch only. All 84 are graduated,
-and with no original left to fall back to a `=0` can no longer be honoured — the
-seam reports that on stderr rather than silently ignoring the flag.
+**No per-slot flags.** Every slot is unconditionally ours. While the DLL was
+mapped each registration carried a `BANISHED_DX11_*` name and a `defaultOn` bool,
+following the project's kill-switch convention (`kDefaultOnFlags` in
+`code/Game/Component/component_factory_base.cpp`): a new slot started opt-in and
+graduated to default-on once verified in-game, after which the var was a `=0`
+kill switch. That convention needs somewhere to fall back *to*. With the original
+gone a declined registration would just be a null vtable entry, so the flags were
+retired along with the lane they belonged to — the registration takes a label and
+nothing else.
 
 ---
 
@@ -153,11 +155,10 @@ return null now, but it is still the single choke point for the 27 "a Runtime
 import failed to resolve" branches, and `fallbacks to shipped code: 0` printed
 at exit stays positive evidence rather than an absence of it.
 
-Also kept, though inert: the per-slot `BANISHED_DX11_*` flags. They are lane
-ownership metadata and appear in the seam report. A `=0` can no longer be
-honoured — there is no original to fall back to — so the seam says so on stderr
-instead of silently ignoring it. Retiring them is a follow-up, not part of this
-change.
+Retired with it: the 84 per-slot `BANISHED_DX11_*` flags and the `defaultOn`
+bool. They were the graduation mechanism, and graduating needs somewhere to fall
+back to. `Dx11RegisterSlot` and `DX11_REGISTER_SLOT` now take a label and nothing
+else; the per-lane `DX11_*_FLAG` defines are gone.
 
 ### How the port stops Runtime loading the DLL
 
@@ -485,14 +486,19 @@ each owns its own `dx11/src/*.cpp` and its own struct block in
 `dx11/types/VideoDX11Data.h`, and registers its slots from a static initializer
 via `DX11_REGISTER_SLOT`, so no lane edits a file another lane owns.
 
-| Lane | Classes | Slots | Env flag | Depends on |
-|------|---------|-------|----------|------------|
-| L1 Buffers | `VertexBufferData`, `IndexBufferData`, `ConstantBufferData` | 18 | `BANISHED_DX11_BUFFERS` | — |
-| L2 Shaders | `VertexProgramData`, `PixelProgramData`, `VertexLayoutData`, `VideoProgramData`, `RenderBufferData` | 16 | `BANISHED_DX11_SHADERS` | — |
-| L3 Images | `ImageBufferData` | 7 | `BANISHED_DX11_IMAGES` | — |
-| L4 State | `RenderStateData` | 3 | `BANISHED_DX11_STATE` | — |
-| L5 Context | `ContextData` | 20 | `BANISHED_DX11_CONTEXT` | L1–L4 |
-| L6 Device | `DeviceData` slots 1/2/3 + 8 helpers | 4 + helpers | `BANISHED_DX11_DEVICE` | L1–L5 |
+Each lane had its own `BANISHED_DX11_*` opt-in flag (`_BUFFERS`, `_SHADERS`,
+`_IMAGES`, `_STATE`, `_CONTEXT`, `_DEVICE`) so it could be enabled or killed as a
+unit. Those are gone with AB mode; the lane structure below is the file layout it
+left behind.
+
+| Lane | Classes | Slots | Depends on |
+|------|---------|-------|------------|
+| L1 Buffers | `VertexBufferData`, `IndexBufferData`, `ConstantBufferData` | 18 | — |
+| L2 Shaders | `VertexProgramData`, `PixelProgramData`, `VertexLayoutData`, `VideoProgramData`, `RenderBufferData` | 16 | — |
+| L3 Images | `ImageBufferData` | 7 | — |
+| L4 State | `RenderStateData` | 3 | — |
+| L5 Context | `ContextData` | 20 | L1–L4 |
+| L6 Device | `DeviceData` slots 1/2/3 + 8 helpers | 4 + helpers | L1–L5 |
 
 `VertexBufferData` and `IndexBufferData` **must** share a lane: their vtable
 slots 3 and 4 are the same two addresses (`0x180003290`, `0x180003340`), so
@@ -623,8 +629,8 @@ lane was run alone and all four were run together — `Installed: 48 slot(s) our
 rendered frame was correct (terrain, BC-compressed textures, alpha foliage,
 water, shadows, smoke, selection outline, UI).
 
-**GRADUATED default-on 2026-07-24** after the RenderDoc A/B pass below. Each
-`BANISHED_DX11_*` flag is now a `=0` kill switch only.
+**GRADUATED default-on 2026-07-24** after the RenderDoc A/B pass below. (The
+per-slot flags were retired entirely when AB mode went — see above.)
 
 ### RenderDoc A/B result
 
@@ -792,8 +798,9 @@ Same as the project-wide loop in `../CLAUDE.md`, with the DX11 specifics:
    (existing convention, already has `Video::Device::Lock/Unlock` etc.);
    VideoDX11-internal calls go in `dx11/funcs/dx11_funcs.h`.
 4. **Write clean C++** in `dx11/src/`.
-5. **Wire the slot** in the seam installer's vtable, behind a `BANISHED_DX11_*`
-   opt-in until proven.
+5. **Wire the slot** with `DX11_REGISTER_SLOT` in the lane's own `.cpp`. Note
+   there is no longer an opt-in flag to hide it behind: a registered slot is
+   live on the next run, so it needs to be right before it is registered.
 6. **Test** — `mingw32-make sa-run`, then read
    `C:/GOG Games/Banished/standalone_debug.log`, and RenderDoc-diff the frame
    against a capture taken with the slot forwarding to the original.

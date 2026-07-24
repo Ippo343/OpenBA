@@ -5,8 +5,7 @@
 #include "dx11_seam.h"
 
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
+#include <cstdlib>   // std::atexit
 
 namespace VideoDX11 {
 
@@ -52,9 +51,7 @@ uintptr_t   VtGhidraAddr(Vt v) { return kVtables[static_cast<int>(v)].ghidra; }
 // *before* any dynamic initializer runs, so registration order cannot matter.
 struct SlotEntry {
     void*       impl;
-    const char* envFlag;
     const char* label;
-    bool        defaultOn;
     bool        live;
 };
 
@@ -118,23 +115,7 @@ void* Dx11OriginalSlot(Vt v, int slot) {
     return nullptr;
 }
 
-// Same semantics as ComponentFactory::LiveEnabled: an explicit env setting wins
-// in both directions; otherwise the registration's defaultOn decides. Kept local
-// so dx11/ has no dependency on code/Game/.
-static bool EnvOn(const char* v) {
-    return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-static bool Enabled(const char* envFlag, bool defaultOn) {
-    if (envFlag) {
-        const char* v = std::getenv(envFlag);
-        if (v && v[0]) return EnvOn(v);
-    }
-    return defaultOn;
-}
-static bool SlotEnabled(const SlotEntry& e) { return Enabled(e.envFlag, e.defaultOn); }
-
-bool Dx11RegisterSlot(Vt v, int slot, void* impl,
-                      const char* envFlag, bool defaultOn, const char* label) {
+bool Dx11RegisterSlot(Vt v, int slot, void* impl, const char* label) {
     if (s_installed) {
         fprintf(stderr, "[Dx11Seam] REJECTED %s slot %d (%s): registered after install\n",
                 ValidSlot(v, slot) ? VtName(v) : "?", slot, label ? label : "");
@@ -151,10 +132,8 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
                 VtName(v), slot, label ? label : "?", e.label ? e.label : "?");
         return false;
     }
-    e.impl      = impl;
-    e.envFlag   = envFlag;
-    e.label     = label;
-    e.defaultOn = defaultOn;
+    e.impl  = impl;
+    e.label = label;
     return true;
 }
 
@@ -164,7 +143,7 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
 bool Dx11SeamInstall() {
     if (s_installed) return true;
 
-    int total = 0, holes = 0, forced = 0;
+    int total = 0, holes = 0;
 
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
         s_ourVt[vi].rtti = nullptr;
@@ -178,17 +157,6 @@ bool Dx11SeamInstall() {
                         kVtables[vi].name, slot);
                 ++holes;
                 continue;
-            }
-            // Per-slot kill switches only ever meant "run the shipped version of
-            // this one instead", which is no longer possible. Say so rather than
-            // silently ignoring the flag.
-            if (!SlotEnabled(e)) {
-                fprintf(stderr,
-                        "[Dx11Seam] %s slot %d (%s): %s is off, but there is no "
-                        "original to fall back to — using ours anyway.\n",
-                        kVtables[vi].name, slot, e.label ? e.label : "?",
-                        e.envFlag ? e.envFlag : "(flag)");
-                ++forced;
             }
             s_ourVt[vi].slot[slot] = e.impl;
             e.live = true;
@@ -204,9 +172,8 @@ bool Dx11SeamInstall() {
 
     s_installed = true;
     printf("[Dx11Seam] %d/%d slots ours, in %d exe-owned vtables. "
-           "VideoDX11-x64.dll is not required.%s\n",
-           total, total, static_cast<int>(Vt::kVtCount),
-           forced ? "  (kill switches ignored — see stderr)" : "");
+           "VideoDX11-x64.dll is not required.\n",
+           total, total, static_cast<int>(Vt::kVtCount));
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
         printf("[Dx11Seam]   %-19s -> %p (%d slots)\n",
                kVtables[vi].name, static_cast<void*>(s_ourVt[vi].slot),
