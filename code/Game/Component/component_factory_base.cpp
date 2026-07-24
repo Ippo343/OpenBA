@@ -2,6 +2,7 @@
 // Shared inert-component factory infrastructure — see component_factory_base.h.
 
 #include "Component/component_factory_base.h"
+#include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstring>
@@ -10,11 +11,40 @@
 
 namespace {
 
+// Kill-switch for the Object::Internal unregistration below (BANISHED_INTERNAL_UNREG=0
+// restores the old, leaking behavior for an A/B run against the ObjAudit tally).
+bool UnregisterOnFree() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* v = std::getenv("BANISHED_INTERNAL_UNREG");
+        cached = (v && (std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0)) ? 0 : 1;
+    }
+    return cached != 0;
+}
+
 // Shared scalar-deleting destructor (vtable slot +0x00). For a freshly-spawned
 // inert component the body is zeroed (no owned arrays/refs to release), so this
 // only frees the object itself when the deleting flag (bit 0) is set — matching
 // the tail of every component's *_ScalarDtor.
+//
+// InitInert/InitInertTyped run the real Object::Internal::Internal, which enters the
+// object into the InternalFactory handle table (obj+0x08 = index, obj+0x0c = generation).
+// Freeing without the matching ~Internal leaves a dangling table entry: the next
+// unrelated ~Internal swap-removes it and executes `*(int*)(freedPtr+0x08) = idx`,
+// a 4-byte store into a block the allocator has already reused. That is the
+// demolish-churn heap corruption (see Object/internal_factory_audit.h mode (A)).
+// Every real component's *_ScalarDtor in the exe ends in ~Internal, so calling it
+// here is also the faithful behavior.
+// Guarded by IsRegistered: if fn_ObjectInternal_Ctor was NULL when this instance was
+// built (or it came from some other path), obj+0x08 is heap garbage and calling
+// ~Internal would swap-remove through that garbage index — corruption mode (B).
+// Only objects genuinely present in the table are unregistered.
 void* Inert_ScalarDtor(void* self, uint32_t flags) {
+    if (self && UnregisterOnFree() && fn_ObjectInternal_Dtor && ObjAudit::IsRegistered(self)) {
+        fn_ObjectInternal_Dtor(self);
+    } else {
+        ObjAudit::NoteUnregisteredFree(self, "InertComponent");
+    }
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }

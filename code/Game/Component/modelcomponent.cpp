@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/modelcomponent_funcs.h"
+#include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -569,11 +570,25 @@ static uint32_t ModelComponent_Real_GetTypeId(void*) {
     return cached;
 }
 
-// ScalarDtor (vtable +0x00): destroy the embedded MeshInstance, free if deleting.
+// ScalarDtor (vtable +0x00): destroy the embedded MeshInstance, unregister from the
+// InternalFactory handle table, free if deleting.
+//
+// The ctor below runs the real Object::Internal::Internal, so this MUST run the matching
+// ~Internal — otherwise the freed block stays in the handle table and the next unrelated
+// ~Internal swap-removes it, writing `*(int*)(freedPtr+0x08) = idx` into a block the
+// allocator has already reused. Caught live by ObjAudit: table slots 325/346/352 held
+// stale ModelComponents whose memory had been recycled into SendComponentMessage actions.
+// The IsRegistered guard keeps a never-registered instance from swap-removing through a
+// garbage index. (See Object/internal_factory_audit.h.)
 static void* ModelComponent_Real_ScalarDtor(void* self, uint32_t flags) {
     EnsureHelpers();
     if (self && s_fn_MeshInstance_Dtor)
         s_fn_MeshInstance_Dtor((void*)((uintptr_t)self + 0x28));
+    if (self && fn_ObjectInternal_Dtor && ObjAudit::IsRegistered(self)) {
+        fn_ObjectInternal_Dtor(self);
+    } else {
+        ObjAudit::NoteUnregisteredFree(self, "ModelComponent");
+    }
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }
