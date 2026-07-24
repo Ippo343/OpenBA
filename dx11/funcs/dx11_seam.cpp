@@ -86,13 +86,18 @@ uintptr_t   VtGhidraAddr(Vt v) { return kVtables[static_cast<int>(v)].ghidra; }
 // ============================================================
 // Registration table
 // ============================================================
+// Deliberately a POD with no default member initializers. Lanes register from
+// static initializers in their own .cpp (see DX11_REGISTER_SLOT), and those run
+// in unspecified order relative to each other. Keeping SlotEntry trivially
+// constructible puts s_slots in .bss with guaranteed zero-initialization
+// *before* any dynamic initializer runs, so registration order cannot matter.
 struct SlotEntry {
-    void*       impl      = nullptr;   // our reimplementation
-    void*       original  = nullptr;   // captured before any patch
-    const char* envFlag   = nullptr;
-    const char* label     = nullptr;
-    bool        defaultOn = false;
-    bool        live      = false;     // is our version currently installed?
+    void*       impl;        // our reimplementation
+    void*       original;    // captured before any patch
+    const char* envFlag;
+    const char* label;
+    bool        defaultOn;
+    bool        live;        // is our version currently installed?
 };
 
 static SlotEntry s_slots[static_cast<int>(Vt::kVtCount)][kMaxSlots];

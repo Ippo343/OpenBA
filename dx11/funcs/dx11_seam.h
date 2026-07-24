@@ -95,6 +95,23 @@ void* Dx11OriginalSlot(Vt v, int slot);
 bool Dx11RegisterSlot(Vt v, int slot, void* impl,
                       const char* envFlag, bool defaultOn, const char* label);
 
+// Register from a porting lane's own .cpp with NO edit to any shared file —
+// this is how the six lanes stay collision-free. The static initializer runs
+// before main(), therefore before Dx11SeamInstall(). Registration order between
+// translation units is unspecified and deliberately irrelevant: the seam's slot
+// table is zero-initialized POD in .bss.
+//
+//   DX11_REGISTER_SLOT(IndexBufferData, 5, &IndexBufferData_Bind,
+//                      "BANISHED_DX11_IB_BIND", false, "IndexBufferData::Bind");
+//
+// `slot` must be an integer literal (it is pasted into the guard variable name).
+#define DX11_REGISTER_SLOT(vtName, slot, impl, envFlag, defaultOn, label)  \
+    namespace {                                                            \
+    const bool kDx11Reg_##vtName##_##slot = ::VideoDX11::Dx11RegisterSlot(  \
+        ::VideoDX11::Vt::vtName, (slot), reinterpret_cast<void*>(impl),    \
+        (envFlag), (defaultOn), (label));                                  \
+    }
+
 // Snapshot every original slot, verify it against the address recorded in
 // dx11/README.md, and apply each enabled override.
 //
