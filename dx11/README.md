@@ -256,10 +256,143 @@ only way to compare a single slot against the shipped implementation.
   count is not a total. A second thread executing DLL code during that window
   would be missed; nothing in VideoDX11 creates threads, but that is an
   argument, not a measurement.
-- **Still open from before this pass:** per-draw pipeline-state equality is not
-  proven for any lane (needs a per-event RenderDoc comparison, not the
-  frame-level A/B), and a resource comparison needs `--opt-ref-all-resources` to
-  remove frame-reference dependence.
+- ~~**Still open from before this pass:** per-draw pipeline-state equality~~ —
+  **closed 2026-07-24**, see "Per-draw pipeline-state equality" below.
+
+---
+
+## Per-draw pipeline-state equality (2026-07-24) — the claim AB mode existed for
+
+The frame-level A/B above compares totals: draw count, texture count, clear
+count. It rules out gross structural differences and little else — the counts it
+compares move on their own between two runs of the *same* renderer. This pass
+compares **every draw's full pipeline state**, and is what retired AB mode.
+
+Tooling is in [`tools/dx11_state_diff/`](../tools/dx11_state_diff/); raw output
+is `notes/dx11_state/RESULTS.txt`, per-draw dumps are the `.jsonl` beside it.
+
+### Making two captures comparable at all
+
+RenderDoc `ResourceId`s are allocation-order handles, so `ResourceId::136` in one
+process is unrelated to `ResourceId::136` in another. Every resource reference in
+a record is therefore replaced by a **content-derived key**: shaders by sha1 of
+their DXBC, textures by creation desc plus sha1 of mip 0, buffers by byte length.
+Render targets are keyed by desc and role only — their contents *are* the frame
+being rendered, so hashing them would just re-measure the simulation.
+
+### The method: let a control decide what counts as noise
+
+Nothing here is judged against intuition about which fields "should" match. Both
+comparisons are run twice — once between two runs of the **same** renderer, once
+between ours and the shipped one — and only fields the control proves stable are
+treated as evidence.
+
+Four captures, `BANISHED_SEED=12345`, in-game frame 150, all with
+`--opt-ref-all-resources`: `shipped1`/`shipped2` (AB mode, every lane flag `0`,
+so the shipped DLL's own slots run) and `sa1`/`sa2` (Standalone).
+
+> **`sa1` was discarded**, and the reason matters: it rendered at 2560×1377 while
+> every other run got 1280×720 — the intermittent window-size bug below. Its
+> capture is 219 MB against ~88 MB for the rest. Comparing it would have compared
+> two resolutions. `capture.sh` verifies the active renderer per run; it does
+> **not** verify resolution, so check the viewport before trusting a capture.
+
+### Result 1 — per-field diff over aligned draws
+
+The two draw sequences are aligned on pipeline signature (difflib), then every
+field of every matched pair is compared. 439 aligned pairs in the control, 368
+and 472 in the two test comparisons:
+
+| | fields at 0.0% in control | same fields, ours vs shipped |
+|---|---|---|
+| `blend` `cbBindings` `depthState` `ds` `gs` `hs` `ibStride` `layout` `om` `ps` `raster` `sampler` `scissors` `srv` `topology` `uav` `viewports` `vs` | **18 fields, 0/439** | **18 fields, 0/368 and 0/472** |
+
+**Every field a same-renderer control proves stable is identical between our
+renderer and the shipped one.** That covers both shader stages, the input
+layout, all four state objects field-by-field (not by handle), viewport and
+scissor rects, render-target and depth bindings, sampler state, and SRV bindings
+down to the content hash of the texture.
+
+The six fields the control shows are *not* stable — `cbContents` (100%),
+`draw` (82%), `vbStrides` (17%), `cbBufferSizes` (29%), `flags`/`name` (6%) —
+are no worse in the test than in the control, except `flags`/`name` at ~12%.
+That one was chased: the draw-type mix swings further between the two *shipped*
+runs (314 indexed / 259 instanced vs 397 / 202) than between ours and either,
+and the non-indexed count is exactly 6 in all three. It is content-driven
+batching, not a renderer difference.
+
+**`cbContents` is 100% noise and this pass cannot say anything about it.** The
+world state at render-frame 150 genuinely differs between runs, so per-object
+transforms differ. Constant-buffer *bindings* are verified (0%); the bytes
+inside them are not. Closing that would need a capture pinned to a sim tick
+rather than a frame.
+
+### Result 2 — pipeline signatures, with no alignment step
+
+Alignment is the weak point of Result 1, so this comparison avoids it entirely.
+Each draw is reduced to a signature: the whole pipeline setup with everything
+derived from *which* resource is bound removed. Three quantities had to come out
+or the comparison would have been circular — D3D11 derives them from the bound
+texture, so they smuggle its identity back in:
+
+```
+sampler.maxLOD    clamped to the bound texture's mip count
+srv.numMips       the view covers the texture's mips
+srv.numSlices     the view covers its array slices
+```
+
+They are not discarded, they are promoted to invariants and checked against the
+description of the texture actually bound at that slot — a stronger statement
+than set equality: not "both used 7" but "both derived it from the texture by
+the same rule, every time".
+
+| | control (shipped1 vs shipped2) | ours (sa2) vs shipped1 / shipped2 |
+|---|---|---|
+| distinct signatures | 35 vs 35 — **identical set** | 31 vs 35, **all 31 of ours occur in shipped** |
+| gap, classified | — | 4 signatures, **all 4** shader-pair-never-drawn (content), **0 unexplained** |
+| `maxLOD == mips-1` | 1475/1475, 1633/1633 | 1405/1405 |
+| `srv.numMips == mips` | 1475/1475, 1633/1633 | 1405/1405 |
+| `srv.numSlices == arraySize` | 1475/1475, 1633/1633 | 1405/1405 |
+
+Zero exceptions to any invariant on either side. The four signatures ours lacks
+are materials that had nothing to draw in that run — its shader pairs never
+appear in our capture at all.
+
+Getting here took two wrong signature definitions, both of which manufactured
+findings: the first left `sampler.maxLOD` in and reported 7 "suspects", the
+second left `srv.numMips` in and reported 7 again *plus* one in the control. A
+signature that flags the control is measuring content, not correctness.
+
+### Result 3 — resource sets, with `--opt-ref-all-resources`
+
+This is what the old buffer-count mystery needed. RenderDoc lists only
+frame-*referenced* resources by default, which is why the count wandered 94–99
+across nine captures on both sides. With all live resources referenced:
+
+| | sa2 | shipped2 |
+|---|---|---|
+| resources / textures / buffers | 1028 / 207 / 341 | 1028 / 207 / 341 |
+| texture bytes | 124,769,459 | 124,769,459 |
+| buffer bytes | 26,675,612 | 26,675,612 |
+| resource-type histogram | \-\- identical \-\- | 9/9 keys |
+| textures by desc **and content hash** | \-\- identical \-\- | 189/189 keys |
+| buffers by byte length | \-\- identical \-\- | 247/247 keys |
+
+**Identical to the byte**, including the constant-buffer size ladder that the
+old count was a noisy proxy for. The shipped-vs-shipped control does *not* match
+itself this closely (1016 vs 1028 resources, 200 vs 207 textures) — shipped1 was
+captured slightly earlier in asset loading. Our renderer creates the same D3D11
+objects, holding textures with the same contents, as the DLL it replaces.
+
+### What this does and does not establish
+
+Established: identical pipeline configuration per draw, identical state-object
+field values, identical resource bindings, identical live resource sets, and
+identical rules for deriving view/sampler parameters from a texture.
+
+Not established: constant-buffer *contents* (irreducibly noisy here), and
+anything about frames other than one in-game frame at one camera position.
+Ordering *within* a frame is only checked to the extent alignment succeeds.
 
 ---
 

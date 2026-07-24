@@ -1,0 +1,24 @@
+{
+ "a": "base1",
+ "b": "base2",
+ "draws": [
+  170,
+  167
+ ],
+ "configs": [
+  49,
+  49
+ ],
+ "configsOnlyA": [],
+ "configsOnlyB": [],
+ "sharedConfigCountDiffs": 1,
+ "alignedPairs": 166,
+ "fieldDiffs": {
+  "cbContents": 166,
+  "cbBufferSizes": 3,
+  "draw": 12,
+  "vbStrides": 12,
+  "flags": 1,
+  "name": 1
+ }
+}

@@ -1,0 +1,209 @@
+Generated from captures in C:/GOG Games/Banished/rdoc_ab/ (BANISHED_SEED=12345, in-game frame 150,
+renderdoccmd capture --opt-ref-all-resources). sa1 excluded: window-size bug gave it a 2560x1377
+client rect where every other run got 1280x720.
+
+================ CONTROL(shipped-vs-shipped) ================
+=== shipped1  vs  shipped2 ===
+draws: 579 vs 605
+  shipped1: actions=586 textures=200 buffers=333 resources=1016
+  shipped2: actions=612 textures=207 buffers=341 resources=1028
+
+-- pipeline configurations --
+distinct configs: 159 vs 156;  shared 140, only-shipped1 19, only-shipped2 16
+  shared configs whose draw COUNT differs: 31/140
+
+-- pipeline signatures (bound-resource identity removed) --
+distinct: 35 vs 35;  shared 35, only-shipped1 0, only-shipped2 0
+  IDENTICAL SET: both renderers configure the pipeline the same 35 ways.
+  shipped1: texture-derived invariants -- maxLOD==mips-1 1475/1475, srv.numMips==mips 1475/1475, srv.numSlices==arraySize 1475/1475
+  shipped2: texture-derived invariants -- maxLOD==mips-1 1633/1633, srv.numMips==mips 1633/1633, srv.numSlices==arraySize 1633/1633
+
+-- textures bound as SRV (content-hashed identity) --
+distinct: 136 vs 138;  shared 127, only-shipped1 9, only-shipped2 11
+
+-- aligned per-field diff --
+aligned 439 draw pairs (unaligned: 140 in shipped1, 166 in shipped2)
+field             differing pairs     rate
+   blend                       0/439       0.0%
+   cbBindings                  0/439       0.0%
+ * cbBufferSizes             127/439      28.9%
+ * cbContents                439/439     100.0%
+   depthState                  0/439       0.0%
+ * draw                      361/439      82.2%
+   ds                          0/439       0.0%
+ * flags                      28/439       6.4%
+   gs                          0/439       0.0%
+   hs                          0/439       0.0%
+   ibStride                    0/439       0.0%
+   layout                      0/439       0.0%
+ * name                       28/439       6.4%
+   om                          0/439       0.0%
+   ps                          0/439       0.0%
+   raster                      0/439       0.0%
+   sampler                     0/439       0.0%
+   scissors                    0/439       0.0%
+   srv                         0/439       0.0%
+   topology                    0/439       0.0%
+   uav                         0/439       0.0%
+ * vbStrides                  76/439      17.3%
+   viewports                   0/439       0.0%
+   vs                          0/439       0.0%
+
+================ TEST-A(ours-vs-shipped) ================
+=== sa2  vs  shipped1 ===
+draws: 499 vs 579
+  sa2: actions=506 textures=207 buffers=341 resources=1028
+  shipped1: actions=586 textures=200 buffers=333 resources=1016
+
+-- pipeline configurations --
+distinct configs: 134 vs 159;  shared 112, only-sa2 22, only-shipped1 47
+  shared configs whose draw COUNT differs: 29/112
+
+-- pipeline signatures (bound-resource identity removed) --
+distinct: 31 vs 35;  shared 31, only-sa2 0, only-shipped1 4
+  gap shipped1->sa2: 4 signature(s); 4 shader-pair-never-drawn (content), 0 UNEXPLAINED
+  sa2: texture-derived invariants -- maxLOD==mips-1 1405/1405, srv.numMips==mips 1405/1405, srv.numSlices==arraySize 1405/1405
+  shipped1: texture-derived invariants -- maxLOD==mips-1 1475/1475, srv.numMips==mips 1475/1475, srv.numSlices==arraySize 1475/1475
+
+-- textures bound as SRV (content-hashed identity) --
+distinct: 115 vs 136;  shared 104, only-sa2 11, only-shipped1 32
+
+-- aligned per-field diff --
+aligned 368 draw pairs (unaligned: 131 in sa2, 211 in shipped1)
+field             differing pairs     rate
+   blend                       0/368       0.0%
+   cbBindings                  0/368       0.0%
+ * cbBufferSizes             136/368      37.0%
+ * cbContents                368/368     100.0%
+   depthState                  0/368       0.0%
+ * draw                      335/368      91.0%
+   ds                          0/368       0.0%
+ * flags                      45/368      12.2%
+   gs                          0/368       0.0%
+   hs                          0/368       0.0%
+   ibStride                    0/368       0.0%
+   layout                      0/368       0.0%
+ * name                       45/368      12.2%
+   om                          0/368       0.0%
+   ps                          0/368       0.0%
+   raster                      0/368       0.0%
+   sampler                     0/368       0.0%
+   scissors                    0/368       0.0%
+   srv                         0/368       0.0%
+   topology                    0/368       0.0%
+   uav                         0/368       0.0%
+ * vbStrides                  48/368      13.0%
+   viewports                   0/368       0.0%
+   vs                          0/368       0.0%
+
+================ TEST-B(ours-vs-shipped) ================
+=== sa2  vs  shipped2 ===
+draws: 499 vs 605
+  sa2: actions=506 textures=207 buffers=341 resources=1028
+  shipped2: actions=612 textures=207 buffers=341 resources=1028
+
+-- pipeline configurations --
+distinct configs: 134 vs 156;  shared 119, only-sa2 15, only-shipped2 37
+  shared configs whose draw COUNT differs: 23/119
+
+-- pipeline signatures (bound-resource identity removed) --
+distinct: 31 vs 35;  shared 31, only-sa2 0, only-shipped2 4
+  gap shipped2->sa2: 4 signature(s); 4 shader-pair-never-drawn (content), 0 UNEXPLAINED
+  sa2: texture-derived invariants -- maxLOD==mips-1 1405/1405, srv.numMips==mips 1405/1405, srv.numSlices==arraySize 1405/1405
+  shipped2: texture-derived invariants -- maxLOD==mips-1 1633/1633, srv.numMips==mips 1633/1633, srv.numSlices==arraySize 1633/1633
+
+-- textures bound as SRV (content-hashed identity) --
+distinct: 115 vs 138;  shared 110, only-sa2 5, only-shipped2 28
+
+-- aligned per-field diff --
+aligned 472 draw pairs (unaligned: 27 in sa2, 133 in shipped2)
+field             differing pairs     rate
+   blend                       0/472       0.0%
+   cbBindings                  0/472       0.0%
+ * cbBufferSizes             169/472      35.8%
+ * cbContents                472/472     100.0%
+   depthState                  0/472       0.0%
+ * draw                      403/472      85.4%
+   ds                          0/472       0.0%
+ * flags                      57/472      12.1%
+   gs                          0/472       0.0%
+   hs                          0/472       0.0%
+   ibStride                    0/472       0.0%
+   layout                      0/472       0.0%
+ * name                       57/472      12.1%
+   om                          0/472       0.0%
+   ps                          0/472       0.0%
+   raster                      0/472       0.0%
+   sampler                     0/472       0.0%
+   scissors                    0/472       0.0%
+   srv                         0/472       0.0%
+   topology                    0/472       0.0%
+   uav                         0/472       0.0%
+ * vbStrides                  48/472      10.2%
+   viewports                   0/472       0.0%
+   vs                          0/472       0.0%
+
+
+================ RESOURCE SETS (--opt-ref-all-resources) ================
+########## CONTROL shipped1 vs shipped2 ##########
+=== resources: shipped1  vs  shipped2 ===
+                            shipped1              shipped2
+resources                       1016                  1028
+textures                         200                   207
+buffers                          333                   341
+texture bytes            124,753,439           124,769,459
+buffer bytes              26,660,660            26,675,612
+
+-- resource types --
+9 distinct keys: 3 identical, 6 count-differs, only-shipped1 0, only-shipped2 0
+  COUNT Buffer: shipped1=333 shipped2=341
+  COUNT Sampler: shipped1=19 shipped2=18
+  COUNT Shader: shipped1=224 shipped2=216
+  COUNT StateObject: shipped1=34 shipped2=33
+  COUNT Texture: shipped1=199 shipped2=206
+  COUNT View: shipped1=204 shipped2=211
+
+-- textures (desc + content hash) --
+196 distinct keys: 179 identical, 2 count-differs, only-shipped1 7, only-shipped2 8
+  ONLY shipped1 (x1): Texture2D:128x64x1:m8:a1:BC3_UNORM:ms1x0:50b65494c04924b4
+  ONLY shipped1 (x1): Texture2D:16x16x1:m5:a1:BC3_UNORM:ms1x0:45d3018bd7c5a802
+  ONLY shipped1 (x1): Texture2D:64x128x1:m8:a1:BC3_UNORM:ms1x0:61e9b447699969d3
+  ONLY shipped1 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:53c7691fcb9d89e4
+  ONLY shipped1 (x1): Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:882acd1243b2d96c
+  ONLY shipped1 (x1): Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:8b28540981206758
+  ONLY shipped1 (x1): Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:9cb21dabb2a7e159
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:0a4a64559a75b1c8
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:96148991ddcd73e7
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:9d279e86c109cf1e
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:9f25f95bfa60ccc4
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:bc2274b77a72fcf6
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:f31abbccc308088c
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:BC1_UNORM:ms1x0:f5dd57859da2b0a0
+  ONLY shipped2 (x1): Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:67020e29492f6aab
+  COUNT Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:410561062557e774: shipped1=1 shipped2=6
+  COUNT Texture2D:64x64x1:m7:a1:R8_UNORM:ms1x0:e0c66649d1434eca: shipped1=9 shipped2=10
+
+-- buffers (byte length) --
+249 distinct keys: 237 identical, 8 count-differs, only-shipped1 2, only-shipped2 2
+  ONLY shipped1 (x1): 1200
+
+########## TEST sa2 vs shipped2 ##########
+=== resources: sa2  vs  shipped2 ===
+                                 sa2              shipped2
+resources                       1028                  1028
+textures                         207                   207
+buffers                          341                   341
+texture bytes            124,769,459           124,769,459
+buffer bytes              26,675,612            26,675,612
+
+-- resource types --
+9 distinct keys: 9 identical, 0 count-differs, only-sa2 0, only-shipped2 0
+  IDENTICAL
+
+-- textures (desc + content hash) --
+189 distinct keys: 189 identical, 0 count-differs, only-sa2 0, only-shipped2 0
+  IDENTICAL
+
+-- buffers (byte length) --
+247 distinct keys: 247 identical, 0 count-differs, only-sa2 0, only-shipped2 0
+  IDENTICAL

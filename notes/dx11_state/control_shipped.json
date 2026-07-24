@@ -1,0 +1,61 @@
+{
+ "a": "shipped1",
+ "b": "shipped2",
+ "draws": [
+  579,
+  605
+ ],
+ "configs": [
+  159,
+  156
+ ],
+ "configsOnlyA": [
+  "163500a57bf9",
+  "2836a8d8b44d",
+  "2f08be2f14c0",
+  "3e710de47248",
+  "3f6a2af7db8f",
+  "46a1c861ea8b",
+  "53c4029a6258",
+  "5474fcd103ee",
+  "5b3baaa47feb",
+  "5d441afe98dc",
+  "678d594d3968",
+  "81943addb4ee",
+  "88f3355454ea",
+  "89bf27fc386c",
+  "8d90bdf07136",
+  "9db7b22c9f3c",
+  "b902aa48e4b7",
+  "ceaa30b0f881",
+  "f5f9e2697dd1"
+ ],
+ "configsOnlyB": [
+  "1ec256bcb224",
+  "31eca1a8d66a",
+  "5755fa4bbd8e",
+  "641e44133156",
+  "7a6755b9effa",
+  "8338c270ff93",
+  "84ad2bba325d",
+  "8c461931c8bd",
+  "8ca8e05d755d",
+  "8e30f55b612c",
+  "97c350975fef",
+  "ac9601371da4",
+  "ba25ab21aa92",
+  "c6b5e39a76ba",
+  "f83d8daa7cfb",
+  "fe04a15b7b00"
+ ],
+ "sharedConfigCountDiffs": 31,
+ "alignedPairs": 439,
+ "fieldDiffs": {
+  "cbContents": 439,
+  "draw": 361,
+  "cbBufferSizes": 127,
+  "flags": 28,
+  "name": 28,
+  "vbStrides": 76
+ }
+}
