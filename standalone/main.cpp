@@ -12,6 +12,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
+#include "dx11_funcs.h"
 #include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
@@ -1205,6 +1206,13 @@ static bool Init() {
         printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
     }
     RuntimeFuncsInit();
+
+    // 4b. Resolve the shipped VideoDX11-x64.dll entry points. Nothing calls
+    //     these yet — see dx11/README.md — but resolving here validates the
+    //     addresses and logs the ASLR delta, and the delegating DeviceData
+    //     (phase 0) will forward through them. Failure is non-fatal: the game
+    //     runs on the original plugin either way.
+    Dx11FuncsInit();
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB

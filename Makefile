@@ -25,6 +25,10 @@ ENGINE_FUNC_SRCS = engine/funcs/engine_funcs.cpp
 RUNTIME_FUNC_SRCS = runtime/funcs/runtime_funcs.cpp
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
 
+# VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
+DX11_FUNC_SRCS = dx11/funcs/dx11_funcs.cpp
+DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)
+
 # ============================================================
 # Standalone EXE build
 # ============================================================
@@ -36,13 +40,16 @@ SA_CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp
 SA_INCLUDES = -I. -Iengine/types -Iengine/funcs -Icode/Game \
-              -Iruntime/types -Iruntime/funcs -Istandalone
+              -Iruntime/types -Iruntime/funcs \
+              -Idx11/types -Idx11/funcs -Istandalone
 
-# Standalone sources: game logic + engine funcs + runtime src + standalone entry
+# Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
           $(ENGINE_FUNC_SRCS) \
           $(RUNTIME_FUNC_SRCS) \
           $(RUNTIME_SRC_SRCS) \
+          $(DX11_FUNC_SRCS) \
+          $(DX11_SRC_SRCS) \
           $(wildcard standalone/*.cpp)
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
@@ -134,6 +141,12 @@ $(SA_OBJ_DIR)/runtime__src__graphics__%.o: runtime/src/graphics/%.cpp | $(SA_OBJ
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/runtime__src__io__%.o: runtime/src/io/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/dx11__funcs__%.o: dx11/funcs/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/dx11__src__%.o: dx11/src/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)

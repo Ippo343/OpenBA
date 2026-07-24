@@ -8,7 +8,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 |--------|-----------|---------|------|-------------|
 | Application-x64.exe | 10,476 | ~67 ECS components + 61 UI classes + game logic | Game logic, UI controllers, ECS | [application.md](application.md) |
 | Runtime-x64.dll | 15,290 | 100+ across 18 namespaces | Full engine runtime | [runtime.md](runtime.md) |
-| VideoDX11-x64.dll | 576 (~86 rendering) | ~25 Video::*Data classes | DX11 renderer plugin | [videodx11.md](videodx11.md) |
+| VideoDX11-x64.dll | 576 (85 rendering, rest CRT) | 12 Video::*Data subclasses | DX11 renderer plugin | [videodx11.md](videodx11.md) |
 
 ---
 
