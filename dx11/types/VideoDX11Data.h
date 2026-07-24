@@ -140,16 +140,53 @@ static_assert(sizeof(ContextData) == 0x20, "ContextData size");
 static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContext");
 
 // 0x38, vtable 0x180018790, factory 0x1800056c0
+//
+// All five COM interfaces identified 2026-07-24 from the seven slots (lane L3).
+// Fields are void* rather than the D3D11 types so this shared header does not
+// force <d3d11.h> on the other lanes; dx11/src/imagebufferdata.cpp casts.
+//
+//   +0x10 ID3D11SamplerState*       created by 0x180002720 via CreateSamplerState
+//                                   (ID3D11Device vtable +0xb8 = index 23)
+//   +0x18 ID3D11Texture2D*          created by slot 3 via CreateTexture2D (+0x28,
+//                                   index 5); slots 1/2 instead AddRef the
+//                                   DeviceData color/depth buffer into it
+//   +0x20 ID3D11RenderTargetView*   CreateRenderTargetView (+0x48, index 9)
+//   +0x28 ID3D11DepthStencilView*   CreateDepthStencilView (+0x50, index 10)
+//   +0x30 ID3D11ShaderResourceView* CreateShaderResourceView (+0x38, index 7)
+//
+// The dtor (0x180002430) and slot 3 (0x180002870) both release these in the
+// order +0x28, +0x20, +0x30, +0x10, +0x18 and then null all five. That order is
+// reproduced verbatim in the port — it is not the declaration order.
 struct ImageBufferData {
-    void* vptr;        // +0x00
-    void* imageBuffer; // +0x08  Video::ImageBuffer*
-    void* unk10;       // +0x10  (texture / SRV / sampler / staging — TBD)
-    void* unk18;       // +0x18
-    void* unk20;       // +0x20
-    void* unk28;       // +0x28
-    void* unk30;       // +0x30
+    void* vptr;               // +0x00
+    void* imageBuffer;        // +0x08  Video::ImageBuffer*
+    void* sampler;            // +0x10  ID3D11SamplerState*
+    void* texture;            // +0x18  ID3D11Texture2D*
+    void* renderTargetView;   // +0x20  ID3D11RenderTargetView*
+    void* depthStencilView;   // +0x28  ID3D11DepthStencilView*
+    void* shaderResourceView; // +0x30  ID3D11ShaderResourceView*
 };
 static_assert(sizeof(ImageBufferData) == 0x38, "ImageBufferData size");
+static_assert(offsetof(ImageBufferData, imageBuffer)        == 0x08, "ImageBufferData::imageBuffer");
+static_assert(offsetof(ImageBufferData, sampler)            == 0x10, "ImageBufferData::sampler");
+static_assert(offsetof(ImageBufferData, texture)            == 0x18, "ImageBufferData::texture");
+static_assert(offsetof(ImageBufferData, renderTargetView)   == 0x20, "ImageBufferData::renderTargetView");
+static_assert(offsetof(ImageBufferData, depthStencilView)   == 0x28, "ImageBufferData::depthStencilView");
+static_assert(offsetof(ImageBufferData, shaderResourceView) == 0x30, "ImageBufferData::shaderResourceView");
+
+// ImageBufferData vtable slot indices (0x180018790, 7 slots) — recovered by
+// lane L3. Names describe what the code does; the Runtime-side Video::ImageBufferData
+// interface names are not recoverable from this DLL alone.
+enum ImageBufferDataSlot : int {
+    kImg_Dtor              = 0,  // 0x180002400  scalar deleting dtor -> 0x180002430
+    kImg_AttachColorBuffer = 1,  // 0x180002580  alias DeviceData::colorBuffer + RTV
+    kImg_AttachDepthBuffer = 2,  // 0x180002650  alias DeviceData::depthBuffer + DSV
+    kImg_Create            = 3,  // 0x180002870  CreateTexture2D + SRV + RTV/DSV + sampler
+    kImg_Bind              = 4,  // 0x180002da0  PSSetSamplers + PSSetShaderResources
+    kImg_Update            = 5,  // 0x180002e10  Map/WRITE_DISCARD or UpdateSubresource
+    kImg_Read              = 6,  // 0x180002ef0  staging copy + Map/READ readback
+    kImageBufferDataSlotCount = 7
+};
 
 // 0x28, vtable 0x1800185d0 (4 slots), factory 0x180005730
 //
