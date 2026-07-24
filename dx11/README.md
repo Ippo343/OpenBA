@@ -199,28 +199,48 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 ### `DeviceData` vtable (20 slots @ `0x180018bb0`)
 
+All 20 slots are now ported (L6). Slots 4–7 are graduated default-on; the other
+16 are **written and compiled but NOT yet run** — they register with
+`defaultOn=false` behind `BANISHED_DX11_DEVICE`.
+
 | Status | Slot | Address | Role |
 |--------|------|---------|------|
-| x | 0 | `0x180004270` | scalar deleting dtor |
-| ~ | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
-| - | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
-| x | 3 | `0x1800051c0` | shutdown / release |
+| **P** | 0 | `0x180004270` | scalar deleting dtor |
+| **P** | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
+| **P** | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
+| **P** | 3 | `0x1800051c0` | shutdown / release |
 | **R** | 4 | `0x180001190` | `ret` — no-op (shared with `VideoProgramData` slot 2) |
 | **R** | 5 | `0x180005430` | `xorps xmm0,xmm0; ret` — returns `0.0f` |
 | **R** | 6 | `0x180005440` | `xor al,al; ret` — returns `false` |
 | **R** | 7 | `0x180001060` | `mov al,1; ret` — returns `true` (shared with `RenderBufferData`/`VideoProgramData` slot 1) |
-| x | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
-| x | 9 | `0x180005650` | create `ContextData` |
-| x | 10 | `0x1800056c0` | create `ImageBufferData` |
-| x | 11 | `0x180005730` | create `ConstantBufferData` |
-| x | 12 | `0x1800057a0` | create `IndexBufferData` |
-| x | 13 | `0x180005810` | create `VertexBufferData` |
-| x | 14 | `0x180005880` | create `VertexLayoutData` |
-| x | 15 | `0x1800058f0` | create `VertexProgramData` |
-| x | 16 | `0x180005960` | create `PixelProgramData` |
-| x | 17 | `0x1800059d0` | create `RenderStateData` |
-| x | 18 | `0x180005a40` | create `VideoProgramData` |
-| x | 19 | `0x180005aa0` | create `RenderBufferData` |
+| **P** | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
+| **P** | 9 | `0x180005650` | create `ContextData` (0x20, vt `…86f0`, ctor IAT `…13478`) |
+| **P** | 10 | `0x1800056c0` | create `ImageBufferData` (0x38, vt `…8790`, ctor IAT `…133e8`) |
+| **P** | 11 | `0x180005730` | create `ConstantBufferData` (0x28, vt `…85d0`, ctor IAT `…13490`) |
+| **P** | 12 | `0x1800057a0` | create `IndexBufferData` (0x20, vt `…87c8`, ctor IAT `…13390`) |
+| **P** | 13 | `0x180005810` | create `VertexBufferData` (0x20, vt `…8830`, ctor IAT `…13340`) |
+| **P** | 14 | `0x180005880` | create `VertexLayoutData` (0x18, vt `…8878`, ctor IAT `…13330`) |
+| **P** | 15 | `0x1800058f0` | create `VertexProgramData` (0x30, vt `…8890`, ctor IAT `…13320`) |
+| **P** | 16 | `0x180005960` | create `PixelProgramData` (0x30, vt `…8800`, ctor IAT `…13360`) |
+| **P** | 17 | `0x1800059d0` | create `RenderStateData` (0x28, vt `…8818`, ctor IAT `…13350`) |
+| **P** | 18 | `0x180005a40` | create `VideoProgramData` (0x10, vt `…85a8`, ctor IAT `…134a0`) |
+| **P** | 19 | `0x180005aa0` | create `RenderBufferData` (0x10, vt `…8588`, ctor IAT `…134b0`) |
+
+`P` = ported and compiling, **not yet run**. The factory ↔ class pairing was
+verified two independent ways: Ghidra's recovered return type per factory, and
+the base-ctor CALL displacement resolved through the VideoDX11 Runtime-import
+IAT (base `0x180013218`) to a mangled `??0<Class>Data@Video@@` name.
+
+### Runtime-import IAT base — `0x180013218`
+
+VideoDX11's Runtime import thunks are one contiguous run; index *N* is at
+`0x180013218 + N*8`, in `objdump -p` order. The base was **derived**, not
+assumed: it is the unique value consistent with all six IAT addresses earlier
+lanes had pinned independently (`?Lock@Device` `…13408`,
+`?_singleton@Configuration` `…13480`, `??1ContextData` `…13470`,
+`?_singleton@Device` `…134b8`, `?MemAlloc` `…134c0`, `?MemFree` `…134d0`) and it
+additionally predicts all eleven base-ctor slots above, each matching its
+factory's CALL displacement. 17 independent confirmations of one constant.
 
 ### Resource class vtables
 
@@ -245,7 +265,7 @@ independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 | **R** | `VertexBufferData` | `0x180018830` | **7** | `…830`–`…867` | L1 | slots 3–4 shared with `IndexBufferData` |
 | **R** | `VertexLayoutData` | `0x180018878` | **3** | `…878`–`…88f` | L2 | the only `"TEXCOORD"` user |
 | **R** | `VertexProgramData` | `0x180018890` | **3** | `…890`–`…8a7` | L2 | |
-| ~ | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | L6 | slots 4–7 done; 1/2/3/8 + factories pending |
+| **P** | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | L6 | slots 4–7 live; other 16 ported, awaiting first run |
 
 **48 of 84 slots (57%) are ported and verified running in-game** as of 2026-07-24:
 the 4 `DeviceData` stubs plus all of L1 (18), L2 (16), L3 (7) and L4 (3). Each
@@ -399,13 +419,13 @@ All addresses are `0x180000000`-relative, `0x1800…` prefix elided.
 
 | Address | Role |
 |---------|------|
-| `0x1800042d0` | Win32 message callback — installed by slot 2 via `Application::RegisterMessageCallback`; calls `0x180004340` twice |
-| `0x180004340` | swap-chain resize / buffer recreate; also called directly by `ContextData` slot 1 |
-| `0x180004510` | `ResolveMultisampleMode()` — clamps `Device+0x24` against `GetMultisampleModeCount`, walks down to a supported mode, returns `sampleCount` (index+1) |
+| `0x1800042d0` | **WM_ACTIVATE** callback (`RegisterMessageCallback` id **6**), installed by slot 2. Saves/restores exclusive fullscreen across focus loss: on `WA_INACTIVE` sets `DeviceData+0x40=1`, `Configuration+0x40=0`, resizes; on activate does the reverse. **No-ops entirely when both flags are already 0** |
+| `0x180004340` | swap-chain resize / buffer recreate; also called directly by `ContextData` slot 1. **First statement sets `Device+0x9c=1`, second is `if (!IsWindowVisible(Device+0x90)) return 0` — the early-out leaves `+0x9c` set** |
+| `0x180004510` | `ResolveMultisampleMode()` — clamps **`Video::Configuration+0x24`** (not `Device+0x24`; `0x18000451f` loads IAT `0x180013480`) against `GetMultisampleModeCount`, walks down to a supported mode, writes the lowered index back, returns `sampleCount` (index+1) |
 | `0x180004590` | `FillSwapChainDesc(DXGI_SWAP_CHAIN_DESC*)` — see field notes in `../decomp/videodx11.md` |
 | `0x1800052b0` | `CreateColorBuffer()` → `CreateTexture2D(B8G8R8A8_UNORM, BIND_RENDER_TARGET)` into `+0x38` |
 | `0x180005350` | `CreateDepthBuffer()` → `CreateTexture2D(D24_UNORM_S8_UINT, BIND_DEPTH_STENCIL)` into `+0x30` |
-| `0x1800053f0` | second Win32 message callback installed by slot 2 |
+| `0x1800053f0` | **WM_SETCURSOR** callback (`RegisterMessageCallback` id **0x20**), installed by slot 2 — `SetCursor(DeviceData+0x48)` then `ShowCursor(TRUE)` |
 | `0x180005b00` | adapter/output enumeration helper for slot 1 |
 | `0x180002300` | `TrackImageBuffer(ImageBuffer*)` — add-if-absent into the `DeviceData+0x60` list; the matching remove lives in `~ImageBufferData` |
 

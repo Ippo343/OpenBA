@@ -108,13 +108,13 @@ creators, and the `+0x60` entry **corrected** (see below).
 |--------|----------|-----------|
 | `+0x00` | vptr | ctor |
 | `+0x08` | `Video::Device*` owner (Runtime base field) | ctor |
-| `+0x10` | COM interface, released on shutdown — most likely `IDXGIFactory1*` (**TBD**) | slot 3 |
+| `+0x10` | `IDXGIFactory1*` — **confirmed** (L6). Created by slot 2's `CreateDXGIFactory1`; **released by slot 2 itself** at `0x1800050c2` and never nulled, so it dangles all session. Slot 3 does *not* release it. | slot 2 |
 | `+0x18` | `IDXGISwapChain*` — released with a `SetFullscreenState(FALSE,0)` first | slot 3 |
 | `+0x20` | `ID3D11Device*` | `0x1800052b0`/`0x180005350` call `[+0x20]` vtable index 5 = `CreateTexture2D` |
 | `+0x28` | `ID3D11DeviceContext*` | every resource `Bind` reads `g_Device->[0x100]->[0x28]` then calls context methods |
 | `+0x30` | depth-stencil `ID3D11Texture2D*` (`D24_UNORM_S8_UINT`, `BIND_DEPTH_STENCIL`) | `0x180005350` |
 | `+0x38` | color/render-target `ID3D11Texture2D*` (`B8G8R8A8_UNORM`, `BIND_RENDER_TARGET`) | `0x1800052b0` |
-| `+0x40` | `bool` — mirrored into `Application::_singleton+0x40` on shutdown | slot 3 |
+| `+0x40` | `bool wasFullscreen` — "restore fullscreen on refocus" latch, **not** "is fullscreen". Only writer is the WM_ACTIVATE handler `0x1800042d0`. Mirrored into **`Video::Configuration::_singleton+0x40`** on shutdown (`0x18000520f` loads IAT `0x180013480`) — the earlier "`Application::_singleton+0x40`" was one of three `_singleton_exref` mix-ups corrected by L6 | slots 3, `42d0` |
 | `+0x48` | `HCURSOR` | slot 8 |
 | `+0x50` | cursor source `Video::ImageBuffer*` | slot 8 |
 | `+0x58` / `+0x5c` | cursor hotspot X / Y | slot 8 |
@@ -152,13 +152,21 @@ The whole fullscreen story lives in this one function:
 | `BufferUsage` | `0x20` = `DXGI_USAGE_RENDER_TARGET_OUTPUT` |
 | `BufferCount` | 2 |
 | `OutputWindow` | `Device+0x90` (`HWND`) |
-| `Windowed` | `Device+0x40 == 0` |
+| `Windowed` | **`Video::Configuration+0x40 == 0`** (corrected — see below) |
 | `SwapEffect` | 0 = `DXGI_SWAP_EFFECT_DISCARD` |
 | `Flags` | 2 = `DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH` |
 
-`ALLOW_MODE_SWITCH` plus `Windowed` derived from `Device+0x40` is exactly the
-configuration behind the fullscreen-on-focus-loss bug documented in
-`../standalone/main.cpp`.
+**Correction (L6): `Windowed` comes from `Video::Configuration+0x40`, not
+`Device+0x40`.** `0x1800045af` loads IAT `0x180013480`
+(`?_singleton@Configuration@Video@@`), then `0x18000465b` does
+`CMP byte [RDI+0x40],AL; SETZ AL`. `Video::Device+0x40` is not a flag at all —
+it is the base pointer of the `Device::GraphicsInterface` array that slot 1
+fills (`0x180004dca` passes `Device+0x40` and `[Device+0x48]+1` to the array
+grower at `0x180005b00`). Reading a bool out of that pointer would be garbage.
+
+`ALLOW_MODE_SWITCH` plus `Windowed` derived from the *configuration's*
+fullscreen flag is the configuration behind the fullscreen-on-focus-loss bug
+documented in `../standalone/main.cpp`.
 
 ## The one global: `0x1800134b8`
 
@@ -181,10 +189,72 @@ Ghidra shows `0x180013480` and `0x1800134b8` with the same display name. They ar
 
 | Address | Actual global | Fields used by this DLL |
 |---------|---------------|-------------------------|
-| `0x180013480` | `Video::Configuration::_singleton` | `+0x28` anisotropy |
+| `0x180013310` | `Application::Application::_singleton` | Register/UnregisterMessageCallback, GetInstance |
+| `0x180013480` | `Video::Configuration::_singleton` | `+0x1c/+0x20` window size, `+0x24` multisample, `+0x28` anisotropy, `+0x40` fullscreen, `+0x41` vsync, `+0x42` skip-ShowWindow |
 | `0x1800134b8` | `Video::Device::_singleton` | `+0x98` caps, `+0x100` active `DeviceData*` |
 
-The Bind chain above is the `0x1800134b8` one.
+The Bind chain above is the `0x1800134b8` one. **There are three, not two** —
+Ghidra renders the `Application` one as `_singleton_exref` too, and an earlier
+revision of this file attributed `DeviceData+0x40`'s shutdown mirror to it. It
+is the `Configuration` one.
+
+## `Video::Configuration` field map (recovered by L6)
+
+Every offset proven twice: by the registry key `Video::Configuration::Startup`
+(Runtime `0x1800f6680`) loads it from, and by the default
+`Video::Configuration::Configuration` (Runtime `0x1800f6f10`) writes. Keys are
+built as `String::Format("%s%s", "Video", <suffix>)` from the suffix table at
+Runtime `0x1801587c0`, and live under
+`HKCU\Software\Shining Rock Software LLC\Banished` as `REG_SZ`.
+
+| Offset | Registry key | Ctor default |
+|--------|--------------|--------------|
+| `+0x00` | `VideoSettings` (bool) | `true` |
+| `+0x04` | `VideoInterface` | 1 |
+| `+0x08` | `VideoAdapter` | 0 |
+| `+0x0c` | `VideoWidth` | −1 |
+| `+0x10` | `VideoHeight` | −1 |
+| `+0x14` | `VideoWindowX` | −1 |
+| `+0x18` | `VideoWindowY` | −1 |
+| `+0x1c` | `VideoWindowWidth` | **−1** ("skip override" sentinel) |
+| `+0x20` | `VideoWindowHeight` | **−1** ("skip override" sentinel) |
+| `+0x24` | `VideoMultisample` | 1 |
+| `+0x28` | `VideoTextureFilter` | 0 |
+| `+0x2c` | `VideoShadowScalar` | 1 |
+| `+0x30` | `VideoShaderDetail` | 2 |
+| `+0x34` | `VideoReflectionDetail` | 1 |
+| `+0x38` | `VideoRefreshN` | 60 |
+| `+0x3c` | `VideoRefreshD` | 1 |
+| `+0x40` | `VideoFullscreen` (bool) | `true` |
+| `+0x41` | `VideoVSync` (bool) | `true` |
+| `+0x42` | *not persisted* | `false` — suppresses slot 2's `ShowWindow` |
+
+The −1 sentinel is consumed in **VideoDX11 slot 2**, not in
+`Video::Device::ValidateConfiguration`: `0x180004f12`/`0x180004f21` are sign
+tests (`TEST ECX,ECX; JS skip`) guarding the windowed size override.
+
+### Where the swap-chain dimensions actually come from
+
+1. Slot 2 seeds `Device+0x04/+0x08` from `modeTable[Device+0x0c]` — the
+   *fullscreen* resolution (`VideoWidth`/`VideoHeight` after validation).
+2. If `Configuration+0x40` (fullscreen) is false, each of
+   `Configuration+0x1c/+0x20` overrides it **when non-negative**.
+3. `ShowWindow(Device+0x90, SW_SHOWDEFAULT)` unless `Configuration+0x42`.
+4. `Video::Device::AdjustDisplay` (Runtime `0x1800f7e20`) physically
+   `SetWindowPos`es the HWND and then, in the windowed branch, **re-reads
+   `Device+0x04/+0x08` from `GetClientRect` and writes the result back into
+   `Configuration+0x1c/+0x20`**.
+5. Only then does `FillSwapChainDesc` run.
+
+So the swap chain always matches the settled client rect, and
+`VideoWindowWidth`/`Height` are rewritten from the real window on every
+`AdjustDisplay` — which is why the −1 sentinel only ever survives the first boot.
+
+`Video::Device::ValidateConfiguration` (Runtime `0x1800f7370`) does **not**
+touch `VideoWindow*` or `VideoSettings` at all. Its eight `int&` parameters are
+interface index, adapter index, width, height, refresh numerator, refresh
+denominator, multisample index and anisotropy — it clamps each against the
+enumerated `Adapter` record slot 1 built.
 
 ## Rendering specs (from strings at `0x1800185c0`–`0x180018b30`)
 
