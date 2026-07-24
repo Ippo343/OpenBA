@@ -53,18 +53,20 @@
 // STANDALONE deviations (each logged once at runtime):
 //   * state-3 mesh/scene ops (Scene::RemoveObject, rubble-mesh swap) skipped —
 //     visual-only; mirrors residencecomponent.cpp's SetMeshFlag skip.
-//   * sub_c530 contents-scatter deferred — stored goods are dropped, not
-//     spilled as ground piles (deps 0x140129760/CopyCtor exist; port later).
 //   * state 6 (bulldoze rubble) deferred entirely.
+// NOW PORTED: sub_c530 contents-scatter (0x14011c530) — reclaimed goods spill as
+// RawMaterial ground piles over the footprint (was: dropped). See below.
 //
 // Opt-in: BANISHED_LIVE_DESTROY (see destroycomponent.cpp). NOT in
 // kDefaultOnFlags — unproven features start opt-in.
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (type-id fallback)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 #include "Component/controller_state_table.h"
 
@@ -137,6 +139,11 @@ static void EnsureResolved() {
 extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);
 // buildstructure.cpp — full retail BuildStructure ctor (0x1400e59c0 port).
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim);
+// action_base_rawmat.cpp — RawMaterialComponent finder over an entity's IBP array
+// (self+0x30 ptrs / +0x38 count), GetTypeId vs DAT_1401c7c80 with a GetTypeIdByName
+// fallback; ctors retIBP from the found component. Reused verbatim by the scatter path.
+// (C++ linkage — declared to match the definition's mangled symbol.)
+void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP);
 
 static bool Trace() {
     static const bool t = [] {
@@ -227,19 +234,236 @@ extern "C" char Destroy_TargetIsCurrent_e5b0(int64_t comp) {
 }
 
 // ============================================================
-// sub_c530 (0x14011c530) — scatter old contents as RawMaterial ground piles.
-// DEFERRED: walks the Storage stacks and clones resource templates onto
-// walkable tiles (deps 0x140129760 PositionEntity + CopyCtor + RegisterEntity
-// are all ported — port the walk when stored-goods fidelity matters). Until
-// then upgrade/demolish DROPS stored goods instead of spilling them.
+// Scatter-path helpers (0x14011c530 dependencies), resolved once.
+//   0x14009f3e0  grid->world terrain query (returns out3, [2]=height). Registered
+//                mapquery, exercised in-game by ~100 sites.
+//   0x140129760  CreateRawMaterial_helper_9760 (PositionEntity) — places the
+//                cloned pile on a cell with a yaw. Registered (reg_action_rawmat).
+//   0x1401c7cb8  RawMaterialDescription type-id; 0x1401c7040 BuildDescription.
+// .rdata float constants (exe values verified via read_memory):
+//   DAT_140172114 = 0.5f  (cell-centre offset), DAT_1401720fc = 0.2f (max tile
+//   height for a valid drop), DAT_140172204 = 90.0f (RandTol yaw scale).
 // ============================================================
-static void Destroy_ScatterContents_c530(int64_t comp) {
-    (void)comp;
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        std::fprintf(stderr, "[DestroySM] NOT-IMPLEMENTED sub_c530 contents-scatter "
-                             "(0x14011c530): stored goods dropped, not spilled\n");
+typedef float* (*fn_GridToWorld_t)(int* grid, float* out3, float* in2, char flag, void* pick);
+typedef void   (*fn_Pos9760_t)(int64_t rawMatComp, int cell, float yaw);
+static fn_GridToWorld_t s_gridToWorld   = nullptr;  // 0x14009f3e0
+static fn_Pos9760_t     s_pos9760       = nullptr;  // 0x140129760
+static const uint32_t*  s_tidRawMatDesc = nullptr;  // 0x1401c7cb8
+static const uint32_t*  s_tidBuildDesc  = nullptr;  // 0x1401c7040
+static bool s_scatterResolved = false;
+static void EnsureScatterResolved() {
+    if (s_scatterResolved) return;
+    s_scatterResolved = true;
+    s_gridToWorld   = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_pos9760       = reinterpret_cast<fn_Pos9760_t>(ResolveAddr(Module::Exe, 0x140129760));
+    s_tidRawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
+    s_tidBuildDesc  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7040));
+}
+
+// RawMaterialDescription type-id, with the proven GetTypeIdByName fallback for the
+// standalone case where the shared .rdata global is left unfilled (0/0xFFFFFFFF).
+static uint32_t RawMatDescTid() {
+    uint32_t t = s_tidRawMatDesc ? *s_tidRawMatDesc : 0;
+    if (t == 0 || t == 0xFFFFFFFFu) {
+        static uint32_t cached = 0;
+        if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
+        t = cached;
+    }
+    return t;
+}
+
+// Find the RawMaterialDescription in a resource TEMPLATE's component-description
+// array (template+0x28 ptrs, count template+0x30) via GetTypeId (vtable+0x10). Its
+// +0x48 (stack size) caps each dropped pile at 100/stackSize (retail c530). Raw
+// pointers, not IBPs — no CheckPtr (matches FUN_140088f90).
+static void* FindRawMatDescInTemplate(int64_t tmpl) {
+    uint32_t tid = RawMatDescTid();
+    int n = *reinterpret_cast<int*>(tmpl + 0x30);
+    uintptr_t base = *reinterpret_cast<uintptr_t*>(tmpl + 0x28);
+    for (int i = 0; i < n; i++) {
+        void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+        if (t == tid)
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+    }
+    return nullptr;
+}
+
+// ============================================================
+// sub_c530 (0x14011c530) — scatter reclaimed contents as RawMaterial ground piles.
+// Faithful port. Two-phase:
+//   Phase 1 builds a {template, count} list. If the building was only PARTIALLY
+//   built (BuildComponent delivered < required), spill the actual Storage stacks
+//   ((count-committed)/(delivered?2:1)); otherwise refund the recipe materials
+//   (recipe.count / (comp+0x50 ? 4 : 2)) — the "recover half your resources" spill.
+//   Phase 2 walks the footprint tiles (width×depth from baseX,baseY), and on each
+//   empty (cell+0==0) walkable (cell+0x29==2) tile whose queried terrain height is
+//   in [0, 0.2), clones the resource template, positions it (9760) with a random
+//   yaw, sets amount(+0x28)/clears +0x30, and registers it into the world. The
+//   placement cursor (col,row) persists across resource types. Overflow beyond the
+//   footprint (row reaches depth) is dropped, exactly as retail.
+// The register category is read from recipe[pairIndex]->+0x20 (retail indexes the
+// build recipe by the scatter-pair index; benign for the ordered partial-build case).
+// ============================================================
+static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
+                                          int width, int depth) {
+    EnsureResolved();
+    EnsureScatterResolved();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
+    if (!entity) return;
+
+    // BuildComponent + its BuildDescription (+0x18). Scatter is only reached with
+    // comp+0x51 set, i.e. the build comp existed — guard defensively regardless.
+    int64_t buildComp = FindOn(entity, s_findD6c0);
+    if (!buildComp) return;
+    void* rawDesc = *reinterpret_cast<void**>(buildComp + 0x18);
+    if (!rawDesc) return;
+    // Retail narrows the desc to BuildDescription (DWORD_1401c7040) but then derefs
+    // it unconditionally (required@+0x30, recipe@+0x20/+0x28) — the invariant is that
+    // a BuildComponent always carries a BuildDescription. We trust the pointer (the
+    // derive check would only null it, which retail never survives). s_tidBuildDesc
+    // is resolved for parity / future use.
+    (void)s_tidBuildDesc;
+    uintptr_t desc = reinterpret_cast<uintptr_t>(rawDesc);
+
+    int delivered = *reinterpret_cast<int*>(buildComp + 0x48);
+    int required  = *reinterpret_cast<int*>(desc + 0x30) *
+                    *reinterpret_cast<int*>(buildComp + 0x4c);
+    uintptr_t recipeBase = *reinterpret_cast<uintptr_t*>(desc + 0x20);
+
+    // ---- Phase 1: scatter list ----
+    struct Pair { int64_t tmpl; int count; };
+    std::vector<Pair> list;
+
+    if (delivered < required) {
+        // Partially built: spill the real Storage contents.
+        void* storage = nullptr;
+        fn_FindComponent_Storage(reinterpret_cast<void*>(entity), &storage);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storage);
+        if (storage) {
+            uintptr_t st = reinterpret_cast<uintptr_t>(storage);
+            int nStacks = *reinterpret_cast<int*>(st + 0x30);
+            uintptr_t stacks = *reinterpret_cast<uintptr_t*>(st + 0x28);
+            int divisor = (delivered > 0) ? 2 : 1;
+            for (int i = 0; i < nStacks; i++) {
+                uintptr_t s = stacks + static_cast<uintptr_t>(i) * 0x10;
+                int f8 = *reinterpret_cast<int*>(s + 8);
+                int fc = *reinterpret_cast<int*>(s + 0xc);
+                list.push_back({*reinterpret_cast<int64_t*>(s), (f8 - fc) / divisor});
+            }
+        }
+    } else {
+        // Fully built: refund half (or a quarter, when comp+0x50) of the recipe.
+        int divisor = (*reinterpret_cast<int8_t*>(comp + 0x50) != 0) ? 4 : 2;
+        int nRecipe = *reinterpret_cast<int*>(desc + 0x28);
+        for (int i = 0; i < nRecipe; i++) {
+            uintptr_t e = recipeBase + static_cast<uintptr_t>(i) * 0x10;
+            list.push_back({*reinterpret_cast<int64_t*>(e),
+                            *reinterpret_cast<int*>(e + 8) / divisor});
+        }
+    }
+    if (list.empty()) return;
+
+    // ---- Phase 2: place piles on empty walkable footprint tiles ----
+    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    if (!grid) return;
+    int gw_width = *grid;
+    if (gw_width <= 0) return;
+    int64_t cellArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(grid) + 0x80);
+    void* random = *reinterpret_cast<void**>(gw + 0xd8);
+    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+
+    const float kHalfCell  = 0.5f;   // DAT_140172114
+    const float kMaxHeight = 0.2f;   // DAT_1401720fc
+    const float kYawScale  = 90.0f;  // DAT_140172204
+
+    int placed = 0;
+    int col = 0;   // local_148 — persists across resource types
+    int row = 0;   // local_128
+
+    for (size_t pi = 0; pi < list.size(); pi++) {
+        int64_t tmpl = list[pi].tmpl;
+        int remaining = list[pi].count;
+        if (remaining <= 0) continue;
+
+        int rowWorld = baseY + row;
+        do {
+            int cell = rowWorld * gw_width + baseX + col;
+            float centre = static_cast<float>(gw_width >> 1) - kHalfCell;
+            float in2[3] = { static_cast<float>(cell % gw_width) - centre,
+                             static_cast<float>(cell / gw_width) - centre, 0.0f };
+            float w0[3] = {0, 0, 0}, w1[3] = {0, 0, 0};
+            if (s_gridToWorld) {
+                s_gridToWorld(grid, w0, in2, 0, nullptr);
+                s_gridToWorld(grid, w1, w0, 0, nullptr);
+            }
+            uintptr_t cp = static_cast<uintptr_t>(cellArr) +
+                           static_cast<uintptr_t>(cell) * 0x30;
+            bool valid = (*reinterpret_cast<int64_t*>(cp) == 0) &&
+                         (*reinterpret_cast<int8_t*>(cp + 0x29) == 2) &&
+                         (0.0f <= w1[2]) && (w1[2] < kMaxHeight);
+            if (valid) {
+                void* rmDesc = FindRawMatDescInTemplate(tmpl);
+                int stackSize = rmDesc ? *reinterpret_cast<int*>(
+                                    reinterpret_cast<uintptr_t>(rmDesc) + 0x48) : 0;
+                if (stackSize > 0) {
+                    int per = 100 / stackSize;
+                    if (per > remaining) per = remaining;
+
+                    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
+                                    ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+                    void* newEntity = (mem && s_copyCtor)
+                                          ? s_copyCtor(mem, reinterpret_cast<void*>(tmpl)) : nullptr;
+                    if (newEntity) {
+                        int64_t entIBP = 0;
+                        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, newEntity);
+                        else entIBP = reinterpret_cast<int64_t>(newEntity);
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIBP);
+
+                        // RawMaterialComponent on the new entity → position + amount.
+                        int64_t rmIBP = 0;
+                        ActRm_FindComponent_223c0(static_cast<uintptr_t>(entIBP), &rmIBP);
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rmIBP);
+                        if (rmIBP) {
+                            int yaw = (fn_Random_RandTol && random)
+                                          ? fn_Random_RandTol(random, 2) : 0;
+                            if (s_pos9760)
+                                s_pos9760(rmIBP, cell, static_cast<float>(yaw) * kYawScale);
+                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rmIBP);
+                            *reinterpret_cast<int*>(rmIBP + 0x28) = per;
+                            *reinterpret_cast<int64_t*>(rmIBP + 0x30) = 0;
+                        }
+
+                        // Register into the world with the recipe category.
+                        int category = 0;
+                        if (recipeBase) {
+                            int64_t catTmpl = *reinterpret_cast<int64_t*>(
+                                recipeBase + pi * 0x10);
+                            if (catTmpl) category = *reinterpret_cast<int*>(catTmpl + 0x20);
+                        }
+                        int64_t regIBP = entIBP;
+                        if (s_regEntity && entityList) s_regEntity(entityList, &regIBP, category);
+
+                        remaining -= per;
+                        placed++;
+                    }
+                }
+            }
+
+            if (++col >= width) {
+                col = 0;
+                row++;
+                rowWorld++;
+            }
+        } while (row != depth && remaining > 0);
+    }
+
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] scatter c530: %zu type(s), placed %d pile(s) "
+                             "over footprint (%d,%d) %dx%d\n",
+                     list.size(), placed, baseX, baseY, width, depth);
         std::fflush(stderr);
     }
 }
@@ -450,10 +674,17 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
             std::fflush(stderr);
         }
     } else {
-        // Nothing recoverable: scatter old contents (deferred) + notify trade +
-        // mark the old entity for removal.
-        if (*reinterpret_cast<int8_t*>(comp + 0x51))
-            Destroy_ScatterContents_c530(static_cast<int64_t>(comp));
+        // Nothing recoverable: scatter old contents (over the footprint) + notify
+        // trade + mark the old entity for removal.
+        if (*reinterpret_cast<int8_t*>(comp + 0x51)) {
+            int64_t fp = FindOn(entity, s_find4680);
+            if (fp)
+                Destroy_ScatterContents_c530(static_cast<int64_t>(comp),
+                    *reinterpret_cast<int16_t*>(fp + 0x28),
+                    *reinterpret_cast<int16_t*>(fp + 0x2a),
+                    *reinterpret_cast<int16_t*>(fp + 0x2c),
+                    *reinterpret_cast<int16_t*>(fp + 0x2e));
+        }
         if (s_trade3480 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
             int64_t tradeMgr = *reinterpret_cast<int64_t*>(gw + 0x120);
@@ -565,7 +796,7 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
             if (*reinterpret_cast<int8_t*>(comp + 0x51)) {
                 if (Destroy_TargetDiffers_e600(static_cast<int64_t>(comp)) ||
                     Destroy_TargetIsCurrent_e5b0(static_cast<int64_t>(comp)))
-                    Destroy_ScatterContents_c530(static_cast<int64_t>(comp));
+                    Destroy_ScatterContents_c530(static_cast<int64_t>(comp), sx, sy, sc, sd);
             }
 
             // >>> CREATE THE NEW BUILDING at the old footprint <<<
@@ -613,7 +844,7 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     }
 
     if (*reinterpret_cast<int8_t*>(comp + 0x51))
-        Destroy_ScatterContents_c530(static_cast<int64_t>(comp));
+        Destroy_ScatterContents_c530(static_cast<int64_t>(comp), sx, sy, sc, sd);
     return 1;
 }
 

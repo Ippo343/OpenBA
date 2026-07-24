@@ -15,8 +15,12 @@
 //   0x14011e5b0  upgrade-target-is-current test
 //   0x14015df60  vtable_UpgradeUIConfig (upgradeuiconfig.cpp static vtable)
 //
+// 0x14011c530 contents-scatter is now ported (destroycomponent_states.cpp) but is
+// called directly in-file by state-5 enter/tick, never by exe address — so it needs
+// no registration here.
+//
 // Deliberately NOT registered (deferred; keep NOT-IMPLEMENTED tracking honest):
-//   0x14011c530 contents-scatter, 0x14011d4d0/d400/d490 state-6 rubble path,
+//   0x14011d4d0/d400/d490 state-6 rubble path,
 //   0x14011d5d0/0x140125020 rubble mesh helpers,
 //   0x14011bcc0/d390/d2a0/d1a0 transition actions, 0x14012ea20 (in-TU only),
 //   0x14012f670 worker release, 0x140086fb0 config Serialize (reached via the

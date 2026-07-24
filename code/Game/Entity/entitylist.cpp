@@ -660,12 +660,58 @@ static void EntityList_CloseDialogsForDyingEntities() {
     }
 }
 
+// Sibling of the dialog-close above, same crash class (weak ref to a dying entity),
+// same marked-window timing. The active world tool (EditTool) keeps the selected entity
+// in an InternalBasePtr at +0x30 that its per-frame outline-follow (Impl_HighlightFollow,
+// tool_base_render.cpp) dereferences. That ref is NOT generation-invalidated when the
+// entity is freed, so the frame after a selected building is demolished the follow reads
+// freed memory (Sub7080 -> GetTypeId on a garbage component ptr — confirmed crash on the
+// LIVE_DESTROY path 2026-07-23). EditTool's own dead-ref cleanup keys off its dialog ref
+// (+0x28) and also runs AFTER the follow, so it cannot save it. Clear the tool's selection
+// here, during the marked window (entity still ALIVE — reading +0x40 is safe), so next
+// frame there is nothing dangling to follow. Reaches the tool the same way the tool tick
+// does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (EntityUI_ToolTick_SA).
+static void EntityList_ClearToolSelectionForDyingEntities() {
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw || !fn_IsDerivedFrom) return;
+    void* entityUI = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x120);
+    if (!entityUI) return;
+    void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
+    if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
+    void* tool = *reinterpret_cast<void**>(toolSlot);
+    if (!tool) return;
+
+    static uint32_t s_tidEditTool = 0;
+    if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu)
+        s_tidEditTool = ::Object::GetTypeIdByName("EditTool");
+    if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu) return;
+    if (!fn_IsDerivedFrom(tool, s_tidEditTool)) return;
+
+    // Selected-entity IBP at EditTool+0x30 (the outline-follow target).
+    void* entSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(tool) + 0x30);
+    if (*reinterpret_cast<void**>(entSlot) == nullptr) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entSlot);
+    uintptr_t ent = *reinterpret_cast<uintptr_t*>(entSlot);
+    if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
+    if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;
+
+    // Drop both the dialog ref (+0x28) and the selected-entity ref (+0x30), exactly as
+    // EditTool_CloseInfoDialog does — leaving +0x30 set would keep the follow chasing it.
+    *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x28) = 0;
+    *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x30) = 0;
+    std::printf("[EntityList] cleared EditTool selection on dying (marked-for-removal) "
+                "entity %p\n", reinterpret_cast<void*>(ent));
+}
+
 void EntityList_DrainRemovals(EntityList* self) {
     int32_t removalCount = self->removalList.count;
     if (removalCount <= 0) return;
 
-    // Close dialogs bound to the entities we're about to free (see helper above).
+    // Close dialogs + clear tool selection bound to the entities we're about to free
+    // (see helpers above) — both are weak refs the free does not invalidate.
     EntityList_CloseDialogsForDyingEntities();
+    EntityList_ClearToolSelectionForDyingEntities();
 
     EntityList_PreUpdate(self);
     EntityList_PostUpdateStaging(self);
