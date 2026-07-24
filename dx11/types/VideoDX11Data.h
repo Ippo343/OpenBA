@@ -63,7 +63,9 @@ struct DeviceData {
     // Registry of the Video::ImageBuffer*s that must be released and recreated
     // across a device / swap-chain reset. Membership test (from ~ImageBufferData):
     //   IsGenerated() || (flags & 0x70) || IsRendered()
-    // Appended by 0x180002300 (add-if-absent), swap-removed by ~ImageBufferData.
+    // Appended by 0x180002300 (add-if-absent); removed by ~ImageBufferData with a
+    // stable SHIFT-ERASE (`*p = p[1]` walking forward), not a swap-remove — order
+    // is preserved and a port must preserve it.
     // NOT the Device::GraphicsInterface array — the older note had that wrong;
     // the stride here is 8, not 0x18.
     void*     trackedImages;     // +0x60  Video::ImageBuffer*[]

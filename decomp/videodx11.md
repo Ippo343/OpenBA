@@ -125,8 +125,15 @@ creators, and the `+0x60` entry **corrected** (see below).
 The earlier note called `+0x60`/`+0x68` the `Device::GraphicsInterface` array
 (stride 0x18). It is not. `0x180002300` appends an `ImageBuffer*` to it
 (add-if-absent, ×3 growth, `MemAlloc(count*8, 8)`), and `~ImageBufferData`
-(`0x180002430`) swap-removes the dying buffer's `ImageBuffer*` from the same
-list. Stride is 8, not 0x18. It is the registry of image buffers that must be
+(`0x180002430`) removes the dying buffer's `ImageBuffer*` from the same list.
+
+**The removal is a stable shift-erase, not a swap-remove** (corrected
+2026-07-24 — an earlier revision of this file said swap-remove). `0x1800024c8`–
+`0x1800024ee` walks forward doing `*p = p[1]`, shifting every later element down
+one, then decrements the count. Order is preserved, so a port that swap-removes
+would be observably different.
+
+Stride is 8, not 0x18. It is the registry of image buffers that must be
 released and recreated across a device/swap-chain reset — `IsGenerated() ||
 flags & 0x70 || IsRendered()` decides membership. The adapter array that slot 1
 builds is a separate allocation; slot 0 frees whatever `+0x60` holds at teardown.
@@ -166,6 +173,18 @@ mov rcx, [rax+0x28]     ; ID3D11DeviceContext*
 
 `ContextData` is the exception — it caches the context at `ContextData+0x18` and
 skips the chain.
+
+### Beware: two different globals both render as `_singleton_exref`
+
+Ghidra shows `0x180013480` and `0x1800134b8` with the same display name. They are
+**different imports** and conflating them will send you to the wrong object:
+
+| Address | Actual global | Fields used by this DLL |
+|---------|---------------|-------------------------|
+| `0x180013480` | `Video::Configuration::_singleton` | `+0x28` anisotropy |
+| `0x1800134b8` | `Video::Device::_singleton` | `+0x98` caps, `+0x100` active `DeviceData*` |
+
+The Bind chain above is the `0x1800134b8` one.
 
 ## Rendering specs (from strings at `0x1800185c0`–`0x180018b30`)
 
