@@ -194,18 +194,26 @@ enum ImageBufferDataSlot : int {
 // [0, count) calling Release (COM vtable +0x10) on each, then MemFrees the
 // block; slot 1 (0x180001300) sizes it through the generic Array::SetLength at
 // 0x180001550. Slot 3 (0x180001450) returns owner->[0x14] + 1.
+//
+// The array is a LADDER when the owner is "banked" (Video::ConstantBuffer+0x19):
+// buffers[i] is created with ByteWidth = owner->bankStride * (i + 1), so slot 2
+// can bind the smallest buffer that still holds the payload. +0x10 is the index
+// of the rung currently bound; slot 2 only re-issues VS/PSSetConstantBuffers
+// when it changes. (Proven by 0x180001300 and 0x180001460 — lane L1.)
 struct ConstantBufferData {
     void*   vptr;           // +0x00
     void*   constantBuffer; // +0x08  Video::ConstantBuffer*
-    int32_t unk10;          // +0x10  initialized to 0xFFFFFFFF (a slot/binding index?)
+    int32_t activeIndex;    // +0x10  index into buffers[] currently bound; factory inits to -1
     int32_t pad14;
     void*   buffers;        // +0x18  ID3D11Buffer*[]
     int32_t bufferCount;    // +0x20
     int32_t bufferCapacity; // +0x24
 };
 static_assert(sizeof(ConstantBufferData) == 0x28, "ConstantBufferData size");
-static_assert(offsetof(ConstantBufferData, buffers)     == 0x18, "ConstantBufferData::buffers");
-static_assert(offsetof(ConstantBufferData, bufferCount) == 0x20, "ConstantBufferData::bufferCount");
+static_assert(offsetof(ConstantBufferData, activeIndex)    == 0x10, "ConstantBufferData::activeIndex");
+static_assert(offsetof(ConstantBufferData, buffers)        == 0x18, "ConstantBufferData::buffers");
+static_assert(offsetof(ConstantBufferData, bufferCount)    == 0x20, "ConstantBufferData::bufferCount");
+static_assert(offsetof(ConstantBufferData, bufferCapacity) == 0x24, "ConstantBufferData::bufferCapacity");
 
 // 0x20, vtable 0x1800187c8 (7 slots), factory 0x1800057a0
 //
@@ -213,16 +221,26 @@ static_assert(offsetof(ConstantBufferData, bufferCount) == 0x20, "ConstantBuffer
 // 0) — so indices are always 16-bit, and +0x10 is the ID3D11Buffer.
 // Slots 3 and 4 are shared verbatim with VertexBufferData (0x180003290 /
 // 0x180003340): the two classes have identical Lock/Unlock code.
+//
+// +0x18 / +0x1c recovered from the shared Lock/Unlock (lane L1):
+//   +0x18  byte offset the NEXT Lock will hand out. Lock maps
+//          WRITE_NO_OVERWRITE and appends while it fits, WRITE_DISCARD and
+//          rewinds to 0 when it does not — a classic dynamic ring buffer. The
+//          cursor advances by the request rounded up to an even byte count.
+//   +0x1c  bool, 1 between Lock and Unlock. Nothing in the DLL reads it; it
+//          exists for the Runtime-side base class / debug assertions.
 struct IndexBufferData {
     void*   vptr;        // +0x00
     void*   indexBuffer; // +0x08  Video::IndexBuffer*
     void*   buffer;      // +0x10  ID3D11Buffer*
-    int32_t unk18;       // +0x18
-    uint8_t unk1c;       // +0x1c  (factory writes a byte here, not a dword)
+    int32_t writeCursor; // +0x18  next Lock offset in bytes
+    uint8_t locked;      // +0x1c  (factory writes a byte here, not a dword)
     uint8_t pad1d[3];
 };
 static_assert(sizeof(IndexBufferData) == 0x20, "IndexBufferData size");
-static_assert(offsetof(IndexBufferData, buffer) == 0x10, "IndexBufferData::buffer");
+static_assert(offsetof(IndexBufferData, buffer)      == 0x10, "IndexBufferData::buffer");
+static_assert(offsetof(IndexBufferData, writeCursor) == 0x18, "IndexBufferData::writeCursor");
+static_assert(offsetof(IndexBufferData, locked)      == 0x1c, "IndexBufferData::locked");
 
 // 0x20, vtable 0x180018830 (7 slots), factory 0x180005810
 // Same shape as IndexBufferData, and slots 3/4 are literally the same code.
@@ -230,12 +248,30 @@ struct VertexBufferData {
     void*   vptr;         // +0x00
     void*   vertexBuffer; // +0x08  Video::VertexBuffer*
     void*   buffer;       // +0x10  ID3D11Buffer*
-    int32_t unk18;        // +0x18
-    uint8_t unk1c;        // +0x1c
+    int32_t writeCursor;  // +0x18  next Lock offset in bytes
+    uint8_t locked;       // +0x1c
     uint8_t pad1d[3];
 };
 static_assert(sizeof(VertexBufferData) == 0x20, "VertexBufferData size");
-static_assert(offsetof(VertexBufferData, buffer) == 0x10, "VertexBufferData::buffer");
+static_assert(offsetof(VertexBufferData, buffer)      == 0x10, "VertexBufferData::buffer");
+static_assert(offsetof(VertexBufferData, writeCursor) == 0x18, "VertexBufferData::writeCursor");
+static_assert(offsetof(VertexBufferData, locked)      == 0x1c, "VertexBufferData::locked");
+
+// Slots 3 (0x180003290, Lock) and 4 (0x180003340, Unlock) are the SAME two
+// addresses in both vtables — the shipped DLL has exactly one copy of the code
+// and both classes dispatch to it. dx11/src/buffers.cpp likewise has exactly
+// one implementation of each, typed on IndexBufferData and registered for both
+// vtables. These asserts are what makes that legal: if a future edit moves a
+// field in one struct and not the other, the build breaks here instead of
+// corrupting vertex buffers at runtime.
+static_assert(sizeof(VertexBufferData) == sizeof(IndexBufferData),
+              "VertexBufferData/IndexBufferData must stay layout-identical (shared slots 3/4)");
+static_assert(offsetof(VertexBufferData, buffer) == offsetof(IndexBufferData, buffer),
+              "shared slot 3/4: buffer offset must match");
+static_assert(offsetof(VertexBufferData, writeCursor) == offsetof(IndexBufferData, writeCursor),
+              "shared slot 3/4: writeCursor offset must match");
+static_assert(offsetof(VertexBufferData, locked) == offsetof(IndexBufferData, locked),
+              "shared slot 3/4: locked offset must match");
 
 // 0x18, vtable 0x180018878 (3 slots), factory 0x180005880
 // Slot 1 (0x180003fc0) is IASetInputLayout(this->inputLayout).
