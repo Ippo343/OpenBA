@@ -237,7 +237,7 @@ independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 | **R** | `RenderBufferData` | `0x180018588` | **4** | `…588`–`…5a7` | L2 | 0 private bytes, but slots 2–3 reach real views via the owner |
 | **R** | `VideoProgramData` | `0x1800185a8` | **3** | `…5a8`–`…5bf` | L2 | 0 private bytes; slots 1–2 are shared stubs |
 | **R** | `ConstantBufferData` | `0x1800185d0` | **4** | `…5d0`–`…5ef` | L1 | buffer ladder, `activeIndex` rung cache |
-| x | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | L5 | biggest vtable of the resource classes — **not yet ported** |
+| ~ | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | L5 | all 20 slots ported (`dx11/src/contextdata.cpp`), **opt-in only** — `BANISHED_DX11_CONTEXT=1`, not yet run in-game or RenderDoc-diffed |
 | **R** | `ImageBufferData` | `0x180018790` | **7** | `…790`–`…7c7` | L3 | largest resource *struct* (0x38); 8-entry format table |
 | **R** | `IndexBufferData` | `0x1800187c8` | **7** | `…7c8`–`…7ff` | L1 | slots 3–4 shared with `VertexBufferData` |
 | **R** | `PixelProgramData` | `0x180018800` | **3** | `…800`–`…817` | L2 | |
@@ -317,9 +317,16 @@ decoded here:
 | `0x180001060` | `b0 01 c3` | `return true` | `RenderBufferData`[1], `VideoProgramData`[1], `DeviceData`[7] |
 | `0x180001190` | `c2 00 00` | `return` (void) | `VideoProgramData`[2], `DeviceData`[4] |
 | `0x180001450` | `48 8b 41 08 / 8b 40 14 / ff c0 / c3` | `return owner->[0x14] + 1` | `ConstantBufferData`[3] |
-| `0x180001d10` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(NULL, R16_UINT, 0)` | `ContextData`[10] |
-| `0x180001ef0` | `b8 34 00 00 00 / c3` | `return 52` | `ContextData`[13] |
-| `0x180002020` | `e9 2b 01 00 00` | `jmp 0x180002150` | `ContextData`[17] (alias of slot 19) |
+| `0x180001d10` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(NULL, R16_UINT, 0)` | `ContextData`[10] — re-verified by L5 |
+| `0x180001ef0` | `b8 34 00 00 00 / c3` | `return 52` | `ContextData`[13] — re-verified by L5 |
+| `0x180002020` | `e9 2b 01 00 00` | `jmp 0x180002150` | `ContextData`[17] (alias of slot 19) — re-verified by L5 |
+
+`ContextData`'s twenty slots are named, not guessed: Runtime's `Video::Context`
+holds its `Video::ContextData*` at `Context+0x2160` and every public method is a
+two-load tail-jump through it (`Video::Context::BindTransforms` `0x1800f22a0` →
+`jmp [platform+0x40]`), so each slot's name and full signature come straight out
+of the Runtime export table. The mapping is tabulated in
+[`dx11/src/contextdata.cpp`](src/contextdata.cpp).
 | `0x180003380` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(this->[0x10], R16_UINT, 0)` | `IndexBufferData`[5] |
 | `0x1800036a0` | tail-jmp `[ctx+0x48]` | `PSSetShader(this->variants[i ?: 0], NULL, 0)` | `PixelProgramData`[2] |
 | `0x180003fc0` | tail-jmp `[ctx+0x88]` | `IASetInputLayout(this->[0x10])` | `VertexLayoutData`[1] |
