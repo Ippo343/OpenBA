@@ -536,11 +536,15 @@ static uint32_t RawMaterialComponent_InertGetTypeId(void*) {
 }
 static void* RawMaterialComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
 
-// Gated: this is the first live work-posting component path. Enable with
-// BANISHED_LIVE_RAWMAT_PICKUP=1; default OFF until the haul is verified end-to-end.
+// GRADUATED 2026-07-24 (default-on via kDefaultOnFlags; BANISHED_LIVE_RAWMAT_PICKUP=0
+// is now the kill-switch). Was held opt-in because the haul crashed on execution — that
+// was the InternalFactory removal-lifecycle corruption (freed objects left in the handle
+// table), root-caused and fixed in component_factory_base.cpp + modelcomponent.cpp.
+// Verified live: 4/4 posted Pickup works claimed and dispatched across 5 player demolishes
+// over two sessions, ObjAudit bad=0 / leaks=0 throughout, no crash, no PlayAnimGuard aborts.
+// Routed through LiveEnabled (not a raw getenv) so the kDefaultOnFlags policy applies.
 static bool RawMatPickupLive() {
-    static const bool on = [] { const char* e = std::getenv("BANISHED_LIVE_RAWMAT_PICKUP");
-                                return e && e[0] && e[0] != '0'; }();
+    static const bool on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_RAWMAT_PICKUP");
     return on;
 }
 static void RawMaterialComponent_OnAddedVSlot(void* s) {

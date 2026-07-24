@@ -176,6 +176,11 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_BUILDCTRL",     // BuildComponent state machine (foundation->1->8->2)
     "BANISHED_BUILD_LIVE_HAUL",    // posts gather + build work to the citizen ledger
     "BANISHED_BUILDER_NATURAL",    // site->profession BST + tick-driven Builder pool
+    // Loose-pile collection — verified 2026-07-24. RawMaterialComponent slot-6 (OnAdded)
+    // self-posts a Pickup work on entity registration; a laborer claims it and dispatches
+    // the haul. Held opt-in only because the haul used to crash on execution — that was the
+    // InternalFactory removal-lifecycle corruption, now fixed (see internal_factory_audit.h).
+    "BANISHED_LIVE_RAWMAT_PICKUP",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
