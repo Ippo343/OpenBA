@@ -276,23 +276,26 @@ struct ImageBufferOwner {
 static_assert(offsetof(ImageBufferOwner, data) == 0x60,
               "Video::ImageBuffer backend data @ +0x60 (0x180001070)");
 
-// ImageBufferData fields this lane reads. They are still named unk18/unk20/unk28
-// in dx11/types/VideoDX11Data.h because ImageBufferData belongs to another
-// porting lane; these helpers name them without editing that struct.
+// ImageBufferData fields this lane reads. L2 derived these offsets from
+// RenderBufferData slots 2/3 (0x180001070, 0x1800010e0) while L3 derived them
+// independently from ImageBufferData slots 1/2/3 — the two lanes agreed
+// exactly, so +0x18/+0x20/+0x28 are texture/RTV/DSV on two separate proofs.
+// L3 owns the struct and has now named them; these helpers just spell out which
+// view each caller wants.
 inline ID3D11Resource* Dx11ImageTexture(const void* imageBuffer) {
     const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
     return static_cast<ID3D11Resource*>(
-        static_cast<ImageBufferData*>(img->data)->unk18);
+        static_cast<ImageBufferData*>(img->data)->texture);
 }
 inline ID3D11RenderTargetView* Dx11ImageRtv(const void* imageBuffer) {
     const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
     return static_cast<ID3D11RenderTargetView*>(
-        static_cast<ImageBufferData*>(img->data)->unk20);
+        static_cast<ImageBufferData*>(img->data)->renderTargetView);
 }
 inline ID3D11DepthStencilView* Dx11ImageDsv(const void* imageBuffer) {
     const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
     return static_cast<ID3D11DepthStencilView*>(
-        static_cast<ImageBufferData*>(img->data)->unk28);
+        static_cast<ImageBufferData*>(img->data)->depthStencilView);
 }
 
 // ============================================================

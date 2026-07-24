@@ -232,20 +232,31 @@ interleaved (`"DirectX 11"` sits between `VideoProgramData` and
 `VertexLayoutData`). `RenderBufferData`'s base at `0x180018588` is confirmed
 independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 
-| Status | Class | Vtable | Slots | Extent | Notes |
-|--------|-------|--------|-------|--------|-------|
-| x | `RenderBufferData` | `0x180018588` | **4** | `…588`–`…5a7` | 0 private bytes — cheapest |
-| x | `VideoProgramData` | `0x1800185a8` | **3** | `…5a8`–`…5bf` | 0 private bytes; slots 1–2 are shared stubs |
-| x | `ConstantBufferData` | `0x1800185d0` | **4** | `…5d0`–`…5ef` | |
-| x | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | biggest vtable of the resource classes |
-| x | `ImageBufferData` | `0x180018790` | **7** | `…790`–`…7c7` | largest resource *struct* (0x38) |
-| x | `IndexBufferData` | `0x1800187c8` | **7** | `…7c8`–`…7ff` | slots 3–4 shared with `VertexBufferData` |
-| x | `PixelProgramData` | `0x180018800` | **3** | `…800`–`…817` | |
-| x | `RenderStateData` | `0x180018818` | **3** | `…818`–`…82f` | |
-| x | `VertexBufferData` | `0x180018830` | **7** | `…830`–`…867` | slots 3–4 shared with `IndexBufferData` |
-| x | `VertexLayoutData` | `0x180018878` | **3** | `…878`–`…88f` | |
-| x | `VertexProgramData` | `0x180018890` | **3** | `…890`–`…8a7` | |
-| x | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | (listed slot-by-slot above) |
+| Status | Class | Vtable | Slots | Extent | Lane | Notes |
+|--------|-------|--------|-------|--------|------|-------|
+| **R** | `RenderBufferData` | `0x180018588` | **4** | `…588`–`…5a7` | L2 | 0 private bytes, but slots 2–3 reach real views via the owner |
+| **R** | `VideoProgramData` | `0x1800185a8` | **3** | `…5a8`–`…5bf` | L2 | 0 private bytes; slots 1–2 are shared stubs |
+| **R** | `ConstantBufferData` | `0x1800185d0` | **4** | `…5d0`–`…5ef` | L1 | buffer ladder, `activeIndex` rung cache |
+| x | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | L5 | biggest vtable of the resource classes — **not yet ported** |
+| **R** | `ImageBufferData` | `0x180018790` | **7** | `…790`–`…7c7` | L3 | largest resource *struct* (0x38); 8-entry format table |
+| **R** | `IndexBufferData` | `0x1800187c8` | **7** | `…7c8`–`…7ff` | L1 | slots 3–4 shared with `VertexBufferData` |
+| **R** | `PixelProgramData` | `0x180018800` | **3** | `…800`–`…817` | L2 | |
+| **R** | `RenderStateData` | `0x180018818` | **3** | `…818`–`…82f` | L4 | full state-desc mapping recovered |
+| **R** | `VertexBufferData` | `0x180018830` | **7** | `…830`–`…867` | L1 | slots 3–4 shared with `IndexBufferData` |
+| **R** | `VertexLayoutData` | `0x180018878` | **3** | `…878`–`…88f` | L2 | the only `"TEXCOORD"` user |
+| **R** | `VertexProgramData` | `0x180018890` | **3** | `…890`–`…8a7` | L2 | |
+| ~ | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | L6 | slots 4–7 done; 1/2/3/8 + factories pending |
+
+**48 of 84 slots (57%) are ported and verified running in-game** as of 2026-07-24:
+the 4 `DeviceData` stubs plus all of L1 (18), L2 (16), L3 (7) and L4 (3). Each
+lane was run alone and all four were run together — `Installed: 48 slot(s) ours,
+0 dormant, 0 failed`, autostart reached the world build, empty crash log, and the
+rendered frame was correct (terrain, BC-compressed textures, alpha foliage,
+water, shadows, smoke, selection outline, UI).
+
+They remain **opt-in** (`defaultOn=false`) pending the RenderDoc frame diff — a
+correct-looking screenshot proves no gross error, not that every state bit
+matches. Graduating them is step 5 of the integration protocol above.
 
 **84 vtable slots** across 12 classes, resolving to **79 distinct addresses**
 (five targets are shared between vtables).
