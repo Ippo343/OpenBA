@@ -174,6 +174,37 @@ attach/detach, `_freefls` on every thread exit, and the `_calloc_impl` /
   `LoadLibrary`s it, and the seam needs it mapped to read the twelve vtables out
   of `.rdata`. `DllMain` at load and CRT teardown at detach are outside any
   armed window and cannot be removed while that is true.
+
+### Do not "test" this by renaming the DLL — it silently disables the port
+
+Tried 2026-07-24, because "rename it so there is no way to load it" sounds like
+the strongest possible version of the claim. It is not a stronger test; it tests
+something else, and it fails in the most misleading way available.
+
+The port is **hosted in** the shipped DLL. The twelve vtables our slots occupy
+are its `.rdata`; every ported class sets `self->vptr` to an address inside it;
+Runtime takes `Device+0xd0`/`+0xd8` from `GetProcAddress` on it. Remove the file
+and there is nothing to patch — and Runtime does not fail. It falls back to
+interface 0, loads **`VideoDX9-x64.dll`**, and the game reaches the in-game world
+build and renders correctly with an empty crash log:
+
+```
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Dx11Seam] VideoDX11-x64.dll not loaded — seam not installed
+[VideoProbe]   +0x04 interface = 0 (VideoDX9)
+[VideoProbe]   active vtable lives in: VideoDX9-x64.dll
+```
+
+Every draw in that session was original DX9 code and not one line of ours ran.
+The only clue in a 10,000-line log was a single "seam not installed" line.
+
+Both failure modes now shout on stderr — `Dx11SeamInstall` when the module is
+absent, and `DumpVideoState` whenever the active `DeviceData` vtable does not
+live in `VideoDX11-x64.dll`. Checked by re-running with the DLL renamed: both
+fire. **If you see either, any A/B measured from that run is meaningless.**
+
+The real test of unreachability is the tripwire above, which measures what
+executes with the DLL present and the port live.
 - **`0x180001000`** (`MemFree` import thunk) and **`0x180001520`** (free-and-null
   helper, reached only from EH unwind funclets) remain un-ported. Both are now
   provably dead rather than assumed dead: they are inside the armed range and

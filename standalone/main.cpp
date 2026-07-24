@@ -860,7 +860,27 @@ static void DumpVideoState() {
                 char path[MAX_PATH] = {0};
                 GetModuleFileNameA(owner, path, MAX_PATH);
                 const char* nm = strrchr(path, '\\');
-                printf("[VideoProbe]   active vtable lives in: %s\n", nm ? nm + 1 : path);
+                nm = nm ? nm + 1 : path;
+                printf("[VideoProbe]   active vtable lives in: %s\n", nm);
+
+                // Renaming VideoDX11-x64.dll away does NOT force our port to
+                // stand alone — it silently disables it. Video::Device falls
+                // back to interface 0, loads VideoDX9-x64.dll, and the game
+                // renders correctly on a completely original DX9 plugin with
+                // the seam never installed. Verified 2026-07-24; the only sign
+                // in a 10k-line log was one "seam not installed" line, which is
+                // not enough to stop someone A/B-ing our port against itself.
+                if (_stricmp(nm, "VideoDX11-x64.dll") != 0) {
+                    fprintf(stderr,
+                            "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
+                            "[VideoProbe] The active renderer's vtable lives in %s, not "
+                            "VideoDX11-x64.dll.\n"
+                            "[VideoProbe] Video::Device fell back to another plugin, so "
+                            "every draw is ORIGINAL code\n"
+                            "[VideoProbe] and the seam patched nothing. Any A/B measured "
+                            "from this run is meaningless.\n", nm);
+                    fflush(stderr);
+                }
             } else {
                 printf("[VideoProbe]   active vtable in unknown module\n");
             }

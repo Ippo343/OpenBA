@@ -340,6 +340,21 @@ bool Dx11SeamInstall() {
 
     const ModuleInfo* info = GetModuleInfo(Module::VideoDX11);
     if (!info || !info->handle) {
+        // Not a benign "run on the original plugin" outcome, despite reading
+        // like one. The port is HOSTED IN this DLL: the twelve vtables our
+        // slots occupy are its .rdata, every ported class sets its vptr to an
+        // address inside it, and Runtime takes Device+0xd0/+0xd8 from
+        // GetProcAddress on it. With the DLL gone there is nothing to patch,
+        // Video::Device falls back to interface 0, and the game renders happily
+        // on the original VideoDX9-x64.dll. It looks like success.
+        fprintf(stderr,
+                "[Dx11Seam] *** VideoDX11-x64.dll IS NOT LOADED — THE PORT IS "
+                "DISABLED ***\n"
+                "[Dx11Seam] No slot is ours and no detour is installed. Runtime "
+                "will fall back to\n"
+                "[Dx11Seam] VideoDX9-x64.dll and render entirely in original "
+                "code.\n");
+        fflush(stderr);
         printf("[Dx11Seam] VideoDX11-x64.dll not loaded — seam not installed\n");
         return false;
     }
