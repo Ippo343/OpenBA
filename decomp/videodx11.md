@@ -8,12 +8,18 @@ plan and status board.
 
 | Bucket | Address range | Count | Notes |
 |--------|---------------|-------|-------|
-| Renderer code | `0x180001000` – `0x180005b7f` | **85** | The only functions worth porting |
+| Renderer code | `0x180001000` – `0x180005b7f` | **85** | Ghidra-defined: 84 real functions + the `MemFree` import thunk |
+| …plus sub-function vtable stubs | (inside the above) | **12** | 3–30-byte tails Ghidra never split out; each is a live vtable slot |
 | CRT / MSVC EH / locale | `0x180005c24` – `0x180012fff` | 491 | `entry`, `_initterm`, `__CxxFrameHandler`, locale tables — never port these |
 
 `.text` is `0x180001000`–`0x1800129ff` (~72 KB); the renderer half is only ~19 KB.
-The "~86 rendering" figure in the old notes was right (85 real functions + one
-`MemFree` import thunk at `0x180001000`).
+
+**The port's real entry-point count is 96**, not 85: 84 Ghidra functions plus 12
+vtable targets that share a function body with their neighbour (e.g. the
+`mov al,1; ret` at `0x180001060`, which is slot 1 of two vtables *and* slot 7 of
+`DeviceData`). The full attributed roster — every slot of every vtable mapped to
+an address, and every address mapped to a class — is the status board in
+[../dx11/README.md](../dx11/README.md).
 
 ## Exports — the entire plugin ABI
 
@@ -93,20 +99,73 @@ wrong — there are exactly **12**.
 | 8 | `0x180005450` | `SetImageBuffer` — builds a Win32 `HCURSOR` from a 32×32 `Video::ImageBuffer` |
 | 9…19 | `0x180005650` … `0x180005aa0` | the **11 resource factories** in the table above, in `ContextData, ImageBufferData, ConstantBufferData, IndexBufferData, VertexBufferData, VertexLayoutData, VertexProgramData, PixelProgramData, RenderStateData, VideoProgramData, RenderBufferData` order |
 
-## `DeviceData` field map (partial, from slots 0/3/8)
+## `DeviceData` field map (complete — 0x70 bytes)
 
-| Offset | Contents |
-|--------|----------|
-| `+0x00` | vptr |
-| `+0x08` | `Video::Device*` owner (Runtime base field) |
-| `+0x10` | `ID3D11Device*` / `ID3D11DeviceContext*` (TBD) |
-| `+0x18` | `IDXGISwapChain*` — released with a `SetFullscreenState(FALSE,0)` first |
-| `+0x20`, `+0x28`, `+0x30`, `+0x38` | COM interfaces released on shutdown |
-| `+0x40` | `bool` — mirrored into `Application::_singleton+0x40` on shutdown |
-| `+0x48` | `HCURSOR` |
-| `+0x50` | cursor source `Video::ImageBuffer*` |
-| `+0x58` / `+0x5c` | cursor hotspot X / Y |
-| `+0x60` / `+0x68` | `Device::GraphicsInterface` array pointer / count (stride 0x18) |
+Updated 2026-07-24: `+0x20`/`+0x28`/`+0x30`/`+0x38` identified from the buffer
+creators, and the `+0x60` entry **corrected** (see below).
+
+| Offset | Contents | Proven by |
+|--------|----------|-----------|
+| `+0x00` | vptr | ctor |
+| `+0x08` | `Video::Device*` owner (Runtime base field) | ctor |
+| `+0x10` | COM interface, released on shutdown — most likely `IDXGIFactory1*` (**TBD**) | slot 3 |
+| `+0x18` | `IDXGISwapChain*` — released with a `SetFullscreenState(FALSE,0)` first | slot 3 |
+| `+0x20` | `ID3D11Device*` | `0x1800052b0`/`0x180005350` call `[+0x20]` vtable index 5 = `CreateTexture2D` |
+| `+0x28` | `ID3D11DeviceContext*` | every resource `Bind` reads `g_Device->[0x100]->[0x28]` then calls context methods |
+| `+0x30` | depth-stencil `ID3D11Texture2D*` (`D24_UNORM_S8_UINT`, `BIND_DEPTH_STENCIL`) | `0x180005350` |
+| `+0x38` | color/render-target `ID3D11Texture2D*` (`B8G8R8A8_UNORM`, `BIND_RENDER_TARGET`) | `0x1800052b0` |
+| `+0x40` | `bool` — mirrored into `Application::_singleton+0x40` on shutdown | slot 3 |
+| `+0x48` | `HCURSOR` | slot 8 |
+| `+0x50` | cursor source `Video::ImageBuffer*` | slot 8 |
+| `+0x58` / `+0x5c` | cursor hotspot X / Y | slot 8 |
+| `+0x60` / `+0x68` / `+0x6c` | **tracked `Video::ImageBuffer*` list** — `{data, count, capacity}`, stride 8 | `0x180002300` + `~ImageBufferData` |
+
+### Correction: `+0x60` is not the adapter array
+
+The earlier note called `+0x60`/`+0x68` the `Device::GraphicsInterface` array
+(stride 0x18). It is not. `0x180002300` appends an `ImageBuffer*` to it
+(add-if-absent, ×3 growth, `MemAlloc(count*8, 8)`), and `~ImageBufferData`
+(`0x180002430`) swap-removes the dying buffer's `ImageBuffer*` from the same
+list. Stride is 8, not 0x18. It is the registry of image buffers that must be
+released and recreated across a device/swap-chain reset — `IsGenerated() ||
+flags & 0x70 || IsRendered()` decides membership. The adapter array that slot 1
+builds is a separate allocation; slot 0 frees whatever `+0x60` holds at teardown.
+
+## Swap-chain description (`0x180004590`)
+
+The whole fullscreen story lives in this one function:
+
+| `DXGI_SWAP_CHAIN_DESC` field | Value |
+|------------------------------|-------|
+| `BufferDesc.Width` / `.Height` | `Device+0x04` / `Device+0x08` |
+| `BufferDesc.RefreshRate` | from the display-mode table, indexed by `Device+0x10` |
+| `BufferDesc.Format` | `0x57` = `DXGI_FORMAT_B8G8R8A8_UNORM` |
+| `BufferDesc.ScanlineOrdering` / `.Scaling` | 0 / 0 |
+| `SampleDesc` | `{1, 0}` — note the *swap chain* is single-sampled; MSAA lives on the `+0x38` color buffer |
+| `BufferUsage` | `0x20` = `DXGI_USAGE_RENDER_TARGET_OUTPUT` |
+| `BufferCount` | 2 |
+| `OutputWindow` | `Device+0x90` (`HWND`) |
+| `Windowed` | `Device+0x40 == 0` |
+| `SwapEffect` | 0 = `DXGI_SWAP_EFFECT_DISCARD` |
+| `Flags` | 2 = `DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH` |
+
+`ALLOW_MODE_SWITCH` plus `Windowed` derived from `Device+0x40` is exactly the
+configuration behind the fullscreen-on-focus-loss bug documented in
+`../standalone/main.cpp`.
+
+## The one global: `0x1800134b8`
+
+Every resource `Bind` in the DLL starts with the same three loads:
+
+```
+mov rax, [rip+…]        ; 0x1800134b8 -> Video::Device**  (Runtime 0x1801fe7a8)
+mov rdx, [rax]          ; Video::Device*
+mov rax, [rdx+0x100]    ; active Video::DeviceData*
+mov rcx, [rax+0x28]     ; ID3D11DeviceContext*
+```
+
+`ContextData` is the exception — it caches the context at `ContextData+0x18` and
+skips the chain.
 
 ## Rendering specs (from strings at `0x1800185c0`–`0x180018b30`)
 

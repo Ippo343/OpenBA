@@ -144,10 +144,10 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 | ~ | 1 | `0x180004690` | enumerate adapters / outputs / display modes |
 | - | 2 | `0x180004e10` | create D3D11 device + swap chain + buffers |
 | x | 3 | `0x1800051c0` | shutdown / release |
-| - | 4 | `0x180001190` | stub (unclassified) |
-| - | 5 | `0x180005430` | stub (unclassified) |
-| - | 6 | `0x180005440` | stub (unclassified) |
-| - | 7 | `0x180001060` | stub (unclassified) |
+| x | 4 | `0x180001190` | `ret` — no-op (shared with `VideoProgramData` slot 2) |
+| x | 5 | `0x180005430` | `xorps xmm0,xmm0; ret` — returns `0.0f` |
+| x | 6 | `0x180005440` | `xor al,al; ret` — returns `false` |
+| x | 7 | `0x180001060` | `mov al,1; ret` — returns `true` (shared with `RenderBufferData`/`VideoProgramData` slot 1) |
 | x | 8 | `0x180005450` | `SetImageBuffer` → `HCURSOR` |
 | x | 9 | `0x180005650` | create `ContextData` |
 | x | 10 | `0x1800056c0` | create `ImageBufferData` |
@@ -163,28 +163,109 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 ### Resource class vtables
 
-| Status | Class | Vtable | Slots | Notes |
-|--------|-------|--------|-------|-------|
-| - | `RenderBufferData` | `0x180018588` | ? | 0 private bytes — cheapest |
-| - | `VideoProgramData` | `0x1800185a8` | ? | 0 private bytes |
-| - | `ConstantBufferData` | `0x1800185d0` | ? | |
-| - | `ContextData` | `0x1800186f0` | ? | |
-| - | `ImageBufferData` | `0x180018790` | ? | largest resource class |
-| - | `PixelProgramData` | `0x180018800` | ? | |
-| - | `RenderStateData` | `0x180018818` | ? | |
-| - | `VertexBufferData` | `0x180018830` | ? | |
-| - | `VertexLayoutData` | `0x180018878` | ? | |
-| - | `VertexProgramData` | `0x180018890` | ? | |
-| - | `IndexBufferData` | `0x1800187c8` | ? | |
+Walked 2026-07-24 by reading `.rdata` `0x180018580`–`0x180018c60` directly. Each
+vtable's extent is the run of code pointers before the next vtable or the next
+string/GUID literal — the extents are **not** contiguous, string data is
+interleaved (`"DirectX 11"` sits between `VideoProgramData` and
+`ConstantBufferData`; `"TEXCOORD"` between `VertexBufferData` and
+`VertexLayoutData`). `RenderBufferData`'s base at `0x180018588` is confirmed
+independently by the `lea rax,[rip+0x17554]` vptr store in its dtor.
 
-Slot counts are unfilled — the vtable extents have not been walked yet. That is
-task #1 for the next session on this branch.
+| Status | Class | Vtable | Slots | Extent | Notes |
+|--------|-------|--------|-------|--------|-------|
+| x | `RenderBufferData` | `0x180018588` | **4** | `…588`–`…5a7` | 0 private bytes — cheapest |
+| x | `VideoProgramData` | `0x1800185a8` | **3** | `…5a8`–`…5bf` | 0 private bytes; slots 1–2 are shared stubs |
+| x | `ConstantBufferData` | `0x1800185d0` | **4** | `…5d0`–`…5ef` | |
+| x | `ContextData` | `0x1800186f0` | **20** | `…6f0`–`…78f` | biggest vtable of the resource classes |
+| x | `ImageBufferData` | `0x180018790` | **7** | `…790`–`…7c7` | largest resource *struct* (0x38) |
+| x | `IndexBufferData` | `0x1800187c8` | **7** | `…7c8`–`…7ff` | slots 3–4 shared with `VertexBufferData` |
+| x | `PixelProgramData` | `0x180018800` | **3** | `…800`–`…817` | |
+| x | `RenderStateData` | `0x180018818` | **3** | `…818`–`…82f` | |
+| x | `VertexBufferData` | `0x180018830` | **7** | `…830`–`…867` | slots 3–4 shared with `IndexBufferData` |
+| x | `VertexLayoutData` | `0x180018878` | **3** | `…878`–`…88f` | |
+| x | `VertexProgramData` | `0x180018890` | **3** | `…890`–`…8a7` | |
+| x | `DeviceData` | `0x180018bb0` | **20** | `…bb0`–`…c4f` | (listed slot-by-slot above) |
 
-### Remaining unclassified renderer functions
+**84 vtable slots** across 12 classes, resolving to **79 distinct addresses**
+(five targets are shared between vtables).
 
-Of the 85 renderer functions, 32 are named above. The other ~53 (mostly in
-`0x180001240`–`0x180004270`, the resource-vtable implementations) have not been
-attributed to a class yet.
+### Function roster — all 85 attributed
+
+Ghidra defines 85 functions in `0x180001000`–`0x180005b7f`: one import thunk
+(`MemFree`) plus 84 real functions. **67** of them are vtable targets; the other
+**18** are the two exports, four shared utilities, and twelve class-private
+helpers. Every one is attributed below.
+
+A further **12 vtable targets are entry points Ghidra never split into their own
+functions** — they are 3-to-30-byte tails living inside a preceding function's
+body. They must be treated as real functions when porting. All twelve are
+decoded here:
+
+| Address | Bytes | Meaning | Used by |
+|---------|-------|---------|---------|
+| `0x180001060` | `b0 01 c3` | `return true` | `RenderBufferData`[1], `VideoProgramData`[1], `DeviceData`[7] |
+| `0x180001190` | `c2 00 00` | `return` (void) | `VideoProgramData`[2], `DeviceData`[4] |
+| `0x180001450` | `48 8b 41 08 / 8b 40 14 / ff c0 / c3` | `return owner->[0x14] + 1` | `ConstantBufferData`[3] |
+| `0x180001d10` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(NULL, R16_UINT, 0)` | `ContextData`[10] |
+| `0x180001ef0` | `b8 34 00 00 00 / c3` | `return 52` | `ContextData`[13] |
+| `0x180002020` | `e9 2b 01 00 00` | `jmp 0x180002150` | `ContextData`[17] (alias of slot 19) |
+| `0x180003380` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(this->[0x10], R16_UINT, 0)` | `IndexBufferData`[5] |
+| `0x1800036a0` | tail-jmp `[ctx+0x48]` | `PSSetShader(this->variants[i ?: 0], NULL, 0)` | `PixelProgramData`[2] |
+| `0x180003fc0` | tail-jmp `[ctx+0x88]` | `IASetInputLayout(this->[0x10])` | `VertexLayoutData`[1] |
+| `0x180004230` | tail-jmp `[ctx+0x58]` | `VSSetShader(this->variants[i ?: 0], NULL, 0)` | `VertexProgramData`[2] |
+| `0x180005430` | `0f 57 c0 / c3` | `return 0.0f` | `DeviceData`[5] |
+| `0x180005440` | `32 c0 / c3` | `return false` | `DeviceData`[6] |
+
+So the real entry-point count for the port is **96** (84 functions + 12 stubs),
+not 85.
+
+#### Shared / infrastructure (4)
+
+| Address | Role |
+|---------|------|
+| `0x180001000` | `MemFree` import thunk (not ported — Runtime's allocator) |
+| `0x180001520` | free-and-null an array `{void* data; int count;}` — reached **only** from EH unwind funclets |
+| `0x180001550` | generic `Array<T*>::SetLength(int)` — grow ×3, `MemAlloc`/copy/`MemFree` |
+| `0x180003060` | tail-thunk to `Video::Device::Unlock(*g_Device)` — EH unwind path |
+
+#### Exports (2)
+
+`0x1800011a0` `CreateDeviceData`, `0x180001230` `GetDeviceName`.
+
+#### Per-class attribution
+
+| Class | Vtable slot targets (in slot order) | Private helpers |
+|-------|-------------------------------------|-----------------|
+| `RenderBufferData` | `1010`, `1060`*, `1070`, `10e0` | — |
+| `VideoProgramData` | `1140`, `1060`*, `1190`* | — |
+| `ConstantBufferData` | `1240`, `1300`, `1460`, `1450`* | `1270` (`~ConstantBufferData`) |
+| `ContextData` | `1600`, `1650`, `1720`, `17c0`, `1920`, `1ad0`, `1b60`, `1be0`, `1c40`, `1cb0`, `1d10`*, `1d30`, `1d80`, `1ef0`*, `1e60`, `1f00`, `2000`, `2020`*, `2030`, `2150` | — |
+| `ImageBufferData` | `2400`, `2580`, `2650`, `2870`, `2da0`, `2e10`, `2ef0` | `2430` (`~ImageBufferData`), `2720` |
+| `IndexBufferData` | `3080`, `30f0`, `31c0`, `3290`†, `3340`†, `3380`*, `33b0` | — |
+| `PixelProgramData` | `3580`, `3610`, `36a0`* | — |
+| `RenderStateData` | `36e0`, `3760`, `3a90` | — |
+| `VertexBufferData` | `3b20`, `3b90`, `3c60`, `3290`†, `3340`†, `3d30`, `3d90` | — |
+| `VertexLayoutData` | `3f60`, `3fc0`*, `3ff0` | — |
+| `VertexProgramData` | `4110`, `41a0`, `4230`* | — |
+| `DeviceData` | `4270`, `4690`, `4e10`, `51c0`, `1190`*, `5430`*, `5440`*, `1060`*, `5450`, `5650`, `56c0`, `5730`, `57a0`, `5810`, `5880`, `58f0`, `5960`, `59d0`, `5a40`, `5aa0` | `42d0`, `4340`, `4510`, `4590`, `52b0`, `5350`, `53f0`, `5b00`, and `2300` (shared with `ImageBufferData`) |
+
+`*` = one of the 12 sub-function stubs above. `†` = shared between
+`IndexBufferData` and `VertexBufferData` (identical Lock/Unlock semantics).
+All addresses are `0x180000000`-relative, `0x1800…` prefix elided.
+
+#### `DeviceData` helper roles (recovered)
+
+| Address | Role |
+|---------|------|
+| `0x1800042d0` | Win32 message callback — installed by slot 2 via `Application::RegisterMessageCallback`; calls `0x180004340` twice |
+| `0x180004340` | swap-chain resize / buffer recreate; also called directly by `ContextData` slot 1 |
+| `0x180004510` | `ResolveMultisampleMode()` — clamps `Device+0x24` against `GetMultisampleModeCount`, walks down to a supported mode, returns `sampleCount` (index+1) |
+| `0x180004590` | `FillSwapChainDesc(DXGI_SWAP_CHAIN_DESC*)` — see field notes in `../decomp/videodx11.md` |
+| `0x1800052b0` | `CreateColorBuffer()` → `CreateTexture2D(B8G8R8A8_UNORM, BIND_RENDER_TARGET)` into `+0x38` |
+| `0x180005350` | `CreateDepthBuffer()` → `CreateTexture2D(D24_UNORM_S8_UINT, BIND_DEPTH_STENCIL)` into `+0x30` |
+| `0x1800053f0` | second Win32 message callback installed by slot 2 |
+| `0x180005b00` | adapter/output enumeration helper for slot 1 |
+| `0x180002300` | `TrackImageBuffer(ImageBuffer*)` — add-if-absent into the `DeviceData+0x60` list; the matching remove lives in `~ImageBufferData` |
 
 ---
 
