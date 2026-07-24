@@ -14,7 +14,6 @@
 #include "runtime_funcs.h"
 #include "dx11_funcs.h"
 #include "dx11_seam.h"
-#include "dx11_tripwire.h"
 #include "video_interface.h"
 #include "address_registry.h"
 #include "renderdoc_integration.h"
@@ -425,7 +424,6 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // session that dies on the way out is exactly the one whose "did any
     // shipped renderer code run?" answer is worth having.
     VideoDX11::Dx11SeamReport();
-    VideoDX11::Dx11TripwireReport();
 
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();
@@ -864,9 +862,7 @@ static void DumpVideoState() {
                 nm = nm ? nm + 1 : path;
                 printf("[VideoProbe]   active vtable lives in: %s\n", nm);
 
-                // Which module SHOULD own the active vtable depends on the mode:
-                // our own exe in Standalone (the vtables are ours), the shipped
-                // DLL in AB (we patch its .rdata in place).
+                // The active vtable must be one of ours, i.e. in this exe.
                 //
                 // The failure this catches: if Video::Device cannot bring up the
                 // configured interface it falls back to interface 0 and loads
@@ -875,19 +871,16 @@ static void DumpVideoState() {
                 // sign in a 10k-line log was one "seam not installed" line,
                 // which is not enough to stop someone A/B-ing our port against
                 // a run that never used it.
-                const bool standalone =
-                    VideoDX11::Dx11ActiveMode() == VideoDX11::Mode::Standalone;
-                const char* expected =
-                    standalone ? "reimpl-x64.exe" : "VideoDX11-x64.dll";
+                const char* expected = "reimpl-x64.exe";
                 if (_stricmp(nm, expected) != 0) {
                     fprintf(stderr,
                             "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
-                            "[VideoProbe] The active renderer's vtable lives in %s; in "
-                            "%s mode it should be %s.\n"
+                            "[VideoProbe] The active renderer's vtable lives in %s; "
+                            "it should be %s.\n"
                             "[VideoProbe] Video::Device fell back to another plugin, so "
                             "every draw is ORIGINAL code.\n"
-                            "[VideoProbe] Any A/B measured from this run is meaningless.\n",
-                            nm, standalone ? "Standalone" : "AB", expected);
+                            "[VideoProbe] Anything measured from this run is meaningless.\n",
+                            nm, expected);
                     fflush(stderr);
                 }
             } else {
@@ -1261,22 +1254,13 @@ static bool Init() {
     Dx11FuncsInit();
     VideoDX11::Dx11SeamInstall();
 
-    //     Standalone renderer mode (the default): our twelve vtables live in
-    //     this exe and VideoDX11-x64.dll is never loaded. That only holds if
-    //     Runtime is stopped from LoadLibrary'ing it, which is what this does —
-    //     it pre-fills Video::Device+0xc8/+0xd0/+0xd8 from inside a detour on
+    //     Our twelve vtables live in this exe and VideoDX11-x64.dll is never
+    //     loaded. That only holds if Runtime is stopped from LoadLibrary'ing
+    //     it, which is what this does — it pre-fills
+    //     Video::Device+0xc8/+0xd0/+0xd8 from inside a detour on
     //     Video::Device::InitializeInterfaces, which skips any slot that is
-    //     already populated. No-op under BANISHED_DX11_AB=1.
+    //     already populated.
     InstallVideoInterfacePrefill();
-
-    //     Optional (BANISHED_DX11_TRIPWIRE): withdraw execute permission from
-    //     the shipped DLL's .text so that any entry into renderer code we did
-    //     not replace reports itself instead of running silently. This is the
-    //     measurement behind the "no shipped VideoDX11 code executes" claim —
-    //     see dx11/funcs/dx11_tripwire.h for exactly what it does and does not
-    //     cover. Must come after the seam: the detours have to be in place
-    //     before their trampolines can be recognised as ours.
-    VideoDX11::Dx11TripwireInstall();
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB

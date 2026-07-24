@@ -1,11 +1,9 @@
-// Phase 0 — the VideoDX11 replacement seam. See dx11_seam.h for the design and
-// for why this patches vtable slots rather than wrapping DeviceData.
+// The VideoDX11 replacement seam. See dx11_seam.h for the design, and for why
+// this owns the twelve vtables rather than wrapping DeviceData or patching the
+// shipped DLL.
 
 #include "dx11_seam.h"
 
-#include "resolve.h"
-
-#include <windows.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,70 +11,31 @@
 namespace VideoDX11 {
 
 // ============================================================
-// The twelve vtables, and every slot target as walked from .rdata
-// 0x180018580-0x180018c60 on 2026-07-24 (see ../README.md).
-//
-// This table is the runtime counterpart of the static_asserts in
-// dx11/types/VideoDX11Data.h: it is checked against the live DLL at install
-// time, so a wrong base, a wrong ASLR delta, or a different build of
-// VideoDX11-x64.dll is caught before a single byte is written.
+// The twelve vtables
 // ============================================================
+// `ghidra` is the shipped DLL's vtable address. Nothing resolves it any more —
+// it is the key that decomp/videodx11.md and the status board in
+// dx11/README.md are indexed by, and it is printed in the seam report so a log
+// line can still be matched against the decompilation.
 struct VtDesc {
     const char* name;
-    uintptr_t   ghidra;      // vtable address in the Ghidra image
+    uintptr_t   ghidra;
     int         slots;
-    uintptr_t   target[kMaxSlots];
 };
 
 static const VtDesc kVtables[static_cast<int>(Vt::kVtCount)] = {
-    { "DeviceData", 0x180018bb0, 20, {
-        0x180004270, 0x180004690, 0x180004e10, 0x1800051c0,
-        0x180001190, 0x180005430, 0x180005440, 0x180001060,
-        0x180005450, 0x180005650, 0x1800056c0, 0x180005730,
-        0x1800057a0, 0x180005810, 0x180005880, 0x1800058f0,
-        0x180005960, 0x1800059d0, 0x180005a40, 0x180005aa0 } },
-
-    { "ContextData", 0x1800186f0, 20, {
-        0x180001600, 0x180001650, 0x180001720, 0x1800017c0,
-        0x180001920, 0x180001ad0, 0x180001b60, 0x180001be0,
-        0x180001c40, 0x180001cb0, 0x180001d10, 0x180001d30,
-        0x180001d80, 0x180001ef0, 0x180001e60, 0x180001f00,
-        0x180002000, 0x180002020, 0x180002030, 0x180002150 } },
-
-    { "ImageBufferData", 0x180018790, 7, {
-        0x180002400, 0x180002580, 0x180002650, 0x180002870,
-        0x180002da0, 0x180002e10, 0x180002ef0 } },
-
-    { "ConstantBufferData", 0x1800185d0, 4, {
-        0x180001240, 0x180001300, 0x180001460, 0x180001450 } },
-
-    // Slots 3 and 4 are byte-identical to VertexBufferData's slots 3 and 4 —
-    // the same two addresses appear in both vtables.
-    { "IndexBufferData", 0x1800187c8, 7, {
-        0x180003080, 0x1800030f0, 0x1800031c0, 0x180003290,
-        0x180003340, 0x180003380, 0x1800033b0 } },
-
-    { "VertexBufferData", 0x180018830, 7, {
-        0x180003b20, 0x180003b90, 0x180003c60, 0x180003290,
-        0x180003340, 0x180003d30, 0x180003d90 } },
-
-    { "VertexLayoutData", 0x180018878, 3, {
-        0x180003f60, 0x180003fc0, 0x180003ff0 } },
-
-    { "VertexProgramData", 0x180018890, 3, {
-        0x180004110, 0x1800041a0, 0x180004230 } },
-
-    { "PixelProgramData", 0x180018800, 3, {
-        0x180003580, 0x180003610, 0x1800036a0 } },
-
-    { "RenderStateData", 0x180018818, 3, {
-        0x1800036e0, 0x180003760, 0x180003a90 } },
-
-    { "VideoProgramData", 0x1800185a8, 3, {
-        0x180001140, 0x180001060, 0x180001190 } },
-
-    { "RenderBufferData", 0x180018588, 4, {
-        0x180001010, 0x180001060, 0x180001070, 0x1800010e0 } },
+    { "DeviceData",         0x180018bb0, 20 },
+    { "ContextData",        0x1800186f0, 20 },
+    { "ImageBufferData",    0x180018790,  7 },
+    { "ConstantBufferData", 0x1800185d0,  4 },
+    { "IndexBufferData",    0x1800187c8,  7 },
+    { "VertexBufferData",   0x180018830,  7 },
+    { "VertexLayoutData",   0x180018878,  3 },
+    { "VertexProgramData",  0x180018890,  3 },
+    { "PixelProgramData",   0x180018800,  3 },
+    { "RenderStateData",    0x180018818,  3 },
+    { "VideoProgramData",   0x1800185a8,  3 },
+    { "RenderBufferData",   0x180018588,  4 },
 };
 
 const char* VtName(Vt v)       { return kVtables[static_cast<int>(v)].name; }
@@ -92,20 +51,18 @@ uintptr_t   VtGhidraAddr(Vt v) { return kVtables[static_cast<int>(v)].ghidra; }
 // constructible puts s_slots in .bss with guaranteed zero-initialization
 // *before* any dynamic initializer runs, so registration order cannot matter.
 struct SlotEntry {
-    void*       impl;        // our reimplementation
-    void*       original;    // captured before any patch
+    void*       impl;
     const char* envFlag;
     const char* label;
     bool        defaultOn;
-    bool        live;        // is our version currently installed?
+    bool        live;
 };
 
 static SlotEntry s_slots[static_cast<int>(Vt::kVtCount)][kMaxSlots];
-static void**    s_vtable[static_cast<int>(Vt::kVtCount)] = { nullptr };
 static bool      s_installed = false;
 
 // ============================================================
-// Our own vtables (Standalone mode)
+// Our twelve vtables
 // ============================================================
 //
 // The leading `rtti` word is not padding. MSVC puts the RTTI Complete Object
@@ -120,19 +77,11 @@ struct OurVtable {
 };
 static OurVtable s_ourVt[static_cast<int>(Vt::kVtCount)];
 
-static Mode s_mode = Mode::Standalone;
-
-Mode Dx11ActiveMode() { return s_mode; }
-const char* Dx11ModeName() {
-    return s_mode == Mode::AB ? "AB (patch the shipped DLL)"
-                              : "Standalone (our own vtables)";
-}
-
 void** Dx11LiveVtable(Vt v) {
     if (!s_installed) return nullptr;
     int vi = static_cast<int>(v);
     if (vi < 0 || vi >= static_cast<int>(Vt::kVtCount)) return nullptr;
-    return s_mode == Mode::AB ? s_vtable[vi] : s_ourVt[vi].slot;
+    return s_ourVt[vi].slot;
 }
 
 bool Dx11SeamReady() { return s_installed; }
@@ -144,10 +93,9 @@ static bool ValidSlot(Vt v, int slot) {
 }
 
 // Fallback accounting. Every Dx11OriginalSlot() call site is a "our port could
-// not resolve a Runtime import, run the shipped code" branch, so a non-zero
-// count here is the same class of finding as a tripwire hit: shipped renderer
-// code executed. Counting is unconditional (not env-gated) because the cost is
-// one increment on a path that is meant to be dead.
+// not resolve a Runtime import, run the original" branch left over from when an
+// original was mapped. Counting is unconditional (not env-gated) because the
+// cost is one increment on a path that is meant to be dead.
 static unsigned s_forward[static_cast<int>(Vt::kVtCount)][kMaxSlots];
 static unsigned s_forwardTotal = 0;
 
@@ -159,22 +107,15 @@ void* Dx11OriginalSlot(Vt v, int slot) {
 
     ++s_forwardTotal;
     if (s_forward[static_cast<int>(v)][slot]++ == 0) {
-        if (s_mode == Mode::Standalone) {
-            fprintf(stderr,
-                    "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) — but "
-                    "Standalone mode has no original. Returning null; the "
-                    "caller will fault. A Runtime import failed to resolve.\n",
-                    VtName(v), slot, e.label ? e.label : "?");
-        } else {
-            fprintf(stderr,
-                    "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) -> %p. A "
-                    "Runtime import failed to resolve; shipped VideoDX11 code "
-                    "is now running for this slot.\n",
-                    VtName(v), slot, e.label ? e.label : "?", e.original);
-        }
+        fprintf(stderr,
+                "[Dx11Seam] FORWARD TO ORIGINAL: %s slot %d (%s) — but the "
+                "shipped DLL is not loaded, so there is no original. Returning "
+                "null; the caller will fault. A Runtime import failed to "
+                "resolve.\n",
+                VtName(v), slot, e.label ? e.label : "?");
         fflush(stderr);
     }
-    return e.original;
+    return nullptr;
 }
 
 // Same semantics as ComponentFactory::LiveEnabled: an explicit env setting wins
@@ -218,173 +159,11 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl,
 }
 
 // ============================================================
-// Detour registration (see dx11_seam.h for why these exist)
+// Install — build the twelve vtables from the registrations
 // ============================================================
-struct DetourEntry {
-    uintptr_t      ghidra;
-    uintptr_t      stubAddr;   // where the trampoline actually landed, once live
-    void*          impl;
-    const uint8_t* expected;
-    int            expectedLen;
-    const char*    envFlag;
-    const char*    label;
-    bool           defaultOn;
-    bool           live;
-};
+bool Dx11SeamInstall() {
+    if (s_installed) return true;
 
-// Two exports today. The cap exists only so the table is POD in .bss for the
-// same reason s_slots is — lanes register from static initializers.
-constexpr int kMaxDetours = 8;
-static DetourEntry s_detours[kMaxDetours];
-static int         s_detourCount = 0;
-
-bool Dx11RegisterDetour(uintptr_t ghidraAddr, void* impl,
-                        const uint8_t* expectedBytes, int expectedLen,
-                        const char* envFlag, bool defaultOn, const char* label) {
-    if (s_installed) {
-        fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): registered after install\n",
-                static_cast<unsigned long long>(ghidraAddr), label ? label : "?");
-        return false;
-    }
-    if (!impl || !expectedBytes || expectedLen < kDetourSize ||
-        s_detourCount >= kMaxDetours) {
-        fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): bad registration\n",
-                static_cast<unsigned long long>(ghidraAddr), label ? label : "?");
-        return false;
-    }
-    for (int i = 0; i < s_detourCount; ++i) {
-        if (s_detours[i].ghidra == ghidraAddr) {
-            fprintf(stderr, "[Dx11Seam] REJECTED detour 0x%llx (%s): already claimed by %s\n",
-                    static_cast<unsigned long long>(ghidraAddr), label ? label : "?",
-                    s_detours[i].label ? s_detours[i].label : "?");
-            return false;
-        }
-    }
-    DetourEntry& d = s_detours[s_detourCount++];
-    d.ghidra      = ghidraAddr;
-    d.impl        = impl;
-    d.expected    = expectedBytes;
-    d.expectedLen = expectedLen;
-    d.envFlag     = envFlag;
-    d.label       = label;
-    d.defaultOn   = defaultOn;
-    return true;
-}
-
-// Write one pointer into the DLL's read-only .rdata.
-static bool WriteSlot(void** vtable, int slot, void* value) {
-    void** target = vtable + slot;
-    DWORD  oldProtect = 0;
-    if (!VirtualProtect(target, sizeof(void*), PAGE_READWRITE, &oldProtect))
-        return false;
-    *target = value;
-    DWORD ignored = 0;
-    VirtualProtect(target, sizeof(void*), oldProtect, &ignored);
-    // .rdata is data, not code, so no FlushInstructionCache is needed. The
-    // indirect call reads it fresh on every dispatch.
-    return true;
-}
-
-bool Dx11SetSlotEnabled(Vt v, int slot, bool useOurs) {
-    if (!s_installed || !ValidSlot(v, slot)) return false;
-    SlotEntry& e = s_slots[static_cast<int>(v)][slot];
-    if (!e.impl) return false;
-    void* want = useOurs ? e.impl : e.original;
-    if (!WriteSlot(s_vtable[static_cast<int>(v)], slot, want)) {
-        fprintf(stderr, "[Dx11Seam] VirtualProtect failed for %s slot %d\n",
-                VtName(v), slot);
-        return false;
-    }
-    e.live = useOurs;
-    printf("[Dx11Seam] %s slot %2d -> %s (%s)\n", VtName(v), slot,
-           useOurs ? "OURS" : "original", e.label ? e.label : "?");
-    return true;
-}
-
-bool Dx11IsDetourStub(uintptr_t addr) {
-    for (int i = 0; i < s_detourCount; ++i) {
-        const DetourEntry& d = s_detours[i];
-        if (d.live && addr >= d.stubAddr &&
-            addr < d.stubAddr + static_cast<uintptr_t>(kDetourSize))
-            return true;
-    }
-    return false;
-}
-
-// Overwrite the first kDetourSize bytes of `target` with an absolute jump to
-// `impl`, after proving the bytes there are the ones we decompiled.
-static bool WriteDetour(uint8_t* target, void* impl,
-                        const uint8_t* expected, int expectedLen,
-                        const char* label) {
-    if (std::memcmp(target, expected, static_cast<size_t>(expectedLen)) != 0) {
-        fprintf(stderr, "[Dx11Seam] detour REFUSED for %s @ %p: prologue does not "
-                        "match the decompiled bytes\n", label ? label : "?", target);
-        fprintf(stderr, "[Dx11Seam]   expected:");
-        for (int i = 0; i < expectedLen; ++i) fprintf(stderr, " %02x", expected[i]);
-        fprintf(stderr, "\n[Dx11Seam]   found:   ");
-        for (int i = 0; i < expectedLen; ++i) fprintf(stderr, " %02x", target[i]);
-        fprintf(stderr, "\n");
-        return false;
-    }
-
-    uint8_t patch[kDetourSize];
-    patch[0] = 0x48;                                   // MOV RAX, imm64
-    patch[1] = 0xB8;
-    std::memcpy(patch + 2, &impl, sizeof(void*));
-    patch[10] = 0xFF;                                  // JMP RAX
-    patch[11] = 0xE0;
-
-    DWORD oldProtect = 0;
-    if (!VirtualProtect(target, kDetourSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        fprintf(stderr, "[Dx11Seam] VirtualProtect failed for detour %s @ %p\n",
-                label ? label : "?", target);
-        return false;
-    }
-    std::memcpy(target, patch, kDetourSize);
-    DWORD ignored = 0;
-    VirtualProtect(target, kDetourSize, oldProtect, &ignored);
-    // This one IS code, so the icache does need flushing.
-    FlushInstructionCache(GetCurrentProcess(), target, kDetourSize);
-    return true;
-}
-
-static void ApplyDetours() {
-    for (int i = 0; i < s_detourCount; ++i) {
-        DetourEntry& d = s_detours[i];
-        if (!Enabled(d.envFlag, d.defaultOn)) {
-            printf("[Dx11Seam] detour dormant: %s (0x%llx)\n",
-                   d.label ? d.label : "?",
-                   static_cast<unsigned long long>(d.ghidra));
-            continue;
-        }
-        uint8_t* target = reinterpret_cast<uint8_t*>(
-            ResolveAddr(Module::VideoDX11, d.ghidra));
-        if (!target) {
-            fprintf(stderr, "[Dx11Seam] could not resolve detour target 0x%llx (%s)\n",
-                    static_cast<unsigned long long>(d.ghidra), d.label ? d.label : "?");
-            continue;
-        }
-        if (WriteDetour(target, d.impl, d.expected, d.expectedLen, d.label)) {
-            d.live    = true;
-            d.stubAddr = reinterpret_cast<uintptr_t>(target);
-            printf("[Dx11Seam] detour OURS: %s (0x%llx @ %p -> %p)\n",
-                   d.label ? d.label : "?",
-                   static_cast<unsigned long long>(d.ghidra), target, d.impl);
-        }
-    }
-}
-
-// ============================================================
-// Standalone install — build our twelve vtables from the registrations
-// ============================================================
-//
-// There is nothing to verify against here: in AB mode the 84-slot check
-// re-proves the map against the live DLL every boot, and losing that was the
-// main cost of owning the vtables. The equivalent check available in this mode
-// is completeness — every slot of every vtable must have a registered
-// implementation, because an unregistered slot is a null function pointer that
-// Runtime will eventually dispatch through. A hole is refused, not zero-filled.
-static bool InstallStandalone() {
     int total = 0, holes = 0, forced = 0;
 
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
@@ -394,22 +173,19 @@ static bool InstallStandalone() {
             ++total;
             if (!e.impl) {
                 fprintf(stderr,
-                        "[Dx11Seam] HOLE: %s slot %d has no reimplementation. "
-                        "Standalone mode cannot fill it — there is no shipped "
-                        "code to fall back to.\n",
+                        "[Dx11Seam] HOLE: %s slot %d has no reimplementation, "
+                        "and there is no shipped code to fall back to.\n",
                         kVtables[vi].name, slot);
                 ++holes;
                 continue;
             }
-            // Per-slot kill switches are an AB-mode concept: "run the shipped
-            // version of this one instead". In Standalone mode there is no
-            // shipped version, so a =0 flag cannot be honoured. Say so rather
-            // than silently ignoring it.
+            // Per-slot kill switches only ever meant "run the shipped version of
+            // this one instead", which is no longer possible. Say so rather than
+            // silently ignoring the flag.
             if (!SlotEnabled(e)) {
                 fprintf(stderr,
-                        "[Dx11Seam] %s slot %d (%s): %s is off, but Standalone "
-                        "mode has no original to fall back to — using ours "
-                        "anyway. Set BANISHED_DX11_AB=1 to A/B this slot.\n",
+                        "[Dx11Seam] %s slot %d (%s): %s is off, but there is no "
+                        "original to fall back to — using ours anyway.\n",
                         kVtables[vi].name, slot, e.label ? e.label : "?",
                         e.envFlag ? e.envFlag : "(flag)");
                 ++forced;
@@ -427,7 +203,7 @@ static bool InstallStandalone() {
     }
 
     s_installed = true;
-    printf("[Dx11Seam] Standalone: %d/%d slots ours, in %d exe-owned vtables. "
+    printf("[Dx11Seam] %d/%d slots ours, in %d exe-owned vtables. "
            "VideoDX11-x64.dll is not required.%s\n",
            total, total, static_cast<int>(Vt::kVtCount),
            forced ? "  (kill switches ignored — see stderr)" : "");
@@ -436,123 +212,12 @@ static bool InstallStandalone() {
                kVtables[vi].name, static_cast<void*>(s_ourVt[vi].slot),
                kVtables[vi].slots);
     }
-    std::atexit(Dx11SeamReport);
-    fflush(stdout);
-    return true;
-}
-
-bool Dx11SeamInstall() {
-    if (s_installed) return true;
-
-    s_mode = Enabled("BANISHED_DX11_AB", false) ? Mode::AB : Mode::Standalone;
-    printf("[Dx11Seam] mode: %s\n", Dx11ModeName());
-
-    if (s_mode == Mode::Standalone) return InstallStandalone();
-
-    const ModuleInfo* info = GetModuleInfo(Module::VideoDX11);
-    if (!info || !info->handle) {
-        // Not a benign "run on the original plugin" outcome, despite reading
-        // like one. The port is HOSTED IN this DLL: the twelve vtables our
-        // slots occupy are its .rdata, every ported class sets its vptr to an
-        // address inside it, and Runtime takes Device+0xd0/+0xd8 from
-        // GetProcAddress on it. With the DLL gone there is nothing to patch,
-        // Video::Device falls back to interface 0, and the game renders happily
-        // on the original VideoDX9-x64.dll. It looks like success.
-        fprintf(stderr,
-                "[Dx11Seam] *** VideoDX11-x64.dll IS NOT LOADED — THE PORT IS "
-                "DISABLED ***\n"
-                "[Dx11Seam] No slot is ours and no detour is installed. Runtime "
-                "will fall back to\n"
-                "[Dx11Seam] VideoDX9-x64.dll and render entirely in original "
-                "code.\n");
-        fflush(stderr);
-        printf("[Dx11Seam] VideoDX11-x64.dll not loaded — seam not installed\n");
-        return false;
-    }
-
-    // --- Pass 1: resolve the vtables and verify every slot ---------------
-    // Nothing is written until all 84 slots match. A mismatch means our map of
-    // the DLL is wrong, and patching on a wrong map corrupts a vtable.
-    int mismatches = 0;
-    int checked    = 0;
-    for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
-        const VtDesc& d = kVtables[vi];
-        void** vt = reinterpret_cast<void**>(
-            ResolveAddr(Module::VideoDX11, d.ghidra));
-        if (!vt) {
-            fprintf(stderr, "[Dx11Seam] could not resolve %s vtable @ 0x%llx\n",
-                    d.name, static_cast<unsigned long long>(d.ghidra));
-            ++mismatches;
-            continue;
-        }
-        s_vtable[vi] = vt;
-
-        for (int slot = 0; slot < d.slots; ++slot) {
-            uintptr_t expected = ResolveAddr(Module::VideoDX11, d.target[slot]);
-            uintptr_t actual   = reinterpret_cast<uintptr_t>(vt[slot]);
-            ++checked;
-            if (expected != actual) {
-                fprintf(stderr,
-                        "[Dx11Seam] MISMATCH %s slot %d: expected %p (ghidra 0x%llx), "
-                        "found %p\n",
-                        d.name, slot, reinterpret_cast<void*>(expected),
-                        static_cast<unsigned long long>(d.target[slot]),
-                        reinterpret_cast<void*>(actual));
-                ++mismatches;
-            }
-            s_slots[vi][slot].original = vt[slot];
-        }
-    }
-
-    if (mismatches) {
-        fprintf(stderr,
-                "[Dx11Seam] ABORT: %d/%d slots did not match the map in "
-                "dx11/README.md. Nothing patched; running on the original "
-                "plugin.\n", mismatches, checked);
-        return false;
-    }
-    printf("[Dx11Seam] Verified %d/%d vtable slots against dx11/README.md "
-           "(base %p, delta %+lld)\n",
-           checked, checked, reinterpret_cast<void*>(info->runtimeBase),
-           static_cast<long long>(info->delta));
-
-    s_installed = true;
-
-    // --- Pass 2: apply the enabled overrides -----------------------------
-    int applied = 0, dormant = 0, failed = 0;
-    for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
-        for (int slot = 0; slot < kVtables[vi].slots; ++slot) {
-            SlotEntry& e = s_slots[vi][slot];
-            if (!e.impl) continue;
-            if (!SlotEnabled(e)) { ++dormant; continue; }
-            if (WriteSlot(s_vtable[vi], slot, e.impl)) {
-                e.live = true;
-                ++applied;
-            } else {
-                fprintf(stderr, "[Dx11Seam] VirtualProtect failed for %s slot %d (%s)\n",
-                        kVtables[vi].name, slot, e.label ? e.label : "?");
-                ++failed;
-            }
-        }
-    }
-
-    printf("[Dx11Seam] Installed: %d slot(s) ours, %d dormant, %d failed, "
-           "%d still original\n",
-           applied, dormant, failed, checked - applied);
-
-    // --- Pass 3: apply the detours ---------------------------------------
-    // Deliberately after the vtable pass. A detour rewrites .text, so it is the
-    // more invasive of the two; running it only once the 84-slot verification
-    // has already agreed with dx11/README.md means a stale map cannot get us
-    // as far as writing code bytes.
-    ApplyDetours();
 
     // Print the slot table (and, crucially, the fallback count) at exit. The
-    // count is only evidence if it is always reported: a verification pass that
-    // has to be remembered to be switched on proves nothing about the runs
-    // where nobody remembered.
+    // count is only evidence if it is always reported: a check that has to be
+    // remembered to be switched on proves nothing about the runs where nobody
+    // remembered.
     std::atexit(Dx11SeamReport);
-
     fflush(stdout);
     return true;
 }
@@ -562,25 +227,19 @@ void Dx11SeamReport() {
         printf("[Dx11Seam] not installed\n");
         return;
     }
-    printf("\n[Dx11Seam] === slot table (%s) ===\n", Dx11ModeName());
+    printf("\n[Dx11Seam] === slot table ===\n");
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
         const VtDesc& d = kVtables[vi];
-        printf("[Dx11Seam] %-19s @ %p (%d slots)\n",
-               d.name, (void*)Dx11LiveVtable(static_cast<Vt>(vi)), d.slots);
+        printf("[Dx11Seam] %-19s @ %p (%d slots, was 0x%llx)\n",
+               d.name, (void*)Dx11LiveVtable(static_cast<Vt>(vi)), d.slots,
+               static_cast<unsigned long long>(d.ghidra));
         for (int slot = 0; slot < d.slots; ++slot) {
             const SlotEntry& e = s_slots[vi][slot];
-            if (!e.impl) continue;   // un-ported slots are the silent majority
+            if (!e.impl) continue;
             printf("[Dx11Seam]     slot %2d  %-7s  %s%s\n", slot,
-                   e.live ? "OURS" : "orig", e.label ? e.label : "?",
-                   s_forward[vi][slot] ? "   *** FORWARDED TO ORIGINAL ***" : "");
+                   e.live ? "OURS" : "----", e.label ? e.label : "?",
+                   s_forward[vi][slot] ? "   *** HIT THE DEAD FALLBACK ***" : "");
         }
-    }
-    printf("[Dx11Seam] %-19s (%d)\n", "detours", s_detourCount);
-    for (int i = 0; i < s_detourCount; ++i) {
-        printf("[Dx11Seam]     0x%llx  %-7s  %s\n",
-               static_cast<unsigned long long>(s_detours[i].ghidra),
-               s_detours[i].live ? "OURS" : "orig",
-               s_detours[i].label ? s_detours[i].label : "?");
     }
     printf("[Dx11Seam] fallbacks to shipped code: %u (expected 0)\n",
            s_forwardTotal);

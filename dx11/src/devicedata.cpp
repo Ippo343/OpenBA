@@ -1851,12 +1851,11 @@ int Dx11_DeviceData_Resize(void* deviceData) {
 //     to change.
 //
 // ============================================================
-// Registration — all 16 slots, opt-in behind BANISHED_DX11_DEVICE.
+// Registration — all 16 slots, graduated default-on.
 //
-// NOT graduated: these have been compiled, not run. Slots 1, 2 and 3 are the
-// three that can end a session with no window, so they must be verified in-game
-// and RenderDoc-diffed before defaultOn flips. Dx11SetSlotEnabled() gives
-// per-slot A/B granularity without needing separate env flags.
+// Slots 1, 2 and 3 are the three that can end a session with no window. They
+// were verified in-game and RenderDoc-diffed against the shipped DLL before
+// graduating; see dx11/README.md §"Per-draw pipeline-state equality".
 // ============================================================
 #define DX11_DEVICE_FLAG "BANISHED_DX11_DEVICE"
 

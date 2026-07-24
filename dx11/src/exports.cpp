@@ -62,39 +62,6 @@ const ExportImports* GetExportImports() {
     return g_imOk ? &g_im : nullptr;
 }
 
-// ============================================================
-// The original prologues, for the detour's byte check
-// ============================================================
-//
-// 1800011a0  40 57                    PUSH RDI
-// 1800011a2  48 83 EC 30              SUB  RSP,0x30
-// 1800011a6  48 C7 44 24 20 FE FF FF FF   MOV qword [RSP+0x20],-2
-//                                          (the MSVC EH state slot)
-// 15 bytes of prologue before anything we would clip; the detour needs 12.
-//
-// Note the 0x40: a REX prefix with no bits set, which encodes nothing. MSVC
-// emits it here anyway, so PUSH RDI is two bytes, not one. Ghidra's listing
-// shows the mnemonic and not the encoding, and taking the encoding from the
-// mnemonic put every byte after it one position early — the detour's byte check
-// refused the patch instead of clipping the function, which is what it is for.
-const uint8_t kCreateDeviceDataPrologue[12] = {
-    0x40, 0x57,
-    0x48, 0x83, 0xEC, 0x30,
-    0x48, 0xC7, 0x44, 0x24, 0x20, 0xFE
-};
-
-// 180001230  48 8D 05 89 73 01 00     LEA RAX,[0x1800185c0]   ; "DirectX 11"
-// 180001237  C3                       RET
-// 180001238  CC CC CC CC CC CC CC CC  alignment padding
-// The whole function is 8 bytes, so the detour's last 4 bytes land in padding.
-// The padding is included in the check precisely so that "did we just clip a
-// neighbouring function?" is answered, not assumed.
-const uint8_t kGetDeviceNamePrologue[12] = {
-    0x48, 0x8D, 0x05, 0x89, 0x73, 0x01, 0x00,
-    0xC3,
-    0xCC, 0xCC, 0xCC, 0xCC
-};
-
 }  // namespace
 
 // ============================================================
@@ -169,12 +136,8 @@ const char* Dx11_GetDeviceName() {
 
 }  // namespace VideoDX11
 
-DX11_REGISTER_DETOUR(CreateDeviceData, 0x1800011a0,
-                     &::VideoDX11::Dx11_CreateDeviceData,
-                     ::VideoDX11::kCreateDeviceDataPrologue,
-                     "BANISHED_DX11_EXPORTS", true,"CreateDeviceData")
-
-DX11_REGISTER_DETOUR(GetDeviceName, 0x180001230,
-                     &::VideoDX11::Dx11_GetDeviceName,
-                     ::VideoDX11::kGetDeviceNamePrologue,
-                     "BANISHED_DX11_EXPORTS", true,"GetDeviceName")
+// Neither export is registered with the seam. Runtime reaches both through
+// Video::Device+0xd8 / +0xd0, and standalone/video_interface.cpp writes our
+// function pointers straight into those fields before Runtime would otherwise
+// LoadLibrary the shipped DLL. They used to be installed as inline detours over
+// the DLL's own entry points; that was the AB-mode arrangement and went with it.

@@ -150,25 +150,13 @@ bool ResolveInit() {
     g_modules[1].delta = static_cast<intptr_t>(g_modules[1].runtimeBase)
                        - static_cast<intptr_t>(g_modules[1].preferredBase);
 
-    // VideoDX11-x64.dll: optional, and in the default Standalone renderer mode
-    // deliberately NOT loaded — that is the point of the mode. Our own vtables
-    // and our ports of the two exports replace it entirely, and
-    // InstallVideoInterfacePrefill stops Runtime LoadLibrary'ing it too.
-    //
-    // Only BANISHED_DX11_AB=1 (the verification mode that patches the shipped
-    // .rdata and can A/B a single slot) needs it mapped. The env var is read
-    // here rather than asked of the seam because ResolveInit runs first —
-    // Dx11SeamInstall cannot have decided the mode yet. Both readers use the
-    // same name; see dx11/funcs/dx11_seam.h.
-    {
-        const char* ab = getenv("BANISHED_DX11_AB");
-        const bool  wantAB = ab && ab[0] && strcmp(ab, "0") != 0 &&
-                             strcmp(ab, "false") != 0;
-        g_modules[2].handle = GetModuleHandleA(g_modules[2].name);
-        if (!g_modules[2].handle && wantAB) {
-            g_modules[2].handle = LoadLibraryA(g_modules[2].name);
-        }
-    }
+    // VideoDX11-x64.dll: never loaded. Our own vtables and our ports of the
+    // two exports replace it entirely, and InstallVideoInterfacePrefill stops
+    // Runtime LoadLibrary'ing it too. GetModuleHandle rather than LoadLibrary,
+    // so that if something else in the process has pulled it in, ResolveAddr
+    // still reports a truthful base instead of a zero delta — a wrong non-null
+    // pointer into nothing is exactly the trap that cost a session before.
+    g_modules[2].handle = GetModuleHandleA(g_modules[2].name);
     if (g_modules[2].handle) {
         g_modules[2].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[2].handle);
         g_modules[2].delta = static_cast<intptr_t>(g_modules[2].runtimeBase)

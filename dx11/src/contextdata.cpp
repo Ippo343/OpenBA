@@ -141,7 +141,6 @@
 // registered by this file.
 
 #include "dx11_seam.h"
-#include "dx11_tripwire.h"
 #include "dx11_backend_access.h"
 
 #include <windows.h>
@@ -252,9 +251,9 @@ const Imports* GetImports() {
         // the function and both callers would converge once L6 landed. They
         // did not: L6's WM_ACTIVATE handler calls its own port, while this one
         // kept calling the shipped body — and the shipped body then called the
-        // shipped CreateColorBuffer (0x1800052b0) beneath it. The DLL-execution
-        // tripwire caught both; "84/84 vtable slots are ours" could not, because
-        // neither call is a vtable dispatch.
+        // shipped CreateColorBuffer (0x1800052b0) beneath it. A DEP tripwire
+        // over the shipped .text caught both; "84/84 vtable slots are ours"
+        // could not, because neither call is a vtable dispatch.
         g_im.DeviceDataResize = &Dx11_DeviceData_Resize;
 
         const void* const* p = reinterpret_cast<const void* const*>(&g_im);
@@ -489,11 +488,6 @@ void* ContextData_Dtor(ContextData* self, unsigned flags) {
 // the path writes ContextData+0x08.
 // ============================================================
 bool ContextData_BeginCommands(ContextData* self) {
-    // Not part of the port: this is the frame boundary, so it is where the
-    // (normally disabled) DLL-execution tripwire re-arms itself after a hit.
-    // No-op unless BANISHED_DX11_TRIPWIRE is set. See dx11/funcs/dx11_tripwire.h.
-    Dx11TripwireRearm();
-
     const Imports* im = GetImports();
     if (!im) return Orig<bool (*)(ContextData*)>(1)(self);
 

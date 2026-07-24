@@ -62,67 +62,104 @@ Implementing Phase 0 killed that plan on three counts:
    `0x180002300` and swap-removed by `~ImageBufferData`. Split across two
    objects it stops being a registry.
 
-### The seam that works: patch the vtable slots
+### The seam that works: own the vtables
 
-The twelve vtables sit in the shipped DLL's `.rdata`. Phase 0 `VirtualProtect`s
-them writable, snapshots all 84 original slot targets, and overwrites individual
-slots with our reimplementations.
+Each ported slot registers its reimplementation, and `Dx11SeamInstall()`
+assembles the registrations into twelve arrays in this exe that our factories
+store as vptrs.
 
 ```
 Dx11RegisterSlot(Vt::IndexBufferData, 5, &IndexBufferData_Bind,
-                 "BANISHED_DX11_IB_BIND", /*defaultOn=*/false,
+                 "BANISHED_DX11_IB_BIND", /*defaultOn=*/true,
                  "IndexBufferData::Bind");
 ...
-Dx11SeamInstall();   // verify 84/84, then apply the enabled ones
+Dx11SeamInstall();   // refuse on any hole, then publish the twelve vtables
 ```
 
 This is strictly better than the delegate:
 
 - **One object, the real one.** Our slot receives the genuine `DeviceData` with
-  the genuine fields, so ported and un-ported slots share state by construction.
-- **No ordering constraint.** Install any time after the DLL is loaded. We do it
-  in `standalone/main.cpp` right after `Dx11FuncsInit()`, before `Engine::Startup`.
+  the genuine fields, so every slot shares state by construction.
+- **No ordering constraint.** Install any time before `Engine::Startup`; we do it
+  in `standalone/main.cpp` right after `Dx11FuncsInit()`.
 - **Works for all twelve classes** without touching any factory.
 - **One slot = one unit of work**, exactly like an entry in
-  `standalone/address_registry.cpp`. `Dx11SetSlotEnabled()` flips a single slot
-  at runtime, so two RenderDoc captures differ by exactly one function.
+  `standalone/address_registry.cpp`.
 
-`Dx11OriginalSlot(vt, slot)` returns the captured original, so a partially-ported
-slot can still call through.
+**Install-time check.** With the DLL gone there is no live map to verify against,
+so the check is completeness: every slot of every vtable must have a registered
+implementation. A hole is a null function pointer that Runtime will eventually
+dispatch through, so it is refused rather than zero-filled — the whole install
+aborts. First run: `[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables`.
 
-**Install-time verification.** `Dx11SeamInstall()` checks all 84 live slot
-pointers against the address map in this file *before writing anything*, and
-aborts the whole install on a single mismatch. That re-proves the vtable walk
-against the shipped DLL on every boot, and makes a wrong ASLR delta or a
-different build of `VideoDX11-x64.dll` a logged refusal instead of a corrupted
-vtable. First run: `[Dx11Seam] Verified 84/84 vtable slots`.
+> **This is not how the port was built.** Through all six porting lanes the seam
+> patched the shipped DLL's `.rdata` in place, verified all 84 live slot pointers
+> against an address map on every boot, and kept the original reachable so one
+> slot could be flipped between ours and the shipped code. See "AB mode, and why
+> it is gone" below.
 
 **Kill-switch convention** (per project policy — see `kDefaultOnFlags` in
 `code/Game/Component/component_factory_base.cpp`): new, unproven DX11 slots start
 opt-in behind `BANISHED_DX11_*`; once a slot is verified in-game it graduates to
-default-on and its env var becomes a `=0` kill switch only.
+default-on and its env var becomes a `=0` kill switch only. All 84 are graduated,
+and with no original left to fall back to a `=0` can no longer be honoured — the
+seam reports that on stderr rather than silently ignoring the flag.
 
 ---
 
-## Two modes: Standalone (default) and AB (verification)
+## One driver: the port replaces the DLL outright
 
-The port replaces the shipped DLL outright. `VideoDX11-x64.dll` is not loaded,
-not patched, and does not need to be present.
+`VideoDX11-x64.dll` is not loaded, not patched, and does not need to be present.
+The twelve vtables are twelve arrays in `reimpl-x64.exe`, both exports are
+written straight onto `Video::Device`, and the install-time check is
+completeness: every slot of every vtable must have a registered implementation,
+because an unregistered slot is a null pointer Runtime will dispatch through.
 
-| | Standalone (default) | AB (`BANISHED_DX11_AB=1`) |
-|---|---|---|
-| The twelve vtables | twelve arrays in `reimpl-x64.exe` | the shipped DLL's `.rdata`, patched in place |
-| `VideoDX11-x64.dll` | never loaded | `LoadLibrary`'d and verified 84/84 |
-| The two exports | on `Video::Device` directly | inline detours over the DLL's entries |
-| `Dx11SetSlotEnabled` A/B | unavailable (no original to switch to) | works |
-| Install-time check | every slot of every vtable has an implementation | 84 live slot pointers match the map below |
+### AB mode, and why it is gone (2026-07-24)
 
-Standalone is what a normal run does. AB exists because comparing one slot
-against the shipped implementation is how every lane in this port was verified,
-and how per-draw state equality will have to be verified — that needs the
-original mapped, so the capability is kept rather than deleted.
+Until the per-draw pass below, there was a second mode (`BANISHED_DX11_AB=1`)
+that loaded the shipped DLL, verified all 84 live slot pointers against an
+address map, patched its `.rdata` in place, and detoured the two exports. Its
+whole point was `Dx11SetSlotEnabled()`: flip one slot between ours and the
+shipped implementation so two RenderDoc captures differ by exactly one function.
+That is how all six porting lanes were verified.
 
-### How Standalone stops Runtime loading the DLL
+It was removed once per-draw pipeline-state equality was proven end to end. With
+the comparison done there was nothing left to compare against, and AB mode was
+carrying real cost: a second seam mechanism, a second install path, the 84-slot
+address map, `Dx11IsDetourStub`, and the DEP tripwire that existed only to watch
+the shipped `.text` for code the vtables could not reach.
+
+Removed with it, because each only made sense with the DLL mapped:
+
+| gone | was |
+|---|---|
+| `BANISHED_DX11_AB`, `Mode`, `Dx11ActiveMode` | mode switch |
+| the `.rdata` patching path, `WriteSlot`, `Dx11SetSlotEnabled` | per-slot A/B |
+| `Dx11RegisterDetour` / `DX11_REGISTER_DETOUR`, the export prologue byte tables, `Dx11IsDetourStub` | export detours |
+| `VtDesc::target[]` — the 84-slot address map | install-time verification against the live DLL |
+| `dx11/funcs/dx11_tripwire.{h,cpp}`, `BANISHED_DX11_TRIPWIRE` | DEP tripwire over the shipped `.text` |
+
+**To A/B a future change against the original again, restore AB mode from git.**
+It was deleted in the commit following the one that added the per-draw section
+below. Two things make that less often necessary than it sounds: the tooling in
+[`tools/dx11_state_diff/`](../tools/dx11_state_diff/) is current, and
+`notes/dx11_state/shipped1.jsonl` / `shipped2.jsonl` are recorded per-draw dumps
+of the shipped renderer that can be diffed against a new capture of ours without
+re-running the DLL at all.
+
+Kept deliberately: `Dx11OriginalSlot()` and its fallback counter. It can only
+return null now, but it is still the single choke point for the 27 "a Runtime
+import failed to resolve" branches, and `fallbacks to shipped code: 0` printed
+at exit stays positive evidence rather than an absence of it.
+
+Also kept, though inert: the per-slot `BANISHED_DX11_*` flags. They are lane
+ownership metadata and appear in the seam report. A `=0` can no longer be
+honoured — there is no original to fall back to — so the seam says so on stderr
+instead of silently ignoring it. Retiring them is a follow-up, not part of this
+change.
+
+### How the port stops Runtime loading the DLL
 
 `Video::Device::InitializeInterfaces` (Runtime `0x1800f79f0`) walks three
 interface slots and, for each, **skips it if the HMODULE word is already
@@ -238,15 +275,6 @@ attach/detach, `_freefls` on every thread exit, and the `_calloc_impl` /
   of `.rdata`. `DllMain` at load and CRT teardown at detach are outside any
   armed window and cannot be removed while that is true.
 
-### Superseded: the port no longer needs the DLL at all
-
-The paragraphs above describe **AB mode**, which is now the opt-in verification
-mode rather than the default. See "Two modes" below. In the default Standalone
-mode the shipped DLL is never loaded, so there is no shipped renderer code in
-the process to reach and the tripwire has nothing to watch.
-
-The tripwire remains the right instrument for AB mode, and AB mode remains the
-only way to compare a single slot against the shipped implementation.
 - **`0x180001000`** (`MemFree` import thunk) and **`0x180001520`** (free-and-null
   helper, reached only from EH unwind funclets) remain un-ported. Both are now
   provably dead rather than assumed dead: they are inside the armed range and
@@ -258,6 +286,15 @@ only way to compare a single slot against the shipped implementation.
   argument, not a measurement.
 - ~~**Still open from before this pass:** per-draw pipeline-state equality~~ —
   **closed 2026-07-24**, see "Per-draw pipeline-state equality" below.
+
+### Superseded — this whole section is history
+
+Everything above describes the arrangement where the shipped DLL was mapped and
+its `.rdata` patched. That is gone: the DLL is never loaded, so there is no
+shipped renderer code in the process to reach, nothing for the tripwire to
+watch, and no `DllMain`/CRT residual either. The section is kept because it
+records *how* three non-obvious live paths were found — reading the code is what
+produced the wrong answer, twice — and that lesson outlives the mechanism.
 
 ---
 
@@ -461,10 +498,11 @@ via `DX11_REGISTER_SLOT`, so no lane edits a file another lane owns.
 slots 3 and 4 are the same two addresses (`0x180003290`, `0x180003340`), so
 splitting them would produce two competing ports of identical code.
 
-### Integration protocol
+### Integration protocol (historical — it depended on AB mode)
 
-Lanes implement and compile; they do **not** run the game. `C:/GOG Games/Banished/`
-is a single shared install, so in-game verification is serialized:
+Lanes implemented and compiled; they did **not** run the game.
+`C:/GOG Games/Banished/` is a single shared install, so in-game verification was
+serialized:
 
 1. Merge the lane branch, confirm `mingw32-make standalone-debug` is clean.
 2. Baseline run with the lane's env flag **unset** — expect
@@ -477,6 +515,13 @@ is a single shared install, so in-game verification is serialized:
 5. Only then flip the registration to `defaultOn=true` — the env var becomes a
    `=0` kill switch, per `kDefaultOnFlags` policy.
 
+Steps 2–4 required the shipped implementation reachable and are not available
+now. To verify a *change* to an already-ported slot, the current equivalent is to
+capture a frame and diff it against the recorded per-draw dumps of the shipped
+renderer in `notes/dx11_state/shipped*.jsonl` — see
+[`tools/dx11_state_diff/`](../tools/dx11_state_diff/). To bisect a *new* port
+slot-by-slot again, restore AB mode from git.
+
 ## Status board
 
 Status key matches `decomp/README.md`: `-` not started, `~` partial,
@@ -484,13 +529,19 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 ### Exports
 
-Reimplemented in `dx11/src/exports.cpp` and installed as **seam detours**, not
-vtable slots: Runtime reaches both through `Video::Device+0xd8`/`+0xd0`, filled
-by `InitializeInterfaces` and consumed by `CreateVideoInterface` inside a single
-`Engine::Startup` call, so there is no window in which to overwrite the fields.
-A detour rewrites the first 12 bytes of the export itself with
-`MOV RAX,imm64; JMP RAX`, after checking the existing bytes against the
-decompiled prologue. See the "Detours" section of `dx11/funcs/dx11_seam.h`.
+Reimplemented in `dx11/src/exports.cpp`. They are not vtable slots and are not
+registered with the seam: Runtime reaches both through
+`Video::Device+0xd8`/`+0xd0`, and `standalone/video_interface.cpp` writes our
+function pointers straight into those fields from inside a detour on
+`InitializeInterfaces` — which skips any interface slot already populated, so
+Runtime never `LoadLibrary`s the DLL to fill them.
+
+They used to be installed as **inline detours** over the shipped DLL's own entry
+points (`MOV RAX,imm64; JMP RAX` over the first 12 bytes, written only if the
+existing bytes matched the decompiled prologue). That check earned its keep
+immediately: `PUSH RDI` at `0x1800011a0` is encoded `40 57` — a REX prefix with
+no bits set — not `57`, and the byte check refused rather than clipping the
+function. The detour mechanism went with AB mode.
 
 | Status | Address | Name |
 |--------|---------|------|

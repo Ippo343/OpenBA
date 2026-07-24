@@ -135,15 +135,9 @@ void WrapInitializeInterfaces(void* device) {
 
 }  // namespace
 
-// Install the pre-fill. Call after Dx11SeamInstall() (so the mode is decided)
+// Install the pre-fill. Call after Dx11SeamInstall() (so our vtables exist)
 // and before Engine::Startup (so we beat InitializeInterfaces).
 void InstallVideoInterfacePrefill() {
-    if (VideoDX11::Dx11ActiveMode() != VideoDX11::Mode::Standalone) {
-        printf("[VideoInterface] AB mode — leaving Runtime to LoadLibrary the "
-               "shipped VideoDX11-x64.dll\n");
-        return;
-    }
-
     uintptr_t addr = ResolveAddr(Module::Runtime, kInitializeInterfaces);
     if (!addr) {
         fprintf(stderr, "[VideoInterface] could not resolve "
