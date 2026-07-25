@@ -1054,6 +1054,39 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         logIndex);
                 fflush(stderr);
             }
+
+            // ── Stamp the build-material bookkeeping a CONSTRUCTED building carries. ──
+            // Same class of gap as the +0x52 stamp above. These structures are spawned
+            // already-complete, so BuildComponent_DemoGateSkip (model already at its final
+            // sub-mesh) skips their build state machine and State1Enter never runs — leaving
+            // the cost multiplier (+0x4c) and the delivered counter (+0x48) at factory-zero.
+            // The upgrade path reads exactly those two: DestroyComponent state-5 enter takes
+            // its REFUND+BUILD branch — the one that spawns the replacement foundation — only
+            // when delivered(+0x48) != 0 (destroycomponent_states.cpp Yard_Delivered). With
+            // both zero a starter house demolished correctly and then never got a replacement
+            // (observed live 2026-07-25: "delivered(+0x48)=0 required=0 -> REMOVE(no-spawn)").
+            // Stamp it as fully delivered: multiplier chosen the same way State1Enter picks it
+            // (default 1, workplace +0x58 only when that is a valid positive value), then
+            // delivered = required = buildDesc(+0x18)->+0x30 * multiplier.
+            void* bcBuilt = FindComponentOnEntity(entity, TypeId("BuildComponent"));
+            if (bcBuilt) {
+                uintptr_t bc = (uintptr_t)bcBuilt;
+                uint32_t mult = 1;
+                void* wpcBuilt = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
+                if (wpcBuilt) {
+                    uint32_t wpMult = *(uint32_t*)((uintptr_t)wpcBuilt + 0x58);
+                    if ((int32_t)wpMult > 0) mult = wpMult;
+                }
+                *(uint32_t*)(bc + 0x4c) = mult;
+                void* bDesc = *(void**)(bc + 0x18);
+                int required = bDesc ? *(int*)((uintptr_t)bDesc + 0x30) * (int)mult : 0;
+                *(int32_t*)(bc + 0x48) = required;
+                fprintf(stderr, "[startTown::struct] [%d] stamped BuildComponent as built: "
+                        "mult(+0x4c)=%u delivered(+0x48)=%d desc=%p%s\n",
+                        logIndex, mult, required, bDesc,
+                        required == 0 ? "  <-- WARN: required computed 0, upgrade will still REMOVE(no-spawn)" : "");
+                fflush(stderr);
+            }
         }
 
         // Register with the world entity list (category = template+0x20).
