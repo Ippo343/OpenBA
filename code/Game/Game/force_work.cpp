@@ -14,8 +14,43 @@
 
 namespace ForceWork {
 
+// ---- readable-region cache --------------------------------------------------
+// VirtualQuery is a syscall that walks the process VAD tree under a lock; measured
+// at ~80 us per call in this process (BANISHED_CITPROF, 2026-07-25). A per-object
+// probe therefore costs real milliseconds as soon as a caller loops over entities:
+// CollectStats' 18-citizen guard was 2.98 ms of its 3.01 ms.
+//
+// Every probed object lives in one of a handful of large engine-heap arenas, so the
+// queries return the same few regions over and over. Cache the POSITIVE ones only —
+// a garbage pointer (the 0x760 desc that originally motivated the guard) is in no
+// cached region and still takes the real query, which still fails it.
+//
+// Staleness: entries are only valid inside one ResetReadableCache() ... next-reset
+// window. Callers scope that to a single pass (see CitizenBehavior_CollectStats), in
+// which nothing is unmapped, so the cache cannot answer differently than the syscall.
+namespace {
+struct ReadRegion { uintptr_t base; uintptr_t end; };
+// 8 measured the same as 64 (CollectStats guard: 0.166 ms -> ~0.03 ms per citizen
+// either way): the surviving cost is the FIRST probe into each engine-heap region,
+// which no cache size can avoid. Keep the scan short.
+constexpr int kReadCacheSize = 8;
+ReadRegion g_readCache[kReadCacheSize] = {};
+int        g_readCacheNext = 0;
+}  // namespace
+
+void ResetReadableCache() {
+    for (int i = 0; i < kReadCacheSize; i++) g_readCache[i].base = g_readCache[i].end = 0;
+    g_readCacheNext = 0;
+}
+
 bool Readable(const void* p, size_t n) {
     if (!p) return false;
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+    for (int i = 0; i < kReadCacheSize; i++) {
+        const ReadRegion& r = g_readCache[i];
+        if (r.end && a >= r.base && a + n <= r.end) return true;
+    }
+
     MEMORY_BASIC_INFORMATION mbi;
     if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
     if (mbi.State != MEM_COMMIT) return false;
@@ -25,7 +60,14 @@ bool Readable(const void* p, size_t n) {
                      PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
     if (!(prot & rd)) return false;
     uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-    return (reinterpret_cast<uintptr_t>(p) + n) <= end;
+
+    // Remember the readable region (round-robin) — the next probe into the same
+    // arena skips the syscall.
+    g_readCache[g_readCacheNext].base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+    g_readCache[g_readCacheNext].end  = end;
+    g_readCacheNext = (g_readCacheNext + 1) % kReadCacheSize;
+
+    return (a + n) <= end;
 }
 
 bool Executable(const void* p) {

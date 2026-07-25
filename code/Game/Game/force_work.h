@@ -40,6 +40,11 @@ constexpr int kActionTopOff = 0x60;
 bool Readable(const void* p, size_t n);
 bool Executable(const void* p);
 
+// Drop Readable()'s cached readable regions. Call once at the start of a pass that
+// probes many objects; entries stay valid only until the next reset, so the cache
+// can never outlive a single pass (see the note in force_work.cpp).
+void ResetReadableCache();
+
 // GetTypeId via vtable[+0x10], fully probe-guarded (0 on any bad pointer).
 uint32_t SafeGetTypeId(void* obj);
 
