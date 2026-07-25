@@ -58,9 +58,12 @@ static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
 typedef void (*fn_SerializeIBP_t)(void* fieldPtr, void* serializer);
 static fn_SerializeIBP_t s_fn_SerializeIBP = nullptr;
 
-// FUN_140002cc0 — register entity reference (add to list)
-typedef void (*fn_AddToList_t)(void* listPtr, void* entityRef);
-static fn_AddToList_t s_fn_AddToList = nullptr;
+// FUN_140002cc0 — REMOVE an entity reference from a dynamic IBP array (Ghidra-verified:
+// scans base[0] for a value equal to *entityRef, shifts the tail down, decrements the
+// count at base+8). It is an UNregister, not an add — the old "AddToList" name here had
+// the sense backwards and made slot 7 below read like a registration.
+typedef void (*fn_RemoveFromList_t)(void* listPtr, void* entityRef);
+static fn_RemoveFromList_t s_fn_RemoveFromList = nullptr;
 
 // WorkPlaceComponent_OnCreate_sub_ee60 — fallback init
 typedef void (*fn_OnCreateFallback_t)(void* self);
@@ -105,7 +108,7 @@ static void EnsureHelpers() {
     s_fn_SerializeIBP = reinterpret_cast<fn_SerializeIBP_t>(
         ResolveAddr(Module::Exe, 0x140018020));
 
-    s_fn_AddToList = reinterpret_cast<fn_AddToList_t>(
+    s_fn_RemoveFromList = reinterpret_cast<fn_RemoveFromList_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
     s_fn_OnCreateFallback = reinterpret_cast<fn_OnCreateFallback_t>(
@@ -166,7 +169,7 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
 // Reimpl bodies for the detach/attach helpers (0x14012f7e0 / 0x14012fa20).
 // Their full exe FUN_ closure became registered in the gap wave, so they are now
 // closure-safe to port. Sub-helpers used:
-//   FUN_140002cc0 (worker-list remove)         -> s_fn_AddToList (already resolved)
+//   FUN_140002cc0 (worker-list remove)         -> s_fn_RemoveFromList (already resolved)
 //   ModelComponent_helper_2b70 (0x1400c2b70)   -> mesh visibility/state kick
 //   Entity_FindComponent_MeshInstance (0x140002f90)
 //   FUN_14012c3f0 (mesh-instance flag setter)
@@ -474,6 +477,15 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
 
     while (*(int*)(self + 0x60) > 0) {
+        // Termination depends on the detach below removing worker[0] from this
+        // component's array (+0x58 / count +0x60) — which it only does when the
+        // worker's own job-host back-pointer (+0x248) still names this workplace.
+        // Retail holds that invariant; standalone seats workers through several
+        // paths (WorkPlaceUI spinners, the builder pool auto-seat), so a stale
+        // back-pointer would spin here forever. A HANG is far worse than a leaked
+        // roster slot, so drop the entry ourselves if an iteration made no progress.
+        const int countBefore = *(int*)(self + 0x60);
+
         int64_t emptyIbp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&emptyIbp, nullptr);
 
@@ -506,7 +518,152 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
             if (s_fn_WPC_Attach) s_fn_WPC_Attach(compIbp, &workerIbp);
         }
+
+        if (*(int*)(self + 0x60) >= countBefore) {
+            // No progress — shift worker[0] out by hand and keep going.
+            int n = *(int*)(self + 0x60);
+            int64_t* arr = *(int64_t**)(self + 0x58);
+            if (arr) for (int i = 1; i < n; ++i) arr[i - 1] = arr[i];
+            *(int*)(self + 0x60) = n - 1;
+            static int s_reported = 0;
+            if (s_reported++ < 10) {
+                printf("[WorkPlaceComponent] release: worker[0]=%p did not detach "
+                            "(its +0x248 job host does not name this workplace %p); "
+                            "dropped it by hand, roster %d -> %d\n",
+                            (void*)worker, selfP, n, n - 1);
+            }
+        }
     }
+}
+
+// town_workplace_registry.cpp — 0x1400895a0, add the owner entity to the profession
+// bucket for `key` in the town BST (townMgr+0x100), creating the bucket if absent.
+extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLocal, uint64_t key);
+
+// ============================================================
+// WorkPlaceComponent_impl_f670 (0x14012f670) — leave the BUILDER profession
+// ============================================================
+// The construction half of a building's life makes its WorkPlaceComponent a BUILDER
+// workplace: BuildComponent state-1 sets WPC+0x48 = the Builder key and registers the
+// owner into the town profession BST (townMgr+0x100) so laborers can be seated as
+// builders. f670 is the undo: gated on "+0x48 is CURRENTLY the Builder key"
+// (*(gameWorld+0xb0)+0x38), it removes the owner from the Builder bucket, refreshes the
+// WorkComponent capacity, hands any pending work over to the natural profession, resets
+// +0x48 to the WorkPlaceDescription's own profession (+0x20 — zero for a house), and
+// releases every seated worker (ee60).
+//
+// Callers in retail (Ghidra xrefs): the DestroyComponent state-5 tick (0x14011c120) and
+// its bcc0 transition action, plus edf0 below.
+//
+// FUN_1400f8400 (the work-scheduler re-key: move the pending task node from the old
+// profession bucket to the new one, mgr+0x120 keyed by the work id) is NOT ported. It is
+// reachable only when the WorkComponent still holds a work id (+0x28 >= 0); at build
+// completion State8OneShot has already dequeued the BuildStructure work, so there is
+// normally nothing to re-key. Logged once if the branch is ever taken.
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
+    EnsureHelpers();
+    EnsureEe60Helpers();
+    if (!selfP || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+    uintptr_t gw   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+
+    uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
+    uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
+    uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
+    if (key == 0 || key != builderKey) return;   // not a construction workplace
+
+    // Remove the owner entity from the Builder bucket in the profession BST.
+    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
+    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    uint64_t* node = townMgr ? *reinterpret_cast<uint64_t**>(townMgr + 0x100) : nullptr;
+    while (node) {
+        if (key < node[0]) {
+            node = reinterpret_cast<uint64_t*>(node[4]);          // left
+        } else {
+            if (key <= node[0]) {
+                if (s_fn_RemoveFromList) {
+                    uint64_t localRef[4] = { static_cast<uint64_t>(ownerRef), 0, 0, 0 };
+                    s_fn_RemoveFromList(reinterpret_cast<void*>(node + 1), localRef);
+                }
+                break;
+            }
+            node = reinterpret_cast<uint64_t*>(node[5]);          // right
+        }
+    }
+
+    // Refresh the WorkComponent's worker capacity (+0x30 = CalcMaxWorkers).
+    static void* s_find3050 = nullptr;
+    static void* s_calcMaxWorkers = nullptr;
+    if (!s_find3050) s_find3050 = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140003050));
+    if (!s_calcMaxWorkers)
+        s_calcMaxWorkers = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14012e5c0));
+    uintptr_t workComp = 0;
+    if (s_find3050) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+        reinterpret_cast<void*(*)(int64_t, void*)>(s_find3050)(
+            *reinterpret_cast<int64_t*>(self + 0x10), &workComp);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workComp);
+    }
+    if (workComp && s_calcMaxWorkers)
+        *reinterpret_cast<int32_t*>(workComp + 0x30) =
+            reinterpret_cast<int(*)(int64_t)>(s_calcMaxWorkers)(static_cast<int64_t>(workComp));
+
+    // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
+    // guards it with IsDerivedFrom(desc, DAT_1401c8118); in standalone that check rejects
+    // valid descriptions in the partial factory tree (the documented landmine — see
+    // MapComponent_DetachOccupancy_4750), so trust the linked description. A null desc
+    // yields key 0 = "no profession", which is the correct end state for a house.
+    void* desc = *reinterpret_cast<void**>(self + 0x18);
+    uint64_t naturalKey = desc
+        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0;
+
+    if (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            printf("[WorkPlaceComponent] NOT-IMPLEMENTED FUN_1400f8400 (work-scheduler "
+                        "profession re-key) — workComp+0x28=%d still holds a work id; the "
+                        "pending task keeps its old Builder key\n",
+                        *reinterpret_cast<int32_t*>(workComp + 0x28));
+        }
+    }
+
+    *reinterpret_cast<uint64_t*>(self + 0x48) = naturalKey;
+    WorkPlaceComponent_OnCreateInit(selfP);   // ee60 — release every seated worker
+}
+
+// ============================================================
+// WorkPlaceDescription_helper_edf0 (0x14012edf0) — the WorkPlaceComponent controller's
+// state-2 ("built") ENTER handler.
+// ============================================================
+// State table proof (WorkPlaceDescription_helper_f3a0 @ 0x14012f3a0, the component's
+// controller table builder): state 0 -> ee40, state 2 -> edf0, state 3 -> ed60. So the
+// moment the entity's state machine enters state 2 (BuildComponent's 8->2 completion),
+// retail runs f670 + re-register under whatever profession the building actually has.
+//
+// This is what makes the finished building's panel correct: WorkPlaceUI shows the worker
+// spinner iff WPC+0x48 != 0 (workplaceui.cpp UpdateVisibility, faithful to Startup
+// 0x140087080). Without this the Builder key survived completion, so a finished house
+// kept showing the construction worker up/down buttons.
+//
+// Our WorkPlaceComponent is an inert component with no controller node, so the state
+// machine cannot dispatch this. It is therefore driven from the build-completion site
+// (BuildComponent_State8Finalize) — the same "collapse the missing controller into the
+// site" pattern as MapComponent's cell occupancy. If WorkPlaceComponent is ever promoted
+// to a live controller, move this call into its state-2 enter and delete the hook.
+extern "C" void WorkPlaceComponent_EnterBuiltState(void* selfP) {
+    if (!selfP) return;
+    WorkPlaceComponent_LeaveBuilderProfession(selfP);
+
+    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+    uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
+    if (key == 0) return;   // no profession (house / storage) -> nothing to register
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!townMgr) return;
+    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
+    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, key);
 }
 
 // ============================================================
@@ -609,10 +766,26 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
 }
 
 // ============================================================
-// WorkPlaceComponent::OnCreate (vtable slot [7], 0x14012f090)
+// WorkPlaceComponent::OnRemovedFromWorld (vtable slot [7], 0x14012f090)
 // ============================================================
-// Reads +0x48 (profession ID), searches BST at game state +0xf0+0x100.
-// If found, registers owner entity. Always calls fallback init at end.
+// Slot 7 (+0x38) is the REMOVAL broadcast slot — FUN_1400c2ea0 (MarkForRemoval)
+// dispatches it to every component whose +0x20 capability flags have bit 1 set
+// (WorkPlaceComponent's are 0x82, so it qualifies). The Ghidra name "OnCreate" is a
+// misnomer, the same one MapComponent carries: this is the TEARDOWN.
+//
+// It reads +0x48 (the profession key), finds that key's bucket in the town's
+// profession BST (gameWorld+0xf0 -> +0x100), and REMOVES this component's owner
+// entity from the bucket's entity array (FUN_140002cc0). Then, unconditionally,
+// ee60 releases every seated worker.
+//
+// Why it matters in standalone: while a building is under construction its
+// WorkPlaceComponent is registered under the Builder profession (the list
+// CitizenBehavior_BuildPathGraph and FindAvailableBuilding walk). With the inert
+// factory's no-op slot 7 the entry survived the entity's free, and the next
+// BuildPathGraph read the freed entity through it — an ACCESS_VIOLATION at
+// citizenbehavior.cpp:716 (fn_Entity_GetGridId on the stale IBP), observed on the
+// first successful building upgrade. Same class as the MapComponent cell-occupancy
+// and PickingComponent pick-mesh teardowns.
 
 void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
     EnsureHelpers();
@@ -633,11 +806,11 @@ void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
             } else if (professionId > *node) {
                 node = (uint64_t*)node[5];  // right child
             } else {
-                // Found: register owner with this BST node's list
-                if (s_fn_AddToList) {
+                // Found: UNregister the owner entity from this bucket's entity array.
+                if (s_fn_RemoveFromList) {
                     uint64_t localRef[4];
                     localRef[0] = ownerRef;
-                    s_fn_AddToList((void*)(node + 1), (void*)localRef);
+                    s_fn_RemoveFromList((void*)(node + 1), (void*)localRef);
                 }
                 found = true;
                 break;
@@ -665,7 +838,7 @@ void WorkPlaceComponent_InitFuncs() {
     printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
            "ResizeIBPArray=%p AddToList=%p OnCreateFallback=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_ResizeIBPArray, (void*)s_fn_AddToList,
+           (void*)s_fn_ResizeIBPArray, (void*)s_fn_RemoveFromList,
            (void*)s_fn_OnCreateFallback);
 #endif
 }
@@ -673,6 +846,39 @@ void WorkPlaceComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(WorkPlaceComponent, 0x68, 0x82)
+
+// COMPONENT_INERT_FACTORY(WorkPlaceComponent, 0x68, 0x82), expanded by hand so the
+// per-type vtable's +0x38 slot (index 7 — the slot FUN_1400c2ea0 dispatches at entity
+// removal) routes to the ported removal hook above instead of a stub. Without it a
+// demolished/upgraded building stays in the town profession BST and the next
+// CitizenBehavior_BuildPathGraph derefs the freed entity. Mirrors the MapComponent and
+// PickingComponent hand-expansions.
+static uint32_t WorkPlaceComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    return cached;
+}
+static void* WorkPlaceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void WorkPlaceComponent_DetachVSlot(void* s) {
+    if (s) WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(s));
+}
+static void WorkPlaceComponent_FinishVtable() {
+    WorkPlaceComponent_InertVtable[7] =
+        reinterpret_cast<void*>(&WorkPlaceComponent_DetachVSlot);
+}
+extern "C" void* WorkPlaceComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x82,
+        WorkPlaceComponent_InertVtable,
+        reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
+    WorkPlaceComponent_FinishVtable();
+    return p;
+}
+static void* WorkPlaceComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x82,
+        WorkPlaceComponent_InertVtable,
+        reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
+    WorkPlaceComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(WorkPlaceComponent, "ControllerComponent",
               &WorkPlaceComponent_Factory, &WorkPlaceComponent_CreateInPlace);

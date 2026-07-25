@@ -134,6 +134,25 @@ static void EnsureResolved() {
     s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
 }
 
+// starttown.cpp — world-registration (region-map cells + pick mesh) for a building
+// entity created at runtime; retail gets both from RegisterEntity's add-broadcast.
+extern "C" void StartTown_RegisterRuntimeBuilding(void* entity);
+
+// buildcomponent_state1.cpp — the construction-demo site/owner (standalone test scaffold).
+extern "C" void* g_pConstructionDemoSite;
+extern "C" void* g_pConstructionDemoEntity;
+
+// Drop the construction-demo pointers when the building being retired owns them; they
+// would otherwise dangle at a freed BuildComponent, and a reused heap block landing on
+// the same address would compare equal to it in BuildComponent_DemoGateSkip. The spawn
+// path retargets them to the replacement immediately afterwards.
+static void Destroy_ReleaseDemoSite(int64_t buildComp) {
+    if (buildComp && g_pConstructionDemoSite == reinterpret_cast<void*>(buildComp)) {
+        g_pConstructionDemoSite   = nullptr;
+        g_pConstructionDemoEntity = nullptr;
+    }
+}
+
 // keystone_a_removalcalcpath.cpp — disasm-verified work-manager AVL lookup
 // (walks the tree at param_1+0x30 for payload key == param_3).
 extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);
@@ -745,6 +764,7 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
             int64_t entityIBP = entity;
             if (tradeMgr) s_trade3480(tradeMgr, &entityIBP);
         }
+        Destroy_ReleaseDemoSite(prod);   // nothing replaces it on this branch
         Destroy_MarkAndPushRemoval(entity);
     }
     return 1;
@@ -846,6 +866,9 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 
     int64_t prod = FindOn(entity, s_findD6c0);
     int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
+    const bool wasDemoSite =
+        prod != 0 && g_pConstructionDemoSite == reinterpret_cast<void*>(prod);
+    Destroy_ReleaseDemoSite(prod);
 
     if (target != 0) {
         bool ready = (prod && Yard_Delivered(prod) >= Yard_Required(prod)) ||
@@ -891,6 +914,30 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                     int category = *reinterpret_cast<int*>(
                         *reinterpret_cast<uintptr_t*>(comp + 0x60) + 0x20);
                     if (entityList) s_regEntity(entityList, &hold, category);
+
+                    // Standalone-only: give the replacement the two world registrations
+                    // retail derives from RegisterEntity's add-broadcast — the region-map
+                    // cell occupancy (click-pick + nav blocking + the armed removal clear)
+                    // and the pick mesh. Our MapComponent slot 6 only paints the minimap
+                    // and PickingComponent registers no mesh, so without this the new
+                    // building is unclickable and leaves stale cells when it is removed.
+                    StartTown_RegisterRuntimeBuilding(newEntity);
+
+                    // Hand the construction-demo baton to the replacement when the
+                    // building we just retired owned it (Destroy_ReleaseDemoSite cleared
+                    // the pointers a moment ago), so BUILD_TRACE's demo logging follows
+                    // the building that is now actually constructing.
+                    if (wasDemoSite) {
+                        int64_t newProd = FindOn(reinterpret_cast<int64_t>(newEntity), s_findD6c0);
+                        g_pConstructionDemoSite   = reinterpret_cast<void*>(newProd);
+                        g_pConstructionDemoEntity = newEntity;
+                        if (Trace()) {
+                            std::fprintf(stderr, "[DestroySM] demo site handed to the "
+                                         "replacement: buildComp=%llx entity=%p\n",
+                                         static_cast<unsigned long long>(newProd), newEntity);
+                            std::fflush(stderr);
+                        }
+                    }
 
                     std::fprintf(stderr, "[DestroySM] UPGRADE SPAWN: new entity=%p from "
                                          "template=%llx at cell(%d,%d) rot=%d cat=%d\n",

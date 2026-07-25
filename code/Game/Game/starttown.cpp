@@ -217,6 +217,44 @@ static void StartTown_PickMeshProbe(void* entity) {
     if (s_enable && pc) PickingComponent_RegisterMesh(pc);
 }
 
+// World-registration for a building entity created at RUNTIME rather than by the
+// start-town spawn — today the upgrade replacement (DestroyComponent state-5 tick
+// 0x14011c120 clones the target template and RegisterEntity's it).
+//
+// Retail gets both halves for free during RegisterEntity: the add-broadcast
+// (FUN_1400c2f60) calls MapComponent's vtable+0x30 (Draw -> 41b0 -> dc20, the cell
+// occupancy write) and PickingComponent's (OnAdded, the pick-mesh registration).
+// Standalone's MapComponent slot 6 only paints the minimap and its PickingComponent
+// registers no mesh, so both are collapsed into the spawn sites — this is the entry
+// point for the runtime ones. Reads the footprint the caller already stamped into the
+// entity's MapComponent (+0x28 x, +0x2a y, +0x2c w, +0x2e h).
+//
+// Consequences of skipping it (observed): the new building is unclickable (EditTool's
+// pick finds nothing in the region-map cell array), does not block navigation, and its
+// removal-side cell clear stays disarmed (bit 0x100000).
+extern "C" void StartTown_RegisterRuntimeBuilding(void* entity) {
+    if (!entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* game = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf8);
+    void* mapComp = FindComponentOnEntity(entity, TypeId("MapComponent"));
+    if (!game || !mapComp) {
+        fprintf(stderr, "[Upgrade] RegisterRuntimeBuilding: SKIP entity=%p game=%p mapComp=%p\n",
+                entity, game, mapComp);
+        fflush(stderr);
+        return;
+    }
+    uint8_t* mc = (uint8_t*)mapComp;
+    int tileX = *(int16_t*)(mc + 0x28), tileY = *(int16_t*)(mc + 0x2a);
+    int fpW   = *(int16_t*)(mc + 0x2c), fpH   = *(int16_t*)(mc + 0x2e);
+    if (fpW <= 0 || fpH <= 0) {
+        fprintf(stderr, "[Upgrade] RegisterRuntimeBuilding: entity=%p has no footprint "
+                "(%d,%d %dx%d) — cells not marked\n", entity, tileX, tileY, fpW, fpH);
+        fflush(stderr);
+        return;
+    }
+    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, (uintptr_t)entity);
+    StartTown_PickMeshProbe(entity);
+}
+
 // Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp) — the MISNAMED
 // WORKPLACE assigner: sets citizen +0x248 (job) AND rosters into the house's WorkPlaceComponent
 // (c80e0) occupant list (+0x58/+0x60). Retained for reference / the gameplay employ path; the

@@ -158,14 +158,21 @@ static bool BCS1_IsModelComplete(uintptr_t buildComp) {
 // Shared construction-demo gate. Returns true if this BuildComponent must NOT be driven
 // through the construction state machine (State1Enter / State1Update / state-8 handlers):
 //   * the seeded demo foundation -> drive it (false);
-//   * any other building when a demo site is registered -> skip (drive ONLY the demo);
-//   * any completed building (model at final sub-mesh) when no demo -> skip.
+//   * any completed building (model at final sub-mesh) -> skip;
+//   * any other genuine foundation -> drive it.
 // This must gate the PER-FRAME handlers too (State1Update), not just State1Enter — else a
 // completed building's node self-advances 1->8->2 and its finalize clobbers finished storage.
+//
+// The completed-building test used to be bypassed whenever a demo site was registered — the
+// gate then returned "skip" for EVERY other building, as belt-and-braces against resetting a
+// finished building's storage. That also blocked buildings that genuinely need constructing,
+// including the UPGRADE REPLACEMENT (DestroyComponent state-5 spawns a fresh stone-house
+// foundation, which is never the demo site, so it sat inert forever). BCS1_IsModelComplete is
+// the real protection and is known-good on its own: with no demo site registered all seven
+// force-completed start-town BuildComponents skip, while a player-placed foundation builds.
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp) {
     if (!buildComp) return false;
     if (g_pConstructionDemoSite && buildComp == g_pConstructionDemoSite) return false;
-    if (g_pConstructionDemoSite != nullptr) return true;
     return BCS1_IsModelComplete(reinterpret_cast<uintptr_t>(buildComp));
 }
 

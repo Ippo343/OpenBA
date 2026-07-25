@@ -588,8 +588,51 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
 // Refund leftover site-storage materials to town stock (townMgr+0x170) + reconfigure the
 // site storage as OUTPUT storage.
 // ==================================================================================
+// workplacecomponent.cpp — the WorkPlaceComponent controller's state-2 ("built") enter
+// handler (0x14012edf0 -> f670): drop the Builder profession the construction phase
+// installed, reset WPC+0x48 to the building's own profession, release the builders, and
+// re-register under the new key. Our WorkPlaceComponent is inert (no controller node), so
+// the state machine cannot dispatch it — it is driven from the 8->2 completion below.
+extern "C" void WorkPlaceComponent_EnterBuiltState(void* workPlaceComp);
+
+// Run that state-2 enter on the finished building's WorkPlaceComponent. Without it the
+// Builder key survives completion and WorkPlaceUI (which shows the spinner iff
+// WPC+0x48 != 0) keeps the construction worker up/down buttons on a finished house.
+static void BuildComponent_ClearBuilderWorkplace(uintptr_t bc) {
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(bc + 0x10);
+    if (!entity) return;
+    uint32_t tidWpc = BC8_TypeId("WorkPlaceComponent", 0x1401c80e0);
+    if (!tidWpc) return;
+    int count = *reinterpret_cast<int32_t*>(entity + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    if (!arr) return;
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        typedef uint32_t (*GT_t)(void*);
+        if (((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp) != tidWpc) continue;
+        uint64_t before = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x48);
+        WorkPlaceComponent_EnterBuiltState(comp);
+        if (BC8_Trace())
+            std::fprintf(stderr, "[BuildTrace] State8Finalize: WorkPlaceComponent state-2 enter "
+                         "(edf0) profession 0x%llx -> 0x%llx (0 = panel hides the builder spinner)\n",
+                         (unsigned long long)before,
+                         (unsigned long long)*reinterpret_cast<uint64_t*>(
+                             reinterpret_cast<uintptr_t>(comp) + 0x48));
+        return;
+    }
+}
+
 static void BuildComponent_State8Finalize(uintptr_t bc) {
     BC8_Resolve();
+    // Retail order: the 8->2 transition puts every controller into state 2, so the
+    // workplace hand-off happens alongside this storage reconfigure. Do it first and
+    // unconditionally — the storage half below early-returns on several data shapes
+    // (no StorageComponent, no StorageDescription) and the profession must clear anyway.
+    BuildComponent_ClearBuilderWorkplace(bc);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
     uintptr_t storageIBP = 0;
     if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);

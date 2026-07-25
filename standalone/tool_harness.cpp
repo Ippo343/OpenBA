@@ -1026,6 +1026,219 @@ void FireClearHarvest() {
                                       : "(no post — owner likely has no WorkComponent; dispatch ran)");
 }
 
+// ============================================================
+// Building upgrade ("upgrade") — automated wood-house -> stone-house repro
+// ============================================================
+// The upgrade path's spawn branch (DestroyComponent state-5, 0x14011c120) only runs
+// when state-5 enter (0x14011cc70) takes its REFUND+BUILD branch, and that branch is
+// gated on the building's BuildComponent (0x14000d6c0, type 0x1401c7008) having
+// delivered(+0x48) != 0 — i.e. the building must have been REALLY CONSTRUCTED. Every
+// start-town / tool-placed building has +0x48 == 0, so a manual upgrade click on one
+// always fell to REMOVE(no-spawn) and the building simply vanished.
+//
+// This scenario builds the required subject automatically: with
+// BANISHED_BUILD_DEMO_HOUSE=1 the start town seeds one extra house as a bare
+// foundation (g_pConstructionDemoEntity) and the organic pipeline constructs it for
+// real (gather -> haul -> build labor -> complete). We poll that site until
+// delivered >= required, then fire the upgrade exactly the way a click does: open the
+// building's info dialog through the EditTool, take its UpgradeUI controller, and
+// call vtable slot 9 with (msg 0x12, id 33000, src = the controller's own button).
+//
+// Env: BANISHED_TOOL_HARNESS=upgrade
+//      BANISHED_UPGRADE_WAIT_FRAMES  poll budget before giving up (default 36000)
+//      BANISHED_UPGRADE_CLICK_DELAY  frames between opening the dialog and clicking
+//                                    (default 15 — UpgradeUI binds its button in the
+//                                    slot-8 self-heal a frame or more after the open)
+// The whole rest of the sequence is observed through the DestroySM traces
+// (BANISHED_DESTROY_TRACE=1) — this only supplies the click.
+
+// The demo foundation's owner entity (starttown.cpp; set alongside g_pConstructionDemoSite).
+extern "C" void* g_pConstructionDemoEntity;
+
+enum UpgradeStage { UP_IDLE = 0, UP_WAIT_BUILT, UP_DIALOG_OPEN, UP_DONE };
+UpgradeStage s_up_stage      = UP_IDLE;
+void*        s_up_entityUI   = nullptr;
+void*        s_up_entity     = nullptr;   // the building being upgraded
+void*        s_up_tool       = nullptr;   // active EditTool (dialog owner)
+int          s_up_armFrame   = 0;
+int          s_up_openFrame  = 0;
+
+int UpgradeWaitFrames() {
+    const char* e = std::getenv("BANISHED_UPGRADE_WAIT_FRAMES");
+    int n = (e && e[0]) ? std::atoi(e) : 36000;
+    return n < 60 ? 36000 : n;
+}
+int UpgradeClickDelay() {
+    const char* e = std::getenv("BANISHED_UPGRADE_CLICK_DELAY");
+    int n = (e && e[0]) ? std::atoi(e) : 15;
+    return n < 1 ? 15 : n;
+}
+
+// BuildComponent (0x14000d6c0 / type 0x1401c7008) on `entity`, CheckPtr'd.
+void* UpgradeFindBuildComp(void* entity) {
+    if (!entity) return nullptr;
+    auto find = reinterpret_cast<void*(*)(uintptr_t, void*)>(
+        ResolveAddr(Module::Exe, 0x14000d6c0));
+    if (!find) return nullptr;
+    uint64_t ibp = 0;
+    find(reinterpret_cast<uintptr_t>(entity), &ibp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
+    return reinterpret_cast<void*>(ibp);
+}
+// Retail's own two reads: +0x48 = delivered build effort, required = desc(+0x18)+0x30
+// * multiplier(+0x4c) — identical to destroycomponent_states.cpp Yard_Delivered/Required.
+int UpgradeDelivered(void* bc) {
+    return bc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x48) : 0;
+}
+int UpgradeRequired(void* bc) {
+    if (!bc) return 0;
+    void* desc = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bc) + 0x18);
+    if (!desc) return 0;
+    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x30) *
+           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x4c);
+}
+
+// Pick the upgrade subject: the construction-demo house if one was seeded (the only
+// building that ever reaches delivered != 0), else founding house 0 so the run still
+// exercises the click + REMOVE branch instead of doing nothing.
+void* UpgradePickSubject(bool* outIsDemo) {
+    if (g_pConstructionDemoEntity) { *outIsDemo = true;  return g_pConstructionDemoEntity; }
+    *outIsDemo = false;
+    return StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0)
+                                                 : nullptr;
+}
+
+void FireUpgradeArm(void* entityUI, int frameNum) {
+    bool isDemo = false;
+    void* subject = UpgradePickSubject(&isDemo);
+    s_up_entityUI = entityUI;
+    s_up_entity   = subject;
+    s_up_armFrame = frameNum;
+    s_up_stage    = UP_WAIT_BUILT;
+
+    void* bc = UpgradeFindBuildComp(subject);
+    printf("[Upgrade] armed at frame %d: subject=%p (%s) BuildComponent=%p "
+           "delivered=%d required=%d\n", frameNum, subject,
+           isDemo ? "construction-demo house — will be built organically"
+                  : "founding house — delivered stays 0, expect REMOVE(no-spawn)",
+           bc, UpgradeDelivered(bc), UpgradeRequired(bc));
+    if (!subject) {
+        printf("[Upgrade] ERROR: no subject building. Set BANISHED_BUILD_DEMO_HOUSE=1 "
+               "so the start town seeds a demo foundation.\n");
+        s_up_stage = UP_DONE;
+        return;
+    }
+    if (!isDemo)
+        printf("[Upgrade] NOTE: no construction-demo house (BANISHED_BUILD_DEMO_HOUSE unset?) "
+               "— the REFUND+BUILD branch cannot be reached with this subject.\n");
+}
+
+// Open the subject's info dialog through the live EditTool (same path a click takes).
+bool UpgradeOpenDialog() {
+    if (!s_up_entityUI || !s_up_entity) return false;
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_entityUI) + 0x28);
+    if (!tool) {
+        printf("[Upgrade] installing default EditTool via SetEditMode(pc,0)...\n");
+        EntityUI_SetEditMode_Impl(s_up_entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_entityUI) + 0x28);
+    }
+    if (!tool) {
+        printf("[Upgrade] EditTool activation FAILED (needs BANISHED_LIVE_TOOLS=1)\n");
+        return false;
+    }
+    s_up_tool = tool;
+    int opened = EditTool_HarnessSelectEntity(tool, s_up_entity);
+    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    printf("[Upgrade] select entity=%p -> opened=%d dialog=%p\n",
+           s_up_entity, opened, dialog);
+    return opened != 0 && dialog != nullptr;
+}
+
+// Fire the upgrade button: UpgradeUI vtable slot 9 (self, &srcElement, msg, id, x, y)
+// with msg 0x12 / id 33000 / src == the controller's bound button (+0x30), which is
+// exactly the event UpgradeUI_OnRemove accepts. It then writes the target template
+// (UpgradeUIConfig+0x20) into DestroyComponent+0x60 and pumps the BuildState SM.
+void FireUpgradeClick() {
+    void* dialog = s_up_tool
+        ? *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_tool) + 0x28) : nullptr;
+    void* ctrl = dialog ? GetControllerByName(dialog, "UpgradeUI") : nullptr;
+    printf("[Upgrade] dialog=%p UpgradeUI controller=%p\n", dialog, ctrl);
+    if (!ctrl) {
+        printf("[Upgrade] FAILED: no UpgradeUI controller in the panel — this building's "
+               "UI has no upgrade page (check the template's UIDescription).\n");
+        return;
+    }
+    uintptr_t c = reinterpret_cast<uintptr_t>(ctrl);
+    void** vt = *reinterpret_cast<void***>(ctrl);
+
+    // Slot 4 (Serialize) binds the button into +0x30 and sets its element id. The
+    // slot-8 self-heal normally does this; drive it directly if it hasn't run.
+    if (*reinterpret_cast<uint64_t*>(c + 0x30) == 0 && vt[4])
+        reinterpret_cast<void(*)(void*)>(vt[4])(ctrl);
+
+    void* button = *reinterpret_cast<void**>(c + 0x30);
+    void* ds     = *reinterpret_cast<void**>(c + 0x28);
+    printf("[Upgrade] controller config(+0x10)=%p datasource(+0x28)=%p button(+0x30)=%p\n",
+           *reinterpret_cast<void**>(c + 0x10), ds, button);
+    if (!button) {
+        printf("[Upgrade] FAILED: UpgradeUI never bound its button (+0x30 null) — Serialize "
+               "was blocked (run with BANISHED_DESTROY_TRACE=1 for the reason).\n");
+        return;
+    }
+    if (!vt[9]) { printf("[Upgrade] FAILED: UpgradeUI vtable slot 9 null\n"); return; }
+
+    void* src = button;   // p2 points at the source-element pointer
+    printf("[Upgrade] >>> firing UpgradeUI slot 9 (msg=0x12 id=33000) <<<\n");
+    reinterpret_cast<void(*)(void*, void*, int, int, int, int)>(vt[9])(
+        ctrl, &src, 0x12, 33000, 0, 0);
+    printf("[Upgrade] click delivered — follow [DestroySM] for state 3 -> 4 -> 5 "
+           "and the UPGRADE SPAWN.\n");
+}
+
+// Per-frame driver for the "upgrade" scenario.
+void UpgradeTick(int frameNum) {
+    switch (s_up_stage) {
+    case UP_WAIT_BUILT: {
+        void* bc = UpgradeFindBuildComp(s_up_entity);
+        int delivered = UpgradeDelivered(bc);
+        int required  = UpgradeRequired(bc);
+        int waited    = frameNum - s_up_armFrame;
+        if (waited % 120 == 0)
+            printf("[Upgrade] waiting for construction: delivered=%d required=%d "
+                   "(%d frames)\n", delivered, required, waited);
+        // Ready when the build is finished (delivered >= required, required > 0). That
+        // satisfies BOTH gates at once: state-5 enter's delivered != 0 and the state-5
+        // tick's delivered >= required spawn condition.
+        if (required > 0 && delivered >= required) {
+            printf("[Upgrade] construction COMPLETE (delivered=%d/%d) — opening the "
+                   "info dialog\n", delivered, required);
+            if (UpgradeOpenDialog()) {
+                s_up_openFrame = frameNum;
+                s_up_stage     = UP_DIALOG_OPEN;
+            } else {
+                s_up_stage = UP_DONE;
+            }
+            return;
+        }
+        if (waited > UpgradeWaitFrames()) {
+            printf("[Upgrade] TIMEOUT after %d frames: delivered=%d required=%d — the "
+                   "demo house never finished building; nothing to upgrade.\n",
+                   waited, delivered, required);
+            s_up_stage = UP_DONE;
+        }
+        break;
+    }
+    case UP_DIALOG_OPEN:
+        if (frameNum - s_up_openFrame >= UpgradeClickDelay()) {
+            s_up_stage = UP_DONE;
+            FireUpgradeClick();
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -1101,6 +1314,10 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         }
     }
 
+    // upgrade: poll the construction-demo house until it is really built, then click
+    // its upgrade button (see the UpgradeStage machine above).
+    if (s_up_stage != UP_IDLE && s_up_stage != UP_DONE) UpgradeTick(frameNum);
+
     if (s_fired) return;
     if (frameNum < s_settleFrame) return;
 
@@ -1121,6 +1338,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "markremoval") == 0) {
         s_mr_fireFrame = frameNum;
         FireMarkRemoval();
+    } else if (std::strcmp(s_toolName, "upgrade") == 0) {
+        FireUpgradeArm(entityUI, frameNum);
     } else if (std::strcmp(s_toolName, "pinpanel") == 0) {
         s_pin_fireFrame = frameNum;
         FirePinPanel(entityUI);

@@ -12,6 +12,7 @@
 #include "SendComponentMessage.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard
 #include <cstdio>
 #include <cstdint>
 
@@ -162,6 +163,31 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
     // CheckPtr on target entity
     fn_InternalBasePtr_CheckPtr(&self->_field20);
     uintptr_t entity = (uintptr_t)self->_field20;
+
+    // SA-guard: the target at +0x20 is a WEAK ref, and nothing invalidates it when the
+    // entity is freed (CheckPtr is an empty function in the shipping Runtime). A citizen
+    // whose in-flight labor message targets a building that got demolished/upgraded
+    // mid-action therefore reads freed memory here. Observed live on the first upgrade
+    // that spawned a replacement: the old building was freed the same frame, and the
+    // next builder message read compArray out of the dead entity, giving compIBP =
+    // 0x346e6f (ASCII from a reused block) -> ACCESS_VIOLATION at the loop below.
+    //
+    // Retail reaches the same "nothing to deliver the message to" outcome through its
+    // own paths (the serialize side nulls +0x20 when it is not an Entity, and the
+    // no-component branch below returns 2), so failing the action is faithful in effect.
+    // Same guard shape as PlayAnimation's PlayAnim_TargetLooksLive.
+    if (!entity || !ForceWork::Readable(reinterpret_cast<void*>(entity), 0x40) ||
+        !ForceWork::Readable(*reinterpret_cast<void**>(entity + 0x30), 8)) {
+        static int s_reported = 0;
+        if (s_reported++ < 20) {
+            std::fprintf(stderr, "[SendCompMsg] ABORT: target entity=%p is not live "
+                         "(msgId=%d compType=%u) — action dropped instead of reading "
+                         "freed memory\n", reinterpret_cast<void*>(entity),
+                         *(int32_t*)(s + 0x34), componentTypeId);
+            std::fflush(stderr);
+        }
+        return 2;
+    }
 
     // Search entity's component array for matching type
     int32_t compCount = *(int32_t*)(entity + 0x38);

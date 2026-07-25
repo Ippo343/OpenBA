@@ -12,6 +12,7 @@
 #include "Entity/citizenbehavior_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Game/force_work.h"   // ForceWork::Readable — CollectStats stale-entry guard
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -1345,6 +1346,32 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
         }
         uintptr_t c = static_cast<uintptr_t>(citizenIBP);
+
+        // SA-guard: skip an entry that is not a readable citizen. Retail's array holds
+        // only live citizens, so this can only trip on a standalone list-integrity bug
+        // — the town citizen list (self+0xA0/+0xA8) has no verified unregister when a
+        // citizen entity is freed, and CheckPtr is an empty function in the shipping
+        // Runtime, so it cannot null a stale weak ref. Observed live: an entry whose
+        // +0x288 CitizenDescription read back as 0x760, so `descPtr + 0x44` faulted at
+        // 0x7a4 (ACCESS_VIOLATION in CollectStats, 2026-07-21 and again 2026-07-24).
+        // CollectStats only AVERAGES — dropping a dead entry changes a statistic, never
+        // simulation state, which is much cheaper than aborting the process. The stale
+        // entry itself is the real bug; the log names it so it can be root-caused.
+        if (!ForceWork::Readable(reinterpret_cast<void*>(c), 0x28C) ||
+            !ForceWork::Readable(
+                reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(c + 0x288)), 0x11C)) {
+            static int s_reported = 0;
+            if (s_reported++ < 20) {
+                std::fprintf(stderr, "[CollectStats] SKIP stale citizen[%d/%d]=%p desc=%p "
+                             "— entry in the town citizen list is not live (list-integrity "
+                             "bug: citizen freed without unregistering)\n",
+                             i, citizenCount, reinterpret_cast<void*>(c),
+                             ForceWork::Readable(reinterpret_cast<void*>(c), 0x28C)
+                                 ? *reinterpret_cast<void**>(c + 0x288) : nullptr);
+                std::fflush(stderr);
+            }
+            continue;
+        }
 
         // Read citizen fields
         float age = *reinterpret_cast<float*>(c + 0x3C);
