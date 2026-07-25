@@ -55,6 +55,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>    // [FLOODDIAG] diagnostic reporting
+#include <cstdlib>   // [FLOODDIAG] getenv
 
 // Ghidra decompile uses `uint`/`ushort` for the unsigned grid-index math; alias them
 // so the literal transcription below matches the decompile token-for-token.
@@ -1036,6 +1038,30 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
     // BFS enqueues a null queue node, and the head-deref below faults (READ of 0x0).
     EnsureFns();
 
+    // [FLOODDIAG] env BANISHED_FLOOD_DIAG — the BFS queue is bounded by the cell
+    // count in retail (a cell is re-enqueued only while unmarked, and every
+    // dequeue marks its whole row span). If the queue ever exceeds the cell
+    // count the fill is not converging, and the node pool doubles until the
+    // engine allocator dies with "failed to allocate a memory range". Log the
+    // map geometry once and report the first runaway.
+    static int s_floodDiag = -1;
+    if (s_floodDiag < 0) {
+        const char* e = std::getenv("BANISHED_FLOOD_DIAG");
+        s_floodDiag = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    static int s_floodCalls = 0;
+    const int diagCellCount = param_1[0x22];
+    const int diagWidth     = *param_1;
+    if (s_floodDiag && s_floodCalls < 8) {
+        std::fprintf(stderr,
+            "[FLOODDIAG] enter #%d map=%p width(param_1[0])=%d cellCount(param_1[0x22])=%d "
+            "cellArr=%p startCell=%u label=%u\n",
+            s_floodCalls, (void*)param_1, diagWidth, diagCellCount,
+            (void*)*reinterpret_cast<int64_t*>(param_1 + 0x20), param_2, (unsigned)param_3);
+        std::fflush(stderr);
+    }
+    s_floodCalls++;
+
     plVar1 = reinterpret_cast<int64_t*>(param_1 + 0x2a);
     local_res10[0] = param_2;
     local_res20[0] = param_4;
@@ -1160,5 +1186,25 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
             }
         }
         iVar12 = param_1[0x2e];
+        // [FLOODDIAG] progress trace: queue depth + iteration count. A converging
+        // fill visits each cell once, so iterations should stay near cellCount.
+        if (s_floodDiag) {
+            static long long iters = 0;
+            if ((++iters % 20000) == 0) {
+                // Count cells actually marked visited (+0x26 != 0). A converging fill
+                // drives this toward the component size; if it stalls while the queue
+                // grows, cells are being re-enqueued because the mark never lands.
+                int marked = 0;
+                const int64_t cb = *reinterpret_cast<int64_t*>(param_1 + 0x20);
+                for (int c = 0; c < diagCellCount; c++)
+                    if (*reinterpret_cast<uint16_t*>(cb + static_cast<int64_t>(c) * 0x30 + 0x26) != 0)
+                        marked++;
+                std::fprintf(stderr,
+                    "[FLOODDIAG] iter=%lld queueDepth(param_1[0x2e])=%d markedCells=%d/%d "
+                    "handedOut(+0x34)=%d\n",
+                    iters, iVar12, marked, diagCellCount, param_1[0x37]);
+                std::fflush(stderr);
+            }
+        }
     } while (true);
 }

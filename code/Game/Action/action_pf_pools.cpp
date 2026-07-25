@@ -30,6 +30,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>    // [POOLDIAG] diagnostic reporting
+#include <cstdlib>   // [POOLDIAG] getenv
 
 namespace {
 // Exe sub-callees that live in OTHER functions in this closure. Resolved lazily; each is
@@ -81,6 +83,28 @@ void* Pf_NodePoolAlloc18_a9b0(uintptr_t param_1, uint32_t* param_2) {
         int iVar2 = *reinterpret_cast<int*>(param_1 + 0x28) * 2;
         *reinterpret_cast<int*>(param_1 + 0x28) = iVar2;
         iVar2 = *reinterpret_cast<int*>(param_1 + 0x2c) * iVar2 + 0xf;
+        // [POOLDIAG] env BANISHED_POOL_DIAG — each grow doubles the chunk. A pool that
+        // keeps growing means nodes are not coming back to the free list; log the pool
+        // identity, the new grow-count and our caller so the owner can be named.
+        {
+            static int s_poolDiag = -1;
+            if (s_poolDiag < 0) {
+                const char* e = std::getenv("BANISHED_POOL_DIAG");
+                s_poolDiag = (e && e[0] && e[0] != '0') ? 1 : 0;
+            }
+            if (s_poolDiag) {
+                std::fprintf(stderr,
+                    "[POOLDIAG] a9b0 GROW pool=0x%llx growCount=%d stride=%d chunkBytes=%d "
+                    "total(+0x30)=%d free(+0x34)=%d used(+0x38)=%d caller=%p\n",
+                    (unsigned long long)param_1, *reinterpret_cast<int*>(param_1 + 0x28),
+                    *reinterpret_cast<int*>(param_1 + 0x2c), iVar2,
+                    *reinterpret_cast<int*>(param_1 + 0x30),
+                    *reinterpret_cast<int*>(param_1 + 0x34),
+                    *reinterpret_cast<int*>(param_1 + 0x38),
+                    __builtin_return_address(0));
+                std::fflush(stderr);
+            }
+        }
         uint64_t* puVar3 = reinterpret_cast<uint64_t*>(
             PfMemAlloc(static_cast<uint64_t>(static_cast<int>((iVar2 + (iVar2 >> 0x1f & 7U)) & static_cast<int>(0xfffffff8))), 8));
         int iVar4 = 0;
@@ -106,6 +130,27 @@ void* Pf_NodePoolAlloc18_a9b0(uintptr_t param_1, uint32_t* param_2) {
     *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + 1;
     *reinterpret_cast<int*>(param_1 + 0x38) = *reinterpret_cast<int*>(param_1 + 0x38) + -1;
     *reinterpret_cast<uint64_t*>(param_1 + 0x20) = *puVar3;
+    // [POOLDIAG] entry/exit free-list head. If the head is non-null on exit but null
+    // on the next entry, an outside writer is clearing pool+0x20 between calls.
+    {
+        static int s_diag = -1;
+        if (s_diag < 0) {
+            const char* e = std::getenv("BANISHED_POOL_DIAG");
+            s_diag = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        static int s_calls = 0;
+        if (s_diag && s_calls < 24) {
+            std::fprintf(stderr,
+                "[POOLDIAG] a9b0 call#%d pool=0x%llx popped=%p newHead(+0x20)=0x%llx "
+                "free(+0x34)=%d used(+0x38)=%d\n",
+                s_calls, (unsigned long long)param_1, (void*)puVar3,
+                (unsigned long long)*reinterpret_cast<uint64_t*>(param_1 + 0x20),
+                *reinterpret_cast<int*>(param_1 + 0x34),
+                *reinterpret_cast<int*>(param_1 + 0x38));
+            std::fflush(stderr);
+        }
+        if (s_diag) s_calls++;
+    }
     if (puVar3 != nullptr) {
         uint32_t uVar1 = *param_2;
         puVar3[1] = 0;

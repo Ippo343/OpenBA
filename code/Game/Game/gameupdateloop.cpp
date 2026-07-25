@@ -681,6 +681,100 @@ extern "C" void TownHallSA_Diag(int frameNum);
 
 extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps trace)
 
+// ============================================================
+// [SIMPROF] Per-phase frame profiler (env BANISHED_SIMPROF)
+// ============================================================
+// Diagnostic only: wall-clock cost of each sim phase, so we can tell whether a
+// speed-multiplier slowdown is a linear "N sim iterations" cost or something
+// superlinear. Reports every BANISHED_SIMPROF frames (default 120) and resets.
+// Zero cost when off (one predictable branch per probe).
+// QueryPerformanceCounter/Frequency come from <windows.h> (LARGE_INTEGER), which
+// this TU already pulls in; the wrappers below keep the call sites on plain int64.
+
+namespace {
+
+enum SimPhase {
+    kPhTimedEvents = 0, kPhAnimation, kPhEntityList, kPhWeather,
+    kPhCitizenList, kPhPostSim, kPhWholeUpdate, kPhCount
+};
+const char* const kPhaseName[kPhCount] = {
+    "TimedEvents", "Animation", "EntityList", "Weather",
+    "CitizenList", "PostSim(UI/cam/audio)", "TOTAL Update"
+};
+
+int      g_simProfOn   = -1;      // -1 = unresolved, 0 = off, else report interval
+long long g_qpcFreq    = 0;
+double   g_phSec[kPhCount] = {0};
+int      g_phCalls[kPhCount] = {0};
+int      g_profFrames  = 0;
+long long g_profSimIters = 0;
+
+inline bool SimProfOn() {
+    if (g_simProfOn < 0) {
+        const char* e = std::getenv("BANISHED_SIMPROF");
+        int n = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
+        if (e && e[0] && e[0] != '0' && n <= 1) n = 120;   // "1" => default interval
+        g_simProfOn = n;
+        if (n) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); g_qpcFreq = f.QuadPart; }
+    }
+    return g_simProfOn > 0;
+}
+inline long long QpcNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+
+struct PhaseTimer {
+    int ph; long long t0; bool on;
+    explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) { if (on) t0 = QpcNow(); }
+    ~PhaseTimer() {
+        if (!on || !g_qpcFreq) return;
+        g_phSec[ph] += (double)(QpcNow() - t0) / (double)g_qpcFreq;
+        g_phCalls[ph]++;
+    }
+};
+
+// Emit the accumulated report and reset the window.
+void SimProfReport(int speedMultiplier, long entCount) {
+    if (++g_profFrames < g_simProfOn) return;
+    double total = g_phSec[kPhWholeUpdate];
+    double msPerFrame = total * 1000.0 / g_profFrames;
+    std::fprintf(stderr,
+        "[SIMPROF] speed=%d frames=%d  %.2f ms/frame (%.1f fps equivalent)  "
+        "simIters/frame=%.2f entities~=%ld\n",
+        speedMultiplier, g_profFrames, msPerFrame,
+        msPerFrame > 0 ? 1000.0 / msPerFrame : 0.0,
+        (double)g_profSimIters / (double)g_profFrames, entCount);
+    for (int i = 0; i < kPhCount; i++) {
+        if (!g_phCalls[i]) continue;
+        double ms = g_phSec[i] * 1000.0 / g_profFrames;
+        std::fprintf(stderr,
+            "[SIMPROF]   %-22s %8.3f ms/frame  %6.2f%%  calls/frame=%.2f  %.4f ms/call\n",
+            kPhaseName[i], ms, total > 0 ? g_phSec[i] * 100.0 / total : 0.0,
+            (double)g_phCalls[i] / (double)g_profFrames,
+            g_phSec[i] * 1000.0 / (double)g_phCalls[i]);
+    }
+    std::fflush(stderr);
+    for (int i = 0; i < kPhCount; i++) { g_phSec[i] = 0; g_phCalls[i] = 0; }
+    g_profFrames = 0;
+    g_profSimIters = 0;
+}
+
+// [FORCE SPEED] env BANISHED_FORCE_SPEED=N — pin the EntityUI speed multiplier
+// (+0x34) and clear the paused flag (+0x30) every frame, so an A/B of 1x vs 2x
+// vs 3x is deterministic under autostart with no clicking. Diagnostic only.
+int g_forceSpeed = -1;
+inline void ApplyForceSpeed(void* entityUIv) {
+    if (g_forceSpeed < 0) {
+        const char* e = std::getenv("BANISHED_FORCE_SPEED");
+        g_forceSpeed = (e && e[0]) ? std::atoi(e) : 0;
+    }
+    if (g_forceSpeed > 0 && entityUIv) {
+        uint8_t* ui = (uint8_t*)entityUIv;
+        *(char*)(ui + 0x30) = 0;                       // not paused
+        *(int32_t*)(ui + 0x34) = g_forceSpeed;         // speed multiplier
+    }
+}
+
+}  // namespace
+
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
@@ -706,6 +800,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     EnsureInit();
 
     s_frameNum++;
+
+    // [SIMPROF] whole-Update stamp + deterministic speed override (both diagnostic-only)
+    const bool simProf = SimProfOn();
+    const long long frameT0 = simProf ? QpcNow() : 0;
+    ApplyForceSpeed(self->m_entityUI);
 
     // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
     // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
@@ -828,7 +927,9 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 void* game = self->m_game;
                 void* timedEventQueue = *(void**)((uint8_t*)game + 0x78);
                 TRACE("[GameUpdateLoop::Update] calling Game::UpdateTimedEvents (queue=%p)...\n", timedEventQueue);
+                { PhaseTimer pt(kPhTimedEvents);
                 if (fn_Game_UpdateTimedEvents) fn_Game_UpdateTimedEvents(timedEventQueue, time); // [GUARD-M5]
+                }
                 TRACE("[GameUpdateLoop::Update] Game::UpdateTimedEvents done\n");
 
                 // 3b. AnimationManager::Update
@@ -837,14 +938,18 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                     **g_pp_rootOnlyUpdates = rootOnly;
                 }
                 TRACE("[GameUpdateLoop::Update] calling AnimationManager::Update (rootOnly=%d)...\n", (int)rootOnly);
+                { PhaseTimer pt(kPhAnimation);
                 if (fn_AnimationManager_Update) fn_AnimationManager_Update(self->m_animationManager, time, rootOnly); // [GUARD-M5] slot 0x140152050 unregistered
+                }
                 TRACE("[GameUpdateLoop::Update] AnimationManager::Update done\n");
 
                 // 3c. EntityList::Update (component ticks)
                 // Uses custom reimpl — original fn_EntityList_Update (0x1400c4090)
                 // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", self->m_entityList);
+                { PhaseTimer pt(kPhEntityList);
                 EntityList_Update(reinterpret_cast<EntityList*>(self->m_entityList), time);
+                }
                 TRACE("[GameUpdateLoop::Update] EntityList::Update done\n");
 
                 // 3d. Day counter increment
@@ -862,12 +967,16 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
+                { PhaseTimer pt(kPhWeather);
                 if (fn_Weather_ResetTime) fn_Weather_ResetTime(self->m_weather, time); // [GUARD-M5]
+                }
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", self->m_citizenList);
+                { PhaseTimer pt(kPhCitizenList);
                 if (fn_CitizenList_Update) fn_CitizenList_Update(self->m_citizenList, time); // [GUARD-M5]
+                }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
                 // 3g. Tutorial frame/time increment
@@ -887,6 +996,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 }
 
                 iteration++;
+                if (simProf) g_profSimIters++;   // [SIMPROF]
             } while (iteration < speedMultiplier);
         }
 
@@ -955,6 +1065,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     }
 
 post_simulation:
+    // [SIMPROF] everything from here to EXIT is the once-per-render-frame work
+    // (ambient/terrain/UI/tools/camera/audio) — NOT multiplied by game speed.
+    { PhaseTimer ptPost(kPhPostSim);
+
     // Step 7: Ambient sound update — fn_AmbientSound_Update (exe FUN_1400a40e0)
     // not yet wired in standalone. [GUARD-M5]
     TRACE("[GameUpdateLoop::Update] calling AmbientSound::Update...\n");
@@ -1139,6 +1253,22 @@ post_simulation:
             TRACE("[GameUpdateLoop::Update] transitioning to next loop %p\n", self->m_nextLoop);
             if (fn_MainLoop_SetNextLoop) fn_MainLoop_SetNextLoop(*g_pMainLoopSingleton, self->m_nextLoop);
         }
+    }
+
+    }  // [SIMPROF] end kPhPostSim
+
+    // [SIMPROF] close the whole-frame timer before reporting so TOTAL includes
+    // this frame, then emit/reset on the reporting interval.
+    if (simProf && g_qpcFreq) {
+        g_phSec[kPhWholeUpdate] += (double)(QpcNow() - frameT0) / (double)g_qpcFreq;
+        g_phCalls[kPhWholeUpdate]++;
+        long entCount = -1;
+        if (self->m_entityList)
+            entCount = *reinterpret_cast<int*>((uint8_t*)self->m_entityList + 0x30);
+        int spd = 0;
+        if (self->m_entityUI && *(char*)((uint8_t*)self->m_entityUI + 0x30) == 0)
+            spd = *(int32_t*)((uint8_t*)self->m_entityUI + 0x34);
+        SimProfReport(spd, entCount);
     }
 
     TRACE("[GameUpdateLoop::Update] EXIT\n");
