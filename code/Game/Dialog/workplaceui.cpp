@@ -12,6 +12,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (stale weak-ref guard)
 #include <cstdint>
 #include <cstdio>
 
@@ -826,6 +827,16 @@ void PopulateCounts(void* self) {
                 uintptr_t citizen = *reinterpret_cast<uintptr_t*>(arr + static_cast<uintptr_t>(i) * 8);
                 fn_InternalBasePtr_CheckPtr(&citizen);
                 if (!citizen) continue;
+                // CONTAINMENT, not a fix. CheckPtr is an EMPTY function in the shipping
+                // Runtime (see internal_factory_audit.h): a stale weak ref in the town's
+                // citizen array never self-invalidates, because retail clears refs
+                // explicitly at removal — which our removal path does not yet do
+                // everywhere. Without this, a freed-and-reused block reads garbage at
+                // +0x288 and faults on desc+0x44 (live crash 2026-07-25: opening a
+                // building panel under LIVE_DESTROY entity churn). Validate against the
+                // InternalFactory handle table before dereferencing. The stale entry
+                // itself still needs fixing at the removal site.
+                if (!ObjAudit::IsRegistered(reinterpret_cast<const void*>(citizen))) continue;
                 void* citizenDesc = *reinterpret_cast<void**>(citizen + 0x288);
                 if (!citizenDesc) continue;
                 // Adult (age > adult-age) AND no active task (citizen+0x208 == 0).
