@@ -655,8 +655,8 @@ static void EntityList_CloseDialogsForDyingEntities() {
         if (!dlgUI) dlgUI = ui;
         uint64_t dialogRef = reinterpret_cast<uint64_t>(toClose[i]);
         fn_UI_CloseDialog(dlgUI, &dialogRef);
-        std::printf("[EntityList] closed info dialog %p on dying (marked-for-removal) entity\n",
-                    toClose[i]);
+        printf("[EntityList] closed info dialog %p on dying (marked-for-removal) entity\n",
+               toClose[i]);
     }
 }
 
@@ -700,8 +700,8 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     // EditTool_CloseInfoDialog does — leaving +0x30 set would keep the follow chasing it.
     *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x28) = 0;
     *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x30) = 0;
-    std::printf("[EntityList] cleared EditTool selection on dying (marked-for-removal) "
-                "entity %p\n", reinterpret_cast<void*>(ent));
+    printf("[EntityList] cleared EditTool selection on dying (marked-for-removal) "
+           "entity %p\n", reinterpret_cast<void*>(ent));
 }
 
 void EntityList_DrainRemovals(EntityList* self) {
