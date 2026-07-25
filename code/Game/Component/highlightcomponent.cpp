@@ -123,6 +123,11 @@ void HighlightComponent_InitFuncs() {
 static void HighlightComponent_OnRemovedFromWorld(void* self) {
     EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    // A null +0x28 vtable is the "fresh/inert" tell (same test Impl_c4a0 uses):
+    // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
+    // in the Scene and +0x120 is not a real object id. Must precede the sceneId
+    // read — an inert component's +0x120 is 0, not -1.
+    if (*reinterpret_cast<void**>(s + 0x28) == nullptr) return;
     int32_t sceneId = *reinterpret_cast<int32_t*>(s + 0x120);
     if (sceneId < 0) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !s_fn_Scene_RemoveObject) return;
@@ -155,11 +160,22 @@ static void HighlightComponent_InstallSlots() {
     HighlightComponent_InertVtable[7] =
         reinterpret_cast<void*>(&HighlightComponent_OnRemovedFromWorld);
 }
+// InitInertTyped zero-fills from +0x28, which leaves the embedded EdgeMeshInstance's
+// scene-object id at +0x120 == 0 where the real ctor writes -1 ("not in scene").
+// Impl_c4a0 (tool_base_render.cpp:501) repairs that lazily when an entity is actually
+// outlined, but slot 7 above runs on EVERY entity teardown — including entities that
+// were never selected — so the sentinel has to be right from construction or the
+// removal broadcast calls Scene::RemoveObject(scene, 0) and takes out whichever
+// object genuinely owns id 0 (live freeze 2026-07-25: the engine's list walk spins).
+static void HighlightComponent_InitSceneId(void* mem) {
+    if (mem) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mem) + 0x120) = -1;
+}
 extern "C" void* HighlightComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x128, 0x82,
         HighlightComponent_InertVtable,
         reinterpret_cast<void*>(&HighlightComponent_InertGetTypeId));
     HighlightComponent_InstallSlots();
+    HighlightComponent_InitSceneId(p);
     return p;
 }
 static void* HighlightComponent_CreateInPlace(void* mem) {
@@ -167,6 +183,7 @@ static void* HighlightComponent_CreateInPlace(void* mem) {
         HighlightComponent_InertVtable,
         reinterpret_cast<void*>(&HighlightComponent_InertGetTypeId));
     HighlightComponent_InstallSlots();
+    HighlightComponent_InitSceneId(mem);
     return mem;
 }
 REGISTER_TYPE(HighlightComponent, "Component",
