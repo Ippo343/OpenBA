@@ -170,9 +170,53 @@ static bool BCS1_IsModelComplete(uintptr_t buildComp) {
 // foundation, which is never the demo site, so it sat inert forever). BCS1_IsModelComplete is
 // the real protection and is known-good on its own: with no demo site registered all seven
 // force-completed start-town BuildComponents skip, while a player-placed foundation builds.
+// ---- Live-site table (standalone) ------------------------------------------------
+// BCS1_IsModelComplete is a HEURISTIC for "was force-completed by StartTown, never
+// constructed". It misreads one case: State8Update snaps the model to its final
+// sub-mesh and THEN requests 8->2, so a genuinely-built building is "model complete"
+// by the time the 8->2 transition action runs. DemoGateSkip then suppressed
+// State8Finalize — the workplace hand-off (WorkPlaceComponent_EnterBuiltState, which
+// drops the Builder key so WorkPlaceUI stops showing the worker up/down spinner) and
+// the OUTPUT storage reconfigure. Only the demo site escaped, via the short-circuit
+// above it; every upgrade replacement and every player-placed building lost both
+// (observed live 2026-07-25: upgraded house kept the builder spinner, and its
+// [Residence] state-2 enter had no State8Finalize before it).
+//
+// So record the exact fact the gate wants instead of inferring it: a BuildComponent
+// that actually ran State1Enter is a live site until its completion clears it. Small
+// fixed table — concurrent construction sites are a handful, and a linear scan keeps
+// this allocation-free on a path that runs per-frame per-site.
+namespace {
+constexpr int kMaxLiveSites = 64;
+void* s_liveSites[kMaxLiveSites];
+}
+extern "C" bool BuildComponent_IsLiveSite(void* bc) {
+    if (!bc) return false;
+    for (int i = 0; i < kMaxLiveSites; ++i)
+        if (s_liveSites[i] == bc) return true;
+    return false;
+}
+extern "C" void BuildComponent_MarkLiveSite(void* bc) {
+    if (!bc || BuildComponent_IsLiveSite(bc)) return;
+    for (int i = 0; i < kMaxLiveSites; ++i) {
+        if (s_liveSites[i] == nullptr) { s_liveSites[i] = bc; return; }
+    }
+    // Table full: fall back to the heuristic for this site rather than evicting a
+    // live one (worst case = the pre-fix behaviour, never a wrong "is complete").
+    if (BCS1_Trace())
+        std::fprintf(stderr, "[BuildTrace] WARN: live-site table full (%d) — site %p "
+                     "falls back to the model-complete heuristic\n", kMaxLiveSites, bc);
+}
+extern "C" void BuildComponent_ClearLiveSite(void* bc) {
+    if (!bc) return;
+    for (int i = 0; i < kMaxLiveSites; ++i)
+        if (s_liveSites[i] == bc) { s_liveSites[i] = nullptr; return; }
+}
+
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp) {
     if (!buildComp) return false;
     if (g_pConstructionDemoSite && buildComp == g_pConstructionDemoSite) return false;
+    if (BuildComponent_IsLiveSite(buildComp)) return false;   // genuinely under construction
     return BCS1_IsModelComplete(reinterpret_cast<uintptr_t>(buildComp));
 }
 
@@ -220,6 +264,11 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                          buildComp, g_pConstructionDemoSite);
         return 1;
     }
+
+    // Past the gate: this is a real construction site. Record it so the state-8
+    // handlers keep running once the mesh progression reaches the final sub-mesh
+    // (see the live-site table note above). Cleared by the 8->2 completion.
+    BuildComponent_MarkLiveSite(buildComp);
 
     // +0x4c = 1 (default multiplier)
     *reinterpret_cast<uint32_t*>(self + 0x4c) = 1;

@@ -45,6 +45,7 @@ extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108
 extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp 1-arg ctor (0x1400e5a90)
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
+extern "C" void BuildComponent_ClearLiveSite(void* buildComp);       // buildcomponent_state1.cpp
 // citizen_employ_cascade.cpp — drive the real ProfessionUI seat cascade (cbf0/ca20/c5f0/c4b0)
 // against a SPECIFIC workplace entity (no FindAvailableBuilding / townMgr+0x100 lookup, which
 // would activate the freeze-prone employment drain path). Seats up to `count` workers of
@@ -704,7 +705,12 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
 
 // sub_75e0 — the 8->2 transition ACTION (node slot +0x28 / our OnState). 1-arg (bc).
 extern "C" char BuildComponent_State8To2Action(void* buildComp) {
-    if (buildComp && !BuildComponent_DemoGateSkip(buildComp))
+    if (buildComp && !BuildComponent_DemoGateSkip(buildComp)) {
         BuildComponent_State8Finalize(reinterpret_cast<uintptr_t>(buildComp));
+        // Construction is over and the hand-off has run: drop the live-site record so
+        // the model-complete heuristic governs this BuildComponent again (it is now
+        // genuinely a finished building, and must not be re-driven through state 1/8).
+        BuildComponent_ClearLiveSite(buildComp);
+    }
     return 0;   // return ignored by Tick (Phase A2 discards the slot-0x28 return)
 }
