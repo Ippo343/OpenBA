@@ -36,7 +36,15 @@ SA_BUILD_DIR = standalone/build
 SA_OBJ_DIR = $(SA_BUILD_DIR)/obj
 SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 
-SA_CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP
+# -fno-strict-aliasing is MANDATORY, not a tuning knob. Every ported function reads
+# and writes binary-layout struct fields by punning raw offsets (e.g. the action-stack
+# top index at +0x18 is read as `param_1[3]` through an int64_t* and written as
+# `*(int*)(param_1 + 3)` — retail's exact instruction pair). Under strict aliasing GCC
+# assumes those two lvalues cannot be the same object, so the store is invisible to the
+# load: at -O2+ it proved CitizenAI_ActionExecutor_c4c50's pop loop could never exit and
+# emitted a literal `jmp .` self-loop, which froze the game in-world with the citizens
+# T-posing (the sim tick never returned). Do not remove.
+SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp
 SA_INCLUDES = -I. -Iengine/types -Iengine/funcs -Icode/Game \
