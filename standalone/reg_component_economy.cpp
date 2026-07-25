@@ -35,6 +35,7 @@ extern int      BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);
 extern void     BuildComponent_DrawReimpl(void* self);
 
 extern void     WorkPlaceComponent_OnCreateInit(void* self);
+extern void     WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);
 
 extern void     AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);
 extern void     AttendanceComponent_ProcessQueue(void* self);
@@ -87,6 +88,13 @@ void RegisterComponentBatch_economy() {
 
     // workplacecomponent.cpp
     RegisterExeAddr(0x14012ee60, reinterpret_cast<uintptr_t>(&WorkPlaceComponent_OnCreateInit));
+    // Entity_impl_fc00 = WorkPlaceComponent::SetAccepting, the workplace enable/disable
+    // toggle. BuildUI slot 9 (the under-construction panel's pause button, event 0x12
+    // id 6000) resolves this address through fn_WorkplaceComponent_Toggle; unregistered it
+    // came back NULL and the click called address 0 (live crash 2026-07-25). NOTE the port
+    // implements the accepting=TRUE path only — accepting=false stores the flag and returns
+    // without the retail evict-and-re-home pass (see workplacecomponent.cpp:391).
+    RegisterExeAddr(0x14012fc00, reinterpret_cast<uintptr_t>(&WorkPlaceComponent_SetAccepting));
 
     // attendancecomponent.cpp
     RegisterExeAddr(0x140002e10, reinterpret_cast<uintptr_t>(&AttendanceComponent_GetJobHostComponent));

@@ -16,6 +16,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -547,7 +548,17 @@ void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4) {
         uint64_t workplaceComp = 0;
         fn_FindComponent_Workplace((void*)entityBasePtr, &workplaceComp);
 
-        // Read enabled state byte at comp+0x50, toggle it
+        // Read enabled state byte at comp+0x50, toggle it. Both guards matter: the
+        // building need not have a WorkPlaceComponent at all, and fn_WorkplaceComponent_
+        // Toggle is an EXE address (0x14012fc00) that resolves NULL whenever it is not in
+        // the address registry — calling it blind crashed on EXEC of 0 (live 2026-07-25).
+        if (workplaceComp == 0 || !fn_WorkplaceComponent_Toggle) {
+            std::fprintf(stderr, "[BuildUI] Slot9 pause click ignored: workplaceComp=%p "
+                         "toggleFn=%p\n", (void*)workplaceComp,
+                         (void*)fn_WorkplaceComponent_Toggle);
+            std::fflush(stderr);
+            return;
+        }
         char currentState = *(char*)(workplaceComp + 0x50);
         fn_WorkplaceComponent_Toggle((void*)workplaceComp, currentState == 0);
     }
