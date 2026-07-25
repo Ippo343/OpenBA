@@ -27,11 +27,33 @@
 
 namespace ChunkedSceneLoader {
 
-// Run LoadSceneA1 (~10ms — small allocs + MenuScene.rsc load + 3
-// AddGlobalObject calls) and capture the chunked PhaseB state. After this
-// returns, IsBusy() is true; Tick() drives the rest. Safe to call multiple
-// times — early-exits if already initialized for the same loop.
+// Run LoadSceneA1 (small allocs + MenuScene.rsc load + 3 AddGlobalObject
+// calls — measured ~590ms, not the ~10ms originally assumed) and capture the
+// chunked PhaseB state. After this returns, IsBusy() is true; Tick() drives
+// the rest. Safe to call multiple times — early-exits if already initialized
+// for the same loop.
 void Init(void* menuDltSelf);
+
+// Record which loop Init should run for, WITHOUT paying its cost yet.
+//
+// Init used to be called straight from RunGameMain, before MainLoop::Run. That
+// put its ~590ms inside the window between ShowWindow (which happens during
+// Engine::Startup, in VideoDX11 CreateDevice) and the first splash Present —
+// i.e. ~590ms of a visible, never-painted engine window at boot. Retail loads
+// the menu scene behind an already-drawing splash, so it has no such gap.
+//
+// Arm() at boot, then RunArmedInit() from the splash's Update once the splash
+// has actually revealed. Cost is unchanged; it just lands behind a drawn frame.
+void Arm(void* menuDltSelf);
+
+// True between Arm() and RunArmedInit(). Callers that gate a loop transition
+// on IsBusy() must ALSO check this — armed-but-not-started is still work
+// outstanding, and IsBusy() is false until Init has actually run.
+bool IsArmed();
+
+// If armed, run Init for the armed loop and clear the armed flag. No-op
+// otherwise. Main thread only.
+void RunArmedInit();
 
 // Process up to maxElements elements of the chunked PhaseB loop. When the
 // chunk function reports done, runs LoadSceneA3 (particles, ~5ms) and clears

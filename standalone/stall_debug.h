@@ -39,6 +39,12 @@ void Tick(const char* tag);
 // Override the stall threshold. Default 30ms (≈2 frames at 60fps).
 void SetStallThresholdMs(double thresholdMs);
 
+// Boot-sequence stopwatch. One [BootTime] line per call, giving both the
+// delta since the previous Mark and the absolute time since Initialize().
+// Cheaper to sprinkle than a Phase scope when what you want is a profile of a
+// long straight-line sequence (Init / RunGameMain) rather than one nested span.
+void Mark(const char* what);
+
 // Discrete phase timing. Always prints start + duration on End/dtor.
 void BeginPhase(const char* name);
 void EndPhase(const char* name);

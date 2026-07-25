@@ -33,6 +33,7 @@
 #include "async_loader.h"
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
+#include "boot_window.h"
 #include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
 #include <cstdio>
@@ -185,10 +186,11 @@ void Stub_Startup(UpdateLoop* self) {
     // are not thread-safe (see async_loader.cpp) — but the one frozen frame now
     // shows a proper loading screen + tip instead of a black hang.
     //
-    // Note: ChunkedSceneLoader::Init has already run during boot (from
-    // RunGameMain in code/Game/Game/game_main.cpp), so MenuDLT struct
-    // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated and
-    // PhaseB chunks are ready to be Tick()'d in Stub_Update below.
+    // Note: ChunkedSceneLoader is only ARMED at boot (RunGameMain in
+    // code/Game/Game/game_main.cpp). Stub_Update runs its Init on the first
+    // revealed frame and then Tick()s PhaseB, so MenuDLT's struct fields
+    // (+0xb90 menuScene, +0xb98 renderer, etc.) are populated behind a drawn
+    // splash rather than during the un-presented boot window.
 
     // Trigger reveal. With async loading, only Step 1's own-rsc load is
     // synchronous (~10ms for ShiningRock/Loading splashes; usually skipped
@@ -248,8 +250,32 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         fn_UI_Update(ui, time);
     }
 
+    // Safety net for the deferred window reveal — if the Draw path never runs,
+    // this reveals the window anyway rather than leaving the process invisible.
+    BootWindow::PumpWatchdog();
+
     if (clamped) {
         dt->ticks = origTicks;
+    }
+
+    // Run the deferred MenuScene load, once, on the first frame where this
+    // splash has actually revealed. RunGameMain only Arm()s it — running
+    // LoadSceneA1 (~590ms) during boot meant paying it while the engine window
+    // was already on screen and had never been presented to, which is the
+    // boot-time blank-window flash. Here it lands behind a drawn splash.
+    //
+    // Same reveal test the deferred load-kick below uses: alpha < 0.5 (1=black,
+    // 0=fully revealed) or a 0.25s safety cap so a stuck fade can't strand it.
+    if (ChunkedSceneLoader::IsArmed()) {
+        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+        int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
+            ? *g_Timer_ticksPerSecond / 4 : 0;
+        float revealAlpha = UIFade::GetCurrentAlpha(ui);
+        if (revealAlpha < 0.5f || (revealCap && ll->m_elapsedTicks >= revealCap)) {
+            printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f -> running "
+                   "deferred ChunkedSceneLoader init\n", (void*)self, revealAlpha);
+            ChunkedSceneLoader::RunArmedInit();
+        }
     }
 
     // Drive the chunked scene loader. Each tick processes ~500 PhaseB
@@ -381,12 +407,16 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             return true;
         }
 
-        // Also wait for the chunked scene loader to finish PhaseB+A3.
-        // Only active when next was the terminal MenuDLT (Init runs from
-        // Stub_Startup gated on m_nextLoop==nullptr). Without this gate,
-        // the splash transitions before chunking completes and MenuDLT
-        // would have to finish synchronously — re-introducing the freeze.
-        if (ChunkedSceneLoader::IsBusy()) {
+        // Also wait for the chunked scene loader to finish PhaseB+A3. Without
+        // this gate, the splash transitions before chunking completes and
+        // MenuDLT would have to finish synchronously — re-introducing the
+        // freeze.
+        //
+        // IsArmed() matters as much as IsBusy() here: between Arm() at boot and
+        // RunArmedInit() above, IsBusy() is still false even though the entire
+        // scene load is outstanding. Gating on IsBusy() alone would let a short
+        // splash transition straight past it.
+        if (ChunkedSceneLoader::IsArmed() || ChunkedSceneLoader::IsBusy()) {
             static int waitCount = 0;
             if ((waitCount++ % 30) == 0) {
                 printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
@@ -441,6 +471,15 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     }
 
     DialogLoaderLoopT_Draw_Impl(reinterpret_cast<DialogLoaderLoopT*>(self));
+
+    // Reveal the engine window once a real frame is actually in the swap chain.
+    // MainLoop presents AFTER Draw returns, so draw #1 has not been presented
+    // yet when we get here — waiting for draw #2 guarantees the window's first
+    // visible content is the splash rather than an unpresented backbuffer.
+    // No-op unless boot_window armed the deferral. See boot_window.h.
+    if (draws >= 2 && BootWindow::IsPending()) {
+        BootWindow::ShowNow("first splash frame presented");
+    }
 }
 
 void Stub_DrawFailed(UpdateLoop* self) {

@@ -12,6 +12,7 @@ namespace ChunkedSceneLoader {
 namespace {
 
 void* g_menuDltSelf = nullptr;
+void* g_armedSelf = nullptr;
 MenuDialogLoopT_PhaseBState g_state{};
 bool   g_busy = false;
 int    g_tickCount = 0;
@@ -83,6 +84,24 @@ void Init(void* menuDltSelf) {
                 "process (chunked across Update ticks)\n",
                 g_state.totalCount);
     std::fflush(stdout);
+}
+
+void Arm(void* menuDltSelf) {
+    g_armedSelf = menuDltSelf;
+    printf("[ChunkedSceneLoader] Arm: self=%p — LoadSceneA1 deferred until the "
+                "splash is on screen\n", menuDltSelf);
+    std::fflush(stdout);
+}
+
+bool IsArmed() {
+    return g_armedSelf != nullptr;
+}
+
+void RunArmedInit() {
+    if (!g_armedSelf) return;
+    void* self = g_armedSelf;
+    g_armedSelf = nullptr;   // clear FIRST so a failing Init can't re-enter
+    Init(self);
 }
 
 int Tick(int maxElements) {

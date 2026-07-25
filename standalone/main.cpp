@@ -1281,13 +1281,37 @@ static void ForceVideoContextReset(const char* tag) {
 }
 
 // Swap the engine's window-class background brush from the default WHITE_BRUSH
-// to a black brush, so the brief moment between window creation and the first
-// DX11 Present doesn't show as a white flash. We do this once on the first
-// engine-window message we observe in CallWndProcHook (don't have access to
-// the HWND any earlier, since the Runtime DLL creates the window).
+// to a black brush, so the window is black — not white — for the ~1s between
+// ShowWindow (VideoDX11 CreateDevice step 6) and the first splash Present.
+//
+// This used to fire on the FIRST message from ANY window on this thread and
+// then latch, which was a race: the engine window is not the only top-level
+// window the main thread owns, and whichever one happened to be messaged first
+// got the black brush. When the engine window lost that race it kept the class
+// default (COLOR_WINDOW+1, i.e. white) for the whole boot — the intermittent
+// white box. Identify the engine window explicitly instead, and don't latch
+// until we have actually found it.
+//
+// Primary test is the window class name, which Runtime registers as "Banished".
+// Fallback is Video::Device::_singleton+0x90, the HWND the renderer itself
+// uses — populated before CreateDevice runs, so it is available in time.
+static bool IsEngineWindow(HWND hwnd) {
+    wchar_t cls[64] = {0};
+    if (GetClassNameW(hwnd, cls, 64) > 0 && wcscmp(cls, L"Banished") == 0)
+        return true;
+
+    void** devSlot = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fe7a8));
+    void* device = devSlot ? *devSlot : nullptr;
+    if (!device) return false;
+    HWND devHwnd = *reinterpret_cast<HWND*>((uintptr_t)device + 0x90);
+    return devHwnd && devHwnd == hwnd;
+}
+
 static void EnsureBlackWindowBrush(HWND hwnd) {
     static bool done = false;
     if (done || !hwnd) return;
+    if (!IsEngineWindow(hwnd)) return;   // not ours — keep looking
     HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
     if (!black) return;
     HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);
@@ -1295,14 +1319,16 @@ static void EnsureBlackWindowBrush(HWND hwnd) {
     UpdateWindow(hwnd);
     done = true;
     printf("[Standalone] Swapped window class background brush from %p to "
-           "BLACK_BRUSH (%p) on hwnd=%p\n", (void*)old, (void*)black, (void*)hwnd);
+           "BLACK_BRUSH (%p) on engine hwnd=%p\n", (void*)old, (void*)black, (void*)hwnd);
 }
 
 static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code >= 0) {
         auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
-        // Swap the class brush on the first message we ever see (any window).
-        // The engine's main HWND is whichever one gets messages first.
+        // Swap the class brush the first time we see a message for the ENGINE
+        // window specifically. Other top-level windows on this thread are
+        // ignored — see EnsureBlackWindowBrush for why matching on "first
+        // message from any window" was wrong.
         EnsureBlackWindowBrush(msg->hwnd);
         // WM_SIZE / WM_WINDOWPOSCHANGING carry the dimensions that end up in
         // Video::Device+0x04/+0x08 and then in VideoWindowWidth/Height. Decode
@@ -1464,14 +1490,18 @@ static bool Init() {
     //     engine reads comes from the registry via Video::Configuration::Startup.
     DumpVideoRegistry("AT-BOOT");
     HarnessGuardUnattendedBoot();
+    StallDebug::Mark("registry probe + harness guard");
 
     // 2. Resolve Runtime-x64.dll and VideoDX11-x64.dll (ASLR)
     printf("[Standalone] Resolving DLLs...\n");
+    StallDebug::Mark("(pre ResolveInit)");
     if (!ResolveInit()) {
         fprintf(stderr, "[Standalone] FATAL: Could not load Runtime-x64.dll\n");
         fprintf(stderr, "[Standalone] Make sure Runtime-x64.dll is in the same directory.\n");
         return false;
     }
+
+    StallDebug::Mark("ResolveInit (LoadLibrary Runtime+DX11)");
 
     // 2a. IAT-hook MessageBoxW in Runtime-x64.dll so MSVC _purecall popups
     //     get logged + ExitProcess instead of blocking the game on a modal.
@@ -1484,6 +1514,8 @@ static bool Init() {
         printf("[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block\n");
     }
 
+    StallDebug::Mark("HookRuntimeMessageBoxW");
+
     // 2b. Window-geometry trace — see InstallWindowTrace.
     InstallWindowTrace();
 
@@ -1491,6 +1523,7 @@ static bool Init() {
     //    Must happen BEFORE EngineFuncsInit, which reads from these slots.
     printf("[Standalone] Initializing address registry...\n");
     AddressRegistryInit();
+    StallDebug::Mark("AddressRegistryInit");
 
     // 4. Resolve engine function pointers from Runtime DLL
     printf("[Standalone] Resolving engine functions...\n");
@@ -1498,6 +1531,7 @@ static bool Init() {
         printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
     }
     RuntimeFuncsInit();
+    StallDebug::Mark("EngineFuncsInit + RuntimeFuncsInit");
 
     // 4b. Resolve the shipped VideoDX11-x64.dll entry points, then install the
     //     renderer seam: verify all 84 vtable slots against the map in
@@ -1522,6 +1556,7 @@ static bool Init() {
     //     Video::Device::InitializeInterfaces, which skips any slot that is
     //     already populated.
     InstallVideoInterfacePrefill();
+    StallDebug::Mark("Dx11FuncsInit + seam + prefill");
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB
@@ -1577,12 +1612,14 @@ static bool Init() {
     //     loader forever. Gate BANISHED_READ_GUARD=1 (default OFF → no-op). See
     //     filename_runtime_hook.cpp.
     InstallReadGuard();
+    StallDebug::Mark("redzone/alloc-lock/diagnostic installers");
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs
     //    at 0x180147xxx. Should print 150+ Runtime types (Dialog, Description,
     //    Element subclasses, etc.).
     DumpFirstTypeInfo("BEFORE InvokeAllRegistrations");
+    StallDebug::Mark("DumpFirstTypeInfo (before)");
 
     // 6. Drain pending Factory registrations into Runtime _firstTypeInfo.
     //    Static-init ctors collected them; now we flush by calling
@@ -1591,8 +1628,10 @@ static bool Init() {
     //    the typeId tree.
     printf("[Standalone] Invoking factory registrations...\n");
     Object::InvokeAllRegistrations();
+    StallDebug::Mark("Object::InvokeAllRegistrations");
 
     DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
+    StallDebug::Mark("DumpFirstTypeInfo (after)");
 
     // NOTE: component type-ID .rdata globals (FillComponentTypeIdGlobals_nature)
     // are filled later, in RunGameMain right after Engine::Startup —
@@ -1612,6 +1651,7 @@ static bool Init() {
     // 9. Latch the BANISHED_AUTOSTART env var. When set, the menu update loop
     //    auto-drives New Game -> Start (see standalone/autostart.cpp).
     AutoStart::Init();
+    StallDebug::Mark("WndMsgHook + AutoStart::Init");
 
     // RunStartupSelfTests() runs from game_main.cpp after Engine::Startup,
     // when the MemoryAllocator singleton is finally populated.
@@ -1624,8 +1664,15 @@ static bool Init() {
 // Entry point
 // ============================================================
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
-    // Redirect stdout/stderr to log file and console
-    AllocConsole();
+    // Redirect stdout/stderr to log files.
+    //
+    // No AllocConsole. Retail is a GUI-subsystem process with no console, and
+    // so are we (-mwindows) — a console here was purely a leftover: the two
+    // freopen calls below rebind stdout/stderr to files immediately, so the
+    // console never received a single byte. It also had a real cost: an extra
+    // top-level window shifts the CW_USEDEFAULT cascade that places the engine
+    // window at creation time, and it sat on top of the game window during the
+    // pre-Present part of boot.
     freopen("standalone_debug.log", "w", stdout);
     freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -1670,7 +1717,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
 
-    FreeConsole();
     return rc;
 }
 

@@ -109,6 +109,8 @@
 // corresponding factory. That is 17 independent confirmations of one constant.
 
 #include "dx11_seam.h"
+#include "stall_debug.h"
+#include "boot_window.h"
 #include "dx11_backend_access.h"
 #include "VideoDX11Data.h"
 
@@ -1277,6 +1279,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(2)(self);
 
     void* dev = DeviceOf(self);
+    StallDebug::Mark("  DX11 CreateDevice: entry");
 
     if (createFactory(kIID_IDXGIFactory1, &self->unk10) != 0) {
         im->ErrorSetText("VideoDX11: Couldn't create a dxgi factory!", false);
@@ -1298,6 +1301,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
         return false;
     }
 
+    StallDebug::Mark("  DX11 DXGI factory + adapter + output enum");
+
     void* cfg = ConfigOf(im);
 
     // 4 — start from the selected display mode.
@@ -1315,11 +1320,26 @@ bool DeviceData_CreateDevice(DeviceData* self) {
         if (wh >= 0) Field<int32_t>(dev, Dev::kHeight) = wh;
     }
 
+    // Arm the deferred reveal BEFORE step 6 reads the flag. This does not
+    // change step 6's logic at all — it sets Configuration+0x42, which the
+    // shipped branch below already honours, so CreateDevice takes the engine's
+    // own skip-show path and standalone/boot_window.cpp reveals the window once
+    // the splash has a frame to show. Without this the window is on screen and
+    // empty for ~450ms every boot; see boot_window.h for the measurements.
+    // No-op (and step 6 shows the window inline, as shipped) when
+    // BANISHED_DEFER_WINDOW_SHOW=0.
+    BootWindow::ArmDeferredShow(cfg, Field<HWND>(dev, Dev::kHwnd));
+
     // 6 — SW_SHOWDEFAULT (10) honours the STARTUPINFO the process was launched
     // with, so the resulting show-state is a property of the launcher, not of
     // this code. See the Task B note in the lane report.
-    if (Field<uint8_t>(cfg, Cfg::kSkipShow) == 0)
+    if (Field<uint8_t>(cfg, Cfg::kSkipShow) == 0) {
         ShowWindow(Field<HWND>(dev, Dev::kHwnd), SW_SHOWDEFAULT);
+        // From here the engine window is ON SCREEN. Everything between this
+        // point and the first splash Present is a visible, unpainted window,
+        // so this mark is the start of the boot blank-window budget.
+        StallDebug::Mark("  DX11 ShowWindow  <== WINDOW NOW VISIBLE");
+    }
 
     // 7 — remember which monitor the chosen output is on; AdjustDisplay uses it
     // to position a fullscreen window.
@@ -1329,6 +1349,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     // 8 — settle the window, which may rewrite Device+0x04/+0x08.
     im->DeviceAdjustDisplay(dev);
+    StallDebug::Mark("  DX11 AdjustDisplay (window sized)");
 
     // 9
     DXGI_SWAP_CHAIN_DESC desc;
@@ -1349,6 +1370,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
                          "D3D_FEATURE_LEVEL_10_0 is required!", false);
         return false;
     }
+
+    StallDebug::Mark("  DX11 D3D11CreateDevice");
 
     ID3D11Device* d3d = static_cast<ID3D11Device*>(self->d3dDevice);
 
@@ -1411,6 +1434,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
         im->StringDtor(&msg);
         return false;
     }
+
+    StallDebug::Mark("  DX11 swapchain + color/depth buffers");
 
     // 17
     void* app = AppOf(im);

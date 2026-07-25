@@ -61,6 +61,15 @@ void Tick(const char* tag) {
     g_lastTickTag = tag;
 }
 
+void Mark(const char* what) {
+    if (!g_initialized) return;
+    static double lastMarkMs = 0.0;
+    double now = NowMs();
+    printf("[BootTime] %-44s +%8.2fms   (t=%8.2fms)\n", what, now - lastMarkMs, now);
+    std::fflush(stdout);
+    lastMarkMs = now;
+}
+
 void BeginPhase(const char* name) {
     if (!g_initialized) return;
     printf("[Stall] BEGIN %s @ t=%.2fms\n", name, NowMs());

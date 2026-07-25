@@ -25,7 +25,7 @@
 namespace RenderDocIntegration {
 
 // Probe for renderdoc.dll, fetch the API. Call once at startup
-// (e.g., from WinMain after AllocConsole / log redirect).
+// (e.g., from WinMain after the stdout/stderr log redirect).
 // Returns true if RenderDoc is attached and the API resolved.
 bool Init();
 

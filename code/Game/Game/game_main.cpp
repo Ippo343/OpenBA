@@ -26,6 +26,7 @@
 #include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
+#include "stall_debug.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -411,6 +412,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     s_fn_Engine_Ctor(&engine, hInstance);
     printf("[GameMain] Engine constructed.\n");
 
+    StallDebug::Mark("Init() -> RunGameMain entry + Engine ctor");
     printf("[GameMain] Engine::Startup(cmdLine=%p, 0x200, 0, false)...\n", (void*)cmdLine);
     unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, 0x200, 0, false);
     // Engine::Startup somehow disconnects stdout/stderr from the log files
@@ -422,6 +424,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     printf("[GameMain] Engine::Startup returned %u\n", ok);
+    StallDebug::Mark("Engine::Startup");
 
     // On Engine::Startup failure, dump System::Error::_errorString
     // (Runtime 0x1801fc720, 8KB) — Engine::Startup's failure paths each call
@@ -475,6 +478,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_fruit();
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
+    StallDebug::Mark("post-Startup typeinfo dump + typeId globals");
     FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
     FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
     FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
@@ -525,6 +529,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             // Engine::Engine::Engine has populated the MemoryAllocator
             // singleton. See standalone/main.cpp for the implementation.
             RunStartupSelfTests();
+            StallDebug::Mark("RunStartupSelfTests + video probes");
 
             // MainLoop is 0xa0 bytes, 8-byte aligned (matches original GameMain).
             void* ml = fn_MemAlloc(memAllocSingleton, 0xa0, 8);
@@ -541,6 +546,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 printf("[GameMain] Game alloc      = %p\n", gameObj);
                 if (gameObj) {
                     Game_Ctor(gameObj);
+                    StallDebug::Mark("MainLoop ctor + Game ctor");
                     printf("[GameMain] Game_Ctor done; KeyMap singleton -> %p\n",
                            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
                 }
@@ -569,6 +575,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // input ID -> "Move View Forward" etc., used by OptionsDialog's
                 // input bind list.
                 Game::LoadInputNameTables();
+                StallDebug::Mark("input bindings + name tables");
 
                 // Load Dialog/SpriteSheet.rsc + construct the "White" /
                 // "SaveLoadEmpty" Sprites into KeyMap+0xa8/+0xb8 (mirror of
@@ -578,6 +585,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // STATE machine still runs but no overlay actually renders, so
                 // splash transitions hard-cut as visible flashes.
                 ::StandaloneEnsureSpriteSheetLoaded();
+                StallDebug::Mark("SpriteSheet.rsc load");
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
                 int32_t* settings = reinterpret_cast<int32_t*>(
@@ -635,7 +643,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         uint8_t menuStr[8] = {};
                         fn_String_Ctor_CStr(menuStr, "Dialog\\MainMenu.rsc");
 
+                        StallDebug::Mark("settings alloc + MenuDLT alloc");
                         MenuDialogLoopT_Ctor(menuLoop, menuStr);
+                        StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
                                (void*)menuLoop->vtable);
 
@@ -698,6 +708,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // the splash appears. Loading the .rsc up front populates
                         // m_dialogExternal so Stub_Startup's fallback synchronous
                         // load is skipped.
+                        StallDebug::Mark("splash DLT ctors");
                         if (fn_DialogLoaderLoopT_Load) {
                             if (shiningRockLoop) {
                                 printf("[GameMain] pre-loading ShiningRock.rsc\n");
@@ -709,19 +720,31 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             }
                         }
 
-                        // Pre-run MenuDLT's LoadSceneA1 here in boot. Boot is
-                        // non-rendering (no swap chain Present yet from
-                        // gameplay code), so the ~10ms A1 cost is invisible.
-                        // After this, MenuDLT struct fields (+0xb90 menuScene,
-                        // +0xb98 renderer, etc.) are populated; the Loading
-                        // splash's Stub_Update will Tick(500) the chunked
-                        // PhaseB iteration each frame so the splash keeps
-                        // animating while the heavy 12K-15K static-mesh loop
-                        // runs in chunks. (Driving Init from the splash
-                        // crashed inside VideoDX11 — see splash_loop_stubs.cpp.)
+                        StallDebug::Mark("splash .rsc preloads (ShiningRock + Loading)");
+
+                        // ARM MenuDLT's scene load; do NOT run it here.
+                        //
+                        // This used to call ChunkedSceneLoader::Init directly,
+                        // on the premise that "boot is non-rendering, so the
+                        // ~10ms A1 cost is invisible". Both halves were wrong.
+                        // The engine window is already VISIBLE by this point —
+                        // VideoDX11 CreateDevice ShowWindow's it during
+                        // Engine::Startup, well before we get here — and A1
+                        // measures ~590ms, not ~10ms. The result was ~590ms of
+                        // an on-screen, never-painted window at every boot.
+                        //
+                        // Arm() records the loop; the first splash runs it from
+                        // Stub_Update once it has actually revealed, so the cost
+                        // lands behind a drawn loading screen the way retail
+                        // does it. After Init runs, MenuDLT struct fields
+                        // (+0xb90 menuScene, +0xb98 renderer, etc.) are
+                        // populated and the splash Tick(500)s the chunked PhaseB
+                        // iteration each frame, keeping the splash animating
+                        // through the heavy 12K-15K static-mesh loop.
                         if (menuLoop) {
-                            printf("[GameMain] pre-running ChunkedSceneLoader::Init for MenuDLT\n");
-                            ChunkedSceneLoader::Init(menuLoop);
+                            printf("[GameMain] arming ChunkedSceneLoader for MenuDLT "
+                                   "(runs behind the splash, not during boot)\n");
+                            ChunkedSceneLoader::Arm(menuLoop);
                         }
 
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
