@@ -181,6 +181,14 @@ static const char* const kDefaultOnFlags[] = {
     // the haul. Held opt-in only because the haul used to crash on execution — that was the
     // InternalFactory removal-lifecycle corruption, now fixed (see internal_factory_audit.h).
     "BANISHED_LIVE_RAWMAT_PICKUP",
+    // DestroyComponent live states — verified end-to-end 2026-07-25 (demolish -> haul-away
+    // -> refund + replacement spawn -> replacement constructed -> correct finished dialog),
+    // for both a genuinely-built house and a start-town house. Held opt-in until now as
+    // "unproven": the removal churn it drives used to corrupt the heap, which was the
+    // InternalFactory lifecycle bug (fixed; see internal_factory_audit.h). The whole
+    // building-upgrade path is dead without it — DestroyComponent installs no vtable slots
+    // and no state table, so the UpgradeUI click pumps a state machine that does not exist.
+    "BANISHED_LIVE_DESTROY",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
