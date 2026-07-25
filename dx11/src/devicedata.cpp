@@ -701,6 +701,143 @@ bool CreateDepthBuffer(DeviceData* self, const Imports* im) {
 }
 
 // ============================================================
+// Window-collapse hunt (temporary diagnostic)
+//
+// The window collapses to 136x39 about 1.6s into a run. 136x39 is exactly
+// SM_CXMIN x SM_CYMIN on this desktop — the OS *minimum tracking size*, i.e.
+// what Windows clamps a request to when a caller asks for a smaller (or 0x0)
+// window. It is NOT the metrics of a minimized frame (SM_CXMINIMIZED is
+// 160x28), and the WM_SIZE that follows carries type=0 (SIZE_RESTORED), so the
+// window is never iconic. Something asks for a degenerate size and the OS
+// rounds it up.
+//
+// CAUSE (proven 2026-07-24): PowerToys FancyZones, an EXTERNAL process. It is
+// not a bug in this port or in the engine. FancyZones has no app exclusions
+// configured and has openWindowOnActiveMonitor/appLastZone_moveWindows set, so
+// it snaps the freshly created game window into a zone on another monitor. The
+// cross-process SetWindowPos carries SWP_ASYNCWINDOWPOS, which is why it is
+// invisible to every in-process hook and why the request is *posted*: it lands
+// only when the main thread resumes pumping after the sync loader wait, making
+// it look like the loader caused it. Adding reimpl-x64.exe to
+// fancyzones_excluded_apps takes the collapse from 240 occurrences to 0 with no
+// code change, and DeviceData_Resize is then never called at all.
+//
+// Everything on our side is downstream of that. This code and
+// Video::Device::AdjustDisplay only *react*: AdjustDisplay unconditionally
+// re-reads GetClientRect into Device+0x04/+0x08 and Configuration+0x1c/+0x20,
+// so once an external actor has collapsed the window the bad size latches and
+// each frame re-applies it. That latch is 100% original Runtime code, so retail
+// Banished is vulnerable to exactly the same thing.
+//
+// The trace below is kept because it cleanly separates "someone else collapsed
+// the window" from "we collapsed it": if entry already reports a degenerate
+// client rect, the caller is external. Bounded to the first few resizes —
+// once the swap chain is wedged BeginCommands retries every frame.
+// ============================================================
+namespace {
+int g_resizeTraceCalls = 0;
+constexpr int kResizeTraceMax = 6;
+
+inline bool ResizeTraceOn() { return g_resizeTraceCalls <= kResizeTraceMax; }
+
+// ------------------------------------------------------------------
+// Degenerate-size guard (deliberate deviation from retail — see below)
+//
+// Retail latches whatever GetClientRect returns, with no floor. That was safe
+// in 2013: nothing on a normal desktop reshaped a window behind the app's back.
+// It is not safe now — FancyZones (2019) and every tiling/zone manager since do
+// exactly that, and one collapsed frame poisons Device+0x04/+0x08 and
+// Configuration+0x1c/+0x20 for the rest of the run, then gets persisted.
+//
+// The guard rejects impossible values rather than overriding real ones: no
+// window this small can be a render target, and no user ever chose one. 64
+// matches the sentinel repair in standalone/main.cpp (HarnessGuardUnattendedBoot).
+//
+// Kill-switch for A/B: BANISHED_WINDOW_GUARD=0 restores verbatim retail
+// behaviour (window collapses and stays collapsed).
+// ------------------------------------------------------------------
+constexpr int kMinSaneWindowDim = 64;
+
+inline bool DegenerateSize(int w, int h) {
+    return w < kMinSaneWindowDim || h < kMinSaneWindowDim;
+}
+
+bool WindowGuardEnabled() {
+    static const bool on = [] {
+        const char* v = getenv("BANISHED_WINDOW_GUARD");
+        return !(v && (strcmp(v, "0") == 0 || strcmp(v, "false") == 0));
+    }();
+    return on;
+}
+
+// Last size that could plausibly be a render target. The guard restores this
+// when it catches a collapse, so it must only ever hold a sane pair.
+int g_lastGoodW = 0;
+int g_lastGoodH = 0;
+
+inline void RememberGoodSize(int w, int h) {
+    if (!DegenerateSize(w, h)) { g_lastGoodW = w; g_lastGoodH = h; }
+}
+
+// Best available sane size, in descending order of trustworthiness: what we
+// last saw working, then the configured window override, then the display mode
+// (which is always sane because it comes from the adapter's mode table).
+void PickGoodSize(void* cfg, const DisplayMode& mode, int* w, int* h) {
+    if (!DegenerateSize(g_lastGoodW, g_lastGoodH)) {
+        *w = g_lastGoodW; *h = g_lastGoodH; return;
+    }
+    const int cw = Field<int32_t>(cfg, Cfg::kWindowWidth);
+    const int ch = Field<int32_t>(cfg, Cfg::kWindowHeight);
+    if (!DegenerateSize(cw, ch)) { *w = cw; *h = ch; return; }
+    *w = mode.width; *h = mode.height;
+}
+
+void TraceGeom(const char* stage, void* dev, const Imports* im) {
+    if (!ResizeTraceOn()) return;
+    HWND hwnd = Field<HWND>(dev, Dev::kHwnd);
+    void* cfg = ConfigOf(im);
+    RECT wr{}, cr{};
+    GetWindowRect(hwnd, &wr);
+    GetClientRect(hwnd, &cr);
+    fprintf(stderr,
+            "[ResizeTrace #%d] %-18s win=(%ld,%ld %ldx%ld) client=%ldx%ld "
+            "dev=%dx%d cfgWin=%dx%d vis=%d tid=%lu\n",
+            g_resizeTraceCalls, stage,
+            wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
+            cr.right - cr.left, cr.bottom - cr.top,
+            Field<int32_t>(dev, Dev::kWidth), Field<int32_t>(dev, Dev::kHeight),
+            Field<int32_t>(cfg, Cfg::kWindowWidth),
+            Field<int32_t>(cfg, Cfg::kWindowHeight),
+            IsWindowVisible(hwnd) ? 1 : 0, GetCurrentThreadId());
+    fflush(stderr);
+}
+
+// Which monitor is the swap chain bound to? The collapsed window lands at
+// (-2456,104), which is (104,104) on DISPLAY3 (desktop x=-2560). If the
+// containing output is that monitor, a DXGI-side reposition explains both the
+// move and the resize.
+void TraceContainingOutput(IDXGISwapChain* sc) {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    IDXGIOutput* out = nullptr;
+    if (SUCCEEDED(sc->GetContainingOutput(&out)) && out) {
+        DXGI_OUTPUT_DESC od{};
+        if (SUCCEEDED(out->GetDesc(&od))) {
+            fprintf(stderr, "[ResizeTrace] swapchain containing output '%ls' "
+                    "desktop=(%ld,%ld)-(%ld,%ld) attached=%d\n",
+                    od.DeviceName,
+                    od.DesktopCoordinates.left, od.DesktopCoordinates.top,
+                    od.DesktopCoordinates.right, od.DesktopCoordinates.bottom,
+                    od.AttachedToDesktop ? 1 : 0);
+            fflush(stderr);
+        }
+        out->Release();
+    }
+}
+}  // namespace
+
+// ============================================================
 // 0x180004340 — the swap-chain resize / recreate helper
 //
 // Not a vtable slot: a plain function called from the WM_ACTIVATE handler
@@ -751,9 +888,19 @@ int DeviceData_Resize(DeviceData* self) {
     }
 
     void* dev = DeviceOf(self);
+    ++g_resizeTraceCalls;
+    TraceGeom("entry", dev, im);
     Field<uint8_t>(dev, Dev::kResetPending) = 1;
 
     if (!IsWindowVisible(Field<HWND>(dev, Dev::kHwnd)))
+        return 0;
+
+    // A minimized window has a 0x0 client rect, and IsWindowVisible() is still
+    // TRUE for it — so retail cheerfully latches that 0x0 the first time the
+    // player minimizes. Treat it like the not-visible case: leave
+    // kResetPending set and rebuild when the window comes back. Doing this
+    // before the guard below also stops us fighting a deliberate minimize.
+    if (WindowGuardEnabled() && IsIconic(Field<HWND>(dev, Dev::kHwnd)))
         return 0;
 
     ID3D11DeviceContext* ctx = static_cast<ID3D11DeviceContext*>(self->d3dContext);
@@ -777,7 +924,65 @@ int DeviceData_Resize(DeviceData* self) {
         Field<int32_t>(dev, Dev::kHeight) = mode.height;
     }
 
+    // AdjustDisplay's windowed branch re-reads GetClientRect and writes the
+    // result into BOTH Device+0x04/+0x08 and Video::Configuration+0x1c/+0x20,
+    // with no floor. Left alone, one collapsed frame latches for the whole run
+    // and then gets persisted. The guard brackets that call.
+    //
+    // Guard, first half. Device+0x04/+0x08 arrives here from the WM_SIZE path,
+    // so an external collapse is already sitting in it before AdjustDisplay
+    // runs. Replacing it with a sane size now means AdjustDisplay's SetWindowPos
+    // pushes the window back open instead of nailing it shut, and the
+    // GetClientRect it latches afterwards is the good value.
+    if (WindowGuardEnabled() &&
+        DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
+                       Field<int32_t>(dev, Dev::kHeight))) {
+        int gw = 0, gh = 0;
+        PickGoodSize(cfg, mode, &gw, &gh);
+        static bool reported = false;
+        if (!reported) {
+            reported = true;
+            fprintf(stderr, "[WindowGuard] refusing collapsed size %dx%d -> "
+                    "restoring %dx%d (an external window manager reshaped the "
+                    "window; see the note above DeviceData_Resize)\n",
+                    Field<int32_t>(dev, Dev::kWidth),
+                    Field<int32_t>(dev, Dev::kHeight), gw, gh);
+            fflush(stderr);
+        }
+        Field<int32_t>(dev, Dev::kWidth)  = gw;
+        Field<int32_t>(dev, Dev::kHeight) = gh;
+    }
+
+    TraceGeom("pre-AdjustDisplay", dev, im);
     im->DeviceAdjustDisplay(dev);
+    TraceGeom("post-AdjustDisplay", dev, im);
+
+    // Guard, second half. If the external actor re-collapsed the window inside
+    // that call, AdjustDisplay has just latched the bad size into both the
+    // device and the configuration. Scrub both: the swap chain must never be
+    // built at a zero dimension (CreateColorBuffer fails with "[0x0 4xAA]" and
+    // Engine::Startup returns 0), and Configuration must never carry a value
+    // that Video::Configuration::Save would persist. The window itself may stay
+    // collapsed — we do not keep fighting for it — but the renderer survives
+    // and the settings stay clean.
+    if (WindowGuardEnabled()) {
+        int gw = 0, gh = 0;
+        PickGoodSize(cfg, mode, &gw, &gh);
+        if (DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
+                           Field<int32_t>(dev, Dev::kHeight))) {
+            Field<int32_t>(dev, Dev::kWidth)  = gw;
+            Field<int32_t>(dev, Dev::kHeight) = gh;
+        }
+        if (DegenerateSize(Field<int32_t>(cfg, Cfg::kWindowWidth),
+                           Field<int32_t>(cfg, Cfg::kWindowHeight))) {
+            Field<int32_t>(cfg, Cfg::kWindowWidth)  = gw;
+            Field<int32_t>(cfg, Cfg::kWindowHeight) = gh;
+        }
+    }
+
+    // Whatever we ended up with, if it is sane it becomes the restore point.
+    RememberGoodSize(Field<int32_t>(dev, Dev::kWidth),
+                     Field<int32_t>(dev, Dev::kHeight));
 
     const RefreshRate* rates = static_cast<const RefreshRate*>(mode.rates);
     const int rateIndex = Field<int32_t>(dev, Dev::kRefreshIndex);
@@ -794,7 +999,23 @@ int DeviceData_Resize(DeviceData* self) {
     IDXGISwapChain* sc = static_cast<IDXGISwapChain*>(self->swapChain);
 
     bool ok = false;
-    if (sc->ResizeTarget(&target) == 0 &&
+
+    // ResizeTarget is called first and unconditionally in the shipped order, so
+    // hoisting it out of the short-circuit chain preserves semantics exactly.
+    TraceContainingOutput(sc);
+    TraceGeom("pre-ResizeTarget", dev, im);
+    const HRESULT hrTarget = sc->ResizeTarget(&target);
+    TraceGeom("post-ResizeTarget", dev, im);
+    if (ResizeTraceOn()) {
+        fprintf(stderr, "[ResizeTrace #%d] ResizeTarget(%ux%u @ %u/%u fmt=%u) "
+                "-> 0x%08lX\n", g_resizeTraceCalls, target.Width, target.Height,
+                target.RefreshRate.Numerator, target.RefreshRate.Denominator,
+                static_cast<unsigned>(target.Format),
+                static_cast<unsigned long>(hrTarget));
+        fflush(stderr);
+    }
+
+    if (hrTarget == 0 &&
         sc->ResizeBuffers(1,
                           static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth)),
                           static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight)),

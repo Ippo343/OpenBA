@@ -27,6 +27,7 @@ constexpr int       kVtableSlot_OnCommand   = 8;      // slot8 (+0x40): OnComman
 // Dialog command/event protocol (matches the UI dispatcher).
 constexpr int kMsg_ButtonClick = 0x12;
 constexpr int kButtonId_New    = 0;   // MainMenuDialog "buttonNew"
+constexpr int kButtonId_Quit   = 6;   // MainMenuDialog "buttonQuit"
 constexpr int kEventId_Ok      = 2;   // NewGameDialog "buttonOk" (Start)
 
 // State of the driver.
@@ -34,6 +35,7 @@ enum class Phase {
     Disabled,
     WaitMenuSettle,   // menu up; counting down before firing New Game
     WaitNewGame,      // New Game opened; waiting for its Slot4 (combos/OK)
+    WaitQuit,         // menu up; counting down before firing Quit
     Done,
 };
 
@@ -62,6 +64,24 @@ void InjectClick(void* dialog, int msg, int id) {
 void Init() {
     if (s_initialized) return;
     s_initialized = true;
+
+    // BANISHED_AUTOQUIT drives menu -> Quit instead of menu -> New Game. It
+    // exercises the only retail exit path (MainMenuDialog buttonQuit ->
+    // Application::Quit -> MainLoop::Run returns -> Engine::Shutdown), which is
+    // what runs Video::Configuration::Save + Persistence::WriteSettings. Use it
+    // to verify settings actually round-trip to the registry.
+    if (const char* q = std::getenv("BANISHED_AUTOQUIT")) {
+        if (q[0] != '\0' && std::strcmp(q, "0") != 0 &&
+            std::strcmp(q, "false") != 0) {
+            int parsedQ = std::atoi(q);
+            if (parsedQ > 1) s_settleFrames = parsedQ;
+            s_enabled = true;
+            s_phase   = Phase::WaitQuit;
+            printf("[AutoStart] AUTOQUIT ENABLED (BANISHED_AUTOQUIT=\"%s\") — will "
+                   "click Quit after %d menu frames\n", q, s_settleFrames);
+            return;
+        }
+    }
 
     const char* env = std::getenv("BANISHED_AUTOSTART");
     if (!env || env[0] == '\0' ||
@@ -139,6 +159,22 @@ void TickMenu(void* menuDLT) {
                    kNewGameTimeoutFrames, newGame);
             s_phase = Phase::Done;
         }
+        break;
+    }
+
+    case Phase::WaitQuit: {
+        void* mainMenu = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        if (!mainMenu) {
+            s_phaseFrame = 0;
+            return;
+        }
+        if (++s_phaseFrame < s_settleFrames) return;
+
+        printf("[AutoStart] menu settled (mainMenu=%p) — injecting Quit click\n",
+               mainMenu);
+        InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Quit);
+        s_phase = Phase::Done;
         break;
     }
 

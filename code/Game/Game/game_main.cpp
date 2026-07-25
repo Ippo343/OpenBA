@@ -189,10 +189,43 @@ static void ShutdownEngineStaged(void* engineP) {
     printf("[Shutdown] partial Engine::Shutdown (steps 1-13)\n");
     fflush(stdout);
 
-    // 1. Write the "skip-reset" bool into Video::Configuration's first byte.
+    // Video::Configuration::Save (step 8) persists whatever
+    // Video::Device::AdjustDisplay last read out of GetClientRect. If anything
+    // reshaped the window during the run, that is a degenerate client rect
+    // (120x0 here) rather than the real size. Log the window state so a
+    // poisoned save is attributable. Root cause of the 120x0 was an external
+    // window manager (PowerToys FancyZones), not a minimize — see the guard in
+    // dx11/src/devicedata.cpp, which now prevents the latch at the source.
+    void* videoDev = load_ptr(0x6c0);
+    HWND gameWnd = videoDev
+        ? *reinterpret_cast<HWND*>(reinterpret_cast<uintptr_t>(videoDev) + 0x90)
+        : nullptr;
+    auto logWindow = [&](const char* when) {
+        if (!gameWnd) return;
+        RECT cr{};
+        GetClientRect(gameWnd, &cr);
+        WINDOWPLACEMENT wp{}; wp.length = sizeof(wp);
+        GetWindowPlacement(gameWnd, &wp);
+        printf("[Shutdown] window %s: iconic=%d showCmd=%u client=%ldx%ld\n",
+               when, IsIconic(gameWnd) ? 1 : 0, wp.showCmd,
+               cr.right - cr.left, cr.bottom - cr.top);
+        fflush(stdout);
+    };
+    logWindow("on entry");
+
+    // 1. This is Engine::PlatformConfigure(false, ...) inlined: VideoSettings =
+    //    (Engine::Startup never reached its end). Startup sets engine+0x6f0 = 1
+    //    only on full success, so a good run stores false and the next boot
+    //    skips the launcher dialog; a run that died during video init leaves it
+    //    true, and the dialog comes back so the user can fix the settings.
     if (void* vc = load_ptr(0x6b8)) {
-        *reinterpret_cast<bool*>(vc) =
+        const bool startupIncomplete =
             *reinterpret_cast<uint8_t*>(base + 0x6f0) == 0;
+        *reinterpret_cast<bool*>(vc) = startupIncomplete;
+        printf("[Shutdown] VideoSettings <- %s (engine+0x6f0=%u)\n",
+               startupIncomplete ? "true (show launcher dialog next boot)"
+                                 : "false (clean run)",
+               *reinterpret_cast<uint8_t*>(base + 0x6f0));
     }
 
     // 2. AchievementManager::RemoveAll
@@ -255,8 +288,35 @@ static void ShutdownEngineStaged(void* engineP) {
         }
     }
 
-    // 8. Video::Configuration::Save
+    // 8. Video::Configuration::Save — this is the snapshot that reaches the
+    //    registry, so log the window block it is about to persist.
+    logWindow("before Video::Configuration::Save");
     if (void* cfg = load_ptr(0x6b8)) {
+        const uintptr_t c = reinterpret_cast<uintptr_t>(cfg);
+        printf("[Shutdown] Video::Configuration to persist: window %dx%d at %d,%d "
+               "fullscreen=%u mode %dx%d\n",
+               *reinterpret_cast<int*>(c + 0x1c), *reinterpret_cast<int*>(c + 0x20),
+               *reinterpret_cast<int*>(c + 0x14), *reinterpret_cast<int*>(c + 0x18),
+               *reinterpret_cast<uint8_t*>(c + 0x40),
+               *reinterpret_cast<int*>(c + 0x0c), *reinterpret_cast<int*>(c + 0x10));
+        // Do not persist a collapsed window. AdjustDisplay copies GetClientRect
+        // into Configuration+0x1c/+0x20 on every call with no floor, so if
+        // anything reshaped the window at any point, what is sitting here is a
+        // degenerate 120x0 rect. This is the last line of defence — the guard
+        // in dx11/src/devicedata.cpp stops it being latched at all. Saving that
+        // makes the next boot fail in CreateColorBuffer and the game becomes
+        // unlaunchable until the registry is edited by hand. Fall back to the
+        // -1 "no override" sentinel from Video::Configuration's constructor.
+        constexpr int kMinSaneWindowDim = 64;
+        int& winW = *reinterpret_cast<int*>(c + 0x1c);
+        int& winH = *reinterpret_cast<int*>(c + 0x20);
+        if ((winW >= 0 && winW < kMinSaneWindowDim) ||
+            (winH >= 0 && winH < kMinSaneWindowDim)) {
+            fprintf(stderr, "[Shutdown] refusing to persist collapsed window "
+                            "%dx%d — storing -1x-1 instead\n", winW, winH);
+            winW = -1;
+            winH = -1;
+        }
         if (auto save = ResolveFn<void(*)(void*)>(
                 "?Save@Configuration@Video@@QEAAXXZ"))
             save(cfg);
@@ -284,11 +344,24 @@ static void ShutdownEngineStaged(void* engineP) {
     }
 
     // 12. Persistence::WriteSettings (gated on engine[0x6f1] == 0)
+    //
+    // WriteSettings is a CONST member — the export is QEBA, not QEAA. Asking
+    // for QEAA resolved to null and this step silently did nothing, so no
+    // setting ever reached the registry. That is what made ResetVideoRegistry
+    // look necessary. The failure is logged now rather than swallowed.
     if (void* per = load_ptr(0x678)) {
         if (*reinterpret_cast<uint8_t*>(base + 0x6f1) == 0) {
-            if (auto fn = ResolveFn<void(*)(void*)>(
-                    "?WriteSettings@Persistence@IO@@QEAAXXZ"))
+            auto fn = ResolveFn<void(*)(void*)>(
+                    "?WriteSettings@Persistence@IO@@QEBAXXZ");
+            if (fn) {
                 fn(per);
+                printf("[Shutdown] Persistence::WriteSettings done\n");
+            } else {
+                fprintf(stderr, "[Shutdown] ERROR: Persistence::WriteSettings "
+                                "did not resolve — settings NOT persisted\n");
+            }
+        } else {
+            printf("[Shutdown] WriteSettings skipped (engine+0x6f1 set)\n");
         }
     }
 

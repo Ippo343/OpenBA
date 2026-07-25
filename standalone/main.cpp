@@ -78,49 +78,180 @@ struct ProbeBaseTypeInfo {
 // to "false" each boot breaks the cycle without touching Persistence::Save.
 // Once standalone has a real shutdown path, this can go away.
 // ============================================================
-static void ResetVideoRegistry() {
+// Log the show-state the process was launched with. Video::Device::PlatformStartup
+// (VideoDX11 slot 2) calls ShowWindow(hwnd, SW_SHOWDEFAULT), and SW_SHOWDEFAULT
+// means "use STARTUPINFO.wShowWindow from whoever called CreateProcess". So the
+// window's initial show state is a property of the launcher, not of the game.
+// Launching with wShowWindow = SW_SHOWMINIMIZED (e.g. Start-Process
+// -WindowStyle Minimized) really does dead-end in CreateColorBuffer, so this
+// stays worth logging. It is NOT, however, the cause of the 136x39 collapse —
+// that is an external window manager; see "Who collapses the game window?".
+static void DumpStartupInfo() {
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    GetStartupInfoW(&si);
+    const bool usesShow = (si.dwFlags & STARTF_USESHOWWINDOW) != 0;
+    const char* name = "?";
+    switch (si.wShowWindow) {
+    case SW_HIDE:            name = "SW_HIDE";            break;
+    case SW_SHOWNORMAL:      name = "SW_SHOWNORMAL";      break;
+    case SW_SHOWMINIMIZED:   name = "SW_SHOWMINIMIZED";   break;
+    case SW_SHOWMAXIMIZED:   name = "SW_SHOWMAXIMIZED";   break;
+    case SW_SHOWNOACTIVATE:  name = "SW_SHOWNOACTIVATE";  break;
+    case SW_SHOW:            name = "SW_SHOW";            break;
+    case SW_MINIMIZE:        name = "SW_MINIMIZE";        break;
+    case SW_SHOWMINNOACTIVE: name = "SW_SHOWMINNOACTIVE"; break;
+    case SW_SHOWNA:          name = "SW_SHOWNA";          break;
+    case SW_RESTORE:         name = "SW_RESTORE";         break;
+    case SW_SHOWDEFAULT:     name = "SW_SHOWDEFAULT";     break;
+    }
+    const bool minimizing = usesShow &&
+        (si.wShowWindow == SW_SHOWMINIMIZED || si.wShowWindow == SW_MINIMIZE ||
+         si.wShowWindow == SW_SHOWMINNOACTIVE);
+    printf("[StartupInfo] dwFlags=0x%08lX USESHOWWINDOW=%d wShowWindow=%u (%s)%s\n",
+           si.dwFlags, usesShow ? 1 : 0, si.wShowWindow, name,
+           minimizing ? "  <-- SW_SHOWDEFAULT WILL MINIMIZE THE GAME WINDOW" : "");
+    fflush(stdout);
+}
+
+// Read back the Video* keys exactly as they sit on disk, before anything
+// overwrites them. This is what Video::Configuration::Startup will parse.
+static void DumpVideoRegistry(const char* tag) {
     HKEY hKey = nullptr;
-    LONG rc = RegOpenKeyExW(HKEY_CURRENT_USER,
-                            L"Software\\Shining Rock Software LLC\\Banished",
-                            0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey);
-    if (rc != ERROR_SUCCESS) {
-        printf("[Standalone] WARN: ResetVideoRegistry: RegOpenKeyExW failed (%ld)\n", rc);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Shining Rock Software LLC\\Banished",
+                      0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS) {
+        printf("[VideoReg %s] key absent (first run)\n", tag);
+        return;
+    }
+    static const wchar_t* keys[] = {
+        L"VideoSettings", L"VideoInterface", L"VideoFullscreen",
+        L"VideoWidth", L"VideoHeight",
+        L"VideoWindowX", L"VideoWindowY",
+        L"VideoWindowWidth", L"VideoWindowHeight",
+    };
+    for (const wchar_t* k : keys) {
+        wchar_t buf[64] = {0};
+        DWORD cb = sizeof(buf), type = 0;
+        if (RegQueryValueExW(hKey, k, nullptr, &type,
+                             reinterpret_cast<BYTE*>(buf), &cb) == ERROR_SUCCESS) {
+            printf("[VideoReg %s]   %-18ls = \"%ls\" (type %lu)\n", tag, k, buf, type);
+        } else {
+            printf("[VideoReg %s]   %-18ls = <absent>\n", tag, k);
+        }
+    }
+    RegCloseKey(hKey);
+    fflush(stdout);
+}
+
+// ============================================================
+// Unattended-run guard (harness only — NOT a settings override)
+//
+// Retail's launcher dialog is gated on one bit: Engine::Shutdown stores
+// VideoSettings = "Engine::Startup never reached its end", and
+// Engine::PlatformConfigure shows the dialog whenever that bit is true. So a
+// clean run leaves it false and boots straight into the game; a run that died
+// during video init leaves it true and the dialog comes back so the user can
+// repair their settings. That is the whole mechanism, and the standalone now
+// participates in it unmodified.
+//
+// The one case it does not survive is ours: during development we kill the
+// process constantly, which looks exactly like a crash and leaves the bit set.
+// An automated run (make sa-run / sa-run-menu) would then block forever on a
+// modal Win32 dialog nobody is there to click.
+//
+// So when — and only when — a harness env var says this run is unattended, we
+// assert what we already know ("the previous run was ended deliberately") by
+// clearing that one bit through the same registry key retail uses. No byte
+// patching, no forced resolutions, no forced renderer.
+//
+// The second half repairs a non-positive VideoWindowWidth/Height. Those are
+// not a user preference — they are the residue of an external window manager
+// collapsing the window (PowerToys FancyZones; see the "Who collapses the game
+// window?" note below). Video::Device::AdjustDisplay re-reads GetClientRect on
+// every call and writes the result back into the configuration, so whatever
+// size anything else forced on the window latches into the settings.
+// Persisting that makes the next boot fail in
+// CreateColorBuffer ("[0x0 4xAA]") and every boot after it. Retail recovers via
+// the launcher dialog; an unattended run has no one to drive it, so we drop
+// back to the -1 "no override" sentinel the Video::Configuration constructor
+// itself uses and let the engine pick the size.
+static void HarnessGuardUnattendedBoot() {
+    auto envSet = [](const char* n) {
+        const char* v = getenv(n);
+        return v && v[0] && strcmp(v, "0") != 0 && strcmp(v, "false") != 0;
+    };
+    const bool unattended = envSet("BANISHED_AUTOSTART") || envSet("BANISHED_AUTOQUIT");
+    if (!unattended) {
+        printf("[Standalone] Attended run — launcher dialog left to retail rules "
+               "(it appears iff the last run did not finish Engine::Startup)\n");
+    }
+
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Shining Rock Software LLC\\Banished",
+                      0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS) {
+        printf("[Standalone] HarnessGuard: settings key absent — nothing to guard\n");
         return;
     }
 
-    // Banished stores ALL settings as REG_SZ (strings) and parses them with
-    // atoi. Writing REG_DWORD silently fails — Persistence::Load only reads
-    // strings, so DWORD-typed keys appear absent and the engine keeps stale
-    // values. Always write strings.
+    // Every Banished setting is REG_SZ and parsed with atoi/strcmp. A REG_DWORD
+    // here reads back as absent and the engine keeps its ctor default.
     auto setStr = [&](const wchar_t* name, const wchar_t* val) {
         DWORD bytes = (DWORD)((wcslen(val) + 1) * sizeof(wchar_t));
         RegSetValueExW(hKey, name, 0, REG_SZ,
                        reinterpret_cast<const BYTE*>(val), bytes);
     };
+    auto getInt = [&](const wchar_t* name, int* out) {
+        wchar_t buf[64] = {0};
+        DWORD cb = sizeof(buf), type = 0;
+        if (RegQueryValueExW(hKey, name, nullptr, &type,
+                             reinterpret_cast<BYTE*>(buf), &cb) != ERROR_SUCCESS)
+            return false;
+        *out = _wtoi(buf);
+        return true;
+    };
 
-    setStr(L"VideoWindowWidth",  L"1280");
-    setStr(L"VideoWindowHeight", L"720");
-    setStr(L"VideoWindowX",      L"100");
-    setStr(L"VideoWindowY",      L"100");
+    if (unattended) {
+        wchar_t settings[16] = {0};
+        DWORD cb = sizeof(settings), type = 0;
+        if (RegQueryValueExW(hKey, L"VideoSettings", nullptr, &type,
+                             reinterpret_cast<BYTE*>(settings), &cb) == ERROR_SUCCESS &&
+            wcscmp(settings, L"true") == 0) {
+            setStr(L"VideoSettings", L"false");
+            printf("[Standalone] HarnessGuard: VideoSettings true -> false "
+                   "(unattended run; suppresses the launcher dialog the previous "
+                   "abnormal exit armed)\n");
+        }
+    }
 
-    // Force DX11 (interface index 1). DX9 (index 0) loses its device on idle
-    // events (TestCooperativeLevel → D3DERR_DEVICELOST), which manifests as
-    // BeginFrame returning false → MenuDLT::DrawFailed loop.
-    setStr(L"VideoInterface", L"1");
-
-    setStr(L"VideoSettings", L"true");
-
-    // Windowed-mode toggle — flip to "false" for windowed (DWM-composited),
-    // "true" for exclusive fullscreen. Used to A/B test whether splash flashes
-    // come from DWM compositor invalidating the window during ~125ms+ stalls.
-    // Windowed mode keeps DWM in the loop (so any DWM-paint glitches show);
-    // fullscreen bypasses DWM (so any glitches must come from our code).
-    const wchar_t* fullscreen = L"false";  // <-- change to L"true" to revert
-    setStr(L"VideoFullscreen", fullscreen);
+    // Degenerate window size repair — runs on EVERY launch, attended or not.
+    //
+    // This is the one deliberate deviation from retail in the settings path,
+    // and it is a rejection of impossible values rather than an override of
+    // real ones. A collapsed window (the 120x0 client of a minimized frame)
+    // gets latched into Video::Configuration by AdjustDisplay and persisted by
+    // Engine::Shutdown; on the next boot the windowed override feeds it back
+    // into the swap chain and CreateColorBuffer fails with "[0x0 4xAA]", so
+    // Engine::Startup returns 0 and the game never boots again. No user ever
+    // chose a 120x0 window, so anything below a plausible minimum goes back to
+    // the -1 "no override" sentinel that Video::Configuration's own
+    // constructor uses, and the engine picks the size.
+    constexpr int kMinSaneWindowDim = 64;
+    int w = -1, h = -1;
+    const bool haveW = getInt(L"VideoWindowWidth",  &w);
+    const bool haveH = getInt(L"VideoWindowHeight", &h);
+    const bool degenerate = (haveW && w >= 0 && w < kMinSaneWindowDim) ||
+                            (haveH && h >= 0 && h < kMinSaneWindowDim);
+    if (degenerate) {
+        setStr(L"VideoWindowWidth",  L"-1");
+        setStr(L"VideoWindowHeight", L"-1");
+        printf("[Standalone] Repaired collapsed window size %dx%d -> -1x-1 "
+               "(a previous run persisted a minimized frame's client rect; see "
+               "Video::Device::AdjustDisplay)\n", w, h);
+    }
 
     RegCloseKey(hKey);
-    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=%ls "
-           "VideoInterface=1 Window=1280x720 (all REG_SZ)\n", fullscreen);
 }
 
 // ============================================================
@@ -593,6 +724,90 @@ static bool HookRuntimeMessageBoxW() {
 }
 
 // ============================================================
+// Window-collapse diagnostic: interpose Runtime's user32 imports for
+// SetWindowPos / ShowWindow and report any call that would shrink the engine
+// window to (or near) the minimized metrics. If the collapse originates in the
+// engine we get the calling thread and a backtrace; if nothing is logged the
+// call came from outside Runtime (the OS, DWM, or another module).
+// ============================================================
+static void PrintBacktraceToLog(const char* tag);   // defined below
+
+typedef BOOL (WINAPI *SetWindowPos_t)(HWND, HWND, int, int, int, int, UINT);
+typedef BOOL (WINAPI *ShowWindow_t)(HWND, int);
+static SetWindowPos_t g_realSetWindowPos = nullptr;
+static ShowWindow_t   g_realShowWindow   = nullptr;
+
+static BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND after, int X, int Y,
+                                      int cx, int cy, UINT flags) {
+    if (!(flags & SWP_NOSIZE) && (cx < 400 || cy < 200)) {
+        printf("[WinTrace] SetWindowPos(hwnd=%p, %d,%d %dx%d, flags=0x%X) tid=%lu"
+               "   <-- COLLAPSING THE WINDOW\n",
+               (void*)hWnd, X, Y, cx, cy, flags, GetCurrentThreadId());
+        PrintBacktraceToLog("WinTrace");
+    }
+    return g_realSetWindowPos(hWnd, after, X, Y, cx, cy, flags);
+}
+
+static BOOL WINAPI HookedShowWindow(HWND hWnd, int nCmdShow) {
+    printf("[WinTrace] ShowWindow(hwnd=%p, nCmdShow=%d) tid=%lu\n",
+           (void*)hWnd, nCmdShow, GetCurrentThreadId());
+    if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED ||
+        nCmdShow == SW_SHOWMINNOACTIVE || nCmdShow == SW_HIDE)
+        PrintBacktraceToLog("WinTrace");
+    return g_realShowWindow(hWnd, nCmdShow);
+}
+
+// Swap one named user32 import in Runtime-x64.dll's IAT. Returns the original.
+static void* HookRuntimeUser32Import(const char* fnName, void* replacement) {
+    HMODULE runtime = GetModuleHandleA("Runtime-x64.dll");
+    if (!runtime) return nullptr;
+    auto base = reinterpret_cast<uint8_t*>(runtime);
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
+    auto& importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!importDir.VirtualAddress || !importDir.Size) return nullptr;
+
+    auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
+    for (; desc->Name; ++desc) {
+        const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
+        if (_stricmp(dllName, "user32.dll") != 0) continue;
+        DWORD nameTableRVA = desc->OriginalFirstThunk ? desc->OriginalFirstThunk
+                                                      : desc->FirstThunk;
+        auto* nameThunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + nameTableRVA);
+        auto* iatThunk  = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
+        for (; nameThunk->u1.AddressOfData; ++nameThunk, ++iatThunk) {
+            if (nameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64) continue;
+            auto* imp = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(
+                base + nameThunk->u1.AddressOfData);
+            if (strcmp(imp->Name, fnName) != 0) continue;
+            DWORD oldProtect = 0;
+            if (!VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
+                                PAGE_READWRITE, &oldProtect))
+                return nullptr;
+            void* orig = reinterpret_cast<void*>(iatThunk->u1.Function);
+            iatThunk->u1.Function = reinterpret_cast<uintptr_t>(replacement);
+            VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
+                           oldProtect, &oldProtect);
+            printf("[WinTrace] hooked Runtime!user32!%s (real=%p)\n", fnName, orig);
+            return orig;
+        }
+    }
+    printf("[WinTrace] Runtime does not import user32!%s\n", fnName);
+    return nullptr;
+}
+
+static void InstallWindowTrace() {
+    g_realSetWindowPos = reinterpret_cast<SetWindowPos_t>(
+        HookRuntimeUser32Import("SetWindowPos", (void*)&HookedSetWindowPos));
+    g_realShowWindow = reinterpret_cast<ShowWindow_t>(
+        HookRuntimeUser32Import("ShowWindow", (void*)&HookedShowWindow));
+    if (!g_realSetWindowPos) g_realSetWindowPos = &SetWindowPos;
+    if (!g_realShowWindow)   g_realShowWindow   = &ShowWindow;
+}
+
+// ============================================================
 // PROBE: walk Runtime's _firstTypeInfo (head @ Runtime 0x1801fc6e0).
 // BaseTypeInfo struct layout: +0x08 name, +0x10 parent, +0x20 factoryFn,
 // +0x30 next. typeId at +0x00 is 0xFFFFFFFF until Factory::Startup runs.
@@ -634,56 +849,6 @@ static void DumpFirstTypeInfo(const char* tag) {
     }
     printf("[Probe %s] Total: %d entries, %d Loading.rsc target descs found\n",
            tag, n, descMatches);
-}
-
-// ============================================================
-// Skip the launcher's DialogBoxParamW call inside Engine::PlatformConfigure
-// (Runtime 0x1800a17d4) without bypassing the rest of the function.
-//
-// Original instruction:
-//     1800a17d4: FF 15 F6 9C 0A 00      CALL [DialogBoxParamW IAT slot]
-// We overwrite with:
-//     1800a17d4: B8 01 00 00 00 90      MOV EAX,1 ; NOP
-// so DialogBoxParamW returns 1 (i.e. user pressed "Play"), but everything
-// else in PlatformConfigure runs normally — most importantly:
-//   - Video::Device::ValidateConfiguration (0x1800a17b5, before the call)
-//   - Video::Configuration::Save / IO::Persistence::WriteSettings (after)
-//
-// PlatformConfigure's tail returns `IVar6 == 1`, so after the patch the
-// function returns true. The big "reset" branches at the end are gated on
-// global flags (DAT_1801fc698/_x699) that the dialog handler would have
-// flipped — with the dialog skipped they stay 0 and the resets don't run.
-//
-// This is the M1-friendly replacement for the previous 6-byte entry patch
-// (MOV EAX,1; RET) which short-circuited ValidateConfiguration and may have
-// left Device::_singleton+0x100 pointing at the wrong renderer.
-// ============================================================
-static void SkipPlatformConfigure() {
-    uintptr_t patchSite = ResolveAddr(Module::Runtime, 0x1800a17d4);
-    if (!patchSite) {
-        printf("[Standalone] WARN: could not resolve PlatformConfigure dialog call site — popup may appear\n");
-        return;
-    }
-    // Sanity check: refuse to patch if the bytes don't match the indirect CALL we expect.
-    static const uint8_t expected[] = { 0xFF, 0x15, 0xF6, 0x9C, 0x0A, 0x00 };
-    if (memcmp((void*)patchSite, expected, sizeof(expected)) != 0) {
-        printf("[Standalone] WARN: PlatformConfigure dialog call site (%p) mismatched — refusing to patch\n",
-               (void*)patchSite);
-        return;
-    }
-    static const uint8_t patch[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0x90 };
-    DWORD oldProtect = 0;
-    if (!VirtualProtect((LPVOID)patchSite, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        printf("[Standalone] WARN: VirtualProtect failed for PlatformConfigure (err=%lu)\n",
-               GetLastError());
-        return;
-    }
-    memcpy((void*)patchSite, patch, sizeof(patch));
-    DWORD dummy = 0;
-    VirtualProtect((LPVOID)patchSite, sizeof(patch), oldProtect, &dummy);
-    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)patchSite, sizeof(patch));
-    printf("[Standalone] PlatformConfigure dialog call (%p) patched to MOV EAX,1; NOP — popup skipped, ValidateConfiguration runs\n",
-           (void*)patchSite);
 }
 
 // ============================================================
@@ -829,6 +994,29 @@ static void DumpVideoState() {
         printf("[VideoProbe]   +0x08 adapter   = %d\n", adapterIdx);
         printf("[VideoProbe]   +0x0c width     = %d\n", width);
         printf("[VideoProbe]   +0x10 height    = %d\n", height);
+
+        // The window block. Video::Device::AdjustDisplay's windowed branch
+        // rewrites +0x1c/+0x20 from GetClientRect on every call, so any size an
+        // external window manager forces on the window ends up here. Whatever
+        // sits here now is what Video::Configuration::Save writes to the
+        // registry at shutdown, so a 0 in either field means the next boot is
+        // poisoned.
+        const int cfgWinX = *reinterpret_cast<int*>((uintptr_t)config + 0x14);
+        const int cfgWinY = *reinterpret_cast<int*>((uintptr_t)config + 0x18);
+        const int cfgWinW = *reinterpret_cast<int*>((uintptr_t)config + 0x1c);
+        const int cfgWinH = *reinterpret_cast<int*>((uintptr_t)config + 0x20);
+        printf("[VideoProbe]   +0x00 settings  = %d  (true => launcher dialog next boot)\n",
+               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x00));
+        printf("[VideoProbe]   +0x14 windowX   = %d\n", cfgWinX);
+        printf("[VideoProbe]   +0x18 windowY   = %d\n", cfgWinY);
+        printf("[VideoProbe]   +0x1c windowW   = %d%s\n", cfgWinW,
+               cfgWinW <= 0 ? "   <-- POISONED (AdjustDisplay latched an externally-forced size)" : "");
+        printf("[VideoProbe]   +0x20 windowH   = %d%s\n", cfgWinH,
+               cfgWinH <= 0 ? "   <-- POISONED (AdjustDisplay latched an externally-forced size)" : "");
+        printf("[VideoProbe]   +0x40 fullscreen= %d  +0x41 vsync=%d  +0x42 skipShow=%d\n",
+               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x40),
+               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x41),
+               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x42));
     }
 
     printf("[VideoProbe] Device::_singleton        = %p\n", device);
@@ -1116,6 +1304,24 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
         // Swap the class brush on the first message we ever see (any window).
         // The engine's main HWND is whichever one gets messages first.
         EnsureBlackWindowBrush(msg->hwnd);
+        // WM_SIZE / WM_WINDOWPOSCHANGING carry the dimensions that end up in
+        // Video::Device+0x04/+0x08 and then in VideoWindowWidth/Height. Decode
+        // them so a collapse to a minimum-size window is attributable to the
+        // message that caused it.
+        if (msg->message == 0x0005 /*WM_SIZE*/) {
+            printf("[WndMsg] WM_SIZE               hwnd=%p type=%llu %ux%u\n",
+                   (void*)msg->hwnd, (unsigned long long)msg->wParam,
+                   (unsigned)(msg->lParam & 0xFFFF),
+                   (unsigned)((msg->lParam >> 16) & 0xFFFF));
+            fflush(stdout);
+        } else if (msg->message == 0x0046 /*WM_WINDOWPOSCHANGING*/) {
+            auto* wp = reinterpret_cast<WINDOWPOS*>(msg->lParam);
+            if (wp) {
+                printf("[WndMsg] WM_WINDOWPOSCHANGING hwnd=%p %d,%d %dx%d flags=0x%X\n",
+                       (void*)msg->hwnd, wp->x, wp->y, wp->cx, wp->cy, wp->flags);
+                fflush(stdout);
+            }
+        }
         if (const char* name = WMNameForFocus(msg->message)) {
             printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
                    name, (void*)msg->hwnd,
@@ -1138,6 +1344,56 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
         }
     }
     return CallNextHookEx(g_msgHook, code, wParam, lParam);
+}
+
+// ============================================================
+// Who collapses the game window?  ANSWERED 2026-07-24: PowerToys FancyZones.
+//
+// A SetWindowPos to 136x39 at an off-screen origin lands on the engine window
+// about 1.6s in, carrying SWP_ASYNCWINDOWPOS. Video::Device::AdjustDisplay then
+// latches the resulting 120x0 client rect into Video::Configuration, and every
+// later call re-applies it (240 times in the captured run).
+//
+// The caller is an EXTERNAL PROCESS: FancyZones, with no app exclusions and
+// openWindowOnActiveMonitor set, snapping the newly created window into a zone
+// on another monitor. Adding reimpl-x64.exe to fancyzones_excluded_apps takes
+// the collapse from 240 occurrences to 0 with no code change. Nothing in this
+// exe or in Runtime ever asked for that size.
+//
+// Two readings that wasted time here, recorded so they are not repeated:
+//   * 136x39 is SM_CXMIN x SM_CYMIN — the OS *minimum tracking size*, i.e. the
+//     clamp on a degenerate request. It is NOT SM_CXMINIMIZED x SM_CYMINIMIZED
+//     (160x28). WM_SIZE carries type=0 (SIZE_RESTORED) and IsIconic() is 0, so
+//     the window is never minimized at any point.
+//   * SWP_ASYNCWINDOWPOS is passed by the CALLER, not added by the OS. It is
+//     the tell for a cross-process caller — which is exactly why the interposers
+//     below stay silent for the initiating call, and why the request is posted
+//     and only lands once the main thread resumes pumping after the sync loader
+//     wait (which makes the loader thread look responsible).
+//
+// So silence from these interposers does not mean "outside Runtime" — it means
+// outside the PROCESS. The cheap discriminator is in dx11/src/devicedata.cpp:
+// if DeviceData_Resize already sees a degenerate client rect on entry, the
+// caller is external and no in-process hook will ever catch it.
+// ============================================================
+static void PrintBacktraceToLog(const char* tag) {
+    void* frames[24] = {0};
+    const USHORT n = CaptureStackBackTrace(1, 24, frames, nullptr);
+    for (USHORT i = 0; i < n; ++i) {
+        HMODULE mod = nullptr;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)frames[i], &mod) && mod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(mod, path, MAX_PATH);
+            const char* nm = strrchr(path, '\\');
+            printf("[%s]   #%-2u %-22s + 0x%llX\n", tag, i, nm ? nm + 1 : path,
+                   (unsigned long long)((uintptr_t)frames[i] - (uintptr_t)mod));
+        } else {
+            printf("[%s]   #%-2u ???  @ %p\n", tag, i, frames[i]);
+        }
+    }
+    fflush(stdout);
 }
 
 static void InstallWndMsgHook() {
@@ -1203,9 +1459,11 @@ static bool Init() {
     //     without this, a pure-virtual call leaves zero log evidence.
     std::set_terminate(TerminateHandler);
 
-    // 1b. Reset Video* registry keys before anything else reads them.
-    //     Breaks the standalone-shutdown corruption cycle that wedges DX11.
-    ResetVideoRegistry();
+    // 1b. Log the Video* keys exactly as they sit on disk, then apply the
+    //     unattended-run guard (no-op for a normal launch). Everything the
+    //     engine reads comes from the registry via Video::Configuration::Startup.
+    DumpVideoRegistry("AT-BOOT");
+    HarnessGuardUnattendedBoot();
 
     // 2. Resolve Runtime-x64.dll and VideoDX11-x64.dll (ASLR)
     printf("[Standalone] Resolving DLLs...\n");
@@ -1225,6 +1483,9 @@ static bool Init() {
     } else {
         printf("[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block\n");
     }
+
+    // 2b. Window-geometry trace — see InstallWindowTrace.
+    InstallWindowTrace();
 
     // 3. Populate address registry (exe dispatch slots, code fns, vtables).
     //    Must happen BEFORE EngineFuncsInit, which reads from these slots.
@@ -1338,8 +1599,10 @@ static bool Init() {
     // Object::Factory::Startup assigns the real CRC type ids only then (here they
     // are still the 0xFFFFFFFF ctor sentinel). See code/Game/Game/game_main.cpp.
 
-    // 7. Skip the launcher dialog — see SkipPlatformConfigure note above.
-    SkipPlatformConfigure();
+    // 7. (was SkipPlatformConfigure) The launcher dialog is no longer patched
+    //    out. Engine::PlatformConfigure skips it on its own whenever
+    //    VideoSettings is false, which a clean Engine::Shutdown now stores —
+    //    see HarnessGuardUnattendedBoot for the whole mechanism.
 
     // 8. Install thread-local CALLWNDPROC hook so we can see WM_ACTIVATE /
     //    WM_KILLFOCUS / WM_SETFOCUS messages reaching the engine WindowProc.
@@ -1374,6 +1637,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
+
+    // Must be logged before anything creates a window — see DumpStartupInfo.
+    DumpStartupInfo();
 
     // Boot the stall detector so subsequent [Stall] log lines are tagged with
     // milliseconds since boot. Used to hunt remaining splash-flash sources.
