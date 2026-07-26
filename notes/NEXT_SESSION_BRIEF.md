@@ -7,13 +7,20 @@ branch `wave/upgrade-path-complete`.
 **Jump to [Investigative opens for next session](#-investigative-opens-for-next-session)**
 for the A–I list.
 
-**Update 2026-07-26 (A/B/C wave):** **A is CLOSED and the town grows** — 24 → 27 → 30 over
-6 000 frames, six births, newborns parented and housed. Two bugs (an unwired OnAdded vtable
-slot, an unassigned `RandFloat`) plus a naming correction that had the delivery roll's two
-branches backwards. **B is partly answered** — housing, not fertility, is now the ceiling,
-and immigration is confirmed not to be an un-played town's growth vector. **C is rescoped**:
-the town starts with 400 firewood in its barn and never touches it, so the missing piece is
-the **haul**, not a woodcutter. C is the only substantial open left.
+**Update 2026-07-26 (A/B/C wave):**
+
+* **A — CLOSED, and the flag is default-on.** The town grows: **24 → 35 over 21 000 frames**,
+  fourteen births, no crash. Two bugs (an unwired OnAdded vtable slot, an unassigned
+  `RandFloat`) plus a naming correction that had the delivery roll's two branches backwards.
+* **B — ANSWERED.** The player *is* the growth vector. The town fills its six houses to the
+  occupant cap and plateaus with 18 adults over marry age and nowhere to move to. That is
+  faithful; stop treating a frozen population as a bug.
+* **J — new, found and FIXED.** A mistyped `Math::Scalar::Abs` mangled name left a null
+  function pointer on the **mainline raw-material drop-off path**. Latent for a long time;
+  surfaced once the town had enough citizens to hit it.
+* **C — RESCOPED and left for next session.** The town starts with 400 firewood in its barn
+  and never touches it, so the missing piece is the **haul**, not a woodcutter. C is the only
+  substantial open left.
 
 ### What the D–I wave changed (2026-07-26)
 
@@ -311,8 +318,11 @@ the town citizen list `townMgr+0xa0`, which was **already ported and already reg
 address** — just never wired to the vtable.
 
 So three live births in one soak left the census at a flat 24: the babies existed, were in
-the world entity list, and were in no population system. Fixed under
-`BANISHED_LIVE_CITIZEN_ONADD` (opt-in until a longer soak).
+the world entity list, and were in no population system.
+
+**GRADUATED default-on 2026-07-26** (`BANISHED_LIVE_CITIZEN_ONADD` now in
+`kDefaultOnFlags`; set it to `0` to A/B). 21 000-frame soak: **24 → 27 → 29 → 30 → 32 → 33
+→ 35**, fourteen births, gender split staying near even (18F/17M), no crash, no deaths.
 
 ⭐ **Corollary worth acting on**: `StartTown_RegisterTownCitizens` is now fully redundant —
 it reports `registered 0 founding citizens (24 already registered by the OnAdd broadcast)`.
@@ -357,13 +367,30 @@ gestation+recovery cycle is ~8 000 frames at `FORCE_SPEED=40` (≈1.5 age units)
 tune — the "births are impossibly rare" reading came entirely from computing the mortality
 chance and mistaking it for the fertility chance.
 
-## B. ⚠️ PARTLY ANSWERED — the town is no longer frozen; housing is still the ceiling
+## B. ✅ ANSWERED (2026-07-26) — **the player IS the growth vector.** Stop calling it a bug
 
-Open A changes the premise: population now grows **inside existing households** up to the
-occupant cap `ResidenceDescription+0x24` (= 5). The stall point moves from "zero growth" to
-"every household full", which is a different and much more faithful failure mode.
+Open A changed the premise, and the 21 000-frame graduation soak then answered B outright.
+The town grows **inside its existing houses** up to the occupant cap
+(`ResidenceDescription+0x24` = 5) and then stops dead, by design:
 
-What is settled:
+| frame | citizens | over marry age | `noGuardian` | `ELIGIBLE` |
+|---|---|---|---|---|
+| 3 000  | 27 | 1  | 0 | 0 |
+| 9 000  | 30 | 7  | 0 | 0 |
+| 18 000 | 35 | 16 | 0 | 0 |
+| 21 000 | 35 | 18 | 0 | 0 |
+
+24 → 35 (+46%) in six houses, then a hard plateau with **18 adults over marry age, every
+single one still a dependant** (`noGuardian=0`). They are not spinning on a broken system —
+`sub_0e70` correctly finds no free house, so nobody moves out, so nobody marries, so no new
+household exists to bear children into. Meanwhile the founding households sit at cap.
+
+That is the faithful shape of an un-played Banished town: **it fills the housing it was
+given and waits for a builder.** A frozen population at that point is not a defect and
+should not be chased as one. The measurable done-when for any future housing work is simply
+`ELIGIBLE` going above 0.
+
+What is settled alongside it:
 
 * **Immigration is not an un-played town's growth vector.** `ImmigrationComponent` is a
   ControllerComponent that `ImmigrationUI_helper_2020` (`0x140012020`) finds by scanning a
@@ -375,8 +402,9 @@ What is settled:
   (`sub_0e70`), which is why `BANISHED_BUILD_DEMO_HOUSE=1` is load-bearing in the standing
   run. That is faithful.
 
-Still open: does a grown child that cannot move out take any *other* action, or does it
-spin? Worth one look now that there are more of them.
+The one loose thread: 18 stuck adults still pick *some* AI state each tick (the tally is
+dominated by SeekHappiness). Whether that is retail's own idle behaviour or a fallback we
+land on by accident is worth one look — but it is a cosmetic question now, not a growth one.
 
 ## C. 🔎 RESCOPED (2026-07-26) — it is not the woodcutter. **The haul never runs.**
 
@@ -449,23 +477,54 @@ idle/leisure tail and the priority table), not a woodcutter. Questions in order:
 
 `BANISHED_SEED_FUEL` / `BANISHED_SEED_FOOD` stay as soak stand-ins until (1) and (2) land.
 
-## J. 🆕 OPEN (2026-07-26) — the storage-spill crash on the elder path
+## J. ✅ FIXED (2026-07-26) — it was a mistyped mangled name, and it was not the elder path
 
-Found while probing C. **Pre-existing and NOT caused by the A-wave changes** — A/B'd with
-`BANISHED_LIVE_CITIZEN_ONADD` off and the crash is byte-identical (same stack, same fault).
-It is *exposed* by `BANISHED_SEED_FUEL=0`, which is simply the first config that lets
-citizens get far enough down the cold/elder path.
+**Root cause: `Math::Scalar::Abs` resolved to NULL.** `ResolveExport` was asked for
+`?Abs@Scalar@Math@@SA?AV12@V12@@Z` — a *static* taking a Scalar by value. No such export
+exists; objdump ordinal 1530 is `?Abs@Scalar@Math@@QEBA?AV12@XZ`, a const *member* taking
+nothing. The lookup returned 0, the dispatch slot `0x140152420` is unregistered (it prints
+`NOT IMPLEMENTED` right before every one of these crashes), and `s_scalarabs` stayed null —
+a hard EXEC-of-0 the moment `Pf_FindPlacementCell_bd40` reached its height-delta check.
+
+The ABI was never wrong: a const member returning a class by value passes `this` in RCX and
+the return buffer in RDX, which is exactly the existing `(const float* val, float* retbuf)`
+typedef. The old comment's own note — *"disasm shows RCX=val, RDX=retbuf — member-style
+retbuf order"* — had the shape right while the name said static. **Only the string changed.**
+Same string fixed in `fencedtool.cpp`, which had been limping on a hardcoded Runtime address.
+
+⚠ **The original "elder path" framing was too narrow.** A second crash, with a completely
+different caller, hit the same terminal function:
+
+```
+… Pf_SpillAllStorage_7570  → Pf_SpawnRawMaterialOnCell_78c0 → Pf_FindPlacementCell_bd40   (elder spill)
+… Pf_DropOffExec_7620      → Pf_SpawnRawMaterialOnCell_78c0 → Pf_FindPlacementCell_bd40   (ordinary drop-off)
+```
+
+i.e. this was on the **mainline "citizen puts a raw material down" route** all along — which
+is precisely the machinery open C needs. It was latent, not new: `LIVE_CITIZEN_ONADD`
+surfaced it because registered newborns become active citizens that do drop-offs, so traffic
+on that path rose. Post-fix the 21 000-frame soak is clean.
+
+### Original write-up, kept for the diagnostic pattern
+
+**Pre-existing and NOT caused by the A-wave changes** — A/B'd with
+`BANISHED_LIVE_CITIZEN_ONADD` off and the crash was byte-identical (same stack, same fault).
+It was *exposed* by `BANISHED_SEED_FUEL=0`, the first config that let citizens get far
+enough down the cold/elder path.
 
 ```
 Fault: EXEC of 0000000000000000
 VCALL-of-0: this=…fedb0  vtable=0000018500000000
 ```
 
-⚠ `vtable = 0x0000018500000000` is **the zeroed-low-dword signature** — the same
-`System::Time::Time(void*, float)` writes-8-bytes-through-a-4-byte-local trap the D–I wave
-paid for (see the traps section). The last fleet audit found only one such site; this is
-either a second one or the same class from a different writer. `this` is a **stack**
-address, so the clobbered pointer is a local.
+⚠ **The `vtable = 0x0000018500000000` reading was a red herring, and the dumper handed it
+to us.** It looked like the zeroed-low-dword `Time`-ctor signature, and it was not. The VEH
+handler *assumes* an EXEC-of-0 is a virtual call and prints `[RCX]` as "vtable" — but RCX
+here was a **stack buffer** (a float local), so the "vtable" was just two adjacent stack
+floats. A genuine vcall has a heap `this`. **Check that RCX looks like an object before
+believing the VCALL-of-0 line**; when it is stack-shaped, the fault is a call through a null
+static function pointer, and the thing to do is find which `EnsureFns()` binding failed —
+the `NOT IMPLEMENTED` lines immediately above the crash name them.
 
 Symbolized stack (image base `0x140000000`, `nm` against `standalone/build/reimpl-x64.exe`):
 
@@ -635,6 +694,21 @@ assumption and should be re-checked before being trusted.
 ---
 
 ## Traps the A/B wave paid for (2026-07-26)
+
+* **Verify every `ResolveExport` string against `objdump`** — the CitizenList-2.9ms lesson,
+  again, and this time it was a hard crash rather than a slowdown. `?Abs@Scalar@Math@@SA…`
+  (static) does not exist; the real export is `…@@QEBA?AV12@XZ` (const member). A wrong
+  string yields NULL, and a NULL that is only reached on a deep path looks like a stable
+  build until traffic on that path rises.
+* **`VCALL-of-0` in the crash dump is a guess, not a fact.** The handler prints `[RCX]` as
+  "vtable" for any EXEC-of-0. If RCX is stack-shaped, it is a null *static function pointer*,
+  not a vtable — and the `NOT IMPLEMENTED` lines printed just above the crash name exactly
+  which bindings failed. Reading it as a vtable sent this session looking for a
+  `Time`-ctor clobber that was not there.
+* **A latent bug surfaces where the traffic goes.** Wiring OnAdd did not create the
+  `ScalarAbs` crash; it created *citizens who do drop-offs*. When a change makes something
+  crash "for the first time", separate "caused" from "exposed" before reverting — the A/B is
+  cheap and the answer changes what you fix.
 
 * **"Declared, null-checked, never assigned" is a repeat offender in
   `citizencomponent.cpp`** — `s_fn_FindPartner` once, `s_fn_RandFloat` now. The idiom

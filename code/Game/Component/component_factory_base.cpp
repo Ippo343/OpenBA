@@ -170,6 +170,13 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_SELECTION_OUTLINE",
     "BANISHED_LIVE_EVENTS",
     "BANISHED_LIVE_CITIZEN_CARRY",
+    // CitizenComponent vtable slot 6 (+0x30, the OnAdded broadcast) -> OnAdd 0x140114000,
+    // the append into the town citizen list townMgr+0xa0. Graduated 2026-07-26: without it
+    // newborns were created, entered the world entity list, and joined no population system
+    // at all — the town could never grow. 21 000-frame soak with it on: 24 -> 35 citizens,
+    // fourteen births, no crash, and it makes StartTown_RegisterTownCitizens redundant
+    // (that pass now reports 0 registered / 24 already done by the broadcast).
+    "BANISHED_LIVE_CITIZEN_ONADD",
     // Organic construction pipeline — verified end-to-end 2026-07-22 (foundation ->
     // real gather/haul -> real build labor via MsgReceive -> completion -> staffed).
     // The three were formerly independent opt-ins; graduated together as one feature.
