@@ -225,10 +225,26 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
 // fields directly. The Ghidra `uVar3 = QueryCount(...)` is the storage's current total; we
 // replicate by reading storage+0x34 is NOT correct — QueryCount is a method. We instead call
 // it through its exe address (StorageComponent_QueryCount). See note: QueryCount addr below.
+// Open C: this is the gate that decides whether a fetch-for-home load can be put down
+// at the house. It has two independent ways to say no — the flag/limit test (12c560) and
+// the volume test — and from the caller they are indistinguishable. Trace names which.
+static inline bool CanAcceptTraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = getenv("BANISHED_DELIVER_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
     EnsureFns();
     uint32_t uVar3 = s_ResLimitFlag(param_1, param_2);
     if ((char)uVar3 == '\0') {
+        if (CanAcceptTraceOn()) {
+            static int n = 0; if (n < 20) { ++n;
+            fprintf(stderr, "[CanAccept] storage=%llx REFUSE: flag/limit test (12c560) said no "
+                    "(acceptMask=0x%x)\n", (unsigned long long)param_1,
+                    *(uint32_t*)(param_1 + 0x3c));
+            fflush(stderr); }
+        }
         return uVar3;
     }
     // StorageComponent::QueryCount(self) — current stored total (0x14012cf10).
@@ -256,8 +272,17 @@ uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3)
             if ((int)uVar6 >= *(int*)(param_2 + 0x30)) break;
         } while (true);
     }
-    return (uint32_t)((int)(*(int*)((int64_t)pvVar5 + 0x48) * param_3 + (int)uVar3) <=
-                      *(int*)(param_1 + 0x38) ? 1 : 0);
+    const int unitVol = pvVar5 ? *(int*)((int64_t)pvVar5 + 0x48) : 0;
+    const int need    = unitVol * param_3 + (int)uVar3;
+    const int cap     = *(int*)(param_1 + 0x38);
+    if (CanAcceptTraceOn()) {
+        static int n = 0; if (n < 20) { ++n;
+        fprintf(stderr, "[CanAccept] storage=%llx rmDesc=%p unitVol=%d qty=%d used(QueryCount)=%d "
+                "need=%d cap(+0x38)=%d -> %s\n", (unsigned long long)param_1, pvVar5,
+                unitVol, param_3, (int)uVar3, need, cap, need <= cap ? "OK" : "REFUSE (volume)");
+        fflush(stderr); }
+    }
+    return (uint32_t)(need <= cap ? 1 : 0);
 }
 
 // ============================================================

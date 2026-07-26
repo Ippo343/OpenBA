@@ -175,6 +175,25 @@ static inline bool TraceOn() {
     return s_ts == 1;
 }
 
+// ── BANISHED_HAUL_TRACE — open C's second half ────────────────────────────────────
+// The candidate census settled the first half: Gather2 (state 7, the fetch-fuel-for-home
+// state) IS offered and DOES win the priority contest, hundreds of times a minute — yet
+// the barn's 400 firewood never moves and every house stays COLD. So the break is inside
+// the state, on the pick-it-up leg. This traces the one loop that can silently do nothing:
+// the row scan that picks WHICH resource row to transfer, and the transfer itself.
+// Off by default => byte-unchanged.
+static inline bool HaulTraceOn() {
+    static int s_ht = -1;
+    if (s_ht < 0) { const char* e = getenv("BANISHED_HAUL_TRACE"); s_ht = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s_ht == 1;
+}
+// Rate-limit: the first `early` are always printed, then one in every `period`.
+static inline bool HaulSample(int& n, long& every, int early = 8, int period = 400) {
+    if (!HaulTraceOn()) return false;
+    if (n < early) { ++n; return true; }
+    return ((++every % period) == 0);
+}
+
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).
 static int64_t CitizenModel(int64_t citizen) {
     CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
@@ -366,6 +385,10 @@ static void GatherTransferLoop(int64_t* self, int64_t pathResult, int64_t found,
 //   pass 2 — walk to the chosen-th match; transfer it if capLeft >= rm+0x48; deduct and re-loop.
 // Returns when a pass yields no transfer. Every scan-deref null-guarded.
 static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
+    static int s_htN = 0; static long s_htEvery = 0;
+    const bool trace = HaulSample(s_htN, s_htEvery);
+    int transfers = 0;
+
     for (;;) {
         // Storage(found) -> stor
         int64_t storWrap = found;
@@ -374,7 +397,15 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         if (s_findStor1) s_findStor1(storWrap, storBuf);
         CheckPtr(storBuf);
         int64_t stor = storBuf[0];
-        if (stor == 0) return;
+        if (stor == 0) {
+            if (trace) {
+                fprintf(stderr, "[Haul] SelectAndTransfer: found=%llx has NO StorageComponent "
+                        "(findStor1=%p) -> nothing to pick up\n",
+                        (unsigned long long)found, (void*)s_findStor1);
+                fflush(stderr);
+            }
+            return;
+        }
 
         int rowCount = *reinterpret_cast<int*>(stor + 0x30);   // local_60
         int chosenIdx = -1;                                     // local_res8 low
@@ -395,6 +426,31 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
                     chosenIdx = matchCount;
                 ++matchCount;
             }
+        }
+
+        if (trace) {
+            // Dump every row so a "no fuel row" answer can be told apart from a
+            // "fuel row but nothing available" one, and from a bad flags read.
+            fprintf(stderr, "[Haul] SelectAndTransfer: found=%llx stor=%llx rows=%d "
+                    "matches=%d chosen=%d capLeft=%d pathResult=%llx transfer=%p\n",
+                    (unsigned long long)found, (unsigned long long)stor, rowCount,
+                    matchCount, chosenIdx, capLeft,
+                    (unsigned long long)pathResult, (void*)s_transfer);
+            int64_t rb = *reinterpret_cast<int64_t*>(stor + 0x28);
+            for (int cur = 0; cur < rowCount && cur < 12; ++cur) {
+                int64_t cursor = (int64_t)cur * 0x10;
+                int64_t child = rb ? *reinterpret_cast<int64_t*>(rb + cursor) : 0;
+                void* rm = child ? FindRawMaterialChild(child) : nullptr;
+                uint32_t flags = rm ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c) : 0;
+                fprintf(stderr, "[Haul]   row[%d] child=%llx rm=%p flags=0x%x fuelBit=%d "
+                        "count=%d reserved=%d avail=%d unitCost=%d\n",
+                        cur, (unsigned long long)child, rm, flags, (flags >> 6) & 1,
+                        rb ? *reinterpret_cast<int*>(rb + cursor + 8) : 0,
+                        rb ? *reinterpret_cast<int*>(rb + cursor + 0xc) : 0,
+                        rb ? *reinterpret_cast<int*>(rb + cursor + 8) - *reinterpret_cast<int*>(rb + cursor + 0xc) : 0,
+                        rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : -1);
+            }
+            fflush(stderr);
         }
 
         if (matchCount == 0) return;
@@ -421,15 +477,37 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
             }
         }
 
-        if (hitChild == 0 || hitCursor < 0) return;   // LAB_14010bb8a: lVar5 == 0 -> done
+        if (hitChild == 0 || hitCursor < 0) {
+            if (trace) {
+                fprintf(stderr, "[Haul] SelectAndTransfer: pass2 found no row for chosen=%d "
+                        "(matches=%d) -> no transfer\n", chosenIdx, matchCount);
+                fflush(stderr);
+            }
+            return;   // LAB_14010bb8a: lVar5 == 0 -> done
+        }
 
         // LAB_14010bb8a: resolve the chosen row child's RawMaterial cost, transfer if capLeft allows
         void* rm = FindRawMaterialChild(hitChild);
         int cost = rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : 0x7fffffff;
-        if (capLeft < cost) return;
+        if (capLeft < cost) {
+            if (trace) {
+                fprintf(stderr, "[Haul] SelectAndTransfer: capLeft=%d < unitCost=%d after %d "
+                        "transfer(s) -> stop\n", capLeft, cost, transfers);
+                fflush(stderr);
+            }
+            return;
+        }
         CheckPtr(&pathResult);
         if (s_transfer) s_transfer(pathResult, hitChild, 1);
+        ++transfers;
         capLeft -= cost;
+        if (trace) {
+            fprintf(stderr, "[Haul] SelectAndTransfer: TRANSFER row[%d] child=%llx cost=%d "
+                    "-> capLeft=%d (transfer #%d) carrier=%llx\n",
+                    hitCursor, (unsigned long long)hitChild, cost, capLeft, transfers,
+                    (unsigned long long)pathResult);
+            fflush(stderr);
+        }
         // goto LAB_14010b92f: re-loop with reduced capacity
     }
 }
@@ -605,6 +683,16 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
         CheckPtr(storBuf);
         int qc = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
+        // Which leg of state 7 this call takes: carrying already (deliver it home via the
+        // LongTermPlan handler) vs empty-handed (go pick some up). If the town never leaves
+        // the pick-up leg, nothing is reaching the citizen's own carry storage.
+        { static int n = 0; static long every = 0;
+          if (HaulSample(n, every)) {
+            fprintf(stderr, "[Haul] Gather2 enter: citizen=%llx carryStor=%llx carryCount=%d "
+                    "-> %s\n", (unsigned long long)citizen,
+                    (unsigned long long)storBuf[0], qc,
+                    qc > 0 ? "DELIVER (LongTermPlan)" : "PICK UP");
+            fflush(stderr); } }
         if (qc > 0) {
             CheckPtr(self);
             uint64_t r = s_ltp ? s_ltp(*self) : 0;
@@ -638,6 +726,14 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
         if (s_dd30) s_dd30(listpair, &found, cell, bGoal, &outComp, srcPos, 1);
         (void)w;
+
+        { static int n = 0; static long every = 0;
+          if (HaulSample(n, every)) {
+            fprintf(stderr, "[Haul] Gather2 target: dd30 cell=%u bGoal=0x%x -> found=%llx "
+                    "outComp=%llx srcPos=(%.1f,%.1f,%.1f)\n", cell, bGoal,
+                    (unsigned long long)found, (unsigned long long)outComp,
+                    srcPos[0], srcPos[1], srcPos[2]);
+            fflush(stderr); } }
 
         if (found == 0) {
             // ---- cooldown + hide-render branch ----
@@ -704,6 +800,23 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         // Mirrors the decompile offset-by-offset; every scan-deref null-guarded. The carrier-slot
         // entity is found via ef40 (the loop's storage component is `found`'s Storage).
         SelectAndTransfer(found, pathResult, capLeft);
+
+        // Did anything actually land in the citizen's own carry storage? This is the
+        // measurement that matters: the same QueryCount the top of this function (and the
+        // candidate list's carry gate) reads. Still 0 here => the pick-up leg is a no-op.
+        { static int n = 0; static long every = 0;
+          if (HaulSample(n, every)) {
+            CheckPtr(self);
+            int64_t cz2 = *self;
+            int64_t sb2[2] = {0, 0};
+            if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(cz2 + 0x10), sb2);
+            CheckPtr(sb2);
+            int qc2 = (sb2[0] && s_queryCount) ? s_queryCount(sb2[0]) : 0;
+            fprintf(stderr, "[Haul] Gather2 after transfer: citizen=%llx carryCount=%d "
+                    "pathResult=%llx%s\n", (unsigned long long)cz2, qc2,
+                    (unsigned long long)pathResult,
+                    qc2 == 0 ? "   <-- NOTHING PICKED UP" : "");
+            fflush(stderr); } }
 
         // ---- set citizen action-state flags + return 1 ----
         CheckPtr(self);

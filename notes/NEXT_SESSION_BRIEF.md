@@ -18,9 +18,13 @@ for the A–I list.
 * **J — new, found and FIXED.** A mistyped `Math::Scalar::Abs` mangled name left a null
   function pointer on the **mainline raw-material drop-off path**. Latent for a long time;
   surfaced once the town had enough citizens to hit it.
-* **C — RESCOPED and left for next session.** The town starts with 400 firewood in its barn
-  and never touches it, so the missing piece is the **haul**, not a woodcutter. C is the only
-  substantial open left.
+* **C — SOLVED (2026-07-26, next session).** The haul was never broken. `Gather2` wins the
+  candidate contest 1079 times in 2000; citizens picked up firewood and walked it *back to
+  the barn* because `BANISHED_SEED_FOOD=8000` had every house 8× over its 1000-volume
+  storage cap, so `CanAdd` refused every delivery at the door. Seeds are now volume-clamped;
+  houses receive and burn firewood. All that is left of C is the **fuel producer** — with
+  `SEED_FUEL=0` the barn's 400 units are the town's whole supply and the soak freezes to
+  death (34 citizens at frame 9000 → extinct by 12000, on cold, not hunger).
 
 ### What the D–I wave changed (2026-07-26)
 
@@ -52,6 +56,18 @@ Two env vars matter more than they look:
   founding town is spare — six families in six houses — and a grown child cannot leave home
   without a free one to leave *to*. That is faithful (in retail the player builds more
   housing), but it means a default run can never demonstrate move-out or marriage.
+* `BANISHED_EXTRA_HOUSES=<n>` (new 2026-07-26) spawns **n extra, already-COMPLETED, empty**
+  houses. The demo house is one house *and* starts as a foundation, so marriage throughput
+  was capped by construction rather than by the marriage logic. These are copies of the
+  first start-town residence, placed at the nearest free footprints to the cluster centre
+  (spiral out, 1-tile gap, no overlap) so they stay on ground the start config already
+  proved buildable; each goes through the same `placeStructure` path, so `ResidenceComponent
+  ::OnCreate` registers it into `townMgr+0x20` like any other house. Cap 32.
+  With `=12` the 2026-07-26 soak went **6 couples → 11 couples and 26 → 34 citizens by
+  frame 9000**, no harness. Verify with `[startTown::extraHouse]` lines.
+
+⚠ **`BANISHED_SEED_FOOD=8000` is retired from the recipe.** It silently broke the fuel haul
+for the whole D–I era — see open C. Use `200`, or leave it unset.
 
 ---
 
@@ -406,76 +422,112 @@ The one loose thread: 18 stuck adults still pick *some* AI state each tick (the 
 dominated by SeekHappiness). Whether that is retail's own idle behaviour or a fallback we
 land on by accident is worth one look — but it is a cosmetic question now, not a growth one.
 
-## C. 🔎 RESCOPED (2026-07-26) — it is not the woodcutter. **The haul never runs.**
+## C. ✅ SOLVED (2026-07-26) — the haul works. **Our own food seed was blocking it.**
 
-Measured, not assumed. Run the standing recipe with `BANISHED_SEED_FUEL=0` and
-`BANISHED_STORAGE_TRACE=1`:
+The two previous framings were both wrong, and the second was wrong because of the first.
+Measured end to end this time, with a candidate-state census
+(`BANISHED_CANDLIST_CENSUS=<period>`) and a haul trace (`BANISHED_HAUL_TRACE=1`).
 
-```
-[StorageSeed] SeedStartingResources counts: … food(0x20)=2400 firewood(0x40)=400 …
-[StorageSeed] SpawnResources mask=0x40 want=400 matchedTemplates=1 placed=400
-[StorageSeed] dump: loc[1] … mask(+0x3c)=0x1c40 volumeUsed=5550
-[StorageSeed] dump:   slot[3] material=… flags=0xc0 unitVol=4 count=400 reserved=0
-```
+### C1 — "nothing ever selects state 6/7" was false
 
-**The town already starts with 400 firewood**, placed by retail's own start config
-(`Game_impl_1f00`), in the one storage location whose accept mask has the fuel bit
-(`0x1c40 & 0x40`; `loc[0]`'s `0x16220` does not). It is still `count=400 reserved=0` for the
-whole run — **nothing ever touches it** — while the houses report:
+The census counts every candidate the list *offers* and every one that comes out *on top*
+after the shuffle+priority sort. Over 2000 calls:
 
 ```
-[HeatTick] house=… COLD no fuel available (temp=49.86 < 50.00, heatLeft=-327003586, storageSlots=2)
+[CandCensus]   Gather2       ( 7) offered=1305     top=1079     by prio: p4=1305
+[CandCensus]   Idle          ( 9) offered=1205     top=306      by prio: p2=1205
+[CandCensus]   Leisure       (12) offered=1995     top=289      by prio: p2=1995
+[CandCensus]   SeekHappiness ( 8) offered=15       top=15       by prio: p5=15
 ```
 
-So a producer is **not** the first missing piece. 400 units at ~1 unit/house/60 in-game
-seconds is many seasons of runway; the town freezes to death standing next to its own
-woodpile. `BANISHED_SEED_FUEL` was never papering over a production hole — it was papering
-over a **distribution** hole, by teleporting the barn's job into each house.
+**Gather2 (id 7, the fetch-fuel-for-home state) wins the contest 1079 times out of 2000.**
+It is not losing to SeekHappiness — SeekHappiness is offered *fifteen* times in the whole
+window, because `+0xac` is credited properly now. The old "19× SeekHappiness, 0× Gather"
+tally was measuring state *entries* through a trace that the Gather path does not print,
+not the selection. Ids never offered at all: 6 (food gather — correct, food was seeded),
+2 (FindHousing), 5 (Work), 0xd (LongTermPlan — carry count is always 0, see below).
 
-### Where the break is
+### C2 — the haul runs, drains the barn, and puts it all back
 
-The fetch-for-home states are already ported: `CitizenAI_State_GatherResources` (id 6,
-`0x14010bc90`) and `GatherResources2` (id 7, `0x14010b3e0`) in `citizenai_gather.cpp`. They
-validate `citizen+0x238` — which is the **HOME**, not a workplace (`0x1401163d0`
-"AssignWorkplace" is the residence assigner; the misnomer runs deep in this family) — and
-transfer resources into it. The trigger shape is already known and already traced by the
-housing pass:
+Following the material instead of the state:
 
 ```
-[startTown::housing] house food(c7e78): storage=… residents=5 reqPerResident=25
-                     threshold=125 seeded=8000 -> GetResourceCount(res)=8000 (SUFFICIENT: no Gather)
+[Haul] SelectAndTransfer: found=… stor=… rows=4 matches=1 chosen=0 capLeft=100 …
+[Haul]   row[3] … flags=0xc0 fuelBit=1 count=400 reserved=0 avail=400 unitCost=4
+[Haul] SelectAndTransfer: TRANSFER row[3] … cost=4 -> capLeft=96 (transfer #1)
+… 25 transfers per trip (capLeft 100 / unitCost 4) …
+[BuildTrace] PickupStored AddItem dst: … count=25 dstTotal 0 -> 100
 ```
 
-i.e. `threshold = residents × reqPerResident`, compared against the house's stock.
-
-With `SEED_FUEL=0` every house is far below threshold for fuel — and the AI state tally
-across the whole run is:
+So a citizen really does pick up 25 firewood. Then:
 
 ```
-19 × aiState=8 (SeekHappiness)      1 × aiState=12
+src(+0x28)=0000021b8d7397a8    ×1070   <- the barn entity (every pickup)
+WALK-TO-STORAGE dest=0000021b8d7397a8  ×1064   <- the SAME barn
+destStorage=0000021b8d733be0          ×1062   <- the barn's StorageComponent
 ```
 
-**Not one entry into state 6 or 7.** The handlers are live and the demand signal is real;
-nothing ever *selects* them.
+**Every trip was a round trip.** 1062 of them: barn → citizen → barn. Not one stick of
+firewood reached a house, which is why the carry count read 0 at every decision point and
+`LongTermPlan` was never a candidate.
 
-### Next step
+### C3 — root cause: `BANISHED_SEED_FOOD=8000` overfills the house 8×
 
-Chase the **candidate-list** side (`citizenai_candidatelist.cpp`, the `LAB_14010ea39`
-idle/leisure tail and the priority table), not a woodcutter. Questions in order:
+`Pf_DropOffExec_7620` only bounces a load to a general acceptor when the intended
+destination refuses it, so the question was why the *house* refused. Instrumenting
+`StorageComponent::CanAdd` (0x14012cd80) named it in one line:
 
-1. Are ids 6/7 in the candidate list at all, and with what priority against SeekHappiness
-   (which is winning 19:0)?
-2. Does the fuel demand reach the candidate list, or only the food path? The `no-firewood`
-   status-icon bit 7 SET side is documented as living in the Gather/Gather2 **no-target**
-   branches — which can never run if the state is never entered, so that icon is not
-   evidence either way.
-3. Only once a citizen carries firewood home does a producer matter. Then scope the
-   woodcutter (`consumeproduce.cpp` is the ConsumeProduce work shape) against the real
-   burn rate: ~1 unit per house per 60 in-game seconds, year-round — the map temperature
-   (29.98) is already below the house `desc+0xF4` of 50, so the tick burns continuously,
-   not just in winter.
+```
+[CanAccept] storage=… unitVol=4 qty=25 used(QueryCount)=8000 need=8100 cap(+0x38)=1000 -> REFUSE (volume)
+[CanAccept] storage=… unitVol=4 qty=25 used(QueryCount)=3654 need=3754 cap(+0x38)=6000 -> OK   <- the barn
+```
 
-`BANISHED_SEED_FUEL` / `BANISHED_SEED_FOOD` stay as soak stand-ins until (1) and (2) land.
+A house's `StorageComponent` has **one volume budget** (`+0x38` = 1000) shared by every
+material. CanAdd's test is `unitVol*qty + QueryCount <= capacity`. The soak recipe's
+`BANISHED_SEED_FOOD=8000` put **8000 volume into a 1000-volume house** — and the seed
+helper used `AddItem` directly, which enforces only the accept *mask*, never the capacity.
+So every house was permanently 8× over budget, refused every delivery at the door, and the
+load fell back to the only thing with room: the barn it came from.
+
+The accept mask was never the problem (`0x60 & 0xc0 = 0x40`, fuel accepted) and neither was
+the flag gate (12c560). Both look identical to the caller — hence the trace that separates
+them.
+
+### The fix + proof
+
+`StartTown_SeedHouseFood` now measures both seeds in **volume**, clamps them to the
+storage capacity, and keeps one carry-load (100) free so a delivery can always land —
+logging loudly when it clamps:
+
+```
+[startTown::housing] house storage=… CLAMPED food seed 8000 -> 900 units (cap=1000,
+                     fuel reserves 0, keeping 100 free): an over-capacity house makes
+                     CanAdd refuse every later delivery
+```
+
+Same recipe, after:
+
+```
+[CanAccept] storage=… used(QueryCount)=200 need=300 cap=1000 -> OK
+[HeatTick] house=… BURN 1 fuel (temp=43.36 < 50.00) slotLeft=24 refill=60.00s
+```
+
+**Houses receive firewood and burn it**, and deposits now spread across many destinations
+instead of piling back into the barn.
+
+### What is actually left of C — the producer, and only the producer
+
+With `BANISHED_SEED_FUEL=0` the town's entire fuel supply is the barn's starting 400 units.
+A 12-house town burns that in a few thousand frames, and the 2026-07-26 soak went
+**34 citizens at frame 9000 → extinct by frame 12000**, on cold (hunger was 8.8 against a
+death threshold of 25.0). So question (3) from the old write-up is now the whole of C:
+scope the woodcutter (`consumeproduce.cpp` is the ConsumeProduce work shape) against a
+burn rate of ~1 unit per house per 60 in-game seconds, year-round.
+
+⚠ **Do not raise `BANISHED_SEED_FOOD` again.** The clamp stops it corrupting the fuel
+haul, but 8000 food still crowds the house down to a single carry-load of headroom. Use
+`BANISHED_SEED_FOOD=200` in the standing recipe; the default (threshold + residents,
+≈130) is better still.
 
 ## J. ✅ FIXED (2026-07-26) — it was a mistyped mangled name, and it was not the elder path
 
@@ -504,6 +556,12 @@ i.e. this was on the **mainline "citizen puts a raw material down" route** all a
 is precisely the machinery open C needs. It was latent, not new: `LIVE_CITIZEN_ONADD`
 surfaced it because registered newborns become active citizens that do drop-offs, so traffic
 on that path rose. Post-fix the 21 000-frame soak is clean.
+
+**Re-confirmed 2026-07-26** while working open C, which hammers exactly this route: six runs
+on `BANISHED_SEED_FUEL=0` with the drop-off path taken 1000+ times per run,
+`standalone_crash.log` **0 bytes** every time, and the `[Deliver] SPILL` counter (the branch
+whose terminal callee was the null pointer) reads 0 — the load now always finds a storage.
+J stays closed.
 
 ### Original write-up, kept for the diagnostic pattern
 

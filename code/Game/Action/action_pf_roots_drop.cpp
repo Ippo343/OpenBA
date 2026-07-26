@@ -280,6 +280,23 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
     if (0 < iVar9) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_3);
         uint32_t uVar6 = s_fn_canAdd ? s_fn_canAdd(*reinterpret_cast<void**>(param_3), reinterpret_cast<void*>(param_4), iVar9) : 0;
+        // Open C: when a fetch-for-home trip reaches the house and CanAdd says no, the
+        // load bounces to the nearest acceptor — which is the barn it came from, so the
+        // whole haul becomes a round trip and the house stays cold. Name the reason:
+        // an accept-mask miss (+0x3c) and a capacity miss (+0x38 vs QueryCount) look
+        // identical from the outside but need opposite fixes.
+        if (static_cast<char>(uVar6) == '\0' && DeliverTraceOn()) {
+            uint8_t* ds = *reinterpret_cast<uint8_t**>(param_3);
+            std::fprintf(stderr, "[Deliver] REFUSED destStorage=%p amount=%d resType=%p "
+                                 "cap(+0x38)=%d used(+0x34)=%d acceptMask(+0x3c)=0x%x "
+                                 "slots(+0x30)=%d\n",
+                         (void*)ds, iVar9, reinterpret_cast<void*>(param_4),
+                         ds ? *reinterpret_cast<int32_t*>(ds + 0x38) : 0,
+                         ds ? *reinterpret_cast<int32_t*>(ds + 0x34) : 0,
+                         ds ? *reinterpret_cast<uint32_t*>(ds + 0x3c) : 0u,
+                         ds ? *reinterpret_cast<int32_t*>(ds + 0x30) : 0);
+            std::fflush(stderr);
+        }
         if (static_cast<char>(uVar6) != '\0') {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_3);
             if (s_fn_addItem) s_fn_addItem(*reinterpret_cast<int64_t*>(param_3), param_4, iVar9);

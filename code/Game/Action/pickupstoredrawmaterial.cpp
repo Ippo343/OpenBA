@@ -361,7 +361,30 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
         uintptr_t parentStorageIBP2[2];
         fn_InternalBasePtr_Ctor(parentStorageIBP2, parentStorage);
         fn_InternalBasePtr_CheckPtr(parentStorageIBP2);
+        // The destination half of the haul. The source above uses the real finder
+        // (fn_FindComponent_Storage); this side hand-rolls the scan against a .rdata
+        // type-id slot, which is exactly the shape that reads 0 in standalone and makes
+        // the whole transfer a silent no-op: the barn is debited and nothing is credited.
+        // Does the credit actually stick? QueryCount straddling the AddItem is the only
+        // read that settles it — the barn is debited unconditionally above, so a
+        // destination that does not grow means the resource is simply destroyed.
+        int dstBefore = 0;
+        if (s_pkTrace == 1 && parentStorageIBP2[0])
+            dstBefore = fn_StorageComponent_QueryCount((void*)parentStorageIBP2[0]);
         s_fn_Storage_AddItem((void*)parentStorageIBP2[0], itemType, requestedCount);
+        if (s_pkTrace == 1) {
+            int dstAfter = parentStorageIBP2[0]
+                ? fn_StorageComponent_QueryCount((void*)parentStorageIBP2[0]) : 0;
+            std::fprintf(stderr, "[BuildTrace] PickupStored AddItem dst: targetBldg=%p "
+                         "parentEntity=%p tidStorage=%u parentStorage=%p count=%d "
+                         "dstTotal %d -> %d%s\n",
+                         targetBuilding, parentEntity,
+                         s_typeId_StorageComp ? *s_typeId_StorageComp : 0u,
+                         parentStorage, requestedCount, dstBefore, dstAfter,
+                         parentStorage ? (dstAfter > dstBefore ? "" : "   <-- CREDIT LOST")
+                                       : "   <-- NULL DESTINATION: resource vanishes");
+            std::fflush(stderr);
+        }
 
         matOffset += 0x10;
         matIdx++;

@@ -921,6 +921,24 @@ static bool BuildDemoWantsHouse() {
     return en == 1;
 }
 
+// ── BANISHED_EXTRA_HOUSES=N — N extra COMPLETED, EMPTY houses (test scaffolding) ──
+// A move-out (and therefore a marriage) needs a FREE residence. The founding town has
+// none spare, and BUILD_DEMO_HOUSE's single spare starts as a foundation, so marriage
+// throughput is capped by the build pipeline rather than by the marriage logic. This
+// spawns ready-to-occupy copies of the first start-town house so the marriage/move-out
+// path can be exercised on its own. Test-only, default 0 (byte-unchanged when unset).
+static const int kMaxExtraHouses = 32;
+static const int kExtraHouseSearchRadius = 40;   // tiles from the cluster centre
+static int ExtraHousesRequested() {
+    static int n = -1;
+    if (n < 0) {
+        const char* e = std::getenv("BANISHED_EXTRA_HOUSES");
+        n = (e && e[0]) ? std::atoi(e) : 0;
+        if (n < 0) n = 0;
+    }
+    return n;
+}
+
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -1206,6 +1224,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     int demoW0 = 0, demoH0 = 0;
     int clusterMaxEdgeX = spawnX;
 
+    // First residence template + footprint, captured unconditionally (the demo-house path
+    // and BANISHED_EXTRA_HOUSES both spawn copies of it).
+    void* resTmpl = nullptr;
+    int resW0 = 0, resH0 = 0;
+
+    // Footprint rects of everything placed, so the extra-house search can avoid overlaps.
+    // Bounded: 8 start structures + 1 demo foundation + kMaxExtraHouses.
+    struct Rect { int x, y, w, h; };
+    Rect occ[8 + 1 + kMaxExtraHouses + 8];
+    int  occN = 0;
+    auto Occupy = [&](int x, int y, int w, int h) {
+        if (occN < (int)(sizeof(occ) / sizeof(occ[0]))) occ[occN++] = { x, y, w, h };
+    };
+    // Cluster bounding box, to centre the extra-house search on known-good ground.
+    int bbX0 = 1 << 28, bbY0 = 1 << 28, bbX1 = -(1 << 28), bbY1 = -(1 << 28);
+
     for (int i = 0; i < count; ++i) {
         uint8_t* entry = pool + (size_t)i * STRUCT_STRIDE;
 
@@ -1248,7 +1282,17 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // capture the first residence template as the demo-house source. Only the X-extent
         // (footprint width after the orientation axis-swap) matters for the east edge.
         const int fpWx = (orient == 0x5a || orient == -0x5a || orient == 0x10e) ? h0 : w0;
+        const int fpHy = (orient == 0x5a || orient == -0x5a || orient == 0x10e) ? w0 : h0;
         if (tileX + fpWx > clusterMaxEdgeX) clusterMaxEdgeX = tileX + fpWx;
+        Occupy(tileX, tileY, fpWx, fpHy);
+        if (tileX < bbX0) bbX0 = tileX;
+        if (tileY < bbY0) bbY0 = tileY;
+        if (tileX + fpWx > bbX1) bbX1 = tileX + fpWx;
+        if (tileY + fpHy > bbY1) bbY1 = tileY + fpHy;
+
+        if (ent && !resTmpl && FindComponentOnEntity(ent, TypeId("ResidenceComponent"))) {
+            resTmpl = tmpl; resW0 = w0; resH0 = h0;
+        }
         if (BuildDemoEnabled() && BuildDemoWantsHouse() && !g_demoHouseAssigned && ent &&
             FindComponentOnEntity(ent, TypeId("ResidenceComponent"))) {
             demoTmpl = tmpl; demoW0 = w0; demoH0 = h0;
@@ -1266,8 +1310,75 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         void* demoEnt = placeStructure(demoTmpl, dTileX, dTileY, 0, demoW0, demoH0,
                                        /*isDemoFoundation=*/true, -1);
         if (demoEnt) ++spawned;
+        Occupy(dTileX, dTileY, demoW0, demoH0);
         fprintf(stderr, "[startTown::struct] FRESH demo foundation spawned tile=(%d,%d) ent=%p\n",
                 dTileX, dTileY, demoEnt);
+        fflush(stderr);
+    }
+
+    // ── BANISHED_EXTRA_HOUSES=N — N extra, COMPLETED, EMPTY houses ────────────────────
+    // The founding town is exactly six families in six houses, so nothing is ever spare
+    // and no grown child can move out (a free residence is the precondition for marriage
+    // — see CanFindHousing / candidate state 2). BUILD_DEMO_HOUSE gives exactly one, and
+    // it starts as a FOUNDATION, so it only becomes a move-out target once the build
+    // pipeline finishes it. This spawns N ready-to-occupy houses instead, which decouples
+    // marriage/move-out testing from construction throughput.
+    //
+    // Placement: copies of the first start-town residence, laid at the nearest free
+    // footprints to the cluster's centre (spiral outward, 1-tile gap, no overlap with any
+    // recorded rect). Hugging the cluster matters — the start config only guarantees
+    // buildable/walkable ground around the spawn point, so ranging far afield risks
+    // houses on unreachable terrain.
+    const int extraWanted = ExtraHousesRequested();
+    if (extraWanted > 0 && resTmpl) {
+        const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+        const int n = extraWanted > kMaxExtraHouses ? kMaxExtraHouses : extraWanted;
+        int placedExtra = 0;
+
+        for (int k = 0; k < n; ++k) {
+            int bestX = 0, bestY = 0;
+            bool found = false;
+            // Chebyshev-ring scan outward from the cluster centre; first free rect wins.
+            for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                for (int dy = -r; dy <= r && !found; ++dy) {
+                    for (int dx = -r; dx <= r && !found; ++dx) {
+                        if (dx != -r && dx != r && dy != -r && dy != r) continue;  // ring only
+                        const int tx = cx + dx, ty = cy + dy;
+                        // 1-tile gap on every side so buildings never touch (walk lanes).
+                        bool clash = false;
+                        for (int o = 0; o < occN; ++o) {
+                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + resW0 + 1 &&
+                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + resH0 + 1) {
+                                clash = true; break;
+                            }
+                        }
+                        if (!clash) { bestX = tx; bestY = ty; found = true; }
+                    }
+                }
+            }
+            if (!found) {
+                fprintf(stderr, "[startTown::extraHouse] no free footprint within r=%d "
+                        "after %d houses; stopping\n", kExtraHouseSearchRadius, placedExtra);
+                fflush(stderr);
+                break;
+            }
+
+            void* ent = placeStructure(resTmpl, bestX, bestY, 0, resW0, resH0,
+                                       /*isDemoFoundation=*/false, -1);
+            Occupy(bestX, bestY, resW0, resH0);
+            if (ent) { ++spawned; ++placedExtra; }
+            fprintf(stderr, "[startTown::extraHouse] [%d/%d] tile=(%d,%d) fp=%dx%d ent=%p\n",
+                    k + 1, n, bestX, bestY, resW0, resH0, ent);
+            fflush(stderr);
+        }
+
+        fprintf(stderr, "[startTown::extraHouse] placed %d/%d extra completed houses "
+                "(cluster bbox x[%d,%d] y[%d,%d] centre=(%d,%d))\n",
+                placedExtra, n, bbX0, bbX1, bbY0, bbY1, cx, cy);
+        fflush(stderr);
+    } else if (extraWanted > 0) {
+        fprintf(stderr, "[startTown::extraHouse] BANISHED_EXTRA_HOUSES=%d requested but no "
+                "start-town residence template was found; nothing spawned\n", extraWanted);
         fflush(stderr);
     }
 
@@ -2410,13 +2521,18 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     // "missing woodcutter economy" already noted against residence heating.
     int64_t fuelTmpl = 0;
     uint32_t fuelFlags = 0;
+    // Per-unit VOLUME of each material (RawMaterialDescription+0x48). A house's
+    // StorageComponent capacity (+0x38) is a single volume budget shared by every
+    // material, so the seeds below have to be measured in volume, not units — see the
+    // capacity clamp in the per-house loop.
+    int foodVol = 1, fuelVol = 1;
     for (int t = 0; t < tmplCount && (foodTmpl == 0 || fuelTmpl == 0); ++t) {
         int64_t tmpl = tmplArr ? *(int64_t*)(tmplArr + (int64_t)t * 8) : 0;
         void* desc = tmpl ? FindDescriptionOnTemplate(reinterpret_cast<void*>(tmpl), tidRawMat) : nullptr;
         if (!desc) continue;
         uint32_t flags = *(uint32_t*)((uint8_t*)desc + 0x5c);
-        if (foodTmpl == 0 && (flags & 0x20)) { foodTmpl = tmpl; foodFlags = flags; }   // edible  (bit 5)
-        if (fuelTmpl == 0 && (flags & 0x40)) { fuelTmpl = tmpl; fuelFlags = flags; }   // fuel    (bit 6)
+        if (foodTmpl == 0 && (flags & 0x20)) { foodTmpl = tmpl; foodFlags = flags; foodVol = *(int32_t*)((uint8_t*)desc + 0x48); }   // edible  (bit 5)
+        if (fuelTmpl == 0 && (flags & 0x40)) { fuelTmpl = tmpl; fuelFlags = flags; fuelVol = *(int32_t*)((uint8_t*)desc + 0x48); }   // fuel    (bit 6)
     }
     if (foodTmpl == 0) {
         fprintf(stderr, "[startTown::housing] no edible raw-material template (templates=%d) — no house food\n", tmplCount);
@@ -2486,15 +2602,57 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             fflush(stderr);
             continue;
         }
-        addItem(reinterpret_cast<int64_t>(sc), foodTmpl, seedN);
+        // ── Capacity clamp (2026-07-26) ────────────────────────────────────────────
+        // A house's StorageComponent has ONE volume budget (+0x38, 1000 on the start
+        // house) shared by every material, and AddItem does NOT enforce it — it only
+        // checks the accept mask. So a generous stand-in seed silently overfills the
+        // house, and then StorageComponent::CanAdd (0x14012cd80) refuses EVERY later
+        // delivery, because its test is `unitVol*qty + QueryCount <= capacity`.
+        //
+        // That is not a hypothetical: BANISHED_SEED_FOOD=8000 put 8000 volume into a
+        // 1000-volume house, so every firewood haul was refused at the door and bounced
+        // back to the barn it came from — a closed loop that looked exactly like "the
+        // haul never runs". Clamp the seed to the real budget, keep one carry-load of
+        // headroom free so a delivery can always land, and say so when we clamp.
+        const int cap = *(int32_t*)((uint8_t*)sc + 0x38);
+        const int fuelVolume = (fuelTmpl != 0 && (mask & fuelFlags) != 0)
+                             ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
+        const int carryLoad = 100;   // Gather2's per-trip budget (townCap/citCap = 100)
+        int foodBudget = cap - fuelVolume - carryLoad;
+        if (foodBudget < 0) foodBudget = 0;
+        const int maxFoodUnits = foodBudget / (foodVol > 0 ? foodVol : 1);
+        if (seedN > maxFoodUnits) {
+            fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED food seed %d -> %d "
+                    "units (cap=%d, fuel reserves %d, keeping %d free): an over-capacity "
+                    "house makes CanAdd refuse every later delivery\n",
+                    sc, seedN, maxFoodUnits, cap, fuelVolume, carryLoad);
+            fflush(stderr);
+            seedN = maxFoodUnits;
+        }
+
+        if (seedN > 0) addItem(reinterpret_cast<int64_t>(sc), foodTmpl, seedN);
         ++seeded;
 
         // Firewood stand-in (see the note at the template pick). The heat tick burns one
         // unit per burn interval per house, so this is a season count, not a per-resident
         // one; the same storage accept gate applies (mask +0x3c vs material flags +0x5c).
         if (fuelTmpl != 0 && (mask & fuelFlags) != 0) {
-            addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, kSeedFuelPerHouse);
-            ++fuelSeeded;
+            // Same volume budget as the food seed above — clamp against what is left.
+            int fuelUnits = kSeedFuelPerHouse;
+            const int freeVol = cap - seedN * (foodVol > 0 ? foodVol : 1) - carryLoad;
+            const int maxFuelUnits = (freeVol > 0 ? freeVol : 0) / (fuelVol > 0 ? fuelVol : 1);
+            if (fuelUnits > maxFuelUnits) {
+                fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED fuel seed %d -> %d "
+                        "units (cap=%d, food takes %d, keeping %d free)\n",
+                        sc, fuelUnits, maxFuelUnits, cap,
+                        seedN * (foodVol > 0 ? foodVol : 1), carryLoad);
+                fflush(stderr);
+                fuelUnits = maxFuelUnits;
+            }
+            if (fuelUnits > 0) {
+                addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, fuelUnits);
+                ++fuelSeeded;
+            }
         }
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
