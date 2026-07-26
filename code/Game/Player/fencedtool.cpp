@@ -330,7 +330,7 @@ static void EnsureCalcCostHelpers() {
         s_fn_FencedTool_AnchorCalc = reinterpret_cast<fn_FencedTool_AnchorCalc_t>(
             ResolveAddr(Module::Exe, 0x1400dbf90));
         s_fn_ScalarAbs = reinterpret_cast<fn_ScalarAbs_t>(
-            ResolveExport("?Abs@Scalar@Math@@SA?AV12@V12@@Z"));
+            ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));
         if (!s_fn_ScalarAbs)
             s_fn_ScalarAbs = reinterpret_cast<fn_ScalarAbs_t>(
                 ResolveAddr(Module::Runtime, 0x18008f530));

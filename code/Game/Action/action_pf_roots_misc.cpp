@@ -47,8 +47,18 @@ static fn_MarkRemoval_t s_markrem   = nullptr;
 // splat ctor:    ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z    (this, &s)
 // Dot:           ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z (this, retbuf, &other)->retbuf(float)
 // Box::Intersect:?Intersect@Box@Volume@@QEBA_NAEBV12@@Z   (this, &other)->bool
-// Scalar::Abs:   ?Abs@Scalar@Math@@SA?AV12@V12@@Z         (val, retbuf)->retbuf
-//   (disasm shows RCX=val, RDX=retbuf — member-style retbuf order)
+// Scalar::Abs:   ?Abs@Scalar@Math@@QEBA?AV12@XZ           (this=val, retbuf)->retbuf
+//   [2026-07-26] This string used to read `?Abs@Scalar@Math@@SA?AV12@V12@@Z` — a STATIC
+//   taking a Scalar by value. No such export exists (objdump: ordinal 1530 is
+//   `?Abs@Scalar@Math@@QEBA?AV12@XZ`, a const MEMBER taking nothing), so ResolveExport
+//   returned 0, the dispatch-slot lookup at 0x140152420 is unregistered ("NOT
+//   IMPLEMENTED"), and s_scalarabs stayed NULL — a hard EXEC-of-0 the moment
+//   FindPlacementCell reached its height-delta check. That is the mainline drop-off
+//   path, so it killed any soak long enough for a citizen to place a raw material.
+//   The ABI was never wrong: a const member returning a class by value passes this in
+//   RCX and the return buffer in RDX, which is exactly `(const float* val, float*
+//   retbuf)` — the old comment's own "disasm shows RCX=val, RDX=retbuf — member-style"
+//   note was right about the shape while the name said static. Only the string changed.
 typedef void  (*fn_V3Ctor3_t)(void* self, float x, float y, float z);
 typedef void  (*fn_V3CtorSplat_t)(void* self, const float* s);
 typedef void* (*fn_V3Dot_t)(const void* self, void* retbuf, const void* other);
@@ -94,7 +104,7 @@ static void EnsureFns() {
         ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
     s_scalarabs = reinterpret_cast<fn_ScalarAbs_t>(slot(0x140152420));
     if (!s_scalarabs) s_scalarabs = reinterpret_cast<fn_ScalarAbs_t>(
-        ResolveExport("?Abs@Scalar@Math@@SA?AV12@V12@@Z"));
+        ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));
 
     s_pTid_c7858 = reinterpret_cast<uint32_t*>(R(0x1401c7858));
     s_pTid_c6f98 = reinterpret_cast<uint32_t*>(R(0x1401c6f98));
