@@ -610,10 +610,10 @@ extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00
 extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
 extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
 extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
-extern uint32_t* g_TypeId_StorageLocationComponent;// DAT_1401c8070
+extern uint32_t* g_TypeId_WorkComponent;// DAT_1401c8070
 extern uint32_t* g_TypeId_StorageComponent;       // (TBD)
 extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
-extern uint32_t* g_TypeId_WorkplaceJobType;       // DAT_1401c80a8
+extern uint32_t* g_TypeId_WorkDescription;       // DAT_1401c80a8
 extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
 extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
@@ -749,9 +749,16 @@ inline void fn_FindComponent_Destroy(void* entity, void* retval) {
 inline void fn_FindComponent_Building(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TradeComponent_FC);
 }
-// fn_FindComponent_Workplace — DAT_1401c8070 (= g_TypeId_StorageLocationComponent), original FUN_140003050
-inline void fn_FindComponent_Workplace(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageLocationComponent);
+// fn_FindComponent_Work — DAT_1401c8070 = "WorkComponent" (factory_registrations.csv:306),
+// original FUN_140003050. Was named fn_FindComponent_Workplace, which is a DIFFERENT type:
+// WorkPlaceComponent is DAT_1401c80e0 / fn_FindComponent_WorkPlace below. Retail uses both,
+// side by side, in WorkPlaceUI::OnCreate (0x140087080) and in the builder-profession pair
+// (0x14012f520 / 0x14012f670). Confusing them costs crashes — a WorkComponent read as a
+// WorkPlaceComponent puts the small work id (+0x28) where a roster heap pointer (+0x58) is
+// expected. Fields used off a WorkComponent: +0x18 WorkDescription, +0x28 scheduler work id
+// (-1 = none), +0x30 cached max workers (WorkComponent_CalcMaxWorkers).
+inline void fn_FindComponent_Work(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_WorkComponent);
 }
 // fn_FindComponent_Attendance — DAT_1401c3f40, original FUN_1400105e0
 inline void fn_FindComponent_Attendance(void* entity, void* retval) {
@@ -765,8 +772,11 @@ inline void fn_FindComponent_Pasture(void* entity, void* retval) {
 inline void fn_FindComponent_Orchard(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_OrchardComponent);
 }
-// fn_FindComponent_BuildState2 — DAT_1401c80e0 (= g_TypeId_WorkplaceComponent), original FUN_140002e10
-inline void fn_FindComponent_BuildState2(void* entity, void* retval) {
+// fn_FindComponent_WorkPlace — DAT_1401c80e0 = "WorkPlaceComponent"
+// (factory_registrations.csv:308), original FUN_140002e10. Was named
+// fn_FindComponent_BuildState2. Fields: +0x48 active profession key, +0x58 roster base,
+// +0x60 roster count, +0x18 WorkPlaceDescription (whose +0x20 is the natural profession).
+inline void fn_FindComponent_WorkPlace(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_WorkplaceComponent);
 }
 // fn_FindComponent_SM — DAT_1401c71c8, original FUN_14000a170
@@ -2030,7 +2040,7 @@ inline uint32_t fn_GetCurrentProductIndex(void* component) {
 inline int fn_StorageCountQuery(void* component) {
     uintptr_t c = (uintptr_t)component;
     void* base = *(void**)(c + 0x18);
-    void* jobType = fn_IsDerivedFrom(base, *g_TypeId_WorkplaceJobType) ? base : nullptr;
+    void* jobType = fn_IsDerivedFrom(base, *g_TypeId_WorkDescription) ? base : nullptr;
     if (!jobType) return 0;
     uintptr_t jt = (uintptr_t)jobType;
     if (*(uint8_t*)(jt + 0x34) == 0) {
@@ -4779,30 +4789,37 @@ typedef void (*fn_FindStorageForResource_t)(
     int param5, char param6, float* velocity, void* outStorageIBP);
 extern fn_FindStorageForResource_t fn_FindStorageForResource;
 
-// FUN_1400223c0 — FindComponent type DAT_1401c7c80 (WorkplaceComponent variant)
-// RCX=entity, RDX=outIBP
-typedef void (*fn_FindComponent_WorkplaceC_t)(int64_t entity, void* outIBP);
-extern fn_FindComponent_WorkplaceC_t fn_FindComponent_WorkplaceC;
+// The three "…C" finders are exe-resolved function pointers rather than the inline
+// type-id form above. All three were misnamed; the names below come from the type-id
+// globals in standalone/factory_registrations.csv. Behaviour is unchanged — only the
+// names were wrong, and every call site was already passing/using the right object.
 
-// FUN_1400052c0 — FindComponent type DAT_1401c7b30 (BuildStateComponent variant)
+// FUN_1400223c0 — FindComponent type DAT_1401c7c80 = "RawMaterialComponent" (csv:288).
 // RCX=entity, RDX=outIBP
-typedef void (*fn_FindComponent_BuildStateC_t)(int64_t entity, void* outIBP);
-extern fn_FindComponent_BuildStateC_t fn_FindComponent_BuildStateC;
+typedef void (*fn_FindComponent_RawMaterialC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC;
 
-// FUN_140003050 — FindComponent_StorageLocation (already have fn_FindComponent_Workplace)
+// FUN_1400052c0 — FindComponent type DAT_1401c7b30 = "NaturalResourceComponent" (csv:282).
 // RCX=entity, RDX=outIBP
-typedef void (*fn_FindComponent_StorageLocC_t)(int64_t entity, void* outIBP);
-extern fn_FindComponent_StorageLocC_t fn_FindComponent_StorageLocC;
+typedef void (*fn_FindComponent_NaturalResourceC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_NaturalResourceC_t fn_FindComponent_NaturalResourceC;
+
+// FUN_140003050 — the exe-pointer twin of the inline fn_FindComponent_Work above
+// (DAT_1401c8070 = "WorkComponent"). RCX=entity, RDX=outIBP
+typedef void (*fn_FindComponent_WorkC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_WorkC_t fn_FindComponent_WorkC;
 
 // FUN_1400f8620 — TryAssignWorkplace
 // RCX=assignMgr, RDX=citizenRef, R8D=workerCount, R9B=flag
 typedef uint64_t (*fn_TryAssignWorkplace_t)(uintptr_t mgr, void* citizenRef, int count, char flag);
 extern fn_TryAssignWorkplace_t fn_TryAssignWorkplace;
 
-// FUN_140006330 — FindComponent_RawMaterial on entity (by resource type)
-// RCX=resourceType, RDX=outIBP
-typedef void (*fn_FindComponent_RawMaterialC_t)(int64_t resourceType, void* outIBP);
-extern fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC;
+// FUN_140006330 — scan a DESCRIPTION list (list+0x28 array / +0x30 count) for the entry
+// whose type id is DAT_1401c7cb8 = "RawMaterialDescription" (csv:289). Not a component
+// finder: 0x1400223c0 (fn_FindComponent_RawMaterialC) is the component one.
+// RCX=descList, RDX=out
+typedef void (*fn_FindDescription_RawMaterial_t)(int64_t descList, void* out);
+extern fn_FindDescription_RawMaterial_t fn_FindDescription_RawMaterial;
 
 // FUN_140116540 — GetRemainingCapacity: returns capacity - current count
 // RCX=citizenEntity
@@ -4904,7 +4921,7 @@ typedef void* (*fn_Entity_FindComponent_BuildDesc_t)(uintptr_t entity, void* ret
 extern fn_Entity_FindComponent_BuildDesc_t fn_Entity_FindComponent_BuildDesc;
 
 // FindComponent_MatDesc (0x140003050) — type DWORD_1401c8070 (MaterialDescription)
-// Note: same address as fn_FindComponent_StorageLocC, different type ID baked in
+// Note: same address as fn_FindComponent_WorkC, different type ID baked in
 typedef void* (*fn_Entity_FindComponent_MatDesc_t)(uintptr_t entity, void* retIBP);
 extern fn_Entity_FindComponent_MatDesc_t fn_Entity_FindComponent_MatDesc;
 
@@ -4964,14 +4981,14 @@ extern fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkpl
 // standalone (that exe address isn't registered), and citizencomponent.cpp:1176/1193 call
 // it UNGUARDED — so once a placed building reaches construction and a citizen evaluates
 // switching workplaces, the null call crashed (VCALL-of-0). Byte-faithful to 0x140017050
-// (FUN_140003050 = fn_FindComponent_Workplace, FUN_14012e5c0 = fn_StorageCountQuery), plus
+// (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 = fn_StorageCountQuery), plus
 // one SA safety guard the original lacks: a null storage-loc component → "no vacancy"
 // rather than dereferencing null+0x30. Works in both DLL and standalone builds.
 inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
     int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workplaceComp + 0x10));
     uint64_t slComp = 0;
-    fn_FindComponent_Workplace(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
+    fn_FindComponent_Work(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
     fn_InternalBasePtr_CheckPtr(&slComp);
     if (slComp == 0) return false;
     uintptr_t sl = static_cast<uintptr_t>(slComp);

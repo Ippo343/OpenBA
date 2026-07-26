@@ -2062,12 +2062,22 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
 
         // Gender (+0x38) + the CitizenComponent handle the caller needs to build the
         // family links — see the FamilyLinksOn() note above.
-        if (FamilyLinksOn()) {
-            uint8_t* cc = StartTown_CitizenComp((void*)entIBP);
-            if (cc) {
-                *reinterpret_cast<int32_t*>(cc + 0x38) = (variantIdx == 0) ? 1 : 0;
-                if (outCitizen) *outCitizen = cc;
-            }
+        //
+        // The gender write is UNGATED. It used to sit inside FamilyLinksOn(), but gender
+        // is not a family-links feature: retail's per-citizen init writes +0x38 for every
+        // colonist, unconditionally, and that initializer is registered and live for every
+        // citizen BORN in game (citizencomponent.cpp -> CitizenComp_DeferredInit_117080).
+        // Only the founding colonists come through this hand-written spawner, so leaving
+        // the write behind an opt-in made the founding town the one cohort with no gender
+        // at all: +0x38 == 0 for all of them, which means (a) helper_fe40's opposite-gender
+        // test `cand->+0x38 != self->+0x38` can never pass, so no founding colonist can ever
+        // marry, and (b) the Update reproduction gate `+0x38 == 0` (female) reads true for
+        // the entire founding generation. What stays gated is the family CROSS-LINKING
+        // (spouse +0x250, child ring) below, which genuinely changes population dynamics.
+        uint8_t* cc = StartTown_CitizenComp((void*)entIBP);
+        if (cc) {
+            *reinterpret_cast<int32_t*>(cc + 0x38) = (variantIdx == 0) ? 1 : 0;
+            if (outCitizen) *outCitizen = cc;
         }
     }
 
@@ -2416,9 +2426,15 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // BANISHED_LIVE_HOUSING is set; otherwise the vector is simply discarded.
     std::vector<std::vector<void*>> famEntities;
 
-    // Kid gender alternates across the whole spawn (as retail's `bVar12` does),
-    // persisting between families. Starts on gender 0.
-    int kidVariant = 0;
+    // Kid gender alternates across the whole spawn (retail's `bVar12`), persisting
+    // between families — CitizenComponent_impl_0dd0 initialises it ONCE, above the
+    // family loop, and only ever toggles it (`bVar12 = bVar12 == false`) per child.
+    //
+    // It starts TRUE, and sub_1040 derives gender as `(uint)(param_5 == '\0')`, so the
+    // first child is gender 0; SetVariant then gets `(ushort)(gender == 0)` = variantIdx
+    // 1. So kidVariant starts at 1, not 0 — starting at 0 put every founding child's
+    // gender/mesh one step out of phase with vanilla for the whole spawn.
+    int kidVariant = 1;
 
     int spawned = 0;
     for (int f = 0; f < famCount; ++f) {

@@ -69,7 +69,7 @@ static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
     if (!jobType) return 0;
 
     // IsDerivedFrom check
-    bool isJobType = fn_IsDerivedFrom(jobType, *g_TypeId_WorkplaceJobType);
+    bool isJobType = fn_IsDerivedFrom(jobType, *g_TypeId_WorkDescription);
     if (!isJobType) return 0;
 
     uintptr_t jt = (uintptr_t)jobType;
@@ -750,8 +750,8 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                         typedef int (*fn_GetTypeId_t)(void*);
                         void** vtbl = *(void***)(comp);
                         int typeId = ((fn_GetTypeId_t)vtbl[2])((void*)comp);
-                        if (typeId == (int)*g_TypeId_StorageLocationComponent) {
-                            if (fn_IsDerivedFrom((void*)comp, *g_TypeId_StorageLocationComponent)) {
+                        if (typeId == (int)*g_TypeId_WorkComponent) {
+                            if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkComponent)) {
                                 storageLocComp = comp;
                             }
                             break;

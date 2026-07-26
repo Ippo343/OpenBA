@@ -1997,7 +1997,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
 
                 // Find StorageLocationComponent (DAT_1401c8070) — ComponentEntity layout
-                void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, *g_TypeId_StorageLocationComponent);
+                void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, *g_TypeId_WorkComponent);
 
                 uint64_t slBP = 0;
                 fn_InternalBasePtr_Ctor(&slBP, storageLocComp);
@@ -2507,7 +2507,7 @@ void EnsureGlobals() {
         { &g_TypeId_RawMaterialDescription,   "RawMaterialDescription" },
         { &g_TypeId_StorageComponent_FC,      "StorageComponent" },
         { &g_TypeId_WorkplaceComponent,       "WorkPlaceComponent" },
-        { &g_TypeId_StorageLocationComponent, "WorkComponent" },
+        { &g_TypeId_WorkComponent, "WorkComponent" },
     };
     for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i) {
         if (*entries[i].global) continue;
@@ -2526,7 +2526,7 @@ bool Ready() {
           g_TypeId_SelectDescription && g_TypeId_ComponentDescription_FC && g_TypeId_StateMachineComponent_FC &&
           g_TypeId_TradeComponent_FC && g_TypeId_RawMaterialDescription &&
           g_TypeId_StorageComponent_FC && g_TypeId_WorkplaceComponent &&
-          g_TypeId_StorageLocationComponent))
+          g_TypeId_WorkComponent))
         return false;
     if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
           fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
@@ -2621,7 +2621,7 @@ void DiagPrint(const char* where, void* self) {
         {"RawMaterialDescription", g_TypeId_RawMaterialDescription},
         {"StorageComponent", g_TypeId_StorageComponent_FC},
         {"WorkPlaceComponent", g_TypeId_WorkplaceComponent},
-        {"WorkComponent", g_TypeId_StorageLocationComponent},
+        {"WorkComponent", g_TypeId_WorkComponent},
     };
     fprintf(stderr, "[TownHallSA] %s: self=%p bound=%d built=%d ready=%d town=%d extFactory=%d\n",
             where, self,

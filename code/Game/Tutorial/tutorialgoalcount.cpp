@@ -428,7 +428,7 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
             uintptr_t workplaceIBP = 0;
-            fn_FindComponent_BuildState2((void*)localEntity, &workplaceIBP);
+            fn_FindComponent_WorkPlace((void*)localEntity, &workplaceIBP);
             if (fn_InternalBasePtr_CheckPtr) {
                 fn_InternalBasePtr_CheckPtr(&workplaceIBP);
             }

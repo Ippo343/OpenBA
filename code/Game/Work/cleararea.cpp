@@ -446,7 +446,7 @@ static fn_GetSlotCount_t fn_GetSlotCount = nullptr;
 
 // FUN_140002e10: FindComponent_BuildState2 (WorkplaceComponent)
 // entity, retval -> InternalBasePtr
-// Already available as fn_FindComponent_BuildState2 inline in engine_funcs.h
+// Already available as fn_FindComponent_WorkPlace inline in engine_funcs.h
 
 // FUN_140004680: FindComponent_Build (BuildComponent_Slot4)
 // Already available as fn_FindComponent_Build inline in engine_funcs.h
@@ -657,13 +657,13 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
     // Find WorkplaceComponent (FUN_140002e10 = FindComponent_BuildState2)
     uint64_t buildStateIBP = 0;
-    fn_FindComponent_BuildState2(citizenEntity, &buildStateIBP);
+    fn_FindComponent_WorkPlace(citizenEntity, &buildStateIBP);
 
     if (buildStateIBP != 0) {
         // Re-find and check if component is active (byte at +0x50)
         uint64_t buildStateIBP2 = 0;
         fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
-        fn_FindComponent_BuildState2(self->field_10, &buildStateIBP2);
+        fn_FindComponent_WorkPlace(self->field_10, &buildStateIBP2);
         fn_InternalBasePtr_CheckPtr(&buildStateIBP2);
         void* bsComp = reinterpret_cast<void*>(buildStateIBP2);
         if (*(char*)((uintptr_t)bsComp + 0x50) == 0) {
@@ -1088,12 +1088,12 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                     uint32_t typeId = reinterpret_cast<GetTypeId_t>(
                         *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
 
-                    if (typeId == *g_TypeId_StorageLocationComponent) {
+                    if (typeId == *g_TypeId_WorkComponent) {
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
                         fn_InternalBasePtr_CheckPtr(compIBP2);
                         void* comp2 = *compIBP2;
-                        if (fn_IsDerivedFrom(comp2, *g_TypeId_StorageLocationComponent)) {
+                        if (fn_IsDerivedFrom(comp2, *g_TypeId_WorkComponent)) {
                             storageLocComp = comp2;
                         }
                         break;

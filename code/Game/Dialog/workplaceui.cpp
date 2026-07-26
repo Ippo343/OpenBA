@@ -55,9 +55,9 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find WorkplaceComponent (FUN_140002e10 = BuildState2/WorkplaceComponent)
+    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0)
     uint64_t workComp = 0;
-    fn_FindComponent_BuildState2((void*)entityPtr, &workComp);
+    fn_FindComponent_WorkPlace((void*)entityPtr, &workComp);
     fn_InternalBasePtr_CheckPtr((void*)&workComp);
     uintptr_t wc = workComp;
 
@@ -65,7 +65,7 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
     fn_InternalBasePtr_CheckPtr((void*)(wc + 0x10));
     uintptr_t innerEntity = *(uintptr_t*)(wc + 0x10);
     uint64_t slComp = 0;
-    fn_FindComponent_Workplace((void*)innerEntity, &slComp);
+    fn_FindComponent_Work((void*)innerEntity, &slComp);
     fn_InternalBasePtr_CheckPtr((void*)&slComp);
     uintptr_t slc = slComp;
 
@@ -102,9 +102,9 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find WorkplaceComponent
+    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
     uint64_t workComp = 0;
-    fn_FindComponent_BuildState2((void*)entityPtr, &workComp);
+    fn_FindComponent_WorkPlace((void*)entityPtr, &workComp);
     fn_InternalBasePtr_CheckPtr((void*)&workComp);
     uintptr_t wc = workComp;
 
@@ -193,13 +193,13 @@ void WorkplaceUI_Serialize(WorkPlaceUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find WorkplaceComponent
+    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
     void* workComp = nullptr;
-    fn_FindComponent_Workplace(entityInternal, &workComp);
+    fn_FindComponent_Work(entityInternal, &workComp);
 
-    // Check sub-component at +0x18 for type DAT_1401c80a8
+    // Check the WorkComponent's WorkDescription at +0x18 (DAT_1401c80a8)
     void* subComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkplaceJobType);
+    bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkDescription);
 
     if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
         // Hide job count up/down buttons if sub-component flag is zero
@@ -229,27 +229,28 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     void* entityPtr = *(void**)entityBuf;
 
-    // Find BuildState2 component (FUN_140002e10 — type DAT_1401c8118)
-    void* buildComp = nullptr;
-    fn_FindComponent_BuildState2(entityPtr, &buildComp);
-    fn_InternalBasePtr_CheckPtr(&buildComp);
+    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0). Retail
+    // also runs a discarded IsDerivedFrom(wpComp+0x18, WorkPlaceDescription) here.
+    void* wpComp = nullptr;
+    fn_FindComponent_WorkPlace(entityPtr, &wpComp);
+    fn_InternalBasePtr_CheckPtr(&wpComp);
 
-    // Find WorkplaceComponent
+    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
     void* workComp = nullptr;
-    fn_FindComponent_Workplace(entityPtr, &workComp);
+    fn_FindComponent_Work(entityPtr, &workComp);
     fn_InternalBasePtr_CheckPtr(&workComp);
 
-    // Get WorkplaceJobType sub-component from workplace: +0x18
+    // Get the WorkDescription off the WorkComponent: +0x18
     void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(jobSubComp, *g_TypeId_WorkplaceJobType);
+    bool isJobType = fn_IsDerivedFrom(jobSubComp, *g_TypeId_WorkDescription);
     void* jobType = isJobType ? jobSubComp : nullptr;
 
-    // Check if building is complete: buildComp +0x48 (profession ptr) must be non-null
-    fn_InternalBasePtr_CheckPtr(&buildComp);
-    if (*(uintptr_t*)((uintptr_t)buildComp + 0x48) == 0) {
+    // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
+    fn_InternalBasePtr_CheckPtr(&wpComp);
+    if (*(uintptr_t*)((uintptr_t)wpComp + 0x48) == 0) {
         // Building not complete — hide the entire panel
 #ifdef _DEBUG
-        printf("[WorkPlaceUI] HIDDEN: buildComp=%p profession(+0x48)=NULL entity=%p\n", buildComp, entityPtr);
+        printf("[WorkPlaceUI] HIDDEN: wpComp=%p profession(+0x48)=NULL entity=%p\n", wpComp, entityPtr);
 #endif
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 1, 0);
         return;
@@ -259,14 +260,14 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 0, 1);
 
 #ifdef _DEBUG
-    printf("[WorkPlaceUI] entity=%p buildComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
-        entityPtr, buildComp, workComp, jobType,
+    printf("[WorkPlaceUI] entity=%p wpComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
+        entityPtr, wpComp, workComp, jobType,
         jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x20) : -1,
-        *(void**)((uintptr_t)buildComp + 0x48));
+        *(void**)((uintptr_t)wpComp + 0x48));
 #endif
     if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
         // Check for laborer profession
-        void* professionId = *(void**)((uintptr_t)buildComp + 0x48);
+        void* professionId = *(void**)((uintptr_t)wpComp + 0x48);
         void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
         void* laborerProf = *(void**)((uintptr_t)profList + 0x38);
 
@@ -290,27 +291,27 @@ showUpDown:
     }
 
     // Get worker count and max worker count
-    fn_InternalBasePtr_CheckPtr(&buildComp);
-    uint32_t workerCount = *(uint32_t*)((uintptr_t)buildComp + 0x60);
+    fn_InternalBasePtr_CheckPtr(&wpComp);
+    uint32_t workerCount = *(uint32_t*)((uintptr_t)wpComp + 0x60);
 
-    // Get WorkplaceComponent from buildComp's parent entity (+0x10)
-    fn_InternalBasePtr_CheckPtr(&buildComp);
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buildComp + 0x10));
-    void* parentEntity = *(void**)((uintptr_t)buildComp + 0x10);
-    void* wpComp2 = nullptr;
-    fn_FindComponent_Workplace(parentEntity, &wpComp2);
-    fn_InternalBasePtr_CheckPtr(&wpComp2);
+    // Get the WorkComponent from the WorkPlaceComponent's parent entity (+0x10)
+    fn_InternalBasePtr_CheckPtr(&wpComp);
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)wpComp + 0x10));
+    void* parentEntity = *(void**)((uintptr_t)wpComp + 0x10);
+    void* parentWorkComp = nullptr;
+    fn_FindComponent_Work(parentEntity, &parentWorkComp);
+    fn_InternalBasePtr_CheckPtr(&parentWorkComp);
 
     // Get max count — lazy-init cached value at +0x30
-    if (*(int*)((uintptr_t)wpComp2 + 0x30) == 0) {
-        int count = fn_StorageCountQuery(wpComp2);
-        *(int*)((uintptr_t)wpComp2 + 0x30) = count;
+    if (*(int*)((uintptr_t)parentWorkComp + 0x30) == 0) {
+        int count = fn_StorageCountQuery(parentWorkComp);
+        *(int*)((uintptr_t)parentWorkComp + 0x30) = count;
     }
-    uint32_t maxCount = *(uint32_t*)((uintptr_t)wpComp2 + 0x30);
+    uint32_t maxCount = *(uint32_t*)((uintptr_t)parentWorkComp + 0x30);
 
-    // Get profession sprite from buildComp +0x48 -> +0x28 (sheet) / +0x30 (name)
+    // Get profession sprite from wpComp +0x48 -> +0x28 (sheet) / +0x30 (name)
     {
-        uintptr_t profPtr = *(uintptr_t*)((uintptr_t)buildComp + 0x48);
+        uintptr_t profPtr = *(uintptr_t*)((uintptr_t)wpComp + 0x48);
         uint8_t spriteBuf[16];
         fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(profPtr + 0x28),
                         (void*)(profPtr + 0x30));
@@ -353,7 +354,7 @@ showUpDown:
 
         // Check if assigned to this workplace's profession
         void* assignedProf = *(void**)((uintptr_t)citizen + 0x1f0);
-        if (assignedProf == *(void**)((uintptr_t)buildComp + 0x48)) {
+        if (assignedProf == *(void**)((uintptr_t)wpComp + 0x48)) {
             workplaceWorkerCount++;
         }
         if (assignedProf == laborerProf) {
@@ -386,7 +387,7 @@ showUpDown:
     }
 
     // Job count up/down enable based on workplace capacity
-    // Use workComp (from main entity), NOT wpComp2 (from inner entity)
+    // Use workComp (from main entity), NOT parentWorkComp (from inner entity)
     fn_InternalBasePtr_CheckPtr(&workComp);
     if (*(int*)((uintptr_t)workComp + 0x30) == 0) {
         int count = fn_StorageCountQuery(workComp);
@@ -403,8 +404,8 @@ showUpDown:
 #endif
 
     // Check if this is a laborer profession
-    fn_InternalBasePtr_CheckPtr(&buildComp);
-    if (*(void**)((uintptr_t)buildComp + 0x48) ==
+    fn_InternalBasePtr_CheckPtr(&wpComp);
+    if (*(void**)((uintptr_t)wpComp + 0x48) ==
         *(void**)((uintptr_t)profList + 0x38)) {
         // Laborer building — check position component for position-based limit
         // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
@@ -483,16 +484,16 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     void* entityPtr = *(void**)entityBuf;
 
-    // Find BuildState2 component
-    void* buildComp = nullptr;
-    fn_FindComponent_BuildState2(entityPtr, &buildComp);
+    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0)
+    void* wpComp = nullptr;
+    fn_FindComponent_WorkPlace(entityPtr, &wpComp);
 
     // Get citizen list singleton
     void* citizenList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
 
     if (id == 0x1450) {
         // workerCountUp — request new worker for profession
-        uint64_t profId = *(uint64_t*)((uintptr_t)buildComp + 0x48);
+        uint64_t profId = *(uint64_t*)((uintptr_t)wpComp + 0x48);
         uint64_t retBuf = 0;
         fn_CitizenList_RequestWorker(citizenList, &retBuf, profId);
         uint64_t workerSlot = retBuf;
@@ -500,7 +501,7 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
         fn_CitizenList_AssignWorker(citizenList, assignBuf, &workerSlot, profId);
     } else if (id == 0x1451) {
         // workerCountDown — remove worker from profession
-        uint64_t profId = *(uint64_t*)((uintptr_t)buildComp + 0x48);
+        uint64_t profId = *(uint64_t*)((uintptr_t)wpComp + 0x48);
         fn_CitizenList_RemoveWorker(citizenList, profId);
     } else if (id == 0x1452) {
         // jobCountUp — increase job count
@@ -588,7 +589,7 @@ void* Dtor(void* self, uint32_t flags) {
 // The exe-.rdata type-id globals the visibility check dereferences are NULL in
 // standalone. Lazy-fill from the live runtime type registry (valid after
 // Object::Factory::Startup). "WorkPlaceComponent" is the registered name that
-// fn_FindComponent_BuildState2 searches by (slot 0x1401c80e0).
+// fn_FindComponent_WorkPlace searches by (slot 0x1401c80e0).
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_wpc = 0;
     if (!g_TypeId_ComponentEntity) {
@@ -623,9 +624,9 @@ void UpdateVisibility(void* self) {
     fn_InternalBasePtr_CheckPtr(entityBuf);
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
-    // Find the WorkPlaceComponent (fn_FindComponent_BuildState2 → g_TypeId_WorkplaceComponent).
+    // Find the WorkPlaceComponent (fn_FindComponent_WorkPlace → g_TypeId_WorkplaceComponent).
     uint64_t workComp = 0;
-    fn_FindComponent_BuildState2(entityPtr, &workComp);
+    fn_FindComponent_WorkPlace(entityPtr, &workComp);
     fn_InternalBasePtr_CheckPtr(&workComp);
 
     // Show only when the workplace has an active profession (+0x48 != 0); hidden
@@ -668,7 +669,7 @@ void UpdateVisibility(void* self) {
 //
 // Runs for any workplace panel, so the count is correct on every building dialog,
 // not just under-construction sites. `workComp` here is the WorkPlaceComponent
-// (fn_FindComponent_BuildState2 → g_TypeId_WorkplaceComponent), matching retail's
+// (fn_FindComponent_WorkPlace → g_TypeId_WorkplaceComponent), matching retail's
 // local_res18 — its +0x48 is the active profession, +0x60 the live roster.
 // One-shot recursive element-tree dump: name (+0x10 = char* with length at [-8]),
 // id (+0x88), child array (+0xa0) / count (+0xa8). Reveals the real panel structure so
@@ -710,7 +711,7 @@ void PopulateCounts(void* self) {
 
     // WorkPlaceComponent (retail local_res18).
     uint64_t workComp = 0;
-    fn_FindComponent_BuildState2(entityPtr, &workComp);
+    fn_FindComponent_WorkPlace(entityPtr, &workComp);
     fn_InternalBasePtr_CheckPtr(&workComp);
     if (workComp == 0) return;
     uintptr_t w = static_cast<uintptr_t>(workComp);
@@ -776,16 +777,16 @@ void PopulateCounts(void* self) {
     // already primed +0x30, so it is read directly; StorageCountQuery only fills it
     // when still zero, and only when its type-id deps are live (else capacity=0).
     uint32_t capacity = 0;
-    if (g_TypeId_StorageLocationComponent && *g_TypeId_StorageLocationComponent) {
+    if (g_TypeId_WorkComponent && *g_TypeId_WorkComponent) {
         fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
         void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
         uint64_t workC = 0;
-        fn_FindComponent_Workplace(parentEntity, &workC);
+        fn_FindComponent_Work(parentEntity, &workC);
         fn_InternalBasePtr_CheckPtr(&workC);
         if (workC) {
             uintptr_t c = static_cast<uintptr_t>(workC);
             if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
-                g_TypeId_WorkplaceJobType && *g_TypeId_WorkplaceJobType) {
+                g_TypeId_WorkDescription && *g_TypeId_WorkDescription) {
                 int n = fn_StorageCountQuery(reinterpret_cast<void*>(c));
                 *reinterpret_cast<int*>(c + 0x30) = n;
             }
@@ -920,7 +921,7 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     void* entityPtr = *reinterpret_cast<void**>(eb);
 
     uint64_t wpc = 0;
-    fn_FindComponent_BuildState2(entityPtr, &wpc);
+    fn_FindComponent_WorkPlace(entityPtr, &wpc);
     fn_InternalBasePtr_CheckPtr(&wpc);
     if (!wpc) return;
     uint64_t profId = *reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(wpc) + 0x48);

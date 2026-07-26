@@ -42,6 +42,8 @@ typedef void  (*WS_NodeFree_t)(void* treeField, void* node);                    
 typedef char  (*WS_CheckSlot_t)(uintptr_t workComp);                             // ead0
 typedef void  (*WS_StopSlot_t)(uintptr_t workComp);                              // eb50
 
+typedef void  (*WS_NodeRemove_t)(void* treeField, void* node);                   // ca60
+
 static WS_Rebalance_t   s_a8c0 = nullptr;
 static WS_Rebalance_t   s_3480 = nullptr;
 static WS_Rebalance_t   s_4b40 = nullptr;
@@ -49,6 +51,7 @@ static WS_IdMapInsert_t s_9a40 = nullptr;
 static WS_NodeFree_t    s_e320 = nullptr;
 static WS_CheckSlot_t   s_ead0 = nullptr;
 static WS_StopSlot_t    s_eb50 = nullptr;
+static WS_NodeRemove_t  s_ca60 = nullptr;
 static bool s_ws_res = false;
 static void WS_Resolve() {
     if (s_ws_res) return;
@@ -59,6 +62,7 @@ static void WS_Resolve() {
     s_e320 = reinterpret_cast<WS_NodeFree_t>(ResolveAddr(Module::Exe, 0x14000e320));
     s_ead0 = reinterpret_cast<WS_CheckSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_eb50 = reinterpret_cast<WS_StopSlot_t>(ResolveAddr(Module::Exe, 0x14012eb50));
+    s_ca60 = reinterpret_cast<WS_NodeRemove_t>(ResolveAddr(Module::Exe, 0x14001ca60));
     s_ws_res = true;
 }
 
@@ -553,8 +557,149 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
                      (void*)workComp, code, assignedId);
 }
 
+// ==================================================================================
+// FUN_1400f8400 — re-key a pending work item between profession buckets.
+// ==================================================================================
+// The scheduler files every posted work item twice: once in the flat id-map at sched+0x30
+// (0x30 nodes keyed by the int work id, payload = the work object), and once inside a
+// per-PROFESSION bucket tree at sched+0x120 (0x38 nodes keyed by the u64 profession key,
+// each holding its own id-keyed inner tree at +0x08 with a count at +0x10). Citizens of a
+// profession only ever see the items in their own bucket.
+//
+// When a building changes profession — a demolition or upgrade re-keys its WorkPlaceComponent
+// to Builder (0x14012f520), a completed building hands it back to its natural profession
+// (0x14012f670) — any work item still in flight has to move buckets with it. Without this,
+// the item keeps its pre-demolition key and gets offered to the wrong profession's citizens.
+//
+//   sched  = *(gameWorld+0x118)
+//   workId = WorkComponent+0x28 (>= 0 means an item is in flight; -1 means nothing to move)
+//   oldKey / newKey = profession keys
+//
+// Faithful 1:1 port; the erase (ca60) and insert (9a40) helpers maintain the bucket counts
+// themselves, which is why retail never touches +0x10 here.
+extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
+                                              uint64_t oldKey, uint64_t newKey) {
+    WS_Resolve();
+    // [STANDALONE GUARD] Retail is only ever called from a live world.
+    if (!sched) return;
+    uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
+    const int key = static_cast<int>(workId);
+
+    // 1. The id-map entry (sched+0x30) — its +0x08 payload is what gets re-filed. Retail
+    //    bails when the id is unknown, before touching either bucket.
+    uint8_t* idNode = *reinterpret_cast<uint8_t**>(schedB + 0x30);
+    while (idNode) {
+        int nk = *reinterpret_cast<int*>(idNode + 0x00);
+        if (nk > key)      idNode = *reinterpret_cast<uint8_t**>(idNode + 0x18);   // left
+        else if (key > nk) idNode = *reinterpret_cast<uint8_t**>(idNode + 0x20);   // right
+        else break;
+    }
+    if (!idNode) {
+        if (WS_Trace()) {
+            uint8_t* root = *reinterpret_cast<uint8_t**>(schedB + 0x30);
+            std::fprintf(stderr, "[BuildTrace] Rekey id=%d: NOT in the sched+0x30 id-map "
+                         "(root=%p rootId=%d count=%d buckets=%d) — nothing to move\n", key,
+                         (void*)root, root ? *reinterpret_cast<int*>(root) : -1,
+                         *reinterpret_cast<int*>(schedB + 0x38),
+                         *reinterpret_cast<int*>(schedB + 0x128));
+            std::fflush(stderr);
+        }
+        return;
+    }
+
+    uint64_t* outer = reinterpret_cast<uint64_t*>(schedB + 0x120);   // {root@0, count@8}
+
+    // 2. The OLD profession's bucket.
+    uint8_t* oldBucket = *reinterpret_cast<uint8_t**>(outer);
+    while (oldBucket) {
+        uint64_t bk = *reinterpret_cast<uint64_t*>(oldBucket + 0x00);
+        if (oldKey < bk)      oldBucket = *reinterpret_cast<uint8_t**>(oldBucket + 0x20);
+        else if (bk < oldKey) oldBucket = *reinterpret_cast<uint8_t**>(oldBucket + 0x28);
+        else break;
+    }
+    if (!oldBucket) {
+        // Retail still materialises the (empty) bucket for oldKey and then returns: with no
+        // bucket there is nothing filed to move. cb50's temp node is freed inside cb50.
+        void* out = nullptr;
+        void* noSubtree[2] = { nullptr, nullptr };
+        uint64_t k = oldKey;
+        WS_cb50(outer, &out, &k, noSubtree);
+        if (WS_Trace()) std::fprintf(stderr, "[BuildTrace] Rekey id=%d: no bucket for oldKey "
+                                     "%llx — created it empty, nothing filed to move\n", key,
+                                     (unsigned long long)oldKey), std::fflush(stderr);
+        return;
+    }
+
+    // 3. The item itself, in that bucket's inner id-keyed tree (bucket+0x08).
+    uint8_t* item = *reinterpret_cast<uint8_t**>(oldBucket + 0x08);
+    while (item) {
+        int nk = *reinterpret_cast<int*>(item + 0x00);
+        if (nk > key)      item = *reinterpret_cast<uint8_t**>(item + 0x18);
+        else if (key > nk) item = *reinterpret_cast<uint8_t**>(item + 0x20);
+        else break;
+    }
+    if (!item) {
+        if (WS_Trace()) std::fprintf(stderr, "[BuildTrace] Rekey id=%d: not filed under oldKey "
+                                     "%llx (bucket=%p) — nothing to move\n", key,
+                                     (unsigned long long)oldKey, (void*)oldBucket), std::fflush(stderr);
+        return;
+    }
+
+    // 4. Unfile it (ca60 frees the node and decrements bucket+0x10).
+    if (!s_ca60) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            std::fprintf(stderr, "[WorkScheduler] Rekey: 0x14001ca60 unresolved — work id %d "
+                         "stays filed under its old profession\n", key);
+            std::fflush(stderr);
+        }
+        return;
+    }
+    s_ca60(oldBucket + 0x08, item);
+
+    // 5. The NEW profession's bucket, created if this is its first item.
+    uint8_t* newBucket = nullptr;
+    for (uint8_t* p = *reinterpret_cast<uint8_t**>(outer); p; ) {
+        uint64_t bk = *reinterpret_cast<uint64_t*>(p + 0x00);
+        if (newKey < bk)      p = *reinterpret_cast<uint8_t**>(p + 0x20);
+        else if (bk < newKey) p = *reinterpret_cast<uint8_t**>(p + 0x28);
+        else { newBucket = p; break; }
+    }
+    if (!newBucket) {
+        void* out = nullptr;
+        void* noSubtree[2] = { nullptr, nullptr };
+        uint64_t k = newKey;
+        WS_cb50(outer, &out, &k, noSubtree);
+        newBucket = reinterpret_cast<uint8_t*>(out);
+    }
+    // [STANDALONE GUARD] Retail derefs the insert result unconditionally; ours can be null
+    // if the allocator failed. Dropping the item is bad, but far better than a write to 0x08.
+    if (!newBucket) {
+        std::fprintf(stderr, "[WorkScheduler] Rekey: could not create bucket for key %llx — "
+                     "work id %d dropped\n", static_cast<unsigned long long>(newKey), key);
+        std::fflush(stderr);
+        return;
+    }
+
+    // 6. Re-file under the new key. The pair is {id, pad, payload}; 9a40 reads the u32 at +0
+    //    and the u64 at +8, and bumps newBucket+0x10.
+    struct { uint32_t id; uint32_t pad; uint64_t payload; } pair;
+    pair.id      = workId;
+    pair.pad     = 0;
+    pair.payload = *reinterpret_cast<uint64_t*>(idNode + 0x08);
+    void* outSlot = nullptr;
+    if (s_9a40) s_9a40(newBucket + 0x08, &outSlot, reinterpret_cast<uint32_t*>(&pair));
+
+    if (WS_Trace())
+        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Rekey id=%d %llx -> %llx\n", key,
+                     static_cast<unsigned long long>(oldKey),
+                     static_cast<unsigned long long>(newKey));
+}
+
 #include "address_registry.h"
 extern "C" void RegisterCitizenAIWorkScheduler() {
     RegisterExeAddr(0x1400f88a0, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Insert));
     RegisterExeAddr(0x14012ec60, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Post));
+    RegisterExeAddr(0x1400f8400, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Rekey));
 }

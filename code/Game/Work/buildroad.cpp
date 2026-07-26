@@ -400,38 +400,40 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
     if (structEntity != 0) {
         fn_InternalBasePtr_CheckPtr((void*)&structEntity);
-        uint64_t workplaceComp = 0;
-        fn_FindComponent_WorkplaceC(structEntity, &workplaceComp);
+        uint64_t rawMatComp = 0;
+        fn_FindComponent_RawMaterialC(structEntity, &rawMatComp);
 
-        if (workplaceComp != 0) {
+        if (rawMatComp != 0) {
             fn_InternalBasePtr_CheckPtr((void*)&structEntity);
-            uint64_t storageLocComp = 0;
-            fn_FindComponent_StorageLocC(structEntity, &storageLocComp);
-            fn_InternalBasePtr_CheckPtr((void*)&storageLocComp);
+            uint64_t workComp = 0;
+            fn_FindComponent_WorkC(structEntity, &workComp);
+            fn_InternalBasePtr_CheckPtr((void*)&workComp);
 
-            int workerCount = *(int*)(*(uintptr_t*)&storageLocComp + 0x28);
+            // WorkComponent+0x28 = the scheduler work id for the pile blocking this
+            // cell, NOT a worker count; it is what gets handed to the scheduler below.
+            int workId = *(int*)(*(uintptr_t*)&workComp + 0x28);
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
             uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
-            uint64_t assignResult = fn_TryAssignWorkplace(assignMgr, &citizenRef, workerCount, '\0');
+            uint64_t assignResult = fn_TryAssignWorkplace(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
             }
             return 1;
         }
 
-        uint64_t buildStateComp = 0;
-        fn_FindComponent_BuildStateC(structEntity, &buildStateComp);
+        uint64_t natResComp = 0;
+        fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
 
-        if (buildStateComp == 0) {
+        if (natResComp == 0) {
             return 1;
         }
 
         fn_InternalBasePtr_CheckPtr((void*)&structEntity);
-        fn_FindComponent_BuildStateC(structEntity, &buildStateComp);
-        fn_InternalBasePtr_CheckPtr((void*)&buildStateComp);
+        fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
+        fn_InternalBasePtr_CheckPtr((void*)&natResComp);
 
-        uint32_t bsFlags = *(uint32_t*)(*(uintptr_t*)&buildStateComp + 0x20);
+        uint32_t bsFlags = *(uint32_t*)(*(uintptr_t*)&natResComp + 0x20);
         if ((bsFlags >> 20) & 1) {
             return 1;
         }
@@ -457,7 +459,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         float terrainPos[4] = {};
         fn_MapGetTerrainPos(mapGrid, terrainPos, worldPos, '\0', nullptr);
 
-        uint64_t targetRef = buildStateComp;
+        uint64_t targetRef = natResComp;
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
         fn_PerformWork_Action_Ctor3(
@@ -543,7 +545,10 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
                 (int64_t)self->field_50, 1, '\0', velocity, &foundStorageIBP);
 
-            fn_FindComponent_RawMaterialC((int64_t)self->field_50, &foundStorageIBP);
+            // 0x140006330 — scans the RawMaterialDescription list for self->field_50's
+            // entry. This is NOT the entity component finder (0x1400223c0) used above;
+            // both were called fn_FindComponent_RawMaterialC before the rename.
+            fn_FindDescription_RawMaterial((int64_t)self->field_50, &foundStorageIBP);
 
             if (foundEntity == 0) {
                 return 1;

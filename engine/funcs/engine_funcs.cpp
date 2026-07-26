@@ -255,10 +255,10 @@ uint32_t* g_TypeId_PageToggleUI = nullptr;
 uint32_t* g_TypeId_MeshInstanceComponent = nullptr;
 uint32_t* g_TypeId_DestroyComponent = nullptr;
 uint32_t* g_TypeId_WorkplaceComponent = nullptr;
-uint32_t* g_TypeId_StorageLocationComponent = nullptr;
+uint32_t* g_TypeId_WorkComponent = nullptr;
 uint32_t* g_TypeId_StorageComponent = nullptr;
 uint32_t* g_TypeId_StateMachineComponent = nullptr;
-uint32_t* g_TypeId_WorkplaceJobType = nullptr;
+uint32_t* g_TypeId_WorkDescription = nullptr;
 uint32_t* g_TypeId_AttendanceDescription = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
 uint32_t* g_TypeId_ToolUI = nullptr;
@@ -1030,9 +1030,9 @@ fn_Vector3_Ctor_t fn_Vector3_Ctor = nullptr;
 fn_PerformWork_Action_Ctor_t fn_PerformWork_Action_Ctor = nullptr;
 fn_PerformWork_Action_Ctor3_t fn_PerformWork_Action_Ctor3 = nullptr;
 fn_FindStorageForResource_t fn_FindStorageForResource = nullptr;
-fn_FindComponent_WorkplaceC_t fn_FindComponent_WorkplaceC = nullptr;
-fn_FindComponent_BuildStateC_t fn_FindComponent_BuildStateC = nullptr;
-fn_FindComponent_StorageLocC_t fn_FindComponent_StorageLocC = nullptr;
+fn_FindDescription_RawMaterial_t fn_FindDescription_RawMaterial = nullptr;
+fn_FindComponent_NaturalResourceC_t fn_FindComponent_NaturalResourceC = nullptr;
+fn_FindComponent_WorkC_t fn_FindComponent_WorkC = nullptr;
 fn_TryAssignWorkplace_t fn_TryAssignWorkplace = nullptr;
 fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC = nullptr;
 fn_GetRemainingCapacity_t fn_GetRemainingCapacity = nullptr;
@@ -2157,9 +2157,9 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c7628));
     g_TypeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c80e0));
-    g_TypeId_StorageLocationComponent = reinterpret_cast<uint32_t*>(
+    g_TypeId_WorkComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c8070));
-    g_TypeId_WorkplaceJobType = reinterpret_cast<uint32_t*>(
+    g_TypeId_WorkDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c80a8));
     g_TypeId_AttendanceDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c3f78));
@@ -2571,7 +2571,7 @@ bool EngineFuncsInit() {
     // EventLogUI_ToggleNotification and NavigateToEvent now inline in eventlogui.cpp
 
     // WorkplaceUI_AdjustWorkerCount/ToggleWorkplace: now static impls in workplaceui.cpp
-    // fn_FindComponent_BuildState2 — inline in engine_funcs.h (uses g_TypeId_StateMachineComponent_FC)
+    // fn_FindComponent_WorkPlace — inline in engine_funcs.h (uses g_TypeId_StateMachineComponent_FC)
     fn_WorkplaceComp_SetMaxWorkers = reinterpret_cast<fn_WorkplaceComp_SetMaxWorkers_t>(
         ResolveAddr(Module::Exe, 0x14012fb00));
     fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
@@ -4474,15 +4474,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400c1eb0));
     fn_FindStorageForResource = reinterpret_cast<fn_FindStorageForResource_t>(
         ResolveAddr(Module::Exe, 0x14008d590));
-    fn_FindComponent_WorkplaceC = reinterpret_cast<fn_FindComponent_WorkplaceC_t>(
+    fn_FindComponent_RawMaterialC = reinterpret_cast<fn_FindComponent_RawMaterialC_t>(
         ResolveAddr(Module::Exe, 0x1400223c0));
-    fn_FindComponent_BuildStateC = reinterpret_cast<fn_FindComponent_BuildStateC_t>(
+    fn_FindComponent_NaturalResourceC = reinterpret_cast<fn_FindComponent_NaturalResourceC_t>(
         ResolveAddr(Module::Exe, 0x1400052c0));
-    fn_FindComponent_StorageLocC = reinterpret_cast<fn_FindComponent_StorageLocC_t>(
+    fn_FindComponent_WorkC = reinterpret_cast<fn_FindComponent_WorkC_t>(
         ResolveAddr(Module::Exe, 0x140003050));
     fn_TryAssignWorkplace = reinterpret_cast<fn_TryAssignWorkplace_t>(
         ResolveAddr(Module::Exe, 0x1400f8620));
-    fn_FindComponent_RawMaterialC = reinterpret_cast<fn_FindComponent_RawMaterialC_t>(
+    fn_FindDescription_RawMaterial = reinterpret_cast<fn_FindDescription_RawMaterial_t>(
         ResolveAddr(Module::Exe, 0x140006330));
     fn_GetRemainingCapacity = reinterpret_cast<fn_GetRemainingCapacity_t>(
         ResolveAddr(Module::Exe, 0x140116540));

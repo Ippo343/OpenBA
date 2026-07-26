@@ -208,7 +208,7 @@ bool ConsumeProduce_ResolveFuncs() {
               g_TypeId_ConsumeProduceComponent_FC &&
               g_TypeId_StorageComponent_FC &&
               g_TypeId_RawMaterialDescription &&
-              g_TypeId_StorageLocationComponent;
+              g_TypeId_WorkComponent;
 
 #ifdef _DEBUG
     printf("[ConsumeProduce] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
@@ -920,7 +920,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                 if (structEntity != *(uintptr_t*)((uintptr_t)self + 0x10)) {
                     // Found a different entity at this position -- check for StorageLocation
                     fn_InternalBasePtr_CheckPtr(&structEntity);
-                    void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_StorageLocationComponent);
+                    void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_WorkComponent);
                     uintptr_t locCompIBP = 0;
                     fn_InternalBasePtr_Ctor(&locCompIBP, locComp);
 

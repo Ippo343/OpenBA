@@ -137,7 +137,7 @@ void BuildUI_Slot4(BuildUI* self) {
 
     // Find WorkplaceComponent (FUN_140002e10)
     uint64_t workplaceComp = 0;
-    fn_FindComponent_BuildState2((void*)entityPtr, &workplaceComp);
+    fn_FindComponent_WorkPlace((void*)entityPtr, &workplaceComp);
 
     // Find "buttonPause" element, set ID 6000
     uint64_t buttonPause = BuildUI_FindElemAsBasePtr(dialogElem, "buttonPause");
@@ -546,15 +546,15 @@ void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4) {
 
         // Find the WorkPlaceComponent on the entity. Retail (BuildUI_Update 0x1400b1ea0)
         // calls FUN_140002e10 — the DAT_1401c80e0 (WorkPlaceComponent) finder. It must NOT
-        // be fn_FindComponent_Workplace: despite the name that helper is the DAT_1401c8070
+        // be fn_FindComponent_Work: despite the name that helper is the DAT_1401c8070
         // (StorageLocation/WorkComponent) finder, FUN_140003050. Handing the c8070 component
         // to Entity_impl_fc00 below made it read +0x50/+0x58/+0x60 off the wrong object, so
         // the pause path treated non-roster fields as the worker roster (live 2026-07-25:
         // base(+0x58)==8 with count>0, then a non-citizen fed to CitizenComponent::
         // AssignHousing -> FUN_140002e10 -> READ of 0xffffffffffffffff).
-        // fn_FindComponent_BuildState2 is the c80e0 finder (likewise misnamed).
+        // fn_FindComponent_WorkPlace is the c80e0 finder (likewise misnamed).
         uint64_t workplaceComp = 0;
-        fn_FindComponent_BuildState2((void*)entityBasePtr, &workplaceComp);
+        fn_FindComponent_WorkPlace((void*)entityBasePtr, &workplaceComp);
 
         // Read enabled state byte at comp+0x50, toggle it. Both guards matter: the
         // building need not have a WorkPlaceComponent at all, and fn_WorkplaceComponent_

@@ -1068,6 +1068,13 @@ int UpgradeWaitFrames() {
     int n = (e && e[0]) ? std::atoi(e) : 36000;
     return n < 60 ? 36000 : n;
 }
+// BANISHED_UPGRADE_FORCE_FRAME — see the note at the UP_WAIT_BUILT force branch.
+// 0/unset = normal behaviour (wait for the build to finish).
+int ForceUpgradeFrame() {
+    const char* e = std::getenv("BANISHED_UPGRADE_FORCE_FRAME");
+    int n = (e && e[0]) ? std::atoi(e) : 0;
+    return n > 0 ? n : 0;
+}
 int UpgradeClickDelay() {
     const char* e = std::getenv("BANISHED_UPGRADE_CLICK_DELAY");
     int n = (e && e[0]) ? std::atoi(e) : 15;
@@ -1206,6 +1213,27 @@ void UpgradeTick(int frameNum) {
         if (waited % 120 == 0)
             printf("[Upgrade] waiting for construction: delivered=%d required=%d "
                    "(%d frames)\n", delivered, required, waited);
+
+        // BANISHED_UPGRADE_FORCE_FRAME=<n>: fire the click n frames after arming WITHOUT
+        // waiting for the build to finish. The replacement-spawn branch needs
+        // delivered != 0 and so will not run, but DestroySM state-4 enter still fires
+        // WorkPlaceComponent_EnterBuilderProfession (0x14012f520) — and mid-construction
+        // is the only window where the site's WorkComponent still holds a scheduler work
+        // id (+0x28 >= 0), which is the sole trigger for the profession re-key
+        // (FUN_1400f8400). Once construction completes the id is cleared, so the normal
+        // wait-for-built path can never exercise that branch.
+        if (int force = ForceUpgradeFrame(); force > 0 && waited >= force) {
+            printf("[Upgrade] FORCED at %d frames (delivered=%d required=%d) — exercising "
+                   "the mid-construction demolish path; no replacement spawn expected\n",
+                   waited, delivered, required);
+            if (UpgradeOpenDialog()) {
+                s_up_openFrame = frameNum;
+                s_up_stage     = UP_DIALOG_OPEN;
+            } else {
+                s_up_stage = UP_DONE;
+            }
+            return;
+        }
         // Ready when the build is finished (delivered >= required, required > 0). That
         // satisfies BOTH gates at once: state-5 enter's delivered != 0 and the state-5
         // tick's delivered >= required spawn condition.

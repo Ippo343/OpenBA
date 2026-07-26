@@ -203,13 +203,29 @@ static const char* const kDefaultOnFlags[] = {
     // WorkPlaceComponent::SetAccepting accepting=false (the pause path: closed indicator,
     // icon clears, roster eviction) — verified live 2026-07-25 once the real bug was fixed
     // at source. The three faults it first hit were all BuildUI_Slot9 passing a c8070
-    // StorageLocationComponent instead of the c80e0 WorkPlaceComponent (fn_FindComponent_
-    // Workplace is misnamed); with the correct component every operand is a live object.
+    // WorkComponent instead of the c80e0 WorkPlaceComponent — the finder for c8070 was
+    // named fn_FindComponent_Workplace, since renamed to fn_FindComponent_Work (and the
+    // c80e0 one from fn_FindComponent_BuildState2 to fn_FindComponent_WorkPlace);
+    // with the correct component every operand is a live object.
     // Two pause clicks evicted real citizens with zero guard trips, and the closed icon
     // renders above the building and in the dialog status bar. The compensation guards
     // added while chasing the wrong cause have been removed; one declared deviation remains
     // (a no-progress break, because an unterminated eviction loop is an in-world freeze).
     "BANISHED_LIVE_WPC_PAUSE",
+    // The DestroySM's WorkPlaceComponent transitions — 0x14012f520 (enter the Builder
+    // profession on demolish/upgrade) and 0x14012f670 (leave it) — verified 2026-07-25 on
+    // the forced mid-construction upgrade harness: the staffed demo site logs
+    // "f520 re-seat ... roster=0", i.e. all three seated builders released, and the
+    // FUN_1400f8400 NOT-IMPLEMENTED skip is gone (that re-key is ported and registered now,
+    // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey).
+    //
+    // A/B'd against the same scenario with the flag OFF. Both runs reach the upgrade spawn
+    // and both then die the SAME way — a queued DropOffRawMaterial whose +0x38 still names
+    // the demolished subject, its own fields already torn down (resType=0 count=-1). That
+    // crash is the pre-existing removal-lifecycle dangling reference, present with the flag
+    // off, so it is not a reason to hold this. It IS a reason not to call the upgrade path
+    // clean; see notes/CITIZEN_ONREMOVE_BRIEF.md.
+    "BANISHED_LIVE_DESTROY_WORKERS",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

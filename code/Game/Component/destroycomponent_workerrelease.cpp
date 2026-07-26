@@ -50,15 +50,12 @@
 //   controller node, so those two run from BuildComponent_State8Finalize instead.)
 //
 // ============================================================
-// Not ported
+// Full closure
 // ============================================================
 // FUN_1400f8400 — the work-scheduler re-key (move the pending task node from the old
-// profession bucket to the new one inside mgr+0x120, keyed by the work id). Reachable only
-// when the WorkComponent still holds a work id (+0x28 >= 0). Skipped identically to the way
-// WorkPlaceComponent_LeaveBuilderProfession already skips it, and logged once.
-//
-// Gating: the two DestroySM call sites are OPT-IN behind BANISHED_LIVE_DESTROY_WORKERS.
-// Unproven — this hands live citizens through the release path during a demolish/upgrade.
+// profession bucket to the new one inside sched+0x120, keyed by the work id) — is now
+// ported and registered: citizenai_work_scheduler.cpp, CitizenAI_WorkScheduler_Rekey. It is
+// reachable only when the WorkComponent still holds a work id (+0x28 >= 0).
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -79,6 +76,7 @@ typedef void  (*fn_AddToProfessionBucket_t)(int64_t townMgr, void* ownerIBP, uin
 typedef void  (*fn_SetAccepting_t)(int64_t wpc, char accepting);  // 0x14012fc00
 typedef void  (*fn_FindWork_t)(int64_t citizen, int64_t* outIBP); // 0x14010ffc0 / 0x140110470
 typedef void  (*fn_AssignHousing_t)(void* citizen, int64_t* targetIBP);  // 0x140111ee0
+typedef void  (*fn_Rekey_t)(uintptr_t sched, uint32_t workId, uint64_t oldKey, uint64_t newKey); // 0x1400f8400
 
 static fn_Ee60_t                 s_ee60          = nullptr;
 static fn_FindIBP_t              s_find3050      = nullptr;  // WorkComponent
@@ -91,6 +89,7 @@ static fn_SetAccepting_t         s_setAccepting  = nullptr;
 static fn_FindWork_t             s_findWorkUnassigned = nullptr;
 static fn_FindWork_t             s_findWorkAssigned   = nullptr;
 static fn_AssignHousing_t        s_assignHousing = nullptr;
+static fn_Rekey_t                s_rekey         = nullptr;
 
 static bool s_resolved = false;
 static void EnsureResolved() {
@@ -107,6 +106,7 @@ static void EnsureResolved() {
     s_findWorkUnassigned = reinterpret_cast<fn_FindWork_t>(ResolveAddr(Module::Exe, 0x14010ffc0));
     s_findWorkAssigned   = reinterpret_cast<fn_FindWork_t>(ResolveAddr(Module::Exe, 0x140110470));
     s_assignHousing  = reinterpret_cast<fn_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
+    s_rekey          = reinterpret_cast<fn_Rekey_t>(ResolveAddr(Module::Exe, 0x1400f8400));
 }
 
 // workplacecomponent.cpp — roster-only mode for the Attach/Detach helpers: do the list
@@ -120,7 +120,7 @@ static bool Plausible(const void* p) {
 }
 
 // ============================================================
-// WorkPlaceUI_helper_fb00 (0x14012fb00) — publish the worker capacity, evict the excess
+// WorkPlaceComponent::SetMaxWorkers (0x14012fb00) — publish the worker capacity, evict excess
 // ============================================================
 // Retail: write `newMax` into the owner's WorkComponent+0x30, then while the roster count
 // (+0x60) exceeds newMax, take entry [0], ask the citizen's own workplace finder for
@@ -128,16 +128,20 @@ static bool Plausible(const void* p) {
 // clear, sub_0470 when set) and AssignHousing it there — AssignHousing detaches from the
 // old workplace, which is what decrements +0x60 and terminates the loop.
 //
-// Kept FILE-LOCAL and deliberately NOT registered at 0x14012fb00. The other retail caller
-// is WorkPlaceUI_Update_sub_7610, i.e. the panel's worker up/down spinner
-// (workplaceui.cpp:80 calls fn_WorkplaceComp_SetMaxWorkers, currently null). Registering
-// the address would silently switch that UNGATED UI path onto this eviction loop as a side
-// effect of a destroy-path fix; that is a separate change with its own risk. See the report.
+// REGISTERED at 0x14012fb00 (reg_destroy_workers.cpp). It was previously file-local, on the
+// theory that registering it would newly expose the WorkPlaceUI worker spinner to the
+// eviction loop. That is what retail does — the spinner's whole job is to lower the cap and
+// let the excess re-home — and leaving it unregistered was the worse bug: the OTHER retail
+// caller, WorkPlaceUI_AdjustWorkerCount (0x140087610, workplaceui.cpp), reaches it through
+// fn_WorkplaceComp_SetMaxWorkers, which resolved to 0. That call is not on a live path today
+// (the SA WorkPlaceUI vtable routes its spinner through W_OnRemove's seat cascade instead of
+// the exe port), so this is a landmine defused rather than a crash fixed — but the address
+// belongs to a real, ported body and must resolve to it.
 //
 // In the f520 flow the loop is dead by construction: ee60 has already drained the roster to
-// zero, so `newMax < count` is false on entry. It is ported for faithfulness and carries the
-// same guards WorkPlaceComponent_EvictRoster needed, and logs if it ever does iterate.
-static void WPC_SetWorkerCapacity_fb00(int64_t wpc, int newMax) {
+// zero, so `newMax < count` is false on entry. The guards below are for the UI path, where
+// the roster is live.
+extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
     EnsureResolved();
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpc + 0x10));
@@ -149,14 +153,14 @@ static void WPC_SetWorkerCapacity_fb00(int64_t wpc, int newMax) {
     if (newMax >= *reinterpret_cast<int32_t*>(wpc + 0x60)) return;
 
     if (!s_assignHousing) {
-        std::fprintf(stderr, "[DestroyWorkers] fb00: roster %d > capacity %d on wpc=%p but "
+        std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: roster %d > capacity %d on wpc=%p but "
                      "AssignHousing (0x140111ee0) is unresolved — excess kept\n",
                      *reinterpret_cast<int32_t*>(wpc + 0x60), newMax, reinterpret_cast<void*>(wpc));
         std::fflush(stderr);
         return;
     }
 
-    std::fprintf(stderr, "[DestroyWorkers] fb00: evicting wpc=%p from roster %d down to %d\n",
+    std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: evicting wpc=%p from roster %d down to %d\n",
                  reinterpret_cast<void*>(wpc), *reinterpret_cast<int32_t*>(wpc + 0x60), newMax);
     std::fflush(stderr);
 
@@ -201,7 +205,7 @@ static void WPC_SetWorkerCapacity_fb00(int64_t wpc, int newMax) {
         // workplace. If it did, an unterminated loop here is an in-world FREEZE rather than
         // a crash, which is far harder to diagnose. Break out loudly.
         if (*reinterpret_cast<int32_t*>(wpc + 0x60) >= before || ++guard > 4096) {
-            std::fprintf(stderr, "[DestroyWorkers] fb00: no progress on wpc=%p (roster %d -> %d, "
+            std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: no progress on wpc=%p (roster %d -> %d, "
                          "citizen=%p) — breaking to avoid a spin\n", reinterpret_cast<void*>(wpc),
                          before, *reinterpret_cast<int32_t*>(wpc + 0x60), reinterpret_cast<void*>(citizen));
             std::fflush(stderr);
@@ -238,17 +242,13 @@ extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     const uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
 
     // 3. Re-key a pending work item from the OLD profession (+0x48, still unmodified here)
-    //    to Builder. FUN_1400f8400 is unported — same skip as
-    //    WorkPlaceComponent_LeaveBuilderProfession's.
+    //    to Builder, so a task already in flight when demolition starts is offered to
+    //    builders rather than to the building's former profession.
     if (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            std::fprintf(stderr, "[DestroyWorkers] NOT-IMPLEMENTED FUN_1400f8400 (work-scheduler "
-                         "profession re-key) — workComp+0x28=%d still holds a work id; the pending "
-                         "task keeps its pre-demolition key\n",
-                         *reinterpret_cast<int32_t*>(workComp + 0x28));
-            std::fflush(stderr);
+        const uintptr_t sched = *reinterpret_cast<uintptr_t*>(gw + 0x118);
+        if (s_rekey && sched) {
+            s_rekey(sched, *reinterpret_cast<uint32_t*>(workComp + 0x28),
+                    *reinterpret_cast<uint64_t*>(wpc + 0x48), builderKey);
         }
     }
 
@@ -285,14 +285,19 @@ extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     }
 
     // 7. Publish the capacity + evict the excess (dead after step 1, see fb00's note).
-    WPC_SetWorkerCapacity_fb00(wpc, capacity);
+    WorkPlaceComponent_SetMaxWorkers(wpc, capacity);
 
     // 8. SetAccepting(true) — the site now takes builders.
     if (s_setAccepting) s_setAccepting(wpc, 1);
 
     std::fprintf(stderr, "[DestroyWorkers] f520 re-seat wpc=%p: builderKey=%llx capacity=%d "
-                 "roster=%d (buildComp=%p)\n", reinterpret_cast<void*>(wpc),
+                 "roster=%d (buildComp=%p) workComp=%p workId(+0x28)=%d%s\n",
+                 reinterpret_cast<void*>(wpc),
                  static_cast<unsigned long long>(builderKey), capacity,
-                 *reinterpret_cast<int32_t*>(wpc + 0x60), reinterpret_cast<void*>(buildComp));
+                 *reinterpret_cast<int32_t*>(wpc + 0x60), reinterpret_cast<void*>(buildComp),
+                 reinterpret_cast<void*>(workComp),
+                 workComp ? *reinterpret_cast<int32_t*>(workComp + 0x28) : -1,
+                 (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0)
+                     ? " -> re-keyed" : " -> nothing in flight to re-key");
     std::fflush(stderr);
 }

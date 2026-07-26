@@ -150,9 +150,18 @@ extern "C" void* TutBase_CastToSliderElement(void* element) {
     return fn_IsDerivedFrom(element, *g_TypeId_SliderElement) ? element : nullptr;
 }
 
-// 0x14012e5c0 — compute a workplace's work capacity from its description and
-// building footprint. Lazily computed and cached by the fbb0 helper below.
-extern "C" int TutBase_ComputeWorkCapacity(uintptr_t workComp) {
+// 0x14012e5c0 — WorkComponent::CalcMaxWorkers. Computes a workplace's worker
+// capacity from its WorkDescription (workComp+0x18) and the building footprint.
+// Lazily computed and cached at workComp+0x30 by the fbb0 helper below.
+//
+// This is the ONLY body registered at 0x14012e5c0 (reg_tutorial_base.cpp). It lives in
+// the Tutorial file because TutorialGoalCount::Check was the first caller found, but the
+// function belongs to WorkComponent and has five other callers: WorkPlaceUI_OnCreate
+// (0x140087080), the builder-profession enter/leave pair (0x14012f520 / 0x14012f670),
+// HuntComponent::Update (0x140122740) and fbb0 below. It is NOT "terrain speed" — a
+// second copy under that name was registered from reg_component_nature.cpp until the
+// duplicate was removed.
+extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
     uintptr_t obj = *reinterpret_cast<uintptr_t*>(workComp + 0x18);   // WorkDescription
 
     // Validate WorkDescription; trust on unresolved type-id (matches the
@@ -201,10 +210,10 @@ extern "C" int TutBase_ComputeWorkCapacity(uintptr_t workComp) {
     return result;
 }
 
-// 0x14012fbb0 — get (cached) work capacity for a WorkPlaceComponent.
-// Finds the WorkComponent via FUN_140003050, returns its cached capacity (+0x30),
-// computing it lazily through TutBase_ComputeWorkCapacity if 0.
-extern "C" int TutBase_GetWorkCapacity(uintptr_t workplaceComp) {
+// 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's
+// WorkComponent via FUN_140003050 and returns its cached capacity (+0x30),
+// computing it lazily through WorkComponent_CalcMaxWorkers if still 0.
+extern "C" int WorkPlaceComponent_GetMaxWorkers(uintptr_t workplaceComp) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workplaceComp + 0x10));
 
     uint8_t ibp[32] = {};

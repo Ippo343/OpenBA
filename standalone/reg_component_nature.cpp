@@ -32,7 +32,6 @@ extern void ZoneComponent_Draw(ZoneComponent* self);
 extern void ZoneComponent_OnCreate(ZoneComponent* self);
 
 // ---- huntcomponent.cpp ----
-extern int  HuntComponent_ComputeTerrainSpeed(int64_t tileData);
 
 // ---- naturalresourcecomponent.cpp ----
 extern void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);
@@ -116,8 +115,13 @@ void RegisterComponentBatch_nature() {
     RegisterExeAddr(0x1401301f0, reinterpret_cast<uintptr_t>(&ZoneComponent_Draw));
     RegisterExeAddr(0x140130080, reinterpret_cast<uintptr_t>(&ZoneComponent_OnCreate));
 
-    // huntcomponent.cpp  (0x14012e5c0 also referenced from workcomponent.cpp — body lives here)
-    RegisterExeAddr(0x14012e5c0, reinterpret_cast<uintptr_t>(&HuntComponent_ComputeTerrainSpeed));
+    // 0x14012e5c0 (WorkComponent::CalcMaxWorkers) used to be registered here TOO, as
+    // "HuntComponent_ComputeTerrainSpeed". Both copies had identical bodies, so which one
+    // won depended purely on batch order (RegisterExeAddr is last-write-wins). The Ghidra
+    // body computes a footprint-scaled worker capacity from WorkDescription+0x24/+0x30/+0x34
+    // — nothing to do with terrain speed; HuntComponent::Update merely reuses the same
+    // workComp+0x30 cache as its divisor. The duplicate is gone; the single body is
+    // WorkComponent_CalcMaxWorkers, registered from reg_tutorial_base.cpp.
 
     // naturalresourcecomponent.cpp
     RegisterExeAddr(0x140005200, reinterpret_cast<uintptr_t>(&NaturalResourceComponent_FindComponentByType));

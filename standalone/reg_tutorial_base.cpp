@@ -27,8 +27,12 @@ extern "C" void TutBase_ResolveToolbarRef(void*);                       // 0x140
 extern "C" uint32_t TutBase_CountBuildingsByType(uintptr_t, uintptr_t);   // 0x140092010
 extern "C" uint32_t TutBase_CountProfessionsByType(uintptr_t, uintptr_t); // 0x1400910a0
 extern "C" void*    TutBase_CastToSliderElement(void*);                   // 0x140013920
-extern "C" int      TutBase_ComputeWorkCapacity(uintptr_t);               // 0x14012e5c0
-extern "C" int      TutBase_GetWorkCapacity(uintptr_t);                   // 0x14012fbb0
+// Not tutorial helpers despite living in tutorial_base.cpp — WorkComponent /
+// WorkPlaceComponent capacity, first discovered via TutorialGoalCount::Check.
+// 0x14012e5c0 is registered ONLY here (a duplicate under the name
+// HuntComponent_ComputeTerrainSpeed used to race this one in reg_component_nature.cpp).
+extern "C" int      WorkComponent_CalcMaxWorkers(uintptr_t);              // 0x14012e5c0
+extern "C" int      WorkPlaceComponent_GetMaxWorkers(uintptr_t);          // 0x14012fbb0
 
 void RegisterTutorialBaseBatch() {
     RegisterExeAddr(0x140026fb0, reinterpret_cast<uintptr_t>(&TutBase_SerializeStepArray));
@@ -40,6 +44,6 @@ void RegisterTutorialBaseBatch() {
     RegisterExeAddr(0x140092010, reinterpret_cast<uintptr_t>(&TutBase_CountBuildingsByType));
     RegisterExeAddr(0x1400910a0, reinterpret_cast<uintptr_t>(&TutBase_CountProfessionsByType));
     RegisterExeAddr(0x140013920, reinterpret_cast<uintptr_t>(&TutBase_CastToSliderElement));
-    RegisterExeAddr(0x14012e5c0, reinterpret_cast<uintptr_t>(&TutBase_ComputeWorkCapacity));
-    RegisterExeAddr(0x14012fbb0, reinterpret_cast<uintptr_t>(&TutBase_GetWorkCapacity));
+    RegisterExeAddr(0x14012e5c0, reinterpret_cast<uintptr_t>(&WorkComponent_CalcMaxWorkers));
+    RegisterExeAddr(0x14012fbb0, reinterpret_cast<uintptr_t>(&WorkPlaceComponent_GetMaxWorkers));
 }

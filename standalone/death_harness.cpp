@@ -79,6 +79,12 @@ void Census(int frameNum) {
     int64_t* list; int n; int64_t townMgr;
     if (!TownList(&list, &n, &townMgr)) return;
     int spouse = 0, ring = 0, partner = 0, host = 0;
+    // Gender (+0x38): 0 = female, non-zero = male. Retail's per-citizen init writes it for
+    // every colonist; the founding spawner reproduces it from the mesh variant. A town that
+    // reports female == citizens is one where nobody can marry (the opposite-gender test in
+    // helper_fe40 can never pass) and every adult passes the reproduction gate — the exact
+    // symptom of the gender write being skipped. Tracked here so the A/B is measurable.
+    int female = 0, male = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = list[i];
         if (!c) continue;
@@ -86,10 +92,12 @@ void Census(int frameNum) {
         if (*reinterpret_cast<int64_t*>(c + 0x260) != 0) ring++;
         if (*reinterpret_cast<int64_t*>(c + 0x208) != 0) partner++;
         if (*reinterpret_cast<int64_t*>(c + 0x258) != 0) host++;
+        if (*reinterpret_cast<int32_t*>(c + 0x38) == 0) female++; else male++;
     }
     std::fprintf(stderr, "[FamilyCensus] frame %d: %d citizens — spouse(+0x250)=%d "
-                 "ring(+0x260)=%d partner(+0x208)=%d host(+0x258)=%d\n",
-                 frameNum, n, spouse, ring, partner, host);
+                 "ring(+0x260)=%d partner(+0x208)=%d host(+0x258)=%d "
+                 "gender(+0x38) female=%d male=%d\n",
+                 frameNum, n, spouse, ring, partner, host, female, male);
     std::fflush(stderr);
 }
 }  // namespace

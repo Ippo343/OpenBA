@@ -132,7 +132,7 @@ int64_t SeatOneAt(int64_t townMgr, int64_t avail, int64_t builderKey) {
 // Slot8's per-profession capacity walk and FindAvailableBuilding use the SAME component
 // path — WorkPlaceComponent (c80e0, +0x50 accepting / +0x10 owner) -> the owner's
 // WorkComponent (c8070, capacity +0x30 / CalcMaxWorkers 0x14012e5c0). The globals Slot8
-// reads (g_TypeId_WorkplaceComponent / g_TypeId_StorageLocationComponent) are bound to
+// reads (g_TypeId_WorkplaceComponent / g_TypeId_WorkComponent) are bound to
 // the type NAMES "WorkPlaceComponent" / "WorkComponent" (see townhallui.cpp 2509-2510),
 // so this walk is byte-faithful to what the UI sums. Confirms the site's capacity is
 // visible to the UI now that BUILDER_NATURAL registers it into townMgr+0x100 by default.

@@ -408,7 +408,7 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
 // HISTORY (2026-07-25): this loop faulted twice on live clicks — READ of 0x8, then READ of
 // 0xffffffffffffffff inside AssignHousing. Neither was a bug in this port. BuildUI_Slot9
 // was handing SetAccepting a StorageLocationComponent (c8070) instead of the
-// WorkPlaceComponent (c80e0), because engine_funcs.h's fn_FindComponent_Workplace is
+// WorkPlaceComponent (c80e0), because engine_funcs.h's fn_FindComponent_Work is
 // MISNAMED — it is the c8070 finder. So +0x50/+0x58/+0x60 were read off the wrong object
 // and "roster base == 8 with count > 0" was simply an unrelated field. Fixed at the source
 // in buildui.cpp; the plausibility/entity checks that were added here to survive the
@@ -762,23 +762,42 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
             reinterpret_cast<int(*)(int64_t)>(s_calcMaxWorkers)(static_cast<int64_t>(workComp));
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
-    // guards it with IsDerivedFrom(desc, DAT_1401c8118); in standalone that check rejects
-    // valid descriptions in the partial factory tree (the documented landmine — see
-    // MapComponent_DetachOccupancy_4750), so trust the linked description. A null desc
-    // yields key 0 = "no profession", which is the correct end state for a house.
+    // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail
+    // dereferences null+0x20, i.e. it crashes rather than resetting the key to 0. So the
+    // check is an assertion, not a branch, and there is no retail behaviour to be faithful
+    // to on the failing side. We run it for its diagnostic value and, when it rejects a
+    // description we do have (the partial-factory-tree landmine — see
+    // MapComponent_DetachOccupancy_4750), log once and trust the linked description anyway.
+    // A genuinely null desc yields key 0 = "no profession", the correct end state for a house.
     void* desc = *reinterpret_cast<void**>(self + 0x18);
+    if (desc && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc && *s_TypeId_WorkPlaceDesc &&
+        !fn_IsDerivedFrom(desc, *s_TypeId_WorkPlaceDesc)) {
+        static bool s_warnedDesc = false;
+        if (!s_warnedDesc) {
+            s_warnedDesc = true;
+            printf("[WorkPlaceComponent] LeaveBuilderProfession: WPC+0x18=%p is not a "
+                   "WorkPlaceDescription (type id %u) — retail would fault here; trusting "
+                   "it and reading +0x20 anyway\n", desc, *s_TypeId_WorkPlaceDesc);
+        }
+    }
     uint64_t naturalKey = desc
         ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0;
 
+    // Hand any in-flight work item over from Builder to the natural profession, so it stops
+    // being offered to builders the moment the building is finished. FUN_1400f8400 —
+    // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey.
     if (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            printf("[WorkPlaceComponent] NOT-IMPLEMENTED FUN_1400f8400 (work-scheduler "
-                        "profession re-key) — workComp+0x28=%d still holds a work id; the "
-                        "pending task keeps its old Builder key\n",
-                        *reinterpret_cast<int32_t*>(workComp + 0x28));
+        typedef void (*Rekey_t)(uintptr_t, uint32_t, uint64_t, uint64_t);
+        static Rekey_t s_rekey = nullptr;
+        static bool s_rekeyRes = false;
+        if (!s_rekeyRes) {
+            s_rekeyRes = true;
+            s_rekey = reinterpret_cast<Rekey_t>(ResolveAddr(Module::Exe, 0x1400f8400));
         }
+        uintptr_t sched = *reinterpret_cast<uintptr_t*>(gw + 0x118);
+        if (s_rekey && sched)
+            s_rekey(sched, *reinterpret_cast<uint32_t*>(workComp + 0x28),
+                    *reinterpret_cast<uint64_t*>(self + 0x48), naturalKey);
     }
 
     *reinterpret_cast<uint64_t*>(self + 0x48) = naturalKey;
