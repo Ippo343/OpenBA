@@ -407,9 +407,13 @@ Whether vanilla really produces so few children is unverified; the child count i
 `Rand(family._maxChildCount + 1)` in both paths, so a low roll streak is plausible at
 this seed. Re-check with several seeds before treating it as evidence about anything.
 
-Watch item: 117080 runs SetupYoung/Elder BEFORE the EntityList register — if colonists
-render uniformly adult-sized and stay so, add a second idempotent Setup call after the
-register.
+Watch item, **UNVERIFIED — needs a human eyeball, logs cannot answer it**: 117080 runs
+SetupYoung/Elder BEFORE the EntityList register, whereas the hand-rolled path ran its
+colour/scale pass after, because `citizen+0x278 -> +0x68` is only wired once OnAdded has
+run. Ages advancing in the census suggests `CheckAge` (`0x14010f890`, ported and live) is
+self-healing it, but that is inference, not observation. If children render adult-sized or
+untinted **and stay that way**, that ordering is the cause; the fix is a second idempotent
+SetupYoung/Elder call after the register (no RNG, so it cannot shift the stream).
 
 ## I. ✅ DONE (2026-07-26) — all 7 renames applied and saved
 
