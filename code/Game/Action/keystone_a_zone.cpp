@@ -123,28 +123,36 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
 void RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
                           void* param_4, int64_t param_5, int param_6) {
     EnsureFns();
-    int local_res8;   // [RSP+0x30] — slot index returned by a6c10
-    int iStackX_c;    // [RSP+0x34] — slot key returned by a6c10
+    // The request slot is TWO ADJACENT ints, not two independent locals: a6c10 ->
+    // TradeComponent_impl_6240 (0x1400a6240) writes BOTH `*param_2` (slot index, retail
+    // [RSP+0x30]) and `param_2[1]` (slot key, [RSP+0x34]) through the single pointer it
+    // is handed. Declaring them as separate `int` locals and passing only &local_res8
+    // left the key write landing on whatever the compiler happened to place next, so
+    // the key compared against uninitialised stack and the wait below NEVER matched —
+    // an unbounded spin that hung the whole game on the first road cost query.
+    int slot[2] = {0, 0};   // [0] = slot index, [1] = slot key
+    int& slotIndex = slot[0];
+    int& slotKey   = slot[1];
 
     // FUN_1400a6b20(param_1, (int)param_4, param_3, param_4)
     if (s_fn_EnqCmd0)
         s_fn_EnqCmd0(param_1, static_cast<int>(reinterpret_cast<uint64_t>(param_4)),
                      reinterpret_cast<void*>(param_3), param_4);
 
-    // TradeComponent_impl_6c10(param_1, &local_res8, param_2, param_3 & 0xffffffff)
+    // TradeComponent_impl_6c10(param_1, slot, param_2, param_3 & 0xffffffff)
     if (s_fn_EnqTrade)
-        s_fn_EnqTrade(param_1, &local_res8,
+        s_fn_EnqTrade(param_1, slot,
                       reinterpret_cast<void*>(static_cast<uint64_t>(param_2)),
                       reinterpret_cast<void*>(param_3 & 0xffffffff));
 
     do {
-        if (local_res8 < *reinterpret_cast<int*>(param_1 + 0x168)) {
+        if (slotIndex < *reinterpret_cast<int*>(param_1 + 0x168)) {
             int64_t base = *reinterpret_cast<int64_t*>(param_1 + 0x160);
-            if (*reinterpret_cast<int*>(base + 4 + static_cast<int64_t>(local_res8) * 0x18) == iStackX_c &&
-                *reinterpret_cast<char*>(base + static_cast<int64_t>(local_res8) * 0x18) != '\0') {
-                // MoveTo_helper_6d50(param_1, &local_res8, param_5, param_6)
+            if (*reinterpret_cast<int*>(base + 4 + static_cast<int64_t>(slotIndex) * 0x18) == slotKey &&
+                *reinterpret_cast<char*>(base + static_cast<int64_t>(slotIndex) * 0x18) != '\0') {
+                // MoveTo_helper_6d50(param_1, slot, param_5, param_6)
                 if (s_fn_CopyPath)
-                    s_fn_CopyPath(reinterpret_cast<void*>(param_1), &local_res8,
+                    s_fn_CopyPath(reinterpret_cast<void*>(param_1), slot,
                                   reinterpret_cast<void*>(param_5), param_6);
                 return;
             }

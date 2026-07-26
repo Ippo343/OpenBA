@@ -19,9 +19,11 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/roadtool_funcs.h"
+#include "Player/dragtool.h"
 #include "Tool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -59,9 +61,12 @@ static void EnsureInternalDtor() {
 static uint32_t* s_TypeId_CreateRoadDescription = nullptr;
 
 // ============================================================
-// Type ID for CreateRoadDescription CalcPath variant (DAT_1401c75b8)
+// Type ID for DecalDescription (DAT_1401c75b8) — the road's decal/texture
+// description, looked up by CalcPath (0x140104d30) to get the surface it paints.
+// NOT a "CreateRoadDescription variant": the RegisterType DATA writer at
+// 0x14014ee35 (DecalDescription_Register) names this global DecalDescription.
 // ============================================================
-static uint32_t* s_TypeId_CreateRoadDescription2 = nullptr;
+static uint32_t* s_TypeId_DecalDescription = nullptr;
 
 // ============================================================
 // Road pathfinding function (RoadTool_sub_ce00)
@@ -101,12 +106,38 @@ static void ResolveRoadToolFuncs() {
 
     s_TypeId_CreateRoadDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c74d8));
-    s_TypeId_CreateRoadDescription2 = reinterpret_cast<uint32_t*>(
+    s_TypeId_DecalDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c75b8));
     s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
         ResolveAddr(Module::Exe, 0x140101270));
+    // Road A* (0x14009ce00). Shared by Draw and CalcCost; resolved here so CalcCost —
+    // which runs before ResolveRoadDrawFuncs is even declared — can reach it too.
+    if (!s_fn_RoadPathfind) {
+        s_fn_RoadPathfind = reinterpret_cast<fn_RoadPathfind_t>(
+            ResolveAddr(Module::Exe, 0x14009ce00));
+    }
 
-    s_funcsResolved = true;
+    // Both globals above are raw .rdata constants, so ResolveAddr returns NULL in the
+    // standalone exe ([[reference_standalone_rdata_null_fallback]]). RoadTool::Startup
+    // then matched no component and left roadDesc (+0x38) null, which is what made the
+    // road tool activate but do nothing. Fall back to the live factory tree by name —
+    // the proven ToolbarStandalone_Init / placementtool pattern. Both names verified
+    // against their RegisterType DATA writers (14014ec90, 14014ee10).
+    static uint32_t s_tid_CreateRoad = 0;
+    static uint32_t s_tid_Decal      = 0;
+    if (!s_TypeId_CreateRoadDescription) {
+        s_tid_CreateRoad = ::Object::ResolveTypeIdByNameLazy("CreateRoadDescription");
+        if (s_tid_CreateRoad) s_TypeId_CreateRoadDescription = &s_tid_CreateRoad;
+    }
+    if (!s_TypeId_DecalDescription) {
+        s_tid_Decal = ::Object::ResolveTypeIdByNameLazy("DecalDescription");
+        if (s_tid_Decal) s_TypeId_DecalDescription = &s_tid_Decal;
+    }
+
+    // Only latch once both type-ids are in hand. ResolveTypeIdByNameLazy needs the
+    // factory tree, which is not populated until after Engine::Startup; Startup can run
+    // before that, and latching early would leave the ids null for the whole session.
+    s_funcsResolved = (s_TypeId_CreateRoadDescription != nullptr);
 }
 
 // ============================================================
@@ -198,14 +229,14 @@ void RoadTool_Startup(RoadTool* self) {
 // UNHOOKABLE: CALL rel32 in prologue.
 // Original: 0x140105690
 uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
-    // Call base DragTool::OnKey
-    // In standalone exe this would be: DragTool_OnKey((DragTool*)self, key);
-    // For now, call through the original vtable slot
-    typedef uint64_t (*fn_DragToolOnKey_t)(void* self, char key);
-    void** vtable = *(void***)self;
-    // DragTool::OnKey is at vtable slot 6 (+0x30)
-    // But this is a virtual dispatch — we'd need the resolved base fn
-    // For standalone, just call DragTool_OnKey directly
+    // Retail (0x140105690) opens with `CALL 0x1400fc6b0` = DragTool::OnKey — a direct
+    // rel32 call to the base, NOT a virtual dispatch (dispatching through vtable[6]
+    // would re-enter RoadTool_OnKey_Impl and recurse forever). This call IS the drag
+    // state machine: it starts/updates the drag, records startCell/endCell at +0x2c/
+    // +0x30, drives the per-frame cost preview via slot 14 (CalcCost) and commits via
+    // slot 13 (CalcPath) on release. Omitting it left the road tool inert — it would
+    // activate but never respond to the mouse.
+    DragTool_OnKey(reinterpret_cast<DragTool*>(self), key);
 
     // Read KeyMap::GetValue(0, 0x16) for the modifier flag
     uint64_t keyMap = (uint64_t)***(void****)g_pKeyMapObjectExref;
@@ -260,6 +291,8 @@ uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
 //   8. On failure: return 3
 uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t endCell,
     uint32_t* outValid, int* outCostB, int* outCostA, int* outLength) {
+    ResolveRoadToolFuncs();
+
     // Sort cells: ensure start <= end
     uint32_t sc = startCell;
     uint32_t ec = endCell;
@@ -282,7 +315,11 @@ uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t end
 
     // Check entity description path constraints
     uintptr_t descEntity = (uintptr_t)*(void**)((uintptr_t)self + 0x10);
-    int* mapGrid = *(int**)(uintptr_t(g_pGameWorldSingleton) + 0xf8);
+    // g_pGameWorldSingleton is the singleton SLOT (void**), so the world pointer needs a
+    // deref first — this read was using the slot's own address as the world base, so
+    // mapGrid came back null and the terrainArray read below faulted on 0x80. RoadTool_Draw
+    // (below) already had this right.
+    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
     if (descEntity && *(char*)(descEntity + 0x80) != '\0') {
         int gridSize = *mapGrid;
@@ -316,16 +353,24 @@ uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t end
         return 3;
     }
 
-    // Would call RoadTool_sub_ce00 here for pathfinding
-    // int pathLength = s_fn_RoadPathfind(mapData, combinedFlags | 0xa17, sc, ec,
-    //     stack_param, outputBuffer, self->modifierFlag, 1);
-    // if (pathLength != 0) {
-    //     *outCostA = pathLength;
-    //     *outCostB = pathLength;
-    //     *outLength = pathLength;
-    //     *outValid = 1;
-    //     return 0;
-    // }
+    // Run the road A* (0x14009ce00, ported in Action/keystone_a_zone.cpp and registered
+    // by reg_keystone_a_zone.cpp). Retail passes mask `combinedFlags | 0xa17` and the
+    // modifier byte at +0x40, writing the cell path into a stack buffer. This call was
+    // left commented out, so CalcCost always fell through to `return 3` (invalid) — the
+    // drag preview could never report a valid road or a cost.
+    int pathBuf[2048];   // retail reserves 8184 bytes for the same buffer
+    int pathLength = 0;
+    if (s_fn_RoadPathfind) {
+        pathLength = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17, sc, ec,
+                                       0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+    }
+    if (pathLength != 0) {
+        *outCostA  = pathLength;
+        *outCostB  = pathLength;
+        *outLength = pathLength;
+        *outValid  = 1;
+        return 0;
+    }
 
     return 3;
 }
@@ -553,7 +598,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
 // ============================================================
 // Standalone factory + vtable (factory cascade).
 // RoadTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161e70.
-// NOTE: slot13 CalcPath is not reimplemented (stubbed); slot14 CalcCost is.
+// NOTE: slot13 CalcPath now lives in roadtool_calcpath.cpp; slot14 CalcCost is here.
 // ============================================================
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
@@ -564,6 +609,20 @@ static uint32_t RoadTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("RoadTool");
     return c;
 }
+// +0x58 (Slot11) GetToolSettingTypeId — retail RoadTool slot 11 is 0x140004950, the
+// SAME shared `*ret = 0; return ret;` thunk RemovalTool and PathTool use (RoadTool has
+// no tool-setting; only PlacementTool's RotationSetting does). SetEditMode
+// (FUN_140102b60 / Toolbar_ShowGroup_Impl) DEREFERENCES the returned pointer to decide
+// whether to build a ToolSetting, so the previous Tool_Ret0 stub (returns 0 -> *0)
+// would fault the instant a road button click created the tool.
+static uint32_t* RoadTool_GetSettingType(void*, uint32_t* ret) {
+    if (ret) *ret = 0;
+    return ret;
+}
+// +0x60 (Slot12) cursor id — retail 0x1400fc9d0 returns 5 (shared with FencedTool).
+// EntityUI_ToolTick_SA feeds this to SetCursor, so Tool_Ret0 gave the road tool the
+// wrong (id 0) cursor.
+static int RoadTool_Slot12(void*) { return 5; }
 static void* g_RoadTool_Vtable[15] = {
     (void*)&RoadTool_Dtor,        // +0x00 Dtor
     (void*)&Tool_Slot1,           // +0x08
@@ -576,9 +635,9 @@ static void* g_RoadTool_Vtable[15] = {
     (void*)&RoadTool_Draw,        // +0x40 Draw
     (void*)&Tool_Ret0,            // +0x48
     (void*)&Tool_Ret0,            // +0x50
-    (void*)&Tool_Ret0,            // +0x58
-    (void*)&Tool_Ret0,            // +0x60
-    (void*)&Tool_Ret0,            // +0x68 CalcPath (not reimplemented)
+    (void*)&RoadTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
+    (void*)&RoadTool_Slot12,      // +0x60 cursor id (retail returns 5)
+    (void*)&RoadTool_CalcPath_Impl, // +0x68 Slot13 CalcPath (roadtool_calcpath.cpp)
     (void*)&RoadTool_CalcCost_Impl, // +0x70 CalcCost
 };
 extern "C" void RegisterRoadToolVtable() {

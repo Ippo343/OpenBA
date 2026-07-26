@@ -150,6 +150,44 @@ void* BuildRoad_Ctor_Impl(BuildRoad* self) {
 }
 
 // ============================================================
+// Parameterised constructor (0x1400e4b50)
+// This is the ctor RoadTool's commit path uses (FUN_14009c960): it chains the shared
+// Work base ctor (Work_Ctor25 @ 0x1400f72e0) with the owner InternalBasePtr, installs
+// the BuildRoad vtable, and seeds the cell + road-description fields.
+//
+// Retail copies *ownerIbp into a LOCAL and passes that local to Work_Ctor25 — the
+// caller's IBP is not handed over directly, and 9c960 goes on to reuse its copy for the
+// pending-road BST insert. Keep the copy.
+// ============================================================
+void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
+                                uint32_t mapDescVal, uint64_t roadDescExtra,
+                                uint32_t roadTypeExisting, uint32_t roadState,
+                                uint32_t terrainType) {
+    if (!self) return nullptr;
+
+    typedef void* (*fn_WorkCtor25_t)(void*, void*);
+    static fn_WorkCtor25_t s_fn_WorkCtor25 = nullptr;
+    if (!s_fn_WorkCtor25)
+        s_fn_WorkCtor25 = (fn_WorkCtor25_t)ResolveAddr(Module::Exe, 0x1400f72e0);
+    if (!s_fn_WorkCtor25) return nullptr;
+
+    uint64_t ownerCopy = ownerIbp ? *ownerIbp : 0;
+    s_fn_WorkCtor25(self, &ownerCopy);
+
+    self->vtable    = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
+    self->field_48  = nullptr;
+    self->field_50  = (void*)roadDescExtra;
+    self->field_58  = (int32_t)cellIdx;
+    self->field_5c  = (int32_t)mapDescVal;
+    self->field_60  = (int32_t)roadTypeExisting;
+    self->field_64  = (int32_t)roadState;
+    self->field_68  = (int32_t)terrainType;
+    self->field_28  = (int32_t)cellIdx;   // retail also mirrors the cell into the Work base
+
+    return self;
+}
+
+// ============================================================
 // ScalarDtor (0x1400295b0)
 // Set vtables to BuildRoad then Work, call ~Internal, optionally free.
 // ============================================================
@@ -618,6 +656,10 @@ static void* g_BuildRoad_Vtable[13] = {
 };
 
 extern "C" void RegisterBuildRoadVtable() {
+    // The parameterised ctor RoadTool's commit path calls by address (FUN_14009c960).
+    // Unregistered it resolved to 0, so every road segment posted a NULL work item and
+    // faulted inside the work scheduler.
+    RegisterExeAddr(0x1400e4b50, (uintptr_t)&BuildRoad_CtorParams_Impl);
     RegisterExeAddr(0x140161020, (uintptr_t)g_BuildRoad_Vtable);
 }
 extern "C" void* BuildRoad_CreateInPlace(void* mem) {

@@ -174,11 +174,26 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (tid_CreatePath && tid_PathTool)
         Tree_Insert(tree, tid_CreatePath, tid_PathTool);
 
+    // RoadTool (the road/stone-road drawing tool). Retail's EntityUI::Startup
+    // (0x140101ee0) keys it on CreateRoadDescription (0x1401c74d8) — the same type-id
+    // RoadTool::Startup (0x1401056e0) scans the descriptor for and caches at tool+0x38.
+    // The Toolbar.rsc road buttons carry that component at item+0x58, so without this
+    // node SetEditMode's component-scan matched nothing and a road click silently
+    // dead-ended (no tool, no cursor, no preview). RoadTool extends DragTool, so
+    // DragTool_OnKey drives the drag and dispatches slot 14 (CalcCost, ported) for the
+    // per-frame cost/validity preview and slot 13 (CalcPath) on release to commit.
+    uint32_t tid_CreateRoad = ::Object::ResolveTypeIdByNameLazy("CreateRoadDescription");
+    uint32_t tid_RoadTool   = ::Object::ResolveTypeIdByNameLazy("RoadTool");
+    if (tid_CreateRoad && tid_RoadTool)
+        Tree_Insert(tree, tid_CreateRoad, tid_RoadTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
             "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
-            "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} count=%d\n",
+            "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} "
+            "node{CreateRoad=%u -> RoadTool=%u} count=%d\n",
             entityUI, s_tid_Tool, s_tid_ToolSetting, tid_CreatePlaced, tid_PlacementTool,
             tid_EditTool, tid_CreateRemoval, tid_RemovalTool, tid_CreatePath, tid_PathTool,
+            tid_CreateRoad, tid_RoadTool,
             *(int32_t*)(tree + 1));
     fflush(stderr);
 }

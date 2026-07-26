@@ -846,7 +846,12 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
 //   self+0xc8 (=200 dec)    = coarse-cell pixel size (block dimension).
 //   self+0x210              = per-batch source-ptr table (qword per batch).
 //   self+0x218              = batch count; +0x220 = per-batch fill-counter array (int); +0x228 = len.
-//   *(param_2+0x20)         = the fine-cell grid (stride 0x30): byte +0x2a = batchId, +0x2b = blendId.
+//   *(param_2+0x80 BYTES)   = the fine-cell grid (stride 0x30): byte +0x2a = batchId, +0x2b = blendId.
+//     ⚠ In the decompile this reads `*(longlong*)(param_2 + 0x20)` where param_2 is `uint*`,
+//     i.e. 0x20 ELEMENTS = 0x80 bytes — the same mapGrid+0x80 terrain array the rest of the
+//     road code uses. Transcribing it as a 0x20 BYTE offset yielded a null grid and faulted
+//     on the first batchId read; it went unnoticed because f370 was registered but never
+//     actually called until RoadTool's commit path landed.
 //
 // Working array local_108 (longlong[2]: ptr@0/count@1) holds `batchCount` records, each 0x60 bytes:
 //   +0x00 srcPtr;  vert short-buffer B {ptr@+0x08, cnt@+0x10, cap@+0x14};
@@ -964,7 +969,7 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                             do {               // fine col within block (local_e0)
                                 int fineCol = local_e0 + local_f4; // iVar20 (local_cc)
                                 uint64_t cellIdx = static_cast<uint64_t>(rowBase + fineCol);
-                                int64_t fineGrid = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x20); // *(param_2+0x20)
+                                int64_t fineGrid = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x80); // *(param_2+0x20)
                                 uint8_t batchId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2a + cellIdx * 0x30);
                                 uint8_t blendId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2b + cellIdx * 0x30);
 
@@ -990,7 +995,7 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                                                     if (iVar1 < 0 || iVar1 >= gridDim || row < 0 || row >= gridDim) {
                                                         local_f0[slot] = 0;
                                                     } else {
-                                                        int64_t fg = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x20);
+                                                        int64_t fg = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x80);
                                                         local_f0[slot] = (*reinterpret_cast<uint8_t*>(
                                                             fg + 0x2a + (static_cast<int64_t>(iVar1) + rowOff) * 0x30) != 0xff) ? 1 : 0;
                                                     }

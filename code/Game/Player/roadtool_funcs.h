@@ -36,13 +36,22 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3);
 // Original: 0x140105690
 uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key);
 
-// CalcPath (vtable +0x68, Slot13): Road path calculation.
-// Validates cells, checks entity description constraints, calls the internal
-// road pathfinding function (RoadTool_sub_ce00), finds CreateRoadDescription
-// component, and places road segments along the calculated path.
-// UNHOOKABLE: CALL rel32 in prologue.
+// CalcPath (vtable +0x68, Slot13): commit the road run. Validates the endpoints,
+// honours the descriptor's fixed-endpoint constraint, runs the road A*, records the
+// decal for the road type, queues a BuildRoad work item per cell, and rebuilds the
+// road mesh. Returns true when the run was committed — DragTool_OnKey reads this to
+// decide between the place sound and the error sound.
+// Implemented in roadtool_calcpath.cpp (with its three exe helpers).
 // Original: 0x140104d30
-uint32_t RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint32_t endCell);
+extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint32_t endCell);
+
+// Helpers ported alongside CalcPath (roadtool_calcpath.cpp), registered so the exe
+// addresses resolve for any other caller.
+extern "C" void** RoadTool_FindMapDescription_6990(void* entity, void** out);   // 0x140026990
+extern "C" void  RoadTool_DecalStore_acd90(int64_t mgr, int index, void* decal); // 0x1400acd90
+extern "C" void  RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cellIdx,
+                                                 uint8_t roadType, uint64_t endCell,
+                                                 uint32_t mapDescVal, uint64_t roadDescExtra);
 
 // CalcCost (vtable +0x70, Slot14): Road cost calculation.
 // Validates cells, checks entity description constraints, calls the internal

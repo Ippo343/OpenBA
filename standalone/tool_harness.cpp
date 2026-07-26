@@ -275,6 +275,129 @@ void FireActivatePlacement(void* entityUI) {
     }
 }
 
+// Road bring-up: activate the RoadTool through the REAL SetEditMode path — exactly what
+// a Toolbar.rsc road-button click does — then drive the tool's own CalcCost (slot 14)
+// and CalcPath (slot 13) over a fixed cell span. This is cursor-free: DragTool_OnKey's
+// drag needs a live OS cursor over the map (ScreenToCell), which the harness has none
+// of, so we set startCell/endCell directly and dispatch the two slots the drag would.
+//
+// CalcCost proves the road A* (RoadTool_sub_ce00) resolves a path and prices it;
+// CalcPath is what actually commits the road. Env: BANISHED_TOOL_HARNESS=road.
+void FireRoadTool(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness] ERROR: entityUI null\n"); return; }
+
+    // Both road templates carry a CreateRoadDescription; DirtRoad is the basic one the
+    // Toolbar "Roads" group opens with. Fall back to StoneRoad if it fails to resolve.
+    const char* kTemplates[] = { "Template\\DirtRoad.rsc", "Template\\StoneRoad.rsc" };
+    void* tmpl = nullptr;
+    const char* used = nullptr;
+    for (const char* path : kTemplates) {
+        printf("[ToolHarness][road] resolving template \"%s\"...\n", path);
+        tmpl = StartTown_ResolveTemplateByPath(path);
+        printf("[ToolHarness][road]   -> %p\n", tmpl);
+        if (tmpl) { used = path; break; }
+    }
+    if (!tmpl) { printf("[ToolHarness][road] ERROR: no road template resolved\n"); return; }
+
+    printf("[ToolHarness][road] SetEditMode(entityUI=%p, descriptor=%p from %s) — "
+           "activating RoadTool via the tool-mode tree...\n", entityUI, tmpl, used);
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    printf("[ToolHarness][road] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
+    if (!tool) {
+        printf("[ToolHarness][road] activation FAILED — tree miss or CreateObject null. "
+               "Expect a node{CreateRoad -> RoadTool} in the [Tools] BuildToolModeTree line.\n");
+        return;
+    }
+    uint8_t* t = static_cast<uint8_t*>(tool);
+    // RoadTool::Startup (slot 4) caches the CreateRoadDescription at +0x38; a null there
+    // means the descriptor carried no road component and CalcPath/CalcCost will bail.
+    printf("[ToolHarness][road]   vtable=%p controller(+0x10)=%p descriptionPtr(+0x20)=%p "
+           "roadDesc(+0x38)=%p\n",
+           *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x10),
+           *reinterpret_cast<void**>(t + 0x20), *reinterpret_cast<void**>(t + 0x38));
+
+    // Pick a span the road rules can actually accept. CalcCost/CalcPath require BOTH
+    // endpoints to be unoccupied (cell+0x00 entity ptr == 0) and on road-legal terrain
+    // ((1 << (cell+0x29 & 0x1f)) & 0x5e0) == 0 — cell stride 0x30, array at mapGrid+0x80.
+    // Hardcoding a span just hits the start-town buildings and trees, so scan outward
+    // from the valley centre for a clear horizontal run instead (same idea as the
+    // PlacementTool harness's ring scan).
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
+    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
+                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    if (!terrain) {
+        printf("[ToolHarness][road] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
+        return;
+    }
+    const int gridSize = *mapGrid;
+    auto cellClear = [&](int row, int col) -> bool {
+        if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
+        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
+        if (*reinterpret_cast<uint64_t*>(c) != 0) return false;              // occupied
+        uint32_t flag = 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+        return (flag & 0x5e0) == 0;                                          // legal terrain
+    };
+
+    const int kRun = 5;   // road length in tiles
+    int startCell = -1, endCell = -1, foundRow = -1, foundCol = -1;
+    for (int dr = 0; dr < 40 && startCell < 0; ++dr) {
+        for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
+            int row = 124 + (sign ? -dr : dr);
+            for (int col = 100; col + kRun < 160; ++col) {
+                bool allClear = true;
+                for (int k = 0; k <= kRun; ++k)
+                    if (!cellClear(row, col + k)) { allClear = false; break; }
+                if (allClear) {
+                    foundRow = row; foundCol = col;
+                    startCell = gridSize * row + col;
+                    endCell   = gridSize * row + col + kRun;
+                    break;
+                }
+            }
+        }
+    }
+    if (startCell < 0) {
+        printf("[ToolHarness][road] ERROR: found no clear %d-tile run to test\n", kRun + 1);
+        return;
+    }
+    *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
+    *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+    printf("[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
+           foundRow, foundCol, foundCol + kRun, startCell, endCell);
+
+    void** vt = *reinterpret_cast<void***>(tool);
+
+    // Slot 14 (+0x70) CalcCost — the per-frame preview call DragTool_OnKey makes while
+    // dragging. Signature: (self, start, end, &pathType, &tileH, &tileW, &extra) -> int
+    {
+        typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
+        int pathType = 0; uint32_t tileH = 0, tileW = 0; uint64_t extra = 0;
+        int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell,
+                                      &pathType, &tileH, &tileW, &extra);
+        // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
+        // that differs from RemovalTool). The path length comes back in the out-params,
+        // and param_4 is the validity: 1 = valid, 2 = invalid.
+        printf("[ToolHarness][road] CalcCost -> rc=%d (0=ok,3=reject) valid=%d "
+               "(1=valid,2=invalid) pathLen=%u/%u\n", rc, pathType, tileH, tileW);
+    }
+
+    // Slot 13 (+0x68) CalcPath — the COMMIT the drag-release makes. Returns true when
+    // the road was placed.
+    {
+        typedef bool (*CalcPath_t)(void*, int, int);
+        bool placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
+        printf("[ToolHarness][road] CalcPath (commit) -> %d (1=road placed)\n", placed ? 1 : 0);
+        if (!placed) {
+            printf("[ToolHarness][road] NOTE: slot13 is still the Tool_Ret0 stub unless "
+                   "RoadTool_CalcPath_Impl has been wired — a 0 here is expected in that case.\n");
+        }
+    }
+    printf("[ToolHarness][road] sequence complete.\n");
+}
+
 // GUI_PLAN Keystone F, Phase 3B: activate the PlacementTool via the real
 // SetEditMode path (as "click" does), then drive the ghost-PREVIEW pipeline for a
 // fixed map cell. Serialize's preview normally follows the OS cursor (sub_da00),
@@ -1401,6 +1524,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FireActivatePlacement(entityUI);
     } else if (std::strcmp(s_toolName, "preview") == 0) {
         FirePreviewPlacement(entityUI);
+    } else if (std::strcmp(s_toolName, "road") == 0) {
+        FireRoadTool(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "select") == 0) {
