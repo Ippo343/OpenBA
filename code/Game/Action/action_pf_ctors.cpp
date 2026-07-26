@@ -245,8 +245,23 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
     s[0x474] = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x28);
     void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
-    bool derived = s_pTid_MoveTo_70b0 && fn_IsDerivedFrom &&
-                   fn_IsDerivedFrom(obj, *s_pTid_MoveTo_70b0);
+    // DAT_1401c70b0 = the CharacterDescription type-id (written by
+    // CharacterDescription_Register). The raw .rdata slot resolves null in standalone,
+    // which made `derived` always false and +0x30 (the walk-speed description: road
+    // speed +0x30 / path +0x34 / normal +0x38) null on EVERY MoveTo. That was latent —
+    // grass takes the default-speed branch — until the first road tile existed, then
+    // MoveTo::Execute's road branch null-deref'd (the post-road-build crash). Fall back
+    // to the runtime type registry, same pattern as ShowTool's description tids.
+    uint32_t charDescTid = 0;
+    if (s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 != 0xFFFFFFFF) {
+        charDescTid = *s_pTid_MoveTo_70b0;
+    } else {
+        static uint32_t s_fallbackTid = 0;
+        if (!s_fallbackTid || s_fallbackTid == 0xFFFFFFFF)
+            s_fallbackTid = ::Object::GetTypeIdByName("CharacterDescription");
+        if (s_fallbackTid != 0xFFFFFFFF) charDescTid = s_fallbackTid;
+    }
+    bool derived = charDescTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, charDescTid);
     *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
     if (0.0f <= speed) {
         *reinterpret_cast<float*>(s + 0x478) = speed;

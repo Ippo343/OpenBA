@@ -164,6 +164,7 @@ void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t ce
                                 uint32_t roadTypeExisting, uint32_t roadState,
                                 uint32_t terrainType) {
     if (!self) return nullptr;
+    BuildRoad_ResolveFuncs();   // this ctor path bypasses the factory; wire the statics now
 
     typedef void* (*fn_WorkCtor25_t)(void*, void*);
     static fn_WorkCtor25_t s_fn_WorkCtor25 = nullptr;
@@ -192,12 +193,19 @@ void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t ce
 // Set vtables to BuildRoad then Work, call ~Internal, optionally free.
 // ============================================================
 void* BuildRoad_ScalarDtor_Impl(BuildRoad* self, uint32_t flags) {
+    // Lazy resolve: RoadTool's commit path constructs via BuildRoad_CtorParams_Impl
+    // (registered at 0x1400e4b50), NOT the factory — so nothing has run
+    // BuildRoad_ResolveFuncs yet and s_fn_ObjectInternal_Dtor was null here
+    // (CALL 0 when the first completed road work item was released).
+    BuildRoad_ResolveFuncs();
     // Set BuildRoad vtable (for correct virtual dispatch during destruction)
     self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
-    // Set Work vtable (base class destructor phase)
-    self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::WorkVtable);
+    // Set Work vtable (base class destructor phase). 0x140161a80 is not registered
+    // in standalone — keep the (non-null) BuildRoad vtable rather than nulling it.
+    if (uintptr_t wv = ResolveAddr(Module::Exe, BuildRoadAddr::WorkVtable))
+        self->vtable = (void*)wv;
     // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
+    if (s_fn_ObjectInternal_Dtor) s_fn_ObjectInternal_Dtor(self);
 
     if (flags & 1) {
         fn_MemFreeStatic(self);

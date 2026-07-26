@@ -3,6 +3,7 @@
 
 #include "redzone_alloc.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 
 #include <cstdarg>
 #include <cstdint>
@@ -86,6 +87,22 @@ bool CanaryIntact(void* userPtr, size_t reqSize) {
 static int HeapCheckLocked(const char* tag, bool report = true);
 namespace {
 
+// Canary reports must go to stderr as well: stdout is fully buffered after the
+// freopen to standalone_debug.log and an ExitProcess right after the report was
+// observed to lose the whole thing (exit 0x122 with a 90-byte debug log).
+void RZBoth(const char* fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    printf("%s", buf);
+    fputs(buf, stderr);
+    fflush(stdout);
+    fflush(stderr);
+}
+
 void PrintEntry(const char* why, void* userPtr, const Entry& e) {
     // Find how far the corruption extends (first + last bad byte).
     const uint8_t* c = CanaryPtr(userPtr, e.reqSize);
@@ -93,34 +110,64 @@ void PrintEntry(const char* why, void* userPtr, const Entry& e) {
     for (int i = 0; i < (int)g_pad; ++i) {
         if (c[i] != kCanary) { if (firstBad < 0) firstBad = i; lastBad = i; }
     }
-    printf("[REDZONE] %s ptr=%p reqSize=%zu (0x%zx) seq=%u "
+    RZBoth("[REDZONE] %s ptr=%p reqSize=%zu (0x%zx) seq=%u "
            "overflow bytes [%d..%d] of %zu\n",
            why, userPtr, e.reqSize, e.reqSize, e.seq,
            firstBad, lastBad, g_pad);
-    printf("[REDZONE]   alloc backtrace:");
-    for (int i = 0; i < e.btCount; ++i) {
+    // Dump the canary's first 16 bytes — the overflow payload identifies the writer.
+    RZBoth("[REDZONE]   canary head: %02x %02x %02x %02x %02x %02x %02x %02x "
+           "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+           c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
+           c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
+    // First user qword = vtable for engine objects; names the corrupted block's type.
+    if (!IsBadReadPtr(userPtr, 8))
+        RZBoth("[REDZONE]   user+0 qword: 0x%016llx\n",
+               (unsigned long long)*reinterpret_cast<uint64_t*>(userPtr));
+    char bt[512]; int off = 0;
+    off += snprintf(bt + off, sizeof(bt) - off, "[REDZONE]   alloc backtrace:");
+    for (int i = 0; i < e.btCount && off < (int)sizeof(bt) - 32; ++i) {
         uintptr_t a = reinterpret_cast<uintptr_t>(e.bt[i]);
         if (g_exeBase && a >= g_exeBase && a < g_exeBase + 0x600000) {
             // exe-relative → Ghidra address (image base 0x140000000)
-            printf(" 0x%llx", (unsigned long long)(0x140000000ull + (a - g_exeBase)));
+            off += snprintf(bt + off, sizeof(bt) - off, " 0x%llx",
+                            (unsigned long long)(0x140000000ull + (a - g_exeBase)));
         } else {
-            printf(" [%p]", e.bt[i]);
+            off += snprintf(bt + off, sizeof(bt) - off, " [%p]", e.bt[i]);
         }
     }
-    printf("\n");
-    fflush(stdout);
+    RZBoth("%s\n", bt);
 }
 
 // Caller MUST hold g_mutex. Scans every live block's tail canary; logs each
 // corrupted one and (unless BANISHED_REDZONE_ABORT=0) ExitProcess()es cleanly
 // at the first corruption — before the bad block is ever freed, which is what
 // otherwise deadlocks the allocator critical section into a hang.
+// Print the CURRENT call stack (the alloc/free that triggered the scan). With
+// SCAN=1 the overflow happened between the previous allocator op and this one,
+// so this backtrace brackets the writer to a single code window.
+void PrintHereBacktrace(const char* what) {
+    void* bt[kBtFrames];
+    USHORT n = CaptureStackBackTrace(2, kBtFrames, bt, nullptr);
+    char buf[512]; int off = 0;
+    off += snprintf(buf + off, sizeof(buf) - off, "[REDZONE]   %s backtrace:", what);
+    for (USHORT i = 0; i < n && off < (int)sizeof(buf) - 32; ++i) {
+        uintptr_t a = reinterpret_cast<uintptr_t>(bt[i]);
+        if (g_exeBase && a >= g_exeBase && a < g_exeBase + 0x600000) {
+            off += snprintf(buf + off, sizeof(buf) - off, " 0x%llx",
+                            (unsigned long long)(0x140000000ull + (a - g_exeBase)));
+        } else {
+            off += snprintf(buf + off, sizeof(buf) - off, " [%p]", bt[i]);
+        }
+    }
+    RZBoth("%s\n", buf);
+}
+
 int ValidateAllLocked(const char* tag) {
     int bad = 0;
     for (auto& kv : *g_live) {
         if (!CanaryIntact(kv.first, kv.second.reqSize)) {
             if (bad == 0) {
-                printf("[REDZONE] ==== corruption detected at checkpoint '%s' ====\n",
+                RZBoth("[REDZONE] ==== corruption detected at checkpoint '%s' ====\n",
                        tag ? tag : "?");
             }
             PrintEntry("CORRUPT", kv.first, kv.second);
@@ -128,14 +175,13 @@ int ValidateAllLocked(const char* tag) {
         }
     }
     if (bad) {
-        printf("[REDZONE] checkpoint '%s': %d corrupted block(s), %zu live\n",
+        PrintHereBacktrace("trip-site");
+        RZBoth("[REDZONE] checkpoint '%s': %d corrupted block(s), %zu live\n",
                tag ? tag : "?", bad, g_live->size());
-        fflush(stdout);
         const char* noAbort = getenv("BANISHED_REDZONE_ABORT");
         if (!(noAbort && noAbort[0] == '0')) {
-            printf("[REDZONE] aborting cleanly at first corruption "
+            RZBoth("[REDZONE] aborting cleanly at first corruption "
                    "(set BANISHED_REDZONE_ABORT=0 to continue)\n");
-            fflush(stdout);
             ExitProcess(0x122);  // distinctive exit code for "redzone tripped"
         }
     }
@@ -171,6 +217,23 @@ void* ShimAlloc(void* singleton, uint64_t size, int alignment) {
     return p;
 }
 
+// Static-signature wrappers for the System::MemoryAllocator::MemAlloc/MemFree
+// dispatch slots (0x140152b60/b68). Several reimpls (tool_base_highlight*.cpp,
+// work_act_*.cpp) allocate/free through those static exports, NOT through
+// fn_MemAlloc/fn_MemFreeStatic. Un-shimmed, an alloc through one channel and a
+// free through the other leaves a stale g_live entry; when the engine reuses
+// that memory the canary scan reports a PHANTOM overflow (seen twice as a
+// "corrupt decal vertex pool" at town load — alloc via f8d0's fn_MemAlloc,
+// free via ace40's static MemFree). Rewiring the slots at install time makes
+// both channels shimmed and the tracking coherent.
+void ShimFree(void* ptr);
+void* ShimAllocStatic(uint64_t size, int alignment) {
+    return ShimAlloc(g_pMemAllocSingleton, size, alignment);
+}
+void ShimFreeStatic(void* ptr) {
+    ShimFree(ptr);
+}
+
 void ShimFree(void* ptr) {
     if (ptr) {
         std::lock_guard<std::mutex> lk(g_mutex);
@@ -182,12 +245,11 @@ void ShimFree(void* ptr) {
             g_live->erase(it);
         }
         // The crash always manifests inside the allocator's Free coalescing
-        // (it follows a clobbered boundary tag). So when scanning is enabled we
-        // validate EVERY free, right before handing the pointer to the real
-        // Free — the fatal free is then preceded by a full canary scan that
-        // catches the overflow and aborts cleanly first. Frees are rarer than
-        // allocs, so this O(live) per free is acceptable for a diagnostic.
-        if (g_scanEvery) {
+        // (it follows a clobbered boundary tag), so frees participate in the
+        // same throttled op counter as allocs. Scanning EVERY free was O(live)
+        // per free and made loading take minutes once both allocator channels
+        // were shimmed (~20k live blocks × constant frees).
+        if (g_scanEvery && (++g_opCounter % g_scanEvery) == 0) {
             ValidateAllLocked("auto-scan(pre-free)");
             HeapCheckLocked("auto-scan(pre-free)");
         }
@@ -231,6 +293,17 @@ void RedzoneAlloc_Install() {
     }
     fn_MemAlloc      = &ShimAlloc;
     fn_MemFreeStatic = &ShimFree;
+    // Rewire the static MemAlloc/MemFree dispatch slots too (see ShimAllocStatic
+    // comment). Consumers snapshot *(fn**)slot lazily at first use, which happens
+    // after this install, so overwriting the slot storage here covers them all.
+    {
+        uintptr_t sa = ResolveAddr(Module::Exe, 0x140152b60);
+        uintptr_t sf = ResolveAddr(Module::Exe, 0x140152b68);
+        if (sa) *reinterpret_cast<void**>(sa) = reinterpret_cast<void*>(&ShimAllocStatic);
+        if (sf) *reinterpret_cast<void**>(sf) = reinterpret_cast<void*>(&ShimFreeStatic);
+        printf("[REDZONE] static MemAlloc/MemFree slots rewired: b60=%p b68=%p\n",
+               (void*)sa, (void*)sf);
+    }
     g_enabled = true;
     printf("[REDZONE] installed: tailPad=%zu bytes (0=native layout), zeroOnAlloc=%d, "
            "autoScanEvery=%u, watchdog=%dms, real alloc=%p free=%p exeBase=%p\n",

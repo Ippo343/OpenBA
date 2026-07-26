@@ -494,7 +494,10 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
 
     // --- PerformWork_Ctor7: heading(XMM2)=-1000(DAT_1722a8), actionType(R9)=0xA,
     //     time=Time(4.0=DAT_172194), p6=1, p7=-1 (0x1400c022b..0x1400c02a6) ---
-    obj = WAP_Alloc(0x40, 8); // 0x1400c0230: ECX=0x38+8=0x40
+    obj = WAP_Alloc(0x48, 8); // 0x1400c0230: MOV EDX,8; LEA ECX,[RDX+0x40] = 0x48
+                              // (was mis-transcribed as 0x40; Ctor7 writes byte +0x40 and
+                              // int +0x44, so 0x40 overflowed the block by 8 bytes — the
+                              // road-build heap corruption, caught by redzone PAD+SCAN)
     void* pw = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c0245: [R14]
