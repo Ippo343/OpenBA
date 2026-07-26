@@ -191,9 +191,22 @@ static fn_WPC_MeshFlag_t       s_fn_WPC_MeshFlag = nullptr;
 static fn_WPC_Accessor5780_t   s_fn_WPC_Accessor5780 = nullptr;
 static fn_WPC_Getter_e710_t    s_fn_WPC_Getter_e710 = nullptr;
 static fn_WPC_FlagNotify_t     s_fn_WPC_FlagNotify = nullptr;
+// SetAccepting pause path (0x14012fc00): the owner's BuildComponent state finder, the two
+// citizen workplace finders the eviction loop dispatches between, and AssignHousing.
+typedef void* (*fn_WPC_FindBuildState_t)(int64_t entity, void* outIbp);   // 0x140003ea0
+typedef void* (*fn_WPC_FindWork_t)(int64_t citizen, int64_t* outIbp);     // 0x14010ffc0 / 0x140110470
+typedef void  (*fn_WPC_AssignHousing_t)(void* citizen, int64_t* housingIbp); // 0x140111ee0
+static fn_WPC_FindBuildState_t s_fn_WPC_FindBuildState = nullptr;
+static fn_WPC_FindWork_t       s_fn_WPC_FindWorkUnassigned = nullptr;
+static fn_WPC_FindWork_t       s_fn_WPC_FindWorkAssigned = nullptr;
+static fn_WPC_AssignHousing_t  s_fn_WPC_AssignHousing = nullptr;
 static bool s_wpcBodyResolved = false;
 static void EnsureWpcBodyHelpers() {
     if (s_wpcBodyResolved) return;
+    s_fn_WPC_FindBuildState = reinterpret_cast<fn_WPC_FindBuildState_t>(ResolveAddr(Module::Exe, 0x140003ea0));
+    s_fn_WPC_FindWorkUnassigned = reinterpret_cast<fn_WPC_FindWork_t>(ResolveAddr(Module::Exe, 0x14010ffc0));
+    s_fn_WPC_FindWorkAssigned   = reinterpret_cast<fn_WPC_FindWork_t>(ResolveAddr(Module::Exe, 0x140110470));
+    s_fn_WPC_AssignHousing  = reinterpret_cast<fn_WPC_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
     s_fn_WPC_RemoveFromList = reinterpret_cast<fn_WPC_RemoveFromList_t>(ResolveAddr(Module::Exe, 0x140002cc0));
     s_fn_WPC_AppendToList   = reinterpret_cast<fn_WPC_AppendToList_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_WPC_ModelKick      = reinterpret_cast<fn_WPC_ModelKick_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
@@ -369,8 +382,93 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
 }
 
 // ============================================================
-// WorkPlaceComponent::SetAccepting — faithful port of Entity_impl_fc00 (0x14012fc00),
-// accepting=true path only (the genuine build-complete -> accepting transition).
+// Pause-path eviction: drain the roster, re-homing each worker (0x14012fc00 tail)
+// ============================================================
+// Retail's loop always takes roster entry [0], asks the citizen's own workplace finder
+// for somewhere else to work (sub_ffc0 when the profession's +0x4c "assigned" byte is
+// clear, sub_0470 when set — the same dispatch CitizenComp_helper_ff80 wraps), and
+// AssignHousing's it there. AssignHousing detaches from the old workplace first, which is
+// what decrements +0x60 and makes the loop terminate.
+//
+// TWO STANDALONE DEVIATIONS:
+//  1. g_wpcRosterOnly is held across the whole loop. Without it each AssignHousing drives
+//     the Detach/Attach status-icon visuals, i.e. FUN_14012c3f0 -> Graphics::Scene::
+//     RemoveObject on the building's StatusIconComponent. Our components come from the
+//     inert factory (zero-filled from +0x28), so a never-registered icon reads scene id 0
+//     instead of -1 and RemoveObject(scene, 0) removes whichever object genuinely owns id
+//     0 — the engine's list walk then spins and the game freezes in-world (the failure
+//     mode fixed at source for HighlightComponent in 0f97d16). Roster-only keeps the list
+//     mutation, which is all the loop's termination depends on.
+//  2. A progress guard. Retail's `while (+0x60 > 0)` assumes the finder never hands back
+//     THIS workplace; if it did, the count never drops. An unterminated loop HERE is an
+//     in-world freeze rather than a crash — the worst failure mode this codebase has (see
+//     reference_inert_component_sentinel_fields) — so it breaks out loudly instead. This
+//     is the ONLY deviation left in this function; it cannot fire on well-formed state.
+//
+// HISTORY (2026-07-25): this loop faulted twice on live clicks — READ of 0x8, then READ of
+// 0xffffffffffffffff inside AssignHousing. Neither was a bug in this port. BuildUI_Slot9
+// was handing SetAccepting a StorageLocationComponent (c8070) instead of the
+// WorkPlaceComponent (c80e0), because engine_funcs.h's fn_FindComponent_Workplace is
+// MISNAMED — it is the c8070 finder. So +0x50/+0x58/+0x60 were read off the wrong object
+// and "roster base == 8 with count > 0" was simply an unrelated field. Fixed at the source
+// in buildui.cpp; the plausibility/entity checks that were added here to survive the
+// garbage have been REMOVED rather than left as permanent scar tissue, since with the
+// correct component every operand is a live object (verified live: two pause clicks, real
+// citizens evicted, zero guard trips).
+// component_factory_base.h is only included further down (factory section), so declare the
+// one entry point needed here.
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
+
+static void WorkPlaceComponent_EvictRoster(int64_t comp) {
+    EnsureWpcBodyHelpers();
+    if (!s_fn_WPC_AssignHousing) return;
+
+    const bool savedRosterOnly = g_wpcRosterOnly;
+    g_wpcRosterOnly = true;
+
+    const bool trace = std::getenv("BANISHED_DESTROY_TRACE") != nullptr;
+    int guard = 0;
+    while (*(int*)(comp + 0x60) > 0) {
+        int before = *(int*)(comp + 0x60);
+
+        int64_t* roster = *(int64_t**)(comp + 0x58);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(roster);
+        int64_t worker = *roster;
+
+        // Pick the finder off the worker's profession record (+0x1f0 -> +0x4c).
+        int64_t profession = *(int64_t*)(worker + 0x1f0);
+        int64_t newWorkplaceIbp = 0;
+        if (*(char*)(profession + 0x4c) == '\0') {
+            if (s_fn_WPC_FindWorkUnassigned) s_fn_WPC_FindWorkUnassigned(worker, &newWorkplaceIbp);
+        } else {
+            if (s_fn_WPC_FindWorkAssigned) s_fn_WPC_FindWorkAssigned(worker, &newWorkplaceIbp);
+        }
+
+        // Re-read the roster base — the finders above can reallocate it.
+        int64_t* rosterNow = *(int64_t**)(comp + 0x58);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rosterNow);
+        if (trace) {
+            std::fprintf(stderr, "[WorkPlace] evict: comp=%p worker=%p cur(+0x248)=%p "
+                         "target=%p roster=%d\n", (void*)comp, (void*)*rosterNow,
+                         (void*)*(int64_t*)(*rosterNow + 0x248), (void*)newWorkplaceIbp, before);
+            std::fflush(stderr);
+        }
+        s_fn_WPC_AssignHousing((void*)*rosterNow, &newWorkplaceIbp);
+
+        if (*(int*)(comp + 0x60) >= before || ++guard > 4096) {
+            std::fprintf(stderr, "[WorkPlace] pause eviction made no progress on comp=%p "
+                         "(roster %d -> %d, worker=%p) — breaking to avoid a spin\n",
+                         (void*)comp, before, *(int*)(comp + 0x60), (void*)worker);
+            std::fflush(stderr);
+            break;
+        }
+    }
+
+    g_wpcRosterOnly = savedRosterOnly;
+}
+
+// ============================================================
+// WorkPlaceComponent::SetAccepting — faithful port of Entity_impl_fc00 (0x14012fc00).
 // ============================================================
 // Retail fires this when a workplace comes online. For accepting=true it: stores the
 // accepting flag (+0x50), clears the "closed"/"manually-disabled" status-icon bits (1,0),
@@ -388,14 +486,37 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
 // and Scene Add/position/notify all live inside FUN_14012c3f0, so a plain MeshFlag(mesh,4,1)
 // reproduces the original's inlined raise byte-for-byte.
 //
-// The accepting=false path (evict every worker + re-home them) is deliberately NOT ported:
-// no standalone caller ever deactivates a workplace (start-town only activates the lodge).
+// The accepting=false (PAUSE) path does three more things, all ported below:
+//   a. raise the "closed" indicator — bit 0 when the building's BuildComponent state
+//      (found via 0x140003ea0, byte +0x52 or +0x50 when +0x52 is negative) is one of
+//      {0,1,8} ("(s & 0xf6) == 0 && s != 9"), bit 1 otherwise
+//   b. clear the worker/warning icons — flags 2, 3 and 4
+//   c. EVICT the whole roster: repeatedly take entry [0], find it somewhere else to work
+//      (sub_ffc0 / sub_0470, picked on profession+0x4c) and AssignHousing it there
+//
+// On (a): the original inlines FUN_14012c3f0's body rather than calling it, which is why
+// the decompile shows an unreachable "mask == 0" arm right after an OR — that arm is the
+// generic helper's CLEAR path, dead for a SET. `mask |= 1 << !normalState` plus the tail is
+// bit-for-bit FUN_14012c3f0(mesh, normalState ? 0 : 1, 1), so the call below is faithful,
+// not an approximation. (Same helper the citizen paths use: it is generic over the
+// StatusIconComponent layout — mask +0xf0, scene id +0x100 — not citizen-specific.)
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
 
     *(char*)(comp + 0x50) = accepting ? 1 : 0;
-    if (!accepting) return;   // eviction path unported — see note above.
+
+    // BANISHED_LIVE_WPC_PAUSE — DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-25); the
+    // env var is a kill-switch (=0). The three live faults this path hit when first landed
+    // were ALL downstream of BuildUI_Slot9 passing the wrong component type (a c8070
+    // StorageLocationComponent instead of the c80e0 WorkPlaceComponent — see the history
+    // note on EvictRoster above); fixed at the source in buildui.cpp. Verified live: pause
+    // on a staffed workplace evicts real citizens with zero guard trips, and the closed
+    // indicator renders both above the building and in the dialog status bar.
+    static int s_pauseEnabled = -1;
+    if (s_pauseEnabled < 0)
+        s_pauseEnabled = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_PAUSE") ? 1 : 0;
+    if (!accepting && !s_pauseEnabled) return;   // kill-switch: flag-only, pre-port behaviour
 
     // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
     uint64_t meshIbp = 0;
@@ -403,30 +524,62 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
     int64_t* mesh = *(int64_t**)&meshIbp;
-    if (!mesh || !s_fn_WPC_MeshFlag) return;   // partial-world: no renderable icon.
+    if (!mesh || !s_fn_WPC_MeshFlag) {
+        // Partial-world: no renderable icon. The eviction below is gameplay state, not
+        // visuals, so it must still run on the pause path.
+        if (!accepting) WorkPlaceComponent_EvictRoster(comp);
+        return;
+    }
 
-    // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting workplace
-    // is no longer showing the closed sign.
-    s_fn_WPC_MeshFlag(mesh, 1, '\0');
-    s_fn_WPC_MeshFlag(mesh, 0, '\0');
+    if (accepting) {
+        // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting
+        // workplace is no longer showing the closed sign.
+        s_fn_WPC_MeshFlag(mesh, 1, '\0');
+        s_fn_WPC_MeshFlag(mesh, 0, '\0');
+    } else {
+        // (a) raise the closed indicator, keyed on the owner's build state.
+        uint64_t stateIbp = 0;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+        if (s_fn_WPC_FindBuildState) s_fn_WPC_FindBuildState(*(int64_t*)(comp + 0x10), &stateIbp);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&stateIbp);
+        // Partial-world guard: a standalone workplace can lack the BuildComponent. The
+        // original derefs it unguarded; with none present treat the building as "normal"
+        // (the state the start-town / force-completed buildings are actually in).
+        uint8_t state = 0;
+        if (stateIbp) {
+            state = *(uint8_t*)(stateIbp + 0x52);
+            if ((int8_t)state < 0) state = *(uint8_t*)(stateIbp + 0x50);
+        }
+        bool normalState = ((state & 0xf6) == 0) && (state != 9);
+        s_fn_WPC_MeshFlag(mesh, normalState ? 0 : 1, '\x01');
+    }
 
-    // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on its
-    // designated job (roster empty && jobSlot == desc.job) — the faithful raise condition.
-    if (*(int*)(comp + 0x60) != 0) return;                 // already staffed → no warning.
-    void* descObj = *(void**)(comp + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
-    if (!desc) return;                                     // no description → cannot key job.
-    if (*(int64_t*)(comp + 0x48) != *(int64_t*)((uintptr_t)desc + 0x20)) return;  // not the job.
+    if (!accepting) {
+        // (b) clear the worker/warning icons. Each toggle re-finds the mesh in the
+        // original; the finder is pure, so one lookup is equivalent.
+        s_fn_WPC_MeshFlag(mesh, 2, '\0');
+        s_fn_WPC_MeshFlag(mesh, 3, '\0');
+        s_fn_WPC_MeshFlag(mesh, 4, '\0');
+    } else if (*(int*)(comp + 0x60) == 0) {
+        // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
+        // its designated job (roster empty && jobSlot == desc.job) — the faithful raise.
+        void* descObj = *(void**)(comp + 0x18);
+        void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                      fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+        if (desc && *(int64_t*)(comp + 0x48) == *(int64_t*)((uintptr_t)desc + 0x20)) {
+            // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
+            // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
+            meshIbp = 0;
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+            if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+            mesh = *(int64_t**)&meshIbp;
+            if (mesh) s_fn_WPC_MeshFlag(mesh, 4, '\x01');
+        }
+    }
 
-    // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
-    // cull-guard + Scene Add + positioning + entity-notify all execute inside the toggle.
-    meshIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
-    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
-    mesh = *(int64_t**)&meshIbp;
-    if (mesh) s_fn_WPC_MeshFlag(mesh, 4, '\x01');
+    // (c) evict the roster.
+    if (!accepting) WorkPlaceComponent_EvictRoster(comp);
 }
 
 // Apply the OCCUPIED end-state visual for a house whose roster was filled in roster-only

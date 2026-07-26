@@ -475,6 +475,8 @@ extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — Handl
 extern "C" void RegisterCitizen25Tick();      // openfuncs step 2.5(b) — behavior-tick group + EventLog_AddEvent
 extern "C" void RegisterEventLogCitizen();    // citizen life-event chain: PostLifeEvent (ex-"AssignState") + AddCitizenEvent + TileIndex
 extern void RegisterCitizenEmployCascade();   // Economy M-C: townMgr+0xa0 registrar (CitizenComponent_OnAdd 0x140114000)
+extern void RegisterCitizenOnRemove();        // the matching de-registrar: CitizenComponent_OnRemove 0x140113ca0 (vtable slot 7)
+extern void RegisterDestroyWorkersBatch();    // Upgrade path: WorkPlaceComponent builder re-seat / worker release (reg_destroy_workers.cpp; 0x14012f520 + 0x14012f670, opt-in BANISHED_LIVE_DESTROY_WORKERS)
 extern "C" void RegisterCitizenBehaviorTick(); // Town-manager tick: CitizenBehavior_Update 0x14008c2b0 (stock recompute for status/town-hall dialogs) + 0x1401721fc=75.0f
 extern "C" void RegisterCitizenAssignCitizens(); // Town employment allocator: CitizenComponent_impl_43b0 0x1400d43b0 (assigns idle laborers to needy workplaces nearest-first)
 extern void RegisterTownHallBatch();          // TownHallUI promotion: GroupRating/array-push/AVL28/prod-stat/sort/RemoveWorker + seat strategies
@@ -611,6 +613,8 @@ static void RegisterCodeFunctions() {
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030
     RegisterCitizenEmployCascade();  // Economy M-C — townMgr+0xa0 citizen-list registrar (CitizenComponent_OnAdd)
+    RegisterCitizenOnRemove();       // the matching de-registrar — CitizenComponent_OnRemove (vtable slot 7)
+    RegisterDestroyWorkersBatch();   // Upgrade path — WorkPlaceComponent 12f520/12f670 worker release
     RegisterCitizenBehaviorTick();   // Town-manager tick — CitizenBehavior_Update (townMgr+0x170 stock recompute + 75s stats recorder)
     RegisterCitizenAssignCitizens(); // Town employment allocator — CitizenComponent_impl_43b0 (idle laborers -> needy workplaces, nearest-first)
     RegisterTownHallBatch();         // TownHallUI promotion — GroupRating/array-push/AVL28/prod-stat/sort/RemoveWorker + seat strategies

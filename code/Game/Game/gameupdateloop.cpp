@@ -665,6 +665,7 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
+extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -864,6 +865,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // Kill N citizens on a chosen frame so the removal teardown (HandleLifeEvent ->
+    // MarkForRemoval -> the +0x38 broadcast -> CitizenComponent::OnRemove) can be
+    // exercised without waiting decades of game time for a natural death. No-op
+    // unless BANISHED_KILL_CITIZENS is set.
+    CitizenDeathHarness_Tick(s_frameNum);
 
     // TownHallUI gate diagnostic (one-shot at frame 120): reports missing fn
     // pointers / type-ids / town data that would silently blank the town-hall

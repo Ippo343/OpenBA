@@ -405,6 +405,83 @@ static void EnsureDrawHelpers() {
     s_drawHelpersResolved = true;
 }
 
+// ============================================================
+// [STANDALONE GUARD] component-array entry sanity (2 deviations, kept deliberately)
+// ============================================================
+// Retail's component walks (0x140003f60, 0x140004740, 0x140004680 ...) dereference every
+// entry of the owner entity's component array with NO validation, because in retail the
+// array is always consistent: an entity's removal clears the weak refs that point at it
+// before anything else can walk them. Our removal lifecycle does not guarantee that yet
+// (dangling weak refs after destroy/upgrade teardown are a known open issue), so a
+// half-torn-down building can hand these walks freed memory. Live crash 2026-07-25:
+// pausing a workplace whose upgrade was in flight faulted on READ of 0xa — a small
+// non-pointer value read out of the array and dereferenced as a component pointer.
+//
+// SCOPE (thinned 2026-07-25 after the buildui wrong-finder fix landed and a live pause
+// ran clean with none of these firing). Exactly two deviations from the decompile remain:
+//   D2  the array ENTRY walked by StatusIcon_FindCompByName is range/alignment checked
+//       before it is dereferenced — 0xa fails both (below 0x10000 and not 8-aligned),
+//       as does every other small free-list-ish integer a reused block leaves behind.
+//       This is the read that actually faulted, which is why it is the one kept.
+//   D4  the "component never ran StartupInit" sentinel discipline (see SI_Initialised).
+//
+// D2 TESTS ONLY THE ENTRY, AND ONLY AS A DATA POINTER — do not extend it. It briefly also
+// tested the component's vtable pointer and the GetTypeId function pointer at vtable+0x10;
+// that second one was a live-fire bug (2026-07-25, defaults-only build, healthy world):
+// a CODE address has no alignment guarantee, and measured on this build only 30 of 132
+// component GetTypeId functions are 8-aligned — GCC packs these tiny statics with no
+// padding. The check therefore rejected ~77% of all component types and silently skipped
+// LIVE components during the ModelComponent / MultiObjectComponent lookups, which can
+// select the wrong positioning branch. Every component pointer, by contrast, comes from
+// Memory::Allocate(size, 8) and every vtable is an 8-aligned data symbol (66/66 measured),
+// so the entry test cannot misfire the same way.
+// Everything else that was here has been removed and those paths are byte-faithful to
+// retail again: the owner-entity gate that suppressed the scene ops, the self/width/notify
+// plausibility checks, and a whole-array pre-check in front of the exe map finder. That
+// last one was dropped on principle rather than because it was harmless: the SAME array is
+// walked unguarded by every WorkBase_FindComponent_* call site in the tree, so guarding one
+// of them defends nothing systemically — if that corruption returns it will fault
+// elsewhere first, and the fix belongs in the removal lifecycle, not here.
+static inline bool SI_Plausible(const void* p) {
+    uintptr_t v = reinterpret_cast<uintptr_t>(p);
+    return v >= 0x10000 && v < 0x00007fffffffffffull && (v & 7) == 0;
+}
+
+// Bounded "this should never happen" logging: the first few of each category go to
+// standalone_error.log with the operands, then the category goes quiet so a per-tick
+// caller cannot flood the log.
+static bool SI_LogOnce(int* budget) {
+    if (*budget <= 0) return false;
+    --*budget;
+    return true;
+}
+
+// PRECONDITION of D2, not a deviation in its own right: the per-entry check below reads
+// THROUGH the array base, so `arr`/`count` have to be sane for it to mean anything. Retail
+// reads both fields unguarded and so do we — this only rejects the values, it does not add
+// a check the original lacks anywhere the original would have proceeded safely.
+static bool SI_ComponentArray(uintptr_t entity, int* outCount, int64_t* outArr) {
+    if (!SI_Plausible(reinterpret_cast<void*>(entity))) return false;
+    int count = *(int*)(entity + 0x38);
+    int64_t arr = *(int64_t*)(entity + 0x30);
+    if (count < 0 || count > 4096) return false;
+    if (count > 0 && !SI_Plausible(reinterpret_cast<void*>(arr))) return false;
+    if (outCount) *outCount = count;
+    if (outArr) *outArr = arr;
+    return true;
+}
+
+// A StatusIconComponent that never ran StatusIconComponent_StartupInit still carries the
+// inert factory's zero-fill: the embedded geometry's vtable (+0x28) is 0 AND the scene
+// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 — feeding it
+// to Graphics::Scene::RemoveObject spins forever (in-world freeze, see
+// reference_inert_component_sentinel_fields), and AddObject-ing a geometry whose vtable is
+// null faults in the renderer's draw pass. The geometry vtable is the in-band marker: the
+// real ctor and StartupInit both always write it, and nothing ever clears it.
+static inline bool SI_Initialised(uintptr_t c) {
+    return *(void**)(c + 0x28) != nullptr;
+}
+
 // Component-vtable +0x40 (idx 8, OnRemove = positioning) routed for standalone. The
 // occupancy toggle FUN_14012c3f0 (ported below as StatusIcon_Toggle) calls this slot
 // directly to position the icon after AddObject. Original signature is (self, Time*);
@@ -433,6 +510,13 @@ static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
         fprintf(stderr, "[StatusIcon] removed-from-world comp=%p sceneId=%d\n",
                 self, sceneId);
         fflush(stderr);
+    }
+    // [STANDALONE GUARD D4] a component that never ran StartupInit still has the inert
+    // zero-fill, so sceneId 0 means "never registered" rather than scene object 0 —
+    // RemoveObject on it spins forever (in-world freeze). Repair the sentinel instead.
+    if (!SI_Initialised(c)) {
+        if (sceneId == 0) *(int32_t*)(c + 0x100) = -1;
+        return;
     }
     if (sceneId >= 0 && scene && s_fn_Scene_RemoveObject) {
         s_fn_Scene_RemoveObject(scene, (uint32_t)sceneId);
@@ -523,23 +607,47 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     }
 }
 
+
 // Resolve a component on the owner entity BY NAME (Object::GetTypeIdByName), mirroring
 // CharacterComponent's CharComp_FindSiblingByName. This is the standalone-safe equivalent
 // of the exe finders 0x140003f60 (ModelComponent) / 0x140004740 (MultiObjectComponent):
 // those compare the .rdata type-id globals DWORD_1401c7a50 / c7ac0, which are 0xFFFFFFFF
 // (UNFILLED) in standalone, so they return null for EVERY entity. Resolving the type id by
 // name at runtime matches the established brick pattern and has no shared-global dependency.
+//
+// The scan itself is 1:1 with the exe finders (8-byte stride over entity+0x30, compare
+// vtable+0x10 GetTypeId, IsDerivedFrom on the first match). The one deviation is
+// [STANDALONE GUARD D2]: entries that cannot be a live component are SKIPPED instead of
+// dereferenced, so a half-torn-down entity yields "component not found" rather than a
+// fault. Retail would have had a fully-consistent array here.
 static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
     if (!entity || !fn_IsDerivedFrom) return nullptr;
     uint32_t want = ::Object::GetTypeIdByName(typeName);
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
-    int count = *(int*)(entity + 0x38);
-    int64_t arr = *(int64_t*)(entity + 0x30);
+
+    int count = 0;
+    int64_t arr = 0;
+    if (!SI_ComponentArray(entity, &count, &arr)) return nullptr;
+
     for (int i = 0; i < count; i++) {
         void** ibp = (void**)(arr + (int64_t)i * 8);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
+        // [STANDALONE GUARD D2] the entry must look like a heap pointer before it is
+        // dereferenced. This is the read that faulted on 0xa. A line here now means a
+        // genuinely bad array entry — see the header note: it must NOT be extended to
+        // test the vtable's function pointers.
+        if (!SI_Plausible(comp)) {
+            static int budget = 8;
+            if (SI_LogOnce(&budget)) {
+                fprintf(stderr, "[StatusIcon] GUARD: entity=%p component[%d/%d]=%p is not a "
+                        "plausible pointer (arr=%p) — skipping it during the %s lookup\n",
+                        (void*)entity, i, count, comp, (void*)arr, typeName);
+                fflush(stderr);
+            }
+            continue;
+        }
         typedef uint32_t (*GetTypeId_t)(void*);
         uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
         if (tid == want)
@@ -559,6 +667,21 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
     EnsureHelpers();
     EnsureDrawHelpers();
     uintptr_t c = (uintptr_t)self;
+
+    // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
+    // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
+    // object 0. Touching the scene from here would either add a null-vtable geometry to
+    // the draw list or RemoveObject an id that was never handed out (which spins forever).
+    if (!SI_Initialised(c)) {
+        static int budget = 4;
+        if (SI_LogOnce(&budget)) {
+            fprintf(stderr, "[StatusIcon] GUARD: comp=%p never ran StartupInit "
+                    "(geom vtable +0x28 == 0, sceneId=%d) — icon refresh skipped\n",
+                    (void*)self, *(int32_t*)(c + 0x100));
+            fflush(stderr);
+        }
+        return;
+    }
 
     void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
     if (!settings || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -663,6 +786,10 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
     void* scene = *(void**)(gw + 0x60);
 
+    // [STANDALONE GUARD D4] see SI_Initialised: with no StartupInit the geometry has no
+    // vtable and +0x100 == 0 is "never registered", so neither scene call below may run.
+    const bool inited = SI_Initialised(c);
+
     // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
     // skips the SET path (only clears are honoured while culled).
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
@@ -678,7 +805,9 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     if ((int32_t)*pFlags == 0) {
         // All status bits cleared → remove the icon from the scene.
         int32_t sid = *(int32_t*)(c + 0x100);
-        if (sid >= 0 && s_fn_Scene_RemoveObject && scene) {
+        if (!inited) {
+            if (sid == 0) *(int32_t*)(c + 0x100) = -1;   // repair the zero-fill sentinel
+        } else if (sid >= 0 && s_fn_Scene_RemoveObject && scene) {
             s_fn_Scene_RemoveObject(scene, (uint32_t)sid);
             *(int32_t*)(c + 0x100) = -1;
         }
@@ -688,7 +817,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         // and position it via component vtable+0x40 (OnRemove).
         void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
         uint8_t vis = settings ? reinterpret_cast<uint8_t*>(settings)[0xc] : 0;
-        if (vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
+        if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;
         }

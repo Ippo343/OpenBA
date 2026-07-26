@@ -88,9 +88,11 @@ static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 // --- Citizen status-icon driver (standalone wiring) ---
 // The 5 health-flag call sites in Update (bit 0 no-workplace, 1 hungry, 2 cold,
 // 3 unemployed/homeless, 5 has-profession) call s_fn_HealthSetFlag, which in the
-// original is FUN_14012c3f0 (the StatusIcon flag setter). That exe fn is unmapped/
-// unregistered in standalone, so ResolveAddr returns NULL and the calls no-op. We
-// instead route them to StatusIcon_Toggle — the faithful port of FUN_14012c3f0 in
+// original is FUN_14012c3f0 (the StatusIcon flag setter). That exe fn IS registered
+// now (CitizenComp_FUN_14012c3f0, reg_component_people.cpp) — it is generic, keyed on
+// the StatusIconComponent layout (mask +0xf0 / scene id +0x100), which is why the
+// building-side callers pass a building's StatusIconComponent to the same address. We
+// still route these five call sites to StatusIcon_Toggle — the port of FUN_14012c3f0 in
 // statusiconcomponent.cpp — so the citizen's own StatusIconComponent (cached at
 // CitizenComponent+0x280) actually shows hunger/cold/unemployed/homeless icons.
 // Gated default-off (BANISHED_LIVE_CITIZEN_STATUSICON) so existing LIVE_CITIZEN(_UPDATE)
@@ -236,8 +238,9 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
         ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
-    // 0x14012c3f0 is unmapped in standalone → route the citizen health-flag calls to the
-    // StatusIcon_Toggle port instead (default-off; see CitizenStatusIcon_SetFlag above).
+    // 0x14012c3f0 is registered (reg_component_people.cpp) but these five call sites keep
+    // routing through the StatusIcon_Toggle port, which resolves the citizen's own cached
+    // StatusIconComponent at +0x280 (default-off; see CitizenStatusIcon_SetFlag above).
     s_fn_HealthSetFlag = CitizenStatusIconEnabled()
                              ? reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag)
                              : nullptr;
@@ -255,6 +258,16 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140110e70));
     s_fn_ReleaseWork = reinterpret_cast<fn_ReleaseWork_t>(
         ResolveAddr(Module::Exe, 0x140111fa0));
+    // CitizenComponent_helper_fe40 (0x14010fe40) — the marriage/partner finder used by
+    // the Update tail at 0x140113827. This assignment was MISSING: s_fn_FindPartner was
+    // declared and null-checked but never resolved, so the whole marriage block (the
+    // `*(pCVar1) = partner; partner->+0x250 = self` pair that establishes the spouse
+    // link) silently no-op'd and CitizenComponent+0x250 stayed 0 for every citizen.
+    // Gated opt-in (BANISHED_LIVE_CITIZEN_FAMILY): turning it on changes population
+    // dynamics (marriage -> shared workplace -> births), so it stays A/B until verified.
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_FAMILY"))
+        s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
+            ResolveAddr(Module::Exe, 0x14010fe40));
     s_fn_CheckStorageCapacity = reinterpret_cast<fn_CheckStorageCapacity_t>(
         ResolveAddr(Module::Exe, 0x14012a4f0));
     s_fn_FindCompStorage = reinterpret_cast<fn_FindCompStorage_t>(
@@ -1732,7 +1745,21 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
         uint32_t changed;
         uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
         if ((int)param_1[0x1e] == 0) {
-            if (-1 < (int)*reinterpret_cast<uint32_t*>(param_1 + 0x20)) {
+            // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
+            // carries the inert factory's zero-fill: the embedded geometry's vtable
+            // (param_1 + 5 == +0x28) is 0 and the scene id (+0x100) is 0. That 0 means
+            // "never registered", NOT scene object 0 — and Scene::RemoveObject(scene, 0)
+            // removes whichever object genuinely owns id 0, after which the engine's list
+            // walk spins: an in-world FREEZE, not a crash (the failure mode fixed at source
+            // for HighlightComponent in 0f97d16). Repair the sentinel instead of removing.
+            // Reachable on the default path since the pause port graduated: SetAccepting's
+            // accepting=false branch CLEARS icon flags 2/3/4, and clearing the last flag on
+            // an uninitialised icon lands exactly here. The AddObject side below needs no
+            // guard — an uninitialised +0x100 == 0 fails its `< 0` test.
+            if (param_1[5] == 0) {
+                if (*reinterpret_cast<int32_t*>(param_1 + 0x20) == 0)
+                    *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
+            } else if (-1 < (int)*reinterpret_cast<uint32_t*>(param_1 + 0x20)) {
                 if (fn_SceneRemoveObject)
                     fn_SceneRemoveObject(*reinterpret_cast<void**>(gw + 0x60),
                                          *reinterpret_cast<uint32_t*>(param_1 + 0x20));
@@ -3087,6 +3114,7 @@ static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time
 // no-op stub => the eat SendComponentMessage remains a no-op exactly as before.
 // ------------------------------------------------------------------
 extern void CitizenComponent_NeedsUpdate(void*, int, uint64_t*, int, int); // citizen_needsupdate.cpp
+extern "C" void CitizenComponent_OnRemove(void*);                          // citizen_onremove.cpp
 
 static uint32_t CitizenComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
@@ -3107,7 +3135,21 @@ static void CitizenComponent_NeedsUpdateVSlot(void* s, int msg, void* target,
                                               int p4, int p5) {
     CitizenComponent_NeedsUpdate(s, msg, reinterpret_cast<uint64_t*>(target), p4, p5);
 }
+// slot +0x38 / index 7 — the removed-from-world broadcast MarkForRemoval
+// (0x1400c2ea0) fires over every component whose +0x20 flags have bit 1 set.
+// CitizenComponent's flags are 0xCB, so the broadcast has always reached this slot;
+// it just landed on the inert no-op stub, which is why every citizen death left the
+// town's citizen list (townMgr+0xa0) holding a dangling pointer. Retail's slot is
+// CitizenComponent::OnRemove 0x140113ca0 — ported in citizen_onremove.cpp.
+// OPT-IN (BANISHED_LIVE_CITIZEN_ONREMOVE) until a death-heavy run verifies it: with
+// the flag unset the slot stays the stub, i.e. behaviour identical to before.
+static void CitizenComponent_OnRemoveVSlot(void* s) {
+    CitizenComponent_OnRemove(s);
+}
 static void CitizenComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONREMOVE"))
+        CitizenComponent_LiveVtable[7] =
+            reinterpret_cast<void*>(&CitizenComponent_OnRemoveVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN")) {
         CitizenComponent_LiveVtable[4] =
             reinterpret_cast<void*>(&CitizenComponent_StartupVSlot);

@@ -1979,9 +1979,60 @@ static void CitizenCarryStorageInit(void* ent) {
     }
 }
 
+// ---- Founding-family links (BANISHED_LIVE_CITIZEN_FAMILY) --------------------
+// The tail of CitizenComponent_impl_0dd0 (0x1400a0dd0) that this spawner replaces:
+// after the two adults are created it cross-links them as spouses, then splices each
+// child into the second adult's family ring:
+//     res18 = sub_1040(..., param_5='\0',   educated);   // gender = (param_5=='\0') = 1
+//     res8  = sub_1040(..., param_5='\x01', educated);   // gender = 0
+//     res18->+0x250 = res8;  res8->+0x250 = res18;       // spouse cross-link
+//     for each child: helper_68a0(res8, &child)          // ring join @0x1400a0fcd
+// Our SpawnOneCitizen replaces sub_1040 (the retail deferred init FUN_140117080 is
+// guarded off in standalone), so it also has to reproduce the gender field the ring
+// and the marriage finder depend on:
+//   [STANDALONE GUARD] CitizenComponent+0x38 (gender) is written by FUN_140117080 from
+//   sub_1040's `(uint)(param_5 == '\0')`. With that init off, +0x38 stayed 0 for every
+//   colonist, which means (a) helper_fe40's `cand->+0x38 != self->+0x38` opposite-gender
+//   test can never pass, so nobody can ever marry, and (b) the Update reproduction gate
+//   `+0x38 == 0` (female) is true for the entire town. Derive it from the mesh variant
+//   the same way retail does in reverse: FUN_1401253d0 gets `(ushort)(gender == 0)`, so
+//   variantIdx 0 <=> gender 1 and variantIdx 1 <=> gender 0.
+// Opt-in: this changes population dynamics (marriages, gendered births), so it is NOT
+// in kDefaultOnFlags.
+static bool FamilyLinksOn() {
+    static int en = -1;
+    if (en < 0) en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_FAMILY") ? 1 : 0;
+    return en == 1;
+}
+
+// CitizenComponent_helper_68a0 (0x1401168a0) — splice `member` into `host`'s family
+// ring (host +0x260 head, member +0x268/+0x270 links, member +0x258 host back-ref).
+// Ported as CitizenComp_JoinRoster_68a0 and registered by reg_citizen_25.cpp.
+static void (*s_fn_JoinFamily_68a0)(void* host, void* memberIBP) = nullptr;
+static bool s_familyFuncsResolved = false;
+static void EnsureFamilyFuncs() {
+    if (s_familyFuncsResolved) return;
+    s_familyFuncsResolved = true;
+    s_fn_JoinFamily_68a0 = reinterpret_cast<void (*)(void*, void*)>(
+        ResolveAddr(Module::Exe, 0x1401168a0));
+}
+
+// Resolve the CitizenComponent behind a spawned colonist (entity already CheckPtr'd).
+static uint8_t* StartTown_CitizenComp(void* entity) {
+    if (!entity || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return nullptr;
+    void* cc = FindComponentOnEntity(entity, TypeId("CitizenComponent"));
+    if (!cc) return nullptr;
+    uintptr_t ibp = 0;
+    fn_InternalBasePtr_Ctor(&ibp, cc);
+    fn_InternalBasePtr_CheckPtr(&ibp);
+    return reinterpret_cast<uint8_t*>(ibp);
+}
+
 static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
                              const float base[3], float jitter, void* rng,
-                             bool isChild, int variantIdx) {
+                             bool isChild, int variantIdx,
+                             uint8_t** outCitizen = nullptr) {
+    if (outCitizen) *outCitizen = nullptr;
     if (!citizenTemplate) return nullptr;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
@@ -2008,6 +2059,16 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
     if (ent) {
         fn_InternalBasePtr_CheckPtr(&entIBP);
         ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc, variantIdx);
+
+        // Gender (+0x38) + the CitizenComponent handle the caller needs to build the
+        // family links — see the FamilyLinksOn() note above.
+        if (FamilyLinksOn()) {
+            uint8_t* cc = StartTown_CitizenComp((void*)entIBP);
+            if (cc) {
+                *reinterpret_cast<int32_t*>(cc + 0x38) = (variantIdx == 0) ? 1 : 0;
+                if (outCitizen) *outCitizen = cc;
+            }
+        }
     }
 
     // Give the citizen its carry-storage capacity (StorageComponent OnAdded is inert in
@@ -2369,20 +2430,43 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
 
         // Two adults — a couple: opposite gender models (variant groups 0 and 1),
         // random adult age, full-size. Matches CitizenComponent_impl_0dd0.
-        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0)) { ++spawned; fe.push_back(a); }
-        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1)) { ++spawned; fe.push_back(b); }
+        uint8_t* adultA = nullptr;   // retail local_res18 — variant 0 / gender 1
+        uint8_t* adultB = nullptr;   // retail local_res8  — variant 1 / gender 0 (ring host)
+        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0, &adultA)) { ++spawned; fe.push_back(a); }
+        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1, &adultB)) { ++spawned; fe.push_back(b); }
+
+        // Spouse cross-link (impl_0dd0: res18->+0x250 = res8; res8->+0x250 = res18).
+        // Retail stores the raw component pointer taken out of the CheckPtr'd IBP.
+        int linkedKids = 0;
+        if (FamilyLinksOn() && adultA && adultB) {
+            *reinterpret_cast<int64_t*>(adultA + 0x250) = reinterpret_cast<int64_t>(adultB);
+            *reinterpret_cast<int64_t*>(adultB + 0x250) = reinterpret_cast<int64_t>(adultA);
+        }
 
         // Children: Rand(0.._maxChildCount) — alternating gender, child scale (0.66).
         int kids = 0;
         if (rng && fn_Random_Rand && maxChildren >= 0)
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
         for (int c = 0; c < kids; ++c) {
-            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant)) { ++spawned; fe.push_back(k); }
+            uint8_t* kid = nullptr;
+            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant, &kid)) { ++spawned; fe.push_back(k); }
+            // impl_0dd0 @0x1400a0fcd: helper_68a0(res8, &child) — the child joins the
+            // SECOND adult's ring (+0x260 head, child +0x258 host back-ref).
+            if (FamilyLinksOn() && adultB && kid) {
+                EnsureFamilyFuncs();
+                if (s_fn_JoinFamily_68a0) {
+                    int64_t node = reinterpret_cast<int64_t>(kid);
+                    s_fn_JoinFamily_68a0(adultB, &node);
+                    ++linkedKids;
+                }
+            }
             kidVariant ^= 1;
         }
 
-        fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d\n",
-                f, educated, maxChildren, kids);
+        fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d "
+                "spouseLink=%d ringKids=%d\n",
+                f, educated, maxChildren, kids,
+                (FamilyLinksOn() && adultA && adultB) ? 1 : 0, linkedKids);
         fflush(stderr);
     }
 

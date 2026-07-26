@@ -189,6 +189,27 @@ static const char* const kDefaultOnFlags[] = {
     // building-upgrade path is dead without it — DestroyComponent installs no vtable slots
     // and no state table, so the UpgradeUI click pumps a state machine that does not exist.
     "BANISHED_LIVE_DESTROY",
+    // CitizenComponent::OnRemove (vtable slot 7) — verified end-to-end 2026-07-25 by A/B:
+    // with it OFF, killing 5 citizens leaves all 5 in townMgr+0xa0 and the game takes an
+    // ACCESS_VIOLATION shortly after; with it ON the list drains exactly (22->17, one per
+    // death), a whole-town mass kill drains to 0, and the step-4 family branch runs its
+    // recursive orphan chain to completion (a couple + 3 under-age children: 20->15) with
+    // no spin-guard trip, ObjAudit bad=0 thousands of frames later. The default build
+    // CRASHES on citizen death without this. Two deviations, both forced by our inert
+    // factory rather than chosen: an uninitialised-body guard before HideTool (a zero-filled
+    // body reads scene id 0 where the ctor writes -1, and RemoveObject(scene,0) freezes),
+    // and progress guards on the two ring walks.
+    "BANISHED_LIVE_CITIZEN_ONREMOVE",
+    // WorkPlaceComponent::SetAccepting accepting=false (the pause path: closed indicator,
+    // icon clears, roster eviction) — verified live 2026-07-25 once the real bug was fixed
+    // at source. The three faults it first hit were all BuildUI_Slot9 passing a c8070
+    // StorageLocationComponent instead of the c80e0 WorkPlaceComponent (fn_FindComponent_
+    // Workplace is misnamed); with the correct component every operand is a live object.
+    // Two pause clicks evicted real citizens with zero guard trips, and the closed icon
+    // renders above the building and in the dialog status bar. The compensation guards
+    // added while chasing the wrong cause have been removed; one declared deviation remains
+    // (a no-progress break, because an unterminated eviction loop is an in-world freeze).
+    "BANISHED_LIVE_WPC_PAUSE",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

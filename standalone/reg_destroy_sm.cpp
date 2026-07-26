@@ -23,8 +23,11 @@
 //   0x14011d4d0/d400/d490 state-6 rubble path,
 //   0x14011d5d0/0x140125020 rubble mesh helpers,
 //   0x14011bcc0/d390/d2a0/d1a0 transition actions, 0x14012ea20 (in-TU only),
-//   0x14012f670 worker release, 0x140086fb0 config Serialize (reached via the
-//   registered vtable, never by address).
+//   0x140086fb0 config Serialize (reached via the registered vtable, never by address).
+//
+// The workplace pair the state machine drives (0x14012f670 worker release / 0x14012f520
+// state-4 builder re-seat) now lives in reg_destroy_workers.cpp, gated at runtime by
+// BANISHED_LIVE_DESTROY_WORKERS.
 
 #include "resolve.h"
 #include <cstdint>

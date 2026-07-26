@@ -78,7 +78,7 @@ typedef void* (*fn_FindIBP_t)(int64_t entity, void* outIBP);    // member-return
 typedef char  (*fn_HasWork_t)(int64_t workComp);                // 0x14012ead0
 typedef void  (*fn_StopWork_t)(int64_t workComp);               // 0x14012eb50
 typedef void  (*fn_PostWork_t)(int64_t workComp, uint32_t code, char flag, void* workIBP); // 0x14012ec60
-typedef void  (*fn_ReleaseWorkers_t)(int64_t wp);               // 0x14012f670 (may be unregistered)
+typedef void  (*fn_ReleaseWorkers_t)(int64_t wp);               // 0x14012f670 (reg_destroy_workers.cpp)
 typedef void  (*fn_TradeNotify_t)(int64_t tradeMgr, void* entityIBP);  // 0x140103480
 typedef void  (*fn_MarkForRemoval_t)(int64_t entity);           // 0x1400c2ea0
 typedef void  (*fn_DynArrInsert_t)(int64_t* arr, int count, void* ibp); // 0x140003110
@@ -97,7 +97,7 @@ static fn_FindIBP_t         s_find3f60  = nullptr;  // model/transform comp (Cle
 static fn_HasWork_t         s_ead0      = nullptr;
 static fn_StopWork_t        s_eb50      = nullptr;
 static fn_PostWork_t        s_ec60      = nullptr;
-static fn_ReleaseWorkers_t  s_f670      = nullptr;  // may stay null (unported)
+static fn_ReleaseWorkers_t  s_f670      = nullptr;  // WorkPlaceComponent_LeaveBuilderProfession
 static fn_TradeNotify_t     s_trade3480 = nullptr;
 static fn_MarkForRemoval_t  s_markRemoval = nullptr;
 static fn_DynArrInsert_t    s_dynInsert = nullptr;
@@ -171,6 +171,25 @@ static bool Trace() {
         return e && e[0] && e[0] != '0';
     }();
     return t;
+}
+
+// ============================================================
+// Worker release / builder re-seat gate (BANISHED_LIVE_DESTROY_WORKERS)
+// ============================================================
+// The WorkPlaceComponent half of a demolition: state-4 enter re-seats the workplace onto
+// the BUILDER profession (FUN_14012f520) and the state-5 tick takes it back off before the
+// old entity dies (FUN_14012f670). Both are now ported+registered (see
+// destroycomponent_workerrelease.cpp and reg_destroy_workers.cpp) but stay OPT-IN: they
+// drive live citizens through the release path mid-demolish, which is exactly the churn
+// that has faulted before. With the flag unset the calls are skipped as they were, and the
+// roster is left as-is — the state that produced the "READ of 0x8 walking a paused
+// workplace roster" crash on 2026-07-25. Graduate into kDefaultOnFlags once a staffed
+// building can be demolished AND upgraded repeatedly without a fault.
+// component_factory_base.h isn't included in this TU; declare the one entry point.
+namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
+static bool DestroyWorkersOn() {
+    static const int s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY_WORKERS") ? 1 : 0;
+    return s == 1;
 }
 
 // ============================================================
@@ -611,20 +630,24 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     int64_t entity = OwnerEntity(comp);
 
-    // Re-seat the workplace subsystem (retail FUN_14012f520 on the 2e10 comp).
+    // Re-seat the workplace onto the BUILDER profession (retail FUN_14012f520 on the 2e10
+    // comp) — ported in destroycomponent_workerrelease.cpp, opt-in per DestroyWorkersOn().
     int64_t wp = FindOn(entity, s_find2e10);
     if (wp) {
         typedef void (*fn_f520_t)(int64_t);
         static fn_f520_t f520 = reinterpret_cast<fn_f520_t>(
             ResolveAddr(Module::Exe, 0x14012f520));
-        if (f520) {
+        if (f520 && DestroyWorkersOn()) {
             f520(wp);
         } else {
             static bool warned = false;
             if (!warned) {
                 warned = true;
-                std::fprintf(stderr, "[DestroySM] NOT-IMPLEMENTED FUN_14012f520 "
-                                     "(state-4 workplace re-seat) — skipped\n");
+                std::fprintf(stderr, "[DestroySM] FUN_14012f520 (state-4 workplace re-seat) "
+                             "SKIPPED — %s. The workplace keeps its pre-demolition profession "
+                             "and roster.\n",
+                             f520 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
+                                  : "NOT REGISTERED (resolved to 0)");
                 std::fflush(stderr);
             }
         }
@@ -840,17 +863,23 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
         yaw = *reinterpret_cast<int*>(pq + 0x168);
     }
 
-    // 2) Release workers from the old workplace (FUN_14012f670).
+    // 2) Release workers from the old workplace, i.e. leave the BUILDER profession
+    //    (FUN_14012f670 = workplacecomponent.cpp WorkPlaceComponent_LeaveBuilderProfession,
+    //    registered by reg_destroy_workers.cpp). Opt-in per DestroyWorkersOn(). Skipping it
+    //    is what leaves the roster half-torn-down on the entity we are about to remove.
     int64_t wp = FindOn(entity, s_find2e10);
     if (wp) {
-        if (s_f670) {
+        if (s_f670 && DestroyWorkersOn()) {
             s_f670(wp);
         } else {
             static bool warned = false;
             if (!warned) {
                 warned = true;
-                std::fprintf(stderr, "[DestroySM] NOT-IMPLEMENTED FUN_14012f670 "
-                                     "(worker release) — skipped\n");
+                std::fprintf(stderr, "[DestroySM] FUN_14012f670 (worker release) SKIPPED — %s. "
+                             "The removed entity keeps its workers and its Builder-bucket "
+                             "registration.\n",
+                             s_f670 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
+                                    : "NOT REGISTERED (resolved to 0)");
                 std::fflush(stderr);
             }
         }

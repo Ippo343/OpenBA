@@ -643,6 +643,23 @@ REGISTER_TYPE(BuildComponent, "ControllerComponent",
 
 // Real vtable slot +0x78 = index 15 (15*8). BuildComponent_LiveVtable is the static
 // array declared by CONTROLLER_LIVE_FACTORY_STATES above; visible from here on.
+static void BuildComponent_OnRemoveVSlot(void* s) {
+    if (s) BuildComponent_OnCreate(reinterpret_cast<BuildComponent*>(s));
+}
 static void BuildComponent_InstallMsgSlot() {
     BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
+
+    // Slot 7 (+0x38) is the removed-from-world broadcast, NOT OnCreate — 0x140108cb0 is
+    // misnamed in Ghidra exactly like CitizenComponent's 0x140113ca0 was. It removes the
+    // site from the town's pending-build registry (townMgr+0xd0), and BuildComponent's
+    // capability flags (0x83) have bit 1 set, so the MarkForRemoval broadcast already
+    // reaches the slot — it has just been landing on the inert stub.
+    //
+    // buildcomponent_state8.cpp removes the site on COMPLETION, so the hole only opens
+    // for a site torn down before state 8: a cancelled/demolished foundation leaves a
+    // dangling entry that BuilderPool_Tick then walks. Same bug class as the citizen
+    // list; OPT-IN (BANISHED_LIVE_BUILD_ONREMOVE) because, unlike the citizen teardown,
+    // this one has not been exercised against a live cancel-a-foundation repro yet.
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONREMOVE"))
+        BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
 }

@@ -30,8 +30,12 @@ namespace CitizenComponentAddr {
     constexpr uintptr_t Startup    = 0x1400300f0; // vtable[2]
     constexpr uintptr_t Shutdown   = 0x140114160; // vtable[3]
     constexpr uintptr_t Serialize  = 0x140114050; // vtable[4]
-    constexpr uintptr_t Draw       = 0x140114000; // vtable[6]
-    constexpr uintptr_t OnCreate   = 0x140113ca0; // vtable[7]
+    constexpr uintptr_t Draw       = 0x140114000; // vtable[6] (CitizenComponent::OnAdd)
+    // vtable[7] (+0x38) is the removed-from-world broadcast slot that
+    // MarkForRemoval (0x1400c2ea0) fires — NOT OnCreate. Ported in
+    // code/Game/Component/citizen_onremove.cpp.
+    constexpr uintptr_t OnRemove   = 0x140113ca0; // vtable[7]
+    constexpr uintptr_t OnCreate   = 0x140114900;
     constexpr uintptr_t Update     = 0x140112e70; // vtable[9]
     constexpr uintptr_t OnUpdate2  = 0x1401140f0; // vtable[11]
 }
