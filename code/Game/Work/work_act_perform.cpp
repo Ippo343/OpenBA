@@ -480,7 +480,14 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
 
     // --- optional ConsumeRawMaterial when param_8 != 0 (0x1400c01c3..0x1400c0226) ---
     if (consumeArg8 != 0) {
-        obj = WAP_Alloc(0x38, 8); // 0x1400c01cf: ECX=0x30+8=0x38
+        obj = WAP_Alloc(0x40, 8); // 0x1400c01cf: MOV EDX,8; LEA ECX,[RDX+0x38] = 0x40
+                                  // (was mis-transcribed 0x38 — same LEA-operand misread as
+                                  // the Ctor7 0x40/0x48 bug. The ConsumeRawMaterial ctor
+                                  // (0x1400c63b0) writes byte +0x38, so 0x38 overflowed by
+                                  // 1 byte. Only stone roads construct this child (material
+                                  // != null), hence dirt roads never crashed. Redzone
+                                  // fingerprint: canary head 0x01, reqSize 0x38, alloc site
+                                  // bffd0+0x3ff, 2026-07-26.)
         void* crm = nullptr;
         if (obj) {
             WAP_CheckPtr(citizenIBP);

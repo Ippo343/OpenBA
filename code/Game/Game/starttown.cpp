@@ -137,20 +137,78 @@ static bool StartTown_PickMapEnabled() {
     }
     return on;
 }
+// Forward decl (defined near the resource-marking pass below).
+static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint8_t newType);
+
 static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fpW, int fpH,
-                                        uintptr_t entIBP) {
+                                        uintptr_t entIBP, int rot) {
     if (!StartTown_PickMapEnabled() || !game || !entIBP) return;
     uint8_t* cells = *(uint8_t**)((uint8_t*)game + 0x80);
     int dim = *(int32_t*)game;
     if (!cells || dim <= 0) return;
-    int marked = 0;
+
+    // Faithful dc20 (FUN_14009dc20) per-cell footprint, replacing the old blanket
+    // fpW x fpH mark. The MapDescription carries a per-cell character map:
+    //   '.' = free ground   (cell+0x08 cleared, terrain class untouched)
+    //   '#' = obstructed    (cell+0x08 = entity, cell+0x29 = desc+0x20 class)
+    //   '_' = road strip    (cell+0x08 = entity, cell+0x29 = 2 = road class)
+    // Blanket-marking the whole rect stamped the '.'/'_' cells in FRONT of every
+    // start-town building as building-occupied, which BuildRoad_Execute (cell+0x08
+    // read at buildroad.cpp ~:445) refuses forever — road segments across house
+    // fronts never built. The caller chain is MapComponent::Draw -> sub_41b0 -> dc20:
+    //   desc+0x20 = terrain class for '#' cells, desc+0x28 = the char-map String,
+    //   desc+0x31 = skip-occupancy flag, rot from MapComponent+0x30.
+    const uint8_t* desc = nullptr;
+    {
+        void* mapComp = FindComponentOnEntity((void*)entIBP, TypeId("MapComponent"));
+        if (mapComp) desc = *(const uint8_t**)((const uint8_t*)mapComp + 0x18);
+        // (No IsDerivedFrom validation: standalone's partial factory tree makes it a
+        // false-negative landmine — same rationale as the resource path at ~L3100.)
+    }
+    if (desc && desc[0x31] != 0) return;   // 41b0: description opts out of occupancy
+
+    const char* shape = desc ? *(const char* const*)(desc + 0x28) : nullptr;
+    const int shapeLen = shape ? *(const int*)(shape - 8) : 0;   // length-prefixed String
+    const uint8_t classByte = desc ? desc[0x20] : 0;
+
+    // Unrotated string-grid dims (the .rsc footprint is authored unrotated; the
+    // spawn already axis-swapped fpW/fpH for 90/270).
+    const bool swapped = (rot == 0x5a || rot == 0x10e);
+    const int w0 = swapped ? fpH : fpW;
+    const int h0 = swapped ? fpW : fpH;
+
+    uintptr_t nullIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+
+    int marked = 0, freed = 0, roadCells = 0;
     for (int iy = 0; iy < fpH; ++iy)
         for (int ix = 0; ix < fpW; ++ix) {
             int cx = tileX + ix, cy = tileY + iy;
             if (cx < 0 || cx >= dim || cy < 0 || cy >= dim) continue;
             int idx = dim * cy + cx;
-            *(uintptr_t*)(cells + (size_t)idx * 0x30 + 0x08) = entIBP;  // dc20: cell+0x08 = entity
-            marked++;
+            uint8_t* cell = cells + (size_t)idx * 0x30;
+
+            // dc20's char lookup (row stride w0+1, rows authored top-first).
+            bool stampClass = true;          // '#'/'_' or no shape -> class stamp
+            bool occupy     = true;          // anything but '.' -> entity in +0x08
+            uint8_t cls     = classByte;
+            if (shape && shapeLen != 0) {
+                int gx, gy;
+                if (rot == 0x5a)       { gy = ix;            gx = iy; }
+                else if (rot == 0xb4)  { gy = iy;            gx = (w0 - 1) - ix; }
+                else if (rot == 0x10e) { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
+                else                   { gy = (h0 - 1) - iy; gx = ix; }
+                const long sidx = (long)gy * (w0 + 1) + gx;
+                const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
+                stampClass = (c == '#' || c == '_');
+                occupy     = (c != '.');
+                if (c == '_') cls = 2;       // road strip
+            }
+
+            if (stampClass) StartTown_WriteCellType((uint8_t*)game, cells, idx, cls);
+            *(uintptr_t*)(cell + 0x08) = occupy ? entIBP : nullIBP;
+            if (occupy) marked++; else freed++;
+            if (stampClass && cls == 2) roadCells++;
         }
 
     // ARM THE REMOVAL-SIDE CLEAR (M-B parity with the resource path @ ~L2684).
@@ -175,8 +233,10 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
         *(uint32_t*)(mc + 0x20) |= 0x100000u;   // detach-clear armed
     }
 
-    fprintf(stderr, "[startTown::pickmap] marked %d footprint cells @ (%d,%d) %dx%d entity=%p mc=%p\n",
-            marked, tileX, tileY, fpW, fpH, (void*)entIBP, mapComp);
+    fprintf(stderr, "[startTown::pickmap] marked %d cells (%d free, %d road) @ (%d,%d) %dx%d rot=%d "
+            "shape=%s entity=%p mc=%p\n",
+            marked, freed, roadCells, tileX, tileY, fpW, fpH, rot,
+            (shape && shapeLen) ? "yes" : "NONE(blanket)", (void*)entIBP, mapComp);
     fflush(stderr);
 }
 
@@ -245,13 +305,14 @@ extern "C" void StartTown_RegisterRuntimeBuilding(void* entity) {
     uint8_t* mc = (uint8_t*)mapComp;
     int tileX = *(int16_t*)(mc + 0x28), tileY = *(int16_t*)(mc + 0x2a);
     int fpW   = *(int16_t*)(mc + 0x2c), fpH   = *(int16_t*)(mc + 0x2e);
+    int rot   = *(int32_t*)(mc + 0x30);
     if (fpW <= 0 || fpH <= 0) {
         fprintf(stderr, "[Upgrade] RegisterRuntimeBuilding: entity=%p has no footprint "
                 "(%d,%d %dx%d) — cells not marked\n", entity, tileX, tileY, fpW, fpH);
         fflush(stderr);
         return;
     }
-    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, (uintptr_t)entity);
+    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, (uintptr_t)entity, rot);
     StartTown_PickMeshProbe(entity);
 }
 
@@ -1186,7 +1247,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // EditTool's click-pick (FUN_1400a0280) resolves it under the cursor -> opens its info
         // dialog. (Inert MapComponent never marks it; standalone-only, DLL uses the real dc20.)
         fn_InternalBasePtr_CheckPtr(&entIBP);
-        StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
+        StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP, rot);
         StartTown_PickMeshProbe((void*)entIBP);
 
         if (isDemoFoundation) {
@@ -1549,7 +1610,7 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
     // Click-to-select: mark the workplace footprint in the region-map cell array (see
     // StartTown_MarkBuildingCells) so EditTool's click-pick resolves it under the cursor.
     fn_InternalBasePtr_CheckPtr(&entIBP);
-    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
+    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP, rot);
 
     // ---- THE PHASE A DIAGNOSTIC: dump the component set. --------------------
     fn_InternalBasePtr_CheckPtr(&entIBP);
@@ -3012,9 +3073,19 @@ static int StartTown_ClassifyCell(void* game, int dim, int idx) {
     return (h < kClassMountainMax) ? 10 : 6;
 }
 
-// FUN_14009f2f0 — write cell+0x29 = `type` and set the Game+0xa2 dirty flag. The
-// type-class-flip notify calls (a8c90 region-dirty, a6fe0 worker-queue) require
-// Game+0x68/+0x70 live subsystems (zero in standalone) and are guarded off here.
+// f2f0 notify targets (ported + registered elsewhere; linked by name).
+extern void Pf_FineCellDirty_a8c90(int64_t self, int x, int y);                       // action_pf_road.cpp
+extern void Pf_EnqueueCmd2_a6fe0(int64_t self, uint32_t idx, void* type, void* p4);   // action_pf_astar.cpp
+
+// FUN_14009f2f0 — write cell+0x29 = `type`, set the Game+0xa2 dirty flag, and run the
+// two notify calls: a8c90 (region-dirty, subsystem @ game+0x70, boundary-flip only) and
+// a6fe0 (pathfinder cmd-2, worker @ game+0x68, ALWAYS).
+//
+// ⚠ These were guarded off under "Game+0x68/+0x70 are zero in standalone" — STALE since
+// Pathfinder_Seed moved before StartTown (gameupdateloop_load.cpp). Skipping a6fe0 left
+// the pathfinder's byte MIRROR (pf+0x158) holding the pre-town classification, so the
+// road A* (which reads the mirror, not the grid) accepted cells the preview painted red
+// — the "places anywhere" validity gap. Null-subsystem checks keep the old safety.
 static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint8_t newType) {
     uint8_t* cell = cells + (size_t)idx * CELL_STRIDE;
     const uint8_t oldType = cell[0x29];
@@ -3027,7 +3098,14 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
         dirty = 1;
     game[0xa2] |= dirty;
     cell[0x29] = newType;
-    // (region/minimap + worker-thread notifies deliberately omitted — inert subsystems)
+    const int dim = *(int32_t*)game;
+    int64_t regionObj = *(int64_t*)(game + 0x70);
+    if (dirty && regionObj && dim > 0)
+        Pf_FineCellDirty_a8c90(regionObj, idx % dim, idx / dim);
+    int64_t pfThread = *(int64_t*)(game + 0x68);
+    if (pfThread)
+        Pf_EnqueueCmd2_a6fe0(pfThread, (uint32_t)idx,
+                             (void*)(uintptr_t)newType, nullptr);
 }
 
 // G3 — write the resource entity into its map cell (cell+0x08) so the ForesterWork
@@ -3063,13 +3141,20 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
             if (!shape || shapeLen == 0) {
                 occupied = true;
             } else {
-                // rot-aware index into the shape grid (matches dee0's index math).
-                int gx, gy, gw;
-                if (rot == 0x5a)          { gw = h; gx = iy;            gy = (w - ix) - 1; }
-                else if (rot == 0xb4)     { gw = w; gx = (w - ix) - 1;  gy = (h - iy) - 1; }
-                else if (rot == 0x10e)    { gw = h; gx = (h - iy) - 1;  gy = ix; }
-                else                      { gw = w; gx = ix;            gy = iy; }
-                const long sidx = (long)gy * (gw + 1) + gx;
+                // dee0's index math, verified against the retail instructions at
+                // 0x14009dd84-0x14009ddda (dc20 uses the identical form). The shape
+                // string is in UNROTATED description space, first row = LAST tile row,
+                // stride = unrotatedW+1 (the newline). The old math here was mirrored
+                // in all four rotations — latent because resources are almost all 1x1.
+                const bool sw = (rot == 0x5a || rot == 0x10e);
+                const int w0 = sw ? h : w;   // unrotated shape-grid width
+                const int h0 = sw ? w : h;
+                int gx, gy;
+                if (rot == 0x5a)          { gy = ix;            gx = iy; }
+                else if (rot == 0xb4)     { gy = iy;            gx = (w0 - 1) - ix; }
+                else if (rot == 0x10e)    { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
+                else                      { gy = (h0 - 1) - iy; gx = ix; }
+                const long sidx = (long)gy * (w0 + 1) + gx;
                 const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
                 occupied = (c == '#' || c == '_');
             }
@@ -3140,17 +3225,22 @@ extern "C" void StartTown_UnmarkResourceCellGrid(void* gameVoid, void* ownerEnti
             if (cx < 0 || cy < 0 || cx >= dim || cy >= dim) continue;  // OOB guard (std-safe)
             const int cellIdx = cy * dim + cx;
 
-            // Occupancy from the rot-aware shape grid (same verified math as the mark).
+            // Occupancy from the rot-aware shape grid (same verified math as the mark —
+            // dee0/dc20 form, retail instructions 0x14009dd84-0x14009ddda; must stay in
+            // lockstep with StartTown_MarkResourceCellGrid or mark/unmark desync).
             bool occupied;
             if (!shape || shapeLen == 0) {
                 occupied = true;
             } else {
-                int gx, gy, gw;
-                if (rot == 0x5a)          { gw = h; gx = iy;            gy = (w - ix) - 1; }
-                else if (rot == 0xb4)     { gw = w; gx = (w - ix) - 1;  gy = (h - iy) - 1; }
-                else if (rot == 0x10e)    { gw = h; gx = (h - iy) - 1;  gy = ix; }
-                else                      { gw = w; gx = ix;            gy = iy; }
-                const long sidx = (long)gy * (gw + 1) + gx;
+                const bool sw = (rot == 0x5a || rot == 0x10e);
+                const int w0 = sw ? h : w;   // unrotated shape-grid width
+                const int h0 = sw ? w : h;
+                int gx, gy;
+                if (rot == 0x5a)          { gy = ix;            gx = iy; }
+                else if (rot == 0xb4)     { gy = iy;            gx = (w0 - 1) - ix; }
+                else if (rot == 0x10e)    { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
+                else                      { gy = (h0 - 1) - iy; gx = ix; }
+                const long sidx = (long)gy * (w0 + 1) + gx;
                 const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
                 occupied = (c == '#' || c == '_');
             }

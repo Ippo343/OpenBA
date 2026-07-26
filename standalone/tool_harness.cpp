@@ -288,7 +288,16 @@ void FireRoadTool(void* entityUI) {
 
     // Both road templates carry a CreateRoadDescription; DirtRoad is the basic one the
     // Toolbar "Roads" group opens with. Fall back to StoneRoad if it fails to resolve.
+    // BANISHED_ROAD_TEMPLATE=stone flips the preference — the stone template is the only
+    // work item with a non-null material (+0x50), i.e. the resource-fetch branch repro.
     const char* kTemplates[] = { "Template\\DirtRoad.rsc", "Template\\StoneRoad.rsc" };
+    {
+        const char* pref = std::getenv("BANISHED_ROAD_TEMPLATE");
+        if (pref && (pref[0] == 's' || pref[0] == 'S')) {
+            kTemplates[0] = "Template\\StoneRoad.rsc";
+            kTemplates[1] = "Template\\DirtRoad.rsc";
+        }
+    }
     void* tmpl = nullptr;
     const char* used = nullptr;
     for (const char* path : kTemplates) {

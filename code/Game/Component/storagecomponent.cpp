@@ -372,6 +372,34 @@ int StorageComponent_QueryCount(void* storageComp) {
 }
 
 // ============================================================
+// StorageComponent::QueryAvailable (0x14012ce70, "BuildRoad_helper_ce70")
+// ============================================================
+// Per-MATERIAL available count: scan the slot rows (comp+0x28, stride 0x10:
+// {materialEntity(8), count(4), reserved(4)}) for the row whose material
+// entity matches, return count - reserved; no row -> 0. Named BuildRoad_*
+// in Ghidra because the road resource branch is its highest-profile caller
+// (BuildRoad_Execute checks the citizen's HOME storage for the road
+// material), but it is a plain StorageComponent accessor.
+// Was never registered: the first stone road ever placed (the only work
+// item with a non-null material at +0x50) called a null fn ptr and died
+// at BuildRoad_Execute+0x7a7 (2026-07-26).
+
+int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
+    if (!storageComp) return 0;
+
+    uintptr_t sc = (uintptr_t)storageComp;
+    int slotCount = *(int*)(sc + 0x30);
+    uintptr_t slotArray = *(uintptr_t*)(sc + 0x28);
+
+    for (int i = 0; i < slotCount; i++) {
+        uintptr_t row = slotArray + (uintptr_t)i * 0x10;
+        if (*(int64_t*)row == materialEntity)
+            return *(int*)(row + 0x08) - *(int*)(row + 0x0c);
+    }
+    return 0;
+}
+
+// ============================================================
 // StorageComponent::Helper_c560 (0x14012c560) — null-safe reimpl
 // ============================================================
 // Checks if (param_1[0x3C] & RawMaterialDescription[0x5C]) != 0.

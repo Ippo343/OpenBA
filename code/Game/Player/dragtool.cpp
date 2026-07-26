@@ -488,3 +488,27 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
 
     return 1; // Always returns 1 (event consumed)
 }
+
+// ============================================================
+// DragTool cancel / "can-deactivate?" — vtable +0x48, Slot9
+// ============================================================
+// Original: 0x1400fc640, shared across the DragTool family (Ghidra mislabels it
+// BridgeTool_Update). EntityUI's right-click path asks this before tearing the tool
+// down: mid-drag it cancels the drag (clears dragState+singleClick, closes the tool
+// dialog) and returns 1 so the tool STAYS; idle it returns 0 and teardown proceeds.
+// The Tool_Ret0 stub in that slot meant a right-click mid-drag tore the tool down
+// with the cost dialog still open — the "icon left on screen" dismiss bug.
+extern "C" int DragTool_CancelDrag_Impl(DragTool* self) {
+    ResolveDragToolFuncs();
+    if (self->dragState == 0) return 0;
+    self->dragState = 0;
+    self->singleClick = 0;   // retail: MOV word ptr [self+0x28], 0
+    uint64_t* ibp = (uint64_t*)self->dialogPtr;
+    if (ibp && *ibp && fn_UI_CloseDialog && fn_InternalBasePtr_Ctor) {
+        uint64_t tempIBP = *ibp;
+        fn_UI_CloseDialog(GetUserInterface(), &tempIBP);
+        fn_InternalBasePtr_Ctor(&tempIBP, nullptr);
+        *ibp = tempIBP;
+    }
+    return 1;
+}

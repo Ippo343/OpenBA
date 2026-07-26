@@ -343,7 +343,14 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
     }
 
     // Rebuild the road mesh so the new cells render.
-    if (s_fn_RoadMeshRebuild) s_fn_RoadMeshRebuild(decalMgr, mapGrid);
+    // BANISHED_ROAD_NO_MESH=1 skips this purely as a bisect knob for the heap-corruption
+    // hunt (f370 had never executed before road placement landed). Diagnostic only.
+    static int s_noMesh = -1;
+    if (s_noMesh < 0) {
+        const char* e = std::getenv("BANISHED_ROAD_NO_MESH");
+        s_noMesh = (e && *e && *e != '0') ? 1 : 0;
+    }
+    if (s_fn_RoadMeshRebuild && !s_noMesh) s_fn_RoadMeshRebuild(decalMgr, mapGrid);
 
     if (RoadTraceOn())
         fprintf(stderr, "[Road] CalcPath: placed %d cells (%u->%u) roadType=%u\n",

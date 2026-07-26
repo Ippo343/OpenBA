@@ -855,7 +855,8 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
 //
 // Working array local_108 (longlong[2]: ptr@0/count@1) holds `batchCount` records, each 0x60 bytes:
 //   +0x00 srcPtr;  vert short-buffer B {ptr@+0x08, cnt@+0x10, cap@+0x14};
-//   index short-buffer A {ptr@+0x18, cnt@+0x20, cap@+0x24};  header ints +0x28..+0x34.
+//   index short-buffer A {ptr@+0x18, cnt@+0x20, cap@+0x24};  +0x28 slot handle (-1 = free,
+//   seeded by f250, never written here);  culling AABB ints +0x2c..+0x38 (minX/minY/maxX/maxY).
 //
 // Phases: (1) sync the +0x220 counter array length to +0x218 (021d0) then zero it; (2) f250-size
 // local_108 to +0x218 records; per coarse block, seed each record header (srcPtr from +0x210,
@@ -949,10 +950,15 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x210) + lVar13);
                         if (s_fn_GrowShort)  s_fn_GrowShort(reinterpret_cast<int64_t*>(recBase + 0x08), 0);   // c890 (buffer B)
                         if (s_fn_GrowElem14) s_fn_GrowElem14(reinterpret_cast<int64_t*>(recBase + 0x18), 0);  // ee40 (buffer A)
-                        *reinterpret_cast<int*>(recBase + 0x28) = seedColMin;
-                        *reinterpret_cast<int*>(recBase + 0x2c) = seedRowMin;
-                        *reinterpret_cast<int*>(recBase + 0x30) = *reinterpret_cast<int*>(param_1 + 200) + local_f4 + vtxOff;
-                        *reinterpret_cast<int*>(recBase + 0x34) = *reinterpret_cast<int*>(param_1 + 200) + local_f8 + vtxOff;
+                        // Culling AABB in tile coords, read by the TerrainGenerator cull pass
+                        // (0x1400ae490 -> Volume::Frustum::Contains). +0x28 is the record's
+                        // slot-handle sentinel (f250 seeds -1) and must NOT be written here —
+                        // retail's piVar11 = (int*)(local_108+6) writes [-1]/[0]/[1]/[2]
+                        // = +0x2c/+0x30/+0x34/+0x38.
+                        *reinterpret_cast<int*>(recBase + 0x2c) = seedColMin;
+                        *reinterpret_cast<int*>(recBase + 0x30) = seedRowMin;
+                        *reinterpret_cast<int*>(recBase + 0x34) = *reinterpret_cast<int*>(param_1 + 200) + local_f4 + vtxOff;
+                        *reinterpret_cast<int*>(recBase + 0x38) = *reinterpret_cast<int*>(param_1 + 200) + local_f8 + vtxOff;
                         recBase += 0x60;
                         lVar13 += 8;
                     }
@@ -1062,9 +1068,26 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
 
                 // ---- flush each batch's buffer B into its mesh record (fa80) when counter>0 ----
                 if (0 < batchCount) {
+                    static int s_trace = -1;
+                    if (s_trace < 0) {
+                        const char* e = std::getenv("BANISHED_ROAD_TRACE");
+                        s_trace = (e && *e && *e != '0') ? 1 : 0;
+                    }
                     uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
                     for (int b = 0; b < batchCount; b++) {
                         if (0 < *reinterpret_cast<int*>(recBase + 0x10)) {
+                            if (s_trace) {
+                                // Sanity check on the culling AABB: minX<=maxX and minY<=maxY,
+                                // rect anchored at block+vtxOff spanning cellSize. An inverted
+                                // or zero max here is the disappearing-road culling bug.
+                                int mnx = *reinterpret_cast<int*>(recBase + 0x2c);
+                                int mny = *reinterpret_cast<int*>(recBase + 0x30);
+                                int mxx = *reinterpret_cast<int*>(recBase + 0x34);
+                                int mxy = *reinterpret_cast<int*>(recBase + 0x38);
+                                fprintf(stderr, "[Road] MeshFlush batch=%d verts=%d aabb=(%d,%d)-(%d,%d)%s\n",
+                                        b, *reinterpret_cast<int*>(recBase + 0x10), mnx, mny, mxx, mxy,
+                                        (mnx <= mxx && mny <= mxy) ? "" : "  <-- INVERTED AABB");
+                            }
                             if (s_fn_GrowElemDup) s_fn_GrowElemDup(meshRecArr, static_cast<int>(meshRecArr[1]) + 1, reinterpret_cast<void*>(recBase));
                         }
                         recBase += 0x60;

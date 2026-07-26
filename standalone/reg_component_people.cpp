@@ -29,6 +29,9 @@ extern char  CitizenComp_CanFindHousing(int64_t selfV);
 extern void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);
 extern int   CitizenComp_StorageComponent_QueryCount(int64_t self);
 extern int   CitizenComp_Storage_GetResourceCount(int64_t self);
+// storagecomponent.cpp — per-material available count (count - reserved), the
+// BuildRoad stone-branch dependency ("BuildRoad_helper_ce70" in Ghidra).
+extern int   StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);
 extern void  CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param);
 extern void  CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV);
 extern void  CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV);
@@ -69,6 +72,7 @@ void RegisterComponentBatch_people() {
     // must ensure no other batch double-registers them.
     RegisterExeAddr(0x140008090, reinterpret_cast<uintptr_t>(&CitizenComp_Entity_FindComponent_Storage));
     RegisterExeAddr(0x14012cf10, reinterpret_cast<uintptr_t>(&CitizenComp_StorageComponent_QueryCount));
+    RegisterExeAddr(0x14012ce70, reinterpret_cast<uintptr_t>(&StorageComponent_QueryAvailable));
     RegisterExeAddr(0x14012a9d0, reinterpret_cast<uintptr_t>(&CitizenComp_Storage_GetResourceCount));
     RegisterExeAddr(0x14010db90, reinterpret_cast<uintptr_t>(&CitizenComp_CitizenAIComponent_TransitionState));
     RegisterExeAddr(0x14010f7a0, reinterpret_cast<uintptr_t>(&CitizenComp_CitizenAIComponent_CheckEducation));

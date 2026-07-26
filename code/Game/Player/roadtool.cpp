@@ -623,6 +623,10 @@ static uint32_t* RoadTool_GetSettingType(void*, uint32_t* ret) {
 // EntityUI_ToolTick_SA feeds this to SetCursor, so Tool_Ret0 gave the road tool the
 // wrong (id 0) cursor.
 static int RoadTool_Slot12(void*) { return 5; }
+// +0x48 (Slot9) cancel/"can-deactivate?" — retail 0x1400fc640, the shared DragTool-family
+// right-click handler (cancels an active drag + closes the tool dialog, returns 1 to keep
+// the tool; returns 0 when idle so EntityUI proceeds with teardown). See dragtool.cpp.
+extern "C" int DragTool_CancelDrag_Impl(void* self);
 static void* g_RoadTool_Vtable[15] = {
     (void*)&RoadTool_Dtor,        // +0x00 Dtor
     (void*)&Tool_Slot1,           // +0x08
@@ -633,7 +637,7 @@ static void* g_RoadTool_Vtable[15] = {
     (void*)&RoadTool_OnKey_Impl,  // +0x30 OnKey
     (void*)&Tool_Ret0,            // +0x38
     (void*)&RoadTool_Draw,        // +0x40 Draw
-    (void*)&Tool_Ret0,            // +0x48
+    (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag / allow-teardown (0x1400fc640)
     (void*)&Tool_Ret0,            // +0x50
     (void*)&RoadTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
     (void*)&RoadTool_Slot12,      // +0x60 cursor id (retail returns 5)
