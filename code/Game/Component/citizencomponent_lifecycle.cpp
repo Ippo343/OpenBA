@@ -255,7 +255,7 @@ void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
 // Game_SpawnCitizens. Turning it on gives colonists real names/ages/lifespans.
 // ============================================================
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
-                                     char isElder, int arg5, char forceEmploy,
+                                     char isElder, float age, char forceEmploy,
                                      int64_t* parentIBP, int64_t spawnKey) {
     EnsureLifecycleFuncs();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
@@ -301,8 +301,12 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
         *reinterpret_cast<int32_t*>(p + 0x210) = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
     }
 
-    // 8. arg5
-    *reinterpret_cast<int32_t*>(p + 0x3c) = arg5;
+    // 8. age — a FLOAT in retail (the field the census and the adult-age gate compare
+    // against desc+0x44). This argument was long declared `int`, which only worked
+    // because every caller passed literal 0 (same bit pattern as 0.0f); the founding
+    // spawn port (open H) passes real ages, so the typedef trap is now fixed at every
+    // declaration (see NEXT_SESSION_BRIEF.md section 4).
+    *reinterpret_cast<float*>(p + 0x3c) = age;
 
     // 9. link into family (parent IBP dereffed once, as retail does)
     if (s_fn_sub_1fa0) {

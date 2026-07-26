@@ -1362,7 +1362,12 @@ typedef void   (*fn_PostLifeEvent_real_t)(CitizenComponent* self, int eventType,
 typedef void   (*fn_sub_2040_t)(int64_t comp, void* ibp);           // CitizenComponent_sub_2040
 typedef void   (*fn_helper_68a0_t)(void* comp, void* ibp);          // CitizenComponent_helper_68a0
 typedef void*  (*fn_CopyCtor_t)(void* dst, void* desc);             // ComponentEntity_CopyCtor
-typedef void   (*fn_FUN_140117080_t)(int64_t a, void* b, uint32_t c, char d, int e, char f, int64_t* g, int64_t h);
+// Arg 5 is the citizen AGE and is a FLOAT in retail (stored to citizen+0x3c, a float
+// field). It was declared `int` here until 2026-07-26 — harmless only because the birth
+// path passes literal 0 (bit-identical to 0.0f). Stack slot 5 is typed the same either
+// way in the MS x64 ABI, so the fix is representational, but every new caller (the
+// founding spawn port) must pass a real float.
+typedef void   (*fn_FUN_140117080_t)(int64_t a, void* b, uint32_t c, char d, float age, char f, int64_t* g, int64_t h);
 typedef void   (*fn_FUN_1400c48a0_t)(void* a, void* ibp, int idx);  // FUN_1400c48a0
 typedef void   (*fn_FUN_1400c3470_t)(void* internal);              // FUN_1400c3470
 typedef void*  (*fn_Entity_FindCompStorage_t)(int64_t entity, void* outIBP); // 0x140008090
@@ -1471,8 +1476,12 @@ static void EnsureCallees() {
     s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
     s_TypeId_AttendanceDesc3f78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78)); // AttendanceDescription; registered+filled in reg_economy_typeids.cpp
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
+    // ⚠ was 0x140152a80 — which this file's own note (lines ~218-221) identifies as
+    // SoundEffect::_typeInfo, NOT the Time ctor. It was harmless only because that slot
+    // is unregistered (null → guarded no-op) and Time(0.0) happens to be all-zero bits
+    // anyway. The real Time::Time(float) slot is 0x140152b00 (audit 2026-07-26).
     {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a80); // Time::Time(float)
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00); // Time::Time(float)
         if (slot) s_fn_TimeFromFloat = *reinterpret_cast<fn_TimeFromFloat_t*>(slot);
     }
     s_calleeResolved = true;

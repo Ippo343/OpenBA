@@ -40,8 +40,9 @@ extern void CitizenComp_LeaveRoster_2040(int64_t self, void* param2);           
 extern void CitizenComp_JoinRoster_68a0(void* self, void* param2);                 // 0x1401168a0
 extern void CitizenComp_SortByProfession_02a0(void* arr, int n, void* tmp);        // 0x1400302a0
 extern void CitizenComp_DeferredInit_117080(int64_t self, void* pos, uint32_t gender,
-                                            char isElder, int arg5, char forceEmploy,
+                                            char isElder, float age, char forceEmploy,
                                             int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
+                                            // (age is a FLOAT in retail — see open H)
 
 void RegisterCitizen25() {
     // group c — needs-msg helpers
