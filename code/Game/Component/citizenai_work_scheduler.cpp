@@ -4,8 +4,8 @@
 //
 //   CitizenAI_impl_ec60 (0x14012ec60)  — post wrapper: stop existing work slot, then
 //   CitizenAI_impl_88a0 (0x1400f88a0)  — the scheduler insert: a primary AVL keyed by
-//                                        priority + a per-id map + 14 category-bitmask
-//                                        sub-trees + a per-work-entity tree.
+//                                        queue order + a per-id map + 14 category-bitmask
+//                                        sub-trees + the per-PROFESSION bucket tree.
 //   TradeWork_impl_ccf0 (0x14002ccf0)  — BST insert into a per-entity work tree (0x38 node)
 //   CitizenAI_helper_cb50 (0x14002cb50)— insert-with-temp-copy wrapper over ccf0
 //   TradeWork_impl_ccf0_sub_ceb0 (0x14002ceb0) — 0x38-node copy-ctor
@@ -229,7 +229,13 @@ static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pS
 // ==================================================================================
 // CitizenAI_impl_88a0 — the scheduler insert.
 //   sched (int*) = gw+0x118. pWorkIBP = InternalBasePtr* to the work. code = category
-//   bitmask (bits 1..14). fromExisting = param_4. prio = param_5 (priority).
+//   bitmask (bits 1..14). fromExisting = param_4. prio = param_5.
+// `prio` is a QUEUE-ORDER key, not an importance level: when fromExisting == 0 the caller's
+// value is thrown away and replaced by sched[1]++ (a monotonic counter), so a caller passing
+// 0 and a caller passing -1 behave identically. It is only honoured when fromExisting != 0,
+// which is exactly the "re-post at the position I already had" case — the wrapper (ec60)
+// sets that flag only when workComp+0x2c holds a previously assigned order (!= INT_MIN).
+// Retail's only direct caller, FUN_14009c960, passes ('\0', -1): the value is dead there.
 // Returns the assigned id.
 // ==================================================================================
 extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code,
@@ -402,8 +408,14 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
         mask = (mask << 1) | ((int)mask < 0 ? 1u : 0u);
     }
 
-    // --- per-work-entity tree at sched+0x120 (0x30 nodes), keyed by the work's target
-    //     (vtable slot +0x50 returns a key ptr). If absent, cb50 inserts a fresh entry. ---
+    // --- per-PROFESSION bucket tree at sched+0x120 (0x38 nodes), keyed by the u64 the
+    //     work's vtable slot +0x50 returns. That slot is the work's "who can do this"
+    //     getter, NOT an entity id: Pickup_Slot10 (0x1400f3a50) and
+    //     GatherRawMaterials_Slot10 (0x1400ec510) both return *(*(gw+0xb0)+0x30), the
+    //     Laborer key. It is the same key space the re-key (f8400) moves items between —
+    //     its callers pass wpc+0x48 / *(*(gw+0xb0)+0x38) (Builder) / desc+0x20. Each bucket
+    //     node holds its own id-keyed inner tree at +0x08 with a count at +0x10.
+    //     If the bucket is absent, cb50 inserts a fresh one. ---
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
     uint8_t* wobj = *reinterpret_cast<uint8_t**>(pWorkIBP);
     typedef uint64_t* (*Slot50_t)(void*, void*);
@@ -423,7 +435,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
         }
     }
     if (found == nullptr) {
-        // cb50 builds+inserts a fresh per-entity node whose key = the work target.
+        // cb50 builds+inserts a fresh bucket node whose key = the work's profession.
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
         void* wobj2 = *reinterpret_cast<void**>(pWorkIBP);
         void* vt2 = *reinterpret_cast<void**>(wobj2);
@@ -435,7 +447,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
         found = reinterpret_cast<uint8_t*>(outNode);
     }
 
-    // --- inner tree hanging off the found per-entity node (+0x08), 0x30 nodes keyed by id ---
+    // --- inner tree hanging off the found profession bucket (+0x08), 0x30 nodes keyed by id ---
     if (found) {
         uint8_t* innerField = found + 0x08;
         uint64_t innerKeyPayload = *reinterpret_cast<uint64_t*>(pWorkIBP);
@@ -496,7 +508,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
                 if (s_3480) s_3480(innerField, &tmp);
             }
         }
-        *reinterpret_cast<uint32_t*>(found + 0x10) += 1;   // per-entity inner count++
+        *reinterpret_cast<uint32_t*>(found + 0x10) += 1;   // profession bucket count++
     }
 
     // The flat id-map at sched+0x30 is filed here (the 9a40 call above) and is the thing
@@ -615,8 +627,15 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     if (!idNode) {
         if (WS_Trace()) {
             uint8_t* root = *reinterpret_cast<uint8_t**>(schedB + 0x30);
-            std::fprintf(stderr, "[BuildTrace] Rekey id=%d: NOT in the sched+0x30 id-map "
-                         "(root=%p rootId=%d count=%d buckets=%d) — nothing to move\n", key,
+            // FAITHFUL NO-OP, not a failure (open D closed 2026-07-26): retail never
+            // resets workComp+0x28 when work completes (ctor 0x14012e820 seeds -1 and
+            // ec60 is the only writer), so the edf0/f670 completion site calls this
+            // re-key with a stale id and retail ALSO finds nothing — the sched+0x30
+            // lookup IS the engine's liveness test (same early-out in ead0). Keep the
+            // wording neutral so a normal path stops reading like a defect.
+            std::fprintf(stderr, "[BuildTrace] Rekey id=%d: no live work item in the "
+                         "sched+0x30 id-map (stale workComp+0x28 — faithful no-op; "
+                         "root=%p rootId=%d count=%d buckets=%d)\n", key,
                          (void*)root, root ? *reinterpret_cast<int*>(root) : -1,
                          *reinterpret_cast<int*>(schedB + 0x38),
                          *reinterpret_cast<int*>(schedB + 0x128));

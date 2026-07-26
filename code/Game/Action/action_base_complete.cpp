@@ -149,8 +149,13 @@ void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
 //  1. For each of the 14 action-list BSTs at param_1+0x40 (stride 0x10), find and
 //     remove (TradeDescription_impl_ca60 = node remove/rebalance) the node whose key
 //     == taskIdx.
-//  2. Find/remove the matching node in the param_1+0x10 BST (key compared against the
-//     task IBP's +0x24 field; left@+0x18, right@+0x10; remove via CitizenAI_impl_a6e0).
+//  2. Find/remove the matching node in the param_1+0x10 ORDER tree (key compared
+//     against the task IBP's +0x24 field; this tree uses the 0x28-node layout:
+//     parent@+0x08, less@+0x10, greater@+0x18 — NOT the 0x30-node layout the id map
+//     and category buckets use; remove via CitizenAI_impl_a6e0). A long-lived offset
+//     inversion here (fixed 2026-07-26) meant the order-tree node was never found, so
+//     sched+0x10/+0x18 grew monotonically and re-posted work got ever-earlier queue
+//     positions.
 //  3. Call owner vtable +0x50 (returns a key ptr); look that key up in the param_1+0x120
 //     BST (left@+0x20, right@+0x28; entry list at node+0x8) and remove the matching
 //     entry via ca60.
@@ -220,10 +225,14 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         int* n = *reinterpret_cast<int**>(self + 0x10);
         while (n != nullptr) {
             int k = *n;
+            // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
+            // node+0x18` (0x28-node order tree: less@+0x10, greater@+0x18). These two
+            // offsets were inverted here until 2026-07-26, which made this search
+            // descend the wrong subtree and the erase below effectively never run.
             if (wantKey < k) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x18);  // left
+                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x10);  // less
             } else if (k < wantKey) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x10);  // right
+                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x18);  // greater
             } else {
                 if (s_a6e0) s_a6e0(reinterpret_cast<void*>(self + 0x10), n);
                 break;
@@ -330,8 +339,17 @@ static bool                  s_showInit       = false;
 static void EnsureShow() {
     if (s_showInit) return;
     s_SetMesh        = reinterpret_cast<fn_SetMesh_t>(ReadDispatchSlot(0x140151498));
-    s_Vector4Ctor    = reinterpret_cast<fn_Vector4Ctor_t>(ReadDispatchSlot(0x140152970));
-    s_TimeCtorMesh   = reinterpret_cast<fn_TimeCtor_t>(ReadDispatchSlot(0x140152968));
+    // ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
+    // family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
+    // in EAX). Calling it as a ctor garbage-derefs the "returned" v[0..3]. Left NULL on
+    // purpose (audit 2026-07-26) so its block stays skipped until the real Vector4 ctor
+    // slot is identified; do NOT register 0x140152970 to "fix" the skip.
+    s_Vector4Ctor    = nullptr;
+    // ⚠ was ReadDispatchSlot(0x140152968) — that slot is Graphics::Geometry::Attach
+    // (dst, src, nodeIdx), not the Time ctor; retail's Time(0.0) there goes through
+    // 0x140152b00 (disasm 0x14011766c). Dormant until now only because 0x140152968 is
+    // unregistered. Bind the REAL Time-from-float slot.
+    s_TimeCtorMesh   = reinterpret_cast<fn_TimeCtor_t>(ReadDispatchSlot(0x140152b00));
     s_SceneAddObject = reinterpret_cast<fn_SceneAddObject_t>(ReadDispatchSlot(0x140151370));
     s_GeomAttach     = reinterpret_cast<fn_GeometryAttach_t>(
         ResolveExport("?Attach@Geometry@Graphics@@QEAAXAEAV12@H@Z"));
