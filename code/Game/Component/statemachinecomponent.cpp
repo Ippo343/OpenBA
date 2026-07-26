@@ -605,7 +605,17 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     if (cnt <= 0) return;
 
     uint8_t* controllerNode = base + 0x28;  // SM root node (controllerSelf target)
-    bool gotDefault = false;
+    // A pending state already written into +0x52 WINS over the controller default.
+    // Retail links controllers at component-creation time, when +0x52 is still the
+    // factory zero, so the default-state write can never destroy a caller's intent.
+    // Standalone links LAZILY (first Update), which is AFTER StartTown_SpawnStructures
+    // stamps its pre-built structures with +0x52 = 2. Overwriting that stamp put every
+    // founding house back into BuildComponent's state 1 (under construction) — a state
+    // the residence table has no entry for — so ResidenceComponent's state-2 Enter
+    // (helper_9de0, 0x140129de0) never ran and townMgr+0x20 stayed null forever. That
+    // one null is what made the move-out finder (CitizenComponent_Update_sub_0e70) and
+    // everything downstream of it dead. Treat a non-zero +0x52 as "already decided".
+    bool gotDefault = (*(base + 0x52) != 0);
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
     uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;

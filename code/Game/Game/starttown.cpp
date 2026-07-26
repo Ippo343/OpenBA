@@ -1087,6 +1087,40 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         required == 0 ? "  <-- WARN: required computed 0, upgrade will still REMOVE(no-spawn)" : "");
                 fflush(stderr);
             }
+
+            // ── Run the WorkPlaceComponent state-2 ("built") ENTER these structures
+            //    skipped, so the town's employers land in the profession registry. ──
+            // Retail wires it through the component's own controller table
+            // (WorkPlaceDescription_helper_f3a0 @0x14012f3a0: state 2 -> helper_edf0), and
+            // edf0 = f670 + AddWorkplaceToProfessionTree. f670's tail is the part that seats
+            // WPC+0x48 = WorkPlaceDescription+0x20 — but only on a building whose key is
+            // CURRENTLY the Builder profession, i.e. one that actually went through
+            // construction. A start-town structure is spawned already-complete and never held
+            // the builder key, so f670 no-ops, +0x48 stays 0, and edf0's `key == 0` early-out
+            // means nothing registers: townMgr+0x100 stayed null and no citizen could find a
+            // job. Seat the key f670 would have left, then run the registration half.
+            // Buildings with no profession on their description (houses, storage) keep key 0
+            // and are correctly skipped — the profession BST is the EMPLOYER list, while
+            // houses live in the separate flat townMgr+0x20 list the residence state-2 enter
+            // fills. The ForesterLodge spawner does the same three steps inline; this makes
+            // every other founding employer behave identically.
+            void* wpcBuilt2 = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
+            if (wpcBuilt2 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                int64_t townMgr2 = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+                uint8_t* w2 = reinterpret_cast<uint8_t*>(wpcBuilt2);
+                void* wpDesc2 = *reinterpret_cast<void**>(w2 + 0x18);
+                uint64_t profKey2 = wpDesc2
+                    ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc2) + 0x20) : 0;
+                if (townMgr2 && profKey2 != 0) {
+                    *reinterpret_cast<uint64_t*>(w2 + 0x48) = profKey2;
+                    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpcBuilt2), true);
+                    TownRegistry_RegisterWorkplace(townMgr2, wpcBuilt2);
+                    fprintf(stderr, "[startTown::struct] [%d] workplace state-2 enter: "
+                            "WPC=%p profKey(desc+0x20)=0x%llx -> registered into townMgr+0x100\n",
+                            logIndex, wpcBuilt2, (unsigned long long)profKey2);
+                    fflush(stderr);
+                }
+            }
         }
 
         // Register with the world entity list (category = template+0x20).
@@ -2313,12 +2347,25 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     int64_t tmplArr = *(int64_t*)((uint8_t*)townMgr + 0x110);
     int64_t foodTmpl = 0;
     uint32_t foodFlags = 0;
-    for (int t = 0; t < tmplCount && foodTmpl == 0; ++t) {
+    // [STAND-IN, NOT THE FIX] Firewood. The residence heat tick (0x140129970) pins the
+    // warmth need (+0x48) at 0 while the outdoor temperature is above desc+0xF4 and lets
+    // it climb once winter arrives, killing at 20 — and it can only hold it down by
+    // BURNING fuel out of the house's own StorageComponent. Standalone has no producer of
+    // any kind, so every soak ends the same way: the whole population dies within ~2000
+    // frames of the first winter (~frame 16000 at FORCE_SPEED=10, seed 12345), which caps
+    // every measurable rate at one pre-winter season. Seeding fuel next to the food seed
+    // buys the soak time to measure birth/marriage rates; it is NOT the winter fixed. The
+    // real fix is a woodcutter producing fuel plus the haul into house storage — the same
+    // "missing woodcutter economy" already noted against residence heating.
+    int64_t fuelTmpl = 0;
+    uint32_t fuelFlags = 0;
+    for (int t = 0; t < tmplCount && (foodTmpl == 0 || fuelTmpl == 0); ++t) {
         int64_t tmpl = tmplArr ? *(int64_t*)(tmplArr + (int64_t)t * 8) : 0;
         void* desc = tmpl ? FindDescriptionOnTemplate(reinterpret_cast<void*>(tmpl), tidRawMat) : nullptr;
         if (!desc) continue;
         uint32_t flags = *(uint32_t*)((uint8_t*)desc + 0x5c);
-        if (flags & 0x20) { foodTmpl = tmpl; foodFlags = flags; }   // edible
+        if (foodTmpl == 0 && (flags & 0x20)) { foodTmpl = tmpl; foodFlags = flags; }   // edible  (bit 5)
+        if (fuelTmpl == 0 && (flags & 0x40)) { fuelTmpl = tmpl; fuelFlags = flags; }   // fuel    (bit 6)
     }
     if (foodTmpl == 0) {
         fprintf(stderr, "[startTown::housing] no edible raw-material template (templates=%d) — no house food\n", tmplCount);
@@ -2330,7 +2377,16 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     // Storage_GetResourceCount (0x14012a9d0) — for the home-food read-back verification.
     typedef int (*fn_GetResCount_t)(int64_t comp);
     fn_GetResCount_t getResCount = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
-    int seeded = 0;
+    // Firewood stand-in size. Deliberately generous: the point is to take the first winter
+    // OUT of the measurement, not to model a fuel economy. Override with
+    // BANISHED_SEED_FUEL=<n> (0 disables) to A/B the cold death against a real producer
+    // once one exists.
+    int kSeedFuelPerHouse = 400;
+    if (const char* fe = std::getenv("BANISHED_SEED_FUEL")) {
+        int v = std::atoi(fe);
+        if (v >= 0) kSeedFuelPerHouse = v;
+    }
+    int seeded = 0, fuelSeeded = 0;
     for (int64_t houseIBP : g_foundingHouseIBPs) {
         if (!houseIBP) continue;
 
@@ -2353,7 +2409,19 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         int seedN = threshold + (residents > 0 ? residents : 0);  // strictly exceed the threshold
         if (seedN < unitsPerHouse) seedN = unitsPerHouse;
         if (seedN < 8) seedN = 8;                                 // minimum visible reserve
-        if (seedN > 500) seedN = 500;                             // sanity clamp
+        // [SOAK KNOB] The default seed is deliberately "just above the HasSufficientResources
+        // threshold" so the citizens do not spam GatherResources(id6) — which is the right
+        // default, but it is also only ~130 units and a long run eats it. Once the firewood
+        // stand-in stopped the cold death, STARVATION became the new wall: a 2026-07-26 soak
+        // (seed 12345, FORCE_SPEED=40) held warmth at ~0 and still went 24 -> 3 citizens
+        // between frames 6000 and 9000 on hunger alone. Raise this floor to push the food
+        // economy out of the measurement window the same way BANISHED_SEED_FUEL does for
+        // fuel. Neither is a fix; both are missing producers.
+        if (const char* se = std::getenv("BANISHED_SEED_FOOD")) {
+            int v = std::atoi(se);
+            if (v > seedN) seedN = v;
+        }
+        if (seedN > 20000) seedN = 20000;                         // sanity clamp
 
         // Seed the ONE household container (StorageComponent c7e78). Faithful accept gate
         // (StorageComponent_helper_c560): the storage flag mask (+0x3c) must intersect the
@@ -2369,6 +2437,14 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         }
         addItem(reinterpret_cast<int64_t>(sc), foodTmpl, seedN);
         ++seeded;
+
+        // Firewood stand-in (see the note at the template pick). The heat tick burns one
+        // unit per burn interval per house, so this is a season count, not a per-resident
+        // one; the same storage accept gate applies (mask +0x3c vs material flags +0x5c).
+        if (fuelTmpl != 0 && (mask & fuelFlags) != 0) {
+            addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, kSeedFuelPerHouse);
+            ++fuelSeeded;
+        }
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
         int have = (getResCount && rescomp) ? getResCount(reinterpret_cast<int64_t>(rescomp)) : -1;
@@ -2382,6 +2458,11 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             "edibleTmpl=%llx flags=0x%x)\n",
             seeded, g_foundingHouseIBPs.size(), unitsPerHouse,
             (unsigned long long)foodTmpl, foodFlags);
+    fprintf(stderr, "[startTown::housing] seeded FIREWOOD STAND-IN into %d/%zu houses "
+            "(%d units each, fuelTmpl=%llx flags=0x%x)%s\n",
+            fuelSeeded, g_foundingHouseIBPs.size(), kSeedFuelPerHouse,
+            (unsigned long long)fuelTmpl, fuelFlags,
+            fuelTmpl == 0 ? "  <-- NO fuel raw-material template found (bit 6)" : "");
     fflush(stderr);
 }
 

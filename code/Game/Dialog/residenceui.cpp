@@ -284,19 +284,31 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
                 for (int r = 0; r < residentCount; r++) {
                     // [DECLARED DEVIATION — ROW-ARRAY BOUND] Retail indexes the row array at
-                    // controller+0x30 by resident index with NO bound: its invariant is that a
-                    // residence can never hold more residents than the dialog table has rows
-                    // (house capacity <= table rows, enforced when residents are assigned).
-                    // Standalone breaks that invariant on the founding side — StartTown's
-                    // housing pass rosters a whole family into slot[0] regardless of the
-                    // ResidenceDescription capacity — so once in-game BIRTHS push a house past
-                    // the row count, retail's unbounded walk reads a row entry past the array
-                    // and hands the garbage pointer to UI::Element::SetFlagsOnOff: observed as
-                    // an ACCESS_VIOLATION inside Runtime-x64.dll at ResidenceUI_Slot7+0x295
-                    // (2026-07-25, first soak in which births survived). Stop at the last real
-                    // row instead of walking off the end, and say so — the residents beyond it
-                    // are simply not displayed. The real fix is capacity-bounded residence
-                    // assignment; see notes/CITIZEN_ONREMOVE_BRIEF.md.
+                    // controller+0x30 by resident index with NO bound (0x1400b51f0: the populate
+                    // walk is unbounded; only the blank-out loop afterwards is bounded by
+                    // controller+0x38). Its invariant is that a household can never hold more
+                    // residents than the dialog table has rows.
+                    //
+                    // [CORRECTION 2026-07-26] The earlier note here blamed StartTown's housing
+                    // pass for "rostering a whole family into slot[0] regardless of the
+                    // ResidenceDescription capacity". That is not a deviation: desc+0x20 is the
+                    // number of HOUSEHOLD SLOTS, not an occupant cap. ResidenceComponent::Serialize
+                    // resizes +0x50 to desc+0x20 and stores it in +0x58; every reader
+                    // (sub_0e70, this slot) then walks +0x58 entries at stride 0x10, each entry
+                    // being its own {data,count,cap} list of citizens. A wood house reads
+                    // desc+0x20 == 1 at runtime, and retail's own home finder PREFERS
+                    // `*(comp+0x58) == 1` and only falls back to `1 < *(comp+0x58)` — which would
+                    // be inverted nonsense if the field were an occupant count. One family in
+                    // slot[0] is exactly what retail's housing solver produces.
+                    //
+                    // So the guard is not covering for a start-town bug; it covers retail's own
+                    // unbounded walk, which a household grown past the table's row count (by
+                    // BIRTHS) would run off the end of, handing garbage to
+                    // UI::Element::SetFlagsOnOff. It has never been observed to fire — and note
+                    // the autostart soak never opens a residence panel, so "never fired" is not
+                    // yet evidence either way about the ResidenceUI_Slot7+0x295 crash of
+                    // 2026-07-25; the mass-death teardown remains an equally good explanation.
+                    // Stop at the last real row instead of walking off the end, and say so.
                     const int rowCapacity = *(int*)(s + 0x38);
                     if (rowIdx >= rowCapacity) {
                         static int s_warned = 0;

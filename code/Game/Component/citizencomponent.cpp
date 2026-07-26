@@ -696,6 +696,28 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // NOTE: skipped for children — start-town citizens currently spawn with age=0
     // (< adultAge), so this whole assignment section no-ops until they age up or are
     // spawned as adults. See project_economy_loop memory.
+    // [DIAG, default OFF] BANISHED_MARRY_TRACE=1 — the life-planning section (housing,
+    // workplace, partner) is gated on THREE things, and the census can only see two of
+    // them. The third is the AI action index at *(self+0x278)+0x60: retail runs the whole
+    // section only while it is -1 (no action in flight). A town where nobody ever marries
+    // and nobody ever moves out looks identical whether the citizens are children, are
+    // already partnered, or are simply never idle — so break the reason out here.
+    {
+        static int s_gateTrace = -1;
+        if (s_gateTrace < 0) s_gateTrace = std::getenv("BANISHED_MARRY_TRACE") ? 1 : 0;
+        if (s_gateTrace) {
+            static int s_n = 0, s_child = 0, s_busy = 0, s_pass = 0;
+            int aiIdx = -999;
+            if (s_fn_CheckPtr_slot) { s_fn_CheckPtr_slot(pCVar1);
+                aiIdx = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(pCVar1) + 0x60); }
+            if (isChildOrStudent) ++s_child; else if (aiIdx + 1 >= 1) ++s_busy; else ++s_pass;
+            if ((++s_n % 2000) == 0) {
+                fprintf(stderr, "[MarryGate] %d calls: child/partnered=%d aiBusy=%d PASS=%d "
+                        "(last aiIdx=%d)\n", s_n, s_child, s_busy, s_pass, aiIdx);
+                fflush(stderr);
+            }
+        }
+    }
     if (isChildOrStudent ||
         (s_fn_CheckPtr_slot && (s_fn_CheckPtr_slot(pCVar1),
          *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(pCVar1) + 0x60) + 1 >= 1)))

@@ -499,9 +499,18 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
         *reinterpret_cast<uint32_t*>(found + 0x10) += 1;   // per-entity inner count++
     }
 
+    // The flat id-map at sched+0x30 is filed here (the 9a40 call above) and is the thing
+    // f8400 needs to find a work item by id. It was recorded as "never populates"; report its
+    // root and count right where it is written so that claim is measured at the source rather
+    // than inferred from the re-key's downstream "NOT in the sched+0x30 id-map" miss. NB most
+    // posts reach this function DIRECTLY (exe 0x1400f88a0), not through the ec60 wrapper — a
+    // trace placed only in the wrapper sees nothing.
     if (WS_Trace())
-        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Insert id=%d prio=%d code=0x%x -> primary+cats+entity trees\n",
-                     id, prio, code);
+        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Insert id=%d prio=%d code=0x%x "
+                     "-> primary+cats+entity trees; idMap(sched+0x30) root=%p count=%d\n",
+                     id, prio, code,
+                     (void*)*reinterpret_cast<uint8_t**>(schedB + 0x30),
+                     *reinterpret_cast<int*>(schedB + 0x38));
     return id;
 }
 
@@ -552,9 +561,18 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
     } else {
         *reinterpret_cast<int*>(workComp + 0x2c) = 0;
     }
+    // The id-map half of the post is the one nothing downstream can see going wrong: a miss
+    // here silently writes priority 0 into workComp+0x2c and makes the f8400 re-key a no-op
+    // ("NOT in the sched+0x30 id-map"). Report the map's own state next to the lookup result
+    // so "the id-map never populates" is a measured fact and not an inference from a
+    // downstream symptom.
     if (WS_Trace())
-        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Post workComp=%p code=0x%x -> id=%d\n",
-                     (void*)workComp, code, assignedId);
+        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Post workComp=%p code=0x%x -> id=%d "
+                     "idMap(root=%p count=%d) payload=%p prio(+0x2c)=%d\n",
+                     (void*)workComp, code, assignedId,
+                     (void*)*reinterpret_cast<uint8_t**>(schedB + 0x30),
+                     *reinterpret_cast<int*>(schedB + 0x38), (void*)payload,
+                     *reinterpret_cast<int*>(workComp + 0x2c));
 }
 
 // ==================================================================================
