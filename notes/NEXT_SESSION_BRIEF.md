@@ -449,6 +449,55 @@ idle/leisure tail and the priority table), not a woodcutter. Questions in order:
 
 `BANISHED_SEED_FUEL` / `BANISHED_SEED_FOOD` stay as soak stand-ins until (1) and (2) land.
 
+## J. 🆕 OPEN (2026-07-26) — the storage-spill crash on the elder path
+
+Found while probing C. **Pre-existing and NOT caused by the A-wave changes** — A/B'd with
+`BANISHED_LIVE_CITIZEN_ONADD` off and the crash is byte-identical (same stack, same fault).
+It is *exposed* by `BANISHED_SEED_FUEL=0`, which is simply the first config that lets
+citizens get far enough down the cold/elder path.
+
+```
+Fault: EXEC of 0000000000000000
+VCALL-of-0: this=…fedb0  vtable=0000018500000000
+```
+
+⚠ `vtable = 0x0000018500000000` is **the zeroed-low-dword signature** — the same
+`System::Time::Time(void*, float)` writes-8-bytes-through-a-4-byte-local trap the D–I wave
+paid for (see the traps section). The last fleet audit found only one such site; this is
+either a second one or the same class from a different writer. `this` is a **stack**
+address, so the clobbered pointer is a local.
+
+Symbolized stack (image base `0x140000000`, `nm` against `standalone/build/reimpl-x64.exe`):
+
+```
+GameUpdateLoop_Update
+  EntityList_Update
+    CitizenAIComponent_Update
+      CitizenComp_CitizenAIComponent_TransitionState
+        CitizenAI_ValidateAndEnterState
+          CitizenAI_State_ElderTransition            +0x24f
+            CitizenAI_PerformWorkCtor8_bd790         +0x6e
+              WorkBase_TaskListCleanup_c5400         +0x60
+                Pf_SpillAllStorage_7570              +0x102
+                  Pf_SpawnRawMaterialOnCell_78c0     +0x141
+                    Pf_FindPlacementCell_bd40        +0x3d0   <- VCALL of 0
+```
+
+i.e. an ageing citizen transitions to Elder, its task list is cleaned up, its carried
+storage is spilled onto the ground, and the cell-placement helper calls through a null
+vtable. Repro (crashes within a couple of minutes):
+
+```
+BANISHED_AUTOSTART=1 BANISHED_SEED=12345 BANISHED_FORCE_SPEED=40 \
+BANISHED_LIVE_CITIZEN_FAMILY=1 BANISHED_BUILD_DEMO_HOUSE=1 BANISHED_BUILDER_AUTOPOOL=1 \
+BANISHED_LIVE_WPC_CONTROLLER=1 BANISHED_SEED_FUEL=0 BANISHED_SEED_FOOD=8000 \
+BANISHED_CITIZENAI_TRACE=1 ./reimpl-x64.exe
+```
+
+Note the `Pf_*` prefixes on the top three frames are almost certainly misnomers inherited
+from `action_pf_roots_drop.cpp` — check what those functions actually do before trusting
+the names, per this codebase's standing record on that family.
+
 ## D. ✅ CLOSED (2026-07-26) — the `f8400` miss is retail's own no-op
 
 Repro'd with the upgrade harness: at the moment of the miss the id-map is **empty**
