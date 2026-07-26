@@ -1,232 +1,122 @@
-# CitizenComponent::OnRemove — Next-Session Brief
+# CitizenComponent::OnRemove — CLOSED 2026-07-25. Open threads for next session.
 
-Written 2026-07-25 at the end of the upgrade-path session. Branch:
-`wave/upgrade-path-complete` (6 commits, nothing pushed, tree clean).
-
----
-
-## Where things stand
-
-**The building upgrade path is DONE through the real UI.** Wood house → stone
-house works end-to-end by clicking, for both a genuinely-constructed house and a
-force-completed start-town house: demolish → haul-away → refund → replacement
-foundation spawns → replacement is constructed → finished panel is correct.
-`BANISHED_LIVE_DESTROY` is now default-on, so no env var is needed for it.
-
-Six commits landed this session, each self-contained:
-
-| Commit | Fixes |
-|---|---|
-| `0f97d16` | HighlightComponent scene-id sentinel — in-world freeze on first citizen death |
-| `69b41cd` | WorkPlaceUI stale weak-ref guard — crash on building click (**containment only**) |
-| `30c602e` | Stamp force-completed start-town buildings as built — starter-house upgrade spawned no foundation |
-| `f43fbef` | Live-site table — restores `State8Finalize` for every constructed building |
-| `330710b` | Register `WorkPlaceComponent::SetAccepting` — pause button called address 0 |
-| `1e0da88` | Graduate `BANISHED_LIVE_DESTROY` to default-on |
+Superseded the original brief (commit `8f4f337`). The task it described is DONE and
+graduated; everything below is what is still open. Branch
+`wave/upgrade-path-complete`, commit `eb6d8aa`.
 
 ---
 
-## THE TASK: port `CitizenComponent::OnRemove` (0x140113ca0)
+## What landed
 
-### Root cause (VERIFIED via Ghidra decompile + tree grep)
-
-The town's citizen list has an **add with no remove**:
-
-| | Address | Status |
+| Feature | Flag | State |
 |---|---|---|
-| `CitizenComponent_OnAdd` — appends to `townMgr+0xa0` | `0x140114000` | ported **and** registered (`standalone/reg_citizen_employ_cascade.cpp:25`) |
-| `CitizenComponent_OnRemove` — removes from `townMgr+0xa0` | `0x140113ca0` | **absent from the tree entirely** |
+| `CitizenComponent::OnRemove` (0x140113ca0) | `BANISHED_LIVE_CITIZEN_ONREMOVE` | **default-on** |
+| `SetAccepting` pause path (0x14012fc00) | `BANISHED_LIVE_WPC_PAUSE` | **default-on** |
+| BuildUI wrong-finder fix | none (unflagged) | **in** |
+| StatusIcon array-entry guard | none (unflagged) | in, one deviation |
+| Founding family links + marriage finder | `BANISHED_LIVE_CITIZEN_FAMILY` | opt-in |
+| DestroySM worker release (12f520/12f670) | `BANISHED_LIVE_DESTROY_WORKERS` | opt-in |
+| BuildComponent slot 7 → townMgr+0xd0 | `BANISHED_LIVE_BUILD_ONREMOVE` | opt-in |
 
-Citizens are added to `townMgr+0xa0` and never removed, so **every death leaves a
-permanent dangling pointer** in the town's own list. `Object::InternalBasePtr::
-CheckPtr` is an EMPTY function in the shipping Runtime
-(`code/Game/Object/internal_factory_audit.h:34`) — retail's correctness comes from
-clearing refs explicitly at removal, and `OnRemove` is that clearing.
-
-Note `ObjAudit` reports `bad=0` while this is happening, and that is consistent:
-the InternalFactory **handle table** is intact. It is the *town's lists* that hold
-stale pointers. Do not take `bad=0` as evidence this is fixed.
-
-### Scope: SIX ref classes, not one
-
-Retail `OnRemove` clears all of these before the entity dies (all VERIFIED from the
-decompile of 0x140113ca0, in this order):
-
-1. `FUN_1401176e0`, `FUN_140115a50`, `Entity_impl_59b0`, `Entity_impl_1650` — prologue teardown
-2. `CitizenComponent_AssignWorkplace(self, null, -1)` — workplace link `+0x238`
-3. `CitizenComponent_sub_2040(self+600, ...)` — the `+0x258` back-ref, when non-null
-4. **family / children** — `+0x250` (spouse) / `+0x260` (child list). Two branches:
-   - no spouse (`+0x250 == 0`): per child, if `child+0x3c <= desc(+0x288)+0x44`
-     (under age) → `HandleLifeEvent(child, 4)`; else re-home the child —
-     `sub_1fa0`, `AssignWorkplace(null,-1)`, `FUN_140002cc0(child+0x208+0x28)`,
-     `FUN_14012c3f0(meshInst, 2, 0)`, null the `+0x208` slot
-   - spouse present: loop `CitizenComponent_sub_1fa0` until `+0x260` drains, then
-     clear the spouse's `+0x250` back-ref and own `+0x250`
-5. `CitizenComponent_AssignHousing(self, null)` — housing `+0x248`, when `+0x248 != 0`
-6. **profession list** — when `self+0x1f0 != *(gw+0xb0)+0x30` (i.e. not already the
-   default profession): `CitizenComponent_impl_c3d0(townMgr, ..., self+0x1f0)` then
-   `CitizenComponent_PostLifeEvent(...)` with event `0xf` (replacement found, arg
-   `self+0x28`) or `0x10` (none found)
-7. `TradeWork_impl_3480(gw+0x120, self+0x10)` — trade-work list
-8. **`FUN_140002cc0(townMgr+0xa0, ref)`** — the citizen-list removal we crashed on
-
-### Building blocks that already exist
-
-- `FUN_140002cc0` — the array REMOVE helper (your own note: "FUN_140002cc0 = REMOVE
-  not add"). Resolved in `attendancecomponent.cpp:107`, `cemeterycomponent.cpp:183`.
-- `CitizenComponent_AssignHousing` `0x140111ee0` — registered (`reg_citizen_employ_cascade.cpp`)
-- `CitizenComponent_AssignWorkplace` `0x1401163d0` — in use (`builder_pool_driver.cpp:105`)
-- `FUN_14012c3f0` — registered (`reg_component_people.cpp:59`)
-- `CitizenComponent_HandleLifeEvent` — ported (`citizen_lifeevent_handler.cpp`)
-
-### Fix shape
-
-Port it properly and register at `0x140113ca0`. **A partial port registered at that
-address is a trap** — retail callers (4 xrefs) would silently skip whichever
-cleanups were omitted, converting a loud crash into quiet corruption. Either do all
-eight steps or gate the whole thing behind an opt-in env flag until verified
-(suggest `BANISHED_LIVE_CITIZEN_ONREMOVE`), per the usual graduation policy in
-`code/Game/Component/component_factory_base.cpp`.
-
-Step 4 fires life events, so it needs care — `HandleLifeEvent` is the same chain
-that produced this morning's freeze.
-
-Once this lands, the `WorkPlaceUI` guard from `69b41cd` can be retired, and the
-five still-unguarded readers below are protected at the source.
-
-### FIX THIS FIRST (one line, trivial)
-
-`engine/types/CitizenComponent.h:34` mislabels the address:
-
-```cpp
-constexpr uintptr_t OnCreate = 0x140113ca0; // vtable[7]   <-- WRONG
-```
-
-`0x140113ca0` is `OnRemove`; `OnCreate` is `0x140114900`. Check for users of the
-constant before renaming.
-
-### Still-exposed readers (unguarded, same no-op CheckPtr)
-
-Per-tick (dangerous):
-- `code/Game/Component/citizencomponent.cpp:1438`, `:1843`, `:2192`
-- `code/Game/Component/citizen_employ_cascade.cpp` — strategies `cbf0`/`ca20`/`c5f0`/`c4b0`
-- `code/Game/Component/citizen_assign_citizens.cpp:317`
-
-On UI interaction only:
-- `code/Game/Dialog/workplaceui.cpp:832` — guarded by `69b41cd`
-
-**Not yet checked:** whether the other town registries have the same add-without-
-remove hole — `townMgr+0x20` (residences), `+0x100` (profession BST), `+0xd0`
-(pending-build sites). Worth auditing the same way: find the OnAdd, find whether
-its OnRemove counterpart is ported AND registered.
+Test tooling added: `standalone/death_harness.cpp` —
+`BANISHED_KILL_CITIZENS=<n>` / `BANISHED_KILL_AT_FRAME=<f>` kill citizens on cue,
+`BANISHED_KILL_FAMILY=<n>` waits for family links to exist then kills those citizens
+(the only practical way to reach OnRemove's step-4 branch), and
+`BANISHED_FAMILY_CENSUS=<f>` reports spouse/ring/partner/host counts. Natural deaths are
+decades of game time away, so this is how any removal path gets exercised.
 
 ---
 
-## Second task: workplace pause — `accepting=false` eviction path
+## OPEN 1 — `FUN_1400f8400` unported (blocks DESTROY_WORKERS graduation)
 
-`0x14012fc00` = `WorkPlaceComponent::SetAccepting`, ported at
-`code/Game/Component/workplacecomponent.cpp:372` but **`accepting=true` path only**.
-Registered as of `330710b`, so the pause button no longer crashes — but pausing
-currently just sets `+0x50 = 0` without evicting anyone.
+The work-scheduler re-key: moves a pending task node between profession buckets inside
+`mgr+0x120`, keyed by work id. Reachable whenever a WorkComponent still holds a work id
+(`+0x28 >= 0`). Both `FUN_14012f520` and `FUN_14012f670` need it; both log
+`[DestroyWorkers] NOT-IMPLEMENTED FUN_1400f8400` and continue. Consequence: a work item
+in flight when demolition starts keeps its pre-demolition profession key, so the wrong
+profession's citizens can be offered it. Blocked behind an unported AVL-node-move cluster
+(`CitizenAI_helper_cb50`, `TradeDescription_impl_ca60` / `_9a40`, `FUN_14000e320`).
 
-### The eviction loop (VERIFIED, decompiled 0x14012fc00)
+Also in that port, `WorkPlaceComponent_LeaveBuilderProfession` (the pre-existing f670
+body) DROPS retail's `IsDerivedFrom(desc, DAT_1401c8118)` check, so where retail resets
+`+0x48` to 0 we may write `desc+0x20`.
 
-```c
-while (wpc+0x60 > 0) {                       // roster count
-    citizen = ((wpc+0x58)[0]);               // always the FIRST entry
-    if ((citizen+0x1f0)->+0x4c == 0) CitizenComponent_sub_ffc0(citizen, &out);  // 0x14010ffc0
-    else                             CitizenComponent_sub_0470(citizen, &out);  // 0x140110470
-    CitizenComponent_AssignHousing((wpc+0x58)[0], &out);                        // 0x140111ee0
-}
-```
+**Verify first:** demolish/upgrade a STAFFED building with `BANISHED_LIVE_DESTROY_WORKERS=1`
+and confirm `[DestroyWorkers] f520 re-seat ... roster=0` and that the `FUN_1400f8400`
+line does NOT appear.
 
-**All four helpers are already ported AND registered** (checked explicitly, because
-"ported but unregistered" was the entire cause of `330710b`):
-`0x14010ffc0` + `0x140110470` → `reg_component_people.cpp`; `0x140111ee0` →
-`reg_citizen_employ_cascade.cpp`; `0x14012c3f0` → `reg_component_people.cpp:59`.
+## OPEN 2 — the worker spinner calls address 0 (live latent crash)
 
-### Two hazards
+`code/Game/Dialog/workplaceui.cpp:80` uses `fn_WorkplaceComp_SetMaxWorkers`, which is
+NULL because **0x14012fb00 is unregistered**. The up/down worker spinner in the workplace
+panel — the same panel as the pause button — calls address 0 today. Independent of
+everything in `eb6d8aa`. Registering it would fix the crash but also puts that ungated UI
+path onto the `AssignHousing` eviction loop; `destroycomponent_workerrelease.cpp` has a
+file-local port of `FUN_14012fb00` that could be registered instead.
 
-1. **Infinite-hang risk.** The loop re-reads `+0x60` each pass and always takes
-   entry `[0]`, so it terminates only if `AssignHousing` removes the worker from the
-   roster. `g_wpcRosterOnly` (declared `workplacecomponent.cpp:218`) makes the
-   attach/detach helpers do the bare roster-list mutation *only* — which is exactly
-   what keeps the count decrementing. So the guard is both required and sufficient.
-   Hold it across the loop.
-2. **Freeze risk.** The pause path calls `Graphics::Scene::RemoveObject`/`AddObject`
-   directly on the MeshInstance — the same call that froze the game in
-   `HighlightComponent` (`0f97d16`), and the reason `g_wpcRosterOnly` exists.
+## OPEN 3 — `0x14012e5c0` registered twice, correctness depends on batch order
 
-### Pause indicator
+`HuntComponent_ComputeTerrainSpeed` (`reg_component_nature.cpp:120`, called at
+`address_registry.cpp:525`) and `TutBase_ComputeWorkCapacity` (`reg_tutorial_base.cpp:43`,
+called at `:635`). `RegisterExeAddr` is last-write-wins, so TutBase currently wins — which
+happens to be the CORRECT semantics (the Ghidra body computes footprint-scaled work
+capacity from `desc+0x24/+0x30/+0x34`; the Hunt "terrain speed" name looks like a
+mis-identification). The f520 capacity calculation depends on that ordering. Reordering
+the batches would silently produce garbage capacity. Resolve properly: confirm the real
+semantics, delete the wrong registration, rename.
 
-`FUN_14012c3f0(meshInst, idx, 0)` with `idx` 2, 3, 4 on the pause path (the
-`accepting=true` path uses 1 and 0). **Unresolved:** the registered port of
-`0x14012c3f0` is described as a citizen health/status-icon flag setter
-(`reg_component_people.cpp:24`) but `fc00` calls the same address on a building
-**MeshInstance**, and different files in the tree describe it both ways. Confirm the
-port is generic before reusing it.
+## OPEN 4 — rename the misnamed component finders
 
-### Also stale
+`engine/funcs/engine_funcs.h:752` `fn_FindComponent_Workplace` resolves **c8070
+StorageLocation**; `:768` `fn_FindComponent_BuildState2` resolves **c80e0
+WorkPlaceComponent**. This cost three crashes and a long wrong-diagnosis detour. Do NOT
+change either helper's behaviour — five call sites (`engine_funcs.h:4974`,
+`workplaceui.cpp:68`, `:301`) genuinely want the c8070 one. Rename both, then re-check
+`workplaceui.cpp:198`/`:239`, which use the c8070 finder and then read `+0x18` for the
+WorkplaceJobType while `:234` uses the c80e0 finder — decompile WorkPlaceUI @0x140087080
+to settle which retail uses.
 
-`code/Game/Component/citizencomponent.cpp:239` (and `:91-93`) assert
-*"0x14012c3f0 is unmapped in standalone"* and deliberately route around it. It **is**
-registered now (`reg_component_people.cpp:59`). Correct the comment.
+## OPEN 5 — family links: make gender retail-accurate, then soak
 
-### Partly inferred, needs a second look
+`FUN_140117080` (per-citizen deferred init) is guarded off in standalone, and it is what
+retail uses to write gender at `+0x38`. `starttown.cpp` currently derives gender from the
+mesh variant instead (`variantIdx 0 ⇔ gender 1`) — the value is identical because retail
+sets variant FROM gender and the mapping is bijective, but the mechanism is ours. Work out
+why 117080 is guarded off and restore it; that also makes the BIRTH path real
+(`CitizenComp_helper_1b90` → `DeferredInit_117080` → `sub_1fa0` is already correct and
+just never fires).
 
-The `meshInst+0xf0` suppression-mask semantics in the pause branch: the `== 0`
-branch looks unreachable after an `OR`, which probably means the decompiler's
-pointer-arithmetic width was misread. Re-check before implementing.
+Then soak for marriages: a grown child must reach `desc+0x48`, have `host == 0` and a
+workplace `+0x238`. Nothing new appeared in 36k frames. **Expect birth rate to roughly
+halve** once gender is real — `+0x38 == 0` (female) gates reproduction and the whole town
+currently counts as female. Worth an explicit A/B before graduating.
+
+Also pre-existing: `kidVariant` starts at 0 where retail's `bVar12` starts at 1, so our
+children's gender/mesh sequence is offset by one from vanilla.
+
+## OPEN 6 — confirm pause on the final binary (2 minutes)
+
+The pause path was verified live on the PRE-thinning binary (two clicks, real citizens
+evicted, closed icon confirmed visually above the building and in the dialog status bar).
+The committed binary has not had a pause click; the only changes since were guard removals
+that never fired. Click pause on a staffed workplace with no env flags and confirm no
+crash and no `[StatusIcon] GUARD:` line.
 
 ---
 
-## Open threads, unowned
+## Lessons worth not re-learning
 
-- **The 77% stall.** Very first run of the session: an upgraded starter house
-  reportedly stalled at 77%. No diagnosis accounts for it — by the final
-  understanding, both upgrade clicks in that run were pure no-ops (`LIVE_DESTROY`
-  was off), so a partially-progressed 77% should not have been possible. Either the
-  number came from a different building, or something else is going on. Watch for it.
-- **Player-placed buildings and OUTPUT storage.** `f43fbef` fixed
-  `State8Finalize` being skipped for every constructed building, which also skipped
-  the OUTPUT storage reconfigure. Player-placed (non-upgrade) buildings were
-  therefore also affected and should now be silently fixed — unverified.
-- **Builder throughput.** Still ~1 unit per trip; construction far slower than
-  retail. Pre-existing, see `project_builder_work_throughput` memory.
-
----
-
-## Repro recipe
-
-Interactive (what was used all session):
-
-```
-BANISHED_AUTOSTART=1 BANISHED_BUILD_DEMO_HOUSE=1 BANISHED_FORCE_SPEED=5 \
-BANISHED_BUILD_TRACE=1 BANISHED_DESTROY_TRACE=1 [BANISHED_OBJAUDIT=1]
-```
-
-- `BANISHED_LIVE_DESTROY` is no longer needed (default-on).
-- `BANISHED_FORCE_SPEED=5` **pins speed and disables the pause/speed buttons**
-  (`gameupdateloop.cpp:769-773` rewrites `+0x30`/`+0x34` every frame). Drop it to
-  use the toolbar; the speed array is `{1,2,5,10}` so 5 is the third button.
-- Builders must be assigned by hand (town hall → Professions). This is intended —
-  `BuilderPool_Tick`'s auto-seating is gated behind `BANISHED_BUILDER_AUTOPOOL`
-  (off) since `55cfa3c` made builder count player-driven. Set it to `1` to
-  auto-staff sites and skip the manual step.
-- Automated upgrade repro: add `BANISHED_TOOL_HARNESS=upgrade` (~8 min; the demo
-  house must build first).
-
-Logs land in `C:/GOG Games/Banished/`. **Read `standalone_crash.log` first** — the
-`[REDZONE-DUMP]` lines mislead; `EXEC of 0` means a null function pointer, which in
-this codebase usually means an exe address is missing from the registry. Symbolize
-with `addr2line -f -C -e standalone/build/reimpl-x64.exe 0x140<offset>` using the
-`reimpl-x64.exe + 0xNNNN` offsets from the trace.
-
-For a **hang** rather than a crash, attach to the live process — this is how the
-freeze was caught:
-
-```
-gdb -p <pid> -batch -ex "set pagination off" -ex "thread apply all bt 18"
-```
-
-Rising CPU while hung means spinning, not a lock.
+* **A small integer where a heap pointer belongs means the WRONG OBJECT, not a corrupted
+  right one.** A roster base of `8` with count > 0 produced three increasingly elaborate
+  lifecycle-corruption theories before the one-line finder bug was found.
+* **Never alignment-test a FUNCTION pointer.** Only 30 of 132 component `GetTypeId`
+  functions are 8-aligned. A guard that did this rejected 77% of components and made
+  `MultiObjectComponent` permanently unfindable, silently sending icons down the wrong
+  positioning branch.
+* **An unflagged guard on the default path is a behaviour change you have not noticed
+  yet.** A guard justified only by a hypothesis should be dropped; one justified by an
+  observed fault can stay.
+* **Test with defaults only.** The guard misfire was invisible in every flag-heavy run.
+* **"Ported but unregistered" resolves to address 0.** It bit this project again here
+  (`FUN_14012f670` was fully ported and simply never registered). When a feature is dead,
+  check registration before writing a second copy.
