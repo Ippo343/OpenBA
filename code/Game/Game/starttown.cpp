@@ -293,6 +293,52 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 // workplace for a profession key from the townMgr+0x100 BST. Used to verify the lodge
 // is findable after seating its profession key + registering it.
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);
+// workplacecomponent.cpp — true when the WPC live controller (BANISHED_LIVE_WPC_CONTROLLER)
+// is enabled; its state-2 ENTER (edf0) then registers workplaces through the SM itself.
+extern "C" bool WorkPlaceComponent_ControllerLive();
+
+static uint32_t TypeId(const char* name);
+static void* FindComponentOnEntity(void* entity, uint32_t typeId);
+
+// ---------------------------------------------------------------------------
+// Shared "activate a pre-built workplace" replay (open E consolidation — was two
+// near-identical inline blocks, one in StartTown_SpawnStructures and one in the
+// ForesterLodge spawner). A spawned-already-complete building skipped both retail
+// seatings: the data-load serialize that seats WPC+0x48 = WorkPlaceDescription+0x20,
+// and the construction-time f520 activation that SetAccepting(true)s the site. Replay
+// both for any employer (desc carries a profession; houses/storage keep key 0 and are
+// skipped — the profession BST is the EMPLOYER list, houses live in townMgr+0x20).
+//
+// REGISTRATION into the townMgr+0x100 profession BST is the WPC controller's state-2
+// ENTER (edf0) and runs by itself on the first SM tick when the live controller is
+// enabled (start-town structures are stamped +0x52 = 2). When the controller is off —
+// or the caller must QUERY the BST before the first tick (the ForesterLodge employ
+// pass runs FindAvailableBuilding during StartTown) — register here too; the insert
+// (impl_95a0) dedups, so both paths running is harmless.
+// Returns the seated profession key (0 = not an employer, nothing done).
+static uint64_t StartTown_ActivateWorkplace(void* entity, bool registerNow,
+                                            const char* logTag) {
+    if (!entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    void* wpc = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
+    if (!wpc) return 0;
+    int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+    uint8_t* w = reinterpret_cast<uint8_t*>(wpc);
+    void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
+    uint64_t profKey = wpDesc
+        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc) + 0x20) : 0;
+    if (!townMgr || profKey == 0) return 0;
+
+    *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
+    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
+    const bool doRegister = registerNow || !WorkPlaceComponent_ControllerLive();
+    if (doRegister) TownRegistry_RegisterWorkplace(townMgr, wpc);
+    fprintf(stderr, "[%s] workplace activate: WPC=%p profKey(desc+0x20)=0x%llx -> seated "
+            "+0x48, accepting=1, %s\n", logTag, wpc, (unsigned long long)profKey,
+            doRegister ? "registered into townMgr+0x100"
+                       : "registration deferred to the state-2 enter (ctrl live)");
+    fflush(stderr);
+    return profKey;
+}
 
 // WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
 // occupied visual was deferred to gameplay time. Drained once by
@@ -1088,36 +1134,18 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 fflush(stderr);
             }
 
-            // ── Run the WorkPlaceComponent state-2 ("built") ENTER these structures
-            //    skipped, so the town's employers land in the profession registry. ──
-            // Retail wires it through the component's own controller table
-            // (WorkPlaceDescription_helper_f3a0 @0x14012f3a0: state 2 -> helper_edf0), and
-            // edf0 = f670 + AddWorkplaceToProfessionTree. f670's tail is the part that seats
-            // WPC+0x48 = WorkPlaceDescription+0x20 — but only on a building whose key is
-            // CURRENTLY the Builder profession, i.e. one that actually went through
-            // construction. A start-town structure is spawned already-complete and never held
-            // the builder key, so f670 no-ops, +0x48 stays 0, and edf0's `key == 0` early-out
-            // means nothing registers: townMgr+0x100 stayed null and no citizen could find a
-            // job. Seat the key f670 would have left, then run the registration half.
-            // Buildings with no profession on their description (houses, storage) keep key 0
-            // and are correctly skipped — the profession BST is the EMPLOYER list, while
-            // houses live in the separate flat townMgr+0x20 list the residence state-2 enter
-            // fills. The ForesterLodge spawner does the same three steps inline; this makes
-            // every other founding employer behave identically.
-            void* wpcBuilt2 = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
-            if (wpcBuilt2 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                int64_t townMgr2 = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
-                uint8_t* w2 = reinterpret_cast<uint8_t*>(wpcBuilt2);
-                void* wpDesc2 = *reinterpret_cast<void**>(w2 + 0x18);
-                uint64_t profKey2 = wpDesc2
-                    ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc2) + 0x20) : 0;
-                if (townMgr2 && profKey2 != 0) {
-                    *reinterpret_cast<uint64_t*>(w2 + 0x48) = profKey2;
-                    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpcBuilt2), true);
-                    TownRegistry_RegisterWorkplace(townMgr2, wpcBuilt2);
-                    fprintf(stderr, "[startTown::struct] [%d] workplace state-2 enter: "
-                            "WPC=%p profKey(desc+0x20)=0x%llx -> registered into townMgr+0x100\n",
-                            logIndex, wpcBuilt2, (unsigned long long)profKey2);
+            // ── Activate a pre-built EMPLOYER: seat WPC+0x48 = desc+0x20 (the key retail
+            // seats at data load and f670 re-seats at build completion) + SetAccepting.
+            // Registration into townMgr+0x100 is the WPC controller's state-2 enter
+            // (edf0), which the +0x52 = 2 stamp above makes fire on the first SM tick
+            // when BANISHED_LIVE_WPC_CONTROLLER is on; with it off, the helper registers
+            // inline (the pre-controller stand-in). See StartTown_ActivateWorkplace.
+            {
+                uint64_t profKeyS = StartTown_ActivateWorkplace(
+                    entity, /*registerNow=*/false, "startTown::struct");
+                if (profKeyS != 0) {
+                    fprintf(stderr, "[startTown::struct] [%d] employer activated "
+                            "(profKey=0x%llx)\n", logIndex, (unsigned long long)profKeyS);
                     fflush(stderr);
                 }
             }
@@ -1445,62 +1473,31 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 
     StartTown_PickMeshProbe(entity);
 
-    // ---- Phase 1 infra: register the workplace into the townMgr+0x100 PROFESSION BST
-    // (the list FindAvailableBuilding scans), keyed by WorkPlaceComponent+0x48. This is
-    // the faithful list for a WORKPLACE — townMgr+0x20 is the RESIDENCE/house list
-    // (scanned by sub_0e70, which correctly ignores a lodge since a lodge has no
-    // ResidenceComponent). This only makes the lodge FINDABLE; actual worker ASSIGNMENT
-    // is player-driven via the Phase-5 ProfessionUI worker-count widget (there is no
-    // organic auto-assigner in retail). Mirrors the exe placement-path registration
-    // (FUN_14012f520 / WorkPlaceDescription_helper_edf0 -> AddWorkplaceToProfessionTree).
+    // ---- Phase 1 infra: activate the lodge as an employer (seat WPC+0x48 from the
+    // desc, SetAccepting) via the shared StartTown_ActivateWorkplace helper. The lodge
+    // passes registerNow=true even when the WPC live controller would register it on
+    // the first SM tick, because StartTown_EmployForesters queries the townMgr+0x100
+    // BST (FindAvailableBuilding) BEFORE any tick runs; the insert dedups, so the
+    // state-2 enter re-registering later is harmless. Worker ASSIGNMENT itself is the
+    // Phase-5 employ cascade — this only makes the lodge FINDABLE.
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
-        void* wpc = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
-        if (townMgr && wpc) {
-            // Phase 4: seat the WorkPlaceComponent profession key (WPC+0x48) from the
-            // lodge's own WorkPlaceDescription (WPC+0x18 -> desc+0x20 = the forester
-            // Profession*, the value ProfessionList/townMgr+0x100 key by). The retail
-            // seater FUN_14012f520 reads it from the ProfessionList iteration cursor
-            // (gw+0xb0+0x38); at spawn we take the equivalent value off our own desc so
-            // registration + a FindAvailableBuilding query use the SAME key by
-            // construction. Skip if the desc carries no profession (key stays 0).
-            uint8_t* w = reinterpret_cast<uint8_t*>(wpc);
-            void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
-            uint64_t profKey = wpDesc ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc) + 0x20) : 0;
-            if (profKey != 0) *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
-            g_foresterProfKey = profKey;   // for the deferred employ pass
+        uint64_t profKey = StartTown_ActivateWorkplace(
+            entity, /*registerNow=*/true, "Phase4Employ");
+        g_foresterProfKey = profKey;   // for the deferred employ pass
 
-            // Enable the workplace via the faithful activation tail Entity_impl_fc00(WPC, 1)
-            // (0x14012fc00): sets the accepting flag WPC+0x50 = 1 AND raises the "no workers"
-            // warning status-icon (bit 4) since the lodge spawns unstaffed on its designated
-            // job. This is the genuine build-complete -> accepting EVENT that drives the
-            // warning; WorkplaceComponent_Attach clears it when the employ pass seats a
-            // forester. (Replaces the old per-frame StatusIcon occupancy poll.) The accepting
-            // flag also gates FindAvailableBuilding's reachability check (FUN_140002e10 ->
-            // WPC+0x50 != 0); the inert lodge never ran the activation so it stayed 0.
-            WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
-
-            TownRegistry_RegisterWorkplace(townMgr, wpc);
-            fprintf(stderr, "[Phase4Employ] lodge WPC=%p desc=%p profKey(desc+0x20)=0x%llx "
-                    "-> seated WPC+0x48=0x%llx; registered into townMgr+0x100\n",
-                    wpc, wpDesc, (unsigned long long)profKey,
-                    (unsigned long long)*(uint64_t*)(w + 0x48));
-
-            // Verify the reader finds it: FindAvailableBuilding(townMgr, &out, profKey)
-            // returns this lodge entity (its WorkPlaceComponent worker count < WorkComponent
-            // capacity + the WPC+0x50 enable flag). Proves the townMgr+0x100 registry + the
-            // FindAvailableBuilding reader work end-to-end (the FIND half of producer
-            // employment). The remaining ASSIGN half = the ProfessionUI worker-count seat
-            // cascade (impl_dd10 0x14007dd10 -> cbf0/ca20/c5f0/c4b0 -> AssignWorkplace).
-            if (profKey != 0) {
-                int64_t foundIBP = 0;
-                FindAvailableBuilding(townMgr, &foundIBP, profKey);
-                fprintf(stderr, "[Phase4Employ] FindAvailableBuilding(profKey=0x%llx) -> %p "
-                        "(lodge entity=%p) %s\n",
-                        (unsigned long long)profKey, (void*)foundIBP, entity,
-                        (foundIBP == reinterpret_cast<int64_t>(entity)) ? "MATCH" :
-                        (foundIBP != 0 ? "other-building" : "NOT-FOUND"));
-            }
+        // Verify the reader finds it: FindAvailableBuilding(townMgr, &out, profKey)
+        // returns this lodge entity (worker count < capacity + the WPC+0x50 enable
+        // flag). Proves the townMgr+0x100 registry + reader end-to-end (the FIND half
+        // of producer employment); the ASSIGN half is the ProfessionUI seat cascade.
+        if (townMgr && profKey != 0) {
+            int64_t foundIBP = 0;
+            FindAvailableBuilding(townMgr, &foundIBP, profKey);
+            fprintf(stderr, "[Phase4Employ] FindAvailableBuilding(profKey=0x%llx) -> %p "
+                    "(lodge entity=%p) %s\n",
+                    (unsigned long long)profKey, (void*)foundIBP, entity,
+                    (foundIBP == reinterpret_cast<int64_t>(entity)) ? "MATCH" :
+                    (foundIBP != 0 ? "other-building" : "NOT-FOUND"));
             fflush(stderr);
         }
     }
@@ -2039,6 +2036,22 @@ static bool FamilyLinksOn() {
     return en == 1;
 }
 
+// ---- Retail founding spawn (BANISHED_LIVE_FOUNDING_SPAWN) -------------------
+// The faithful port of sub_1040 / impl_0dd0 lives in founding_spawn.cpp. When the flag
+// is on it REPLACES SpawnOneCitizen for the founding cohort: FUN_140117080 reproduces
+// gender / mesh variant / spawn transform / name / colour / age / lifespan / housing,
+// all of which SpawnOneCitizen also does by hand, so running both double-applies them
+// and burns two RNG streams. The family CROSS-LINKS below are part of impl_0dd0 (not of
+// sub_1040) and are unconditional in retail, so the retail path performs them too — the
+// FamilyLinksOn() opt-in only governs the hand-rolled path.
+extern "C" bool  StartTown_FoundingSpawnEnabled();
+extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate);
+extern "C" float StartTown_FoundingChildAge(void* citizenTemplate);
+extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citizenTemplate,
+                                               void* entityList, const float base[3],
+                                               float age, char genderSel, char educated,
+                                               uint8_t** outCitizenComp);
+
 // CitizenComponent_helper_68a0 (0x1401168a0) — splice `member` into `host`'s family
 // ring (host +0x260 head, member +0x268/+0x270 links, member +0x258 host back-ref).
 // Ported as CitizenComp_JoinRoster_68a0 and registered by reg_citizen_25.cpp.
@@ -2535,6 +2548,16 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // gender/mesh one step out of phase with vanilla for the whole spawn.
     int kidVariant = 1;
 
+    // Retail spawn (founding_spawn.cpp) vs the hand-rolled SpawnOneCitizen — mutually
+    // exclusive, see the extern block above. The family cross-links are impl_0dd0's own
+    // work and are unconditional in retail, so the retail path always performs them.
+    const bool retailSpawn = StartTown_FoundingSpawnEnabled();
+    const bool doLinks     = retailSpawn || FamilyLinksOn();
+    fprintf(stderr, "[startTown::citizen] spawn path = %s (BANISHED_LIVE_FOUNDING_SPAWN), "
+            "familyLinks=%d\n", retailSpawn ? "RETAIL sub_1040" : "hand-rolled SpawnOneCitizen",
+            (int)doLinks);
+    fflush(stderr);
+
     int spawned = 0;
     for (int f = 0; f < famCount; ++f) {
         uint8_t* fam = families + (size_t)f * FAMILY_STRIDE;
@@ -2547,13 +2570,31 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         // random adult age, full-size. Matches CitizenComponent_impl_0dd0.
         uint8_t* adultA = nullptr;   // retail local_res18 — variant 0 / gender 1
         uint8_t* adultB = nullptr;   // retail local_res8  — variant 1 / gender 0 (ring host)
-        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0, &adultA)) { ++spawned; fe.push_back(a); }
-        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1, &adultB)) { ++spawned; fe.push_back(b); }
+        if (retailSpawn) {
+            // Each adult gets its OWN RandFloat age draw immediately before its spawn —
+            // that is one draw in the shared world RNG stream, so it must not be hoisted
+            // out of the pair. genderSel '\0' then '\x01', matching impl_0dd0.
+            float ageA = StartTown_FoundingAdultAge(citizenTemplate);
+            if (void* a = StartTown_SpawnColonistRetail(startConfig, citizenTemplate, entityList,
+                                                        base, ageA, '\0', (char)educated, &adultA)) {
+                ++spawned; fe.push_back(a);
+                CitizenCarryStorageInit(a);   // standalone-only: inert StorageComponent OnAdded
+            }
+            float ageB = StartTown_FoundingAdultAge(citizenTemplate);
+            if (void* b = StartTown_SpawnColonistRetail(startConfig, citizenTemplate, entityList,
+                                                        base, ageB, '\x01', (char)educated, &adultB)) {
+                ++spawned; fe.push_back(b);
+                CitizenCarryStorageInit(b);
+            }
+        } else {
+            if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0, &adultA)) { ++spawned; fe.push_back(a); }
+            if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1, &adultB)) { ++spawned; fe.push_back(b); }
+        }
 
         // Spouse cross-link (impl_0dd0: res18->+0x250 = res8; res8->+0x250 = res18).
         // Retail stores the raw component pointer taken out of the CheckPtr'd IBP.
         int linkedKids = 0;
-        if (FamilyLinksOn() && adultA && adultB) {
+        if (doLinks && adultA && adultB) {
             *reinterpret_cast<int64_t*>(adultA + 0x250) = reinterpret_cast<int64_t>(adultB);
             *reinterpret_cast<int64_t*>(adultB + 0x250) = reinterpret_cast<int64_t>(adultA);
         }
@@ -2564,10 +2605,24 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
         for (int c = 0; c < kids; ++c) {
             uint8_t* kid = nullptr;
-            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant, &kid)) { ++spawned; fe.push_back(k); }
+            if (retailSpawn) {
+                // kidVariant is retail's bVar12 in the variant encoding: bVar12 true ==
+                // genderSel '\x01' == gender 0 == variantIdx 1. educated is always '\0'
+                // for children in impl_0dd0 (sub_1040 would force it anyway).
+                float ageK = StartTown_FoundingChildAge(citizenTemplate);
+                if (void* k = StartTown_SpawnColonistRetail(startConfig, citizenTemplate, entityList,
+                                                            base, ageK,
+                                                            (kidVariant == 1) ? '\x01' : '\0',
+                                                            '\0', &kid)) {
+                    ++spawned; fe.push_back(k);
+                    CitizenCarryStorageInit(k);
+                }
+            } else {
+                if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant, &kid)) { ++spawned; fe.push_back(k); }
+            }
             // impl_0dd0 @0x1400a0fcd: helper_68a0(res8, &child) — the child joins the
             // SECOND adult's ring (+0x260 head, child +0x258 host back-ref).
-            if (FamilyLinksOn() && adultB && kid) {
+            if (doLinks && adultB && kid) {
                 EnsureFamilyFuncs();
                 if (s_fn_JoinFamily_68a0) {
                     int64_t node = reinterpret_cast<int64_t>(kid);
@@ -2581,7 +2636,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d "
                 "spouseLink=%d ringKids=%d\n",
                 f, educated, maxChildren, kids,
-                (FamilyLinksOn() && adultA && adultB) ? 1 : 0, linkedKids);
+                (doLinks && adultA && adultB) ? 1 : 0, linkedKids);
         fflush(stderr);
     }
 
