@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers for Update
@@ -836,6 +837,28 @@ FindWorkLabel:
                     void* result = s_fn_FindPartner(
                         reinterpret_cast<int64_t>(self), partnerBuf);
                     int64_t partnerIBP = *reinterpret_cast<int64_t*>(result);
+                    // [DIAG, default OFF] BANISHED_MARRY_TRACE=1 — the finder scan is the
+                    // one step the census cannot see: a citizen can clear every gate and
+                    // still get null back because no opposite-gender, unmarried candidate
+                    // sits inside the description's age window (desc+0x4c). Log the first
+                    // 40 calls with the caller's own gender/age so a null result can be
+                    // told apart from "never even asked".
+                    static int s_marryTrace = -1;
+                    if (s_marryTrace < 0)
+                        s_marryTrace = std::getenv("BANISHED_MARRY_TRACE") ? 1 : 0;
+                    if (s_marryTrace) {
+                        static int s_calls = 0, s_hits = 0;
+                        if (partnerIBP != 0) ++s_hits;
+                        if (++s_calls <= 40 || partnerIBP != 0) {
+                            fprintf(stderr, "[Marry] call %d comp=%p gender=%d age=%.2f "
+                                    "marryAge=%.2f window=%.2f -> partner=%p (hits=%d)\n",
+                                    s_calls, (void*)self, *reinterpret_cast<int*>(p + 0x38),
+                                    *reinterpret_cast<float*>(p + 0x3C), partnerAge,
+                                    *reinterpret_cast<float*>(desc + 0x4c),
+                                    (void*)partnerIBP, s_hits);
+                            fflush(stderr);
+                        }
+                    }
                     *reinterpret_cast<int64_t*>(pPartner) = partnerIBP;
                     if (partnerIBP != 0) {
                         *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x200;
@@ -953,9 +976,20 @@ LAB_140113873:
                         float roll2 = s_fn_RandFloat ? s_fn_RandFloat(random2) : 0.5f;
                         float timerBase = *reinterpret_cast<float*>(desc + 0x5C);
                         float timerRange = *reinterpret_cast<float*>(desc + 0x60);
-                        uint32_t newTimer = static_cast<uint32_t>(roll2 * timerRange + timerBase);
-                        uint32_t xorMask = s_DAT_1401722c0 ? *s_DAT_1401722c0 : 0;
-                        *reinterpret_cast<uint32_t*>(p + 0x4C) = newTimer ^ xorMask;
+                        // The post-birth cooldown is stored NEGATIVE: retail is
+                        //   XORPS XMM0, [0x1401722c0]   (0x80000000 x4 = the float sign mask)
+                        // i.e. `+0x4c = -(rand*range + base)`, which the `fVar14 < 0` branch
+                        // above then counts back up toward 0. The decompiler renders that as
+                        // `(uint)(...) ^ DAT_1401722c0` and this port had taken it literally:
+                        // a numeric float->int truncation, so e.g. 12.7 became 0x0000000C,
+                        // and flipping bit 31 of THAT yields -1.7e-44 — a cooldown that
+                        // expires on the very next tick. Flip the sign bit of the float's
+                        // BITS, not of a truncated integer.
+                        float cooldown = roll2 * timerRange + timerBase;
+                        uint32_t bits;
+                        std::memcpy(&bits, &cooldown, sizeof(bits));
+                        bits ^= (s_DAT_1401722c0 ? *s_DAT_1401722c0 : 0x80000000u);
+                        std::memcpy(p + 0x4C, &bits, sizeof(bits));
                     } else {
                         // Passed reproduction roll — handle life event 6 (childbirth)
                         char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 6, nullptr) : 0;
@@ -1853,6 +1887,10 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
     return *reinterpret_cast<char*>(cell + 0x22 + *reinterpret_cast<int64_t*>(grid + 0x20)) != '\0';
 }
 
+// The standalone type-name -> CRC registry lookup (also declared further down, next to
+// the storage finder that uses it). Needed here for the newborn-component fallback.
+namespace Object { uint32_t GetTypeIdByName(const char* name); }
+
 // Reimpl of CitizenComponent_helper_1b90 (0x140111b90):
 // procreation — count nearby eligible mature citizens to bias child gender, allocate
 // a new ComponentEntity copy of the citizen description, find its CitizenAIComponent
@@ -1903,10 +1941,35 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     fn_InternalBasePtr_Ctor(&childIBP, child);
     fn_InternalBasePtr_CheckPtr(&childIBP);
 
-    // find the child's CitizenAIComponent (DAT_1401c7158)
-    void* aiComp = FindCompByTypeId(childIBP, s_TypeId_AIComp ? *s_TypeId_AIComp : 0);
+    // Find the newborn's CitizenComponent — retail reads the type id from DAT_1401c7158,
+    // which is BaseTypeInfo("CitizenComponent"), NOT CitizenAIComponent (see the corrected
+    // note in standalone/reg_citizenai_typeids.cpp).
+    //
+    // [STANDALONE GAP → CRASH FIX] That .rdata global is only filled behind the opt-in
+    // BANISHED_LIVE_CITIZENAI_CITID/_TIDS gate, so on a default run it reads 0, the find
+    // matches nothing, and the deferred init below was called with a NULL component:
+    // ACCESS_VIOLATION reading 0x10 inside CitizenComp_DeferredInit_117080's first
+    // `*(self+0x10)` (observed on the very first in-game birth, ~frame 5000, release
+    // build 2026-07-25). Fall back to the self-contained name→CRC lookup — the same
+    // pattern CitizenComp_FindSiblingByName uses — instead of filling the shared global,
+    // which would un-dormant ~30 unrelated readers.
+    uint32_t tidCitizen = (s_TypeId_AIComp && *s_TypeId_AIComp) ? *s_TypeId_AIComp
+                                                                : ::Object::GetTypeIdByName("CitizenComponent");
+    void* aiComp = FindCompByTypeId(childIBP, tidCitizen);
     int64_t aiIBP = 0;
     fn_InternalBasePtr_Ctor(&aiIBP, aiComp);
+    if (aiIBP == 0) {
+        // Never true in retail (the newborn is a copy of a citizen template, so it always
+        // carries the component). Abort the birth rather than hand the deferred init a null
+        // `this` — a crash here kills the run on the first childbirth.
+        static int s_warned = 0;
+        if (s_warned < 4) { ++s_warned;
+            fprintf(stderr, "[Birth] ABORT: newborn entity %p has no CitizenComponent "
+                    "(tid=%u) — skipping deferred init\n", child, tidCitizen);
+            fflush(stderr);
+        }
+        return;
+    }
 
     int64_t spawnArg = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(gw + 0xb0) + 0x30);
     int64_t parentIBP = 0;

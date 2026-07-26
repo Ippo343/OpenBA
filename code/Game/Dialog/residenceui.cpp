@@ -283,6 +283,32 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 #endif
 
                 for (int r = 0; r < residentCount; r++) {
+                    // [DECLARED DEVIATION — ROW-ARRAY BOUND] Retail indexes the row array at
+                    // controller+0x30 by resident index with NO bound: its invariant is that a
+                    // residence can never hold more residents than the dialog table has rows
+                    // (house capacity <= table rows, enforced when residents are assigned).
+                    // Standalone breaks that invariant on the founding side — StartTown's
+                    // housing pass rosters a whole family into slot[0] regardless of the
+                    // ResidenceDescription capacity — so once in-game BIRTHS push a house past
+                    // the row count, retail's unbounded walk reads a row entry past the array
+                    // and hands the garbage pointer to UI::Element::SetFlagsOnOff: observed as
+                    // an ACCESS_VIOLATION inside Runtime-x64.dll at ResidenceUI_Slot7+0x295
+                    // (2026-07-25, first soak in which births survived). Stop at the last real
+                    // row instead of walking off the end, and say so — the residents beyond it
+                    // are simply not displayed. The real fix is capacity-bounded residence
+                    // assignment; see notes/CITIZEN_ONREMOVE_BRIEF.md.
+                    const int rowCapacity = *(int*)(s + 0x38);
+                    if (rowIdx >= rowCapacity) {
+                        static int s_warned = 0;
+                        if (s_warned < 4) { ++s_warned;
+                            fprintf(stderr, "[ResidenceUI] GUARD: residence %p has %d resident(s) "
+                                    "in group %d but the dialog table only has %d row(s) — "
+                                    "truncating (SA over-filled house)\n",
+                                    (void*)storageComp, residentCount, g, rowCapacity);
+                            fflush(stderr);
+                        }
+                        break;
+                    }
                     // Original CheckPtr's the component IBP every iteration
                     fn_InternalBasePtr_CheckPtr(&storageComp);
 

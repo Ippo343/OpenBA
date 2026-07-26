@@ -27,14 +27,27 @@
 #include <cstdlib>
 
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void*, int, const char*); // 0x140116dd0
+// CitizenComponent_sub_1fa0 (0x140111fa0) — re-parent a citizen: detach from the current
+// guardian's family ring (+0x258 / the host's +0x260 ring) and attach to the new one.
+// Passing a null IBP is exactly what CitizenComponent::Update does when a grown child
+// finds its own home and moves out.
+extern void CitizenComp_sub_1fa0(int64_t selfV, void* param2);
+// CitizenComponent_AssignWorkplace (0x1401163d0) — MISNAMED in retail: this is the
+// RESIDENCE assigner (sets +0x238 = home and rosters the citizen into the house's
+// ResidenceComponent). Update calls it right after the move-out with the house sub_0e70
+// found; the harness calls it with the house the citizen already lived in.
+extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP, int slotIndex);
 
 namespace {
 int  s_count       = -1;   // -1 = not yet read from the environment
 int  s_atFrame     = 900;
 int  s_censusEvery = 0;
 int  s_killFamily  = 0;
+int  s_marryHarness = 0;
+int  s_moved        = 0;   // citizens the marriage harness has made independent so far
 bool s_fired       = false;
 bool s_firedFamily = false;
+bool s_firedMarry  = false;
 
 void Init() {
     if (s_count >= 0) return;
@@ -46,6 +59,8 @@ void Init() {
     s_censusEvery = (c && c[0]) ? std::atoi(c) : 0;
     const char* kf = std::getenv("BANISHED_KILL_FAMILY");
     s_killFamily = (kf && kf[0]) ? std::atoi(kf) : 0;
+    const char* mh = std::getenv("BANISHED_MARRY_HARNESS");
+    s_marryHarness = (mh && mh[0]) ? std::atoi(mh) : 0;
     if (s_count > 0) {
         std::fprintf(stderr, "[DeathHarness] ENABLED — killing %d citizen(s) at frame %d\n",
                      s_count, s_atFrame);
@@ -55,6 +70,10 @@ void Init() {
     if (s_killFamily > 0)
         std::fprintf(stderr, "[DeathHarness] will kill %d citizen(s) WITH family links "
                      "once any exist\n", s_killFamily);
+    if (s_marryHarness > 0)
+        std::fprintf(stderr, "[MarryHarness] ENABLED — will move up to %d grown, unmarried "
+                     "citizen(s) out of their guardian's household once any are old enough\n",
+                     s_marryHarness);
     std::fflush(stderr);
 }
 
@@ -77,7 +96,18 @@ inline bool HasFamily(int64_t c) {
 
 void Census(int frameNum) {
     int64_t* list; int n; int64_t townMgr;
-    if (!TownList(&list, &n, &townMgr)) return;
+    if (!TownList(&list, &n, &townMgr)) {
+        // TownList fails when the citizen array is null OR the count is 0 — i.e. an EXTINCT
+        // town looks exactly like "no census at all". Silence then reads as a hung process
+        // (it did, 2026-07-25: a FORCE_SPEED=40 soak went quiet and three gdb samples inside
+        // the DX11 Present path were misread as a stall, when the town had simply died out —
+        // RTSS's frame limiter blocks in Present, so that is where an IDLE run always samples).
+        // Say it out loud instead.
+        std::fprintf(stderr, "[FamilyCensus] frame %d: NO CITIZENS — town list is empty or "
+                     "unavailable (extinct town, or the world is not built yet)\n", frameNum);
+        std::fflush(stderr);
+        return;
+    }
     int spouse = 0, ring = 0, partner = 0, host = 0;
     // Gender (+0x38): 0 = female, non-zero = male. Retail's per-citizen init writes it for
     // every colonist; the founding spawner reproduces it from the mesh variant. A town that
@@ -85,28 +115,168 @@ void Census(int frameNum) {
     // helper_fe40 can never pass) and every adult passes the reproduction gate — the exact
     // symptom of the gender write being skipped. Tracked here so the A/B is measurable.
     int female = 0, male = 0;
+    // Marriage-gate breakdown. CitizenComponent::Update's partner block (the tail at
+    // 0x140113827) only calls the finder when ALL of these hold:
+    //     +0x258 (guardian/host citizen) == 0
+    //     +0x238 (home) != 0
+    //     +0x250 (spouse) == 0
+    //     +0x3c (age) >= desc+0x48 (marriage age)
+    // A soak that reports "0 marriages" is uninformative without knowing which of the
+    // four is the one nobody passes, so count them separately. `eligible` is the number
+    // of citizens that actually reach the finder on a given tick.
+    int adults = 0, children = 0;
+    int overMarryAge = 0, unmarried = 0, noGuardian = 0, hasHome = 0, eligible = 0;
+    float youngest = 1e9f, oldest = -1e9f, marryAge = -1.0f, adultAge = -1.0f;
+    // Survival state. The standalone town has no food economy: houses are seeded with a
+    // fixed stock and nothing replaces it, so hunger (+0x44) and thirst (+0x48) climb until
+    // the whole cohort starves at once. Without these, a soak just ends and the census goes
+    // quiet — which is exactly how the 2026-07-25 die-off was first misread as a hang.
+    float hungerMax = 0.0f, hungerSum = 0.0f, thirstMax = 0.0f, thirstSum = 0.0f;
+    int   sick = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = list[i];
         if (!c) continue;
-        if (*reinterpret_cast<int64_t*>(c + 0x250) != 0) spouse++;
+        bool noSpouse = *reinterpret_cast<int64_t*>(c + 0x250) == 0;
+        if (!noSpouse) spouse++; else unmarried++;
         if (*reinterpret_cast<int64_t*>(c + 0x260) != 0) ring++;
         if (*reinterpret_cast<int64_t*>(c + 0x208) != 0) partner++;
-        if (*reinterpret_cast<int64_t*>(c + 0x258) != 0) host++;
+        bool guardianFree = *reinterpret_cast<int64_t*>(c + 0x258) == 0;
+        if (!guardianFree) host++;
         if (*reinterpret_cast<int32_t*>(c + 0x38) == 0) female++; else male++;
+
+        float hunger = *reinterpret_cast<float*>(c + 0x44);
+        float thirst = *reinterpret_cast<float*>(c + 0x48);
+        hungerSum += hunger; thirstSum += thirst;
+        if (hunger > hungerMax) hungerMax = hunger;
+        if (thirst > thirstMax) thirstMax = thirst;
+        if (*reinterpret_cast<int64_t*>(c + 0x68) != 0) sick++;
+
+        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        if (!desc) continue;
+        float age = *reinterpret_cast<float*>(c + 0x3c);
+        adultAge  = *reinterpret_cast<float*>(desc + 0x44);
+        marryAge  = *reinterpret_cast<float*>(desc + 0x48);
+        if (age < youngest) youngest = age;
+        if (age > oldest)   oldest   = age;
+        if (age >= adultAge) adults++; else children++;
+        if (!noSpouse) continue;                 // already married: not a candidate
+        bool old_enough = age >= marryAge;
+        bool home       = *reinterpret_cast<int64_t*>(c + 0x238) != 0;
+        if (old_enough)   overMarryAge++;
+        if (guardianFree) noGuardian++;
+        if (home)         hasHome++;
+        if (old_enough && guardianFree && home) eligible++;
     }
-    std::fprintf(stderr, "[FamilyCensus] frame %d: %d citizens — spouse(+0x250)=%d "
+    static int s_prevN = -1;
+    int delta = (s_prevN < 0) ? 0 : n - s_prevN;
+    s_prevN = n;
+    std::fprintf(stderr, "[FamilyCensus] frame %d: %d citizens (%+d) — spouse(+0x250)=%d "
                  "ring(+0x260)=%d partner(+0x208)=%d host(+0x258)=%d "
                  "gender(+0x38) female=%d male=%d\n",
-                 frameNum, n, spouse, ring, partner, host, female, male);
+                 frameNum, n, delta, spouse, ring, partner, host, female, male);
+    // A grown child can only stop being someone's dependant (+0x258) by finding a home of
+    // its OWN: CitizenComponent::Update -> sub_0e70 -> sub_1fa0(self, null). sub_0e70 scans
+    // the town building registry at townMgr+0x20/+0x28 and the profession/category BST at
+    // townMgr+0x100. Both are populated by WorkPlaceComponent::OnCreate in retail and are
+    // empty in standalone's start town, so report them next to the gate counts — an
+    // "ELIGIBLE=0 / noGuardian=0" census means nothing without knowing whether the finder
+    // it depends on had anything to find.
+    int64_t reg   = *reinterpret_cast<int64_t*>(townMgr + 0x20);
+    int     regN  = *reinterpret_cast<int32_t*>(townMgr + 0x28);
+    int64_t bst   = *reinterpret_cast<int64_t*>(townMgr + 0x100);
+    int     bldgN = *reinterpret_cast<int32_t*>(townMgr + 0x68);
+    std::fprintf(stderr, "[FamilyCensus]   townMgr=%p buildingRegistry(+0x20)=%p count(+0x28)=%d "
+                 "profBST(+0x100)=%p bldgCount(+0x68)=%d\n",
+                 reinterpret_cast<void*>(townMgr), reinterpret_cast<void*>(reg), regN,
+                 reinterpret_cast<void*>(bst), bldgN);
+    std::fprintf(stderr, "[FamilyCensus]   ages: %d adult / %d child (min=%.2f max=%.2f "
+                 "adultAge=%.2f marryAge=%.2f) — unmarried=%d of which overMarryAge=%d "
+                 "noGuardian=%d hasHome=%d ELIGIBLE=%d\n",
+                 adults, children, (youngest > 1e8f ? 0.0f : youngest),
+                 (oldest < -1e8f ? 0.0f : oldest), adultAge, marryAge,
+                 unmarried, overMarryAge, noGuardian, hasHome, eligible);
+    // desc+0xcc/+0xd0 are the hunger warn/death thresholds, +0xec/+0xf0 the thirst ones —
+    // read them off the last citizen's description so the numbers have a scale.
+    float hungerDeath = 0.0f, thirstDeath = 0.0f;
+    for (int i = 0; i < n; i++) {
+        int64_t c = list[i];
+        int64_t d = c ? *reinterpret_cast<int64_t*>(c + 0x288) : 0;
+        if (d) { hungerDeath = *reinterpret_cast<float*>(d + 0xd0);
+                 thirstDeath = *reinterpret_cast<float*>(d + 0xf0); break; }
+    }
+    std::fprintf(stderr, "[FamilyCensus]   survival: hunger avg=%.1f max=%.1f (death %.1f) "
+                 "thirst avg=%.1f max=%.1f (death %.1f) sick(+0x68)=%d\n",
+                 n ? hungerSum / n : 0.0f, hungerMax, hungerDeath,
+                 n ? thirstSum / n : 0.0f, thirstMax, thirstDeath, sick);
     std::fflush(stderr);
 }
 }  // namespace
+
+// ---- Marriage harness (BANISHED_MARRY_HARNESS=<n>) --------------------------------
+// The marriage block in CitizenComponent::Update only runs for a citizen with
+//   +0x258 (guardian) == 0, +0x238 (home) != 0, +0x250 (spouse) == 0, age >= desc+0x48.
+// A citizen born into a family clears the FIRST of those only by finding a home of its
+// own — Update -> sub_0e70 -> sub_1fa0(self, null). sub_0e70 scans the town building
+// registry (townMgr+0x20/+0x28) and the profession BST (townMgr+0x100), and BOTH are
+// empty in the standalone start town (see the [FamilyCensus] townMgr line), so no
+// standalone citizen can ever move out and therefore none can ever marry. That is an
+// economy-registry gap, not a marriage bug — but it makes the marriage code itself
+// untestable, exactly as the death harness makes CitizenComponent::OnRemove testable.
+//
+// This harness performs the move-out the retail way: sub_1fa0(citizen, nullIBP), the
+// same call Update and the marriage block itself make. Leaving the household also drops
+// the citizen out of its guardian's house (+0x238 goes to 0), and a homeless citizen
+// still fails the marriage gate — so, exactly as Update does one line later, the harness
+// re-assigns a home immediately: the very house the citizen already lived in, which
+// keeps the residence roster count unchanged. It does NOT touch +0x250 or the age gate;
+// everything after this is the game's own code path.
+void MoveOutGrownChildren(int frameNum) {
+    int64_t* list; int n; int64_t townMgr;
+    if (!TownList(&list, &n, &townMgr)) return;
+    for (int i = 0; i < n && s_moved < s_marryHarness; i++) {
+        int64_t c = list[i];
+        if (!c) continue;
+        if (*reinterpret_cast<int64_t*>(c + 0x250) != 0) continue;   // already married
+        if (*reinterpret_cast<int64_t*>(c + 0x258) == 0) continue;   // already independent
+        int64_t home = *reinterpret_cast<int64_t*>(c + 0x238);
+        if (home == 0) continue;                                     // no home to move back into
+        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        if (!desc) continue;
+        float age = *reinterpret_cast<float*>(c + 0x3c);
+        if (age < *reinterpret_cast<float*>(desc + 0x48)) continue;  // not old enough yet
+
+        int slot = *reinterpret_cast<int32_t*>(c + 0x240);
+        int64_t nullIBP = 0;
+        CitizenComp_sub_1fa0(c, &nullIBP);
+        int64_t guardian = *reinterpret_cast<int64_t*>(c + 0x258);
+        int64_t homeIBP = home;
+        CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(c), &homeIBP, slot);
+        int64_t homeAfter = *reinterpret_cast<int64_t*>(c + 0x238);
+        std::fprintf(stderr, "[MarryHarness] frame %d: moved out comp=%p age=%.2f gender=%d "
+                     "— guardian(+0x258) %s, home(+0x238) %p -> %p\n", frameNum,
+                     reinterpret_cast<void*>(c), age, *reinterpret_cast<int32_t*>(c + 0x38),
+                     guardian == 0 ? "cleared" : "STILL SET",
+                     reinterpret_cast<void*>(home), reinterpret_cast<void*>(homeAfter));
+        std::fflush(stderr);
+        if (guardian == 0 && homeAfter != 0) ++s_moved;
+    }
+    if (s_moved >= s_marryHarness) {
+        s_firedMarry = true;
+        std::fprintf(stderr, "[MarryHarness] %d citizen(s) independent and housed — done\n",
+                     s_moved);
+        std::fflush(stderr);
+    }
+}
 
 extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     Init();
 
     if (s_censusEvery > 0 && frameNum > 0 && (frameNum % s_censusEvery) == 0)
         Census(frameNum);
+
+    // Poll until enough citizens have aged past the marriage age, then move them out once.
+    if (s_marryHarness > 0 && !s_firedMarry && frameNum > 600 && (frameNum % 600) == 0)
+        MoveOutGrownChildren(frameNum);
 
     // Targeted kill: wait for family links to exist, then take those citizens.
     if (s_killFamily > 0 && !s_firedFamily && frameNum > 300 && (frameNum % 300) == 0) {
