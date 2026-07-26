@@ -627,13 +627,23 @@ static void BuildComponent_ClearBuilderWorkplace(uintptr_t bc) {
     }
 }
 
+// workplacecomponent.cpp — true when the WPC live controller is enabled (its state-2
+// enter IS edf0, dispatched by the state machine on the 8->2 transition).
+extern "C" bool WorkPlaceComponent_ControllerLive();
+
 static void BuildComponent_State8Finalize(uintptr_t bc) {
     BC8_Resolve();
     // Retail order: the 8->2 transition puts every controller into state 2, so the
     // workplace hand-off happens alongside this storage reconfigure. Do it first and
     // unconditionally — the storage half below early-returns on several data shapes
     // (no StorageComponent, no StorageDescription) and the profession must clear anyway.
-    BuildComponent_ClearBuilderWorkplace(bc);
+    // RETIRED under BANISHED_LIVE_WPC_CONTROLLER: the live WorkPlaceComponent controller
+    // links a real state node, so the SAME 8->2 transition enters state 2 on it and the
+    // SM dispatches edf0 itself (the faithful path). Running the hook too would drive
+    // the enter twice (the register half dedups, but f670's worker release does not
+    // want a second pass). Hook kept only for the kill-switch configuration.
+    if (!WorkPlaceComponent_ControllerLive())
+        BuildComponent_ClearBuilderWorkplace(bc);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
     uintptr_t storageIBP = 0;
     if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);

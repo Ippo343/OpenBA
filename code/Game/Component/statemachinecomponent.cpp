@@ -178,6 +178,12 @@ void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
 // ============================================================
 // Serialize (vtable slot [4], 0x14012b6a0)
 // Post-deserialization re-linking of ControllerComponents.
+//
+// ⚠ UNREGISTERED DEAD CODE — kept as the faithful reference port only. Do NOT
+// register it for 0x14012b6a0: it writes the first controller's default into
+// +0x52 UNCONDITIONALLY, which is exactly the clobber the lazy-link fix in
+// LinkControllers_Standalone exists to avoid (retail can only afford this
+// because its linker runs at component creation, when +0x52 is factory-zero).
 // ============================================================
 void StateMachineComponent_Serialize(StateMachineComponent* self) {
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
@@ -614,8 +620,19 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     // the residence table has no entry for — so ResidenceComponent's state-2 Enter
     // (helper_9de0, 0x140129de0) never ran and townMgr+0x20 stayed null forever. That
     // one null is what made the move-out finder (CitizenComponent_Update_sub_0e70) and
-    // everything downstream of it dead. Treat a non-zero +0x52 as "already decided".
-    bool gotDefault = (*(base + 0x52) != 0);
+    // everything downstream of it dead. Treat a non-sentinel +0x52 as "already decided".
+    //
+    // TWO sentinel values must NOT count as intent (task-F audit, 2026-07-26):
+    //   0x00 — the ctor/BodyInit placeholder retail expects the linker to overwrite.
+    //   0xff — StateMachine::Tick's "no pending state". Two registered paths
+    //   (ConsumeProduceAction_helper_b310's priming Tick and StateMachine_impl_dfa0's
+    //   inline copy) can run Tick on a NOT-YET-LINKED chain, which writes 0xffff into
+    //   +0x52/+0x53; honouring that 0xff here would suppress the controller default
+    //   FOREVER (permanent dormancy), where pre-fix the next link pass recovered it.
+    //   A 0xff at link time can only have come from such an empty-chain Tick — retail
+    //   never ticks an unlinked SM — so ignoring it is always correct.
+    uint8_t pending52 = *(base + 0x52);
+    bool gotDefault = (pending52 != 0x00 && pending52 != 0xff);
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
     uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;
@@ -650,8 +667,18 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
             if (!destroyOutOfOrder) {
                 typedef int (*GetDefaultState_t)(void*);
                 auto gd = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
-                *(base + 0x52) = static_cast<uint8_t>(gd ? gd(comp) : 0);
-                gotDefault = true;
+                int d = gd ? gd(comp) : 0;
+                // A ZERO default is indistinguishable from the BodyInit value already
+                // sitting in +0x52 — writing it changes nothing, and CLAIMING it would
+                // only block a later live controller's real default. That bites the
+                // moment WorkPlaceComponent goes live (its GetDefaultState 0x140003730
+                // returns 0): if the WPC precedes BuildComponent in the entity's array,
+                // it must not rob a fresh foundation of Build's 1 (under construction).
+                // So a zero default neither writes nor claims; keep looking.
+                if (d != 0) {
+                    *(base + 0x52) = static_cast<uint8_t>(d);
+                    gotDefault = true;
+                }
             }
         }
         if (isController && !isLive) sawEarlierController = true;

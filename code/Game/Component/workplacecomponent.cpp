@@ -1018,6 +1018,7 @@ void WorkPlaceComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_state_table.h"
 
 // COMPONENT_INERT_FACTORY(WorkPlaceComponent, 0x68, 0x82), expanded by hand so the
 // per-type vtable's +0x38 slot (index 7 — the slot FUN_1400c2ea0 dispatches at entity
@@ -1038,18 +1039,127 @@ static void WorkPlaceComponent_FinishVtable() {
     WorkPlaceComponent_InertVtable[7] =
         reinterpret_cast<void*>(&WorkPlaceComponent_DetachVSlot);
 }
+
+// ── LIVE controller (BANISHED_LIVE_WPC_CONTROLLER, opt-in until soak-verified) ──
+// Retail wiring, Ghidra-verified against vtable 0x140164d30 + ctor 0x14012f2e0 + the
+// state-table builder WorkPlaceDescription_helper_f3a0 (0x14012f3a0):
+//   * GetDefaultState (slot 16, 0x140003730) returns 0.
+//   * CreateState (slot 17, 0x140004080) returns the embedded node at +0x28; the ctor
+//     seats the node back-pointer +0x40 = self and defaults accepting +0x50 = 1.
+//   * States: 0 enter=ee40(->f520 "enter construction": become a Builder workplace,
+//     re-key pending work via f8400, register in the Builder bucket, publish capacity,
+//     SetAccepting) transitions {1,3}; 2 enter=edf0 ("built": leave Builder, re-key to
+//     the natural profession, register under it) transitions {3}; 3 enter=ed60
+//     ("demolish": release workers + BST-erase) transitions {6,4,5}.
+// Promoting this retires the two stand-in hooks that collapsed the missing controller
+// into call sites: BuildComponent_State8Finalize's explicit edf0 call, and the
+// registration half of the StartTown_SpawnStructures workplace block (both now gated
+// on WorkPlaceComponent_ControllerLive()).
+
+// destroycomponent_workerrelease.cpp — faithful f520 port (0x14012f520).
+extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);
+
+// First-N bring-up trace for the three controller enters (stderr, unconditional —
+// these fire a handful of times per run and are the proof the SM dispatches them).
+static void WPC_TraceEnter(const char* which, void* comp) {
+    static int n = 0;
+    if (n >= 24) return;
+    ++n;
+    fprintf(stderr, "[WPCCtrl] %s enter: comp=%p key(+0x48)=0x%llx roster(+0x60)=%d\n",
+            which, comp,
+            (unsigned long long)*reinterpret_cast<uint64_t*>(
+                reinterpret_cast<uintptr_t>(comp) + 0x48),
+            *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(comp) + 0x60));
+    fflush(stderr);
+}
+
+static char WPC_EnterConstructionState(void* comp, void* /*sm*/) {   // ee40 -> f520
+    WPC_TraceEnter("state-0 (construction/f520)", comp);
+    WorkPlaceComponent_EnterBuilderProfession(reinterpret_cast<int64_t>(comp));
+    return 0;
+}
+static char WPC_EnterBuiltStateNode(void* comp, void* /*sm*/) {      // edf0
+    WPC_TraceEnter("state-2 (built/edf0)", comp);
+    WorkPlaceComponent_EnterBuiltState(comp);
+    return 0;
+}
+static char WPC_EnterDemolishState(void* comp, void* /*sm*/) {       // ed60
+    // ed60 = ee60 (release every worker) + BST-erase on the +0x48 key. The ported
+    // OnCreate body is the same pair in erase-first order; the halves touch disjoint
+    // state (+0x48/BST vs the +0x58 roster), so the order is immaterial.
+    WPC_TraceEnter("state-3 (demolish/ed60)", comp);
+    WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(comp));
+    return 0;
+}
+
+namespace { struct WPCCtrlTag {}; }
+using WPCCtrlDispatch = ::ControllerLive::Dispatcher<WPCCtrlTag>;
+
+static void WorkPlaceComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = WPCCtrlDispatch::table;
+    if (t.count != 0) return;  // idempotent
+    TableRegisterState(t, 0, reinterpret_cast<void*>(&WPC_EnterConstructionState),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 1, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&WPC_EnterBuiltStateNode),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&WPC_EnterDemolishState),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
+}
+
+static int WorkPlaceComponent_GetDefaultState(void*) { return 0; }   // 0x140003730
+static void* WorkPlaceComponent_CreateState(void* self) {            // 0x140004080
+    return reinterpret_cast<uint8_t*>(self) + 0x28;
+}
+
+// Query used by the retired hook sites (buildcomponent_state8.cpp, starttown.cpp).
+extern "C" bool WorkPlaceComponent_ControllerLive() {
+    static int s = -1;
+    if (s < 0)
+        s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_CONTROLLER") ? 1 : 0;
+    return s == 1;
+}
+
+static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
+    WorkPlaceComponent_FinishVtable();   // slot-7 teardown patch stays unconditional
+    if (!WorkPlaceComponent_ControllerLive()) return;
+    WorkPlaceComponent_InertVtable[16] =
+        reinterpret_cast<void*>(&WorkPlaceComponent_GetDefaultState);
+    WorkPlaceComponent_InertVtable[17] =
+        reinterpret_cast<void*>(&WorkPlaceComponent_CreateState);
+    WorkPlaceComponent_PopulateStateTable();
+    if (mem) {
+        // Embedded node + ctor body defaults (0x14012f2e0): node vtable at +0x28,
+        // parent/child zeroed, back-pointer +0x40 = self, accepting +0x50 = 1 (the
+        // inert zero-fill left it 0; retail workplaces are born accepting).
+        uint8_t* b = reinterpret_cast<uint8_t*>(mem);
+        *reinterpret_cast<void**>(b + 0x28) =
+            reinterpret_cast<void*>(WPCCtrlDispatch::Vtable());
+        *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
+        *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
+        *reinterpret_cast<void**>(b + 0x40) = mem;
+        b[0x50] = 1;
+    }
+}
+
 extern "C" void* WorkPlaceComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x82,
         WorkPlaceComponent_InertVtable,
         reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
-    WorkPlaceComponent_FinishVtable();
+    WorkPlaceComponent_FinishLiveVtable(p);
     return p;
 }
 static void* WorkPlaceComponent_CreateInPlace(void* mem) {
     if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x82,
         WorkPlaceComponent_InertVtable,
         reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
-    WorkPlaceComponent_FinishVtable();
+    WorkPlaceComponent_FinishLiveVtable(mem);
     return mem;
 }
 REGISTER_TYPE(WorkPlaceComponent, "ControllerComponent",
