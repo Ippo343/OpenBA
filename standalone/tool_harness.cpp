@@ -750,6 +750,52 @@ void FirePinPanel(void* entityUI) {
     s_pin_fired     = true;
 }
 
+// ============================================================
+// House-panel-open soak ("housepanel") — open G from NEXT_SESSION_BRIEF.md
+// ============================================================
+// The ResidenceUI_Slot7+0x295 crash has never been explained, and the autostart
+// soak never opens a residence panel — so "the row-bound guard never fired" was
+// no evidence. This mode opens a founding-house info dialog (NO pin, NO removal —
+// the house entity itself stays alive) and leaves it open, so W_Slot7 repopulates
+// the roster rows every frame. Combine with the death harness
+// (BANISHED_KILL_CITIZENS=<n> / BANISHED_KILL_FAMILY=<n>) so occupants die and
+// cascade OUT of the roster while the panel is live — the suspected crash window
+// (mass-death teardown racing the per-frame row refresh). Watch for: the Slot7
+// range-guard printf, a crash in standalone_crash.log, or a clean run (= evidence
+// the crash needs something else, e.g. births growing a household past the row
+// table, which open A still blocks).
+void FireHousePanel(void* entityUI) {
+    if (!entityUI) { printf("[HousePanel] ERROR: entityUI null\n"); return; }
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        printf("[HousePanel] installing default EditTool via SetEditMode(pc,0)...\n");
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) { printf("[HousePanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
+
+    // Open the FIRST founding house that yields a dialog. BANISHED_HOUSEPANEL_INDEX
+    // picks a specific one instead.
+    int houses = StartTown_GetFoundingHouseCount();
+    int want = -1;
+    if (const char* e = std::getenv("BANISHED_HOUSEPANEL_INDEX")) want = std::atoi(e);
+    void* house = nullptr; int opened = 0; int pickedIdx = -1;
+    for (int i = 0; i < houses && !opened; ++i) {
+        if (want >= 0 && i != want) continue;
+        house = StartTown_GetFoundingHouseEntity(i);
+        if (house) { opened = EditTool_HarnessSelectEntity(tool, house); pickedIdx = i; }
+    }
+    if (!opened || !house) {
+        printf("[HousePanel] no house info dialog opened (houses=%d want=%d)\n", houses, want);
+        return;
+    }
+    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    printf("[HousePanel] OPEN house[%d]=%p dialog=%p — panel stays open; Slot7 now "
+           "repopulates rows every frame while the death harness drains the roster\n",
+           pickedIdx, house, dialog);
+}
+
 // Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
 // (the 0x140117d60 port) on each captured founding-house building, marking any
 // footprint resources for removal, then watches EntityList::Update drain them.
@@ -1371,6 +1417,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "pinpanel") == 0) {
         s_pin_fireFrame = frameNum;
         FirePinPanel(entityUI);
+    } else if (std::strcmp(s_toolName, "housepanel") == 0) {
+        FireHousePanel(entityUI);
     } else if (std::strcmp(s_toolName, "clearfootprint") == 0) {
         s_mr_fireFrame = frameNum;
         FireClearFootprint();
