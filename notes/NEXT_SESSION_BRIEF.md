@@ -5,10 +5,15 @@ Rewritten 2026-07-26 (commits `07155bb`, `255d5e4`), then updated the same day a
 branch `wave/upgrade-path-complete`.
 
 **Jump to [Investigative opens for next session](#-investigative-opens-for-next-session)**
-for the A–I list. **A, B and C are the only opens left** — the town is still *alive but
-frozen* (24 citizens, 7 couples, 0 births, 0 move-outs) and those three are the separate
-reasons it cannot grow. D–I are all closed or landed; their entries below now record the
-outcome rather than the question.
+for the A–I list.
+
+**Update 2026-07-26 (A/B/C wave):** **A is CLOSED and the town grows** — 24 → 27 → 30 over
+6 000 frames, six births, newborns parented and housed. Two bugs (an unwired OnAdded vtable
+slot, an unassigned `RandFloat`) plus a naming correction that had the delivery roll's two
+branches backwards. **B is partly answered** — housing, not fertility, is now the ceiling,
+and immigration is confirmed not to be an un-played town's growth vector. **C is rescoped**:
+the town starts with 400 firewood in its barn and never touches it, so the missing piece is
+the **haul**, not a woodcutter. C is the only substantial open left.
 
 ### What the D–I wave changed (2026-07-26)
 
@@ -373,12 +378,76 @@ What is settled:
 Still open: does a grown child that cannot move out take any *other* action, or does it
 spin? Worth one look now that there are more of them.
 
-## C. The woodcutter economy — the real fix behind two stand-ins
+## C. 🔎 RESCOPED (2026-07-26) — it is not the woodcutter. **The haul never runs.**
 
-`BANISHED_SEED_FUEL` and `BANISHED_SEED_FOOD` are both papering over the same hole. Note the
-heat tick burns **continuously** (map temperature 29.98 is already below the house's
-`desc+0xF4` of 50), so a producer must sustain roughly one unit per house per 60 in-game
-seconds year-round. Scope the smallest real producer + haul that closes it.
+Measured, not assumed. Run the standing recipe with `BANISHED_SEED_FUEL=0` and
+`BANISHED_STORAGE_TRACE=1`:
+
+```
+[StorageSeed] SeedStartingResources counts: … food(0x20)=2400 firewood(0x40)=400 …
+[StorageSeed] SpawnResources mask=0x40 want=400 matchedTemplates=1 placed=400
+[StorageSeed] dump: loc[1] … mask(+0x3c)=0x1c40 volumeUsed=5550
+[StorageSeed] dump:   slot[3] material=… flags=0xc0 unitVol=4 count=400 reserved=0
+```
+
+**The town already starts with 400 firewood**, placed by retail's own start config
+(`Game_impl_1f00`), in the one storage location whose accept mask has the fuel bit
+(`0x1c40 & 0x40`; `loc[0]`'s `0x16220` does not). It is still `count=400 reserved=0` for the
+whole run — **nothing ever touches it** — while the houses report:
+
+```
+[HeatTick] house=… COLD no fuel available (temp=49.86 < 50.00, heatLeft=-327003586, storageSlots=2)
+```
+
+So a producer is **not** the first missing piece. 400 units at ~1 unit/house/60 in-game
+seconds is many seasons of runway; the town freezes to death standing next to its own
+woodpile. `BANISHED_SEED_FUEL` was never papering over a production hole — it was papering
+over a **distribution** hole, by teleporting the barn's job into each house.
+
+### Where the break is
+
+The fetch-for-home states are already ported: `CitizenAI_State_GatherResources` (id 6,
+`0x14010bc90`) and `GatherResources2` (id 7, `0x14010b3e0`) in `citizenai_gather.cpp`. They
+validate `citizen+0x238` — which is the **HOME**, not a workplace (`0x1401163d0`
+"AssignWorkplace" is the residence assigner; the misnomer runs deep in this family) — and
+transfer resources into it. The trigger shape is already known and already traced by the
+housing pass:
+
+```
+[startTown::housing] house food(c7e78): storage=… residents=5 reqPerResident=25
+                     threshold=125 seeded=8000 -> GetResourceCount(res)=8000 (SUFFICIENT: no Gather)
+```
+
+i.e. `threshold = residents × reqPerResident`, compared against the house's stock.
+
+With `SEED_FUEL=0` every house is far below threshold for fuel — and the AI state tally
+across the whole run is:
+
+```
+19 × aiState=8 (SeekHappiness)      1 × aiState=12
+```
+
+**Not one entry into state 6 or 7.** The handlers are live and the demand signal is real;
+nothing ever *selects* them.
+
+### Next step
+
+Chase the **candidate-list** side (`citizenai_candidatelist.cpp`, the `LAB_14010ea39`
+idle/leisure tail and the priority table), not a woodcutter. Questions in order:
+
+1. Are ids 6/7 in the candidate list at all, and with what priority against SeekHappiness
+   (which is winning 19:0)?
+2. Does the fuel demand reach the candidate list, or only the food path? The `no-firewood`
+   status-icon bit 7 SET side is documented as living in the Gather/Gather2 **no-target**
+   branches — which can never run if the state is never entered, so that icon is not
+   evidence either way.
+3. Only once a citizen carries firewood home does a producer matter. Then scope the
+   woodcutter (`consumeproduce.cpp` is the ConsumeProduce work shape) against the real
+   burn rate: ~1 unit per house per 60 in-game seconds, year-round — the map temperature
+   (29.98) is already below the house `desc+0xF4` of 50, so the tick burns continuously,
+   not just in winter.
+
+`BANISHED_SEED_FUEL` / `BANISHED_SEED_FOOD` stay as soak stand-ins until (1) and (2) land.
 
 ## D. ✅ CLOSED (2026-07-26) — the `f8400` miss is retail's own no-op
 
