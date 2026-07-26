@@ -217,11 +217,15 @@ void Census(int frameNum) {
 //   +0x258 (guardian) == 0, +0x238 (home) != 0, +0x250 (spouse) == 0, age >= desc+0x48.
 // A citizen born into a family clears the FIRST of those only by finding a home of its
 // own — Update -> sub_0e70 -> sub_1fa0(self, null). sub_0e70 scans the town building
-// registry (townMgr+0x20/+0x28) and the profession BST (townMgr+0x100), and BOTH are
-// empty in the standalone start town (see the [FamilyCensus] townMgr line), so no
-// standalone citizen can ever move out and therefore none can ever marry. That is an
-// economy-registry gap, not a marriage bug — but it makes the marriage code itself
-// untestable, exactly as the death harness makes CitizenComponent::OnRemove testable.
+// registry (townMgr+0x20/+0x28) and the profession BST (townMgr+0x100).
+//
+// HISTORY: when this harness was written, both registries were empty in the standalone
+// start town, so no citizen could ever move out and the marriage code was untestable.
+// The town-registry wave (07155bb, 2026-07-26) fixed that — the residence state-2 enter
+// now fills townMgr+0x20 and ORGANIC move-out + marriage are proven in the standing run
+// (spouse 12 -> 14 by frame 3000, given a free house via BANISHED_BUILD_DEMO_HOUSE=1).
+// The harness stays for tests that need a couple NOW rather than after an organic
+// move-out, or without a spare house: it needs neither.
 //
 // This harness performs the move-out the retail way: sub_1fa0(citizen, nullIBP), the
 // same call Update and the marriage block itself make. Leaving the household also drops

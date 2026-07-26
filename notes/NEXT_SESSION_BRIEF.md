@@ -278,6 +278,33 @@ in `CitizenComponent::Update` in order and log which test fails, on a known non-
 Only after one birth is observed does the cooldown magnitude (`desc+0x58`, and the negative
 reseed) mean anything. **Do not tune the rate before then.**
 
+### Marriage is a prerequisite of every birth — how to get a couple to test with
+
+Step 5's `+0x250 != 0` means **only married, housed couples can conceive**, so the birth
+walk needs a known couple. Three ways to have one, all already working:
+
+* **Founding couples** — the six are spouse-cross-linked at spawn (`spouse=12` at frame 0).
+  The three non-full households (`desc+0x24 == 5`, families of ≤4) are the default test
+  subjects. With `BANISHED_LIVE_FOUNDING_SPAWN=1` the families come out smaller
+  (0–1 children at seed 12345), so MORE founding households have room — but the cohort
+  differs from the hand-rolled baseline, so pick one setting and stay in it.
+* **Organic marriage** — proven, no harness (the town-registry wave's done-when test):
+  a grown child (age ≥ `desc+0x48` marry age, guardian `+0x258` set) moves out via
+  `sub_0e70`, which needs a **free house** (`BANISHED_BUILD_DEMO_HOUSE=1`), then the
+  marriage block in `CitizenComponent::Update` pairs it. The standing run shows
+  `spouse 12 → 14` by frame 3000 — two organic marriages. A newlywed pair in the demo
+  house is arguably the cleanest birth subject: 2 occupants against cap 5, maximally
+  non-full, and the pair's `+0x4C` history starts clean.
+* **Forced** — `BANISHED_MARRY_HARNESS=<n>` (standalone/death_harness.cpp) makes up to n
+  grown, unmarried children independent by clearing the guardian via `sub_1fa0(self,
+  null)` and re-homing them into the house they already live in — no free house needed.
+  It touches neither `+0x250` nor the age gate; everything after it is the game's own
+  marriage code. Use it when the test needs a couple NOW rather than after a move-out.
+
+The eligibility signal in the census is `ELIGIBLE=n` (unmarried, over marry age, housed,
+no guardian) — the founding-spawn A/B already produced `ELIGIBLE=1` organically at frame
+6000 when a child grew up.
+
 ## B. Can a town with no spare housing do anything but stall?
 
 `noGuardian=0` at frame 12 000 with 10 citizens over marry age: every grown child is stuck
