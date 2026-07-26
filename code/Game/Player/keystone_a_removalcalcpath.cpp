@@ -381,6 +381,16 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     int32_t local_res8 = 0;   // CONCAT44(uStackX_c,local_res8) -> state ptr (8 bytes)
     int32_t uStackX_c = 0;
     int64_t local_res10 = 0;
+    // Retail reuses ONE 8-byte stack slot as both the Time(0.0) buffer and the 4-byte
+    // outState the transition handlers write. The port previously modeled that slot as
+    // the int32 local_res8 — and System::Time::Time writes 8 bytes, clobbering whatever
+    // the compiler placed in the adjacent 4 bytes. Observed live 2026-07-26 (debug
+    // build): the adjacent local was local_res10 (the SMC pointer), its low dword was
+    // zeroed to 0x2b900000000, and SM_RunPhase faulted reading +0x52 off it on the
+    // first upgrade-click pump. An explicit 8-byte slot with the outState aliased to
+    // its low dword reproduces the retail frame exactly and is layout-proof.
+    int64_t timeOutSlot = 0;
+    int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     {
@@ -429,23 +439,20 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     // ---- main tick path ----
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res10);
-    {
-        int32_t tbuf[2] = {0, 0};  // System::Time::Time(&local_res8, 0.0)
-        if (s_timeCtor) s_timeCtor(&local_res8, 0.0f);
-    }
+    // Time(0.0) into the shared 8-byte slot (see timeOutSlot note above).
+    if (s_timeCtor) s_timeCtor(&timeOutSlot, 0.0f);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     int64_t state = local_res10;
     int64_t* stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
-    // Phase 1 (transition slot +0x30 passes &local_res8, same as phase 2)
-    SM_RunPhase(state, stackPtrField, &local_res8);
+    // Phase 1 (transition slot +0x30 passes the shared slot, same as phase 2)
+    SM_RunPhase(state, stackPtrField, outState);
 
     // ---- between-phase: choose transition + kick Tick ----
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     state = local_res10;
-    local_res8 = 3;  // outState seed
+    *outState = 3;  // outState seed
     if (*reinterpret_cast<char*>(state + 0x51) < 0) {
-        int32_t tbuf[2] = {0, 0};  // System::Time::Time(local_res18, 0.0)
         int64_t timeBuf[1] = {0};
         if (s_timeCtor) s_timeCtor(timeBuf, 0.0f);
         if (s_smTick) s_smTick(reinterpret_cast<int64_t*>(state + 0x48), timeBuf, 0, 0);
@@ -453,22 +460,19 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     {
         int64_t* head = *reinterpret_cast<int64_t**>(state + 0x48);
         int iVar8 = (*reinterpret_cast<int(**)(int64_t*, int, int32_t*)>(*head + 8))(
-            head, (int)*reinterpret_cast<char*>(state + 0x51), &local_res8);
+            head, (int)*reinterpret_cast<char*>(state + 0x51), outState);
         if (-1 < iVar8) {
             *reinterpret_cast<char*>(state + 0x53) = (char)iVar8;
-            *reinterpret_cast<char*>(state + 0x52) = (char)(uint32_t)local_res8;
+            *reinterpret_cast<char*>(state + 0x52) = (char)(uint32_t)*outState;
         }
     }
-    {
-        int32_t tbuf[2] = {0, 0};  // System::Time::Time(&local_res8, 0.0)
-        if (s_timeCtor) s_timeCtor(&local_res8, 0.0f);
-    }
+    if (s_timeCtor) s_timeCtor(&timeOutSlot, 0.0f);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     state = local_res10;
     stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
-    // Phase 2 (transition slot +0x30 passes &outState)
-    SM_RunPhase(state, stackPtrField, &local_res8);
+    // Phase 2 (transition slot +0x30 passes the shared slot)
+    SM_RunPhase(state, stackPtrField, outState);
 }
 
 // ============================================================
