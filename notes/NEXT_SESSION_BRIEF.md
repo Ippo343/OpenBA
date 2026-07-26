@@ -1,14 +1,26 @@
-# Next-session brief — after the town-registry wave
+# Next-session brief — after the town-registry and D–I waves
 
-Rewritten 2026-07-26 (commits `07155bb`, `255d5e4`). The previous version of this file
-listed five opens; this records what closed, what turned out to be a misreading, and what is
-left. Run data behind every claim is from the standard town-health run (below) on the
-**release** build, branch `wave/upgrade-path-complete`.
+Rewritten 2026-07-26 (commits `07155bb`, `255d5e4`), then updated the same day after the
+**D–I wave**. Run data behind every claim is from the standard town-health run (below) on
+branch `wave/upgrade-path-complete`.
 
 **Jump to [Investigative opens for next session](#-investigative-opens-for-next-session)**
-for the A–I list. Headline going in: the town is now **alive but frozen** — 24 citizens,
-7 couples, 0 births, 0 move-outs — and opens A/B/C are the three separate reasons it cannot
-grow.
+for the A–I list. **A, B and C are the only opens left** — the town is still *alive but
+frozen* (24 citizens, 7 couples, 0 births, 0 move-outs) and those three are the separate
+reasons it cannot grow. D–I are all closed or landed; their entries below now record the
+outcome rather than the question.
+
+### What the D–I wave changed (2026-07-26)
+
+* **WorkPlaceComponent is a live controller** (`BANISHED_LIVE_WPC_CONTROLLER`, opt-in) —
+  both stand-in hooks retired, the two spawn-site blocks consolidated, and the previously
+  unexercised founding-employer path verified.
+* **Three bugs fixed that nobody was looking for**: an 8-byte `Time` ctor writing through
+  a 4-byte local (killed every upgrade click), inverted BST child offsets that meant the
+  scheduler's order tree was never erased, and three wrong dispatch-slot bindings.
+* **The `+0x52` lazy-link guard** now rejects both sentinels (0x00 and Tick's 0xff).
+* **The retail founding spawn is ported** (`BANISHED_LIVE_FOUNDING_SPAWN`, opt-in).
+* **G is half-answered**: mass-death teardown does NOT reproduce the ResidenceUI crash.
 
 ## The standing town-health run
 
@@ -274,66 +286,149 @@ heat tick burns **continuously** (map temperature 29.98 is already below the hou
 `desc+0xF4` of 50), so a producer must sustain roughly one unit per house per 60 in-game
 seconds year-round. Scope the smallest real producer + haul that closes it.
 
-## D. Why does `f8400` miss, now that the id-map is known to populate?
+## D. ✅ CLOSED (2026-07-26) — the `f8400` miss is retail's own no-op
 
-The re-key's `NOT in the sched+0x30 id-map` early-out is real but its cause is unknown. The
-root changes between inserts while the count stays 1, which suggests the item is claimed and
-erased before the re-key runs. Repro with the upgrade harness
-(`BANISHED_TOOL_HARNESS=upgrade …`, see [[reference-harness-env-gotchas]]) and log the map at
-the moment of the miss, not just at insert.
+Repro'd with the upgrade harness: at the moment of the miss the id-map is **empty**
+(`count=0`) — the work was claimed and erased long before the re-key. And that is
+faithful: `WorkComponent+0x28` is written ONLY by the ctor (`0x14012e820`, seeds -1) and
+the post; **retail never resets it when work completes**, so retail calls `f8400` at the
+edf0/f670 completion site with the same stale id and early-outs the same way. The
+`sched+0x30` lookup IS the engine's liveness test (`ead0` exists solely for it). The
+misleading trace wording is fixed.
 
-Two smaller threads in the same file:
-* Is `prio=0` on the direct-insert callers (`0x1400f88a0`) faithful? Only the `ec60` wrapper
-  passes `workComp+0x2c`. Check what retail's direct callers pass.
-* `Insert`'s comment calls `sched+0x120` a "per-work-entity tree" while `f8400` keys the same
-  tree by PROFESSION (`wpc+0x48`). Both hold only if the work's vtable slot `+0x50` returns
-  the profession key. Confirm and fix the wrong comment.
+The two side threads both resolved:
+* `prio` is a queue-order key, dead unless `param_4 != 0`. Retail has exactly TWO callers
+  of the direct insert — `FUN_14009c960` (passes a dead `-1`) and the `ec60` wrapper — and
+  ALL of our posts route through `ec60`. The old "most posts bypass the wrapper" reading
+  was wrong.
+* `sched+0x120` is keyed by **profession** (work vtable `+0x50` returns the Laborer key —
+  `Pickup_Slot10` 0x1400f3a50, `GatherRawMaterials_Slot10` 0x1400ec510). Comments fixed;
+  that tree's node size is 0x38, not 0x30.
 
-## E. Promote WorkPlaceComponent to a live controller (TASK)
+**Real bug found by the hunt, fixed**: `ActCt_TaskCleanup_8e30` searched the `sched+0x10`
+order tree with INVERTED child offsets (the 0x28-node tree is less@+0x10/greater@+0x18;
+the 0x30-node trees are left@+0x18/right@+0x20). Order nodes were never erased, so
+`sched+0x18` grew forever and re-posted work got steadily earlier queue positions — also
+the best explanation for the old "prio=0 twice while the id went 1→2" anomaly.
 
-Its state table is known: `helper_f3a0` (`0x14012f3a0`) → state 0 `ee40`, state 2 `edf0`,
-state 3 `ed60`. Doing this retires **two** hooks that currently stand in for the missing
-controller node: the call from `BuildComponent_State8Finalize`, and the block this session
-added to `StartTown_SpawnStructures`. Watch for double-registration while both exist —
-`ResidenceComponent_impl_95a0` dedups, but `f670` does not.
+## E. ✅ DONE (2026-07-26) — WorkPlaceComponent is a live controller
 
-⚠ The StartTown block added this session is **currently unexercised in a default run**: the
-start town has no employer buildings (a stockpile and a barn, neither with a profession), so
-nothing takes that path. It needs a run with a founding employer before it can be called
-verified. The ForesterLodge spawner does the same three steps inline — consolidate.
+Implemented under `BANISHED_LIVE_WPC_CONTROLLER` (opt-in until the graduation note below):
+the retail table verbatim (state 0 enter=ee40→f520 "become a Builder workplace" →{1,3};
+state 2 enter=edf0 →{3}; state 3 enter=ed60 →{6,4,5}), GetDefaultState=0 (`0x140003730`),
+CreateState=node@+0x28 (`0x140004080`), ctor body replayed (back-ptr +0x40=self,
+**accepting +0x50 defaults 1** per ctor 0x14012f2e0). Both hooks stand down under the
+flag; the two spawn-site blocks are consolidated into `StartTown_ActivateWorkplace`
+(seat key + SetAccepting always — the spawn replay; registration deferred to the state-2
+enter except for the lodge, which needs the BST queryable before the first tick for
+EmployForesters; `impl_95a0` dedups so both are safe).
 
-## F. Blast radius of the `+0x52` change (TASK)
+Verified live: (a) standing soak — identical census to baseline, all 7 registrations via
+the SM; (b) upgrade harness — the demo house's state-2 enter fired through the SM with the
+builder key + 3 seated builders (the retired State8 hook's exact job), demolish → f520
+re-seat → UPGRADE SPAWN all clean; (c) the previously-unexercised founding-employer path —
+ForesterLodge activate → FindAvailableBuilding MATCH → 4/4 foresters seated.
 
-`gotDefault = (*(base + 0x52) != 0)` changes a default path. It can only bite an entity whose
-`+0x52` is already non-zero at link time, which today means only start-town stamped
-structures — but that is an argument, not a measurement. Enumerate what else writes `+0x52`
-before the first Update (the load/save path is the obvious candidate) and confirm none of
-them wants the controller default to win.
+Two lazy-link guards were needed (see F): the 0x00/0xff sentinel test, and "a live
+controller whose default is 0 does not claim the default" (WPC's 0 must not block Build's
+1 on a foundation).
 
-## G. Is the `ResidenceUI_Slot7+0x295` crash a row overflow at all?
+⚠ Noted, not changed: the **lodge spawner does not stamp `+0x52=2`** (only
+SpawnStructures stamps), so a spawned lodge's SM takes Build's default 1 and idles there —
+WPC has no state-1 entry, so it stays dormant on the lodge exactly as before the
+promotion. Faithfulness follow-up: stamp spawned-prebuilt employers to 2 so their WPC
+state-2 enter runs like the structures'.
 
-Still unexplained. The guard has never fired, but the autostart soak **never opens a
-residence panel**, so that is not evidence. Open a house panel in a run that has had births
-and deaths. With `desc+0x24 == 5` and the founding pass respecting it, mass-death teardown
-now looks like the better explanation.
+## F. ✅ CLOSED (2026-07-26) — audited every writer; the fix's premise held but its sentinel was wrong
 
-## H. Retire the hand-rolled founding spawn (TASK — carried over)
+Full writer enumeration (byte-pattern sweep + decompiles): the ctor writes 0x00, the
+linker is the link itself, retail's Serialize restores saved state but **retail's linker
+only ever runs on a freshly-constructed component** (ComponentEntity::Serialize calls the
+linker slot only for save-absent description components), so retail never faces the
+saved-state-vs-default choice — the premise stands. Standalone has no save/load at all.
 
-Not restated here: **section 4 above** has the full port map for `sub_1040` (`0x1400a1040`)
-and `impl_0dd0`, and the float-vs-int typedef trap on `FUN_140117080`'s age argument. It is a
-replacement for `SpawnOneCitizen`, not an addition. Worth doing *after* A, so the birth path
-is understood before the spawn path changes underneath it.
+The real finding: `!= 0` also honoured **0xff**, which is `StateMachine::Tick`'s "no
+pending" — and two registered paths (`ConsumeProduceAction_helper_b310`'s priming Tick,
+`StateMachine_impl_dfa0`'s inline copy) can write it onto a NOT-YET-LINKED chain. The old
+code recovered on the next link pass; the fix made it permanent dormancy. Now
+`pending != 0x00 && pending != 0xff`. State 0 is a real state (WPC's table registers it)
+but is reachable only via GetDefaultState, never via a pre-stamp — there is deliberately
+no way to express "I want state 0" through a stamp. The dead faithful-linker port in
+statemachinecomponent.cpp is marked never-register.
 
-## I. Ghidra hygiene (TASK)
+## G. ✅ ANSWERED for the testable half (2026-07-26) — mass-death teardown is NOT the mechanism
 
-Rename what cost this session a detour, so it is not re-derived:
-`0x14012a0e0` → `ResidenceComponent_OnRemove`, `0x14012f090` → `WorkPlaceComponent_OnRemove`,
-`0x140129de0` → `ResidenceComponent_EnterBuiltState`, `0x14012a4f0` →
-`ResidenceComponent_IsHouseholdFull`, `0x140002cc0` → `DynArray_EraseByValue`,
-`0x140003110` → `DynArray_Append`. Also fix the `TradeComponent` mislabel on the TownManager
-ctor `0x140090a30`.
+New harness mode `BANISHED_TOOL_HARNESS=housepanel` opens a founding-house info dialog via
+the EditTool select path and leaves it refreshing every frame (`BANISHED_HOUSEPANEL_INDEX`
+picks the house). Ran it with `BANISHED_KILL_CITIZENS=24` — the whole town died under the
+open panel, the roster tore down live, Slot7 repopulated throughout: **no crash, no guard
+trip**. Mass-death teardown is ruled out. What remains untestable is a household grown
+past the row table by BIRTHS — still blocked on open A; re-run housepanel after the first
+birth. The row-bound guard stays.
+
+## H. ✅ PORTED opt-in (2026-07-26) — retail founding spawn behind `BANISHED_LIVE_FOUNDING_SPAWN`
+
+`founding_spawn.cpp` is the faithful sub_1040 port (all 8 steps, retail RNG draw order,
+educated forced 0 for children, `DAT_140172114`=0.5 kept as-is) + the impl_0dd0 age draws;
+starttown's family loop branches on the flag (ON = retail path only, links unconditional
+as impl_0dd0 has them; OFF = byte-identical hand-rolled path). The float-age typedef trap
+is defused at every declaration — `FUN_140117080`'s 5th arg is `float` now, stored as a
+float to citizen+0x3c. A/B: standing run + the flag (drop `LIVE_CITIZEN_FAMILY`, the
+retail path links by itself).
+
+**First A/B result (2026-07-26)** — the path works: real varied ages (adults 2.47–3.83
+against `adultAge` 2.00 and the range `[desc+0x50 2.20, desc+0x54*0.5 = 4.00)`, child
+0.49), genders alternating 1/0 per couple as `(param_5 == 0)` dictates, jittered
+positions, `educated` forced 0 for children, laborer profession seeded, all six spouse
+links + ring joins made with **no `LIVE_CITIZEN_FAMILY`**, houses registered, no crash.
+
+⚠ **The cohort is 15, not 24.** The retail path consumes different RNG draws (one
+`RandFloat` age per colonist + two `RandFloatTol` for the jitter) before each
+`Rand(maxChildren+1)`, so the child rolls land differently: kids were `0,0,0,1,1,1`
+instead of two per family. That is a consequence of matching retail's draw ORDER, not a
+defect — but the standing soak recipe's "24 citizens / 12 dependants" baseline does not
+carry across the flag, so **A/B census numbers are only comparable within one setting.**
+Whether vanilla really produces so few children is unverified; the child count is
+`Rand(family._maxChildCount + 1)` in both paths, so a low roll streak is plausible at
+this seed. Re-check with several seeds before treating it as evidence about anything.
+
+Watch item: 117080 runs SetupYoung/Elder BEFORE the EntityList register — if colonists
+render uniformly adult-sized and stay so, add a second idempotent Setup call after the
+register.
+
+## I. ✅ DONE (2026-07-26) — all 7 renames applied and saved
+
+Each verified by decompile first. One name corrected en route: `0x140003110` is
+**`DynArray8_ResizeFill`** (resize-with-fill-value; append is the caller's count+1 idiom),
+not an append — and `0x140002cc0` is `DynArray8_EraseByValue` (order-preserving shift, all
+matches). TownManager ctor identification is now decisive (stores into
+GameUpdateLoop[0x1e] = gw+0xF0; seeds the 21-entry town-resource-limit table). ⚠ Loose
+end: `MainMenuDialog_impl_6b00`'s plate comment still says "TradeComponent" at step 10
+(GhidraMCP build lacks get_plate_comment; a dated correction sits at call site
+0x140096e75) — and every other `TradeComponent_*` name in that family (e.g.
+`TradeComponent_impl_f760_sub_7640`, operates on townMgr+0x140) inherits the bad
+assumption and should be re-checked before being trusted.
 
 ---
+
+## Traps the D–I wave paid for (2026-07-26)
+
+* **`System::Time::Time(void*, float)` writes 8 bytes.** A port that models retail's
+  reused stack slot as an `int32_t` local clobbers the neighbouring local — the dfa0 pump
+  zeroed the SMC pointer's low dword (`0x2b900000000`, fault at +0x52) and killed every
+  upgrade click. Fleet-audited all ~126 other call sites: that was the only one. The
+  signature to recognize: a valid-looking pointer with a zeroed low dword. And the crash
+  survived an A/B with the new feature off — **A/B before debugging the new feature.**
+* **Dispatch-slot bindings drift.** Two wrong slots found dormant (`0x140152968` bound as
+  "Time ctor" is Geometry::Attach; `0x140152970` as "Vector4 ctor" is
+  GetNodeIndexFromName) plus one live (`0x140152a80` "Time" is SoundEffect::_typeInfo).
+  ~20 independent local typedefs alias the one Time ctor — the alias sprawl is the root
+  risk; consider a shared `MakeTime(float)->int64_t` to make the bug unrepresentable.
+* **Two BST node layouts.** The 0x28-node order tree (sched+0x10) is parent@+0x08,
+  less@+0x10, greater@+0x18; the 0x30-node trees (id map, category buckets, profession
+  inners) are left@+0x18/right@+0x20. Check which tree before trusting offsets.
+* **A guard sentinel must reject ALL sentinel values.** `+0x52 != 0` honoured Tick's 0xff
+  "no pending" and turned a transient into permanent dormancy.
 
 ## Traps this wave paid for
 

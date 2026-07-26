@@ -1,3 +1,6 @@
+// ⚠ SUPERSEDED DRAFT — do not copy forward: the s_timeCtor(&local_res8) pattern below
+// is the 8-byte-write-into-int32 stack clobber fixed in the landed file 2026-07-26
+// (see code/Game/Player/keystone_a_removalcalcpath.cpp timeOutSlot).
 // code/Game/Player/keystone_a_removalcalcpath.cpp
 // Faithful 1:1 ports of RemovalTool::Slot13 (CalcPath, 0x1401035e0) and its
 // previously-unregistered exe sub-callee closure.
