@@ -1,9 +1,14 @@
 # Next-session brief — after the town-registry wave
 
-Rewritten 2026-07-26. The previous version of this file (written 2026-07-25 after `668d366`)
+Rewritten 2026-07-26 (commits `07155bb`, `255d5e4`). The previous version of this file
 listed five opens; this records what closed, what turned out to be a misreading, and what is
 left. Run data behind every claim is from the standard town-health run (below) on the
 **release** build, branch `wave/upgrade-path-complete`.
+
+**Jump to [Investigative opens for next session](#-investigative-opens-for-next-session)**
+for the A–I list. Headline going in: the town is now **alive but frozen** — 24 citizens,
+7 couples, 0 births, 0 move-outs — and opens A/B/C are the three separate reasons it cannot
+grow.
 
 ## The standing town-health run
 
@@ -223,6 +228,110 @@ households — if not, the gate above it (`+0x38 == 0` female, `+0x208 == 0`, ag
 is a *rate* meaningful, and the `desc+0x58` timer plus the negative-cooldown reseed can be
 calibrated. The naming in `citizencomponent.cpp` has been corrected so this does not have to
 be rediscovered.
+
+---
+
+---
+
+# ⭐ Investigative opens for next session
+
+Ordered by what they unblock. A–C are one thread: the town is now **alive but frozen** —
+24 citizens, 7 couples, zero births, zero move-outs — and each of the three is a separate
+reason it cannot grow. Everything below is a *question* except where marked TASK.
+
+## A. Get exactly one birth to happen
+
+Three of six founding households are full at spawn (`desc+0x24 == 5`), but three have room
+for two each and still produced nothing in 12 000 frames at `FORCE_SPEED=40`. Walk the gate
+in `CitizenComponent::Update` in order and log which test fails, on a known non-full house:
+
+1. `citizen+0x38 == 0` (female) — census says 12 female, fine.
+2. `+0x208 == 0` (not a student).
+3. `desc+0x44 <= age` (adult).
+4. The hunger/thirst reset: `isHungryOrThirsty` **zeroes `+0x4C` every tick it is true**.
+   With hunger running 5–12 against a `desc+0xCC` warn threshold this is the first suspect —
+   if the warn point is below the citizens' steady-state hunger, the timer can never survive
+   long enough to expire. **Check `desc+0xCC/+0xD0` against the observed hunger first.**
+5. The seed itself: `+0x250 != 0 && +0x238 != 0 && +0x4C == 0` and age within
+   `desc+0x50..+0x54`, then `!helper_a4f0`.
+
+Only after one birth is observed does the cooldown magnitude (`desc+0x58`, and the negative
+reseed) mean anything. **Do not tune the rate before then.**
+
+## B. Can a town with no spare housing do anything but stall?
+
+`noGuardian=0` at frame 12 000 with 10 citizens over marry age: every grown child is stuck
+because `sub_0e70` finds no free house, which is faithful — in retail the player builds more.
+Questions: does a grown child that cannot move out take any other action (retail must not
+just spin), and is there an immigration/nomad path that is the intended growth vector for an
+un-played town? If the answer is "the player is the growth vector", say so in the notes and
+stop treating a frozen population as a bug.
+
+## C. The woodcutter economy — the real fix behind two stand-ins
+
+`BANISHED_SEED_FUEL` and `BANISHED_SEED_FOOD` are both papering over the same hole. Note the
+heat tick burns **continuously** (map temperature 29.98 is already below the house's
+`desc+0xF4` of 50), so a producer must sustain roughly one unit per house per 60 in-game
+seconds year-round. Scope the smallest real producer + haul that closes it.
+
+## D. Why does `f8400` miss, now that the id-map is known to populate?
+
+The re-key's `NOT in the sched+0x30 id-map` early-out is real but its cause is unknown. The
+root changes between inserts while the count stays 1, which suggests the item is claimed and
+erased before the re-key runs. Repro with the upgrade harness
+(`BANISHED_TOOL_HARNESS=upgrade …`, see [[reference-harness-env-gotchas]]) and log the map at
+the moment of the miss, not just at insert.
+
+Two smaller threads in the same file:
+* Is `prio=0` on the direct-insert callers (`0x1400f88a0`) faithful? Only the `ec60` wrapper
+  passes `workComp+0x2c`. Check what retail's direct callers pass.
+* `Insert`'s comment calls `sched+0x120` a "per-work-entity tree" while `f8400` keys the same
+  tree by PROFESSION (`wpc+0x48`). Both hold only if the work's vtable slot `+0x50` returns
+  the profession key. Confirm and fix the wrong comment.
+
+## E. Promote WorkPlaceComponent to a live controller (TASK)
+
+Its state table is known: `helper_f3a0` (`0x14012f3a0`) → state 0 `ee40`, state 2 `edf0`,
+state 3 `ed60`. Doing this retires **two** hooks that currently stand in for the missing
+controller node: the call from `BuildComponent_State8Finalize`, and the block this session
+added to `StartTown_SpawnStructures`. Watch for double-registration while both exist —
+`ResidenceComponent_impl_95a0` dedups, but `f670` does not.
+
+⚠ The StartTown block added this session is **currently unexercised in a default run**: the
+start town has no employer buildings (a stockpile and a barn, neither with a profession), so
+nothing takes that path. It needs a run with a founding employer before it can be called
+verified. The ForesterLodge spawner does the same three steps inline — consolidate.
+
+## F. Blast radius of the `+0x52` change (TASK)
+
+`gotDefault = (*(base + 0x52) != 0)` changes a default path. It can only bite an entity whose
+`+0x52` is already non-zero at link time, which today means only start-town stamped
+structures — but that is an argument, not a measurement. Enumerate what else writes `+0x52`
+before the first Update (the load/save path is the obvious candidate) and confirm none of
+them wants the controller default to win.
+
+## G. Is the `ResidenceUI_Slot7+0x295` crash a row overflow at all?
+
+Still unexplained. The guard has never fired, but the autostart soak **never opens a
+residence panel**, so that is not evidence. Open a house panel in a run that has had births
+and deaths. With `desc+0x24 == 5` and the founding pass respecting it, mass-death teardown
+now looks like the better explanation.
+
+## H. Retire the hand-rolled founding spawn (TASK — carried over)
+
+Not restated here: **section 4 above** has the full port map for `sub_1040` (`0x1400a1040`)
+and `impl_0dd0`, and the float-vs-int typedef trap on `FUN_140117080`'s age argument. It is a
+replacement for `SpawnOneCitizen`, not an addition. Worth doing *after* A, so the birth path
+is understood before the spawn path changes underneath it.
+
+## I. Ghidra hygiene (TASK)
+
+Rename what cost this session a detour, so it is not re-derived:
+`0x14012a0e0` → `ResidenceComponent_OnRemove`, `0x14012f090` → `WorkPlaceComponent_OnRemove`,
+`0x140129de0` → `ResidenceComponent_EnterBuiltState`, `0x14012a4f0` →
+`ResidenceComponent_IsHouseholdFull`, `0x140002cc0` → `DynArray_EraseByValue`,
+`0x140003110` → `DynArray_Append`. Also fix the `TradeComponent` mislabel on the TownManager
+ctor `0x140090a30`.
 
 ---
 
