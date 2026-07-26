@@ -2277,11 +2277,29 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
             int64_t sa = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
             if (sa) residents = *reinterpret_cast<int32_t*>(sa + 8);
         }
+        // ResidenceDescription carries TWO different numbers and they are easy to confuse:
+        //   +0x20 = how many HOUSEHOLD SLOTS the house has (1 for a wood house; it is what
+        //           Serialize resizes +0x50 to, and what +0x58 then holds)
+        //   +0x24 = how many OCCUPANTS one slot may hold — the real capacity.
+        // +0x24 is the cap the BIRTH gate reads: CitizenComponent::Update only starts a
+        // couple's reproduction timer when helper_a4f0 (0x14012a4f0) reports
+        // `desc+0x24 > slot[i].count`, i.e. the household is not yet full. So a founding
+        // family rostered up to or past +0x24 can never have a child, and one rostered PAST
+        // it also breaks the invariant ResidenceUI::Slot7's unbounded row walk relies on.
+        // Log both next to the actual resident count so over-filling is visible.
+        int occupantCap = -1;
+        {
+            void* rdesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(resComp) + 0x18);
+            if (rdesc) occupantCap = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(rdesc) + 0x24);
+        }
         fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu "
-                "members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=%d slots=%d; "
-                "+0x248!=0 (should be 0) on %d members\n",
+                "members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=%d slots=%d "
+                "occupantCap(desc+0x24)=%d%s; +0x248!=0 (should be 0) on %d members\n",
                 f, f, (unsigned long long)houseIBP, housed, families[f].size(),
-                residents, slotCnt, misfiled);
+                residents, slotCnt, occupantCap,
+                (occupantCap >= 0 && residents >= occupantCap)
+                    ? "  <-- FULL: this household can never have a child" : "",
+                misfiled);
         fflush(stderr);
     }
     g_wpcRosterOnly = prevRosterOnly;   // restore

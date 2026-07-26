@@ -1039,11 +1039,19 @@ LAB_140113873:
                     if (storResult) {
                         if (s_fn_CheckPtr_slot) s_fn_CheckPtr_slot(storResult);
                         int64_t storComp = *reinterpret_cast<int64_t*>(storResult);
-                        int itemType = *reinterpret_cast<int*>(p + 0x240);
-                        bool hasCapacity = s_fn_CheckStorageCapacity ?
-                            s_fn_CheckStorageCapacity(storComp, itemType) : false;
-                        if (!hasCapacity) {
-                            // No capacity — set happiness timer from description
+                        // [NAMING CORRECTION 2026-07-26] This is not a storage query at all.
+                        // 0x14012a4f0 is `ResidenceDescription(+0x18)->+0x24 <=
+                        // residence->slot[idx].count` — i.e. **is this household FULL?** —
+                        // and the index is the citizen's own residence slot (+0x240), not an
+                        // item type. So the timer starts when the household has ROOM, which is
+                        // the sensible reading; the old `hasCapacity` name inverted it and made
+                        // this branch look like a bug. desc+0x24 is the per-household OCCUPANT
+                        // cap (distinct from desc+0x20, the household SLOT count).
+                        int slotIdx = *reinterpret_cast<int*>(p + 0x240);
+                        bool householdFull = s_fn_CheckStorageCapacity ?
+                            s_fn_CheckStorageCapacity(storComp, slotIdx) : false;
+                        if (!householdFull) {
+                            // Room for another occupant — start the reproduction timer.
                             *reinterpret_cast<uint32_t*>(p + 0x4C) =
                                 *reinterpret_cast<uint32_t*>(desc + 0x58);
                         }

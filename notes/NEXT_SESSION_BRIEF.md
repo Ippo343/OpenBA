@@ -88,8 +88,12 @@ anything is under construction (the Builder-profession bucket) or an employer is
 
 ## 2. ⚠️ WITHDRAWN — "capacity-bounded residence assignment"
 
-The premise was a misreading of `ResidenceDescription+0x20`. It is the **household SLOT
-count**, not an occupancy cap:
+The premise was a misreading of `ResidenceDescription+0x20`. That field is the **household
+SLOT count**; the occupancy cap is the *next* field, **`+0x24`**, and the founding pass does
+not violate it. Measured: `occupantCap(desc+0x24)=5`, and the largest founding family is 5,
+so no house is over-filled. (`+0x24` is not decorative — see item 5, it is the birth gate.)
+
+Why `+0x20` is the slot count:
 
 * `ResidenceComponent::Serialize` resizes `+0x50` to `desc+0x20` and stores it in `+0x58`.
 * Every reader (`sub_0e70`, `ResidenceUI::Slot7`) walks `+0x58` entries at stride `0x10`,
@@ -124,6 +128,11 @@ disable. Verified live — the heat tick consumes it:
 
 and the warmth need (`+0x48`) now sits at ~2 of a death threshold of 20 where it previously
 climbed to 20 and killed the town at ~frame 16000.
+
+Fixing the cold death immediately exposed the next wall: **starvation**. With fuel but the
+default food seed (~130/house), the same seeded run went 24 → 3 citizens between frames 6000
+and 9000 on hunger alone. `BANISHED_SEED_FOOD=<n>` raises the food floor the same way; with
+both, the town is intact and unchanged at 24 through frame 12 000.
 
 **This is a stand-in and is labelled as one in the code.** The real fix is unchanged: a
 woodcutter producing fuel plus the haul into house storage. Note the tick burns
@@ -167,20 +176,53 @@ is A/B-able.
 
 ---
 
-## 5. ⏳ OPEN — scheduler id-map; birth-rate magnitude
+## 5. Scheduler id-map — ❌ CLAIM WAS WRONG. Birth gate — 🔎 root-caused, not yet fixed
 
-* **`sched+0x30` id-map.** The insert helper (`WorkCellBST_Insert_9a40`, exe `0x140029a40`)
-  *is* registered and its node layout matches the readers (`+0x00` id, `+0x08` payload,
-  `+0x18` left, `+0x20` right, count at root+8), and the call in
-  `CitizenAI_WorkScheduler_Insert` passes the right arguments — so the "never populates"
-  claim now has no obvious mechanism and needs re-measuring before any code change.
-  `CitizenAI_WorkScheduler_Post` now prints the map's own root/count/payload next to each
-  post under `BANISHED_BUILD_TRACE=1`; **run that first**. If the map is in fact populated,
-  the real defect is elsewhere and the `workComp+0x2c = 0` writes are a different bug.
-* **Birth rate.** Still unmeasured — no births observed within the first 3000 frames of the
-  standing run. Needs a longer soak now that the winter no longer ends it. Also still open:
-  whether the storage-capacity branch pinning `+0x4c = desc+0x58` is faithful or is starving
-  the rate.
+### The id-map DOES populate
+
+Measured under `BANISHED_BUILD_TRACE=1` at the point of insert:
+
+```
+[BuildTrace] WorkScheduler_Insert id=1 prio=0 code=0x2001 …; idMap(sched+0x30) root=…c638 count=1
+[BuildTrace] WorkScheduler_Insert id=2 prio=0 code=0x2001 …; idMap(sched+0x30) root=…c6e8 count=1
+```
+
+So "the flat id-map never populates" is false, and neither the `workComp+0x2c = 0` writes nor
+the re-key's `NOT in the sched+0x30 id-map` miss can be blamed on it. Two things that
+misled the earlier session, both worth keeping:
+
+* **Most posts never touch the `ec60` wrapper.** They call the scheduler insert directly
+  (exe `0x1400f88a0`). A trace placed only in `CitizenAI_WorkScheduler_Post` sees nothing,
+  which reads exactly like "the post path is dead".
+* Note the root **changes** between the two inserts while the count stays 1 — consistent
+  with the item being claimed and erased between posts. That is also the most likely reason
+  a later `f8400` re-key finds nothing: the work is already gone, not never filed.
+* `prio=0` is the *caller's* argument, not a lookup failure. The direct-insert callers pass
+  0; only the `ec60` wrapper passes `workComp+0x2c`. Chase the callers, not the map.
+
+### Why there are no births
+
+Nothing to do with the cooldown decode. `CitizenComponent::Update`'s reproduction timer
+(`+0x4C`) only ever *counts*; the one place that seeds it positive is gated on
+`0x14012a4f0`, which is **not** the storage query its old name (`CheckStorageCapacity`)
+suggested. It is:
+
+```
+ResidenceDescription(+0x18)->+0x24  <=  residence->slot[citizen+0x240].count
+```
+
+— i.e. **"is this household full?"**, indexed by the citizen's own residence slot. The timer
+starts only when there is room. With `desc+0x24 == 5`, **three of the six founding families
+are 5-strong and are therefore full at spawn: those couples can never have a child.** The
+other three have room for two each, and still produced no birth in 12 000 frames at
+`FORCE_SPEED=40`.
+
+Next steps, in order: (a) confirm a birth happens at all for one of the three non-full
+households — if not, the gate above it (`+0x38 == 0` female, `+0x208 == 0`, age within
+`desc+0x50..+0x54`, and the hunger/thirst reset at `+0x4C`) is where to look; (b) only then
+is a *rate* meaningful, and the `desc+0x58` timer plus the negative-cooldown reseed can be
+calibrated. The naming in `citizencomponent.cpp` has been corrected so this does not have to
+be rediscovered.
 
 ---
 
