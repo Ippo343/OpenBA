@@ -247,9 +247,17 @@ be rediscovered.
 
 # ⭐ Investigative opens for next session
 
-Ordered by what they unblock. A–C are one thread: the town is now **alive but frozen** —
-24 citizens, 7 couples, zero births, zero move-outs — and each of the three is a separate
-reason it cannot grow. Everything below is a *question* except where marked TASK.
+**A, B and C are the only opens left** (D–I are recorded above as outcomes). They are one
+thread: the town is **alive but frozen** — 24 citizens, 7 couples, zero births, zero
+move-outs — and each is a separate reason it cannot grow. A is the one that unblocks the
+most, including the untested half of G.
+
+⚠ Two notes before running any of them, both new on 2026-07-26:
+* Prefer the **defaults** (no `BANISHED_LIVE_FOUNDING_SPAWN`) for A/B/C work — the retail
+  spawn path changes the founding cohort's RNG stream and therefore its size, so old
+  census baselines do not carry across it.
+* `BANISHED_LIVE_WPC_CONTROLLER=1` is safe to leave on and is the more faithful
+  configuration.
 
 ## A. Get exactly one birth to happen
 
@@ -381,6 +389,13 @@ against `adultAge` 2.00 and the range `[desc+0x50 2.20, desc+0x54*0.5 = 4.00)`, 
 0.49), genders alternating 1/0 per couple as `(param_5 == 0)` dictates, jittered
 positions, `educated` forced 0 for children, laborer profession seeded, all six spouse
 links + ring joins made with **no `LIVE_CITIZEN_FAMILY`**, houses registered, no crash.
+
+**Colonists now have real ages that ADVANCE.** Census at frame 3000: 15 citizens,
+`spouse=12` (all six couples), `ring=6`, ages 0.77–4.39. At frame 6000: ages 1.33–4.94 and
+**12 adults / 3 children became 13 / 2** — a child grew up and turned `ELIGIBLE=1`. Under
+the hand-rolled path every colonist was stuck at age 0 (the deferred init was guarded
+off), so this is the first run where the cohort ages at all. Stable, no deaths, no crash
+through frame 6000.
 
 ⚠ **The cohort is 15, not 24.** The retail path consumes different RNG draws (one
 `RandFloat` age per colonist + two `RandFloatTol` for the jitter) before each
