@@ -1525,17 +1525,37 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 // OnAdd is a plain append (no dedup), so the citizen pass keeps a once-guard
 // shared with StartTown_EmployForesters (which needs the same registration and
 // previously did it inline, gated behind BANISHED_LIVE_WORKPLACE).
+//
+// [2026-07-26] OnAdd is now ALSO reachable the retail way: CitizenComponent's vtable
+// slot 6 (+0x30) is wired under BANISHED_LIVE_CITIZEN_ONADD, so any citizen that goes
+// through EntityList::RegisterEntity registers itself. Since OnAdd is a plain append
+// with no dedup, this pass would double-count anyone the broadcast already added — so
+// it now checks the list first. 24 entries, once per run; the scan is free.
 static bool s_townCitizensRegistered = false;
 static void StartTown_RegisterTownCitizens() {
     if (s_townCitizensRegistered) return;
     s_townCitizensRegistered = true;
-    int n = 0;
+    int64_t townMgr = 0;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        townMgr = *reinterpret_cast<int64_t*>(
+            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    auto alreadyListed = [&](void* c) -> bool {
+        if (!townMgr) return false;
+        int64_t* arr = *reinterpret_cast<int64_t**>(townMgr + 0xa0);
+        int n = *reinterpret_cast<int32_t*>(townMgr + 0xa8);
+        for (int i = 0; i < n && arr; i++)
+            if (reinterpret_cast<void*>(arr[i]) == c) return true;
+        return false;
+    };
+    int n = 0, skipped = 0;
     for (void* c : g_foundingCitizens) {
         if (!c) continue;
+        if (alreadyListed(c)) { ++skipped; continue; }
         CitizenComponent_OnAdd(c);
         ++n;
     }
-    fprintf(stderr, "[startTown::registry] registered %d founding citizens into townMgr+0xa0\n", n);
+    fprintf(stderr, "[startTown::registry] registered %d founding citizens into townMgr+0xa0"
+            " (%d already registered by the OnAdd broadcast)\n", n, skipped);
     fflush(stderr);
 }
 

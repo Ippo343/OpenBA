@@ -35,7 +35,16 @@ typedef void (*fn_Time_FromSeconds_t)(void* outTime, float seconds);
 static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
 
 // System::Random::RandFloat(Random*) -> float
-// Dispatch slot at 0x140152a60
+// Dispatch slot at 0x140152a60.
+// [2026-07-26] This was DECLARED and null-checked but NEVER ASSIGNED — the same class of
+// bug as the s_fn_FindPartner gap below. Both of its call sites silently took their
+// fallback constant instead of a random number:
+//   * the delivery roll fell back to 1.0f, so `pMaternalDeath <= roll` was always true and
+//     death in childbirth could never happen;
+//   * the post-partum cooldown fell back to 0.5f, so every mother got exactly
+//     0.5*desc+0x60 + desc+0x5C = 4500 — which is why two mothers who delivered on the
+//     same tick showed byte-identical +0x4C values in the census.
+// EnsureHelpers now binds it to the resolved engine function.
 typedef float (*fn_RandFloat_t)(void* random);
 static fn_RandFloat_t s_fn_RandFloat = nullptr;
 
@@ -163,10 +172,13 @@ static fn_ReleaseWork_t s_fn_ReleaseWork = nullptr;
 typedef void* (*fn_FindPartner_t)(int64_t self, void* outIBP);
 static fn_FindPartner_t s_fn_FindPartner = nullptr;
 
-// CitizenComponent_helper_1b90 (0x140111b90–0x140111ecb) — partner-candidate scan
-// over the citizen list (partner link +0x250 empty, age +0x3c <= desc+0x4c): the
-// reproduction helper. NOT UpdateHealth — UpdateHealth is 0x1401127d0, ported in
-// citizen_updatehealth.cpp (disambiguated 2026-07-19).
+// CitizenComponent_helper_1b90 (0x140111b90–0x140111ecb) — CHILDBIRTH. It opens with a
+// scan over the citizen list (partner link +0x250 empty, age +0x3c <= desc+0x4c) but
+// that scan only BIASES THE NEWBORN'S GENDER toward the scarcer sex; the body then
+// allocates the child entity. Update calls it on the COMMON branch of the delivery roll
+// (see the LAB_140113873 block) — the rare branch is death in childbirth.
+// NOT UpdateHealth — UpdateHealth is 0x1401127d0, ported in citizen_updatehealth.cpp
+// (disambiguated 2026-07-19; branch semantics corrected 2026-07-26).
 typedef void (*fn_HandleRepro_t)(void* self);
 
 // CitizenComponent_helper_a4f0 — check storage has capacity for item type
@@ -198,6 +210,17 @@ static float* s_DAT_140172100 = nullptr;  // thirst threshold fraction
 static uint32_t* s_DAT_1401722c0 = nullptr; // XOR mask for happiness timer
 
 static bool s_helpersResolved = false;
+
+// BANISHED_BIRTH_TRACE — narrate the delivery/conception path. Off by default; the
+// standalone soak fires a delivery only every few thousand frames, so this is quiet.
+static bool BirthTraceOn() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_BIRTH_TRACE");
+        s = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s != 0;
+}
 
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
@@ -269,6 +292,8 @@ static void EnsureHelpers() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_FAMILY"))
         s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
             ResolveAddr(Module::Exe, 0x14010fe40));
+    // See the declaration: this binding was missing entirely.
+    s_fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(fn_Random_RandFloat);
     s_fn_CheckStorageCapacity = reinterpret_cast<fn_CheckStorageCapacity_t>(
         ResolveAddr(Module::Exe, 0x14012a4f0));
     s_fn_FindCompStorage = reinterpret_cast<fn_FindCompStorage_t>(
@@ -948,50 +973,63 @@ LAB_140113873:
                 float newHap = happiness - dt_sec;
                 *reinterpret_cast<float*>(p + 0x4C) = newHap;
                 if (newHap <= 0.0f) {
-                    // Happiness timer expired — roll for reproduction
-                    float happyScore = *reinterpret_cast<float*>(p + 0x50);
-                    float maxHappy = *reinterpret_cast<float*>(desc + 0x70);
-                    float repChanceHigh = *reinterpret_cast<float*>(desc + 100);  // 0x64
-                    float repChanceLow = *reinterpret_cast<float*>(desc + 0x68);
+                    // ---------------------------------------------------------------
+                    // GESTATION TIMER EXPIRED — this is the DELIVERY, not a "try for a
+                    // baby" roll. [NAMING CORRECTION 2026-07-26, from the 0x140113923
+                    // disassembly.] The old comments here had the two branches exactly
+                    // backwards and cost a whole session's premise ("zero births").
+                    //
+                    //   +0x4C > 0   gestation, counting down (seeded to desc+0x58 = 900
+                    //               by the conception gate below: married + housed +
+                    //               childbearing age + household has room)
+                    //   +0x4C == 0  fires HERE
+                    //   +0x4C < 0   post-partum recovery, counting back up to 0
+                    //
+                    // The roll decides whether the MOTHER SURVIVES the birth:
+                    //   pDeath = (health/maxHealth) * (desc+0x64 - desc+0x68) + desc+0x68
+                    // measured live: desc+0x68 = 0.0250 (at health 0), desc+0x64 = 0.0063
+                    // (at health 10) — i.e. a sick mother is ~4x likelier to die. That
+                    // monotonicity is the proof this is a mortality roll and not a
+                    // fertility one; a fertility chance that FELL with health would be
+                    // nonsense. So +0x50 is HEALTH (max = desc+0x70 = 10), not happiness.
+                    //
+                    //   roll < pDeath  (rare)   -> HandleLifeEvent(self, 6, null), which
+                    //                              is the DEATH handler (tombstone +
+                    //                              queue-for-removal). Died in childbirth.
+                    //   roll >= pDeath (common) -> helper_1b90 = THE BIRTH (allocates the
+                    //                              newborn entity), then seeds the
+                    //                              post-partum cooldown.
+                    // ---------------------------------------------------------------
+                    float health = *reinterpret_cast<float*>(p + 0x50);
+                    float maxHealth = *reinterpret_cast<float*>(desc + 0x70);
+                    float deathChanceAtMaxHealth = *reinterpret_cast<float*>(desc + 100);  // 0x64
+                    float deathChanceAtZeroHealth = *reinterpret_cast<float*>(desc + 0x68);
 
                     void* random = *reinterpret_cast<void**>(
                         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
                     float roll = s_fn_RandFloat ? s_fn_RandFloat(random) : 1.0f;
 
-                    float repThreshold = (happyScore / maxHappy) * (repChanceHigh - repChanceLow) +
-                                         repChanceLow;
-                    if (repThreshold <= roll) {
-                        // Failed reproduction roll — do reproduction helper
-                        // Note: this is CitizenComponent_helper_1b90 in Ghidra
-                        typedef void (*fn_ReproHelper_t)(void* self);
-                        static fn_ReproHelper_t s_fn_ReproHelper = nullptr;
-                        if (!s_fn_ReproHelper) {
-                            // This address is NOT 0x140111b90 (that's UpdateHealth).
-                            // From Ghidra: "CitizenComponent_helper_1b90" with base at
-                            // the CitizenComponent function region. Checking the call in
-                            // the decompilation output more carefully...
-                            // The decompilation is ambiguous. This helper must be resolved
-                            // from the actual call target. For safety, use the exe address
-                            // from the decompilation context.
-                            // After review: line ~370 shows it called after the random roll
-                            // fails. It's the "make baby" function. Address likely in the
-                            // 0x1401118xx or 0x1401119xx range.
-                            // Actually "helper_1b90" = 0x140111b90, but that IS UpdateHealth.
-                            // The Ghidra decompilation conflates them. Looking at the actual
-                            // control flow: the repro helper modifies happiness fields, not
-                            // health. This suggests it IS at 0x140111b90 but does DIFFERENT
-                            // things based on the call context. OR the Ghidra function
-                            // boundary is wrong. For safety, call the original address.
-                            s_fn_ReproHelper = reinterpret_cast<fn_ReproHelper_t>(
+                    float pMaternalDeath = (health / maxHealth) *
+                                           (deathChanceAtMaxHealth - deathChanceAtZeroHealth) +
+                                           deathChanceAtZeroHealth;
+                    if (BirthTraceOn())
+                        std::fprintf(stderr, "[Birth] DELIVERY citizen=%p health=%.2f/%.2f "
+                                     "pMaternalDeath=%.4f roll=%.4f -> %s\n",
+                                     reinterpret_cast<void*>(p), health, maxHealth,
+                                     pMaternalDeath, roll,
+                                     pMaternalDeath <= roll ? "LIVE BIRTH" : "MOTHER DIES");
+                    if (pMaternalDeath <= roll) {
+                        // Mother survives: deliver the baby.
+                        typedef void (*fn_GiveBirth_t)(void* self);
+                        static fn_GiveBirth_t s_fn_GiveBirth = nullptr;
+                        if (!s_fn_GiveBirth)
+                            s_fn_GiveBirth = reinterpret_cast<fn_GiveBirth_t>(
                                 ResolveAddr(Module::Exe, 0x140111b90));
-                        }
-                        // WARNING: This shares the address with UpdateHealth.
-                        // It's likely Ghidra splitting. The decompilation context suggests
-                        // this IS a different logical operation. If it causes issues,
-                        // this call should be investigated further.
-                        if (s_fn_ReproHelper) s_fn_ReproHelper(self);
+                        if (s_fn_GiveBirth) s_fn_GiveBirth(self);
+                        else if (BirthTraceOn())
+                            std::fprintf(stderr, "[Birth] 0x140111b90 UNRESOLVED — no baby\n");
 
-                        // Reset happiness timer with random interval
+                        // Post-partum recovery interval.
                         desc = GetDescription(self);
                         void* random2 = *reinterpret_cast<void**>(
                             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
@@ -1013,15 +1051,17 @@ LAB_140113873:
                         bits ^= (s_DAT_1401722c0 ? *s_DAT_1401722c0 : 0x80000000u);
                         std::memcpy(p + 0x4C, &bits, sizeof(bits));
                     } else {
-                        // Passed reproduction roll — handle life event 6 (childbirth)
+                        // Mother died in childbirth — event type 6. 0x140116dd0 is the
+                        // DEATH handler (tombstone + queue-for-removal), so no baby is
+                        // produced on this branch and Update returns immediately.
                         char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 6, nullptr) : 0;
                         if (r != 0) return;
                     }
                 }
             }
 
-            // --- Check partner & workplace: if partner exists and has workplace,
-            //     and happiness timer is zero, check storage capacity for child ---
+            // --- CONCEPTION GATE: married + housed + idle timer + childbearing age +
+            //     household has room  ->  seed the gestation timer (+0x4C = desc+0x58) ---
             workplaceRef = *reinterpret_cast<int64_t*>(pSelf238);
             if (*reinterpret_cast<int64_t*>(p + 0x250) != 0 && workplaceRef != 0 &&
                 *reinterpret_cast<float*>(p + 0x4C) == 0.0f) {
@@ -1937,6 +1977,9 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }
 // flag both parent + linked entity (+0x88 |= 0x100).
 void CitizenComp_helper_1b90(int64_t selfV) {
     EnsureCallees();
+    if (BirthTraceOn())
+        std::fprintf(stderr, "[Birth] helper_1b90 ENTER (mother=%p)\n",
+                     reinterpret_cast<void*>(selfV));
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
@@ -2027,6 +2070,8 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     fn_InternalBasePtr_CheckPtr(&aiIBP);
     if (s_fn_FUN_140117080)
         s_fn_FUN_140117080(aiIBP, pos, gender, '\x01', 0, '\0', &parentIBP, spawnArg);
+    else if (BirthTraceOn())
+        std::fprintf(stderr, "[Birth] 0x140117080 (per-citizen init) UNRESOLVED\n");
 
     fn_InternalBasePtr_CheckPtr(self + 0x10);
     int64_t addArg = childIBP;
@@ -2034,6 +2079,18 @@ void CitizenComp_helper_1b90(int64_t selfV) {
         int64_t desc = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x10) + 0x28);
         s_fn_FUN_1400c48a0(*reinterpret_cast<void**>(gw + 0xe8), &addArg,
                            *reinterpret_cast<int*>(desc + 0x20));
+    } else if (BirthTraceOn()) {
+        std::fprintf(stderr, "[Birth] 0x1400c48a0 (EntityList register) UNRESOLVED — the "
+                     "newborn exists but is in no list\n");
+    }
+    if (BirthTraceOn()) {
+        int64_t tm = *reinterpret_cast<int64_t*>(gw + 0xf0);
+        std::fprintf(stderr, "[Birth] BABY BORN: parent=%p child=%p citizenComp=%p gender=%u "
+                     "pos=(%.1f,%.1f,%.1f) townCount(+0xa8)=%d\n",
+                     reinterpret_cast<void*>(selfV), child, aiComp, gender,
+                     pos[0], pos[1], pos[2],
+                     tm ? *reinterpret_cast<int*>(tm + 0xa8) : -1);
+        std::fflush(stderr);
     }
     fn_InternalBasePtr_CheckPtr(&aiIBP);
     // Post "child born" (event type 8) for the newborn.
@@ -3248,7 +3305,28 @@ static void CitizenComponent_NeedsUpdateVSlot(void* s, int msg, void* target,
 static void CitizenComponent_OnRemoveVSlot(void* s) {
     CitizenComponent_OnRemove(s);
 }
+// slot +0x30 / index 6 — the ADDED-to-world broadcast. ComponentEntity_OnAddedPass
+// (FUN_1400c2f60, run at the tail of EntityList::RegisterEntity 0x1400c48a0) calls this
+// slot on every component whose +0x20 bit 0 is set; CitizenComponent's flags are 0xCB, so
+// bit 0 is set and the broadcast has always reached this slot — it just landed on the
+// inert stub. Retail's slot is CitizenComponent::OnAdd 0x140114000, the append into the
+// town citizen list townMgr+0xa0, ported in citizen_employ_cascade.cpp.
+//
+// [2026-07-26] This is why the town could never grow. Childbirth works — the delivery
+// roll fires, helper_1b90 allocates the newborn, and RegisterEntity puts it in the world
+// entity list — but with slot 6 dead the baby never joined townMgr+0xa0, which is the
+// list the census, the town-hall stats and every population system read. Three live
+// births in one soak left the count at a flat 24. It is also why StartTown has to
+// hand-register the founding cohort (StartTown_RegisterTownCitizens); that pass now
+// dedups, so it is safe with this slot live.
+extern "C" void CitizenComponent_OnAdd(void* citizenComp);   // 0x140114000
+static void CitizenComponent_OnAddVSlot(void* s) {
+    CitizenComponent_OnAdd(s);
+}
 static void CitizenComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONADD"))
+        CitizenComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONREMOVE"))
         CitizenComponent_LiveVtable[7] =
             reinterpret_cast<void*>(&CitizenComponent_OnRemoveVSlot);

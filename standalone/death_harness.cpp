@@ -44,6 +44,7 @@ int  s_atFrame     = 900;
 int  s_censusEvery = 0;
 int  s_killFamily  = 0;
 int  s_marryHarness = 0;
+int  s_birthTrace   = 0;   // BANISHED_BIRTH_TRACE — per-citizen detail lines for the birth gate
 int  s_moved        = 0;   // citizens the marriage harness has made independent so far
 bool s_fired       = false;
 bool s_firedFamily = false;
@@ -61,6 +62,11 @@ void Init() {
     s_killFamily = (kf && kf[0]) ? std::atoi(kf) : 0;
     const char* mh = std::getenv("BANISHED_MARRY_HARNESS");
     s_marryHarness = (mh && mh[0]) ? std::atoi(mh) : 0;
+    const char* bt = std::getenv("BANISHED_BIRTH_TRACE");
+    s_birthTrace = (bt && bt[0]) ? std::atoi(bt) : 0;
+    if (s_birthTrace > 0)
+        std::fprintf(stderr, "[BirthGate] ENABLED — walking the reproduction gate at each "
+                     "census, up to %d per-citizen detail line(s)\n", s_birthTrace);
     if (s_count > 0) {
         std::fprintf(stderr, "[DeathHarness] ENABLED — killing %d citizen(s) at frame %d\n",
                      s_count, s_atFrame);
@@ -92,6 +98,175 @@ bool TownList(int64_t** outList, int* outCount, int64_t* outTownMgr) {
 inline bool HasFamily(int64_t c) {
     return c && (*reinterpret_cast<int64_t*>(c + 0x250) != 0 ||
                  *reinterpret_cast<int64_t*>(c + 0x260) != 0);
+}
+
+// ---- Birth-gate walk (BANISHED_BIRTH_TRACE=<n>) ------------------------------------
+// Open A of the next-session brief: the town has couples but zero births, and the
+// reproduction timer (+0x4C) only ever counts down — never gets seeded. The seed lives in
+// CitizenComponent::Update behind a chain of tests, and "no births" alone does not say
+// which one nobody passes. This walks the SAME chain, in the same order, read-only, and
+// reports the first test each female fails. It calls nothing that mutates state: the two
+// resolved helpers (FindComponent_Residence, helper_a4f0) are both pure queries.
+//
+// The chain, from Update's LAB_140113873 tail:
+//   1. +0x38 == 0            female
+//   2. +0x3c >= desc+0x44    adult
+//   3. +0x208 == 0           not a student/partner-in-training
+//   4. NOT hungry/cold       hunger(+0x44) <= warn, warmth(+0x48) <= warn — a citizen over
+//                            either warn level has its +0x4C ZEROED every tick, so the
+//                            timer can never run down to fire
+//   5. +0x250 != 0           married
+//   6. *(+0x238) != 0        housed
+//   7. +0x4C == 0            timer idle (a NEGATIVE +0x4C is the post-birth cooldown)
+//   8. desc+0x50 <= age <= desc+0x54    within the childbearing window
+//   9. residence component found off the home entity
+//  10. !helper_a4f0          household not full: desc+0x24 > slot[+0x240].count
+// Passing all ten is what seeds +0x4C = desc+0x58 and starts the countdown to a birth.
+//
+// n = how many per-citizen detail lines to print (the aggregate always prints when set).
+typedef void* (*fn_FindCompResidence_t)(int64_t entity, void* outIBP);
+typedef bool  (*fn_HouseholdFull_t)(int64_t residenceComp, int slotIdx);
+fn_FindCompResidence_t s_fnFindResidence = nullptr;
+fn_HouseholdFull_t     s_fnHouseholdFull = nullptr;
+float* s_pHungerFrac = nullptr;   // DAT_140172114
+float* s_pWarmthFrac = nullptr;   // DAT_140172100
+
+const char* const kGateName[12] = {
+    "PASSES-ALL",       // 0
+    "male",             // 1
+    "child",            // 2
+    "student(+0x208)",  // 3
+    "hungry/cold",      // 4
+    "unmarried",        // 5
+    "homeless",         // 6
+    "timerBusy",        // 7
+    "ageWindow",        // 8
+    "noResidence",      // 9
+    "householdFull",    // 10
+    "noDesc",           // 11
+};
+
+void BirthGate(int frameNum, int64_t* list, int n) {
+    if (s_birthTrace <= 0) return;
+    if (!s_fnFindResidence) {
+        // 0x140008090 is Entity::FindComponent<ResidenceComponent> (NOT storage — 0x140006270
+        // is the storage one; the two are a standing naming trap in this codebase).
+        s_fnFindResidence = reinterpret_cast<fn_FindCompResidence_t>(
+            ResolveAddr(Module::Exe, 0x140008090));
+        s_fnHouseholdFull = reinterpret_cast<fn_HouseholdFull_t>(
+            ResolveAddr(Module::Exe, 0x14012a4f0));
+        s_pHungerFrac = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
+        s_pWarmthFrac = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172100));
+    }
+    const float hungerFrac = s_pHungerFrac ? *s_pHungerFrac : 0.5f;
+    const float warmthFrac = s_pWarmthFrac ? *s_pWarmthFrac : 0.5f;
+
+    int tally[12] = {0};
+    int printed = 0;
+    // Thresholds read off the first citizen with a description, so the numbers have a scale.
+    float hWarn = 0.0f, wWarn = 0.0f, bearMin = 0.0f, bearMax = 0.0f;
+    float timerSeed = 0.0f, occupantCap = 0.0f;
+    bool  haveDesc = false;
+
+    for (int i = 0; i < n; i++) {
+        int64_t c = list[i];
+        if (!c) continue;
+        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        if (!desc) { tally[11]++; continue; }
+
+        const float hungerWarn = (*reinterpret_cast<float*>(desc + 0xD0) -
+                                  *reinterpret_cast<float*>(desc + 0xCC)) * hungerFrac +
+                                 *reinterpret_cast<float*>(desc + 0xCC);
+        const float warmthWarn = (*reinterpret_cast<float*>(desc + 0xF0) -
+                                  *reinterpret_cast<float*>(desc + 0xEC)) * warmthFrac +
+                                 *reinterpret_cast<float*>(desc + 0xEC);
+        if (!haveDesc) {
+            haveDesc = true;
+            hWarn = hungerWarn; wWarn = warmthWarn;
+            bearMin = *reinterpret_cast<float*>(desc + 0x50);
+            bearMax = *reinterpret_cast<float*>(desc + 0x54);
+            timerSeed = *reinterpret_cast<float*>(desc + 0x58);
+            // The occupant cap lives on the RESIDENCE description, not the citizen's —
+            // filled in below from the first residence we successfully resolve.
+        }
+
+        const float age    = *reinterpret_cast<float*>(c + 0x3c);
+        const float hunger = *reinterpret_cast<float*>(c + 0x44);
+        const float warmth = *reinterpret_cast<float*>(c + 0x48);
+        const float timer  = *reinterpret_cast<float*>(c + 0x4C);
+        const int64_t home = *reinterpret_cast<int64_t*>(c + 0x238);
+        const int   slotIdx = *reinterpret_cast<int32_t*>(c + 0x240);
+
+        int gate = 0;
+        int64_t residence = 0;
+        if (*reinterpret_cast<int32_t*>(c + 0x38) != 0)                gate = 1;
+        else if (age < *reinterpret_cast<float*>(desc + 0x44))         gate = 2;
+        else if (*reinterpret_cast<int64_t*>(c + 0x208) != 0)          gate = 3;
+        else if (hungerWarn < hunger || warmthWarn < warmth)           gate = 4;
+        else if (*reinterpret_cast<int64_t*>(c + 0x250) == 0)          gate = 5;
+        else if (home == 0)                                            gate = 6;
+        else if (timer != 0.0f)                                        gate = 7;
+        else if (age < *reinterpret_cast<float*>(desc + 0x50) ||
+                 age > *reinterpret_cast<float*>(desc + 0x54))         gate = 8;
+        else {
+            int64_t outIBP = 0;
+            void* res = s_fnFindResidence ? s_fnFindResidence(home, &outIBP) : nullptr;
+            residence = res ? *reinterpret_cast<int64_t*>(res) : 0;
+            if (!residence)                                            gate = 9;
+            else if (s_fnHouseholdFull && s_fnHouseholdFull(residence, slotIdx)) gate = 10;
+        }
+        tally[gate]++;
+
+        // Detail lines: the interesting citizens are the ones deep in the chain, so print
+        // anything past the married gate first — a wall of "male"/"child" says nothing.
+        if (printed < s_birthTrace && (gate == 0 || gate >= 4)) {
+            printed++;
+            float cap = -1.0f;
+            if (residence) {
+                int64_t rdesc = *reinterpret_cast<int64_t*>(residence + 0x18);
+                if (rdesc) {
+                    cap = static_cast<float>(*reinterpret_cast<int32_t*>(rdesc + 0x24));
+                    if (occupantCap == 0.0f) occupantCap = cap;
+                }
+            }
+            std::fprintf(stderr,
+                "[BirthGate]   c=%p BLOCKED-AT=%s age=%.2f hunger=%.1f/%.1f warmth=%.1f/%.1f "
+                "timer(+0x4C)=%.2f score(+0x50)=%.2f spouse=%d home=%d slot=%d occupantCap=%.0f\n",
+                reinterpret_cast<void*>(c), kGateName[gate], age, hunger, hungerWarn,
+                warmth, warmthWarn, timer, *reinterpret_cast<float*>(c + 0x50),
+                *reinterpret_cast<int64_t*>(c + 0x250) != 0 ? 1 : 0,
+                home != 0 ? 1 : 0, slotIdx, cap);
+        }
+    }
+
+    std::fprintf(stderr,
+        "[BirthGate] frame %d: PASSES-ALL=%d | male=%d child=%d student=%d hungry/cold=%d "
+        "unmarried=%d homeless=%d timerBusy=%d ageWindow=%d noResidence=%d householdFull=%d\n",
+        frameNum, tally[0], tally[1], tally[2], tally[3], tally[4], tally[5], tally[6],
+        tally[7], tally[8], tally[9], tally[10]);
+    std::fprintf(stderr,
+        "[BirthGate]   thresholds: hungerWarn=%.1f warmthWarn=%.1f (frac %.2f/%.2f) "
+        "bearingAge=[%.2f,%.2f] timerSeed(desc+0x58)=%.2f occupantCap(rdesc+0x24)=%.0f\n",
+        hWarn, wWarn, hungerFrac, warmthFrac, bearMin, bearMax, timerSeed, occupantCap);
+    // The roll itself, so a failed attempt is interpretable. Update computes
+    //   pSuccess = (score(+0x50) / desc+0x70) * (desc+0x64 - desc+0x68) + desc+0x68
+    // and a birth happens when RandFloat() < pSuccess; otherwise +0x4C is reseeded to
+    // -(rand * desc+0x60 + desc+0x5C), the post-attempt cooldown.
+    if (haveDesc) {
+        for (int i = 0; i < n; i++) {
+            int64_t c = list[i];
+            int64_t d = c ? *reinterpret_cast<int64_t*>(c + 0x288) : 0;
+            if (!d) continue;
+            std::fprintf(stderr,
+                "[BirthGate]   roll consts: chanceLow(desc+0x68)=%.4f chanceHigh(desc+0x64)=%.4f "
+                "scoreMax(desc+0x70)=%.2f cooldownBase(desc+0x5C)=%.1f range(desc+0x60)=%.1f\n",
+                *reinterpret_cast<float*>(d + 0x68), *reinterpret_cast<float*>(d + 0x64),
+                *reinterpret_cast<float*>(d + 0x70), *reinterpret_cast<float*>(d + 0x5C),
+                *reinterpret_cast<float*>(d + 0x60));
+            break;
+        }
+    }
+    std::fflush(stderr);
 }
 
 void Census(int frameNum) {
@@ -209,6 +384,7 @@ void Census(int frameNum) {
                  n ? hungerSum / n : 0.0f, hungerMax, hungerDeath,
                  n ? thirstSum / n : 0.0f, thirstMax, thirstDeath, sick);
     std::fflush(stderr);
+    BirthGate(frameNum, list, n);
 }
 }  // namespace
 

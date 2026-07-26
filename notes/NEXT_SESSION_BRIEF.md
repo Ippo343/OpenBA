@@ -259,60 +259,119 @@ most, including the untested half of G.
 * `BANISHED_LIVE_WPC_CONTROLLER=1` is safe to leave on and is the more faithful
   configuration.
 
-## A. Get exactly one birth to happen
+## A. ✅ CLOSED (2026-07-26) — the town grows. Births always worked; two other things didn't
 
-Three of six founding households are full at spawn (`desc+0x24 == 5`), but three have room
-for two each and still produced nothing in 12 000 frames at `FORCE_SPEED=40`. Walk the gate
-in `CitizenComponent::Update` in order and log which test fails, on a known non-full house:
+Verified live: **24 → 25 → 26 → 27**, the count stepping at the exact moment of each
+delivery. Two independent bugs, and a naming correction that was the reason the open was
+framed as "get one birth to happen" in the first place.
 
-1. `citizen+0x38 == 0` (female) — census says 12 female, fine.
-2. `+0x208 == 0` (not a student).
-3. `desc+0x44 <= age` (adult).
-4. The hunger/thirst reset: `isHungryOrThirsty` **zeroes `+0x4C` every tick it is true**.
-   With hunger running 5–12 against a `desc+0xCC` warn threshold this is the first suspect —
-   if the warn point is below the citizens' steady-state hunger, the timer can never survive
-   long enough to expire. **Check `desc+0xCC/+0xD0` against the observed hunger first.**
-5. The seed itself: `+0x250 != 0 && +0x238 != 0 && +0x4C == 0` and age within
-   `desc+0x50..+0x54`, then `!helper_a4f0`.
+### The block at `LAB_140113873` is not a fertility roll — it is the DELIVERY
 
-Only after one birth is observed does the cooldown magnitude (`desc+0x58`, and the negative
-reseed) mean anything. **Do not tune the rate before then.**
+From the `0x140113923` disassembly, the corrected semantics of `+0x4C`:
 
-### Marriage is a prerequisite of every birth — how to get a couple to test with
+| `+0x4C` | meaning |
+|---|---|
+| `> 0` | **gestation**, counting down; seeded to `desc+0x58` (= 900) by the conception gate |
+| `== 0` | **delivery fires here** |
+| `< 0` | **post-partum recovery**, counting back up to 0 |
 
-Step 5's `+0x250 != 0` means **only married, housed couples can conceive**, so the birth
-walk needs a known couple. Three ways to have one, all already working:
+and the roll at the delivery is **maternal mortality**, not conception:
 
-* **Founding couples** — the six are spouse-cross-linked at spawn (`spouse=12` at frame 0).
-  The three non-full households (`desc+0x24 == 5`, families of ≤4) are the default test
-  subjects. With `BANISHED_LIVE_FOUNDING_SPAWN=1` the families come out smaller
-  (0–1 children at seed 12345), so MORE founding households have room — but the cohort
-  differs from the hand-rolled baseline, so pick one setting and stay in it.
-* **Organic marriage** — proven, no harness (the town-registry wave's done-when test):
-  a grown child (age ≥ `desc+0x48` marry age, guardian `+0x258` set) moves out via
-  `sub_0e70`, which needs a **free house** (`BANISHED_BUILD_DEMO_HOUSE=1`), then the
-  marriage block in `CitizenComponent::Update` pairs it. The standing run shows
-  `spouse 12 → 14` by frame 3000 — two organic marriages. A newlywed pair in the demo
-  house is arguably the cleanest birth subject: 2 occupants against cap 5, maximally
-  non-full, and the pair's `+0x4C` history starts clean.
-* **Forced** — `BANISHED_MARRY_HARNESS=<n>` (standalone/death_harness.cpp) makes up to n
-  grown, unmarried children independent by clearing the guardian via `sub_1fa0(self,
-  null)` and re-homing them into the house they already live in — no free house needed.
-  It touches neither `+0x250` nor the age gate; everything after it is the game's own
-  marriage code. Use it when the test needs a couple NOW rather than after a move-out.
+```
+pDeath = (health/maxHealth) * (desc+0x64 - desc+0x68) + desc+0x68
+```
 
-The eligibility signal in the census is `ELIGIBLE=n` (unmarried, over marry age, housed,
-no guardian) — the founding-spawn A/B already produced `ELIGIBLE=1` organically at frame
-6000 when a child grew up.
+Measured live: `desc+0x68 = 0.0250` (at health 0), `desc+0x64 = 0.0063` (at health 10) —
+i.e. a sick mother is ~4x likelier to die. **That monotonicity is the proof**: a fertility
+chance that FELL as health rose would be nonsense. So `+0x50` is **HEALTH** (max
+`desc+0x70` = 10), not happiness.
 
-## B. Can a town with no spare housing do anything but stall?
+* `roll >= pDeath` (~99%) → `helper_1b90` = **the birth** (allocates the newborn), then
+  seeds the post-partum cooldown.
+* `roll < pDeath` (rare) → `HandleLifeEvent(self, 6, null)`, which is the **death**
+  handler (tombstone + queue-for-removal). Died in childbirth.
 
-`noGuardian=0` at frame 12 000 with 10 citizens over marry age: every grown child is stuck
-because `sub_0e70` finds no free house, which is faithful — in retail the player builds more.
-Questions: does a grown child that cannot move out take any other action (retail must not
-just spin), and is there an immigration/nomad path that is the intended growth vector for an
-un-played town? If the answer is "the player is the growth vector", say so in the notes and
-stop treating a frozen population as a bug.
+The old comments had these two branches **exactly backwards** — `helper_1b90` was called
+"the failed reproduction roll" and the death handler was labelled "(childbirth)". Names
+corrected in `citizencomponent.cpp`.
+
+### Bug 1 — the vtable slot that made every birth invisible
+
+`CitizenComponent_LiveVtable` **slot 6 (+0x30, the OnAdded broadcast) was never filled.**
+`ComponentEntity_OnAddedPass` (`FUN_1400c2f60`, the tail of `EntityList::RegisterEntity`
+`0x1400c48a0`) calls that slot on every component whose `+0x20` bit 0 is set, and
+CitizenComponent's flags are `0xCB` — so the broadcast always arrived and always landed on
+the inert stub. Retail's slot is `CitizenComponent::OnAdd` (`0x140114000`), the append into
+the town citizen list `townMgr+0xa0`, which was **already ported and already registered by
+address** — just never wired to the vtable.
+
+So three live births in one soak left the census at a flat 24: the babies existed, were in
+the world entity list, and were in no population system. Fixed under
+`BANISHED_LIVE_CITIZEN_ONADD` (opt-in until a longer soak).
+
+⭐ **Corollary worth acting on**: `StartTown_RegisterTownCitizens` is now fully redundant —
+it reports `registered 0 founding citizens (24 already registered by the OnAdd broadcast)`.
+It dedups now so the two paths cannot double-count. **Every other hand-rolled "standalone
+spawns without running the registrar" pass deserves the same check**: the registrar may be
+ported and merely unwired from its slot, in which case the workaround can be deleted rather
+than maintained.
+
+### Bug 2 — `s_fn_RandFloat` was declared, null-checked, and never assigned
+
+Same class as the old `s_fn_FindPartner` gap. Both call sites silently took their fallback
+constant and looked like working code:
+
+* the delivery roll fell back to `1.0f`, so `pDeath <= roll` was **always** true — death in
+  childbirth was impossible;
+* the cooldown fell back to `0.5f`, so every mother got exactly `0.5*5400 + 1800 = 4500`.
+
+The census signature was two mothers who delivered on the same tick showing byte-identical
+`+0x4C` values (`-3400.68` / `-3400.69`). Now bound to `fn_Random_RandFloat`; rolls read
+`0.5645 / 0.0270 / 0.5578`.
+
+### The diagnostic, kept
+
+`BANISHED_BIRTH_TRACE=<n>` (`standalone/death_harness.cpp`) walks the whole gate read-only
+at each census and reports the **first failing test per citizen**, plus the roll constants:
+
+```
+[BirthGate] frame 3000: PASSES-ALL=0 | male=13 child=6 student=0 hungry/cold=0
+            unmarried=1 homeless=0 timerBusy=4 ageWindow=1 noResidence=0 householdFull=2
+[BirthGate]   thresholds: hungerWarn=21.5 warmthWarn=16.2 bearingAge=[2.20,8.00]
+              timerSeed(desc+0x58)=900.00 occupantCap(rdesc+0x24)=5
+```
+
+Set to 1 or more it also narrates each delivery from `citizencomponent.cpp`
+(`[Birth] DELIVERY … -> LIVE BIRTH`, `[Birth] BABY BORN … townCount(+0xa8)=25`).
+
+The old brief's **#1 suspect was wrong**: step 4 (hunger/warmth zeroing `+0x4C`) never
+fires — `hungry/cold=0` with hunger 0.1–11.2 against a warn level of 21.5.
+
+**Rate, now that it is measurable**: the timer moves ~0.668 in-game sec per frame, so one
+gestation+recovery cycle is ~8 000 frames at `FORCE_SPEED=40` (≈1.5 age units). Nothing to
+tune — the "births are impossibly rare" reading came entirely from computing the mortality
+chance and mistaking it for the fertility chance.
+
+## B. ⚠️ PARTLY ANSWERED — the town is no longer frozen; housing is still the ceiling
+
+Open A changes the premise: population now grows **inside existing households** up to the
+occupant cap `ResidenceDescription+0x24` (= 5). The stall point moves from "zero growth" to
+"every household full", which is a different and much more faithful failure mode.
+
+What is settled:
+
+* **Immigration is not an un-played town's growth vector.** `ImmigrationComponent` is a
+  ControllerComponent that `ImmigrationUI_helper_2020` (`0x140012020`) finds by scanning a
+  single **entity's** component array — i.e. it lives on a player-built structure and is
+  read through that structure's panel. In standalone only its `Shutdown`/serialize is
+  ported (`immigrationcomponent.cpp`); there is no driver at all, and `NomadComponent` is
+  likewise serialize-only. So nothing arrives on its own, in our build or by design.
+* **Housing is the player's job.** A grown child cannot leave home without a free house
+  (`sub_0e70`), which is why `BANISHED_BUILD_DEMO_HOUSE=1` is load-bearing in the standing
+  run. That is faithful.
+
+Still open: does a grown child that cannot move out take any *other* action, or does it
+spin? Worth one look now that there are more of them.
 
 ## C. The woodcutter economy — the real fix behind two stand-ins
 
@@ -456,6 +515,25 @@ end: `MainMenuDialog_impl_6b00`'s plate comment still says "TradeComponent" at s
 assumption and should be re-checked before being trusted.
 
 ---
+
+## Traps the A/B wave paid for (2026-07-26)
+
+* **"Declared, null-checked, never assigned" is a repeat offender in
+  `citizencomponent.cpp`** — `s_fn_FindPartner` once, `s_fn_RandFloat` now. The idiom
+  `s_fn_X ? s_fn_X(...) : <constant>` turns an unresolved binding into working-looking code
+  with plausible output, so it never crashes and never logs. Grep for any `s_fn_*` static
+  that appears in exactly two places (its declaration and its use) — that is the signature.
+* **The rare branch of a roll is not "the failure branch".** Read which function each side
+  calls before naming either. Here the *common* branch was the birth and the *rare* one was
+  a death, and the inherited names asserted the opposite — which is what made "zero births"
+  look like a gate problem instead of a bookkeeping problem.
+* **A monotonicity check identifies a probability's meaning.** `chance` falling from 0.0250
+  to 0.0063 as health rose 0→10 is only sensible for mortality, never for fertility. When a
+  formula's constants are nameless, ask which reading makes the slope sensible.
+* **A ported, registered function can still be dead.** `CitizenComponent::OnAdd` was
+  correct, registered at its exe address, and reached by nothing, because its *vtable slot*
+  was never filled. `RegisterExeAddr` presence is not evidence a function runs; the
+  hand-rolled workaround built to compensate is the thing that proves it doesn't.
 
 ## Traps the D–I wave paid for (2026-07-26)
 
