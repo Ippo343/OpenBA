@@ -179,7 +179,14 @@ void PickingComponent_RegisterMesh(void* pc) {
     fn_InternalBasePtr_CheckPtr((void*)(p + 0x10));
     void* entity = *(void**)(p + 0x10);           // resolved ComponentEntity ptr
     if (!entity) return;
-    *(void**)(p + 0x30) = entity;                 // userData = owner entity
+    // Retail SPLITS what this function fuses: Startup seats +0x30 = owner, and OnAdded
+    // (which runs much later, from EntityList::RegisterEntity) passes whatever +0x30
+    // holds as the pick userData. BridgeTool::CalcPath uses that window — it re-points
+    // each deck segment's +0x30 at the MASTER bridge entity so clicking any piece
+    // selects the whole bridge. Fusing Startup+OnAdded here must not undo that, so only
+    // default +0x30 when nothing has claimed it.
+    void* userData = *(void**)(p + 0x30);
+    if (!userData) { userData = entity; *(void**)(p + 0x30) = entity; }
     // NB: retail OnAdded only registers when pickingId(+0x28) < 0. In SA +0x28 is a
     // zeroed 0 (Startup/OnAdded never ran), NOT the -1 unregistered sentinel, so we
     // register unconditionally here — we drive this exactly once per building at spawn.
@@ -212,13 +219,13 @@ void PickingComponent_RegisterMesh(void* pc) {
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
     if (!scene) return;
 
-    uint32_t meshId = s_fn_AddMesh(scene, mesh, xform, entity, 0, 0, nullptr);
+    uint32_t meshId = s_fn_AddMesh(scene, mesh, xform, userData, 0, 0, nullptr);
     *(int32_t*)(p + 0x28) = (int32_t)meshId;      // store pickingId
 
     static int s_logged = 0;
     if (s_logged < 12) { s_logged++;
         fprintf(stderr, "[PickMesh] AddMesh entity=%p mesh=%p userData=%p -> meshId=%u\n",
-                entity, mesh, entity, meshId);
+                entity, mesh, userData, meshId);
         fflush(stderr);
     }
 }

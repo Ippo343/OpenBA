@@ -296,8 +296,15 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     }
 
     // --- Build dynamic label array: find "labelBuild0", "labelBuild1", etc. ---
-    // Reset label array count
+    // Reset BOTH counters. Retail resets neither: it starts the FindElement loop at the
+    // current +0x48 and appends to +0x58, because the controller is constructed fresh per
+    // dialog and this runs exactly once on it. In standalone the controller is reused
+    // across opens, so without a reset the arrays grow every time. (This is NOT what
+    // caused the reqCount=4 / labelCount=3 mismatch — that was a double-count at the push
+    // below — but the two must still be reset together, or the same drift reappears the
+    // second time a tool's create-bar is opened.)
     *(uint32_t*)(s + 0x48) = 0;
+    *(uint32_t*)(s + 0x58) = 0;
 
     // Find first label element using format "labelBuild%i"
     {
@@ -372,8 +379,14 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Push requirement count data into array at +0x50
             // Entry+0x08 contains the requirement count (uint32)
             void* countPtr = (void*)(entry + 0x08);
+            // fn_ExeArrayPush takes arrayBase = {data, count@+0x08, cap@+0x0c} and writes
+            // the new count itself. Incrementing +0x58 again here DOUBLE-COUNTED every
+            // requirement: a two-material building ended with reqCount(+0x58)=4 against
+            // labelCount(+0x48)=3, and UpdateToolUI_e700 — which iterates +0x58 and indexes
+            // the +0x40 label array — then ran off the end (retail would have faulted; we
+            // logged "[e700] WARN: null label element"). Retail's own inline expansion
+            // stores the count once.
             fn_ExeArrayPush((void*)(s + 0x50), *(int*)(s + 0x58) + 1, (void*)countPtr);
-            *(uint32_t*)(s + 0x58) = *(uint32_t*)(s + 0x58) + 1;
 
             // Get the sub-entity from this entry (pointer at entry+0x00)
             uintptr_t subEntity = *(uintptr_t*)entry;

@@ -167,6 +167,18 @@ static uint32_t g_tid_RawMaterialComponent = 0;   // 0x1401c7c80
 // Found 2026-07-26 by instrumenting CalcCost (desc=0000000000000000 on a live drag).
 static uint32_t g_tid_CreateBridgeDescription  = 0;  // 0x1401c73f8
 
+// 0x1401c7ac0 MultiObjectComponent — writer confirmed as MultiObjectComponent_RegisterType
+// (0x14014f475). Read by FUN_140004740, the shared "find the owner's MultiObjectComponent"
+// walk, and by BuildComponent_helper_8720 and BridgeTool::CalcPath. Unregistered, so the
+// walk compared every component against a NULL type-id pointer, found nothing, and every
+// caller silently took its no-MultiObject branch. The one that mattered:
+// InteractComponent::Draw (0x140123110, the on-added slot) rebuilds the interact
+// use-location list from those children, and FUN_140122b00 recurses over that list to find
+// a tile a worker can stand on. A BRIDGE's own footprint is all water, so the bank
+// end-pieces in that list are its only reachable access points — with the list empty,
+// GatherRawMaterials bailed "no target pos" forever and a placed bridge was never built.
+static uint32_t g_tid_MultiObjectComponent     = 0;  // 0x1401c7ac0
+
 static uint32_t g_tid_CreateRemovalDescription = 0;  // 0x1401c74a0
 static uint32_t g_tid_DestroyComponent         = 0;  // 0x1401c75f0
 static uint32_t g_tid_BuildRoad                = 0;  // 0x1401c6860
@@ -238,6 +250,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7190, reinterpret_cast<uintptr_t>(&g_tid_CitizenDescription));
     RegisterExeAddr(0x1401c7c80, reinterpret_cast<uintptr_t>(&g_tid_RawMaterialComponent));
     RegisterExeAddr(0x1401c73f8, reinterpret_cast<uintptr_t>(&g_tid_CreateBridgeDescription));
+    RegisterExeAddr(0x1401c7ac0, reinterpret_cast<uintptr_t>(&g_tid_MultiObjectComponent));
     RegisterExeAddr(0x1401c74a0, reinterpret_cast<uintptr_t>(&g_tid_CreateRemovalDescription));
     RegisterExeAddr(0x1401c75f0, reinterpret_cast<uintptr_t>(&g_tid_DestroyComponent));
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
@@ -267,6 +280,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
     g_tid_RawMaterialComponent = ::Object::GetTypeIdByName("RawMaterialComponent");
     g_tid_CreateBridgeDescription  = ::Object::GetTypeIdByName("CreateBridgeDescription");
+    g_tid_MultiObjectComponent     = ::Object::GetTypeIdByName("MultiObjectComponent");
     g_tid_CreateRemovalDescription = ::Object::GetTypeIdByName("CreateRemovalDescription");
     g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");

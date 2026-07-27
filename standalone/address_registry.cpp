@@ -1201,6 +1201,14 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@AEBV01@@Z"));
     RegisterDispatchSlot(0x1401529a8,   // Picking::Scene::SetTransform(uint id, const Transform&)
         (uintptr_t)ResolveExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z"));
+    // Picking::Scene::SetMeshUserData(uint id, void* userData, int, int, callback*) —
+    // re-points an ALREADY-registered pick mesh at a different owner. Exactly two exe
+    // callers: BridgeTool::CalcPath (0x1400fab75, re-owns each deck segment to the master
+    // bridge entity) and FencedTool_helper_90d0 (0x140129114). Slot RVA read out of the
+    // .rdata name table: 0x1401529a0 holds 0x1c0608 -> "?SetMeshUserData@Scene@Picking@@…"
+    // (ordinal prefix 0x0f4c = 3916, which is the export's ordinal).
+    RegisterDispatchSlot(0x1401529a0,
+        (uintptr_t)ResolveExport("?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z"));
     RegisterDispatchSlot(0x140151e78,   // Math::Scalar::Max(const Scalar&) const -> Scalar
         (uintptr_t)ResolveExport("?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z"));
     // sinf / cosf used by the heading quaternion (clean CRT-wrapper reimpls, sqrtf precedent).

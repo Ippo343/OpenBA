@@ -1445,6 +1445,350 @@ void UpgradeTick(int frameNum) {
     }
 }
 
+// ============================================================
+// Bridge ("bridge") — place a bridge, then watch builders finish it
+// ============================================================
+// Activates the BridgeTool through the real SetEditMode path (same as the road
+// scenario — cursor-free, so the drag's start/end cells are set directly), finds a
+// bank→water→bank span the tool's own CalcCost accepts, commits it with CalcPath, and
+// then polls the placed segments every BANISHED_BRIDGE_POLL frames until each one's
+// BuildComponent reports delivered >= required.
+//
+// Env: BANISHED_TOOL_HARNESS=bridge
+//      BANISHED_BRIDGE_TEMPLATE     default "Template\\WoodBridge.rsc"
+//      BANISHED_BRIDGE_POLL         poll period in frames (default 600)
+//      BANISHED_BRIDGE_WAIT_FRAMES  give-up budget (default 60000)
+// Needs BANISHED_BUILDER_AUTOPOOL=1 (nothing gets built without it) and is much
+// faster under BANISHED_FORCE_SPEED=40.
+extern "C" void* g_BridgeLastMaster;
+extern "C" void* g_BridgeLastSegments[32];
+extern "C" int   g_BridgeLastSegmentCount;
+
+enum BridgeStage { BR_IDLE = 0, BR_WAIT_BUILT, BR_DONE };
+BridgeStage s_br_stage     = BR_IDLE;
+int         s_br_armFrame  = 0;
+int         s_br_lastPoll  = 0;
+bool        s_br_dumped    = false;
+
+int BridgePollPeriod() {
+    const char* e = std::getenv("BANISHED_BRIDGE_POLL");
+    int n = (e && e[0]) ? std::atoi(e) : 600;
+    return n < 30 ? 600 : n;
+}
+int BridgeWaitFrames() {
+    const char* e = std::getenv("BANISHED_BRIDGE_WAIT_FRAMES");
+    int n = (e && e[0]) ? std::atoi(e) : 60000;
+    return n < 600 ? 60000 : n;
+}
+
+// One-shot inventory of what a placed segment actually carries, so "did builders
+// finish it" is answered against the real component set rather than an assumption
+// that a bridge segment is constructed like a building.
+// Every component name the standalone factory registry knows, so an unrecognised
+// type id in the dump means "not a game component we register", not "we forgot to
+// list it here".
+const char* const kComponentNames[] = {
+    "AbsorbResourceComponent", "AmbientEmitterComponent", "AmbientEnvironmentComponent",
+    "AnimalComponent", "AttendanceComponent", "AutoPickupComponent", "BoatComponent",
+    "BuildComponent", "CemeteryComponent", "CharacterComponent", "CitizenAIComponent",
+    "CitizenComponent", "ClearAreaComponent", "ClearResourceComponent",
+    "ConsumeProduceComponent", "CropFieldComponent", "DecalComponent", "DestroyComponent",
+    "DiseaseComponent", "FireComponent", "FishingComponent", "FloorComponent",
+    "ForesterComponent", "FruitComponent", "GrowthComponent", "HappinessComponent",
+    "HealerComponent", "HerbalistComponent", "HerdComponent", "HighlightComponent",
+    "HuntComponent", "ImmigrationComponent", "InteractComponent", "LivestockComponent",
+    "MapComponent", "MarketComponent", "MarketLocationComponent", "MineComponent",
+    "ModelComponent", "MultiObjectComponent", "NaturalResourceComponent", "NomadComponent",
+    "OrchardComponent", "ParticleComponent", "PastureComponent", "PickingComponent",
+    "PopulationComponent", "QuarryComponent", "RawMaterialComponent", "ResidenceComponent",
+    "SpawnComponent", "StateMachineComponent", "StatusIconComponent", "StorageComponent",
+    "StorageDisplayComponent", "StorageLocationComponent", "TerraformComponent",
+    "TombstoneComponent", "TornadoComponent", "TrackerComponent", "TradeComponent",
+    "UIComponent", "WellComponent", "WildAnimalComponent", "WorkComponent",
+    "WorkPlaceComponent", "ZoneComponent",
+};
+
+const char* BridgeComponentName(uint32_t tid) {
+    static uint32_t ids[sizeof(kComponentNames) / sizeof(kComponentNames[0])] = {};
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+            ids[i] = ::Object::GetTypeIdByName(kComponentNames[i]);
+    }
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+        if (ids[i] && ids[i] == tid) return kComponentNames[i];
+    return "?";
+}
+
+void BridgeDumpEntity(const char* what, void* ent) {
+    if (!ent) { printf("[Bridge] %s = null\n", what); return; }
+    const uint32_t tidPicking = ::Object::GetTypeIdByName("PickingComponent");
+
+    uint8_t* e = static_cast<uint8_t*>(ent);
+    const int count = *reinterpret_cast<int32_t*>(e + 0x38);
+    uintptr_t arr   = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    printf("[Bridge] %s=%p components=%d:", what, ent, count);
+    for (int i = 0; i < count && arr; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        typedef uint32_t (*gt_t)(void*);
+        uint32_t tid = (*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        printf(" %s(%u)", BridgeComponentName(tid), tid);
+        // Picking: report the user data we seated — this is the SetMeshUserData fix.
+        if (tidPicking && tid == tidPicking)
+            printf("{pickId=%d userData=%p master=%p}",
+                   *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28),
+                   *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x30),
+                   g_BridgeLastMaster);
+    }
+    printf("\n");
+}
+
+void FireBridgeTool(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness][bridge] ERROR: entityUI null\n"); return; }
+
+    const char* tmplPath = std::getenv("BANISHED_BRIDGE_TEMPLATE");
+    if (!tmplPath || !tmplPath[0]) tmplPath = "Template\\WoodBridge.rsc";
+    printf("[ToolHarness][bridge] resolving template \"%s\"...\n", tmplPath);
+    void* tmpl = StartTown_ResolveTemplateByPath(tmplPath);
+    printf("[ToolHarness][bridge]   -> %p\n", tmpl);
+    if (!tmpl) { printf("[ToolHarness][bridge] ERROR: template did not resolve\n"); return; }
+
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    printf("[ToolHarness][bridge] after SetEditMode: activeTool=%p\n", tool);
+    if (!tool) {
+        printf("[ToolHarness][bridge] activation FAILED — expect a node{CreateBridge -> "
+               "BridgeTool} in the [Tools] BuildToolModeTree line.\n");
+        return;
+    }
+    uint8_t* t = static_cast<uint8_t*>(tool);
+    uintptr_t bridgeDesc = *reinterpret_cast<uintptr_t*>(t + 0x38);
+    printf("[ToolHarness][bridge]   descriptionPtr(+0x20)=%p bridgeDesc(+0x38)=%p\n",
+           *reinterpret_cast<void**>(t + 0x20), reinterpret_cast<void*>(bridgeDesc));
+    if (!bridgeDesc) {
+        printf("[ToolHarness][bridge] FAILED: Startup left bridgeDesc null — the tool "
+               "descriptor carries no CreateBridgeDescription.\n");
+        return;
+    }
+
+    // The masks ValidatePath enforces (see bridgetool_validate.cpp).
+    const uint32_t maskBody     = *reinterpret_cast<uint32_t*>(bridgeDesc + 0x20);
+    const uint32_t maskApproach = *reinterpret_cast<uint32_t*>(bridgeDesc + 0x24);
+    printf("[ToolHarness][bridge]   maskBody=0x%x maskApproach=0x%x maskRequired=0x%x "
+           "maskNeighbor=0x%x radius=%d\n", maskBody, maskApproach,
+           *reinterpret_cast<uint32_t*>(bridgeDesc + 0x2c),
+           *reinterpret_cast<uint32_t*>(bridgeDesc + 0x30),
+           *reinterpret_cast<int*>(bridgeDesc + 0x34));
+
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
+    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
+                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    if (!terrain) {
+        printf("[ToolHarness][bridge] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
+        return;
+    }
+    const int W = *mapGrid;
+    auto bitAt = [&](int idx) -> uint32_t {
+        uintptr_t c = terrain + static_cast<uintptr_t>(idx) * 0x30;
+        return 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+    };
+
+    void** vt = *reinterpret_cast<void***>(tool);
+    typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
+
+    // Where the town is, so we cross NEAR it. The first crossable span on the map is
+    // typically at the map edge, and builders then spend the whole job walking (and a
+    // fair number of them dying) to reach it. Average the founding houses' MapComponent
+    // cells; fall back to the map centre if the start town is not up yet.
+    int townCol = W / 2, townRow = W / 2;
+    {
+        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        long sumCol = 0, sumRow = 0; int n = 0;
+        const int houses = StartTown_GetFoundingHouseCount();
+        for (int i = 0; i < houses && tidMap; ++i) {
+            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            if (!e) continue;
+            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
+            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            for (int k = 0; k < cc && ca; ++k) {
+                void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+                void* comp = *slot;
+                if (!comp) continue;
+                typedef uint32_t (*gt_t)(void*);
+                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                        != tidMap) continue;
+                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
+                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                ++n;
+                break;
+            }
+        }
+        if (n > 0) { townCol = static_cast<int>(sumCol / n); townRow = static_cast<int>(sumRow / n); }
+        printf("[ToolHarness][bridge] town centre = (col %d, row %d) from %d founding "
+               "house(s)%s\n", townCol, townRow, n, n ? "" : " — falling back to map centre");
+    }
+
+    // Collect every bank→water→bank run (rows, then columns; body 2..kMaxBody cells),
+    // then test them NEAREST-TOWN-FIRST and let the tool's own CalcCost be the judge.
+    struct Cand { int a, b, line, from, to, len, axis, dist; };
+    const int kMaxCand = 512;
+    Cand cands[kMaxCand];
+    int nCand = 0, nSeen = 0;
+    const int kMaxAttempts = 400, kMaxBody = 24;
+    for (int axis = 0; axis < 2; ++axis) {
+        for (int line = 1; line < W - 1; ++line) {
+            int runStart = -1;
+            for (int p = 1; p < W - 1; ++p) {
+                const int idx = (axis == 0) ? (W * line + p) : (W * p + line);
+                const uint32_t bit = bitAt(idx);
+                if (maskBody & bit) {
+                    if (runStart < 0) runStart = p;
+                    continue;
+                }
+                if (runStart >= 0) {
+                    const int len = p - runStart;
+                    const int beforeIdx = (axis == 0) ? (W * line + runStart - 1)
+                                                      : (W * (runStart - 1) + line);
+                    if (len >= 2 && len <= kMaxBody &&
+                        (maskApproach & bitAt(beforeIdx)) && (maskApproach & bit)) {
+                        // midpoint of the span, in cells
+                        const int midP = runStart + len / 2;
+                        const int mCol = (axis == 0) ? midP : line;
+                        const int mRow = (axis == 0) ? line : midP;
+                        const int dc = mCol - townCol, dr = mRow - townRow;
+                        const Cand cand = { beforeIdx,
+                                            (axis == 0) ? (W * line + p) : (W * p + line),
+                                            line, runStart - 1, p, len, axis,
+                                            dc * dc + dr * dr };
+                        ++nSeen;
+                        if (nCand < kMaxCand) {
+                            cands[nCand++] = cand;
+                        } else {
+                            // Keep the NEAREST kMaxCand: evict the current farthest rather
+                            // than dropping everything past the cap, which would silently
+                            // bias the pick towards whatever the scan happened to reach first.
+                            int worst = 0;
+                            for (int q = 1; q < kMaxCand; ++q)
+                                if (cands[q].dist > cands[worst].dist) worst = q;
+                            if (cand.dist < cands[worst].dist) cands[worst] = cand;
+                        }
+                    }
+                    runStart = -1;
+                }
+            }
+        }
+    }
+    // Insertion sort by distance — nCand is small and this keeps the harness allocation-free.
+    for (int i = 1; i < nCand; ++i) {
+        Cand key = cands[i];
+        int j = i - 1;
+        while (j >= 0 && cands[j].dist > key.dist) { cands[j + 1] = cands[j]; --j; }
+        cands[j + 1] = key;
+    }
+
+    int startCell = -1, endCell = -1, attempts = 0;
+    for (int i = 0; i < nCand && attempts < kMaxAttempts && startCell < 0; ++i) {
+        const Cand& c = cands[i];
+        ++attempts;
+        *reinterpret_cast<int32_t*>(t + 0x2c) = c.a;
+        *reinterpret_cast<int32_t*>(t + 0x30) = c.b;
+        int pathType = 0; uint32_t h = 0, wd = 0; uint64_t extra = 0;
+        int rc = reinterpret_cast<CalcCost_t>(vt[kSlot_CalcCost])(
+                     tool, c.a, c.b, &pathType, &h, &wd, &extra);
+        if (rc == 0 && pathType == 1) {
+            startCell = c.a; endCell = c.b;
+            printf("[ToolHarness][bridge] span accepted after %d of %d candidates "
+                   "(nearest-town first): %s line=%d %d..%d start=%d end=%d bodyLen=%d "
+                   "dist^2=%d from town (CalcCost rc=%d valid=%d)\n",
+                   attempts, nCand, c.axis == 0 ? "row" : "col", c.line, c.from, c.to,
+                   c.a, c.b, c.len, c.dist, rc, pathType);
+        }
+    }
+    if (startCell < 0) {
+        printf("[ToolHarness][bridge] ERROR: no crossable span found (%d of %d candidates "
+               "tried, all rejected by CalcCost)\n", attempts, nCand);
+        return;
+    }
+
+    // Slot 13 — the commit a drag-release makes.
+    typedef bool (*CalcPath_t)(void*, int, int);
+    bool placed = reinterpret_cast<CalcPath_t>(vt[kSlot_CalcPath])(tool, startCell, endCell);
+    printf("[ToolHarness][bridge] CalcPath (commit) -> %d; master=%p segments=%d\n",
+           placed ? 1 : 0, g_BridgeLastMaster, g_BridgeLastSegmentCount);
+    if (!placed || g_BridgeLastSegmentCount == 0) {
+        printf("[ToolHarness][bridge] nothing was placed — stopping.\n");
+        return;
+    }
+    BridgeDumpEntity("master", g_BridgeLastMaster);
+    for (int i = 0; i < g_BridgeLastSegmentCount; ++i) {
+        char label[32];
+        std::snprintf(label, sizeof(label), "segment[%d]", i);
+        BridgeDumpEntity(label, g_BridgeLastSegments[i]);
+    }
+    s_br_dumped = true;
+    s_br_stage    = BR_WAIT_BUILT;
+    s_br_armFrame = 0;   // set on the first tick
+}
+
+// Poll the placed segments until each reports delivered >= required.
+void BridgeTick(int frameNum) {
+    if (s_br_armFrame == 0) { s_br_armFrame = frameNum; s_br_lastPoll = frameNum; }
+    if (frameNum - s_br_lastPoll < BridgePollPeriod()) {
+        if (frameNum - s_br_armFrame <= BridgeWaitFrames()) return;
+    }
+    s_br_lastPoll = frameNum;
+
+    // The construction site may be the MASTER (one build job for the whole span) rather
+    // than the individual deck pieces, so poll both.
+    int done = 0, withBuild = 0;
+    void* mbc = UpgradeFindBuildComp(g_BridgeLastMaster);
+    if (mbc) {
+        ++withBuild;
+        int delivered = UpgradeDelivered(mbc), required = UpgradeRequired(mbc);
+        if (required > 0 && delivered >= required) ++done;
+        printf("[Bridge] frame %d master=%p build=%p delivered=%d required=%d\n",
+               frameNum, g_BridgeLastMaster, mbc, delivered, required);
+    }
+    for (int i = 0; i < g_BridgeLastSegmentCount; ++i) {
+        void* bc = UpgradeFindBuildComp(g_BridgeLastSegments[i]);
+        if (!bc) continue;
+        ++withBuild;
+        int delivered = UpgradeDelivered(bc);
+        int required  = UpgradeRequired(bc);
+        if (required > 0 && delivered >= required) ++done;
+        if (i < 4)
+            printf("[Bridge] frame %d segment[%d]=%p build=%p delivered=%d required=%d\n",
+                   frameNum, i, g_BridgeLastSegments[i], bc, delivered, required);
+    }
+    printf("[Bridge] frame %d (%d since commit): %d/%d build sites complete "
+           "(master=%s, %d segments)\n", frameNum, frameNum - s_br_armFrame,
+           done, withBuild, mbc ? "yes" : "no", g_BridgeLastSegmentCount);
+
+    if (withBuild > 0 && done == withBuild) {
+        printf("[Bridge] COMPLETE — builders finished the bridge.\n");
+        s_br_stage = BR_DONE;
+        return;
+    }
+    if (withBuild == 0) {
+        printf("[Bridge] neither the master nor any segment carries a BuildComponent — a "
+               "bridge is not constructed like a building; see the component dump above "
+               "for what actually drives it.\n");
+        s_br_stage = BR_DONE;
+        return;
+    }
+    if (frameNum - s_br_armFrame > BridgeWaitFrames()) {
+        printf("[Bridge] TIMEOUT after %d frames with %d/%d complete.\n",
+               frameNum - s_br_armFrame, done, withBuild);
+        s_br_stage = BR_DONE;
+    }
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -1524,6 +1868,9 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     // its upgrade button (see the UpgradeStage machine above).
     if (s_up_stage != UP_IDLE && s_up_stage != UP_DONE) UpgradeTick(frameNum);
 
+    // bridge: poll the placed span until the builders finish it.
+    if (s_br_stage == BR_WAIT_BUILT) BridgeTick(frameNum);
+
     if (s_fired) return;
     if (frameNum < s_settleFrame) return;
 
@@ -1535,6 +1882,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePreviewPlacement(entityUI);
     } else if (std::strcmp(s_toolName, "road") == 0) {
         FireRoadTool(entityUI);
+    } else if (std::strcmp(s_toolName, "bridge") == 0) {
+        FireBridgeTool(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "select") == 0) {

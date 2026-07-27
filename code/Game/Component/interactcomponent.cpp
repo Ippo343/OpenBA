@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -225,6 +226,15 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 // owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
 // scan its job hosts for an InteractComponent and append it to the +0x28 list.
 // Faithful port of the Ghidra decompilation.
+static bool IC_Trace() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return on == 1;
+}
+
 void InteractComponent_Draw(InteractComponent* self) {
     EnsureHelpers();
     uintptr_t selfA = (uintptr_t)self;
@@ -232,6 +242,10 @@ void InteractComponent_Draw(InteractComponent* self) {
     if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(selfA + 0x10));
     int64_t multiBuf = 0;
     if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
+    if (IC_Trace())
+        std::fprintf(stderr, "[Interact] Draw self=%p owner=%p multiObj=%p findFn=%p\n",
+                     self, *(void**)(selfA + 0x10), (void*)multiBuf,
+                     (void*)s_fn_FindMultiObjComp);
     if (multiBuf == 0) return;
 
     // Clear the existing use-location array
@@ -297,6 +311,9 @@ void InteractComponent_Draw(InteractComponent* self) {
         }
         if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
     }
+    if (IC_Trace())
+        std::fprintf(stderr, "[Interact] Draw self=%p children=%d from %d MultiObject "
+                     "entries\n", self, *(int*)(selfA + 0x30), childCount);
 }
 
 // ============================================================
@@ -323,6 +340,52 @@ void InteractComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(InteractComponent, 0x38, 0x81)
+// Hand-expanded from COMPONENT_INERT_FACTORY(InteractComponent, 0x38, 0x81) so vtable
+// slot 6 (+0x30) can carry the real InteractComponent_Draw.
+//
+// Slot 6 is the ON-ADDED broadcast: ComponentEntity_OnAddedPass (FUN_1400c2f60, the tail
+// of EntityList::RegisterEntity 0x1400c48a0) calls it on every component whose capability
+// flags (+0x20) have bit 0 — InteractComponent's 0x81 qualifies. 0x140123110 has always
+// been ported AND registered by address, and was reached by nothing, because the inert
+// vtable's slot 6 was a stub. Exactly the CitizenComponent::OnAdd gap again.
+//
+// What it costs to leave it unwired: the function rebuilds the owner's interact
+// use-location list (+0x28 array / +0x30 count) from the owner's MultiObjectComponent
+// children. FUN_140122b00 (CalcChildTargetPos) recurses over precisely that list to find
+// a tile a worker can stand on. A bridge master's own footprint is all water, so its only
+// reachable access points are the two bank end-pieces — which live in that child list.
+// With the list empty, GatherRawMaterials bailed "no target pos (found==0)" on every tick
+// and no material was ever hauled to a bridge.
+//
+// Opt-in for now (this changes every entity that owns a MultiObjectComponent, not just
+// bridges): BANISHED_LIVE_INTERACT_ONADD=1.
+static uint32_t InteractComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("InteractComponent");
+    return cached;
+}
+static void* InteractComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void InteractComponent_OnAddedVSlot(void* self) {
+    InteractComponent_Draw(reinterpret_cast<InteractComponent*>(self));
+}
+static void InteractComponent_FinishVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_INTERACT_ONADD"))
+        InteractComponent_InertVtable[6] =
+            reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);
+}
+extern "C" void* InteractComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x81,
+        InteractComponent_InertVtable,
+        reinterpret_cast<void*>(&InteractComponent_InertGetTypeId));
+    InteractComponent_FinishVtable();
+    return p;
+}
+static void* InteractComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x81,
+        InteractComponent_InertVtable,
+        reinterpret_cast<void*>(&InteractComponent_InertGetTypeId));
+    InteractComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(InteractComponent, "Component",
               &InteractComponent_Factory, &InteractComponent_CreateInPlace);

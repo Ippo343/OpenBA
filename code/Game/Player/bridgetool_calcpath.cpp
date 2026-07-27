@@ -30,19 +30,21 @@
 // ComponentEntity component array is at entity+0x30 with the count at entity+0x38 —
 // NOT the +0x28/+0x30 pair used for *description* entities in BridgeTool::Startup.
 //
-// KNOWN OMISSIONS vs retail, both deliberate and non-fatal:
-//   · The f3e0 terrain-height/world-position math. Retail computes a per-segment world
-//     position by averaging two corner samples, but then passes a ZERO offset to
-//     FromYawPitchOffset, so the value never reaches the transform. Placement is driven
-//     entirely by the MapComponent cell coords, exactly as DragPlacementTool does.
-//   · Picking::Scene::SetMeshUserData — unbound in standalone. Only affects click-picking
-//     a finished bridge; the geometry still renders and registers.
+// The f3e0 terrain-height/world-position math IS ported (CellRectCentre below). It was
+// once dismissed as dead — "retail computes it and then passes a ZERO offset" — which was
+// a misread of FromYawPitchOffset's argument order: the zero is the PITCH, the position is
+// the offset. Dropping it parked every bridge entity at the world origin and silently made
+// the bridge unbuildable; see the note on ApplyYaw.
+// (Picking used to be listed here as an omission. It is DONE now: the per-segment
+//  PickingComponent is re-owned to the master entity and its mesh is registered, so a
+//  click anywhere on the span selects the bridge — see SeatSegmentPickOwner below.)
 
 #include "BridgeTool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "address_registry.h"
 #include "Object/factory_registration.h"
+#include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMeshForEntity
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -132,14 +134,49 @@ void StampCells(void* comp, int col, int row, int w, int h, int rotation) {
     *reinterpret_cast<int32_t*>(c + 0x30) = rotation;
 }
 
-// Build the yaw-only transform and apply it to a ModelComponent.
+// World-space centre of a cell rect: sample the terrain position of the two opposite
+// corner cells and average them. Retail does exactly this twice — once for the master
+// (0x1400fa218..0x1400fa363) and once per segment (0x1400fa6f1..0x1400fa7e4) — via
+// FUN_14009f3e0 (fn_MapGetTerrainPos). Cell -> map-space is (col - c, row - c) with
+// c = (gridSize >> 1) - 0.5, and the final z is forced to 0 (0x1400fa35d).
+bool CellRectCentre(uint32_t* mapGrid, int col0, int row0, int col1, int row1, float out[3]) {
+    out[0] = out[1] = out[2] = 0.0f;
+    if (!mapGrid || !fn_MapGetTerrainPos) return false;
+    const int   W = static_cast<int>(mapGrid[0]);
+    const float c = static_cast<float>(W >> 1) - 0.5f;
+    float inA[3] = { static_cast<float>(col0) - c, static_cast<float>(row0) - c, 0.0f };
+    float inB[3] = { static_cast<float>(col1) - c, static_cast<float>(row1) - c, 0.0f };
+    float a[3] = {0.f, 0.f, 0.f}, b[3] = {0.f, 0.f, 0.f};
+    fn_MapGetTerrainPos(mapGrid, a, inA, '\0', nullptr);
+    fn_MapGetTerrainPos(mapGrid, b, inB, '\0', nullptr);
+    out[0] = (a[0] + b[0]) * 0.5f;
+    out[1] = (a[1] + b[1]) * 0.5f;
+    out[2] = 0.0f;
+    return true;
+}
+
+// Build the yaw+offset transform and apply it to a ModelComponent.
 // Transform occupies model+0x148 .. +0x168 (0x20 bytes); +0x168 caches the yaw.
-void ApplyYaw(void* model, float yawDeg) {
+//
+// ⚠ The offset is NOT decorative and was the reason a placed bridge was never built.
+// Retail passes the cell-rect centre computed above as FromYawPitchOffset's 4th
+// argument (0x1400fa57c `LEA R9,[RBP-0x38]` for the master, 0x1400faa5d
+// `LEA R9,[RSP+0x50]` per segment); the ZERO argument one slot over is the PITCH
+// (`LEA R8,[RSP+0x30]` / `[RBP-0x70]`, both explicitly stored 0). An earlier reading
+// of this function had the two swapped and dropped the position, which left every
+// bridge entity's transform at the world origin. The transform is what
+// FUN_140122be0 (GatherRawMaterials' CalcBestTargetPos) walks to find a tile a
+// builder can stand on, so with it at the origin the gather bailed
+// "no target pos (found==0)" forever and no material was ever hauled.
+void ApplyYaw(void* model, float yawDeg, const float offset[3]) {
     if (!model || !fn_Transform_FromYawPitchOffset) return;
     uint8_t xform[96];
     std::memset(xform, 0, sizeof(xform));
-    float yaw = yawDeg, pitch = 0.f, offset[3] = {0.f, 0.f, 0.f};
-    fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, offset);
+    float yaw = yawDeg, pitch = 0.f;
+    float off[3] = { offset ? offset[0] : 0.f,
+                     offset ? offset[1] : 0.f,
+                     offset ? offset[2] : 0.f };
+    fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, off);
 
     uintptr_t m = reinterpret_cast<uintptr_t>(model);
     std::memcpy(reinterpret_cast<void*>(m + 0x148), xform, 0x20);
@@ -147,6 +184,51 @@ void ApplyYaw(void* model, float yawDeg) {
     if (fn_Geometry_SetTransform)
         fn_Geometry_SetTransform(reinterpret_cast<void*>(m + 0x28),
                                  reinterpret_cast<void*>(m + 0x148));
+}
+
+// ---- picking ------------------------------------------------------------------
+// Retail tail of the per-segment block (0x1400faab3 .. 0x1400fab7b): scan the SEGMENT
+// entity's components for the PickingComponent (type id DAT_1401c7c10), then
+//
+//     *(pickComp + 0x30) = masterEntity;                       // always
+//     if (*(int*)(pickComp + 0x28) >= 0)                       // already has a mesh
+//         Picking::Scene::SetMeshUserData(gw->pickScene, meshId,
+//                                         *(pickComp + 0x30), 0, 0, nullptr);
+//
+// i.e. every deck piece is re-OWNED by the master bridge entity, so a click anywhere
+// on the span selects the bridge as one object. +0x30 is exactly what
+// PickingComponent::OnAdded later hands to Picking::Scene::AddMesh as the pick
+// userData, so seating it here is the load-bearing half; the SetMeshUserData call only
+// covers the case where the clone arrived with a mesh already registered.
+//
+// This is the fix behind the edittool.cpp:833 guard: a segment whose +0x30 was never
+// seated registers (or leaves) garbage user data, and EditTool's pick deref faults on
+// it. Slot 0x1401529a0 is registered in standalone/address_registry.cpp.
+typedef void (*fn_SetMeshUserData_t)(void* scene, uint32_t meshId, void* userData,
+                                     int a, int b, void* callback);
+
+void SeatSegmentPickOwner(void* segIBPSlot, void* masterEntity, uint32_t tidPicking,
+                          void* gameWorld) {
+    void* pc = FindComponentOn(segIBPSlot, tidPicking);
+    if (!pc) return;
+    uintptr_t p = reinterpret_cast<uintptr_t>(pc);
+    *reinterpret_cast<void**>(p + 0x30) = masterEntity;
+
+    const int meshId = *reinterpret_cast<int32_t*>(p + 0x28);
+    if (meshId < 0) return;              // no mesh yet — OnAdded/RegisterMesh reads +0x30
+
+    static fn_SetMeshUserData_t s_setUserData = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_resolved = true;
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x1401529a0);
+        if (slot) s_setUserData = *reinterpret_cast<fn_SetMeshUserData_t*>(slot);
+    }
+    void* scene = gameWorld ? *reinterpret_cast<void**>(
+                                  reinterpret_cast<uintptr_t>(gameWorld) + 0x70) : nullptr;
+    if (s_setUserData && scene)
+        s_setUserData(scene, static_cast<uint32_t>(meshId),
+                      *reinterpret_cast<void**>(p + 0x30), 0, 0, nullptr);
 }
 
 // Clone a ComponentEntity (0x48 bytes) from a template/description entity.
@@ -162,6 +244,16 @@ void* CloneEntity(void* templateEntity) {
 }
 
 }  // namespace
+
+// Last-commit record, for the standalone bridge harness (BANISHED_TOOL_HARNESS=bridge).
+// Same role as g_pConstructionDemoEntity: gives a headless test something to poll
+// without having to re-derive the entities from the map grid. Diagnostic only —
+// nothing in the game path reads these.
+extern "C" {
+void* g_BridgeLastMaster = nullptr;
+void* g_BridgeLastSegments[32] = {};
+int   g_BridgeLastSegmentCount = 0;
+}
 
 // ============================================================
 // BridgeTool::CalcPath (vtable +0x68, Slot13) — 0x1400f9cd0
@@ -262,9 +354,10 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&masterIBP, master);
     if (!master) return 0;
 
-    const uint32_t tidMap    = Tid("MapComponent");
-    const uint32_t tidModel  = Tid("ModelComponent");
-    const uint32_t tidMulti  = Tid("MultiObjectComponent");
+    const uint32_t tidMap     = Tid("MapComponent");
+    const uint32_t tidModel   = Tid("ModelComponent");
+    const uint32_t tidMulti   = Tid("MultiObjectComponent");
+    const uint32_t tidPicking = Tid("PickingComponent");
 
     {
         int mw = stepCol * bodyLen, mh = stepRow * bodyLen;
@@ -272,10 +365,13 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
         const int crossH = radius * stepCol * 2 + 1;
         if (mw < crossW) mw = crossW;
         if (mh < crossH) mh = crossH;
-        StampCells(FindComponentOn(&masterIBP, tidMap),
-                   bodyCol - radius * stepRow, bodyRow - radius * stepCol,
-                   mw, mh, stepRow * 0x5a);
-        ApplyYaw(FindComponentOn(&masterIBP, tidModel), static_cast<float>(stepRow) * 90.0f);
+        const int mCol = bodyCol - radius * stepRow;
+        const int mRow = bodyRow - radius * stepCol;
+        StampCells(FindComponentOn(&masterIBP, tidMap), mCol, mRow, mw, mh, stepRow * 0x5a);
+        float centre[3];
+        CellRectCentre(mapGrid, mCol, mRow, mCol + mw - 1, mRow + mh - 1, centre);
+        ApplyYaw(FindComponentOn(&masterIBP, tidModel),
+                 static_cast<float>(stepRow) * 90.0f, centre);
     }
     void* multi = FindComponentOn(&masterIBP, tidMulti);
 
@@ -283,6 +379,8 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
     void* entityList = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xe8);
     int   cursorCol = bodyCol, cursorRow = bodyRow;
     int   placedCells = 0, placedSegs = 0;
+    g_BridgeLastMaster = master;
+    g_BridgeLastSegmentCount = 0;
 
     for (SegNode* n = head; n != nullptr; n = n->next) {
         const int rawSize = n->size;
@@ -310,7 +408,10 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&segIBP, seg);
 
             StampCells(FindComponentOn(&segIBP, tidMap), cursorCol, cursorRow, segW, segH, rot);
-            ApplyYaw(FindComponentOn(&segIBP, tidModel), static_cast<float>(rot));
+            float segCentre[3];
+            CellRectCentre(mapGrid, cursorCol, cursorRow,
+                           cursorCol + segW - 1, cursorRow + segH - 1, segCentre);
+            ApplyYaw(FindComponentOn(&segIBP, tidModel), static_cast<float>(rot), segCentre);
 
             // Append to the master's MultiObjectComponent (array +0x48, count +0x50).
             if (multi && fn_ExeArrayResize) {
@@ -325,11 +426,24 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
                 }
             }
 
+            // Re-own the segment's pick mesh to the master (retail 0x1400faab3..fab7b),
+            // BEFORE the register — that is the window PickingComponent::OnAdded reads.
+            SeatSegmentPickOwner(&segIBP, master, tidPicking, gameWorld);
+
             if (fn_EntityList_RegisterEntity && entityList && tpl) {
                 const int categoryId = *reinterpret_cast<int*>(
                                            reinterpret_cast<uintptr_t>(tpl) + 0x20);
                 fn_EntityList_RegisterEntity(entityList, &segIBP, categoryId);
             }
+
+            // Standalone only: PickingComponent is an inert factory here, so the OnAdded
+            // that RegisterEntity would have broadcast never runs and the segment never
+            // enters Picking::Scene (bridges were unclickable). Drive the ported
+            // registration explicitly, exactly where retail's OnAdded sits. It honours
+            // the +0x30 we just seated, so the mesh's user data is the master entity.
+            PickingComponent_RegisterMeshForEntity(seg);
+            if (g_BridgeLastSegmentCount < 32)
+                g_BridgeLastSegments[g_BridgeLastSegmentCount++] = seg;
             placedSegs++;
         }
 
