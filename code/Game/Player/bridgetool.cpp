@@ -294,6 +294,11 @@ static int BridgeTool_Slot12(void*) { return 5; }
 // right-click handler (cancels an active drag + closes the tool dialog, returns 1 to keep
 // the tool; 0 when idle so EntityUI proceeds with teardown). Same fn RoadTool slot 9 uses.
 extern "C" int DragTool_CancelDrag_Impl(void* self);
+// +0x40 (Slot8) Draw — retail 0x1400fadc0, the red/green drag preview. Ported in
+// bridgetool_draw.cpp. While this was Tool_Ret0 a bridge drag rendered NOTHING: the
+// placement worked and CalcCost reported valid=1 every frame, but the player had no
+// on-map feedback at all. The headless harness never renders, so it could not see it.
+extern "C" void BridgeTool_Draw_Impl(void* self, void* context, char skip);
 static void* g_BridgeTool_Vtable[15] = {
     (void*)&BridgeTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,           // +0x08 slot1 (null)
@@ -303,7 +308,7 @@ static void* g_BridgeTool_Vtable[15] = {
     (void*)&Tool_Ret0,            // +0x28
     (void*)&DragTool_OnKey,       // +0x30 OnKey — retail 0x1400fc6b0 IS DragTool::OnKey (shared)
     (void*)&Tool_Ret0,            // +0x38 retail 0x1400fb2c0 = empty `return;`
-    (void*)&Tool_Ret0,            // +0x40 Draw — retail 0x1400fadc0 (bridge preview, NOT ported)
+    (void*)&BridgeTool_Draw_Impl, // +0x40 Draw — retail 0x1400fadc0 (red/green drag preview)
     (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag / allow-teardown (0x1400fc640)
     (void*)&Tool_Ret0,            // +0x50 retail 0x1400268a0 = shared `return 0`
     (void*)&BridgeTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)

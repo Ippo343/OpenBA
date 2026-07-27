@@ -1464,11 +1464,28 @@ extern "C" void* g_BridgeLastMaster;
 extern "C" void* g_BridgeLastSegments[32];
 extern "C" int   g_BridgeLastSegmentCount;
 
-enum BridgeStage { BR_IDLE = 0, BR_WAIT_BUILT, BR_DONE };
+enum BridgeStage { BR_IDLE = 0, BR_DRAG, BR_WAIT_BUILT, BR_SELECT_SETTLE, BR_DONE };
 BridgeStage s_br_stage     = BR_IDLE;
 int         s_br_armFrame  = 0;
 int         s_br_lastPoll  = 0;
 bool        s_br_dumped    = false;
+bool        s_br_selected  = false;   // BANISHED_BRIDGE_SELECT fired yet?
+// BANISHED_BRIDGE_DRAG_FRAMES=N — hold the tool in the DRAGGING state (+0x28=1) over the
+// chosen span for N frames before committing, so BridgeTool::Draw (slot 8, the red/green
+// preview ported in bridgetool_draw.cpp) renders the multi-cell drag path rather than only
+// the single-cell hover the harness would otherwise produce.
+void*       s_br_tool      = nullptr;
+int         s_br_dragStart = -1, s_br_dragEnd = -1;
+int         s_br_dragUntil = 0;
+
+void BridgeCommit(void* tool, int startCell, int endCell);
+
+int BridgeDragFrames() {
+    const char* e = std::getenv("BANISHED_BRIDGE_DRAG_FRAMES");
+    if (!e || !e[0]) return 0;
+    int n = std::atoi(e);
+    return (n > 0) ? n : 0;
+}
 
 int BridgePollPeriod() {
     const char* e = std::getenv("BANISHED_BRIDGE_POLL");
@@ -1716,7 +1733,27 @@ void FireBridgeTool(void* entityUI) {
         return;
     }
 
-    // Slot 13 — the commit a drag-release makes.
+    // Optionally hold the drag open first so slot 8 (Draw) renders the span preview.
+    if (BridgeDragFrames() > 0) {
+        *reinterpret_cast<uint8_t*>(t + 0x28) = 1;          // dragState = dragging
+        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
+        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+        s_br_tool = tool; s_br_dragStart = startCell; s_br_dragEnd = endCell;
+        s_br_dragUntil = 0;                                  // armed on the first tick
+        s_br_stage = BR_DRAG;
+        printf("[ToolHarness][bridge] holding the drag open for %d frames (%d..%d) so "
+               "BridgeTool::Draw renders the preview...\n",
+               BridgeDragFrames(), startCell, endCell);
+        return;
+    }
+    BridgeCommit(tool, startCell, endCell);
+}
+
+// Slot 13 — the commit a drag-release makes.
+void BridgeCommit(void* tool, int startCell, int endCell) {
+    void** vt = *reinterpret_cast<void***>(tool);
+    uint8_t* t = static_cast<uint8_t*>(tool);
+    *reinterpret_cast<uint8_t*>(t + 0x28) = 0;               // drag released
     typedef bool (*CalcPath_t)(void*, int, int);
     bool placed = reinterpret_cast<CalcPath_t>(vt[kSlot_CalcPath])(tool, startCell, endCell);
     printf("[ToolHarness][bridge] CalcPath (commit) -> %d; master=%p segments=%d\n",
@@ -1736,8 +1773,71 @@ void FireBridgeTool(void* entityUI) {
     s_br_armFrame = 0;   // set on the first tick
 }
 
+// ---------------------------------------------------------------------------
+// BANISHED_BRIDGE_SELECT — reproduce the "click a placed bridge" crash headlessly.
+//
+// A human found (2026-07-26) that clicking a placed bridge crashes the NEXT frame in
+// Graphics::EdgeMeshInstance::Draw -> MeshInstance::GetNodeToWorld -> Transform::Lerp.
+// That is the SELECTION OUTLINE, not the info dialog: the click submits a highlight
+// mesh to the Graphics::Scene and the following render trips over it.
+//
+// It drives the same EditTool::SelectEntity path FireSelectEntity uses for houses, so
+// both halves of a click run: the info DialogInstance is built AND Entity_impl_c9e0
+// submits the selection outline.
+//
+// Why a bridge and not a house: c9e0 walks the entity's MultiObjectComponent CHILDREN
+// (FUN_140004740 -> +0x48 array / +0x50 count) and outlines each one. That walk
+// returned null for every entity in the game until 0x1401c7ac0 was registered in the
+// previous wave, so this path is newly live — and the bridge, whose segments are those
+// children, is the entity that exercises it.
+//
+// Set BANISHED_BRIDGE_SELECT=1 (optionally =N for "N frames after the commit",
+// default 120) to fire it. BANISHED_OUTLINE_TRACE=1 shows where c4a0 lands per segment.
+extern "C" void HighlightSelect_Impl(void*);
+
+int BridgeSelectDelay() {
+    const char* e = std::getenv("BANISHED_BRIDGE_SELECT");
+    if (!e || !e[0] || std::strcmp(e, "0") == 0 || std::strcmp(e, "false") == 0) return -1;
+    int n = std::atoi(e);
+    return (n > 1) ? n : 120;
+}
+
+void BridgeSelectFire(void* entityUI) {
+    if (!g_BridgeLastMaster) {
+        printf("[Bridge][select] no master entity — nothing to select.\n");
+        return;
+    }
+    // The bridge harness left the BridgeTool active at entityUI+0x28; swap back to the
+    // default EditTool (the one a player would be holding when they click a bridge).
+    EntityUI_SetEditMode_Impl(entityUI, 0);
+    void* tool = entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28)
+                          : nullptr;
+    if (!tool) {
+        printf("[Bridge][select] EditTool activation FAILED (nothing at entityUI+0x28) — "
+               "needs BANISHED_LIVE_TOOLS=1.\n");
+        return;
+    }
+    printf("[Bridge][select] EditTool active (%p); selecting bridge master=%p — this is a "
+           "full click (info dialog + selection outline).\n", tool, g_BridgeLastMaster);
+    fflush(stdout);
+
+    const int opened = EditTool_HarnessSelectEntity(tool, g_BridgeLastMaster);
+
+    printf("[Bridge][select] select -> %d (1=info dialog opened). Returned without "
+           "faulting; a crash from this lands in the NEXT Draw.\n", opened);
+    fflush(stdout);
+}
+
 // Poll the placed segments until each reports delivered >= required.
-void BridgeTick(int frameNum) {
+void BridgeTick(void* entityUI, int frameNum) {
+    if (!s_br_selected) {
+        const int delay = BridgeSelectDelay();
+        if (delay > 0 && s_br_armFrame != 0 && frameNum - s_br_armFrame >= delay) {
+            s_br_selected = true;
+            BridgeSelectFire(entityUI);
+        }
+    }
+
     if (s_br_armFrame == 0) { s_br_armFrame = frameNum; s_br_lastPoll = frameNum; }
     if (frameNum - s_br_lastPoll < BridgePollPeriod()) {
         if (frameNum - s_br_armFrame <= BridgeWaitFrames()) return;
@@ -1772,6 +1872,17 @@ void BridgeTick(int frameNum) {
 
     if (withBuild > 0 && done == withBuild) {
         printf("[Bridge] COMPLETE — builders finished the bridge.\n");
+        // Click it again now that it is BUILT, not a foundation: completion swaps the
+        // ModelComponent to the finished mesh, so the selection outline's per-variant
+        // prebuilt lookup (c4a0's PREBUILT branch) resolves a different mesh than it did
+        // on the foundation. Selecting only the foundation would leave that untested.
+        if (BridgeSelectDelay() > 0) {
+            printf("[Bridge][select] re-selecting the COMPLETED bridge...\n");
+            BridgeSelectFire(entityUI);
+            s_br_stage = BR_SELECT_SETTLE;
+            s_br_lastPoll = frameNum;
+            return;
+        }
         s_br_stage = BR_DONE;
         return;
     }
@@ -1869,7 +1980,22 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     if (s_up_stage != UP_IDLE && s_up_stage != UP_DONE) UpgradeTick(frameNum);
 
     // bridge: poll the placed span until the builders finish it.
-    if (s_br_stage == BR_WAIT_BUILT) BridgeTick(frameNum);
+    if (s_br_stage == BR_DRAG) {
+        if (s_br_dragUntil == 0) s_br_dragUntil = frameNum + BridgeDragFrames();
+        else if (frameNum >= s_br_dragUntil) {
+            printf("[ToolHarness][bridge] drag preview held %d frames; committing.\n",
+                   BridgeDragFrames());
+            BridgeCommit(s_br_tool, s_br_dragStart, s_br_dragEnd);
+        }
+    }
+    else if (s_br_stage == BR_WAIT_BUILT) BridgeTick(entityUI, frameNum);
+    // After the post-completion re-select, hold the loop open ~300 frames so the crash
+    // (if any) has frames to land in — it faults in Draw, not in the click.
+    else if (s_br_stage == BR_SELECT_SETTLE && frameNum - s_br_lastPoll > 300) {
+        printf("[Bridge] survived %d frames of Draw after selecting the completed bridge.\n",
+               frameNum - s_br_lastPoll);
+        s_br_stage = BR_DONE;
+    }
 
     if (s_fired) return;
     if (frameNum < s_settleFrame) return;

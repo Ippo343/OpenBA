@@ -623,9 +623,38 @@ add_prebuilt:
         OT("c4a0 PREBUILT-branch variant=(%d,%d) desc=%p table=%p row=%p cellMesh=%p",
            iVar10, iVar11, desc, (void*)table, (void*)row, cellMesh);
         if (cellMesh == nullptr) return;   // nothing loaded to draw
+
+        // The third SetMesh argument is a SOURCE MeshInstance (mangled name:
+        // ...@@PEAVMeshInstance@2@@Z) — the outline follows its node transforms. It is
+        // stored at EdgeMeshInstance+0xc8, and Graphics::EdgeMeshInstance::Draw
+        // (Runtime 0x1800a3150) does this with it:
+        //
+        //   1800a33c7  MOV RCX,[RSI + 0xc8]     ; the source instance
+        //   1800a33d9  JZ  0x1800a3469          ; null -> skip, draw without node follow
+        //   1800a33e4  CALL GetNodeToWorld      ; else: source->nodes[idx]
+        //
+        // The SOURCE is null-checked; its NODE ARRAY (MeshInstance+0xf0) is not.
+        // MeshInstance::GetNodeToWorld computes `nodeIdx * 0x38 + *(this + 0xf0)` and
+        // hands it straight to Math::Transform::Lerp, so a source instance that never
+        // got a mesh gives Lerp a null Scalar* and faults on `MOVSS XMM2,[R8+0x10]` —
+        // READ of 0x10, which is exactly the manual-play crash recorded in
+        // notes/bridge_dialog_crash.log (RCX=0x1c = 0+0x1c, R8=0).
+        //
+        // Retail can rely on the invariant "a ModelComponent's MeshInstance always has
+        // its mesh"; standalone cannot, because ModelComponent is built by an inert
+        // factory whose on-added never ran. Passing nullptr instead just takes the
+        // no-source branch above — the outline still draws, it simply does not follow
+        // animated node transforms.
+        void* srcInst = reinterpret_cast<void*>(charIBP + 0x28);
+        void* srcNodes = *reinterpret_cast<void**>(charIBP + 0x28 + 0xf0);
+        if (srcNodes == nullptr) {
+            OT("c4a0 PREBUILT source MeshInstance %p has NO node array (+0xf0 null) — "
+               "passing nullptr; retail would fault in EdgeMeshInstance::Draw", srcInst);
+            srcInst = nullptr;
+        }
         if (fn_EdgeMeshInstance_SetMesh)
             fn_EdgeMeshInstance_SetMesh(reinterpret_cast<void*>(self + 0x28), cellMesh,
-                                        reinterpret_cast<void*>(charIBP + 0x28));
+                                        srcInst);
         uint8_t time[8];
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
