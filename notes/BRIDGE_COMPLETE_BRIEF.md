@@ -200,11 +200,63 @@ builds.** That is pre-existing and does not match the brief's recorded 24→35-o
 soak, so either that soak ran a different configuration or something regressed between then and
 now. It is a separate thread from this wave; do not attribute it to the type-id fill.
 
+## ⭐ Found by MANUAL play, 2026-07-26 — two bridge opens the harness cannot see
+
+A human placed a bridge by hand (`BANISHED_AUTOSTART=1 BANISHED_SEED=12345
+BANISHED_BUILDER_AUTOPOOL=1 BANISHED_LIVE_INTERACT_ONADD=1`). The placement itself was clean —
+`CalcCost … snapped=30587 -> valid=1 len=12`, `CalcPath … 5 segments, 12 cells`, all five pick
+meshes registered with `userData=<master>`, and `[e700] reqCount=2 labelCount=3`. Two things
+the headless harness had no way to catch:
+
+**A. No red/green validity box during the drag.** Not a validity bug — `CalcCost` returns
+`valid=1` on every drag frame. It is the *highlight* that never renders.
+
+**B. Clicking the placed bridge to open its info dialog crashes.**
+
+Both point at the same family, and the log names it. The four addresses that print
+`NOT IMPLEMENTED` in the frames immediately before the fault:
+
+| address | what it is (writer confirmed in Ghidra) | read by |
+|---|---|---|
+| `0x1401c4410` | **HighlightComponent** type id (`HighlightComponent_RegisterType`) | `HighlightComponent_Slot2`, `thunk_helper_d250_sub_7080` |
+| `0x1401c4448` | **HighlightDescription** type id (`HighlightDescription_Register`) | `Entity_impl_c4a0`, `TradeWork_impl_b930` |
+| `0x1401c7fc8` | **UIComponent** type id (`UIComponent_RegisterType`) | **`EntityUI_impl_1ee0`** — the entity-info-dialog open path |
+| `0x140161c10` | a vtable referenced by `BridgeTool_Ctor` / `Tool_Ctor3` | — |
+
+Every bridge segment carries a `HighlightComponent` (see the component dump above), so **A is
+almost certainly the two Highlight type-ids** — same silent-null class as `0x1401c7ac0` in this
+very wave. And `EntityUI_impl_1ee0` reading a null **UIComponent** type id is the obvious
+suspect for **B**: the panel gets built wrong and the fault lands a frame later in the draw.
+
+Crash dump (`standalone_crash.log`), symbolized with `nm` at base `0x140000000`:
+
+```
+Fault: READ of 0000000000000010   (RSI=0)   Module: Runtime-x64.dll + 0x1D69B
+  #0..#4  Runtime-x64.dll  (UI draw chain)
+  #5      GameUpdateLoop_Draw               +0x35b
+  #6..#8  Runtime-x64.dll
+  #9      Game::RunGameMain                 +0x5d1
+```
+
+⚠ Note it faults in **Draw**, not in the click handler — so the click builds something bad and
+the next frame's render trips over it. Do not go looking for the fault in the open path itself;
+find what the open path left null. Both leads are **hypotheses from the log, not proven** —
+register the ids, re-run the same manual test, and confirm before believing either.
+
 ## Open
 
+* **A and B above** — the highlight box and the info-dialog crash. Best next session's work.
 * **Graduate `BANISHED_LIVE_INTERACT_ONADD`** — the A/B above was run with it OFF, so the flag
   itself still needs a soak of its own before it goes into `kDefaultOnFlags`.
 * **The frames-3000→6000 die-off** above, which nothing in this wave caused or fixed.
+
+## What the harness could not tell us
+
+Worth recording as method: the bridge harness proved placement, costing, hauling and
+construction, and reported a clean run — while a bridge you cannot *see the preview of* or
+*click on* was sitting in front of the player. **A headless harness measures the systems it
+drives, and reports silence about everything it does not.** Five minutes of manual play found
+two opens the automation was structurally blind to.
 * **`PickingComponent::OnAdded` (`0x140128f50`) is still unregistered** and prints
   `NOT IMPLEMENTED` on every entity register. Wiring vtable slot 6 for `PickingComponent` the
   way `InteractComponent` now is would make pick-mesh registration automatic and retire the
