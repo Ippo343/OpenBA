@@ -655,6 +655,24 @@ add_prebuilt:
         if (fn_EdgeMeshInstance_SetMesh)
             fn_EdgeMeshInstance_SetMesh(reinterpret_cast<void*>(self + 0x28), cellMesh,
                                         srcInst);
+
+        // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
+        // it: retail's PREBUILT branch sets no transform of its own because
+        // GetNodeToWorld supplies one. Dropping the source therefore leaves the
+        // EdgeMeshInstance on the identity transform its ctor gave it, and every
+        // outlined piece renders at the world origin instead of on the entity — observed
+        // by hand 2026-07-26 as "imaginary pieces offset from the main bridge" when
+        // clicking a bridge FOUNDATION.
+        //
+        // Place it from the model's own world Transform (ModelComponent+0x148, the
+        // 0x20-byte Math::Transform that BridgeTool::CalcPath writes per segment). Same
+        // call the BUILD branch above makes with the HighlightComponent's +0x100.
+        if (srcInst == nullptr && fn_Geometry_SetTransform) {
+            fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
+                                     reinterpret_cast<void*>(charIBP + 0x148));
+            OT("c4a0 PREBUILT placed outline from ModelComponent+0x148 (no source "
+               "instance to follow)");
+        }
         uint8_t time[8];
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
