@@ -830,6 +830,23 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
         // If flag80 is set, verify entity matches expected type
         if (flag80) {
             if (s_fn_CheckPtr) s_fn_CheckPtr(&foundEntity);
+            // Picking user data is not guaranteed to be a live entity pointer in standalone:
+            // any mesh registered WITHOUT Picking::Scene::SetMeshUserData leaves a stale/garbage
+            // slot, and this deref then faults (observed 2026-07-26: foundEntity=0x4167eb1a, a
+            // float bit pattern, -> READ of +0x28). Retail is safe only because every pickable
+            // mesh gets real user data. Reject implausible pointers rather than fault; the
+            // upstream miss is the real bug, so say so loudly.
+            if (foundEntity < 0x10000 || (foundEntity & 0x7) != 0) {
+                static int s_warned = 0;
+                if (s_warned < 4) {
+                    s_warned++;
+                    fprintf(stderr, "[EditTool] WARN: picking user data %p is not a valid entity "
+                            "pointer — skipping select. A mesh was registered without "
+                            "Picking::Scene::SetMeshUserData.\n", (void*)foundEntity);
+                    fflush(stderr);
+                }
+                return 1;
+            }
             uintptr_t entityTypeRef = *(uintptr_t*)(foundEntity + 0x28);
             uintptr_t expectedType = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x90);
             if (entityTypeRef != expectedType) {

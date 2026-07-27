@@ -172,6 +172,31 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
     int bridgeLength = 0;
     int valid = fn_BridgeTool_ValidatePath(self, startCell, snappedEnd, &bridgeLength);
 
+    // Diagnostics: confirm the two helpers are bound to the ports (they resolved to 0 before
+    // reg_player_bridge.cpp existed, which made every drag return 3 = invalid). Logs the
+    // first call, the first real (non-degenerate) drag, and the first validating span —
+    // enough to tell "never runs" from "runs but always rejects".
+    {
+        static bool s_first = false, s_drag = false, s_valid = false;
+        const bool isDrag = (startCell != snappedEnd);
+        if (!s_first || (isDrag && !s_drag) || (valid && !s_valid)) {
+            if (!s_first) s_first = true;
+            if (isDrag)   s_drag  = true;
+            if (valid)    s_valid = true;
+            uintptr_t d = (uintptr_t)self->bridgeDesc;
+            fprintf(stderr, "[Bridge] CalcCost: start=%d end=%d snapped=%d -> valid=%d len=%d"
+                    "  (Snap=%p Validate=%p desc=%p body=%08x approach=%08x req=%08x "
+                    "neigh=%08x radius=%d)\n",
+                    startCell, endCell, snappedEnd, valid, bridgeLength,
+                    (void*)fn_BridgeTool_SnapEndCell, (void*)fn_BridgeTool_ValidatePath,
+                    (void*)d,
+                    d ? *(uint32_t*)(d + 0x20) : 0, d ? *(uint32_t*)(d + 0x24) : 0,
+                    d ? *(uint32_t*)(d + 0x2c) : 0, d ? *(uint32_t*)(d + 0x30) : 0,
+                    d ? *(int*)(d + 0x34) : -1);
+            fflush(stderr);
+        }
+    }
+
     if ((char)valid != '\0') {
         // Success: all cost outputs = bridge body length
         *outCostB = bridgeLength;
@@ -226,16 +251,14 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
 typedef uint64_t (*fn_BridgeTool_CalcPath_t)(void* self, int startCell, int endCell);
 static fn_BridgeTool_CalcPath_t s_fn_BridgeTool_CalcPath = nullptr;
 
+// PORTED 2026-07-26 — bridgetool_calcpath.cpp. The delegation below was a leftover from
+// the removed proxy-DLL mode: in the standalone exe ResolveAddr(Exe, 0x1400f9cd0) has no
+// original to point at, so it returned 0 and every released bridge drag logged
+// "CalcPath function pointer is NULL" and built nothing.
+extern "C" uint64_t BridgeTool_CalcPath_Impl(void* self, int startCell, int endCell);
+
 uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
-    if (!s_fn_BridgeTool_CalcPath) {
-        s_fn_BridgeTool_CalcPath = reinterpret_cast<fn_BridgeTool_CalcPath_t>(
-            ResolveAddr(Module::Exe, BridgeToolAddr::CalcPath));
-    }
-    if (!s_fn_BridgeTool_CalcPath) {
-        printf("[BridgeTool] ERROR: CalcPath function pointer is NULL\n");
-        return 0;
-    }
-    return s_fn_BridgeTool_CalcPath(self, startCell, endCell);
+    return BridgeTool_CalcPath_Impl(self, startCell, endCell);
 }
 
 // ============================================================
@@ -253,6 +276,24 @@ static uint32_t BridgeTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("BridgeTool");
     return c;
 }
+// +0x58 (Slot11) GetToolSettingTypeId — retail BridgeTool slot 11 is 0x140004950, the
+// SAME shared `*ret = 0; return ret;` thunk RoadTool/RemovalTool/PathTool use (BridgeTool
+// has no tool-setting; only PlacementTool's RotationSetting does). SetEditMode
+// (FUN_140102b60 / Toolbar_ShowGroup_Impl) DEREFERENCES the returned pointer to decide
+// whether to build a ToolSetting, so the previous Tool_Ret0 stub (returns nullptr -> *0)
+// faulted the instant a bridge button click created the tool. This was the reason the
+// tool-mode tree node could not simply be added on its own.
+static uint32_t* BridgeTool_GetSettingType(void*, uint32_t* ret) {
+    if (ret) *ret = 0;
+    return ret;
+}
+// +0x60 (Slot12) cursor id — retail 0x1400fc9d0 `return 5`, shared with RoadTool/FencedTool.
+// EntityUI_ToolTick_SA feeds this to SetCursor, so Tool_Ret0 gave the wrong (id 0) cursor.
+static int BridgeTool_Slot12(void*) { return 5; }
+// +0x48 (Slot9) cancel/"can-deactivate?" — retail 0x1400fc640, the shared DragTool-family
+// right-click handler (cancels an active drag + closes the tool dialog, returns 1 to keep
+// the tool; 0 when idle so EntityUI proceeds with teardown). Same fn RoadTool slot 9 uses.
+extern "C" int DragTool_CancelDrag_Impl(void* self);
 static void* g_BridgeTool_Vtable[15] = {
     (void*)&BridgeTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,           // +0x08 slot1 (null)
@@ -260,13 +301,13 @@ static void* g_BridgeTool_Vtable[15] = {
     (void*)&Tool_Persist,         // +0x18 Serialize (base)
     (void*)&BridgeTool_Startup,   // +0x20 Startup
     (void*)&Tool_Ret0,            // +0x28
-    (void*)&DragTool_OnKey,       // +0x30 OnKey (DragTool base)
-    (void*)&Tool_Ret0,            // +0x38
-    (void*)&Tool_Ret0,            // +0x40
-    (void*)&Tool_Ret0,            // +0x48
-    (void*)&Tool_Ret0,            // +0x50
-    (void*)&Tool_Ret0,            // +0x58
-    (void*)&Tool_Ret0,            // +0x60
+    (void*)&DragTool_OnKey,       // +0x30 OnKey — retail 0x1400fc6b0 IS DragTool::OnKey (shared)
+    (void*)&Tool_Ret0,            // +0x38 retail 0x1400fb2c0 = empty `return;`
+    (void*)&Tool_Ret0,            // +0x40 Draw — retail 0x1400fadc0 (bridge preview, NOT ported)
+    (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag / allow-teardown (0x1400fc640)
+    (void*)&Tool_Ret0,            // +0x50 retail 0x1400268a0 = shared `return 0`
+    (void*)&BridgeTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
+    (void*)&BridgeTool_Slot12,    // +0x60 cursor id (retail returns 5)
     (void*)&BridgeTool_CalcPath,  // +0x68 CalcPath
     (void*)&BridgeTool_CalcCost,  // +0x70 CalcCost
 };

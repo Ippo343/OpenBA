@@ -187,6 +187,21 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (tid_CreateRoad && tid_RoadTool)
         Tree_Insert(tree, tid_CreateRoad, tid_RoadTool);
 
+    // BridgeTool (the river/water bridge drawing tool). Retail's EntityUI::Startup keys it
+    // on CreateBridgeDescription (0x1401c73f8). Without this node the toolbar's bridge
+    // button dead-ended exactly like road did before 311e46f: Toolbar_ShowGroup_Impl's
+    // component-scan matched none of the bridge description's 18 components, fell through
+    // to foundTypeId=0, and silently cleared the tool (no crash, no cursor, no preview).
+    // BridgeTool extends DragTool, so DragTool_OnKey (retail 0x1400fc6b0, its real slot-6)
+    // drives the drag and dispatches slot 14 (CalcCost) per frame and slot 13 (CalcPath)
+    // on release. NOTE: slot 11 had to be un-stubbed first — SetEditMode derefs its return.
+    uint32_t tid_CreateBridge = ::Object::ResolveTypeIdByNameLazy("CreateBridgeDescription");
+    uint32_t tid_BridgeTool   = ::Object::ResolveTypeIdByNameLazy("BridgeTool");
+    if (tid_CreateBridge && tid_BridgeTool)
+        Tree_Insert(tree, tid_CreateBridge, tid_BridgeTool);
+    fprintf(stderr, "[Tools]   bridge node: CreateBridge=%u -> BridgeTool=%u\n",
+            tid_CreateBridge, tid_BridgeTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
             "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
             "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} "

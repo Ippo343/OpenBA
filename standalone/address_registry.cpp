@@ -487,6 +487,7 @@ extern void RegisterRegionPairCacheBatch();  // Keystone A: region-pair ring-buf
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPlayerRoadCalcPathBatch();  // RoadTool commit path helpers (3)
+extern void RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell + ValidatePath (2)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
 extern void RegisterPfRootsRoadBatch();    // Wave 3: road-edit roots (9c480/9f2f0/9e0e0/9c640)
 extern void RegisterPfRootsRouteBatch();   // Wave 3: routing/storage roots (9f810/12cd80/12d5d0/8d590)
@@ -626,6 +627,7 @@ static void RegisterCodeFunctions() {
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPlayerRoadCalcPathBatch();  // RoadTool CalcPath helpers (6990 / acd90 / 9c960)
+    RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell (fb710) + ValidatePath (fb2d0)
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
     RegisterPfRootsRoadBatch();    // Wave 3 roots — road-edit (9c480/9f2f0/9e0e0/9c640)
     RegisterPfRootsRouteBatch();   // Wave 3 roots — routing/storage (9f810/12cd80/12d5d0/8d590)

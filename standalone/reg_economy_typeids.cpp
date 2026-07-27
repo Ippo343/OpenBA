@@ -156,6 +156,17 @@ static uint32_t g_tid_RawMaterialComponent = 0;   // 0x1401c7c80
 //   0x1401c6860 BuildRoad (TypeInfo_BuildRoad) — RemovalTool_helper_c700 (road removal)
 //                IsA/IsDerivedFrom-checks the resolved road component against this. Unfilled
 //                -> road removal treats every tile as non-road (removeKind stays 0xff).
+// 0x1401c73f8 CreateBridgeDescription — BridgeTool::Startup (0x1400fb7a0) scans the tool's
+// description entity for this component and stores it as bridgeDesc (+0x38). EVERY bridge
+// path reads it: ValidatePath (0x1400fb2d0) pulls its terrain masks from +0x20/+0x24/+0x2c/
+// +0x30 and the clearance radius from +0x34, and CalcPath (0x1400f9cd0) pulls the per-size
+// segment templates from +0x38[0..4]. Unregistered -> ResolveAddr returned 0 ->
+// g_TypeId_CreateBridgeDescription stayed null -> Startup took its early-out and left
+// bridgeDesc null -> ValidatePath bailed on its first guard, so every bridge drag reported
+// invalid with length 0. Exactly the same silent-null class as the 74a0 removal fix below.
+// Found 2026-07-26 by instrumenting CalcCost (desc=0000000000000000 on a live drag).
+static uint32_t g_tid_CreateBridgeDescription  = 0;  // 0x1401c73f8
+
 static uint32_t g_tid_CreateRemovalDescription = 0;  // 0x1401c74a0
 static uint32_t g_tid_DestroyComponent         = 0;  // 0x1401c75f0
 static uint32_t g_tid_BuildRoad                = 0;  // 0x1401c6860
@@ -226,6 +237,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7e78, reinterpret_cast<uintptr_t>(&g_tid_StorageComponent));
     RegisterExeAddr(0x1401c7190, reinterpret_cast<uintptr_t>(&g_tid_CitizenDescription));
     RegisterExeAddr(0x1401c7c80, reinterpret_cast<uintptr_t>(&g_tid_RawMaterialComponent));
+    RegisterExeAddr(0x1401c73f8, reinterpret_cast<uintptr_t>(&g_tid_CreateBridgeDescription));
     RegisterExeAddr(0x1401c74a0, reinterpret_cast<uintptr_t>(&g_tid_CreateRemovalDescription));
     RegisterExeAddr(0x1401c75f0, reinterpret_cast<uintptr_t>(&g_tid_DestroyComponent));
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
@@ -254,6 +266,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_StorageComponent     = ::Object::GetTypeIdByName("StorageComponent");
     g_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
     g_tid_RawMaterialComponent = ::Object::GetTypeIdByName("RawMaterialComponent");
+    g_tid_CreateBridgeDescription  = ::Object::GetTypeIdByName("CreateBridgeDescription");
     g_tid_CreateRemovalDescription = ::Object::GetTypeIdByName("CreateRemovalDescription");
     g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");

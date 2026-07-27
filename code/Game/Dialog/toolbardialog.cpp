@@ -32,6 +32,24 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+
+// ------------------------------------------------------------
+// BANISHED_TOOL_TRACE — diagnostic-only tracing for the toolbar-click ->
+// tool-activation path (why a building click activates no PlacementTool while
+// a road click activates a RoadTool). Off unless the env var is set, since
+// ShowGroup runs on every click and the scan loop is O(nodes * subitems).
+// ------------------------------------------------------------
+static bool ToolTraceOn() {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_TOOL_TRACE");
+        s_on = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return s_on != 0;
+}
+#define TOOLTRACE(...) do { if (ToolTraceOn()) { \
+    fprintf(stderr, "[ToolTrace] " __VA_ARGS__); fflush(stderr); } } while (0)
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -315,6 +333,30 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
     }
 
+    // Trace the inputs to the component-scan: a building click that activates no
+    // tool means either groupData==0 or none of its components matched a tree node.
+    if (ToolTraceOn()) {
+        int64_t gd = *(int64_t*)(pc + 0x20);
+        TOOLTRACE("ShowGroup ENTER gameSubsys=%p groupId=%p treeRoot=%p\n",
+                  gameSubsys, (void*)groupId, *(void**)(pc + 0x10));
+        if (gd != 0) {
+            int32_t n = *(int32_t*)(gd + 0x30);
+            void** arr = *(void***)(gd + 0x28);
+            TOOLTRACE("  groupData=%p subCount=%d subArray=%p\n", (void*)gd, n, arr);
+            for (int i = 0; i < n && i < 32; i++) {
+                void* sub = arr[i];
+                uint32_t tid = 0;
+                if (sub) {
+                    typedef uint32_t (*GetTypeId_t)(void*);
+                    tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)sub + 0x10)))(sub);
+                }
+                TOOLTRACE("    sub[%d]=%p typeId=%u\n", i, sub, tid);
+            }
+        } else {
+            TOOLTRACE("  groupData=NULL — scan will find nothing (tool cleared)\n");
+        }
+    }
+
     // Step 4: In-order BST traversal to find the matching tool node typeId.
     // The BST at pc+0x10 maps typeIds to tool factory/setting info.
     // We scan all nodes, checking each node's typeId against the group data's
@@ -412,6 +454,10 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         }
     }
 
+    TOOLTRACE("ShowGroup SCAN RESULT foundTypeId=%u foundNode=%p%s\n",
+              foundTypeId, (void*)foundNode,
+              foundTypeId == 0 ? "  <-- NO MATCH: clearing tool, click is a no-op" : "");
+
     // When groupId=0 (ESC/clear tools), no matching type exists — just clear controller and return
     if (foundTypeId == 0) {
         fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
@@ -426,6 +472,11 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     // IsDerivedFrom check for ToolController type
     bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
     void* toolController = isToolCtrl ? newObj : nullptr;
+
+    TOOLTRACE("ShowGroup CREATE toolTypeId=%u -> obj=%p isToolController=%d%s\n",
+              factoryTypeId, newObj, (int)isToolCtrl,
+              newObj == nullptr ? "  <-- factory returned NULL (type not registered)"
+                                : (!isToolCtrl ? "  <-- NOT a ToolController, discarded" : ""));
 
     // Store as InternalBasePtr at pc+0x28
     uint64_t ctrlRef = 0;
@@ -1558,6 +1609,13 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         fn_InternalBasePtr_Ctor(&localElemRef, typedElem);
 
         int32_t actionType = *(int32_t*)(item + 0x48);
+
+        TOOLTRACE("OnEvent CLICK self=%p btn=%d item=%p actionType=%d "
+                  "item+0x4C=%d item+0x58=%p elem=%p checked(+0xD8)=%d\n",
+                  self, buttonIndex, (void*)item, actionType,
+                  *(int32_t*)(item + 0x4C), *(void**)(item + 0x58),
+                  (void*)localElemRef,
+                  localElemRef ? *(uint8_t*)(localElemRef + 0xD8) : -1);
 
         switch (actionType) {
         case 0: {

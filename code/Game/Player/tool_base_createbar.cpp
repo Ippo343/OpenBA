@@ -308,6 +308,24 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x38) = param_8;
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(ctrl) + 0x58);
     if (count <= 0) return;
+    // Retail indexes the label-element array (+0x40, count at +0x48) using the REQUIREMENT
+    // count (+0x58) and never null-checks the element — safe only because the two arrays
+    // move together there (one labelBuild%i element per requirement). In standalone they can
+    // diverge (e.g. BuildRequirementUI's "labelBuild%i" FindElement loop coming up short),
+    // and the bridge tool's first drag faulted in UI::TextElement::SetParameter on a null
+    // element. Log the shape once and skip null entries rather than fault.
+    {
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            uintptr_t c = reinterpret_cast<uintptr_t>(ctrl);
+            fprintf(stderr, "[e700] ctrl=%p reqCount(+0x58)=%d labelCount(+0x48)=%u "
+                    "labelArr(+0x40)=%p sizeArr(+0x50)=%p\n",
+                    ctrl, count, *reinterpret_cast<uint32_t*>(c + 0x48),
+                    *reinterpret_cast<void**>(c + 0x40), *reinterpret_cast<void**>(c + 0x50));
+            fflush(stderr);
+        }
+    }
     for (int i = 0; i < count; i++) {
         uintptr_t sizeArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x50);
         int mult = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(ctrl) + 0x38);
@@ -317,10 +335,27 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
         if (fn_String_Format) fn_String_Format(s, "%i", static_cast<uint64_t>(static_cast<uint32_t>(val)));
 
         uintptr_t elemArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x40);
-        void* elemIBP = reinterpret_cast<void*>(elemArr + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
-        void* elem = *reinterpret_cast<void**>(elemIBP);
-        if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, s);
+        void* elem = nullptr;
+        if (elemArr) {
+            void* elemIBP = reinterpret_cast<void*>(elemArr + static_cast<int64_t>(i) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
+            elem = *reinterpret_cast<void**>(elemIBP);
+        }
+        if (elem) {
+            if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, s);
+        } else {
+            // Loud: retail would have faulted here, so this means our controller state is
+            // wrong upstream (label array shorter than the requirement count), not that the
+            // skip is correct behaviour.
+            static int s_warned = 0;
+            if (s_warned < 4) {
+                s_warned++;
+                fprintf(stderr, "[e700] WARN: null label element at i=%d (reqCount=%d, "
+                        "labelArr=%p) — skipping; upstream BuildRequirementUI state is short\n",
+                        i, count, reinterpret_cast<void*>(elemArr));
+                fflush(stderr);
+            }
+        }
         if (fn_String_Dtor) fn_String_Dtor(s);
     }
 }

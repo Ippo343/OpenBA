@@ -1,0 +1,255 @@
+// bridgetool_validate.cpp — BridgeTool path helpers (drag snapping + validation).
+//
+// Ports the two exe-internal helpers BridgeTool::CalcCost (slot 14) and
+// BridgeTool::CalcPath (slot 13) both call. Before this file they were bound via
+// ResolveAddr(Module::Exe, ...) to UNREGISTERED addresses, which return 0 in the
+// standalone exe — so CalcCost bailed with "return 3" (invalid) on every frame of a
+// bridge drag, and CalcPath's own validity gate could never open. Both are pure
+// map-grid math with no engine calls, so they port directly.
+//
+//   BridgeTool_SnapEndCell   0x1400fb710 (sub_b710)
+//   BridgeTool_ValidatePath  0x1400fb2d0 (sub_b2d0)
+//
+// Map-grid layout (mapGrid = gameWorld+0xf8) — identical to the layout the road port
+// documents in roadtool_calcpath.cpp:
+//   +0x00 gridSize (width) · +0x80 terrain cell array (stride 0x30) · +0xe8 pending BST root
+// Terrain cell (stride 0x30):
+//   +0x00 occupant entity ptr (0 = empty) · +0x29 terrain type byte · +0x2a road type (0xff = none)
+//
+// NOTE on the Ghidra listing: the grid pointer decompiles as `int *piVar1`, so its
+// `piVar1 + 0x20` is byte offset +0x80 and `piVar1 + 0x3a` is +0xe8 (element-vs-byte
+// scaling). The pending-cell BST nodes use left=+0x10 / right=+0x18, which is a DIFFERENT
+// node layout from the tool-mode tree's +0x20/+0x28 — two BST shapes exist in this binary.
+//
+// CreateBridgeDescription masks (self->bridgeDesc, see engine/types/BridgeTool.h):
+//   +0x20 maskBody     — terrain the bridge body may span (the water)
+//   +0x24 maskApproach — terrain the bridge ends must land on (the banks)
+//   +0x2c maskRequired — at least one body cell must carry one of these bits
+//   +0x30 maskNeighbor — terrain permitted in the clearance ring around the span
+//   +0x34 neighborRadius
+
+#include "BridgeTool.h"
+#include "engine_funcs.h"
+#include "address_registry.h"
+#include <cstdint>
+#include <cstdlib>
+
+namespace {
+
+inline uint32_t* MapGrid() {
+    void* gameWorld = *g_pGameWorldSingleton;
+    if (!gameWorld) return nullptr;
+    return *reinterpret_cast<uint32_t**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
+}
+
+inline int64_t TerrainBase(uint32_t* mapGrid) {
+    return *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+}
+
+inline uintptr_t CellAt(int64_t terrainBase, int cellIdx) {
+    return static_cast<uintptr_t>(terrainBase) + static_cast<int64_t>(cellIdx) * 0x30;
+}
+
+// 1 << (terrainType & 0x1f) — the bit each mask is tested against.
+inline uint32_t TerrainBit(uintptr_t cell) {
+    return 1u << (*reinterpret_cast<uint8_t*>(cell + 0x29) & 0x1f);
+}
+
+// The pending/queued-cell BST at mapGrid+0xe8. Returns true if cellIdx is present,
+// which makes the cell unavailable. Node: key=+0x00, left=+0x10, right=+0x18.
+bool PendingContains(uint32_t* mapGrid, int cellIdx) {
+    int* node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(mapGrid) + 0xe8);
+    while (node != nullptr) {
+        if (cellIdx < *node) {
+            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x10);
+        } else {
+            if (cellIdx <= *node) return true;   // exact hit
+            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+// ============================================================
+// BridgeTool::SnapEndCell (0x1400fb710)
+// ============================================================
+// Constrains the drag's end cell to a straight run from the start cell: whichever of
+// the row/column deltas is smaller collapses, so a bridge is always axis-aligned.
+// Ties (|dRow| == |dCol|) snap to a horizontal run, matching retail's `<=`.
+extern "C" int BridgeTool_SnapEndCell_Impl(void* self, int endCell) {
+    uint32_t* mapGrid = MapGrid();
+    if (!mapGrid) return endCell;
+    const int width = static_cast<int>(mapGrid[0]);
+    if (width <= 0) return endCell;
+
+    const int startCell = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x2c);
+    const int startRow = startCell / width;
+    const int startCol = startCell % width;
+    const int dCol = startCol - (endCell % width);
+    const int dRow = startRow - (endCell / width);
+
+    if (std::abs(dRow) <= std::abs(dCol))
+        return (endCell % width) + width * startRow;   // keep the start row (horizontal run)
+    return startCol + width * (endCell / width);       // keep the start col (vertical run)
+}
+
+// ============================================================
+// BridgeTool::ValidatePath (0x1400fb2d0)
+// ============================================================
+// Walks the axis-aligned span between startCell and endCell and decides whether a bridge
+// may be built there, writing the body length (in cells) to outLength.
+//
+// Three phases, all faithful to the original:
+//   1. Span scan — a state machine that must see approach terrain, then body terrain,
+//      then approach terrain again (bank -> water -> bank), with at least one body cell
+//      carrying a maskRequired bit. Any occupied cell invalidates.
+//   2. Locate the first body cell (start of the span proper).
+//   3. Clearance ring — every cell within neighborRadius of the body must be free
+//      (no occupant, no road, not queued in the pending BST) and, for offsets != 0,
+//      must carry a maskNeighbor terrain bit.
+//
+// Returns nonzero when the bridge is placeable. outLength may be null.
+extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell,
+                                                 int* outLength) {
+    uint32_t result = 1;
+    if (outLength) *outLength = 0;
+
+    uint32_t* mapGrid = MapGrid();
+    if (!mapGrid) return 0;
+    const int width = static_cast<int>(mapGrid[0]);
+    if (width <= 0) return 0;
+    const int64_t terrainBase = TerrainBase(mapGrid);
+    if (!terrainBase) return 0;
+
+    const uintptr_t desc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(self) + 0x38);
+    if (!desc) return 0;
+    const uint32_t maskBody     = *reinterpret_cast<uint32_t*>(desc + 0x20);
+    const uint32_t maskApproach = *reinterpret_cast<uint32_t*>(desc + 0x24);
+    const uint32_t maskRequired = *reinterpret_cast<uint32_t*>(desc + 0x2c);
+    const uint32_t maskNeighbor = *reinterpret_cast<uint32_t*>(desc + 0x30);
+    const int      radius       = *reinterpret_cast<int*>(desc + 0x34);
+
+    // Normalise the span to [minRow..maxRow] x [minCol..maxCol].
+    int startRow = startCell / width, startCol = startCell % width;
+    int endRow   = endCell   / width, endCol   = endCell   % width;
+    int minCol = startCol, maxCol = endCol;
+    if (endCol < startCol) { minCol = endCol; maxCol = startCol; }
+    int minRow = startRow, maxRow = endRow;
+    if (endRow < startRow) { minRow = endRow; maxRow = startRow; }
+
+    // ---- Phase 1: bank -> water -> bank state machine over the span ----
+    int  state          = 0;   // 0 = near bank, 1 = body, 2 = far bank
+    int  approachNear   = 0;
+    int  bodyCount      = 0;
+    int  approachFar    = 0;
+    int  savedBodyCount = 0;
+    bool sawRequired    = false;
+    bool spanOk         = false;
+
+    if (minRow <= maxRow) {
+        for (int row = minRow; row <= maxRow; row++) {
+            if (minCol <= maxCol) {
+                uintptr_t cell = CellAt(terrainBase, width * row + minCol);
+                for (int n = maxCol - minCol + 1; n > 0; n--, cell += 0x30) {
+                    if (*reinterpret_cast<int64_t*>(cell) != 0)
+                        result = 0;                     // cell already occupied
+                    const uint32_t bit = TerrainBit(cell);
+
+                    if (state == 0) {
+                        if (maskBody & bit) {
+                            state = 1;
+                            sawRequired = sawRequired || ((maskRequired & bit) != 0);
+                            bodyCount++;
+                        } else if (maskApproach & bit) {
+                            approachNear++;
+                        } else {
+                            result = 0;
+                        }
+                    } else if (state == 1) {
+                        if (maskApproach & bit) {
+                            state = 2;
+                            approachFar++;
+                        } else if (maskBody & bit) {
+                            sawRequired = sawRequired || ((maskRequired & bit) != 0);
+                            bodyCount++;
+                        } else {
+                            result = 0;
+                        }
+                    } else {  // state == 2
+                        if (maskApproach & bit) approachFar++;
+                        else                    result = 0;
+                    }
+                }
+                savedBodyCount = bodyCount;
+            }
+        }
+        spanOk = (state == 2) && (approachNear != 0) && (bodyCount != 0) && (approachFar != 0);
+    }
+    if (!spanOk)      result = 0;
+    if (!sawRequired) result = 0;
+    if (outLength)    *outLength = bodyCount;
+
+    // ---- Phase 2: locate the first body cell in the span ----
+    int bodyRow = minRow, bodyCol = minCol;
+    {
+        int foundIdx = -1;
+        int scanCol = minCol, scanRow = minRow;
+        for (int row = minRow; row <= maxRow; row++) {
+            int hitIdx = -1;
+            int hitCol = scanCol, hitRow = scanRow;
+            if (minCol <= maxCol) {
+                int idx = width * row + minCol;
+                for (int col = minCol; col <= maxCol; col++, idx++) {
+                    if (maskBody & TerrainBit(CellAt(terrainBase, idx))) {
+                        hitIdx = idx; hitCol = col; hitRow = row;
+                        break;
+                    }
+                }
+            }
+            if (hitIdx >= 0) { foundIdx = hitIdx; scanCol = hitCol; scanRow = hitRow; break; }
+        }
+        (void)foundIdx;
+        bodyCol = scanCol;
+        bodyRow = scanRow;
+    }
+
+    // ---- Phase 3: clearance ring around the body span ----
+    // The body extends from (bodyRow, bodyCol) by savedBodyCount along whichever axis is
+    // not already at its maximum — matching retail's `(col != maxCol) * len + col` form.
+    const int spanEndCol = (bodyCol != maxCol) ? bodyCol + savedBodyCount : bodyCol;
+    const int spanEndRow = (bodyRow != maxRow) ? bodyRow + savedBodyCount : bodyRow;
+
+    for (int row = bodyRow, rowBias = -bodyRow; row <= spanEndRow; row++, rowBias--) {
+        if (bodyCol > spanEndCol) continue;
+        for (int col = bodyCol; col <= spanEndCol; col++) {
+            for (int off = -radius; off <= radius; off++) {
+                // A horizontal body walks the ring along the row; a degenerate span
+                // (single column) walks it along the column instead.
+                int probeRow = off + row;
+                int probeCol = col;
+                if (bodyCol == spanEndCol) {
+                    probeRow = row;
+                    probeCol = rowBias + off + row + col;
+                }
+                const int idx = width * probeRow + probeCol;
+                if (idx < 0) { result = 0; continue; }
+                const uintptr_t cell = CellAt(terrainBase, idx);
+                const uint32_t  bit  = TerrainBit(cell);
+
+                if (off != 0 && (maskNeighbor & bit) == 0)
+                    result = 0;
+
+                const bool free = (*reinterpret_cast<int64_t*>(cell) == 0)
+                               && ((bit & 2) == 0)
+                               && ((bit & 1) == 0)
+                               && (*reinterpret_cast<int8_t*>(cell + 0x2a) == -1);
+                if (!free || PendingContains(mapGrid, idx))
+                    result = 0;
+            }
+        }
+    }
+
+    return result;
+}
