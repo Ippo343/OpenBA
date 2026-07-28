@@ -233,6 +233,31 @@ static const char* const kDefaultOnFlags[] = {
     // off, so it is not a reason to hold this. It IS a reason not to call the upgrade path
     // clean; see notes/CITIZEN_ONREMOVE_BRIEF.md.
     "BANISHED_LIVE_DESTROY_WORKERS",
+    // BuildComponent's OnAdded broadcast (vtable slot 6 / +0x30, retail 0x140108d40 ->
+    // body 0x140108720) — the one-shot that fills the site's construction mesh list
+    // (+0x58/+0x60) and picking list (+0x68/+0x70) at EntityList_RegisterEntity time and
+    // reads the real build multiplier into +0x4c. Graduated 2026-07-27.
+    //
+    // Held opt-in for two sessions on two concerns, both now settled by measurement:
+    //  * "It un-frames the founding town." It did, and that was OUR gap, not the slot's:
+    //    the start-town spawner never opened retail's instant-build bracket around
+    //    SetModel + RegisterEntity (gw+0xd0 bit 0), which is exactly how retail stops this
+    //    slot from un-framing a pre-built building. Bracket ported; measured 0 resets.
+    //  * "It changes the bridge's build target from x1 to x13, and no build has completed
+    //    with a real multiplier." Wrong attribution: State1Enter (0x140108290) reads +0x4c
+    //    from the SAME MultiObjectComponent finder (0x140004740) and runs AFTER
+    //    registration, so it sets the target for every site that enters state 1 whether
+    //    this slot ran or not. Measured with the flag OFF: bridge sites report
+    //    "costQty=4 mult=15" and "mult=21" — the real span, not 1. The flag is
+    //    target-neutral; there was never an unverified multiplier riding on it.
+    // Positive evidence with it on: 9 slot-6 dispatches, the bridge master's mesh list
+    // filled with all its segments (0 lazy BC8_EnsureMeshList fallbacks), and the organic
+    // demo-house build still completes end-to-end (30/30 credits -> 8->2 -> OneShot +
+    // Finalize), 0-byte crash log.
+    // One visible consequence, faithful to retail: a site registered while the instant bit
+    // is clear has its model un-framed until state 8 gives it construction frame 0 — i.e.
+    // a placed foundation shows no building mesh until construction actually starts.
+    "BANISHED_LIVE_BUILD_ONADDED",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

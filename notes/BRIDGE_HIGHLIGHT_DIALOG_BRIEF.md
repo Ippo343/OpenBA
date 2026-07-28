@@ -461,6 +461,162 @@ with the flag off.
 * Pre-existing and untouched: `[PickupStoredRawMaterial] ERROR: some function pointers
   not resolved!` (`typeId7158=0`) floods the default run's log.
 
+## The insta-build path, end to end (2026-07-27)
+
+Three opens from the pass above, all closed: what triggers the instant completion during
+spawn (was "hypothesis, untraced"), `sub_8720`'s instant branch (was "unported"), and the
+`BANISHED_LIVE_BUILD_ONADDED` graduation (was "plausible, not verified").
+
+### The path
+
+Retail's insta-build is not a special case in the spawner — it is the ordinary build state
+machine, run to completion inside `RegisterEntity`:
+
+```
+StartTown / ComponentEntity_impl_1fc0, per building:
+  gw+0xd0 |= 1                          ; instant-build bit (also the debug menu setting)
+  ModelComponent::SetModel(variant, 0)  ; construction frame 0, NOT the finished mesh
+  EntityList_RegisterEntity --> ComponentEntity_OnAddedPass
+        StateMachineComponent slot 6 (+0x30, 0x14012b660) = StateMachine::Tick(sm, Time(0), 0, 0)
+          |  Tick's outer loop runs *while a pending state is set*, so the whole chain
+          |  below happens inside this one call:
+          |- state 1 enter (0x140108290): instant bit set => skip the gather-work spawn,
+          |                 request 1 -> 8
+          |- state 8 enter (0x140107ae0) INSTANT branch:
+          |       sub_8720 (= BuildComponent's OnAdded BODY) fills the mesh list + stamps
+          |       each model build-controlled (variant -1), then
+          |       +0x48 (delivered) = matComp[0x30] * +0x4c (multiplier), then
+          |       every mesh -> its FINAL frame (frameCount-1), then request 8 -> 2
+          \- state 2 entered => the 8->2 action (Finalize) + State8OneShot run: site dequeued
+                   from townMgr+0xd0, WorkPlaceComponent state-2 enter, storage
+                   reconfigured as OUTPUT — and every *other* controller's state-2 enter
+                   fires too (ResidenceComponent's household registry, etc.)
+  gw+0xd0 &= ~1
+```
+
+So the answer to "what triggers the instant completion" is `StateMachine::Tick`'s
+pending-state loop: a state's enter handler that requests a transition is serviced by the
+*same* Tick, so 1 -> 8 -> 2 completes before `RegisterEntity` returns. The earlier
+hypothesis ("the StateMachineComponent's own OnAdded entering state 1 inside the same
+pass") had the entry point right and did not know the loop was what carried it to the end.
+
+`SetModel`'s frame argument is settled by the same finding: retail's **0** is correct
+*because* this path exists. Our `subCount-1` was the stand-in for it.
+
+### What was missing in standalone — three things, not one
+
+1. `sub_8720`'s caller: State8Enter's INSTANT branch (unported, traced only).
+2. State1Enter's `else` leg: it traced "state-8 transition DEFERRED" instead of requesting.
+3. **The SM component itself**: slot 6 was never wired *and* our controller-linking ran
+   lazily on the first `Update` — a frame after the spawner clears the bit. So even with
+   (1) and (2) ported, nothing would have run inside the bracket. Retail links in slot 4
+   (`StateMachineComponent::Startup` 0x14012b6a0, dispatched by `StartupComponents` before
+   `RegisterEntity`); we now do the same, and slot 6 runs the Tick.
+
+All three ported, behind `BANISHED_LIVE_SM_ONADDED` (opt-in) plus a new
+`COMPONENT_LIVE_FACTORY_SOA` macro (Startup + Update under one env var, OnAdded under its
+own).
+
+### Measured, flag on, `BANISHED_SEED=12345`
+
+| founding structure | result |
+|---|---|
+| State1Enter reached | 7 / 7 (the 8th has no BuildComponent) |
+| `State8Enter INSTANT` completions | 7 / 7 |
+| mesh frame | `variant=N frame -1 -> 2` — sub_8720 un-frames, the instant branch snaps to the final sub-mesh (= the exact value the old stand-in hand-set) |
+| `delivered(+0x48)` | 60 / 30 — identical to what the hand-stamp computed |
+| SM current state `+0x50` | **2** for all 7, `pending(+0x52)` back to 0xff |
+| completion bookkeeping | `State8OneShot` + `State8Finalize` run for founding buildings for the first time: dequeue from townMgr+0xd0, WPC state-2 enter, storage reconfigured OUTPUT (`accept=0x60 cap=1000` per house — the same numbers the fuel-haul session derived by hand; `accept=0x16220 cap=6000` for the hall) |
+| residence state-2 registrations | 6, same as control |
+| crash log | 0 bytes, both runs |
+
+Retired by it: the `subCount-1` model frame, the `+0x52 = 2` stamp, and the
+`+0x48`/`+0x4c` build-bookkeeping stamp — **for the 7 structures the real path reaches**.
+
+### The one entity it does not reach, and why the stand-in stays
+
+Start-town entry `[1]` (4x6 footprint, no model group, no `BuildComponent` — the stockpile)
+has nothing to drive its state machine, and its own first controller is inert so the linker
+cannot read a real default either. It lands at `+0x50 = 0`, which `EntityUI`'s page router
+(`pageIdx = pending < 0 ? current : pending`, `entityui.cpp:588`) reads as the
+under-construction page.
+
+So the stamps are not deleted — they became a **post-`RegisterEntity` fallback** that fires
+only when the real chain did not land on state 2, and logs either way. The measurement is
+the point: exactly one fallback line, for exactly that entity.
+
+⚠ `+0x50` is the CURRENT state and `+0x52` the PENDING one (block pointer at `+0x48`; the
+`sm` pointer `StateMachine::Tick` receives IS `SMC+0x48`, so its `sm+0x08..0x0b` are
+`SMC+0x50..0x53`). The first version of the fallback probe tested `+0x52` and reported
+`-1` for every building that had *succeeded* — the stand-in wrote the pending byte so the
+first tick would ENTER state 2, and after a real entry pending is 0xff again.
+
+### `BANISHED_LIVE_BUILD_ONADDED` — graduated, and the blocker was mis-attributed
+
+The stated blocker was: "the flag makes the bridge's build target `matComp[0x30] * 13`
+instead of `* 1`, and no build has completed with a multiplier > 1."
+
+That premise is wrong. `State1Enter` reads `+0x4c` from the **same** MultiObjectComponent
+finder (`0x140004740`) and runs *after* registration, so it sets the multiplier for every
+site that enters state 1 whether slot 6 ran or not. Measured with the flag **off**:
+
+```
+[BuildTrace] HaveAllMaterials ... delivered=0 required=60 (costQty=4 mult=15) SHORT   # run A
+[BuildTrace] HaveAllMaterials ... (costQty=4 mult=21)                                # run B, different span
+```
+
+The multiplier was already real on the default path. The flag is target-neutral, so there
+was never an unverified target riding on it. What it does change is verified: the mesh list
+is filled at the faithful time (0 lazy fallbacks), and Stage 3 un-frames a site's model at
+register time — whose one regression (the founding town) is fixed at the source by the
+instant-build bracket, and whose remaining visible effect (a placed foundation carries no
+building mesh until construction starts) is what retail does.
+
+Positive evidence with it on: the organic demo-house build still completes end to end
+(30/30 credits -> 8->2 -> OneShot + Finalize), 0-byte crash log. **Promoted to
+`kDefaultOnFlags`.**
+
+### Still open
+
+* `BANISHED_LIVE_SM_ONADDED` stays opt-in. It is verified on the spawn path above, but it
+  changes controller-link *timing for every entity* and newly runs `State8Finalize`
+  (storage reconfigure) on all founding buildings — economy surface that wants a real soak.
+  **The soak gate itself is broken, and that is the finding**: the standing town-health
+  recipe goes EXTINCT by frame 9000 with *both* flags explicitly off.
+
+  | frame | flags off (control) | both flags on |
+  |---|---|---|
+  | 3000 | 27 citizens | 27 |
+  | 6000 | 18 | 13 |
+  | 9000 | **none — extinct** | **none — extinct** |
+
+  Cause, identical in both runs and unrelated to either flag:
+  `CLAMPED food seed 6000 -> 0 units (cap=1000, fuel reserves 1600, keeping 100 free)`,
+  then `seeded food into 7/7 houses (8 units each)`. `BANISHED_SEED_FUEL`'s 400 units/house
+  is 1600 volume against a real house capacity of 1000 (`StorageDescription+0x24`), so the
+  house is already over cap before any food goes in and the food seed clamps to ~nothing.
+  Hunger climbs 7.5 → 11.4 (death at 25) and the town starves. Until the fuel stand-in is
+  sized to the real capacity (or the woodcutter exists), this recipe cannot clear ANY flag —
+  the 13-vs-18 gap at frame 6000 is a difference between two dying towns, not a signal. The
+  earlier note "loses ~40% of the town by frame 6000, pre-existing" was the same thing seen
+  before it finished.
+* A completed build with a multiplier > 1 is still not demonstrated *by labour*. Not a
+  blocker for the flag (see above), but bridges still stall with `delivered=0` — 4 log units
+  x a 15-21 cell span is 60-84 units that never arrive. That is the haul-to-a-bridge-site
+  question, untouched here.
+
+### Traps this pass paid for
+
+* **A field can be the pending state, not the state.** The fallback probe "confirmed"
+  failure for seven buildings that had all succeeded. Read the consumer (`entityui.cpp`
+  already had `pending < 0 ? current : pending`) before asserting what a byte means.
+* **"The flag changes X" needs the write ordering checked.** Two writers of `+0x4c` exist;
+  the later one runs on the default path, so the earlier one can never be the source of a
+  behaviour difference. One grep for the offset shows both writers.
+* **A "one-line port" can be three ports.** Both branch handlers were pointless without the
+  component wiring that lets them run at spawn time. Ask what *dispatches* the code before
+  calling it the last piece.
+
 ## Traps this wave paid for
 
 * **A stale "default off" comment is worse than no comment.** It ruled out the correct

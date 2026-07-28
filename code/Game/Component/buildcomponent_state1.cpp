@@ -32,6 +32,7 @@
 
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
@@ -482,14 +483,31 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         }
     } else {
         // -------- Materials present / instant: force transition to state 8 --------
-        // The faithful path StateMachine_Tick's the node then calls its Step vtable slot
-        // to advance to state 8. That transition (+ the state-8 build handlers) is the
-        // NEXT brick; here we only trace so brick 1 stays crash-safe even when a building
-        // lacks a resolvable BuildDescription (sub_8630 -> true routes here).
-        (void)smNode;
+        // Retail (0x140108290 else-branch):
+        //     req = 8;
+        //     if ((int8_t)sm[9] < 0) { Time t(0.0f); StateMachine_Tick(sm,t,0,0); }
+        //     i = node->slot08(node, sm[9], &req);
+        //     if (i >= 0) { sm[0xb] = i; sm[0xa] = req; }
+        // == ControllerLive::RequestStateTransition, which is the same idiom minus the
+        // nested pre-tick (it bails when sm[9] < 0 instead). That pre-tick cannot fire on
+        // the path this branch actually takes: StateMachine::Tick writes sm+9 from the
+        // node Step BEFORE dispatching the Enter slot, so sm+9 is >= 0 whenever a state's
+        // enter handler is running. The one caller that could reach it with sm+9 < 0 is a
+        // hand-driven node outside Tick, which this project has none of.
+        //
+        // The instant-build leg of this branch (instant != 0) is retail's start-town
+        // completion path: gw+0xd0 bit 0 is set across the spawner's SetModel +
+        // RegisterEntity bracket, StateMachineComponent's own OnAdded (slot 6,
+        // 0x14012b660) ticks the SM inside that same OnAddedPass, and StateMachine::Tick
+        // loops while a pending state is set — so 1 -> 8 -> 2 all completes before the
+        // spawner clears the bit. State8Enter's instant branch is what snaps the meshes to
+        // their final frame and stamps +0x48 = target. See StartTown_SpawnStructures and
+        // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
+        ::ControllerLive::RequestStateTransition(smNode, 8);
         if (BCS1_Trace())
-            std::fprintf(stderr, "[BuildTrace] materials present/instant (haveAll=%d instant=%d) -> state-8 transition DEFERRED\n",
-                         (int)haveAll, (int)instant);
+            std::fprintf(stderr, "[BuildTrace] materials present/instant (haveAll=%d instant=%d) -> requested 1->8 (self=%p mult=%d)\n",
+                         (int)haveAll, (int)instant, buildComp,
+                         *reinterpret_cast<int32_t*>(self + 0x4c));
     }
 
     return 1;

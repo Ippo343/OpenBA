@@ -247,3 +247,53 @@ bool LiveEnabled(const char* envVar);
         Name##_FinishLiveVtable();                                             \
         return mem;                                                           \
     }
+
+// As COMPONENT_LIVE_FACTORY_S, plus the OnAdded slot (vtable +0x30 / index 6 —
+// dispatched by ComponentEntity_OnAddedPass at EntityList_RegisterEntity time)
+// under its OWN env var, so a component can keep Startup+Update live (proven,
+// default-on) while its register-time one-shot stays a separate opt-in. The
+// slot-6 install has to live in FinishLiveVtable like the others: InitInertTyped
+// re-stubs the shared vtable on every instance creation, so anything installed
+// from a per-instance body would be erased by the next component's creation.
+#define COMPONENT_LIVE_FACTORY_SOA(Name, Size, Flags, EnvVar, UpdateFn,         \
+                                   StartupFn, OnAddedEnvVar, OnAddedFn)        \
+    static uint32_t Name##_LiveGetTypeId(void*) {                              \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];     \
+    static void Name##_UpdateVSlot(void* s, void* t) {                         \
+        UpdateFn(reinterpret_cast<Name*>(s), reinterpret_cast<int64_t*>(t));   \
+    }                                                                          \
+    static void Name##_StartupVSlot(void* s) {                                 \
+        StartupFn(reinterpret_cast<Name*>(s));                                 \
+    }                                                                          \
+    static void Name##_OnAddedVSlot(void* s) {                                 \
+        OnAddedFn(reinterpret_cast<Name*>(s));                                 \
+    }                                                                          \
+    static void Name##_FinishLiveVtable() {                                    \
+        if (::ComponentFactory::LiveEnabled(EnvVar)) {                         \
+            Name##_LiveVtable[4] =                                             \
+                reinterpret_cast<void*>(&Name##_StartupVSlot);                 \
+            Name##_LiveVtable[9] =                                             \
+                reinterpret_cast<void*>(&Name##_UpdateVSlot);                  \
+        }                                                                      \
+        if (::ComponentFactory::LiveEnabled(OnAddedEnvVar))                    \
+            Name##_LiveVtable[6] =                                             \
+                reinterpret_cast<void*>(&Name##_OnAddedVSlot);                 \
+    }                                                                          \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),          \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return p;                                                              \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                             \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),      \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return mem;                                                            \
+    }

@@ -813,9 +813,61 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
     StateMachineComponent_Update(self, reinterpret_cast<int64_t>(time));
 }
 
-COMPONENT_LIVE_FACTORY_S(StateMachineComponent, 0x58, 0xcd,
-                         "BANISHED_LIVE_STATEMACHINE",
-                         StateMachineComponent_UpdateAdapter,
-                         StateMachineComponent_BodyInit)
+// ------------------------------------------------------------------
+// Slot 4 (+0x20) — retail StateMachineComponent::Startup (0x14012b6a0). Retail's
+// slot-4 handler is EXACTLY the controller-linker; the field init lives in the ctor
+// (0x14012ba30), which the inert factory does not run, so we do both here.
+//
+// Linking at Startup instead of lazily on the first Update is what makes the
+// insta-build spawn path reachable: ComponentEntity_StartupComponents runs this pass
+// after every component of the entity exists but BEFORE the spawner's
+// SetModel/RegisterEntity bracket, so the chain is already linked when OnAddedPass
+// dispatches slot 6 below. With lazy linking the first tick is a frame later, by which
+// time StartTown has cleared the instant-build bit and the site takes the staged path.
+//
+// Gated (BANISHED_LIVE_SM_ONADDED) together with the slot-6 tick: on its own, earlier
+// linking only moves the +0x52 default-state write earlier, but that write is what the
+// 2026-07-20 stockpile regression turned on, so it does not go live independently.
+static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
+    if (!self) return;
+    StateMachineComponent_BodyInit(self);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED") &&
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x38) == nullptr) {
+        StateMachineComponent_ResolveHelpers();
+        StateMachineComponent_LinkControllers_Standalone(self);
+    }
+}
+
+// ------------------------------------------------------------------
+// Slot 6 (+0x30) — retail 0x14012b660: StateMachine::Tick(sm, Time(0.0f), 0, 0).
+// Verified slot: its only vtable xref is 0x140164550 == vtable(0x140164520) + 0x30.
+// (Ghidra names it StateMachineComponent_Draw — the familiar slot-6 mislabel.)
+//
+// This is the one-shot register-time tick, and it is the ENGINE of retail's
+// insta-build: Tick's outer loop runs while a pending state is set, so a state's enter
+// handler that requests a transition is serviced inside the SAME call. During
+// StartTown's instant-build bracket that means 1 (State1Enter -> req 8) -> 8
+// (State8Enter INSTANT: meshes to final frame, delivered = target -> req 2) -> 2, all
+// before RegisterEntity returns and the bit is cleared.
+static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+    StateMachineComponent_ResolveHelpers();
+    if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
+        StateMachineComponent_BodyInit(self);
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
+        StateMachineComponent_LinkControllers_Standalone(self);
+    // Same guard as the Update adapter: an unlinked chain would drive Tick's
+    // parent-walk through the bare root's Step(-1).
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr) return;
+    StateMachineComponent_Draw(self);   // Tick(sm, Time(0.0f), 0, 0)
+}
+
+COMPONENT_LIVE_FACTORY_SOA(StateMachineComponent, 0x58, 0xcd,
+                           "BANISHED_LIVE_STATEMACHINE",
+                           StateMachineComponent_UpdateAdapter,
+                           StateMachineComponent_StartupSlot,
+                           "BANISHED_LIVE_SM_ONADDED",
+                           StateMachineComponent_OnAddedSlot)
 REGISTER_TYPE(StateMachineComponent, "Component",
               &StateMachineComponent_Factory, &StateMachineComponent_CreateInPlace);

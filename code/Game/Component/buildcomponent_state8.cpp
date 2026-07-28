@@ -2,9 +2,10 @@
 // Brick 2a — the BuildComponent construction STATE MACHINE handlers past state-1 enter:
 //   * State1Update  (sub_81e0 @ 0x1401081e0) — per-frame: when all raw materials are in
 //                    the site storage (sub_8630) request transition 1 -> 8.
-//   * State8Enter   (sub_7ae0 @ 0x140107ae0) — on entering state 8: reset the construction
-//                    meshes to frame 0 and (STAGED branch) spawn the BuildStructure labor
-//                    work. The work-spawn + instant branch are DEFERRED to brick 2c.
+//   * State8Enter   (sub_7ae0 @ 0x140107ae0) — on entering state 8. STAGED branch: reset
+//                    the construction meshes to frame 0 and spawn the BuildStructure labor
+//                    work. INSTANT branch (gw+0xd0 bit 0): snap every mesh to its final
+//                    frame, stamp delivered(+0x48) = target, request 8 -> 2.
 //   * State8Update  (sub_76e0 @ 0x1401076e0) — per-frame: advance each mesh's build frame
 //                    proportional to progress(+0x48)/target; when progress >= target snap
 //                    meshes to final + request transition 8 -> 2.
@@ -243,10 +244,11 @@ static int BC8_Target(uintptr_t bc, void* matComp) {
 // 0x140118a70) is a shared empty `return;` stub. Ghidra's "BuildComponent_Draw" label is
 // the same slot-6 mislabel as InteractComponent's and CitizenComponent's.
 //
-// So retail fills this list ONCE, when the site entity is registered. In standalone the
-// live factory leaves slot 6 an inert stub unless BANISHED_LIVE_BUILD_ONADDED is set, so
-// the list stays empty (count=0) and the state-8 mesh loops iterate zero times (no visible
-// rising). Invoke the faithful fill directly when the list is empty — the appended IBPs
+// So retail fills this list ONCE, when the site entity is registered. That slot is now
+// wired by default (BANISHED_LIVE_BUILD_ONADDED graduated 2026-07-27), so this lazy call
+// normally finds the list already filled and returns; it stays because the kill-switch
+// (=0) and any site registered before the flag existed leave it empty (count=0), and then
+// the state-8 mesh loops would iterate zero times (no visible rising). The appended IBPs
 // persist for the whole state-8 duration, so one call suffices. This lazy call is
 // idempotent with the wired slot: whichever runs first leaves count>0 and the other
 // no-ops.
@@ -283,17 +285,18 @@ extern "C" char BuildComponent_State1Update(void* buildComp, void* sm) {
 
 // ==================================================================================
 // State8Enter — sub_7ae0 (on entering state 8). enterHandler for state 8.
-// Brick 2a: reset construction meshes to frame 0 (STAGED branch). The BuildStructure
-// work-spawn (staged) and the instant branch (needs sub_8720) are DEFERRED to brick 2c.
+// BOTH branches are now ported: STAGED (reset construction meshes to frame 0 + spawn the
+// BuildStructure work) and INSTANT (gw+0xd0 bit 0 — snap every mesh to its final frame,
+// stamp +0x48 = target, request 8->2).
 //
 // sub_8720 IDENTIFIED 2026-07-27: 0x140108720 is the BODY of BuildComponent's OnAdded —
 // 0x140108d40 is only a 4-instruction thunk that tests the instant-build bit and either
 // falls through to it or returns. The body has exactly two callers: that thunk, and this
 // handler at 0x140107bb0. So the instant branch reuses the same list-fill + model-reset,
-// entered directly (bypassing the gate, which is set precisely when this path runs).
-// Porting it is what would let StartTown_SpawnStructures stop hand-setting a finished
-// mesh — retail spawns start-town buildings at construction frame 0 and lets the instant
-// build complete them. See notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
+// entered directly (bypassing the gate, which is set precisely when this path runs) —
+// which also means the instant path does NOT depend on the slot-6 wiring flag
+// (BANISHED_LIVE_BUILD_ONADDED): it calls the body itself.
+// See notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
 // ==================================================================================
 extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
     uintptr_t bc = reinterpret_cast<uintptr_t>(buildComp);
@@ -430,9 +433,50 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         if (BC8_Trace())
             std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work-spawn (liveLabor off)\n", meshCount);
     } else {
-        // Instant branch (gw+0xd0&1) needs sub_8720 — DEFERRED.
+        // ---------------------------------------------------------------------------
+        // INSTANT branch (gw+0xd0 bit 0) — retail's whole insta-build completion, ported
+        // 2026-07-27. This is the path the start-town spawner drives: it brackets each
+        // building's SetModel(variant, frame 0) + RegisterEntity with the bit set, and
+        // StateMachineComponent's OnAdded (slot 6, 0x14012b660) ticks the SM inside that
+        // same OnAddedPass. StateMachine::Tick loops while a pending state is set, so
+        // 1 (State1Enter -> req 8) -> 8 (here -> req 2) -> 2 all runs before the spawner
+        // clears the bit. Nothing else in the game sets it except the debug menu's
+        // insta-build setting.
+        //
+        // Retail order (0x140107bb0..): sub_8720 first (it writes +0x4c), THEN the target,
+        // then snap every collected mesh to its FINAL frame (frameCount-1 — the opposite
+        // end of the ramp from the staged branch's frame 0), then request state 2.
+        void* matComp = BC8_MatComp(bc);
+        BuildComponent_DrawReimpl(buildComp);           // sub_8720 (mesh-list fill + model reset)
+        *reinterpret_cast<int32_t*>(bc + 0x48) = BC8_Target(bc, matComp);
+        int meshCount = *reinterpret_cast<int32_t*>(bc + 0x60);
+        for (int i = 0; i < meshCount; ++i) {
+            uintptr_t me = BC8_MeshElem(bc, i);
+            if (!me) continue;
+            int finalFrame = BC8_MeshFrameCount(me, BC8_MeshModelDesc(me)) - 1;
+            if (BC8_Trace())
+                std::fprintf(stderr, "[BuildTrace]   INSTANT mesh[%d]=%p variant=%d frame %d -> %d\n",
+                             i, (void*)me, (int)*reinterpret_cast<int16_t*>(me + 0x164),
+                             (int)*reinterpret_cast<int16_t*>(me + 0x166), finalFrame);
+            if (finalFrame == (int)*reinterpret_cast<int16_t*>(me + 0x166)) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
+                if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
+            } else {
+                BC8_SetMeshFrame(me, finalFrame);
+                BC8_ReaddDrawChildren(me);
+            }
+            uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
+            if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
+                if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
+            }
+        }
+        ::ControllerLive::RequestStateTransition(sm, 2);
         if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Enter INSTANT branch DEFERRED (self=%p)\n", buildComp);
+            std::fprintf(stderr, "[BuildTrace] State8Enter INSTANT: meshes snapped to final (count=%d) "
+                         "delivered(+0x48)=%d mult(+0x4c)=%d -> requested 8->2 (self=%p)\n",
+                         meshCount, *reinterpret_cast<int32_t*>(bc + 0x48),
+                         *reinterpret_cast<int32_t*>(bc + 0x4c), buildComp);
     }
     return 1;
 }

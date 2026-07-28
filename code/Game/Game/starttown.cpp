@@ -952,6 +952,22 @@ extern "C" void* g_pConstructionDemoEntity;   // the demo foundation's OWNER ent
 static bool BuildDemoEnabled() {
     return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
 }
+
+// Retail's insta-build spawn path (BANISHED_LIVE_SM_ONADDED, opt-in). When on, the
+// founding buildings are spawned exactly as ComponentEntity_impl_1fc0 does it —
+// SetModel(variant, frame 0) inside the gw+0xd0 bit-0 bracket — and the state machine
+// finishes them during RegisterEntity's OnAdded pass (StateMachineComponent slot 6 ticks
+// the SM; State1Enter sees the instant bit and requests state 8; State8Enter's INSTANT
+// branch snaps the meshes to their final frame, stamps delivered = target, requests
+// state 2). That retires three standalone stand-ins here: the subCount-1 model frame,
+// the +0x52 = 2 stamp, and the +0x48/+0x4c build-bookkeeping stamp.
+// The flag lives on StateMachineComponent because that is the component whose slots it
+// wires; this helper only asks whether the path is available.
+static bool StartTown_InstantBuildPath() {
+    static int on = -1;
+    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED") ? 1 : 0;
+    return on != 0;
+}
 static int BuildDemoIndex() {
     static int idx = -2;
     if (idx == -2) {
@@ -1167,12 +1183,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     if (rng && fn_Random_Rand && groupCount > 1)
                         variantIdx = (int)fn_Random_Rand(rng, groupCount);
                     int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
-                    int modelVariant = (subCount > 0) ? subCount - 1 : 0;  // last sub-mesh = complete
+                    // Retail passes construction frame 0 here (XOR R8D,R8D at 0x1400a2677,
+                    // disassembly-verified) and lets the instant-build path inside the
+                    // bracket finish the building: State1Enter -> state 8 -> State8Enter's
+                    // INSTANT branch snaps every mesh to frameCount-1. Our subCount-1 is the
+                    // stand-in for that path; with BANISHED_LIVE_SM_ONADDED on, the path is
+                    // live (SM chain linked at Startup + slot-6 tick at register time), so
+                    // use retail's 0 and let it do the work.
+                    const bool instantPath = StartTown_InstantBuildPath();
+                    int modelVariant = instantPath ? 0
+                                     : ((subCount > 0) ? subCount - 1 : 0);  // last sub-mesh = complete
                     ApplyResourceModelVariant(entity, tidModelComponent,
                                               (int16_t)variantIdx, (int16_t)modelVariant);
                     fprintf(stderr, "[startTown::struct] [%d] complete-model variantIdx=%d "
-                            "modelVariant=%d (subCount=%d groups=%u)\n",
-                            logIndex, variantIdx, modelVariant, subCount, groupCount);
+                            "modelVariant=%d (subCount=%d groups=%u)%s\n",
+                            logIndex, variantIdx, modelVariant, subCount, groupCount,
+                            instantPath ? "  [retail frame 0 + instant-build path]" : "");
                     fflush(stderr);
                 }
             }
@@ -1192,8 +1218,23 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             // unresolvable in SA; it's lazily filled post-Engine::Startup), so the IBP finder
             // fn_FindComponent_BuildState returns null here. The name-based lookup matches on
             // the live vtable GetTypeId, exactly like the modelComp lookup just above.
+            //
+            // MOSTLY RETIRED by the instant-build path (BANISHED_LIVE_SM_ONADDED): with the
+            // SM chain linked at Startup and its slot-6 tick live, RegisterEntity below runs
+            // the real 1 -> 8 -> 2 chain inside the instant-build bracket, so +0x52 ends
+            // up 2 because the state machine ENTERED state 2 — which also fires every
+            // other controller's state-2 enter (ResidenceComponent's household registry,
+            // etc.) instead of leaving them to a stamped-but-never-entered state.
+            // It only reaches entities that HAVE a BuildComponent, though: the stockpile
+            // (start-town entry with no model group and no BuildComponent) has nothing to
+            // drive its SM, and its own first controller is inert so the linker cannot read
+            // a real default either. So the stamp is not deleted — it becomes a post-register
+            // FALLBACK below (stamp only if the real path did not already land on 2), which
+            // also measures exactly which entities still need it.
             void* bsComp = FindComponentOnEntity(entity, TypeId("StateMachineComponent"));
-            if (bsComp) {
+            if (StartTown_InstantBuildPath()) {
+                /* deferred: see the post-RegisterEntity fallback */
+            } else if (bsComp) {
                 *(int8_t*)((uintptr_t)bsComp + 0x52) = 2;  // built/complete (build state graph state 2)
                 fprintf(stderr, "[startTown::struct] [%d] stamped StateMachineComponent+0x52=2 (built)\n",
                         logIndex);
@@ -1217,7 +1258,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             // Stamp it as fully delivered: multiplier chosen the same way State1Enter picks it
             // (default 1, workplace +0x58 only when that is a valid positive value), then
             // delivered = required = buildDesc(+0x18)->+0x30 * multiplier.
-            void* bcBuilt = FindComponentOnEntity(entity, TypeId("BuildComponent"));
+            //
+            // RETIRED by the instant-build path (BANISHED_LIVE_SM_ONADDED): State8Enter's
+            // INSTANT branch writes +0x4c (via sub_8720) and +0x48 = matComp[0x30] * +0x4c
+            // itself, from the real BuildDescription, during RegisterEntity below.
+            void* bcBuilt = StartTown_InstantBuildPath()
+                          ? nullptr : FindComponentOnEntity(entity, TypeId("BuildComponent"));
             if (bcBuilt) {
                 uintptr_t bc = (uintptr_t)bcBuilt;
                 uint32_t mult = 1;
@@ -1263,6 +1309,53 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // OnCreate pass, cell marking, storage wiring) sees it clear, and so does every
         // later per-frame BuildComponent tick.
         if (gwFlags) *(uint32_t*)gwFlags &= ~1u;
+
+        // ── Instant-build path: what the real chain did NOT cover. ────────────────────
+        // The bracket above just ran the faithful 1 -> 8 -> 2 completion for every
+        // structure that has a BuildComponent. Anything still not at state 2 had nothing
+        // to drive it (the stockpile: no BuildComponent, and its own first controller is
+        // inert so the linker cannot read a real default either) — those keep the
+        // pre-existing stand-in stamp. Logging both outcomes is the measurement: a line
+        // per entity that still needs the fallback, and silence for the ones the real
+        // state machine finished.
+        if (StartTown_InstantBuildPath() && !isDemoFoundation) {
+            fn_InternalBasePtr_CheckPtr(&entIBP);
+            void* postEnt = (void*)entIBP;
+            void* smPost = FindComponentOnEntity(postEnt, TypeId("StateMachineComponent"));
+            void* bcPost = FindComponentOnEntity(postEnt, TypeId("BuildComponent"));
+            // +0x50 is the CURRENT state, +0x52 the PENDING one (0xff = nothing pending) —
+            // the pair EntityUI's page router reads as `pending < 0 ? current : pending`
+            // (entityui.cpp:588). The old stand-in wrote the PENDING byte so that the first
+            // tick would enter state 2; when the real chain has already run, pending is
+            // back to 0xff and current is 2, so "did it work?" is a +0x50 test.
+            int cur = smPost ? *(int8_t*)((uintptr_t)smPost + 0x50) : -1;
+            int pend = smPost ? *(int8_t*)((uintptr_t)smPost + 0x52) : -1;
+            int delivered = bcPost ? *(int32_t*)((uintptr_t)bcPost + 0x48) : -1;
+            if (smPost && cur != 2 && pend != 2) {
+                *(int8_t*)((uintptr_t)smPost + 0x52) = 2;
+                fprintf(stderr, "[startTown::struct] [%d] instant-path FALLBACK: state(+0x50)=%d "
+                        "pending(+0x52)=%d -> stamped pending 2 (buildComp=%p)\n",
+                        logIndex, cur, pend, bcPost);
+                fflush(stderr);
+            } else if (smPost) {
+                fprintf(stderr, "[startTown::struct] [%d] instant-path: state(+0x50)=%d "
+                        "pending(+0x52)=%d delivered(+0x48)=%d (no fallback needed)\n",
+                        logIndex, cur, pend, delivered);
+                fflush(stderr);
+            }
+            if (bcPost && delivered == 0) {
+                uintptr_t bc = (uintptr_t)bcPost;
+                uint32_t mult = *(uint32_t*)(bc + 0x4c);
+                if ((int32_t)mult <= 0) mult = 1;
+                void* bDesc = *(void**)(bc + 0x18);
+                int required = bDesc ? *(int*)((uintptr_t)bDesc + 0x30) * (int)mult : 0;
+                *(uint32_t*)(bc + 0x4c) = mult;
+                *(int32_t*)(bc + 0x48) = required;
+                fprintf(stderr, "[startTown::struct] [%d] instant-path FALLBACK: delivered was 0 "
+                        "-> %d (mult=%u)\n", logIndex, required, mult);
+                fflush(stderr);
+            }
+        }
 
         // Run the OnCreate pass on the freshly-registered entity (deferred-activation
         // equivalent — see StartTown_RunOnCreatePass). For a WoodHouse this fires

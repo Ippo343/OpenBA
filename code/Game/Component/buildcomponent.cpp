@@ -301,7 +301,8 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 // *_DrawReimpl only because callers and the address registry already use it; Ghidra's
 // "Draw" label is the familiar slot-6 mislabel.
 //
-// Wiring is OPT-IN via BANISHED_LIVE_BUILD_ONADDED — see BuildComponent_InstallMsgSlot.
+// Wiring is DEFAULT-ON via BANISHED_LIVE_BUILD_ONADDED (kill-switch =0) — see
+// BuildComponent_InstallMsgSlot.
 // Faithful port of the Ghidra decompilation. All exe-internal helpers are resolved
 // guarded; if any is unavailable the corresponding step is skipped.
 typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
@@ -397,9 +398,9 @@ void BuildComponent_DrawReimpl(void* selfP) {
     //     MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
     // The gate is in the THUNK; the body at 0x140108720 is ungated and has two callers —
     // the thunk (slot 6 / OnAdded) and 0x140107bb0 inside BuildDescription_helper_7ae0,
-    // i.e. State8Enter's instant branch (the `sub_8720` that buildcomponent_state8.cpp
-    // still lists as deferred). Keeping the gate in the body would wrongly suppress that
-    // second caller, since it runs precisely when the bit IS set.
+    // i.e. State8Enter's instant branch (ported 2026-07-27). Keeping the gate in the body
+    // would wrongly suppress that second caller, since it runs precisely when the bit IS
+    // set — and that caller is the whole insta-build completion path.
 
     // BANISHED_MODEL_TRACE — is this OnAdded one-shot invoked at all, and by whom?
     // It is what fills the site's construction mesh list (+0x58/+0x60) that the
@@ -744,24 +745,31 @@ static void BuildComponent_OnRemoveVSlot(void* s) {
 // Slot 6 (+0x30) — the real OnAdded broadcast, retail 0x140108d40. See the header block
 // above BuildComponent_DrawReimpl for the slot proof.
 //
-// OPT-IN (BANISHED_LIVE_BUILD_ONADDED), deliberately NOT in kDefaultOnFlags, because
-// wiring it un-dormants the whole body for EVERY build site at registration time rather
+// DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-27); the env var is a kill-switch (=0).
+// Wiring it un-dormants the whole body for EVERY build site at registration time rather
 // than lazily at state-8 entry:
 //   * Stage 1/2 fill the mesh (+0x58/+0x60) and picking (+0x68/+0x70) lists from the
-//     site's own ModelComponent and from each MultiObjectComponent child.
+//     site's own ModelComponent and from each MultiObjectComponent child. Measured: the
+//     bridge master collects all of its segments, and the lazy BC8_EnsureMeshList
+//     fallback drops to 0 calls — the two paths are cleanly idempotent.
 //   * Stage 3 HIDES each collected model: for a model whose modelVariant (+0x166) is
 //     >= 0 it calls the model's own vtable +0x38, stamps +0x166 = -1, and re-adds the
 //     entity's draw children via +0x60. That is retail's "this model is now
 //     build-controlled" transition — the finished mesh is replaced by nothing until
-//     State8Enter/State8Update sets a construction frame. So with BUILDCTRL disabled
-//     (or on any site that never reaches state 8) the wired slot makes the building
-//     INVISIBLE. That is the un-dormanting risk to A/B, and the reason for the gate.
+//     State8Enter/State8Update sets a construction frame, which is why a placed
+//     foundation carries no building mesh until construction starts (faithful). For a
+//     PRE-BUILT building that would be permanent, and retail's answer is not to
+//     special-case it here: the spawner sets the instant-build bit (gw+0xd0 bit 0) across
+//     SetModel + RegisterEntity, which makes the thunk above return before Stage 3 —
+//     see StartTown_SpawnStructures.
 //   * Stage 4 writes +0x4c from MultiObjectComponent+0x58 (clamped to keep the
-//     default 1 — see the comment at the write).
-// Ordering caveat: at RegisterEntity time the MultiObjectComponent child array may not
-// be filled yet, in which case Stage 2 collects nothing and the non-empty list then
-// suppresses the BC8_EnsureMeshList fallback. Measure meshCount in the trace before
-// promoting this flag.
+//     default 1 — see the comment at the write). NOT a behaviour change on its own:
+//     State1Enter reads the same finder AFTER registration, so every site that enters
+//     state 1 gets that multiplier with this slot dormant too (measured: a bridge site
+//     reports mult=15/21 with the flag off).
+// Ordering caveat, checked and clear: at RegisterEntity time the MultiObjectComponent
+// child array IS filled — the bridge master's OnAdded fires after all its segments are
+// created and appended, so Stage 2 collects every one.
 static void BuildComponent_OnAddedVSlot(void* s) {
     if (!s) return;
     g_BC_OnAddedCaller = 1;
