@@ -38,6 +38,21 @@ static bool BCDraw_Trace() {
 }
 extern "C" void* g_pConstructionDemoSite;
 
+// BANISHED_MODEL_TRACE — instrumentation for the slot-6 (OnAdded) verification pass.
+// g_BC_OnAddedCalls counts every invocation of BuildComponent_DrawReimpl;
+// g_BC_OnAddedCaller is 1 only while the wired vtable slot 6 is driving it, so an
+// on/off run can tell a real dispatch from the BC8_EnsureMeshList lazy fallback.
+static int s_bcModelTrace = -1;
+static bool BC_ModelTrace() {
+    if (s_bcModelTrace < 0) {
+        const char* e = std::getenv("BANISHED_MODEL_TRACE");
+        s_bcModelTrace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return s_bcModelTrace == 1;
+}
+static int g_BC_OnAddedCalls = 0;
+static int g_BC_OnAddedCaller = 0;
+
 // ============================================================
 // Type ID globals needed by BuildComponent
 // ============================================================
@@ -274,9 +289,19 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 }
 
 // ============================================================
-// Reimpl of FUN_140108d40 / body 0x140108720 (BuildComponent::Draw:
-//   rebuild the worker/storage child lists and refresh build progress)
+// Reimpl of FUN_140108d40 / body 0x140108720 — BuildComponent::OnAdded
+//   (rebuild the worker/storage child lists and refresh build progress)
 // ============================================================
+// SLOT: vtable INDEX 6 (+0x30) — the one-shot OnAdded broadcast dispatched by
+// ComponentEntity_OnAddedPass (componententity.cpp:701) at EntityList_RegisterEntity
+// time, for components whose +0x20 bit 0 is set (BuildComponent's flags are 0x83, so
+// it qualifies). It is NOT a per-frame draw-tick: verified 2026-07-27, the function's
+// only xref is 0x140162290 == vtable_BuildComponent(0x140162260) + 0x30, and +0x40
+// (index 8) is 0x140118a70, a shared empty `return;` stub. The name below is kept as
+// *_DrawReimpl only because callers and the address registry already use it; Ghidra's
+// "Draw" label is the familiar slot-6 mislabel.
+//
+// Wiring is OPT-IN via BANISHED_LIVE_BUILD_ONADDED — see BuildComponent_InstallMsgSlot.
 // Faithful port of the Ghidra decompilation. All exe-internal helpers are resolved
 // guarded; if any is unavailable the corresponding step is skipped.
 typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
@@ -352,6 +377,21 @@ void BuildComponent_DrawReimpl(void* selfP) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
     if (*(uint8_t*)(gw + 0xd0) & 1) return;   // debug-disabled
+
+    // BANISHED_MODEL_TRACE — is this OnAdded one-shot invoked at all, and by whom?
+    // It is what fills the site's construction mesh list (+0x58/+0x60) that the
+    // state-8 frame ramp drives. g_BC_OnAddedCaller is set by the slot-6 vslot; any
+    // other entry is the lazy BC8_EnsureMeshList fallback.
+    const int entryCount = (int)((int64_t*)selfP)[0xc];
+    if (BC_ModelTrace()) {
+        ++g_BC_OnAddedCalls;
+        if (g_BC_OnAddedCalls <= 24)
+            std::fprintf(stderr, "[ModelTrace] BuildComponent::OnAdded ENTER #%d via=%s "
+                         "self=%p meshCount=%d\n", g_BC_OnAddedCalls,
+                         g_BC_OnAddedCaller ? "slot6" : "EnsureMeshList",
+                         selfP, entryCount);
+        std::fflush(stderr);
+    }
 
     bool demoTrace = BCDraw_Trace() && g_pConstructionDemoSite && selfP == g_pConstructionDemoSite;
     if (demoTrace)
@@ -484,6 +524,29 @@ void BuildComponent_DrawReimpl(void* selfP) {
         int wpMult = (int)((int64_t*)wpIbp)[0xb];
         if (wpMult > 0)
             *(int*)((uintptr_t)self + 0x4c) = wpMult;
+    }
+
+    if (BC_ModelTrace() && g_BC_OnAddedCalls <= 24) {
+        std::fprintf(stderr, "[ModelTrace] BuildComponent::OnAdded EXIT  #%d self=%p "
+                     "meshCount %d->%d storeCount=%d mult(+0x4c)=%d\n",
+                     g_BC_OnAddedCalls, selfP, entryCount, (int)self[0xc],
+                     (int)self[0xe], *(int*)((uintptr_t)self + 0x4c));
+        // Per collected mesh element: modelVariant (+0x166) and the embedded
+        // MeshInstance's node array (+0x28+0xf0). This is the measurement that decides
+        // whether the tool_base_render.cpp EdgeMeshInstance guard is still load-bearing:
+        // a null nodes= here means running OnAdded did NOT give the model a mesh, so a
+        // selection outline over it would still fault.
+        int mc = (int)self[0xc];
+        for (int i = 0; i < mc && i < 8; ++i) {
+            uintptr_t slot = (uintptr_t)self[0xb] + (uintptr_t)i * 8;
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)slot);
+            uintptr_t me = *(uintptr_t*)slot;
+            if (!me) { std::fprintf(stderr, "[ModelTrace]   mesh[%d] = null\n", i); continue; }
+            std::fprintf(stderr, "[ModelTrace]   mesh[%d] model=%p variant(%d,%d) nodes@+0xf0=%p\n",
+                         i, (void*)me, (int)*(int16_t*)(me + 0x164), (int)*(int16_t*)(me + 0x166),
+                         *(void**)(me + 0x28 + 0xf0));
+        }
+        std::fflush(stderr);
     }
 }
 
@@ -646,6 +709,34 @@ REGISTER_TYPE(BuildComponent, "ControllerComponent",
 static void BuildComponent_OnRemoveVSlot(void* s) {
     if (s) BuildComponent_OnCreate(reinterpret_cast<BuildComponent*>(s));
 }
+
+// Slot 6 (+0x30) — the real OnAdded broadcast, retail 0x140108d40. See the header block
+// above BuildComponent_DrawReimpl for the slot proof.
+//
+// OPT-IN (BANISHED_LIVE_BUILD_ONADDED), deliberately NOT in kDefaultOnFlags, because
+// wiring it un-dormants the whole body for EVERY build site at registration time rather
+// than lazily at state-8 entry:
+//   * Stage 1/2 fill the mesh (+0x58/+0x60) and picking (+0x68/+0x70) lists from the
+//     site's own ModelComponent and from each MultiObjectComponent child.
+//   * Stage 3 HIDES each collected model: for a model whose modelVariant (+0x166) is
+//     >= 0 it calls the model's own vtable +0x38, stamps +0x166 = -1, and re-adds the
+//     entity's draw children via +0x60. That is retail's "this model is now
+//     build-controlled" transition — the finished mesh is replaced by nothing until
+//     State8Enter/State8Update sets a construction frame. So with BUILDCTRL disabled
+//     (or on any site that never reaches state 8) the wired slot makes the building
+//     INVISIBLE. That is the un-dormanting risk to A/B, and the reason for the gate.
+//   * Stage 4 writes +0x4c from MultiObjectComponent+0x58 (clamped to keep the
+//     default 1 — see the comment at the write).
+// Ordering caveat: at RegisterEntity time the MultiObjectComponent child array may not
+// be filled yet, in which case Stage 2 collects nothing and the non-empty list then
+// suppresses the BC8_EnsureMeshList fallback. Measure meshCount in the trace before
+// promoting this flag.
+static void BuildComponent_OnAddedVSlot(void* s) {
+    if (!s) return;
+    g_BC_OnAddedCaller = 1;
+    BuildComponent_DrawReimpl(s);
+    g_BC_OnAddedCaller = 0;
+}
 static void BuildComponent_InstallMsgSlot() {
     BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
 
@@ -662,4 +753,7 @@ static void BuildComponent_InstallMsgSlot() {
     // this one has not been exercised against a live cancel-a-foundation repro yet.
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONREMOVE"))
         BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
+
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONADDED"))
+        BuildComponent_LiveVtable[6] = reinterpret_cast<void*>(&BuildComponent_OnAddedVSlot);
 }

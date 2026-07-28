@@ -200,9 +200,148 @@ that exercises a code path is not a repro that exercises its consequences.
   unregistered. Registering them centrally would retire three local
   `GetTypeIdByName` workarounds, but it un-dormants nothing that is currently broken and
   carries the shared-global risk `0x1401c7ac0` demonstrated. Cleanup, not a fix.
-* **`ModelComponent`'s on-added is a stub** — that is *why* a foundation's MeshInstance
-  has no node array. Fixing it (task #22's family) would remove the need for the guard
-  rather than tolerate the state.
+* ~~**`ModelComponent`'s on-added is a stub** — that is *why* a foundation's MeshInstance
+  has no node array.~~ **WRONG — measured and corrected 2026-07-26, see below.**
+
+* ~~**`BuildComponent::Draw`'s draw-tick is never dispatched** — *that* is why a foundation's
+  MeshInstance has no node array.~~ **HALF WRONG — verification pass 2026-07-27, see
+  "The `BuildComponent` slot-6 verification pass" below. The dispatch really was missing,
+  but it is not a draw-tick, it is not at `+0x40`, and wiring it does NOT give a
+  foundation a node array.** Measured with `BANISHED_MODEL_TRACE=1`:
+
+  | claim | measured |
+  |---|---|
+  | `ComponentEntity_CopyCtor` skips `StartupComponents` | **false** — `0x1400c3720` is `CtorFromDescription`; its tail calls it (`componententity.cpp:663`) |
+  | `ModelComponent::Startup` is unwired | **false** — `g_ModelComponent_RealVtable[4]`; 96/96 world models got a mesh + nodes through it |
+  | a bridge segment's Startup was skipped | **false** — segment ends `comp(0,-1)`, mirroring its `ModelDescription(+0x30=0, +0x34=-1)`; the factory zero-inits to `(0,0)`, so `-1` proves Startup ran |
+  | `BuildComponent::Draw` (`0x140108d40`) runs | **false** — **0 dispatches** in a full harness run |
+
+  `modelVariant = -1` is not "no model", it is retail's "a `BuildComponent` picks the
+  frame" — and retail's `Startup` skips `SetMesh` for it too. The frame-picker is
+  `BuildComponent::Draw`, whose Stage 2 walks the `MultiObjectComponent` segment array
+  (`+0x48`/`+0x50`) that `CalcPath` fills. It is ported (`BuildComponent_DrawReimpl`) and
+  registered, but nothing dispatches vtable `+0x40`, so it never runs.
+  `BC8_EnsureMeshList` is the hand-rolled workaround for exactly this and says so in its
+  own comment — but it only fires from the state-8 path, which a bridge never reaches
+  (`delivered=0 required=24` forever).
+
+  Wiring the draw-tick un-dormants Stages 1–4 for **every** build site (the `+0x4c`
+  multiplier write, the Stage 3 `+0x60`/`+0x38` dispatches per collected node), so it
+  wants its own wave behind an opt-in, not a drive-by. The `tool_base_render.cpp` guard
+  stays correct meanwhile.
+
+  **Trap paid for:** the stale comment "ModelComponent is built by an inert factory whose
+  on-added never ran" (in `tool_base_render.cpp` and in this file) sent the next session
+  at an already-wired slot. Corrected in both. Same lesson as the stale "default off"
+  below, one level down: *before "wire slot X", count live dispatches — being registered
+  and being ported are not being called.*
+
+## The `BuildComponent` slot-6 verification pass (2026-07-27)
+
+The item above was taken as a work order — "wire vtable `+0x40` behind an opt-in and
+verify". Both halves of the premise turned out to be wrong, in opposite directions.
+
+### The slot is `+0x30` (index 6), and it is `OnAdded`, not `Draw`
+
+`0x140108d40` has exactly **one** xref: `0x140162290`. That is
+`vtable_BuildComponent (0x140162260) + 0x30` — **index 6**. Every neighbour confirms the
+base: `+0x18` = `0x140108d80` (Shutdown), `+0x38` = `0x140108cb0`, `+0x78` =
+`0x140108710` (MsgReceive) — each already named that way in `buildcomponent.cpp`.
+
+`+0x40` (index 8) is `0x140118a70`, a **shared empty `return;` stub**. There was never
+anything there to wire.
+
+Index 6 is this project's long-established **OnAdded** slot — `ComponentEntity_OnAddedPass`
+(`componententity.cpp:701`) dispatches it at `EntityList_RegisterEntity` time for
+components whose `+0x20` bit 0 is set (BuildComponent's flags are `0x83`, so it
+qualifies). So it is a **one-shot at registration**, not a per-frame tick. Ghidra's
+`BuildComponent_Draw` is the same slot-6 mislabel already recorded for
+`InteractComponent` and `CitizenComponent`.
+
+The stale claim came from `BC8_EnsureMeshList`'s own comment ("runs every frame as the
+component's draw-tick (vtable +0x40)"), which this brief then repeated. Both corrected.
+
+### Wired it anyway — `BANISHED_LIVE_BUILD_ONADDED`, opt-in
+
+`BuildComponent_LiveVtable[6]` → `BuildComponent_DrawReimpl`, installed from
+`BuildComponent_InstallMsgSlot` so it survives `InitInertTyped`'s per-instance re-stub.
+Deliberately **not** in `kDefaultOnFlags`. A/B, bridge harness + demo house:
+
+| | control (flag off) | flag on |
+|---|---|---|
+| invocations | 1 | **9** |
+| via slot 6 | 0 | **9** |
+| via `BC8_EnsureMeshList` fallback | 1 | **0** |
+| bridge master mesh list | never filled | **0→3** (all 3 segments) |
+| bridge `+0x4c` multiplier | 1 (clamp default) | **6** (real `MultiObjectComponent+0x58`) |
+| `standalone_crash.log` | 0 bytes | 0 bytes |
+
+It works, and it works *better than expected on the one point I had flagged as risky*:
+the ordering caveat is empirically fine. The bridge master's OnAdded fires at line 690,
+**after** all three segments are created (684–688) and appended to the
+`MultiObjectComponent` — so Stage 2 collects all of them. The lazy fallback drops to
+zero calls, confirming the two paths are cleanly idempotent.
+
+### But it does NOT fix the node array — the guard stays load-bearing
+
+This was the whole reason the item existed, and it is disproven. After the bridge
+master's OnAdded ran to completion over all three collected segments:
+
+```
+[ModelTrace] OnAdded EXIT #9 meshCount 0->3 storeCount=3 mult(+0x4c)=6
+[ModelTrace]   mesh[0] model=...5a08 variant(0,-1) nodes@+0xf0=0000000000000000
+[ModelTrace]   mesh[1] model=...63d8 variant(0,-1) nodes@+0xf0=0000000000000000
+[ModelTrace]   mesh[2] model=...f8c0 variant(0,-1) nodes@+0xf0=0000000000000000
+```
+
+Still null. Which the disassembly says it must be: **Stage 3 never calls `SetMesh`.** It
+hides the model (`+0x38`), stamps `modelVariant = -1`, and re-adds draw children
+(`+0x60`). It is the frame *un*-setter — the "this model is now build-controlled"
+transition. The frame is set later, by `State8Enter`/`State8Update` via
+`BC8_SetMeshFrame`. A bridge never reaches state 8 (`delivered=0 required=24`), so its
+segments keep an empty `MeshInstance` no matter what slot 6 does.
+
+**`tool_base_render.cpp`'s null-`+0xf0` guard remains correct and load-bearing, with the
+flag on or off.** Its comment is corrected again: the cause is not the missing dispatch,
+it is that a foundation legitimately has no frame mesh until the state-8 ramp.
+
+### Measured regression — why this stays opt-in
+
+The 8 founding StartTown buildings take Stage 3's `mark >= 0` branch. Before / after, same
+`ModelComponent`:
+
+```
+Startup : self=...de0cf0 modelVariant=0  mesh=...557730 nodes=...de1508
+OnAdded : mesh[0] model=...de0cf0 variant(0,-1)         nodes=...de1508
+```
+
+Completed buildings get `modelVariant` stamped to `-1` and their draw entry cycled — i.e.
+put into the un-framed build-controlled state — and nothing restores a frame, because they
+are already finished and never enter state 8. The node array survives (Stage 3 does not
+clear the mesh), so this is a display-state change, not a corruption; the visual result
+was not confirmed headless, but "un-framed" is what `BC8_SetMeshFrame` treats as hidden.
+
+That is a real behaviour change to the founding town on a flag that fixes nothing
+currently broken. **Not promoted.**
+
+### What this bought
+
+Not the bug it was aimed at. What it did buy: the mesh list is now filled at the faithful
+time by the faithful path for every site, the real `+0x4c` multiplier is read instead of
+clamped, and the hand-rolled `BC8_EnsureMeshList` workaround is provably redundant when
+the flag is on (0 fallback calls). Those are the reasons to keep it and finish it later —
+after the state-3/completed-site path stops stamping finished buildings.
+
+### Traps this pass paid for
+
+* **Verify the slot index before writing the port, not after.** One `get_xrefs_to` would
+  have caught `+0x40` vs `+0x30` at any point in the previous two sessions. The cost was
+  a code comment that read as measured fact and got copied twice.
+* **"It is never dispatched" and "dispatching it fixes X" are two separate claims.** The
+  first was true here; the second was false. Un-dormanting a function proves what the
+  function does — it is not evidence for the diagnosis that motivated it.
+* **Instrument the consequence, not just the call.** Counting dispatches showed the wiring
+  worked. Only probing `+0xf0` on the collected models showed it did not matter.
 * Pre-existing and untouched: `[PickupStoredRawMaterial] ERROR: some function pointers
   not resolved!` (`typeId7158=0`) floods the default run's log.
 

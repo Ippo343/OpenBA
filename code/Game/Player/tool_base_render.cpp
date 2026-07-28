@@ -641,10 +641,21 @@ add_prebuilt:
         // notes/bridge_dialog_crash.log (RCX=0x1c = 0+0x1c, R8=0).
         //
         // Retail can rely on the invariant "a ModelComponent's MeshInstance always has
-        // its mesh"; standalone cannot, because ModelComponent is built by an inert
-        // factory whose on-added never ran. Passing nullptr instead just takes the
+        // its mesh"; standalone cannot. NOT because ModelComponent is inert — it has a
+        // real factory and its Startup (vtable +0x20) does run, measured 2026-07-26 with
+        // BANISHED_MODEL_TRACE=1. A CONSTRUCTION SITE's ModelDescription carries
+        // modelVariant = -1 (+0x34), and retail's Startup deliberately skips SetMesh for
+        // that: the frame is set later by the state-8 ramp (BC8_SetMeshFrame). A bridge
+        // never reaches state 8 (delivered=0 required=24), so its segments keep an empty
+        // MeshInstance forever. Passing nullptr instead just takes the
         // no-source branch above — the outline still draws, it simply does not follow
         // animated node transforms.
+        //
+        // STILL LOAD-BEARING (verified 2026-07-27): wiring BuildComponent's slot 6
+        // (BANISHED_LIVE_BUILD_ONADDED) does NOT remove this state. Slot 6 collects the
+        // segments and stamps them build-controlled, but never calls SetMesh — measured
+        // 3/3 bridge segments still at +0xf0 == null after it runs. See
+        // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md, "the slot-6 verification pass".
         void* srcInst = reinterpret_cast<void*>(charIBP + 0x28);
         void* srcNodes = *reinterpret_cast<void**>(charIBP + 0x28 + 0xf0);
         if (srcNodes == nullptr) {

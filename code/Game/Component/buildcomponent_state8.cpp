@@ -233,13 +233,23 @@ static int BC8_Target(uintptr_t bc, void* matComp) {
     return *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) * mult;
 }
 
-// Ensure the construction mesh list (bc+0x58 / count bc+0x60) is populated. In the
-// retail game BuildComponent::Draw (0x140108d40) runs every frame as the component's
-// draw-tick (vtable +0x40) and fills this list with the site's ModelComponent(s). In
-// standalone the BuildComponent draw-tick is not wired for our seeded buildings, so the
-// list stays empty (count=0) and the state-8 mesh loops iterate zero times (no visible
+// Ensure the construction mesh list (bc+0x58 / count bc+0x60) is populated.
+//
+// SLOT CORRECTED 2026-07-27 (this comment previously said "draw-tick, vtable +0x40" and
+// was the source of two sessions' worth of wrong premise): 0x140108d40 is vtable INDEX 6
+// (+0x30), the ONE-SHOT OnAdded broadcast that ComponentEntity_OnAddedPass dispatches at
+// EntityList_RegisterEntity time — NOT a per-frame draw. Verified: the function's only
+// xref is 0x140162290 == vtable_BuildComponent(0x140162260) + 0x30, and +0x40 (index 8,
+// 0x140118a70) is a shared empty `return;` stub. Ghidra's "BuildComponent_Draw" label is
+// the same slot-6 mislabel as InteractComponent's and CitizenComponent's.
+//
+// So retail fills this list ONCE, when the site entity is registered. In standalone the
+// live factory leaves slot 6 an inert stub unless BANISHED_LIVE_BUILD_ONADDED is set, so
+// the list stays empty (count=0) and the state-8 mesh loops iterate zero times (no visible
 // rising). Invoke the faithful fill directly when the list is empty — the appended IBPs
-// persist for the whole state-8 duration, so one call suffices.
+// persist for the whole state-8 duration, so one call suffices. This lazy call is
+// idempotent with the wired slot: whichever runs first leaves count>0 and the other
+// no-ops.
 static void BC8_EnsureMeshList(uintptr_t bc) {
     if (*reinterpret_cast<int32_t*>(bc + 0x60) > 0) return;
     BuildComponent_DrawReimpl(reinterpret_cast<void*>(bc));

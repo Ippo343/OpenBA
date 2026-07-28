@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // ============================================================
@@ -388,18 +389,25 @@ void ModelComponent_Serialize(ModelComponent* self) {
         }
     }
 
-#if defined(_DEBUG)
-    // Foundation F one-shot diagnostic: confirm the description carries mesh data.
+    // BANISHED_MODEL_TRACE=1 — per-invocation Startup trace. Reports whether the
+    // dispatch happened at all and, crucially, whether SetMesh left the embedded
+    // MeshInstance with a NODE ARRAY (+0x28+0xf0). A null node array there is the
+    // exact state EdgeMeshInstance::Draw faults on (tool_base_render.cpp guard).
+    static int s_mcTrace = -1;
+    if (s_mcTrace < 0) {
+        const char* e = std::getenv("BANISHED_MODEL_TRACE");
+        s_mcTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
     static int s_serLog = 0;
-    if (s_serLog < 10) {
+    if (s_mcTrace && s_serLog < 96) {
         ++s_serLog;
-        fprintf(stderr, "[ModelComponent::Startup] self=%p desc=%p variantIdx=%d "
-                "modelVariant=%d meshGroups@+0x20=%p mesh=%p\n",
+        fprintf(stderr, "[ModelTrace] Startup self=%p desc=%p variantIdx=%d "
+                "modelVariant=%d groups@+0x20=%p groupCount@+0x28=%u mesh=%p nodes@+0xf0=%p\n",
                 (void*)self, desc, (int)*(int16_t*)(s + 0x164), (int)modelVariant,
-                *(void**)(d + 0x20), meshResource);
+                *(void**)(d + 0x20), *(uint32_t*)(d + 0x28), meshResource,
+                *(void**)(s + 0x28 + 0xf0));
         fflush(stderr);
     }
-#endif
 }
 
 // ============================================================
