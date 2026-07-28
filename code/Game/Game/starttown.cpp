@@ -1043,6 +1043,30 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fn_InternalBasePtr_CheckPtr(&entIBP);
         void* entity = (void*)entIBP;
 
+        // ── INSTANT-BUILD bracket (retail ComponentEntity_impl_1fc0). ────────────────
+        // Retail sets gameWorld+0xd0 bit 0 here, right before the MapComponent/
+        // ModelComponent setup, and clears it immediately after RegisterEntity below:
+        //     *(uint*)(g_pGameWorldSingleton + 0xd0) |= 1;
+        //     ... map placement, transform, ModelComponent::SetModel(0x1401253d0) ...
+        //     FUN_1400c48a0(entityList, &ibp, category);          // RegisterEntity
+        //     *(uint*)(g_pGameWorldSingleton + 0xd0) &= 0xfffffffe;
+        //
+        // That bit is the instant-build flag (buildcomponent_state1.cpp:320,
+        // buildcomponent_state8.cpp:298 — a build with it set skips the staged
+        // gather/ramp and completes immediately). Crucially it is ALSO the first test in
+        // BuildComponent's OnAdded (0x140108d40): with the bit set that slot returns
+        // before its Stage 3 can hide the model and stamp modelVariant = -1.
+        //
+        // This bracket is why retail can safely hand a pre-built start-town building a
+        // finished mesh BEFORE registering it — which is exactly what the code below
+        // does. Without it, RegisterEntity's OnAdded pass un-frames every founding
+        // building and the whole town renders as bare foundations (observed 2026-07-27
+        // once BuildComponent's OnAdded slot was wired). Missing bracket = the real gap;
+        // porting it retires the standalone guard that was briefly used instead.
+        const uintptr_t gwFlags = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                                ? (uintptr_t)*g_pGameWorldSingleton + 0xd0 : 0;
+        if (gwFlags) *(uint32_t*)gwFlags |= 1u;
+
         void* mapComp = FindComponentOnEntity(entity, tidMapComponent);
         if (mapComp) {
             uintptr_t mapIBP = 0;
@@ -1233,6 +1257,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // Register with the world entity list (category = template+0x20).
         int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
         fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+        // Close the instant-build bracket opened above — retail clears the bit on the
+        // very next instruction after RegisterEntity, so everything from here on (the
+        // OnCreate pass, cell marking, storage wiring) sees it clear, and so does every
+        // later per-frame BuildComponent tick.
+        if (gwFlags) *(uint32_t*)gwFlags &= ~1u;
 
         // Run the OnCreate pass on the freshly-registered entity (deferred-activation
         // equivalent — see StartTown_RunOnCreatePass). For a WoodHouse this fires

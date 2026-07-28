@@ -285,6 +285,15 @@ extern "C" char BuildComponent_State1Update(void* buildComp, void* sm) {
 // State8Enter — sub_7ae0 (on entering state 8). enterHandler for state 8.
 // Brick 2a: reset construction meshes to frame 0 (STAGED branch). The BuildStructure
 // work-spawn (staged) and the instant branch (needs sub_8720) are DEFERRED to brick 2c.
+//
+// sub_8720 IDENTIFIED 2026-07-27: 0x140108720 is the BODY of BuildComponent's OnAdded —
+// 0x140108d40 is only a 4-instruction thunk that tests the instant-build bit and either
+// falls through to it or returns. The body has exactly two callers: that thunk, and this
+// handler at 0x140107bb0. So the instant branch reuses the same list-fill + model-reset,
+// entered directly (bypassing the gate, which is set precisely when this path runs).
+// Porting it is what would let StartTown_SpawnStructures stop hand-setting a finished
+// mesh — retail spawns start-town buildings at construction frame 0 and lets the instant
+// build complete them. See notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
 // ==================================================================================
 extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
     uintptr_t bc = reinterpret_cast<uintptr_t>(buildComp);

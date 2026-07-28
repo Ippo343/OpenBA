@@ -332,6 +332,111 @@ clamped, and the hand-rolled `BC8_EnsureMeshList` workaround is provably redunda
 the flag is on (0 fallback calls). Those are the reasons to keep it and finish it later —
 after the state-3/completed-site path stops stamping finished buildings.
 
+### The regression, and the real gap behind it
+
+Wiring the slot turned the whole founding town into bare foundations — measured, then
+confirmed visually. Chasing that to its root is where the wave actually paid off.
+
+**What breaks.** Stage 3's `mark >= 0` branch is retail's *"reset this model to
+build-controlled"*: remove it from the scene via the model's `+0x38`, stamp
+`modelVariant = -1`, so the state-8 ramp can drive its construction frames. Correct for a
+site about to be built; catastrophic for one already finished, which never enters state 8
+and so never gets a frame back. `StartTown_SpawnStructures` hand-sets the completed
+sub-mesh and *then* calls `RegisterEntity` — so `OnAddedPass` wiped it a few hundred
+instructions later.
+
+**Two fixes that don't work**, both instructive:
+
+1. *Move the hand-set after `RegisterEntity`.* Fails: `ModelComponent`'s own slot 6
+   (`ModelComponent_Draw`, the `Graphics::Scene` add) is itself gated on
+   `modelVariant >= 0` (`modelcomponent.cpp:426`), so the model is never added to the
+   scene at all. Same black buildings, new cause. Both components are dispatched by the
+   *same* `OnAddedPass`: one needs `>= 0`, the other must not see `>= 0`. Over-constrained.
+2. *Suppress the reset for already-built sites* (via `DemoGateSkip`). Works, and was
+   briefly committed to — but it is a standalone deviation papering over a missing port.
+
+**What retail actually does.** `ComponentEntity_impl_1fc0` — the initial-buildings spawner
+our code says it mirrors — brackets every building:
+
+```
+1400a2677: XOR R8D,R8D              ; SetModel frame = 0
+1400a2682: CALL 0x1401253d0         ; ModelComponent::SetModel(randomVariant, 0)
+1400a26b9: CALL 0x1400c48a0         ; RegisterEntity -> OnAddedPass
+1400a26c5: AND dword ptr [RAX+0xd0],0xfffffffe
+```
+preceded by the matching `|= 1`. That bit is the **instant-build flag** — already read
+under that name by `buildcomponent_state1.cpp:320` and `state8.cpp:298`, and exposed in
+the game's own debug menu as the insta-build setting (user-confirmed). It is also the
+first test in BuildComponent's OnAdded, which we had ported and labelled
+`// debug-disabled`.
+
+So retail's answer to *"how do you register a pre-built building without the build system
+un-framing it"* is: **you tell the build system this one is instant-built, for the
+duration of the spawn.** Our spawner set the mesh before registering — correct, matching
+retail — but never opened the bracket. Ported; the deviation is gone.
+
+### The thunk/body split
+
+`0x140108d40` is only four instructions:
+
+```
+MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
+```
+
+The gate is in the **thunk**; the body at `0x140108720` is ungated and has a second
+caller — `0x140107bb0`, inside `BuildDescription_helper_7ae0` = **State8Enter**. That is
+the `sub_8720` `buildcomponent_state8.cpp` still lists as deferred. Our port had the gate
+*inside* the body, which would have no-op'd that second caller, since it runs exactly when
+the bit is set. Now split, and both addresses registered.
+
+### The `SetModel` frame argument — identified, deliberately not "fixed"
+
+Retail passes frame **0** (disassembly-verified, not a decompiler artifact); we pass
+`subCount-1`. The ramp settles which is which: `State8Enter` resets to frame 0 at
+construction start, `State8Update` ramps up, completion snaps to `frameCount-1`. So frame
+0 is the *first construction stage* and retail spawns start-town buildings there — relying
+on the instant-build path to finish them. That path is `sub_8720`'s second caller, and it
+is **not ported**.
+
+Our `subCount-1` is therefore a stand-in for an unported completion path. Changing it to
+`0` would faithfully reproduce one instruction and leave every founding building frozen as
+a timber frame — strictly worse. Left as-is and documented at the deferral site. **Not
+proven:** what triggers the instant completion during spawn (hypothesis: the
+StateMachineComponent's own OnAdded entering state 1 inside the same pass, while the bit is
+still set — untraced).
+
+### Final A/B
+
+Bridge harness + demo house, after all of the above:
+
+| | control (flag off) | flag on |
+|---|---|---|
+| invocations | 1 | 2 |
+| via slot 6 | 0 | **1** |
+| via `BC8_EnsureMeshList` | 1 | 1 |
+| start-town buildings reset | — | **0** (bracket suppresses all 8) |
+| bridge master mesh list | never filled | **0→5** (all 5 segments) |
+| bridge `+0x4c` multiplier | 1 (clamp default) | **13** (real, = the 13-cell span) |
+| `standalone_crash.log` | 0 bytes | 0 bytes |
+
+The bridge master is the one slot-6 dispatch; the demo house still comes through the lazy
+fallback (it reaches state 8, where `EnsureMeshList` fires first). All 5 collected segments
+remain `+0xf0` null, so the `tool_base_render.cpp` guard is still load-bearing — unchanged.
+
+### Still opt-in, and why
+
+The regression that held it back is fixed at the source. What is *not* soaked is the
+consequence of finally reading a real `+0x4c`: the bridge's build target becomes
+`matComp[0x30] * 13` instead of `* 1`. That is almost certainly right — a 13-cell bridge
+should cost 13 segments of labour — but no build has yet completed with a real multiplier
+(bridges stall at `delivered=0 required=24` for unrelated reasons). Per project policy a
+feature graduates once *verified*, not once *plausible*, so `BANISHED_LIVE_BUILD_ONADDED`
+stays out of `kDefaultOnFlags` until a site completes end-to-end with a multiplier > 1.
+
+The instant-build bracket in `StartTown_SpawnStructures` is **not** flag-gated — it is
+retail behaviour that was simply missing, and the control run above confirms it is neutral
+with the flag off.
+
 ### Traps this pass paid for
 
 * **Verify the slot index before writing the port, not after.** One `get_xrefs_to` would
@@ -342,6 +447,17 @@ after the state-3/completed-site path stops stamping finished buildings.
   function does — it is not evidence for the diagnosis that motivated it.
 * **Instrument the consequence, not just the call.** Counting dispatches showed the wiring
   worked. Only probing `+0xf0` on the collected models showed it did not matter.
+* **A third stale label, same session.** `// debug-disabled` on the instant-build bit —
+  after `+0x40` and after `"default off"`. Two *other* files already had the right name for
+  that exact bit. Grep the codebase for an offset before naming it from one call site.
+* **When a deviation looks necessary, look one level up first.** The `DemoGateSkip` guard
+  worked and would have shipped. The question "is this a gap in how we build the town at
+  start?" is what turned a permanent deviation into a four-line port of retail's own
+  bracket.
+* **A 4-instruction function is a gate, not an implementation.** Ghidra inlines the tail
+  jump, so the decompiler shows the whole body under the thunk's name and the gate looks
+  like the body's first statement. Check the function's byte length before assuming its
+  decompilation is its scope.
 * Pre-existing and untouched: `[PickupStoredRawMaterial] ERROR: some function pointers
   not resolved!` (`typeId7158=0`) floods the default run's log.
 

@@ -369,14 +369,37 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
     return nullptr;
 }
 
+void BuildComponent_DrawReimpl(void* selfP);   // body, 0x140108720
+
+// The thunk at 0x140108d40 itself, instruction for instruction:
+//     MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
+// Registered at 0x140108d40; the ungated body is registered separately at 0x140108720.
+// Keeping them distinct matters because State8Enter calls the BODY directly (0x140107bb0),
+// precisely when the instant bit is set — routing it through the gate would no-op it.
+extern "C" void BuildComponent_OnAddedThunk(void* selfP) {
+    if (!selfP) return;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+        if (*(uint8_t*)(gw + 0xd0) & 1) return;   // instant build -> OnAdded does nothing
+    }
+    BuildComponent_DrawReimpl(selfP);
+}
+
 void BuildComponent_DrawReimpl(void* selfP) {
     EnsureHelpers();
     EnsureDrawHelpers();
     int64_t* self = (int64_t*)selfP;
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
-    if (*(uint8_t*)(gw + 0xd0) & 1) return;   // debug-disabled
+    // NOTE: the instant-build gate that used to sit here has MOVED to
+    // BuildComponent_OnAddedVSlot, because that is where retail keeps it. 0x140108d40 is
+    // only a 4-instruction thunk:
+    //     MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
+    // The gate is in the THUNK; the body at 0x140108720 is ungated and has two callers —
+    // the thunk (slot 6 / OnAdded) and 0x140107bb0 inside BuildDescription_helper_7ae0,
+    // i.e. State8Enter's instant branch (the `sub_8720` that buildcomponent_state8.cpp
+    // still lists as deferred). Keeping the gate in the body would wrongly suppress that
+    // second caller, since it runs precisely when the bit IS set.
 
     // BANISHED_MODEL_TRACE — is this OnAdded one-shot invoked at all, and by whom?
     // It is what fills the site's construction mesh list (+0x58/+0x60) that the
@@ -458,6 +481,14 @@ void BuildComponent_DrawReimpl(void* selfP) {
 
     // --- Stage 3: walk our collected Build list (+0xb / count +0xc), driving each
     //     child's job hosts; finalise Storage list entries via Entity_impl_8f50.
+    //
+    // NOTE (2026-07-27): the `mark >= 0` branch below is retail's "reset this model to
+    // build-controlled" — hide it via the model's +0x38, stamp modelVariant = -1 — so the
+    // state-8 ramp can drive its construction frames. Running it on an already-finished
+    // building un-frames it permanently (nothing restores a frame; it never enters state
+    // 8). Retail does not special-case that here; it suppresses this whole function via
+    // the instant-build bit at the top (gw+0xd0 bit 0), which the start-town spawner sets
+    // across each building's setup + RegisterEntity. See StartTown_SpawnStructures.
     int buildCount = (int)self[0xc];
     for (int i = 0; i < buildCount; i++) {
         int64_t arrB = self[0xb];
@@ -734,7 +765,7 @@ static void BuildComponent_OnRemoveVSlot(void* s) {
 static void BuildComponent_OnAddedVSlot(void* s) {
     if (!s) return;
     g_BC_OnAddedCaller = 1;
-    BuildComponent_DrawReimpl(s);
+    BuildComponent_OnAddedThunk(s);
     g_BC_OnAddedCaller = 0;
 }
 static void BuildComponent_InstallMsgSlot() {

@@ -32,7 +32,8 @@ extern bool     WorkComponent_CheckWorkSlot(void* self);
 extern void     WorkComponent_RegisterWorkSlot(void* self);
 
 extern int      BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);
-extern void     BuildComponent_DrawReimpl(void* self);
+extern void     BuildComponent_DrawReimpl(void* self);          // body  0x140108720
+extern "C" void BuildComponent_OnAddedThunk(void* self);        // thunk 0x140108d40
 
 extern void     WorkPlaceComponent_OnCreateInit(void* self);
 extern void     WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);
@@ -84,7 +85,12 @@ void RegisterComponentBatch_economy() {
 
     // buildcomponent.cpp
     RegisterExeAddr(0x140017550, reinterpret_cast<uintptr_t>(&BuildComponent_FindInQueue));
-    RegisterExeAddr(0x140108d40, reinterpret_cast<uintptr_t>(&BuildComponent_DrawReimpl));
+    // 0x140108d40 is only a 4-instruction thunk — it tests the instant-build bit
+    // (gameWorld+0xd0 bit 0) and either falls through to the body at 0x140108720 or
+    // returns. Register BOTH: State8Enter calls the body directly (from 0x140107bb0),
+    // and it does so exactly when the bit is set, so it must not go through the gate.
+    RegisterExeAddr(0x140108d40, reinterpret_cast<uintptr_t>(&BuildComponent_OnAddedThunk));
+    RegisterExeAddr(0x140108720, reinterpret_cast<uintptr_t>(&BuildComponent_DrawReimpl));
 
     // workplacecomponent.cpp
     RegisterExeAddr(0x14012ee60, reinterpret_cast<uintptr_t>(&WorkPlaceComponent_OnCreateInit));
