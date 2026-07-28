@@ -258,6 +258,37 @@ static const char* const kDefaultOnFlags[] = {
     // is clear has its model un-framed until state 8 gives it construction frame 0 — i.e.
     // a placed foundation shows no building mesh until construction actually starts.
     "BANISHED_LIVE_BUILD_ONADDED",
+    // StateMachineComponent slot 4 (link the controller chain at Startup) + slot 6
+    // (the one-shot Tick inside RegisterEntity) — retail's insta-build engine, and
+    // the ordering guarantee the rest of the start town depends on. Graduated
+    // 2026-07-27 together with LIVE_STORAGECTRL below, which needs it.
+    //
+    // Held opt-in because "linking earlier only moves the +0x52 default-state write
+    // earlier, and that write is what the 2026-07-20 stockpile regression turned on."
+    // That risk is measured out now: the LINK-DECIDE trace shows the stockpile taking
+    // StorageLocationComponent's own default of 2 (its live node), not DestroyComponent's
+    // 4 — the out-of-order destroy guard blocks that — and the 7 other founding
+    // structures taking BuildComponent's 1 and running the real 1 -> 8 -> 2 chain to
+    // completion inside the spawn bracket (`state(+0x50)=2 pending=-1`, no fallback
+    // stamp needed on any of them).
+    "BANISHED_LIVE_SM_ONADDED",
+    // StorageLocationComponent live controller. Its state-2 ENTER is d230
+    // (0x14012d230 = the townMgr+0x00 append) and its state-3 ENTER is d1f0 (the
+    // matching erase) — verified to be the ONLY places retail registers/unregisters a
+    // town storage location: the function is in no vtable, and its only xrefs are
+    // .pdata plus SetupCrossRefs/impl_d410. Both are now real handlers instead of the
+    // nulls they were left as, so the StorageBarn AND the stockpile register
+    // themselves and the StartTown_WireStorage stand-in stands down.
+    //
+    // MUST ship with LIVE_SM_ONADDED above, which is why they graduate together:
+    // Game_SpawnResources round-robins the starting stock over townMgr+0x00, so the
+    // registration has to happen inside the spawn loop. With lazy linking the SM first
+    // ticks a frame later and the seeder sees an empty list — measured storageLocs=0
+    // and placed=0 for all seven masks. With both on: registrations at spawn time,
+    // storageLocs=2, and 150/70/50/50/2400/400/40 placed, identical to the stand-in
+    // baseline. The half-configuration double-registers (2 -> 4, d230 has no dedup)
+    // and now warns loudly from StartTown_WireStorage.
+    "BANISHED_LIVE_STORAGECTRL",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

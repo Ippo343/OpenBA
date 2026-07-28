@@ -9,7 +9,16 @@
 //       Appends *(comp+0x10) (the owning ENTITY pointer) to the town
 //       storage-location list at townMgr+0x00 (count +0x08, cap +0x0c) via the
 //       grow fn FUN_140003110 (registered). townMgr = *(gameWorld+0xf0).
-//       Retail fires this from the StorageLocationComponent OnAdded vtable slot.
+//       NOT an OnAdded vtable slot (an earlier note here claimed that; corrected
+//       2026-07-27). 0x14012d230 appears in NO vtable — its only three xrefs are
+//       the .pdata entry plus StorageLocationDescription_SetupCrossRefs
+//       (0x14014fc70) and its inlined twin impl_d410, both of which register it as
+//       the ENTER handler of StorageLocationComponent state 2. So retail registers
+//       a storage location exactly when that component's state machine ENTERS
+//       state 2, and nowhere else. It is now wired as exactly that (state-2 enter in
+//       storagelocationcomponent.cpp, with helper_d1f0 as the matching state-3 erase),
+//       and the StartTown_WireStorage stand-in stands down when the controller can
+//       beat the resource seeder to it (BANISHED_LIVE_STORAGECTRL + LIVE_SM_ONADDED).
 //   * 0x140107ff0 BuildDescription_helper_7ff0
 //       -> TownStorage_BuildCompleteInit_7ff0(componentWithEntityAt0x10)
 //       The BUILD-COMPLETE storage init: finds the entity's StorageComponent,

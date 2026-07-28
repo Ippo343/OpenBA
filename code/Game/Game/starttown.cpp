@@ -899,9 +899,12 @@ static void StartTown_ProbeWorkplaceKey(void* entityV) {
 //      : 1), mask +0x3c = _storageFlags(desc+0x28). Passing the StorageComponent
 //      itself is layout-equivalent to retail's BuildComponent (both hold the
 //      entity IBP at +0x10).
-//   2. town storage-location registration (StorageLocationComponent OnAdded →
-//      d230): append the entity to townMgr+0x00 so the citizen eat chain
-//      (CitizenAI_helper_e370) and Game_SpawnResources can find it.
+//   2. town storage-location registration (d230): append the entity to
+//      townMgr+0x00 so the citizen eat chain (CitizenAI_helper_e370) and
+//      Game_SpawnResources can find it. In retail d230 is the ENTER handler of
+//      StorageLocationComponent state 2 — not an OnAdded slot (verified
+//      2026-07-27: 0x14012d230 is in no vtable). Calling it here is a stand-in for
+//      an SM that never reaches state 2 in this build.
 // Our CopyCtor already wires comp+0x10 (entity) and +0x18 (description).
 static void StartTown_WireStorage(void* entity, int entryIdx) {
     if (!LiveStorageEnabled() || !entity) return;
@@ -917,7 +920,43 @@ static void StartTown_WireStorage(void* entity, int entryIdx) {
     // storage locations — registering them made the citizen food-search + the
     // start-resource seeder treat houses as barns (unfaithful; also crashed the
     // town-list searches pre-fallback). Init (7ff0) still runs for them above.
-    if (slc) TownRegistry_RegisterStorageLocation(slc);
+    // RETIRED when the StorageLocationComponent controller registers by itself
+    // (2026-07-27): its state-2 ENTER *is* d230, so entering state 2 registers the
+    // building. Measured both ways: with the controller live and this call still in
+    // place every storage building registered TWICE (townMgr+0x00 count 2 -> 4) —
+    // retail's d230 does not dedup, so the stand-in has to go, not merely be tolerated.
+    //
+    // TIMING IS PART OF THE CONTRACT, and it is why SM_ONADDED is in this condition.
+    // StartTown_SeedStartingResources -> Game_SpawnResources round-robins the starting
+    // stock over the entities in townMgr+0x00, so the registration must already have
+    // happened when it runs. With LAZY linking the SM first ticks a frame later:
+    // measured storageLocs=0 at seed time and placed=0 for all seven masks — a town
+    // whose barn starts empty. With BANISHED_LIVE_SM_ONADDED the chain is linked in
+    // slot 4 and ticked in slot 6 inside RegisterEntity, i.e. still inside the spawn
+    // loop, which is the retail ordering. So: drop the stand-in only when the live
+    // controller can actually beat the seeder to it.
+    const bool storageCtrlLive =
+        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGECTRL") &&
+        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATEMACHINE");
+    const bool ctrlRegisters =
+        storageCtrlLive && ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED");
+    // The half-configuration double-registers and there is no faithful way to stop it
+    // (retail's d230 has no dedup): the stand-in below has to run to beat the seeder,
+    // and then the lazily-linked chain enters state 2 a frame later and appends the
+    // same entity again. STORAGECTRL must be paired with SM_ONADDED — say so loudly
+    // rather than let a duplicated town storage list look like a search bug later.
+    if (storageCtrlLive && !ctrlRegisters) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            fprintf(stderr, "[StorageSeed] WARN: BANISHED_LIVE_STORAGECTRL without "
+                            "BANISHED_LIVE_SM_ONADDED — every storage building will "
+                            "register TWICE in townMgr+0x00 (stand-in now, state-2 "
+                            "enter on the first tick). Set BANISHED_LIVE_SM_ONADDED=1.\n");
+            fflush(stderr);
+        }
+    }
+    if (slc && !ctrlRegisters) TownRegistry_RegisterStorageLocation(slc);
     if (StorageTraceOn()) {
         uint8_t* sc = (uint8_t*)storageComp;
         fprintf(stderr, "[StorageSeed] struct[%d] entity=%p storage=%p slc=%p "
@@ -1313,9 +1352,16 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // ── Instant-build path: what the real chain did NOT cover. ────────────────────
         // The bracket above just ran the faithful 1 -> 8 -> 2 completion for every
         // structure that has a BuildComponent. Anything still not at state 2 had nothing
-        // to drive it (the stockpile: no BuildComponent, and its own first controller is
-        // inert so the linker cannot read a real default either) — those keep the
-        // pre-existing stand-in stamp. Logging both outcomes is the measurement: a line
+        // to drive it — the stockpile (StorageYard) has no BuildComponent at all, and
+        // measurement on 2026-07-27 killed the standing theory that our linker was merely
+        // failing to read its default: the stockpile's FIRST controller in array order is
+        // AbsorbResourceComponent ([9]; StorageLocationComponent is LAST at [12]), and
+        // AbsorbResource's retail GetDefaultState (0x140003730) genuinely returns 0. Retail
+        // stamps 0 here too, so no linker change can produce state 2 — some other retail
+        // path posts it, and until that path is found this stamp is a real deviation, not a
+        // gap-filler. See the LINK-DECIDE block in statemachinecomponent.cpp.
+        // Those entities keep the pre-existing stand-in stamp. Logging both outcomes is the
+        // measurement: a line
         // per entity that still needs the fallback, and silence for the ones the real
         // state machine finished.
         if (StartTown_InstantBuildPath() && !isDemoFoundation) {

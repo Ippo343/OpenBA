@@ -148,21 +148,62 @@ void StorageLocationComponent_InitFuncs() {
 //   state 2: enter=helper_d230  ; transitions -> {3}
 //   state 3: enter=helper_d1f0  ; transitions -> {6, 4, 5}
 // (state-ids 6/4/5 are transition targets only — not registered states here.)
-// Handlers are exe code unmapped in standalone -> populated null (graceful no-op);
-// the ids + transitions are real. Because the StorageBarn seeds the SM with
-// BuildComponent's default state (1, the first-linked controller), this node — the
-// SM chain TAIL — gets Step(1) which is not in its table (returns -1), so Tick walks
-// up to BuildComponent's node (Step(1)->0): the real multi-controller parent-walk.
+// Because the StorageBarn seeds the SM with BuildComponent's default state (1, the
+// first-linked controller), this node — the SM chain TAIL — gets Step(1) which is not
+// in its table (returns -1), so Tick walks up to BuildComponent's node (Step(1)->0):
+// the real multi-controller parent-walk.
+//
+// BOTH enter handlers are now REAL (2026-07-27). They were left null on the belief
+// that they were "exe code unmapped in standalone"; they are not — both are ported:
+//   * state 2 enter = helper_d230 (0x14012d230) = TownRegistry_RegisterStorageLocation,
+//     the townMgr+0x00 APPEND. Verified to be the state-2 enter and NOTHING else: the
+//     function's only xrefs are .pdata plus SetupCrossRefs and its inlined twin
+//     impl_d410, and it appears in no vtable. So "entity becomes a town storage
+//     location" IS "this component's state machine entered state 2".
+//   * state 3 enter = helper_d1f0 (0x14012d1f0) = the matching ERASE
+//     (DynArray8_EraseByValue over the same *(gw+0xf0) list, i.e. 0x140002cc0 which we
+//     ship as CemeteryListErase_Reimpl). state 3 = "no longer a storage location".
+// Both take the component (the enter dispatcher passes node+0x18 = the owning
+// component) and read the entity from comp+0x10, which is exactly the argument
+// TownRegistry_RegisterStorageLocation already expects.
 namespace { struct StorageCtrlTag {}; }
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
+
+extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);
+
+// state-2 ENTER — port of StorageLocationDescription_helper_d230.
+static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
+    if (!data) return 0;
+    TownRegistry_RegisterStorageLocation(data);
+    return 1;
+}
+
+// state-3 ENTER — port of StorageLocationDescription_helper_d1f0. Retail:
+//   local[0] = *(comp+0x10); DynArray8_EraseByValue(*(gw+0xf0), &local[0]);
+// The list base is the town manager itself (townMgr+0x00 is the array head), which is
+// the same object the state-2 append grows.
+static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
+    if (!data) return 0;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    void* townMgr = *reinterpret_cast<void**>(
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    if (!townMgr) return 1;
+    uint64_t entityRef = *reinterpret_cast<uint64_t*>(
+        reinterpret_cast<uintptr_t>(data) + 0x10);
+    CemeteryListErase_Reimpl(townMgr, &entityRef);
+    return 1;
+}
 
 static void StorageLocationComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = StorageCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&StorageLoc_State2Enter),
+                       nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&StorageLoc_State3Enter),
+                       nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);

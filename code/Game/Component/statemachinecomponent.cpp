@@ -591,17 +591,60 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
 // LIVE controller — with one retail-ordering constraint that fixes the
 // 2026-07-20 stockpile regression: a live DESTROYCOMPONENT may supply the
 // default ONLY when it is also the first ControllerComponent-derived component
-// in array order (registry-chain test, Object::IsTypeDerivedFromByName). On a
-// stockpile (no BuildComponent; StorageLocationComponent-family controller
-// first but inert) the old first-LIVE rule made DestroyComponent "first" and
-// its default of 4 booted the fresh entity straight into haul-away demolition.
-// Retail gives destroy's 4 only to entities where destroy genuinely is the
-// first controller (the starting supply cart's haul-away-then-vanish); for a
-// destroy-preceded-by-inert entity we leave +0x52 = 0 (BodyInit value) — a
-// state no live table registers, so every node stays dormant until a real
-// request (the removal tool's state-3 pump) arrives. +0x52 is the Tick block's
-// PENDING field: whatever lands here is ENTERED (enter-handler and all) on the
-// first tick, which is why a wrong default here demolishes buildings.
+// in array order (registry-chain test, Object::IsTypeDerivedFromByName). The old
+// first-LIVE rule made DestroyComponent "first" on a stockpile and its default of
+// 4 booted the fresh entity straight into haul-away demolition. Retail gives
+// destroy's 4 only to entities where destroy genuinely is the first controller
+// (the starting supply cart's haul-away-then-vanish); for a destroy-preceded-by-
+// inert entity we leave +0x52 = 0 (BodyInit value) — a state no live table
+// registers, so every node stays dormant until a real request (the removal tool's
+// state-3 pump) arrives. +0x52 is the Tick block's PENDING field: whatever lands
+// here is ENTERED (enter-handler and all) on the first tick, which is why a wrong
+// default here demolishes buildings.
+//
+// MEASURED 2026-07-27 (BANISHED_SM_TRACE LINK-DECIDE, start-town entities) — what
+// retail's first-in-order rule ACTUALLY yields, with each GetDefaultState read out
+// of the shipped exe vtable rather than inferred:
+//   * 19-component buildings (StorageBarn + all 6 WoodHouses): first controller is
+//     [14] ClearAreaComponent, +0x80 = 0x140003730 = `xor eax,eax; ret` -> 0.
+//     BuildComponent (default 1, vtable +0x80 = 0x14002f2f0) is only [15], so its 1
+//     is NEVER the linker-supplied default in retail.
+//   * 13-component stockpile (StorageYard): first controller is [9]
+//     AbsorbResourceComponent, also 0x140003730 -> 0. StorageLocationComponent
+//     (default 2, +0x80 = 0x1400026c0) is LAST at [12].
+// So retail's linker stamps 0 on every one of these entities, and the real spawn
+// states (build's 1, storage's 2) are posted by something else. Our first-LIVE rule
+// is therefore a DEVIATION that happens to reproduce the visible outcome for
+// buildings — not a degraded copy of retail. Do not "fix" it toward first-in-order
+// expecting the stockpile to gain state 2: in this build that reads Inert_Stub's 0,
+// and in retail it reads a genuine 0.
+// Resolve a runtime component type-id back to a readable name by matching it
+// against the type registry (diagnostics only; "?" when the type is not one of
+// the names we register). Shared by the linker's decision trace and the
+// per-tick owner dump below.
+static const char* SMTrace_ComponentName(uint32_t tid) {
+    static const char* const kCandidates[] = {
+        "StateMachineComponent", "StorageLocationComponent", "StorageComponent",
+        "WorkPlaceComponent", "ResidenceComponent", "AttendanceComponent",
+        "HappinessComponent", "HealerComponent", "CemeteryComponent",
+        "ImmigrationComponent", "MarketLocationComponent", "NomadComponent",
+        "OrchardComponent", "TradeComponent", "WellComponent",
+        "AbsorbResourceComponent", "BuildComponent", "ClearAreaComponent",
+        "ClearResourceComponent", "CropFieldComponent", "DestroyComponent",
+        "MultiObjectComponent", "PastureComponent", "ResourceProduceComponent",
+        "CitizenComponent", "CitizenAIComponent", "CharacterComponent",
+        "StorageDisplayComponent", "RawMaterialComponent", "ModelComponent",
+        "GrowthComponent", "FlammableComponent", "DecalComponent",
+        "MapComponent", "PickingComponent", "InteractComponent",
+        "HighlightComponent", "NaturalResourceComponent", "UIComponent",
+        "ParticleComponent", "WorkComponent", "StatusIconComponent",
+    };
+    if (tid == 0) return "?";
+    for (const char* cand : kCandidates)
+        if (::Object::GetTypeIdByName(cand) == tid) return cand;
+    return "?";
+}
+
 static void StateMachineComponent_LinkControllers_Standalone(StateMachineComponent* self) {
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
@@ -636,6 +679,38 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
     uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;
+
+    // Decision trace (BANISHED_SM_TRACE, default off => byte-unchanged). Dumps the
+    // owner's components IN ARRAY ORDER with the three facts the default-state rule
+    // turns on — controller-derived?, live?, GetDefaultState — plus what retail's
+    // first-in-order rule would have taken versus what we took. Bounded to the first
+    // kSMTraceEntities entities so a full town does not flood the log.
+    static const int kSMTraceEntities = 24;
+    static int s_decideTraceState = -1;
+    static int s_decideTraceCount = 0;
+    static void* s_decideSeen[kSMTraceEntities] = {};
+    if (s_decideTraceState < 0) {
+        const char* e = std::getenv("BANISHED_SM_TRACE");
+        s_decideTraceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    // Once per SM, not once per call: an SM that links nothing keeps firstChild
+    // null and re-enters this linker every single tick, which would otherwise
+    // burn the whole budget on the first entity.
+    bool decideTrace = false;
+    if (s_decideTraceState == 1 && s_decideTraceCount < kSMTraceEntities) {
+        decideTrace = true;
+        for (int s = 0; s < s_decideTraceCount; ++s)
+            if (s_decideSeen[s] == (void*)self) { decideTrace = false; break; }
+    }
+    int retailFirstDefault = -1;    // GetDefaultState of the FIRST controller in order
+    int retailFirstIdx = -1;
+    if (decideTrace) {
+        s_decideSeen[s_decideTraceCount++] = (void*)self;
+        fprintf(stderr, "[SMTrace] LINK-DECIDE sm=%p owner=%p comps=%d pending(+0x52)=0x%02x%s\n",
+                (void*)self, owner, cnt, pending52,
+                gotDefault ? " (already decided)" : "");
+        fflush(stderr);
+    }
     for (int i = 0; i < cnt; ++i) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
         owner = *reinterpret_cast<void**>(base + 0x10);
@@ -658,6 +733,25 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         void* node = cs ? cs(comp) : nullptr;
         bool isLive = (node != nullptr && node != comp);
 
+        if (decideTrace) {
+            // GetDefaultState on an INERT component is safe: MakeInertTyped fills
+            // every slot but 0/0x10 with Inert_Stub, which returns null (=> 0). That
+            // zero is the whole point of this line — it shows that applying retail's
+            // first-in-order rule verbatim would read 0 off an inert controller, not
+            // the real default that component's exe code returns.
+            typedef int (*GetDefaultState_t)(void*);
+            auto gdT = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
+            int dT = gdT ? gdT(comp) : 0;
+            if (isController && retailFirstIdx < 0) {
+                retailFirstIdx = i;
+                retailFirstDefault = dT;
+            }
+            fprintf(stderr, "[SMTrace]   [%d] %-26s tid=0x%08x ctrl=%d live=%d default=%d\n",
+                    i, SMTrace_ComponentName(tid), tid, isController ? 1 : 0,
+                    isLive ? 1 : 0, dT);
+            fflush(stderr);
+        }
+
         if (!gotDefault && isLive) {
             // Retail-order constraint (destroy only): skip a live destroy that
             // is not the entity's first controller; its 4 must never become the
@@ -675,7 +769,27 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
                 // returns 0): if the WPC precedes BuildComponent in the entity's array,
                 // it must not rob a fresh foundation of Build's 1 (under construction).
                 // So a zero default neither writes nor claims; keep looking.
-                if (d != 0) {
+                //
+                // ...UNLESS the live controller genuinely OWNS state 0 (2026-07-27).
+                // ClearAreaComponent's default really is 0 and 0 really is its start
+                // state (helper_8010 registers 0 -> {1,3} -> 2), so blanket-skipping
+                // zero robbed every placed building of its clear-the-footprint pass:
+                // measured on a hand-placed house over trees — ClearArea live at [14]
+                // with default 0, we took BuildComponent's 1 from [16] instead, State0
+                // never ran, no clear-work was ever posted and the trees stayed up.
+                // Ask the node whether it can actually HANDLE state 0 (Step(0) >= 0):
+                // that separates a real 0 from Inert_Stub's 0, and from a live
+                // controller whose 0 just means "I have no opinion" (WorkPlaceComponent
+                // returns 0 and registers no state 0, so it still keeps looking and
+                // still cannot rob a fresh foundation of Build's 1).
+                bool ownsZero = false;
+                if (d == 0) {
+                    typedef int (*Step_t)(void*, int);
+                    uintptr_t nvt = *reinterpret_cast<uintptr_t*>(node);
+                    auto stepFn = *reinterpret_cast<Step_t*>(nvt + 0x00);
+                    ownsZero = stepFn && stepFn(node, 0) >= 0;
+                }
+                if (d != 0 || ownsZero) {
                     *(base + 0x52) = static_cast<uint8_t>(d);
                     gotDefault = true;
                 }
@@ -690,6 +804,13 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         *reinterpret_cast<void**>(controllerNode + 0x10) = node;                              // prev child
         controllerNode = reinterpret_cast<uint8_t*>(node);
         ++linked;
+    }
+
+    if (decideTrace) {
+        fprintf(stderr, "[SMTrace] LINK-RESULT sm=%p linked=%d ours(+0x52)=%u "
+                        "retailFirstCtrl=[%d]->default=%d\n",
+                (void*)self, linked, *(base + 0x52), retailFirstIdx, retailFirstDefault);
+        fflush(stderr);
     }
 
     if (linked > 0) {
