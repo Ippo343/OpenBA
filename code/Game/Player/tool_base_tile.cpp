@@ -360,6 +360,96 @@ static bool ToolTile_OrganicConstruction() {
     return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
 }
 
+// (The placement path deliberately performs no occupancy write — see the note at the tail
+// of ValidateCreate_fd650. That belongs to MapComponent slot 12, driven by ClearArea's
+// state-2 event-1 broadcast.)
+
+// Diagnostic for the placed-building click-pick question: report both pick routes for
+// the entity we just created. cellEntity != 0 => EditTool's cell pick resolves it;
+// pickingId >= 0 => the Picking::Scene mesh route registered a mesh. BANISHED_PLACE_PICK_DIAG=1.
+static void ToolTile_ProbePlacedPick(void* entity, int tileX, int tileY) {
+    static bool s_on = [](){ const char* e = std::getenv("BANISHED_PLACE_PICK_DIAG");
+                             return e && e[0] && e[0] != '0'; }();
+    if (!s_on || !entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+
+    // Walk the entity's component array for the Model/Picking/Map trio (entity+0x30 array,
+    // +0x38 count; each slot an IBP) — same shape as PC_FindModelComponent.
+    int modelVariant = -999, pickingId = -999;
+    uint8_t* mapComp = nullptr;
+    // Array INDEX of each: ComponentEntity_OnAddedPass dispatches slot 6 in array order, so
+    // whether PickingComponent sees a framed model (variant 0 = the foundation decal) or an
+    // un-framed one (-1, stamped by BuildComponent's own OnAdded Stage 3) is decided purely
+    // by which index comes first. That ordering is the whole question for the mesh route.
+    int idxModel = -1, idxPick = -1, idxBuild = -1, idxMap = -1;
+    uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    uint32_t tidPick  = ::Object::GetTypeIdByName("PickingComponent");
+    uint32_t tidMap   = ::Object::GetTypeIdByName("MapComponent");
+    uint32_t tidBuild = ::Object::GetTypeIdByName("BuildComponent");
+    int count = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(entity) + 0x30);
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        typedef uint32_t (*gt_t)(void*);
+        uint32_t tid = (*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (tid == tidModel) { modelVariant = *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(comp) + 0x166); idxModel = i; }
+        else if (tid == tidPick) { pickingId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(comp) + 0x28); idxPick = i; }
+        else if (tid == tidMap) { mapComp = reinterpret_cast<uint8_t*>(comp); idxMap = i; }
+        else if (tid == tidBuild) idxBuild = i;
+    }
+
+    // Sweep the WHOLE footprint, not one corner: dc20 clears '.' cells (the ground in
+    // front of a building) and only stamps '#'/'_' ones, so sampling the rect origin
+    // reads a legitimately-empty cell and libels the fix. Report coverage instead, plus
+    // what else is holding cells (a foreign occupant = the trees this port does not remove).
+    // Both slots: FUN_1400a0280 returns cell+0x00 first and only falls back to cell+0x08,
+    // so a building that is only ever written to +0x08 can be masked by whatever holds +0x00.
+    int fpCells = 0, mine = 0, foreign = 0, empty = 0;
+    int s0_mine = 0, s0_other = 0, s0_empty = 0;
+    if (grid && mapComp) {
+        int dim = *grid;
+        uint8_t* cells = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
+        int x0 = *reinterpret_cast<int16_t*>(mapComp + 0x28), y0 = *reinterpret_cast<int16_t*>(mapComp + 0x2a);
+        int w  = *reinterpret_cast<int16_t*>(mapComp + 0x2c), h  = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
+        for (int iy = 0; cells && iy < h; ++iy)
+            for (int ix = 0; ix < w; ++ix) {
+                int cx = x0 + ix, cy = y0 + iy;
+                if (cx < 0 || cx >= dim || cy < 0 || cy >= dim) continue;
+                ++fpCells;
+                uint8_t* cell = cells + (size_t)(dim * cy + cx) * 0x30;
+                void* occ0 = *reinterpret_cast<void**>(cell + 0x00);
+                void* occ8 = *reinterpret_cast<void**>(cell + 0x08);
+                if (!occ8) ++empty; else if (occ8 == entity) ++mine; else ++foreign;
+                if (!occ0) ++s0_empty; else if (occ0 == entity) ++s0_mine; else ++s0_other;
+            }
+    }
+
+    // The retail dispatch is MapComponent::Draw -> (gate: MapDescription+0x30) -> 41b0 ->
+    // (gate: desc+0x31) -> dc20. If +0x30 is 0 for a building template, retail NEVER runs
+    // the occupancy write at register time and any call we make to it is a deviation.
+    const uint8_t* mdesc = mapComp ? *reinterpret_cast<const uint8_t* const*>(mapComp + 0x18) : nullptr;
+    std::fprintf(stderr, "[PlacePick] entity=%p tile=(%d,%d) fp=%d cells | slot8: mine=%d foreign=%d empty=%d %s"
+                 " | slot0: mine=%d other=%d empty=%d | modelVariant=%d pickingId=%d %s"
+                 " | mapDesc=%p +0x30(drawGate)=%d +0x31(skipOccupancy)=%d +0x32(minimap)=%d | pickmap=%s\n",
+                 entity, tileX, tileY, fpCells, mine, foreign, empty,
+                 (mine || s0_mine) ? "CELL-PICK OK" : "CELL-PICK DEAD",
+                 s0_mine, s0_other, s0_empty,
+                 modelVariant, pickingId,
+                 (pickingId > 0) ? "MESH-PICK OK" : "MESH-PICK DEAD",
+                 (const void*)mdesc,
+                 mdesc ? mdesc[0x30] : -1, mdesc ? mdesc[0x31] : -1, mdesc ? mdesc[0x32] : -1,
+                 ::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY") ? "on" : "off");
+    std::fprintf(stderr, "[PlacePick]   component order: Model=[%d] Picking=[%d] Build=[%d] Map=[%d] -> "
+                 "Picking %s Build (retail OnAddedPass runs them in this order)\n",
+                 idxModel, idxPick, idxBuild, idxMap,
+                 (idxPick >= 0 && idxBuild >= 0) ? (idxPick < idxBuild ? "BEFORE" : "AFTER") : "?");
+    std::fflush(stderr);
+}
+
 unsigned long long ToolTile_ValidateCreate_fd650(
         long long param_1, int param_2, int param_3, int param_4, int param_5,
         const void* param_6, float param_7) {
@@ -492,8 +582,38 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     // model mesh into Picking::Scene so it's clickable anywhere on the model — the same
     // fix start-town buildings get. Retail would drive this via PickingComponent::OnAdded
     // during the build lifecycle, which is inert in standalone. Respects LIVE_PICKMESH.
+    //
+    // NB this is a NO-OP for a foundation, faithfully: PickingComponent::OnAdded bails on
+    // `modelVariant < 0`, and a just-registered building has -1 there (retail stamps it at
+    // fd650 above; ours is re-stamped by BuildComponent's OnAdded Stage 3). So the mesh
+    // route cannot select a foundation in retail either — the MAP-CELL route below is what
+    // does, which is why it is the load-bearing half.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     PickingComponent_RegisterMeshForEntity(reinterpret_cast<void*>(local_res8));
+
+    // Cell-precise picking + navigation blocking: write the placed building's footprint
+    // into the region-map cell array (cell+0x08 = the entity), the half retail gets from
+    // RegisterEntity -> OnAddedPass -> MapComponent's vtable+0x30 -> sub_41b0 -> dc20.
+    // Standalone's MapComponent slot 6 only paints the minimap and the occupancy half is
+    // collapsed into per-site helpers (starttown.cpp) — the START-TOWN spawn and the
+    // upgrade-replacement path each call one, and the PLAYER PLACEMENT path had no
+    // equivalent. Consequence measured 2026-07-28: a hand-placed building holds 0 of its
+    // 16 footprint cells, so it is unclickable (EditTool_OnKey's cell pick reads cell+0x08
+    // and finds nothing, and the mesh pick above legitimately registered nothing), it does
+    // not block navigation, and its removal-side cell clear stays disarmed.
+    //
+    // NB there is deliberately NO map-cell occupancy write here. An earlier pass added one
+    // and it was wrong: retail's chain is MapComponent::Draw (slot 6) -> gate
+    // `MapDescription+0x30 != 0` -> 41b0 -> dc20, and +0x30 is **0** for a WoodHouse, so
+    // retail never writes cells at register time. Forcing it ran dc20's stale-occupant
+    // branch and MarkForRemoval'd 11 trees under one footprint — the opposite of the
+    // shipped game, where the trees stay and the building's dialog reads "remove X of Y".
+    //
+    // A building claims its cells LATER, when its ClearArea reaches state 2: that handler
+    // broadcasts event 1 (`MOV EDX,1; CALL 0x1400c2b70`) and MapComponent's slot 12 turns
+    // that into the 41b0 call. See MapComponent_Slot12VSlot (mapcomponent.cpp), which is
+    // where the occupancy write belongs.
+    ToolTile_ProbePlacedPick(reinterpret_cast<void*>(local_res8), param_2, param_3);
 
     unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
     return (uVar9 & ~0xffULL) | 1ULL;

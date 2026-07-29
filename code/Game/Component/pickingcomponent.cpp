@@ -187,9 +187,24 @@ void PickingComponent_RegisterMesh(void* pc) {
     // default +0x30 when nothing has claimed it.
     void* userData = *(void**)(p + 0x30);
     if (!userData) { userData = entity; *(void**)(p + 0x30) = entity; }
-    // NB: retail OnAdded only registers when pickingId(+0x28) < 0. In SA +0x28 is a
-    // zeroed 0 (Startup/OnAdded never ran), NOT the -1 unregistered sentinel, so we
-    // register unconditionally here — we drive this exactly once per building at spawn.
+    // Retail's OnAdded (0x140128f50) is a REFRESH, not a one-shot. Its very first act is to
+    // call its OWN vtable +0x38 — PickingComponent::OnCreate, i.e. "if pickingId >= 0,
+    // Picking::Scene::RemoveMesh it and reset to -1" — and only then does it re-register
+    // under `modelVariant >= 0 && pickingId < 0`. So the guard is always satisfied by the
+    // teardown that precedes it; it is not a "skip if already registered" test.
+    //
+    // That matters because the pick mesh must FOLLOW the model's frame: retail re-invokes
+    // this from BuildComponent's sub_8720 (CALL 0x140128f50 at 0x140108b26) as a site walks
+    // its construction frames, so the pickable volume tracks what is actually drawn. An
+    // earlier version of this port guarded with a bare `if (pickingId >= 0) return;`, which
+    // pinned the mesh to whichever frame was current at OnAddedPass time (the small
+    // foundation sub-mesh) and made every later refresh a no-op — measured as a placed
+    // building whose clickable area stayed a fraction of the building.
+    //
+    // Doing the teardown here also subsumes the double-registration concern that motivated
+    // the bad guard: a second call removes the first mesh before adding its own.
+    PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(pc));
+    if (*(int32_t*)(p + 0x28) >= 0) return;   // retail: `(int)param_1[5] < 0`
 
     // --- OnAdded body (0x140128f50) ---
     void* mc = PC_FindModelComponent(entity);     // sibling ModelComponent
@@ -223,9 +238,40 @@ void PickingComponent_RegisterMesh(void* pc) {
     *(int32_t*)(p + 0x28) = (int32_t)meshId;      // store pickingId
 
     static int s_logged = 0;
-    if (s_logged < 12) { s_logged++;
-        fprintf(stderr, "[PickMesh] AddMesh entity=%p mesh=%p userData=%p -> meshId=%u\n",
-                entity, mesh, userData, meshId);
+    if (s_logged < 64) { s_logged++;
+        // Dump the transform we hand to AddMesh as floats, next to the owner's MapComponent
+        // footprint rect. Measured 2026-07-28: a placed building's pickable region sat at the
+        // FAR CORNER of its footprint (hits only at (105,12x) for a rect anchored at
+        // (102,122) 4x5) while the model drew around the centre — i.e. the mesh is displaced,
+        // not undersized. This line is how you tell "wrong transform" from "small mesh":
+        // compare xform's translation against the rect.
+        const float* f = reinterpret_cast<const float*>(xform);
+        int fx = -1, fy = -1, fw = -1, fh = -1;
+        {   // owner's MapComponent, for the footprint rect
+            static uint32_t s_tidMapPC = 0;
+            if (!s_tidMapPC) s_tidMapPC = ::Object::GetTypeIdByName("MapComponent");
+            uint8_t* e = (uint8_t*)entity;
+            int n = *(int32_t*)(e + 0x38);
+            uintptr_t arr = *(uintptr_t*)(e + 0x30);
+            for (int i = 0; i < n && arr; ++i) {
+                void** slot = (void**)(arr + (uintptr_t)i * 8);
+                fn_InternalBasePtr_CheckPtr(slot);
+                void* c = *slot; if (!c) continue;
+                typedef uint32_t (*gt_t)(void*);
+                if ((*(gt_t*)(*(uintptr_t*)c + 0x10))(c) == s_tidMapPC) {
+                    uint8_t* m2 = (uint8_t*)c;
+                    fx = *(int16_t*)(m2 + 0x28); fy = *(int16_t*)(m2 + 0x2a);
+                    fw = *(int16_t*)(m2 + 0x2c); fh = *(int16_t*)(m2 + 0x2e);
+                    break;
+                }
+            }
+        }
+        fprintf(stderr, "[PickMesh] AddMesh entity=%p mesh=%p userData=%p -> meshId=%u | "
+                "variant=(%d,%d) xform[0..6]=%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f | "
+                "footprint=(%d,%d %dx%d) => cellFromXform=(%.1f,%.1f)\n",
+                entity, mesh, userData, meshId, (int)variantIdx, (int)modelVariant,
+                f[0], f[1], f[2], f[3], f[4], f[5], f[6], fx, fy, fw, fh,
+                f[4] + 128.0f, f[5] + 128.0f);
         fflush(stderr);
     }
 }
@@ -329,7 +375,25 @@ static void PickingComponent_DetachVSlot(void* s) {
     PickingComponent_InitFuncs();   // ensure s_fn_RemoveMesh (dispatch 0x140152438) resolved
     PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(s));
 }
+// Slot 6 (+0x30) = OnAdded, retail 0x140128f50 — dispatched by ComponentEntity_OnAddedPass
+// at EntityList_RegisterEntity time, in COMPONENT ARRAY ORDER. That order is the whole
+// point: on a WoodHouse, Picking is index [5] and Build is index [16], so retail registers
+// the pick mesh while the model still carries the FOUNDATION decal (modelVariant 0) and
+// only then does BuildComponent's own OnAdded Stage 3 un-frame it to -1.
+//
+// Standalone left this slot a stub and compensated with explicit
+// PickingComponent_RegisterMeshForEntity calls at each creation site — but the placement
+// site calls it AFTER RegisterEntity, i.e. after index [16] has already stamped -1, so
+// `modelVariant < 0` bails and a hand-placed building registers no pick mesh at all.
+// Measured 2026-07-28: that is why a placed foundation could not be clicked. Wiring the
+// slot puts the registration back in its retail window and retires the workarounds.
+static void PickingComponent_OnAddedVSlot(void* s) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PICK_ONADDED")) return;
+    PickingComponent_RegisterMesh(s);
+}
 static void PickingComponent_FinishVtable() {
+    PickingComponent_InertVtable[6] =
+        reinterpret_cast<void*>(&PickingComponent_OnAddedVSlot);
     PickingComponent_InertVtable[7] =
         reinterpret_cast<void*>(&PickingComponent_DetachVSlot);
 }

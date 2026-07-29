@@ -34,8 +34,18 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
+
+// BANISHED_DC20_TRACE=1 — log dc20's stale-occupant eviction decisions (see the branch).
+static bool DC20Trace() {
+    static int on = -1;
+    if (on < 0) { const char* e = std::getenv("BANISHED_DC20_TRACE");
+                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return on == 1;
+}
 
 // --- registered exe sub-callees, resolved on first use ----------------------
 typedef int      (*fn_e2c0_t)(int* map, int cellIndex);                 // 0x14009e2c0 (this file)
@@ -161,6 +171,25 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                             if (lVar2 != 0) {
                                 if (fn_InternalBasePtr_CheckPtr)
                                     fn_InternalBasePtr_CheckPtr(&local_68);
+                                // [diag] BANISHED_DC20_TRACE — this branch is retail DESTROYING
+                                // whatever already occupied the cell (MarkForRemoval + push onto
+                                // the world removal queue). User-observed retail behaviour is that
+                                // a building placed over trees does NOT remove them, so either this
+                                // branch is skipped (bit 0x400 already set) or the whole 41b0 chain
+                                // does not run at placement. Log which, with the deciding flags.
+                                if (DC20Trace()) {
+                                    static int s_ev = 0;
+                                    if (++s_ev <= 40) {
+                                        uint32_t f40 = *reinterpret_cast<uint32_t*>(local_68 + 0x40);
+                                        std::fprintf(stderr, "[dc20] cell=%d occupant=%p flags+0x40=0x%x "
+                                                     "removalBit0x400=%d -> %s\n",
+                                                     iVar15, reinterpret_cast<void*>(local_68), f40,
+                                                     (f40 >> 10) & 1,
+                                                     ((f40 >> 10) & 1) ? "SKIP (already marked)"
+                                                                       : "EVICT (MarkForRemoval + queue)");
+                                        std::fflush(stderr);
+                                    }
+                                }
                                 if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
                                     if (fn_InternalBasePtr_CheckPtr)
                                         fn_InternalBasePtr_CheckPtr(&local_68);

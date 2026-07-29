@@ -332,6 +332,66 @@ static void MapComponent_PaintMinimapRect(uint8_t* mc, bool clear) {
 }
 
 // ============================================================
+// The OCCUPANCY half of sub_41b0 — cell entity-links + stale-occupant eviction
+// ============================================================
+// `MapComponent_sub_41b0` (keystone_a_map.cpp) is a complete port of 0x1401241b0 and
+// `MapComponent_overlay_dc20` a complete port of 0x14009dc20, but nothing calls the
+// pair: 41b0's `IsDerivedFrom(AreaDescription)` returns false in standalone's partial
+// factory tree, leaving `pvVar5` null and the very next line reading `null+0x32`. So
+// the occupancy write has been collapsed into hand-rolled per-site helpers
+// (starttown.cpp) that each creation path must remember to call — and the PLAYER
+// PLACEMENT path never did (measured 2026-07-28: a hand-placed building holds 0 of its
+// 16 footprint cells, so EditTool's cell pick finds nothing and it cannot be selected).
+//
+// This is 41b0's second half with the one standalone accommodation this file already
+// makes twice (PaintMinimapRect, DetachOccupancy_4750): trust the description linked at
+// mc+0x18 instead of re-deriving it through IsDerivedFrom. The paint half is skipped —
+// slot 6 already ran it at register time.
+//
+// dc20 does MORE than write cells: any existing occupant that is not the new owner and
+// is not already removal-marked (entity+0x40 bit 0x400) is MarkForRemoval'd
+// (0x1400c2ea0) and pushed onto the world removal queue at EntityList+0xd0. That is
+// retail's answer to "a building was placed on top of trees" — the trees are destroyed,
+// not harvested. Calling only the cell-write half would leave those trees standing but
+// absent from the grid, so the eviction is not optional if this runs at all.
+extern void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
+                                      int param_4, int param_5, int param_6, int param_7,
+                                      int64_t* param_8, int param_9);
+
+extern "C" void MapComponent_ApplyOccupancy_41b0(void* mapCompV) {
+    uint8_t* mc = reinterpret_cast<uint8_t*>(mapCompV);
+    if (!mc || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if ((*(uint32_t*)(mc + 0x20) >> 0x14) & 1) return;        // occupancy already written
+    uint8_t* desc = *(uint8_t**)(mc + 0x18);
+    if (!desc) return;
+    if (desc[0x31] != 0) return;                              // description opts out
+    int* grid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (!grid) return;
+
+    int64_t ownerIBP = *(int64_t*)(mc + 0x10);
+    MapComponent_overlay_dc20(grid, &ownerIBP, (uint8_t)*(uint32_t*)(desc + 0x20),
+                              (int)*(int16_t*)(mc + 0x28), (int)*(int16_t*)(mc + 0x2a),
+                              (int)*(int16_t*)(mc + 0x2c), (int)*(int16_t*)(mc + 0x2e),
+                              (int64_t*)(desc + 0x28), *(int32_t*)(mc + 0x30));
+
+    // 41b0's tail: arm the removal-side clear (the bit MapComponent_DetachOccupancy_4750
+    // gates on) and, if the low-16 flags changed, NotifyEntityChanged. The BTS never
+    // touches the low 16 bits, so the notify is dead here exactly as it is in retail —
+    // kept for shape.
+    uint32_t before = *(uint32_t*)(mc + 0x20);
+    uint32_t after  = before | 0x100000u;
+    *(uint32_t*)(mc + 0x20) = after;
+    if (((after ^ before) & 0xffff) != 0 && *(int64_t*)(mc + 0x10) != 0) {
+        static void (*s_c3470)(void*) = nullptr;
+        static bool s_init = false;
+        if (!s_init) { s_init = true;
+            s_c3470 = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c3470)); }
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(mc + 0x10));
+        if (s_c3470) s_c3470(*(void**)(mc + 0x10));
+    }
+}
+
+// ============================================================
 // Economy brick M-B — grid occupancy UN-mark on entity removal
 // ============================================================
 // Standalone body for CreateNaturalResource_impl_4750 (0x140124750), the
@@ -408,9 +468,50 @@ static void MapComponent_DetachVSlot(void* s) {
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/true);
     MapComponent_OnCreate(reinterpret_cast<MapComponent*>(s));
 }
+// Slot 12 (+0x60) — the per-component MESSAGE slot, retail `MapComponent_Slot12`
+// (0x1401243c0), which is only three instructions:
+//
+//     CMP EDX,1 ; JZ 0x1401241b0 ; RET
+//
+// i.e. "on message 1, run the occupancy write". The broadcaster is
+// `ModelComponent_helper_2b70(entity, msgId)` (0x1400c2b70), which walks the entity's
+// components and calls each one's +0x60 with the id — and the caller that passes **1** is
+// `ClearAreaDescription_helper_77f0`, the ClearArea **state-2 ENTER**
+// (`MOV EDX,1; CALL c2b70` at 0x140117807). Every other +0x60 dispatch in the exe passes
+// 0 (verified: all three BuildComponent sites and both sub_8720 sites are `XOR EDX,EDX`).
+//
+// So retail's answer to "when does a building claim its footprint cells" is: **when its
+// ClearArea finishes**, not when it is placed. That is why a fresh foundation is pickable
+// only by its decal mesh (fiddly), while a cleared/among-completed building is cell-picked
+// and blocks navigation — and it is what makes dc20's stale-occupant eviction safe: by the
+// time it runs, the trees have been harvested by citizens, so it only sweeps stragglers.
+//
+// Measured 2026-07-28: standalone ports the state-2 handler and does broadcast event 1, but
+// this slot was an unwired stub, so the message landed on nothing and no player-placed
+// building ever registered its cells.
+static void MapComponent_Slot12VSlot(void* s, int msgId) {
+    // [diag] BANISHED_MAP_TRACE — this is the only observable point for "the building just
+    // became solid". dc20 itself logs nothing on clear ground (it only reports evictions),
+    // so without this line a successful solidify is indistinguishable from a no-op.
+    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    if (s_trace && msgId == 1) {
+        uint8_t* mc = reinterpret_cast<uint8_t*>(s);
+        bool already = (*(uint32_t*)(mc + 0x20) >> 0x14) & 1;
+        fprintf(stderr, "[MapSolidify] slot12 msg=1 comp=%p rect=(%d,%d %dx%d) alreadyWritten=%d -> %s\n",
+                s, (int)*(int16_t*)(mc + 0x28), (int)*(int16_t*)(mc + 0x2a),
+                (int)*(int16_t*)(mc + 0x2c), (int)*(int16_t*)(mc + 0x2e), (int)already,
+                ::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY")
+                    ? (already ? "SKIP (bit already set)" : "REGISTERING CELLS") : "flag off");
+        fflush(stderr);
+    }
+    if (msgId != 1) return;                       // retail: CMP EDX,1 / JZ / RET
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY")) return;
+    MapComponent_ApplyOccupancy_41b0(s);
+}
 static void MapComponent_FinishVtable() {
-    MapComponent_InertVtable[6] = reinterpret_cast<void*>(&MapComponent_OnAddedVSlot);
-    MapComponent_InertVtable[7] = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
+    MapComponent_InertVtable[6]  = reinterpret_cast<void*>(&MapComponent_OnAddedVSlot);
+    MapComponent_InertVtable[7]  = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
+    MapComponent_InertVtable[12] = reinterpret_cast<void*>(&MapComponent_Slot12VSlot);
 }
 extern "C" void* MapComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x83,

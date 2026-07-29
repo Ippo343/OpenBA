@@ -289,6 +289,37 @@ static const char* const kDefaultOnFlags[] = {
     // baseline. The half-configuration double-registers (2 -> 4, d230 has no dedup)
     // and now warns loudly from StartTown_WireStorage.
     "BANISHED_LIVE_STORAGECTRL",
+    // PickingComponent vtable slot 6 (+0x30, OnAdded — retail 0x140128f50), so the pick
+    // mesh registers inside ComponentEntity_OnAddedPass instead of from a hand-rolled call
+    // after EntityList_RegisterEntity. Graduated 2026-07-28, user-verified in real play.
+    //
+    // The slot is not a nicety — the ORDER is the fix. OnAddedPass dispatches slot 6 in
+    // component ARRAY order, and on a WoodHouse that is Model=[3] Picking=[5] Build=[16].
+    // At [5] the model still carries the placement FOUNDATION DECAL (modelVariant 0), so
+    // OnAdded's `modelVariant < 0` guard passes and the mesh registers; only at [16] does
+    // BuildComponent's own OnAdded un-frame the model to -1 for the build ramp. Our
+    // explicit call ran after RegisterEntity — effectively last — so it ALWAYS saw -1 and
+    // bailed, and a hand-placed building was unclickable (measured: pickingId -1 -> 27).
+    // RegisterMesh now also honours retail's `pickingId(+0x28) < 0` guard, which makes the
+    // legacy explicit calls idempotent no-ops rather than double-registrations.
+    "BANISHED_LIVE_PICK_ONADDED",
+    // MapComponent vtable slot 12 (+0x60, the message slot — retail 0x1401243c0, literally
+    // `CMP EDX,1 ; JZ 0x1401241b0 ; RET`), i.e. "on message 1, run the occupancy write".
+    // Graduated 2026-07-28 alongside the above.
+    //
+    // This is WHEN a building claims its footprint cells, and it is not at placement:
+    // MapComponent::Draw's own gate is `MapDescription+0x30 != 0`, and that byte is 0 for a
+    // WoodHouse, so slot 6 never reaches 41b0. The broadcaster is
+    // ModelComponent_helper_2b70(entity, msgId) and the ONLY caller in the exe that passes
+    // 1 is ClearAreaDescription_helper_77f0 — ClearArea's state-2 ENTER (`MOV EDX,1; CALL
+    // c2b70`). Every other +0x60 dispatch site is `XOR EDX,EDX` (checked: all three
+    // BuildComponent sites and both sub_8720 sites). So a building becomes solid when its
+    // CLEARING FINISHES, which is also what makes dc20's stale-occupant eviction safe — by
+    // then citizens have harvested the trees and it only sweeps stragglers.
+    // We already ported the state-2 handler and broadcast event 1; this slot was a stub, so
+    // the message landed on nothing and no placed building ever registered its cells.
+    // Inert unless BANISHED_LIVE_CLEARCTRL is on (nothing else broadcasts event 1).
+    "BANISHED_LIVE_MAP_SOLIDIFY",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
