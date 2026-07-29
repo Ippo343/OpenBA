@@ -173,26 +173,36 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);
 
 // state-2 ENTER — port of StorageLocationDescription_helper_d230.
+//
+// RETURN 0, NOT 1. Retail d230 ends `return uVar1 & 0xffffffffffffff00` — AL is
+// explicitly zeroed. The return value is StateMachine::Tick's walk-stop bit: the
+// enter walk runs tail->parent through EVERY controller node while handlers
+// return 0, and stops at the first non-zero (ClearArea's 77f0 returns 1 by
+// design; Storage/WPC/Residence return 0). Returning 1 here stopped the barn's
+// state-2 walk at this node, starving WPC's edf0 (so the completed barn stayed
+// registered as an available Builder workplace, capacity 4, and absorbed the
+// first 4 builders town-wide) and ClearArea's state-2 event-1 broadcast.
 static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
     if (!data) return 0;
     TownRegistry_RegisterStorageLocation(data);
-    return 1;
+    return 0;
 }
 
 // state-3 ENTER — port of StorageLocationDescription_helper_d1f0. Retail:
 //   local[0] = *(comp+0x10); DynArray8_EraseByValue(*(gw+0xf0), &local[0]);
 // The list base is the town manager itself (townMgr+0x00 is the array head), which is
 // the same object the state-2 append grows.
+// Returns 0 for the same reason as State2Enter above (retail d1f0 zeroes AL too).
 static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     if (!data) return 0;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     void* townMgr = *reinterpret_cast<void**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
-    if (!townMgr) return 1;
+    if (!townMgr) return 0;
     uint64_t entityRef = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(data) + 0x10);
     CemeteryListErase_Reimpl(townMgr, &entityRef);
-    return 1;
+    return 0;
 }
 
 static void StorageLocationComponent_PopulateStateTable() {

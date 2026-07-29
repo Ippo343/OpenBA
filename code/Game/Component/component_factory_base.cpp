@@ -320,6 +320,19 @@ static const char* const kDefaultOnFlags[] = {
     // the message landed on nothing and no placed building ever registered its cells.
     // Inert unless BANISHED_LIVE_CLEARCTRL is on (nothing else broadcasts event 1).
     "BANISHED_LIVE_MAP_SOLIDIFY",
+    // ZoneComponent vtable slots 6/7 (Draw 0x1401301f0 / OnCreate 0x140130080) -> sub_d360,
+    // the writer of cell+0x00 — the FIRST slot EditTool's cell pick (FUN_1400a0280)
+    // resolves. This is retail's placement-time cell registration: for every non-'.'
+    // footprint cell it writes the owning entity into cell+0x00, notifies the pathfinder
+    // mirror (a6f00 cmd 3), and bumps the '.'-reserve counter at cell+0x28; slot 7 is the
+    // NULL-raster teardown. A WoodHouse carries a ZoneComponent at array index [1], so in
+    // retail a just-placed foundation is cell-pickable immediately (user-verified in the
+    // shipped game) even though it has no pick mesh. Everything below the slots (d360,
+    // a6f00, the 88e20 zone-map insert) was ported AND registered for months; the inert
+    // factory just shipped the stub vtable. Default-on 2026-07-28: A/B on clearplaceover
+    // measured slot0 mine=16/empty=4('.') CELL-PICK OK vs control mine=0 DEAD, trees keep
+    // their +0x08 cells, 0 crash; default and FAB-scenario runs clean.
+    "BANISHED_LIVE_ZONE_RASTER",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
