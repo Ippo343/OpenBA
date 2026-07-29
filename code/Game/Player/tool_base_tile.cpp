@@ -382,11 +382,12 @@ static void ToolTile_ProbePlacedPick(void* entity, int tileX, int tileY) {
     // whether PickingComponent sees a framed model (variant 0 = the foundation decal) or an
     // un-framed one (-1, stamped by BuildComponent's own OnAdded Stage 3) is decided purely
     // by which index comes first. That ordering is the whole question for the mesh route.
-    int idxModel = -1, idxPick = -1, idxBuild = -1, idxMap = -1;
+    int idxModel = -1, idxPick = -1, idxBuild = -1, idxMap = -1, idxZone = -1;
     uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
     uint32_t tidPick  = ::Object::GetTypeIdByName("PickingComponent");
     uint32_t tidMap   = ::Object::GetTypeIdByName("MapComponent");
     uint32_t tidBuild = ::Object::GetTypeIdByName("BuildComponent");
+    uint32_t tidZone  = ::Object::GetTypeIdByName("ZoneComponent");
     int count = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(entity) + 0x30);
     for (int i = 0; i < count; ++i) {
@@ -400,6 +401,7 @@ static void ToolTile_ProbePlacedPick(void* entity, int tileX, int tileY) {
         else if (tid == tidPick) { pickingId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(comp) + 0x28); idxPick = i; }
         else if (tid == tidMap) { mapComp = reinterpret_cast<uint8_t*>(comp); idxMap = i; }
         else if (tid == tidBuild) idxBuild = i;
+        else if (tid == tidZone) idxZone = i;
     }
 
     // Sweep the WHOLE footprint, not one corner: dc20 clears '.' cells (the ground in
@@ -443,9 +445,9 @@ static void ToolTile_ProbePlacedPick(void* entity, int tileX, int tileY) {
                  (const void*)mdesc,
                  mdesc ? mdesc[0x30] : -1, mdesc ? mdesc[0x31] : -1, mdesc ? mdesc[0x32] : -1,
                  ::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY") ? "on" : "off");
-    std::fprintf(stderr, "[PlacePick]   component order: Model=[%d] Picking=[%d] Build=[%d] Map=[%d] -> "
+    std::fprintf(stderr, "[PlacePick]   component order: Model=[%d] Picking=[%d] Build=[%d] Map=[%d] Zone=[%d] -> "
                  "Picking %s Build (retail OnAddedPass runs them in this order)\n",
-                 idxModel, idxPick, idxBuild, idxMap,
+                 idxModel, idxPick, idxBuild, idxMap, idxZone,
                  (idxPick >= 0 && idxBuild >= 0) ? (idxPick < idxBuild ? "BEFORE" : "AFTER") : "?");
     std::fflush(stderr);
 }

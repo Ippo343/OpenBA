@@ -18,6 +18,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -170,6 +171,7 @@ void ZoneComponent_Draw(ZoneComponent* self) {
         s_fn_FindMapComponent(*ownerSlot, &mapIBP);
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
+    if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
 
     int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
     int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
@@ -179,11 +181,13 @@ void ZoneComponent_Draw(ZoneComponent* self) {
 
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
-    void* obj = *reinterpret_cast<void**>(mapIBP + 0x18);
-    bool isDerived = (s_pZoneDescTypeId && fn_IsDerivedFrom)
-                         ? fn_IsDerivedFrom(obj, *s_pZoneDescTypeId)
-                         : false;
-    void* desc = isDerived ? obj : nullptr;
+    // Retail gates the description through IsDerivedFrom(DAT_1401c7a18); in
+    // standalone's partial factory tree that check rejects valid descriptions
+    // (the documented FUN_1401253d0-class landmine, same accommodation as
+    // MapComponent_PaintMinimapRect) and d360 would then deref (null+0x28).
+    // Trust the linked description — it comes straight from the entity template.
+    void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
+    if (!desc) return;
 
     if (!s_pGameState || !*s_pGameState) return;
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
@@ -220,6 +224,7 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
         s_fn_FindMapComponent(*ownerSlot, &mapIBP);
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
+    if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
 
     int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
     int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
@@ -229,11 +234,10 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
 
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
-    void* obj = *reinterpret_cast<void**>(mapIBP + 0x18);
-    bool isDerived = (s_pZoneDescTypeId && fn_IsDerivedFrom)
-                         ? fn_IsDerivedFrom(obj, *s_pZoneDescTypeId)
-                         : false;
-    void* desc = isDerived ? obj : nullptr;
+    // Same IsDerivedFrom landmine accommodation as Draw above: trust the linked
+    // description or d360 derefs (null+0x28).
+    void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
+    if (!desc) return;
 
     if (!s_pGameState || !*s_pGameState) return;
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
@@ -318,6 +322,81 @@ void ZoneComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(ZoneComponent, 0x28, 0x83)
+// ============================================================
+// Vtable slots 6/7 — the CELL+0x00 occupant write (placed-building click-pick)
+// ============================================================
+// Retail dispatch: EntityList::RegisterEntity -> ComponentEntity_OnAddedPass ->
+// ZoneComponent vtable slot 6 = Draw (0x1401301f0, xref'd ONLY from the vtable at
+// 0x140164e60) -> sub_d360 (0x14009d360), which writes the owning entity into
+// **cell + 0x00** for every non-'.' footprint cell, notifies the pathfinder mirror
+// per cell (a6f00 cmd 3), and bumps the '.'-cell reserve counter at cell+0x28.
+// Slot 7 = OnCreate (0x140130080), dispatched by MarkForRemoval's vtable+0x38
+// walk, rasterizes the same rect with a NULL ref — the symmetric teardown.
+//
+// cell+0x00 is the slot EditTool's cell pick (FUN_1400a0280) resolves FIRST —
+// before the cell+0x08 solid layer buildings only claim when their clearing
+// finishes (MapComponent slot 12). This is what makes a just-placed foundation
+// clickable in retail while the trees still hold +0x08 (user-verified in the
+// shipped game 2026-07-28; recorded as the "cell+0x00 writer" open).
+//
+// Everything below Draw was already ported AND registered (d360 in
+// keystone_a_zone.cpp, a6f00, the 88e20 zone-map insert) — but the inert factory
+// shipped with the shared stub vtable, so OnAddedPass dispatched slot 6 into a
+// stub and no placed building ever reached cell+0x00. Same one-guard-away shape
+// as PickingComponent slot 6 and MapComponent slot 12 before it.
+static uint32_t ZoneComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ZoneComponent");
+    return cached;
+}
+static void* ZoneComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static bool ZoneRasterLive() {
+    // Default-on via kDefaultOnFlags (2026-07-28); BANISHED_LIVE_ZONE_RASTER=0 is
+    // the kill-switch for A/B runs.
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_ZONE_RASTER");
+}
+static void ZoneComponent_TraceRaster(void* s, const char* which) {
+    static bool s_trace = [](){ const char* e = std::getenv("BANISHED_ZONE_TRACE");
+                               return e && e[0] && e[0] != '0'; }();
+    if (!s_trace) return;
+    static int s_count = 0;
+    ++s_count;
+    if (s_count > 40 && (s_count % 200) != 0) return;
+    std::fprintf(stderr, "[ZoneRaster] #%d %s comp=%p live=%d\n",
+                 s_count, which, s, ZoneRasterLive() ? 1 : 0);
+    std::fflush(stderr);
+}
+static void ZoneComponent_OnAddedVSlot(void* s) {
+    // slot 6 (+0x30) — flags 0x83 bit 0 puts every ZoneComponent in the
+    // OnAddedPass dispatch, exactly as retail.
+    ZoneComponent_TraceRaster(s, "attach(Draw)");
+    if (!ZoneRasterLive()) return;
+    ZoneComponent_Draw(reinterpret_cast<ZoneComponent*>(s));
+}
+static void ZoneComponent_DetachVSlot(void* s) {
+    // slot 7 (+0x38) — the removal walk. Must mirror slot 6 or a removed
+    // building leaves a dangling entity ref in cell+0x00 (the exact
+    // use-after-free shape MapComponent_DetachOccupancy_4750 exists to prevent
+    // on the +0x08 layer).
+    ZoneComponent_TraceRaster(s, "detach(OnCreate)");
+    if (!ZoneRasterLive()) return;
+    ZoneComponent_OnCreate(reinterpret_cast<ZoneComponent*>(s));
+}
+static void ZoneComponent_FinishVtable() {
+    ZoneComponent_InertVtable[6] = reinterpret_cast<void*>(&ZoneComponent_OnAddedVSlot);
+    ZoneComponent_InertVtable[7] = reinterpret_cast<void*>(&ZoneComponent_DetachVSlot);
+}
+extern "C" void* ZoneComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x28, 0x83,
+        ZoneComponent_InertVtable, reinterpret_cast<void*>(&ZoneComponent_InertGetTypeId));
+    ZoneComponent_FinishVtable();
+    return p;
+}
+static void* ZoneComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x28, 0x83,
+        ZoneComponent_InertVtable, reinterpret_cast<void*>(&ZoneComponent_InertGetTypeId));
+    ZoneComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(ZoneComponent, "Component",
               &ZoneComponent_Factory, &ZoneComponent_CreateInPlace);
