@@ -11,4 +11,8 @@ void PopulationComponent_Update(PopulationComponent* self, int64_t* pDeltaTime);
 // body init (description, habitability grid) AND the wild-herd creation pass.
 void PopulationComponent_Startup(PopulationComponent* self);
 
+// DynArray resize for the 12-byte density cells (FUN_14000b0d0). Exposed for
+// the slot-3 Serialize body in animalwave_serialize.cpp (load-side resize).
+void PopulationComponent_ResizeCells(int64_t* arr, int newCount);
+
 void PopulationComponent_InitFuncs();

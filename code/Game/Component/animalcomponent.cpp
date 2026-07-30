@@ -56,6 +56,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // ============================================================
@@ -247,6 +248,17 @@ int s_traceDeath       = 0;
 int s_traceMoveTo      = 0;
 int s_traceMissing     = 0;
 constexpr int kTraceCap = 24;
+
+// Population-stability soaks need every death, not the first 24; HERD_TRACE
+// already marks a run as a herd diagnostic, so it lifts the cap.
+inline bool HerdTraceEnv() {
+    static int on = -1;
+    if (on < 0) {
+        const char* v = getenv("BANISHED_HERD_TRACE");
+        on = (v && *v && *v != '0') ? 1 : 0;
+    }
+    return on != 0;
+}
 
 } // namespace
 
@@ -512,7 +524,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                           At<int>(static_cast<uintptr_t>(corpseOwner), 0xd8) + 1,
                           &entity);
         }
-        if (s_traceDeath++ < kTraceCap) {
+        if (HerdTraceEnv() || s_traceDeath++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] death: self=%p entity=%p age=%.2f deathAge=%.2f\n",
                     static_cast<void*>(self), reinterpret_cast<void*>(entity), age, deathAge);
         }

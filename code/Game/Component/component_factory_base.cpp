@@ -333,6 +333,26 @@ static const char* const kDefaultOnFlags[] = {
     // measured slot0 mine=16/empty=4('.') CELL-PICK OK vs control mine=0 DEAD, trees keep
     // their +0x08 cells, 0 crash; default and FAB-scenario runs clean.
     "BANISHED_LIVE_ZONE_RASTER",
+    // Wild deer herds — verified end-to-end 2026-07-29 and soak-passed 2026-07-29
+    // (20+ real minutes at FORCE_SPEED=10 ≈ a full deer lifespan: 16 herds, 108
+    // deaths vs 119 AdjustSize repop spawns, per-herd census stable across three
+    // repop rounds, a starved herd re-seeded from the retail min-2 target, empty
+    // crash log). Aging arithmetic verified retail-identical (Update dt*1/3600,
+    // Startup deathAge roll, Populate initial-age seeding age=RandFloat*base —
+    // early deaths are the faithful uniform-age tail, not a drain). The three
+    // gates are one feature: population spawns herds, herd ticks the members,
+    // animal update ages/wanders them.
+    "BANISHED_LIVE_HERD",
+    "BANISHED_LIVE_POPULATION",
+    "BANISHED_LIVE_ANIMAL_UPDATE",
+    // Pasture chain — adopt/spawn/production verified 0071c53; reproduction
+    // proven 2026-07-29 after porting the missing slot-15 breed tag (msg 0 ->
+    // random pastured animal gets flag bit 23; the latch->bit 21->Reproduce
+    // chain then births — first lamb observed in a 15-min tend-harness soak).
+    // Default runs have no pastures until the fenced-area tool lands, so this
+    // is inert without the demo rig; organic births still need the herder
+    // chain (PastureComponent_Slot14 cmd 2 -> PastureWork), tracked as an open.
+    "BANISHED_LIVE_PASTURE",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

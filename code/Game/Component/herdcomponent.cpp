@@ -1027,6 +1027,13 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
             currentTarget = maxSize;
         }
 
+        if (HerdTraceOn()) {
+            fprintf(stderr, "[Herd] census: herd=%p members=%d target=%d food=%.2f\n",
+                    (void*)self, *reinterpret_cast<int32_t*>(&self->data40),
+                    currentTarget, foodScore);
+            fflush(stderr);
+        }
+
         s_fn_AdjustSize(self, currentTarget);
     }
 
@@ -1102,8 +1109,10 @@ void HerdComponent_InitFuncs() {
 //   slot 4 Startup  -> the ctor tail the inert factory can't express (+0x4c=-1)
 //   slot 6 OnAdd    -> world herd-list registration (0x140121f40)
 //   slot 9 Update   -> the real grazing/migration tick (0x140121bf0)
-// Slot 3 Serialize (0x140121f90) is still a stub: it only matters for save/load
-// and needs the IO::Serializer plumbing.
+// Slot 3 Serialize (0x140121f90) is ported (animalwave_serialize.cpp) and
+// registered (reg_animal_serialize.cpp) but NOT wired here: slot-3 wiring for
+// ALL live components lands together in the save/load wave (a partial fill
+// would desync the save stream).
 //
 // A live herd does nothing on its own — PopulationComponent's Startup is what
 // creates herd entities and calls Populate, so the useful recipe is

@@ -380,8 +380,12 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
         s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
     }
 
-    // On load (serializer mode == 0), resize entity array
-    if (*(int*)((uintptr_t)serializer + 8) == 0) {
+    // On load, resize entity array. Retail reads the direction flag from the
+    // STREAM (+8) through the serializer's first field — `*(int*)(ser[0] + 8)`
+    // — not from serializer+8 (that's the version int, 0 here, which made the
+    // old check pass on save too; benign only because resize-to-same-count is
+    // a no-op).
+    if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
         if (s_fn_ResizeIBPArray) {
             s_fn_ResizeIBPArray((void*)&self->field30, countBuf);
         }
@@ -486,6 +490,7 @@ void PastureComponent_InitFuncs() {
 
 extern "C" void** PastureCtrl_NodeVtable();
 extern "C" void   PastureCtrl_PopulateTable();
+extern "C" void   Pasture_MsgReceive(void* pasture, int msg);  // slot 15 breed tag
 
 static uint32_t PastureComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
@@ -503,6 +508,13 @@ static void  PastureComponent_OnAddedVSlot(void* s) {
 static void  PastureComponent_OnRemoveVSlot(void* s) {
     PastureComponent_OnCreate(reinterpret_cast<PastureComponent*>(s));
 }
+// Slot 15 (+0x78 OnMessage, retail 0x140127720): the herder's work-complete
+// message tags one random pastured animal breed-eligible (flag bit 23) — the
+// only setter of that bit in the exe; without it livestock never reproduce.
+// Body in pasturecomponent_states.cpp; ABI = (self, msgCode, rest unused).
+static void  PastureComponent_MsgVSlot(void* s, int msg, void*, uint32_t, uint32_t) {
+    Pasture_MsgReceive(s, msg);
+}
 static int   PastureComponent_GetDefaultState(void*) { return 2; }
 static void* PastureComponent_CreateState(void* self) {
     return reinterpret_cast<uint8_t*>(self) + 0x48;
@@ -513,6 +525,7 @@ static void PastureComponent_InstallLive(void* mem) {
     if (!PastureComponent_LiveOn()) return;
     PastureComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PastureComponent_OnAddedVSlot);
     PastureComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PastureComponent_OnRemoveVSlot);
+    PastureComponent_LiveVtable[15] = reinterpret_cast<void*>(&PastureComponent_MsgVSlot);
     PastureComponent_LiveVtable[16] = reinterpret_cast<void*>(&PastureComponent_GetDefaultState);
     PastureComponent_LiveVtable[17] = reinterpret_cast<void*>(&PastureComponent_CreateState);
     PastureCtrl_PopulateTable();

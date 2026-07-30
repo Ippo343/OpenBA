@@ -364,6 +364,19 @@ extern "C" void Pasture_Reproduce(void* pasture) {
 
         uintptr_t an = static_cast<uintptr_t>(animalIBP);
         uint32_t oldFlags = *reinterpret_cast<uint32_t*>(an + 0x20);
+        // Breed-chain diagnostic: the latch that sets bit 21 requires +0x40!=0
+        // AND flag bit 23 (0x800000, data-driven from the livestock template's
+        // Component flags). Log each animal's state so a soak shows which
+        // precondition fails when births stay at 0.
+        static uint32_t s_breedCheckCalls = 0;
+        if (Trace() && (s_breedCheckCalls++ % 4096) == 0) {
+            std::fprintf(stderr, "[Pasture] breed-check: animal=%p flags=0x%08x "
+                         "sex40=%d age=%.2f\n",
+                         reinterpret_cast<void*>(an), oldFlags,
+                         (int)*reinterpret_cast<uint8_t*>(an + 0x40),
+                         *reinterpret_cast<float*>(an + 0x44));
+            std::fflush(stderr);
+        }
         if ((oldFlags & 0x200000u) == 0) continue;          // not ready to breed
 
         uint32_t newFlags = oldFlags & ~0x200000u;
@@ -379,6 +392,61 @@ extern "C" void Pasture_Reproduce(void* pasture) {
             uint64_t parent = animalIBP;
             Pasture_SpawnLivestock(pasture, &parent);
         }
+    }
+}
+
+// ============================================================
+// PastureComponent slot 15 (+0x78 "OnMessage", 0x140127720) — the BREED TAG.
+//
+// This is the missing link of livestock reproduction. The herder's work chain
+// ends in a SendComponentMessage(msg=0) at the pasture (same dispatch the build
+// labor credit uses, see buildcomponent.cpp Slot15). On each message the retail
+// handler picks ONE RANDOM pastured animal and ORs flag bit 23 (0x800000) into
+// its AnimalComponent — the "breed-eligible" mark. AnimalComponent::Update's
+// offspring latch requires exactly that bit (plus +0x40 pose byte and adult
+// age) before it will arm the offspring timer that sets bit 21, which
+// Pasture_Reproduce then consumes to spawn a calf/lamb/chick. NOTHING else in
+// the exe ever sets bit 23, so without this slot no livestock can ever breed —
+// the reproduction rate is deliberately driven by herdsman labor.
+//
+// ABI matches BuildComponent's slot 15: (self RCX, int msgCode RDX, rest unused).
+// The `(new ^ old) & 0xffff` notify can never fire here (bit 23 is above the
+// mask); kept for fidelity like the identical dead test in helper_7400.
+// ============================================================
+extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
+    Resolve();
+    if (!pasture || msg != 0) return;
+    const int count = PastureCount(pasture);
+    if (count == 0) return;
+    uintptr_t w = World();
+    uintptr_t arr = PastureAnimals(pasture);
+    if (!w || !arr || !fn_Random_Rand) return;
+
+    void* rng = *reinterpret_cast<void**>(w + 0xd8);
+    uint32_t idx = fn_Random_Rand(rng, static_cast<uint32_t>(count));
+    void** slot = reinterpret_cast<void**>(arr + (uintptr_t)idx * 8);
+    CheckPtr(slot);
+    if (!*slot) return;
+
+    uint64_t entIBP = *reinterpret_cast<uint64_t*>((uintptr_t)*slot + 0x10);
+    CheckPtr(&entIBP);
+    uint64_t animalIBP = 0;
+    if (s_FindAnimal) s_FindAnimal(static_cast<int64_t>(entIBP), &animalIBP);
+    CheckPtr(&animalIBP);
+    if (!animalIBP) return;
+
+    uintptr_t an = static_cast<uintptr_t>(animalIBP);
+    uint32_t oldF = *reinterpret_cast<uint32_t*>(an + 0x20);
+    uint32_t newF = oldF | 0x800000u;
+    *reinterpret_cast<uint32_t*>(an + 0x20) = newF;
+    if (((newF ^ oldF) & 0xffffu) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
+        CheckPtr(reinterpret_cast<void*>(an + 0x10));
+        if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
+    }
+    if (Trace() && (oldF & 0x800000u) == 0) {
+        std::fprintf(stderr, "[Pasture] breed-tag: pasture=%p animal=%p flags 0x%08x -> 0x%08x\n",
+                     pasture, reinterpret_cast<void*>(an), oldF, newF);
+        std::fflush(stderr);
     }
 }
 

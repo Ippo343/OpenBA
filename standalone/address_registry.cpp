@@ -386,6 +386,7 @@ extern void RegisterComponentBatch_animal();
 extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
+extern void RegisterAnimalSerialize();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -546,6 +547,7 @@ static void RegisterCodeFunctions() {
     RegisterHerdLive();
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
+    RegisterAnimalSerialize();
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();

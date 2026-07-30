@@ -45,6 +45,8 @@ extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 extern "C" char Pasture_State2Enter(void* data, void* sm);
 extern "C" char Pasture_State3Enter(void* data, void* sm);
 extern "C" char Pasture_State2PerFrame(void* data, void* sm, void* time);
+extern "C" void Pasture_MsgReceive(void* pasture, int msg);
+extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);
 
 void LivestockComponent_OnAdd(LivestockComponent* self);
 void LivestockComponent_OnRemove(LivestockComponent* self);
@@ -70,6 +72,12 @@ void RegisterPastureLive() {
     RegisterExeAddr(0x140126e40, reinterpret_cast<uintptr_t>(&Pasture_State3Enter));
     RegisterExeAddr(0x1401267e0, reinterpret_cast<uintptr_t>(&Pasture_State2PerFrame));
     RegisterExeAddr(0x1401277e0, reinterpret_cast<uintptr_t>(&Pasture_ReleaseAllAnimals));
+    // Slot 15 OnMessage — the breed tag (herder work-complete -> random animal
+    // gets flag bit 23; sole setter of the bit in the exe).
+    RegisterExeAddr(0x140127720, reinterpret_cast<uintptr_t>(&Pasture_MsgReceive));
+    // LivestockComponent finder (FUN_14002f1d0) — previously unregistered, which
+    // silently skipped the spawn-path bind for every spawned/born livestock.
+    RegisterExeAddr(0x14002f1d0, reinterpret_cast<uintptr_t>(&Pasture_FindLivestockComp));
 
     // Livestock lifecycle
     RegisterExeAddr(0x140123c70, reinterpret_cast<uintptr_t>(&LivestockComponent_OnAdd));

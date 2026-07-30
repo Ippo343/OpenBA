@@ -347,7 +347,7 @@ void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV
 // arr+0x8, capacity at arr+0xc. Grows (tripling on a single-element append),
 // copies the surviving prefix, zero-fills the tail, frees the old block.
 // ============================================================
-static void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
+void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
     int oldCount = static_cast<int>(arr[1]);
     if (newCount == oldCount) return;
 

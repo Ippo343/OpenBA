@@ -104,6 +104,47 @@ inline uintptr_t GameState() {
     uintptr_t w = World();
     return w ? *reinterpret_cast<uintptr_t*>(w + 0xf0) : 0;
 }
+} // namespace (reopened below)
+
+// ============================================================
+// Reimpl of FUN_14002f1d0 — the standard entity find-loop for LivestockComponent
+// (type id 0x1401c7970; same template as ActHunt_FindComponent_5500).
+//
+// This finder was NEVER registered, so s_FindLivestock resolved null and the
+// spawn path silently skipped Pasture_BindAnimal for EVERY spawned or born
+// livestock: fill-time sheep only reached the pasture because the state-2
+// ADOPT pass rescued them from the free-roam pool, and NEWBORNS (pasture at
+// capacity, adopt won't take them) stayed unbound free-roamers forever. It is
+// also why every "[Pasture] SPAWN" trace printed count 0/5 — the bind that
+// should have run just before never did.
+// ============================================================
+extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
+    static const uint32_t* pTid = nullptr;
+    if (!pTid)
+        pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7970));
+    void* found = nullptr;
+    if (pTid && *pTid && entity) {
+        int n = *reinterpret_cast<int*>(entity + 0x38);
+        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+        for (int i = 0; i < n && list; ++i) {
+            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = *slot;
+            if (!comp) continue;
+            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(
+                *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (t == *pTid) {
+                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pTid)) ? comp : nullptr;
+                break;
+            }
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    return retIBP;
+}
+
+namespace {
+
 inline void*& PastureType(void* p)  { return *reinterpret_cast<void**>((uintptr_t)p + 0x28); }
 inline uintptr_t PastureAnimals(void* p) { return *reinterpret_cast<uintptr_t*>((uintptr_t)p + 0x30); }
 inline int&   PastureCount(void* p) { return *reinterpret_cast<int*>((uintptr_t)p + 0x38); }
