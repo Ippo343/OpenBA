@@ -18,6 +18,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
 
 namespace {
 
@@ -590,6 +591,24 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 }
             }
             // LAB_140122574: ctor an IBP from foundComp, write the 4 int16 target fields.
+            // DEVIATION (guard): retail writes unconditionally — it can, because a
+            // dead member is erased from the herd list by WildAnimalComponent's
+            // OnRemove before migration ever walks it. A null foundComp here means
+            // that cleanup didn't happen (or the member lost its AnimalComponent):
+            // skipping the write beats the retail-faithful WRITE-null+0x38 crash,
+            // and the trace makes the cleanup bug visible instead of silent.
+            if (!foundComp) {
+                static int s_nullMemberLogs = 0;
+                if (s_nullMemberLogs < 8) {
+                    ++s_nullMemberLogs;
+                    fprintf(stderr, "[Herd] StartMigration: member %u of herd %p has no "
+                            "AnimalComponent (dead entry not erased?) — skipping\n",
+                            memberIdx, param_1);
+                }
+                memberIdx = memberIdx + 1;
+                pvVar6_off = pvVar6_off + 8;
+                continue;
+            }
             int64_t local_50[2];
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(local_50, foundComp);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_50);

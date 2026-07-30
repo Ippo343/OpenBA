@@ -220,9 +220,52 @@ void WildAnimalComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Inert-but-valid WildAnimalComponent: size 0x30 + Object::Internal base + shared stub
 // vtable + capability flags +0x20=0x82 (from WildAnimalComponent_Ctor) + zeroed body.
+//
+// LIVE slot 7 (OnRemove, retail 0x14012e2b0): erases this animal from its herd's
+// member list (herd+0x30/+0x38). MANDATORY once deer can die — a dead deer that
+// stays in the list leaves a dangling entry that HerdComponent_Update's migration
+// pass then walks (StartMigration faulted on exactly that: WRITE null+0x38).
+// Hand-rolled (no macro variant exposes slot 7); pattern copied from
+// pasturecomponent.cpp's controller factory. Gated on any of the animal-wave
+// flags that can put deer in the world.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(WildAnimalComponent, 0x30, 0x82)
+static uint32_t WildAnimalComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("WildAnimalComponent");
+    return cached;
+}
+static void* WildAnimalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void WildAnimalComponent_OnRemoveVSlot(void* self) {
+    WildAnimalComponent_OnRemove(reinterpret_cast<WildAnimalComponent*>(self));
+}
+
+// Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
+static void WildAnimalComponent_InstallLive() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD") &&
+        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION") &&
+        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE") &&
+        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMALS"))
+        return;
+    WildAnimalComponent_LiveVtable[7] =
+        reinterpret_cast<void*>(&WildAnimalComponent_OnRemoveVSlot);
+}
+
+extern "C" void* WildAnimalComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x82,
+        WildAnimalComponent_LiveVtable,
+        reinterpret_cast<void*>(&WildAnimalComponent_LiveGetTypeId));
+    WildAnimalComponent_InstallLive();
+    return p;
+}
+static void* WildAnimalComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x30, 0x82,
+        WildAnimalComponent_LiveVtable,
+        reinterpret_cast<void*>(&WildAnimalComponent_LiveGetTypeId));
+    WildAnimalComponent_InstallLive();
+    return mem;
+}
 REGISTER_TYPE(WildAnimalComponent, "Component",
               &WildAnimalComponent_Factory, &WildAnimalComponent_CreateInPlace);

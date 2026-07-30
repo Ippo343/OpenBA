@@ -666,6 +666,7 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
+extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -871,6 +872,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // exercised without waiting decades of game time for a natural death. No-op
     // unless BANISHED_KILL_CITIZENS is set.
     CitizenDeathHarness_Tick(s_frameNum);
+
+    // One-shot pasture stocking for the animal-wave test rig. No-op unless
+    // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
+    PastureFillHarness_Tick(s_frameNum);
 
     // TownHallUI gate diagnostic (one-shot at frame 120): reports missing fn
     // pointers / type-ids / town data that would silently blank the town-hall

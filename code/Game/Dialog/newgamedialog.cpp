@@ -14,6 +14,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -272,6 +273,78 @@ static void UpdateDescription(NewGameDialog* self) {
 }
 
 // ============================================================
+// SelectStartConditionOverride (standalone-only, additive)
+// ============================================================
+// BANISHED_START_CONDITION picks the start-condition combo entry: digits = list
+// index, anything else = case-insensitive substring of the entry's name key
+// (System::String at resource+0x28, e.g. "Easy"/"Medium"/"Hard"), "none" = off.
+// When unset, an autostart run defaults to "easy" so the livestock start path
+// (free-roaming cows/sheep/chickens from the simple pool) is exercised; manual
+// runs are untouched. Runs after the saved-selection restore so it wins, and
+// before UpdateDescription so the UI shows the forced choice. Logs every entry
+// (index, name, visibility) so the index<->name mapping is verifiable in the log.
+// NOTE: retail's StartGame treats combo+0x118 as a LIST index (all retail start
+// conditions are visible, so combo index == list index); we match that.
+static void SelectStartConditionOverride(NewGameDialog* self) {
+    const char* want = std::getenv("BANISHED_START_CONDITION");
+    if (!want || !want[0]) {
+        const char* as = std::getenv("BANISHED_AUTOSTART");
+        if (!as || !as[0] || std::strcmp(as, "0") == 0 ||
+            std::strcmp(as, "false") == 0)
+            return;                       // manual run, no override requested
+        want = "easy";                    // autostart default
+    }
+    if (std::strcmp(want, "none") == 0) return;
+    if (!self->mapGeneratorList || !self->comboCondition) return;
+
+    bool numeric = true;
+    for (const char* p = want; *p; ++p)
+        if (*p < '0' || *p > '9') { numeric = false; break; }
+
+    auto containsNoCase = [](const char* hay, const char* needle) -> bool {
+        if (!hay || !needle || !*needle) return false;
+        size_t nlen = std::strlen(needle);
+        for (const char* h = hay; *h; ++h) {
+            size_t i = 0;
+            while (i < nlen && h[i] &&
+                   std::tolower((unsigned char)h[i]) ==
+                   std::tolower((unsigned char)needle[i]))
+                ++i;
+            if (i == nlen) return true;
+        }
+        return false;
+    };
+
+    void* list = self->mapGeneratorList;
+    int count = fn_ExternalList_GetResourceCount(list);
+    void** ptrArray = *(void***)((uintptr_t)list + 0x20);
+    int target = -1;
+    for (int i = 0; i < count; ++i) {
+        void* res = ptrArray[i];
+        const char* name = res ? *(char**)((uintptr_t)res + 0x28) : nullptr;
+        uint8_t vis = res ? *(uint8_t*)((uintptr_t)res + 0x38) : 0;
+        fprintf(stderr, "[NewGameDialog] startCondition[%d] name=\"%.32s\" visible=%d\n",
+                i, name ? name : "(null)", (int)vis);
+        if (target < 0 && !numeric && containsNoCase(name, want))
+            target = i;
+    }
+    if (numeric) {
+        int idx = std::atoi(want);
+        if (idx >= 0 && idx < count) target = idx;
+    }
+    if (target >= 0) {
+        fn_InternalBasePtr_CheckPtr(&self->comboCondition);
+        fn_ComboElement_SetCurrentItem(self->comboCondition, target);
+        fprintf(stderr, "[NewGameDialog] start condition FORCED to [%d] (want=\"%s\")\n",
+                target, want);
+    } else {
+        fprintf(stderr, "[NewGameDialog] start condition override \"%s\" matched "
+                "nothing (%d entries) — selection left alone\n", want, count);
+    }
+    fflush(stderr);
+}
+
+// ============================================================
 // Slot4 (0x1400706d0): Startup — build new game UI
 // ============================================================
 // Finds all UI elements, populates combo boxes with map/climate/terrain
@@ -473,6 +546,10 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     }
 
     }  // end if (settings) — standalone null-settings guard
+
+    // --- Standalone: env/autostart start-condition override (wins over the
+    //     saved-selection restore above; see SelectStartConditionOverride) ---
+    SelectStartConditionOverride(self);
 
     // --- Update description text from selected map generator ---
     UpdateDescription(self);

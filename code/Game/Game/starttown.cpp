@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <vector>
 
@@ -1055,6 +1056,9 @@ static int ExtraHousesRequested() {
     return n;
 }
 
+// Defined below (template-by-path resolver used by the demo-pasture block).
+static void* ResolveTemplateByPath(const char* path);
+
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -1610,6 +1614,74 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fprintf(stderr, "[startTown::extraHouse] BANISHED_EXTRA_HOUSES=%d requested but no "
                 "start-town residence template was found; nothing spawned\n", extraWanted);
         fflush(stderr);
+    }
+
+    // ── BANISHED_BUILD_DEMO_PASTURE — one COMPLETED pasture (test scaffolding) ──────
+    // Retail acquires pastures only through the fenced-area tool (still unported), so
+    // nothing can exercise the pasture controller (adopt/reproduce/produce) without
+    // this. Spawns Template\Pasture.rsc as a completed structure at the nearest free
+    // footprint to the cluster centre, same ring scan as the extra houses. The pasture
+    // then needs a livestock TYPE (BANISHED_PASTURE_AUTOTYPE=<Cow|Sheep|Chicken>) and
+    // animals (BANISHED_PASTURE_FILL=<frame>, standalone/pasture_harness.cpp) to come
+    // alive. Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
+    // Test-only, default off (byte-unchanged when unset).
+    {
+        const char* pe = std::getenv("BANISHED_BUILD_DEMO_PASTURE");
+        if (pe && pe[0] && pe[0] != '0') {
+            void* ptmpl = ResolveTemplateByPath("Template\\Pasture.rsc");
+            int pw = 0, ph = 0;
+            if (const char* xpos = std::strchr(pe, 'x')) {   // "WxH" size override
+                pw = std::atoi(pe); ph = std::atoi(xpos + 1);
+            }
+            if (ptmpl && (pw <= 0 || ph <= 0)) {
+                // Template-default footprint from CreatePlacedDescription (+0x44/+0x48);
+                // pastures are variable-size so the authored default may be 0 — fall
+                // back to 8x8 (capacity ~= a small starting herd).
+                void* cpd = FindDescriptionOnTemplate(ptmpl, TypeId("CreatePlacedDescription"));
+                if (cpd) {
+                    pw = *(int32_t*)((uint8_t*)cpd + 0x44);
+                    ph = *(int32_t*)((uint8_t*)cpd + 0x48);
+                }
+                if (pw <= 0 || ph <= 0) { pw = 8; ph = 8; }
+            }
+            if (!ptmpl) {
+                fprintf(stderr, "[startTown::pasture] BANISHED_BUILD_DEMO_PASTURE set but "
+                        "Template\\Pasture.rsc did not resolve; nothing spawned\n");
+            } else {
+                const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+                int bestX = 0, bestY = 0;
+                bool found = false;
+                for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                    for (int dy = -r; dy <= r && !found; ++dy) {
+                        for (int dx = -r; dx <= r && !found; ++dx) {
+                            if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                            const int tx = cx + dx, ty = cy + dy;
+                            bool clash = false;
+                            for (int o = 0; o < occN; ++o) {
+                                if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + pw + 1 &&
+                                    ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + ph + 1) {
+                                    clash = true; break;
+                                }
+                            }
+                            if (!clash) { bestX = tx; bestY = ty; found = true; }
+                        }
+                    }
+                }
+                if (!found) {
+                    fprintf(stderr, "[startTown::pasture] no free %dx%d footprint within "
+                            "r=%d of cluster centre; nothing spawned\n",
+                            pw, ph, kExtraHouseSearchRadius);
+                } else {
+                    void* pent = placeStructure(ptmpl, bestX, bestY, 0, pw, ph,
+                                                /*isDemoFoundation=*/false, -1);
+                    Occupy(bestX, bestY, pw, ph);
+                    if (pent) ++spawned;
+                    fprintf(stderr, "[startTown::pasture] demo pasture tile=(%d,%d) "
+                            "fp=%dx%d ent=%p\n", bestX, bestY, pw, ph, pent);
+                }
+            }
+            fflush(stderr);
+        }
     }
 
     return spawned;
