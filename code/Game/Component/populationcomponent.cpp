@@ -11,6 +11,8 @@
 // Original: 0x140054070 (256 bytes)
 
 #include "Component/populationcomponent_funcs.h"
+#include "Component/herdcomponent_funcs.h"   // HerdComponent_Populate
+#include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -32,6 +34,37 @@ static fn_ScanHabitability_t s_fn_ScanHabitability = nullptr;
 
 // Game world singleton
 static void** s_pGameWorld = nullptr;
+
+// Startup (herd-creation) deps.
+// ComponentEntity_CopyCtor(mem, description) — 0x1400c3720
+typedef void* (*fn_CopyCtor_t)(void* mem, int64_t description);
+static fn_CopyCtor_t s_fn_CopyCtor = nullptr;
+// System::Random::Rand(rng, range) via the exe dispatch slot 0x1401512e8
+typedef int (*fn_Rand_t)(void* rng, int range);
+static fn_Rand_t s_fn_Rand = nullptr;
+// EntityList_RegisterEntity(list, &entityIbp, categoryId) — 0x1400c48a0
+typedef void (*fn_RegisterEntity_t)(void* list, void* entityIbp, int categoryId);
+static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
+
+// Component find-loop over a freshly-instantiated entity (IBP array at +0x30,
+// count at +0x38); match on the component's vtable+0x10 GetTypeId.
+static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
+    if (!entity || typeId == 0) return nullptr;
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = reinterpret_cast<void**>(list + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t != typeId) continue;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* c = *slot;
+        return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+    }
+    return nullptr;
+}
 
 // Density smoothing interval constant: 300.0f seconds
 static constexpr float SMOOTH_INTERVAL_SECONDS = 300.0f;
@@ -83,7 +116,10 @@ void PopulationComponent_Update(PopulationComponent* self, int64_t* pDeltaTime) 
         return;
     }
 
-    int totalCells = static_cast<int>(self->field48);
+    // Cell count is the density array's element count at +0x40 (the DynArray at
+    // +0x38/+0x40/+0x44), NOT the herd grid dim at +0x48. Retail reads +0x40 for
+    // both the per-tick slice size and the round-robin wrap.
+    int totalCells = *reinterpret_cast<int32_t*>(&self->field40);
     // Signed division by 16 with rounding toward zero
     int cellsToProcess = (totalCells + ((totalCells >> 31) & 0xF)) >> 4;
     if (cellsToProcess <= 0) return;
@@ -306,6 +342,175 @@ void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV
 }
 
 // ============================================================
+// Reimpl of FUN_14000b0d0 (PopulationComponent_sub_b0d0)
+// DynArray resize for the 12-byte density cells: ptr at arr[0], count at
+// arr+0x8, capacity at arr+0xc. Grows (tripling on a single-element append),
+// copies the surviving prefix, zero-fills the tail, frees the old block.
+// ============================================================
+static void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
+    int oldCount = static_cast<int>(arr[1]);
+    if (newCount == oldCount) return;
+
+    uint8_t* oldBuf = reinterpret_cast<uint8_t*>(arr[0]);
+    *reinterpret_cast<int*>(&arr[1]) = newCount;
+    if (*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) < newCount) {
+        int* pCap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc);
+        *pCap = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) *pCap = newCount * 3;
+        arr[0] = reinterpret_cast<int64_t>(
+            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*pCap) * 0xc, 4));
+    }
+
+    int start = (oldBuf == reinterpret_cast<uint8_t*>(arr[0])) ? oldCount : 0;
+    for (int64_t i = start; i < newCount; i++) {
+        uint8_t* dst = reinterpret_cast<uint8_t*>(arr[0]) + i * 0xc;
+        if (!dst) continue;
+        if (i < oldCount) {
+            const uint8_t* src = oldBuf + i * 0xc;
+            *reinterpret_cast<int32_t*>(dst + 0) = *reinterpret_cast<const int32_t*>(src + 0);
+            *reinterpret_cast<int32_t*>(dst + 4) = *reinterpret_cast<const int32_t*>(src + 4);
+            *reinterpret_cast<int32_t*>(dst + 8) = *reinterpret_cast<const int32_t*>(src + 8);
+        } else {
+            *reinterpret_cast<int64_t*>(dst + 0) = 0;
+            *reinterpret_cast<int32_t*>(dst + 8) = 0;
+        }
+    }
+
+    if (oldBuf != reinterpret_cast<uint8_t*>(arr[0])) fn_MemFreeStatic(oldBuf);
+}
+
+// ============================================================
+// Reimpl of FUN_140054220 — PopulationComponent::Startup (vtable slot 4).
+// ============================================================
+// Ghidra labels this PopulationComponent_Serialize; it isn't. It is the
+// component's spawn-time body init, dispatched from
+// ComponentEntity_StartupComponents while the "PopulationDeer" template entity
+// is being instantiated, and it is the ONLY place wild herds come into
+// existence:
+//
+//   +0x28 = the PopulationDescription (from the component's +0x18)
+//   +0x30 = mapDim / popDesc+0x28   (habitability grid dimension)
+//   +0x48 = mapDim / popDesc+0x2c   (herd grid dimension)
+//   +0x38 = a (+0x30)^2 array of 12-byte cells {density, smoothed, min}
+//   each cell scanned once, then smoothed/min seeded from density
+//   then, if popDesc+0x50 (the herd entity template) is set, one herd entity
+//   per cell of the (+0x48)^2 grid: instantiate the template, find its
+//   HerdComponent, point it back at us (+0x28) and at its cell (+0x30), roll
+//   a size in [herdDesc+0x2c, herdDesc+0x28), seed it via Populate, register.
+static uint32_t PopulationTypeId(uintptr_t globalAddr, const char* name) {
+    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, globalAddr));
+    if (!p) return 0;
+    if (*p == 0) *p = ::Object::GetTypeIdByName(name);
+    return *p;
+}
+
+void PopulationComponent_Startup(PopulationComponent* selfC) {
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfC);
+    PopulationComponent_InitFuncs();
+    if (!fn_IsDerivedFrom || !fn_MemAlloc || !fn_InternalBasePtr_Ctor) return;
+    if (!s_pGameWorld || !*s_pGameWorld) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*s_pGameWorld);
+
+    uint32_t tidPopDesc = PopulationTypeId(0x1401c47c8, "PopulationDescription");
+    void* descObj = *reinterpret_cast<void**>(self + 0x18);
+    void* popDesc = (tidPopDesc && fn_IsDerivedFrom(descObj, tidPopDesc)) ? descObj : nullptr;
+    *reinterpret_cast<void**>(self + 0x28) = popDesc;
+    if (!popDesc) {
+        fprintf(stderr, "[Herd] PopulationComponent::Startup: self=%p has no "
+                "PopulationDescription (+0x18=%p, tid=%u) — no herds will spawn\n",
+                (void*)self, descObj, tidPopDesc);
+        fflush(stderr);
+        return;
+    }
+
+    int* mapDims = *reinterpret_cast<int**>(gw + 0xf8);
+    if (!mapDims) return;
+    int habBlock  = *reinterpret_cast<int*>((uintptr_t)popDesc + 0x28);
+    int herdBlock = *reinterpret_cast<int*>((uintptr_t)popDesc + 0x2c);
+    if (habBlock <= 0 || herdBlock <= 0) return;
+
+    int habDim = *mapDims / habBlock;
+    *reinterpret_cast<int32_t*>(self + 0x30) = habDim;
+    *reinterpret_cast<int32_t*>(self + 0x48) = *mapDims / herdBlock;
+
+    PopulationComponent_ResizeCells(reinterpret_cast<int64_t*>(self + 0x38), habDim * habDim);
+
+    int cellCount = *reinterpret_cast<int32_t*>(self + 0x40);
+    for (int i = 0; i < cellCount; i++) {
+        PopulationComponent_ScanHabitability_Reimpl(self, mapDims, i);
+        uint8_t* cell = *reinterpret_cast<uint8_t**>(self + 0x38) + (int64_t)i * 0xc;
+        *reinterpret_cast<int32_t*>(cell + 4) = *reinterpret_cast<int32_t*>(cell + 0);
+        *reinterpret_cast<int32_t*>(cell + 8) = *reinterpret_cast<int32_t*>(cell + 0);
+        cellCount = *reinterpret_cast<int32_t*>(self + 0x40);
+    }
+
+    // Retail vtable slot 11 (0x140054210) is an empty function.
+    {
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(self);
+        auto slot11 = *reinterpret_cast<void (**)(void*)>(vt + 0x58);
+        if (slot11) slot11(self);
+    }
+
+    int64_t herdTemplate = *reinterpret_cast<int64_t*>((uintptr_t)popDesc + 0x50);
+    int herdDim = *reinterpret_cast<int32_t*>(self + 0x48);
+    int herdCount = herdDim * herdDim;
+    fprintf(stderr, "[Herd] PopulationComponent::Startup: self=%p mapDim=%d "
+            "habDim=%d cells=%d herdDim=%d herds=%d template=%p\n",
+            (void*)self, *mapDims, habDim, cellCount, herdDim,
+            herdTemplate ? herdCount : 0, (void*)herdTemplate);
+    fflush(stderr);
+    if (herdTemplate == 0) return;
+
+    uint32_t tidHerdComp = PopulationTypeId(0x1401c7820, "HerdComponent");
+    uint32_t tidHerdDesc = PopulationTypeId(0x1401c7858, "HerdDescription");
+    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
+    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+
+    int created = 0;
+    for (int i = 0; i < herdCount; i++) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* ent = (mem && s_fn_CopyCtor) ? s_fn_CopyCtor(mem, herdTemplate) : nullptr;
+        uint64_t entRef = 0;
+        fn_InternalBasePtr_Ctor(&entRef, ent);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
+        int64_t entObj = static_cast<int64_t>(entRef);
+        if (!entObj) continue;
+
+        void* herdComp = PopulationFindComponent(entObj, tidHerdComp);
+        uint64_t herdRef = 0;
+        fn_InternalBasePtr_Ctor(&herdRef, herdComp);
+        uint64_t selfRef = 0;
+        fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&herdRef);
+        uint8_t* herd = reinterpret_cast<uint8_t*>(herdRef);
+        if (!herd) continue;
+
+        *reinterpret_cast<int32_t*>(herd + 0x30) = i;
+        *reinterpret_cast<uint64_t*>(herd + 0x28) = selfRef;
+
+        void* hDescObj = *reinterpret_cast<void**>(herd + 0x18);
+        void* herdDesc = (tidHerdDesc && fn_IsDerivedFrom(hDescObj, tidHerdDesc))
+                             ? hDescObj : nullptr;
+        int size = 0;
+        if (herdDesc) {
+            int maxSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x28);
+            int minSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x2c);
+            size = (s_fn_Rand ? s_fn_Rand(rng, maxSize - minSize) : 0) + minSize;
+        }
+        HerdComponent_Populate(reinterpret_cast<int64_t>(herd), size);
+
+        if (s_fn_RegisterEntity) {
+            uint64_t regRef = entRef;
+            s_fn_RegisterEntity(entityList, &regRef, *reinterpret_cast<int*>(herdTemplate + 0x20));
+        }
+        created++;
+    }
+    fprintf(stderr, "[Herd] PopulationComponent::Startup: %d/%d herd entities created\n",
+            created, herdCount);
+    fflush(stderr);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void PopulationComponent_InitFuncs() {
@@ -317,6 +522,13 @@ void PopulationComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140053b50));
     s_pGameWorld = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
+
+    s_fn_CopyCtor = reinterpret_cast<fn_CopyCtor_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    uintptr_t randSlot = ResolveAddr(Module::Exe, 0x1401512e8);
+    if (randSlot) s_fn_Rand = *reinterpret_cast<fn_Rand_t*>(randSlot);
+    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400c48a0));
 
     s_initialized = true;
 }
@@ -339,12 +551,15 @@ void PopulationComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-// Live bring-up (Phase 1, env BANISHED_LIVE_POPULATION or global BANISHED_LIVE_COMPONENTS).
-// PopulationComponent_Update is crash-safe on an inert body: +0x60 accumulates
-// unconditionally (observable), SmoothDensity is a no-op while the cell count
-// (+0x40) is 0, and the habitability scan early-returns on the null owner (+0x28).
-// Full density simulation needs the +0x28 owner / +0x38 grid / +0x40 count body-init.
-COMPONENT_LIVE_FACTORY(PopulationComponent, 0x70, 0xCB,
-                       "BANISHED_LIVE_POPULATION", PopulationComponent_Update)
+// Live bring-up (env BANISHED_LIVE_POPULATION or global BANISHED_LIVE_COMPONENTS).
+// Slot 4 Startup does the body init retail does at spawn — description at +0x28,
+// habitability grid at +0x38/+0x40, herd grid dim at +0x48 — and, crucially,
+// creates the wild-animal herd entities. Slot 9 Update then has the +0x28 owner
+// and +0x40 cell count it needs for real density simulation.
+//
+// Pair with BANISHED_LIVE_HERD so the herds it creates actually tick.
+COMPONENT_LIVE_FACTORY_S(PopulationComponent, 0x70, 0xCB,
+                         "BANISHED_LIVE_POPULATION",
+                         PopulationComponent_Update, PopulationComponent_Startup)
 REGISTER_TYPE(PopulationComponent, "Component",
               &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);

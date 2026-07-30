@@ -110,9 +110,116 @@ void LivestockComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================
+// LivestockComponent::OnAdd (vtable slot [6], 0x140123c70)
+// ============================================================
+// A livestock with no pasture (+0x28 == 0) files itself into the world's
+// FREE-ROAMING livestock list at gameState+0x80 (count +0x88). This is what makes
+// the start-condition livestock (Template\LivestockCow/Sheep/Chicken.rsc, spawned
+// loose by the start-config simple pool) findable by a pasture's adopt pass.
+//
+// FUN_140003110 is DynArray8_ResizeFill; called with count+1 it appends.
+
+void LivestockComponent_OnAdd(LivestockComponent* self) {
+    if (!self || self->data28 != 0) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    typedef void (*fn_ResizeFill_t)(void* arrayField, int newCount, void* valueIBP);
+    static fn_ResizeFill_t s_append = nullptr;
+    static bool s_res = false;
+    if (!s_res) { s_res = true;
+        s_append = reinterpret_cast<fn_ResizeFill_t>(ResolveAddr(Module::Exe, 0x140003110)); }
+    if (!s_append) return;
+
+    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!gs) return;
+    uint64_t ibp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+    else ibp = reinterpret_cast<uint64_t>(self);
+    s_append(reinterpret_cast<void*>(gs + 0x80), *reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
+    std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
+                 (void*)self, *reinterpret_cast<int*>(gs + 0x88));
+    std::fflush(stderr);
+}
+
+// ============================================================
+// LivestockComponent::OnRemove (vtable slot [7], 0x140123c00)
+// ============================================================
+// Erase from whichever list owns it: the world free-roaming list when it has no
+// pasture, otherwise its pasture's animal list (pasture+0x30 / count +0x38).
+// FUN_140002cc0 is DynArray8_EraseByValue.
+
+void LivestockComponent_OnRemove(LivestockComponent* self) {
+    if (!self) return;
+    typedef void (*fn_Erase_t)(void* arrayField, void* valueIBP);
+    static fn_Erase_t s_erase = nullptr;
+    static bool s_res = false;
+    if (!s_res) { s_res = true;
+        s_erase = reinterpret_cast<fn_Erase_t>(ResolveAddr(Module::Exe, 0x140002cc0)); }
+    if (!s_erase) return;
+
+    uint64_t ibp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+    else ibp = reinterpret_cast<uint64_t>(self);
+
+    if (self->data28 == 0) {
+        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
+        return;
+    }
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(
+            reinterpret_cast<uintptr_t>(self) + 0x28));
+    s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(self->data28) + 0x30), &ibp);
+}
+
+// ===== Standalone factory =====
+// Inert by default; BANISHED_LIVE_PASTURE graduates three slots (indices from the
+// retail vtable at 0x1401639b0): [6] OnAdd, [7] OnRemove, [9] Update. Size 0x38 and
+// flags 0x8b come from LivestockComponent_Ctor (0x140123ee0) — Component_Ctor's 0x80
+// OR'd with the leaf's 0x0b.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(LivestockComponent, 0x38, 0x8B)
+
+static uint32_t LivestockComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("LivestockComponent");
+    return cached;
+}
+static void* LivestockComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void LivestockComponent_OnAddVSlot(void* s) {
+    LivestockComponent_OnAdd(reinterpret_cast<LivestockComponent*>(s));
+}
+static void LivestockComponent_OnRemoveVSlot(void* s) {
+    LivestockComponent_OnRemove(reinterpret_cast<LivestockComponent*>(s));
+}
+static void LivestockComponent_UpdateVSlot(void* s, void* t) {
+    LivestockComponent_Update(reinterpret_cast<LivestockComponent*>(s),
+                              t ? *reinterpret_cast<int64_t*>(t) : 0);
+}
+static void LivestockComponent_InstallLive() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE")) return;
+    LivestockComponent_LiveVtable[6] = reinterpret_cast<void*>(&LivestockComponent_OnAddVSlot);
+    LivestockComponent_LiveVtable[7] = reinterpret_cast<void*>(&LivestockComponent_OnRemoveVSlot);
+    LivestockComponent_LiveVtable[9] = reinterpret_cast<void*>(&LivestockComponent_UpdateVSlot);
+}
+extern "C" void* LivestockComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x8b,
+        LivestockComponent_LiveVtable,
+        reinterpret_cast<void*>(&LivestockComponent_LiveGetTypeId));
+    LivestockComponent_InstallLive();
+    return p;
+}
+static void* LivestockComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x8b,
+        LivestockComponent_LiveVtable,
+        reinterpret_cast<void*>(&LivestockComponent_LiveGetTypeId));
+    LivestockComponent_InstallLive();
+    return mem;
+}
+
 REGISTER_TYPE(LivestockComponent, "Component",
               &LivestockComponent_Factory, &LivestockComponent_CreateInPlace);

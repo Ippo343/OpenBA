@@ -62,6 +62,11 @@ extern "C" void FillComponentTypeIdGlobals_nature();
 extern "C" void FillComponentTypeIdGlobals_fruit();
 extern "C" void FillComponentTypeIdGlobals_spawn();
 extern "C" void FillComponentTypeIdGlobals_tombstone();
+// Animal spawn wave — herd/animal/livestock type-id globals (reg_component_animal.cpp).
+extern "C" void FillComponentTypeIdGlobals_animal();
+// Animal-update lane — CharacterComponent/CharacterDescription ids (reg_animal_update.cpp;
+// idempotent, also self-fills lazily on the first live animal tick).
+extern "C" void FillComponentTypeIdGlobals_animal_update();
 // Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
 extern "C" void FillTypeIdGlobals_actionchild();
 // Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
@@ -478,6 +483,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_fruit();
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
+    FillComponentTypeIdGlobals_animal();   // herd/animal/livestock ids (self-gated)
+    FillComponentTypeIdGlobals_animal_update(); // Character comp/desc ids (self-gated)
     StallDebug::Mark("post-Startup typeinfo dump + typeId globals");
     FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
     FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id

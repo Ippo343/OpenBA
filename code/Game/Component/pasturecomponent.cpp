@@ -55,13 +55,14 @@ static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
 typedef uint64_t (*fn_ComputePastureCapacity_t)(uintptr_t self);
 static fn_ComputePastureCapacity_t s_fn_ComputePastureCapacity = nullptr;
 
-// FUN_140002cc0 — add entity ref to list
-typedef void (*fn_AddToList_t)(void* listPtr, void* entityRef);
-static fn_AddToList_t s_fn_AddToList = nullptr;
+// FUN_140002cc0 — DynArray8_EraseByValue(arrayField, valueIBP). NOT an "add".
+typedef void (*fn_EraseByValue_t)(void* listPtr, void* entityRef);
+static fn_EraseByValue_t s_fn_EraseByValue = nullptr;
 
-// FUN_140003110 — insert entity ref at position in list
-typedef void (*fn_InsertInList_t)(void* listPtr, int position, void* entityRef);
-static fn_InsertInList_t s_fn_InsertInList = nullptr;
+// FUN_140003110 — DynArray8_ResizeFill(arrayField, newCount, valueIBP); called with
+// count+1 it appends. NOT an "insert at position".
+typedef void (*fn_ResizeFill_t)(void* listPtr, int newCount, void* entityRef);
+static fn_ResizeFill_t s_fn_ResizeFill = nullptr;
 
 // PastureComponent_helper_5ed0 — process entity ref for pasture
 typedef void (*fn_PastureHelper5ed0_t)(void* entityRef);
@@ -109,10 +110,10 @@ static void EnsureHelpers() {
     s_fn_ComputePastureCapacity = reinterpret_cast<fn_ComputePastureCapacity_t>(
         ResolveAddr(Module::Exe, 0x140128570));
 
-    s_fn_AddToList = reinterpret_cast<fn_AddToList_t>(
+    s_fn_EraseByValue = reinterpret_cast<fn_EraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
-    s_fn_InsertInList = reinterpret_cast<fn_InsertInList_t>(
+    s_fn_ResizeFill = reinterpret_cast<fn_ResizeFill_t>(
         ResolveAddr(Module::Exe, 0x140003110));
 
     s_fn_PastureHelper5ed0 = reinterpret_cast<fn_PastureHelper5ed0_t>(
@@ -432,177 +433,26 @@ void PastureComponent_Draw(PastureComponent* self) {
 }
 
 // ============================================================
-// PastureComponent::OnCreate (vtable slot [7], 0x1401277e0)
+// PastureComponent vtable slot [7] (0x1401277e0) — RELEASE, not "OnCreate"
 // ============================================================
-// Complex entity ref management. Iterates entity array backwards,
-// validates references, registers with population manager lists,
-// reassigns entity refs. The loop processes each entity at +0x30
-// array[count-1] down to array[0], then registers self with
-// game world population list at +0x90.
+// Ghidra's "OnCreate" label is the usual off-by-one (slot 6 is OnAdded, slot 7 is
+// the remove side). The body is byte-identical to PastureDescription_helper_6e40,
+// the controller's state-3 (teardown) ENTER: unassign every animal back to the
+// world's free-roaming pool and erase the pasture from the world pasture registry
+// at gameState+0x90.
 //
-// Due to extreme complexity (100+ lines of Ghidra output with multiple
-// nested conditionals, InternalBasePtr operations, and sub-component
-// lookups), this delegates to the original function via a resolved
-// function pointer. This preserves correctness while still extracting
-// the function to the clean code layer.
+// The previous port of this function spun forever. Two labelling mistakes caused it:
+// FUN_140002cc0 is DynArray8_EraseByValue and FUN_140003110 is DynArray8_ResizeFill,
+// not "AddToList"/"InsertInList" — and it is the ERASE from pasture+0x30 that shrinks
+// pasture+0x38 and ends the `while (count >= 1)` loop. The single shared body now
+// lives in pasturecomponent_states.cpp (Pasture_ReleaseAllAnimals), so the vtable
+// slot and the state-3 handler cannot drift apart again.
 
-// Direct address call to original implementation
-typedef void (*fn_PastureOnCreate_Orig_t)(void* self);
-static fn_PastureOnCreate_Orig_t s_fn_PastureOnCreate_Orig = nullptr;
+extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 
 void PastureComponent_OnCreate(PastureComponent* self) {
     EnsureHelpers();
-
-    // Resolve original on first call (cannot do in EnsureHelpers due to hook)
-    if (!s_fn_PastureOnCreate_Orig) {
-        // We call the sub-functions individually since the original is hooked.
-        // The logic is: iterate entity array backwards, process each entity.
-    }
-
-    // Due to the extreme complexity of this function (deeply nested entity ref
-    // management with InternalBasePtr ctor/CheckPtr/dereference chains, BST
-    // lookups, and population manager registration), we reproduce the original
-    // control flow faithfully.
-
-    int entityCount = *(int*)((uintptr_t)self + 0x38);
-
-    // Process entities backwards (original uses do-while with decrementing count)
-    while (entityCount >= 1) {
-        // Create InternalBasePtr for null (self reference)
-        uint64_t selfRef = 0;
-        if (fn_InternalBasePtr_Ctor) {
-            fn_InternalBasePtr_Ctor(&selfRef, nullptr);
-        }
-
-        // Get entity from array[count-1]
-        uintptr_t entityArray = *(uintptr_t*)((uintptr_t)self + 0x30);
-        uintptr_t entitySlot = entityArray + (int64_t)(entityCount - 1) * 8;
-
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr((void*)entitySlot);
-        }
-        void* entity = *(void**)entitySlot;
-
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&selfRef);
-        }
-
-        // Check if entity's +0x28 field differs from selfRef
-        int64_t entityField28 = *(int64_t*)((uintptr_t)entity + 0x28);
-        if (entityField28 != (int64_t)selfRef) {
-            if (entityField28 == 0) {
-                // No assignment: add to unassigned list at game world +0xf0 -> +0x80
-                uint64_t entityRef = 0;
-                if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&entityRef, entity);
-                }
-                if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_AddToList) {
-                    uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-                    s_fn_AddToList((void*)(gameState + 0x80), &entityRef);
-                }
-            } else {
-                // Has assignment: add to assigned entity's component list
-                uint64_t entityRef2 = 0;
-                if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&entityRef2, entity);
-                }
-
-                // Get the assigned entity's +0x28 field, CheckPtr, then add to its +0x30 list
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)entity + 0x28));
-                }
-                uintptr_t assignedEntity = *(uintptr_t*)((uintptr_t)entity + 0x28);
-                if (assignedEntity) {
-                    s_fn_AddToList((void*)(assignedEntity + 0x30), &entityRef2);
-                }
-
-                // Find sub-component of specific type on assigned entity
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)entity + 0x10));
-                }
-                uintptr_t entityOwner = *(uintptr_t*)((uintptr_t)entity + 0x10);
-                void* foundComp = nullptr;
-
-                int compCount = *(int*)(entityOwner + 0x38);
-                for (int i = 0; i < compCount; i++) {
-                    uintptr_t compSlot = *(uintptr_t*)(entityOwner + 0x30) + (int64_t)i * 8;
-                    if (fn_InternalBasePtr_CheckPtr) {
-                        fn_InternalBasePtr_CheckPtr((void*)compSlot);
-                    }
-                    void* comp = *(void**)compSlot;
-                    // Check type via vtable slot +0x10 (GetDescription)
-                    uint32_t compType = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
-                    if (s_TypeId_PastureSubComp && compType == *s_TypeId_PastureSubComp) {
-                        // Validate with IsDerivedFrom
-                        if (s_fn_IsDerivedFrom_dispatch) {
-                            bool valid = s_fn_IsDerivedFrom_dispatch(comp, *s_TypeId_PastureSubComp);
-                            foundComp = valid ? comp : nullptr;
-                        }
-                        break;
-                    }
-                }
-
-                // Process found component
-                uint64_t compRef = 0;
-                if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&compRef, foundComp);
-                }
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr(&compRef);
-                }
-                if (s_fn_PastureHelper5ed0) {
-                    s_fn_PastureHelper5ed0((void*)compRef);
-                }
-            }
-
-            // Update entity's +0x28 to point to selfRef (our pasture)
-            *(int64_t*)((uintptr_t)entity + 0x28) = (int64_t)selfRef;
-
-            // Register or re-register entity based on selfRef
-            if ((int64_t)selfRef == 0) {
-                // Insert into unassigned list
-                uint64_t entityRef3 = 0;
-                if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&entityRef3, entity);
-                }
-                if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_InsertInList) {
-                    uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-                    int listCount = *(int*)(gameState + 0x88);
-                    s_fn_InsertInList((void*)(gameState + 0x80), listCount + 1, &entityRef3);
-                }
-            } else {
-                // Insert into assigned entity's list and call reassign
-                uint64_t entityRef4 = 0;
-                if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&entityRef4, entity);
-                }
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)entity + 0x28));
-                }
-                uintptr_t target = *(uintptr_t*)((uintptr_t)entity + 0x28);
-                if (target && s_fn_InsertInList) {
-                    int listCount2 = *(int*)(target + 0x38);
-                    s_fn_InsertInList((void*)(target + 0x30), listCount2 + 1, &entityRef4);
-                }
-                if (s_fn_ReassignEntityRef) {
-                    s_fn_ReassignEntityRef((uintptr_t)entity);
-                }
-            }
-        }
-
-        // Re-read count (original code re-reads from self+0x38 each iteration)
-        entityCount = *(int*)((uintptr_t)self + 0x38);
-    }
-
-    // Final: register self with population manager at game world +0xf0 -> +0x90
-    uint64_t selfEntityRef = 0;
-    if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(&selfEntityRef, self);
-    }
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_AddToList) {
-        uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        s_fn_AddToList((void*)(gameState + 0x90), &selfEntityRef);
-    }
+    Pasture_ReleaseAllAnimals(self);
 }
 
 // ============================================================
@@ -614,20 +464,79 @@ void PastureComponent_InitFuncs() {
     printf("[PastureComponent] Funcs resolved: Component_Serialize=%p ComputeCapacity=%p "
            "AddToList=%p InsertInList=%p PastureHelper=%p ReassignEntityRef=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_ComputePastureCapacity,
-           (void*)s_fn_AddToList, (void*)s_fn_InsertInList,
+           (void*)s_fn_EraseByValue, (void*)s_fn_ResizeFill,
            (void*)s_fn_PastureHelper5ed0, (void*)s_fn_ReassignEntityRef);
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid PastureComponent
-// (size 0x68, +0x20 capability flags 0x8b, Object::Internal base + shared stub
-// vtable, zeroed body). Size from PastureComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ===== Standalone factory =====
+// Inert by default; BANISHED_LIVE_PASTURE graduates the component to a live
+// ControllerComponent. Size 0x68 and flags 0x8b come from PastureComponent_Ctor
+// (0x1401280e0): Component_Ctor's +0x20=0x80 OR'd with the leaf's 0x8b.
+//
+// Live slots (indices read off the retail primary vtable at 0x140163f60):
+//   [6]  OnAdded  = PastureComponent_Draw   (0x140127a30) — compute +0x40 capacity
+//   [7]  OnRemove = release-all             (0x1401277e0)
+//   [16] GetDefaultState -> 2   (retail 0x1400026c0 is literally `MOV EAX,2; RET`)
+//   [17] CreateState     -> self+0x48       (retail 0x140036770 `LEA RAX,[RCX+0x48]`)
+// plus the embedded node at +0x48: its vtable is the pasture state-table dispatcher
+// and node+0x18 (= comp+0x60) is the back-pointer the ctor writes.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(PastureComponent, 0x68, 0x8b)
+extern "C" void** PastureCtrl_NodeVtable();
+extern "C" void   PastureCtrl_PopulateTable();
+
+static uint32_t PastureComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("PastureComponent");
+    return cached;
+}
+static void* PastureComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static bool PastureComponent_LiveOn() {
+    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE");
+}
+static void  PastureComponent_OnAddedVSlot(void* s) {
+    PastureComponent_Draw(reinterpret_cast<PastureComponent*>(s));
+}
+static void  PastureComponent_OnRemoveVSlot(void* s) {
+    PastureComponent_OnCreate(reinterpret_cast<PastureComponent*>(s));
+}
+static int   PastureComponent_GetDefaultState(void*) { return 2; }
+static void* PastureComponent_CreateState(void* self) {
+    return reinterpret_cast<uint8_t*>(self) + 0x48;
+}
+
+// Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
+static void PastureComponent_InstallLive(void* mem) {
+    if (!PastureComponent_LiveOn()) return;
+    PastureComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PastureComponent_OnAddedVSlot);
+    PastureComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PastureComponent_OnRemoveVSlot);
+    PastureComponent_LiveVtable[16] = reinterpret_cast<void*>(&PastureComponent_GetDefaultState);
+    PastureComponent_LiveVtable[17] = reinterpret_cast<void*>(&PastureComponent_CreateState);
+    PastureCtrl_PopulateTable();
+    if (mem) {
+        uint8_t* node = reinterpret_cast<uint8_t*>(mem) + 0x48;
+        *reinterpret_cast<void**>(node) = reinterpret_cast<void*>(PastureCtrl_NodeVtable());
+        *reinterpret_cast<void**>(node + 0x18) = mem;   // = comp+0x60, as the ctor does
+    }
+}
+
+extern "C" void* PastureComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x8b,
+        PastureComponent_LiveVtable,
+        reinterpret_cast<void*>(&PastureComponent_LiveGetTypeId));
+    PastureComponent_InstallLive(p);
+    return p;
+}
+static void* PastureComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x8b,
+        PastureComponent_LiveVtable,
+        reinterpret_cast<void*>(&PastureComponent_LiveGetTypeId));
+    PastureComponent_InstallLive(mem);
+    return mem;
+}
+
 REGISTER_TYPE(PastureComponent, "ControllerComponent",
               &PastureComponent_Factory, &PastureComponent_CreateInPlace);

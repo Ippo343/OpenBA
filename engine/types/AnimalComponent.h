@@ -15,38 +15,54 @@
 #include <cstddef>
 #include "Component.h"
 
+// Vtable slots, read back from .rdata at 0x140162110 (2026-07-28). Slots 4 and 6
+// were previously labelled "Serialize" and "Draw"; Ghidra and the decompiled
+// bodies say otherwise — 0x140106d50 rolls the death age off the description
+// (Startup) and 0x140106c20 is the register-time OnAdded one-shot (the project's
+// established +0x30 / index 6 mapping). Every slot not listed is a shared
+// Component base stub in 0x140118xxx.
 namespace AnimalComponentAddr {
     constexpr uintptr_t Ctor       = 0x140106fc0;
     constexpr uintptr_t Vtable     = 0x140162110;
     constexpr uintptr_t ScalarDtor = 0x14002f170; // vtable[0]
-    constexpr uintptr_t Startup    = 0x14002f000; // vtable[2]
+    constexpr uintptr_t BaseInit   = 0x14002f000; // vtable[2]
     constexpr uintptr_t Shutdown   = 0x140106e40; // vtable[3]
-    constexpr uintptr_t Serialize  = 0x140106d50; // vtable[4]
-    constexpr uintptr_t Draw       = 0x140106c20; // vtable[6]
+    constexpr uintptr_t Startup    = 0x140106d50; // vtable[4]  (was "Serialize")
+    constexpr uintptr_t OnAdded    = 0x140106c20; // vtable[6]  (was "Draw")
     constexpr uintptr_t Update     = 0x140106420; // vtable[9]
-    constexpr uintptr_t OnUpdate2  = 0x140106dd0; // vtable[11]
+    constexpr uintptr_t OnUpdate2  = 0x140106dd0; // vtable[11] (not ported)
+
+    // Private helpers of Update, all reimplemented in animalcomponent.cpp.
+    constexpr uintptr_t SetBounds      = 0x140105e20; // ported as PastureComponent_AnimalSetBounds
+    constexpr uintptr_t FindHabitat    = 0x140106020;
+    constexpr uintptr_t SetWanderTimer = 0x140106250;
+    constexpr uintptr_t UpdateBehavior = 0x140107320;
 }
 
+// Field meanings recovered from the Update/Startup/OnAdded bodies. Names are
+// deliberately left as dataNN so sibling lanes that already reference them keep
+// compiling; animalcomponent.cpp accesses them by byte offset.
 struct AnimalComponent {
     // Component base (0x28 bytes)
     void*    vtable;       // +0x00
     void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
+    void*    owner;        // +0x10  Entity InternalBasePtr
+    void*    _unk18;       // +0x18  AnimalDescription (validated, tid 0x1401c6fd0)
+    uint32_t flags;        // +0x20  bit 20 penned, 21 graze latch,
+                           //        22 revalidate habitat, 23 grazing enabled
     uint8_t  _pad24[4];    // +0x24
 
     // AnimalComponent fields
-    uint32_t data28;       // +0x28: zeroed (u32 write)
+    uint32_t data28;       // +0x28  habitat cell index (y * mapDim + x)
     uint8_t  _pad2C[4];    // +0x2C: padding/gap
-    uint64_t data30;       // +0x30: zeroed
-    uint64_t data38;       // +0x38: zeroed
-    uint8_t  data40;       // +0x40: zeroed (byte write)
+    uint64_t data30;       // +0x30  System::Time move timer
+    uint64_t data38;       // +0x38  wander box: short x0, y0, width, height
+    uint8_t  data40;       // +0x40  non-zero once this animal grazes
     uint8_t  _pad41[3];    // +0x41: gap
-    uint32_t data44;       // +0x44: zeroed (lower half of u64 write at 0x44)
-    uint32_t data48;       // +0x48: zeroed (upper half of u64 write at 0x44)
+    uint32_t data44;       // +0x44  float age, in hours
+    uint32_t data48;       // +0x48  float age of death (rolled by Startup)
     uint8_t  _pad4C[4];    // +0x4C: gap
-    uint64_t data50;       // +0x50: zeroed
+    uint64_t data50;       // +0x50  System::Time graze timer
 };
 
 static_assert(sizeof(AnimalComponent) == 0x58, "AnimalComponent size mismatch");

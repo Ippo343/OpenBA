@@ -2,11 +2,21 @@
 // Clean reimplementation of WildAnimalComponent lifecycle methods.
 //
 // WildAnimalComponent (0x30 bytes) -- simple Component subclass.
-// Holds a single entity reference at +0x28 (the wild animal entity).
+// Holds a back-reference at +0x28 to the HERD entity this wild animal belongs to.
 //
-// Vtable at 0x140164af0:
-//   [3] Shutdown = 0x14012e300 -- serialization with InternalBasePtr + IsDerivedFrom
-//   [7] OnCreate = 0x14012e2b0 -- registers self with animal's component list
+// Vtable at 0x140164af0 (slot addresses read from .rdata):
+//   [3] Serialize = 0x14012e300 -- Component base + the InternalBasePtr at +0x28,
+//       then a post-load IsDerivedFrom validation against the HerdComponent id.
+//   [7] OnRemove  = 0x14012e2b0 -- ERASES self from the herd entity's component
+//       list at +0x38 (DynArray8_EraseByValue).
+//
+// NAMING CORRECTIONS (2026-07-28): this file previously called slot 3 "Shutdown"
+// and slot 7 "OnCreate", and described FUN_140002cc0 as "add to component list".
+// Ghidra names them WildAnimalComponent_Serialize / WildAnimalComponent_OnRemove,
+// and FUN_140002cc0 is erase-by-value, not append (append is FUN_140003110). The
+// emitted code was already correct -- only the labels were wrong. The real
+// OnCreate is 0x14012e440 (a Stream overload that just brackets an IO::Serializer
+// and returns 1); it is NOT in this vtable, so nothing here should route to it.
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -40,9 +50,10 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// FUN_140002cc0 -- add InternalBasePtr to component list at entity+0x38
-typedef void (*fn_AddToComponentList_t)(void* listBase, void* ibpPtr);
-static fn_AddToComponentList_t s_fn_AddToComponentList = nullptr;
+// FUN_140002cc0 -- DynArray8_EraseByValue: remove an InternalBasePtr from the
+// 8-byte-element list at entity+0x38. (Append is FUN_140003110, a different fn.)
+typedef void (*fn_EraseFromComponentList_t)(void* listBase, void* ibpPtr);
+static fn_EraseFromComponentList_t s_fn_EraseFromComponentList = nullptr;
 
 // Object::InternalBasePtr::CheckPtr
 typedef void (*fn_CheckPtr_t)(void* ptrField);
@@ -52,8 +63,10 @@ static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
 typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 
-// Type ID: DAT_1401c7820 -- WildAnimal type for IsDerivedFrom validation
-static uint32_t* s_TypeId_WildAnimal = nullptr;
+// Type ID: DAT_1401c7820 -- HerdComponent (NOT "WildAnimal": factory_registrations
+// .csv:268 maps this global to HerdComponent_RegisterType). The +0x28 back-ref is
+// validated against it because it points at the herd, not at another wild animal.
+static uint32_t* s_TypeId_HerdComponent = nullptr;
 
 static bool s_helpersResolved = false;
 
@@ -87,33 +100,33 @@ static void EnsureHelpers() {
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
 
-    // FUN_140002cc0 -- add to component list
-    s_fn_AddToComponentList = reinterpret_cast<fn_AddToComponentList_t>(
+    // FUN_140002cc0 -- erase from component list
+    s_fn_EraseFromComponentList = reinterpret_cast<fn_EraseFromComponentList_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
-    // Type ID
-    s_TypeId_WildAnimal = reinterpret_cast<uint32_t*>(
+    // Type ID (HerdComponent)
+    s_TypeId_HerdComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7820));
 
     s_helpersResolved = true;
 }
 
 // ============================================================
-// WildAnimalComponent::Shutdown (vtable slot [3], 0x14012e300)
+// WildAnimalComponent::Serialize (vtable slot [3], 0x14012e300)
 // ============================================================
-// Serializes Component base, then InternalBasePtr at +0x28.
-// After deserialization, validates the pointer with IsDerivedFrom
-// and nulls it out if the type check fails (save compatibility).
+// Serializes Component base, then the InternalBasePtr at +0x28.
+// After deserialization, validates the pointer with IsDerivedFrom against the
+// HerdComponent id and nulls it out if the check fails (save compatibility).
 //
 // Original pseudocode:
 //   Component_Serialize(self, stream)
 //   IO::Serializer::Serializer(local, stream, 0)
 //   Object::InternalBasePtr::Serialize(&self->data28, local)
-//   if (self->data28 != 0 && !IsDerivedFrom(self->data28, WildAnimalTypeId))
+//   if (self->data28 != 0 && !IsDerivedFrom(self->data28, HerdComponentTypeId))
 //       self->data28 = 0
 //   IO::Serializer::~Serializer(local)
 
-void WildAnimalComponent_Shutdown(WildAnimalComponent* self, void* stream) {
+void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
     EnsureHelpers();
 
     // Call base Component_Serialize
@@ -134,9 +147,9 @@ void WildAnimalComponent_Shutdown(WildAnimalComponent* self, void* stream) {
 
     // Post-deserialize type validation
     if (self->data28 != 0) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WildAnimal) {
+        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_HerdComponent) {
             bool valid = s_fn_IsDerivedFrom_dispatch(
-                reinterpret_cast<void*>(self->data28), *s_TypeId_WildAnimal);
+                reinterpret_cast<void*>(self->data28), *s_TypeId_HerdComponent);
             if (!valid) {
                 self->data28 = 0;
             }
@@ -150,22 +163,23 @@ void WildAnimalComponent_Shutdown(WildAnimalComponent* self, void* stream) {
 }
 
 // ============================================================
-// WildAnimalComponent::OnCreate (vtable slot [7], 0x14012e2b0)
+// WildAnimalComponent::OnRemove (vtable slot [7], 0x14012e2b0)
 // ============================================================
-// If data28 (entity ref at +0x28) is non-null:
-//   1. Creates InternalBasePtr from owner (self)
-//   2. CheckPtr on +0x28 entity
-//   3. Adds owner to entity's component list at +0x38 via FUN_140002cc0
+// If data28 (the herd entity back-ref at +0x28) is non-null:
+//   1. Creates an InternalBasePtr wrapping self
+//   2. CheckPtr on the +0x28 back-ref
+//   3. ERASES self from that entity's component list at +0x38 (FUN_140002cc0 =
+//      DynArray8_EraseByValue), so the herd stops seeing this animal.
 //
 // Original pseudocode:
 //   if (self->data28 != 0) {
 //       InternalBasePtr ibp;
 //       InternalBasePtr::Ctor(&ibp, self);
 //       CheckPtr(&self->data28);
-//       FUN_140002cc0(self->data28 + 0x38, &ibp);
+//       DynArray8_EraseByValue(self->data28 + 0x38, &ibp);
 //   }
 
-void WildAnimalComponent_OnCreate(WildAnimalComponent* self) {
+void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
     EnsureHelpers();
 
     if (self->data28 != 0) {
@@ -180,10 +194,10 @@ void WildAnimalComponent_OnCreate(WildAnimalComponent* self) {
             s_fn_CheckPtr(reinterpret_cast<uint8_t*>(self) + 0x28);
         }
 
-        // Add self to entity's component list at entity+0x38
-        if (s_fn_AddToComponentList) {
+        // Erase self from the herd entity's component list at entity+0x38
+        if (s_fn_EraseFromComponentList) {
             uintptr_t entity = static_cast<uintptr_t>(self->data28);
-            s_fn_AddToComponentList(
+            s_fn_EraseFromComponentList(
                 reinterpret_cast<void*>(entity + 0x38), &ibp);
         }
     }
@@ -196,10 +210,10 @@ void WildAnimalComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[WildAnimalComponent] Funcs resolved: Serialize=%p IBP_Serialize=%p "
-           "AddToList=%p TypeId=%p\n",
+           "EraseFromList=%p HerdTypeId=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_AddToComponentList,
-           (void*)s_TypeId_WildAnimal);
+           (void*)s_fn_EraseFromComponentList,
+           (void*)s_TypeId_HerdComponent);
 #endif
 }
 

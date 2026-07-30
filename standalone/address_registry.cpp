@@ -378,6 +378,14 @@ extern void RegisterComponentBatch_visuals();
 extern void RegisterComponentBatch_fruit();
 extern void RegisterComponentBatch_spawn();
 extern void RegisterComponentBatch_tombstone();
+// Animal spawn wave (2026-07-28, deer herds + pasture livestock). Shared type-id
+// globals in reg_component_animal.cpp (gated on any BANISHED_LIVE_ANIMALS/HERD/
+// PASTURE/ANIMAL_UPDATE flag); per-lane bring-ups in reg_herd_live.cpp,
+// reg_pasture_live.cpp, reg_animal_update.cpp.
+extern void RegisterComponentBatch_animal();
+extern void RegisterHerdLive();
+extern void RegisterPastureLive();
+extern void RegisterAnimalUpdateLive();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -533,6 +541,11 @@ static void RegisterCodeFunctions() {
     RegisterComponentBatch_fruit();
     RegisterComponentBatch_spawn();
     RegisterComponentBatch_tombstone();
+    // Animal spawn wave — shared type-ids + per-lane bring-ups (all self-gated).
+    RegisterComponentBatch_animal();
+    RegisterHerdLive();
+    RegisterPastureLive();
+    RegisterAnimalUpdateLive();
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();
