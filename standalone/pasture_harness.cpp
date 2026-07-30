@@ -51,8 +51,65 @@ static void PastureTendHarness_Tick(int frameNum) {
     }
 }
 
+// BANISHED_PASTURE_HERDERS=<n> — herder STAFFING stand-in (the ProfessionUI
+// "+1 herdsman" click, the one player action left in the chain). One-shot at
+// frame 1000 (after AUTOTYPE ran Slot14 cmd 2, which turned the workplace on
+// and posted PastureWork): for every typed pasture whose workplace is
+// accepting, drive the real seat cascade (CitizenEmploy_SeatWorkers =
+// FindAvailableBuilding + cbf0->ca20->c5f0->c4b0, exactly what ProfessionUI's
+// dd10 does per worker) for n workers on the pasture's natural profession key
+// (WPC desc+0x20 — the key the workplace registered under). From the seat on,
+// the chain is ORGANIC: the herder's CitizenAI claims the posted PastureWork,
+// works it, and each completed cycle sends the slot-15 msg-0 breed tag.
+// Default n=1; =0 disables. Candidates must be laborers (StartTown seeds the
+// laborer profession on founding adults ungated).
+extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
+
+static void PastureHerderHarness_Tick(int frameNum) {
+    static int s_count = -2;                  // -2 = env unread
+    if (s_count == -2) {
+        const char* e = std::getenv("BANISHED_PASTURE_HERDERS");
+        s_count = (!e || !e[0]) ? 1 : std::atoi(e);
+        if (s_count > 0)
+            fprintf(stderr, "[PastureHerders] armed: seat %d herder(s) per typed "
+                    "pasture at frame 1000\n", s_count);
+    }
+    if (s_count <= 0 || frameNum != 1000) return;
+
+    typedef void* (*fn_FindWPC_t)(int64_t entity, void* outIBP);
+    uintptr_t f2e10 = ResolveAddr(Module::Exe, 0x140002e10);
+    if (!f2e10 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!gs) return;
+    int n = *reinterpret_cast<int*>(gs + 0x98);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    for (int i = 0; i < n && list; ++i) {
+        void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        if (!pasture) continue;
+        if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
+        uint64_t entRef = *reinterpret_cast<uint64_t*>((uintptr_t)pasture + 0x10);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
+        if (!entRef) continue;
+        uint64_t wpcIBP = 0;
+        reinterpret_cast<fn_FindWPC_t>(f2e10)(static_cast<int64_t>(entRef), &wpcIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
+        if (!wpcIBP) continue;
+        if (*reinterpret_cast<char*>(wpcIBP + 0x50) == 0) continue;   // workplace off
+        uint64_t desc = *reinterpret_cast<uint64_t*>(wpcIBP + 0x18);
+        uint64_t profKey = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;
+        if (!profKey) continue;
+        int seated = CitizenEmploy_SeatWorkers(static_cast<int64_t>(gs), profKey, s_count);
+        fprintf(stderr, "[PastureHerders] frame %d: pasture=%p profKey=0x%llx "
+                "seated %d/%d herder(s)\n", frameNum, pasture,
+                (unsigned long long)profKey, seated, s_count);
+        fflush(stderr);
+    }
+}
+
 extern "C" void PastureFillHarness_Tick(int frameNum) {
     PastureTendHarness_Tick(frameNum);
+    PastureHerderHarness_Tick(frameNum);
     static int s_fillFrame = -2;              // -2 = env unread, -1 = disabled
     if (s_fillFrame == -2) {
         const char* e = std::getenv("BANISHED_PASTURE_FILL");

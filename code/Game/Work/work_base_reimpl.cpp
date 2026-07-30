@@ -226,10 +226,15 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 void WorkBase_TaskListCleanup_c5400(void* self) {
     uintptr_t* p = reinterpret_cast<uintptr_t*>(self);
     uintptr_t base = reinterpret_cast<uintptr_t>(self);
-    int count = *reinterpret_cast<int*>(base + 8);
-    uintptr_t arr = p[0];
-    for (int i = 0; i < count; i++) {
-        uintptr_t slot = arr + static_cast<uintptr_t>(i) * 8;
+    // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
+    // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
+    // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
+    // An earlier port cached both once; the first cancel-push that forced a
+    // grow left the cached pointer dangling and the walk read freed memory
+    // (crash: organic herder's first PastureWork claim, GrazingWorkCtor →
+    // cleanup → MoveTo cancel → push → walk of the stale array).
+    for (int i = 0; i < *reinterpret_cast<int*>(base + 8); i++) {
+        uintptr_t slot = p[0] + static_cast<uintptr_t>(i) * 8;
         void* node = *reinterpret_cast<void**>(slot);
         if (!node) continue;
         void* cur = node;
@@ -240,6 +245,8 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
             cur = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cur) + 0x10);  // node[2] = next
         } while (cur != nullptr);
+        // Slot address recomputed from the CURRENT array pointer (may have moved).
+        slot = p[0] + static_cast<uintptr_t>(i) * 8;
         if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(slot));
         uintptr_t nul = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nul, nullptr);

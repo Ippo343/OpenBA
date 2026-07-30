@@ -491,6 +491,8 @@ void PastureComponent_InitFuncs() {
 extern "C" void** PastureCtrl_NodeVtable();
 extern "C" void   PastureCtrl_PopulateTable();
 extern "C" void   Pasture_MsgReceive(void* pasture, int msg);  // slot 15 breed tag
+extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd); // slot 13 capability query
+extern "C" void   Pasture_Command(void* pasture, int cmd);      // slot 14 execute command
 
 static uint32_t PastureComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
@@ -515,6 +517,15 @@ static void  PastureComponent_OnRemoveVSlot(void* s) {
 static void  PastureComponent_MsgVSlot(void* s, int msg, void*, uint32_t, uint32_t) {
     Pasture_MsgReceive(s, msg);
 }
+// Slots 13/14 (retail 0x140127dd0 / 0x140127a60): the pasture command pair —
+// slot 13 answers "may command N run?", slot 14 executes it. Cmd 2 is the herder
+// toggle SetLivestockType fires on the first type assignment (posts PastureWork).
+static uint64_t PastureComponent_CanCommandVSlot(void* s, int cmd) {
+    return Pasture_CanCommand(s, cmd);
+}
+static void  PastureComponent_CommandVSlot(void* s, int cmd) {
+    Pasture_Command(s, cmd);
+}
 static int   PastureComponent_GetDefaultState(void*) { return 2; }
 static void* PastureComponent_CreateState(void* self) {
     return reinterpret_cast<uint8_t*>(self) + 0x48;
@@ -525,6 +536,8 @@ static void PastureComponent_InstallLive(void* mem) {
     if (!PastureComponent_LiveOn()) return;
     PastureComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PastureComponent_OnAddedVSlot);
     PastureComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PastureComponent_OnRemoveVSlot);
+    PastureComponent_LiveVtable[13] = reinterpret_cast<void*>(&PastureComponent_CanCommandVSlot);
+    PastureComponent_LiveVtable[14] = reinterpret_cast<void*>(&PastureComponent_CommandVSlot);
     PastureComponent_LiveVtable[15] = reinterpret_cast<void*>(&PastureComponent_MsgVSlot);
     PastureComponent_LiveVtable[16] = reinterpret_cast<void*>(&PastureComponent_GetDefaultState);
     PastureComponent_LiveVtable[17] = reinterpret_cast<void*>(&PastureComponent_CreateState);

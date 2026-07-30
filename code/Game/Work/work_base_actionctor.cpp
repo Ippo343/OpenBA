@@ -81,7 +81,13 @@ typedef void* (*WA_fn_Time_Ctor_t)(void* retval, float seconds);
 // 0x140152a30 — Math::Vector3::Vector3(self, x, y, z).
 typedef void* (*WA_fn_Vector3_Ctor_t)(void* self, float x, float y, float z);
 // 0x1401512c0 — Math::Vector3::Normalize(self) -> Vector3*.
-typedef void* (*WA_fn_Vector3_Normalize_t)(void* self);
+// ?Normalize@Vector3@Math@@QEBA?AV12@XZ — returns a NEW Vector3 BY VALUE, so the
+// Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes).
+// ⚠ A one-arg typedef here made Normalize write its result through whatever RDX
+// happened to hold — at the grazing-ctor call site that was an IBP slot, and the
+// task-list append then walked ±0.7071f float bits as an action pointer (the
+// organic herder's first-claim crash).
+typedef void* (*WA_fn_Vector3_Normalize_t)(void* self, void* outVec3);
 // 0x1401512d8 — Math::Vector3::Heading(self) -> float (XMM0).
 typedef float (*WA_fn_Vector3_Heading_t)(void* self);
 
@@ -783,7 +789,8 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
         float v3[3];
         s_fn_Vec3Ctor(v3, srcPos[0] - targetPos[0], srcPos[1] - targetPos[1], srcPos[2] - targetPos[2]);
         if (s_fn_Vec3Normalize) {
-            void* n = s_fn_Vec3Normalize(v3);
+            float nv[3] = {0, 0, 0};
+            void* n = s_fn_Vec3Normalize(v3, nv);
             if (s_fn_Vec3Heading && n) heading = s_fn_Vec3Heading(n);
         }
     }

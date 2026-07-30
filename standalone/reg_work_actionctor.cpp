@@ -40,7 +40,16 @@ extern uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, i
 extern uint64_t PickupGate_Accepts_12d990(int64_t slComp, int64_t resEntity);                        // 0x14012d990
 extern int      PickupGate_AcceptMask_12d560(int64_t self);                                          // 0x14012d560
 
+// .rdata float constants the action ctors read (verified against the exe bytes):
+//   0x1401721b0 = 10.0f  — grazing PerformWork time (bb0a0; also Leisure/Tornado)
+//   0x140172178 =  2.1f  — plant/hunt PerformWork time (be6e0, bdd20, ShowTool ctor3)
+// Previously unregistered: the ctors fell back to 0.0 (instant work cycles).
+static float g_f_GrazingWorkTime = 10.0f;
+static float g_f_PlantWorkTime   = 2.1f;
+
 void RegisterWorkActionCtorBatch() {
+    RegisterExeAddr(0x1401721b0, reinterpret_cast<uintptr_t>(&g_f_GrazingWorkTime));
+    RegisterExeAddr(0x140172178, reinterpret_cast<uintptr_t>(&g_f_PlantWorkTime));
     RegisterExeAddr(0x1400c1eb0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCtor_c1eb0));
     RegisterExeAddr(0x1400c2490, reinterpret_cast<uintptr_t>(&WorkAct_PlayAnimationCtor_c2490));
     RegisterExeAddr(0x1400bb0a0, reinterpret_cast<uintptr_t>(&WorkAct_GrazingWorkCtor_bb0a0));

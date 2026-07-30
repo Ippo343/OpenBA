@@ -47,6 +47,8 @@ extern "C" char Pasture_State3Enter(void* data, void* sm);
 extern "C" char Pasture_State2PerFrame(void* data, void* sm, void* time);
 extern "C" void Pasture_MsgReceive(void* pasture, int msg);
 extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);
+extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd);
+extern "C" void Pasture_Command(void* pasture, int cmd);
 
 void LivestockComponent_OnAdd(LivestockComponent* self);
 void LivestockComponent_OnRemove(LivestockComponent* self);
@@ -75,6 +77,10 @@ void RegisterPastureLive() {
     // Slot 15 OnMessage — the breed tag (herder work-complete -> random animal
     // gets flag bit 23; sole setter of the bit in the exe).
     RegisterExeAddr(0x140127720, reinterpret_cast<uintptr_t>(&Pasture_MsgReceive));
+    // Slots 13/14 — pasture command pair. Slot 14 cmd 2 is the organic herder
+    // start (WPC toggle + PastureWork post); retires the PASTURE_TEND stand-in.
+    RegisterExeAddr(0x140127dd0, reinterpret_cast<uintptr_t>(&Pasture_CanCommand));
+    RegisterExeAddr(0x140127a60, reinterpret_cast<uintptr_t>(&Pasture_Command));
     // LivestockComponent finder (FUN_14002f1d0) — previously unregistered, which
     // silently skipped the spawn-path bind for every spawned/born livestock.
     RegisterExeAddr(0x14002f1d0, reinterpret_cast<uintptr_t>(&Pasture_FindLivestockComp));

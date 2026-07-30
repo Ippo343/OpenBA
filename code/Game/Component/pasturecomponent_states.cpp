@@ -71,6 +71,9 @@ typedef void* (*fn_FindStorage_13320_t)(int64_t entity, void* outIBP);        //
 typedef void  (*fn_StorageNote_8fd0_t)(int64_t storage, int64_t tmpl, int n); // 0x140058fd0
 typedef uint32_t (*fn_ResourceIndex_t)(void* world, int64_t tmpl);            // 0x140088f90
 typedef void* (*fn_FindWorkComp_t)(int64_t entity, void* outIBP);             // 0x140003050
+typedef void  (*fn_StopWorkSlot_t)(uintptr_t workComp);                       // 0x14012eb50
+typedef void  (*fn_PostWorkSched_t)(uintptr_t workComp, uint32_t code,
+                                    char flag, void* workIBP);                // 0x14012ec60
 typedef void  (*fn_WorkSetAmount_t)(int64_t comp, uint32_t v);                // 0x140044810
 typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entIBP, int cat);// 0x1400c48a0
 typedef void* (*fn_EntityCopyCtor_t)(void* mem, int64_t tmpl);                // 0x1400c3720
@@ -98,6 +101,8 @@ fn_FindStorage_13320_t  s_FindStore    = nullptr;
 fn_StorageNote_8fd0_t   s_StoreNote    = nullptr;
 fn_ResourceIndex_t      s_ResIndex     = nullptr;
 fn_FindWorkComp_t       s_FindWork     = nullptr;
+fn_StopWorkSlot_t       s_StopWork     = nullptr;
+fn_PostWorkSched_t      s_PostWork     = nullptr;
 fn_WorkSetAmount_t      s_WorkSetAmt   = nullptr;
 fn_RegisterEntity_t     s_RegEntity    = nullptr;
 fn_EntityCopyCtor_t     s_EntityCopy   = nullptr;
@@ -143,6 +148,8 @@ void Resolve() {
     s_StoreNote    = R<fn_StorageNote_8fd0_t>(0x140058fd0);
     s_ResIndex     = R<fn_ResourceIndex_t>(0x140088f90);
     s_FindWork     = R<fn_FindWorkComp_t>(0x140003050);
+    s_StopWork     = R<fn_StopWorkSlot_t>(0x14012eb50);
+    s_PostWork     = R<fn_PostWorkSched_t>(0x14012ec60);
     s_WorkSetAmt   = R<fn_WorkSetAmount_t>(0x140044810);
     s_RegEntity    = R<fn_RegisterEntity_t>(0x1400c48a0);
     s_EntityCopy   = R<fn_EntityCopyCtor_t>(0x1400c3720);
@@ -523,10 +530,6 @@ extern "C" char Pasture_State2Enter(void* data, void* /*sm*/) {
                  data, PastureType(data));
     std::fflush(stderr);
 
-    // Bring-up only, opt-in: retail relies on the pasture dialog to set the type, so
-    // an untyped pasture would adopt nothing. No-op unless BANISHED_PASTURE_AUTOTYPE.
-    if (PastureType(data) == nullptr) Pasture_AutoAssignType(data);
-
     Pasture_AdoptWanderers(data);
 
     uintptr_t gs = GameState();
@@ -540,6 +543,15 @@ extern "C" char Pasture_State2Enter(void* data, void* /*sm*/) {
     if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)data + 0x10), &wpc);
     CheckPtr(&wpc);
     if (wpc && s_ActivateWP) s_ActivateWP(static_cast<int64_t>(wpc), 0);
+
+    // Bring-up only, opt-in: retail relies on the pasture dialog to set the type, so
+    // an untyped pasture would adopt nothing. No-op unless BANISHED_PASTURE_AUTOTYPE.
+    // MUST run AFTER the workplace deactivation above: SetLivestockType fires the
+    // slot-14 cmd-2 herder TOGGLE, whose retail invariant is accepting==0 at first
+    // type assignment (the dialog can only run once the pasture is operational).
+    // With the call before the zeroing, the toggle flipped the builder-path leftover
+    // 1 -> 0 ("herder OFF") and the herder never spawned.
+    if (PastureType(data) == nullptr) Pasture_AutoAssignType(data);
     return 0;
 }
 
@@ -726,4 +738,192 @@ extern "C" void PastureCtrl_PopulateTable() {
     std::fprintf(stderr, "[Pasture] state table populated: %d states (2=operational, "
                  "3=teardown)\n", t.count);
     std::fflush(stderr);
+}
+
+// PastureWork factory-with-entity (code/Game/Work/pasturework.cpp): MemAlloc(0x58,8)
+// + the retail ctor 0x1400f2d80. `entityRefSlot` points at an 8-byte entity ref.
+extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);
+
+// ============================================================
+// PastureComponent slot 13 (0x140127dd0) — capability query for the three
+// pasture commands. Shared preamble sums the FREE capacity across every OTHER
+// pasture of the same livestock type (world registry gameState+0x90/+0x98).
+//
+//   cmd 0 "empty the pasture":  our count fits elsewhere (0 < count <= free)
+//   cmd 1 "split the herd":     count > 9 AND free >= 5
+//   cmd 2 "toggle the herder":  bit 0 = has a livestock type (+0x28 != 0),
+//                               bit 1 = workplace currently accepting (+0x50)
+//
+// The cmd 0/1 results are additionally masked by hasType (uVar5 in retail).
+// Slot 14 dispatches this through the vtable and tests only bit 0.
+// ============================================================
+extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
+    Resolve();
+    if (!pasture) return 0;
+
+    int freeElsewhere = 0;
+    uintptr_t gs = GameState();
+    const int n = gs ? *reinterpret_cast<int*>(gs + 0x98) : 0;
+    uintptr_t list = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x90) : 0;
+    for (int i = 0; i < n && list; ++i) {
+        void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        if (!p || p == pasture) continue;
+        CheckPtr(&p);
+        if (PastureType(p) != PastureType(pasture)) continue;
+        freeElsewhere += static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
+                         - PastureCount(p);
+    }
+
+    const uint64_t hasType = (PastureType(pasture) != nullptr) ? 1u : 0u;
+    if (cmd == 0) {
+        const int cnt = PastureCount(pasture);
+        return (cnt > 0 && cnt <= freeElsewhere) ? hasType : 0;
+    }
+    if (cmd == 1) {
+        if (PastureCount(pasture) > 9)
+            return (freeElsewhere < 5) ? 0 : hasType;
+        return 0;
+    }
+    if (cmd == 2) {
+        uint64_t wpcIBP = 0;
+        CheckPtr(reinterpret_cast<uint8_t*>(pasture) + 0x10);
+        if (s_FindWorkplace)
+            s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x10), &wpcIBP);
+        CheckPtr(&wpcIBP);
+        uint64_t r = hasType;
+        if (wpcIBP && *reinterpret_cast<char*>(wpcIBP + 0x50) != 0) r |= 2;
+        return r;
+    }
+    return 0;
+}
+
+// ============================================================
+// PastureComponent slot 14 (0x140127a60) — execute a pasture command.
+// Guard: vtable slot 13 (above), bit 0. This is the slot the pasture dialog's
+// SetLivestockType invokes with cmd 2 the first time a type is assigned — the
+// ORGANIC start of the herder chain:
+//
+//   cmd 2: toggle the herder. Flip the owner entity's WorkPlaceComponent
+//     accepting flag (Entity_impl_fc00). If it lands OFF: stop the entity's
+//     work slot (FUN_14012eb50). If it lands ON: MemAlloc(0x58) + the retail
+//     PastureWork ctor and post it to the work scheduler
+//     (CitizenAI_impl_ec60, code=1) — a citizen then claims it and tends the
+//     pasture, whose completed cycles send the slot-15 msg-0 breed tag.
+//
+//   cmd 0 / cmd 1: transfer animals to the other same-type pastures — all of
+//     them (cmd 0) or floor(half) (cmd 1, keep = count - count/2). Fill the
+//     pasture with the most free capacity first, then sweep the rest, moving
+//     the FIRST animal of our slot array each step via Pasture_BindAnimal
+//     (which erases it from our array, so the loop advances).
+// ============================================================
+extern "C" void Pasture_Command(void* pasture, int cmd) {
+    Resolve();
+    if (!pasture) return;
+
+    void** vt = *reinterpret_cast<void***>(pasture);
+    const uint64_t can = (vt && vt[13])
+        ? reinterpret_cast<uint64_t (*)(void*, int)>(vt[13])(pasture, cmd) : 0;
+    if ((can & 1) == 0) {
+        if (Trace()) {
+            std::fprintf(stderr, "[Pasture] command %d refused by slot13 (mask=0x%llx) on %p\n",
+                         cmd, (unsigned long long)can, pasture);
+            std::fflush(stderr);
+        }
+        return;
+    }
+
+    if (cmd == 2) {
+        uint8_t* selfB = reinterpret_cast<uint8_t*>(pasture);
+        uint64_t wcIBP = 0, wpcIBP = 0;
+        CheckPtr(selfB + 0x10);
+        if (s_FindWork)      s_FindWork(*reinterpret_cast<int64_t*>(selfB + 0x10), &wcIBP);
+        CheckPtr(selfB + 0x10);
+        if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>(selfB + 0x10), &wpcIBP);
+        if (!wcIBP || !wpcIBP || !s_ActivateWP) {   // standalone guard; retail assumes both
+            std::fprintf(stderr, "[Pasture] cmd 2: missing %s%s on %p — herder toggle skipped\n",
+                         wcIBP ? "" : "WorkComponent ", wpcIBP ? "" : "WorkPlaceComponent",
+                         pasture);
+            std::fflush(stderr);
+            return;
+        }
+
+        CheckPtr(&wpcIBP);
+        const char cur = *reinterpret_cast<char*>(wpcIBP + 0x50);
+        CheckPtr(&wpcIBP);
+        s_ActivateWP(static_cast<int64_t>(wpcIBP), cur == 0 ? 1 : 0);
+        CheckPtr(&wpcIBP);
+        if (*reinterpret_cast<char*>(wpcIBP + 0x50) == 0) {
+            CheckPtr(&wcIBP);
+            if (s_StopWork) s_StopWork(static_cast<uintptr_t>(wcIBP));
+            CheckPtr(&wpcIBP);
+            s_ActivateWP(static_cast<int64_t>(wpcIBP), 0);
+            if (Trace()) {
+                std::fprintf(stderr, "[Pasture] herder OFF: pasture=%p work slot stopped\n",
+                             pasture);
+                std::fflush(stderr);
+            }
+        } else {
+            uint64_t entRef = *reinterpret_cast<uint64_t*>(selfB + 0x10);
+            void* work = PastureWork_CreateForEntity(&entRef);
+            uint64_t workIBP = MakeIBP(work);
+            CheckPtr(&wcIBP);
+            if (s_PostWork) s_PostWork(static_cast<uintptr_t>(wcIBP), 1, 1, &workIBP);
+            CheckPtr(&wpcIBP);
+            s_ActivateWP(static_cast<int64_t>(wpcIBP), 1);
+            if (Trace()) {
+                std::fprintf(stderr, "[Pasture] herder ON: pasture=%p PastureWork=%p posted "
+                             "(code=1)\n", pasture, work);
+                std::fflush(stderr);
+            }
+        }
+        return;
+    }
+
+    // cmd 0 / cmd 1 — transfer animals out.
+    uintptr_t gs = GameState();
+    const int n = gs ? *reinterpret_cast<int*>(gs + 0x98) : 0;
+    uintptr_t list = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x90) : 0;
+    const int keep = (cmd != 0)
+        ? PastureCount(pasture) - (PastureCount(pasture) >> 1) : 0;
+
+    void* best = nullptr;
+    int bestFree = 0;
+    for (int i = 0; i < n && list; ++i) {
+        void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        if (!p || p == pasture) continue;
+        CheckPtr(&p);
+        if (PastureType(p) != PastureType(pasture)) continue;
+        const int freeN = static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
+                          - PastureCount(p);
+        if (freeN > bestFree) { bestFree = freeN; best = p; }
+    }
+
+    int moved = 0;
+    auto transferInto = [&](void* dst) {
+        while (keep < PastureCount(pasture)) {
+            if (static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)dst) : 0)
+                    <= PastureCount(dst)) break;
+            uintptr_t arr = PastureAnimals(pasture);
+            if (!arr) break;                        // standalone guard
+            void** first = reinterpret_cast<void**>(arr);
+            CheckPtr(first);
+            if (!*first) break;                     // standalone guard
+            uint64_t dstRef = reinterpret_cast<uint64_t>(dst);
+            Pasture_BindAnimal(*first, &dstRef);
+            ++moved;
+        }
+    };
+    if (best) transferInto(best);
+    for (int i = 0; i < n && list; ++i) {
+        void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        if (!p || p == pasture || p == best) continue;
+        CheckPtr(&p);
+        if (PastureType(p) != PastureType(pasture)) continue;
+        transferInto(p);
+    }
+    if (Trace()) {
+        std::fprintf(stderr, "[Pasture] cmd %d: moved %d animal(s) out of %p (keep=%d, "
+                     "now %d)\n", cmd, moved, pasture, keep, PastureCount(pasture));
+        std::fflush(stderr);
+    }
 }

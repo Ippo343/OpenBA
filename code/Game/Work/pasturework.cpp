@@ -23,6 +23,18 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+// BANISHED_PASTURE_TRACE — shared with the pasture component traces.
+static bool PW_Trace() {
+    static int t = -1;
+    if (t < 0) {
+        const char* e = std::getenv("BANISHED_PASTURE_TRACE");
+        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return t == 1;
+}
 
 // ============================================================
 // Local function pointers (resolved once by PastureWork_ResolveFuncs)
@@ -369,6 +381,11 @@ bool PastureWork_ResolveFuncs() {
 //
 int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
     (void)param3; (void)param4;  // unused in original, forwarded by action executor
+    if (PW_Trace()) {
+        std::fprintf(stderr, "[PastureWork] Slot4 claim: work=%p citizen=%p\n",
+                     (void*)self, entityIBP ? *(void**)entityIBP : nullptr);
+        std::fflush(stderr);
+    }
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
     void* citizenIBP = entityIBP;
@@ -705,7 +722,16 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
                 fn_InternalBasePtr_CheckPtr(local_res10);
                 uintptr_t citizenEnt = *(uintptr_t*)local_res10;
 
-                // Call vtable slot +0x50 (GetWorkEntity)
+                // ⚠ Retail saves the citizen IBP pointer (pIVar15) BEFORE the
+                // vtable+0x50 call: slot 10 writes its result (the workplace's
+                // profession key, wpc+0x48) THROUGH the out param — i.e. it
+                // OVERWRITES local_res10. The register call below must use the
+                // SAVED pointer; passing the clobbered local made the BST key
+                // *(Profession*) = g_Prof_Vtable, and the next Slot9 validate
+                // crashed IsA on it (organic herder, first completed cycle).
+                void* savedCitizenIBP = local_res10;
+
+                // Call vtable slot +0x50 (GetWorkEntity — returns the profession key)
                 typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
                 uintptr_t vtable = *(uintptr_t*)self;
                 auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
@@ -716,12 +742,14 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
                 *(int32_t*)(citizenEnt + 0x30) = priority;
                 *(uint32_t*)(citizenEnt + 0xb0) = 0;
 
+                // Profession match: slot 10's result vs citizen+0x1F0 (Profession*).
                 if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
                     *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
                 }
 
-                // Register work with CitizenAI (CitizenAI_impl_1a30)
-                s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), &local_res10, local_res10);
+                // Register work with CitizenAI (CitizenAI_impl_1a30):
+                // (tree root = self+0x48, outResult = &local_res10, key = citizen IBP)
+                s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), &local_res10, savedCitizenIBP);
                 return 2;
             }
         }
@@ -1051,7 +1079,7 @@ void* PastureWork_ScalarDtor_Impl(PastureWork* self, uint32_t flags) {
 //   slot9  Validate   : PastureWork_Slot9_Impl
 //   slot10 GetTarget  : PastureWork_Slot10_Impl
 //   slot11 GetPriority: PastureWork_Slot11_Impl
-//   Ctor       : FLAG — NO PastureWork_Ctor_Impl in this file -> factory null
+//   Ctor       : PastureWork_Ctor_Impl (retail 0x1400f2d80, Work_Ctor25 base)
 //   ResolveFuncs: PastureWork_ResolveFuncs()
 // ============================================================
 #include "work_base_standalone.h"
@@ -1080,8 +1108,59 @@ static void* g_PastureWork_Vtable[13] = {
     (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
 };
 
+// ============================================================
+// PastureWork::PastureWork (0x1400f2d80) — the retail ctor Slot14 cmd-2 calls
+// when it turns the herder on. Base = Work_Ctor25 (0x1400f7250 pattern):
+//   +0x10 = *entityIBP (raw 8-byte copy of the pasture entity ref)
+//   +0x18 = WorkComponent ref (finder 0x140003050 on the same entity)
+//   +0x20 = -1, +0x28 = -1 OR the Area component's center cell:
+//           ((h>>1)+y)*mapDim + (w>>1)+x  from area +0x28/+0x2a/+0x2c/+0x2e
+//   +0x24/+0x2c/+0x30/+0x38/+0x40 = 0
+// PastureWork tail: vtable, +0x48 BST root = 0, +0x50 count = 0.
+// Work_GenericCtor already covers the static part (zero-fill + the two -1s +
+// vtable); this adds the entity-dependent fields on top.
+// ============================================================
+extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
+    if (!mem) return nullptr;
+    PastureWork_ResolveFuncs();
+    Work_GenericCtor(mem, 0x58, g_PastureWork_Vtable);
+    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
+    *reinterpret_cast<uint64_t*>(s + 0x10) = *reinterpret_cast<uint64_t*>(entityIBP);
+    if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0 &&
+        g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        fn_InternalBasePtr_CheckPtr(s + 0x10);
+        uintptr_t areaIBP[2] = {0};
+        s_fn_GetAreaComponent(*reinterpret_cast<uintptr_t*>(s + 0x10), areaIBP);
+        if (areaIBP[0] != 0) {
+            fn_InternalBasePtr_CheckPtr(areaIBP);
+            uintptr_t a = areaIBP[0];
+            uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+            int mapDim = **reinterpret_cast<int**>(gw + 0xf8);
+            *reinterpret_cast<int32_t*>(s + 0x28) =
+                (((int)*reinterpret_cast<int16_t*>(a + 0x2e) >> 1) +
+                  (int)*reinterpret_cast<int16_t*>(a + 0x2a)) * mapDim +
+                ((int)*reinterpret_cast<int16_t*>(a + 0x2c) >> 1) +
+                 (int)*reinterpret_cast<int16_t*>(a + 0x28);
+        }
+        fn_InternalBasePtr_CheckPtr(entityIBP);
+        uintptr_t wcIBP[2] = {0};
+        s_fn_FindComp_MatDesc(*reinterpret_cast<uintptr_t*>(entityIBP), wcIBP);  // 0x140003050 = WorkComponent finder
+        *reinterpret_cast<uint64_t*>(s + 0x18) = wcIBP[0];
+    }
+    return mem;
+}
+
+// Convenience for PastureComponent Slot14: MemAlloc(0x58,8) + the faithful ctor.
+// `entityRefSlot` points at an 8-byte entity ref (the pasture's owner entity).
+extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot) {
+    PastureWork_ResolveFuncs();
+    void* p = Work_Alloc(0x58);
+    return p ? PastureWork_Ctor_Impl(p, entityRefSlot) : nullptr;
+}
+
 extern "C" void RegisterPastureWorkVtable() {
     RegisterExeAddr(0x1401617a0, (uintptr_t)g_PastureWork_Vtable);
+    RegisterExeAddr(0x1400f2d80, (uintptr_t)&PastureWork_Ctor_Impl);
 }
 extern "C" void* PastureWork_CreateInPlace(void* mem) {
     PastureWork_ResolveFuncs();

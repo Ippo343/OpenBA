@@ -943,6 +943,15 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z"));
     RegisterDispatchSlot(0x140152400,
         (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
+    // System::Random RandTol / RandFloat — .rdata dispatch slots read by many Work/
+    // Action reimpls (PastureWork Slot4, forester/herbalist, spawn/tombstone all
+    // carry per-file fallbacks or MISSING traces for these). Previously UNREGISTERED:
+    // PastureWork_ResolveFuncs FAILED on Random_RandTol, so the organic herder's
+    // grazing-position roll had a null fn ptr. Mangled names match engine_funcs.cpp.
+    RegisterDispatchSlot(0x1401512f0,
+        (uintptr_t)ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));
+    RegisterDispatchSlot(0x1401512f8,
+        (uintptr_t)ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
 
     // ----------------------------------------------------------------
     // M3.5 cleanup — IO::Serializer dispatch slots (Geometry::Serialize)
