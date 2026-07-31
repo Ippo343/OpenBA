@@ -65,16 +65,30 @@ static void PastureTendHarness_Tick(int frameNum) {
 // laborer profession on founding adults ungated).
 extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 
+// Manual play types the pasture from the dialog whenever the player gets to it — minutes
+// after frame 1000 — so a one-shot fires against an untyped pasture and silently does
+// nothing. Re-check every kHerderRetry frames from 1000 on, and remember which pastures
+// have already been seated so a typed pasture gets its herder exactly once.
+static const int kHerderRetry = 120;
+static void* s_herderSeated[16];
+static int   s_herderSeatedCount = 0;
+static bool HerderAlreadySeated(void* pasture) {
+    for (int i = 0; i < s_herderSeatedCount; ++i)
+        if (s_herderSeated[i] == pasture) return true;
+    return false;
+}
+
 static void PastureHerderHarness_Tick(int frameNum) {
     static int s_count = -2;                  // -2 = env unread
     if (s_count == -2) {
         const char* e = std::getenv("BANISHED_PASTURE_HERDERS");
         s_count = (!e || !e[0]) ? 1 : std::atoi(e);
         if (s_count > 0)
-            fprintf(stderr, "[PastureHerders] armed: seat %d herder(s) per typed "
-                    "pasture at frame 1000\n", s_count);
+            fprintf(stderr, "[PastureHerders] armed: seat %d herder(s) for each typed "
+                    "pasture, re-checked every %d frames from frame 1000\n",
+                    s_count, kHerderRetry);
     }
-    if (s_count <= 0 || frameNum != 1000) return;
+    if (s_count <= 0 || frameNum < 1000 || ((frameNum - 1000) % kHerderRetry) != 0) return;
 
     typedef void* (*fn_FindWPC_t)(int64_t entity, void* outIBP);
     uintptr_t f2e10 = ResolveAddr(Module::Exe, 0x140002e10);
@@ -88,6 +102,7 @@ static void PastureHerderHarness_Tick(int frameNum) {
         void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!pasture) continue;
         if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
+        if (HerderAlreadySeated(pasture)) continue;
         uint64_t entRef = *reinterpret_cast<uint64_t*>((uintptr_t)pasture + 0x10);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         if (!entRef) continue;
@@ -100,12 +115,18 @@ static void PastureHerderHarness_Tick(int frameNum) {
         uint64_t profKey = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;
         if (!profKey) continue;
         int seated = CitizenEmploy_SeatWorkers(static_cast<int64_t>(gs), profKey, s_count);
+        if (s_herderSeatedCount < (int)(sizeof(s_herderSeated) / sizeof(s_herderSeated[0])))
+            s_herderSeated[s_herderSeatedCount++] = pasture;
         fprintf(stderr, "[PastureHerders] frame %d: pasture=%p profKey=0x%llx "
-                "seated %d/%d herder(s)\n", frameNum, pasture,
-                (unsigned long long)profKey, seated, s_count);
+                "seated %d/%d herder(s)%s\n", frameNum, pasture,
+                (unsigned long long)profKey, seated, s_count,
+                seated == 0 ? "  <-- NO IDLE LABORER FOUND (all citizens already "
+                              "have a profession? BUILDER_AUTOPOOL takes them)" : "");
         fflush(stderr);
     }
 }
+
+static const int kFillRetry = 300;
 
 extern "C" void PastureFillHarness_Tick(int frameNum) {
     PastureTendHarness_Tick(frameNum);
@@ -117,11 +138,16 @@ extern "C" void PastureFillHarness_Tick(int frameNum) {
         else {
             int v = std::atoi(e);
             s_fillFrame = (v > 1) ? v : 900;
-            fprintf(stderr, "[PastureFill] armed: will fill pastures at frame %d\n",
-                    s_fillFrame);
+            fprintf(stderr, "[PastureFill] armed: fill pastures from frame %d, re-run "
+                    "every %d frames (retail body only touches TYPED pastures and stops "
+                    "at capacity, so this is self-limiting)\n", s_fillFrame, kFillRetry);
         }
     }
-    if (s_fillFrame < 0 || frameNum != s_fillFrame) return;
+    // Same manual-play problem as the herder stand-in: a one-shot at frame 900 runs before
+    // the player has picked a livestock type, and the retail fill body skips untyped
+    // pastures — so nothing ever arrives. Repeat instead; it is bounded by pasture capacity.
+    if (s_fillFrame < 0 || frameNum < s_fillFrame ||
+        ((frameNum - s_fillFrame) % kFillRetry) != 0) return;
 
     typedef int (*fn_FillAllPastures_t)();
     uintptr_t addr = ResolveAddr(Module::Exe, 0x140060290);
