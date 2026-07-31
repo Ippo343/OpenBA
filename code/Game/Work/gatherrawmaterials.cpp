@@ -760,7 +760,16 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 }
 
                 if (found == 0) {
-                    GRM_TRACEF("slot[%d] BAIL: no target pos (found==0, posDesc=%p)\n", slotIdx, posDesc);
+                    // CalcBestTargetPos (0x140122be0) walks posDesc+0x38: {ptr, count} of
+                    // local-space access offsets, and returns false when the count is 0 or
+                    // every offset fails the 0xe1f walkability probe. The child loop above
+                    // is the multi-part fallback (posComp+0x28/+0x30). Log both counts so a
+                    // "site is unreachable" bail is distinguishable from "site has no
+                    // access points at all".
+                    GRM_TRACEF("slot[%d] BAIL: no target pos (found==0, posDesc=%p "
+                               "accessPts=%d children=%d)\n", slotIdx, posDesc,
+                               posDesc ? *(int*)((uintptr_t)posDesc + 0x40) : -1,
+                               *(int*)((uintptr_t)posCompIBP + 0x30));
                     return 1;
                 }
 

@@ -357,8 +357,11 @@ void InteractComponent_InitFuncs() {
 // With the list empty, GatherRawMaterials bailed "no target pos (found==0)" on every tick
 // and no material was ever hauled to a bridge.
 //
-// Opt-in for now (this changes every entity that owns a MultiObjectComponent, not just
-// bridges): BANISHED_LIVE_INTERACT_ONADD=1.
+// Graduated default-on 2026-07-30 (kDefaultOnFlags; BANISHED_LIVE_INTERACT_ONADD=0 is the
+// kill-switch). The same gap blocks a fenced PASTURE master, whose description carries zero
+// access points of its own (measured accessPts=0), so every haul bailed "no target pos" and
+// the site never took a single log. With the slot live the master rebuilds children=1 from
+// its 29 MultiObject entries, delivers 56/56, and builds to completion.
 static uint32_t InteractComponent_InertGetTypeId(void*) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("InteractComponent");
@@ -369,9 +372,16 @@ static void InteractComponent_OnAddedVSlot(void* self) {
     InteractComponent_Draw(reinterpret_cast<InteractComponent*>(self));
 }
 static void InteractComponent_FinishVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_INTERACT_ONADD"))
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_INTERACT_ONADD")) {
         InteractComponent_InertVtable[6] =
             reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);
+        static bool once = false;
+        if (!once && IC_Trace()) {
+            once = true;
+            std::fprintf(stderr, "[Interact] slot6 OnAdded installed (vtable=%p)\n",
+                         (void*)InteractComponent_InertVtable);
+        }
+    }
 }
 extern "C" void* InteractComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x81,

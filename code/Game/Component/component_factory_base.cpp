@@ -353,6 +353,25 @@ static const char* const kDefaultOnFlags[] = {
     // is inert without the demo rig; organic births still need the herder
     // chain (PastureComponent_Slot14 cmd 2 -> PastureWork), tracked as an open.
     "BANISHED_LIVE_PASTURE",
+    // InteractComponent vtable slot 6 (+0x30, OnAdded -> retail 0x140123110), which
+    // rebuilds the owner's interact use-location list (+0x28 array / +0x30 count) from its
+    // MultiObjectComponent children. Graduated 2026-07-30: this is what lets a MULTI-PART
+    // construction site receive materials at all.
+    //
+    // GatherRawMaterials' target-position step is CalcBestTargetPos (0x140122be0) over
+    // InteractDescription+0x38 {ptr,count}, then CalcChildTargetPos (0x140122b00) recursing
+    // over that child list. A fenced pasture master's own description carries ZERO access
+    // points (measured: accessPts=0) — its shape is computed by the tool, not declared in
+    // Pasture.rsc — so with the list empty every haul bailed "no target pos (found==0)"
+    // forever and the site sat at 0 materials indefinitely. Same for a bridge master, whose
+    // own footprint is all water.
+    // Measured with it on: the pasture master rebuilds children=1 from 29 MultiObject
+    // entries, 0 gather bails (was 722 in the control run), 56/56 logs delivered, both
+    // sites reach state 8 and take real per-mesh build labor to completion, 0-byte crash
+    // log. It also corrects a mis-attribution: a footprint containing 23 trees built fine
+    // with the clear chain OFF, so "a tool-placed site over naturals never builds" was
+    // never about clearing — it was this.
+    "BANISHED_LIVE_INTERACT_ONADD",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

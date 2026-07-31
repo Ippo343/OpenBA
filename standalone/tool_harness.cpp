@@ -481,7 +481,10 @@ void FirePastureTool(void* entityUI) {
                         if (!cellClear(row + dy, col + dx)) clear = false;
                         else if (cellHasNatural(row + dy, col + dx)) ++naturals;
                     }
-                if (clear && (!wantNaturals || naturals >= 3)) {
+                // cellClear only tests cell+0x00/+0x28/terrain — trees and rocks sit in the
+                // cell+8 occupant slot, so without this the "clear block" scan happily picks
+                // a rect with 20+ naturals in it and the two investigations get conflated.
+                if (clear && (wantNaturals ? naturals >= 3 : naturals == 0)) {
                     startCell = gridSize * row + col;
                     endCell   = gridSize * (row + kSide - 1) + col + kSide - 1;
                     printf("[ToolHarness][pasture] rect: (%d,%d)-(%d,%d) naturals=%d\n",
