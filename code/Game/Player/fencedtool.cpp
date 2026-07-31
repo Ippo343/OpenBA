@@ -141,11 +141,16 @@ static inline void* GetKeyMap() {
 // Rotation value stored at rotationSetting(+0x50)->+0x10.
 // Always returns 1 (event consumed).
 // Original: 0x1400dcbe0
+// DragTool::OnKey is our own port (dragtool.cpp) — call it by symbol, exactly
+// like BridgeTool/RoadTool wire it into their vtables. The old call went
+// through fn_DragTool_OnKey = ResolveAddr(0x1400fc6b0), which was never
+// registered, so the base drag NEVER ran: mouse-down couldn't set dragState
+// and the preview stayed a single cursor-cell box (found 2026-07-30 manual test).
+#include "Player/dragtool.h"
+
 uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     // Call base DragTool::OnKey
-    if (fn_DragTool_OnKey) {
-        fn_DragTool_OnKey(self, key);
-    }
+    DragTool_OnKey(reinterpret_cast<DragTool*>(self), key);
 
     void* keyMap = GetKeyMap();
 
@@ -158,6 +163,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
             fn_InternalBasePtr_CheckPtr(rotSettingIBP);
         }
         uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
+        if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
         *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) - 1;
 
         if (fn_InternalBasePtr_CheckPtr) {
@@ -180,6 +186,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
                 fn_InternalBasePtr_CheckPtr(rotSettingIBP);
             }
             uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
+            if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
             *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) + 1;
 
             if (fn_InternalBasePtr_CheckPtr) {
@@ -1055,8 +1062,22 @@ static void* g_FencedTool_Vtable[15] = {
 extern "C" void RegisterFencedToolVtable() {
     RegisterExeAddr(0x1401605d0, (uintptr_t)g_FencedTool_Vtable);
 }
-extern "C" void* FencedTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x70, g_FencedTool_Vtable, 1);}
+// ⚠ sceneObjectId sentinel: the retail ctor (0x1400dd070) sets +0x58 = -1
+// ("preview mesh not in scene"). Tool_InitInPlace zero-fills, and 0 is a VALID
+// Graphics::Scene object id — the first registered object (the start-town
+// storage barn). With the 0, Serialize_Impl's remove path called
+// Scene::RemoveObject(scene, 0): the barn's mesh vanished and a later
+// RemoveObject spun forever (in-world freeze, gdb-sampled 2026-07-30). Same
+// family as the inert-component sentinel lesson: zero-fill turns -1 sentinels
+// into live-looking values.
+extern "C" void* FencedTool_CreateInPlace_SA(void* mem) {
+    void* p = Tool_InitInPlace(mem, 0x70, g_FencedTool_Vtable, 1);
+    if (p) reinterpret_cast<FencedTool*>(p)->sceneObjectId = -1;
+    return p;
+}
 extern "C" void* FencedTool_Factory_SA(void) {
-    return Tool_Alloc(0x70, g_FencedTool_Vtable, 1);
+    void* p = Tool_Alloc(0x70, g_FencedTool_Vtable, 1);
+    if (p) reinterpret_cast<FencedTool*>(p)->sceneObjectId = -1;
+    return p;
 }
 REGISTER_TYPE(FencedTool, "DragTool", &FencedTool_Factory_SA, &FencedTool_CreateInPlace_SA);
