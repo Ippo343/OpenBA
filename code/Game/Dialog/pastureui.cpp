@@ -195,6 +195,10 @@ void PastureUI_Slot7(PastureUI* self) {
     uint8_t compBuf[16];
     fn_FindComponent_Pasture(*(void**)entityBuf, compBuf);
     uintptr_t comp = *(uintptr_t*)compBuf;
+    // SA guard (retail unguarded): entity without a PastureComponent, or the
+    // combo/slider elements not seated yet (Slot4 hasn't run) — bail.
+    if (!comp) return;
+    if (!*(void**)(s + 0x30) || !*(void**)(s + 0x38)) return;
 
     // Enable combo only if it has items AND pasture has no animals yet
     void* comboElem = *(void**)(s + 0x30);
@@ -247,6 +251,7 @@ void PastureUI_Slot11(PastureUI* self, int64_t param2) {
     // Find PastureComponent on entity
     uint64_t pastureComp = 0;
     fn_FindComponent_Pasture((void*)entityBasePtr, &pastureComp);
+    if (!pastureComp) return;   // SA guard (retail unguarded)
 
     // If currently no resource set (comp+0x28 == 0) and new resource is valid,
     // set resource first then call initialization via vtable[14](comp, 2)
@@ -293,6 +298,7 @@ void* PastureUI_Slot12(PastureUI* self, void* param2) {
     // Find PastureComponent on entity
     uint64_t pastureComp = 0;
     fn_FindComponent_Pasture((void*)entityBasePtr, &pastureComp);
+    if (!pastureComp) { *(uint64_t*)param2 = 0; return param2; }  // SA guard
 
     // Return resource type at comp+0x28
     *(uint64_t*)param2 = *(uint64_t*)(pastureComp + 0x28);
@@ -352,3 +358,131 @@ int PastureUI_Slot13(PastureUI* self) {
     (void)self;
     return 2;
 }
+
+// ============================================================
+// STANDALONE promotion — real PastureUI controller vtable
+// ============================================================
+// PastureUI was a UI_DIALOG_STUB (all-no-op) so every port above was dead code
+// and the pasture panel's type combo / animal slider stayed empty — the
+// BANISHED_PASTURE_AUTOTYPE stand-in existed only because Slot11 was
+// unreachable. Promotion follows the StorageUI/ResidenceUI pattern (stub
+// registration removed from ui_dialog_stub_factories.cpp).
+//
+// Retail vtable @ 0x14015f610 (14 slots):
+//   idx4  (+0x20) 0x1400b5090 Slot4  — setup: base combo find/populate + slider
+//   idx7  (+0x38) 0x1400b4e50 Slot7  — per-frame: combo enable + slider text
+//   idx8  (+0x40) 0x140078d30        — SelectResourceUI::Slot8 (combo refresh;
+//                                      the slot the framework ticks per frame)
+//   idx9  (+0x48) 0x1400b4e20 Slot9  — events: combo 0x14/500, slider 0x17/501
+//   idx11 (+0x58) 0x1400b4c40 Slot11 — SetLivestockType (drives Pasture Slot14 cmd 2)
+//   idx12 (+0x60) 0x1400b4d00 Slot12 — get current type
+//   idx13 (+0x68) 0x1400b4cf0 Slot13 — category filter = 2 (livestock)
+#include "Object/factory_registration.h"
+#include <cstdlib>
+#include <cstdio>
+
+namespace pastureui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PastureUI");
+    return c;
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+static void Trace(const char* what, void* self) {
+    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
+    fprintf(stderr, "[PastureUI] %s self=%p\n", what, self);
+    fflush(stderr);
+}
+
+// idx4 (+0x20): setup. Needs the DialogInstance (+0x18) the framework seats
+// before dispatch; the combo/slider finds are null-guarded in the port.
+void W_Slot4(void* self) {
+    if (!self || !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x18)) {
+        Trace("Slot4 SKIP (no DialogInstance)", self);
+        return;
+    }
+    Trace("Slot4", self);
+    PastureUI_Slot4(reinterpret_cast<PastureUI*>(self));
+}
+// idx7 (+0x38): per-frame slider text / combo enable (SA_DialogEntityAlive-guarded).
+void W_Slot7(void* self) {
+    if (!self) return;
+    PastureUI_Slot7(reinterpret_cast<PastureUI*>(self));
+}
+// idx8 (+0x40): the ONLY slot the framework dispatches per frame (see
+// eventlogui.cpp:343 — DialogInstance::OnUpdate hits +0x40 only), so this is a
+// composite like the other promotions: self-heal Slot4 once if the slider IBP
+// (+0x38) is still null (setup missed), run the base combo refresh, then drive
+// Slot7 so the count text / combo-enable stay live (retail refreshes it via
+// layout invalidation we don't reproduce).
+void W_Slot8(void* self) {
+    if (!self) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    if (!SA_DialogEntityAlive(self)) return;
+    if (!*reinterpret_cast<void**>(s + 0x38)) {
+        W_Slot4(self);
+        if (!*reinterpret_cast<void**>(s + 0x38)) return;   // still no slider — dialog lacks it
+    }
+    if (*reinterpret_cast<void**>(s + 0x30))
+        SelectResourceUI_Slot8(self);
+    PastureUI_Slot7(reinterpret_cast<PastureUI*>(self));
+}
+// idx9 (+0x48): element events.
+void W_Slot9(void* self, void* p2, int p3, int p4) {
+    if (!self) return;
+    Trace("Slot9(event)", self);
+    PastureUI_Slot9(reinterpret_cast<PastureUI*>(self), p2, p3, p4);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
+        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4]  = reinterpret_cast<void*>(&W_Slot4);
+        g_vt[7]  = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8]  = reinterpret_cast<void*>(&W_Slot8);
+        g_vt[9]  = reinterpret_cast<void*>(&W_Slot9);
+        g_vt[11] = reinterpret_cast<void*>(&PastureUI_Slot11);
+        g_vt[12] = reinterpret_cast<void*>(&PastureUI_Slot12);
+        g_vt[13] = reinterpret_cast<void*>(&PastureUI_Slot13);
+    }
+} g_init;
+
+// PastureUI object size 0x40 (header comment; +0x30 combo IBP, +0x38 slider IBP).
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace pastureui_sa
+
+REGISTER_TYPE(PastureUI, "SelectResourceUI",
+              &pastureui_sa::Factory, &pastureui_sa::InPlace);

@@ -42,6 +42,20 @@
 static uint32_t g_tid_CreatePlacedDescription = 0;  // 0x1401c7468
 static uint32_t g_tid_ModelComponent          = 0;  // 0x1401c7a50
 static uint32_t g_tid_ModelDescription        = 0;  // 0x1401c7a88
+// FencedTool (pasture/crop-field) Startup constants — engine_funcs.cpp reads all
+// three via ResolveAddr; unregistered they stayed null, FencedTool_Startup found
+// no CreateFencedDescription, and the first fenced activation crashed on the
+// null-desc +0x28 read (Startup_Impl+0xc4, 2026-07-30). NOTE the fencedtool.cpp /
+// FencedTool.h labels "SizeDescription"(0x1401c7468) / "FenceDescription"
+// (0x1401c7a88) are MISNOMERS for CreatePlacedDescription / ModelDescription —
+// both already seeded above.
+static uint32_t g_tid_CreateFencedDescription = 0;  // 0x1401c4100
+static uint32_t g_tid_AreaDescription         = 0;  // 0x1401c7a18
+static uint32_t g_tid_RotationSetting         = 0;  // 0x1401c63c8
+// SelectResourceUI combo populate (selectresourceui.cpp IterateResources)
+// derefs *g_TypeId_SelectDescription — null until seeded (PastureUI promotion
+// crash 2026-07-30, IterateResources+0x107).
+static uint32_t g_tid_SelectDescription       = 0;  // 0x1401c48a8
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
 extern "C" void FillPipelineTypeIds() {
@@ -49,6 +63,10 @@ extern "C" void FillPipelineTypeIds() {
     g_tid_CreatePlacedDescription = ::Object::GetTypeIdByName("CreatePlacedDescription");
     g_tid_ModelComponent          = ::Object::GetTypeIdByName("ModelComponent");
     g_tid_ModelDescription        = ::Object::GetTypeIdByName("ModelDescription");
+    g_tid_CreateFencedDescription = ::Object::GetTypeIdByName("CreateFencedDescription");
+    g_tid_AreaDescription         = ::Object::GetTypeIdByName("AreaDescription");
+    g_tid_RotationSetting         = ::Object::GetTypeIdByName("RotationSetting");
+    g_tid_SelectDescription       = ::Object::GetTypeIdByName("SelectDescription");
 }
 
 void RegisterPipelineTypeIds() {
@@ -61,6 +79,10 @@ void RegisterPipelineTypeIds() {
     RegisterExeAddr(0x1401c7468, reinterpret_cast<uintptr_t>(&g_tid_CreatePlacedDescription));
     RegisterExeAddr(0x1401c7a50, reinterpret_cast<uintptr_t>(&g_tid_ModelComponent));
     RegisterExeAddr(0x1401c7a88, reinterpret_cast<uintptr_t>(&g_tid_ModelDescription));
+    RegisterExeAddr(0x1401c4100, reinterpret_cast<uintptr_t>(&g_tid_CreateFencedDescription));
+    RegisterExeAddr(0x1401c7a18, reinterpret_cast<uintptr_t>(&g_tid_AreaDescription));
+    RegisterExeAddr(0x1401c63c8, reinterpret_cast<uintptr_t>(&g_tid_RotationSetting));
+    RegisterExeAddr(0x1401c48a8, reinterpret_cast<uintptr_t>(&g_tid_SelectDescription));
     // 0x1401c79e0 (MapComponent) intentionally omitted — already registered by
     // RegisterEconomyTypeIds() (reg_economy_typeids.cpp).
 }

@@ -927,3 +927,29 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
         std::fflush(stderr);
     }
 }
+
+// ============================================================
+// 0x14009f770 — map-grid cell owner-ref stamp (shared leaf).
+// ------------------------------------------------------------
+// Writes an 8-byte ref (the owning entity/template value the caller passes)
+// into cell+0x10 for every cell of the (x,y,w,h) footprint rect. Cell array at
+// mapGrid+0x80, stride 0x30. Retail callers: the pasture state-2 per-frame
+// (sub_67e0 — stamps the pasture's cells so pathing/occupancy queries see it)
+// and HarvestOrchard_impl_0800. Was resolved by s_StampCells above but never
+// registered — the null guard made footprint stamping a silent no-op until
+// 2026-07-30 (deferred item from the animal wave's Update 2).
+// ============================================================
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
+                                                void* ref) {
+    if (!grid || w <= 0) return 0;
+    const int dim = *reinterpret_cast<int*>(grid);
+    uintptr_t cells = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+    if (!cells) return 0;
+    for (int64_t dx = 0; dx < w; ++dx) {
+        for (int64_t dy = 0; dy < h; ++dy) {
+            const int64_t cell = (dy + y) * dim + x + dx;
+            *reinterpret_cast<void**>(cells + 0x10 + cell * 0x30) = ref;
+        }
+    }
+    return 0;
+}

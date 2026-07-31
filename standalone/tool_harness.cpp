@@ -407,6 +407,97 @@ void FireRoadTool(void* entityUI) {
     printf("[ToolHarness][road] sequence complete.\n");
 }
 
+// ---------------------------------------------------------------------------
+// FencedTool (pasture) — activate via the tool-mode tree exactly like a toolbar
+// pasture click (SetEditMode with Template\Pasture.rsc), then drive the drag
+// slots over a scanned-clear rect: slot 14 (CalcCost, rect validation) and
+// slot 13 (CalcPath, the ported commit that creates master + shelter + fence).
+// Env: BANISHED_TOOL_HARNESS=pasture. Pasture.rsc _minWidth/_minHeight = 7.
+// ---------------------------------------------------------------------------
+void FirePastureTool(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness] ERROR: entityUI null\n"); return; }
+
+    const char* kTemplate = "Template\\Pasture.rsc";
+    printf("[ToolHarness][pasture] resolving template \"%s\"...\n", kTemplate);
+    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    printf("[ToolHarness][pasture]   -> %p\n", tmpl);
+    if (!tmpl) { printf("[ToolHarness][pasture] ERROR: template resolve failed\n"); return; }
+
+    printf("[ToolHarness][pasture] SetEditMode — activating FencedTool via the tree...\n");
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    printf("[ToolHarness][pasture] after SetEditMode: activeTool=%p\n", tool);
+    if (!tool) {
+        printf("[ToolHarness][pasture] activation FAILED — check the [Tools] fenced node line.\n");
+        return;
+    }
+    uint8_t* t = static_cast<uint8_t*>(tool);
+    printf("[ToolHarness][pasture]   vtable=%p fencedDesc(+0x38)=%p areaDesc(+0x40)=%p "
+           "fenceDesc(+0x48)=%p\n",
+           *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x38),
+           *reinterpret_cast<void**>(t + 0x40), *reinterpret_cast<void**>(t + 0x48));
+
+    // Scan outward from the valley centre for a clear 8x8 block (min size is 7).
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
+    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
+                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    if (!terrain) { printf("[ToolHarness][pasture] ERROR: no terrain array\n"); return; }
+    const int gridSize = *mapGrid;
+    auto cellClear = [&](int row, int col) -> bool {
+        if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
+        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
+        if (*reinterpret_cast<uint64_t*>(c) != 0) return false;              // entity in cell
+        if (*reinterpret_cast<uint8_t*>(c + 0x28) != 0) return false;        // occupied flag
+        uint32_t flag = 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+        return (flag & 0x5e0) == 0;                                          // buildable terrain
+    };
+
+    const int kSide = 8;
+    int startCell = -1, endCell = -1;
+    for (int r = 0; r < 60 && startCell < 0; ++r) {
+        for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
+            int row = 124 + (sign ? -r : r);
+            for (int col = 90; col + kSide < 170; ++col) {
+                bool clear = true;
+                for (int dy = 0; dy < kSide && clear; ++dy)
+                    for (int dx = 0; dx < kSide && clear; ++dx)
+                        if (!cellClear(row + dy, col + dx)) clear = false;
+                if (clear) {
+                    startCell = gridSize * row + col;
+                    endCell   = gridSize * (row + kSide - 1) + col + kSide - 1;
+                    printf("[ToolHarness][pasture] rect: (%d,%d)-(%d,%d)\n",
+                           col, row, col + kSide - 1, row + kSide - 1);
+                    break;
+                }
+            }
+        }
+    }
+    if (startCell < 0) {
+        printf("[ToolHarness][pasture] ERROR: no clear %dx%d block found\n", kSide, kSide);
+        return;
+    }
+    *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
+    *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+
+    void** vt = *reinterpret_cast<void***>(tool);
+    {
+        typedef int (*CalcCost_t)(void*, int, int, uint32_t*, int*, int*, int*);
+        uint32_t outW = 0; int rectW = 0, rectH = 0, segs = 0;
+        int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell, &outW, &rectW, &rectH, &segs);
+        printf("[ToolHarness][pasture] CalcCost -> rc=%d (0=ok,1=small,2=big,3=blocked) "
+               "w=%d h=%d perimeter=%d\n", rc, rectW, rectH, segs);
+    }
+    {
+        typedef uint64_t (*CalcPath_t)(void*, int64_t, int64_t);
+        uint64_t placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
+        printf("[ToolHarness][pasture] CalcPath (commit) -> %d (1=pasture placed)\n",
+               (int)(placed & 0xff));
+    }
+    printf("[ToolHarness][pasture] sequence complete.\n");
+}
+
 // GUI_PLAN Keystone F, Phase 3B: activate the PlacementTool via the real
 // SetEditMode path (as "click" does), then drive the ghost-PREVIEW pipeline for a
 // fixed map cell. Serialize's preview normally follows the OS cursor (sub_da00),
@@ -926,6 +1017,96 @@ void FireHousePanel(void* entityUI) {
     printf("[HousePanel] OPEN house[%d]=%p dialog=%p — panel stays open; Slot7 now "
            "repopulates rows every frame while the death harness drains the roster\n",
            pickedIdx, house, dialog);
+}
+
+// ============================================================
+// Pasture-panel-open ("pasturepanel") — open the FIRST world pasture's info
+// dialog via EditTool select, exactly like clicking it. Exercises the promoted
+// PastureUI controller (pastureui.cpp): livestock-type combo populate (Slot4 →
+// SelectResourceUI base over the AgriSeed +0x120 list), per-frame slider text
+// (Slot7/8), and — combined with BANISHED_PASTUREPANEL_SELECT=<idx> — the
+// combo-select event path (Slot9 → Slot11 SetLivestockType → PastureComponent
+// Slot14 cmd 2), which retires BANISHED_PASTURE_AUTOTYPE for testing.
+// Needs a pasture: either BANISHED_BUILD_DEMO_PASTURE or TOOL_HARNESS=pasture's
+// own commit in an earlier run (mutually exclusive with this mode).
+// ============================================================
+void FirePasturePanel(void* entityUI) {
+    if (!entityUI) { printf("[PasturePanel] ERROR: entityUI null\n"); return; }
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) { printf("[PasturePanel] EditTool activation FAILED\n"); return; }
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!gs) { printf("[PasturePanel] no entity-list singleton\n"); return; }
+    int n = *reinterpret_cast<int*>(gs + 0x98);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    if (n <= 0 || !list) {
+        printf("[PasturePanel] no pastures in world list (n=%d) — set "
+               "BANISHED_BUILD_DEMO_PASTURE\n", n);
+        return;
+    }
+    void* pastureComp = *reinterpret_cast<void**>(list);
+    uint64_t entRef = pastureComp
+        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x10) : 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
+    if (!entRef) { printf("[PasturePanel] pasture[0] has no entity backref\n"); return; }
+
+    int opened = EditTool_HarnessSelectEntity(tool, reinterpret_cast<void*>(entRef));
+    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    printf("[PasturePanel] select pasture ent=%p -> opened=%d dialog=%p "
+           "(comp=%p type(+0x28)=%p count(+0x38)=%d max(+0x40)=%d)\n",
+           reinterpret_cast<void*>(entRef), opened, dialog, pastureComp,
+           *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pastureComp) + 0x28),
+           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x38),
+           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x40));
+
+    // BANISHED_PASTUREPANEL_SELECT=<item> — simulate the player picking a
+    // livestock type from the combo: exactly the event DialogInstance routes on
+    // a combo change (msg 0x14, element id 500) into PastureUI slot 9, which
+    // reads the combo's current item and dispatches Slot11 (SetLivestockType).
+    // This is the REAL UI path end-to-end; it retires AUTOTYPE for testing.
+    const char* selEnv = std::getenv("BANISHED_PASTUREPANEL_SELECT");
+    if (selEnv && *selEnv && dialog) {
+        int wantItem = std::atoi(selEnv);
+        uint32_t tidPUI = ::Object::GetTypeIdByName("PastureUI");
+        void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
+        int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+        void* pui = nullptr;
+        for (int i = 0; ctrlArr && i < cnt; i++) {
+            void* c = ctrlArr[i];
+            if (!c) continue;
+            void** vt = *reinterpret_cast<void***>(c);
+            typedef uint32_t (*G)(void*);
+            if (vt && vt[2] && reinterpret_cast<G>(vt[2])(c) == tidPUI) { pui = c; break; }
+        }
+        if (!pui) {
+            printf("[PasturePanel] SELECT: no PastureUI controller among %d "
+                   "controllers (tid=%u)\n", cnt, tidPUI);
+        } else {
+            void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pui) + 0x30);
+            int items = (combo && fn_ComboElement_GetItemCount)
+                            ? fn_ComboElement_GetItemCount(combo) : -1;
+            printf("[PasturePanel] SELECT: PastureUI=%p combo=%p items=%d want=%d\n",
+                   pui, combo, items, wantItem);
+            if (combo && items > 0) {
+                if (wantItem >= items) wantItem = items - 1;
+                fn_ComboElement_SetCurrentItem(combo, wantItem);
+                void** vt = *reinterpret_cast<void***>(pui);
+                typedef void (*Slot9_t)(void*, void*, int, int);
+                reinterpret_cast<Slot9_t>(vt[9])(pui, combo, 0x14, 500);
+                printf("[PasturePanel] SELECT fired: item=%d -> pasture type(+0x28)=%p "
+                       "max(+0x40)=%d\n", wantItem,
+                       *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pastureComp) + 0x28),
+                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x40));
+            }
+        }
+    }
 }
 
 // Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
@@ -2010,6 +2191,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FireRoadTool(entityUI);
     } else if (std::strcmp(s_toolName, "bridge") == 0) {
         FireBridgeTool(entityUI);
+    } else if (std::strcmp(s_toolName, "pasture") == 0) {
+        FirePastureTool(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "select") == 0) {
@@ -2028,6 +2211,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePinPanel(entityUI);
     } else if (std::strcmp(s_toolName, "housepanel") == 0) {
         FireHousePanel(entityUI);
+    } else if (std::strcmp(s_toolName, "pasturepanel") == 0) {
+        FirePasturePanel(entityUI);
     } else if (std::strcmp(s_toolName, "clearfootprint") == 0) {
         s_mr_fireFrame = frameNum;
         FireClearFootprint();

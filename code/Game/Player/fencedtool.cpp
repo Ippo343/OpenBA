@@ -315,8 +315,12 @@ typedef uint64_t (*fn_FencedTool_AnchorCalc_t)(void* self, uint32_t* p2, uint32_
                                                  float* p6, uint32_t* p7);
 static fn_FencedTool_AnchorCalc_t s_fn_FencedTool_AnchorCalc = nullptr;
 
-// Math::Scalar::Abs
-typedef float* (*fn_ScalarAbs_t)(float* val);
+// Math::Scalar::Abs — `?Abs@Scalar@Math@@QEBA?AV12@XZ` returns Scalar BY VALUE:
+// member ABI is (RCX=this, RDX=&retSlot) -> returns RDX. The old one-arg typedef
+// left the callee writing its result through a garbage RDX (the classic hidden
+// ret-slot clobber; it faulted WRITE-on-own-code the first time the height
+// branch ran, CalcCost_Impl+0x570 2026-07-30).
+typedef float* (*fn_ScalarAbs_t)(const float* self, float* retSlot);
 static fn_ScalarAbs_t s_fn_ScalarAbs = nullptr;
 
 // Math::Vector3::Vector3(out, x, y, z)
@@ -451,7 +455,8 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
 
                 if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
                 float heightDiff = outPos[2] - baseHeight;
-                float* absResult = s_fn_ScalarAbs(&heightDiff);
+                float absSlot = 0.0f;
+                float* absResult = s_fn_ScalarAbs(&heightDiff, &absSlot);
                 if (absResult && HEIGHT_TOLERANCE < *absResult) { allValid = false; break; }
             }
         }
@@ -735,7 +740,8 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
                         s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
 
                         float heightDiff = outPos[2] - 0.0f;
-                        float* absResult = s_fn_ScalarAbs(&heightDiff);
+                        float absSlot = 0.0f;
+                        float* absResult = s_fn_ScalarAbs(&heightDiff, &absSlot);
                         if (absResult && *absResult <= HEIGHT_TOL) {
                             valid = true;
                         }
@@ -866,6 +872,16 @@ void FencedTool_Startup_Impl(FencedTool* self) {
         fencedDesc = FencedFindComponent(entity, *g_TypeId_CreateFencedDescription);
     }
     self->fencedDesc = fencedDesc;
+    // SA guard (retail would fault): without the CreateFencedDescription every
+    // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
+    // storage is unseeded (reg_pipeline_typeids.cpp) or the template lacks a
+    // createfenced block. Trace loudly — a silent bail here cost a crash-debug.
+    if (!fencedDesc) {
+        fprintf(stderr, "[FencedTool] Startup: no CreateFencedDescription on entity=%p "
+                "(tid ptr=%p) — tool left un-wired\n", (void*)entity,
+                (void*)g_TypeId_CreateFencedDescription);
+        return;
+    }
 
     // 2. Find AreaDescription on self->entity (+0x20)
     entity = *(uintptr_t*)(selfAddr + 0x20);
@@ -976,23 +992,18 @@ void FencedTool_Startup_Impl(FencedTool* self) {
 //   - FencedTool_Slot13_sub_bc80: place corner fence posts (4 calls)
 //   - FencedTool_Slot13_sub_b8c0: place side fence segments (4 calls)
 //
-// Full reimplementation is blocked until these helpers are typed and resolved.
-// Delegates to the original exe function via a resolved function pointer.
+// PORTED 2026-07-30: full reimplementation in fencedtool_calcpath.cpp (master
+// entity + shelter + corner/edge/gate fence pieces via MultiObject). The old
+// body here delegated to ResolveAddr(0x1400dae00) which was never registered,
+// so committing a fenced drag was a silent no-op.
 //
 // Original: 0x1400dae00
-typedef uint64_t (*fn_FencedTool_CalcPath_t)(void* self, uint64_t startCell, uint64_t endCell);
-static fn_FencedTool_CalcPath_t s_fn_FencedTool_CalcPath = nullptr;
+extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell,
+                                             int64_t endCell);
 
 uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t endCell) {
-    if (!s_fn_FencedTool_CalcPath) {
-        s_fn_FencedTool_CalcPath = reinterpret_cast<fn_FencedTool_CalcPath_t>(
-            ResolveAddr(Module::Exe, FencedToolAddr::CalcPath));
-    }
-    if (!s_fn_FencedTool_CalcPath) {
-        printf("[FencedTool] ERROR: CalcPath function pointer is NULL\n");
-        return 0;
-    }
-    return s_fn_FencedTool_CalcPath(self, startCell, endCell);
+    return FencedTool_CalcPath_Port(self, static_cast<int64_t>(startCell),
+                                    static_cast<int64_t>(endCell));
 }
 
 // ============================================================
@@ -1008,6 +1019,22 @@ static uint32_t FencedTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("FencedTool");
     return c;
 }
+// +0x58 (Slot11) GetToolSettingTypeId — retail 0x140026920 writes
+// TypeInfo_RotationSetting through the out param (FencedTool HAS a tool
+// setting: the rotation the shelter edge follows). SetEditMode DEREFERENCES
+// the returned pointer (the BridgeTool slot-11 lesson — a Tool_Ret0 stub here
+// faulted the instant the fenced node activated, EntityUI_SetEditMode+0x2e0).
+// The .rdata type-id global is null in standalone, so resolve by name; the
+// non-zero id also makes SetEditMode build the RotationSetting that
+// FencedTool_Startup wires to +0x50 — dbf90's rotation source.
+static uint32_t* FencedTool_GetSettingType(void*, uint32_t* ret) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("RotationSetting");
+    if (ret) *ret = c;
+    return ret;
+}
+// +0x60 (Slot12) cursor id — retail 0x1400fc9d0 `return 5` (shared with Road/Bridge).
+static int FencedTool_Slot12(void*) { return 5; }
 static void* g_FencedTool_Vtable[15] = {
     (void*)&FencedTool_Dtor,          // +0x00 Dtor
     (void*)&Tool_Slot1,               // +0x08
@@ -1019,9 +1046,9 @@ static void* g_FencedTool_Vtable[15] = {
     (void*)&FencedTool_Serialize_Impl,// +0x38 Serialize (preview mesh)
     (void*)&FencedTool_Draw_Impl,     // +0x40 Draw
     (void*)&FencedTool_Shutdown,      // +0x48 Shutdown
-    (void*)&Tool_Ret0,                // +0x50
-    (void*)&Tool_Ret0,                // +0x58
-    (void*)&Tool_Ret0,                // +0x60
+    (void*)&Tool_Ret0,                // +0x50 retail 0x1400268a0 = shared `return 0`
+    (void*)&FencedTool_GetSettingType,// +0x58 Slot11 GetToolSettingTypeId (RotationSetting)
+    (void*)&FencedTool_Slot12,        // +0x60 cursor id (retail returns 5)
     (void*)&FencedTool_CalcPath_Impl, // +0x68 CalcPath
     (void*)&FencedTool_CalcCost_Impl, // +0x70 CalcCost
 };

@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -235,6 +236,20 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
             int64_t ibpArg = selfIbp;
             *reinterpret_cast<int32_t*>(p + 0x40) =
                 static_cast<int32_t>(CharMgr_sub_83f0(reinterpret_cast<float*>(charMgr), &ibpArg));
+            // BANISHED_MOVETICK_TRACE: one line per char-index allocation. The owner
+            // entity ptr correlates with [Herd]/[Pasture] SPAWN traces to prove whether
+            // ANIMAL characters ever register (the [MoveTick] trace caps at 4 subjects
+            // and cannot answer that).
+            if (std::getenv("BANISHED_MOVETICK_TRACE")) {
+                fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
+                        *reinterpret_cast<int32_t*>(p + 0x40), (void*)self,
+                        (void*)owner, (void*)model);
+            }
+        }
+        else if (std::getenv("BANISHED_MOVETICK_TRACE")) {
+            fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
+                    (void*)self, (void*)owner, (void*)*reinterpret_cast<int64_t*>(p + 0x68),
+                    (void*)charMgr);
         }
     }
 }
@@ -265,8 +280,60 @@ static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* 
     CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);
 }
 
-COMPONENT_LIVE_FACTORY_S(CharacterComponent, 0x80, 0x8f,
-                         "BANISHED_LIVE_CHARACTER",
-                         CharacterComponent_UpdateAdapter, CharacterComponent_BodyInit)
+// Hand-rolled factory (macro variants only fill slots 4/6/9) — RETAIL SLOT WIRING.
+// Retail vtable 0x140162370:
+//   slot 8 (+0x40) = 0x1401094c0 move-tick — dispatched EVERY FRAME by the
+//                    EntityList update-TREE walk (component flag bit 2);
+//   slot 9 (+0x48) = 0x140109480 Update — dispatched at the THROTTLED 5-bucket
+//                    round-robin rate (component flag bit 3, processCount quotas).
+// The original port installed the move-tick at slot 9, so every character
+// integrated movement at the BUCKET rate: citizens at roughly half speed, and
+// Fifth-priority animals (quota 2/frame, ~120 animals) at ~1/60 speed —
+// visually frozen. Slot 8 full-rate dispatch is the fix (2026-07-30).
+// Slot 9's faithful body (CharacterComponent_Update -> action +0x30 tick) has
+// never executed in standalone; it installs under its own opt-in env var until
+// proven, keeping the default build's new behaviour limited to the slot move.
+static uint32_t CharacterComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("CharacterComponent");
+    return cached;
+}
+static void* CharacterComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void CharacterComponent_MoveTickVSlot(void* s, void* t) {
+    CharacterComponent_UpdateAdapter(reinterpret_cast<CharacterComponent*>(s),
+                                     reinterpret_cast<int64_t*>(t));
+}
+static void CharacterComponent_StartupVSlot(void* s) {
+    CharacterComponent_BodyInit(reinterpret_cast<CharacterComponent*>(s));
+}
+static void CharacterComponent_Update9VSlot(void* s, void* t) {
+    CharacterComponent_Update(reinterpret_cast<CharacterComponent*>(s),
+                              *reinterpret_cast<int64_t*>(t));
+}
+static void CharacterComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER")) {
+        CharacterComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&CharacterComponent_StartupVSlot);
+        CharacterComponent_LiveVtable[8] =
+            reinterpret_cast<void*>(&CharacterComponent_MoveTickVSlot);
+    }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_UPDATE9"))
+        CharacterComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&CharacterComponent_Update9VSlot);
+}
+extern "C" void* CharacterComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x80, 0x8f,
+        CharacterComponent_LiveVtable,
+        reinterpret_cast<void*>(&CharacterComponent_LiveGetTypeId));
+    CharacterComponent_FinishLiveVtable();
+    return p;
+}
+static void* CharacterComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x80, 0x8f,
+        CharacterComponent_LiveVtable,
+        reinterpret_cast<void*>(&CharacterComponent_LiveGetTypeId));
+    CharacterComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(CharacterComponent, "Component",
               &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);

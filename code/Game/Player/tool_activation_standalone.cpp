@@ -202,6 +202,19 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     fprintf(stderr, "[Tools]   bridge node: CreateBridge=%u -> BridgeTool=%u\n",
             tid_CreateBridge, tid_BridgeTool);
 
+    // FencedTool (pasture / crop-field fenced-area tool). Retail's EntityUI::Startup keys
+    // it on CreateFencedDescription (0x1401c4100). Pasture.rsc / CropField.rsc toolbar
+    // buttons carry that component, so without this node a pasture click dead-ended the
+    // same way road/bridge once did. FencedTool extends DragTool; slot 14 (CalcCost,
+    // ported) previews the rect, slot 13 (CalcPath, ported in fencedtool_calcpath.cpp)
+    // commits the master entity + shelter + fence pieces on drag-release.
+    uint32_t tid_CreateFenced = ::Object::ResolveTypeIdByNameLazy("CreateFencedDescription");
+    uint32_t tid_FencedTool   = ::Object::ResolveTypeIdByNameLazy("FencedTool");
+    if (tid_CreateFenced && tid_FencedTool)
+        Tree_Insert(tree, tid_CreateFenced, tid_FencedTool);
+    fprintf(stderr, "[Tools]   fenced node: CreateFenced=%u -> FencedTool=%u\n",
+            tid_CreateFenced, tid_FencedTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
             "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
             "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} "

@@ -789,7 +789,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 if (s_fnActStackPush) s_fnActStackPush(stack, &actionIBP);
                 At<int64_t>(self, 0x30) = 0;
 
-                if (s_traceMoveTo++ < kTraceCap) {
+                if (HerdTraceEnv() || s_traceMoveTo++ < kTraceCap) {
                     fprintf(stderr, "[AnimalUpd] MoveTo: self=%p dest=(%.2f, %.2f, %.2f) attempts=%d\n",
                             static_cast<void*>(self), dest[0], dest[1], dest[2], attempts);
                 }

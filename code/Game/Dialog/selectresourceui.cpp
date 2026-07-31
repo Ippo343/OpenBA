@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 
 // ============================================================
@@ -45,6 +46,21 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
     uintptr_t s = (uintptr_t)self;
     int count = 0;
     int selectedIdx = -1;
+
+    // Belt-and-braces: the .rdata type-id globals are null until seeded
+    // (reg_pipeline_typeids.cpp registers 0x1401c48a8); lazy-resolve by name so
+    // the combo populate never derefs a null pointer (StorageUI EnsureGlobals
+    // pattern).
+    static uint32_t s_sd = 0, s_ce = 0;
+    if (!g_TypeId_SelectDescription) {
+        s_sd = ::Object::ResolveTypeIdByNameLazy("SelectDescription");
+        if (s_sd) g_TypeId_SelectDescription = &s_sd;
+    }
+    if (!g_TypeId_ComponentEntity) {
+        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
+    }
+    if (!g_TypeId_SelectDescription || !g_TypeId_ComponentEntity) return 0;
 
     // Get resource type list from game world
     void* gameWorld = *g_pGameWorldSingleton;

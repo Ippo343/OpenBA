@@ -758,7 +758,9 @@ UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);
 // ---- SelectResourceUI subclasses (parent is the abstract SelectResourceUI) --
 UI_DIALOG_STUB(OrchardUI,           "SelectResourceUI",     0x48);
 UI_DIALOG_STUB(CropUI,              "SelectResourceUI",     0x60);
-UI_DIALOG_STUB(PastureUI,           "SelectResourceUI",     0x40);
+// ---- PastureUI: PROMOTED to real SA vtable (pastureui.cpp) — livestock-type
+//      combo + animal-count slider now live; retires BANISHED_PASTURE_AUTOTYPE
+//      as the only way to type a pasture. ----
 
 // ---- DialogInstance family --------------------------------------------------
 UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);

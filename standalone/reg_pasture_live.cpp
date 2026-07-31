@@ -49,6 +49,8 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg);
 extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);
 extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd);
 extern "C" void Pasture_Command(void* pasture, int cmd);
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
+                                                void* ref);
 
 void LivestockComponent_OnAdd(LivestockComponent* self);
 void LivestockComponent_OnRemove(LivestockComponent* self);
@@ -81,6 +83,9 @@ void RegisterPastureLive() {
     // start (WPC toggle + PastureWork post); retires the PASTURE_TEND stand-in.
     RegisterExeAddr(0x140127dd0, reinterpret_cast<uintptr_t>(&Pasture_CanCommand));
     RegisterExeAddr(0x140127a60, reinterpret_cast<uintptr_t>(&Pasture_Command));
+    // Map-cell footprint stamp (shared leaf; also called by HarvestOrchard_impl_0800).
+    // Un-no-ops the state-2 per-frame footprint stamp (deferred since the animal wave).
+    RegisterExeAddr(0x14009f770, reinterpret_cast<uintptr_t>(&MapGrid_StampCellRefs_9f770));
     // LivestockComponent finder (FUN_14002f1d0) — previously unregistered, which
     // silently skipped the spawn-path bind for every spawned/born livestock.
     RegisterExeAddr(0x14002f1d0, reinterpret_cast<uintptr_t>(&Pasture_FindLivestockComp));
