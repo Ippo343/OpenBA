@@ -454,6 +454,20 @@ void FirePastureTool(void* entityUI) {
         return (flag & 0x5e0) == 0;                                          // buildable terrain
     };
 
+    // BANISHED_PASTURE_OVER_NATURALS=1: pick a rect that CONTAINS trees/rocks
+    // (occupant slot cell+8 non-null on >=3 cells) — the manual-play repro where
+    // builders must footprint-clear the site before it can build. CalcCost still
+    // passes: naturals occupy cell+8, its occupancy check reads only cell+0x00.
+    const bool wantNaturals = [] {
+        const char* e = std::getenv("BANISHED_PASTURE_OVER_NATURALS");
+        return e && *e && *e != '0';
+    }();
+    auto cellHasNatural = [&](int row, int col) -> bool {
+        if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
+        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
+        return *reinterpret_cast<uint64_t*>(c + 8) != 0;
+    };
+
     const int kSide = 8;
     int startCell = -1, endCell = -1;
     for (int r = 0; r < 60 && startCell < 0; ++r) {
@@ -461,14 +475,17 @@ void FirePastureTool(void* entityUI) {
             int row = 124 + (sign ? -r : r);
             for (int col = 90; col + kSide < 170; ++col) {
                 bool clear = true;
+                int naturals = 0;
                 for (int dy = 0; dy < kSide && clear; ++dy)
-                    for (int dx = 0; dx < kSide && clear; ++dx)
+                    for (int dx = 0; dx < kSide && clear; ++dx) {
                         if (!cellClear(row + dy, col + dx)) clear = false;
-                if (clear) {
+                        else if (cellHasNatural(row + dy, col + dx)) ++naturals;
+                    }
+                if (clear && (!wantNaturals || naturals >= 3)) {
                     startCell = gridSize * row + col;
                     endCell   = gridSize * (row + kSide - 1) + col + kSide - 1;
-                    printf("[ToolHarness][pasture] rect: (%d,%d)-(%d,%d)\n",
-                           col, row, col + kSide - 1, row + kSide - 1);
+                    printf("[ToolHarness][pasture] rect: (%d,%d)-(%d,%d) naturals=%d\n",
+                           col, row, col + kSide - 1, row + kSide - 1, naturals);
                     break;
                 }
             }
