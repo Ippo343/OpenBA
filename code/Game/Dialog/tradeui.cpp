@@ -36,6 +36,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Runtime dispatch slot type ID reader — reads fresh from exe dispatch slot,
@@ -57,17 +58,44 @@ static uint32_t ReadDispatchTypeId(uintptr_t ghidraSlotAddr) {
 #define SLOT_SPINNER_ELEM  0x1401516c8  // SpinnerElement
 #define SLOT_TOOLBAR_ELEM  0x1401516a8  // ToolbarElement
 
-// SliderElement::SetMinMax — resolved from dispatch slot 0x140151cf8 at runtime.
-// SliderElement has NO exported SetMinMax; the engine fills this dispatch slot.
-// SpinnerElement::SetMinMax crashes on SliderElements (+0xa0 is NULL).
-// NumberEditElement::SetMinMax hangs on SliderElements (+0xC8 isn't a string).
+// Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
+// 0x140151cf8 (RefreshSellTable 0x1400841df, RefreshBuyTable 0x140083629,
+// RefreshDisplay 0x140084be8 — one shared slot for all three tables).
+//
+// That slot's name string (slot -> RVA 0x1bb5d0 -> C string) is literally
+//   "?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z"
+// and Runtime-x64.dll exports it as ordinal 3918. So the slot IS
+// fn_SpinnerElement_SetMinMax; the "SliderElement" naming here is the same mislabel
+// reg_element_typeids.cpp:36 documents (0x140151cf0 is UI::SpinnerElement, and the
+// real SliderElement slot is 0x1401516d0, which nothing in the trade panel touches).
+//
+// The slot is NOT in the address registry — nothing anywhere registers 0x140151cf8 —
+// so ResolveAddr returned 0 and this helper silently did nothing on every call. That
+// left every sell/buy spinner at its .rsc min/max, so a typed quantity was clamped
+// straight back to 0. Fall back to the export the slot names.
 #define SLOT_SLIDER_SETMINMAX 0x140151cf8
 static fn_SpinnerElement_SetMinMax_t fn_SliderElement_SetMinMax = nullptr;
 
 static void SliderElement_SetMinMax(void* self, int minVal, int maxVal) {
-    if (!fn_SliderElement_SetMinMax) {
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_resolved = true;
         uintptr_t slot = ResolveAddr(Module::Exe, SLOT_SLIDER_SETMINMAX);
-        if (slot) fn_SliderElement_SetMinMax = *(fn_SpinnerElement_SetMinMax_t*)slot;
+        if (slot) {
+            fn_SliderElement_SetMinMax = *(fn_SpinnerElement_SetMinMax_t*)slot;
+        }
+        // Kill-switch for an A/B run against the old (no-op) behaviour.
+        const char* off = getenv("BANISHED_LIVE_TRADE_SPINNER_RANGE");
+        bool disabled = (off && (off[0] == '0' || off[0] == 'f' || off[0] == 'F'));
+        if (!fn_SliderElement_SetMinMax && !disabled)
+            fn_SliderElement_SetMinMax = fn_SpinnerElement_SetMinMax;
+        // Report the OUTCOME: which pointer we ended up with, or that we have none.
+        fprintf(stderr, "[TradeUI] spinner SetMinMax = %p (slot 0x%llx -> %p, export %p%s)\n",
+                (void*)fn_SliderElement_SetMinMax,
+                (unsigned long long)SLOT_SLIDER_SETMINMAX, (void*)slot,
+                (void*)fn_SpinnerElement_SetMinMax,
+                disabled ? ", kill-switch ON" : "");
+        fflush(stderr);
     }
     if (fn_SliderElement_SetMinMax)
         fn_SliderElement_SetMinMax(self, minVal, maxVal);
@@ -1676,19 +1704,20 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     if (switchVal == 0) {
         // --- eventType 0x12: click events ---
         if (eventId == 0x4e20) {
-            // buttonTrade — the CHECKOUT. fn_TradeUI_OnTradeButton resolves 0x140081420,
-            // which is neither ported nor registered (it is Wave D: it is the function
-            // that moves sell items, processes buy orders, and calls the livestock
-            // delivery leaf 0x14005ace0). ResolveAddr returns 0 until then, so calling
-            // it unguarded is an EXEC-of-0 on a plain button click. Guard it: the rest
-            // of the dispatcher (dismiss, spinners, combos) is fully ported and works.
+            // buttonTrade — the CHECKOUT. Ported in code/Game/Dialog/tradeui_checkout.cpp
+            // and registered at 0x140081420 (reg_tradeui_checkout.cpp), so
+            // fn_TradeUI_OnTradeButton is non-null. It is nonetheless still gated:
+            // the handler itself is opt-in behind BANISHED_LIVE_TRADE_CHECKOUT and
+            // returns without committing anything while that is unset. The null
+            // check below survives only as EXEC-of-0 insurance for a build where the
+            // registration wave is not linked in.
             if (!fn_TradeUI_OnTradeButton) {
                 static bool s_warned = false;
                 if (!s_warned) {
                     s_warned = true;
                     fprintf(stderr, "[TradeUI] buttonTrade clicked but the checkout "
-                            "(0x140081420) is NOT REGISTERED — ignoring the click. "
-                            "This needs Wave D.\n");
+                            "(0x140081420) did not resolve — is reg_tradeui_checkout.cpp "
+                            "linked? Ignoring the click.\n");
                     fflush(stderr);
                 }
                 return;
@@ -1903,11 +1932,18 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
         uintptr_t entry = buyBase + (uintptr_t)i * 0x18;
         int qty = *(int*)(entry + 0x10);
         if (qty != 0) {
-            // Price is at resourceTypeBase + i*0x10 - 8 (relative to i-th type)
-            // This is a sorted/indexed structure: each 0x10-byte slot has price at offset -8
-            // Note: pIVar3 starts at 0, increments by 0x10, so at iteration i:
-            //   offset = i*0x10, value at resourceTypeBase + i*0x10 - 8 = resourceTypeBase - 8 + i*0x10
-            int price = *(int*)(resourceTypeBase - 8 + (uintptr_t)i * 0x10);
+            // Price lives at entry+8 of the TradeComponent's buy-order array
+            // (building+0x50, stride 0x10: +0x00 entity, +0x08 unit price,
+            //  +0x0c quantity — the same layout TradeComponent_RemoveBuyOrder
+            //  edits in tradeui_checkout.cpp).
+            //
+            // The index register is PRE-incremented before the load, which the
+            // decompiler renders as a bare "-8": at 0x1400828cd the induction
+            // variable becomes (i+1)*0x10 and the load at 0x1400828d1 reads
+            // [-8] off it, i.e. i*0x10 + 8 — NOT i*0x10 - 8. Transcribing the
+            // "-8" literally read entry i-1's price and, at i == 0, read eight
+            // bytes off the front of the array.
+            int price = *(int*)(resourceTypeBase + (uintptr_t)i * 0x10 + 8);
             total += price * qty;
         }
     }
@@ -2806,17 +2842,17 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 }
 
 // ============================================================
-// NOTE: The following functions are too complex for this pass (100+ lines
-// with many unknown sub-calls) and are marked "needs opus":
+// NOTE: this block used to defer three functions as "needs opus". All three have
+// since landed, so the list is kept only to say where they went — a deferral list
+// that outlives the deferral is exactly the kind of comment this project keeps
+// getting bitten by.
 //
-//   fn_TradeUI_OnTradeButton   (0x140081420, ~160 lines)
-//     — executes the actual trade: moves sell items to StateMachine,
-//       processes buy orders (destroys/removes/spawns entities),
-//       updates totals, refreshes all tables
+//   fn_TradeUI_RefreshSellTable (0x140083c70) -> TradeUI_RefreshSellTable, above
+//   fn_TradeUI_RefreshBuyTable  (0x140083100) -> TradeUI_RefreshBuyTable, above
+//   fn_TradeUI_OnTradeButton    (0x140081420) -> code/Game/Dialog/tradeui_checkout.cpp
 //
-//   fn_TradeUI_RefreshSellTable (0x140083c70, 381 lines)
-//     — populates sell table UI elements with resource info, amounts, icons
-//
-//   fn_TradeUI_RefreshBuyTable  (0x140083100, 488 lines)
-//     — populates buy table UI elements with resource/buildtype info
+// The old description of the checkout said it "destroys/removes/spawns entities".
+// That was read off two Ghidra mislabels and is wrong in the way that matters:
+// 0x140091e60 and 0x140091a20 are the town AVAILABILITY-POOL registrars, not
+// entity teardown. See the header block of tradeui_checkout.cpp.
 // ============================================================

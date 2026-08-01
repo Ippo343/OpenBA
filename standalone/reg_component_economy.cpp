@@ -47,6 +47,11 @@ struct InteractComponent;
 extern void     InteractComponent_Draw(InteractComponent* self);
 
 extern void     TradeComponent_Setup(void* self);
+struct TradeComponent;
+extern void     TradeComponent_Draw(TradeComponent* self);      // 0x14005c1d0 — really OnAdded (slot 6)
+extern void     TradeComponent_OnCreate(TradeComponent* self);  // 0x14005c190
+extern uint8_t  TradeComponent_Slot13(TradeComponent* self);    // 0x14005c140 — work-state query
+extern void     TradeComponent_Slot14(TradeComponent* self);    // 0x14005c000 — work-state toggle
 
 extern void     SpawnComponent_DoSpawn(void* self, void* resourceData, int entryIndex, char flag);
 
@@ -112,6 +117,13 @@ void RegisterComponentBatch_economy() {
 
     // tradecomponent.cpp
     RegisterExeAddr(0x14005c220, reinterpret_cast<uintptr_t>(&TradeComponent_Setup));
+    // Both were ported but never registered, so nothing could reach them by address.
+    // TradeComponent_Draw is the ONLY caller of Setup, which is the only thing that
+    // allocates the merchant-name array at +0x30 that TradeUI_RefreshBuyTable indexes.
+    RegisterExeAddr(0x14005c1d0, reinterpret_cast<uintptr_t>(&TradeComponent_Draw));
+    RegisterExeAddr(0x14005c190, reinterpret_cast<uintptr_t>(&TradeComponent_OnCreate));
+    RegisterExeAddr(0x14005c140, reinterpret_cast<uintptr_t>(&TradeComponent_Slot13));
+    RegisterExeAddr(0x14005c000, reinterpret_cast<uintptr_t>(&TradeComponent_Slot14));
 
     // spawncomponent.cpp
     RegisterExeAddr(0x140055780, reinterpret_cast<uintptr_t>(&SpawnComponent_DoSpawn));

@@ -120,6 +120,144 @@ void TradeComponent_OnCreate(TradeComponent* self) {
 }
 
 // ============================================================
+// TradeComponent slots 13 and 14 — the work-enable pair
+// ============================================================
+// These are the two remaining TradeComponent-specific vtable entries (the full
+// vtable is 0x14015acd0; only slots 3/6/7/13/14 are TradeComponent's own, the rest
+// are Component base). Both were inert no-op stubs, which is what made the trading
+// post report "work disabled" permanently and ignore the work button:
+//
+//   slot 13 (0x14005c140) is the QUERY the UI reads for the work toggle's state.
+//     It returns 3 when the workplace is accepting and 1 when it is not — never 0.
+//     An inert stub returns 0, which is neither, and reads as "disabled here".
+//   slot 14 (0x14005c000) is the TOGGLE ACTION. It flips the workplace's accepting
+//     flag and, on enable, allocates a TradeWork and posts it to the work
+//     scheduler; on disable it cancels the posted work.
+//
+// They must be promoted together. Slot 13 alone would report a state that slot 14
+// is not able to change; slot 14 alone would change a state nothing reads.
+
+// FUN_140002e10 — find the WorkPlaceComponent (type 0x1401c80e0) on an entity.
+typedef void (*fn_FindWorkPlace_t)(int64_t entity, void* outIBP);      // 0x140002e10
+// FUN_140003050 — find the component the work scheduler is posted through.
+typedef void (*fn_FindWorkSched_t)(int64_t entity, void* outIBP);      // 0x140003050
+// FUN_1400f72e0 — Work base ctor (Work_Ctor25), takes the owning entity IBP.
+typedef void (*fn_WorkCtor25_t)(void* work, void* entityIBP);          // 0x1400f72e0
+// FUN_14012ec60 — post a Work to the scheduler (stop existing slot, then install).
+typedef void (*fn_PostWork_t)(int64_t sched, uint32_t code, char flag, void* workIBP); // 0x14012ec60
+// FUN_14012eb50 — cancel whatever work is currently posted on that scheduler.
+typedef void (*fn_CancelWork_t)(int64_t sched);                        // 0x14012eb50
+// FUN_14012fc00 — commit the new accepting state onto the WorkPlaceComponent.
+typedef void (*fn_SetAccepting_t)(int64_t workPlaceComp, char accepting); // 0x14012fc00
+
+static fn_FindWorkPlace_t  s_tc_FindWorkPlace = nullptr;
+static fn_FindWorkSched_t  s_tc_FindWorkSched = nullptr;
+static fn_WorkCtor25_t     s_tc_WorkCtor25 = nullptr;
+static fn_PostWork_t       s_tc_PostWork = nullptr;
+static fn_CancelWork_t     s_tc_CancelWork = nullptr;
+static fn_SetAccepting_t   s_tc_SetAccepting = nullptr;
+static void**              s_tc_TradeWorkVtable = nullptr;
+static bool s_tcWorkResolved = false;
+
+static void EnsureTradeWorkHelpers() {
+    if (s_tcWorkResolved) return;
+    s_tc_FindWorkPlace = reinterpret_cast<fn_FindWorkPlace_t>(ResolveAddr(Module::Exe, 0x140002e10));
+    s_tc_FindWorkSched = reinterpret_cast<fn_FindWorkSched_t>(ResolveAddr(Module::Exe, 0x140003050));
+    s_tc_WorkCtor25    = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
+    s_tc_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
+    s_tc_CancelWork    = reinterpret_cast<fn_CancelWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
+    s_tc_SetAccepting  = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
+    // The TradeWork vtable is built and registered by tradework.cpp:955
+    // (RegisterTradeWorkVtable, wired at address_registry.cpp:1674).
+    s_tc_TradeWorkVtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a10));
+    s_tcWorkResolved = true;
+
+    // Report the OUTCOME of each dependency, not "resolve ran". A single null here
+    // silently turns the toggle into a no-op that still repaints — believable and
+    // wrong, the failure mode this subsystem keeps producing.
+    fprintf(stderr, "[TradeComp] work deps: findWP=%p findSched=%p workCtor=%p post=%p "
+            "cancel=%p setAccept=%p vtable=%p\n",
+            (void*)s_tc_FindWorkPlace, (void*)s_tc_FindWorkSched, (void*)s_tc_WorkCtor25,
+            (void*)s_tc_PostWork, (void*)s_tc_CancelWork, (void*)s_tc_SetAccepting,
+            (void*)s_tc_TradeWorkVtable);
+    fflush(stderr);
+}
+
+// TradeComponent::Slot13 (vtable index 13, 0x14005c140) — work-state query.
+//   return -(WPC[0x50] != 0) & 2 | 1   =>  3 when accepting, 1 when not.
+uint8_t TradeComponent_Slot13(TradeComponent* selfP) {
+    EnsureTradeWorkHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    if (!s_tc_FindWorkPlace) return 1;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    uint64_t wpc[2] = {0, 0};
+    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
+    if (!wpc[0]) return 1;
+
+    return (*(char*)(wpc[0] + 0x50) != 0) ? 3 : 1;
+}
+
+// TradeComponent::Slot14 (vtable index 14, 0x14005c000) — work-state toggle.
+// Reads the workplace's CURRENT accepting flag (+0x50) and inverts it:
+//   currently OFF -> allocate a TradeWork, post it, commit accepting = 1
+//   currently ON  -> cancel the posted work,          commit accepting = 0
+// TradeComponent+0x70 caches the new state for the panel.
+void TradeComponent_Slot14(TradeComponent* selfP) {
+    EnsureTradeWorkHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    if (!s_tc_FindWorkPlace || !s_tc_FindWorkSched || !s_tc_SetAccepting) return;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    int64_t sched = 0;
+    s_tc_FindWorkSched(*(int64_t*)(self + 0x10), &sched);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    int64_t wpc = 0;
+    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
+    if (!wpc) return;
+
+    // enable == "the workplace is NOT currently accepting", i.e. this is a toggle.
+    bool enable = (*(char*)(wpc + 0x50) == '\0');
+    *(bool*)(self + 0x70) = enable;
+
+    char newState;
+    if (enable) {
+        void* work = nullptr;
+        if (fn_MemAlloc && g_pMemAllocSingleton && s_tc_WorkCtor25 && s_tc_TradeWorkVtable) {
+            work = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+            if (work) {
+                int64_t entityIBP = *(int64_t*)(self + 0x10);
+                s_tc_WorkCtor25(work, &entityIBP);
+                *(void***)work = s_tc_TradeWorkVtable;
+                *(uint64_t*)((uintptr_t)work + 0x48) = 0;
+                *(uint32_t*)((uintptr_t)work + 0x50) = 0;
+            }
+        }
+        uint64_t workIBP[1] = {0};
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(workIBP, work);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&sched);
+        if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
+        newState = '\x01';
+    } else {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&sched);
+        if (s_tc_CancelWork) s_tc_CancelWork(sched);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
+        newState = '\0';
+    }
+
+    s_tc_SetAccepting(wpc, newState);
+
+    fprintf(stderr, "[TradeComp] Slot14 toggle: wpc=%p was=%d now=%d\n",
+            (void*)wpc, !enable, (int)newState);
+    fflush(stderr);
+}
+
+// ============================================================
 // Reimpl of FUN_14005c220 (TradeComponent_impl_c220: build the trade name list
 //   and item table from the TradeDescription template)
 // ============================================================
@@ -181,6 +319,13 @@ void TradeComponent_Setup(void* selfP) {
         if (s_tc_StrAssign) s_tc_StrAssign(dst, strBuf);
         if (s_tc_StrDtor) s_tc_StrDtor(strBuf);
     }
+
+    // Report the OUTCOME, not the call. A populated +0x30 is the whole point of
+    // this function — TradeUI_RefreshBuyTable indexes it — and "Setup ran" is not
+    // evidence it filled anything: desc null, or a desc+0x50 of 0, both leave the
+    // array NULL and read identically from a bare entry trace.
+    fprintf(stderr, "[TradeComp] Setup: desc=%p names=%d array=%p\n",
+            desc, nameCount, (void*)*(int64_t*)(self + 0x30));
 
     // Resize the item table (+0x40) to desc+0x40
     if (s_tc_ResizeItems)
@@ -372,6 +517,89 @@ void TradeComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(TradeComponent, 0xa8, 0x83)
+// ── Promotion from inert, 2026-07-31 ─────────────────────────────────────────
+// TradeComponent was COMPONENT_INERT_FACTORY, which zero-fills the body and
+// leaves every vtable slot a no-op stub. That produced two faults at once in
+// TradeUI_RefreshBuyTable (tradeui.cpp:849):
+//
+//   * +0x30 (merchant-name array) stayed NULL, because slot 6 was a stub and
+//     TradeComponent_Draw — which is what calls TradeComponent_Setup, the only
+//     thing that ever allocates that array — never ran.
+//   * +0x2c (selected merchant index) read 0, and 0 passes the `>= 0` guard at
+//     tradeui.cpp:848, so the panel indexed a NULL array.
+//
+// The real ctor (0x14005c430, Ghidra-verified) writes `+0x2c = 0xffffffff`.
+// -1 IS the "no merchant selected" sentinel — the `>= 0` test at tradeui.cpp:848
+// and the `comboEnabled` at :858 both key off it. A zero-filled body turns that
+// sentinel into a valid-looking index 0: exactly the inert-sentinel trap.
+//
+// Only +0x2c is applied here. Every other field the ctor writes is already 0 from
+// the zero-fill, and +0x20's `| 3` is covered by the Flags argument (0x83).
+// DELIBERATELY NOT applied: +0x88 (the controller sub-object's own vtable) and
+// +0xa0 (its self back-pointer). Those two go together, and publishing a
+// controller vtable we have not ported would turn today's null-guarded skips into
+// calls through a half-built object. They stay inert until someone ports the
+// controller.
+static void TradeComponent_CtorInit(void* self) {
+    if (!self) return;
+    *(int32_t*)((uintptr_t)self + 0x2c) = -1;   // ctor 0x14005c430: no merchant selected
+}
+
+static uint32_t TradeComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TradeComponent");
+    return cached;
+}
+static void* TradeComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// Ghidra calls 0x14005c1d0 "Draw"; it is the OnAdded slot (index 6), dispatched by
+// ComponentEntity_OnAddedPass at register time because Component+0x20 bit 0 is set
+// (Flags 0x83). Same mislabel family as the OnCreate/OnRemove pair.
+static void TradeComponent_OnAddedVSlot(void* s) {
+    TradeComponent_Draw(reinterpret_cast<TradeComponent*>(s));
+}
+
+static uint8_t TradeComponent_Slot13VSlot(void* s) {
+    return TradeComponent_Slot13(reinterpret_cast<TradeComponent*>(s));
+}
+static void TradeComponent_Slot14VSlot(void* s) {
+    TradeComponent_Slot14(reinterpret_cast<TradeComponent*>(s));
+}
+
+static void TradeComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT")) {
+        TradeComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&TradeComponent_OnAddedVSlot);
+        // 13 and 14 go in together — see the note on the pair above. A live query
+        // over a stub toggle reports a state nothing can change.
+        TradeComponent_LiveVtable[13] =
+            reinterpret_cast<void*>(&TradeComponent_Slot13VSlot);
+        TradeComponent_LiveVtable[14] =
+            reinterpret_cast<void*>(&TradeComponent_Slot14VSlot);
+    }
+}
+
+extern "C" void* TradeComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0xa8, 0x83,
+        TradeComponent_LiveVtable,
+        reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
+    TradeComponent_FinishLiveVtable();
+    // Gated with the slot so the two never disagree: a live OnAdded on a body
+    // whose sentinel is still 0 is the state that just crashed.
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
+        TradeComponent_CtorInit(p);
+    return p;
+}
+
+static void* TradeComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0xa8, 0x83,
+        TradeComponent_LiveVtable,
+        reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
+    TradeComponent_FinishLiveVtable();
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
+        TradeComponent_CtorInit(mem);
+    return mem;
+}
+
 REGISTER_TYPE(TradeComponent, "ControllerComponent",
               &TradeComponent_Factory, &TradeComponent_CreateInPlace);

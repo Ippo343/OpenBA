@@ -575,7 +575,9 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
 // Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
 // body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
 // standalone cannot ResolveAddr an unported exe address.
-static void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
+// Not static: the trade checkout (code/Game/Dialog/tradeui_checkout.cpp, the
+// FUN_140081420 named above) is the other caller that grows this list.
+void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
     if (!townMgr || !desc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
     void**  arr   = *(void***)(townMgr + 0x120);
     int     count = *(int32_t*)(townMgr + 0x128);
@@ -1828,9 +1830,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     bool found = false;
                     int pointsSeen = 0;
 
-                    // Natural iteration order already visits path 0 first, which is the
-                    // one the retail route builder walks; later paths are the fallback.
-                    for (int p = 0; p < pathCount && !found; ++p) {
+                    // ⚠ SELECTION IS NEAREST-TO-TOWN, NOT FIRST-FIT.
+                    // This used to take the first fit in path order, "path 0 first,
+                    // because that is the one the retail route builder walks". Measured
+                    // result: the post landed on the far side of the water, most of the
+                    // map from the town — unusable for testing the panel, because no
+                    // citizen will ever walk to it. Two reasons the old rule was wrong:
+                    //   * path 0 is the COASTLINE RING, not a river (confirmed by its
+                    //     halfWidth of 4.00 vs 1.50 for the others), so "first point on
+                    //     path 0" is a point on the map edge.
+                    //   * even on a real river, the first in-bounds point is an artifact
+                    //     of polyline winding order, not of proximity to anything.
+                    // So scan every candidate and keep the one closest to the town
+                    // cluster centre. Path 0 is still preferred on ties only.
+                    const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
+                    long long bestDist = -1;
+                    for (int p = 0; p < pathCount; ++p) {
                         uint8_t* entry = pathArr + (size_t)p * 0x10;
                         const float* pts = *(const float**)entry;
                         const int ptCount = *(int32_t*)(entry + 8);
@@ -1846,13 +1861,13 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                 p, WorldGen_GetPathHalfWidth(p), bankF, sMin,
                                 bankF < 0.0f ? "  (NO halfWidth DATA — using fallback)" : "");
 
-                        for (int j = 0; j < ptCount && !found; ++j) {
+                        for (int j = 0; j < ptCount; ++j) {
                             const int rx = (int)(pts[2 * j]     + (float)half);
                             const int ry = (int)(pts[2 * j + 1] + (float)half);
                             if (rx < 0 || ry < 0 || rx >= mapSize || ry >= mapSize) continue;
                             ++pointsSeen;
 
-                            for (int s = sMin; s <= sMin + kSetbackRange && !found; ++s) {
+                            for (int s = sMin; s <= sMin + kSetbackRange; ++s) {
                                 // 4 cardinals: post footprint placed s tiles off the water.
                                 const int cand[4][2] = {
                                     { rx + s,      ry - th / 2 },   // east of the river
@@ -1860,7 +1875,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     { rx - tw / 2, ry + s      },   // south
                                     { rx - tw / 2, ry - s - th },   // north
                                 };
-                                for (int d = 0; d < 4 && !found; ++d) {
+                                for (int d = 0; d < 4; ++d) {
                                     const int tx = cand[d][0], ty = cand[d][1];
                                     if (tx < 1 || ty < 1 ||
                                         tx + tw >= mapSize - 1 || ty + th >= mapSize - 1)
@@ -1873,6 +1888,15 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                         }
                                     }
                                     if (clash) continue;
+                                    // Distance from the footprint centre to the town
+                                    // centre. Strictly-less keeps the earliest path on a
+                                    // tie, preserving the old path-0 preference where it
+                                    // costs nothing.
+                                    const long long ddx = (long long)(tx + tw / 2) - townCx;
+                                    const long long ddy = (long long)(ty + th / 2) - townCy;
+                                    const long long dist = ddx * ddx + ddy * ddy;
+                                    if (bestDist >= 0 && dist >= bestDist) continue;
+                                    bestDist = dist;
                                     bestX = tx; bestY = ty; bestSetback = s;
                                     bestPath = p; bestPt = j; found = true;
                                 }
@@ -1938,8 +1962,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         if (bestPath >= 0)
                             fprintf(stderr, "[startTown::tradingpost] demo trading post "
                                     "tile=(%d,%d) fp=%dx%d setback=%d from river path[%d] "
-                                    "point[%d] ent=%p%s\n",
-                                    bestX, bestY, tw, th, bestSetback, bestPath, bestPt, tent,
+                                    "point[%d] townCentre=(%d,%d) dist=%.1f ent=%p%s\n",
+                                    bestX, bestY, tw, th, bestSetback, bestPath, bestPt,
+                                    townCx, townCy,
+                                    bestDist >= 0 ? std::sqrt((double)bestDist) : -1.0, tent,
                                     bestPath != 0 ? "  <-- NOT on river path 0; the retail route "
                                                     "builder walks path 0, so the boat may not "
                                                     "reach this dock" : "");

@@ -348,7 +348,11 @@ showUpDown:
 
         // Check if citizen is adult and has profession assigned
         void* citizenProf = *(void**)((uintptr_t)citizen + 0x288);
-        if (*(float*)((uintptr_t)citizen + 0x3c) <=
+        // Retail 0x1400873d2: COMISS XMM0,[RCX+0x44] / JC — CF is set only when
+        // XMM0 is strictly BELOW, so the skip is `<`, not `<=`. A citizen sitting
+        // exactly on the adulthood threshold counts as an adult in retail and was
+        // being dropped here.
+        if (*(float*)((uintptr_t)citizen + 0x3c) <
             *(float*)((uintptr_t)citizenProf + 0x44)) continue;
         if (*(uintptr_t*)((uintptr_t)citizen + 0x208) != 0) continue;
 
@@ -395,13 +399,22 @@ showUpDown:
     }
     int wpMaxCount = *(int*)((uintptr_t)workComp + 0x30);
 
-#ifdef _DEBUG
-    printf("[WorkPlaceUI] workers=%u/%u assigned=%d laborers=%d wpMax=%d jt+0x28=%d jt+0x2c=%d jt+0x34=%d\n",
+    // stderr, NOT stdout, and no longer _DEBUG-only. stdout stalls in this build (the
+    // debug log froze at 3.5 KB while stderr ran the whole session), so this line has
+    // been invisible for its entire life — a diagnostic that produces nothing is
+    // indistinguishable from one that never ran. It is the discriminator for
+    // "6/6 assigned but no citizens available": `workers` comes from WPC+0x60 while
+    // `assigned`/`laborers` come from the citizen loop, so if the panel shows 6/6 and
+    // this prints assigned=0 laborers=0, the loop is what is broken, not the roster.
+    fprintf(stderr,
+        "[WorkPlaceUI] workers=%u/%u assigned=%d laborers=%d wpMax=%d citizens=%d "
+        "wpProf=%p laborProf30=%p jt+0x28=%d jt+0x2c=%d jt+0x34=%d\n",
         workerCount, maxCount, workplaceWorkerCount, laborerCount, wpMaxCount,
+        citizenCount, *(void**)((uintptr_t)wpComp + 0x48), laborerProf,
         jobType ? *(int*)((uintptr_t)jobType + 0x28) : -1,
         jobType ? *(int*)((uintptr_t)jobType + 0x2c) : -1,
         jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x34) : -1);
-#endif
+    fflush(stderr);
 
     // Check if this is a laborer profession
     fn_InternalBasePtr_CheckPtr(&wpComp);
@@ -539,9 +552,11 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
 // still under construction and on genuine production workplaces.
 //
 // Only the visibility decision is ported here — the heavy worker-count population
-// tail of Startup is deliberately skipped in SA: it calls two exe helper functions
-// via ResolveAddr(Module::Exe,…) (FUN_14000d6c0 / FUN_140002ed0) that resolve NULL
-// in standalone, and iterates the citizen list. The user-visible requirement is
+// ⚠ STALE AS OF 2026-08-01 — the tail of Startup USED to be skipped in SA because
+// FUN_14000d6c0 / FUN_140002ed0 "resolve NULL in standalone". Both are registered
+// now (reg_dialog.cpp:22, reg_work_base.cpp:39) and the full Startup runs from
+// W_Startup/W_OnUpdate. Skipping it was what left the worker up/down buttons
+// permanently disabled. Kept here only to record why the gap existed. The user-visible requirement is
 // that the panel disappears on the storage/house dialogs; a shown production panel
 // keeps its .rsc default content exactly as the StubNop already left it (no
 // regression). This mirrors the StorageUI/StorageCapacityUI/ResidenceUI promotions.
@@ -864,11 +879,39 @@ void PopulateCounts(void* self) {
 // idx8 (+0x40): per-frame — keep the panel's visibility in sync as buildings
 // finish construction (profession clears → panel hides), and refresh the live
 // worker/builder counts (roster grows as builders are seated).
+// ── The worker-assignment half, restored 2026-08-01 ──────────────────────────
+// The block comment above (the "Vtable offsets" note) said the tail of Startup was
+// "deliberately skipped in SA" because it calls FUN_14000d6c0 / FUN_140002ed0,
+// "that resolve NULL in standalone". THAT IS NO LONGER TRUE and has not been for a
+// while: 0x14000d6c0 is registered at standalone/reg_dialog.cpp:22 and 0x140002ed0
+// at standalone/reg_work_base.cpp:39. The comment was accurate when written and
+// aged into a lie — the same failure mode as the worldgen river-polyline copy.
+//
+// The cost of that stale deferral was the user-visible bug: UpdateVisibility +
+// PopulateCounts render the roster ("6/6") but NEVER touch the worker up/down
+// buttons, because the only code that enables them is the citizen loop in the
+// skipped tail (it enables workerCountUp iff laborerCount > 0 and workerCountDown
+// iff this workplace has assigned workers). With the tail skipped, both buttons sit
+// at their .rsc default disabled state forever — which presents exactly as
+// "no citizens are available to work", clicking does nothing, and yet the count
+// still reads 6/6 because that half DID run.
+//
+// So run the full ported Startup. It is a superset: it recomputes the same counts
+// and additionally sets the button enable states.
+static bool WorkPlaceUI_FullStartupEnabled() {
+    // Kill-switch only — this restores retail behaviour that was accidentally
+    // absent, so the default is ON. Set to 0 to A/B against the subset.
+    const char* v = std::getenv("BANISHED_LIVE_WORKPLACE_ASSIGN");
+    return !(v && (v[0] == '0' || v[0] == 'f' || v[0] == 'F'));
+}
+
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
+    if (WorkPlaceUI_FullStartupEnabled())
+        WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
 }
 
 // idx7 (+0x38): Startup — same visibility decision + count refresh on setup.
@@ -877,6 +920,8 @@ void W_Startup(void* self) {
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
+    if (WorkPlaceUI_FullStartupEnabled())
+        WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
 }
 
 // idx9 (+0x48): OnRemove — per-building worker up/down spinner. Adds/removes ONE worker of

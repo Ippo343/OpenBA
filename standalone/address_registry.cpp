@@ -454,6 +454,7 @@ extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-c
 extern void RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3: CitizenAI candidate-selection
 extern void RegisterCitizenAITypeIds();      // openfuncs step 2: c70e8/c7158/c42c0 type-id fill (BANISHED_LIVE_CITIZENAI_TIDS)
 extern void RegisterTradeUITypeIds();        // c4b80 TradeComponent type-id fill (BANISHED_LIVE_TRADE_TIDS)
+extern void RegisterElementTypeIds();        // 13 UI-element type-id dispatch slots, one batch (BANISHED_LIVE_ELEMENT_TIDS)
 extern void RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b: CitizenAI state handlers
 extern void RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b: CitizenAI find-best-target (dd30)
 extern void RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b: CitizenAI action-ctor family
@@ -473,6 +474,7 @@ extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreateP
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterTradeUILeavesBatch();     // Wave A: TradeUI DynArray clear leaves (16050/16130/16200)
+extern void RegisterTradeUICheckoutBatch();   // Wave D: TradeUI checkout (81420) + leaves (5baa0/5a490)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
 extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: PastureWork Slot4 (f2370) registration
 extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road enqueue (a6f00/9d360/9ce00/a6e30)
@@ -595,6 +597,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3 — CitizenAI candidate-selection
     RegisterCitizenAITypeIds();      // openfuncs step 2 — c70e8/c7158/c42c0 fill (gated BANISHED_LIVE_CITIZENAI_TIDS)
     RegisterTradeUITypeIds();        // c4b80 TradeComponent — unblocks fn_FindComponent_Building (gated BANISHED_LIVE_TRADE_TIDS)
+    RegisterElementTypeIds();        // whole UI-element type-id table — unblocks every FindTypedElement (gated BANISHED_LIVE_ELEMENT_TIDS)
     RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b — CitizenAI state handlers (Wander+)
     RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b — CitizenAI find-best-target (dd30+78c0)
     RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b — CitizenAI action-ctor family (9 ctors)
@@ -621,6 +624,7 @@ static void RegisterCodeFunctions() {
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterTradeUILeavesBatch();    // Wave A — TradeUI DynArray clear leaves (3 of the 10 gate deps)
+    RegisterTradeUICheckoutBatch();  // Wave D — TradeUI checkout; opt-in via BANISHED_LIVE_TRADE_CHECKOUT
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
     RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail — PastureWork Slot4 (f2370) registration
     RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A — zone+road enqueue cluster

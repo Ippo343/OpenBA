@@ -54,15 +54,52 @@
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
+#include <cstdio>
 
 // Backing storage for the .rdata slot. Stays 0 unless the gate is on AND the
 // post-Startup fill has run.
 static uint32_t g_tid_TradeComponent = 0;     // 0x1401c4b80
 
+// ── The other three exe-side type-ids the panel path needs ───────────────────
+// Added 2026-07-31 after the element-table batch (reg_element_typeids.cpp) let
+// TradeUI_Serialize finish its element-wiring phase and reach Phase 5. The next
+// fault was the SAME class of bug one function further on: `TradeUI_RefreshDisplay`
+// faulted at reimpl-x64.exe+0xDB3BE = `mov (%rax),%edx` on
+// `*g_TypeInfo_TradeDescription`, RAX=0 — engine_funcs.cpp:3516 resolves that
+// global straight from ResolveAddr(Module::Exe, 0x1401c4bb8), which nothing had
+// ever registered.
+//
+// These three are swept together for the same reason the element table was: each
+// one left out is one more crash, one run apart. Unlike the element slots these are
+// exe-registered types (their REGISTER_TYPE lines are in code/Game/Component/
+// tradedescription.cpp:215, valuedescription.cpp:112, and the ComponentDescription
+// entry at factory_registrations.csv:245), so they use the single-deref
+// storage + GetTypeIdByName pattern above rather than a Runtime BaseTypeInfo export.
+//
+// ComponentDescription reaches beyond trade, but it is unregistered everywhere and
+// the trade path is what needs it; it sits under this gate until something else
+// claims it. address_registry.cpp:1724 mentions the address in a comment only —
+// that is a cross-reference, not a registration.
+static uint32_t g_tid_TradeDescription = 0;      // 0x1401c4bb8
+static uint32_t g_tid_ValueDescription = 0;      // 0x1401c4bf0
+static uint32_t g_tid_ComponentDescription = 0;  // 0x1401c7318
+
 extern "C" void FillTypeIdGlobals_tradeui() {
     // No-op in effect unless the storage was registered above (gate on); writing it
     // when unregistered is harmless because nothing reads this static directly.
     g_tid_TradeComponent = ::Object::GetTypeIdByName("TradeComponent");
+    g_tid_TradeDescription = ::Object::GetTypeIdByName("TradeDescription");
+    g_tid_ValueDescription = ::Object::GetTypeIdByName("ValueDescription");
+    g_tid_ComponentDescription = ::Object::GetTypeIdByName("ComponentDescription");
+
+    // Report the OUTCOME. A 0 here means the type never registered exe-side and the
+    // reader will silently match nothing rather than fault — the failure mode that
+    // made 0x1401c4b80 invisible for the life of the project.
+    fprintf(stderr, "[TradeTid] TradeComponent=%u TradeDescription=%u "
+            "ValueDescription=%u ComponentDescription=%u\n",
+            g_tid_TradeComponent, g_tid_TradeDescription,
+            g_tid_ValueDescription, g_tid_ComponentDescription);
+    fflush(stderr);
 }
 
 void RegisterTradeUITypeIds() {
@@ -72,5 +109,8 @@ void RegisterTradeUITypeIds() {
     // calls out for BANISHED_LIVE_CITIZENAI.
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_TIDS")) {
         RegisterExeAddr(0x1401c4b80, reinterpret_cast<uintptr_t>(&g_tid_TradeComponent));
+        RegisterExeAddr(0x1401c4bb8, reinterpret_cast<uintptr_t>(&g_tid_TradeDescription));
+        RegisterExeAddr(0x1401c4bf0, reinterpret_cast<uintptr_t>(&g_tid_ValueDescription));
+        RegisterExeAddr(0x1401c7318, reinterpret_cast<uintptr_t>(&g_tid_ComponentDescription));
     }
 }
