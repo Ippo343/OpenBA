@@ -161,6 +161,60 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 }
 
 // ============================================================
+// 0x140089470 — TownRegistry_ShuffleProfessionList. Fisher-Yates shuffle of ONE
+// profession node's building array, in place. FindAvailableBuilding calls it as its
+// step 1, which is what makes retail's "which building gets the next worker" pick
+// round-robin instead of always-the-first-registered.
+//   param_1 = townMgr   param_2 = professionKey
+// Walks the +0x100 BST for the key; bails if absent or count <= 1; otherwise swaps
+// each slot i with System::Random::Rand(*(gw+0xd8), count). Faithful 1:1 — note the
+// original's redundant `count == 1` / `count < 2` / `count < 1` early-outs, all of
+// which collapse to "nothing to shuffle".
+//
+// NOT the same function as FUN_1400896a0 (Shuffle896a0 in citizen_employ_cascade.cpp)
+// — that one shuffles the town HOUSE list for strategy 3. Different array, different
+// caller.
+//
+// BEHAVIOUR CHANGE, therefore OPT-IN: until now this address resolved to null in
+// standalone and FindAvailableBuilding silently skipped step 1, making seat order
+// deterministic (always the first registered building with room). Registering it
+// makes seating random, which is retail-correct but is a real, observable change to
+// every seat decision. It is gated in reg_town_workplace_registry.cpp behind
+// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in kDefaultOnFlags: unproven
+// behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
+// ============================================================
+extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey) {
+    if (townMgr == 0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    // BST search for the key (same walk as the reader below).
+    uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
+    uint64_t* found = nullptr;
+    while (node != nullptr) {
+        if (professionKey < node[0])       node = reinterpret_cast<uint64_t*>(node[4]);  // left
+        else if (professionKey <= node[0]) { found = node; break; }
+        else                               node = reinterpret_cast<uint64_t*>(node[5]);  // right
+    }
+    if (found == nullptr) return;
+
+    uint32_t count = static_cast<uint32_t>(found[2]);        // +0x10 count (low dword)
+    if (static_cast<int>(count) < 2) return;                 // 0/1 entries -> nothing to do
+
+    void* rng = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+    if (!rng || !fn_Random_Rand) return;
+
+    for (int64_t i = 0; i < static_cast<int>(count); ++i) {
+        uint32_t j = fn_Random_Rand(rng, count);
+        if (static_cast<uint32_t>(i) == j) continue;
+        int64_t base = static_cast<int64_t>(found[1]);       // +0x08 array data
+        int64_t tmp = *reinterpret_cast<int64_t*>(base + i * 8);
+        *reinterpret_cast<int64_t*>(base + i * 8) =
+            *reinterpret_cast<int64_t*>(base + static_cast<int64_t>(static_cast<int>(j)) * 8);
+        *reinterpret_cast<int64_t*>(base + static_cast<int64_t>(static_cast<int>(j)) * 8) = tmp;
+    }
+}
+
+// ============================================================
 // 0x14008d100 — FindAvailableBuilding = the READER of the townMgr+0x100 profession
 //   BST. Given a professionKey, returns (in *out) an available workplace building
 //   entity for that profession — one that (a) has a WorkPlaceComponent whose live

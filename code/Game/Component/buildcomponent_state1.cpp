@@ -405,6 +405,27 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                              matCount, found, acceptMask, totalQty, multiplier);
         }
 
+        // ---------------------------------------------------------------------------
+        // *** TWO CONVENTIONS SET WPC+0x50 IN THIS CODEBASE. READ BOTH BEFORE GREPPING. ***
+        //   (a) WorkPlaceComponent_SetAccepting()  — workplacecomponent.cpp:503, the
+        //       faithful Entity_impl_fc00 (0x14012fc00) port. Sets +0x50 AND drives the
+        //       status-icon side effects (clears closed/disabled bits; raises the
+        //       "no workers" warning when the roster is empty).
+        //   (b) the RAW FIELD WRITE just below — sets +0x50 only, no icon.
+        // A `grep SetAccepting` CANNOT SEE (b). That blind spot cost a wrong root-cause
+        // call on 2026-07-30 ("the only true-setter is starttown.cpp:394"). If you are
+        // auditing who makes a workplace accepting, grep for `0x50` too.
+        //
+        // Retail does NOT hand-roll this: FUN_14012f520 ("enter Builder profession",
+        // ported at destroycomponent_workerrelease.cpp:222 and registered) ends with
+        // WorkPlaceUI_helper_fb00(...) then Entity_impl_fc00(wpc, 1) — i.e. the full
+        // SetAccepting, icon included. So converting (b) to a real SetAccepting call is
+        // justifiable on faithfulness grounds; but the *properly* faithful change is to
+        // call the already-ported f520 here instead of hand-rolling a subset of it, which
+        // also brings ee60's worker release, the profession re-key, the BST register and
+        // SetMaxWorkers. That is a real behaviour change and wants its own gated task —
+        // do not do it as a drive-by while touching this comment.
+        // ---------------------------------------------------------------------------
         // Enable the site's WorkPlaceComponent so citizens actually gather for it.
         // GatherRawMaterials::Execute (0x1400ebe40) gates the whole haul on the site's
         // WorkPlaceComponent (0x1401c80e0) "accepting" flag (+0x50): when 0 it returns

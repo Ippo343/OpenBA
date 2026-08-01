@@ -29,14 +29,34 @@
 //   Phase 2  Need-table: for every profession in the registry (reg+0x20 array,
 //            reg+0x28 count), look it up in the town workplace map (townMgr+0x100)
 //            to get the list of workplace entities for that profession; for each
-//            that has a WorkPlaceComponent with capacity (+0x60 != 0) push a
-//            NeedEntry{workplaceComp, cellId, remaining=cap, capacity=cap, costTree}.
+//            that has a WorkPlaceComponent whose LIVE WORKER ROSTER is non-empty
+//            (+0x60 != 0) push NeedEntry{workplaceComp, cellId,
+//            remaining=rosterCount, rosterCount=rosterCount, costTree}.
+//
+//            *** +0x60 IS THE LIVE ROSTER COUNT, NOT THE CAPACITY. ***
+//            Retail reads it once and stores it as BOTH the "remaining" and the
+//            denominator (0x1400d43b0: `if (*(int *)(local_res20 + 0x60) != 0)`
+//            then `local_8c = local_88 = *(local_res20 + 0x60)`). The real capacity
+//            lives on the sibling WorkComponent at +0x30 (lazily filled by
+//            CalcMaxWorkers 0x14012e5c0) and this function never reads it — see
+//            FindAvailableBuilding 0x14008d100, which compares WPC+0x60 < WC+0x30.
+//
+//            CONSEQUENCE, and the reason this comment is shouting: the `!= 0` gate
+//            means the allocator SKIPS EVERY WORKPLACE WITH ZERO SEATED WORKERS. It
+//            can only rebalance and refill workplaces that already have at least one
+//            worker; it structurally CANNOT seat worker #1 anywhere. In retail the
+//            only thing that seats the first worker at a building is the player, via
+//            the profession spinner (TownHallUI::OnProfessionSpinner 0x14007dd10 /
+//            ProfessionUI 0x1400763c0 -> FindAvailableBuilding + the
+//            cbf0/ca20/c5f0/c4b0 cascade). Do not plan around "the allocator will
+//            staff it" — it will not. builder_pool_driver.cpp has this right.
 //   Phase 3  Idle pass: for each idle+healthy citizen — normalize (same as phase 1),
 //            insert into the idle-laborer set, bump the per-profession count map
 //            (keyed by +0x1f0), and add a {cost,citizen} candidate (cost from
 //            sub_6060) to every NeedEntry's cost-tree.
 //   Phase 4  Priority: score each NeedEntry = (int)(minCost * (uvScale - filled)),
-//            filled = (cap-remaining)/cap; insert into a max-priority queue.
+//            filled = (rosterCount-remaining)/rosterCount; insert into a max-
+//            priority queue.
 //   Phase 5A Assign loop: while the queue is non-empty, pop the highest-score need,
 //            take its nearest available candidate (min cost), assign the citizen —
 //            AssignHousing(citizen, workplaceEntity) + set +0x1f0 = reqProf — then
@@ -60,7 +80,9 @@
 //     +0x208  busy/action ptr         +0x238 residence entity IBP (source cell)
 //     +0x248  workplace-assign IBP    +0x288 health component (+0x44 threshold)
 //   workplaceComponent (the c80e0 component FindWorkplaceComponent returns)
-//     +0x10   owner entity IBP        +0x48  required profession key   +0x60 capacity
+//     +0x10   owner entity IBP        +0x48  required profession key
+//     +0x58   worker IBP array        +0x60  LIVE WORKER COUNT (not capacity —
+//                                            capacity is WorkComponent+0x30)
 //
 //   AssignHousing (0x140111ee0) writes citizen+0x248: detaches from the old
 //   workplace's worker roster (FUN_14012f7e0) and attaches to the new (FUN_14012fa20).
@@ -256,14 +278,18 @@ struct Candidate {
 struct NeedEntry {
     void* workplaceComp;   // c80e0 component (owner entity @ +0x10, reqProf @ +0x48)
     int   cellId;          // workplace grid cell
-    int   remaining;       // open slots (starts = capacity, decremented on assign)
-    int   capacity;        // total slots
+    int   remaining;       // seats still to fill this pass (starts = rosterCount)
+    // WPC+0x60 = the workplace's LIVE WORKER COUNT, not its capacity. Retail uses it
+    // as the denominator anyway (it reads +0x60 once into both slots), so this is
+    // faithful — but it is why a workplace with an empty roster is never a "need":
+    // Phase 2 skips rosterCount == 0. See the shouting block in the file header.
+    int   rosterCount;
     std::multiset<Candidate> candidates;   // available laborers, by (cost, citizen)
 
     int score(float uvScale) const {
-        if (candidates.empty() || capacity <= 0) return 0;
+        if (candidates.empty() || rosterCount <= 0) return 0;
         int minCost = candidates.begin()->cost;
-        float filled = static_cast<float>(capacity - remaining) / static_cast<float>(capacity);
+        float filled = static_cast<float>(rosterCount - remaining) / static_cast<float>(rosterCount);
         return static_cast<int>(static_cast<float>(minCost) * (uvScale - filled));
     }
 };
@@ -344,13 +370,16 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
             CheckPtr(&entity);
             void* wpComp = FindWorkplaceComp(entity);
             if (!wpComp) continue;
-            int cap = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wpComp) + 0x60);
-            if (cap == 0) continue;
+            // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read
+            // here). The `== 0` skip is what makes this allocator a rebalancer only:
+            // an unstaffed workplace is invisible to it. Faithful to retail.
+            int rosterCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wpComp) + 0x60);
+            if (rosterCount == 0) continue;
             NeedEntry e;
             e.workplaceComp = wpComp;
-            e.cellId    = CellOfEntity(entity);
-            e.remaining = cap;
-            e.capacity  = cap;
+            e.cellId       = CellOfEntity(entity);
+            e.remaining    = rosterCount;
+            e.rosterCount  = rosterCount;
             needs.push_back(std::move(e));
         }
     }

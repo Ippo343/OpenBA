@@ -25,6 +25,7 @@ extern "C" int  TownHall_QueryProductionStat(void*, int, int, int);           //
 extern "C" void TownHall_InventorySortAsc(void*, int, void*, void*);          // 0x140015200
 extern "C" void TownHall_InventorySortDesc(void*, int, void*, void*);         // 0x140015500
 extern "C" void TownHall_RemoveWorker(void*, uint64_t);                       // 0x140091180
+extern "C" void CitizenList_AddWorker_91130(int64_t, uint64_t);               // 0x140091130 (FAB + AssignWorker)
 extern "C" void* CitizenEmploy_Strat_cbf0(int64_t, void*, int64_t*, int64_t); // 0x14008cbf0
 extern "C" void* CitizenEmploy_Strat_ca20(int64_t, void*, int64_t*, int64_t); // 0x14008ca20
 extern "C" void* CitizenEmploy_Strat_c5f0(int64_t, void*, int64_t*, int64_t); // 0x14008c5f0
@@ -41,6 +42,11 @@ void RegisterTownHallBatch() {
     RegisterExeAddr(0x140015200, reinterpret_cast<uintptr_t>(&TownHall_InventorySortAsc));
     RegisterExeAddr(0x140015500, reinterpret_cast<uintptr_t>(&TownHall_InventorySortDesc));
     RegisterExeAddr(0x140091180, reinterpret_cast<uintptr_t>(&TownHall_RemoveWorker));
+    // CitizenList::AddWorker — the + counterpart of RemoveWorker above. Two calls
+    // (FindAvailableBuilding then AssignWorker); nothing in the exe dispatches it in
+    // our build today, but registering it keeps the pair symmetric and gives future
+    // callers one seat entry point instead of a hand-rolled fallback chain.
+    RegisterExeAddr(0x140091130, reinterpret_cast<uintptr_t>(&CitizenList_AddWorker_91130));
     RegisterExeAddr(0x14008cbf0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_cbf0));
     RegisterExeAddr(0x14008ca20, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_ca20));
     RegisterExeAddr(0x14008c5f0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c5f0));

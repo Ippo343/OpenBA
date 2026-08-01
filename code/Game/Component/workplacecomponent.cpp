@@ -500,6 +500,11 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
 // bit-for-bit FUN_14012c3f0(mesh, normalState ? 0 : 1, 1), so the call below is faithful,
 // not an approximation. (Same helper the citizen paths use: it is generic over the
 // StatusIconComponent layout — mask +0xf0, scene id +0x100 — not citizen-specific.)
+// NB: this is not the only writer of +0x50. A raw field write lives at
+// buildcomponent_state1.cpp:427 (construction-site enable, no status icon), and the
+// ctor default is set in WorkPlaceComponent_FinishLiveVtable above. A grep for
+// "SetAccepting" will miss both — see the block at buildcomponent_state1.cpp for why
+// that matters.
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
@@ -1126,8 +1131,122 @@ extern "C" bool WorkPlaceComponent_ControllerLive() {
     return s == 1;
 }
 
+// BANISHED_LIVE_WPC_BORN_ACCEPTING — DEFAULT-ON via kDefaultOnFlags (graduated
+// 2026-07-31); the env var is now only a kill-switch (=0).
+//
+// Retail's WorkPlaceComponent_Ctor (0x14012f2e0) sets the accepting byte
+// UNCONDITIONALLY, as a plain ctor-body default:
+//     *(Internal **)(param_1 + 0x40) = param_1;
+//     *(undefined8 *)(param_1 + 0x48) = 0;
+//     param_1[0x50] = (Internal)0x1;      <-- born accepting, always
+//     *(undefined8 *)(param_1 + 0x58) = 0;
+//     *(undefined8 *)(param_1 + 0x60) = 0;
+//
+// Our port had that write INSIDE the controller-gated block below, so on the default
+// path (BANISHED_LIVE_WPC_CONTROLLER is opt-in) it never ran and every workplace was
+// born accepting=0. That is a faithfulness bug, not a controller feature: +0x50 has no
+// dependency on the controller node — it was swept into the gate only because retail's
+// ctor happens to set it adjacent to the +0x28/+0x40 controller-node fields.
+//
+// Symptom it produces: a sweep of a default start town finds every WPC with
+// +0x40..+0x5F entirely zero (no back-pointer, no accepting byte) — the whole tail of
+// the un-run block — and FindAvailableBuilding, which requires +0x50 != 0, can never
+// return any building that did not get an explicit SetAccepting(true) from elsewhere.
+//
+// Graduated 2026-07-31 on a two-arm soak (release build, identical seed and settings,
+// the town-health recipe minus the seed knobs that over-cap houses):
+//   * the WPC census reports 8/8 constructions taking the ctor defaults, and the sweep
+//     flips accepting=0 -> 8 / accepting=1 -> 8. Every workplace in the game is reached;
+//     there is no second construction path (proven by the census cross-check, which
+//     reported live-but-NOT-ours=0).
+//   * both arms hold a stable town — 27 citizens (+0) at frames 1500 / 3000 / 4500 —
+//     with zero guard trips and no new error pattern in the flag-on arm.
+//   * both arms then die IDENTICALLY just past frame 4500: ACCESS_VIOLATION, READ of
+//     0000000140152a90, same seven stack frames (NomadComp_FUN_140103480 <-
+//     CitizenComponent_OnRemove <- MarkEntityRemoval <- HandleLifeEvent <-
+//     CitizenComponent_Update). That is a PRE-EXISTING default-path crash on the
+//     citizen-death teardown, present with this flag off, so — exactly as for
+//     BANISHED_LIVE_DESTROY above — it is not a reason to hold this flag. It is
+//     tracked separately; do not read this note as "the soak was clean".
+//
+// Blast radius at defaults is nil in a start town: all 8 workplaces carry profKey 0, so
+// none is in a profession bucket and FindAvailableBuilding never reads their accepting
+// byte. The flag matters for workplaces that reach a bucket without passing
+// BuildComponent state-1 or StartTown_ActivateWorkplace — instant-built employers,
+// force/harness-placed buildings, upgrade replacements, load-from-save entities.
+static bool WorkPlaceComponent_BornAcceptingOn() {
+    static int s = -1;
+    if (s < 0)
+        s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_BORN_ACCEPTING") ? 1 : 0;
+    return s == 1;
+}
+
+// ── WPC construction census (UNCONDITIONAL, diagnostic only) ────────────────
+// Every WorkPlaceComponent in the standalone exe is built by the two entry points
+// at the bottom of this file (Factory / CreateInPlace) — there is no other path:
+// ComponentEntity_CtorFromDescription (componententity.cpp:597) and the save-load
+// path (:351) both go through Object::Factory::CreateObject -> the REGISTER_TYPE
+// factoryFn, no code anywhere calls the retail ctor 0x14012f2e0 (unregistered and
+// unmapped), and nothing else inserts into an entity's component array.
+//
+// Recording every construction makes that claim FALSIFIABLE at runtime instead of
+// only by reading code: the sweep in standalone/trade_probe.cpp asks
+// WorkPlaceComponent_WasFactoryBuilt() per swept object, so a workplace that our
+// factory never produced shows up by name. It also removes the throttle that made
+// "3 lines logged" indistinguishable from "3 to 24 constructions" — the ambiguity
+// that sent this investigation looking for a construction path that doesn't exist.
+static const int kWpcCensusCap = 256;
+static void* s_wpcCensus[kWpcCensusCap];
+static int   s_wpcCensusCount = 0;
+
+extern "C" int WorkPlaceComponent_CensusCount() { return s_wpcCensusCount; }
+extern "C" bool WorkPlaceComponent_WasFactoryBuilt(const void* p) {
+    if (!p) return false;
+    for (int i = 0; i < s_wpcCensusCount && i < kWpcCensusCap; ++i)
+        if (s_wpcCensus[i] == p) return true;
+    return false;
+}
+// True while the census is complete enough to answer WasFactoryBuilt negatively.
+// Past the cap a "no" only means "not among the first kWpcCensusCap".
+extern "C" bool WorkPlaceComponent_CensusComplete() {
+    return s_wpcCensusCount <= kWpcCensusCap;
+}
+
 static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
     WorkPlaceComponent_FinishVtable();   // slot-7 teardown patch stays unconditional
+
+    if (mem) {
+        if (s_wpcCensusCount < kWpcCensusCap) s_wpcCensus[s_wpcCensusCount] = mem;
+        ++s_wpcCensusCount;
+        if (s_wpcCensusCount == kWpcCensusCap + 1)
+            std::fprintf(stderr, "[WPCCensus] census FULL (>%d) — WasFactoryBuilt can now "
+                         "false-negative; raise kWpcCensusCap\n", kWpcCensusCap);
+    }
+
+    // Retail ctor-body default, independent of the controller node (see above).
+    if (mem && WorkPlaceComponent_BornAcceptingOn()) {
+        // +0x40 = self and +0x50 = 1 are BOTH plain ctor-body defaults in retail
+        // (Ghidra 0x14012f2e0, verified 2026-07-30) and are set here together. Only
+        // +0x50 has a known reader on the default path (FindAvailableBuilding's
+        // accepting gate, town_workplace_registry.cpp:317); +0x40 is the controller
+        // node's back-pointer and has no reader while +0x28 stays null, so it is
+        // included for faithfulness and to stop "+0x40..+0x5F all zero" reading as
+        // evidence of an un-run constructor. If run B regresses, +0x50 is the
+        // behavioural half — split them before bisecting anything else.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x40) = mem;
+        reinterpret_cast<uint8_t*>(mem)[0x50] = 1;
+    }
+    // Unthrottled: a run constructs a few dozen of these at most, and the throttle
+    // is what made the previous run unreadable. Printed for BOTH flag states so
+    // "flag on, nothing changed" can never be confused with "the write never ran".
+    if (mem)
+        std::fprintf(stderr, "[WPCCensus] #%d wpc=%p ctor-defaults %s (+0x40=%p +0x50=%d)\n",
+                     s_wpcCensusCount, mem,
+                     WorkPlaceComponent_BornAcceptingOn() ? "APPLIED" : "skipped (flag off)",
+                     *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x40),
+                     (int)reinterpret_cast<uint8_t*>(mem)[0x50]);
+    std::fflush(stderr);
+
     if (!WorkPlaceComponent_ControllerLive()) return;
     WorkPlaceComponent_InertVtable[16] =
         reinterpret_cast<void*>(&WorkPlaceComponent_GetDefaultState);
@@ -1135,16 +1254,16 @@ static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
         reinterpret_cast<void*>(&WorkPlaceComponent_CreateState);
     WorkPlaceComponent_PopulateStateTable();
     if (mem) {
-        // Embedded node + ctor body defaults (0x14012f2e0): node vtable at +0x28,
-        // parent/child zeroed, back-pointer +0x40 = self, accepting +0x50 = 1 (the
-        // inert zero-fill left it 0; retail workplaces are born accepting).
+        // Embedded controller node (0x14012f2e0): node vtable at +0x28, parent/child
+        // zeroed, back-pointer +0x40 = self. The accepting byte +0x50 is NOT part of
+        // this — it is a plain ctor default and now lives above, outside the gate.
         uint8_t* b = reinterpret_cast<uint8_t*>(mem);
         *reinterpret_cast<void**>(b + 0x28) =
             reinterpret_cast<void*>(WPCCtrlDispatch::Vtable());
         *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
         *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
         *reinterpret_cast<void**>(b + 0x40) = mem;
-        b[0x50] = 1;
+        b[0x50] = 1;   // controller path keeps its own write (idempotent with the above)
     }
 }
 

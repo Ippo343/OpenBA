@@ -767,15 +767,28 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
             static int s_hn = 0;
             if (s_hn < 8) { ++s_hn;
-                int64_t mgr = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                    ? *reinterpret_cast<int64_t*>(
-                          reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0)
-                    : 0;
+                uint8_t* gwB = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                    ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+                int64_t mgr = gwB ? *reinterpret_cast<int64_t*>(gwB + 0xf0) : 0;
                 int bcount = (mgr) ? *reinterpret_cast<int*>(mgr + 0x68) : -1;
                 int64_t btree = (mgr) ? *reinterpret_cast<int64_t*>(mgr + 0x100) : 0;
-                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no house found)"
-                                " townMgr=%p bldgCount=%d profTreeRoot=%p\n",
-                        (void*)self, (void*)housingResult, (void*)mgr, bcount, (void*)btree);
+                // ffc0/0470 both key townMgr+0x100 on citizen+0x1f0 (the citizen's OWN
+                // profession). No workplace ever registers under the laborer/_default
+                // key (both TownRegistry_RegisterWorkplace and retail's edf0 bail on
+                // WPC+0x48 == 0), so a laborer MUST get findResult=0 — correctly, not
+                // as a bug. Print the two keys so that can be read off directly:
+                // czProf == laborerKey on every line => hypothesis proven, nothing to fix.
+                int64_t profList  = gwB ? *reinterpret_cast<int64_t*>(gwB + 0xb0) : 0;
+                int64_t laborerKey = profList
+                    ? *reinterpret_cast<int64_t*>(profList + 0x30) : 0;
+                int64_t czProf = *reinterpret_cast<int64_t*>(
+                    reinterpret_cast<uint8_t*>(self) + 0x1f0);
+                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no workplace found)"
+                                " townMgr=%p bldgCount=%d profTreeRoot=%p"
+                                " czProf(+0x1f0)=0x%llx laborerKey=0x%llx isLaborer=%d\n",
+                        (void*)self, (void*)housingResult, (void*)mgr, bcount, (void*)btree,
+                        (unsigned long long)czProf, (unsigned long long)laborerKey,
+                        (int)(czProf == laborerKey && laborerKey != 0));
                 fflush(stderr);
             }
         }

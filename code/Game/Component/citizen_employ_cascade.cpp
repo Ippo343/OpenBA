@@ -425,13 +425,49 @@ extern "C" void CitizenComponent_OnAdd(void* citizenComp) {
 // read this list. The exe copies the +0x10 IBP value raw (no re-ctor) — same
 // here; the caller passes the value it captured at ResidenceComponent::OnCreate.
 // ============================================================================
+// INSTRUMENTED 2026-07-31. The five guards below are all silent, and the caller in
+// residencecomponent.cpp logged "registered into townMgr+0x20" UNCONDITIONALLY after the
+// call — so seven "registered" lines coexisted with count(+0x28)==0 and the log was a
+// statement of intent, not of outcome. Per the standing rule (log the outcome, inside the
+// guarded function, never let a silent no-op read as success), every call now reports
+// which guard fired and the count before/after. Behaviour is unchanged: same guards, same
+// order, same early return.
 extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
     EnsureFns();
-    if (!houseEntityIBP || !g_pGameWorldSingleton || !*g_pGameWorldSingleton || !s_arrayAdd3110) return;
-    int64_t townMgr = TownMgr();
-    if (townMgr == 0) return;
-    s_arrayAdd3110(reinterpret_cast<int64_t*>(townMgr + 0x20),
-                   *reinterpret_cast<int*>(townMgr + 0x28) + 1, &houseEntityIBP);
+
+    const char* fail = nullptr;
+    int64_t townMgr = 0;
+    int before = -1, after = -1;
+
+    if (!houseEntityIBP)              fail = "houseEntityIBP == 0";
+    else if (!g_pGameWorldSingleton)  fail = "g_pGameWorldSingleton pointer is null";
+    else if (!*g_pGameWorldSingleton) fail = "*g_pGameWorldSingleton == 0 (no GameWorld yet)";
+    else if (!s_arrayAdd3110)         fail = "s_arrayAdd3110 unresolved (exe 0x140003110)";
+    else {
+        townMgr = TownMgr();
+        if (townMgr == 0)             fail = "townMgr (gameWorld+0xf0) == 0";
+    }
+
+    if (!fail) {
+        before = *reinterpret_cast<int*>(townMgr + 0x28);
+        s_arrayAdd3110(reinterpret_cast<int64_t*>(townMgr + 0x20), before + 1, &houseEntityIBP);
+        after = *reinterpret_cast<int*>(townMgr + 0x28);
+        // The append is the only thing that advances the count. If it did not move, the
+        // array primitive is not writing the count field we (and retail) read at +0x28 —
+        // a different failure from any of the guards above, so name it separately.
+        if (after != before + 1) fail = "append ran but count(+0x28) did not advance";
+    }
+
+    static int n = 0;
+    if (n < 16) {
+        ++n;
+        std::fprintf(stderr, "[TownRegistry] RegisterResidence ibp=%llx townMgr=%p "
+                     "count %d -> %d : %s\n",
+                     static_cast<unsigned long long>(houseEntityIBP),
+                     reinterpret_cast<void*>(townMgr), before, after,
+                     fail ? fail : "APPENDED OK");
+        std::fflush(stderr);
+    }
 }
 
 // ============================================================================
@@ -600,6 +636,49 @@ extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* a
 // *availPtr is 0) -> c5f0 (most-laborer house) -> c4b0 (first idle laborer, writes
 // `out` itself). First nonzero winner's 8-byte result is copied into out+0x0 only,
 // exactly like the original (out+0x8 is left untouched on those paths).
+// Defined below; AddWorker (0x140091130) calls it.
+extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);
+
+// ============================================================================
+// CitizenList::AddWorker (0x140091130) — the public one-call seat: find a building
+// with an open slot for `professionKey`, then run the four-strategy cascade against
+// it. Retail is literally two calls (the result is discarded; the seat happens as a
+// side effect inside the strategies):
+//
+//     FUN_14008d100(townMgr, &avail, profKey);        // FindAvailableBuilding
+//     local_res20 = avail;                            // fresh copy — c3d0 mutates it
+//     CitizenComponent_impl_c3d0(townMgr, out, &local_res20, profKey);
+//
+// The copy matters: c3d0 takes `availPtr` by pointer and each strategy anchors
+// through it, so the caller's value must not be handed over directly.
+//
+// DEVIATION (deliberate): we hold g_wpcRosterOnly across the call. Retail does not
+// need it — its WorkplaceComponent Attach/Detach can run the full Graphics::Scene
+// mesh-visual toggle, which faults on our inert standalone objects (READ of 0x10 in
+// Detach's e710 getter). Every other seat path in this build holds the same guard
+// (ProfessionUI_HandleSpinner, TownHallUI_OnProfessionSpinner, WorkPlaceUI
+// W_OnRemove, BuilderPool_Tick, CitizenAssignCitizens); this is a call site, so it
+// holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
+// controller with real scene objects.
+extern "C" void CitizenList_AddWorker_91130(int64_t townMgr, uint64_t professionKey) {
+    EnsureFns();
+    if (townMgr == 0 || professionKey == 0) return;
+
+    extern bool g_wpcRosterOnly;
+    struct RosterGuard {
+        bool prev;
+        RosterGuard() { prev = g_wpcRosterOnly; g_wpcRosterOnly = true; }
+        ~RosterGuard() { g_wpcRosterOnly = prev; }
+    } _rosterGuard;
+
+    int64_t avail[2] = { 0, 0 };
+    FindAvailableBuilding(townMgr, avail, professionKey);
+
+    int64_t availArg = avail[0];                 // fresh copy — c3d0 anchors through it
+    alignas(8) uint8_t out[16] = { 0 };          // local_18[16] in the original
+    CitizenList_AssignWorker_c3d0(townMgr, out, &availArg, static_cast<int64_t>(professionKey));
+}
+
 extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
     EnsureFns();
     alignas(8) uint8_t local[16] = {0};

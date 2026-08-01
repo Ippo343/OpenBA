@@ -527,8 +527,14 @@ static char ResidenceComponent_EnterBuilt(void* comp, void* /*sm*/) {
     {
         static int n = 0;
         if (n < 12) { ++n;
-            fprintf(stderr, "[Residence] state-2 enter: house comp=%p entityIBP=%llx "
-                    "registered into townMgr+0x20\n", comp, (unsigned long long)ibp);
+            // Reports that the state-2 enter FIRED, not that the append succeeded — the
+            // registration has five silent guards and this line used to claim success
+            // regardless, which is how seven "registered" lines coexisted with
+            // count(+0x28)==0. The outcome is logged inside TownRegistry_RegisterResidence
+            // itself ([TownRegistry] lines); read those, not this one.
+            fprintf(stderr, "[Residence] state-2 enter FIRED: house comp=%p entityIBP=%llx "
+                    "-> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)\n",
+                    comp, (unsigned long long)ibp);
             fflush(stderr);
         }
     }
@@ -538,6 +544,15 @@ static char ResidenceComponent_EnterBuilt(void* comp, void* /*sm*/) {
 // State-3 enter — faithful helper_9920 (0x140129920): evict via helper_9ef0 + remove
 // from townMgr+0x20 via FUN_140002cc0. That is exactly the ported OnCreate body.
 static char ResidenceComponent_EnterDemolish(void* comp, void* /*sm*/) {
+    // Discriminator (2026-07-31): this body ERASES the house from townMgr+0x20, and
+    // something is running it during StartTown right after each state-2 append, which is
+    // what keeps the residence count pinned at 0. Two call sites can reach it — this
+    // state-3 enter and the slot-7 removal hook — so each says which one fired.
+    static int n = 0;
+    if (n < 12) { ++n;
+        fprintf(stderr, "[Residence] ERASE via STATE-3 DEMOLISH enter: comp=%p\n", comp);
+        fflush(stderr);
+    }
     ResidenceComponent_OnCreate(reinterpret_cast<ResidenceComponent*>(comp));
     return 0;
 }
@@ -576,6 +591,13 @@ static void ResidenceComponent_SerializeVSlot(void* s) {   // vtable +0x20 (inde
     ResidenceComponent_Serialize(reinterpret_cast<ResidenceComponent*>(s));
 }
 static void ResidenceComponent_OnCreateVSlot(void* s) {    // vtable +0x38 (index 7)
+    // See the note on ResidenceComponent_EnterDemolish — this is the other route into
+    // the townMgr+0x20 erase, dispatched by FUN_1400c2ea0 at entity removal.
+    static int n = 0;
+    if (n < 12) { ++n;
+        fprintf(stderr, "[Residence] ERASE via SLOT-7 removal hook: comp=%p\n", s);
+        fflush(stderr);
+    }
     ResidenceComponent_OnCreate(reinterpret_cast<ResidenceComponent*>(s));
 }
 static int ResidenceComponent_GetDefaultState(void*) { return 2; }  // 0x1400026c0

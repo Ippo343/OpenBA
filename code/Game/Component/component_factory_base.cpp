@@ -219,6 +219,41 @@ static const char* const kDefaultOnFlags[] = {
     // added while chasing the wrong cause have been removed; one declared deviation remains
     // (a no-progress break, because an unterminated eviction loop is an in-world freeze).
     "BANISHED_LIVE_WPC_PAUSE",
+    // WorkPlaceComponent's ctor-body defaults — +0x40 = self and the accepting byte
+    // +0x50 = 1, which retail's WorkPlaceComponent_Ctor (0x14012f2e0) writes
+    // UNCONDITIONALLY. Our port had them inside the controller-gated block, so on the
+    // default path every workplace in the game was born accepting=0 and
+    // FindAvailableBuilding (which requires +0x50 != 0) could never return it.
+    //
+    // Graduated 2026-07-31 on a two-arm release soak, identical seed and settings. The
+    // WPC census shows 8/8 constructions taking the defaults and the sweep flips
+    // accepting=0 -> 8; both arms hold a stable 27-citizen town at frames 1500/3000/4500
+    // with zero guard trips. Both arms then die IDENTICALLY just past 4500 (READ of
+    // 0x140152a90 on the citizen-death teardown, NomadComp_FUN_140103480 <-
+    // CitizenComponent_OnRemove) — a pre-existing default-path crash present with the
+    // flag off, tracked separately, and — as for BANISHED_LIVE_DESTROY below — not a
+    // reason to hold this. The soak was NOT clean; it was A/B-IDENTICAL, which is the
+    // claim being made here.
+    "BANISHED_LIVE_WPC_BORN_ACCEPTING",
+    // House-seed reservation ordering (starttown.cpp StartTown_SeedHouseInventory).
+    // The food budget reserved the full REQUESTED fuel volume (400 * 4 = 1600) while the
+    // fuel clamp ran second and took only what food left (225 units / 900 volume) — so
+    // food reserved against ~700 volume of fuel that never landed, `cap - fuelVolume -
+    // carryLoad` went negative, and maxFoodUnits was 0. **Every house started with ZERO
+    // food, on pure defaults, with no seed env var set.** No BANISHED_SEED_FOOD value
+    // could help: the clamp yields 0 for 6000, 130 or 1 once fuelVolume + carryLoad >= cap.
+    //
+    // Graduated 2026-07-31 on a deterministic mechanism check, not an outcome metric:
+    // with the flag on, `foodBudget=900`, food seeds 130/78 units, `GetResourceCount(res)`
+    // matches, and there are ZERO food-CLAMPED lines; fuel still gets 192-205 units and the
+    // house packs to 998/1000. Reproducible at n=1 because it is binary.
+    //
+    // NOT claimed: any longevity ranking. Seeded runs still go extinct (~9000 frames vs
+    // ~7500 for the control), and run-to-run variance is large because the gameplay RNG at
+    // gw+0xd8 is UNSEEDED — BANISHED_SEED pins world-gen only. Frames-to-extinction is a
+    // single threshold crossing and must not be used to rank fixes. See
+    // reference_banished_seed_pins_worldgen_only.
+    "BANISHED_SEED_FOOD_FIRST",
     // The DestroySM's WorkPlaceComponent transitions — 0x14012f520 (enter the Builder
     // profession on demolish/upgrade) and 0x14012f670 (leave it) — verified 2026-07-25 on
     // the forced mid-construction upgrade harness: the staffed demo site logs
