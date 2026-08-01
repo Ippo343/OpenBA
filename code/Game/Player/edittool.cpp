@@ -89,24 +89,31 @@ void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags) {
 }
 
 // ============================================================
-// EditTool::Serialize (vtable +0x50, Slot10) — Compare entity reference
+// EditTool Slot10 (vtable +0x50) — "is this the entity I have selected?"
 // ============================================================
-// Calls InternalBasePtr::CheckPtr on self->lastEntityRef (+0x30),
-// then compares *param_2 with self->lastEntityRef.
-// Returns true if the entity references match.
+// Calls InternalBasePtr::CheckPtr on self->lastEntityRef (+0x30), then compares
+// *entityRef with it. Returns true if the entity references match — i.e. whether a
+// given entity is the one currently being edited/selected by this tool.
 //
-// This is used to check whether a given entity is the one currently
-// being edited by this tool (e.g., for highlight/selection state).
+// NAMING (2026-07-31): this was `EditTool_Serialize_Impl`. It is NOT a serializer;
+// the name came from an early guess at the slot's purpose and survived long enough to
+// mislead a crash investigation — a frame reading "Serialize" in a citizen-death
+// teardown looks like nonsense and delays the read of an otherwise clean stack.
+//
+// CONTRACT: `entityRef` is DEREFERENCED. Every caller must pass it. Retail's own
+// caller (TradeWork_impl_3480, 0x140103480) seeds a local from *param_2 immediately
+// before the call and passes its address; a one-arg call site in nomadcomponent.cpp
+// left RDX holding stale garbage and faulted here on every citizen death.
 //
 // Original: 0x1400fd290
-bool EditTool_Serialize_Impl(EditTool* self, uint64_t* param_2) {
+bool EditTool_IsSelectedEntity(EditTool* self, uint64_t* entityRef) {
     // CheckPtr on self->lastEntityRef to resolve lazy/weak pointers
     if (fn_InternalBasePtr_CheckPtr) {
         fn_InternalBasePtr_CheckPtr((void*)&self->lastEntityRef);
     }
 
-    // Compare: does *param_2 match self->lastEntityRef?
-    return *param_2 == self->lastEntityRef;
+    // Compare: does *entityRef match self->lastEntityRef?
+    return *entityRef == self->lastEntityRef;
 }
 
 // ============================================================
@@ -905,7 +912,10 @@ static void* g_EditTool_Vtable[13] = {
     (void*)&EditTool_Startup_Impl,   // +0x38 Startup
     (void*)&Tool_Ret0,               // +0x40
     (void*)&Tool_Ret0,               // +0x48
-    (void*)&EditTool_Serialize_Impl, // +0x50 Serialize (entity ref)
+    // +0x50 Slot10 — `bool(self, longlong* entityRef)` = "is *entityRef the entity I
+    // have selected?". Callers MUST pass the second argument; a one-arg call site left
+    // RDX stale and faulted inside it (see the typedef note in nomadcomponent.cpp).
+    (void*)&EditTool_IsSelectedEntity,
     (void*)&EditTool_GetSettingTypeId, // +0x58 GetSettingTypeId (writes 0 to retbuf)
     (void*)&Tool_Ret0,               // +0x60
 };

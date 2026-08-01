@@ -209,8 +209,24 @@ typedef void* (*fn_Transform3_AsMatrix_t)(void* self, void* retval);
 static fn_Transform3_AsMatrix_t fn_Transform3_AsMatrix = nullptr;
 
 // Math::Vector3::Normalize(this)
-typedef void (*fn_Vector3_Normalize_t)(void* self);
-static fn_Vector3_Normalize_t fn_Vector3_Normalize = nullptr;
+// REMOVED 2026-07-31: `fn_Vector3_Normalize` lived here with a ONE-ARG typedef
+// `void(*)(void* self)` bound to `?Normalize@Vector3@Math@@QEBA?AV12@XZ`. That export
+// returns Vector3 BY VALUE, so the ABI passes a hidden return-buffer pointer in RDX and
+// the callee WRITES 8+ bytes through it — a one-arg call leaves RDX stale and the store
+// lands wherever the last call left it. It was resolved and CHECK_FN'd but never called
+// from this file, so it corrupted nothing; it was a loaded gun for the next caller.
+// See reference_byvalue_return_hidden_rdx — this same export already caused one
+// deterministic crash (the ±0.7071 garbage signature).
+//
+// Deleted rather than corrected: the three real callers (action_base_move.cpp:58,
+// moveto.cpp:101, and the action_child_ctors/animalcomponent/weather_particles group)
+// each declare their own correct 2-arg `(void* self, void* retbuf)` static. An unused,
+// wrongly-typed resolver is pure liability.
+//
+// NOTE the mirror-image trap: `AEAV` is a REFERENCE return, NOT by-value.
+// `?Normalize@Vector2@Math@@QEAAAEAV12@XZ` returns Vector2& in RAX and a one-arg typedef
+// is CORRECT for it (worldgen_f390_coastline.cpp:94 looks wrong and is right). Same
+// method name, different ABI between Vector2 and Vector3.
 
 // Engine::MainLoop::SetNextLoop — declared in engine_funcs.h, resolved by EngineFuncsInit()
 
@@ -569,8 +585,7 @@ static void EnsureInit() {
         ResolveExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z"));
     fn_Transform3_AsMatrix = reinterpret_cast<fn_Transform3_AsMatrix_t>(
         ResolveExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ"));
-    fn_Vector3_Normalize = reinterpret_cast<fn_Vector3_Normalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
+    // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
     // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
     fn_SaveLoad_Draw = reinterpret_cast<fn_SaveLoad_Draw_t>(
@@ -638,7 +653,6 @@ static void EnsureInit() {
     CHECK_FN(fn_Video_Context_SetTime);
     CHECK_FN(fn_Video_Context_SetCamera);
     CHECK_FN(fn_Transform3_AsMatrix);
-    CHECK_FN(fn_Vector3_Normalize);
     CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
@@ -670,6 +684,7 @@ extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
+extern "C" void TradeProbe_Tick(int frameNum);            // standalone/trade_probe.cpp
 
 // fn_MemFreeStatic is already available from engine_funcs.h
 
@@ -881,6 +896,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // pointers / type-ids / town data that would silently blank the town-hall
     // statistics panel (code/Game/Dialog/townhallui.cpp).
     TownHallSA_Diag(s_frameNum);
+
+    // Wave-0 gating probe for the trading-post / livestock-acquisition wave:
+    // read-only one-shot dump of the trading-post template and its merchant data.
+    // No-op unless BANISHED_TRADE_PROBE is set (standalone/trade_probe.cpp).
+    TradeProbe_Tick(s_frameNum);
 
     // Apply the deferred founding-house "occupied" visuals now that the scene is live
     // (the Scene mesh-visual can't run during the build-time founding pass — it

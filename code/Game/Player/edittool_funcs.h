@@ -11,11 +11,14 @@
 // Original: 0x14002db00
 void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags);
 
-// Serialize (vtable +0x50, Slot10): Compare entity reference.
-// Calls CheckPtr on self->lastEntityRef (+0x30), then compares
-// *param_2 with self->lastEntityRef. Returns true if they match.
+// Slot10 (vtable +0x50): "is *entityRef the entity I currently have selected?"
+// Calls CheckPtr on self->lastEntityRef (+0x30), then compares *entityRef with it.
+// NOT a serializer — it was called EditTool_Serialize_Impl until 2026-07-31, and a
+// "Serialize" surfacing in a citizen-death teardown stack cost real diagnosis time.
+// Callers MUST pass entityRef; it is dereferenced. A one-arg call site in
+// nomadcomponent.cpp left RDX stale and faulted inside this function.
 // Original: 0x1400fd290
-bool EditTool_Serialize_Impl(EditTool* self, uint64_t* param_2);
+bool EditTool_IsSelectedEntity(EditTool* self, uint64_t* entityRef);
 
 // OnKey (vtable +0x30, Slot6): Entity selection via picking.
 // Casts ray from cursor, finds entity under cursor via Picking::Scene::Intersect

@@ -330,10 +330,31 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 // Sub-deps + the member-return UI calls resolved via .rdata dispatch slots.
 // Non-static for registration. Faithful structural port of 0x140103480.
 // ============================================================
-typedef char  (*fn_ctrl_active_t)(void* ctrl);             // vtable+0x50
+// vtable+0x50 takes TWO arguments — (self, entityRef) — NOT one.
+//
+// Retail's slot is EditTool_Slot10 (0x1400fd290), reached here because the object at
+// self+0x28 is the EditTool holding the open info dialog:
+//     bool EditTool_Slot10(longlong self, longlong *entityRef) {
+//         CheckPtr(self + 0x30);
+//         return *entityRef == *(longlong *)(self + 0x30);   // <-- DEREFS ARG 2
+//     }
+// i.e. "is the entity I have selected the one being removed?". TradeWork_impl_3480 sets
+// `local_res8 = *(longlong *)param_2` immediately BEFORE the call and passes &local_res8;
+// Ghidra renders the call as `(...)()` because it cannot recover args through the
+// unrecovered function-pointer type, which is what made this look like a one-arg getter.
+//
+// Declaring it one-arg left RDX holding whatever the previous call put there, and the
+// callee dereferenced it. On the FIRST invocation that is 0x140152a90 — the last argument
+// to ResolveAddr inside Ensure3480() — so the crash presented as "a raw exe dispatch-slot
+// VA dereferenced as a pointer" and sent the investigation after an unregistered slot.
+// The fault address was stale-register garbage, not a resolve failure. (Same trap family
+// as reference_byvalue_return_hidden_rdx.)
+typedef char  (*fn_ctrl_active_t)(void* ctrl, int64_t* entityRef);   // vtable+0x50
 typedef void  (*fn_FUN_140102b60_t)(int64_t self, int v);  // 0x140102b60
 typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c690
-typedef void* (*fn_GetFirstDialog_t)(void* ui);            // slot 0x140151ca0 (writes out via hidden ptr in orig)
+// slot 0x140151ca0 — by-value struct return: hidden retbuf pointer in RDX (see the call
+// site). The second parameter is NOT optional; omitting it corrupts memory.
+typedef void* (*fn_GetFirstDialog_t)(void* ui, void* retbuf);
 typedef void* (*fn_GetController_t)(void* dialog, void* retbuf); // slot 0x140151768 (member, non-trivial ret)
 typedef void  (*fn_CloseDialog_slot_t)(void* ui, void* dlgPtr);// slot 0x140151550
 typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
@@ -370,9 +391,13 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
 
     if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
         fn_InternalBasePtr_CheckPtr(self + 0x28);
+        // Retail's local_res8: seeded from *param_2 BEFORE the call, and passed by
+        // address as the slot's second argument (see the typedef note above).
+        int64_t entityRef = *reinterpret_cast<int64_t*>(param_2);
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
         int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
-        char active = (*reinterpret_cast<fn_ctrl_active_t*>(vt + 0x50))(reinterpret_cast<void*>(ctrl));
+        char active = (*reinterpret_cast<fn_ctrl_active_t*>(vt + 0x50))(
+            reinterpret_cast<void*>(ctrl), &entityRef);
         if (active != '\0' && s_fn_FUN_140102b60) s_fn_FUN_140102b60(param_1, 0);
     }
 
@@ -383,7 +408,22 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     void* ui = *reinterpret_cast<void**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x98);
     if (!s_fn_GetFirstDialog) return;
-    int64_t* dlg = reinterpret_cast<int64_t*>(s_fn_GetFirstDialog(ui));
+    // GetFirstDialog returns a struct BY VALUE, so the ABI passes a hidden return-buffer
+    // pointer in RDX and the callee WRITES through it. Runtime-x64.dll 0x180031150:
+    //   ?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@...@@XZ
+    //   void *__thiscall GetFirstDialog(UserInterface *this, void *retval)
+    //   { *(undefined8 *)retval = *(undefined8 *)this; return retval; }
+    // The old one-arg typedef left RDX stale and that store wrote 8 bytes through whatever
+    // the previous call had left there — a memory-corrupting WRITE, worse than the READ
+    // fault fixed above. It also took the RAX return (which is `retval`, i.e. the buffer's
+    // ADDRESS) as the iterator, one dereference too few. Both are fixed here: pass a real
+    // buffer, then read the head-node pointer out of it, matching retail's use of the RDX
+    // home slot (`local_res10`) as the iterator it then walks via [2].
+    // Currently dormant — slot 0x140151ca0 is unregistered, so the guard above returns
+    // first; this fix is what makes registering that slot safe.
+    int64_t iter = 0;
+    s_fn_GetFirstDialog(ui, &iter);
+    int64_t* dlg = reinterpret_cast<int64_t*>(iter);
     while (dlg != nullptr) {
         int64_t* cur = dlg;
         if (*dlg != 0) {
