@@ -151,7 +151,7 @@ is the path to use for verifying any rendering / gameplay / world-build change.
 - Still loads Runtime-x64.dll + VideoDX11-x64.dll (engine DLLs, ASLR handled normally)
 
 **Key files:**
-- `patches/src/resolve.h` — ResolveAddr/ResolveExport/ResolveOrdinal declarations
+- `standalone/resolve.h` — ResolveAddr/ResolveExport/ResolveOrdinal declarations
 - `standalone/resolve_standalone.cpp` — standalone ResolveAddr + ResolveInit (loads DLLs via LoadLibrary)
 - `standalone/address_registry.cpp` — maps Ghidra exe addresses to our reimplemented code
 - `standalone/main.cpp` — WinMain entry point (launcher-dialog skip, VEH crash handler, log redirection)
@@ -167,24 +167,9 @@ in `standalone/address_registry.cpp` so standalone mode can find it. Three categ
 
 The `code/Game/` directory mirrors the original source tree structure discovered from
 profile build debug strings (project codename "Buildy", `C:\Projects\Buildy\code\Game\`).
-
-```
-code/Game/           — Clean game logic (mirrors original source tree, future standalone exe)
-  Action/            — StateMachine actions (17 classes: MoveTo, PerformWork, etc.)
-  Component/         — ECS components (60 classes: AI, economy, building, etc.)
-  Dialog/            — UI dialogs + panels (50+ classes)
-  Entity/            — ComponentEntity, CitizenBehavior, EntityList
-  Game/              — Core systems (Game, Map, Pathfinder, StateMachine, Weather, etc.)
-  Goal/              — Goal classes (BuildingGoal, PopulationGoal, etc.)
-  Player/            — Placement tools (9 classes: BridgeTool, PlacementTool, etc.)
-  Tutorial/          — Tutorial classes (17 classes)
-  Work/              — Work classes (21 classes: BuildRoad, FishingWork, etc.)
-
-engine/types/        — Binary-compatible struct definitions (142 headers)
-engine/funcs/        — Resolved engine function pointers
-runtime/             — Runtime-x64.dll types/funcs + early reimpl (runtime/src/)
-standalone/          — Exe entry point, address registry, reg_*.cpp registration waves
-```
+Alongside it: `engine/types/` (binary-compatible structs), `engine/funcs/` (resolved
+engine function pointers), `runtime/` (Runtime-x64.dll types/funcs + early reimpl),
+`standalone/` (exe entry point, address registry, reg_*.cpp registration waves).
 
 ### Address Resolution
 - `ResolveAddr(Module::Exe, ghidra_addr)` — exe addresses (base 0x140000000)
@@ -220,16 +205,7 @@ All logs land in `C:/GOG Games/Banished/` (the working directory at launch):
 
 ## VS Code Launch Configurations
 
-Defined in `.vscode/launch.json`:
-
-| Configuration | Type | What it does |
-|---------------|------|-------------|
-| **Attach to Banished** | attach | Attach GDB to a running game process (pick from list) |
-| **Launch Standalone (debug)** | launch | Builds + deploys `reimpl-x64.exe`, stops at the main menu |
-| **Launch Standalone (debug, autostart new game)** | launch | Same, but sets `BANISHED_AUTOSTART` — lands in-game |
-| **Launch Standalone (debug, tool harness)** | launch | Autostart + `BANISHED_TOOL_HARNESS` for placement-tool testing |
-| **Launch Standalone (debug, redzone)** | launch | Autostart + `BANISHED_REDZONE=1` heap red-zone allocator |
-| **Launch Standalone (release)** | launch | Release build, no debugger stops |
+Debug/attach configurations live in `.vscode/launch.json`.
 
 ### Compiler & Toolchain
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`
