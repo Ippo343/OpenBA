@@ -76,6 +76,7 @@ extern "C" void FillTypeIdGlobals_worktail_trade();
 // openfuncs step 2 — CitizenAI/Citizen/Happiness type-id globals (c70e8/c7158/c42c0;
 // storage gated on BANISHED_LIVE_CITIZENAI_TIDS, fill is a harmless no-op when off).
 extern "C" void FillTypeIdGlobals_citizenai();
+extern "C" void FillTypeIdGlobals_tradeui();
 extern "C" void FillTypeIdGlobals_worktail_fire();
 // step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
 extern "C" void FillTypeIdGlobals_citizen_lifeevent();
@@ -495,6 +496,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
     FillTypeIdGlobals_citizenai();         // openfuncs step 2 — CitizenAI/Citizen/Happiness ids (c70e8/c7158/c42c0, gated)
+    FillTypeIdGlobals_tradeui();           // c4b80 TradeComponent id — MUST be post-Startup (see reg_tradeui_typeids.cpp)
     FillTypeIdGlobals_citizen_lifeevent(); // step 2.5 defer close — TombstoneComponent/CemeteryDescription ids (c4a30/c40c8)
 
     if (ok != 0) {

@@ -775,7 +775,21 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     *(void**)(p + 0xB8) = nullptr;  // ui material
     *(void**)(p + 0xA0) = nullptr;  // help topics
 
-    // Step 5 — Random (+0xD8, 0x9c4) seeded with mapSizeIndex (+0x30).
+    // Step 5 — the gameplay Random (+0xD8, 0x9c4) seeded from gameLoop+0x30.
+    //
+    // ⚠ CORRECTED 2026-07-31: this said "seeded with mapSizeIndex (+0x30)". WRONG, and it
+    // cost real time. `+0x30` is THE MAP SEED — `newgamedialog.cpp:718` writes the seed
+    // there and `:719` writes terrainSize to `+0x34`. So the full chain is
+    //   BANISHED_SEED -> seed UI element (newgamedialog.cpp:229-236)
+    //                 -> gameLoop+0x30   (newgamedialog.cpp:718)
+    //                 -> Random(seed) at gw+0xD8   (here)
+    // The gameplay RNG IS seeded. Do NOT "fix" this by pinning gw+0xD8 — it is already
+    // pinned, and an investigation was launched on the belief that it wasn't.
+    //
+    // Runs with an identical seed still diverge (gender splits 14/13, 15/12, 13/14), so
+    // the divergence is in the ORDER or COUNT of RNG consumption, or a second entropy
+    // source — NOT in seeding. Leading suspect: iteration over a container keyed by heap
+    // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
         void* mem = AllocSub(0x9c4, 4);
         if (mem && s_fn_Random_Seeded_Ctor) s_fn_Random_Seeded_Ctor(mem, *(uint32_t*)(p + 0x30));

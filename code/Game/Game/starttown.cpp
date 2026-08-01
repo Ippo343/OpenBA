@@ -50,6 +50,12 @@
 extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
 extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity);
 extern "C" void StartTown_SeedStartingResources(void* startConfig);
+// Feature-path channel widths, captured by worldgen.cpp from the 0x1C-stride SOURCE
+// PathPoints (+0x14) before the copy into wg+0x1e0 narrows them to (x,y). Both return
+// -1.0f when there is no data for that path index. BankDistance = halfWidth + 2.0 =
+// tiles from centerline to dry land, which is what a dock placement needs.
+extern "C" float WorldGen_GetPathHalfWidth(int pathIndex);
+extern "C" float WorldGen_GetPathBankDistance(int pathIndex);
 extern "C" void TownStorage_TraceDump();
 
 static bool LiveStorageEnabled() {
@@ -809,14 +815,53 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             comp = *slot;
             if (!comp) continue;
             vt = *(uintptr_t*)comp;
-            typedef void (*fn_OnCreate_t)(void*);
-            (*(fn_OnCreate_t*)(vt + 0x38))(comp);                // ResidenceComponent::OnCreate
+            // BANISHED_LIVE_RESIDENCE_REGISTRY — OPT-IN (not in kDefaultOnFlags).
+            //
+            // Slot 7 (vtable +0x38, "ResidenceComponent::OnCreate") does TWO things:
+            //   1. ResidenceComponent_helper_9ef0 (0x140129ef0) — init/evict. Wanted.
+            //   2. exe 0x140002cc0 on townMgr+0x20 — which is ERASE-BY-VALUE, not register
+            //      (the Ghidra OnCreate/OnRemove mislabel; workplacecomponent.cpp:61-66
+            //      already corrected the identical misnaming in its own copy). Unwanted.
+            //
+            // Measured 2026-07-31, seven houses, seven times: the residence controller's
+            // state-2 enter appends the house to townMgr+0x20 (count 0->1, APPENDED OK),
+            // and this call erases it again (count back to 0). No guard ever fired — the
+            // registry was being populated correctly and then cancelled a moment later.
+            //
+            // ⚠ The comment that used to sit here said townMgr+0x20 "is never populated in
+            // standalone". That was TRUE WHEN WRITTEN — nothing populated the list, so the
+            // erase was harmless. The state-2 enter landed 2026-07-26 and started populating
+            // it, at which point this call silently became the thing that undoes it. Nobody
+            // re-read the comment because it still SOUNDED right. See
+            // reference_condition_shaped_comments — a comment stating a current condition
+            // rather than an invariant becomes a lie and disguises the gap it creates.
+            //
+            // Flag ON: call the init half directly, skipping the erase. Flag off: byte-identical.
+            static int s_residenceRegistry = -1;
+            if (s_residenceRegistry < 0) {
+                const char* e = std::getenv("BANISHED_LIVE_RESIDENCE_REGISTRY");
+                s_residenceRegistry = (e && e[0] && e[0] != '0') ? 1 : 0;
+            }
+            if (s_residenceRegistry) {
+                typedef void (*fn_ResidenceInit_t)(void*);
+                uintptr_t initFn = ResolveAddr(Module::Exe, 0x140129ef0);
+                if (initFn) {
+                    (*(fn_ResidenceInit_t)initFn)(comp);
+                } else {
+                    fprintf(stderr, "[startTown::housing] RESIDENCE_REGISTRY: 0x140129ef0 "
+                            "unresolved — falling back to slot 7 (erase still happens)\n");
+                    fflush(stderr);
+                    typedef void (*fn_OnCreate_t)(void*);
+                    (*(fn_OnCreate_t*)(vt + 0x38))(comp);
+                }
+            } else {
+                typedef void (*fn_OnCreate_t)(void*);
+                (*(fn_OnCreate_t*)(vt + 0x38))(comp);            // ResidenceComponent::OnCreate
+            }
             // Capture the house's owner-entity IBP (ResidenceComponent+0x10 — the exact
-            // value the original registration uses) for the founding-housing pass. NB the
-            // original OnCreate's "registration" (FUN_140002cc0 on townMgr+0x20) is actually
-            // a remove-by-value → townMgr+0x20 is never populated in standalone (residences
-            // are listed at building-PLACEMENT time, which we don't run). So we keep the
-            // house IBPs here and pair them to families directly.
+            // value the original registration uses) for the founding-housing pass. We keep
+            // the house IBPs here and pair them to families directly; that pairing is
+            // independent of townMgr+0x20 and stays correct in both flag states.
             g_foundingHouseIBPs.push_back(*reinterpret_cast<int64_t*>((uint8_t*)comp + 0x10));
             fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
                             "(house #%zu captured, ownerIBP=%llx)\n",
@@ -1678,6 +1723,231 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     if (pent) ++spawned;
                     fprintf(stderr, "[startTown::pasture] demo pasture tile=(%d,%d) "
                             "fp=%dx%d ent=%p\n", bestX, bestY, pw, ph, pent);
+                }
+            }
+            fflush(stderr);
+        }
+    }
+
+    // ── BANISHED_BUILD_DEMO_TRADINGPOST — one COMPLETED trading post ON THE RIVER ──
+    // Gating harness for the trade / livestock-acquisition wave. A trading post is a
+    // DOCK: the merchant-arrival tick (retail 0x14005aa60) clones the TraderBoat entity
+    // and hands it to the route builder (0x1400456e0), which walks river path 0 from the
+    // map edge to the post's "boat" attach point. So the post MUST sit next to the river.
+    // The BUILD_DEMO_PASTURE block above ring-scans from the founding-cluster centre,
+    // which would drop the post inland and make the route build fail for reasons that
+    // have nothing to do with the port being wrong — an expensive false negative. This
+    // block therefore seeds its search from the river polylines instead.
+    //
+    // River geometry (same array StartTown_SpawnEnvironment pass 1 reads, and the same
+    // one the retail route builder uses): worldGeom = gameWorld+0x110; the polyline array
+    // is worldGeom+0x1e0 with count worldGeom+0x1e8; each entry is 0x10 bytes
+    // {const float* pts (x,y float pairs), int ptCount @ +0x08}. Retail's route builder
+    // uses path 0 specifically, so path 0 is tried first here and the rest only as a
+    // fallback. Point coords are world-space; tile = (int)(coord + mapSize/2).
+    //
+    // Value: 1/on = template-default footprint (probe-observed 12x11), "WxH" overrides.
+    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset. Every failure
+    // branch prints, so a silent log means this never ran rather than that it succeeded.
+    {
+        const char* te = std::getenv("BANISHED_BUILD_DEMO_TRADINGPOST");
+        if (te && te[0] && te[0] != '0') {
+            void* ttmpl = ResolveTemplateByPath("Template\\TradingPost.rsc");
+            int tw = 0, th = 0;
+            if (const char* xpos = std::strchr(te, 'x')) {      // "WxH" size override
+                tw = std::atoi(te); th = std::atoi(xpos + 1);
+            }
+            if (ttmpl && (tw <= 0 || th <= 0)) {
+                void* cpd = FindDescriptionOnTemplate(ttmpl, TypeId("CreatePlacedDescription"));
+                if (cpd) {
+                    tw = *(int32_t*)((uint8_t*)cpd + 0x44);
+                    th = *(int32_t*)((uint8_t*)cpd + 0x48);
+                }
+                // Observed live via BANISHED_TRADE_PROBE: CreatePlacedDescription 12x11.
+                if (tw <= 0 || th <= 0) { tw = 12; th = 11; }
+            }
+            if (!ttmpl) {
+                fprintf(stderr, "[startTown::tradingpost] BANISHED_BUILD_DEMO_TRADINGPOST set "
+                        "but Template\\TradingPost.rsc did not resolve; nothing spawned\n");
+            } else {
+                void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                         ? *g_pGameWorldSingleton : nullptr;
+                void* worldGeom = gw ? *(void**)((uint8_t*)gw + 0x110) : nullptr;
+                const int mapSize = game ? *(int32_t*)game : 0;
+                const int pathCount = worldGeom ? *(int32_t*)((uint8_t*)worldGeom + 0x1e8) : 0;
+                uint8_t* pathArr = worldGeom ? *(uint8_t**)((uint8_t*)worldGeom + 0x1e0) : nullptr;
+
+                if (!worldGeom || !pathArr || pathCount <= 0 || mapSize <= 0) {
+                    fprintf(stderr, "[startTown::tradingpost] no river geometry "
+                            "(worldGeom=%p pathArr=%p pathCount=%d mapSize=%d); nothing "
+                            "spawned — the post needs a river-adjacent dock\n",
+                            worldGeom, (void*)pathArr, pathCount, mapSize);
+                } else {
+                    const int half = mapSize / 2;
+                    // Diagnostic: the first attempt converted river points to tiles as
+                    // (int)(coord + mapSize/2) and found ZERO in-bounds points, so dump
+                    // the raw values rather than guess which of mapSize / the coordinate
+                    // space / the entry stride is wrong.
+                    fprintf(stderr, "[startTown::tradingpost] geom: mapSize=%d half=%d "
+                            "pathCount=%d pathArr=%p\n", mapSize, half, pathCount, (void*)pathArr);
+                    for (int dp = 0; dp < pathCount && dp < 4; ++dp) {
+                        uint8_t* de = pathArr + (size_t)dp * 0x10;
+                        const float* dpts = *(const float**)de;
+                        const int dn = *(int32_t*)(de + 8);
+                        fprintf(stderr, "[startTown::tradingpost]   path[%d] pts=%p n=%d",
+                                dp, (const void*)dpts, dn);
+                        if (dpts && dn > 0)
+                            for (int k = 0; k < dn && k < 4; ++k)
+                                fprintf(stderr, "  (%.2f,%.2f)->tile(%d,%d)",
+                                        dpts[2*k], dpts[2*k+1],
+                                        (int)(dpts[2*k] + (float)half),
+                                        (int)(dpts[2*k+1] + (float)half));
+                        fprintf(stderr, "\n");
+                    }
+                    fflush(stderr);
+                    // Try path 0 first (the one the retail route builder walks), then the
+                    // rest. For each river point, step the footprint outward from the water
+                    // in each cardinal direction until it stops clashing with an existing
+                    // building — the first fit wins, nearest setback first.
+                    //
+                    // ⚠ THE SETBACK IS MEASURED FROM THE CENTERLINE, NOT THE BANK.
+                    // These polylines are channel CENTERLINES; the water extends
+                    // halfWidth + 2.0 tiles either side (fb00's band width). Starting the
+                    // search at s=1 therefore placed the post IN THE RIVER — the measured
+                    // 2026-07-30 result, tile=(1,217). halfWidth is one of the 20 bytes per
+                    // 0x1C PathPoint that the wg+0x1e0 copy deliberately drops (retail drops
+                    // them too), so it is read from the SOURCE records via worldgen's side
+                    // table rather than by widening that copy.
+                    static const int kSetbackRange = 10;   // tiles searched BEYOND the bank
+                    // Fallback bank distance when the table has no entry for a path.
+                    // 4.0 (coastline) + 2.0 margin is the WIDEST case, so this errs toward
+                    // dry land: too far inland only costs dock adjacency, whereas too near
+                    // puts the post under water and fails for a misleading reason.
+                    static const int kBankFallback = 6;
+                    int bestX = 0, bestY = 0, bestSetback = -1, bestPath = -1, bestPt = -1;
+                    bool found = false;
+                    int pointsSeen = 0;
+
+                    // Natural iteration order already visits path 0 first, which is the
+                    // one the retail route builder walks; later paths are the fallback.
+                    for (int p = 0; p < pathCount && !found; ++p) {
+                        uint8_t* entry = pathArr + (size_t)p * 0x10;
+                        const float* pts = *(const float**)entry;
+                        const int ptCount = *(int32_t*)(entry + 8);
+                        if (!pts || ptCount < 2) continue;
+
+                        // First DRY tile off this path's centerline. -1 = no data.
+                        const float bankF = WorldGen_GetPathBankDistance(p);
+                        const int sMin = (bankF < 0.0f)
+                                       ? kBankFallback
+                                       : (int)std::ceil(bankF) + 1;   // +1 = clear of the band
+                        fprintf(stderr, "[startTown::tradingpost]   path[%d] halfWidth=%.2f "
+                                "bank=%.2f -> setback starts at s=%d%s\n",
+                                p, WorldGen_GetPathHalfWidth(p), bankF, sMin,
+                                bankF < 0.0f ? "  (NO halfWidth DATA — using fallback)" : "");
+
+                        for (int j = 0; j < ptCount && !found; ++j) {
+                            const int rx = (int)(pts[2 * j]     + (float)half);
+                            const int ry = (int)(pts[2 * j + 1] + (float)half);
+                            if (rx < 0 || ry < 0 || rx >= mapSize || ry >= mapSize) continue;
+                            ++pointsSeen;
+
+                            for (int s = sMin; s <= sMin + kSetbackRange && !found; ++s) {
+                                // 4 cardinals: post footprint placed s tiles off the water.
+                                const int cand[4][2] = {
+                                    { rx + s,      ry - th / 2 },   // east of the river
+                                    { rx - s - tw, ry - th / 2 },   // west
+                                    { rx - tw / 2, ry + s      },   // south
+                                    { rx - tw / 2, ry - s - th },   // north
+                                };
+                                for (int d = 0; d < 4 && !found; ++d) {
+                                    const int tx = cand[d][0], ty = cand[d][1];
+                                    if (tx < 1 || ty < 1 ||
+                                        tx + tw >= mapSize - 1 || ty + th >= mapSize - 1)
+                                        continue;
+                                    bool clash = false;
+                                    for (int o = 0; o < occN; ++o) {
+                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + tw + 1 &&
+                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + th + 1) {
+                                            clash = true; break;
+                                        }
+                                    }
+                                    if (clash) continue;
+                                    bestX = tx; bestY = ty; bestSetback = s;
+                                    bestPath = p; bestPt = j; found = true;
+                                }
+                            }
+                        }
+                    }
+
+                    // FALLBACK — no usable river geometry. Measured 2026-07-30: the
+                    // worldGeom+0x1e0 array has 4 entries but every one is {pts=NULL, n=0},
+                    // at world-build time AND at frame 900. That is not a timing problem;
+                    // worldgen.cpp:598 only RESIZES detail-group-C (its own comment: "no-op
+                    // for first-light: hf detailCountA == 0 ... feature-record append loop
+                    // (empty -> skipped)"), so standalone never generates the polylines.
+                    //
+                    // Consequence well beyond this harness: retail's boat-route builder
+                    // (0x1400456e0) walks this same array, so until worldgen fills it a
+                    // merchant boat has no river to follow. Placing the post inland is
+                    // therefore no worse than placing it on a "river" that does not exist,
+                    // and it unblocks everything that does not need the boat: the TradeUI
+                    // panel and the post's WorkPlaceComponent accepting state.
+                    // Ring-scan from the cluster centre exactly as BUILD_DEMO_PASTURE does,
+                    // and say loudly that this post is NOT dockable.
+                    if (!found) {
+                        const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+                        for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                            for (int dy = -r; dy <= r && !found; ++dy) {
+                                for (int dx = -r; dx <= r && !found; ++dx) {
+                                    if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                                    const int tx = cx + dx, ty = cy + dy;
+                                    if (tx < 1 || ty < 1 ||
+                                        tx + tw >= mapSize - 1 || ty + th >= mapSize - 1) continue;
+                                    bool clash = false;
+                                    for (int o = 0; o < occN; ++o) {
+                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + tw + 1 &&
+                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + th + 1) {
+                                            clash = true; break;
+                                        }
+                                    }
+                                    if (!clash) { bestX = tx; bestY = ty; found = true; }
+                                }
+                            }
+                        }
+                        if (found)
+                            fprintf(stderr, "[startTown::tradingpost] NO RIVER GEOMETRY "
+                                    "(%d path(s), all empty) — fell back to a cluster-centre "
+                                    "placement. The post will NOT be dockable: the retail boat "
+                                    "route builder needs worldGeom+0x1e0 populated, which "
+                                    "standalone worldgen never does. Fine for TradeUI / "
+                                    "accepting tests, NOT for the merchant-arrival wave.\n",
+                                    pathCount);
+                    }
+
+                    if (!found) {
+                        fprintf(stderr, "[startTown::tradingpost] no free %dx%d footprint near "
+                                "any river point (%d path(s), %d in-bounds point(s)) NOR within "
+                                "r=%d of the cluster centre; nothing spawned\n",
+                                tw, th, pathCount, pointsSeen, kExtraHouseSearchRadius);
+                    } else {
+                        void* tent = placeStructure(ttmpl, bestX, bestY, 0, tw, th,
+                                                    /*isDemoFoundation=*/false, -1);
+                        Occupy(bestX, bestY, tw, th);
+                        if (tent) ++spawned;
+                        if (bestPath >= 0)
+                            fprintf(stderr, "[startTown::tradingpost] demo trading post "
+                                    "tile=(%d,%d) fp=%dx%d setback=%d from river path[%d] "
+                                    "point[%d] ent=%p%s\n",
+                                    bestX, bestY, tw, th, bestSetback, bestPath, bestPt, tent,
+                                    bestPath != 0 ? "  <-- NOT on river path 0; the retail route "
+                                                    "builder walks path 0, so the boat may not "
+                                                    "reach this dock" : "");
+                        else
+                            fprintf(stderr, "[startTown::tradingpost] demo trading post "
+                                    "tile=(%d,%d) fp=%dx%d ent=%p  (cluster-centre fallback, "
+                                    "NOT river-adjacent)\n", bestX, bestY, tw, th, tent);
+                    }
                 }
             }
             fflush(stderr);
@@ -2920,9 +3190,39 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         const int fuelVolume = (fuelTmpl != 0 && (mask & fuelFlags) != 0)
                              ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
         const int carryLoad = 100;   // Gather2's per-trip budget (townCap/citCap = 100)
-        int foodBudget = cap - fuelVolume - carryLoad;
+        // BANISHED_SEED_FOOD_FIRST — GRADUATING to kDefaultOnFlags (verified 2026-07-31:
+        // food lands at default fuel settings, zero CLAMPED lines, house packs 998/1000).
+        // `=0` remains the kill-switch. Read via LiveEnabled so the table entry works.
+        //
+        // Reservation-ordering defect (found 2026-07-31): this budget reserves the full
+        // REQUESTED fuel volume (kSeedFuelPerHouse * fuelVol = 400*4 = 1600), but the fuel
+        // clamp below then runs SECOND and reduces fuel to whatever food left. So food
+        // reserves against ~700 volume of fuel that never lands, and with the default fuel
+        // seed `cap - fuelVolume - carryLoad` goes negative => maxFoodUnits == 0. Every
+        // house starts with ZERO food, on pure defaults, and the town starves.
+        //
+        // Note the knob to turn is the FUEL seed, not the food one: maxFoodUnits is 0
+        // whenever fuelVolume + carryLoad >= cap, so BANISHED_SEED_FOOD=6000, =130 and =1
+        // all clamp to 0 identically. BANISHED_SEED_FUEL=150 is the zero-code workaround.
+        //
+        // Since the fuel clamp already takes the remainder, dropping this one subtraction
+        // IS the fix. Flag off => expression byte-identical to before.
+        // Read through LiveEnabled, NOT raw getenv: kDefaultOnFlags is consulted only
+        // inside ComponentFactory::LiveEnabled, so a raw getenv here would make a table
+        // entry a silent no-op — unset would stay OFF while `=0` still worked, i.e. it
+        // would look graduated, pass the kill-switch test, and not actually be on.
+        static int s_foodFirst = -1;
+        if (s_foodFirst < 0)
+            s_foodFirst = ::ComponentFactory::LiveEnabled("BANISHED_SEED_FOOD_FIRST") ? 1 : 0;
+        int foodBudget = cap - carryLoad - (s_foodFirst ? 0 : fuelVolume);
         if (foodBudget < 0) foodBudget = 0;
         const int maxFoodUnits = foodBudget / (foodVol > 0 ? foodVol : 1);
+        // Print in BOTH states so "flag on, nothing changed" is never ambiguous.
+        fprintf(stderr, "[startTown::housing] seed budget: cap=%d carry=%d fuelReserve=%d "
+                "-> foodBudget=%d maxFoodUnits=%d (food-first %s)\n",
+                cap, carryLoad, (s_foodFirst ? 0 : fuelVolume), foodBudget, maxFoodUnits,
+                s_foodFirst ? "ON" : "off");
+        fflush(stderr);
         if (seedN > maxFoodUnits) {
             fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED food seed %d -> %d "
                     "units (cap=%d, fuel reserves %d, keeping %d free): an over-capacity "

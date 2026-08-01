@@ -89,6 +89,52 @@ static constexpr int WG_MATERIAL2  = 0x150;  // External*
 static constexpr int WG_MATERIAL3  = 0x158;  // External*
 static constexpr int WG_DETAILGRPC = 0x1e0;  // {void*,int,int} detail-group-C
 
+// Source PathPoint stride for the step-8 feature-record copy. Matches
+// PATHPT_STRIDE in worldgen_f390_coastline.cpp (which is static there), and the
+// `count * 0x1c` walk in retail TradeWork_impl_c4b0's append loop.
+static constexpr int PATHPT_STRIDE_SRC = 0x1c;
+
+// PathPoint field offsets within the 0x1C source stride (water_contour_mesh.cpp:295,
+// notes/water_mesh/lake_coverage.md §"+0x14 is a per-path constant"):
+//   +0x00 float x, +0x04 float y, ..., +0x14 float halfWidth
+// halfWidth is the CHANNEL half-width in tiles. It is written by the path builder
+// (FUN_1400cc850 arg a7) identically into every point of a path, so it is a per-path
+// constant, not per-point: coastline ring = 4.0 (DAT_140172194), secondary paths =
+// 1.5 (DAT_140172160). The RENDERED water band is wider still — fb00 uses
+// halfWidth + 2.0 (DAT_140172174) — so "distance from centerline to dry land" is
+// halfWidth + 2, not halfWidth.
+static constexpr int PATHPT_OFF_HALFWIDTH = 0x14;
+static constexpr float PATHPT_BAND_MARGIN = 2.0f;   // DAT_140172174
+
+// ── halfWidth side table ────────────────────────────────────────────────────────
+// The polyline copy into wg+0x1e0 drops all 20 non-(x,y) bytes, faithfully to retail.
+// Consumers that legitimately need the channel width (the BUILD_DEMO_TRADINGPOST dock
+// placement in starttown.cpp — a dock 1 tile from a CENTERLINE is still under water)
+// read it here instead of widening the copy. Indexed by path index, which the copy
+// preserves: dest[i] comes from src[i]; only the POINTS within a path are reversed.
+static constexpr int kMaxTrackedPaths = 16;
+static float s_pathHalfWidth[kMaxTrackedPaths];
+static float s_pathHalfWidthMax[kMaxTrackedPaths];   // to verify the "constant" claim
+static int   s_pathHalfWidthCount = 0;
+
+// Returns the channel half-width in tiles for feature path `pathIndex`, or -1.0f if
+// unknown (index out of range, or worldgen has not run). Callers MUST handle -1
+// rather than treating it as a width — a missing value means "no data", and silently
+// using 0 would reintroduce the centerline placement this table exists to prevent.
+extern "C" float WorldGen_GetPathHalfWidth(int pathIndex) {
+    if (pathIndex < 0 || pathIndex >= s_pathHalfWidthCount ||
+        pathIndex >= kMaxTrackedPaths)
+        return -1.0f;
+    return s_pathHalfWidth[pathIndex];
+}
+
+// Distance in tiles from a path's centerline to the first dry tile, or -1.0f if the
+// half-width is unknown. This is the value a dock placement wants.
+extern "C" float WorldGen_GetPathBankDistance(int pathIndex) {
+    const float hw = WorldGen_GetPathHalfWidth(pathIndex);
+    return (hw < 0.0f) ? -1.0f : hw + PATHPT_BAND_MARGIN;
+}
+
 // ============================================================
 // TerrainGenerator material-triple offsets (input to fd10).
 // Each triple = {System::String name @+0; int cookie @+0x08; External* cache @+0x10}.
@@ -593,9 +639,137 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
         }
     }
 
-    // 8. Detail-group-C resize (no-op for first-light: hf detailCountA == 0) +
-    //    the feature-record append loop (empty -> skipped).
-    Reimpl_Array_Resize_ArrayOfArrays(w + WG_DETAILGRPC, *(int32_t*)((uint8_t*)hf + HF_DETAILCNTA));
+    // 8. Detail-group-C resize + the FEATURE-RECORD APPEND LOOP.
+    //
+    // This is what fills worldGeom+0x1e0 — the map's feature polylines (coastline
+    // ring, rivers, paths). Consumers: the ambient-emitter pass in starttown.cpp
+    // (StartTown_SpawnEnvironment pass 1) and, crucially, retail's merchant boat
+    // ROUTE BUILDER 0x1400456e0, which walks path 0 from the map edge to a trading
+    // post's dock. Until 2026-07-30 only the resize was ported, so every entry was
+    // {ptr=NULL, count=0} and a merchant boat had no river to follow.
+    //
+    // ⚠ WHY THIS SAT UNDISCOVERED — the comment that used to be here read:
+    //     "8. Detail-group-C resize (no-op for first-light: hf detailCountA == 0) +
+    //         the feature-record append loop (empty -> skipped)."
+    // That was ACCURATE WHEN WRITTEN: detailCountA really was 0, the loop really had
+    // nothing to copy, and skipping it really was correct. Then the retail river /
+    // coastline generators landed (worldgen_f390_rivers.cpp, _coastline.cpp) and
+    // detailCountA became 4 — but the comment never changed, so to every later reader
+    // the missing loop looked like a considered decision rather than an omission.
+    // The measured symptom was 4 allocated slots all holding {NULL, 0}.
+    //
+    // The lesson generalises: a comment that states a CURRENT CONDITION ("count is 0
+    // here") rather than an INVARIANT silently becomes a lie the moment the condition
+    // changes, and it disguises the gap it created. Prefer invariants; when you must
+    // state a condition, say what would make it stop being true.
+    //
+    // Faithful to the tail of retail TradeWork_impl_c4b0 (0x1400ac4b0):
+    //   src  = hf+0x18 (HF_PATCHLIST), stride 0x10 = {void* pts, int count, int cap}
+    //          — the 0x1C-stride PathPoint vectors that wg_f390_coastline and the
+    //          other f390 feature stages append into.
+    //   dest = wg+0x1e0, stride 0x10, element size 8 = one (x,y) float pair.
+    //
+    // THREE THINGS THAT MATTER (each is a silent wrong-behaviour if missed):
+    //  1. The copy is REVERSED. Retail walks the source from count-1 down to 0
+    //     (`lVar7 = count * 0x1c`, decrementing). Preserving source order does not
+    //     fail loudly — it makes the merchant boat traverse the river the WRONG
+    //     WAY, which reads as a routing bug and would not be traced back to here.
+    //  2. Only the FIRST 8 BYTES of each 0x1C-byte PathPoint are copied — the (x,y)
+    //     pair. The remaining 20 bytes (halfWidth etc.) are deliberately dropped.
+    //     DO NOT widen this copy to "rescue" halfWidth: retail drops those bytes too,
+    //     and wg+0x1e0 is read by retail code that assumes an 8-byte stride. Callers
+    //     that need the channel width read it from the SOURCE via the side table
+    //     below (WorldGen_GetPathHalfWidth), which leaves the destination
+    //     byte-identical to retail.
+    //  3. Retail grows the destination incrementally with a *3 growth factor; we
+    //     size it exactly once instead. Deliberate deviation: consumers read only
+    //     {ptr, count}, never capacity, so the observable result is identical and
+    //     this avoids reimplementing the grow-and-copy dance for a known length.
+    {
+        const int destCount = *(int32_t*)((uint8_t*)hf + HF_DETAILCNTA);
+        Reimpl_Array_Resize_ArrayOfArrays(w + WG_DETAILGRPC, destCount);
+
+        uint8_t* srcBase  = *(uint8_t**)((uint8_t*)hf + HF_PATCHLIST);
+        uint8_t* destBase = *(uint8_t**)(w + WG_DETAILGRPC);
+        const char* rt = getenv("BANISHED_RIVER_TRACE");
+        const bool trace = rt && rt[0] && rt[0] != '0';
+        int pathsCopied = 0, pointsCopied = 0;
+
+        s_pathHalfWidthCount = 0;
+        for (int i = 0; i < kMaxTrackedPaths; ++i)
+            s_pathHalfWidth[i] = s_pathHalfWidthMax[i] = -1.0f;
+
+        for (int i = 0; i < destCount && srcBase && destBase; ++i) {
+            uint8_t* srcRec  = srcBase  + (size_t)i * 0x10;
+            uint8_t* destRec = destBase + (size_t)i * 0x10;
+            uint8_t* srcPts  = *(uint8_t**)(srcRec + 0x00);
+            const int srcN   = *(int32_t*)(srcRec + 0x08);
+            if (trace)
+                fprintf(stderr, "[worldgen::river]   src[%d] pts=%p n=%d\n",
+                        i, (void*)srcPts, srcN);
+            if (!srcPts || srcN <= 0) continue;
+
+            // Capture halfWidth from the SOURCE before the narrowing copy drops it.
+            // Scan every point rather than trusting point 0: the "per-path constant"
+            // claim comes from the decomp of the path builder, and if +0x14 were the
+            // wrong field this min/max would diverge and say so. Cheap insurance
+            // against reading a plausible-looking number out of the wrong offset.
+            if (i < kMaxTrackedPaths) {
+                float hwMin = *(const float*)(srcPts + PATHPT_OFF_HALFWIDTH);
+                float hwMax = hwMin;
+                for (int j = 1; j < srcN; ++j) {
+                    const float hw = *(const float*)(srcPts + (size_t)j * PATHPT_STRIDE_SRC
+                                                     + PATHPT_OFF_HALFWIDTH);
+                    if (hw < hwMin) hwMin = hw;
+                    if (hw > hwMax) hwMax = hw;
+                }
+                s_pathHalfWidth[i]    = hwMin;
+                s_pathHalfWidthMax[i] = hwMax;
+                if (i >= s_pathHalfWidthCount) s_pathHalfWidthCount = i + 1;
+            }
+
+            void* buf = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
+                                                  (uint64_t)srcN * 8, 4) : nullptr;
+            if (!buf) continue;
+            // dest[j] = src[srcN-1-j] — the reversal from note (1).
+            for (int j = 0; j < srcN; ++j)
+                *(uint64_t*)((uint8_t*)buf + (size_t)j * 8) =
+                    *(uint64_t*)(srcPts + (size_t)(srcN - 1 - j) * PATHPT_STRIDE_SRC);
+            *(void**)(destRec + 0x00)  = buf;
+            *(int32_t*)(destRec + 0x08) = srcN;
+            *(int32_t*)(destRec + 0x0c) = srcN;
+            ++pathsCopied; pointsCopied += srcN;
+        }
+
+        // Always print (one line): an empty result here is exactly the silent
+        // failure this port exists to remove, so it must never look like success.
+        fprintf(stderr, "[worldgen::river] feature polylines: %d/%d path(s) copied, "
+                "%d point(s) total%s\n", pathsCopied, destCount, pointsCopied,
+                pathsCopied == 0 ? "   <-- EMPTY: no boat route is possible; check "
+                                   "that the f390 feature stages populated hf+0x18"
+                                 : "");
+        // Always print the half-width table, INCLUDING when it is empty — an absent
+        // line must mean "this code did not run", never "there was nothing to say".
+        // Expected shape: path 0 = 4.00 (the coastline RING, which hugs the map
+        // border — it is not a river), later paths = 1.50 (secondary channels).
+        if (s_pathHalfWidthCount == 0) {
+            fprintf(stderr, "[worldgen::river] halfWidth table: EMPTY (no path "
+                    "contributed a width; dock placement has no bank distance)\n");
+        } else {
+            fprintf(stderr, "[worldgen::river] halfWidth table (%d path(s)):",
+                    s_pathHalfWidthCount);
+            for (int i = 0; i < s_pathHalfWidthCount; ++i) {
+                fprintf(stderr, "  [%d]=%.2f(bank %.2f)", i, s_pathHalfWidth[i],
+                        s_pathHalfWidth[i] < 0.0f ? -1.0f
+                                                  : s_pathHalfWidth[i] + PATHPT_BAND_MARGIN);
+                if (s_pathHalfWidthMax[i] != s_pathHalfWidth[i])
+                    fprintf(stderr, "<-- NOT CONSTANT (max %.2f): +0x14 may be the "
+                            "wrong field", s_pathHalfWidthMax[i]);
+            }
+            fprintf(stderr, "\n");
+        }
+        fflush(stderr);
+    }
 }
 
 // ============================================================

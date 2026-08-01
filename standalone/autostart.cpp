@@ -77,7 +77,7 @@ void Init() {
             if (parsedQ > 1) s_settleFrames = parsedQ;
             s_enabled = true;
             s_phase   = Phase::WaitQuit;
-            printf("[AutoStart] AUTOQUIT ENABLED (BANISHED_AUTOQUIT=\"%s\") — will "
+            fprintf(stderr, "[AutoStart] AUTOQUIT ENABLED (BANISHED_AUTOQUIT=\"%s\") — will "
                    "click Quit after %d menu frames\n", q, s_settleFrames);
             return;
         }
@@ -89,7 +89,7 @@ void Init() {
         std::strcmp(env, "false") == 0) {
         s_enabled = false;
         s_phase   = Phase::Disabled;
-        printf("[AutoStart] disabled (BANISHED_AUTOSTART unset)\n");
+        fprintf(stderr, "[AutoStart] disabled (BANISHED_AUTOSTART unset)\n");
         return;
     }
 
@@ -99,7 +99,7 @@ void Init() {
 
     s_enabled = true;
     s_phase   = Phase::WaitMenuSettle;
-    printf("[AutoStart] ENABLED (BANISHED_AUTOSTART=\"%s\") — will auto-open "
+    fprintf(stderr, "[AutoStart] ENABLED (BANISHED_AUTOSTART=\"%s\") — will auto-open "
            "New Game after %d menu frames, then auto-Start\n",
            env, s_settleFrames);
 }
@@ -124,7 +124,7 @@ void TickMenu(void* menuDLT) {
         }
         if (++s_phaseFrame < s_settleFrames) return;
 
-        printf("[AutoStart] menu settled (mainMenu=%p) — injecting New Game "
+        fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting New Game "
                "click\n", mainMenu);
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_New);
         s_phase        = Phase::WaitNewGame;
@@ -143,17 +143,17 @@ void TickMenu(void* menuDLT) {
                 reinterpret_cast<uintptr_t>(newGame) + kNewGame_ButtonOk) != nullptr;
 
         if (setupDone) {
-            printf("[AutoStart] NewGameDialog ready (self=%p) — injecting "
+            fprintf(stderr, "[AutoStart] NewGameDialog ready (self=%p) — injecting "
                    "Start click (buttonOk)\n", newGame);
             InjectClick(newGame, kMsg_ButtonClick, kEventId_Ok);
             s_phase = Phase::Done;
-            printf("[AutoStart] sequence fired — new-game transition queued; "
+            fprintf(stderr, "[AutoStart] sequence fired — new-game transition queued; "
                    "driver done\n");
             return;
         }
 
         if (s_newGameFrame > kNewGameTimeoutFrames) {
-            printf("[AutoStart] WARN: NewGameDialog setup did not complete in "
+            fprintf(stderr, "[AutoStart] WARN: NewGameDialog setup did not complete in "
                    "%d frames (self=%p) — aborting auto-Start to avoid a crash "
                    "on half-built combos\n",
                    kNewGameTimeoutFrames, newGame);
@@ -171,7 +171,7 @@ void TickMenu(void* menuDLT) {
         }
         if (++s_phaseFrame < s_settleFrames) return;
 
-        printf("[AutoStart] menu settled (mainMenu=%p) — injecting Quit click\n",
+        fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting Quit click\n",
                mainMenu);
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Quit);
         s_phase = Phase::Done;

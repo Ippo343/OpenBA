@@ -1055,6 +1055,21 @@ extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
 
 // Sprite::IsValid(this) -> bool
 // ?IsValid@Sprite@UI@@QEBA_NXZ
+//
+// ⚠ THIS DECLARATION IS CORRECT — do not "fix" it. Ghidra USED to label the exe
+// dispatch slot 0x1401514d0 as fn_Sprite_IsValid, which is wrong: that slot is
+// ExternalFactory::FindNext(self, typeId, prev) -> void*, and it is declared below as
+// fn_ExternalFactory_FindNext. The mislabel cost real time on 2026-07-31 because it
+// made the decompiler type the iterator's return as `bool`, which turned the cursor
+// walk in Building_GetBuyEntries (0x140059670) into an apparent infinite loop. The
+// Ghidra data label has since been renamed to Object_ExternalFactory_FindNext.
+//
+// Tell them apart: this one resolves by MANGLED EXPORT from the Runtime DLL
+// (engine_funcs.cpp: ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ")) and has nothing to
+// do with any exe .rdata slot. Its real callers are saveloaddialog.cpp:248 and
+// toolbardialog.cpp:1373. If a decompile shows "fn_Sprite_IsValid" being called twice
+// per loop with a cursor argument, you are looking at the factory iterator, not a
+// sprite check.
 typedef bool (*fn_Sprite_IsValid_t)(void* sprite);
 extern fn_Sprite_IsValid_t fn_Sprite_IsValid;
 
@@ -2676,9 +2691,34 @@ extern uint32_t* g_TypeId_SliderElement;
 // Used in Serialize ExternalFactory loop to count selectable build types
 extern uint32_t* g_TypeId_SelectDescription;
 
-// FUN_14005a520: Building_GetSellableCount(building, resource_entity) -> int
-// Queries available sell count for a given resource at a building.
-// Used by UpdateSellTotals and RefreshSellSpinnerValues.
+// FUN_14005a520: (tradeState, resourceEntityTemplate) -> int
+//
+// ⚠ THE NAME IS WRONG — kept only because ~4 call sites use it. This is NOT a
+// "sellable count". It is the per-resource PRICE/VALUE lookup for the trade panel.
+// Verified from the 0x14005a520 decompile (2026-07-30):
+//   * When tradeState+0x2c < 0 (no merchant docked) it finds the resource's
+//     ValueDescription (g_TypeInfo_ValueDescription) and returns desc+0x40 — the
+//     base value.
+//   * Otherwise it finds the resource's RawMaterial-ish component (DWORD_1401c7cb8)
+//     and tests that component's category flags at +0x5c against the docked
+//     merchant's masks, then returns desc+0x40 (buy) or desc+0x40 * DAT_140172124
+//     (sell, a discount multiplier), or 0 if the merchant deals in neither.
+//
+// ⚠ MERCHANT-RECORD DECODE (needed to port this, and easy to get wrong):
+// The merchant masks live in the TradeDescription+0x48 merchant array, element
+// stride 0x48, indexed by tradeState+0x2c:
+//     merchant[n] + 0x14  =  BUY  resource-category bitmask
+//     merchant[n] + 0x18  =  SELL resource-category bitmask
+// Both are ANDed against the resource component's flags at +0x5c. They are
+// **bitmasks, not enums** — a live BANISHED_TRADE_PROBE dump read them as
+// {32, 221728, 7232} etc., which look like nonsense enum values but are perfectly
+// ordinary category masks. Anything that treats them as enum ordinals will
+// silently price every resource wrong rather than fail loudly.
+//
+// Closure needed before this can be registered: sub-callee 0x14000ea80
+// (TradeUI_sub_sub_a520_sub_ea80) plus the two type-id globals above.
+// Used by UpdateSellTotals, RefreshSellSpinnerValues, RefreshSellTable, and the
+// merchant auto-buy routine TradeDescription_helper_sub_9ad0 (0x140059ad0).
 typedef int (*fn_Building_GetSellableCount_t)(void* building, void* resourceEntity);
 extern fn_Building_GetSellableCount_t fn_Building_GetSellableCount;  // 0x14005a520
 

@@ -226,18 +226,44 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
     // capture if both runs generated the same world, and autostart otherwise
     // rolls a fresh seed every launch. Purely additive — unset behaves exactly
     // like the original.
+    //
+    // ⚠ SCOPE — this value reaches FURTHER than "world generation", but runs still are
+    // NOT reproducible, and the reason is not the seeding.
+    //   BANISHED_SEED -> this seed element -> gameLoop+0x30 (newgamedialog.cpp:718)
+    //                 -> Random(seed) for the gameplay RNG at gameWorld+0xd8
+    //                    (gameupdateloop_load.cpp:777-782, whose "seeded with
+    //                     mapSizeIndex" comment is WRONG — +0x30 is the seed, +0x34 is
+    //                     terrainSize).
+    // So the in-sim RNG that drives citizen gender, ages and model variants IS pinned.
+    // Yet identical configs measurably diverge: 2026-07-31 gave gender splits 14/13,
+    // 15/12 and 13/14 and extinction frames spanning ~7500-10500. Same seed, same
+    // starting state, different outcomes => the divergence is in the ORDER or COUNT of
+    // RNG consumption (or a second entropy source), NOT in the seed.
+    // **Do not A/B two fixes on one run of each and rank them by outcome** — and do not
+    // "fix" this by pinning gw+0xd8; it is already pinned.
+    //
+    // Both branches log, to stderr, ALWAYS. This used to be a printf on the pinned
+    // branch only, i.e. into the stream that stalls (standalone_debug.log freezes at
+    // ~22KB), so no log could confirm the seed had been applied and a silent random
+    // seed was indistinguishable from a pinned one. Every past "this run used seed N"
+    // was an assumption.
     const char* envSeed = std::getenv("BANISHED_SEED");
     if (envSeed && envSeed[0]) {
         uint32_t fixed = (uint32_t)strtoul(envSeed, nullptr, 0);
         if (maxVal > 0) fixed %= (uint32_t)(maxVal + 1);
         fn_NumberEditElement_SetValue(seedElem, fixed);
-        printf("[NewGameDialog] BANISHED_SEED=%s -> seed pinned to %u\n",
-               envSeed, fixed);
+        fprintf(stderr, "[NewGameDialog] BANISHED_SEED=%s -> seed PINNED to %u "
+                "(also seeds the gameplay RNG at gw+0xd8; runs still diverge — see the "
+                "scope note above)\n", envSeed, fixed);
+        fflush(stderr);
         return;
     }
 
     uint32_t seed = fn_Random_Rand(random, (uint32_t)(maxVal + 1));
     fn_NumberEditElement_SetValue(seedElem, seed);
+    fprintf(stderr, "[NewGameDialog] BANISHED_SEED unset -> world seed RANDOMISED to %u\n",
+            seed);
+    fflush(stderr);
 }
 
 // ============================================================
