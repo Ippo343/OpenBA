@@ -633,7 +633,178 @@ REGISTER_TYPE(ToolUI, "UI::DialogController",
 // ---- TownHallUI: PROMOTED to real SA vtable (townhallui.cpp) — the town-hall
 //      General statistics / Professions / Production / Inventory / Graph /
 //      Agriculture panel now populates from the full reimplementation. ----
-UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
+// ---- TradeUI: PROMOTED to the real reimpl (Wave A), GATED on its exe leaves ----
+// The trading-post panel (Dialog\Trade.rsc). ~2800 lines of real reimplementation
+// already exist in code/Game/Dialog/tradeui.cpp but were unreachable: the generic
+// UI_DIALOG_STUB below registered the type name to a zero-filled 0x148 stub with a
+// no-op vtable, so opening a post gave a blank panel and every ported method was
+// dead code. This promotion follows the ProfessionUI pattern above (own g_vt +
+// REGISTER_TYPE; slots wired by index, never by exe address).
+//
+// Slot map (byte offset = slot * 8), taken from the per-function headers in
+// tradeui.cpp, which were recorded against the retail vtable when each was ported:
+//   slot 4  (+0x20) TradeUI_Serialize — MISNAMED: this is the full UI SETUP
+//                   (element lookup + table building). It is the ProfessionUI-Slot5
+//                   analogue and must run before any other slot touches the caches.
+//   slot 5  (+0x28) TradeUI_Draw      — mark tables for layout recalc
+//   slot 6  (+0x30) TradeUI_Slot6     — clear the building dirty flag
+//   slot 7  (+0x38) TradeUI_Startup   — trade value calcs, warning text, button enable
+//   slot 8  (+0x40) TradeUI_OnCreate  — per-frame refresh when the order count changes
+//   slot 9  (+0x48) TradeUI_OnRemove  — event dispatcher (spinners/combos/buttons)
+//   slot 10 (+0x50) TradeUI_Update    — serialize the tab/sort state
+//
+// ── WHY THE GATE ─────────────────────────────────────────────────────────────
+// tradeui.cpp calls 11 exe-resolved leaf helpers that are NOT ported and NOT
+// registered, so ResolveAddr returns 0 for every one of them:
+//   0x14005a520 fn_Building_GetSellableCount    0x140016050 fn_DynArray_Clear_0x20
+//   0x140059670 fn_Building_GetBuyEntries       0x140016130 fn_DynArray_Clear_0x18_Buy
+//   0x140015fd0 fn_Building_GetOrderName        0x140016200 fn_DynArray_Clear_0x18
+//   0x1400165d0 fn_IntroSort_ByComponent        0x1400162d0 fn_IntroSort_ByName
+//   0x14000e1c0 fn_StorageTree_Insert           0x140059490 fn_Building_AddPurchaseOrder
+//   0x140081420 fn_TradeUI_OnTradeButton (also needs Wave D — it IS the checkout)
+// Eight of those are reachable from the slot-4 SETUP path alone (it tails into
+// RefreshDisplay + RefreshSellTable + RefreshBuyTable), so wiring the real slots
+// today would EXEC-of-0 on the very first dispatch — the panel would crash rather
+// than render. Wave A is therefore "port + register those 11, THEN flip", not a
+// one-line stub removal.
+//
+// Rather than leave that as a tripwire, the wiring is conditional: DepsReady()
+// checks every one of them at first dispatch, and while any is null the slots stay
+// no-ops (identical to the old stub) and a single loud line names what is missing.
+// Once the 11 land, this promotion goes live with no further edit here.
+struct TradeUI;
+extern void TradeUI_Serialize(TradeUI* self);
+extern void TradeUI_Draw(TradeUI* self);
+extern void TradeUI_Slot6(TradeUI* self);
+extern void TradeUI_Startup(TradeUI* self);
+extern void TradeUI_OnCreate(TradeUI* self);
+extern void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId);
+extern void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4);
+namespace uistub_TradeUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("TradeUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // Every exe leaf the wired slots can reach. Null while unported/unregistered.
+    bool DepsReady() {
+        static int s_ok = -1;
+        if (s_ok >= 0) return s_ok != 0;
+        struct Dep { const char* name; const void* fn; };
+        const Dep deps[] = {
+            { "fn_Building_GetSellableCount (0x14005a520)",  (const void*)fn_Building_GetSellableCount },
+            { "fn_Building_GetBuyEntries (0x140059670)",     (const void*)fn_Building_GetBuyEntries },
+            { "fn_Building_GetOrderName (0x140015fd0)",      (const void*)fn_Building_GetOrderName },
+            { "fn_Building_AddPurchaseOrder (0x140059490)",  (const void*)fn_Building_AddPurchaseOrder },
+            { "fn_DynArray_Clear_0x20 (0x140016050)",        (const void*)fn_DynArray_Clear_0x20 },
+            { "fn_DynArray_Clear_0x18_Buy (0x140016130)",    (const void*)fn_DynArray_Clear_0x18_Buy },
+            { "fn_DynArray_Clear_0x18 (0x140016200)",        (const void*)fn_DynArray_Clear_0x18 },
+            { "fn_IntroSort_ByComponent (0x1400165d0)",      (const void*)fn_IntroSort_ByComponent },
+            { "fn_IntroSort_ByName (0x1400162d0)",           (const void*)fn_IntroSort_ByName },
+            { "fn_StorageTree_Insert (0x14000e1c0)",         (const void*)fn_StorageTree_Insert },
+            // NOTE: fn_TradeUI_OnTradeButton (0x140081420) is deliberately NOT in this
+            // list. It is the Wave D checkout, reachable ONLY from the slot-9 buttonTrade
+            // branch, which null-guards it at the call site (tradeui.cpp). Including it
+            // here would mean the panel could not open until Wave D landed — the opposite
+            // of the intent, since rendering the panel needs none of the checkout.
+            { "fn_Element_SetNeedsSizeCalc",                 (const void*)fn_Element_SetNeedsSizeCalc },
+            { "fn_TabElement_SetActiveTab",                  (const void*)fn_TabElement_SetActiveTab },
+            { "fn_UIString_Ctor",                            (const void*)fn_UIString_Ctor },
+            { "fn_Sprite_Ctor",                              (const void*)fn_Sprite_Ctor },
+        };
+        int missing = 0;
+        for (const Dep& d : deps) if (!d.fn) ++missing;
+        s_ok = (missing == 0) ? 1 : 0;
+        if (missing) {
+            std::fprintf(stderr, "[TradeUI] STAYING STUBBED — %d unresolved exe leaf(s); the "
+                         "panel would EXEC-of-0 on its setup slot. Missing:\n", missing);
+            for (const Dep& d : deps)
+                if (!d.fn) std::fprintf(stderr, "[TradeUI]     %s\n", d.name);
+            std::fprintf(stderr, "[TradeUI]   Port+register these, then TradeUI goes live with "
+                         "no further change to ui_dialog_stub_factories.cpp.\n");
+            std::fflush(stderr);
+        }
+        return s_ok != 0;
+    }
+    // Slot 4 builds the element caches (+0xC0..+0x140) every other slot dereferences.
+    // Same hazard ProfessionUI documents: the framework dispatches the per-frame slots
+    // before setup has run, so they must skip until the caches exist.
+    bool IsSetUp(void* self) {
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        return *reinterpret_cast<void**>(s+0xC8)!=nullptr &&   // tableSell
+               *reinterpret_cast<void**>(s+0xD0)!=nullptr;     // tableBuy
+    }
+    void Trace(const char* slot, void* self) {
+        if (!std::getenv("BANISHED_TRADE_TRACE")) return;
+        static int n=0; if (n>=32) return; ++n;
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        // stderr, NOT stdout — two independent reasons, both already project rules:
+        //  1. `std::printf` does not survive the release build. log_strip.h defines
+        //     `printf(...)` as `((void)0)`, so the QUALIFIED call expands to
+        //     `std::((void)0)` and fails with "expected unqualified-id before '('".
+        //     This single line broke `make standalone` for the whole tree.
+        //  2. stdout STALLS in this exe (standalone_debug.log froze at 22KB on the splash
+        //     while stderr kept growing all session), so a printf-based harness prints
+        //     NOTHING and looks identical to one that never fired — which is exactly the
+        //     symptom this trace was added to investigate.
+        std::fprintf(stderr, "[TradeUI] %s self=%p tableSell(+0xC8)=%p tableBuy(+0xD0)=%p "
+               "buttonTrade(+0xF0)=%p sell.n(+0x38)=%d buy.n(+0x48)=%d\n", slot, self,
+               self?*reinterpret_cast<void**>(s+0xC8):nullptr,
+               self?*reinterpret_cast<void**>(s+0xD0):nullptr,
+               self?*reinterpret_cast<void**>(s+0xF0):nullptr,
+               self?*reinterpret_cast<int32_t*>(s+0x38):0,
+               self?*reinterpret_cast<int32_t*>(s+0x48):0);
+        std::fflush(stderr);
+    }
+    // Slot 4 is idempotent-guarded for the same reason ProfessionUI's Slot5 is: a second
+    // run re-clones table rows and appends to the element arrays instead of clearing.
+    void Slot4(void* self) {
+        if (!self || !DepsReady()) return;
+        if (IsSetUp(self)) { Trace("Slot4-skip(already set up)", self); return; }
+        Trace("Slot4-setup", self);
+        TradeUI_Serialize(reinterpret_cast<TradeUI*>(self));
+    }
+    void Slot5(void* self) {
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        Trace("Slot5-draw", self); TradeUI_Draw(reinterpret_cast<TradeUI*>(self));
+    }
+    void Slot6(void* self) {
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        TradeUI_Slot6(reinterpret_cast<TradeUI*>(self));
+    }
+    void Slot7(void* self) {
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        Trace("Slot7-values", self); TradeUI_Startup(reinterpret_cast<TradeUI*>(self));
+    }
+    void Slot8(void* self) {
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        TradeUI_OnCreate(reinterpret_cast<TradeUI*>(self));
+    }
+    void Slot9(void* self, void* p2, int msg, int id, int p5, int p6) {
+        (void)p5; (void)p6;
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        Trace("Slot9-event", self);
+        TradeUI_OnRemove(reinterpret_cast<TradeUI*>(self), p2, msg, id);
+    }
+    void Slot10(void* self, void* stream, void* p3, int64_t p4) {
+        if (!self || !DepsReady() || !IsSetUp(self)) return;
+        TradeUI_Update(reinterpret_cast<TradeUI*>(self), stream, p3, p4);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                          g_vt[5]=reinterpret_cast<void*>(&Slot5);
+                          g_vt[6]=reinterpret_cast<void*>(&Slot6);
+                          g_vt[7]=reinterpret_cast<void*>(&Slot7);
+                          g_vt[8]=reinterpret_cast<void*>(&Slot8);
+                          g_vt[9]=reinterpret_cast<void*>(&Slot9);
+                          g_vt[10]=reinterpret_cast<void*>(&Slot10); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x148;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x148,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(TradeUI, "UI::DialogController",
+              &uistub_TradeUI::Factory, &uistub_TradeUI::InPlace);
 // UpgradeUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/upgradeui.cpp (wires Slot4/8/9 — the wood→stone upgrade
 // button; click writes the target template into DestroyComponent+0x60 and

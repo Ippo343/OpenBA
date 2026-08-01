@@ -1676,6 +1676,23 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     if (switchVal == 0) {
         // --- eventType 0x12: click events ---
         if (eventId == 0x4e20) {
+            // buttonTrade — the CHECKOUT. fn_TradeUI_OnTradeButton resolves 0x140081420,
+            // which is neither ported nor registered (it is Wave D: it is the function
+            // that moves sell items, processes buy orders, and calls the livestock
+            // delivery leaf 0x14005ace0). ResolveAddr returns 0 until then, so calling
+            // it unguarded is an EXEC-of-0 on a plain button click. Guard it: the rest
+            // of the dispatcher (dismiss, spinners, combos) is fully ported and works.
+            if (!fn_TradeUI_OnTradeButton) {
+                static bool s_warned = false;
+                if (!s_warned) {
+                    s_warned = true;
+                    fprintf(stderr, "[TradeUI] buttonTrade clicked but the checkout "
+                            "(0x140081420) is NOT REGISTERED — ignoring the click. "
+                            "This needs Wave D.\n");
+                    fflush(stderr);
+                }
+                return;
+            }
             fn_TradeUI_OnTradeButton(self, param2, nullptr, 0);
             return;
         }
