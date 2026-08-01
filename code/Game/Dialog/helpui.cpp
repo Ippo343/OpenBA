@@ -69,8 +69,15 @@ static void HelpUI_ArrayResize_Impl(void* arrayBase, int newCount) {
 }
 
 // Get the help topics ExternalList from the game world singleton
+// (retail: `*(ExternalList**)(g_pGameWorldSingleton + 0xa0)`, verified against the
+// disassembly of 0x140069f38 — the singleton IS the GameUpdateLoop at .rdata
+// 0x1401c3dd8). Standalone deviation: the singleton is null before the game loop
+// exists (and the list itself can be null if the help resources never loaded), so
+// return null rather than fault; every caller below treats null as "no topics".
 static void* GetHelpExternalList() {
+    if (!g_pGameWorldSingleton) return nullptr;
     void* world = *g_pGameWorldSingleton;
+    if (!world) return nullptr;
     return *(void**)((uintptr_t)world + 0xa0);
 }
 
@@ -89,6 +96,13 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
     // Get currently selected combo item
     void* comboElem = *(void**)(s + 0x40);
+
+    // Standalone guard (retail has none — its .rsc always yields both elements and
+    // the world always owns the help list). If an element lookup failed (a null
+    // element type-id makes FindElementType store null even when the element
+    // exists) this would deref null at combo+0x118 / inside SetText.
+    if (!extList || !comboElem || !*(void**)(s + 0x38) || !*(void**)(s + 0x58))
+        return;
     int currentItem = *(int*)((uintptr_t)comboElem + 0x118);
     void* itemData = fn_ComboElement_GetItemData(comboElem, currentItem);
     int pageResIndex = (int)(intptr_t)itemData;
@@ -174,6 +188,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
 static int HelpUI_FindLinkTarget(uint8_t* searchStr) {
     void* extList = GetHelpExternalList();
+    if (!extList) { fn_String_Dtor(searchStr); return -1; }   // standalone guard
     int count = fn_ExternalList_GetResourceCount(extList);
 
     for (int i = 0; i < count; i++) {
@@ -261,8 +276,9 @@ void HelpUI_Slot4(HelpUI* self) {
     *(uint64_t*)(s + 0x58) = *(uint64_t*)bpBuf;
 
     // Set element IDs on combo and document elements
-    fn_Element_SetElementId(*(void**)(s + 0x40), 0xE74);
-    fn_Element_SetElementId(*(void**)(s + 0x38), 0xE75);
+    // (standalone guard: SetElementId derefs its `this`, so skip a failed lookup)
+    if (*(void**)(s + 0x40)) fn_Element_SetElementId(*(void**)(s + 0x40), 0xE74);
+    if (*(void**)(s + 0x38)) fn_Element_SetElementId(*(void**)(s + 0x38), 0xE75);
 
     // Find "buttonBack" by name -> +0x48, set ID 0xE76
     uint8_t nameStr[8];
@@ -283,13 +299,14 @@ void HelpUI_Slot4(HelpUI* self) {
     *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
     fn_String_Dtor(nameStr);
 
-    fn_Element_SetElementId(*(void**)(s + 0x48), 0xE76);
-    fn_Element_SetElementId(*(void**)(s + 0x50), 0xE77);
+    if (*(void**)(s + 0x48)) fn_Element_SetElementId(*(void**)(s + 0x48), 0xE76);
+    if (*(void**)(s + 0x50)) fn_Element_SetElementId(*(void**)(s + 0x50), 0xE77);
 
     // Populate combo with help topic names from ExternalList
     void* extList = GetHelpExternalList();
-    int topicCount = fn_ExternalList_GetResourceCount(extList);
     void* comboElem = *(void**)(s + 0x40);
+    if (!extList || !comboElem) return;    // standalone guard
+    int topicCount = fn_ExternalList_GetResourceCount(extList);
 
     for (int i = 0; i < topicCount; i++) {
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
@@ -330,16 +347,23 @@ void HelpUI_Slot7(HelpUI* self) {
     int pageIndex = *(int*)((uintptr_t)self + 0x64);
     int pageCount = *(int*)((uintptr_t)self + 0x70);
 
-    // Enable prev button if not on first page
-    void* prevBtn = (void*)self->data48;
-    void** vtable1 = *(void***)prevBtn;
     typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)vtable1[8])(prevBtn, pageIndex > 0);
+
+    // Enable prev button if not on first page
+    // (standalone guard: a failed "buttonBack"/"buttonForward" lookup leaves the
+    // field null, and retail dereferences it unconditionally)
+    void* prevBtn = (void*)self->data48;
+    if (prevBtn) {
+        void** vtable1 = *(void***)prevBtn;
+        ((fn_SetEnabled_t)vtable1[8])(prevBtn, pageIndex > 0);
+    }
 
     // Enable next button if not on last page
     void* nextBtn = (void*)self->data50;
-    void** vtable2 = *(void***)nextBtn;
-    ((fn_SetEnabled_t)vtable2[8])(nextBtn, pageIndex < pageCount - 1);
+    if (nextBtn) {
+        void** vtable2 = *(void***)nextBtn;
+        ((fn_SetEnabled_t)vtable2[8])(nextBtn, pageIndex < pageCount - 1);
+    }
 }
 
 // ============================================================
@@ -356,6 +380,15 @@ void HelpUI_Slot7(HelpUI* self) {
 //
 // Original: 0x14006A290.
 
+// Standalone guard helper: every navigation branch below (link / back / forward)
+// dereferences the scroll source (+0x30), the document (+0x38), the combo (+0x40),
+// the container (+0x58) and the history array (+0x68) without a null check, exactly
+// as retail does. If setup could not find an element, treat the event as unhandled.
+static bool HelpUI_NavReady(uintptr_t s) {
+    return *(void**)(s + 0x30) && *(void**)(s + 0x38) && *(void**)(s + 0x40) &&
+           *(void**)(s + 0x58) && *(void**)(s + 0x68);
+}
+
 void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
                    int param5, int param6, int linkIndex) {
     (void)param2; (void)param5; (void)param6;
@@ -369,6 +402,11 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
 
     if (msg != 0x12)
         return;
+
+    if (id != 0xE75 && id != 0xE76 && id != 0xE77)
+        return;
+    if (!HelpUI_NavReady(s))
+        return;   // standalone guard, see above
 
     if (id == 0xE75) {
         // Document link clicked — navigate to linked page

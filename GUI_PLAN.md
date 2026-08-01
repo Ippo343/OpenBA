@@ -569,11 +569,15 @@ premise: **Town Hall / Trade are NOT Utility** items — they are `Action=Tool`/
   custom minimap element (an exe UI type with no standalone vtable). Text dialogs (Help) have no
   such element and are fine. Each utility dialog with a custom content element will need that
   element's standalone vtable.
-- **Controllers render NO content**: all utility controllers (MapUI/StatusBarUI/ProfessionUI/
-  EventLogUI/HelpUI/ResourceLimitUI) are no-op `StubNop` stubs in `ui_dialog_stub_factories.cpp`
-  (only Dtor/GetTypeId real). So the dialogs open but are empty. Promoting a controller to a real
-  Slot4 reimpl (the BuildRequirementUI/HotKeyToolTipUI pattern in that file) is the "renders
-  content" increment.
+- ~~**Controllers render NO content**~~ **CLOSED**: every utility controller named here
+  (MapUI/StatusBarUI/ProfessionUI/EventLogUI/HelpUI/ResourceLimitUI) has since been promoted out
+  of the generic `StubNop` registration in `ui_dialog_stub_factories.cpp` to its real reimplemented
+  slots. HelpUI was the last one (2026-07-31): promoting the controller alone was NOT enough —
+  `GameUpdateLoop::Load` step 4 (`ExternalList::Find "Game/Help/HelpTopics.rsc"` → `gw+0xa0`) was
+  among the deferred step 1-4 resource Finds, so a live controller still populated an empty combo.
+  Both halves landed together; the help dialog now lists all 66 topics and the topic combo, the
+  in-document links and back/forward are user-verified working. When promoting the NEXT dialog,
+  check its data source is actually loaded before concluding the promotion failed.
 
 **🔧 Build bug fixed en route:** the standalone link was silently failing on the Windows ~32KB
 `CreateProcess` command-line limit (~400 object files; my 2 new `.o` tipped it over) — every SA

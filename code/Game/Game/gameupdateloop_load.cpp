@@ -156,6 +156,56 @@ static void LoadProfessionList_Step2(uint8_t* p) {
     fflush(stderr);
 }
 
+// ============================================================
+// Step 4 — HelpTopics load (help-dialog bring-up 2026-07-31)
+// ============================================================
+// Retail (0x140096c80..0x140096cdd) does
+//   ExternalList::Find(param_1[1], &out, "Game/Help/HelpTopics.rsc", ExternalList typeId)
+// and stores the result at +0xA0 — an Object::ExternalList whose resources are the
+// per-topic UI::StringTables (text 0 = link key, 1 = combo title, 2 = page body).
+// That store was deferred with the rest of the step 1-4 Finds, so gw+0xa0 stayed null
+// and HelpUI::Slot4 populated an empty combo — the reason the in-game help dialog
+// renders blank (verified live: `[HelpUI] Slot4 ... topics=0000000000000000`).
+//
+// Loaded through ExternalFactory::FindOrLoad rather than ExternalList::Find on the
+// resource list at +0x08, for the same reason as ProfessionList above: the global
+// factory load is the primitive that is proven to work in standalone. The
+// IsDerivedFrom(ExternalList) check is retail's (it stores null on a type mismatch).
+static void LoadHelpTopics_Step4(uint8_t* p) {
+    *(void**)(p + 0xA0) = nullptr;
+
+    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        fprintf(stderr, "[GUL::Help] SKIP — loader fns/factory unavailable "
+                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
+                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
+                (void*)fn_Filename_Dtor,
+                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+        fflush(stderr);
+        return;
+    }
+
+    uint8_t fname[16] = {0};
+    fn_Filename_CtorCStr(fname, "Game/Help/HelpTopics.rsc");
+    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
+    fn_Filename_Dtor(fname);
+
+    // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
+    // Runtime (the exe .rdata slot 0x140151ef0 that retail reads is unfilled in SA).
+    static const uint32_t* s_extListTypeInfo = reinterpret_cast<const uint32_t*>(
+        ResolveExport("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A"));
+    bool isList = false;
+    if (list && s_extListTypeInfo && fn_IsDerivedFrom)
+        isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
+    if (isList) *(void**)(p + 0xA0) = list;
+
+    fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
+            *(void**)(p + 0xA0), list, (int)isList,
+            (isList && fn_ExternalList_GetResourceCount)
+                ? fn_ExternalList_GetResourceCount(list) : -1);
+    fflush(stderr);
+}
+
 static bool s_loadResolved = false;
 static void LoadEnsureInit() {
     if (s_loadResolved) return;
@@ -769,11 +819,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     if (g_pGameWorldSingleton) *g_pGameWorldSingleton = loopVoid;
 
     // Steps 1-4: resource Finds (Diseases/Profession/Material/Help) — DEFERRED (leave null),
-    // EXCEPT step 2 ProfessionList (the citizen-economy keystone) under BANISHED_LIVE_PROFESSIONLIST.
+    // EXCEPT step 2 ProfessionList (the citizen-economy keystone) under BANISHED_LIVE_PROFESSIONLIST
+    // and step 4 HelpTopics (the only consumer is the help dialog).
     *(void**)(p + 0xA8) = nullptr;  // diseases
     LoadProfessionList_Step2(p);    // step 2 → +0xB0 (professions); env-gated, else null
     *(void**)(p + 0xB8) = nullptr;  // ui material
-    *(void**)(p + 0xA0) = nullptr;  // help topics
+    LoadHelpTopics_Step4(p);        // step 4 → +0xA0 (help topics)
 
     // Step 5 — the gameplay Random (+0xD8, 0x9c4) seeded from gameLoop+0x30.
     //

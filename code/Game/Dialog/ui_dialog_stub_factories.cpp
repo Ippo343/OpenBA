@@ -36,6 +36,7 @@
 
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "resolve.h"      // ResolveExport — HelpUI's Runtime BaseTypeInfo type-id heal
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -216,7 +217,162 @@ UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
 // (wires Slot4 so the entity panel gets its +0x30 entity ref → correct positioning).
 // EventLogUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/eventlogui.cpp
 // (wires Slot5/7/9 + per-frame OnUpdate so the event-log panel populates from gameWorld+0x138).
-UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
+// ---- HelpUI: PROMOTED to the real reimpl (help-dialog bring-up 2026-07-31) ----
+// The toolbar "help" utility dialog (Template\UtilityHelp.rsc -> StandardDialog.rsc,
+// content Dialog/Help.rsc). The whole controller is already reimplemented in
+// code/Game/Dialog/helpui.cpp, but the generic stub below left every slot a no-op,
+// so the dialog opened with an empty topic combo and a blank document — the
+// "controllers render NO content" follow-up recorded in GUI_PLAN.md Phase 4.
+//
+// Slot map, read out of the retail vtable at exe .rdata 0x14015bf30 (qword N =
+// slot N), NOT from our labels:
+//   slot 4 (+0x20) 0x14006a500 Slot4  — setup: find the 4 typed elements + the two
+//                                       named buttons, populate the topic combo from
+//                                       the help ExternalList, tail into LoadPage.
+//   slot 5 (+0x28) 0x14006a4f0        — 3-byte RET no-op (left as StubNop).
+//   slot 7 (+0x38) 0x14006a230 Slot7  — enable/disable back+forward per history index.
+//   slot 9 (+0x48) 0x14006a290 Slot9  — combo change (msg 0x14), document link click
+//                                       and back/forward (msg 0x12).
+// Slot9's 7th parameter is the clicked link index: retail reads it from
+// [RSP+0xb0] at 0x14006a2ed, which is arg 7 in this frame — hence the 7-arg wrapper.
+//
+// ── Construction deviation ───────────────────────────────────────────────────
+// HelpUI_Ctor (0x14006a920) zeroes +0x30..+0x58 and +0x68/+0x70 but writes
+// **-1** to the qword at +0x60, i.e. BOTH the current page index (+0x60) and the
+// history index (+0x64) start at -1. A plain zero-fill is not equivalent: LoadPage
+// truncates the history to (historyIndex + 1) entries, so a 0 index leaves one
+// uninitialised history slot in front of the first real page and the back button
+// then navigates to a garbage page id. Factory/InPlace stamp the -1 explicitly.
+//
+// ── Type-id dependency ───────────────────────────────────────────────────────
+// Slot4 looks its elements up by type (ScrollElement/ComboElement/
+// DocumentTextElement/ContainerElement, plus ButtonElement for the two named
+// buttons) and checks the topic resources against StringTable. Those ids come from
+// exe .rdata dispatch slots that standalone only fills when
+// BANISHED_LIVE_ELEMENT_TIDS is set (standalone/reg_element_typeids.cpp). Rather
+// than make the help dialog depend on that gate, EnsureTypeIds() points the globals
+// straight at the Runtime DLL's own BaseTypeInfo exports — the same objects retail's
+// name resolution would have written into those slots, so this is a no-op when the
+// gate is on and a self-heal when it is off. A type-id that fails to resolve leaves
+// the element null, and the reimpl's standalone guards then degrade to today's
+// empty-panel behaviour instead of faulting.
+struct HelpUI;
+extern void HelpUI_Slot4(HelpUI* self);
+extern void HelpUI_Slot7(HelpUI* self);
+extern void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
+                         int param5, int param6, int linkIndex);
+namespace uistub_HelpUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("HelpUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // Fill the element/StringTable type-id globals from the Runtime's BaseTypeInfo
+    // data exports (first dword of each object is the id). These are Runtime-
+    // registered types, so Object::GetTypeIdByName cannot see them — see the
+    // "Why ResolveExport and not GetTypeIdByName" note in reg_element_typeids.cpp.
+    // Idempotent; never overwrites a slot the gate already filled.
+    void EnsureTypeIds() {
+        struct Fill { uint32_t** global; const char* mangled; };
+        const Fill fills[] = {
+            { &g_TypeId_HelpFirstElem,     "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpComboElem,     "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpDocTextElem,   "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpContainerElem, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpButtonElem,    "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_StringTable,       "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A" },
+        };
+        for (const Fill& f : fills) {
+            if (*f.global) continue;
+            *f.global = reinterpret_cast<uint32_t*>(ResolveExport(f.mangled));
+        }
+    }
+    // Everything the wired slots dereference unconditionally.
+    bool Ready() {
+        return g_TypeId_HelpFirstElem && g_TypeId_HelpComboElem &&
+               g_TypeId_HelpDocTextElem && g_TypeId_HelpContainerElem &&
+               g_TypeId_HelpButtonElem && g_TypeId_StringTable &&
+               fn_Element_FindElementType && fn_FindElement && fn_IsDerivedFrom &&
+               fn_InternalBasePtr_Ctor && fn_Element_SetElementId &&
+               fn_ExternalList_GetResourceCount && fn_StringTable_GetText &&
+               fn_Sprite_Default_Ctor && fn_ComboElement_AddItem &&
+               fn_ComboElement_SetCurrentItem && fn_ComboElement_GetItemData &&
+               fn_UIString_Ctor_Index && fn_DocumentTextElement_SetText_UIString &&
+               fn_ContainerElement_SetOffsets && fn_String_Ctor_CStr &&
+               fn_String_Dtor && fn_MemAlloc && g_pMemAllocSingleton;
+    }
+    // Report the OUTCOME of the readiness test, once, naming what is missing.
+    bool CheckOnce() {
+        static int s_ok = -1;
+        if (s_ok >= 0) return s_ok != 0;
+        EnsureTypeIds();
+        s_ok = Ready() ? 1 : 0;
+        if (!s_ok) {
+            fprintf(stderr, "[HelpUI] slots stay no-op — unresolved deps:%s%s%s%s%s%s\n",
+                    g_TypeId_HelpFirstElem     ? "" : " ScrollElement",
+                    g_TypeId_HelpComboElem     ? "" : " ComboElement",
+                    g_TypeId_HelpDocTextElem   ? "" : " DocumentTextElement",
+                    g_TypeId_HelpContainerElem ? "" : " ContainerElement",
+                    g_TypeId_HelpButtonElem    ? "" : " ButtonElement",
+                    g_TypeId_StringTable       ? "" : " StringTable");
+            fflush(stderr);
+        }
+        return s_ok != 0;
+    }
+    void Trace(const char* slot, void* self) {
+        if (!std::getenv("BANISHED_HELP_TRACE")) return;
+        static int n=0; if (n>=24) return; ++n;
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+        void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
+        printf("[HelpUI] %s self=%p root(+0x20)=%p scroll=%p doc=%p combo=%p back=%p fwd=%p "
+               "cont=%p page=%d hist=%d/%d topics=%p n=%d\n", slot, self,
+               *reinterpret_cast<void**>(s+0x20), *reinterpret_cast<void**>(s+0x30),
+               *reinterpret_cast<void**>(s+0x38), *reinterpret_cast<void**>(s+0x40),
+               *reinterpret_cast<void**>(s+0x48), *reinterpret_cast<void**>(s+0x50),
+               *reinterpret_cast<void**>(s+0x58), *reinterpret_cast<int*>(s+0x60),
+               *reinterpret_cast<int*>(s+0x64), *reinterpret_cast<int*>(s+0x70), topics,
+               (topics && fn_ExternalList_GetResourceCount)
+                   ? fn_ExternalList_GetResourceCount(topics) : -1);
+        fflush(stdout);
+    }
+    void Slot4(void* self) {
+        if (!self || !CheckOnce()) return;
+        // Setup is not idempotent: a second run appends every topic to the combo
+        // again and pushes a second history entry. The framework dispatches it once
+        // per dialog build; skip if the element cache is already populated.
+        if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self)+0x40)) {
+            Trace("Slot4-skip(already set up)", self);
+            return;
+        }
+        HelpUI_Slot4(reinterpret_cast<HelpUI*>(self));
+        Trace("Slot4", self);
+    }
+    void Slot7(void* self) {
+        if (!self || !CheckOnce()) return;
+        HelpUI_Slot7(reinterpret_cast<HelpUI*>(self));
+    }
+    void Slot9(void* self, uint64_t p2, int msg, int id, int p5, int p6, int linkIndex) {
+        if (!self || !CheckOnce()) return;
+        Trace("Slot9", self);
+        HelpUI_Slot9(reinterpret_cast<HelpUI*>(self), p2, msg, id, p5, p6, linkIndex);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                          g_vt[7]=reinterpret_cast<void*>(&Slot7);
+                          g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    // Mirror HelpUI_Ctor: zero, then the -1 qword at +0x60 (page index AND history index).
+    void Init(void* p) {
+        for (size_t o=0;o<(size_t)0x78;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0;
+        *reinterpret_cast<uint64_t*>((char*)p+0x60) = 0xffffffffffffffffull;
+        *reinterpret_cast<void**>(p)=g_vt;
+    }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x78,8); if(!p) return nullptr; Init(p); return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Init(m); return m; }
+}
+REGISTER_TYPE(HelpUI, "UI::DialogController",
+              &uistub_HelpUI::Factory, &uistub_HelpUI::InPlace);
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
 // ---- ImmigrationUI: PROMOTED to a real SA vtable (immigrationui.cpp) ----------
 // The Town Hall "Nomads" tab: Dialog/Immigration.rsc is inserted into the empty
