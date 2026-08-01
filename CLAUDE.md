@@ -1,5 +1,8 @@
 # Banished x64 Reverse Engineering - Progressive Reimplementation
 
+## Agent rules
+When dispatching subagents use a lower tier subagent when appropriate
+
 ## Project Goal
 Reverse engineer Banished (by Shining Rock Software) and progressively replace game
 functions with clean, readable C++ source code. Each decompiled function gets a
