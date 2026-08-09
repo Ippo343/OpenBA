@@ -407,6 +407,28 @@ static const char* const kDefaultOnFlags[] = {
     // with the clear chain OFF, so "a tool-placed site over naturals never builds" was
     // never about clearing — it was this.
     "BANISHED_LIVE_INTERACT_ONADD",
+    // ClearAreaComponent + ClearResourceComponent controllers (the state-0 harvest
+    // dispatch, its per-frame done-test, and the state-1/2 finalize). Graduated
+    // 2026-07-31, user-verified in real play: a pasture placed over trees clears and
+    // the build ribbon's resource counter counts up as citizens chop.
+    //
+    // It was left opt-in when the clear wave closed, and two things had been quietly
+    // riding on a flag nobody set:
+    //   * The build ribbon's ClearArea counter reads ClearAreaComponent+0x48, and
+    //     State0Enter is its ONLY writer. Inert controller => +0x48 stayed at its ctor
+    //     zero while the footprint still held N standing resources, and the label
+    //     (snapshot - stillStanding, unclamped in retail too — see buildui.cpp:420-429
+    //     against 0x1400b1a50) rendered as "-9 out of 0". No arithmetic was ever wrong.
+    //   * BANISHED_LIVE_MAP_SOLIDIFY above has been default-on since 2026-07-28 while
+    //     being, by its own comment, "inert unless BANISHED_LIVE_CLEARCTRL is on" —
+    //     ClearArea's state-2 ENTER is the only site in the exe that broadcasts event 1.
+    //     So no placed building was registering its footprint cells at all.
+    // Measured on: 31 [ClearCtrl] traces during the founding-town spawn (zero with it
+    // off), every founding house taking the State0Enter `remaining == 0` short-circuit
+    // exactly as the comment at clearareacomponent_states.cpp:438-442 predicts. That
+    // short-circuit is load-bearing, not vestigial — do not "simplify" it to match
+    // retail's helper_7960 shape without re-running that spawn.
+    "BANISHED_LIVE_CLEARCTRL",
     // StorageComponent vtable slot 6 (+0x30, OnAdded — retail 0x14012c640 =
     // StorageComponent::Draw; read straight off the real vtable at 0x140164720, where
     // [3]=0x14012c730 Shutdown and [6]=0x14012c640). Flags 0x81 has bit 0, so
