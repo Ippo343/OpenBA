@@ -751,7 +751,17 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     // rayOrigin = 12 bytes (Vector3), rayDir = 12 bytes (Vector3)
     float rayOrigin[3] = {0.0f, 0.0f, 0.0f};
     float rayDir[3] = {0.0f, 0.0f, 0.0f};
-    float maxDist = 0.0f;
+    // THE PICK RANGE CAP. Retail stamps this 400.0f BEFORE the map hit test
+    // (0x1400fd0e5: MOV dword ptr [RBP + 0x6f],0x43c80000) and then hands the SAME stack
+    // slot to Picking::Scene::Intersect as its R9 max-distance (0x1400fd1c6: LEA R9,
+    // [RBP + 0x6f]) with NO re-initialization in between — the only writes in that window
+    // are the hitPoint/hitNormal buffers (RBP+0x17/0x27) and foundEntity (RBP+0x7f).
+    // So it is one in/out variable: the terrain hit shortens it, and the picking pass is
+    // then capped at the terrain distance. That is what stops the ray selecting a mesh
+    // BEHIND the ground.
+    // This port had it backwards in both directions — it started at 0.0f and was then
+    // reset to 400.0f just before the picking call, which threw the terrain distance away.
+    float maxDist = 400.0f;   // 0x43c80000
 
     if (s_fn_CameraRay) {
         s_fn_CameraRay(keyMap, rayOrigin, rayDir);
@@ -760,7 +770,6 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     // Map hit test to find world position under cursor
     float hitPos[2] = {0.0f, 0.0f};
     float hitDistBuf[2] = {0.0f, 0.0f};  // extra space for output
-    float hitMaxDist = 400.0f;   // 0x43c80000
     uintptr_t foundEntity = 0;
 
     uintptr_t mapComponent = *(uintptr_t*)(gameWorld + 0x110);
@@ -813,8 +822,10 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     float hitPoint[3] = {0.0f, 0.0f, 0.0f};
 
     if (s_fn_PickingIntersect && pickingScene) {
-        maxDist = 400.0f;  // reset max distance for picking
-        int hitId = s_fn_PickingIntersect(pickingScene, rayOrigin, rayDir,
+        // NO reset here — retail deliberately carries the map hit test's shortened
+        // distance into the pick (see the maxDist declaration). Re-stamping 400.0f is
+        // what let the pick reach through terrain.
+                int hitId = s_fn_PickingIntersect(pickingScene, rayOrigin, rayDir,
                                            &maxDist, hitPoint, hitNormal);
         if (hitId >= 0) {
             // Get the entity associated with this picking hit
