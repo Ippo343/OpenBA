@@ -46,6 +46,9 @@ int  s_killFamily  = 0;
 int  s_marryHarness = 0;
 int  s_birthTrace   = 0;   // BANISHED_BIRTH_TRACE — per-citizen detail lines for the birth gate
 int  s_moved        = 0;   // citizens the marriage harness has made independent so far
+int  s_forceBirth      = 0;   // BANISHED_FORCE_BIRTH — see the force-birth harness below
+int  s_forceBirthFrame = 1200;
+bool s_firedBirth      = false;
 bool s_fired       = false;
 bool s_firedFamily = false;
 bool s_firedMarry  = false;
@@ -64,6 +67,13 @@ void Init() {
     s_marryHarness = (mh && mh[0]) ? std::atoi(mh) : 0;
     const char* bt = std::getenv("BANISHED_BIRTH_TRACE");
     s_birthTrace = (bt && bt[0]) ? std::atoi(bt) : 0;
+    const char* fb = std::getenv("BANISHED_FORCE_BIRTH");
+    s_forceBirth = (fb && fb[0]) ? std::atoi(fb) : 0;
+    const char* fbf = std::getenv("BANISHED_FORCE_BIRTH_FRAME");
+    if (fbf && fbf[0]) s_forceBirthFrame = std::atoi(fbf);
+    if (s_forceBirth > 0)
+        std::fprintf(stderr, "[BirthHarness] ENABLED — delivering %d baby(ies) at frame %d\n",
+                     s_forceBirth, s_forceBirthFrame);
     if (s_birthTrace > 0)
         std::fprintf(stderr, "[BirthGate] ENABLED — walking the reproduction gate at each "
                      "census, up to %d per-citizen detail line(s)\n", s_birthTrace);
@@ -448,8 +458,78 @@ void MoveOutGrownChildren(int frameNum) {
     }
 }
 
+// ---- Force-birth harness (BANISHED_FORCE_BIRTH=<n>) -------------------------------
+// An organic birth is unreachable in a test-length run: conception needs a married,
+// housed, fed, in-window female with an idle +0x4C timer, and then desc+0x58 = 900
+// seconds of gestation on top. An 11-minute soak at FORCE_SPEED=10 produced zero
+// deliveries — the founding cohort ages out first.
+//
+// So call the DELIVERY leaf directly. This is not a shortcut around the code under
+// test: CitizenComp_helper_1b90 (0x140111b90) is exactly what CitizenComponent::Update
+// invokes when the gestation timer fires, and it owns the whole newborn path —
+// allocate + copy-construct the child entity, DeferredInit_117080, and
+// EntityList_RegisterEntity (0x1400c48a0), whose tail is the OnAddedPass that
+// broadcasts component vtable slot 6. Everything the birth arm needs to exercise is
+// inside it; only the gestation countdown is skipped.
+//
+// Requirements on the "mother": a description (+0x288) and a ModelComponent (+0x278,
+// for the spawn position). A spouse is optional — helper_1b90 tests +0x250 before
+// flagging it. Any founding adult qualifies.
+//
+//   BANISHED_FORCE_BIRTH=<n>        deliver n babies (0 / unset = disabled)
+//   BANISHED_FORCE_BIRTH_FRAME=<f>  frame to fire on (default 1200)
+//
+// Pair with BANISHED_BIRTH_TRACE=1 to get the [Birth] BABY BORN line and the newborn's
+// carry capacity, which is the point of the exercise.
+extern void CitizenComp_helper_1b90(int64_t selfV);
+
+namespace {
+void ForceBirths(int frameNum) {
+    int64_t* list; int n; int64_t townMgr;
+    if (!TownList(&list, &n, &townMgr)) {
+        std::fprintf(stderr, "[BirthHarness] frame %d: no town citizen list — nothing to do\n",
+                     frameNum);
+        std::fflush(stderr);
+        return;
+    }
+    // Snapshot the mothers first: each birth appends to this very list.
+    int64_t mothers[16];
+    int want = 0;
+    int skippedNoDesc = 0, skippedNoModel = 0;
+    for (int i = 0; i < n && want < s_forceBirth && want < 16; i++) {
+        int64_t c = list[i];
+        if (!c) continue;
+        if (*reinterpret_cast<int64_t*>(c + 0x288) == 0) { skippedNoDesc++;  continue; }
+        if (*reinterpret_cast<int64_t*>(c + 0x278) == 0) { skippedNoModel++; continue; }
+        mothers[want++] = c;
+    }
+    std::fprintf(stderr, "[BirthHarness] frame %d: %d mother(s) selected from %d citizens "
+                 "(skipped: noDesc=%d noModel=%d)\n",
+                 frameNum, want, n, skippedNoDesc, skippedNoModel);
+    std::fflush(stderr);
+    if (want == 0) return;
+
+    int before = *reinterpret_cast<int*>(townMgr + 0xa8);
+    for (int i = 0; i < want; i++) {
+        std::fprintf(stderr, "[BirthHarness] delivering %d/%d from mother=%p\n",
+                     i + 1, want, reinterpret_cast<void*>(mothers[i]));
+        std::fflush(stderr);
+        CitizenComp_helper_1b90(mothers[i]);
+    }
+    std::fprintf(stderr, "[BirthHarness] done — town citizen list %d -> %d "
+                 "(+%d expected if CitizenComponent::OnAdd is live)\n",
+                 before, *reinterpret_cast<int*>(townMgr + 0xa8), want);
+    std::fflush(stderr);
+}
+}  // namespace
+
 extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     Init();
+
+    if (s_forceBirth > 0 && !s_firedBirth && frameNum >= s_forceBirthFrame) {
+        s_firedBirth = true;
+        ForceBirths(frameNum);
+    }
 
     if (s_censusEvery > 0 && frameNum > 0 && (frameNum % s_censusEvery) == 0)
         Census(frameNum);

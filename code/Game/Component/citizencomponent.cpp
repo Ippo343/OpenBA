@@ -2103,6 +2103,37 @@ void CitizenComp_helper_1b90(int64_t selfV) {
                      reinterpret_cast<void*>(selfV), child, aiComp, gender,
                      pos[0], pos[1], pos[2],
                      tm ? *reinterpret_cast<int*>(tm + 0xa8) : -1);
+        // Carry capacity of the NEWBORN, read after RegisterEntity — i.e. after
+        // ComponentEntity_OnAddedPass has broadcast vtable slot 6. This is the only place
+        // the birth arm of BANISHED_LIVE_STORAGE_ONADDED can be observed: the four
+        // starttown.cpp hand-calls only ever covered the founding cohort, so a newborn with
+        // capacity 0 is what freezes the game later (PickupStoredRawMaterial requests 0 ->
+        // AddItem appends a {resType,0} stack -> Pf_SpillAllStorage_7570 spins forever).
+        // Report it either way; "no line" must not be readable as "fine".
+        typedef void* (*fn_FindStorage_t)(uintptr_t, void*);
+        static fn_FindStorage_t s_findStorage = nullptr;
+        static bool s_findStorageTried = false;
+        if (!s_findStorageTried) {
+            s_findStorageTried = true;
+            s_findStorage = reinterpret_cast<fn_FindStorage_t>(
+                ResolveAddr(Module::Exe, 0x140006270));   // Entity_FindComponent_Storage
+        }
+        if (!s_findStorage) {
+            std::fprintf(stderr, "[Birth]   carry capacity UNKNOWN — 0x140006270 unresolved\n");
+        } else {
+            uintptr_t stIbp = 0;
+            s_findStorage(reinterpret_cast<uintptr_t>(child), &stIbp);
+            if (!stIbp) {
+                std::fprintf(stderr, "[Birth]   newborn has NO StorageComponent — it can "
+                             "carry nothing\n");
+            } else {
+                fn_InternalBasePtr_CheckPtr(&stIbp);
+                int cap = *reinterpret_cast<int*>(stIbp + 0x38);
+                std::fprintf(stderr, "[Birth]   newborn carry capacity(+0x38)=%d%s\n", cap,
+                             cap == 0 ? "  <-- ZERO: slot 6 did not run for the newborn"
+                                      : "  (slot 6 ran)");
+            }
+        }
         std::fflush(stderr);
     }
     fn_InternalBasePtr_CheckPtr(&aiIBP);
