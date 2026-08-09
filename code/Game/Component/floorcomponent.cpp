@@ -233,7 +233,17 @@ static void EnsureSubHelpers() {
     s_pNatResTypeId   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
     s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
     // Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
-    s_fn_SceneAddMesh    = reinterpret_cast<fn_SceneAddMesh_t>(ResolveAddr(Module::Runtime, 0x1800f8d80));
+    // 0x1801252e0, NOT 0x1800f8d80. The latter is int3 PADDING, not a function entry —
+    // calling it raises a breakpoint exception. It survived only because floors are never
+    // placed on the autostart path (the note at citizenai_executor.cpp:316 has said so for
+    // a while); that assumption expired on 2026-08-01 when player building placement started
+    // working, so this was a live landmine on the first hand-placed floor.
+    // Signature verified from exe Entity_impl_8f50 (0x140128f50):
+    //   uint AddMesh(Scene*, ExternalPtr<PickingMesh>, Transform*, ownerIBP, int, int, cb*)
+    // ⚠ OPEN: the call below passes 0 for the OWNER argument, so a floor's pick mesh has no
+    // owner entity. That is a separate, untested question from the address — flagging rather
+    // than silently changing it.
+    s_fn_SceneAddMesh    = reinterpret_cast<fn_SceneAddMesh_t>(ResolveAddr(Module::Runtime, 0x1801252e0));
     s_fn_SceneRemoveMesh = reinterpret_cast<fn_SceneRemoveMesh_t>(ResolveAddr(Module::Runtime, 0x1800f8f50));
     s_subResolved = true;
 }
