@@ -407,6 +407,32 @@ static const char* const kDefaultOnFlags[] = {
     // with the clear chain OFF, so "a tool-placed site over naturals never builds" was
     // never about clearing — it was this.
     "BANISHED_LIVE_INTERACT_ONADD",
+    // StorageComponent vtable slot 6 (+0x30, OnAdded — retail 0x14012c640 =
+    // StorageComponent::Draw; read straight off the real vtable at 0x140164720, where
+    // [3]=0x14012c730 Shutdown and [6]=0x14012c640). Flags 0x81 has bit 0, so
+    // ComponentEntity_OnAddedPass has always broadcast to this slot — it landed on the
+    // inert stub. Graduated 2026-08-09.
+    //
+    // This is the CARRY CAPACITY of every citizen: Draw sets +0x38 = _volumeLimit
+    // (desc+0x24) x area. Standalone compensated with four hand-calls in starttown.cpp
+    // (CitizenCarryStorageInit), all on the FOUNDING cohort — no birth path calls them, so
+    // every citizen born after world start kept capacity 0 forever. Capacity 0 makes
+    // PickupStoredRawMaterial request (0-0)/unitVolume = 0 items, the only rejection is
+    // `available < requested` which 0 passes, and AddItem (0x14012d000) appends a
+    // {resType,0} stack. Pf_SpillAllStorage_7570's exit test is the stack COUNT at +0x30
+    // while its work is gated on the entry's own count, so a zero-count stack spins it
+    // forever — an in-world FREEZE (first reached by the pasture cull, 2026-07-31). Both
+    // loops are byte-faithful; retail relies on a zero-count stack never existing, which is
+    // exactly what this slot guarantees. Do not guard them.
+    //
+    // A/B measured 2026-08-09 with the force-birth harness (BANISHED_FORCE_BIRTH, which
+    // calls the real delivery leaf helper_1b90 — an organic birth needs 900s of gestation
+    // and never fires in a test-length run): ON => three newborns at capacity 100, the six
+    // founding-colonist verifier lines report 100 ALREADY SET before the hand-call, 22 of
+    // 29 slot dispatches set a real capacity and 7 take the faithful `desc+0x21 == 0` skip
+    // (buildings, whose capacity comes from TownStorage_BuildCompleteInit_7ff0 instead —
+    // it deliberately does not test that byte). OFF => the same newborn at capacity 0.
+    "BANISHED_LIVE_STORAGE_ONADDED",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

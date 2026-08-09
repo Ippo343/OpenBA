@@ -18,6 +18,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -270,8 +271,19 @@ void StorageComponent_Draw(StorageComponent* self) {
     uintptr_t descAddr = (uintptr_t)storageDesc;
     uintptr_t selfAddr = (uintptr_t)self;
 
-    // Check if storage is defined (byte at +0x21)
-    if (*(uint8_t*)(descAddr + 0x21) == 0) return;
+    // Check if storage is defined (byte at +0x21). NOTE: this early return leaves +0x38
+    // (max volume capacity) at its ctor ZERO, and a zero capacity makes CanAdd refuse
+    // everything and makes PickupStoredRawMaterial compute a requested count of 0 — which
+    // deposits a {resType, 0} stack that hangs the spill loop. Report the exit, don't
+    // assume it: an empty log line here would otherwise read as "capacity was set fine".
+    if (*(uint8_t*)(descAddr + 0x21) == 0) {
+        if (std::getenv("BANISHED_STORAGE_TRACE")) {
+            std::fprintf(stderr, "[StorageCap] SKIPPED (desc+0x21==0) self=%p desc=%p — "
+                         "capacity(+0x38) stays 0\n", self, storageDesc);
+            std::fflush(stderr);
+        }
+        return;
+    }
 
     // Compute tile multiplier
     int tileArea = 1;
@@ -304,6 +316,12 @@ void StorageComponent_Draw(StorageComponent* self) {
     // Set computed values
     *(int*)(selfAddr + 0x38) = maxPerSlot * tileArea;
     *(uint32_t*)(selfAddr + 0x3c) = defaultType;
+    if (std::getenv("BANISHED_STORAGE_TRACE")) {
+        std::fprintf(stderr, "[StorageCap] self=%p capacity(+0x38)=%d (maxPerSlot=%d x tileArea=%d) "
+                     "defaultType=0x%x%s\n", self, maxPerSlot * tileArea, maxPerSlot, tileArea,
+                     defaultType, (maxPerSlot * tileArea == 0) ? "  <-- ZERO CAPACITY" : "");
+        std::fflush(stderr);
+    }
 
     // Iterate template storage entries
     uintptr_t templateArray = *(uintptr_t*)(descAddr + 0x30);
@@ -484,6 +502,28 @@ void StorageComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(StorageComponent, 0x40, 0x81)
+// Slot 6 (+0x30) = OnAdded, retail 0x14012c640 = StorageComponent::Draw — verified by
+// reading the real vtable at 0x140164720: [3]=0x14012c730 (Shutdown), [6]=0x14012c640.
+// ComponentEntity_OnAddedPass (the tail of EntityList::RegisterEntity) dispatches slot 6
+// on every component whose capability flags (+0x20) have bit 0 — StorageComponent's 0x81
+// qualifies — so in retail EVERY entity carrying a StorageComponent gets its capacity
+// (+0x38 = _volumeLimit x area) and its template slots at register time.
+//
+// Standalone left the slot a stub and compensated with four hand-calls in starttown.cpp
+// (CitizenCarryStorageInit), all on the FOUNDING colonists. No birth path calls it, so
+// every citizen born after world start kept capacity 0 forever. Capacity 0 makes
+// PickupStoredRawMaterial request (0 - 0)/unitVolume = 0 items, the only rejection is
+// `available < requested` which 0 passes, and AddItem (0x14012d000) then appends a
+// {resType, 0} stack. Pf_SpillAllStorage_7570's exit test is the stack COUNT at +0x30
+// while its work is gated on the entry's own count, so a zero-count stack spins it
+// forever — an in-world FREEZE, first reached by the pasture cull (2026-07-31). That
+// spill loop is byte-faithful to retail 0x1400c7570; retail relies on a zero-count stack
+// never existing, which is exactly what this slot guarantees.
+//
+// Buildings are unaffected: Draw's own `desc+0x21 (_available) == 0` gate short-circuits
+// for a barn, whose capacity instead comes from the build-complete init
+// (TownStorage_BuildCompleteInit_7ff0), which deliberately does NOT test that byte.
+COMPONENT_LIVE_FACTORY_ONADDED(StorageComponent, 0x40, 0x81,
+                               "BANISHED_LIVE_STORAGE_ONADDED", StorageComponent_Draw)
 REGISTER_TYPE(StorageComponent, "Component",
               &StorageComponent_Factory, &StorageComponent_CreateInPlace);

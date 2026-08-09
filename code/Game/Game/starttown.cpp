@@ -2704,12 +2704,21 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
 // faithful Draw setup once at spawn. The carry storage is located exactly as
 // GatherRawMaterials does (Entity_FindComponent_Storage 0x140006270 on entity+0x10).
 // Gated default-OFF (A/B); fold into SA_LIVE_ENV once verified.
+//
+// STANDS DOWN when BANISHED_LIVE_STORAGE_ONADDED wires StorageComponent's real slot 6
+// (storagecomponent.cpp): that runs for EVERY entity at RegisterEntity time, including
+// citizens born after world start, which these four founding-colonist call sites never
+// covered. It still runs as a VERIFIER in that mode — it reads the capacity the slot
+// left behind and logs it instead of calling Draw again, so "the slot ran" is an
+// observed outcome rather than an assumption.
 static void CitizenCarryStorageInit(void* ent) {
     static int s_on = -1;
+    static int s_slotLive = -1;
     if (s_on < 0) {
         s_on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_CARRY") ? 1 : 0;
+        s_slotLive = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE_ONADDED") ? 1 : 0;
     }
-    if (s_on != 1 || !ent || !fn_InternalBasePtr_CheckPtr) return;
+    if ((s_on != 1 && s_slotLive != 1) || !ent || !fn_InternalBasePtr_CheckPtr) return;
 
     static bool s_res = false;
     static void* (*s_find6270)(uintptr_t, void*) = nullptr;
@@ -2731,6 +2740,15 @@ static void CitizenCarryStorageInit(void* ent) {
     void* stComp = reinterpret_cast<void*>(stIbp);   // FindComponent writes the component ptr into the IBP
 
     int before = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
+    if (s_slotLive == 1) {
+        // Verify-only: slot 6 already ran inside RegisterEntity. Report what it left.
+        if (logThis) { ++s_log;
+            fprintf(stderr, "[CarryInit] VERIFY (slot6 live) citizen storage=%p capacity(+0x38)=%d%s\n",
+                    stComp, before, (before == 0) ? "  <-- STILL ZERO, slot did not run" : "");
+            fflush(stderr);
+        }
+        return;
+    }
     StorageComponent_Draw(reinterpret_cast<StorageComponent*>(stComp));
     int after = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
     if (logThis) { ++s_log;
