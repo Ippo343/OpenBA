@@ -768,8 +768,20 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     }
 
     // Map hit test to find world position under cursor
-    float hitPos[2] = {0.0f, 0.0f};
-    float hitDistBuf[2] = {0.0f, 0.0f};  // extra space for output
+    // MUST be 4 floats, matching retail EditTool::Draw's `float local_58[4]` (0x1400fd030).
+    // MapHitTest's callee (retail 0x1400aaa20) writes a full Vector3 through this out-param
+    // on EVERY call, hit or miss — its tail is
+    // `MOVSS [RCX],XMM1 / [RCX+4],XMM0 / [RCX+8],XMM2` at 0x1400aad2a-33. On a MISS t == 0,
+    // so it writes the RAY ORIGIN, i.e. the camera position.
+    // This was declared `float hitPos[2]` with the slack put in a SEPARATE `hitDistBuf[2]`
+    // that nothing read — so the optimiser deleted it and the third float landed on
+    // `foundEntity` (frame: 0x38 = hitPos[0..1], 0x40 = foundEntity). The camera Z then
+    // travelled into EditTool_SelectEntity as an entity pointer and crashed at
+    // edittool_select.cpp:189 (observed 0x4167CF1B = 14.4877, and 0x4167EB1A on 2026-07-26 —
+    // the same camera, slightly different zoom, which is why the two values are within 0.006).
+    // Reaches SelectEntity only when the terrain ray MISSES (so the EntityAtCell branch that
+    // would overwrite the slot is skipped) and the picking pass also misses.
+    float hitPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     uintptr_t foundEntity = 0;
 
     uintptr_t mapComponent = *(uintptr_t*)(gameWorld + 0x110);
@@ -825,7 +837,7 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
         // NO reset here — retail deliberately carries the map hit test's shortened
         // distance into the pick (see the maxDist declaration). Re-stamping 400.0f is
         // what let the pick reach through terrain.
-                int hitId = s_fn_PickingIntersect(pickingScene, rayOrigin, rayDir,
+        int hitId = s_fn_PickingIntersect(pickingScene, rayOrigin, rayDir,
                                            &maxDist, hitPoint, hitNormal);
         if (hitId >= 0) {
             // Get the entity associated with this picking hit
@@ -848,12 +860,16 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
         // If flag80 is set, verify entity matches expected type
         if (flag80) {
             if (s_fn_CheckPtr) s_fn_CheckPtr(&foundEntity);
-            // Picking user data is not guaranteed to be a live entity pointer in standalone:
-            // any mesh registered WITHOUT Picking::Scene::SetMeshUserData leaves a stale/garbage
-            // slot, and this deref then faults (observed 2026-07-26: foundEntity=0x4167eb1a, a
-            // float bit pattern, -> READ of +0x28). Retail is safe only because every pickable
-            // mesh gets real user data. Reject implausible pointers rather than fault; the
-            // upstream miss is the real bug, so say so loudly.
+            // CORRECTED 2026-08-01. This used to blame "a mesh registered without
+            // Picking::Scene::SetMeshUserData", citing foundEntity=0x4167eb1a from
+            // 2026-07-26. That was WRONG and cost a second investigation: the float bit
+            // pattern was the CAMERA POSITION, written past the end of the 8-byte `hitPos`
+            // buffer by MapHitTest's 12-byte Vector3 store (see the hitPos declaration
+            // above, now float[4] as retail has it). Picking was never at fault — the
+            // exports on that path were re-verified against the Runtime DLL and all match.
+            // Kept as defence in depth only. NOTE it did not fire on the 2026-08-01 repeat:
+            // flag80 was 0, so this whole branch was skipped and the corrupt value went
+            // straight through to SelectEntity.
             if (foundEntity < 0x10000 || (foundEntity & 0x7) != 0) {
                 static int s_warned = 0;
                 if (s_warned < 4) {
