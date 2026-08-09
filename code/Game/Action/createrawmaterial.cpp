@@ -346,9 +346,24 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
 // allocates new entities, positions them, registers with resource tracker.
 // Returns 0 (action complete).
 // ============================================================
+// Trace gate. BANISHED_PRODUCE_TRACE is the name that describes what this function is
+// (the produce/pile-spawn leaf shared by ConsumeProduce, FishingWork, HarvestOrchard and
+// the animal-slaughter drop path); BANISHED_FORESTER_SCAN_TRACE stays accepted because it
+// is what the existing forester rig sets — and because the forester is NOT even a caller
+// (a chopped tree spawns its pile inline in 0x1401260f0, no CreateRawMaterial action).
+static bool ProduceTraceOn() {
+    static int s = -1;
+    if (s < 0) {
+        const char* a = std::getenv("BANISHED_PRODUCE_TRACE");
+        const char* b = std::getenv("BANISHED_FORESTER_SCAN_TRACE");
+        s = ((a && a[0] && a[0] != '0') || (b && b[0] && b[0] != '0')) ? 1 : 0;
+    }
+    return s == 1;
+}
+
 int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionStack) {
     (void)actionStack;
-    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+    if (ProduceTraceOn()) {
         fprintf(stderr, "[ORGANIC-PRODUCE] CreateRawMaterial::Main running (self=%p)\n", (void*)self);
         fflush(stderr);
     }
@@ -388,8 +403,50 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
         return 0;
     }
 
-    // Max items per entity from raw material description (+0x48)
-    int maxPerEntity = *(int*)((uintptr_t)rawMatDesc + 0x48);
+    // Max items per PILE = the carrier's volume capacity / this material's per-unit volume.
+    // Retail 0x1400c6c22-2c, verified at instruction level:
+    //     MOV EAX,[R15+0x40]     ; R15 = self, +0x40 = ctor arg7
+    //     CDQ
+    //     IDIV dword ptr [RBX+0x48]  ; RBX = rawMatDesc, +0x48 = per-unit VOLUME
+    //     MOV ECX,EAX            ; ECX = cap, loop-invariant
+    //     MOV [RBP+0x50],EAX     ; stashed; reloaded into ECX at the loop tail (6c6ef3)
+    // then inside the loop at 6c6c40-46: MOV EAX,R13D / CMP R13D,ECX / CMOVG EAX,ECX
+    // = min(totalItems, cap). The division is done ONCE, before the loop — matched here.
+    //
+    // This port previously used rawMatDesc+0x48 (the per-unit volume) DIRECTLY as the cap,
+    // i.e. it dropped the division entirely, so every pile produced or culled has been the
+    // wrong size since the function was written.
+    //
+    // action+0x40 is CreateRawMaterial's ctor arg7, and all four retail construction sites
+    // pass StorageComponent+0x38 — the carrier's max volume capacity (0x1400bed3f loads it
+    // as MOV R12D,[RAX+0x38] and 0x1400bed9f stores it to RSP+0x30 = arg7; our ported site
+    // in action_pf_roots_drop.cpp does the same). So this is "how many whole units fit in
+    // the hauler", which is why it caps the per-entity batch.
+    int unitVolume = *(int*)((uintptr_t)rawMatDesc + 0x48);
+    int carrierVolume = *(int*)(s + 0x40);
+    // STANDALONE-ONLY TRIPWIRE (retail has no equivalent and needs none). Retail's IDIV
+    // relies on +0x48 being non-zero and its cap being >= 1; a cap of 0 makes batchSize 0,
+    // the loop tail's `SUB R13D,EDI` subtract nothing, and 0x1400c6efa jump back forever —
+    // an in-world FREEZE, not a crash. We can still reach that state because a not-yet-
+    // ported construction path would leave +0x40 at its zeroed ctor value, so fail LOUDLY
+    // with the operands instead of hanging. If this ever fires, fix the ctor site that
+    // passed a zero capacity — do not soften this into a clamp.
+    if (unitVolume <= 0 || carrierVolume < unitVolume) {   // i.e. the quotient would be <= 0
+        fprintf(stderr, "[CreateRawMaterial] ABORT: batch cap would be 0 — "
+                "carrierVolume(action+0x40)=%d unitVolume(rawMatDesc+0x48)=%d totalItems=%d. "
+                "Retail would spin here forever; the ctor site that built this action passed "
+                "a zero/short capacity as arg7.\n", carrierVolume, unitVolume, totalItems);
+        fflush(stderr);
+        return 0;
+    }
+    int maxPerEntity = carrierVolume / unitVolume;
+    if (ProduceTraceOn()) {
+        fprintf(stderr, "[ORGANIC-PRODUCE] batch cap: carrierVolume(+0x40)=%d / "
+                "unitVolume(desc+0x48)=%d = %d per pile; totalItems=%d -> %d pile(s)\n",
+                carrierVolume, unitVolume, maxPerEntity, totalItems,
+                (totalItems + maxPerEntity - 1) / maxPerEntity);
+        fflush(stderr);
+    }
 
     // Spawn loop: create entities for all items
     while (totalItems > 0) {
@@ -475,6 +532,13 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
             fn_InternalBasePtr_CheckPtr(&compIBP);
             *(int32_t*)(compIBP + 0x28) = batchSize;
             *(int64_t*)(compIBP + 0x30) = 0;
+
+            if (ProduceTraceOn()) {
+                fprintf(stderr, "[ORGANIC-PRODUCE]   pile spawned: count=%d at cell %d "
+                        "(%d item(s) still to place)\n",
+                        batchSize, cellIndex, totalItems - batchSize);
+                fflush(stderr);
+            }
 
             // Register raw material with resource tracker
             int64_t sourceIBP = *(int64_t*)(s + 0x30);
