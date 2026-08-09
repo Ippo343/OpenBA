@@ -150,10 +150,17 @@ static PW_PositionCount_t             s_fn_PositionCount = nullptr;
 static PW_StorageOverflowCheck_t      s_fn_StorageOverflowCheck = nullptr;
 static PW_UpdateParentEntity_t         s_fn_UpdateParentEntity = nullptr;
 
-// Type ID constants
-static uint32_t* s_typeId_PastureComponent = nullptr;  // DAT_1401c7bd8
-static uint32_t* s_typeId_ComponentEntity = nullptr;    // DAT_1401c6fd0
-static uint32_t* s_typeId_NatResComponent = nullptr;    // DWORD_1401c7ba0
+// Type ID constants.
+// ⚠ The THREE names below are all wrong — verified against
+// standalone/factory_registrations.csv:230,284,285 on 2026-07-31. The ADDRESSES are
+// correct and the code behaves correctly, so do NOT "fix" any deref to match a name.
+// Renaming the variables is the right follow-up; leaving the lie labelled is the
+// minimum. (Wrong names of exactly this kind caused two separate bugs today: a
+// GetTypeIdByName("AreaDescription") that matched nothing, and a whole investigation
+// misdirected by a finder named for the wrong component.)
+static uint32_t* s_typeId_PastureComponent = nullptr;  // DAT_1401c7bd8  = PastureDescription
+static uint32_t* s_typeId_ComponentEntity = nullptr;    // DAT_1401c6fd0  = AnimalDescription
+static uint32_t* s_typeId_NatResComponent = nullptr;    // DWORD_1401c7ba0 = PastureComponent
 
 // Float constants from .rdata
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f

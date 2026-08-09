@@ -186,6 +186,17 @@ engine function pointers), `runtime/` (Runtime-x64.dll types/funcs + early reimp
 5. **Register** the exe address in `standalone/address_registry.cpp` (or a `standalone/reg_*.cpp` wave file) so `ResolveAddr(Module::Exe, addr)` finds it
 6. **Test** — `mingw32-make sa-run`, read `C:/GOG Games/Banished/standalone_debug.log`
 
+### Don't "fix" a faithful crash with a null check
+
+The port is mature enough that when a byte-faithful function crashes on an unguarded
+deref, **retail is not wrong — something upstream handed us a null.** Find that instead.
+Retail's unguarded derefs are load-bearing: it relies on the value always being there,
+so a guard doesn't restore the behaviour, it skips it.
+
+Add a guard only where our standalone genuinely differs from retail (e.g. an entity that
+legitimately lacks a component because the panel template is shared), and say so in the
+comment. Otherwise fix the upstream null and leave the deref faithful.
+
 ### ABI Compatibility Notes
 - MinGW GCC x64 uses the same Microsoft x64 ABI as MSVC (one calling convention on Win64)
 - Type headers use plain structs with explicit padding (no C++ inheritance/vtables)
