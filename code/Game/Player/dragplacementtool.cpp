@@ -128,7 +128,8 @@ void DragPlacementTool_Startup(DragPlacementTool* self) {
 
     // Find AreaDescription
     void* foundArea = nullptr;
-    if (g_TypeId_AreaDescription) {
+    // Value-check, not just pointer — same registered-but-zero trap as PlacementTool.
+    if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
         foundArea = FindComponentByTypeId(entity, *g_TypeId_AreaDescription);
     }
     self->areaDesc = foundArea;

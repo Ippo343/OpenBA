@@ -50,7 +50,17 @@ static uint32_t g_tid_ModelDescription        = 0;  // 0x1401c7a88
 // (0x1401c7a88) are MISNOMERS for CreatePlacedDescription / ModelDescription —
 // both already seeded above.
 static uint32_t g_tid_CreateFencedDescription = 0;  // 0x1401c4100
-static uint32_t g_tid_AreaDescription         = 0;  // 0x1401c7a18
+// 0x1401c7a18 is MapDescription (factory_registrations.csv:277,
+// MapDescription_Register @ 0x14014f390). It was seeded by the name
+// "AreaDescription" until 2026-07-31 — a type that exists NOWHERE in the game — so
+// GetTypeIdByName returned 0, that zero became the .rdata slot's backing storage,
+// and PlacementTool_Startup's findComp searched for type-id 0 and matched nothing.
+// Consequences: tool+0x30 (the template's MapDescription) stayed null, and BOTH
+// PlacementTool slot-7 Serialize (retail 0x1400fdee0) and fd650 deref it unguarded
+// — so EVERY player building placement crashed on the first preview frame — while
+// MapComponent went silently dead (GetMapDescription returned null for every
+// building, so Draw/OnCreate always returned early).
+static uint32_t g_tid_MapDescription          = 0;  // 0x1401c7a18
 static uint32_t g_tid_RotationSetting         = 0;  // 0x1401c63c8
 // SelectResourceUI combo populate (selectresourceui.cpp IterateResources)
 // derefs *g_TypeId_SelectDescription — null until seeded (PastureUI promotion
@@ -64,7 +74,7 @@ extern "C" void FillPipelineTypeIds() {
     g_tid_ModelComponent          = ::Object::GetTypeIdByName("ModelComponent");
     g_tid_ModelDescription        = ::Object::GetTypeIdByName("ModelDescription");
     g_tid_CreateFencedDescription = ::Object::GetTypeIdByName("CreateFencedDescription");
-    g_tid_AreaDescription         = ::Object::GetTypeIdByName("AreaDescription");
+    g_tid_MapDescription          = ::Object::GetTypeIdByName("MapDescription");
     g_tid_RotationSetting         = ::Object::GetTypeIdByName("RotationSetting");
     g_tid_SelectDescription       = ::Object::GetTypeIdByName("SelectDescription");
 }
@@ -80,7 +90,7 @@ void RegisterPipelineTypeIds() {
     RegisterExeAddr(0x1401c7a50, reinterpret_cast<uintptr_t>(&g_tid_ModelComponent));
     RegisterExeAddr(0x1401c7a88, reinterpret_cast<uintptr_t>(&g_tid_ModelDescription));
     RegisterExeAddr(0x1401c4100, reinterpret_cast<uintptr_t>(&g_tid_CreateFencedDescription));
-    RegisterExeAddr(0x1401c7a18, reinterpret_cast<uintptr_t>(&g_tid_AreaDescription));
+    RegisterExeAddr(0x1401c7a18, reinterpret_cast<uintptr_t>(&g_tid_MapDescription));
     RegisterExeAddr(0x1401c63c8, reinterpret_cast<uintptr_t>(&g_tid_RotationSetting));
     RegisterExeAddr(0x1401c48a8, reinterpret_cast<uintptr_t>(&g_tid_SelectDescription));
     // 0x1401c79e0 (MapComponent) intentionally omitted — already registered by

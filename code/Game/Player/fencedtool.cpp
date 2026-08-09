@@ -893,7 +893,9 @@ void FencedTool_Startup_Impl(FencedTool* self) {
     // 2. Find AreaDescription on self->entity (+0x20)
     entity = *(uintptr_t*)(selfAddr + 0x20);
     void* areaDesc = nullptr;
-    if (g_TypeId_AreaDescription) {
+    // Value-check, not just pointer: a registered-but-zero slot would make this search
+    // for type-id 0 and match nothing forever (see reg_pipeline_typeids.cpp 0x1401c7a18).
+    if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
         areaDesc = FencedFindComponent(entity, *g_TypeId_AreaDescription);
     }
     self->areaDesc = areaDesc;

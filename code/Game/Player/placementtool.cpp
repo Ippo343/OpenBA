@@ -1081,11 +1081,29 @@ static void EnsureStartupFuncs() {
     s_tid_Map          = ::Object::ResolveTypeIdByNameLazy("MapDescription");
     s_tid_Model        = ::Object::ResolveTypeIdByNameLazy("ModelDescription");
     s_tid_Radius       = ::Object::ResolveTypeIdByNameLazy("RadiusDescription");
-    if (!g_TypeId_SizeDescription) g_TypeId_SizeDescription = &s_tid_CreatePlaced; // +0x28
-    if (!g_TypeId_AreaDescription) g_TypeId_AreaDescription = &s_tid_Map;          // +0x30
-    if (!g_TypeId_FenceDescription) g_TypeId_FenceDescription = &s_tid_Model;      // +0x38
-    if (!g_TypeId_RadiusComponent) g_TypeId_RadiusComponent = &s_tid_Radius;      // +0x40
-    fprintf(stderr, "[Placement] type-ids: CreatePlaced=%u Map=%u Model=%u Radius=%u\n",
+    // Test the VALUE, not just the pointer. A pointer-only test (`if (!g_TypeId_X)`)
+    // cannot see a slot that IS registered but was filled with 0, and that is exactly
+    // what happened to +0x30 until 2026-07-31: reg_pipeline_typeids.cpp seeded
+    // 0x1401c7a18 by the name "AreaDescription", which does not exist, so the slot held
+    // a real pointer to a zero. This fallback looked like it was covering the case and
+    // silently was not — every player building placement crashed on the first preview
+    // frame, and MapComponent was dead game-wide.
+    if (!g_TypeId_SizeDescription  || !*g_TypeId_SizeDescription)
+        g_TypeId_SizeDescription  = &s_tid_CreatePlaced;  // +0x28
+    if (!g_TypeId_AreaDescription  || !*g_TypeId_AreaDescription)
+        g_TypeId_AreaDescription  = &s_tid_Map;           // +0x30 (MapDescription)
+    if (!g_TypeId_FenceDescription || !*g_TypeId_FenceDescription)
+        g_TypeId_FenceDescription = &s_tid_Model;         // +0x38
+    if (!g_TypeId_RadiusComponent  || !*g_TypeId_RadiusComponent)
+        g_TypeId_RadiusComponent  = &s_tid_Radius;        // +0x40
+    // Report the values findComp will ACTUALLY consult (the globals), not the locals —
+    // the old line printed s_tid_Map, a healthy id, while the consulted global held 0.
+    fprintf(stderr, "[Placement] type-ids CONSULTED: CreatePlaced=%u Map=%u Model=%u Radius=%u"
+            "  (locals: %u/%u/%u/%u)\n",
+            g_TypeId_SizeDescription  ? *g_TypeId_SizeDescription  : 0,
+            g_TypeId_AreaDescription  ? *g_TypeId_AreaDescription  : 0,
+            g_TypeId_FenceDescription ? *g_TypeId_FenceDescription : 0,
+            g_TypeId_RadiusComponent  ? *g_TypeId_RadiusComponent  : 0,
             s_tid_CreatePlaced, s_tid_Map, s_tid_Model, s_tid_Radius);
     fflush(stderr);
 
