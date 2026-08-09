@@ -529,6 +529,7 @@ extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 
 extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); GATED default-OFF on BANISHED_SELECTION_OUTLINE
 extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
 extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers + UpgradeUIConfig vtable (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
+extern void RegisterControlUIBatch();        // ControlUI + ControlUIConfig vtables (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -677,6 +678,12 @@ static void RegisterCodeFunctions() {
     //   11cec0/11cc70/11c120) + guards (11da80/11e600/11e5b0) + vtable_UpgradeUIConfig 14015df60.
     //   Runtime behavior gated by BANISHED_LIVE_DESTROY (default-ON since 2026-07-25;
     //   the env var is a kill-switch); see reg_destroy_sm.cpp.
+    RegisterControlUIBatch();      // vtable_ControlUI 14015b380 + vtable_ControlUIConfig 14015b3e0.
+    //   The generic component-command buttons (pasture work/split/empty share element id 50000;
+    //   the command int is ControlUIConfig+0x20 — work=2 split=1 empty=0 — and the target
+    //   component type is +0x24, both read by the config's idx5 deserialize 0x14005fb70).
+    //   Both classes were all-no-op stubs until 2026-07-31, so ControlUI's ported slots were
+    //   dead code; see reg_controlui.cpp.
     RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
     RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
     RegisterPlayerTradeBatch();    // r2c trade: 66800 EditTool + 666b0 EntityUI + AVL family (retrace disasm-verified, typo 2e30/c690->102e30/2c690 caught)

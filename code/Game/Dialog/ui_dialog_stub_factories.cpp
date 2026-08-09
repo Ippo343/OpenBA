@@ -202,7 +202,11 @@ REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
 UI_DIALOG_STUB(AttendanceUI,        "UI::DialogController", 0x38);
 UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
-UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
+// ControlUI: PROMOTED to a real per-class standalone vtable in
+// code/Game/Dialog/controlui.cpp (wires Slot4/7/8/9 so the generic
+// component-command buttons — pasture work/split/empty, element id 50000,
+// distinguished by ControlUIConfig+0x20 — actually reach the target component's
+// vtable[14]). Stub registration removed to avoid a duplicate REGISTER_TYPE.
 // DebugUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/debugui.cpp (wires Slot4/7/8/9 so the dev debug/cheat panel
 // links to live game data instead of rendering blank). Stub registration removed
@@ -649,20 +653,43 @@ namespace uistub_ResourceLimitUI {
         if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
         if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
     }
-    // Dispatch-order -> resource index. The framework never binds the child
-    // controller's datasource (self+0x10) in standalone, so the retail Slot4/7/9
-    // (which read the resource index from config+0x20) would IsDerivedFrom(NULL)
-    // and fault. Instead we number the 11 row controllers by the order the
-    // framework sets them up, which equals the .rsc/table order == resource index
-    // (Log=0..Textile=10). One registry per dialog build: a 12th distinct `self`
-    // means a fresh build, so wrap back to 0.
+    // Resource index for this row. PREFERRED source: the bound config's +0x20,
+    // exactly as retail Slot4/7/9 read it — ResourceLimitUIConfig is a real class
+    // as of 2026-07-31 (code/Game/Dialog/resourcelimituiconfig.cpp) and its idx5
+    // deserialize fills that field.
+    //
+    // The dispatch-order fallback below is what we used while the config was a
+    // stub, and it is UNSOUND across dialog rebuilds: it keys on the controller
+    // POINTER, so when reopening the dialog allocates a row controller at an
+    // address reused from the previous build, the loop finds a stale match and
+    // returns that row's old index — desyncing every row after it. That was the
+    // user-visible "the food limit shows a different value each time I open and
+    // close the Town Hall". It is kept only so a row whose config somehow did not
+    // bind still shows plausible data instead of always reading Log, and it now
+    // says so when it fires.
     static void* g_selves[11];
     static int   g_count = 0;
-    int IdxFor(void* self) {
+    int IdxForFallback(void* self) {
         for (int i=0;i<g_count;i++) if (g_selves[i]==self) return i;
         if (g_count >= 11) { for (int i=0;i<11;i++) g_selves[i]=nullptr; g_count=0; }
         g_selves[g_count]=self;
         return g_count++;
+    }
+    int IdxFor(void* self) {
+        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self + 0x10) : nullptr;
+        if (cfg) {
+            int idx = *reinterpret_cast<int*>((uintptr_t)cfg + 0x20);
+            if (idx >= 0 && idx < 11) return idx;
+        }
+        int idx = IdxForFallback(self);
+        if (std::getenv("BANISHED_LIMIT_TRACE")) {
+            printf("[ResourceLimitUI] WARNING: config unbound (self=%p cfg=%p) — falling "
+                   "back to dispatch order, idx=%d. This path desyncs across dialog "
+                   "rebuilds; if you see it, the config promotion is not taking effect.\n",
+                   self, cfg, idx);
+            fflush(stdout);
+        }
+        return idx;
     }
     void Trace(const char* slot, void* self, int idx) {
         if (!std::getenv("BANISHED_LIMIT_TRACE")) return;
@@ -1106,16 +1133,27 @@ UI_DIALOG_STUB(ToolbarDialog,       "UI::DialogInstance",   0x108);
 UI_DIALOG_STUB(TutorialHighlightDialog, "UI::DialogInstance", 0xF0);
 
 // ---- DialogControllerConfig family (all 0x28) -------------------------------
-UI_DIALOG_STUB(ControlUIConfig,       "UI::DialogControllerConfig", 0x28);
-// ResourceLimitUIConfig stays a generic stub: standalone creates these config
-// objects (Factory fires) but never runs their field-deserialize (Serialize) nor
-// links them to the row controllers, so config+0x20 (resource index) is always 0
-// and controller+0x10 (config) is always null. The resource index is therefore
-// unrecoverable from the config in standalone — the ResourceLimitUI promotion
-// above sources it from dispatch order (== .rsc/table order == resource index)
-// instead. See the "Standalone entry points" note in
-// code/Game/Dialog/resourcelimitui.cpp.
-UI_DIALOG_STUB(ResourceLimitUIConfig, "UI::DialogControllerConfig", 0x28);
+// ControlUIConfig: PROMOTED to the real config class in
+// code/Game/Dialog/controluiconfig.cpp — its idx5 field-deserialize (retail
+// 0x14005fb70) reads the command int (+0x20) and target component type (+0x24)
+// that ControlUI needs. As a stub those stayed zero, so every ControlUI button
+// read as command 0 against component type 0. Stub registration removed to
+// avoid a duplicate REGISTER_TYPE.
+// ResourceLimitUIConfig: PROMOTED to the real config class in
+// code/Game/Dialog/resourcelimituiconfig.cpp (idx5 deserialize, retail 0x140077b10,
+// fills +0x20 = this row's resource index). Stub registration removed to avoid a
+// duplicate REGISTER_TYPE.
+//
+// CORRECTION (2026-07-31) to what stood here before: this comment used to claim
+// that standalone "creates these config objects but never runs their
+// field-deserialize, and controller+0x10 is always null", making the resource index
+// unrecoverable — which is why ResourceLimitUI sourced it from dispatch order.
+// That claim was FALSE. It described the symptom of the config being an all-no-op
+// STUB (its idx5 was StubNop, so of course nothing was deserialized), not a missing
+// framework binding. Promoting ControlUIConfig the same way immediately produced
+// real values, proving the framework does create AND deserialize these configs.
+// The dispatch-order workaround it justified was itself the cause of the Town Hall
+// limits changing value across dialog open/close — see the IdxFor note above.
 UI_DIALOG_STUB(StatusIconUIConfig,    "UI::DialogControllerConfig", 0x28);
 // UpgradeUIConfig: PROMOTED to the real config class in
 // code/Game/Dialog/upgradeuiconfig.cpp (Serialize deserializes the upgrade

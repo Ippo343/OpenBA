@@ -81,6 +81,7 @@ extern "C" void ReportTypeIdGlobals_elements();
 extern "C" void FillTypeIdGlobals_worktail_fire();
 // step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
 extern "C" void FillTypeIdGlobals_citizen_lifeevent();
+extern "C" void FillControlUITypeIds();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
@@ -500,6 +501,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_tradeui();           // c4b80 TradeComponent id — MUST be post-Startup (see reg_tradeui_typeids.cpp)
     ReportTypeIdGlobals_elements();        // UI-element type-id table — nothing to fill (Runtime owns the ids); proves they are non-zero
     FillTypeIdGlobals_citizen_lifeevent(); // step 2.5 defer close — TombstoneComponent/CemeteryDescription ids (c4a30/c40c8)
+    FillControlUITypeIds();                // ControlUIConfig id (0x1401c4e20) — gates EVERY ControlUI button (work/split/empty)
 
     if (ok != 0) {
         // Relativize the engine FileSystem resource directories. This was a
