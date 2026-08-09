@@ -443,8 +443,12 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     void* pStorIBP = s_fn_findStorage ? s_fn_findStorage(local_res8_v, &local_68) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pStorIBP);
     float fVar6 = s_pUVScale_17214c ? *s_pUVScale_17214c : 0.0f;  // g_fUVScale
+    // StorageComponent+0x38 is NOT a dead load: retail keeps it in R12D (1400bc048) and
+    // passes it as arg7 of EVERY CreateRawMaterial_Action_CopyCtor below (stored to
+    // RSP+0x30 at 1400bc0d8). R12D is only zeroed at 1400bc294, AFTER the loop — which is
+    // where the old "arg7 = 0 (R12D)" comment came from. Read it here, before local_68 is
+    // recycled as the child-action push IBP.
     uint32_t uVar1 = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(pStorIBP) + 0x38);
-    (void)uVar1;  // faithful dead load from the original (decompiler-surfaced; no side effect)
 
     // --- CreateRawMaterial action per description entry ---
     if (0 < *reinterpret_cast<int*>(param_6 + 0x50)) {
@@ -460,7 +464,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                 //   arg4 = &local_78  (local_78 = *param_1)
                 //   arg5 = &local_70  (local_70 = (*param_1)+0x248)
                 //   arg6 = <unwritten by caller — uninitialized, ctor never reads it>
-                //   arg7 = 0          (R12D)
+                //   arg7 = uVar1      (R12D = StorageComponent+0x38, loaded at 1400bc048)
                 //   arg8 = param_4    (R13D = bbea0's 4th arg)
                 //   arg9 = 1
                 //   arg10 = &local_res8_v  (local_res8_v = (*param_1)+0x248, a 2nd copy)
@@ -477,7 +481,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                     reinterpret_cast<uint64_t*>(&local_78),
                     &local_70,
                     0 /*arg6 uninitialized — unused by ctor*/,
-                    0 /*arg7 = R12D = 0*/, param_4 /*arg8 = R13D*/, 1, reinterpret_cast<uint64_t*>(&local_res8_v), 0xc) : nullptr;
+                    uVar1 /*arg7 = R12D = StorageComponent+0x38*/, param_4 /*arg8 = R13D*/, 1,
+                    reinterpret_cast<uint64_t*>(&local_res8_v), 0xc) : nullptr;
             }
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_68, pIVar9);
             if (s_fn_push) s_fn_push(plVar18, &local_68);
@@ -538,8 +543,26 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         if (s_fn_push) s_fn_push(plVar18, &local_68);
     }
 
-    // --- finalise on param_5 ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pStorIBP);
-    if (s_fn_remHelper7260) s_fn_remHelper7260(*reinterpret_cast<int64_t**>(pStorIBP));
+    // --- finalise on param_5 (the animal's NaturalResourceComponent) ---
+    // MUST be param_5, NOT pStorIBP. s_fn_findStorage returns its OUT-IBP argument
+    // (work_base_reimpl.cpp:57 `return retIBP`), so pStorIBP == &local_68 — and local_68
+    // is recycled as the push-IBP for every child action above (lines 482 / 520 / 537).
+    // By this point it holds the MoveTo action, whose +0x10 the Action base ctor zeroes,
+    // so 0x140107260 handed a NULL entity to Entity_FindComponent_Family and faulted on
+    // `entity + 0x38` — the first time a pasture ever culled an animal. Worse than the
+    // crash: we had already OR'd the 0x100000 removal flag into the MoveTo action's +0x20,
+    // corrupting a queued action.
+    // Retail loads param_5's home slot into R14 at 1400bc267, BEFORE that stack slot is
+    // recycled as a loop cursor at 1400bc71f, and calls 0x140107260 with *R14 at
+    // 1400bc755. Ghidra's decompile prints the storage-find result here because it
+    // reassigns its alias to param_5 mid-function — the same arg-aliasing trap this
+    // function's own comment already warns about for the CreateRawMaterial args.
+    // Semantic proof it is the animal: 0x140107260 sets bit 0x100000 at param_1+0x20, and
+    // pasturework.cpp:517 tests exactly that bit on the NatRes component to skip animals
+    // already flagged for removal. A null guard here would be WRONG — this is the only
+    // writer of that flag, so guarding would leave the culled animal unflagged and the
+    // pasture would re-select it every tick: a silent livelock instead of a crash.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_5);
+    if (s_fn_remHelper7260) s_fn_remHelper7260(*reinterpret_cast<int64_t**>(param_5));
     (void)plVar18; (void)param_3;
 }

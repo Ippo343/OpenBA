@@ -115,6 +115,24 @@ void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count) {
 // entry, growing the 16-byte-element array (capacity at storage+0x34; grows to 3x on a
 // non-first append) via MemAlloc + copy + MemFree. Leaf (alloc only).
 void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
+    // DIAGNOSTIC, not a guard — appending a count<=0 entry is legal here in retail too, but
+    // it creates a stack that Pf_SpillAllStorage_7570 (action_pf_roots_drop.cpp:250) can
+    // never drain: that loop's exit test is the stack COUNT at +0x30 while its work is gated
+    // on the entry's own count, so a {resType, 0} entry spins the game forever (observed
+    // 2026-07-31 after the first pasture cull, confirmed by gdb: +0x30 == 1, entry count 0).
+    // Retail shipped assertions on exactly this invariant — the profile build carries
+    // "_count >= 0 && _reserve >= 0 && _count - _reserve >= 0" and "_items[index]._count >= 0"
+    // on StorageComponent::Draw — so naming the caller at the moment of the write is
+    // retail-shaped. Do NOT turn this into `if (count <= 0) return;`: that would silently
+    // drop a real deposit on the default path and hide whichever caller is passing 0.
+    if (count <= 0) {
+        std::fprintf(stderr, "[StorageAdd] ZERO/NEG COUNT: storage=%p resType=%p count=%d "
+                     "stacks(+0x30)=%d capacity(+0x38)=%d — this entry will hang the spill loop\n",
+                     reinterpret_cast<void*>(storage), reinterpret_cast<void*>(resType), count,
+                     *reinterpret_cast<int*>(storage + 0x30),
+                     *reinterpret_cast<int*>(storage + 0x38));
+        std::fflush(stderr);
+    }
     int idx = 0;
     int n = *reinterpret_cast<int*>(storage + 0x30);
     if (n > 0) {
