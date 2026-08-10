@@ -22,6 +22,7 @@
 // passing &entityIBP straight through would hand it the caller's storage.
 
 #include "BuildActions.h"
+#include "plantorchard_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -66,9 +67,26 @@ void Resolve() {
 
 }  // namespace
 
+// The diag counter is bumped in the FACTORY ctor only, so this path — the state machine's,
+// and the only one that actually runs in a live game — reported "constructed=0" while
+// building work items every time. Count here too, or the counter reads as a failure of the
+// thing it is meant to be measuring.
+extern "C" void OrchardDiag_NotePlantConstructed();
+
 extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType) {
     Resolve();
+    // [STANDALONE] plantorchard.cpp's own function-pointer table is filled by
+    // PlantOrchard_ResolveFuncs(), which until now was only called from the two FACTORY
+    // entry points (the deserialize path). This constructor is the state machine's path —
+    // it allocates and builds the object directly — so every s_fn_* over there stayed null.
+    // The first slot the framework dispatches on the fresh object is GetTarget (+0x50),
+    // called by the work scheduler's insert; it calls s_fn_FindSubEntity(entity, out) with
+    // no guard, so a null there is a call-of-0 with the ORCHARD ENTITY in RCX — which is
+    // exactly the crash this path produced. Resolve here so both creation paths arrive at a
+    // fully-wired object. See reference_vcall_of_0_may_be_a_null_fnptr.
+    PlantOrchard_ResolveFuncs();
     if (!mem) return mem;
+    OrchardDiag_NotePlantConstructed();
 
     uintptr_t s = reinterpret_cast<uintptr_t>(mem);
 
