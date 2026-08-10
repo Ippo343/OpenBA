@@ -5,6 +5,23 @@
 #include "resolve.h"
 #include <cstdio>
 
+// Shared .rdata-slot type-id resolver. Declared in engine_funcs.h.
+// Prefers the exe .rdata DWORD; falls back to the live factory tree by NAME when that slot
+// is unregistered (ResolveAddr -> 0) or registered-but-filled-with-zero. Testing the VALUE
+// rather than the pointer is deliberate: a slot holding 0 is the documented failure mode a
+// null-pointer check cannot see.
+namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
+
+uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
+    if (cache && *cache) return *cache;
+    uint32_t tid = 0;
+    const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
+    if (p && *p && *p != 0xFFFFFFFFu) tid = *p;
+    if (!tid) tid = ::Object::ResolveTypeIdByNameLazy(name);
+    if (cache) *cache = tid;
+    return tid;
+}
+
 // ============================================================
 // Timer globals — addresses in Runtime-x64.dll
 // ============================================================

@@ -560,17 +560,35 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
 // (+0x110 via 0x140091e60) but skipped these three loops, so +0x120 stayed empty
 // and every icon rendered greyed.
 //
-//   crops    : pool ptr sc+0xb0, pool size sc+0xb8, grant count sc+0xe0
-//   livestock: pool ptr sc+0xc0, pool size sc+0xc8, grant count sc+0xe4
-//   orchards : pool ptr sc+0xd0, pool size sc+0xd8, grant count sc+0xe8
+// The three pools, with their REAL identities (the earlier labels here were shifted
+// by one, which is how the starting herd went missing for so long — see below):
+//
+//   plants   : pool ptr sc+0xb0, pool size sc+0xb8, grant count sc+0xe0 (_plantCount)
+//   trees    : pool ptr sc+0xc0, pool size sc+0xc8, grant count sc+0xe4 (_treeCount)
+//   LIVESTOCK: pool ptr sc+0xd0, pool size sc+0xd8, grant count sc+0xe8 (_livestockCount)
+//
+// Confirmed against ToolKit/resource/Game/StartCondition/Easy.rsc, whose fields appear
+// in exactly this offset order (_plantCount, _treeCount, _livestockCount,
+// _livestockOffsetX/Y, _livestockRadius, _livestockGroupCount -> 0xe0..0xf8), and against
+// a live run: pool sizes a8=7 b8=8 c8=8 d8=3, where 3 == len(_initialLivestockList)
+// [LivestockChicken, LivestockCow, LivestockSheep].
 //
 // Each pool entry is the standard 0x18-stride ExternalRef; resolve it to the
 // crop/animal ComponentDescription (the SAME cached External that
 // InitAgriculture's ExternalFactory::FindNext keys the agri BST on, so the
-// pointers match). The retail orchard loop additionally calls FUN_1400a0b10
-// (spawns the initial orchard resource in the world) before the availability add;
-// that world-spawn is a separate concern from the tab greying and is intentionally
-// omitted here — only the availability registration is ported.
+// pointers match).
+//
+// The THIRD loop additionally calls FUN_1400a0b10 before the availability add
+// (1400a35dc, then 1400a35e7). A previous comment here described that call as spawning
+// "the initial orchard resource" and omitted it as unrelated to tab greying. Both halves
+// of that were wrong: the pool is livestock, not orchards, and the call is the town's
+// STARTING HERD — the primary source of a new town's animals. It is ported as
+// StartTown_SpawnStartingHerd (code/Game/Component/pasturecomponent_spawn.cpp) and is
+// now called below.
+
+// The starting-herd spawn (retail FUN_1400a0b10), ported alongside the other animal-spawn
+// bodies in code/Game/Component/pasturecomponent_spawn.cpp.
+extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl);
 
 // Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
 // body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
@@ -613,8 +631,12 @@ static bool AgriTraceOn() {
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and
 // dedup-append each resolved description into townMgr+0x120. Faithful to the retail
 // loop (System::Random::Rand(worldRng, size) per pick).
+// `spawnCentre` non-null marks the LIVESTOCK pool: retail spawns the starting herd from
+// the picked template before the availability add. The other two pools pass nullptr and
+// register availability only, exactly as retail does.
 static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
-                        int poolOff, int sizeOff, int countOff, const char* label) {
+                        int poolOff, int sizeOff, int countOff, const char* label,
+                        const float* spawnCentre = nullptr) {
     uint8_t* pool  = *(uint8_t**)(sc + poolOff);
     int      size  = *(int32_t*)(sc + sizeOff);
     int      count = *(int32_t*)(sc + countOff);
@@ -630,6 +652,9 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
         if (AgriTraceOn())
             fprintf(stderr, "[AgriSeed]   %s[%d] idx=%u tmpl=%p\n", label, i, idx, tmpl);
         if (!tmpl) continue;
+        // Retail order: spawn FIRST (0x1400a35dc), then the availability add
+        // (0x1400a35e7). Both consume the same resolved template.
+        if (spawnCentre) StartTown_SpawnStartingHerd(sc, spawnCentre, tmpl);
         TownMgr_AddAvailableAgri(townMgr, tmpl);
         ++added;
     }
@@ -639,20 +664,35 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
 // Ungated: registers the town's starting available crops/livestock/orchards into
 // townMgr+0x120 so the Town Hall Agri tab brightens them (instead of all-greyed).
 // Independent of live storage; only needs townMgr + the resolved templates.
-static void StartTown_SeedAvailableAgriculture(uint8_t* sc) {
+static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
+                                               int spawnX, int spawnY) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
     void*    rng     = *(void**)(gw + 0xd8);
     if (!townMgr) return;
 
+    // Town-centre world position — retail passes the same Vector3 it computed once for
+    // the camera and every other spawn pass (it is FUN_1400a3300's own return value,
+    // held in R13 across the loop).
+    float centre[3] = { 0.0f, 0.0f, 0.0f };
+    bool haveCentre = false;
+    if (game && fn_MapGetTerrainPos) {
+        StartTown_TileToWorld(game, spawnX, spawnY, centre);
+        haveCentre = true;
+    }
+
     int before = *(int32_t*)(townMgr + 0x128);
-    int c = SeedAgriPool(sc, townMgr, rng, 0xb0, 0xb8, 0xe0, "crops");
-    int a = SeedAgriPool(sc, townMgr, rng, 0xc0, 0xc8, 0xe4, "livestock");
-    int o = SeedAgriPool(sc, townMgr, rng, 0xd0, 0xd8, 0xe8, "orchards");
-    fprintf(stderr, "[AgriSeed] available-agriculture seeded: crops=%d livestock=%d "
-            "orchards=%d; townMgr+0x120 count %d -> %d\n",
-            c, a, o, before, *(int32_t*)(townMgr + 0x128));
+    int p = SeedAgriPool(sc, townMgr, rng, 0xb0, 0xb8, 0xe0, "plants");
+    int t = SeedAgriPool(sc, townMgr, rng, 0xc0, 0xc8, 0xe4, "trees");
+    int a = SeedAgriPool(sc, townMgr, rng, 0xd0, 0xd8, 0xe8, "livestock",
+                         haveCentre ? centre : nullptr);
+    if (!haveCentre)
+        fprintf(stderr, "[AgriSeed] no town centre (game=%p MapGetTerrainPos=%p) — "
+                "starting herd SKIPPED\n", game, (void*)fn_MapGetTerrainPos);
+    fprintf(stderr, "[AgriSeed] available-agriculture seeded: plants=%d trees=%d "
+            "livestock=%d; townMgr+0x120 count %d -> %d\n",
+            p, t, a, before, *(int32_t*)(townMgr + 0x128));
     fflush(stderr);
 }
 
@@ -4479,7 +4519,11 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     // townMgr+0x120 so the Town Hall Agri tab brightens them instead of showing
     // every icon greyed. Independent of live storage; must run after the town
     // manager exists (it does — gw+0xf0 set during world build).
-    StartTown_SeedAvailableAgriculture(sc);
+    // The third pool loop also spawns the town's STARTING HERD (retail 0x1400a35dc),
+    // which is why this now needs the spawn tile: on Easy (_livestockCount=1,
+    // _livestockGroupCount=8) it puts 8 free-roaming animals of one rolled type near the
+    // town centre. Medium/Hard set _livestockCount=0 and correctly get none.
+    StartTown_SeedAvailableAgriculture(sc, game, spawnX, spawnY);
 
     // ========================================================================
     // Brick M-D (BANISHED_LIVE_STORAGE) — starting-resource seeding. Mirrors

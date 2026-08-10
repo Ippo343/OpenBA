@@ -10,6 +10,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
@@ -17,6 +19,24 @@
 // StatusIconComponent type-id .rdata global DAT_1401c7e08, which is UNFILLED (0xFFFFFFFF)
 // in the standalone image and therefore matches no component for any entity.
 static void* StatusIconUI_FindStatusIconComp(void* entity);
+
+// Type ids for the two guards in Startup. BOTH were previously wrong, and the two errors
+// compounded: the outer one made the page gate unreachable, and the inner one would have
+// kept it broken even after the outer was fixed.
+//
+//   self+0x10 is a StatusIconUIConfig — retail reads DAT_1401c56e0, and get_xrefs_to
+//   confirms that slot is written by StatusIconUIConfig_Register (0x14014c865). It is NOT
+//   DialogController; engine_funcs.h:608 mislabels 0x1401c56e0 as such.
+//
+//   The dialog's controller 0 is an EntityUI — retail reads DAT_1401c4f00, written by
+//   RegisterType_EntityUI (0x14014bf65). It is NOT PageToggleUI; that name is a legacy
+//   misnomer already flagged in code/Game/Player/edittool.cpp:288 and used correctly in
+//   edittool_select.cpp:151, but the correction never reached this file.
+//
+// Resolved by NAME here rather than through the mislabelled g_TypeId_* globals, which are
+// left untouched because engine_funcs.h:4585 still consumes g_TypeId_PageToggleUI.
+static uint32_t s_tidStatusIconUIConfig = 0;
+static uint32_t s_tidEntityUI = 0;
 
 // ============================================================
 // StatusIconUI::Serialize (vtable +0x20) — Cache icon child elements
@@ -98,48 +118,88 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     // entity. Resolve the StatusIconComponent by name instead so the panel reads live bits.
     if (!meshComp) meshComp = StatusIconUI_FindStatusIconComp(entityInternal);
 
-    // Determine if icons should be visible based on page state
+    // Determine if icons should be visible based on page state.
+    //
+    // A workplace-building dialog mounts this SAME "icons" ribbon TWICE (see
+    // ToolKit/resource/Template/Pasture.rsc:262-273): once into "userGroup1" (the
+    // content area, bottom right) with NO config, and once into "userTitle2" (the
+    // TITLE BAR) with a config — e.g. CropField.rsc:256 `StatusIconUIConfig
+    // titleBuildStatus { bool _showOnMainPage = false; }`. The config's +0x20 byte is
+    // the ONLY thing that keeps the title-bar copy off the main info page, so getting
+    // this gate wrong renders the stop-work icon twice.
     bool iconsActive = true;
 
-    void* parentController = *(void**)((uintptr_t)self + 0x10);
-    if (parentController != nullptr) {
-        // Check if parent is a DialogController. Guard the type-id deref: in standalone the
-        // exe .rdata type-id globals are null (page-check then defaults iconsActive=true,
-        // which is the correct "show icons per active bits" behaviour for a single-view
-        // panel).
-        bool isDC = g_TypeId_DialogController &&
-                    fn_IsDerivedFrom(parentController, *g_TypeId_DialogController);
-        void* dcPtr = isDC ? parentController : nullptr;
+    // self+0x10 is the optional per-mount StatusIconUIConfig, NOT a DialogController.
+    void* config = *(void**)((uintptr_t)self + 0x10);
+    if (config != nullptr) {
+        bool isCfg = s_tidStatusIconUIConfig &&
+                     fn_IsDerivedFrom(config, s_tidStatusIconUIConfig);
+        void* cfgPtr = isCfg ? config : nullptr;
 
-        // Check if controller's dialog element (+0x20) is null
-        if (dcPtr && *(void**)((uintptr_t)dcPtr + 0x20) == nullptr) {
-            // Get PageToggleUI controller from dialog instance
+        // Retail reads *(char*)(cfg+0x20) — the `_showOnMainPage` BOOL — and enters the
+        // page restriction when it is FALSE. (This was previously coded as a
+        // *pointer*-null test on +0x20, which is a different question entirely.)
+        if (cfgPtr && *(uint8_t*)((uintptr_t)cfgPtr + 0x20) == 0) {
             void* dialogInst = *(void**)((uintptr_t)self + 0x18);
             uint64_t ctrlResult = 0;
             fn_DialogInstance_GetController(dialogInst, &ctrlResult, 0);
 
-            void* pageToggle = nullptr;
+            void* entityUI = nullptr;
             if (ctrlResult != 0) {
                 void* ctrlPtr = (void*)ctrlResult;
-                bool isPageToggle = g_TypeId_PageToggleUI &&
-                                    fn_IsDerivedFrom(ctrlPtr, *g_TypeId_PageToggleUI);
-                pageToggle = isPageToggle ? ctrlPtr : nullptr;
+                if (s_tidEntityUI && fn_IsDerivedFrom(ctrlPtr, s_tidEntityUI))
+                    entityUI = ctrlPtr;
             }
 
             uint8_t ptBuf[8];
-            fn_InternalBasePtr_Ctor(ptBuf, pageToggle);
+            fn_InternalBasePtr_Ctor(ptBuf, entityUI);
             void* ptInternal = *(void**)ptBuf;
 
-            // GetActivePage is just *(int*)(pageElement + 0xC0)
-            // PageToggleUI stores its page element at +0x40
+            // Retail: iconsActive = (GetActivePage(ctrl+0x40) - 2U <= 1), i.e. the page
+            // is pageBuild(2) or pageDestroy(3) per StandardDialog.rsc:64-74. Once this
+            // gate is entered retail ALWAYS recomputes the flag — it never leaves it true.
+            // GetActivePage is just *(int*)(pageElement + 0xC0).
+            //
+            // SA guard: retail derefs ctrl+0x40 unconditionally and would fault here. We
+            // fall back to FALSE (hidden), not true — the config has explicitly said "not
+            // on the main page", and the main page is what is open by default. Defaulting
+            // this to `true` is precisely what hid the duplicate icon for this function's
+            // entire life.
+            iconsActive = false;
             if (ptInternal != nullptr) {
                 void* pageElem = *(void**)((uintptr_t)ptInternal + 0x40);
                 if (pageElem != nullptr) {
                     int activePage = *(int*)((uintptr_t)pageElem + 0xC0);
-                    // Icons are active on pages 2 and 3 (iVar3 - 2U <= 1)
                     iconsActive = (activePage >= 2 && activePage <= 3);
                 }
             }
+        }
+    }
+
+    // Per-instance gate diagnostic. Reports the OUTCOME at every exit, including the
+    // paths that SKIP the gate — a trace that only prints when the gate runs cannot
+    // distinguish "gate said show" from "gate never ran", which is exactly the
+    // ambiguity that made the first fix attempt unverifiable.
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        static int s_n = 0;
+        if (s_n < 24) {
+            ++s_n;
+            void* cfg = *(void**)((uintptr_t)self + 0x10);
+            const char* why = "gate ran";
+            if (!cfg)                          why = "SKIP: no config at +0x10 (content mount?)";
+            else if (!s_tidStatusIconUIConfig) why = "SKIP: StatusIconUIConfig tid unresolved";
+            else if (!fn_IsDerivedFrom(cfg, s_tidStatusIconUIConfig))
+                                               why = "SKIP: config not derived from StatusIconUIConfig";
+            else if (*(uint8_t*)((uintptr_t)cfg + 0x20) != 0)
+                                               why = "SKIP: _showOnMainPage=true";
+            fprintf(stderr,
+                "[StatusIconUI] self=%p cfg=%p cfgTid=%u entityUITid=%u showOnMain=%d "
+                "iconsActive=%d icons=%d bits=0x%x  <- %s\n",
+                (void*)self, cfg, s_tidStatusIconUIConfig, s_tidEntityUI,
+                cfg ? (int)*(uint8_t*)((uintptr_t)cfg + 0x20) : -1,
+                (int)iconsActive, *(int*)((uintptr_t)self + 0x38),
+                meshComp ? *(uint32_t*)((uintptr_t)meshComp + 0xF0) : 0u, why);
+            fflush(stderr);
         }
     }
 
@@ -250,18 +310,34 @@ void EnsureGlobals() {
     static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
     // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
     if (!g_TypeId_ComponentEntity) { s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
-    // DialogController + PageToggleUI feed the (cosmetic) page-gating branch. If they don't
-    // resolve, Startup's guards default iconsActive=true (icons shown per the active bits),
-    // which is the correct single-view behaviour — so these are best-effort, not required.
-    if (!g_TypeId_DialogController) { s_dc = ::Object::ResolveTypeIdByNameLazy("DialogController"); if (s_dc) g_TypeId_DialogController = &s_dc; }
-    if (!g_TypeId_PageToggleUI)     { s_pt = ::Object::ResolveTypeIdByNameLazy("PageToggleUI");     if (s_pt) g_TypeId_PageToggleUI = &s_pt; }
+    // These two are the REAL types the page gate needs (see the note at the top of this
+    // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
+    // draws on the main info page and the stop-work icon appears twice.
+    if (!s_tidStatusIconUIConfig) s_tidStatusIconUIConfig = ::Object::ResolveTypeIdByNameLazy("StatusIconUIConfig");
+    if (!s_tidEntityUI)           s_tidEntityUI           = ::Object::ResolveTypeIdByNameLazy("EntityUI");
+
+    // REMOVED — these two lazy by-name fills were actively harmful, not merely redundant.
+    // Neither 0x1401c56e0 nor 0x1401c4f00 is RegisterExeAddr'd, so engine_funcs.cpp's
+    // ResolveAddr leaves both globals null; THIS was the only code in the tree that ever
+    // made them non-null, and it filled them by NAME with genuinely different classes than
+    // the .rdata slots they are documented as. `*g_TypeId_DialogController` now has no
+    // readers at all, and the sole reader of `*g_TypeId_PageToggleUI`
+    // (engine_funcs.h, Toolbar_CenterOnEntity_Impl) actually wants **EntityUI** — retail
+    // FUN_140103040 compares against DWORD_1401c4f00, whose registrar is
+    // RegisterType_EntityUI. Feeding it the real PageToggleUI id (a different class, whose
+    // own slot is 0x1401c5408) made its IsDerivedFrom always fail, silently disabling
+    // camera-follow for every "go to entity" click. That consumer now resolves EntityUI
+    // for itself, so filling these globals here would only re-poison it.
+    (void)s_dc; (void)s_pt;
 
     static bool s_logged = false;
     if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
         s_logged = true;
-        fprintf(stderr, "[StatusIconUI] globals: CE=%p DC=%p PageToggle=%p\n",
-                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_DialogController,
-                (void*)g_TypeId_PageToggleUI);
+        // Print the VALUES, not just the pointers: a resolve that returns 0 is the
+        // documented "registered but filled with zero" failure, and a pointer-only log
+        // cannot distinguish it from a good resolve.
+        fprintf(stderr, "[StatusIconUI] globals: CE=%p cfgTid=%u entityUITid=%u\n",
+                (void*)g_TypeId_ComponentEntity, s_tidStatusIconUIConfig, s_tidEntityUI);
         fflush(stderr);
     }
 }

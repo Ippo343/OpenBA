@@ -139,6 +139,42 @@ void TrackerComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(TrackerComponent, 0x50, 0x80)
+// NOT COMPONENT_INERT_FACTORY: that macro leaves the whole body zeroed, but the
+// retail ctor (TrackerComponent_Factory 0x14000d7a0) writes +0x48 = -1. +0x48 is
+// the "game-world item-count generation" stamp, and 0 is a LEGAL generation
+// value: with a zeroed body ProductionUI's per-frame update (0x140075a50) would
+// compare gameWorld item count 0 == stamp 0 on the very first frame of a fresh
+// world and SKIP the one-shot array rebuild that the -1 sentinel is there to
+// force. Documented project trap: "inert-component sentinel fields" — a zero
+// where a -1 belongs. Everything else is the macro's inert body verbatim.
+static uint32_t TrackerComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TrackerComponent");
+    return cached;
+}
+static void* TrackerComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+
+// Retail ctor tail: +0x28/+0x30/+0x38/+0x40 = 0 (already zeroed), +0x48 = -1.
+static void TrackerComponent_ApplyCtorDefaults(void* p) {
+    if (p) *reinterpret_cast<int32_t*>(static_cast<char*>(p) + 0x48) = -1;
+}
+
+extern "C" void* TrackerComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x80,
+        TrackerComponent_InertVtable,
+        reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
+    TrackerComponent_ApplyCtorDefaults(p);
+    return p;
+}
+static void* TrackerComponent_CreateInPlace(void* mem) {
+    if (mem) {
+        ::ComponentFactory::InitInertTyped(mem, 0x50, 0x80,
+            TrackerComponent_InertVtable,
+            reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
+        TrackerComponent_ApplyCtorDefaults(mem);
+    }
+    return mem;
+}
+
 REGISTER_TYPE(TrackerComponent, "Component",
               &TrackerComponent_Factory, &TrackerComponent_CreateInPlace);

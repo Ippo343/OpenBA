@@ -10,6 +10,18 @@
 // already have >=1 worker (its Phase-2 need-table skips any workplace whose live roster
 // count WPC+0x60 == 0 — Ghidra-verified). See reference_builder_profession_bst_flow.
 //
+// RE-VERIFIED 2026-08-09 from the decompile of 0x1400d43b0: the skip is RETAIL's, not ours.
+// Phase 1 (the citizen sweep) only *evicts* — for a citizen whose site profession
+// (WorkPlaceComponent+0x48) no longer matches its own (+0x1f0) it calls AssignHousing(null)
+// and demotes it to laborer; it never seats. Phase 2 then walks the per-profession site
+// lists out of townMgr+0x100 and builds its need table under a literal
+// `if (*(int *)(workPlaceComponent + 0x60) != 0)` guard, so a roster-0 site is invisible to
+// it. Nothing else in retail seats a first worker: the WorkPlaceUI workerCountUp click
+// (0x1450 -> FUN_14008d100 + CitizenComponent_impl_c3d0) and the town-hall Professions
+// spinner are the only first-seat paths, and both are ported + live in SA. So this stand-in
+// exists because retail's UI is the allocator's missing half, not because our allocator
+// diverges — do NOT "fix" 0x1400d43b0 by removing the roster==0 skip.
+//
 // So "fully organic" is driven here: each town tick we keep the town's construction sites
 // staffed by running the exact retail seat cascade against the sites FindAvailableBuilding
 // returns (the sites State1Enter registered into townMgr+0x100 under the Builder key), up

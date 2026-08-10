@@ -471,6 +471,7 @@ extern "C" float CharacterComponent_Cosf_131090(float); // Phase 3 Keystone D: m
 extern void RegisterCharManager();           // Phase 3 Keystone D: char spatial-hash manager (sub_83f0/8660/8c40/8d00/28c0/8560)
 extern void RegisterEconomyTypeIds();        // Phase 3 economy: building-find type-id globals (InteractDescription c7938)
 extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreatePlacedDescription c7468 / ModelComponent c7a50 / ModelDescription c7a88 (gated BANISHED_LIVE_DECAL)
+extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterTradeUILeavesBatch();     // Wave A: TradeUI DynArray clear leaves (16050/16130/16200)
@@ -665,6 +666,7 @@ static void RegisterCodeFunctions() {
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
     RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
+    RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
 
     // Player registration wave (round 1) — closure-safe tool sub-helpers.
     RegisterPlayerDragBatch();     // 5160 FindDescription, ff980 CloseDialog, ffbf0/1000f0/100140 sounds, 1018d0 ClearPathEntities

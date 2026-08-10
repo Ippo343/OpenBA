@@ -513,8 +513,169 @@ REGISTER_TYPE(MapUI, "UI::DialogController",
               &uistub_MapUI::Factory, &uistub_MapUI::InPlace);
 UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
 UI_DIALOG_STUB(NoiseUI,             "UI::DialogController", 0x70);
-UI_DIALOG_STUB(PageToggleUI,        "UI::DialogController", 0x48);
-UI_DIALOG_STUB(ProductionUI,        "UI::DialogController", 0x50);
+// ---- PageToggleUI: PROMOTED to the real reimpl (production-statistics button) --
+// PageToggleUI drives the `checkProduction` CheckElement that Dialog/Production.rsc
+// inserts into a workplace dialog's title bar (userTitle0). It is the ONLY thing
+// that switches a StandardDialog between pageMain(0) and pageUser(4) — the page
+// that holds the production-statistics content (Production.rsc:production4, driven
+// by ProductionUI below). Retail bodies:
+//   Slot4 (+0x20, Setup)  0x140075850 — FindElementType(CheckElement) -> +0x30,
+//                         SetElementId(700), FindElement("pages") -> +0x38, then
+//                         restore the saved page if the dialog is on page 0 or 4.
+//   Slot7 (+0x38, Update) 0x140075780 — enable/disable the checkbox (vtable +0x40)
+//                         depending on whether the active page is 0 or 4.
+//   Slot9 (+0x48, Event)  0x140075710 — msg 0x12 + id 700 -> +0x40 = checked ? 4 : 0
+//                         and PageElement::SetActivePage. It opens NO dialog.
+//   Slot3 (+0x18)         0x1400759a0 is a 3-byte `RET 0` — left a no-op stub
+//                         (see ui_panels.h:618).
+// The generic stub made all three no-ops, so the button was inert: the id-700
+// event never fired and clicking the control did nothing.
+//
+// HAZARD (retail-faithful, hence the gate below): Slot7 derefs the checkbox
+// vtable with NO null check, so if Slot4's FindElementType misses, Slot7 faults.
+// In standalone the checkbox type id is null by default — the exe reads it through
+// .rdata exref 0x1401516a8, and that whole element-type-id table
+// (standalone/reg_element_typeids.cpp) is gated on BANISHED_LIVE_ELEMENT_TIDS,
+// which is NOT in kDefaultOnFlags. With g_TypeId_CheckboxElement null,
+// FindElementType(root, 0) can never match, +0x30 stays null, and Slot7 faults.
+// pagetoggleui.cpp therefore resolves a PRIVATE copy of the id by name (the
+// exref's import string, read out of exe .rdata at 0x1401b8ce8, is
+// "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A" — i.e. UI::CheckElement),
+// without writing the shared global, and Ready() refuses to dispatch any slot
+// until it is non-zero.
+struct PageToggleUI;
+extern void PageToggleUI_Slot4(PageToggleUI* self);
+extern void PageToggleUI_Slot7(PageToggleUI* self);
+extern void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4);
+extern bool PageToggleUI_TypeIdsReady();
+namespace uistub_PageToggleUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("PageToggleUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // The CheckElement type id is resolved PRIVATELY inside pagetoggleui.cpp
+    // (PageToggleUI_TypeIdsReady) — see the long note there. We must not fill the
+    // shared g_TypeId_CheckboxElement here: reg_element_typeids.cpp owns that
+    // table and holds it behind BANISHED_LIVE_ELEMENT_TIDS on purpose.
+    // Every slot below dereferences the checkbox / "pages" element unguarded, and
+    // Slot4 cannot populate either without the type id. Report the outcome once.
+    bool Ready() {
+        bool ok = PageToggleUI_TypeIdsReady()
+                  && fn_Element_FindElementType && fn_Element_SetElementId
+                  && fn_DialogInstance_FindElement
+                  && fn_PageElement_GetActivePage && fn_PageElement_SetActivePage;
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            fprintf(stderr, "[PageToggleUI] Ready=%d (CheckElement id resolved=%d)\n",
+                    (int)ok, (int)PageToggleUI_TypeIdsReady());
+            fflush(stderr);
+        }
+        return ok;
+    }
+    void Slot4(void* self) { if (self && Ready()) PageToggleUI_Slot4(reinterpret_cast<PageToggleUI*>(self)); }
+    // Slot7 runs every frame, including before Slot4 has populated +0x30/+0x38.
+    // Retail cannot observe that ordering (its Slot4 always succeeds first), so
+    // the empty-cache test below is a STANDALONE-ONLY precondition, not a
+    // behaviour change: with both caches populated this is retail verbatim.
+    void Slot7(void* self) {
+        if (!self || !Ready()) return;
+        uintptr_t s = reinterpret_cast<uintptr_t>(self);
+        if (!*reinterpret_cast<void**>(s + 0x30) || !*reinterpret_cast<void**>(s + 0x38)) return;
+        PageToggleUI_Slot7(reinterpret_cast<PageToggleUI*>(self));
+    }
+    void Slot9(void* self, void* p2, int msg, int id, int, int) {
+        if (!self || !Ready()) return;
+        uintptr_t s = reinterpret_cast<uintptr_t>(self);
+        if (!*reinterpret_cast<void**>(s + 0x30) || !*reinterpret_cast<void**>(s + 0x38)) return;
+        PageToggleUI_Slot9(reinterpret_cast<PageToggleUI*>(self), p2, msg, id);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x48;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x48,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(PageToggleUI, "UI::DialogController",
+              &uistub_PageToggleUI::Factory, &uistub_PageToggleUI::InPlace);
+
+// ---- ProductionUI: PROMOTED to the real reimpl (production-statistics content) -
+// ProductionUI drives Dialog/Production.rsc:production4 at pageUser — the page
+// PageToggleUI above flips to. Retail bodies:
+//   Slot4 (+0x20, Setup)  0x140075da0 — find "production"/"production3"/"production4",
+//                         take child 0 (consumed) + child 1 (produced), and cache
+//                         each row's {labelStorage, numberCount} pair into the two
+//                         dynamic arrays at +0x30 / +0x40.
+//   Slot7 (+0x38, Update) 0x140075a20 -> helper 0x140075a50 twice (list 0, list 1) —
+//                         reads the entity's TrackerComponent and fills sprite/text/
+//                         count per row, hiding the leftovers.
+//   Slot3 (+0x18)         0x140076300 decompiles to a bare `return;` — left a no-op.
+// The generic stub made both no-ops, so even once the page could be reached it was
+// blank.
+//
+// HAZARD: Slot7 runs EVERY frame, including before Slot4 has populated the caches,
+// and the helper derefs tracker+0x48 unguarded. The tracker id is fixed properly
+// (standalone/reg_tracker_typeid.cpp registers .rdata 0x1401c4b10 and game_main
+// fills it after Object::Factory::Startup); the remaining null-tracker case is
+// guarded inside productionui.cpp with an explicit standalone rationale.
+struct ProductionUI;
+extern void ProductionUI_Slot4(ProductionUI* self);
+extern void ProductionUI_Slot7(ProductionUI* self);
+extern bool ProductionUI_TypeIdsReady();
+namespace uistub_ProductionUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ProductionUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // ComponentEntity (.rdata 0x1401c5d70) and RawMaterialDescription (0x1401c7cb8)
+    // are already registered+filled, ungated, by reg_action_child_ctors2, and
+    // TrackerComponent (0x1401c4b10) by reg_tracker_typeid.cpp. The two ELEMENT ids
+    // are resolved privately inside productionui.cpp (ProductionUI_TypeIdsReady) —
+    // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_SpinnerElement,
+    // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
+    bool Ready() {
+        bool ok = g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity != 0
+                  && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
+                  && g_TypeId_TrackerComponent && *g_TypeId_TrackerComponent != 0
+                  && ProductionUI_TypeIdsReady()
+                  && g_pGameWorldSingleton
+                  && fn_FindElement && fn_Element_Child && fn_Element_ChildCount;
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            fprintf(stderr, "[ProductionUI] Ready=%d entity=%u rawmat=%u tracker=%u elementIds=%d\n",
+                    (int)ok,
+                    g_TypeId_ComponentEntity        ? *g_TypeId_ComponentEntity        : 0u,
+                    g_TypeId_RawMaterialDescription ? *g_TypeId_RawMaterialDescription : 0u,
+                    g_TypeId_TrackerComponent       ? *g_TypeId_TrackerComponent       : 0u,
+                    (int)ProductionUI_TypeIdsReady());
+            fflush(stderr);
+        }
+        return ok;
+    }
+    void Slot4(void* self) { if (self && Ready()) ProductionUI_Slot4(reinterpret_cast<ProductionUI*>(self)); }
+    // Standalone-only precondition (see PageToggleUI::Slot7 above): with no cached
+    // rows there is nothing for the retail body to write, and self+0x30/+0x40 are
+    // still null.
+    void Slot7(void* self) {
+        if (!self || !Ready()) return;
+        uintptr_t s = reinterpret_cast<uintptr_t>(self);
+        if (*reinterpret_cast<uint32_t*>(s + 0x38) == 0 &&
+            *reinterpret_cast<uint32_t*>(s + 0x48) == 0) return;
+        ProductionUI_Slot7(reinterpret_cast<ProductionUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ProductionUI, "UI::DialogController",
+              &uistub_ProductionUI::Factory, &uistub_ProductionUI::InPlace);
 // ---- ProfessionUI: PROMOTED to the real reimpl (profession-assignment bring-up) -
 // The toolbar "professions" overlay (Template\UtilityProfessions.rsc). Its controller
 // lists every profession with a worker-count spinner + a "goto" button. The real
@@ -1154,7 +1315,14 @@ UI_DIALOG_STUB(TutorialHighlightDialog, "UI::DialogInstance", 0xF0);
 // real values, proving the framework does create AND deserialize these configs.
 // The dispatch-order workaround it justified was itself the cause of the Town Hall
 // limits changing value across dialog open/close — see the IdxFor note above.
-UI_DIALOG_STUB(StatusIconUIConfig,    "UI::DialogControllerConfig", 0x28);
+// StatusIconUIConfig: PROMOTED to the real config class in
+// code/Game/Dialog/statusiconuiconfig.cpp. Its Serialize (vtable idx5, retail
+// 0x14007b400) reads ONE bool byte (_showOnMainPage) off the resource stream;
+// the generic stub's StubNop read zero, so the external-object load drifted and
+// the title-bar mount's config never resolved — StatusIconUI saw config==NULL at
+// +0x10 and could not suppress the duplicate stop-work icon. Exactly the same
+// failure (and fix) as the ControlUIConfig / ResourceLimitUIConfig promotions
+// noted above. Stub registration removed to avoid a duplicate REGISTER_TYPE.
 // UpgradeUIConfig: PROMOTED to the real config class in
 // code/Game/Dialog/upgradeuiconfig.cpp (Serialize deserializes the upgrade
 // target ComponentEntity template into +0x20 — the zero-fill stub left it null,

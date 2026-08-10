@@ -605,8 +605,22 @@ extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
 extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
 extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
 extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
-extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0
-extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00
+// ⚠ BOTH NAMES BELOW ARE WRONG — kept only so existing declarations keep compiling.
+// Verified via get_xrefs_to on each slot, checking which *_Register writes it:
+//   0x1401c56e0 <- StatusIconUIConfig_Register (0x14014c865)  => StatusIconUIConfig
+//   0x1401c4f00 <- RegisterType_EntityUI       (0x14014bf65)  => EntityUI
+// Neither slot is RegisterExeAddr'd, so both globals are NULL in standalone and nothing
+// should read them. `g_TypeId_DialogController` now has zero readers tree-wide. Do not
+// add new consumers — use ResolveTypeId(<slot>, "<RealName>", &cache) instead, which
+// guards the VALUE rather than the pointer.
+extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0 — really StatusIconUIConfig
+extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00 — really EntityUI
+
+// Prefer the raw .rdata DWORD; if that slot is unregistered or filled with 0, fall back to
+// the live factory tree by name. Caches into *cache. Defined in engine_funcs.cpp.
+// (edittool_select.cpp has an identical private helper in an anonymous namespace — this is
+// the shared, externally-linkable one. Guards the VALUE, not the pointer.)
+uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache);
 extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
 extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
 extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
@@ -725,7 +739,9 @@ typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 // FindComponent inline wrappers — call Entity_FindComponentByExeTypeId with correct type ID.
 // Original exe functions (FUN_140XXXXXX) are no longer needed.
 
-// fn_FindComponent_Build — DAT_1401c79e0 (BuildComponent), original FUN_140004680
+// fn_FindComponent_Build — DAT_1401c79e0, original FUN_140004680. MISNOMER: the type id at
+// DAT_1401c79e0 is MapComponent, not BuildComponent (registrar MapComponent_RegisterType
+// 0x14014f375; the declaration above already names it g_TypeId_MapComponent_FC).
 inline void fn_FindComponent_Build(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_MapComponent_FC);
 }
@@ -2047,10 +2063,15 @@ inline uint32_t fn_GetCurrentProductIndex(void* component) {
     return idx;
 }
 
-// FUN_14012e5c0: Calculate worker slot count for a StorageLocationComponent/WorkplaceComponent.
-// param_1+0x18 = entity ptr (checks IsDerivedFrom WorkplaceJobType at DAT_1401c80a8).
-// If jobType[0x34]==0: return jobType[0x24] (fixed count).
-// Else: scale by building tile area (building at param_1+0x10).
+// FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —
+// i.e. the initial value of WorkComponent+0x30, the number of worker SLOTS the site opens
+// with. It is NOT the maximum the player can reach: the jobCount spinner raises +0x30 up
+// to WorkDescription+0x2c (_maxWorkerCount) via SetMaxWorkers (0x14012fb00).
+// param_1+0x18 = the WorkDescription (checks IsDerivedFrom at DAT_1401c80a8).
+// WorkDescription layout: +0x20 _allowCountChange, +0x24 _defaultWorkers,
+//   +0x28 _minWorkerCount, +0x2c _maxWorkerCount, +0x30 _maxArea, +0x34 _scaleWorkersWithSize.
+// If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
+// Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
 // Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
 inline int fn_StorageCountQuery(void* component) {
     uintptr_t c = (uintptr_t)component;
@@ -2066,13 +2087,13 @@ inline int fn_StorageCountQuery(void* component) {
     fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
     fn_InternalBasePtr_CheckPtr(&buildBP);
     uintptr_t build = (uintptr_t)buildBP;
-    int maxWorkers = *(int*)(jt + 0x24);
-    int tileArea   = *(int*)(jt + 0x30);
+    int defaultWorkers = *(int*)(jt + 0x24);   // _defaultWorkers (NOT _maxWorkerCount)
+    int maxArea        = *(int*)(jt + 0x30);   // _maxArea (NOT the building's tile area)
     int width      = (int)*(short*)(build + 0x2c);
     int height     = (int)*(short*)(build + 0x2e);
-    int result = (int)(((float)(width * height) / (float)tileArea) * (float)maxWorkers + 1.0f);
-    if (result > maxWorkers) result = maxWorkers;
-    if (result < 1)          result = 1;
+    int result = (int)(((float)(width * height) / (float)maxArea) * (float)defaultWorkers + 1.0f);
+    if (result > defaultWorkers) result = defaultWorkers;
+    if (result < 1)              result = 1;
     return result;
 }
 // Alias used by professionui.cpp
@@ -4580,11 +4601,23 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;
-        // g_TypeId_PageToggleUI is an exe .rdata type-id that is NULL in standalone
-        // until lazily resolved; dereferencing *g_TypeId_PageToggleUI would fault.
-        if (controllerRaw != 0 && g_TypeId_PageToggleUI) {
+        // Retail FUN_140103040 gates this on DWORD_1401c4f00, whose registrar is
+        // RegisterType_EntityUI — so the controller this wants is an **EntityUI**, and the
+        // accepted pointer is handed to EntityUI_helper_66b0. It is NOT a PageToggleUI (a
+        // different class, own slot 0x1401c5408, which nothing in this tree reads).
+        //
+        // This previously read g_TypeId_PageToggleUI. That global is null unless
+        // statusiconui.cpp's by-name lazy fill had run, and when it HAD run it held the real
+        // PageToggleUI id — wrong-but-NONZERO, which the old `&& g_TypeId_PageToggleUI` null
+        // check could not detect. Either way IsDerivedFrom failed, panelController stayed
+        // null, and entity+0xd8 was never set: the camera centred on the entity but never
+        // FOLLOWED it, for every caller ("go to entity" in workplace/profession/residence/
+        // townhall/statusbar/toolbar/citizen panels). Guard the VALUE, not the pointer.
+        static uint32_t s_tid_EntityUI_toolbar = 0;
+        const uint32_t tidEntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI_toolbar);
+        if (controllerRaw != 0 && tidEntityUI) {
             fn_InternalBasePtr_CheckPtr(controllerBuf);
-            if (fn_IsDerivedFrom((void*)controllerRaw, *g_TypeId_PageToggleUI)) {
+            if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {
                 panelController = (void*)controllerRaw;
             }
         }

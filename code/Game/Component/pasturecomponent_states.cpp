@@ -67,8 +67,16 @@ typedef void* (*fn_CellOccupant_t)(int64_t occ, void* outIBP);                //
 typedef void  (*fn_GridDirty_t)(int64_t fine, int x, int y);                  // 0x1400a8c90
 typedef void  (*fn_GridEnqueue_t)(void* thread, int cell, int kind, uint64_t);// 0x1400a6fe0
 typedef void  (*fn_PlaceEntityAtCell_t)(int64_t comp, int cell, float yaw);   // 0x140129760
-typedef void* (*fn_FindStorage_13320_t)(int64_t entity, void* outIBP);        // 0x140013320
-typedef void  (*fn_StorageNote_8fd0_t)(int64_t storage, int64_t tmpl, int n); // 0x140058fd0
+// NAME CORRECTION (2026-08-09): 0x140013320 is NOT a storage finder — engine_funcs.h:797
+// documents it as fn_FindComponent_Tracker (type-id .rdata DWORD_1401c4b10 =
+// TrackerComponent), and 0x140058fd0 is the generation-aware {template,count} upsert
+// into that tracker (ported as ActRm_ArrayUpsert_58fd0). The old "Storage"/"StorageNote"
+// names are the FIFTH instance of the documented "misnamed component finders" trap, and
+// they are exactly why this call pair sat unused: it reads as optional storage
+// bookkeeping when it is in fact the ONLY thing that feeds the production-statistics
+// panel (ProductionUI reads TrackerComponent+0x28/+0x38).
+typedef void* (*fn_FindTracker_13320_t)(int64_t entity, void* outIBP);        // 0x140013320
+typedef void  (*fn_TrackerUpsert_8fd0_t)(int64_t tracker, int64_t tmpl, int n);// 0x140058fd0
 typedef uint32_t (*fn_ResourceIndex_t)(void* world, int64_t tmpl);            // 0x140088f90
 typedef void* (*fn_FindWorkComp_t)(int64_t entity, void* outIBP);             // 0x140003050
 typedef void  (*fn_StopWorkSlot_t)(uintptr_t workComp);                       // 0x14012eb50
@@ -97,8 +105,8 @@ fn_CellOccupant_t       s_CellOccupant = nullptr;
 fn_GridDirty_t          s_GridDirty    = nullptr;
 fn_GridEnqueue_t        s_GridEnqueue  = nullptr;
 fn_PlaceEntityAtCell_t  s_PlaceAtCell  = nullptr;
-fn_FindStorage_13320_t  s_FindStore    = nullptr;
-fn_StorageNote_8fd0_t   s_StoreNote    = nullptr;
+fn_FindTracker_13320_t  s_FindTracker  = nullptr;
+fn_TrackerUpsert_8fd0_t s_TrackerUpsert= nullptr;
 fn_ResourceIndex_t      s_ResIndex     = nullptr;
 fn_FindWorkComp_t       s_FindWork     = nullptr;
 fn_StopWorkSlot_t       s_StopWork     = nullptr;
@@ -144,8 +152,8 @@ void Resolve() {
     s_GridDirty    = R<fn_GridDirty_t>(0x1400a8c90);
     s_GridEnqueue  = R<fn_GridEnqueue_t>(0x1400a6fe0);
     s_PlaceAtCell  = R<fn_PlaceEntityAtCell_t>(0x140129760);
-    s_FindStore    = R<fn_FindStorage_13320_t>(0x140013320);
-    s_StoreNote    = R<fn_StorageNote_8fd0_t>(0x140058fd0);
+    s_FindTracker  = R<fn_FindTracker_13320_t>(0x140013320);
+    s_TrackerUpsert= R<fn_TrackerUpsert_8fd0_t>(0x140058fd0);
     s_ResIndex     = R<fn_ResourceIndex_t>(0x140088f90);
     s_FindWork     = R<fn_FindWorkComp_t>(0x140003050);
     s_StopWork     = R<fn_StopWorkSlot_t>(0x14012eb50);
@@ -581,13 +589,19 @@ extern "C" char Pasture_State3Enter(void* data, void* /*sm*/) {
 //       pasture+0x44 -= rawDesc+0x40
 //       if (stock < limit) drop one pile of `produced` on a free footprint cell
 //
-// DEFERRED (resolved above so the addresses stay recorded, not yet called): retail's
+// LANDED 2026-08-09: the FUN_140013320 -> CreateRawMaterial_helper_8fd0 tail is now
+// called (see the loop below). It is the TrackerComponent upsert, not "storage
+// bookkeeping" — it is what the production-statistics panel (ProductionUI) reads, so
+// the panel was blank purely because this pair was never called. The pile-quantity
+// write (rawComp+0x28 = perUnit) that retail does in the same statement group landed
+// with it.
+//
+// DEFERRED (resolved above so the addresses stay recorded, still not called): retail's
 // cell path also RESERVES the target cell when it is occupied — FUN_1400223c0 to read
 // the occupant, then tile flag byte +0x29 = 2 plus FUN_1400a8c90 / FUN_1400a6fe0 to
-// republish it to the pathfinder — and notifies the town's storage/work bookkeeping
-// through FUN_140013320 -> CreateRawMaterial_helper_8fd0 and FUN_140003050 ->
-// FUN_140044810 (type 0x1401c3fb0). We only place on an ALREADY-free cell and skip
-// those two tails, so production is under-reported to the town totals.
+// republish it to the pathfinder — and pokes the work component through FUN_140003050
+// -> FUN_140044810 (type 0x1401c3fb0). We only place on an ALREADY-free cell and skip
+// that tail.
 // ============================================================
 namespace {
 
@@ -680,9 +694,47 @@ void PastureProduce(void* self) {
             s_PlaceAtCell(reinterpret_cast<int64_t>(rawComp), placedCell,
                           static_cast<float>(roll) * quarter);
         }
+        // Retail writes the pile's quantity onto the RawMaterialComponent right here
+        // (0x1401267e0: `*(local_c8+0x28) = *(rawDesc+0x40); *(local_c8+0x30) = 0;`).
+        // We were skipping it, so every pile we dropped carried quantity 0 — found
+        // while porting the tracker tail below, NOT a pre-existing known gap.
+        if (rawComp) {
+            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawComp) + 0x28) = perUnit;
+            *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(rawComp) + 0x30) = 0;
+        }
+
+        // ---- retail tail: TrackerComponent upsert, BEFORE the town stock bump ----
+        // 0x1401267e0:
+        //     entity = *(self+0x10);
+        //     if (entity) { FUN_140013320(entity,&trackerIBP);
+        //                   if (trackerIBP) helper_8fd0(tracker, produced, perUnit); }
+        //     idx = FUN_140088f90(<unused>, produced);  // stock bump below
+        // This is what fills TrackerComponent+0x38 (the "produced" list) that
+        // ProductionUI's panel reads, so without it the production page is blank even
+        // when piles are appearing. Same three-call shape as the already-ported
+        // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
+        CheckPtr(reinterpret_cast<void*>(s + 0x10));
+        int64_t pastureEntity = *reinterpret_cast<int64_t*>(s + 0x10);
+        if (pastureEntity && s_FindTracker) {
+            uint64_t trackerIBP = 0;
+            s_FindTracker(pastureEntity, &trackerIBP);
+            if (trackerIBP) {
+                CheckPtr(&trackerIBP);
+                if (s_TrackerUpsert)
+                    s_TrackerUpsert(static_cast<int64_t>(trackerIBP), produced, perUnit);
+            }
+        }
+
         if (s_RegEntity)
             s_RegEntity(*reinterpret_cast<void**>(w + 0xe8), &entIBP,
                         *reinterpret_cast<int*>(produced + 0x20));
+        // NB (pre-existing, unchanged): retail calls RegisterEntity AFTER the stock
+        // bump, we call it before. Left as-is rather than reordered under this task.
+        // FUN_140088f90's first argument is unused by the callee
+        // (ActRm_GetResourceCategory_88f90(void* /*unused*/, entity)), so retail's
+        // register-shared `puVar21` — gameWorld, or the entity, or the tracker,
+        // depending on which branch ran — is observationally irrelevant; passing the
+        // world here is equivalent.
         if (s_ResIndex) {
             uint32_t idx = s_ResIndex(reinterpret_cast<void*>(w), produced);
             if (static_cast<int>(idx) >= 0 && stockTable) {

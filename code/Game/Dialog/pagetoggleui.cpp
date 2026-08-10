@@ -7,14 +7,42 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
+
+// ---- UI::CheckElement type id -----------------------------------------------
+// Retail reads this through exe .rdata exref 0x1401516a8 (import string
+// "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A" — read out of the exe's
+// own .rdata at 0x1401b8ce8, and an export of Runtime-x64.dll). In standalone the
+// whole element-type-id table lives in standalone/reg_element_typeids.cpp, which
+// is GATED on BANISHED_LIVE_ELEMENT_TIDS and therefore OFF by default — so
+// g_TypeId_CheckboxElement is normally null and FindElementType(root, 0) can
+// never match, leaving +0x30 null for Slot7 to fault on.
+//
+// We deliberately do NOT publish into g_TypeId_CheckboxElement: that global is
+// shared with ControlUI, and filling the shared element-id globals on the default
+// path is exactly the broad change reg_element_typeids.cpp put behind its gate.
+// Instead resolve a PRIVATE copy of the same id by name. Prefer the registry
+// value whenever the gate is on, so the two paths can never disagree.
+static uint32_t PageToggleUI_CheckElementTypeId() {
+    if (g_TypeId_CheckboxElement && *g_TypeId_CheckboxElement)
+        return *g_TypeId_CheckboxElement;          // gate on: use the real slot
+    static uint32_t s_local = 0;
+    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("CheckElement");
+    return s_local;
+}
+
+// True once the id is known. The promotion gate in ui_dialog_stub_factories.cpp
+// calls this before dispatching ANY PageToggleUI slot, because Slot7 derefs the
+// checkbox vtable with no null check of its own (retail 0x140075780).
+bool PageToggleUI_TypeIdsReady() { return PageToggleUI_CheckElementTypeId() != 0; }
 
 // Slot4: Find checkbox by type, find "pages" element, restore saved page.
 void PageToggleUI_Slot4(PageToggleUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find checkbox element by type ID in the dialog element tree
-    uint32_t checkboxTypeId = g_TypeId_CheckboxElement ? *g_TypeId_CheckboxElement : 0;
+    uint32_t checkboxTypeId = PageToggleUI_CheckElementTypeId();
     uint64_t foundElem = 0;
     fn_Element_FindElementType((void*)*(uint64_t*)(s + 0x20), &foundElem, checkboxTypeId);
 

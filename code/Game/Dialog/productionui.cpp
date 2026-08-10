@@ -10,6 +10,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
 #include <cstdio>
 
@@ -79,6 +80,47 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
     }
 }
 
+// ---- element type ids for retail's two casts --------------------------------
+// Retail Slot4 stores `IsDerivedFrom(hit, id) ? hit : nullptr`, reading the ids
+// through exe .rdata exrefs 0x140151668 (UI::LabelElement) and 0x1401516c8
+// (UI::NumberElement — the engine_funcs label "SpinnerElement" is a known
+// misnomer, see standalone/reg_element_typeids.cpp:35).
+//
+// That element-type-id table is registered by reg_element_typeids.cpp but GATED
+// on BANISHED_LIVE_ELEMENT_TIDS, which is NOT in kDefaultOnFlags — so by default
+// both globals are null. We resolve PRIVATE copies by name rather than filling
+// g_TypeId_LabelElement / g_TypeId_SpinnerElement, because those globals are
+// shared with townhallui / helpui / toolbardialog and waking them on the default
+// path is precisely the broad change that gate exists to hold back. When the gate
+// IS on we use the registry value, so the two paths cannot disagree.
+static uint32_t ProductionUI_LabelElementTypeId() {
+    if (g_TypeId_LabelElement && *g_TypeId_LabelElement) return *g_TypeId_LabelElement;
+    static uint32_t s_local = 0;
+    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("LabelElement");
+    return s_local;
+}
+static uint32_t ProductionUI_NumberElementTypeId() {
+    if (g_TypeId_SpinnerElement && *g_TypeId_SpinnerElement) return *g_TypeId_SpinnerElement;
+    static uint32_t s_local = 0;
+    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("NumberElement");
+    return s_local;
+}
+
+// Gate helper for the promotion in ui_dialog_stub_factories.cpp.
+bool ProductionUI_TypeIdsReady() {
+    return ProductionUI_LabelElementTypeId() != 0
+        && ProductionUI_NumberElementTypeId() != 0;
+}
+
+static void* CastLabel(void* elem) {
+    if (!elem) return nullptr;
+    return fn_IsDerivedFrom(elem, ProductionUI_LabelElementTypeId()) ? elem : nullptr;
+}
+static void* CastNumber(void* elem) {
+    if (!elem) return nullptr;
+    return fn_IsDerivedFrom(elem, ProductionUI_NumberElementTypeId()) ? elem : nullptr;
+}
+
 // ============================================================
 // ProductionUI::Slot4 (vtable +0x20) -- Setup
 // ============================================================
@@ -142,9 +184,10 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_FindElement((void*)childElem, &labelResult, nameBuf);
         fn_String_Dtor(nameBuf);
 
-        // Wrap as InternalBasePtr (type check is optional safety)
+        // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
+        // when it isn't one (0x140075da0 uses g_TypeId_LabelElement_exref @0x140151668).
         uint64_t labelBP = 0;
-        fn_InternalBasePtr_Ctor(&labelBP, (void*)labelResult);
+        fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
 
         // Find "numberCount" sub-element
         fn_String_Ctor_CStr(nameBuf, "numberCount");
@@ -152,8 +195,10 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_FindElement((void*)childElem, &numberResult, nameBuf);
         fn_String_Dtor(nameBuf);
 
+        // Retail casts through IsDerivedFrom(NumberElement) (exref 0x1401516c8,
+        // engine_funcs label "SpinnerElement" — the id is UI::NumberElement's).
         uint64_t numberBP = 0;
-        fn_InternalBasePtr_Ctor(&numberBP, (void*)numberResult);
+        fn_InternalBasePtr_Ctor(&numberBP, CastNumber((void*)numberResult));
 
         // Push pair to consumed array at +0x30
         PushElementPair(s, 0x30, labelBP, numberBP);
@@ -175,7 +220,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_String_Dtor(nameBuf);
 
         uint64_t labelBP = 0;
-        fn_InternalBasePtr_Ctor(&labelBP, (void*)labelResult);
+        fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
 
         fn_String_Ctor_CStr(nameBuf, "numberCount");
         uint64_t numberResult = 0;
@@ -183,7 +228,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_String_Dtor(nameBuf);
 
         uint64_t numberBP = 0;
-        fn_InternalBasePtr_Ctor(&numberBP, (void*)numberResult);
+        fn_InternalBasePtr_Ctor(&numberBP, CastNumber((void*)numberResult));
 
         // Push pair to produced array at +0x40
         PushElementPair(s, 0x40, labelBP, numberBP);
@@ -215,6 +260,17 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     uint64_t trackerBP = 0;
     fn_FindComponent_Tracker((void*)entityBP, &trackerBP);
     uintptr_t tracker = (uintptr_t)trackerBP;
+
+    // STANDALONE DEVIATION (the only guard in this file). Retail derefs
+    // tracker+0x48 unguarded because every entity that can reach Dialog/
+    // Production.rsc carries a TrackerComponent. Our panel templates are shared
+    // across entity kinds and this controller runs EVERY frame (slot 7 is the
+    // per-frame update, dispatched before any click ever selects a producing
+    // building), so a bound entity legitimately without a TrackerComponent would
+    // fault here. Skipping the list update is the correct standalone behaviour —
+    // there is nothing to show. Do NOT widen this into "null checks everywhere":
+    // if the pasture/crop entity itself lacks a tracker, that is an upstream bug.
+    if (!tracker) return;
 
     // Check if game world item count changed; rebuild tracker if so
     int gameItemCount = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0x128);

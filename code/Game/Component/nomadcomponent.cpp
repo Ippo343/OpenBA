@@ -365,14 +365,21 @@ static fn_GetFirstDialog_t  s_fn_GetFirstDialog = nullptr;
 static fn_GetController_t    s_fn_GetController = nullptr;
 static fn_CloseDialog_slot_t s_fn_CloseDialog_slot = nullptr;
 static fn_IBP_CtorFrom_t     s_fn_IBP_CtorFrom = nullptr;
-static uint32_t*             s_TypeId_PageToggleUI = nullptr; // DAT_1401c4f00
+static uint32_t              s_TypeId_EntityUI = 0;           // DAT_1401c4f00 = EntityUI
+static uint32_t              s_TypeId_EntityUI_cache = 0;
 static bool s_fn3480Resolved = false;
 
 static void Ensure3480() {
     if (s_fn3480Resolved) return;
     s_fn_FUN_140102b60 = reinterpret_cast<fn_FUN_140102b60_t>(ResolveAddr(Module::Exe, 0x140102b60));
     s_fn_TradeWork_c690 = reinterpret_cast<fn_TradeWork_c690_t>(ResolveAddr(Module::Exe, 0x14002c690));
-    s_TypeId_PageToggleUI = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4f00));
+    // 0x1401c4f00 is the **EntityUI** type-id slot (registrar RegisterType_EntityUI), not
+    // PageToggleUI. It is not RegisterExeAddr'd, so this ResolveAddr always returned 0 and
+    // every `if (s_TypeId_PageToggleUI && ...)` guard below was permanently false — this
+    // whole "close the removed entity's open info dialog" path was silently dead code.
+    // Retail FUN_140103480 gates on that slot and then reads ctrl+0x30 (EntityUI's bound
+    // entity), which confirms the type. Resolve by value with a by-name fallback.
+    s_TypeId_EntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_TypeId_EntityUI_cache);
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140151ca0);
     if (slot) s_fn_GetFirstDialog = *reinterpret_cast<fn_GetFirstDialog_t*>(slot);
@@ -433,7 +440,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
                 fn_InternalBasePtr_CheckPtr(ctrlBuf);
-                if (s_TypeId_PageToggleUI && fn_IsDerivedFrom(ctrlBuf[0], *s_TypeId_PageToggleUI))
+                if (s_TypeId_EntityUI && fn_IsDerivedFrom(ctrlBuf[0], s_TypeId_EntityUI))
                     found = ctrlBuf[0];
             }
             int64_t ibp = 0;

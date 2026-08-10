@@ -876,6 +876,97 @@ void PopulateCounts(void* self) {
     }
 }
 
+// ------------------------------------------------------------------
+// WorkPlaceComponent::SetMaxWorkers (0x14012fb00) — retail WorkPlaceUI_helper_fb00
+// ------------------------------------------------------------------
+// NOT reimplemented here: the address is already ported and registered
+// (WorkPlaceComponent_SetMaxWorkers in code/Game/Component/destroycomponent_workerrelease.cpp,
+// registered by standalone/reg_destroy_workers.cpp), so fn_WorkplaceComp_SetMaxWorkers
+// resolves to the real body. Its header comment already anticipated exactly this caller:
+// "the OTHER retail caller, WorkPlaceUI_AdjustWorkerCount (0x140087610), reaches it through
+// fn_WorkplaceComp_SetMaxWorkers ... not on a live path today". Wiring the jobCount spinner
+// to it is what puts it on that live path, which is retail's own structure (7610 -> fb00).
+// It writes WorkComponent+0x30 = newMax and, while WPC+0x60 > newMax, re-homes roster[0]
+// through sub_ffc0/sub_0470 + AssignHousing; it holds g_wpcRosterOnly across that loop
+// itself, so this caller must not (and does not) duplicate the guard.
+
+// ------------------------------------------------------------------
+// jobCountUp / jobCountDown body — retail WorkPlaceUI_Update_sub_7610 (0x140087610)
+// ------------------------------------------------------------------
+//   wpc = FindWorkPlaceComponent(entity);                       // FUN_140002e10
+//   wc  = FindWorkComponent(*(wpc + 0x10));                     // FUN_140003050
+//   if (wc->+0x30 == 0) wc->+0x30 = CalcStartingJobCount(wc);   // FUN_14012e5c0
+//   SetMaxWorkers(wpc, wc->+0x30 + delta);                      // 0x14012fb00
+// No clamping here — retail bounds the player with the button-enable tail in Startup
+// (0x1400874c0..0x1400875e0), which IS ported and live: WorkplaceUI_Startup at the top of
+// this file computes `wpMaxCount` from WorkComponent+0x30 and drives the two arrows'
+// enable state (up: wpMaxCount < WorkDescription+0x2c _maxWorkerCount; down: wpMaxCount >
+// +0x28 _minWorkerCount, or > 1 on the special profession branch), and W_OnUpdate/W_Startup
+// call it every frame under WorkPlaceUI_FullStartupEnabled(). So the spinner is bounded by
+// retail's own mechanism — a greyed arrow — not by a clamp bolted onto the handler.
+static void SA_AdjustJobCount(void* self, int delta) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    void* dataSource = *reinterpret_cast<void**>(s + 0x28);
+    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    uint8_t eb[8];
+    fn_InternalBasePtr_Ctor(eb, dataSource);
+    fn_InternalBasePtr_CheckPtr(eb);
+    void* entityPtr = *reinterpret_cast<void**>(eb);
+
+    uint64_t wpc = 0;
+    fn_FindComponent_WorkPlace(entityPtr, &wpc);
+    fn_InternalBasePtr_CheckPtr(&wpc);
+    // SA deviation (named): retail's 0x140087610 derefs both of these unguarded, because the
+    // workPlace panel is only ever instanced for a real workplace entity. In SA the panel
+    // template is shared and can be bound to an entity without a WorkPlace/Work component,
+    // so bail with a logged reason instead of faulting on a binding bug we already know about.
+    if (!wpc) {
+        fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d ABORTED: no WorkPlaceComponent on "
+                        "entity=%p\n", delta, entityPtr);
+        fflush(stderr);
+        return;
+    }
+
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(static_cast<uintptr_t>(wpc) + 0x10));
+    uint64_t workC = 0;
+    fn_FindComponent_Work(
+        *reinterpret_cast<void**>(static_cast<uintptr_t>(wpc) + 0x10), &workC);
+    fn_InternalBasePtr_CheckPtr(&workC);
+    if (!workC) {   // same named SA deviation as the wpc bail above
+        fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d ABORTED: no WorkComponent on wpc=0x%llx\n",
+                delta, static_cast<unsigned long long>(wpc));
+        fflush(stderr);
+        return;
+    }
+    uintptr_t c = static_cast<uintptr_t>(workC);
+    if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
+        g_TypeId_WorkDescription && *g_TypeId_WorkDescription) {
+        *reinterpret_cast<int*>(c + 0x30) = fn_StorageCountQuery(reinterpret_cast<void*>(c));
+    }
+    const int cur = *reinterpret_cast<int*>(c + 0x30);
+
+    // No g_wpcRosterOnly wrapper here: the ported SetMaxWorkers body holds that guard across
+    // its own eviction loop (destroycomponent_workerrelease.cpp), so setting it again would
+    // only obscure which layer owns it.
+    const int rosterBefore = *reinterpret_cast<int*>(static_cast<uintptr_t>(wpc) + 0x60);
+    if (fn_WorkplaceComp_SetMaxWorkers)
+        fn_WorkplaceComp_SetMaxWorkers(reinterpret_cast<void*>(static_cast<uintptr_t>(wpc)),
+                                       cur + delta);
+
+    // Report the OUTCOME in both arms: the observed before/after of WorkComponent+0x30 (the
+    // field this whole open is about) and of the roster, or the reason nothing happened.
+    fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d %s WorkComponent+0x30 %d->%d (asked %d) "
+                    "roster %d->%d\n",
+            delta, fn_WorkplaceComp_SetMaxWorkers
+                 ? "applied"
+                 : "NOT APPLIED (fn_WorkplaceComp_SetMaxWorkers unresolved; 0x14012fb00 should "
+                   "be registered by reg_destroy_workers.cpp)",
+            cur, *reinterpret_cast<int*>(c + 0x30), cur + delta,
+            rosterBefore, *reinterpret_cast<int*>(static_cast<uintptr_t>(wpc) + 0x60));
+    fflush(stderr);
+}
+
 // idx8 (+0x40): per-frame — keep the panel's visibility in sync as buildings
 // finish construction (profession clears → panel hides), and refresh the live
 // worker/builder counts (roster grows as builders are seated).
@@ -947,15 +1038,25 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     // No roster mutation, so no g_wpcRosterOnly guard needed.
     if (id == 0x1454) { WorkplaceUI_ToggleWorkplace_Impl(self); return; }
 
-    // Both spinners (workerCountUp/Down 0x1450/0x1451 AND the visible jobsUpDown pair
-    // jobCountUp/Down 0x1452/0x1453) staff/unstaff the site. Retail routes jobCount to
-    // SetMaxWorkers (raise the slot cap) and lets the employment allocator auto-fill; but
-    // that allocator never seats the FIRST worker at an empty site (Phase-2 skips roster==0
-    // — see builder_pool_driver.cpp), so a fresh construction site would never fill. To make
-    // the building dialog actually staff a foundation, the up arrow directly runs the seat
-    // cascade (the per-building equivalent of the town-hall Professions spinner), and the
-    // down arrow pulls one — capacity-bounded (FindAvailableBuilding returns null when full).
-    const bool add = (id == 0x1450 || id == 0x1452);
+    // The panel has TWO spinners, and retail (0x1400877e0) gives them DIFFERENT jobs:
+    //
+    //   0x1452 / 0x1453  jobCountUp/Down   -> WorkPlaceUI_Update_sub_7610(self, +/-1)
+    //        raises/lowers the SLOT CAP (WorkComponent+0x30) via SetMaxWorkers; lowering
+    //        evicts the surplus. It seats nobody — it only opens/closes seats.
+    //   0x1450 / 0x1451  workerCountUp/Down -> FUN_14008d100 + CitizenComponent_impl_c3d0
+    //        / CitizenComponent_impl_1180: the seat/unseat pair that actually converts a
+    //        laborer into a worker of this profession (cbf0 -> ca20 -> c5f0 -> c4b0).
+    //
+    // The previous SA code ran the seat cascade for BOTH pairs, so +0x30 never moved and
+    // the panel read "1/1" forever. Retail restored: jobCount now goes to SetMaxWorkers.
+    // (No allocator change accompanies this: the periodic employment allocator
+    // 0x1400d43b0 genuinely does skip WPC+0x60 == 0 in retail too — its Phase-2 need-table
+    // is built under `if (*(int *)(wpc + 0x60) != 0)` — so retail has NO organic first-seat
+    // either. The player's 0x1450 click IS the first-seat mechanism, and it is live here.)
+    if (id == 0x1452 || id == 0x1453) { SA_AdjustJobCount(self, id == 0x1452 ? 1 : -1); return; }
+
+    // Remaining ids are the worker assign/unassign pair.
+    const bool add = (id == 0x1450);
 
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
@@ -1019,7 +1120,7 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
                 if (anyBuf) who = "any";
             }
         }
-    } else {  // 0x1451 / 0x1453 — remove one worker of this profession
+    } else {  // 0x1451 — remove one worker of this profession
         who = "remove";
         if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
     }

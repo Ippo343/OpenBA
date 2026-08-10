@@ -25,8 +25,13 @@
 // The Easy/Medium/Hard start conditions (Game\StartCondition\*.rsc) each reference
 // Template\LivestockChicken.rsc, Template\LivestockCow.rsc and Template\LivestockSheep.rsc
 // alongside Template\Deer.rsc — but NOT Template\Pasture.rsc. So the starting livestock
-// are spawned as FREE-ROAMING entities by the start-config simple pool
-// (ComponentEntity_impl_09e0 / StartTown_SpawnSimplePool). LivestockComponent::OnAdd
+// are spawned as FREE-ROAMING entities.
+//
+// CORRECTION: they are NOT spawned by the start-config simple pool. That pool
+// (startConfig+0x90, count +0x98) is `_populations` and holds exactly one entry,
+// PopulationDeer — verified from a live run (simple(+0x98)=1). The livestock come from
+// the THIRD agri-pool loop's FUN_1400a0b10 call, ported below as
+// StartTown_SpawnStartingHerd. LivestockComponent::OnAdd
 // (0x140123c70) files each one into the world's free-roaming livestock list at
 // gameState+0x80, and when the player later builds a pasture and picks a type, the
 // pasture's state-2 adopt pass (sub_7140) pulls the matching wanderers in. That is the
@@ -408,4 +413,138 @@ extern "C" bool Pasture_AutoAssignType(void* pasture) {
                  tmpl, pasture);
     Pasture_SetLivestockType(pasture, tmpl);
     return true;
+}
+
+// ============================================================
+// Reimpl of FUN_1400a0b10 — the START-CONDITION livestock grant ("easy-start cows")
+// ============================================================
+// This is the PRIMARY way a town gets its first livestock, and it is NOT trade.
+// FUN_1400a3300 (StartTown) runs three agri-pool loops at its tail; the THIRD one
+// (pool sc+0xd0, size sc+0xd8, count sc+0xe8) is the livestock pool, and its body is
+//     1400a35dc: CALL 0x1400a0b10        <- spawn the herd     (RCX=sc, RDX=centre, R8=tmpl)
+//     1400a35e7: CALL 0x140091a20        <- availability-add   (RCX=townMgr, RDX=tmpl)
+// Loop bound VERIFIED from `CMP R12D,[RDI+0xe8]` at 0x1400a35ef.
+//
+// Complete CALL set of 0x1400a0b10 contains no trade leaf (no 0x14005ace0, no trading
+// post, no storage): it is MemAlloc -> CopyCtor -> place -> register, the same primitive
+// shape as Pasture_SpawnOneLivestock. Livestock via TRADE is real but SECONDARY; the two
+// paths are independent, so this does not depend on the unported trade lane.
+//
+// Easy.rsc: _livestockCount=1, _livestockOffsetX/Y=0, _livestockRadius=4,
+//           _livestockGroupCount=8.  Medium/Hard set _livestockCount=0 — no starting herd
+//           there, which is faithful, not a bug.
+// So an Easy start rolls ONE of the three types in _initialLivestockList
+// [Chicken, Cow, Sheep] and spawns EIGHT free-roaming animals of it. A pasture later set
+// to either of the other two types will correctly show 0 animals until trade exists.
+//
+// These animals are free-roaming, NOT placed in a pasture. LivestockComponent::OnAdd
+// (0x140123c70) files them into gameState+0x80, and the pasture state-2 adopt pass
+// (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
+// builds a pasture and picks that type. Both of those are already ported and live.
+extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl) {
+    Resolve();
+    uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
+    if (!sc || !tmpl || !centre) return 0;
+
+    const int groupCount = *reinterpret_cast<int32_t*>(sc + 0xf8);
+    if (groupCount <= 0) return 0;
+
+    uintptr_t w = World();
+    if (!w || !s_EntityCopy || !s_RegEntity || !fn_MemAlloc) return 0;
+    void* rng = *reinterpret_cast<void**>(w + 0xd8);
+
+    // AnimalComponent type id. Retail scans the entity's component array inline and
+    // compares GetTypeId (vtable +0x10) against DAT_1401c6f98 — it does NOT call the
+    // 0x140005500 finder. Reproduced inline for the same reason: this project has a
+    // documented trap where a finder's Ghidra name does not match the type id it keys on.
+    static const uint32_t* pAnimalTid = nullptr;
+    if (!pAnimalTid)
+        pAnimalTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
+    // Guard the VALUE, not just the pointer: a slot that is registered but filled with
+    // zero matches nothing and would silently spawn eight animals with no AnimalComponent.
+    if (!pAnimalTid || !*pAnimalTid) {
+        std::fprintf(stderr, "[StartHerd] AnimalComponent type id unresolved (ptr=%p val=%u)"
+                     " — skipping starting herd\n",
+                     (const void*)pAnimalTid, pAnimalTid ? *pAnimalTid : 0u);
+        std::fflush(stderr);
+        return 0;
+    }
+
+    // Retail seeds the alternating sex from ONE Rand(2) before the loop and flips it every
+    // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
+    bool female = (fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0u) == 0u;
+
+    const float offX      = *reinterpret_cast<float*>(sc + 0xec);
+    const float offY      = *reinterpret_cast<float*>(sc + 0xf0);
+    const float radius    = *reinterpret_cast<float*>(sc + 0xf4);
+    const float yawSpread = s_pYawSpread ? *s_pYawSpread : 180.0f;  // 0x140172220 = 180.0f
+
+    int spawned = 0;
+    for (int i = 0; i < groupCount; ++i) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* ent = mem ? s_EntityCopy(mem, reinterpret_cast<int64_t>(tmpl)) : nullptr;
+        if (!ent) continue;
+        uint64_t entIBP = MakeIBP(ent);
+        CheckPtr(&entIBP);
+        if (!entIBP) continue;
+
+        // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
+        void* animal = nullptr;
+        {
+            int   n    = *reinterpret_cast<int*>(static_cast<uintptr_t>(entIBP) + 0x38);
+            uintptr_t list = *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(entIBP) + 0x30);
+            for (int c = 0; c < n && list; ++c) {
+                void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
+                CheckPtr(slot);
+                void* comp = *slot;
+                if (!comp) continue;
+                uint32_t tid = (*reinterpret_cast<uint32_t (**)(void*)>(
+                                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                if (tid != *pAnimalTid) continue;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pAnimalTid)) animal = comp;
+                break;
+            }
+        }
+        uint64_t animalIBP = MakeIBP(animal);
+
+        // Retail evaluates RandFloatTol TWICE and applies the results CROSSED: the FIRST
+        // scales Y, the SECOND scales X (decompile: X += fVar13*r, Y += fVar12*r where
+        // fVar12 is the earlier call). The world RNG at gw+0xd8 is shared, so evaluating
+        // these in the wrong order desynchronises every later roll in the game.
+        const float tolY = fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f;
+        const float tolX = fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f;
+        const float px = centre[0] + offX + tolX * radius;
+        const float py = centre[1] + offY + tolY * radius;
+
+        CheckPtr(&animalIBP);
+        if (animalIBP && s_HerdPlace) {
+            const float yaw = (fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f)
+                              * yawSpread;
+            // THREE floats, not two: retail builds a full Vector3 (Z = centre Z) and the
+            // callee reads all three. A 2-float array here would feed it whatever local
+            // happens to sit next on the stack as Z.
+            float pos3[3] = { px, py, centre[2] };
+            s_HerdPlace(static_cast<int64_t>(animalIBP), pos3, yaw, female);
+        }
+        female = !female;   // alternate AFTER placing, as retail does
+
+        CheckPtr(&animalIBP);
+        if (animalIBP) {
+            // +0x44 = animation/behaviour phase, randomised so the herd doesn't move in lockstep.
+            *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) =
+                fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+            if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(animalIBP));
+        }
+
+        uint64_t regIBP = entIBP;
+        s_RegEntity(*reinterpret_cast<void**>(w + 0xe8), &regIBP,
+                    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+        ++spawned;
+    }
+
+    std::fprintf(stderr, "[StartHerd] spawned %d/%d livestock from template %p "
+                 "at (%.1f,%.1f) radius=%.1f\n",
+                 spawned, groupCount, tmpl, centre[0] + offX, centre[1] + offY, radius);
+    std::fflush(stderr);
+    return spawned;
 }
