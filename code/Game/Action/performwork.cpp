@@ -25,6 +25,7 @@
 #include "PerformWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdio>
 #include <cstdint>
 
@@ -81,8 +82,16 @@ static float* s_fYawMin = nullptr;
 // DAT_140172220 -- float constant 180.0f (yaw upper bound)
 static float* s_fYawMax = nullptr;
 
-// TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenComponent_FC)
-// Already in engine_funcs.h as g_TypeId_CitizenComponent_FC
+// TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenComponent_FC).
+// engine_funcs.h has it as g_TypeId_CitizenComponent_FC, but that global is filled from
+// exe slot 0x1401c7158, whose registration is env-gated (BANISHED_LIVE_CITIZENAI_CITID,
+// standalone/reg_citizenai_typeids.cpp) and therefore NULL on a default run. Serialize
+// derefs it unguarded, exactly as retail does -- so keep a private copy resolved by name.
+// Same CRC as retail's slot (0x14014e7b5 = Object::BaseTypeInfo(&DWORD_1401c7158,
+// "CitizenComponent", ...), +0x00 is the type id), and no blast radius on the ~30 other
+// readers the gate exists to hold back.
+static uint32_t  s_tid_CitizenComponent_storage = 0;
+static uint32_t* s_tid_CitizenComponent = nullptr;
 
 // Vtable addresses for dtor chain
 static uintptr_t s_vtable_PerformWork = 0;
@@ -168,6 +177,18 @@ bool PerformWork_ResolveFuncs() {
     s_typeInfo_PerformWork = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5fe0));
 
+    // CitizenComponent type id: prefer the real .rdata slot when the gate published it,
+    // otherwise resolve by name into private storage (see the declaration above).
+    // GetTypeIdByName only returns a real CRC after Object::Factory::Startup, so only
+    // latch a non-zero result -- a failed attempt just retries on the next call.
+    s_tid_CitizenComponent = g_TypeId_CitizenComponent_FC;
+    if (!s_tid_CitizenComponent) {
+        if (!s_tid_CitizenComponent_storage)
+            s_tid_CitizenComponent_storage = ::Object::GetTypeIdByName("CitizenComponent");
+        if (s_tid_CitizenComponent_storage)
+            s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
+    }
+
     bool ok = s_fn_CheckPtr && s_fn_IBP_Serialize && s_fn_IBP_DeletePtr &&
               s_fn_ObjectInternal_Dtor && s_fn_Time_Serialize &&
               s_fn_Serialize_Float && s_fn_FindFamily &&
@@ -175,22 +196,52 @@ bool PerformWork_ResolveFuncs() {
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
               s_fConst1 && s_fYawMin && s_fYawMax &&
               s_vtable_PerformWork && s_vtable_Action &&
-              g_TypeId_CitizenComponent_FC &&
+              s_tid_CitizenComponent &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_fn_Serialize_Int &&
               fn_IsDerivedFrom && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[PerformWork] ResolveFuncs: CheckPtr=%p IBPSer=%p SetAnim=%p\n",
-           (void*)s_fn_CheckPtr, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_SetAnimation);
-    printf("[PerformWork]   SetDir=%p FromYaw=%p BreakChk=%p\n",
-           (void*)s_fn_SetFacingDirection, (void*)s_fn_FromYawPitch,
-           (void*)s_fn_CitizenBreakCheck);
-    printf("[PerformWork]   SerFloat=%p FindFamily=%p TimeSer=%p\n",
-           (void*)s_fn_Serialize_Float, (void*)s_fn_FindFamily,
-           (void*)s_fn_Time_Serialize);
-    if (!ok) printf("[PerformWork] ERROR: some function pointers not resolved!\n");
+    // Report the OUTCOME, not the intent: name the pointers that are actually null.
+    // This block used to dump three fixed lines every call and then print a bare
+    // "some function pointers not resolved!" — and because ResolveFuncs is called from
+    // every vtable slot and only caches on success, that ran on every action tick.
+    // Print once, and only the missing names.
+    if (!ok) {
+        static bool s_reported = false;
+        if (!s_reported) {
+            s_reported = true;
+            struct { const char* name; const void* p; } kDeps[] = {
+                { "CheckPtr",              (const void*)s_fn_CheckPtr },
+                { "IBP_Serialize",         (const void*)s_fn_IBP_Serialize },
+                { "IBP_DeletePtr",         (const void*)s_fn_IBP_DeletePtr },
+                { "ObjectInternal_Dtor",   (const void*)s_fn_ObjectInternal_Dtor },
+                { "Time_Serialize",        (const void*)s_fn_Time_Serialize },
+                { "Serialize_Float",       (const void*)s_fn_Serialize_Float },
+                { "FindFamily",            (const void*)s_fn_FindFamily },
+                { "SetAnimation",          (const void*)s_fn_SetAnimation },
+                { "SetFacingDirection",    (const void*)s_fn_SetFacingDirection },
+                { "FromYawPitch",          (const void*)s_fn_FromYawPitch },
+                { "CitizenBreakCheck",     (const void*)s_fn_CitizenBreakCheck },
+                { "fConst1",               (const void*)s_fConst1 },
+                { "fYawMin",               (const void*)s_fYawMin },
+                { "fYawMax",               (const void*)s_fYawMax },
+                { "vtable_PerformWork",    (const void*)s_vtable_PerformWork },
+                { "vtable_Action",         (const void*)s_vtable_Action },
+                { "TypeId_CitizenComponent (0x1401c7158 / by-name)",
+                                           (const void*)s_tid_CitizenComponent },
+                { "Serializer_Ctor",       (const void*)g_fn_Serializer_Ctor },
+                { "Serializer_Dtor",       (const void*)g_fn_Serializer_Dtor },
+                { "Serialize_Bool",        (const void*)g_fn_Serialize_Bool },
+                { "Serialize_Int",         (const void*)g_fn_Serialize_Int },
+                { "IsDerivedFrom",         (const void*)fn_IsDerivedFrom },
+                { "MemFreeStatic",         (const void*)fn_MemFreeStatic },
+            };
+            for (const auto& d : kDeps)
+                if (!d.p) fprintf(stderr, "[PerformWork] UNRESOLVED: %s\n", d.name);
+            fflush(stderr);
+        }
+    }
 #endif
 
     s_funcs_resolved = ok;
@@ -254,7 +305,7 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
     // Serialize work target entity ref (+0x20)
     s_fn_IBP_Serialize(s + 0x20, ser2);
     if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeId_CitizenComponent_FC)) {
+        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_tid_CitizenComponent)) {
             *(void**)(s + 0x20) = nullptr;
         }
     }
