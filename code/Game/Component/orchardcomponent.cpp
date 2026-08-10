@@ -359,8 +359,40 @@ float OrchardComponent_GetGrowth(void* selfV) {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
+//
+// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent. While it was
+// inert, the embedded state node at comp+0x28 was never installed and never linked
+// into the entity's StateMachineComponent, so nothing ticked: the slot array at
+// +0x50/+0x58 was never built, no PlantOrchard work was ever posted, no trees grew,
+// and no HarvestOrchard work was ever scheduled. That was the whole "orchard produces
+// no work or yield" symptom.
+//
+// The three macro arguments are byte-verified against retail, not inferred:
+//   Size 0x68 / Flags 0x80 — OrchardComponent_Ctor (0x140051f40) allocates 0x68 and
+//     ORs 0x80 into +0x20.
+//   NodeOff 0x28 — the ctor writes vtable_OrchardComponent_Controller (0x14015a130)
+//     to +0x28, and primary vtable slot 17 (CreateState) at 0x140004080 is literally
+//     `48 8D 41 28 C3` = LEA RAX,[RCX+0x28]; RET. The macro also writes the owner
+//     backptr at NodeOff+0x18 = +0x40, exactly as the ctor's `*(self+0x40) = self`.
+//   DefState 2 — primary vtable slot 16 (GetDefaultState) at 0x1400026c0 is literally
+//     `B8 02 00 00 00 C3` = MOV EAX,2; RET. (The `activeState=3` seen in the runtime
+//     diagnostic is the ENTITY-level StateMachine state, a different thing — do not
+//     conflate them.)
+//
+// Opt-in for now (BANISHED_LIVE_ORCHARD), NOT in kDefaultOnFlags: the state table
+// currently registers null handlers, so this increment brings up the node and proves
+// it links and ticks without changing any behaviour. It graduates to default-on once
+// the per-state bodies land and produce verified planting/yield.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(OrchardComponent, 0x68, 0x80)
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+extern "C" void** OrchardCtrl_NodeVtable();     // orchardcomponent_states.cpp
+extern "C" void   OrchardCtrl_PopulateTable();
+
+CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_ORCHARD",
+                               OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTable)
 REGISTER_TYPE(OrchardComponent, "ControllerComponent",
               &OrchardComponent_Factory, &OrchardComponent_CreateInPlace);

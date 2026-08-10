@@ -25,6 +25,11 @@
 #include <cstdint>
 #include <cstdio>
 
+// Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
+// BANISHED_ORCHARD_DIAG is set; never change behaviour.
+extern "C" void OrchardDiag_NoteHarvestConstructed();
+extern "C" void OrchardDiag_NoteHarvestExecuted();
+
 // ============================================================
 // Local function pointers (resolved once by HarvestOrchard_ResolveFuncs)
 // ============================================================
@@ -488,6 +493,7 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 // Mark cell as used
                                 validityArray[i] = 0;
 
+                                OrchardDiag_NoteHarvestExecuted();
                                 return 2;
                             }
                         }
@@ -837,11 +843,15 @@ extern "C" void RegisterHarvestOrchardVtable() {
 }
 extern "C" void* HarvestOrchard_CreateInPlace(void* mem) {
     HarvestOrchard_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x68, g_HarvestOrchard_Vtable);
+    void* r = Work_GenericCtor(mem, 0x68, g_HarvestOrchard_Vtable);
+    if (r) OrchardDiag_NoteHarvestConstructed();
+    return r;
 }
 extern "C" void* HarvestOrchard_Factory(void) {
     HarvestOrchard_ResolveFuncs();
     void* p = Work_Alloc(0x68);
-    return p ? Work_GenericCtor(p, 0x68, g_HarvestOrchard_Vtable) : nullptr;
+    void* r = p ? Work_GenericCtor(p, 0x68, g_HarvestOrchard_Vtable) : nullptr;
+    if (r) OrchardDiag_NoteHarvestConstructed();
+    return r;
 }
 REGISTER_TYPE(HarvestOrchard, "AutoPickupWork", &HarvestOrchard_Factory, &HarvestOrchard_CreateInPlace);

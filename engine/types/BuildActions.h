@@ -344,7 +344,18 @@ static_assert(offsetof(PlantArea, field_68) == 0x68, "");
 // BaseDtor: 0x1400f5010
 // ============================================================
 namespace PlantOrchardAddr {
-    constexpr uintptr_t Ctor         = 0x1400f50b0;
+    // ⚠ TWO constructors exist and they are not interchangeable:
+    //   Ctor           0x1400f50b0 — the DEFAULT/zero-arg ctor (Object::Internal::Internal,
+    //                                vtable_Work, manual field init, +0x68 = 0). This is the
+    //                                deserialize/factory path.
+    //   CtorFromEntity 0x1400f5140 — (mem, InternalBasePtr* entityIBP, ExternalPtr treeType).
+    //                                This is the one the OrchardComponent state machine calls
+    //                                from state 9 and state 12 enter; it sizes the per-slot
+    //                                byte array from the orchard's slot count and stores the
+    //                                tree type at +0x68. Anything wiring `Ctor` for the
+    //                                orchard planting path is wiring the wrong constructor.
+    constexpr uintptr_t Ctor           = 0x1400f50b0;
+    constexpr uintptr_t CtorFromEntity = 0x1400f5140;
     constexpr uintptr_t Vtable       = 0x140161910;
     constexpr uintptr_t ScalarDtor   = 0x14002c540;
     constexpr uintptr_t BaseDtor     = 0x1400f5010;
@@ -376,10 +387,15 @@ struct PlantOrchard {
     void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
     int32_t  field_50;           // +0x50: BST count (assigned workers)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: validity byte array (one per orchard slot)
-    int32_t  field_60;           // +0x60: orchard slot count
-    uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: ExternalPtr (orchard description resource)
+    // +0x58/+0x60/+0x64 are ONE dynamic-array triple {base, count, capacity} — the same
+    // shape as OrchardComponent's +0x50/+0x58/+0x5c. 0x14000a590 (the resizer the ctor
+    // calls) reads capacity at +0x0c of the triple, so +0x64 is NOT padding.
+    void*    field_58;           // +0x58: validity byte array base (one byte per orchard slot)
+    int32_t  field_60;           // +0x60: element count (= OrchardComponent+0x58 slot count)
+    int32_t  field_64;           // +0x64: capacity (was mislabelled padding)
+    void*    field_68;           // +0x68: ExternalPtr to the TREE TYPE template chosen in
+                                 //        OrchardUI's combo (copied from OrchardComponent+0x60).
+                                 //        NOT the OrchardDescription — the old comment misled.
 };
 
 static_assert(sizeof(PlantOrchard) == 0x70, "PlantOrchard size mismatch");

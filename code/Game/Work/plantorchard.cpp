@@ -22,6 +22,11 @@
 #include <cstdint>
 #include <cstdio>
 
+// Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
+// BANISHED_ORCHARD_DIAG is set; never change behaviour.
+extern "C" void OrchardDiag_NotePlantConstructed();
+extern "C" void OrchardDiag_NotePlantExecuted();
+
 // ============================================================
 // Local function pointers (resolved once by PlantOrchard_ResolveFuncs)
 // ============================================================
@@ -423,6 +428,7 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
             // Mark cell as planted (not available)
             validityArray[i] = 1;
 
+            OrchardDiag_NotePlantExecuted();
             return 2;
         }
     }
@@ -776,6 +782,7 @@ static void* PlantOrchard_Ctor_Impl(PlantOrchard* self) {
     *(void**)(a + 0x60) = nullptr;     // field_60 (slot count + pad)
     *(void**)(a + 0x68) = nullptr;     // ExternalPtr (orchard desc)
 
+    OrchardDiag_NotePlantConstructed();
     return self;
 }
 

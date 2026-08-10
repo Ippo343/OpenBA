@@ -681,6 +681,8 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
+extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
+extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -891,6 +893,16 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
+
+    // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
+    // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
+    OrchardDiag_Tick(s_frameNum);
+
+    // One-shot: force an untyped demo orchard's master switch on + assign a real
+    // tree type via the live combo-select path, so the state-2->state-9 transition
+    // has something to prove. No-op unless BANISHED_ORCHARD_FORCE_START is set
+    // (standalone/orchard_force_start.cpp).
+    OrchardForceStart_Tick(self->m_entityUI, s_frameNum);
 
     // One-shot at frame 120. Despite the name this is NOT purely a diagnostic: it
     // also publishes nine shared element type-id globals that other dialogs read
