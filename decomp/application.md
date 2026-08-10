@@ -145,7 +145,7 @@ Registered types inheriting from `UI::DialogInstance`. Each manages a specific g
 
 Registered types inheriting from `UI::DialogController`. Each manages a specific in-game panel/HUD element. Some have paired `*Config` types.
 
-Inheritance note: `SelectResourceUI` is an abstract base class (placeholder factory). `CropUI`, `OrchardUI`, and `PastureUI` extend it. `OrchardUI` and `PastureUI` share the same vtable (`0x14015d330`).
+Inheritance note: `SelectResourceUI` is an abstract base class (placeholder factory). `CropUI`, `OrchardUI`, and `PastureUI` extend it. **Each of the three has its OWN vtable** — corrected 2026-08-09 by a byte-wise read; the previous claim that OrchardUI and PastureUI shared `0x14015d330` was wrong. `0x14015d330` is `SelectResourceUI`'s own table, which Ghidra mislabels `vtable_CropUI`; its `_purecall` (0x14003addc) entries at idx11/12/13 are simply the three pure virtuals (SetResource / GetResource / GetCategoryFilter), NOT a defect in CropUI. All three subclasses inherit idx8 `0x140078d30` and idx9 `0x140078d80` from it.
 
 | Status | Class | Size | Vtable | Factory | Parent | Purpose |
 |--------|-------|------|--------|---------|--------|---------|
@@ -156,7 +156,7 @@ Inheritance note: `SelectResourceUI` is an abstract base class (placeholder fact
 | ~ | `CitizenUI` | 0xe8 (232B) | `0x14015ba00` | `0x140010f80` | UI::DialogController | Citizen info panel. Ctor 0x140065a40, InternalBasePtr@+0xE0 |
 | ~ | `ConsumeProduceUI` | 0x40 (64B) | `0x14015b2e0` | `0x140010ae0` | UI::DialogController | Production chain panel |
 | ~ | `ControlUI` | 0x40 (64B) | `0x14015b380` | `0x140010c00` | UI::DialogController | Control panel (+`ControlUIConfig`) |
-| ~ | `CropUI` | 0x60 (96B) | `0x14015f270` | `0x140020b10` | **SelectResourceUI** | Crop field panel. Ctor 0x1400b2c90, base vtable 0x14015d330 |
+| ~ | `CropUI` | 0x60 (96B) | `0x14015f270` | `0x140020b10` | **SelectResourceUI** | Crop field panel. Ctor 0x1400b2c90; real code at idx4/7/11/12/13 (0x1400b2b50 / 0x1400b2a50 / 0x1400b2920 / 0x1400b29d0 / 0x1400b29c0) — still a stub, wireable |
 | ~ | `DebugUI` | 0x130 (304B) | `0x14015b870` | `0x140010ec0` | DialogController | Debug overlay. Ctor 0x140064630 |
 | ~ | `DestroyUI` | 0x78 (120B) | `0x14015bb00` | `0x140011130` | UI::DialogController | Demolition panel |
 | ~ | `EntityUI` | 0x48 (72B) | `0x14015bb90` | `0x140011270` | UI::DialogController | Entity info panel |
@@ -167,15 +167,15 @@ Inheritance note: `SelectResourceUI` is an abstract base class (placeholder fact
 | ~ | `MapUI` | 0x50 (80B) | `0x14015c350` | `0x140012240` | UI::DialogController | Minimap |
 | ~ | `ModBrowseUI` | 0x30 (48B) | `0x14015c500` | `0x1400126d0` | UI::DialogController | Mod browser panel |
 | ~ | `NoiseUI` | 0x70 (112B) | `0x14015ca80` | `0x140012d30` | UI::DialogController | Noise/debug display |
-| ~ | `OrchardUI` | 0x48 (72B) | `0x14015d330` | `0x140012ff0` | **SelectResourceUI** | Orchard panel |
+| ✓ | `OrchardUI` | 0x48 (72B) | `0x14015cf30` | `0x140012ff0` | **SelectResourceUI** | Orchard panel. PROMOTED (orchardui.cpp): idx4/7/11/12/13 + base idx8/9 |
 | ~ | `PageToggleUI` | 0x48 (72B) | `0x14015cfb0` | `0x140013160` | UI::DialogController | Page toggle |
-| ~ | `PastureUI` | 0x40 (64B) | `0x14015d330` | `0x140020e10` | **SelectResourceUI** | Pasture panel |
+| ✓ | `PastureUI` | 0x40 (64B) | `0x14015f610` | `0x140020e10` | **SelectResourceUI** | Pasture panel. PROMOTED (pastureui.cpp) |
 | ~ | `ProductionUI` | 0x50 (80B) | `0x14015d070` | `0x140013230` | UI::DialogController | Production overview |
 | ~ | `ProfessionUI` | 0x78 (120B) | `0x14015d0f0` | `0x140013400` | UI::DialogController | Profession assignment. Ctor 0x1400775a0 |
 | ~ | `RadiusUI` | 0x38 (56B) | `0x14015d160` | `0x140013590` | UI::DialogController | Radius display |
 | ~ | `ResidenceUI` | 0x40 (64B) | `0x14015f6d0` | `0x140020f60` | UI::DialogController | Residence panel |
 | ~ | `ResourceLimitUI` | 0x40 (64B) | `0x14015d1f0` | `0x1400136b0` | UI::DialogController | Resource limits (+`ResourceLimitUIConfig`) |
-| ~ | `SelectResourceUI` | abstract | — | (abstract) | UI::DialogController | Resource selection base class |
+| ~ | `SelectResourceUI` | abstract | `0x14015d330` | (abstract) | UI::DialogController | Resource selection base class. Ghidra mislabels its vtable `vtable_CropUI` |
 | ~ | `SpriteCaptureUI` | 0x70 (112B) | `0x14015d4f0` | `0x140013d10` | UI::DialogController | Screenshot capture |
 | ~ | `StatusBarUI` | 0x1d0 (464B) | `0x14015d810` | `0x1400140e0` | UI::DialogController | Status bar. Ctor 0x14007af20 |
 | ~ | `StatusIconUI` | 0x40 (64B) | `0x14015d8a0` | `0x140014180` | UI::DialogController | Status icons (+`StatusIconUIConfig`) |
