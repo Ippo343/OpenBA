@@ -1771,6 +1771,74 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         }
     }
 
+    // ── BANISHED_BUILD_DEMO_ORCHARD — one COMPLETED orchard (test scaffolding) ─────
+    // Same rationale as BUILD_DEMO_PASTURE directly above: orchards are fenced areas,
+    // acquired only through the still-unported fenced-area tool, so without this there
+    // is no way to open an orchard panel and exercise OrchardUI (tree-type combo +
+    // yield bar). Identical ring scan from the founding-cluster centre.
+    //
+    // The orchard still needs a TREE TYPE chosen in the panel combo — that selection is
+    // exactly what OrchardUI::Slot9 -> Slot11 does, so leaving it unset is the correct
+    // starting state for testing rather than something to pre-fill.
+    // Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
+    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset.
+    {
+        const char* oe = std::getenv("BANISHED_BUILD_DEMO_ORCHARD");
+        if (oe && oe[0] && oe[0] != '0') {
+            void* otmpl = ResolveTemplateByPath("Template\\Orchard.rsc");
+            int ow = 0, oh = 0;
+            if (const char* xpos = std::strchr(oe, 'x')) {   // "WxH" size override
+                ow = std::atoi(oe); oh = std::atoi(xpos + 1);
+            }
+            if (otmpl && (ow <= 0 || oh <= 0)) {
+                void* cpd = FindDescriptionOnTemplate(otmpl, TypeId("CreatePlacedDescription"));
+                if (cpd) {
+                    ow = *(int32_t*)((uint8_t*)cpd + 0x44);
+                    oh = *(int32_t*)((uint8_t*)cpd + 0x48);
+                }
+                // Variable-size like pastures, so the authored default may be 0.
+                if (ow <= 0 || oh <= 0) { ow = 8; oh = 8; }
+            }
+            if (!otmpl) {
+                fprintf(stderr, "[startTown::orchard] BANISHED_BUILD_DEMO_ORCHARD set but "
+                        "Template\\Orchard.rsc did not resolve; nothing spawned\n");
+            } else {
+                const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+                int bestX = 0, bestY = 0;
+                bool found = false;
+                for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                    for (int dy = -r; dy <= r && !found; ++dy) {
+                        for (int dx = -r; dx <= r && !found; ++dx) {
+                            if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                            const int tx = cx + dx, ty = cy + dy;
+                            bool clash = false;
+                            for (int o = 0; o < occN; ++o) {
+                                if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + ow + 1 &&
+                                    ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + oh + 1) {
+                                    clash = true; break;
+                                }
+                            }
+                            if (!clash) { bestX = tx; bestY = ty; found = true; }
+                        }
+                    }
+                }
+                if (!found) {
+                    fprintf(stderr, "[startTown::orchard] no free %dx%d footprint within "
+                            "r=%d of cluster centre; nothing spawned\n",
+                            ow, oh, kExtraHouseSearchRadius);
+                } else {
+                    void* oent = placeStructure(otmpl, bestX, bestY, 0, ow, oh,
+                                                /*isDemoFoundation=*/false, -1);
+                    Occupy(bestX, bestY, ow, oh);
+                    if (oent) ++spawned;
+                    fprintf(stderr, "[startTown::orchard] demo orchard tile=(%d,%d) "
+                            "fp=%dx%d ent=%p\n", bestX, bestY, ow, oh, oent);
+                }
+            }
+            fflush(stderr);
+        }
+    }
+
     // ── BANISHED_BUILD_DEMO_TRADINGPOST — one COMPLETED trading post ON THE RIVER ──
     // Gating harness for the trade / livestock-acquisition wave. A trading post is a
     // DOCK: the merchant-arrival tick (retail 0x14005aa60) clones the TraderBoat entity

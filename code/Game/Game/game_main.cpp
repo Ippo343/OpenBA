@@ -83,6 +83,7 @@ extern "C" void FillTypeIdGlobals_worktail_fire();
 extern "C" void FillTypeIdGlobals_citizen_lifeevent();
 extern "C" void FillControlUITypeIds();
 extern "C" void FillTypeIdGlobals_tracker();
+extern "C" void FillTypeIdGlobals_orchard();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
@@ -504,6 +505,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_citizen_lifeevent(); // step 2.5 defer close — TombstoneComponent/CemeteryDescription ids (c4a30/c40c8)
     FillControlUITypeIds();                // ControlUIConfig id (0x1401c4e20) — gates EVERY ControlUI button (work/split/empty)
     FillTypeIdGlobals_tracker();           // production-stats panel — TrackerComponent id (c4b10)
+    FillTypeIdGlobals_orchard();           // orchard panel type/yield — OrchardComponent id (c46b0)
 
     if (ok != 0) {
         // Relativize the engine FileSystem resource directories. This was a

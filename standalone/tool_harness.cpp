@@ -1149,6 +1149,138 @@ void FirePasturePanel(void* entityUI) {
 // (code/Game/Game/starttown.cpp). Prints on every failure branch, so a silent log
 // means this never ran rather than that the panel opened.
 // ============================================================
+// ============================================================
+// Orchard-panel-open ("orchardpanel") — open the FIRST world orchard's info dialog
+// via EditTool select, exactly like clicking it. Exercises the promoted OrchardUI
+// controller (orchardui.cpp): tree-type combo populate (Slot4 -> SelectResourceUI
+// base) and the per-frame yield bar (Slot7). With BANISHED_ORCHARDPANEL_SELECT=<idx>
+// it also drives the combo-select event path (Slot9 -> Slot11 SetResourceType),
+// which is the only way to give an orchard a tree type without the fenced-area tool.
+//
+// Same shape as FireTradePanel below — the orchard has no world registry list of its
+// own that we have mapped, so it scans the EntityList for an OrchardComponent by the
+// component's own vtable+0x10 GetTypeId rather than trusting a .rdata type-id slot.
+//
+// Needs an orchard in the world: BANISHED_BUILD_DEMO_ORCHARD=1
+// (code/Game/Game/starttown.cpp). Prints on every failure branch, so a silent log
+// means this never ran rather than that the panel opened.
+// ============================================================
+void FireOrchardPanel(void* entityUI) {
+    if (!entityUI) { fprintf(stderr, "[OrchardPanel] ERROR: entityUI null\n"); return; }
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) { fprintf(stderr, "[OrchardPanel] EditTool activation FAILED\n"); return; }
+
+    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) { fprintf(stderr, "[OrchardPanel] gameWorld null\n"); return; }
+    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
+    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
+    const uint32_t tidOrchardComp = ::Object::GetTypeIdByName("OrchardComponent");
+    if (!arr || n <= 0 || !tidOrchardComp) {
+        fprintf(stderr, "[OrchardPanel] cannot scan (arr=%p n=%d tidOrchardComponent=%u)\n",
+               reinterpret_cast<void*>(arr), n, tidOrchardComp);
+        return;
+    }
+
+    void* orchEnt = nullptr;
+    void* orchComp = nullptr;
+    for (int i = 0; i < n && !orchEnt; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        for (int c = 0; c < cN && cA; ++c) {
+            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+            void* comp = *cs;
+            if (!comp) continue;
+            void** vt = *reinterpret_cast<void***>(comp);
+            typedef uint32_t (*G)(void*);
+            if (vt && vt[2] && reinterpret_cast<G>(vt[2])(comp) == tidOrchardComp) {
+                orchEnt = ent; orchComp = comp; break;
+            }
+        }
+    }
+    if (!orchEnt) {
+        fprintf(stderr, "[OrchardPanel] no orchard in world (scanned %d entities) — set "
+               "BANISHED_BUILD_DEMO_ORCHARD=1\n", n);
+        return;
+    }
+
+    int opened = EditTool_HarnessSelectEntity(tool, orchEnt);
+    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    fprintf(stderr, "[OrchardPanel] select orchard ent=%p -> opened=%d dialog=%p\n",
+           orchEnt, opened, dialog);
+    if (!dialog) {
+        fprintf(stderr, "[OrchardPanel] no dialog was created — the orchard has no info-panel "
+               "UI binding, or SelectEntity refused it\n");
+        return;
+    }
+
+    // Locate the OrchardUI controller and report the two fields the promotion is
+    // supposed to fill: +0x30 combo IBP and +0x38 yield ProgressElement IBP. A null
+    // +0x38 with a good +0x30 is the ProgressElement type-id trap; both null means
+    // Slot4 never ran at all.
+    const uint32_t tidOUI = ::Object::GetTypeIdByName("OrchardUI");
+    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
+    int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+    void* oui = nullptr;
+    for (int i = 0; ctrlArr && i < cnt; i++) {
+        void* c = ctrlArr[i];
+        if (!c) continue;
+        void** vt = *reinterpret_cast<void***>(c);
+        typedef uint32_t (*G)(void*);
+        if (vt && vt[2] && reinterpret_cast<G>(vt[2])(c) == tidOUI) { oui = c; break; }
+    }
+    if (!oui) {
+        fprintf(stderr, "[OrchardPanel] no OrchardUI controller among %d controllers "
+               "(tid=%u)\n", cnt, tidOUI);
+        return;
+    }
+    void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x30);
+    void* yield = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x38);
+    int items = (combo && fn_ComboElement_GetItemCount)
+                    ? fn_ComboElement_GetItemCount(combo) : -1;
+    // OrchardComponent+0x60 is the selected tree type (Slot11 writes it, Slot12 reads
+    // it). Printing it before AND after the select is what turns "the event fired"
+    // into "the type actually landed" — see the diagnostics-report-outcomes rule.
+    auto orchType = [&]() -> unsigned long long {
+        return orchComp ? *reinterpret_cast<unsigned long long*>(
+                              reinterpret_cast<uintptr_t>(orchComp) + 0x60) : 0ull;
+    };
+    fprintf(stderr, "[OrchardPanel] OrchardUI=%p combo(+0x30)=%p items=%d yield(+0x38)=%p "
+           "comp=%p type(+0x60)=%llx\n",
+           oui, combo, items, yield, orchComp, orchType());
+
+    // BANISHED_ORCHARDPANEL_SELECT=<item> — the real combo-change event the
+    // DialogInstance routes on a player pick (msg 0x14, element id 500) into
+    // OrchardUI slot 9 (SelectResourceUI::Slot9), which dispatches Slot11.
+    const char* selEnv = std::getenv("BANISHED_ORCHARDPANEL_SELECT");
+    if (selEnv && *selEnv) {
+        int wantItem = std::atoi(selEnv);
+        if (combo && items > 0) {
+            if (wantItem >= items) wantItem = items - 1;
+            fn_ComboElement_SetCurrentItem(combo, wantItem);
+            void** vt = *reinterpret_cast<void***>(oui);
+            typedef void (*Slot9_t)(void*, void*, int, int);
+            reinterpret_cast<Slot9_t>(vt[9])(oui, combo, 0x14, 500);
+            fprintf(stderr, "[OrchardPanel] SELECT fired: item=%d -> orchard type(+0x60)=%llx "
+                   "(%s)\n", wantItem, orchType(),
+                   orchType() ? "TYPED" : "STILL UNTYPED - Slot11 did not take");
+        } else {
+            fprintf(stderr, "[OrchardPanel] SELECT skipped: combo=%p items=%d\n", combo, items);
+        }
+    }
+}
+
 void FireTradePanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[TradePanel] ERROR: entityUI null\n"); return; }
 
@@ -1158,6 +1290,7 @@ void FireTradePanel(void* entityUI) {
         tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
     }
     if (!tool) { fprintf(stderr, "[TradePanel] EditTool activation FAILED\n"); return; }
+
 
     // Find the trading post by scanning the entity list for a TradeComponent. The
     // raw .rdata type-id slot 0x1401c4b80 is unregistered in standalone, so match on
@@ -2360,6 +2493,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FireHousePanel(entityUI);
     } else if (std::strcmp(s_toolName, "pasturepanel") == 0) {
         FirePasturePanel(entityUI);
+    } else if (std::strcmp(s_toolName, "orchardpanel") == 0) {
+        FireOrchardPanel(entityUI);
     } else if (std::strcmp(s_toolName, "tradepanel") == 0) {
         FireTradePanel(entityUI);
     } else if (std::strcmp(s_toolName, "clearfootprint") == 0) {

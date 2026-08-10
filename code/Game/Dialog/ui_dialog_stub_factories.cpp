@@ -1318,7 +1318,9 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);
 
 // ---- SelectResourceUI subclasses (parent is the abstract SelectResourceUI) --
-UI_DIALOG_STUB(OrchardUI,           "SelectResourceUI",     0x48);
+// ---- OrchardUI: PROMOTED to real SA vtable (orchardui.cpp) — the orchard panel's
+//      tree-type combo now populates and the yield bar tracks growth instead of
+//      sitting empty at 0. ----
 UI_DIALOG_STUB(CropUI,              "SelectResourceUI",     0x60);
 // ---- PastureUI: PROMOTED to real SA vtable (pastureui.cpp) — livestock-type
 //      combo + animal-count slider now live; retires BANISHED_PASTURE_AUTOTYPE

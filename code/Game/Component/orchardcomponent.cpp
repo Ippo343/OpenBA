@@ -274,6 +274,90 @@ void OrchardComponent_InitFuncs() {
     s_initialized = true;
 }
 
+// ============================================================
+// OrchardComponent::GetGrowth (0x140051640) -> float
+// ============================================================
+// Average growth ratio (0.0-1.0) across the orchard's planted tree slots.
+// This is what OrchardUI::Slot7 renders as the panel's yield bar + "NN%" text;
+// with it unresolved the percentage rendered blank (and, once the component
+// finder started working, calling the null pointer crashed the frame).
+//
+// Slot array: base = comp+0x50, count = comp+0x58, stride 0x28. Per slot:
+//   +0x00 int32  tile index into the map tile array
+//   +0x04 int32  slot state — only state 1 (a grown/planted tree) counts
+//   +0x08 Base*  the entity this slot believes it owns
+//   +0x18 IBP    the growth-carrying object; its +0x30 is the ratio
+// The tile lookup is `*(map+0x80) + 8 + tileIdx*0x30`, i.e. the entity pointer
+// inside a 0x30-byte tile record, with map = *(gameWorld+0xf8).
+//
+// The `entity == slot+0x08` re-check is retail's staleness test: a slot whose
+// tile now holds a DIFFERENT entity (tree chopped, something else built) is
+// skipped rather than counted. Note the divisor is the FULL slot count, not the
+// number of slots that scored — an orchard of saplings correctly reads low.
+//
+// The per-slot clamp is against the 1.0f constant at 0x14017214c (Ghidra names
+// that float g_fUVScale; it is a plain 1.0f used here as the growth ceiling).
+float OrchardComponent_GetGrowth(void* selfV) {
+    uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
+    if (!comp) return 0.0f;
+
+    const int count = *reinterpret_cast<int32_t*>(comp + 0x58);
+    if (count <= 0) return 0.0f;
+
+    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                      ? *g_pGameWorldSingleton : nullptr;
+    if (!world) return 0.0f;
+    uintptr_t map = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(world) + 0xf8);
+    if (!map) return 0.0f;
+    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(map + 0x80);
+    if (!tiles) return 0.0f;
+
+    const uint32_t tidEntity = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    const float maxGrowth = g_fUVScale ? *g_fUVScale : 1.0f;
+
+    // FUN_1400052c0 — FindComponent(NaturalResourceComponent), member ABI
+    // (RCX = entity, RDX = out InternalBasePtr). Registered by reg_work_base.cpp.
+    typedef void* (*fn_FindNatRes_t)(void* entity, void* outIbp);
+    static fn_FindNatRes_t s_findNatRes = nullptr;
+    if (!s_findNatRes)
+        s_findNatRes = reinterpret_cast<fn_FindNatRes_t>(ResolveAddr(Module::Exe, 0x1400052c0));
+    if (!s_findNatRes) return 0.0f;
+
+    const uintptr_t slots = *reinterpret_cast<uintptr_t*>(comp + 0x50);
+    if (!slots) return 0.0f;
+
+    float total = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        const uintptr_t slot = slots + static_cast<uintptr_t>(i) * 0x28;
+
+        const int tileIdx = *reinterpret_cast<int32_t*>(slot + 0x00);
+        void* entity = *reinterpret_cast<void**>(
+            tiles + 8 + static_cast<uintptr_t>(tileIdx) * 0x30);
+        if (!entity) continue;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        if (!fn_IsA || !fn_IsA(entity, tidEntity)) continue;
+
+        uint64_t natRes = 0;
+        s_findNatRes(entity, &natRes);
+        if (!natRes) continue;
+
+        void** owned = reinterpret_cast<void**>(slot + 0x08);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(owned);
+        if (entity != *owned) continue;
+        if (*reinterpret_cast<int32_t*>(slot + 0x04) != 1) continue;
+
+        void** growthObj = reinterpret_cast<void**>(slot + 0x18);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(growthObj);
+        if (!*growthObj) continue;   // SA: retail derefs unguarded; state 1 implies it
+        float g = *reinterpret_cast<float*>(
+            reinterpret_cast<uintptr_t>(*growthObj) + 0x30);
+        if (g > maxGrowth) g = maxGrowth;
+        total += g;
+    }
+
+    return total / static_cast<float>(count);
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
