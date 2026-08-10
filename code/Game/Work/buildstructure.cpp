@@ -359,12 +359,14 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     uintptr_t buildMgmtIBP = 0;
     fn_Entity_FindComponent_Build(entity, &buildMgmtIBP);
 
-    // Traverse: buildMgmt -> +0x10 child -> find build description (type DWORD_1401c80e0)
+    // Traverse: buildMgmt -> +0x10 child -> find the WorkPlaceComponent (DWORD_1401c80e0).
+    // (Was documented as "build description"; corrected 2026-08-09 — the +0x50 read below
+    // is the workplace accepting flag, not a description field. Behaviour unchanged.)
     fn_InternalBasePtr_CheckPtr(&buildMgmtIBP);
     uintptr_t buildMgmt = buildMgmtIBP;
     fn_InternalBasePtr_CheckPtr((void*)(buildMgmt + 0x10));
     uintptr_t buildDescIBP = 0;
-    fn_Entity_FindComponent_BuildDesc(*(uintptr_t*)(buildMgmt + 0x10), &buildDescIBP);
+    fn_Entity_FindComponent_WorkPlace(*(uintptr_t*)(buildMgmt + 0x10), &buildDescIBP);
     fn_InternalBasePtr_CheckPtr(&buildDescIBP);
 
     // Check if building is enabled (byte at +0x50 of description)
@@ -385,7 +387,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     // --- Phase 3: Check builder count vs max, verify citizen authorization ---
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t bcIBP = 0;
-    fn_Entity_FindComponent_BuildDesc(*(uintptr_t*)(s + 0x10), &bcIBP);
+    fn_Entity_FindComponent_WorkPlace(*(uintptr_t*)(s + 0x10), &bcIBP);
     fn_InternalBasePtr_CheckPtr(&bcIBP);
     int currentBuilders = *(int32_t*)(bcIBP + 0x60);
 
@@ -1018,7 +1020,7 @@ extern "C" bool BuildStructure_DepsReady() {
     EnsureVtables();
     return fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
            fn_Entity_FindComponent_Position && fn_Entity_FindComponent_Build &&
-           fn_Entity_FindComponent_BuildDesc && fn_Entity_FindComponent_MatDesc &&
+           fn_Entity_FindComponent_WorkPlace && fn_Entity_FindComponent_MatDesc &&
            fn_PositionComponent_Count && fn_CalcMaxBuilders && fn_DynArray_Resize &&
            fn_Entity_GetPositionForIndex && fn_Map_Invalidate && fn_Map_CalcPathCost &&
            fn_Map_NeighborLookup && fn_Map_CalcPathDist && fn_Map_CachePathDist &&

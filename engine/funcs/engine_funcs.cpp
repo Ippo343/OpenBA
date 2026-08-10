@@ -1060,7 +1060,7 @@ fn_Work_SerializeBase_t fn_Work_SerializeBase = nullptr;
 fn_BST_SerializeHelper_t fn_BST_SerializeHelper = nullptr;
 fn_Entity_FindComponent_Position_t fn_Entity_FindComponent_Position = nullptr;
 fn_Entity_FindComponent_Build_t fn_Entity_FindComponent_Build = nullptr;
-fn_Entity_FindComponent_BuildDesc_t fn_Entity_FindComponent_BuildDesc = nullptr;
+fn_Entity_FindComponent_WorkPlace_t fn_Entity_FindComponent_WorkPlace = nullptr;
 fn_Entity_FindComponent_MatDesc_t fn_Entity_FindComponent_MatDesc = nullptr;
 fn_PositionComponent_Count_t fn_PositionComponent_Count = nullptr;
 fn_CalcMaxBuilders_t fn_CalcMaxBuilders = nullptr;
@@ -4539,7 +4539,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140002ed0));
     fn_Entity_FindComponent_Build = reinterpret_cast<fn_Entity_FindComponent_Build_t>(
         ResolveAddr(Module::Exe, 0x14000d6c0));
-    fn_Entity_FindComponent_BuildDesc = reinterpret_cast<fn_Entity_FindComponent_BuildDesc_t>(
+    fn_Entity_FindComponent_WorkPlace = reinterpret_cast<fn_Entity_FindComponent_WorkPlace_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
     fn_Entity_FindComponent_MatDesc = reinterpret_cast<fn_Entity_FindComponent_MatDesc_t>(
         ResolveAddr(Module::Exe, 0x140003050));

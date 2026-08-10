@@ -4989,9 +4989,17 @@ extern fn_Entity_FindComponent_Position_t fn_Entity_FindComponent_Position;
 typedef void* (*fn_Entity_FindComponent_Build_t)(uintptr_t entity, void* retIBP);
 extern fn_Entity_FindComponent_Build_t fn_Entity_FindComponent_Build;
 
-// FindComponent_BuildDesc (0x140002e10) — type DWORD_1401c80e0 (BuildDescription)
-typedef void* (*fn_Entity_FindComponent_BuildDesc_t)(uintptr_t entity, void* retIBP);
-extern fn_Entity_FindComponent_BuildDesc_t fn_Entity_FindComponent_BuildDesc;
+// FindComponent_WorkPlace (0x140002e10) — type DWORD_1401c80e0 (WorkPlaceComponent).
+// ⚠ RENAMED 2026-08-09. This was called "..._BuildDesc" and documented as
+// BuildDescription, which is WRONG: 0x1401c80e0's only [DATA] writer is
+// WorkPlaceComponent_RegisterType (0x14014feb5) — every other xref is a read. The
+// behaviour was never affected (the ports call retail's address, so they always got a
+// WorkPlaceComponent), but the name invited the classic bug of treating the result as a
+// description. The existing call sites corroborate the corrected name: buildstructure.cpp
+// reads +0x60 as the builder/roster count and +0x50 as the accepting flag, both of which
+// are WorkPlaceComponent fields. Fifth instance of the misnamed-finder class.
+typedef void* (*fn_Entity_FindComponent_WorkPlace_t)(uintptr_t entity, void* retIBP);
+extern fn_Entity_FindComponent_WorkPlace_t fn_Entity_FindComponent_WorkPlace;
 
 // FindComponent_MatDesc (0x140003050) — type DWORD_1401c8070 (MaterialDescription)
 // Note: same address as fn_FindComponent_WorkC, different type ID baked in
