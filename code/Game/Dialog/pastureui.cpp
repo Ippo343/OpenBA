@@ -422,12 +422,19 @@ void W_Slot7(void* self) {
     if (!self) return;
     PastureUI_Slot7(reinterpret_cast<PastureUI*>(self));
 }
-// idx8 (+0x40): the ONLY slot the framework dispatches per frame (see
-// eventlogui.cpp:343 — DialogInstance::OnUpdate hits +0x40 only), so this is a
-// composite like the other promotions: self-heal Slot4 once if the slider IBP
-// (+0x38) is still null (setup missed), run the base combo refresh, then drive
-// Slot7 so the count text / combo-enable stay live (retail refreshes it via
-// layout invalidation we don't reproduce).
+// idx8 (+0x40): the base SelectResourceUI combo refresh (retail 0x140078d30 is a real
+// slot on this class, unlike plain DialogController where idx8 stays inherited), plus a
+// standalone-only self-heal of Slot4 if the slider IBP (+0x38) is still null.
+//
+// CORRECTED 2026-08-09: this comment used to claim idx8 was "the ONLY slot the
+// framework dispatches per frame" (sourced from eventlogui.cpp:343). That is FALSE, and
+// Ghidra disproves it: UI::UserInterface::Update (Runtime 0x1801213c0) ->
+// DialogInstance::ComputeLayout (0x180113d90) -> vtable idx6 OnUpdateLayout
+// (0x1801153a0) walks +0x78 and dispatches controller **idx7** every frame, with no
+// dirty flag; idx8 is OnUpdate (0x180115400), also per frame. BOTH tick. Acting on the
+// false claim, this composite also called PastureUI_Slot7 — which W_Slot7 at idx7
+// already does — so Slot7 ran TWICE per frame. That extra call is removed; idx7 is the
+// per-frame sync path and is sufficient on its own.
 void W_Slot8(void* self) {
     if (!self) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
@@ -438,7 +445,6 @@ void W_Slot8(void* self) {
     }
     if (*reinterpret_cast<void**>(s + 0x30))
         SelectResourceUI_Slot8(self);
-    PastureUI_Slot7(reinterpret_cast<PastureUI*>(self));
 }
 // idx9 (+0x48): element events.
 void W_Slot9(void* self, void* p2, int p3, int p4) {

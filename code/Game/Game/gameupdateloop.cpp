@@ -892,9 +892,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
 
-    // TownHallUI gate diagnostic (one-shot at frame 120): reports missing fn
-    // pointers / type-ids / town data that would silently blank the town-hall
-    // statistics panel (code/Game/Dialog/townhallui.cpp).
+    // One-shot at frame 120. Despite the name this is NOT purely a diagnostic: it
+    // also publishes nine shared element type-id globals that other dialogs read
+    // (toolbardialog / optionsdialog / saveloaddialog / spritecaptureui), so it must
+    // stay ungated — see the note above TownHallSA_Diag in townhallui.cpp. The
+    // reporting half is gated on BANISHED_TOWNHALL_DIAG.
     TownHallSA_Diag(s_frameNum);
 
     // Wave-0 gating probe for the trading-post / livestock-acquisition wave:

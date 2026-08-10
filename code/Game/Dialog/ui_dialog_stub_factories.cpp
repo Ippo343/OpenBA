@@ -881,7 +881,54 @@ UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
 // ---- StorageCapacityUI: PROMOTED to real SA vtable (storagecapacityui.cpp) — the
 //      storage building's "X%" fill number now computes+renders instead of staying
 //      blank (Serialize finds the ProgressElement, Startup sets count/capacity %). ----
-UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
+// ---- TitleDescToolTipUI: PROMOTED — wiring only, the logic was already ported --
+// titledesctooltipui.cpp has held a faithful TitleDescToolTipUI_Serialize (exe
+// 0x14007b730, vtable +0x20 = idx4) since it was decompiled, and NOTHING ever wired
+// it: the generic stub left every slot StubNop, so the tooltip rendered its .rsc
+// placeholder text forever. No port work was needed here, only a wire.
+//
+// Ghidra vtable read (vtable_TitleDescToolTipUI @ 0x14015d9f0, 11 slots): idx4 is
+// the ONLY real slot; every other entry is one of the shared 5-6 byte micro-returns
+// clustered at 0x14003a95a-0x14003a97e, for which the generic StubNop is already
+// byte-faithful. So idx4 closes the work list at the vtable boundary — there is no
+// second slot waiting to be found.
+//
+// No readiness gate: unlike PageToggleUI/ProductionUI this reimpl reads no element
+// type id (it finds "textTitle"/"textDesc" BY NAME) and touches no .rdata type-id
+// global, so there is nothing that could be null at static-init time. It also has
+// zero unguarded dereferences — it null-checks both +0x18 (dialog) and +0x28
+// (datasource) before use — which is why this was chosen as the first wire of the
+// sweep: if the wiring mechanism itself is wrong, this class fails visibly without
+// being able to fault.
+// Forward-declared rather than including ui_panels.h: this file deliberately does
+// not pull in the panel headers (the other promotions forward-declare too), and a
+// pointer to an incomplete type is all the call needs.
+struct TitleDescToolTipUI;
+void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
+
+namespace uistub_TitleDescToolTipUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("TitleDescToolTipUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    void Slot4(void* self) {
+        if (!self) return;
+        ::TitleDescToolTipUI_Serialize(reinterpret_cast<TitleDescToolTipUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    // MUST be declared AFTER g_init: same TU, same namespace, both dynamic
+    // initializers, so declaration order is guaranteed. Reversed, g_init's blanket
+    // StubNop fill would run second and silently un-wire idx4 — the promotion would
+    // look complete and be dead.
+    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x30;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x30,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(TitleDescToolTipUI, "UI::DialogController",
+              &uistub_TitleDescToolTipUI::Factory, &uistub_TitleDescToolTipUI::InPlace);
 // ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
 // ToolUI is StandardDialog.rsc's controller — created for EVERY StandardDialog-
 // based utility dialog (Map/Help/Goal/…). Its Slot4 (+0x20, Setup) reads the

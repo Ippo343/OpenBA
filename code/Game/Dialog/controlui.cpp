@@ -7,7 +7,48 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
+
+// ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
+// Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
+// by Slot4 before storing the element at +0x30) and 0x1401516a8 (CheckElement,
+// tested by Slot4/Slot7 before touching the checked byte at elem+0xd8). In
+// standalone both live in the element-type-id table in
+// standalone/reg_element_typeids.cpp, which is GATED on BANISHED_LIVE_ELEMENT_TIDS
+// and therefore off by default — so g_TypeId_UIElementBase and
+// g_TypeId_CheckboxElement are both normally null.
+//
+// MEASURED consequence before this fix (BANISHED_CONTROLUI_TRACE, demo pasture):
+// all three pasture ControlUIs reported `elem(+0x30)=0` with a perfectly good
+// `target(+0x38)`, because IsDerivedFrom(elem, 0) is always false. That null +0x30
+// silently disabled everything this controller does — SetElementId(50000) was
+// skipped (so Slot9 could never match a click), the +0xd8 checked byte was never
+// written, and Slot7 returned at the `if (!elem)` guard before calling Enable().
+// The four button predicates were correct all along; nothing ever applied them,
+// which is why work/split/empty all sat at the element ctor default (enabled,
+// unchecked) and read as "highlighted".
+//
+// Resolve PRIVATE copies by name rather than publishing into the shared globals:
+// those are read by other dialogs that currently rely on the null as a no-op, and
+// filling them on the default path is exactly the broad change that table put
+// behind its gate. Prefer the registry value when the gate IS on so the two paths
+// can never disagree. Same idiom as pagetoggleui.cpp / productionui.cpp.
+static uint32_t ControlUI_ButtonElementTypeId() {
+    if (g_TypeId_UIElementBase && *g_TypeId_UIElementBase)
+        return *g_TypeId_UIElementBase;            // gate on: use the real slot
+    static uint32_t s_local = 0;
+    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("ButtonElement");
+    return s_local;
+}
+
+static uint32_t ControlUI_CheckElementTypeId() {
+    if (g_TypeId_CheckboxElement && *g_TypeId_CheckboxElement)
+        return *g_TypeId_CheckboxElement;          // gate on: use the real slot
+    static uint32_t s_local = 0;
+    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("CheckElement");
+    return s_local;
+}
 
 // Slot4: Find checkbox element, find sub-component by type, set initial state.
 void ControlUI_Slot4(ControlUI* self) {
@@ -26,7 +67,7 @@ void ControlUI_Slot4(ControlUI* self) {
     if (!component) return;
 
     // Check dialog element type, store at +0x30
-    uint32_t elemBaseTypeId = g_TypeId_UIElementBase ? *g_TypeId_UIElementBase : 0;
+    uint32_t elemBaseTypeId = ControlUI_ButtonElementTypeId();
     void* dialogElem = (void*)*(uint64_t*)(s + 0x20);
     void* checkedElem = nullptr;
     if (fn_IsDerivedFrom(dialogElem, elemBaseTypeId)) {
@@ -56,8 +97,24 @@ void ControlUI_Slot4(ControlUI* self) {
     // template is reused across building types), so bail rather than fault.
     if (!subComp) return;
 
-    // If element at +0x30 IsA CheckboxElement, set initial checkbox state
-    uint32_t checkboxTypeId = g_TypeId_CheckboxElement ? *g_TypeId_CheckboxElement : 0;
+    // If element at +0x30 IsA CheckboxElement, set initial checkbox state.
+    //
+    // This guard is LOAD-BEARING, not defensive: +0xd8 is one byte PAST the end of a
+    // plain ButtonElement. ButtonDescription::CreateInstance (Runtime 0x180111510)
+    // allocates 0xd8; CheckDescription::CreateInstance (0x1801119c0) allocates 0xe0
+    // precisely so the checked byte fits. On a pasture, empty(0)/split(1) are
+    // ButtonElements and only work(2) is a CheckElement — relaxing this test to make a
+    // highlight appear would be a 1-byte heap overrun on two of the three buttons.
+    // It is also why Pasture_CanCommand (0x140127dd0) never sets bit 1 for cmd 0/1:
+    // those elements have no checked byte to write.
+    //
+    // FAITHFULNESS DEVIATION (deliberate, documented rather than silent): retail guards
+    // this with Object::Base::IsA (exe slot 0x140151410, 0x1800491c0), an EXACT-type
+    // test (`return param_1 == GetTypeId();`), whereas we use fn_IsDerivedFrom. Identical
+    // for the pasture — work is exactly CheckElement, empty/split are not derived from it
+    // — but the two differ for any CheckElement SUBCLASS, and Runtime does ship
+    // RadioElement. Revisit if a .rsc ever binds a check subclass here.
+    uint32_t checkboxTypeId = ControlUI_CheckElementTypeId();
     void* elemAt30 = (void*)*(uint64_t*)(s + 0x30);
     bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
     if (isCheckbox) {
@@ -95,7 +152,7 @@ void ControlUI_Slot7(ControlUI* self) {
     if (!*(uint64_t*)(s + 0x38)) return;
 
     // Check if element IsA CheckboxElement
-    uint32_t checkboxTypeId = g_TypeId_CheckboxElement ? *g_TypeId_CheckboxElement : 0;
+    uint32_t checkboxTypeId = ControlUI_CheckElementTypeId();
     void* elemAt30 = (void*)*(uint64_t*)(s + 0x30);
     bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
     if (isCheckbox) {
@@ -250,9 +307,52 @@ void W_Slot4(void* self) {
 }
 
 // idx7 (+0x38): per-frame enable / checked sync.
+//
+// Slot7 had NO trace of its own, which is why "is slot 7 even ticked for this
+// panel?" stayed open through two investigations. It is: UI::UserInterface::Update
+// (Runtime 0x1801213c0) -> DialogInstance::ComputeLayout (0x180113d90) -> vtable
+// idx6 OnUpdateLayout (0x1801153a0) walks +0x78 and dispatches controller idx7
+// every frame, with no dirty flag. Report the OUTCOME — the element state read back
+// AFTER the writes — rather than the intent, and print in every arm so that silence
+// can never read as success. Rate-limited because this is a per-frame path.
 void W_Slot7(void* self) {
     if (!self) return;
     ControlUI_Slot7(reinterpret_cast<ControlUI*>(self));
+
+    if (!std::getenv("BANISHED_CONTROLUI_TRACE")) return;
+    static int s_left = 12;
+    if (s_left <= 0) return;
+    --s_left;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* cfg = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10));
+    void* elem = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30));
+    int cmd = cfg ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(cfg) + 0x20) : -1;
+    if (!elem) {
+        // The pre-fix state: correct predicates, nothing to apply them to.
+        std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem(+0x30)=NULL"
+                     " -> no Enable, no checked write\n", cmd);
+    } else {
+        // elem+0x34 bit 0x800000 = disabled (UI::Element::Enable, Runtime 0x180116910).
+        uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(elem) + 0x34);
+        // +0xd8 is the checked byte of a CheckElement ONLY (CheckElement::IsChecked,
+        // Runtime 0x180048c80; CheckDescription::CreateInstance allocates 0xe0). The
+        // first version of this trace read it unconditionally and printed checked=50
+        // for the two ButtonElement buttons — a read PAST the end of a plain button,
+        // i.e. heap bytes reported as game state. Only the cmd=2 work button is a
+        // CheckElement here, so gate the read on the same type id Slot7 gates its
+        // write on.
+        if (fn_IsDerivedFrom(elem, ControlUI_CheckElementTypeId())) {
+            unsigned checked =
+                *reinterpret_cast<unsigned char*>(reinterpret_cast<uintptr_t>(elem) + 0xd8);
+            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d checked=%u\n",
+                         cmd, elem, (flags & 0x800000u) ? 1 : 0, checked);
+        } else {
+            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d"
+                         " checked=n/a (ButtonElement, no +0xd8)\n",
+                         cmd, elem, (flags & 0x800000u) ? 1 : 0);
+        }
+    }
+    std::fflush(stderr);
 }
 
 // idx8 (+0x40) is DELIBERATELY NOT OVERRIDDEN, matching retail.

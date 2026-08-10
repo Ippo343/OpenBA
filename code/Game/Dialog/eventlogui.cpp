@@ -340,9 +340,18 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 //   +0x28 idx5 Slot5  = setup (find nav buttons, "display" rows, "notifybuttons")
 //   +0x30 idx6 Slot6  = 3-byte RET 0 no-op
 //   +0x38 idx7 Slot7  = content update (fill display rows from the event log)
-//   +0x40 idx8        = base DialogController::OnUpdate (per-frame). The framework
-//                       dispatches ONLY +0x40 each frame; the exe leaves it a base
-//                       no-op, so drive Slot7 here to refresh the panel every frame.
+//   +0x40 idx8        = base DialogController::OnUpdate (per-frame). Left INHERITED,
+//                       matching retail. This comment used to claim the framework
+//                       "dispatches ONLY +0x40 each frame" and therefore drove Slot7
+//                       from here — that claim is FALSE (it also propagated to
+//                       pastureui.cpp, where it caused the same bug). Ghidra:
+//                       UI::UserInterface::Update (Runtime 0x1801213c0) ->
+//                       DialogInstance::ComputeLayout (0x180113d90) -> vtable idx6
+//                       OnUpdateLayout (0x1801153a0) walks +0x78 and dispatches
+//                       controller idx7 EVERY frame with no dirty flag. So idx7 is
+//                       the per-frame sync path; driving Slot7 from idx8 as well ran
+//                       it twice per frame. Also note idx8's real signature takes a
+//                       `const Time&`, which a void(*)(void*) override silently drops.
 //   +0x48 idx9 Slot9  = button dispatch (scroll / notify toggle / row click)
 //
 // EventLogUI_Slot5/7/9 read the event-log struct (gameWorld+0x138) but dereference
@@ -395,7 +404,7 @@ void W_Slot7(void* self) {
         fflush(stderr);
     }
 }
-void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }  // +0x40 per-frame
+// (W_OnUpdate removed — idx8 stays inherited, see the vtable note at the top.)
 void W_Slot9(void* self, void* p2, int msg, int id) {
     if (self) EventLogUI_Slot9(reinterpret_cast<EventLogUI*>(self), p2, msg, id);
 }
@@ -407,7 +416,7 @@ struct Init {
         g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
         g_vt[5] = reinterpret_cast<void*>(&W_Slot5);
         g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        // idx8 deliberately NOT overridden — inherited base OnUpdate, as in retail.
         g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
     }
 } g_init;

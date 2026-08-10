@@ -2824,12 +2824,29 @@ void* InPlace(void* m) {
 // World-build-time gate diagnostic (called once from GameUpdateLoop::Update at an
 // early frame, see gameupdateloop.cpp) — reports the dialog-independent gates
 // (fn pointers / type-ids / town data) without needing the panel opened.
+// NOTE (2026-08-09): this function has TWO jobs, and only one of them is a
+// diagnostic. `EnsureGlobals()` PUBLISHES nine shared element type-id globals
+// (TabElement/TableElement/LabelElement/TextElement/NumberElement/NumberEditElement/
+// ComboElement/ButtonElement/…) by name, and because this is called unconditionally
+// from GameUpdateLoop::Update, that publish happens at frame 120 of EVERY session
+// whether or not the town-hall panel is ever opened. Other dialogs read those same
+// globals (toolbardialog / optionsdialog / saveloaddialog / spritecaptureui), so the
+// publish decides which of THEIR code paths are live rather than dormant.
+//
+// That means the publish is now load-bearing and must NOT be put behind an env gate:
+// gating it would silently return those other readers to their null-pointer no-op
+// path. Only the REPORTING is a diagnostic, so only the reporting is gated — which
+// also stops a diagnostic from writing to the log on every default run. If the
+// frame-120 publish is ever to be removed, the readers have to be migrated to
+// private by-name resolves first (see controlui.cpp / pagetoggleui.cpp for the
+// idiom); it is not a standalone cleanup.
 extern "C" void TownHallSA_Diag(int frameNum) {
     static bool s_done = false;
     if (s_done || frameNum < 120) return;
     s_done = true;
-    townhallui_sa::EnsureGlobals();
-    townhallui_sa::DiagPrint("world-build", nullptr);
+    townhallui_sa::EnsureGlobals();   // load-bearing publish — deliberately ungated
+    if (std::getenv("BANISHED_TOWNHALL_DIAG"))
+        townhallui_sa::DiagPrint("world-build", nullptr);
 }
 
 REGISTER_TYPE(TownHallUI, "UI::DialogController",
