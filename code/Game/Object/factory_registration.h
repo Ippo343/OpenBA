@@ -69,6 +69,10 @@ int InvokeAllRegistrations();
 // caching the result in a function-local static after first hit.
 uint32_t GetTypeIdByName(const char* name);
 
+// The BaseTypeInfo pointer for a registered type. Component vtable slot 1 (GetTypeInfo)
+// returns this; in retail it is a per-class .rdata global 8 bytes after the type id.
+void* GetTypeInfoByName(const char* name);
+
 // Description vtable +0x40 ("GetComponentTypeId") contract. The real exe slot is
 // `void f(self=RCX, uint32_t* out=RDX) { *out = <Component>TypeId; return out; }`
 // — ComponentEntity_CopyCtor (0x1400c3720) calls it on each of a template's

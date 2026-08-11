@@ -73,9 +73,21 @@ void** NodeVtable();
     static void* Name##_CreateState(void* self) {                              \
         return reinterpret_cast<uint8_t*>(self) + (NodeOff);                    \
     }                                                                           \
+    /* Slot 1 = GetTypeInfo. Retail returns a per-class .rdata global sitting 8  \
+       bytes after the type-id global (FishingComponent: id 0x1401c7660, info    \
+       0x1401c7668). Our BaseTypeInfoStorage IS that object, so its address is   \
+       the faithful answer. This was the ONE slot the coverage harness found     \
+       stubbed on all six food classes, so it is filled here once, in the shared \
+       macro, rather than six times over. */                                     \
+    static void* Name##_LiveGetTypeInfo(void*) {                               \
+        static void* cached = nullptr;                                         \
+        if (!cached) cached = ::Object::GetTypeInfoByName(#Name);              \
+        return cached;                                                         \
+    }                                                                           \
     static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];      \
     static void Name##_InstallLive(void* mem) {                                \
         if (!::ComponentFactory::LiveEnabled(EnvVar)) return;                  \
+        Name##_LiveVtable[1]  = reinterpret_cast<void*>(&Name##_LiveGetTypeInfo); \
         Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
         Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \
         if (mem)                                                               \
@@ -118,9 +130,21 @@ void** NodeVtable();
     static void* Name##_CreateState(void* self) {                              \
         return reinterpret_cast<uint8_t*>(self) + (NodeOff);                    \
     }                                                                           \
+    /* Slot 1 = GetTypeInfo. Retail returns a per-class .rdata global sitting 8  \
+       bytes after the type-id global (FishingComponent: id 0x1401c7660, info    \
+       0x1401c7668). Our BaseTypeInfoStorage IS that object, so its address is   \
+       the faithful answer. This was the ONE slot the coverage harness found     \
+       stubbed on all six food classes, so it is filled here once, in the shared \
+       macro, rather than six times over. */                                     \
+    static void* Name##_LiveGetTypeInfo(void*) {                               \
+        static void* cached = nullptr;                                         \
+        if (!cached) cached = ::Object::GetTypeInfoByName(#Name);              \
+        return cached;                                                         \
+    }                                                                           \
     static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];      \
     static void Name##_InstallLive(void* mem) {                                \
         if (!::ComponentFactory::LiveEnabled(EnvVar)) return;                  \
+        Name##_LiveVtable[1]  = reinterpret_cast<void*>(&Name##_LiveGetTypeInfo); \
         Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
         Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \
         (PopulateFn)();                                                        \

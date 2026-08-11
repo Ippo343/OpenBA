@@ -57,6 +57,21 @@ uint32_t GetTypeIdByName(const char* name) {
     return 0;
 }
 
+// The BaseTypeInfo POINTER for a registered type — the same thing each class's
+// GetTypeInfo virtual (vtable slot 1) returns in retail, where it reads a per-class
+// .rdata global sitting 8 bytes after the type-id global (e.g. FishingComponent's id at
+// 0x1401c7660, its type-info at 0x1401c7668). Our BaseTypeInfoStorage IS that object, so
+// handing back its address is the faithful answer.
+void* GetTypeInfoByName(const char* name) {
+    if (!name) return nullptr;
+    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
+        if (r->typeName && std::strcmp(r->typeName, name) == 0) {
+            return &r->storage;
+        }
+    }
+    return nullptr;
+}
+
 // Tiny per-name cache. Names are static string literals from the call sites,
 // so we compare pointers (after a strcmp on first miss). 16 entries is
 // plenty for the External-serialize helper set (Mesh, Particle, MaterialInst,
