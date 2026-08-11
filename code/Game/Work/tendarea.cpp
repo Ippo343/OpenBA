@@ -209,7 +209,18 @@ bool TendArea_ResolveFuncs() {
     bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_Serializer_Serialize && s_fn_BST_Serialize &&
               s_fn_BSTFindRemove && s_fn_BSTRemove && s_fn_CancelAllWork &&
-              s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFree &&
+              s_fn_ValidateEntity && s_fn_MemAlloc &&
+              // s_fn_MemFree is deliberately NOT required. It comes from the IAT dispatch
+              // slot 0x140151468, which is registered nowhere in our tree, so it is always
+              // null — and this file never calls it (the real frees go through
+              // s_fn_MemFreeStatic, which comes from engine_funcs and is non-null). Its
+              // four sibling Work files resolve the same dead pointer and correctly leave it
+              // out of their conjunction; only this one gated on it, which made
+              // TendArea_ResolveFuncs() report FAILED on every call and never latch
+              // s_tend_funcs_resolved — so it re-ran the whole resolve on every TendArea
+              // construction, and a genuinely useful readiness signal read FAILED
+              // permanently, ready to mask a real missing pointer later.
+              // Still resolved and still reported below, so a future call site is visible.
               s_fn_TreeNodeCleanup && s_fn_FindSubEntity &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_AreaCrop && s_fn_FindComp_AreaOrchard &&
