@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 
 // ============================================================
@@ -322,6 +323,20 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     fn_InternalBasePtr_CheckPtr(&meshIBPBuf);
     s_fn_MeshInstance_SetVisibility(*(void**)&meshIBPBuf, 2, atCapacity ? 1 : 0);
 
+    {
+        static int s_capN = 0;
+        const char* fe = std::getenv("BANISHED_FISHWORK_TRACE");
+        if (fe && fe[0] && fe[0] != '0' && s_capN < 4) {
+            ++s_capN;
+            std::fprintf(stderr, "[FishWork] capacity gate: resIdx=%lld current=%d limit=%d "
+                         "atCapacity=%d%s\n",
+                         (long long)(offset / 0x20),
+                         *(int*)(mapEntries + offset), *(int*)(mapEntries + offset + 8),
+                         (int)atCapacity,
+                         atCapacity ? "  <-- dock stops here, no fishing search runs" : "");
+            std::fflush(stderr);
+        }
+    }
     if (atCapacity) {
         return 1;
     }
@@ -354,6 +369,29 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     // Find first available fishing spot (state == 0)
     // Also reset spots that were marked as state 2 if the map cell is now empty
     int spotCount = (int)selfQ[0xc];    // +0x60
+    // ── Fishing-spot rejection census (BANISHED_FISHWORK_TRACE) ──────────────────
+    // Slot4 ran 231 times without ever reaching the fishing action ctor, so every
+    // candidate tile is being rejected — but "found nothing" cannot say by WHICH of the
+    // two gates. Count them separately. Zero cost when the env var is unset.
+    static int s_ftrace = -1;
+    if (s_ftrace < 0) {
+        const char* fe = std::getenv("BANISHED_FISHWORK_TRACE");
+        s_ftrace = (fe && fe[0] && fe[0] != '0') ? 1 : 0;
+    }
+    static long long s_maskFail = 0, s_coverZero = 0, s_ok = 0, s_calls = 0;
+    if (s_ftrace) {
+        static int s_entryN = 0;
+        if (s_entryN < 6) {
+            ++s_entryN;
+            std::fprintf(stderr, "[FishWork] Slot4 entry: spotCount(+0x60)=%d "
+                         "spotArray(+0x58)=%p citizenArr(+0x48)=%p citizenCount(+0x50)=%d\n",
+                         spotCount, *(void**)(selfAddr + 0x58),
+                         *(void**)(selfAddr + 0x48), *(int*)(selfAddr + 0x50));
+            std::fflush(stderr);
+        }
+    }
+
+
     uintptr_t spotStates = (uintptr_t)selfQ[0xb];  // +0x58
     int* mapGridPtr = *(int**)(gameWorld + 0xf8);
     int mapSize = *mapGridPtr;
@@ -466,6 +504,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                     continue;
                 }
 
+
                 // Check map cell for valid water terrain
                 int64_t mapCellIdx = (int64_t)(cMapSize * targetY + targetX);
                 uintptr_t mapData = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
@@ -475,12 +514,24 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 // Check fishing description allows this terrain and terrain is nonzero
                 uint32_t fishingTerrainMask = *(uint32_t*)((uintptr_t)fishingDesc + 0x2c);
                 if (((fishingTerrainMask >> (terrainBit & 0x1f)) & 1) == 0) {
+                    if (s_ftrace) ++s_maskFail;
                     attemptCount++;
                     continue;
                 }
                 if (terrainType == 0) {
+                    // cell+0x24 is the dock-coverage byte FishingComponent slot 19 stamps
+                    // via BrushTile(state 8). Zero here means the tile is fishable terrain
+                    // but OUTSIDE any dock's stamped disk.
+                    if (s_ftrace) ++s_coverZero;
                     attemptCount++;
                     continue;
+                }
+                if (s_ftrace) {
+                    ++s_ok;
+                    std::fprintf(stderr, "[FishWork] ACCEPTED tile=(%d,%d) coverage=%u "
+                                 "mask=0x%08x\n", targetX, targetY,
+                                 (unsigned)terrainType, fishingTerrainMask);
+                    std::fflush(stderr);
                 }
 
                 // Valid spot found — create fishing action
@@ -525,6 +576,12 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 *(int*)(selfAddr + 0x68) = 0;
                 return 2;
             } while (attemptCount < 10);
+            if (s_ftrace && (++s_calls % 40) == 0) {
+                std::fprintf(stderr, "[FishWork] after %lld spot searches: maskFail=%lld "
+                             "coverageZero=%lld ACCEPTED=%lld\n",
+                             s_calls, s_maskFail, s_coverZero, s_ok);
+                std::fflush(stderr);
+            }
 
             // All 10 random attempts failed — retry with animation if under limit
             if ((int)selfQ[0xd] < 0xb) {  // retry count < 11
