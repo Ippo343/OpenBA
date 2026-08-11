@@ -92,7 +92,18 @@ extern "C" void FillTypeIdGlobals_food() {
     std::fflush(stderr);
 }
 
+// .rdata float constants used by the food controllers. These are NOT auto-available:
+// every one has to be registered by address or ResolveAddr hands back 0, and a null
+// constant here is silent -- the crop field's harvest trigger simply returned early
+// forever with no log of its own. 0x140172144 = 0x3F7D70A4 = 0.99f, the maturity
+// threshold the state-10 per-frame compares mean crop growth against; without it the
+// ripeness ARM of the trigger can never be evaluated, so a field that plants perfectly
+// still never harvests. Its siblings (0x1401721d4 = 33.0f, 0x14017225c = 3600.0f) were
+// already registered elsewhere, which is exactly why only this one arm was dead.
+static const float k_rdata_172144 = 0.99f;
+
 void RegisterFoodTypeIds() {
     for (int i = 0; i < kSlotCount; ++i)
         RegisterExeAddr(g_slots[i].addr, reinterpret_cast<uintptr_t>(&g_slots[i].value));
+    RegisterExeAddr(0x140172144, reinterpret_cast<uintptr_t>(&k_rdata_172144));
 }

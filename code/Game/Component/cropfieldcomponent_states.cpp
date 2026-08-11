@@ -581,6 +581,29 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (CountSlots(comp, 2) == total)
         ::ControllerLive::RequestStateTransition(sm, 21);
 
+    // Report WHICH guard stops the trigger. These five early returns all look identical
+    // from outside -- a silent state 10 says only "no harvest", not why -- and the
+    // [CropHarvest] census below can never print if one of them fires first.
+    {
+        static int s_gt = -1;
+        if (s_gt < 0) { const char* ge = std::getenv("BANISHED_CROPFIELD_TRACE");
+                        s_gt = (ge && ge[0] && ge[0] != '0') ? 1 : 0; }
+        static int s_g = 0;
+        if (s_gt && (s_g++ % 600) == 0) {
+            const uintptr_t gwd = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+            std::fprintf(stderr, "[CropTrigger] switch(+0x48)=%d cropType(+0x49)=%d gw=%d "
+                         "consts=%d weather=%d season=%d\n",
+                         (int)*reinterpret_cast<char*>(comp + 0x48),
+                         (int)*reinterpret_cast<char*>(comp + 0x49), gwd != 0,
+                         (s_fTempMin?1:0)|(s_fYearSeconds?2:0)|(s_fYearMonths?4:0)
+                          |(s_fRipe?8:0)|(fn_Time_AsSeconds?16:0),
+                         gwd ? (*reinterpret_cast<uintptr_t*>(gwd + 0x130) != 0) : 0,
+                         gwd ? (*reinterpret_cast<uintptr_t*>(gwd + 0x128) != 0) : 0);
+            std::fflush(stderr);
+        }
+    }
+
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (*reinterpret_cast<char*>(comp + 0x49) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
@@ -631,6 +654,8 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
 // HarvestArea is 0x68 with a per-slot byte array and no desc field (vtable 0x1401614a0).
 static char CropField_State11Enter(void* self, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    std::fprintf(stderr, "[CropXition] STATE 11 ENTER - posting HarvestArea\n");
+    std::fflush(stderr);
     void* work = CF_MakeAreaWork(comp, 0x68, 0x1401614a0, /*perSlotArray=*/true, 0, false);
     CF_PostWork(comp, work);
     return 1;
