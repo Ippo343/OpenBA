@@ -15,6 +15,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -126,8 +127,21 @@ static void EnsureCropExtras() {
     if (s_cropExtraInit) return;
     s_fn_FindComp_BS_local = reinterpret_cast<fn_FindComp_BS_local_t>(
         ResolveAddr(Module::Exe, 0x1400052c0));
+    // Object::Base::IsA via the IAT dispatch slot 0x140151410. The slot is bound to exe
+    // 0x140002d40, which is NOT IsA at all (it is DynArray8_EraseByValue) and has no
+    // reimplementation, so ResolveAddr yields 0 and s_fn_Base_IsA stays null. The
+    // `s_fn_Base_IsA &&` guard in ValidateEntityRefs then fails for EVERY slot, so every
+    // correctly-bound crop cell was demoted to state 2 on the very next validate pass —
+    // measured: 64 msg-0 binds, then histogram 1:0 2:64, and the field pinned in state 9
+    // requesting the body-less state 21 forever.
+    //
+    // The ORCHARD wave already hit this identical bug and fixed it with the fallback
+    // below (see EnsureSubHelpers in orchardcomponent.cpp, whose comment describes the
+    // same "replanted the same cell forever" symptom). The crop-field copy of the
+    // resolve was written without it. Same fallback here.
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
     if (slot) s_fn_Base_IsA = *reinterpret_cast<fn_Base_IsA_t*>(slot);
+    if (!s_fn_Base_IsA) s_fn_Base_IsA = reinterpret_cast<fn_Base_IsA_t>(fn_IsA);
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBP_Serialize2 = *reinterpret_cast<fn_IBP_Serialize_t*>(slot);
     s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
@@ -160,6 +174,17 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         int id = *(int*)entry;
         void* obj = *(void**)(*(uintptr_t*)(map + 0x80) + 8 + (int64_t)id * 0x30);
         bool keep = false;
+        // Reject-reason census. This function is byte-faithful to retail 0x14011aa20
+        // (verified), so a demotion here is legitimate — the question is WHICH of the
+        // four conditions the planted entity stops satisfying. All four look identical
+        // from outside: the slot silently becomes "done".
+        static int s_vt = -1;
+        if (s_vt < 0) {
+            const char* ve = std::getenv("BANISHED_CROPFIELD_TRACE");
+            s_vt = (ve && ve[0] && ve[0] != '0') ? 1 : 0;
+        }
+        static long long s_cellEmpty = 0, s_notEntity = 0, s_noBuildComp = 0,
+                         s_mismatch = 0, s_kept = 0, s_dumps = 0;
         if (obj != nullptr) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
             if (s_fn_Base_IsA && s_pTypeId_ComponentEntity &&
@@ -172,7 +197,18 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
                     if (fn_InternalBasePtr_CheckPtr)
                         fn_InternalBasePtr_CheckPtr((void*)(entry + 0x8));
                     if (obj == *(void**)(entry + 0x8)) keep = true;
-                }
+                    else if (s_vt) ++s_mismatch;
+                } else if (s_vt) ++s_noBuildComp;
+            } else if (s_vt) ++s_notEntity;
+        } else if (s_vt) ++s_cellEmpty;
+        if (s_vt) {
+            if (keep) ++s_kept;
+            if ((++s_dumps % 16) == 0 && s_dumps <= 160) {
+                std::fprintf(stderr, "[CropValidate] kept=%lld | demoted: cellEmpty=%lld "
+                             "notComponentEntity=%lld noBuildStateComp=%lld "
+                             "entityMismatch=%lld\n",
+                             s_kept, s_cellEmpty, s_notEntity, s_noBuildComp, s_mismatch);
+                std::fflush(stderr);
             }
         }
         if (keep) continue;
