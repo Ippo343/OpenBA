@@ -368,6 +368,33 @@ Two concrete things block completion, both now visible in the histogram:
 ⚠ Do not "fix" (1) by relaxing the transition to `>=`. Retail uses equality and the
 defect is the unplanted cell.
 
+### Harvest NEVER RUNS — and slot state 2 does NOT mean "harvested"
+
+Counted with `grep -B1 "already hit"` so each count is paired with its own breakpoint
+(see the gdb-misread warning above):
+
+    CreateRawMaterial_AbstractImpl   NOT HIT
+    HarvestArea::Slot4 (Execute)     NOT HIT
+    HarvestArea::Slot6               NOT HIT
+
+So the crop field never reaches state 11, no HarvestArea work is ever executed, and no
+raw material is ever created. That is why nothing deposits — there is nothing to deposit.
+
+⚠ CORRECTION to the earlier soak entry: it read `done=42` as "42 cells harvested". That
+was wrong. Slot state 2 is what `ValidateEntityRefs` writes when it DROPS a stale slot;
+it is not a harvest marker. The 42 were slots going stale again over the long run, not
+produce. Do not treat state 2 as progress.
+
+So the real crop-field sequence is: plant all 64 -> hold as growing -> slots gradually
+demote to 2 as their entities fail validation -> `growing + done` never equals total ->
+state 9/10 cycle forever -> state 11 unreachable.
+
+⭐NEXT: state 10's per-frame is the only path to state 11 (event 4 / the harvest
+trigger). Instrument `CropField_State10PerFrame`: log `CF_Maturity()` against the 0.99
+ripeness constant and the weather/season branch result. If maturity never climbs, the
+growth tick (slot 15 msg 1) is not advancing the crops; if it does climb but the branch
+never fires, the season window is the blocker.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
