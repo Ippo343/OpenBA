@@ -66,6 +66,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include <cstdio>
 
 namespace { struct OrchardCtrlTag {}; }
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
@@ -78,6 +79,10 @@ extern void OrchardComponent_ValidateRefs(void* selfV);
 extern void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount);
 // PlantOrchard "from entity" ctor — retail 0x1400f5140 (code/Game/Work/plantorchard_ctor.cpp)
 extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType);
+// TendArea "from entity" ctor — retail 0x1400f5a80 (code/Game/Work/tendarea_ctor.cpp)
+extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);
+// OrchardComponent_GetGrowth — retail 0x140051640, already ported (orchardcomponent.cpp).
+extern float OrchardComponent_GetGrowth(void* selfV);
 
 // ============================================================
 // Resolved leaves. Every one is bound by ADDRESS rather than through a named
@@ -123,6 +128,10 @@ uint32_t OrchardDescTypeId() {
 fn_SetWorkplaceActive_t  s_SetWorkplaceActive = nullptr;   // 0x14012fc00
 fn_DeactivateWorkplace_t s_DeactivateWorkplace= nullptr;   // 0x14012eb50
 fn_SMTick_t              s_SMTick             = nullptr;   // 0x1400a9660
+// FUN_14012ead0 — "does the work component currently hold a work slot?"; the companion
+// of 0x14012eb50 (release). State 10 gates both its update and its seasonal re-post on it.
+typedef char (*fn_HasWorkSlot_t)(uintptr_t wc);
+fn_HasWorkSlot_t         s_HasWorkSlot        = nullptr;   // 0x14012ead0
 fn_TimeCtor_t            s_TimeCtor           = nullptr;   // slot [0x140152b00]
 bool                     s_resolved           = false;
 
@@ -139,6 +148,7 @@ void Resolve() {
     s_CreateNaturalResource = reinterpret_cast<fn_CreateNatRes_t>(
                                ResolveAddr(Module::Exe, 0x140124750));
     s_PostWork           = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
+    s_HasWorkSlot        = reinterpret_cast<fn_HasWorkSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     if (uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00))
         s_TimeCtor = *reinterpret_cast<fn_TimeCtor_t*>(slot);
     s_resolved = s_FindWorkPlace_2e10 && s_Find_3050 && s_SetWorkplaceActive &&
@@ -417,6 +427,249 @@ extern "C" char Orchard_State9PerFrame(void* selfV, void* sm, void* /*time*/) {
     return 1;
 }
 
+// ============================================================
+// State 10's shared leaves
+// ============================================================
+// The calendar/weather constants are the exe's own .rdata floats, read as BYTES
+// (read_memory, 2026-08-10) rather than taken from a Ghidra label:
+//   DAT_14017225c = 0x45610000 = 3600.0f   seconds per game year
+//   DAT_1401721b8 = 0x41400000 =   12.0f   months per year
+//   DAT_1401721d4 = 0x42040000 =   33.0f   weather threshold (gw+0x130, +0x18)
+//   DAT_140172144 = 0x3f7d70a4 =    0.99f  ripeness threshold on GetGrowth
+static constexpr float kSecondsPerYear   = 3600.0f;
+static constexpr float kMonthsPerYear    = 12.0f;
+static constexpr float kWeatherThreshold = 33.0f;
+static constexpr float kRipeGrowth       = 0.99f;
+
+namespace {
+
+// The month index retail derives in three separate places:
+//   (int)(Time::AsSeconds(*(gw+0x128) + 8) / 3600.0f * 12.0f)
+// Note the Time lives at calendar+8 and the YEAR is the int at calendar+0 (see the
+// event-4 handler, which stamps it into the component's +0x4c).
+int OrchardCurrentMonth() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_Time_AsSeconds) return 0;
+    uintptr_t cal = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+    if (!cal) return 0;
+    const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(cal + 8));
+    return static_cast<int>(secs / kSecondsPerYear * kMonthsPerYear);
+}
+
+int OrchardCurrentYear() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    uintptr_t cal = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+    return cal ? *reinterpret_cast<int32_t*>(cal) : 0;
+}
+
+// Slots whose +0x04 is 2 are HOLES — a tile the planter could not use (msg 0 failed to
+// bind, or the tree was later removed). Retail writes the scan as
+// `if ((v != 0) && (v != 1) && (v == 2))`, a switch artefact that means simply `v == 2`.
+int OrchardHoleCount(uintptr_t s) {
+    const int count = *reinterpret_cast<int32_t*>(s + 0x58);
+    uintptr_t slots = *reinterpret_cast<uintptr_t*>(s + 0x50);
+    if (!slots) return 0;
+    int holes = 0;
+    for (int i = 0; i < count; ++i)
+        if (*reinterpret_cast<int32_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 4) == 2)
+            ++holes;
+    return holes;
+}
+
+// The TendArea post shared by state 10's enter and its per-frame seasonal branch.
+void OrchardPostTendArea(uintptr_t s) {
+    // Retail runs a finder into a throwaway out-param here before allocating and never
+    // reads the result — kept for shape, since it also runs the CheckPtr side effects.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t unusedIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);
+
+    void* work = nullptr;
+    if (fn_MemAlloc) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+        if (mem) {
+            void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
+            work = TendArea_CtorFromEntity(mem, &entityLocal, 1);
+        }
+    }
+    uintptr_t workIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    else workIBP = reinterpret_cast<uintptr_t>(work);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t targetIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
+    if (s_PostWork) s_PostWork(targetIBP, 1, 0, &workIBP);
+}
+
+// Is the work component currently holding a work slot for us? (0x14012ead0)
+bool OrchardHasWork(uintptr_t s) {
+    if (!s_HasWorkSlot) return false;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t wcIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+    return s_HasWorkSlot(wcIBP) != 0;
+}
+
+}  // namespace
+
+// ============================================================
+// event-4 handler — retail 0x140050900 (wired on states 10 and 12)
+// Request state 11 (harvest), clear every slot's "tended" byte at +0x20, and stamp the
+// current year into +0x4c so TryHarvest cannot fire twice in one year.
+//
+// Exposed (not static) because TryHarvest calls it directly, which is what makes the
+// harvest reachable at all while StateEntry still has no event list — see the GAP note
+// at the top of this file.
+// ============================================================
+extern "C" char Orchard_Event4Harvest(void* selfV, void* sm) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    OrchardRequestState(sm, 11);
+
+    const int count = *reinterpret_cast<int32_t*>(s + 0x58);
+    uintptr_t slots = *reinterpret_cast<uintptr_t*>(s + 0x50);
+    for (int i = 0; slots && i < count; ++i)
+        *reinterpret_cast<uint8_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 0x20) = 0;
+
+    *reinterpret_cast<int32_t*>(s + 0x4c) = OrchardCurrentYear();
+    return 1;
+}
+
+// ============================================================
+// TryHarvest — retail 0x140051580 (called by the state 10 and 12 per-frame bodies)
+// The growth -> harvest trigger, and the only reader of GetGrowth outside the UI.
+//
+//   if (!self->+0x48)                  return 0;   // master switch off
+//   if (year == self->+0x4c)           return 0;   // already harvested this year
+//   if (weather >= 33.0f && month in [7..11] && GetGrowth > 0.0f)  -> harvest
+//   if (GetGrowth > 0.99f)                                         -> harvest
+//
+// The first arm is the "frost is coming, take what is there" rule; the second is the
+// ordinary ripeness one. Returning 1 makes the per-frame body return immediately.
+// ============================================================
+static char Orchard_TryHarvest(void* selfV, void* sm) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+    if (*reinterpret_cast<char*>(s + 0x48) == 0) return 0;
+    if (OrchardCurrentYear() == *reinterpret_cast<int32_t*>(s + 0x4c)) return 0;
+
+    uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t weather = gw ? *reinterpret_cast<uintptr_t*>(gw + 0x130) : 0;
+    if (weather && *reinterpret_cast<float*>(weather + 0x18) >= kWeatherThreshold) {
+        const unsigned m = static_cast<unsigned>(OrchardCurrentMonth() - 7);
+        if (m < 5 && OrchardComponent_GetGrowth(selfV) > 0.0f)
+            return Orchard_Event4Harvest(selfV, sm);
+    }
+    if (OrchardComponent_GetGrowth(selfV) > kRipeGrowth)
+        return Orchard_Event4Harvest(selfV, sm);
+    return 0;
+}
+
+// ============================================================
+// state 10 ENTER — retail 0x140050e30
+// ValidateRefs; if ANY slot is a hole, go replant (state 12) and post nothing.
+// Otherwise post one TendArea work item. Returns AL = 1 on both paths.
+// ============================================================
+extern "C" char Orchard_State10Enter(void* selfV, void* sm) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    OrchardComponent_ValidateRefs(selfV);
+    const int holes = OrchardHoleCount(s);
+    {   // both arms are silent otherwise, and "posted a TendArea" vs "bounced to replant"
+        // is the whole meaning of this handler.
+        static int s_n = 0;
+        if (s_n++ < 4) {
+            std::fprintf(stderr, "[Orchard10] enter: holes=%d -> %s\n", holes,
+                         holes > 0 ? "request state 12 (replant)" : "post TendArea");
+            std::fflush(stderr);
+        }
+    }
+    if (holes > 0) {
+        OrchardRequestState(sm, 12);
+        return 1;
+    }
+    OrchardPostTendArea(s);
+    return 1;
+}
+
+// ============================================================
+// state 10 UPDATE — retail 0x140050ba0
+// Find the work component; if it is holding a work slot, release it. `sm` unused.
+// ============================================================
+extern "C" char Orchard_State10Update(void* selfV, void* /*sm*/, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+    if (OrchardHasWork(s)) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+        uintptr_t wcIBP = 0;
+        if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+        if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
+    }
+    return 1;
+}
+
+// ============================================================
+// state 10 TRANS38 (per-frame) — retail 0x140050c00
+// ValidateRefs; TryHarvest (returns straight out if it fired); holes -> request 12;
+// then the seasonal tending gate.
+//
+// ⚠ FAITHFUL: the state-12 request is NOT followed by a return — the seasonal block
+// still runs in the same frame. Do not "tidy" it into an early return.
+//
+// inSeason = month in [1..8]: retail spells it `(unsigned)(m-1) < 11 && !((unsigned)(m-9) < 3)`,
+// i.e. [1..11] minus [9..11]. Out of season the tending work is dropped rather than
+// left queued; in season a fresh TendArea is posted only when none is outstanding.
+// ============================================================
+extern "C" char Orchard_State10PerFrame(void* selfV, void* sm, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    OrchardComponent_ValidateRefs(selfV);
+    if (Orchard_TryHarvest(selfV, sm) != 0) return 1;
+
+    if (OrchardHoleCount(s) > 0) OrchardRequestState(sm, 12);   // no return — faithful
+
+    const int m = OrchardCurrentMonth();
+    const bool inSeason = (static_cast<unsigned>(m - 1) < 11u) &&
+                          !(static_cast<unsigned>(m - 9) < 3u);
+    const bool hasWork = OrchardHasWork(s);
+
+    {   // This handler runs every frame and its four branch combinations look identical
+        // from outside. Report the deciding inputs a few times, then periodically.
+        static int s_n = 0;
+        if (++s_n <= 4 || (s_n % 600) == 0) {
+            std::fprintf(stderr, "[Orchard10] perFrame #%d: month=%d inSeason=%d hasWork=%d "
+                         "holes=%d growth=%.6f year=%d lastHarvestYear(+0x4c)=%d -> %s\n",
+                         s_n, m, (int)inSeason, (int)hasWork, OrchardHoleCount(s),
+                         OrchardComponent_GetGrowth(selfV), OrchardCurrentYear(),
+                         *reinterpret_cast<int32_t*>(s + 0x4c),
+                         (hasWork && !inSeason) ? "drop the tending work"
+                             : (!hasWork && inSeason) ? "post TendArea" : "nothing");
+            std::fflush(stderr);
+        }
+    }
+    if (hasWork && !inSeason) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+        uintptr_t wcIBP = 0;
+        if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+        if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
+    } else if (!hasWork && inSeason) {
+        OrchardPostTendArea(s);
+    }
+    return 1;
+}
+
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.
 // State ids are literal; the names in comments are inferred from the bodies.
 extern "C" void OrchardCtrl_PopulateTable() {
@@ -451,7 +704,12 @@ extern "C" void OrchardCtrl_PopulateTable() {
     // update   0x140050ba0  deactivate the workplace if active
     // trans38  0x140050c00  TryHarvest; hole -> 12; seasonal TendArea re-post
     // event 5  0x1400513e0 -> state 20 ; event 4  0x140050900 -> state 11
-    TableRegisterState(t, 10, nullptr, nullptr, nullptr, nullptr);
+    // Event 4 has no wiring point yet (StateEntry carries no event list), but the harvest
+    // is still reachable: TryHarvest calls the event-4 body directly, which is what retail's
+    // per-frame does too.
+    TableRegisterState(t, 10, reinterpret_cast<void*>(&Orchard_State10Enter), nullptr,
+                       reinterpret_cast<void*>(&Orchard_State10PerFrame),
+                       reinterpret_cast<void*>(&Orchard_State10Update));
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 12, nullptr);
     TableAddTransition(t, 11, nullptr);

@@ -198,7 +198,7 @@ void DumpOrchards(int frameNum) {
         }
 
         fprintf(stderr, "[OrchardDiag] frame=%d entity=%p comp=%p treeType(+0x60)=%s "
-                        "slots(+0x50)=%p count(+0x58)=%d avgGrowth=%.3f\n",
+                        "slots(+0x50)=%p count(+0x58)=%d avgGrowth=%.6f\n",
                 frameNum, ent, orchComp,
                 treeType ? "SET" : "UNTYPED", reinterpret_cast<void*>(slots), slotCount, avgGrowth);
         fprintf(stderr, "[OrchardDiag]   slot histogram (state:count) = "
@@ -207,6 +207,31 @@ void DumpOrchards(int frameNum) {
                 stateHist[0], stateHist[1], stateHist[2], stateHist[3], stateHist[4],
                 stateHist[5], stateHist[6], stateHist[7], otherStates,
                 nonNullEntity, nonNullGrowth);
+
+        // avgGrowth is an average over ALL slots and prints 0.000000 both when nothing is
+        // growing and when growth is merely tiny — two very different states. Show the raw
+        // per-tree field (fruit/growth object at slot+0x18, ratio +0x30, active flag +0x34)
+        // so "not ticking" is distinguishable from "early".
+        if (slots && slotCount > 0) {
+            float gMin = 1e30f, gMax = -1e30f;
+            int active = 0, sampled = 0;
+            for (int s = 0; s < slotCount; ++s) {
+                uintptr_t slot = slots + static_cast<uintptr_t>(s) * 0x28;
+                void* g = *reinterpret_cast<void**>(slot + 0x18);
+                if (!g) continue;
+                float ratio = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(g) + 0x30);
+                if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(g) + 0x34)) ++active;
+                if (ratio < gMin) gMin = ratio;
+                if (ratio > gMax) gMax = ratio;
+                ++sampled;
+            }
+            if (sampled)
+                fprintf(stderr, "[OrchardDiag]   per-tree growth: sampled=%d activeFlag(+0x34)=%d "
+                                "ratio(+0x30) min=%.6f max=%.6f\n", sampled, active, gMin, gMax);
+            else
+                fprintf(stderr, "[OrchardDiag]   per-tree growth: NO slot carries a growth object "
+                                "(+0x18 null on all %d)\n", slotCount);
+        }
 
         if (wpc) {
             int32_t roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x60);

@@ -355,6 +355,16 @@ static const char* const kDefaultOnFlags[] = {
     // the message landed on nothing and no placed building ever registered its cells.
     // Inert unless BANISHED_LIVE_CLEARCTRL is on (nothing else broadcasts event 1).
     "BANISHED_LIVE_MAP_SOLIDIFY",
+    // MapComponent slot 6's other half. Retail slot 6 is MapComponent::Draw (0x140124370) =
+    // `if (MapDescription(mc+0x18)->+0x30) sub_41b0(mc)`, and 41b0 is paint (desc+0x32) AND
+    // occupancy (desc+0x31 == 0) under one bit-0x100000 gate; our port wired only the paint,
+    // so no register-time path ever claimed a cell. desc+0x30 is the "claim at spawn"
+    // switch: natural resources set it and take their tile immediately, buildings leave it
+    // clear and claim their footprint when ClearArea finishes (MAP_SOLIDIFY above).
+    // Proven by the orchard: without it CreateNaturalResource spawns the tree, nothing
+    // writes it into the tile record, and OrchardComponent::OnMessage(0) reads a null out of
+    // *(mapGrid+0x80)[tile]+8. With it, 12/12 orchard slots bind (2026-08-10).
+    "BANISHED_LIVE_MAP_SPAWN_CLAIM",
     // ZoneComponent vtable slots 6/7 (Draw 0x1401301f0 / OnCreate 0x140130080) -> sub_d360,
     // the writer of cell+0x00 — the FIRST slot EditTool's cell pick (FUN_1400a0280)
     // resolves. This is retail's placement-time cell registration: for every non-'.'
