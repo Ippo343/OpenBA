@@ -464,3 +464,33 @@ evaluated, HarvestArea runs, and the deposit path finally gets exercised.
 - Crop Field / Fishing / Hunt / Gatherer: **no env flags exist at all**. Fishing and
   Hunt have only `Shutdown` ported plus a `COMPONENT_INERT_FACTORY` — i.e. the
   components are created inert and never run.
+
+## Crop field — corrected state (session 2026-08-11, commit 3b9a635)
+
+The paired-plant theory is REFUTED. Measured, not inferred:
+
+| claim | measurement |
+|---|---|
+| state-9 gate faithful | retail 0x14011a1e0 counts slot+0x04 over comp+0x60, transitions on `done==total` (->21) / `growing+done==total` (->10). Identical to ours. |
+| all 64 cells claimed | fruitless-scan census never fires; every PlantArea mark ends 0 |
+| pair binds are distinct | 61 msg-0 arrivals, **0 duplicate slot indices** |
+| PlantArea_Ctor faithful | retail also fills the work validity array all-1, does NOT copy slot+0x18 |
+| passability not systematic | 9 cells stalled in one run, 0 in the next two — placement-dependent |
+
+Remaining: **3-4 of 64 claims never deliver a msg 0.** Claimed, both marks cleared,
+both BST entries inserted, action chain built, no report. Accept-side bookkeeping is
+byte-faithful and WAH_Append delegates to retail's own 0x1400c54e0.
+
+### ⭐Next lead: the CANCEL path may never run
+
+A dropped action leaves its BST entry and its cleared mark in place forever. Retail has
+a recovery route for exactly this — PlantArea Slot7 (cancel) restores marks and drops
+BST entries, and `ValidateTask` (0x1400f7100) is what detects a stale claim. In our run
+the marks are never restored, so **either the Validate slot is never dispatched or our
+Slot7 never fires**. If retail loses claims at the same ~5% rate and simply recovers
+them, then the missing recovery — not the loss — is the divergence, and the field would
+complete on the second pass. Check whether anything calls our PlantArea Validate slot
+before hunting the loss itself.
+
+Trap recorded: `noMark` counts every ALREADY-CLEARED cell each scan, so it is large on
+a HEALTHY field. Reading it as loss produced the wrong theory.
