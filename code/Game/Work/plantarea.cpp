@@ -608,7 +608,26 @@ bool PlantArea_Execute_Impl(PlantArea* /*self*/) {
 // Removes BST entries, marks cells valid.
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
+
+// Slot-traffic census (BANISHED_PLANTAREA_TRACE). A dropped plant action leaves its
+// BST entry and its cleared mark in place forever unless the cancel/validate path
+// reclaims it. Counting the three slots separates "never dispatched" from "runs and
+// does not restore".
+namespace { void PA_SlotHit(const char* which) {
+    static int s_t = -1;
+    if (s_t < 0) { const char* e = std::getenv("BANISHED_PLANTAREA_TRACE");
+                   s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (!s_t) return;
+    static long long s_complete = 0, s_cancel = 0, s_validate = 0, s_n = 0;
+    if (which[0] == 'C') ++s_complete; else if (which[0] == 'X') ++s_cancel; else ++s_validate;
+    if ((++s_n % 10) == 0) {
+        std::fprintf(stderr, "[PlantSlots] OnComplete=%lld OnCancel=%lld Validate=%lld\n",
+                     s_complete, s_cancel, s_validate);
+        std::fflush(stderr);
+    }
+} }
 int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+    PA_SlotHit("C");
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -669,6 +688,7 @@ int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
 int PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+    PA_SlotHit("X");
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -747,6 +767,7 @@ void PlantArea_Cleanup_Impl(PlantArea* self) {
 // Marks invalid cells as valid (available for re-planting).
 // ============================================================
 bool PlantArea_Validate_Impl(PlantArea* self, void* param2) {
+    PA_SlotHit("V");
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 

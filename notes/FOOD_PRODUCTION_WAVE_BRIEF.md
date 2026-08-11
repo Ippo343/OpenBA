@@ -494,3 +494,24 @@ before hunting the loss itself.
 
 Trap recorded: `noMark` counts every ALREADY-CLEARED cell each scan, so it is large on
 a HEALTHY field. Reading it as loss produced the wrong theory.
+
+### Sharper still: it is ONE hung claim, not a 5% loss rate
+
+New [PlantSlots] census counts the three work slots. Measured on a 62/64 field:
+
+    OnComplete=30  OnCancel=0  Validate=30      (~31 accepts)
+
+So claims are NOT dropped -- 30 of 31 completed normally, and nothing was ever
+cancelled. Exactly ONE claim is outstanding, and a claim covers a PAIR of cells,
+which is exactly the 2 slots left at state 0. The field is not losing work at a
+rate; it is hung on a single claim that never completes and never cancels.
+
+That also retires the "3-4 lost per field" framing from earlier in this file: the
+count varied (2, 3, 4, 9) because runs were cut at different points and because one
+run had genuine passability rejections on top. The steady-state figure is ONE.
+
+Next: find why the last claim never reports. OnCancel is never called at all, so the
+recovery path is not merely ineffective -- it is never entered. Worth checking whether
+the citizen holding it is still alive and still has the action chain, and whether
+Validate (which DOES run, 30 times) is expected to reclaim a stale claim and is
+returning "still valid" for a claim whose citizen has moved on.
