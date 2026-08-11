@@ -49,11 +49,18 @@ typedef float*(*HO_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
 typedef float*(*HO_Vector3_Ctor_t)(float* self, float x, float y, float z);
 typedef void* (*HO_FindComp_RawMaterial_t)(uintptr_t compList, void* outPtr);
 
-// FUN_1400bb7b0 -- creates orchard harvest action chain
-// Signature: (citizenIBP, priority, entityRefPtr, position, rawMatRef, isFirstCell, matCount, cellIdx, cellFloat)
-typedef void (*HO_OrchardHarvest_Ctor_t)(void* citizenIBP, int priority, void* entityRefPtr,
-                                          float* position, uintptr_t rawMatRef, char isFirstCell,
-                                          uint32_t matCount, int cellIdx, float cellFloat);
+// FUN_1400bb7b0 -- builds the gather-raw-material action chain on the citizen's AI task list.
+// Signature taken from the PORTED body (code/Game/Work/work_act_rawmat.cpp, which was
+// reversed from 0x1400bb7b0 itself), not from this call site:
+//   (citizenIBP, workId u32, workEntity int64*, worldPos float*, rawMatP2 u64,
+//    flag6 char, rawMatP3 FLOAT, rawMatP8 u32, param9 u32)
+// ⚠ The last three used to be declared (u32, int, float) here — one slot out of step with
+// the callee on both type and meaning. Args 5+ travel in 8-byte stack slots, so nothing
+// crashed; the callee simply read a float's bit pattern as a count and an int slot as a
+// float. Fixed 2026-08-10 together with the three call-site arguments below.
+typedef void (*HO_OrchardHarvest_Ctor_t)(void* citizenIBP, uint32_t workId, void* workEntity,
+                                          float* worldPos, uintptr_t rawMatP2, char flag6,
+                                          float rawMatP3, uint32_t rawMatP8, uint32_t param9);
 static HO_OrchardHarvest_Ctor_t s_fn_OrchardHarvest_Ctor = nullptr;
 
 // BST operations
@@ -231,16 +238,47 @@ bool HarvestOrchard_ResolveFuncs() {
 
 #ifdef _DEBUG
     printf("[HarvestOrchard] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
+    // The MISSING list must cover EVERY term of `ok`. It used to print 9 of 35, so a
+    // failure in any of the other 26 reported "FAILED" with no reason at all — which is
+    // exactly what state 11's first live run hit (see reference_diagnostics_must_report_outcomes).
     if (!ok) {
-        if (!s_fn_AutoPickup_CheckAssignments) printf("  MISSING: AutoPickup_CheckAssignments\n");
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_OrchardDesc) printf("  MISSING: FindComp_OrchardDesc\n");
-        if (!s_fn_FindComp_NatRes) printf("  MISSING: FindComp_NatRes\n");
-        if (!s_fn_FindComp_DescComp) printf("  MISSING: FindComp_DescComp\n");
-        if (!s_fn_FindComp_RawMaterial) printf("  MISSING: FindComp_RawMaterial\n");
-        if (!s_fn_OrchardHarvest_Ctor) printf("  MISSING: OrchardHarvest_Ctor\n");
-        if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
-        if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
+        #define HO_MISS(cond, name) do { if (!(cond)) printf("  MISSING: %s\n", name); } while (0)
+        HO_MISS(s_fn_AutoPickup_CheckAssignments, "AutoPickup_CheckAssignments");
+        HO_MISS(s_fn_FindComp_MatDesc, "FindComp_MatDesc");
+        HO_MISS(s_fn_FindComp_MeshInstance, "FindComp_MeshInstance");
+        HO_MISS(s_fn_FindComp_OrchardDesc, "FindComp_OrchardDesc");
+        HO_MISS(s_fn_FindComp_NatRes, "FindComp_NatRes");
+        HO_MISS(s_fn_FindComp_DescComp, "FindComp_DescComp");
+        HO_MISS(s_fn_MeshInstance_SetVisible, "MeshInstance_SetVisible");
+        HO_MISS(s_fn_CalcMaxWorkers, "CalcMaxWorkers");
+        HO_MISS(s_fn_Map_FindNearestPassable, "Map_FindNearestPassable");
+        HO_MISS(s_fn_Map_CanPathTo, "Map_CanPathTo");
+        HO_MISS(s_fn_GetTerrainPos, "GetTerrainPos");
+        HO_MISS(s_fn_Vector3_Ctor, "Vector3_Ctor (slot 0x140152a30)");
+        HO_MISS(s_fn_FindComp_RawMaterial, "FindComp_RawMaterial");
+        HO_MISS(s_fn_OrchardHarvest_Ctor, "OrchardHarvest_Ctor");
+        HO_MISS(s_fn_BST_Insert, "BST_Insert");
+        HO_MISS(s_fn_BST_Remove, "BST_Remove");
+        HO_MISS(s_fn_BST_Serialize, "BST_Serialize");
+        HO_MISS(s_fn_ValidateTask, "ValidateTask");
+        HO_MISS(s_fn_TaskCancel, "TaskCancel");
+        HO_MISS(s_fn_FindPosComp, "FindPosComp");
+        HO_MISS(s_fn_Work_Serialize, "Work_Serialize");
+        HO_MISS(s_fn_Serializer_Ctor, "Serializer_Ctor (slot 0x140152ad8)");
+        HO_MISS(s_fn_Serializer_Dtor, "Serializer_Dtor (slot 0x140152ad0)");
+        HO_MISS(s_fn_ResizeByteArray, "ResizeByteArray");
+        HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
+        HO_MISS(fn_InternalBasePtr_CheckPtr, "fn_InternalBasePtr_CheckPtr");
+        HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
+        HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
+        HO_MISS(g_pGameWorldSingleton, "g_pGameWorldSingleton");
+        HO_MISS(s_typeId_OrchardDesc, "typeId_OrchardDesc (0x1401c46e8)");
+        HO_MISS(s_typeId_DescComp, "typeId_DescComp (0x1401c4288)");
+        HO_MISS(s_fHalfCellOffset, "fHalfCellOffset (0x140172114)");
+        HO_MISS(s_vtable_HarvestOrchard, "vtable_HarvestOrchard (0x140161520)");
+        HO_MISS(s_vtable_AutoPickupWork, "vtable_AutoPickupWork (0x140161380)");
+        HO_MISS(s_vtable_Work, "vtable_Work (0x140161300)");
+        #undef HO_MISS
     }
 #endif
 
@@ -425,9 +463,16 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 uintptr_t rawMatIBP = 0;
                                 s_fn_FindComp_RawMaterial(rawMatRef, &rawMatIBP);
 
-                                // Get material count from description
-                                fn_InternalBasePtr_CheckPtr(orchardDescIBP);
-                                uint32_t matCount = *(uint32_t*)(orchardDescIBP[0] + 0x30);
+                                // Arg 7 of the action ctor. Read from the DESCRIPTION-COMPONENT
+                                // holder (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
+                                // orchard component, and as a FLOAT:
+                                //   1400edc74  MOV RAX,[RBP-0x39] ; 1400edc7f MOVSS XMM6,[RAX+0x30]
+                                //   1400edd04  MOVSS [RSP+0x30],XMM6      <- 7th argument slot
+                                // It used to be read as a uint32 off orchardDescIBP — wrong object
+                                // and wrong type, so the callee (which takes a float here, and
+                                // forwards it to CreateRawMaterial in XMM2) got an integer bit
+                                // pattern from an unrelated field.
+                                float rawMatAmount = *(float*)(descCompIBP + 0x30);
 
                                 // Calculate world position
                                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
@@ -447,20 +492,30 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 // Create orchard harvest action
                                 uintptr_t citizenVal = *(uintptr_t*)citizenIBP;
                                 uintptr_t actionBuf[2] = { citizenVal, 0 };
-                                char isFirstCell = (cellFloat == 0.0f) ? 0 : 1;
-                                // The ~SUB41 in decompilation: isFirstCell = (i != 0) ? 0 : 1
-                                isFirstCell = (i == 0) ? 0 : 1;
+                                // Arg 6 is the PARITY of the slot index, not "is this the first
+                                // cell". Retail: 1400edd00 MOVZX EAX,SIL ; 1400edd0a NOT AL ;
+                                // 1400edd14 AND AL,1 — with ESI = i, that is `!(i & 1)`. The old
+                                // `(i == 0) ? 0 : 1` was both the wrong test and inverted.
+                                char altCellFlag = (char)(~i & 1);
 
                                 s_fn_OrchardHarvest_Ctor(
                                     actionBuf,                     // citizenIBP
-                                    (int)selfQ[4],                 // priority
+                                    (uint32_t)selfQ[4],            // work id / priority (self+0x20)
                                     &entityRef,                    // entity ref ptr
                                     pathPos,                       // position
                                     rawMatRef,                     // raw material ref
-                                    isFirstCell,                   // is first cell flag
-                                    matCount,                      // material count
-                                    nearestCell,                   // cell index
-                                    cellFloat);                    // cell float index
+                                    altCellFlag,                   // alternating-cell flag
+                                    rawMatAmount,                  // float, -> CreateRawMaterial XMM2
+                                    (uint32_t)nearestCell,         // map cell index
+                                    (uint32_t)i);                  // SLOT index — the value that
+                                                                   // comes back as the harvested-slot
+                                                                   // id (CompleteTask p5 /
+                                                                   // SendComponentMessage p6). This
+                                                                   // used to be `cellFloat`, a float
+                                                                   // in an integer slot, so every
+                                                                   // completion reported the same
+                                                                   // wrong slot. See
+                                                                   // reference_int_arg_typed_as_float.
 
                                 // Assign work and register with AI
                                 int priority = (int)selfQ[4];

@@ -81,6 +81,11 @@ extern void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount);
 extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType);
 // TendArea "from entity" ctor — retail 0x1400f5a80 (code/Game/Work/tendarea_ctor.cpp)
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);
+// HarvestOrchard "from entity" ctor — retail 0x1400ee060 (code/Game/Work/harvestorchard_ctor.cpp)
+extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);
+// Map-grid footprint cell stamp — retail 0x14009f770, ported in pasturecomponent_states.cpp.
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
+                                                void* ref);
 // OrchardComponent_GetGrowth — retail 0x140051640, already ported (orchardcomponent.cpp).
 extern float OrchardComponent_GetGrowth(void* selfV);
 
@@ -670,6 +675,194 @@ extern "C" char Orchard_State10PerFrame(void* selfV, void* sm, void* /*time*/) {
     return 1;
 }
 
+// ============================================================
+// state 12 ENTER — retail 0x140050ae0 (Ghidra: PlantOrchard_impl_0ae0)
+// The replant-the-gaps state. Post a fresh PlantOrchard; unlike state 9 it does NOT
+// touch the slot array — PlantOrchard_CtorFromEntity re-sizes its own byte array from
+// the orchard's existing slot count, so the holes it finds are whatever ValidateRefs
+// last marked as state 2.
+//
+// Retail runs a finder into a throwaway out-param before allocating and never reads the
+// result; kept for shape (it also runs the CheckPtr side effects).
+// ============================================================
+extern "C" char Orchard_State12Enter(void* selfV, void* /*sm*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t unusedIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);
+
+    void* work = nullptr;
+    if (fn_MemAlloc) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+        if (mem) {
+            void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
+            work = PlantOrchard_CtorFromEntity(mem, &entityLocal,
+                                               *reinterpret_cast<void**>(s + 0x60));
+        }
+    }
+    uintptr_t workIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    else workIBP = reinterpret_cast<uintptr_t>(work);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t targetIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
+    {   // state 12 is only reachable when ValidateRefs found a hole, so "we got here at
+        // all" is the interesting fact; the hole count says how much replanting is due.
+        static int s_n = 0;
+        if (s_n++ < 4) {
+            std::fprintf(stderr, "[Orchard12] enter: holes=%d work=%p -> post PlantOrchard\n",
+                         OrchardHoleCount(s), work);
+            std::fflush(stderr);
+        }
+    }
+    if (s_PostWork) s_PostWork(targetIBP, 1, 0, &workIBP);
+    return 1;
+}
+
+// ============================================================
+// state 12 UPDATE — retail 0x1400509b0
+// Byte-for-byte the same body as state 10's update (separate retail function, identical
+// logic): if the work component holds a work slot, release it.
+// ============================================================
+extern "C" char Orchard_State12Update(void* selfV, void* sm, void* time) {
+    return Orchard_State10Update(selfV, sm, time);
+}
+
+// ============================================================
+// state 12 TRANS38 (per-frame) — retail 0x140050a10
+// ValidateRefs; TryHarvest (short-circuits the frame if it fired); if any hole remains
+// stay in 12, otherwise go back to tending.
+//
+// ⚠ FAITHFUL zero-degenerate, third instance: when +0x58 is 0 retail skips the scan loop
+// entirely and falls straight through to requesting state 10 — a slot-less orchard leaves
+// replant on its first frame. Do not "fix" it.
+// ============================================================
+extern "C" char Orchard_State12PerFrame(void* selfV, void* sm, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    OrchardComponent_ValidateRefs(selfV);
+    if (Orchard_TryHarvest(selfV, sm) != 0) return 1;
+
+    if (*reinterpret_cast<int32_t*>(s + 0x58) > 0 && OrchardHoleCount(s) != 0)
+        return 1;                                   // holes remain — stay in 12
+
+    OrchardRequestState(sm, 10);
+    return 1;
+}
+
+// ============================================================
+// state 11 ENTER — retail 0x140050800 (Ghidra: HarvestOrchard_impl_0800)
+// Post one HarvestOrchard work item, then stamp the footprint cells with the orchard's
+// tree type. Note the ctor takes NO tree-type argument, unlike PlantOrchard's — the work
+// item derives its worklist from the component's slot array instead.
+// ============================================================
+extern "C" char Orchard_State11Enter(void* selfV, void* /*sm*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    void* work = nullptr;
+    if (fn_MemAlloc) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+        if (mem) {
+            void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
+            work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
+        }
+    }
+    uintptr_t workIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    else workIBP = reinterpret_cast<uintptr_t>(work);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t targetIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
+    if (s_PostWork) s_PostWork(targetIBP, 1, 0, &workIBP);
+
+    // Footprint stamp. Retail passes *(gw+0xf8) — the map grid — and the rect as four
+    // int16s off the position component.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t posIBP = 0;
+    if (s_FindPosition_4680) s_FindPosition_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
+    void* grid = nullptr;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        grid = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    {   // The single line that says "the harvest actually started".
+        static int s_n = 0;
+        if (s_n++ < 4) {
+            std::fprintf(stderr, "[Orchard11] enter: work=%p slots=%d grid=%p treeType=%p\n",
+                         work, *reinterpret_cast<int32_t*>(s + 0x58), grid,
+                         *reinterpret_cast<void**>(s + 0x60));
+            std::fflush(stderr);
+        }
+    }
+    if (posIBP)     // SA: retail derefs the finder's out-param unguarded; see state 9 enter.
+        MapGrid_StampCellRefs_9f770(grid,
+            *reinterpret_cast<int16_t*>(posIBP + 0x28), *reinterpret_cast<int16_t*>(posIBP + 0x2a),
+            *reinterpret_cast<int16_t*>(posIBP + 0x2c), *reinterpret_cast<int16_t*>(posIBP + 0x2e),
+            *reinterpret_cast<void**>(s + 0x60));
+    return 1;
+}
+
+// ============================================================
+// state 11 TRANS38 (per-frame) — retail 0x140050650
+// The harvest-complete latch: count slots that still hold a tree (+0x04 == 1) against
+// slots already picked (+0x20 != 0). Once picked >= live, release the work slot and go
+// back to tending.
+//
+// The event-4 handler clears every slot's +0x20 on the way IN to state 11, which is what
+// makes this latch meaningful — HarvestOrchard sets the byte per slot as citizens pick.
+//
+// ⚠ FAITHFUL zero-degenerate: with no slots 0 <= 0 holds, so a slot-less orchard exits to
+// state 10 on its first frame.
+// ============================================================
+extern "C" char Orchard_State11PerFrame(void* selfV, void* sm, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    const int count = *reinterpret_cast<int32_t*>(s + 0x58);
+    uintptr_t slots = *reinterpret_cast<uintptr_t*>(s + 0x50);
+    int liveCount = 0, doneCount = 0;
+    for (int i = 0; slots && i < count; ++i) {
+        const int st = *reinterpret_cast<int32_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 4);
+        if (st != 0 && st == 1) ++liveCount;        // retail's redundant pair, kept verbatim
+    }
+    for (int i = 0; slots && i < count; ++i)
+        if (*reinterpret_cast<uint8_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 0x20) != 0)
+            ++doneCount;
+    {
+        static int s_n = 0;
+        if (++s_n <= 4 || (s_n % 600) == 0) {
+            std::fprintf(stderr, "[Orchard11] perFrame #%d: live=%d picked=%d -> %s\n",
+                         s_n, liveCount, doneCount,
+                         liveCount <= doneCount ? "harvest done, request state 10" : "keep picking");
+            std::fflush(stderr);
+        }
+    }
+    if (liveCount > doneCount) return 1;
+
+    // Retail inlines the WorkComponent scan here rather than calling 0x140003050; the scan
+    // is identical (same type id DWORD_1401c8070, same IsDerivedFrom confirmation), so we
+    // call the shared finder. Note the release is unconditional — no HasWorkSlot test.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t wcIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+    if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
+    OrchardRequestState(sm, 10);
+    return 1;
+}
+
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.
 // State ids are literal; the names in comments are inferred from the bodies.
 extern "C" void OrchardCtrl_PopulateTable() {
@@ -720,7 +913,9 @@ extern "C" void OrchardCtrl_PopulateTable() {
     // update   0x1400509b0
     // trans38  0x140050a10  TryHarvest; no holes left -> request state 10
     // event 5  0x1400513e0 -> state 20 ; event 4  0x140050900 -> state 11
-    TableRegisterState(t, 12, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 12, reinterpret_cast<void*>(&Orchard_State12Enter), nullptr,
+                       reinterpret_cast<void*>(&Orchard_State12PerFrame),
+                       reinterpret_cast<void*>(&Orchard_State12Update));
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 11, nullptr);
@@ -731,7 +926,8 @@ extern "C" void OrchardCtrl_PopulateTable() {
     //                       stamp the footprint cells with *(self+0x60)
     // trans38  0x140050650  harvest-complete latch -> request state 10
     // event 5  0x1400513e0 -> state 20
-    TableRegisterState(t, 11, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 11, reinterpret_cast<void*>(&Orchard_State11Enter), nullptr,
+                       reinterpret_cast<void*>(&Orchard_State11PerFrame), nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 20, nullptr);
