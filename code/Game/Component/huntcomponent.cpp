@@ -119,6 +119,41 @@ void HuntComponent_InitFuncs() {
 #endif
 }
 
+// ============================================================
+// HuntComponent::Shutdown — vtable slot 3, retail 0x140122820
+// ============================================================
+// Retail:
+//   ResourceProduceComponent::Shutdown(self, stream)    (0x14012b4a0)
+//   Serializer s(stream, 0)
+//   System::Time::Serialize(self+0x50, s)               — the hunt-progress accumulator
+//   ~Serializer()
+//
+// +0x50 is the 8-byte Time the slot-9 Update advances, so without this the lodge's
+// accumulated hunt progress is silently dropped across a save/load. It was the last
+// slot on HuntComponent still holding the inert stub.
+extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
+    static void* (*s_serCtor)(void*, void*, int) = nullptr;
+    static void  (*s_serDtor)(void*)             = nullptr;
+    static void  (*s_parentShutdown)(void*, void*) = nullptr;
+    static bool s_res = false;
+    if (!s_res) {
+        s_parentShutdown = reinterpret_cast<void(*)(void*, void*)>(
+            ResolveAddr(Module::Exe, 0x14012b4a0));
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ad8);
+        if (slot) s_serCtor = *reinterpret_cast<void*(**)(void*, void*, int)>(slot);
+        slot = ResolveAddr(Module::Exe, 0x140152ad0);
+        if (slot) s_serDtor = *reinterpret_cast<void(**)(void*)>(slot);
+        s_res = true;
+    }
+    if (s_parentShutdown) s_parentShutdown(selfP, stream);
+
+    uint8_t serializer[24];
+    if (s_serCtor) s_serCtor(serializer, stream, 0);
+    if (g_fn_Time_Serialize)
+        g_fn_Time_Serialize(reinterpret_cast<uint8_t*>(selfP) + 0x50, serializer);
+    if (s_serDtor) s_serDtor(serializer);
+}
+
 // NOTE on slot 9: HuntComponent::Update is already implemented above
 // (0x140122740). Hunt is the only ResourceProduceComponent subclass that overrides
 // slot 9, and its ctor (0x1401228e0) ORs capability bit 8 into +0x20 precisely to opt
@@ -159,6 +194,7 @@ CONTROLLER_LIVE_FACTORY_STATES(HuntComponent, 0x58, 0x88, 0x28, 2,
                                RPCtrl_NodeVtable, HuntCtrl_PopulateAndWireHooks)
 
 static void HuntCtrl_PopulateAndWireHooks() {
+    HuntComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HuntComponent_ShutdownVSlot);
     HuntComponent_LiveVtable[9]  = reinterpret_cast<void*>(&HuntComponent_Update);
     HuntComponent_LiveVtable[18] = reinterpret_cast<void*>(&HuntComponent_CreateWork);
     // Slots 13/14 are the panel command path, shared by every
