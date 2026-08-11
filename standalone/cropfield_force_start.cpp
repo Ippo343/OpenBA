@@ -115,6 +115,49 @@ void Fire(int frame) {
         if (AlreadyDone(comp)) continue;
 
         uintptr_t c = reinterpret_cast<uintptr_t>(comp);
+
+        // ── pick a CROP TYPE (the analogue of the orchard's tree-type combo) ──────
+        // State-9 enter reads comp+0x50 as a description LIST and looks inside it for a
+        // NaturalResourceDescription (0x1401c7b68); that entry IS the crop. A null
+        // +0x50 means "no crop chosen", so the state clears +0x49, marks no cells and
+        // the field stays bare — correct for an unconfigured field, and exactly what a
+        // freshly spawned demo field is.
+        //
+        // The panel fills it from the world's resource-type list: town manager
+        // (gw+0xf0) +0x120 array / +0x128 count, each entry carrying its
+        // sub-description list at +0x28 / +0x30. So pick the first entry that actually
+        // contains a NaturalResourceDescription and write it in — the same value a
+        // player's combo pick would produce.
+        if (*reinterpret_cast<uintptr_t*>(c + 0x50) == 0) {
+            const uint32_t tidNatRes = ::Object::GetTypeIdByName("NaturalResourceDescription");
+            void* gw2 = *g_pGameWorldSingleton;
+            uintptr_t town = gw2 ? *reinterpret_cast<uintptr_t*>(
+                reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
+            void** types = town ? *reinterpret_cast<void***>(town + 0x120) : nullptr;
+            const int typeN = town ? *reinterpret_cast<int32_t*>(town + 0x128) : 0;
+            void* chosen = nullptr;
+            for (int t = 0; t < typeN && types && !chosen; ++t) {
+                void* entry = types[t];
+                if (!entry) continue;
+                uintptr_t e = reinterpret_cast<uintptr_t>(entry);
+                void** subs = *reinterpret_cast<void***>(e + 0x28);
+                const int subN = *reinterpret_cast<int32_t*>(e + 0x30);
+                for (int k = 0; k < subN && subs; ++k)
+                    if (subs[k] && tidNatRes && fn_IsDerivedFrom &&
+                        fn_IsDerivedFrom(subs[k], tidNatRes)) { chosen = entry; break; }
+            }
+            if (chosen) {
+                *reinterpret_cast<void**>(c + 0x50) = chosen;
+                std::fprintf(stderr, "[CropStart]   crop type set: %p (from %d world "
+                             "resource types)\n", chosen, typeN);
+            } else {
+                std::fprintf(stderr, "[CropStart]   NO crop type available — scanned %d "
+                             "world resource types, none carries a "
+                             "NaturalResourceDescription. The field will plant nothing; "
+                             "that is a world-data gap, not a component defect.\n", typeN);
+            }
+        }
+
         const uint8_t before = *reinterpret_cast<uint8_t*>(c + 0x48);
         *reinterpret_cast<uint8_t*>(c + 0x48) = 1;
         if (s_doneN < kMaxTracked) s_done[s_doneN++] = comp;
