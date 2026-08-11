@@ -50,6 +50,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -479,6 +481,36 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
     const int total   = SlotCount(comp);
     const int growing = CountSlots(comp, 1);
     const int done    = CountSlots(comp, 2);
+
+    // Slot-state histogram. Planting is measured to run to completion (64 cells, 64
+    // binds), so every slot should read 1 "growing" and the transition below should
+    // fire. It does not, and the two candidate causes need different fixes:
+    // ValidateEntityRefs (s_slotRefresh, 0x14011aa20) demoting slots whose entity fails
+    // validation, versus the transition request being dropped. The histogram separates
+    // them — it prints what the states ACTUALLY are, not what they should be.
+    {
+        static int s_h = -1;
+        if (s_h < 0) {
+            const char* he = std::getenv("BANISHED_CROPFIELD_TRACE");
+            s_h = (he && he[0] && he[0] != '0') ? 1 : 0;
+        }
+        static int s_n = 0;
+        if (s_h && (s_n % 600) == 0) {
+            int hist[8] = {0};
+            int other = 0;
+            for (int i = 0; i < total; ++i) {
+                uint8_t* sl = SlotAt(comp, i);
+                if (!sl) continue;
+                const int st = *reinterpret_cast<int32_t*>(sl + 0x04);
+                if (st >= 0 && st < 8) ++hist[st]; else ++other;
+            }
+            std::fprintf(stderr, "[CropSlots] total=%d growing=%d done=%d | state histogram "
+                         "0:%d 1:%d 2:%d 3:%d other:%d\n",
+                         total, growing, done, hist[0], hist[1], hist[2], hist[3], other);
+            std::fflush(stderr);
+        }
+        ++s_n;
+    }
     if (done == total) {
         CF_ReleaseWorkSlot(comp);
         ::ControllerLive::RequestStateTransition(sm, 21);

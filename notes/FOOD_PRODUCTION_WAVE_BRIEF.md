@@ -311,6 +311,36 @@ PlantArea slot 8 calls it), and the work-scheduler re-key/eviction path
 (`CitizenAI_WorkScheduler_Rekey`, 0x1400f8400). Put a counter on slot 8 first; if slot 8
 is hot, the cancel originates in the citizen's action teardown.
 
+### Crop field ROOT CAUSE located — slots demote to state 2
+
+Slot-state histogram from `CropField_State9PerFrame` (BANISHED_CROPFIELD_TRACE):
+
+    [CropSlots] total=64 growing=0 done=64 | histogram 0:0 1:0 2:64 3:0 other:0
+
+Every slot reads **state 2 ("done")**, not state 1 ("growing"), even though msg-0 binds
+fire 64 times and set state 1. So something demotes them immediately, and the only
+thing that writes 2 is `CropFieldComponent_ValidateEntityRefs` (retail 0x14011aa20,
+called every tick as the state-9/10/11 slot refresh): it resets any slot whose stored
+entity is gone, is not a ComponentEntity, or whose build-state component link no longer
+matches.
+
+That fully explains the stall, and the mechanism is worth understanding before fixing:
+- state 9's per-frame checks `done == total` FIRST and requests state **21**;
+- 21 is a transition TARGET with no registered body (retail registers none either), so
+  `Step(21)` returns -1 and the machine cannot enter it;
+- the field therefore re-requests 21 forever and never reaches state 10.
+
+Retail's per-frame has the same `done == total -> 21` branch, so retail must never see
+all-slots-done while in state 9 — i.e. in retail the slots legitimately hold state 1.
+The defect is the demotion, not the transition logic.
+
+⭐NEXT: instrument the three reject branches inside `CropFieldComponent_ValidateEntityRefs`
+(entity null / not ComponentEntity / build-state link mismatch) and see which fires. If
+it is the build-state link, compare what msg-0 stores at slot+0x10 against what the
+validator expects — msg 0 stores the NaturalResource component from finder 0x1400052c0,
+and the validator re-derives it the same way, so a mismatch there points at the finder
+returning a different component than the one the plant chain bound.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
