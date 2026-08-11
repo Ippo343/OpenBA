@@ -119,9 +119,49 @@ void HuntComponent_InitFuncs() {
 #endif
 }
 
+// NOTE on slot 9: HuntComponent::Update is already implemented above
+// (0x140122740). Hunt is the only ResourceProduceComponent subclass that overrides
+// slot 9, and its ctor (0x1401228e0) ORs capability bit 8 into +0x20 precisely to opt
+// into per-frame update ticking; Fishing and Herbalist do neither. The slot receives
+// the Time by VALUE (an 8-byte tick count in a register), which is why the existing
+// signature takes int64_t rather than a Time*.
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
+//
+// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent, so the shared
+// ResourceProduce state machine (resourceproducecomponent_states.cpp) actually runs
+// and slot 18 mints + posts a HuntWork. HuntWork itself was already fully ported and
+// vtable-registered — it just had no producer while the component stayed inert.
+//
+// Flags 0x88, not 0x80: HuntComponent_Ctor (0x1401228e0) ORs bit 8 into +0x20 on top
+// of the Component_Ctor chain's 0x80, which is what opts this component into the
+// per-frame Update above. Size 0x58 and NodeOff 0x28 / DefState 2 come from the shared
+// ResourceProduceComponent ctor — see fishingcomponent.cpp for the byte derivation.
+//
+// Opt-in until a positive-outcome run measures venison reaching storage.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(HuntComponent, 0x58, 0x88)
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
+extern "C" void   RPCtrl_PopulateTable();
+extern "C" uintptr_t* HuntComponent_CreateWork(void*, uintptr_t*);   // slot 18
+
+// Slots must be written from inside InstallLive — FillTypedVtable erases anything
+// written at static-init on the first factory call.
+static void HuntCtrl_PopulateAndWireHooks();
+
+CONTROLLER_LIVE_FACTORY_STATES(HuntComponent, 0x58, 0x88, 0x28, 2,
+                               "BANISHED_LIVE_HUNTING",
+                               RPCtrl_NodeVtable, HuntCtrl_PopulateAndWireHooks)
+
+static void HuntCtrl_PopulateAndWireHooks() {
+    HuntComponent_LiveVtable[9]  = reinterpret_cast<void*>(&HuntComponent_Update);
+    HuntComponent_LiveVtable[18] = reinterpret_cast<void*>(&HuntComponent_CreateWork);
+    // 19/20/21 deliberately left as the base no-ops: retail's HuntComponent vtable
+    // keeps 0x140006b10 in all three.
+    RPCtrl_PopulateTable();
+}
 REGISTER_TYPE(HuntComponent, "ResourceProduceComponent",
               &HuntComponent_Factory, &HuntComponent_CreateInPlace);

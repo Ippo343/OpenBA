@@ -99,6 +99,40 @@ void HerbalistComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(HerbalistComponent, 0x50, 0x80)
+// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent.
+//
+// This component backs the GATHERER'S HUT (GathererShelter.rsc carries
+// HerbalistDescription — there is no separate GathererComponent) as well as the
+// herbalist. While inert, the shared ResourceProduce state machine never ran, so
+// slot 18 never minted a HerbalistWork and the hut collected nothing.
+//
+// Size 0x50 / Flags 0x80 from HerbalistComponent_Factory (0x140006b40): it MemAllocs
+// 0x50 and adds no ctor bits beyond the Component_Ctor chain's 0x80 (contrast Hunt,
+// which ORs bit 8). NodeOff 0x28 / DefState 2 come from the shared
+// ResourceProduceComponent ctor — see fishingcomponent.cpp for the byte derivation.
+//
+// Retail's HerbalistComponent vtable overrides slot 18 ONLY; 19/20/21 stay the base
+// no-ops, so all production happens citizen-side in HerbalistWork.
+//
+// Opt-in until a positive-outcome run measures gathered food reaching storage.
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
+extern "C" void   RPCtrl_PopulateTable();
+extern "C" uintptr_t* HerbalistComponent_CreateWork(void*, uintptr_t*);   // slot 18
+
+static void HerbalistCtrl_PopulateAndWireHooks();
+
+CONTROLLER_LIVE_FACTORY_STATES(HerbalistComponent, 0x50, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_GATHERER",
+                               RPCtrl_NodeVtable, HerbalistCtrl_PopulateAndWireHooks)
+
+static void HerbalistCtrl_PopulateAndWireHooks() {
+    // From inside InstallLive only — FillTypedVtable erases static-init slot writes.
+    HerbalistComponent_LiveVtable[18] =
+        reinterpret_cast<void*>(&HerbalistComponent_CreateWork);
+    RPCtrl_PopulateTable();
+}
 REGISTER_TYPE(HerbalistComponent, "ResourceProduceComponent",
               &HerbalistComponent_Factory, &HerbalistComponent_CreateInPlace);

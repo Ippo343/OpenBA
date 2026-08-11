@@ -113,14 +113,60 @@ void FishingComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid FishingComponent
-// (size 0x58, +0x20 capability flags 0x80, Object::Internal base + shared stub
-// vtable, zeroed body). Size from FishingComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+//
+// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent. While inert,
+// the embedded state node at comp+0x28 was never installed and never linked into the
+// entity's StateMachineComponent, so the shared ResourceProduce state machine never
+// ran: state 13 was never entered, slot 18 (CreateWork) was never called, and no
+// FishingWork was ever posted to the reservation ledger. FishingWork itself has been
+// fully ported and vtable-registered for some time — it simply had no producer. That
+// is the whole "fishing dock does nothing" symptom.
+//
+// Macro arguments, byte-verified against retail rather than inferred:
+//   Size 0x58  — FishingComponent_Factory (0x140034350) MemAllocs 0x58.
+//   Flags 0x80 — the Component_Ctor chain ORs 0x80 into +0x20; the Fishing factory
+//                adds no further bits (contrast HuntComponent, which ORs bit 8).
+//   NodeOff 0x28 — ResourceProduceComponent_Ctor (0x14012b3d0) writes
+//                vtable_ResourceProduceComponent_Controller to +0x28 and self to
+//                +0x40 (= NodeOff+0x18); primary slot 17 (CreateState) is the shared
+//                0x140004080 = `LEA RAX,[RCX+0x28]; RET`.
+//   DefState 2 — primary slot 16 (GetDefaultState) is the shared 0x1400026c0 =
+//                `MOV EAX,2; RET`.
+//
+// Opt-in (NOT in kDefaultOnFlags) until a positive-outcome run measures fish actually
+// reaching storage. A clean run proves nothing here — an unentered state machine and a
+// working one both log nothing.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
 
-COMPONENT_INERT_FACTORY(FishingComponent, 0x58, 0x80)
+extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
+extern "C" void   RPCtrl_PopulateTable();
+extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);  // slot 18
+
+// Fishing is the only subclass in this wave that overrides the whole production-hook
+// block: 19/20 (enter/exit producing) and 21 (the per-frame rate tick).
+extern "C" char  FishingComponent_OnEnterProducing(void* self);   // 0x14011ee80
+extern "C" char  FishingComponent_OnExitProducing(void* self);    // 0x14011ee50
+extern "C" char  FishingComponent_ProduceTick(void* self, void* time);  // 0x14011ec10
+
+// Slots 18..21 must be written from INSIDE InstallLive: MakeInertTyped ->
+// FillTypedVtable rewrites slots 1..N with the inert stub on the first factory call,
+// so anything written at static-init is silently erased. The macro calls PopulateFn
+// from InstallLive AFTER FillTypedVtable has run, which is the one surviving place.
+static void FishingCtrl_PopulateAndWireHooks();
+
+CONTROLLER_LIVE_FACTORY_STATES(FishingComponent, 0x58, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_FISHING",
+                               RPCtrl_NodeVtable, FishingCtrl_PopulateAndWireHooks)
+
+static void FishingCtrl_PopulateAndWireHooks() {
+    FishingComponent_LiveVtable[18] = reinterpret_cast<void*>(&FishingComponent_CreateWork);
+    FishingComponent_LiveVtable[19] = reinterpret_cast<void*>(&FishingComponent_OnEnterProducing);
+    FishingComponent_LiveVtable[20] = reinterpret_cast<void*>(&FishingComponent_OnExitProducing);
+    FishingComponent_LiveVtable[21] = reinterpret_cast<void*>(&FishingComponent_ProduceTick);
+    RPCtrl_PopulateTable();
+}
 REGISTER_TYPE(FishingComponent, "ResourceProduceComponent",
               &FishingComponent_Factory, &FishingComponent_CreateInPlace);
