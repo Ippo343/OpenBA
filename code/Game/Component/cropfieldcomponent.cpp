@@ -361,6 +361,45 @@ void CropFieldComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(CropFieldComponent, 0x68, 0x80)
+// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent, so the state
+// machine in cropfieldcomponent_states.cpp actually runs.
+//
+// Macro arguments, byte-verified against retail rather than inferred:
+//   Size 0x68 / Flags 0x80 — CropFieldComponent_Ctor (0x14011afd0) is allocated at 0x68
+//     by CropFieldComponent_Factory (0x140032ed0) and ORs 0x80 into +0x20.
+//   NodeOff 0x28 — the ctor writes vtable_CropFieldComponent_Controller (0x140162e70)
+//     to +0x28 and self to +0x40 (= NodeOff+0x18); primary vtable slot 17 (CreateState)
+//     is the shared 0x140004080 = `LEA RAX,[RCX+0x28]; RET`.
+//   DefState 2 — primary slot 16 (GetDefaultState) is the shared 0x1400026c0 =
+//     `MOV EAX,2; RET`.
+//
+// The ctor also seeds +0x48 = 0x0100 (two bytes: +0x48 = 0, +0x49 = 1) and zeroes
+// +0x50/+0x58/+0x60. MakeInertTyped zeroes the body, so +0x49 currently starts 0 rather
+// than 1; that difference is only observable once the state handlers that read it are
+// ported, and is noted here so it is not rediscovered as a mystery.
+//
+// Opt-in: the state table registers null handlers on this first pass, so the machine
+// runs its real structure and performs no work yet. Nothing to graduate until the
+// handler bodies land.
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+extern "C" void** CropFieldCtrl_NodeVtable();     // cropfieldcomponent_states.cpp
+extern "C" void   CropFieldCtrl_PopulateTable();
+
+// Slots 13/14/15 are the panel command path (CanCommand / Command / OnMessage) at retail
+// 0x14011ada0 / 0x14011acc0 / 0x14011ab50, and 18 is 0x140033040. They are NOT wired yet
+// — their bodies are unported. When they are, write them from INSIDE this hook, never at
+// static init: FillTypedVtable rewrites slots 1..N on the first factory call and would
+// silently erase anything written earlier.
+static void CropFieldCtrl_Populate();
+
+CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_CROPFIELD",
+                               CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
+
+static void CropFieldCtrl_Populate() {
+    CropFieldCtrl_PopulateTable();
+}
 REGISTER_TYPE(CropFieldComponent, "ControllerComponent",
               &CropFieldComponent_Factory, &CropFieldComponent_CreateInPlace);
