@@ -378,12 +378,27 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             fn_InternalBasePtr_CheckPtr(&cropDescIBP);
             uintptr_t cropDescVal = cropDescIBP;
             int srcCellIdx = *(int*)((uintptr_t)i * 0x20 + *(uintptr_t*)(cropDescVal + 0x58));
-            int srcCellIdxBuf = srcCellIdx;
 
+            // ⚠ The action ctor's 7th argument is a pointer to TWO adjacent ints, not one.
+            // Retail builds them as the stack pair local_70 / local_6c:
+            //     local_70 = slot[i].cell
+            //     local_6c = paired ? slot[pairedIdx].cell : -1
+            // and passes &local_70, so the callee reads [ptr+0] AND [ptr+4].
+            //
+            // This used to pass the address of a LONE int, and computed the paired cell
+            // only to discard it with a (void) cast. The callee therefore read whatever
+            // stack local happened to follow, and CreateNaturalResource ended up with a
+            // truncated heap pointer as its cell index (measured: cellIndex=87879760),
+            // faulting on grid + cell*0x30. That is the out-param-buffer-too-small trap
+            // already recorded for this codebase, in its read-side form.
+            int cellPair[2];
+            cellPair[0] = srcCellIdx;
+            cellPair[1] = -1;
             if (pairedAvailable) {
                 fn_InternalBasePtr_CheckPtr(&cropDescIBP);
                 uintptr_t cropDescVal2 = cropDescIBP;
-                (void)*(int*)((uintptr_t)pairedIdx * 0x20 + *(uintptr_t*)(cropDescVal2 + 0x58));
+                cellPair[1] = *(int*)((uintptr_t)pairedIdx * 0x20 +
+                                      *(uintptr_t*)(cropDescVal2 + 0x58));
             }
 
             // Check pathfinding
@@ -431,7 +446,7 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
                 0,                                // R9D: 0
                 pathPos,                          // [RSP+0x20]: position
                 harvestMode,                      // [RSP+0x28]: 1=single, 2=paired
-                &srcCellIdxBuf,                   // [RSP+0x30]: srcCellIdx ptr
+                cellPair,                         // [RSP+0x30]: ptr to {cell, pairedCell}
                 packedCellInfo,                   // [RSP+0x38]: packed cell indices
                 &entityRef,                       // [RSP+0x40]: entity ref from field_10
                 &typeConstVal,                    // [RSP+0x48]: type constant
