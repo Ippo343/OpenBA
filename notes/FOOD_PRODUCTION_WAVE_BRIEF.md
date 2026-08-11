@@ -262,6 +262,37 @@ Also worth re-checking once the churn stops: with 64/64 slots bound as "growing"
 9's per-frame should satisfy `growing + done == total` and advance to state 10, so the
 state-9 pin may be a symptom of the churn rather than a second defect.
 
+### ⚠⚠ THERE IS NO OnCancel CHURN — the 14 742 figure was a gdb misread
+
+`info breakpoints` omits the "already hit" line entirely for a breakpoint with zero
+hits, so every count is attributed to the breakpoint listed ABOVE its true owner when
+any earlier breakpoint is cold. The "PlantArea::OnCancel 14 742" figure was actually
+`FoodDiag_Tick`'s per-frame count. Re-measured with the cold breakpoint isolated:
+
+    PlantArea::OnCancel               NOT HIT
+    PlantArea::Cleanup (slot 8)       1
+    CitizenAI_WorkScheduler_Rekey     14 134   (~once per frame, benign)
+
+⚠ This is the SECOND time this session that mistake was made. When reading
+`info breakpoints`, match each count to its breakpoint by checking the line immediately
+ABOVE it, and treat a missing line as ZERO — never assume the counts line up positionally.
+
+So the cancel-churn narrative is void, and with it the Validate investigation it
+motivated. What the measurements actually establish for the crop field:
+
+    64 cells planted, 64 msg-0 binds, 32 OnComplete (= 64/2 paired), 0 cancels
+
+Planting runs to COMPLETION. Every slot should therefore read state 1 "growing", and
+state 9's per-frame (`growing + done == total` -> request state 10) should fire.
+It does not, and the field sits in state 9.
+
+⭐NEXT, and it is now a narrow question inside OUR OWN port: dump the slot-state
+histogram (`slot+0x04` across all 64) from `CropField_State9PerFrame`. Either the slots
+are not reading 1 — in which case `s_slotRefresh` (ValidateEntityRefs, 0x14011aa20) is
+resetting them, since it demotes any slot whose entity fails validation — or they are,
+and the transition request itself is being dropped. Those are different fixes and the
+histogram distinguishes them in one run.
+
 ### PlantArea::Validate is NOT the churn driver — eliminated by measurement
 
 Named as prime suspect for the 14 742 OnCancel calls, then instrumented
