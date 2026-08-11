@@ -341,6 +341,33 @@ validator expects — msg 0 stores the NaturalResource component from finder 0x1
 and the validator re-derives it the same way, so a mismatch there points at the finder
 returning a different component than the one the plant chain bound.
 
+### Post-IsA-fix soak (30 000 frames) — the machine now CYCLES
+
+    [CropSlots] total=64 growing=21 done=42 | histogram 0:1 1:21 2:42
+    smStateIdx=1 (state 9), staffed=2, accepting=1
+    storage 3422 -> 2023 (still declining; no new resource type appears)
+
+Progress vs before the fix: slots hold real states (21 growing, 42 done) instead of an
+instant 64x demotion, the field reached state 10 earlier in the run, and 42 slots have
+reached state 2 — which in this machine means harvested/finished, so the harvest half is
+running, not just planting.
+
+Two concrete things block completion, both now visible in the histogram:
+
+1. ONE slot sits at state 0 (never planted). State 9's per-frame only advances when
+   `growing + done == total`; 21 + 42 = 63 against total 64, so the transition can never
+   fire and the field re-enters state 9 forever. Find why that single cell is never
+   planted — most likely its PlantArea mark was cleared without a successful plant, or
+   it is unreachable. A one-cell shortfall permanently stalling the machine is worth a
+   guard-free fix, not a >= comparison.
+
+2. No new resource type appears in storage and the totals only fall, so even the 42
+   finished cells are not depositing. That is the same remaining question as fishing:
+   the produce path from a finished work into town storage.
+
+⚠ Do not "fix" (1) by relaxing the transition to `>=`. Retail uses equality and the
+defect is the unplanted cell.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
