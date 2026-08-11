@@ -262,6 +262,24 @@ Also worth re-checking once the churn stops: with 64/64 slots bound as "growing"
 9's per-frame should satisfy `growing + done == total` and advance to state 10, so the
 state-9 pin may be a symptom of the churn rather than a second defect.
 
+### PlantArea::Validate is NOT the churn driver — eliminated by measurement
+
+Named as prime suspect for the 14 742 OnCancel calls, then instrumented
+(`BANISHED_PLANTAREA_TRACE` now also counts Validate verdicts) and ruled out: the
+verdict census never reaches its 500-verdict print threshold, i.e. Validate's inner
+loop barely runs. Two further facts settled while checking:
+- retail's Validate (0x1400f3c70) passes a NULL out-task to Work::CanStartWork exactly
+  as our port does, so that difference was never a defect;
+- retail's Validate restores the validity mark for invalid tasks itself via a direct BST
+  remove, NOT through slot 7 — so even a misbehaving Validate could not produce
+  OnCancel hits.
+
+So the OnCancel churn is driven from the CITIZEN side, not from the work. Remaining
+candidates, in order: the citizen task-cancel path (`0x1400c5400`, CancelAllWork — note
+PlantArea slot 8 calls it), and the work-scheduler re-key/eviction path
+(`CitizenAI_WorkScheduler_Rekey`, 0x1400f8400). Put a counter on slot 8 first; if slot 8
+is hot, the cancel originates in the citizen's action teardown.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,

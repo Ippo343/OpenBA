@@ -737,6 +737,28 @@ bool PlantArea_Validate_Impl(PlantArea* self, void* param2) {
 
         uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
 
+        // Validate-verdict census. Retail passes a null out-task here too (verified at
+        // 0x1400f3c70), so that is faithful — what matters is the VERDICT. If
+        // Work::CanStartWork (0x1400f7100) reports every task unstartable, Validate
+        // invalidates them all, restores their marks and drops them from the BST every
+        // tick, which is the churn signature we are chasing.
+        {
+            static int s_vtrace = -1;
+            if (s_vtrace < 0) {
+                const char* ve = std::getenv("BANISHED_PLANTAREA_TRACE");
+                s_vtrace = (ve && ve[0] && ve[0] != '0') ? 1 : 0;
+            }
+            static long long s_vOk = 0, s_vBad = 0;
+            if (s_vtrace) {
+                if (valid) ++s_vOk; else ++s_vBad;
+                if (((s_vOk + s_vBad) % 500) == 0) {
+                    std::fprintf(stderr, "[PlantArea] Validate verdicts: startable=%lld "
+                                 "UNSTARTABLE=%lld\n", s_vOk, s_vBad);
+                    std::fflush(stderr);
+                }
+            }
+        }
+
         if (valid == 0) {
             // Invalid -- add to collect list (grow array if needed)
             uint32_t newCount = collectCount + 1;
