@@ -1326,6 +1326,23 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140151ea0,
         (uintptr_t)ResolveExport("??1External@Object@@UEAA@XZ"));
 
+    // Object::Base::IsA — dispatch slot 0x140151410, read as `CALL qword ptr [...]`.
+    // The slot was bound to exe 0x140002d40, which is NOT IsA (it is
+    // DynArray8_EraseByValue) and has no reimplementation, so every consumer's
+    // ResolveAddr returned 0 and their `s_fn_IsA &&` guards silently failed.
+    //
+    // That single null cost this project twice: it demoted every planted ORCHARD cell
+    // (fixed there with a local fallback) and then, identically, every planted CROP
+    // FIELD cell — 64 correctly-bound slots torn down on the next validate pass, the
+    // field pinned forever. It is also what the food dialog harness saw as orchard
+    // CanCommand hitting "NOT IMPLEMENTED: exe function at 0x140151410".
+    //
+    // Registering the slot here fixes it once for every present and future consumer,
+    // instead of relying on each call site remembering a fallback. The two existing
+    // fallbacks stay as belt-and-braces.
+    RegisterDispatchSlot(0x140151410,
+        (uintptr_t)ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
+
     // Input::KeyMap exref. Slot stores a level-1 pointer to a "level-2 cell"
     // whose contents are the real KeyMap*. See the comment near
     // g_StandaloneKeyMapPtr above for the reasoning.
