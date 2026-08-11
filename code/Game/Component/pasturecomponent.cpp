@@ -526,6 +526,36 @@ static uint64_t PastureComponent_CanCommandVSlot(void* s, int cmd) {
 static void  PastureComponent_CommandVSlot(void* s, int cmd) {
     Pasture_Command(s, cmd);
 }
+// ── Family-A tail slots 1 / 4 / 19 / 20 / 21 ──────────────────────────────────────
+// PastureComponent does not use the CONTROLLER_LIVE_FACTORY_STATES macro (it has this
+// hand-rolled InstallLive), so none of the shared slot fills reached it and the
+// coverage harness reported it as the weakest of the six at 14/22. All five of these
+// are tiny in retail:
+//   slot 1  0x140036720  MOV RAX,[rip+global]; RET   — the class BaseTypeInfo
+//   slot 4  0x140127a50  *(uint64*)(self+0x28) = 0   — one store
+//   slot 19 0x140036790  MOV RAX,[rip+global]; RET
+//   slot 20 0x140036780  MOV EAX,[rip+global]; RET
+//   slot 21 0x140128280  MOV EAX,2; RET              — 2 here, 3 on Orchard/CropField
+//
+// ⚠ As on Orchard/CropField, 19/20 read globals ADJACENT to the ones 1/2 use — the
+// controller-interface subobject's, for which we hold no separate storage. Returning
+// the class's own type info/id is a stand-in, not byte-exact; still strictly closer
+// than the inert stub, and flagged so it is not mistaken for finished.
+static void* PastureComponent_GetTypeInfoVSlot(void*) {
+    static void* c = nullptr;
+    if (!c) c = ::Object::GetTypeInfoByName("PastureComponent");
+    return c;
+}
+static uint32_t PastureComponent_GetTypeIdVSlot(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PastureComponent");
+    return c;
+}
+static void PastureComponent_Slot4Clear(void* self) {
+    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x28) = 0;
+}
+static int PastureComponent_Slot21Const(void*) { return 2; }
+
 static int   PastureComponent_GetDefaultState(void*) { return 2; }
 static void* PastureComponent_CreateState(void* self) {
     return reinterpret_cast<uint8_t*>(self) + 0x48;
@@ -534,6 +564,11 @@ static void* PastureComponent_CreateState(void* self) {
 // Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
 static void PastureComponent_InstallLive(void* mem) {
     if (!PastureComponent_LiveOn()) return;
+    PastureComponent_LiveVtable[1]  = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
+    PastureComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PastureComponent_Slot4Clear);
+    PastureComponent_LiveVtable[19] = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
+    PastureComponent_LiveVtable[20] = reinterpret_cast<void*>(&PastureComponent_GetTypeIdVSlot);
+    PastureComponent_LiveVtable[21] = reinterpret_cast<void*>(&PastureComponent_Slot21Const);
     PastureComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PastureComponent_OnAddedVSlot);
     PastureComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PastureComponent_OnRemoveVSlot);
     PastureComponent_LiveVtable[13] = reinterpret_cast<void*>(&PastureComponent_CanCommandVSlot);
