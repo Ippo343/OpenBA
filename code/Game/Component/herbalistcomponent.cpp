@@ -140,6 +140,11 @@ static void HerbalistCtrl_PopulateAndWireHooks() {
     // both slots still held the inert stub.
     HerbalistComponent_LiveVtable[13] = reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
     HerbalistComponent_LiveVtable[14] = reinterpret_cast<void*>(&ResourceProduceComponent_Command);
+    // Slot 3 is Shutdown. The body has been ported in this file since the original
+    // wave, but nothing ever wrote it into the live vtable, so the slot-coverage
+    // harness measured it as still holding the inert stub — "ported but unwired",
+    // the trap this codebase has hit repeatedly. Wire it here, inside InstallLive.
+    HerbalistComponent_LiveVtable[3] = reinterpret_cast<void*>(&HerbalistComponent_Shutdown);
     RPCtrl_PopulateTable();
 }
 REGISTER_TYPE(HerbalistComponent, "ResourceProduceComponent",

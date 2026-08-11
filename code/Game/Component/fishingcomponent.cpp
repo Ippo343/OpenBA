@@ -171,6 +171,11 @@ static void FishingCtrl_PopulateAndWireHooks() {
     // both slots still held the inert stub.
     FishingComponent_LiveVtable[13] = reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
     FishingComponent_LiveVtable[14] = reinterpret_cast<void*>(&ResourceProduceComponent_Command);
+    // Slot 3 is Shutdown. The body has been ported in this file since the original
+    // wave, but nothing ever wrote it into the live vtable, so the slot-coverage
+    // harness measured it as still holding the inert stub — "ported but unwired",
+    // the trap this codebase has hit repeatedly. Wire it here, inside InstallLive.
+    FishingComponent_LiveVtable[3] = reinterpret_cast<void*>(&FishingComponent_Shutdown);
     FishingComponent_LiveVtable[19] = reinterpret_cast<void*>(&FishingComponent_OnEnterProducing);
     FishingComponent_LiveVtable[20] = reinterpret_cast<void*>(&FishingComponent_OnExitProducing);
     FishingComponent_LiveVtable[21] = reinterpret_cast<void*>(&FishingComponent_ProduceTick);

@@ -44,20 +44,57 @@
 
 namespace {
 
+// ── retail slot addresses, read from each class's component vtable ────────────────
+// Stored as the low 32 bits (every one is 0x140xxxxxx). Sources:
+//   CropField 0x140162ec0  Orchard 0x14015a180  Pasture  0x140163f60
+//   Fishing   0x140163230  Hunt    0x140163770  Herbalist 0x140159860
 struct FoodClass {
     const char* key;
     const char* component;
-    const char* demoEnv;     // the spawner that puts one in the world
+    const char* demoEnv;          // the spawner that puts one in the world
+    uint32_t    retail[22];
 };
 
 const FoodClass kClasses[] = {
-    { "cropfield", "CropFieldComponent", "BANISHED_BUILD_DEMO_CROPFIELD"   },
-    { "orchard",   "OrchardComponent",   "BANISHED_BUILD_DEMO_ORCHARD"     },
-    { "pasture",   "PastureComponent",   "BANISHED_BUILD_DEMO_PASTURE"     },
-    { "fishing",   "FishingComponent",   "BANISHED_BUILD_DEMO_FISHINGDOCK" },
-    { "hunting",   "HuntComponent",      "BANISHED_BUILD_DEMO_HUNTERLODGE" },
-    { "gatherer",  "HerbalistComponent", "BANISHED_BUILD_DEMO_GATHERERHUT" },
+    { "cropfield", "CropFieldComponent", "BANISHED_BUILD_DEMO_CROPFIELD", {
+        0x400330a0,0x40032ec0,0x40032eb0,0x4011ae70,0x4011ae60,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4011ada0,0x4011acc0,0x4011ab50,
+        0x400026c0,0x40004080,0x40033040,0x40032f20,0x40032f10,0x4011b2f0 } },
+    { "orchard",   "OrchardComponent",   "BANISHED_BUILD_DEMO_ORCHARD", {
+        0x40009a70,0x40009860,0x40009850,0x40051de0,0x40051dd0,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x40051c90,0x40051ba0,0x40051990,
+        0x400026c0,0x40004080,0x40009a10,0x400098c0,0x400098b0,0x400523a0 } },
+    { "pasture",   "PastureComponent",   "BANISHED_BUILD_DEMO_PASTURE", {
+        0x40036910,0x40036720,0x40036710,0x40127f40,0x40127a50,0x40118a60,0x40127a30,0x401277e0,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40127540,0x40127dd0,0x40127a60,0x40127720,
+        0x400026c0,0x40036770,0x400368b0,0x40036790,0x40036780,0x40128280 } },
+    { "fishing",   "FishingComponent",   "BANISHED_BUILD_DEMO_FISHINGDOCK", {
+        0x40034560,0x40034340,0x40034330,0x4011f050,0x40118a50,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
+        0x400026c0,0x40004080,0x4011efe0,0x4011ee80,0x4011ee50,0x4011ec10 } },
+    { "hunting",   "HuntComponent",      "BANISHED_BUILD_DEMO_HUNTERLODGE", {
+        0x40035100,0x40034f20,0x40034f10,0x40122820,0x40118a50,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40122740,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
+        0x400026c0,0x40004080,0x401226a0,0x40006b10,0x40006b10,0x40006b10 } },
+    { "gatherer",  "HerbalistComponent", "BANISHED_BUILD_DEMO_GATHERERHUT", {
+        0x40006d60,0x40006b30,0x40006b20,0x4004b200,0x40118a50,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
+        0x400026c0,0x40004080,0x4004b160,0x40006b10,0x40006b10,0x40006b10 } },
 };
+
+// Retail bodies that are literally `C2 00 00` (RET) plus 0xCC padding — verified by
+// reading the bytes. A slot pointing at one of these has NO behaviour in retail, so our
+// inert stub is already equivalent there and it is NOT outstanding work. Counting those
+// as "missing" was making the coverage number far more alarming than the truth.
+const uint32_t kRetailNoOp[] = {
+    0x40118a50, 0x40118a60, 0x40118820, 0x40118830, 0x40118a70,
+    0x40118a80, 0x40118a90, 0x40118aa0, 0x40118ab0, 0x40006b10,
+    0x40118ae0,   // slot 15 (OnMessage) on the ResourceProduce family
+};
+bool IsRetailNoOp(uint32_t a) {
+    for (uint32_t x : kRetailNoOp) if (x == a) return true;
+    return false;
+}
 const int kClassCount = (int)(sizeof(kClasses) / sizeof(kClasses[0]));
 const int kSlots = 22;      // retail width for this component family
 
@@ -161,17 +198,24 @@ void ProbeClass(const FoodClass& fc) {
     if (!vt) { std::fprintf(stderr, "[FoodPlace]   no vtable?!\n"); return; }
     void* stub = ::ComponentFactory::InertStubSlot();
     char map[kSlots + 1];
-    int live = 0;
+    int live = 0, equiv = 0, gap = 0;
     for (int i = 0; i < kSlots; ++i) {
         const bool isStub = (vt[i] == stub) || (vt[i] == nullptr);
-        map[i] = isStub ? '.' : 'W';
-        if (!isStub) ++live;
+        if (!isStub)                        { map[i] = 'W'; ++live;  }
+        else if (IsRetailNoOp(fc.retail[i])){ map[i] = '='; ++equiv; }   // retail no-op too
+        else                                { map[i] = '.'; ++gap;   }
     }
     map[kSlots] = 0;
-    std::fprintf(stderr, "[FoodPlace]   slots 0..21 [%s]  %d/%d live\n", map, live, kSlots);
-    if (live < kSlots) {
-        std::fprintf(stderr, "[FoodPlace]   still stubbed:");
-        for (int i = 0; i < kSlots; ++i) if (map[i] == '.') std::fprintf(stderr, " %d", i);
+    // W = we have a real body. = retail is an empty RET here, so our stub matches it.
+    // . = retail has real behaviour and we do not — the only genuine outstanding work.
+    std::fprintf(stderr, "[FoodPlace]   slots 0..21 [%s]  ported=%d equivalent-noop=%d "
+                 "MISSING=%d  (behavioural coverage %d/%d)\n",
+                 map, live, equiv, gap, live + equiv, kSlots);
+    if (gap > 0) {
+        std::fprintf(stderr, "[FoodPlace]   MISSING slots:");
+        for (int i = 0; i < kSlots; ++i)
+            if (map[i] == '.')
+                std::fprintf(stderr, " %d(0x1%08X)", i, fc.retail[i]);
         std::fprintf(stderr, "\n");
     }
     std::fflush(stderr);
