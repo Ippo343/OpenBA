@@ -208,6 +208,32 @@ manager +0x120/+0x128).
 is well sited (327/611 water tiles), and "resources in range" must be counted against
 the building's OWN accept list — a raw count is meaningless.
 
+### Crop field — 30 000-frame soak result (measured, negative)
+
+Do not assume "more time" fixes it; it was tried:
+
+    [PlantArea] after 40 Execute calls: maxWorkers=14 noMark=600 alreadyInBst=0
+                noPassableCell=0 noPath=0 ACCEPTED=25 (slotCount=64 treeCount=0 cap=2)
+    frame=10000/20000/30000: CropField smStateIdx=1, staffed=2, accepting=1
+    storage 4024 -> 3125 -> 2338 (declining throughout)
+
+Reading:
+- Execute is called only ~40–79 times in 30 000 frames (ONE census line, printed every
+  40 calls) and `treeCount=0` — so citizens have STOPPED claiming plant work entirely.
+  It is not slow progress, it is a stall.
+- `ACCEPTED=25` of 64 cells, and `noMark` dominates. Each accept clears the mark for its
+  cell (and its pair), so ~25 accepts exhaust ~50 of 64 marks. Once a mark is cleared the
+  cell can never be retried.
+- The suspected mechanism: a plant that is ACCEPTED but whose action later FAILS
+  (CreateNaturalResource bailing) has already had its mark cleared. Retail restores marks
+  only via slot 7 (OnCancel). If our chain reports a failed plant as COMPLETED rather
+  than CANCELLED, the mark leaks and the cell is lost — the field then runs out of
+  plantable cells having actually planted only a handful, and stalls in state 9 forever
+  with no way to advance to state 10.
+- Worth checking first next session: count `CropFieldComponent_OnMessageVSlot` msg-0
+  binds against `ACCEPTED`. If binds << accepts, the leak above is confirmed and the fix
+  is routing failed plants through OnCancel rather than OnComplete.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
