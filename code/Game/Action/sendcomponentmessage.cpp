@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic filter)
 #include <cstdio>
 #include <cstdint>
 
@@ -209,6 +210,21 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
             // Found matching component
             foundComp = *(uintptr_t*)(compArray + (uintptr_t)i * 8);
             break;
+        }
+    }
+
+    {   // First few sends only. When a message never reaches its handler there are three
+        // candidate stages — the action never ran, it ran against the wrong entity, or the
+        // type-id scan missed — and only a report at the scan can tell them apart.
+        static uint32_t s_tidOrchard = ::Object::GetTypeIdByName("OrchardComponent");
+        static int s_seen = 0;
+        if (componentTypeId == s_tidOrchard && s_seen++ < 8) {
+            std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
+                         "scanned %d components, found=%p\n",
+                         reinterpret_cast<void*>(entity), componentTypeId,
+                         *(int32_t*)(s + 0x34), *(uint32_t*)(s + 0x38), compCount,
+                         reinterpret_cast<void*>(foundComp));
+            std::fflush(stderr);
         }
     }
 

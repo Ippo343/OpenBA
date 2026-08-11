@@ -11,6 +11,7 @@
 #include "CreateNaturalResource.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic below)
 #include <cstdio>
 #include <cstdint>
 
@@ -221,28 +222,43 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     int32_t cellIndex = *(int32_t*)(s + 0x30);
     uintptr_t cellArrayBase = *(uintptr_t*)(mapGrid + 0x80);
 
+    // The four early-outs below all return the same failure code, so a caller can only see
+    // "no resource was created", never why. That matters here: the orchard plant chain sends
+    // a bind message immediately after this action and dereferences the entity this action
+    // was supposed to leave on the tile, so a silent bail surfaces as a null deref two frames
+    // later in a different subsystem. Name the branch, a few times per run.
+    static int s_bailReported = 0;
+    #define CNR_BAIL(why) do {                                                      \
+        if (s_bailReported++ < 4) {                                                 \
+            std::fprintf(stderr, "[CreateNR] cell %d: %s — no resource created\n",  \
+                         cellIndex, (why));                                         \
+            std::fflush(stderr);                                                    \
+        }                                                                           \
+        return 2;                                                                   \
+    } while (0)
+
     // Check if the cell already has an entity at the structure slot (+8)
     int64_t existingEntity = *(int64_t*)(cellArrayBase + 8 + (int64_t)cellIndex * 0x30);
     if (existingEntity != 0) {
-        return 2;
+        CNR_BAIL("tile already holds an entity");
     }
 
     // Check if the cell's owner matches our parent entity
     int64_t cellOwner = *(int64_t*)(cellArrayBase + (int64_t)cellIndex * 0x30);
     fn_InternalBasePtr_CheckPtr(s + 0x28);
     if (cellOwner != *(int64_t*)(s + 0x28)) {
-        return 2;
+        CNR_BAIL("tile owner != the action's parent entity");
     }
 
     // Check terrain validity for this cell
     uint64_t terrainResult = s_fn_CheckTerrain((void*)mapGrid, cellIndex);
     if ((char)terrainResult != '\0') {
-        return 2;
+        CNR_BAIL("terrain check says the cell is unavailable");
     }
 
     // Check terrain byte flag
     if (*(char*)(cellArrayBase + (int64_t)cellIndex * 0x30 + 0x28) != '\0') {
-        return 2;
+        CNR_BAIL("tile status byte (+0x28) is set");
     }
 
     // Allocate a new ComponentEntity copied from description at +0x20
@@ -269,6 +285,45 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     void* growthCompIBP = nullptr;
     s_fn_FindComponent_Growth(entityIBP, &growthCompIBP);
     fn_InternalBasePtr_CheckPtr(&growthCompIBP);
+    // Retail derefs both finder results unguarded, and it is right to: the description this
+    // action carries is always a natural-resource template that HAS both components. When one
+    // comes back null the description (or the entity copy) is wrong upstream, and the crash
+    // alone cannot say which. Report the whole chain once, then let the faithful deref stand.
+    if (!modelCompIBP || !growthCompIBP || !newEntity) {
+        static bool s_reported = false;
+        if (!s_reported) {
+            s_reported = true;
+            std::fprintf(stderr, "[CreateNR] MISSING COMPONENT on the spawned resource: "
+                         "desc=%p descTypeGroup=%d cell=%d entityMem=%p newEntity=%p "
+                         "modelComp=%p growthComp=%p\n",
+                         desc, desc ? *(int*)((uintptr_t)desc + 0x20) : -1, cellIndex,
+                         newEntityMem, newEntity, modelCompIBP, growthCompIBP);
+            // Two very different causes look identical from here: the TEMPLATE genuinely has
+            // no GrowthComponent, or the finder's type-id .rdata slot is unregistered/zero so
+            // it misses on every entity (reference_registered_but_filled_with_zero). Separate
+            // them by re-scanning with the by-NAME id, which does not depend on that slot.
+            const uint32_t tidByName = ::Object::GetTypeIdByName("GrowthComponent");
+            const uint32_t* pSlot = reinterpret_cast<const uint32_t*>(
+                ResolveAddr(Module::Exe, 0x1401c77b0));
+            int compN = newEntity ? *(int32_t*)((uint8_t*)newEntity + 0x38) : 0;
+            uintptr_t compA = newEntity ? *(uintptr_t*)((uint8_t*)newEntity + 0x30) : 0;
+            int growthByName = 0;
+            for (int ci = 0; ci < compN && compA; ++ci) {
+                void* c = *(void**)(compA + (uintptr_t)ci * 8);
+                if (!c) continue;
+                uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10))(c);
+                if (tidByName && t == tidByName) ++growthByName;
+            }
+            std::fprintf(stderr, "[CreateNR]   finder slot 0x1401c77b0 -> storage=%p value=%u | "
+                         "GetTypeIdByName(\"GrowthComponent\")=%u | components on entity=%d, "
+                         "matching by NAME=%d  => %s\n",
+                         (const void*)pSlot, pSlot ? *pSlot : 0u, tidByName, compN, growthByName,
+                         growthByName > 0 ? "THE TEMPLATE HAS ONE — the finder's type-id slot is "
+                                            "the bug" : "the template genuinely has no "
+                                            "GrowthComponent — look upstream at the description");
+            std::fflush(stderr);
+        }
+    }
     s_fn_SetGrowthProgress(*(int64_t*)&growthCompIBP, 0.0f);
 
     // Find NaturalResourceComponent and randomize variant

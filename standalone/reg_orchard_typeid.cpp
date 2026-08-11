@@ -45,9 +45,22 @@
 #include <cstdio>
 
 static uint32_t g_tid_OrchardComponent = 0;   // 0x1401c46b0
+// OrchardDescription (DAT_1401c46e8, writer OrchardDescription_Register 0x14014b440). Also
+// registered nowhere; consumers worked around it with private by-name resolves
+// (orchardcomponent_states.cpp's OrchardDescTypeId, harvestorchard.cpp:202). Giving the real
+// slot storage means the exe-faithful `IsDerivedFrom(desc, *DAT_1401c46e8)` reads in
+// OrchardComponent::OnMessage msg 2 and state 9 work as written.
+static uint32_t g_tid_OrchardDescription = 0; // 0x1401c46e8
 
 extern "C" void FillTypeIdGlobals_orchard() {
     g_tid_OrchardComponent = ::Object::GetTypeIdByName("OrchardComponent");
+    g_tid_OrchardDescription = ::Object::GetTypeIdByName("OrchardDescription");
+    if (g_tid_OrchardDescription == 0)
+        std::fprintf(stderr, "[OrchardTypeId] ERROR: GetTypeIdByName(\"OrchardDescription\") "
+                             "returned 0 — slot 0x1401c46e8 is live but EMPTY\n");
+    else
+        std::fprintf(stderr, "[OrchardTypeId] 0x1401c46e8 = %u (0x%08X)\n",
+                     g_tid_OrchardDescription, g_tid_OrchardDescription);
     // Verify the VALUE, not the pointer: a registered slot holding 0 is
     // indistinguishable from an unregistered one at every call site. Report the
     // outcome in BOTH arms so an empty log can never read as success.
@@ -64,4 +77,5 @@ extern "C" void FillTypeIdGlobals_orchard() {
 
 void RegisterOrchardTypeIds() {
     RegisterExeAddr(0x1401c46b0, reinterpret_cast<uintptr_t>(&g_tid_OrchardComponent));
+    RegisterExeAddr(0x1401c46e8, reinterpret_cast<uintptr_t>(&g_tid_OrchardDescription));
 }

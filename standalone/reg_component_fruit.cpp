@@ -36,8 +36,19 @@
 // So filling it is REQUIRED for the live path, not optional.
 static uint32_t g_tid_FruitDescription = 0;  // 0x1401c4288
 
+// FruitComponent type-id .rdata global (DAT_1401c4250, writer FruitComponent_RegisterType
+// 0x14014ac40 per factory_registrations.csv). This slot was registered NOWHERE, so the
+// shared sibling finder FUN_14000a0b0 — which scans an entity for *DAT_1401c4250 — missed on
+// EVERY entity forever. Found 2026-08-10 while porting OrchardComponent::OnMessage: msg 0
+// binds the fruit component of a freshly planted tree into the orchard slot at +0x18, and
+// msg 2 (the growth boost) drives that component's Update; with a null id the slot bind
+// silently downgrades to state 2 ("planted but unusable") and the boost is a no-op.
+// Same class of defect as the GrowthComponent slot c77b0 — see reg_growth_typeid.cpp.
+static uint32_t g_tid_FruitComponent = 0;    // 0x1401c4250
+
 extern "C" void FillComponentTypeIdGlobals_fruit() {
     g_tid_FruitDescription = ::Object::GetTypeIdByName("FruitDescription");
+    g_tid_FruitComponent   = ::Object::GetTypeIdByName("FruitComponent");
 }
 
 // Backing storage for the fruitcomponent .rdata constant-pool entries not already
@@ -55,4 +66,5 @@ void RegisterComponentBatch_fruit() {
 
     // FruitDescription type-ID global (filled after Engine::Startup — see above).
     RegisterExeAddr(0x1401c4288, reinterpret_cast<uintptr_t>(&g_tid_FruitDescription));
+    RegisterExeAddr(0x1401c4250, reinterpret_cast<uintptr_t>(&g_tid_FruitComponent));
 }

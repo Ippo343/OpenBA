@@ -54,11 +54,18 @@ static POW_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;
 typedef float* (*POW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 static POW_Vector3_Ctor_t s_fn_Vector3_Ctor = nullptr;
 
-// Orchard planting action ctor (FUN_1400be6e0) -- 11 parameters
+// Orchard planting action ctor (FUN_1400be6e0) -- 11 parameters.
+// ⚠ cellIdx / cellIdx2 are INTEGERS, not floats. The call site stores them with
+// `MOV dword ptr [RSP+0x30],EBX` (0x1400f4dd1) and `MOV dword ptr [RSP+0x50],EBX`
+// (0x1400f4daf), where EBX is the loop counter — there is no CVTSI2SS anywhere near them.
+// Typing them float here reinterpreted the index as its float BIT PATTERN: slot 0 still
+// came out 0, but slot 1 became 0x3F800000, so the completion message that binds a planted
+// tree into its orchard slot (OrchardComponent::OnMessage msg 0, param p1 = slot index)
+// addressed an absurd index instead of slot 1.
 typedef void (*POW_PlantAction_Ctor_t)(void* citizenIBP, int priority, void* externalPtr,
                                         uint32_t zero, float* position, int srcCellIdx,
-                                        float cellIdx, void* entityRefPtr, uint32_t* typeConstPtr,
-                                        uint64_t unused, float cellIdx2);
+                                        uint32_t cellIdx, void* entityRefPtr, uint32_t* typeConstPtr,
+                                        uint64_t unused, uint32_t cellIdx2);
 static POW_PlantAction_Ctor_t s_fn_PlantAction_Ctor = nullptr;  // 0x1400be6e0
 
 // BST operations
@@ -387,11 +394,11 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
                 0,                                // R9D: 0
                 pathPos,                          // [RSP+0x20]: position
                 srcCellIdx,                       // [RSP+0x28]: srcCellIdx
-                (float)i,                         // [RSP+0x30]: cellIdx as float
+                (uint32_t)i,                      // [RSP+0x30]: cellIdx (integer, EBX)
                 &entityRef,                       // [RSP+0x38]: entity ref from field_10
                 &typeConstVal,                    // [RSP+0x40]: type constant
                 0,                                // [RSP+0x48]: unused
-                (float)i                          // [RSP+0x50]: cellIdx again
+                (uint32_t)i                       // [RSP+0x50]: cellIdx again (integer, EBX)
             );
 
             // Assign work
@@ -418,8 +425,11 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
             uintptr_t insertResult[2] = {0};
             uintptr_t citizenIBPVal = *(uintptr_t*)entityIBP;
             uint32_t insertKey[4];
-            // BST node key: first 4 bytes = cell index (float bits), next 8 bytes = citizen IBP
-            *(float*)&insertKey[0] = (float)i;
+            // BST node key: first 4 bytes = cell index, next 8 bytes = citizen IBP.
+            // Integer, not float — retail is `MOV dword ptr [RBP+0xf],EBX` (0x1400f4e3a),
+            // and the matching lookups (BST_FindInt above, OnComplete's param4) both
+            // compare it as an int.
+            insertKey[0] = (uint32_t)i;
             insertKey[1] = 0;
             insertKey[2] = (uint32_t)citizenIBPVal;
             insertKey[3] = (uint32_t)(citizenIBPVal >> 32);

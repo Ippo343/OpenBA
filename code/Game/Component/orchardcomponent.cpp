@@ -358,6 +358,156 @@ float OrchardComponent_GetGrowth(void* selfV) {
     return total / static_cast<float>(count);
 }
 
+// ============================================================
+// OrchardComponent::OnMessage — primary vtable idx15 (+0x78), retail 0x140051990.
+// ABI confirmed by code/Game/Action/sendcomponentmessage.cpp:231, which dispatches
+// vtable+0x78 as (comp, msgId, srcEntityRef, p1, p2). p1 is the SLOT INDEX.
+//
+// This is the writer the whole planting loop was missing. PlantOrchard::Slot4 skips any
+// slot whose +0x08 already holds an entity and marks its own validity byte, and
+// PlantOrchard::OnComplete clears that byte again on completion — so with nothing ever
+// writing slot+0x08 the orchardist replanted the same cell forever (measured: 29 executed
+// plant actions, slot histogram still 12x state 0, nonNullEntity=0).
+//
+//   msg 0 "planted"  — read the tile the slot points at, take the entity standing on it,
+//                      and bind {entity, NaturalResourceComponent, FruitComponent} into the
+//                      slot with state 1. If ANY of the three is missing the slot goes to
+//                      state 2 (removed/unusable) instead — retail's own failure branch.
+//   msg 1 "harvested" — flag the slot (+0x20) and reset the fruit component's yield
+//                      (+0x30 = 0, +0x34 = 1).
+//   msg 2 "boost"    — advance the tree's fruit growth by the orchard description's rate.
+//
+// ⚠ Two faithful landmines kept verbatim: msg 2 reads desc+0x2c through a pointer that
+// retail nulls when IsDerivedFrom fails, and helper_9fc0 does the same with desc+0x20. Both
+// are load-bearing — they only fire if a type-id global is unfilled, which is a bug to fix at
+// the registration, not to paper over here (see reg_orchard_typeid.cpp / reg_component_fruit.cpp).
+// ============================================================
+
+// FUN_14000a0b0 — sibling FruitComponent finder (type id DAT_1401c4250).
+typedef void* (*fn_FindFruit_a0b0_t)(int64_t entity, void* outIBP);
+static fn_FindFruit_a0b0_t s_fn_FindFruit_a0b0 = nullptr;
+static uint32_t* s_pTypeFruitDesc = nullptr;    // DAT_1401c4288 FruitDescription
+static uint32_t* s_pTypeOrchardDesc = nullptr;  // DAT_1401c46e8 OrchardDescription
+static float*    s_pf_172234 = nullptr;         // 300.0f
+static bool s_msgResolved = false;
+static void EnsureMsgHelpers() {
+    if (s_msgResolved) return;
+    s_msgResolved = true;
+    s_fn_FindFruit_a0b0 = reinterpret_cast<fn_FindFruit_a0b0_t>(
+        ResolveAddr(Module::Exe, 0x14000a0b0));
+    s_pTypeFruitDesc   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4288));
+    s_pTypeOrchardDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46e8));
+    s_pf_172234        = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
+}
+
+// Reimpl of OrchardComponent_helper_9fc0 (0x140049fc0) — advance a FruitComponent's growth
+// by `scale` worth of its description's rate, by synthesising a Time and calling the
+// component's own Update (vtable +0x48, slot 9).
+static void OrchardComponent_BoostFruit_49fc0(int64_t* fruitComp, float scale) {
+    EnsureMsgHelpers();
+    void* desc = reinterpret_cast<void*>(fruitComp[3]);          // +0x18
+    void* validated = nullptr;
+    if (fn_IsDerivedFrom && s_pTypeFruitDesc && fn_IsDerivedFrom(desc, *s_pTypeFruitDesc))
+        validated = desc;
+    const float rate  = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x20);
+    const float secs  = rate * (s_pf_172234 ? *s_pf_172234 : 300.0f) * scale;
+    // System::Time is 8 bytes — a 4-byte target here is the documented clobber trap.
+    uint64_t timeVal = 0;
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeVal, secs);
+    typedef void (*Update_t)(void*, void*);
+    void* vt = *reinterpret_cast<void**>(fruitComp);
+    reinterpret_cast<Update_t>(*reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uint8_t*>(vt) + 0x48))(fruitComp, &timeVal);
+}
+
+extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEntityRef*/,
+                                           uint32_t slotIdx, uint32_t /*p2*/) {
+    EnsureSubHelpers();
+    EnsureMsgHelpers();
+    {   // first few deliveries only — this is the handler the slot array depends on, and
+        // "was it ever called at all" is the question its silence raises.
+        static int s_seen = 0;
+        if (s_seen++ < 6) {
+            std::fprintf(stderr, "[OrchardMsg] OnMessage(comp=%p msg=%d slot=%u)\n",
+                         selfV, msgId, slotIdx);
+            std::fflush(stderr);
+        }
+    }
+    if (!selfV) return;
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    const uintptr_t idx  = static_cast<uintptr_t>(slotIdx);
+    uintptr_t world = s_pWorldSingleton2 ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton2) : 0;
+    if (!world) return;
+
+    if (msgId == 0) {
+        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        if (!slots) return;
+        const uintptr_t slot = slots + idx * 0x28;
+        const uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(world + 0xf8);
+        // The tile record is stride 0x30 in *(mapGrid+0x80); its +0x08 is the entity
+        // standing on it — the tree the plant action just created.
+        int64_t entity = *reinterpret_cast<int64_t*>(
+            *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
+            static_cast<int64_t>(*reinterpret_cast<int32_t*>(slot)) * 0x30);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        int64_t natResIBP = 0;
+        if (s_fn_IBPAccessor52c0) s_fn_IBPAccessor52c0(entity, &natResIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        int64_t fruitIBP = 0;
+        if (s_fn_FindFruit_a0b0) s_fn_FindFruit_a0b0(entity, &fruitIBP);
+
+        if (entity != 0 && natResIBP != 0 && fruitIBP != 0) {
+            *reinterpret_cast<int32_t*>(slot + 0x04) = 1;          // planted
+            *reinterpret_cast<int64_t*>(slot + 0x08) = entity;
+            *reinterpret_cast<int64_t*>(slot + 0x10) = natResIBP;
+            *reinterpret_cast<int64_t*>(slot + 0x18) = fruitIBP;
+            return;
+        }
+        *reinterpret_cast<int32_t*>(slot + 0x04) = 2;              // unusable
+        return;
+    }
+
+    if (msgId == 1) {
+        OrchardComponent_ValidateRefs(selfV);
+        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        if (!slots) return;
+        const uintptr_t slot = slots + idx * 0x28;
+        *reinterpret_cast<uint8_t*>(slot + 0x20) = 1;
+        if (*reinterpret_cast<int64_t*>(slot + 0x18) != 0 &&
+            *reinterpret_cast<int64_t*>(slot + 0x08) != 0) {
+            if (fn_InternalBasePtr_CheckPtr)
+                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot + 0x18));
+            const uintptr_t fruit = *reinterpret_cast<uintptr_t*>(slot + 0x18);
+            *reinterpret_cast<uint32_t*>(fruit + 0x30) = 0;
+            *reinterpret_cast<uint8_t*>(fruit + 0x34) = 1;
+        }
+        return;
+    }
+
+    if (msgId == 2) {
+        const uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(world + 0xf8);
+        OrchardComponent_ValidateRefs(selfV);
+        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        if (!slots) return;
+        int64_t entity = *reinterpret_cast<int64_t*>(
+            *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
+            static_cast<int64_t>(*reinterpret_cast<int32_t*>(slots + idx * 0x28)) * 0x30);
+        if (entity == 0) return;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        int64_t fruitIBP = 0;
+        if (s_fn_FindFruit_a0b0) s_fn_FindFruit_a0b0(entity, &fruitIBP);
+        if (fruitIBP == 0) return;
+        void* desc = *reinterpret_cast<void**>(self + 0x18);
+        void* validated = nullptr;
+        if (fn_IsDerivedFrom && s_pTypeOrchardDesc && fn_IsDerivedFrom(desc, *s_pTypeOrchardDesc))
+            validated = desc;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&fruitIBP);
+        OrchardComponent_BoostFruit_49fc0(reinterpret_cast<int64_t*>(fruitIBP),
+            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x2c));
+        return;
+    }
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 //
 // Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent. While it was
@@ -391,8 +541,22 @@ float OrchardComponent_GetGrowth(void* selfV) {
 extern "C" void** OrchardCtrl_NodeVtable();     // orchardcomponent_states.cpp
 extern "C" void   OrchardCtrl_PopulateTable();
 
+// Slot 15 (OnMessage) has to be wired from INSIDE InstallLive, not at static-init:
+// MakeInertTyped -> FillTypedVtable rewrites slots 1..N with the inert stub on the first
+// factory call, so anything written earlier is silently erased — the same "reversed order =
+// silently un-wired" trap the stub-controller sweep documented, via a different mechanism.
+// The macro only fills 16/17 itself, but it calls PopulateFn from InstallLive AFTER
+// FillTypedVtable has run, so hanging the slot-15 write off the populate hook puts it in the
+// one place that survives. Idempotent: InstallLive runs per component instance.
+static void OrchardCtrl_PopulateTableAndWireSlot15();
+
 CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
                                "BANISHED_LIVE_ORCHARD",
-                               OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTable)
+                               OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTableAndWireSlot15)
+
+static void OrchardCtrl_PopulateTableAndWireSlot15() {
+    OrchardComponent_LiveVtable[15] = reinterpret_cast<void*>(&OrchardComponent_OnMessage);
+    OrchardCtrl_PopulateTable();
+}
 REGISTER_TYPE(OrchardComponent, "ControllerComponent",
               &OrchardComponent_Factory, &OrchardComponent_CreateInPlace);
