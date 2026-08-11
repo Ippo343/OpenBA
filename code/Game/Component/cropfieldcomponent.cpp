@@ -393,6 +393,105 @@ extern "C" void   CropFieldCtrl_PopulateTable();
 // static init: FillTypedVtable rewrites slots 1..N on the first factory call and would
 // silently erase anything written earlier.
 
+// ── slot 13 — CanCommand — retail 0x14011ada0 ─────────────────────────────────────
+// Decides which of the crop-field panel's three buttons are enabled. Unlike the
+// ResourceProduce family's slot 13 (which ignores its argument and returns a mask),
+// this one IS a per-command query:
+//   cmd 0 (plant)   enabled when the SM sits in state 2  AND the field has slots
+//   cmd 1 (harvest) enabled when the SM sits in state 10 AND the field has slots
+//   cmd 2 (toggle)  returns a two-bit value: bit 1 = currently on (+0x48), bit 0 =
+//                   selectable at all (has slots). Retail computes it as
+//                   `-(+0x48 != 0) & 2 | hasSlots`, i.e. a MASK, not a boolean — the
+//                   panel reads bit 1 to draw the toggle's state and bit 0 to enable
+//                   it. Returning a plain bool here would collapse "on" and
+//                   "available" into one and mis-draw the button.
+// "Has slots" is self+0x50 != 0 — the slot array state 9 builds. An unplanted field
+// therefore greys everything, which is retail behaviour, not a defect.
+extern "C" uint8_t CropFieldComponent_CanCommandVSlot(void* selfV, int cmdId) {
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    static void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
+    static bool s_r = false;
+    if (!s_r) {
+        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140003ea0));
+        s_r = true;
+    }
+    if (!s_findSM) return 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    uintptr_t smc = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    if (!smc) return 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smc);
+
+    int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
+    if (cur < 0) cur = *reinterpret_cast<int8_t*>(smc + 0x50);
+    const bool hasSlots = (*reinterpret_cast<uintptr_t*>(self + 0x50) != 0);
+
+    switch (cmdId) {
+        case 0:  return (cur == 2  && hasSlots) ? 1 : 0;
+        case 1:  return (cur == 10 && hasSlots) ? 1 : 0;
+        case 2:  return static_cast<uint8_t>(
+                     ((*reinterpret_cast<char*>(self + 0x48) != 0) ? 2 : 0) |
+                     (hasSlots ? 1 : 0));
+        default: return 0;
+    }
+}
+
+// ── slot 14 — Command — retail 0x14011acc0 ────────────────────────────────────────
+//   cmd 0 -> post node event 3 (PLANT)    — the event state 2 registers
+//   cmd 1 -> post node event 4 (HARVEST)  — the event state 10 registers
+//   cmd 2 -> flip +0x48 and push it straight into the workplace accepting flag
+// The two event ids line up exactly with the state table in
+// cropfieldcomponent_states.cpp, so the panel drives the same paths the seasonal
+// triggers do.
+extern "C" void CropFieldComponent_CommandVSlot(void* selfV, int cmdId) {
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    static void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
+    static void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
+    static void (*s_setAccepting)(uintptr_t, char)  = nullptr;
+    static bool s_r = false;
+    if (!s_r) {
+        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140003ea0));
+        s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140002e10));
+        s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
+            ResolveAddr(Module::Exe, 0x14012fc00));
+        s_r = true;
+    }
+    if (cmdId != 0 && cmdId != 1 && cmdId != 2) return;
+
+    if (cmdId == 2) {
+        char* master = reinterpret_cast<char*>(self + 0x48);
+        *master = (*master == 0) ? 1 : 0;
+        if (!s_findWpc || !s_setAccepting) return;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+        uintptr_t wpc = 0;
+        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpc);
+        if (!wpc) return;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
+        s_setAccepting(wpc, *master);
+        return;
+    }
+
+    if (!s_findSM) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    uintptr_t smc = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    if (!smc) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smc);
+
+    const uintptr_t sm = smc + 0x48;
+    void* node = *reinterpret_cast<void**>(sm);
+    if (!node) return;
+    void** nvt = *reinterpret_cast<void***>(node);
+    if (!nvt || !nvt[2]) return;
+    const int curIdx  = *reinterpret_cast<int8_t*>(smc + 0x51);
+    const int eventId = (cmdId == 0) ? 3 : 4;
+    reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[2])(
+        node, reinterpret_cast<void*>(sm), curIdx, eventId);
+}
+
 // ── Family-A tail slots 4 / 19 / 20 / 21 ──────────────────────────────────────────
 // These four sit past the shared Component block and were the last cheap gaps the
 // slot-coverage harness reported for this class. All four are tiny in retail:
@@ -428,6 +527,8 @@ CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
                                CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
 
 static void CropFieldCtrl_Populate() {
+    CropFieldComponent_LiveVtable[13] = reinterpret_cast<void*>(&CropFieldComponent_CanCommandVSlot);
+    CropFieldComponent_LiveVtable[14] = reinterpret_cast<void*>(&CropFieldComponent_CommandVSlot);
     CropFieldComponent_LiveVtable[4]  = reinterpret_cast<void*>(&CropFieldComponent_Slot4Clear);
     CropFieldComponent_LiveVtable[19] = reinterpret_cast<void*>(&CropFieldComponent_Slot19GetTypeInfo);
     CropFieldComponent_LiveVtable[20] = reinterpret_cast<void*>(&CropFieldComponent_Slot20GetTypeId);

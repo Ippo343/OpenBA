@@ -145,12 +145,20 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             if (r[id]) ++enabled;
             if (r[id] != r[0]) uniform = false;
         }
-        if (uniform) {
+        if (uniform && r[0] != 0) {
+            // A non-zero value repeated for every id is the ResourceProduce mask form.
             std::fprintf(stderr, "[FoodPanel]   command MASK = 0x%02X  (pause=%s resume=%s)"
-                         "  [identical for every id -> the ResourceProduce mask form]%s\n",
+                         "  [identical for every id -> the ResourceProduce mask form]\n",
                          (unsigned)r[0],
-                         (r[0] & 2) ? "yes" : "no", (r[0] & 1) ? "yes" : "no",
-                         r[0] == 0 ? "  <-- no command offered" : "");
+                         (r[0] & 2) ? "yes" : "no", (r[0] & 1) ? "yes" : "no");
+        } else if (uniform) {
+            // All zero says nothing about the FORM — a per-command CanCommand that
+            // legitimately refuses everything looks identical to a mask of 0. Do not
+            // assert which one it is; a crop field with no slot array (unplanted)
+            // greys all three buttons, and that is retail behaviour, not a defect.
+            std::fprintf(stderr, "[FoodPanel]   every command returns 0 — all buttons "
+                         "disabled. Form indeterminate from this alone; for a crop field "
+                         "this is CORRECT while unplanted (+0x50 slot array still null).\n");
         } else {
             std::fprintf(stderr, "[FoodPanel]   CanCommand(id) =");
             for (int id = 0; id < 8; ++id)
