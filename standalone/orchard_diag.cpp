@@ -214,9 +214,21 @@ void DumpOrchards(int frameNum) {
         // so "not ticking" is distinguishable from "early".
         if (slots && slotCount > 0) {
             float gMin = 1e30f, gMax = -1e30f;
-            int active = 0, sampled = 0;
+            float mMin = 1e30f, mMax = -1e30f;
+            int active = 0, sampled = 0, matured = 0;
             for (int s = 0; s < slotCount; ++s) {
                 uintptr_t slot = slots + static_cast<uintptr_t>(s) * 0x28;
+                // The TREE's own maturity lives on the NaturalResourceComponent bound at
+                // slot+0x10, field +0x28. FruitComponent::Update gates ALL ripening on
+                // `growthRate >= 1.0f`, so a sapling correctly bears nothing and a fruit
+                // ratio of 0 says nothing about whether anything is wrong — this is the
+                // number that decides it.
+                if (void* nr = *reinterpret_cast<void**>(slot + 0x10)) {
+                    float mat = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(nr) + 0x28);
+                    if (mat < mMin) mMin = mat;
+                    if (mat > mMax) mMax = mat;
+                    if (mat >= 1.0f) ++matured;
+                }
                 void* g = *reinterpret_cast<void**>(slot + 0x18);
                 if (!g) continue;
                 float ratio = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(g) + 0x30);
@@ -227,7 +239,9 @@ void DumpOrchards(int frameNum) {
             }
             if (sampled)
                 fprintf(stderr, "[OrchardDiag]   per-tree growth: sampled=%d activeFlag(+0x34)=%d "
-                                "ratio(+0x30) min=%.6f max=%.6f\n", sampled, active, gMin, gMax);
+                                "fruitRatio(+0x30) min=%.6f max=%.6f | treeMaturity(natRes+0x28) "
+                                "min=%.6f max=%.6f matured(>=1.0)=%d\n",
+                        sampled, active, gMin, gMax, mMin, mMax, matured);
             else
                 fprintf(stderr, "[OrchardDiag]   per-tree growth: NO slot carries a growth object "
                                 "(+0x18 null on all %d)\n", slotCount);
