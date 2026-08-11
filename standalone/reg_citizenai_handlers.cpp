@@ -24,6 +24,12 @@ extern bool CitizenAI_State_Wander(int64_t param_1);
 static const float k_rdata_172180 =  3.0f;   // anim-time base
 static const float k_rdata_1721a0 =  7.0f;   // anim-time scale
 static const float k_rdata_172280 = -1.0f;   // MoveTo speed sentinel (-> randomized default)
+// PI. Sits between the two above in .rdata and was the only constant in that run of
+// registrations still missing, which is why HerbalistWork::Slot4 (the gatherer's
+// forage search) faulted on `*s_fPI` the first time a seated gatherer ever executed
+// its work — the search-area term `sqrtf(radiusSq * PI)`. Value read from Ghidra:
+// 0x140172184 = 0xdb0f4940 = 3.14159274f.
+static const float k_rdata_172184 =  3.14159274f;
 
 void RegisterCitizenAIHandlers() {
     RegisterExeAddr(0x1400c26c0, reinterpret_cast<uintptr_t>(&CitizenAI_PlayAnimationActionCtor5));
@@ -31,4 +37,5 @@ void RegisterCitizenAIHandlers() {
     RegisterExeAddr(0x140172180, reinterpret_cast<uintptr_t>(&k_rdata_172180));
     RegisterExeAddr(0x1401721a0, reinterpret_cast<uintptr_t>(&k_rdata_1721a0));
     RegisterExeAddr(0x140172280, reinterpret_cast<uintptr_t>(&k_rdata_172280));
+    RegisterExeAddr(0x140172184, reinterpret_cast<uintptr_t>(&k_rdata_172184));
 }

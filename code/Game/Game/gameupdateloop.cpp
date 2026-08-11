@@ -685,6 +685,7 @@ extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
+extern "C" void FoodWorkers_Tick(int frameNum);            // standalone/food_workers_harness.cpp
 extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
 extern "C" void OrchardCutHarness_Tick(int frameNum);      // standalone/orchard_cut_harness.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
@@ -918,6 +919,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // allocator structurally cannot make (it gates on roster != 0). No-op unless
     // BANISHED_ORCHARD_WORKERS is set (standalone/orchard_workers_harness.cpp).
     OrchardWorkersHarness_Tick(s_frameNum);
+
+    // Seat the first worker at each Fishing Dock / Hunter Lodge / Gatherer's Hut /
+    // Crop Field — the one player click those buildings have no tool for yet. The
+    // employment allocator gates on a NON-ZERO roster, so it can rebalance but never
+    // seat worker #1. No-op unless BANISHED_FOOD_WORKERS is set
+    // (standalone/food_workers_harness.cpp).
+    FoodWorkers_Tick(s_frameNum);
 
     // Fast-forward tree maturity, then fruit ripeness, so the harvest half of the orchard
     // state machine is reachable in one run rather than a multi-hour soak. No-op unless
