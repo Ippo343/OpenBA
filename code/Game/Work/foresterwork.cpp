@@ -1355,7 +1355,7 @@ static void* g_ForesterWork_Vtable[13] = {
     (void*)&ForesterWork_Slot8_Impl,       // +0x40 Cleanup (0x1400eb8a0)
     (void*)&ForesterWork_Slot9_Impl,       // +0x48 Validate (0x1400eac60)
     (void*)&ForesterWork_Slot10_Impl,      // +0x50 GetTarget (0x1400eb910)
-    (void*)&Work_SlotRet0,          // +0x58 GetPriority (0x140029860 shared HasWorkers; no own fn)
+    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
     (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
 };
 

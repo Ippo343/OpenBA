@@ -989,7 +989,7 @@ static void* g_HarvestArea_Vtable[13] = {
     (void*)&HarvestArea_Slot8_Impl,       // +0x40 Cleanup (0x1400ed270)
     (void*)&HarvestArea_Slot9_Impl,       // +0x48 Validate (0x1400ec930)
     (void*)&HarvestArea_Slot10_Impl,      // +0x50 GetTarget (0x1400ed2f0)
-    (void*)&Work_SlotRet0,         // +0x58 GetPriority (0x140029860 shared HasWorkers; no own fn)
+    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
     (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
 };
 

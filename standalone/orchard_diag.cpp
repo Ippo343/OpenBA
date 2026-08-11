@@ -100,6 +100,77 @@ uint64_t s_harvestExecuted    = 0; // Slot4 successfully created a harvest actio
 // ------------------------------------------------------------------
 // Periodic per-entity dump.
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// Town-wide stored-goods total.
+//
+// "Does the harvested fruit reach storage" was the last unmeasured link in the orchard
+// chain: the harvest completes (msg=1, ascending slots, machine leaves state 11), and
+// CreateRawMaterial spawns piles on the ground, but nothing in this codebase reported
+// whether a citizen ever hauls one into a barn. Counting the piles is NOT the same
+// question — a pile that no one collects is a yield of zero.
+//
+// StorageComponent inventory layout (see action_base_rawmat.cpp): an array at +0x28 of
+// {resType(8 bytes), count(int)} with stride 0x10, entry count at +0x30. Summing every
+// storage in town gives a number that only moves when goods are actually deposited.
+//
+// This is a HARNESS probe, not a port: it reads published fields and writes nothing.
+void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
+    const uint32_t tidStorage = ::Object::GetTypeIdByName("StorageComponent");
+    if (!tidStorage || !arr || n <= 0) {
+        fprintf(stderr, "[OrchardDiag] frame=%d: town storage — cannot scan "
+                        "(tidStorageComponent=%u entities=%d)\n", frameNum, tidStorage, n);
+        return;
+    }
+
+    // Aggregate by resType so the fruit shows up as its own line rather than lost in a total.
+    struct Stack { uintptr_t resType; long long count; };
+    Stack byType[24] = {};
+    int    types = 0;
+    long long grandTotal = 0;
+    int    storages = 0, nonEmpty = 0;
+
+    for (int i = 0; i < n; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        for (int c = 0; c < cN && cA; ++c) {
+            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+            void* comp = *cs;
+            if (!comp) continue;
+            void** vt = *reinterpret_cast<void***>(comp);
+            if (!vt || !vt[2]) continue;
+            if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp) != tidStorage) continue;
+            ++storages;
+
+            uintptr_t st = reinterpret_cast<uintptr_t>(comp);
+            const int stacks = *reinterpret_cast<int32_t*>(st + 0x30);
+            uintptr_t inv = *reinterpret_cast<uintptr_t*>(st + 0x28);
+            if (stacks > 0) ++nonEmpty;
+            for (int k = 0; inv && k < stacks; ++k) {
+                uintptr_t e = inv + static_cast<uintptr_t>(k) * 0x10;
+                uintptr_t rt = *reinterpret_cast<uintptr_t*>(e);
+                const int ct = *reinterpret_cast<int32_t*>(e + 8);
+                grandTotal += ct;
+                int f = -1;
+                for (int t = 0; t < types; ++t) if (byType[t].resType == rt) { f = t; break; }
+                if (f < 0 && types < 24) { f = types++; byType[f].resType = rt; byType[f].count = 0; }
+                if (f >= 0) byType[f].count += ct;
+            }
+        }
+    }
+
+    fprintf(stderr, "[OrchardDiag] frame=%d: town storage — %d StorageComponent(s), %d holding "
+                    "goods, %d distinct type(s), TOTAL ITEMS=%lld\n",
+            frameNum, storages, nonEmpty, types, grandTotal);
+    for (int t = 0; t < types; ++t)
+        fprintf(stderr, "[OrchardDiag]   resType=%p count=%lld\n",
+                reinterpret_cast<void*>(byType[t].resType), byType[t].count);
+}
+
 void DumpOrchards(int frameNum) {
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
     if (!gw) {
@@ -320,6 +391,8 @@ void DumpOrchards(int frameNum) {
             static_cast<unsigned long long>(s_plantExecuted),
             static_cast<unsigned long long>(s_harvestConstructed),
             static_cast<unsigned long long>(s_harvestExecuted));
+
+    DumpTownStorage(frameNum, arr, n);
     std::fflush(stderr);
 }
 

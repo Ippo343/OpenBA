@@ -506,6 +506,27 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 // `(i == 0) ? 0 : 1` was both the wrong test and inverted.
                                 char altCellFlag = (char)(~i & 1);
 
+                                {   // arg 6 gates exactly ONE node of the action chain the
+                                    // ctor builds: CreateRawMaterial (verified in retail
+                                    // 0x1400bb7b0 — `if (param_6 != 0)` wraps the
+                                    // MemAlloc(0x58) + CreateRawMaterial_Action_CopyCtor).
+                                    // So on ODD slot indices the citizen picks the tree and
+                                    // reports it, but spawns no produce. That is retail's
+                                    // shape (MOVZX EAX,SIL / NOT AL / AND AL,1 at
+                                    // 0x1400edd00, ESI = the loop index) — this trace exists
+                                    // to measure what it COSTS, since "half the trees yield
+                                    // nothing" and "yield is batched two trees per pile"
+                                    // look identical from the outside.
+                                    static int s_n = 0;
+                                    if (s_n++ < 24) {
+                                        fprintf(stderr, "[OrchardHarvest] slot=%d cell=%u "
+                                                "amount=%.3f createsProduce=%d\n",
+                                                i, (unsigned)nearestCell, (double)rawMatAmount,
+                                                (int)altCellFlag);
+                                        fflush(stderr);
+                                    }
+                                }
+
                                 s_fn_OrchardHarvest_Ctor(
                                     actionBuf,                     // citizenIBP
                                     (uint32_t)selfQ[4],            // work id / priority (self+0x20)
@@ -911,7 +932,7 @@ static void* g_HarvestOrchard_Vtable[13] = {
     (void*)&HarvestOrchard_Slot8_Impl,       // +0x40 Cleanup
     (void*)&HarvestOrchard_Slot9_Impl,       // +0x48 Validate
     (void*)&HarvestOrchard_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&Work_SlotRet0,            // +0x58 GetPriority (NO HarvestOrchard_Slot11_Impl)
+    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
     (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
 };
 

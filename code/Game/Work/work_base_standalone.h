@@ -41,6 +41,24 @@ void Work_Slot12(void);
 // slot is actually dispatched (dormant for the factory-cascade landmine fix).
 int Work_SlotRet0(void);
 
+// slot11 for the five types whose retail vtable idx11 is the SHARED body at exe
+// 0x140029860 (`XOR EAX,EAX ; CMP [RCX+0x50],EAX ; SETG AL ; RET`):
+//   FishingWork    0x140161320    ForesterWork   0x1401613a0
+//   HarvestArea    0x1401614a0    HarvestOrchard 0x140161520
+//   HerbalistWork  0x1401615a0
+// +0x50 is the count of citizens currently assigned to the work item (the BST at
+// +0x48 holds them; each type's Cleanup slot cancels tasks `while (+0x50 > 0)`), so
+// this answers "is anyone working this right now" — NOT a priority value, despite the
+// slot's inherited name. Work_SlotRet0 pinned it to 0, i.e. permanently "idle", for
+// every one of the five. ClearArea already ports the identical body by hand as
+// ClearArea_GetPriority.
+//
+// ⚠ Four sibling types do NOT share this body and must not use this helper — they read
+// a different field through the same shape: ClearStorage/ConsumeProduce 0x14002a0f0
+// (+0x60), FireWork 0x14002a220 (+0x58), GatherRawMaterials 0x14002a400 (+0x70). Those
+// stay on Work_SlotRet0 until ported.
+int Work_Slot11_HasActiveTasks(void* self);
+
 // Shared allocator: MemAlloc(size, 8). The per-type factory then runs the type's
 // own *_Ctor_Impl on the returned memory. Returns null on allocation failure.
 void* Work_Alloc(int size);

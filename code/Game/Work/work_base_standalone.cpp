@@ -60,6 +60,14 @@ extern "C" void Work_SerializeNop(void* /*self*/, void* /*stream*/) {}
 // Fallback slot returning 0 (false / lowest priority).
 extern "C" int Work_SlotRet0(void) { return 0; }
 
+// Shared slot11 — exe 0x140029860. Bytes: 33 C0 39 41 50 0F 9F C0 C3, i.e.
+//   EAX = 0 ; CMP dword[RCX+0x50], EAX ; SETG AL ; RET   ->  return (self->+0x50 > 0).
+// See the header for which five types share it and which four only look like they do.
+extern "C" int Work_Slot11_HasActiveTasks(void* self) {
+    if (!self) return 0;
+    return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(self) + 0x50) > 0 ? 1 : 0;
+}
+
 // ============================================================
 // The Work BASE vtable — exe 0x140161a80 (WorkAddr::Vtable)
 // ============================================================

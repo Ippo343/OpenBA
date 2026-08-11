@@ -1053,7 +1053,7 @@ static void* g_HerbalistWork_Vtable[13] = {
     (void*)&HerbalistWork_Slot8_Impl,       // +0x40 Cleanup
     (void*)&HerbalistWork_Slot9_Impl,       // +0x48 Validate
     (void*)&HerbalistWork_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&Work_SlotRet0,           // +0x58 GetPriority (NO HerbalistWork_Slot11_Impl)
+    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
     (void*)&Work_Slot12,                    // +0x60 slot12 (void nop)
 };
 

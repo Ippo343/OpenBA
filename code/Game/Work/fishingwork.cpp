@@ -986,7 +986,7 @@ static void* g_FishingWork_Vtable[13] = {
     (void*)&FishingWork_Slot8_Impl,     // +0x40 Cleanup   (FishingWork_Slot8_Impl)
     (void*)&FishingWork_Slot9_Impl,     // +0x48 Validate  (FishingWork_Slot9_Impl)
     (void*)&FishingWork_Slot10_Impl,    // +0x50 GetTarget (FishingWork_Slot10_Impl)
-    (void*)&Work_SlotRet0,                   // +0x58 GetPriority (NO FishingWork_GetPriority_Impl)
+    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
     (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
 };
 
