@@ -23,6 +23,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Local function pointers (resolved once by PlantArea_ResolveFuncs)
@@ -320,7 +321,31 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
+    // ── Plant-search census (BANISHED_PLANTAREA_TRACE) ───────────────────────────
+    // Execute runs but never reaches the action ctor, and "found nothing" cannot say
+    // which of the five gates is responsible. Count each. Zero cost when unset.
+    static int s_ptrace = -1;
+    if (s_ptrace < 0) {
+        const char* pe = std::getenv("BANISHED_PLANTAREA_TRACE");
+        s_ptrace = (pe && pe[0] && pe[0] != '0') ? 1 : 0;
+    }
+    static long long s_calls = 0, s_maxWorkers = 0, s_noMark = 0,
+                     s_inBst = 0, s_noPass = 0, s_noPath = 0, s_ok = 0;
+    if (s_ptrace) {
+        ++s_calls;
+        if ((s_calls % 40) == 0) {
+            std::fprintf(stderr, "[PlantArea] after %lld Execute calls: maxWorkers=%lld "
+                         "noMark=%lld alreadyInBst=%lld noPassableCell=%lld noPath=%lld "
+                         "ACCEPTED=%lld  (slotCount=%d treeCount=%d cap=%d)\n",
+                         s_calls, s_maxWorkers, s_noMark, s_inBst, s_noPass, s_noPath, s_ok,
+                         (int)((uintptr_t*)self)[0xc], treeCount,
+                         matDescIBP ? *(int*)(matDescIBP + 0x30) : -1);
+            std::fflush(stderr);
+        }
+    }
+
     if (treeCount >= *(int*)(matDescIBP + 0x30)) {
+        if (s_ptrace) ++s_maxWorkers;
         return 1;
     }
 

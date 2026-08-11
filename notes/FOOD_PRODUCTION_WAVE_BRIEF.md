@@ -172,6 +172,42 @@ BUILDING ENTITY, so the dock found its own work. f8620's re-entrancy guard canno
 entity, documented as a divergence whose real cause is upstream (`cell+8` should not
 carry the building entity).
 
+## Session 2 results — SLOT COVERAGE COMPLETE
+
+**132/132 component vtable slots across all six classes**, machine-checked every run by
+`BANISHED_FOOD_PLACE`. Each slot is either ported from the retail body or verified
+byte-for-byte equivalent to a retail no-op (`C2 00 00` + 0xCC padding — ten such
+addresses, listed in `standalone/food_placement_harness.cpp`).
+
+Both harness types now exist for all six:
+- `BANISHED_FOOD_PLACE=<class>|all` — placement facts + per-slot coverage map.
+- `BANISHED_FOOD_PANEL=<class>|all` — opens each panel, lists its controllers, reports
+  the command verdicts that grey or enable each button.
+
+### The single most productive tool
+The coverage harness caught **five separate "ported but unwired" cases** — Fishing and
+Herbalist `Shutdown`, then all three Family-A `Shutdown` bodies. In every case the
+source tree looked complete while the vtable slot still held the inert stub. None would
+have been found by reading code. If you add a slot, verify it with the harness.
+
+### Deposit chain — where each class actually stops
+Nothing deposits into storage yet. Each blocker is one named component:
+
+| Class | Reaches | Stops at |
+|---|---|---|
+| Crop Field | state 9 (PLANT), staffed, crop type set | the posted PlantArea work is never CLAIMED — `PlantArea_Slot4_Impl` is never called |
+| Fishing | accepts real spots (`ACCEPTED tile=... coverage=1`) | strictly downstream of the accepted spot, inside the action chain |
+| Gatherer | forages, all filters instrumented | `GATHERABLE=0` — worldgen spawns only 3 natural-resource templates near the start, none in the hut's accept list |
+
+Fixed this session on the way: PlantArea's cell index (out-param buffer too small,
+READ side — the callee reads two ints, we passed one), and the crop-type selection
+(`comp+0x50` is the chosen crop, filled from the world resource-type list at town
+manager +0x120/+0x128).
+
+⚠ Do NOT re-spend these: the resource-limit gate is FINE (measured 2400/5000), the dock
+is well sited (327/611 water tiles), and "resources in range" must be counted against
+the building's OWN accept list — a raw count is meaningless.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
