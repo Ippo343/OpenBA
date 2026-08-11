@@ -234,6 +234,34 @@ Reading:
   binds against `ACCEPTED`. If binds << accepts, the leak above is confirmed and the fix
   is routing failed plants through OnCancel rather than OnComplete.
 
+### ⚠ The mark-leak hypothesis above is REFUTED — measured
+
+Counted probes over one run (crop field, 4 workers):
+
+    CropFieldComponent::OnMessage (msg 0 bind)  64
+    CreateNaturalResource                       64
+    PlantArea::OnComplete                       32   (= 64 cells / 2 per paired action)
+    PlantArea::OnCancel                     14 742
+
+So ALL 64 cells are planted and bound. Planting is not leaking marks and is not
+short-changing the field — the earlier "ACCEPTED=25 of 64, marks exhausted" reading was
+an artefact of sampling a run at 40 Execute calls, not a stall in planting.
+
+The real pathology is `PlantArea::OnCancel` firing **14 742 times** — roughly 230 cancels
+per planted cell. OnCancel restores validity marks and removes BST entries, so the work
+is being cancelled and re-offered continuously. That churn, not a shortage of plantable
+cells, is what keeps the field pinned in state 9.
+
+⭐NEXT: find the caller driving OnCancel. It is dispatched through the work vtable slot 7
+(+0x38); candidates are the citizen task-cancel path (`0x1400c5400`) and Work slot 9
+(Validate, `PlantArea_Validate_Impl`) returning "invalid" and forcing a re-plan every
+tick. Instrument slot 9's verdict first — a Validate that always reports invalid would
+produce exactly this signature.
+
+Also worth re-checking once the churn stops: with 64/64 slots bound as "growing", state
+9's per-frame should satisfy `growing + done == total` and advance to state 10, so the
+state-9 pin may be a symptom of the churn rather than a second defect.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
