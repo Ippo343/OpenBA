@@ -377,12 +377,14 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             char* validityArray = (char*)selfQ[0xb];  // self->field_58
             if (validityArray[i] == 0) {
                 // Cell not available for planting
+                if (s_ptrace) ++s_noMark;
                 continue;
             }
 
             // Check if cell is already assigned (in BST)
             int* bstRoot = (int*)selfQ[9];  // self->field_48
             if (BST_FindInt(bstRoot, i) != nullptr) {
+                if (s_ptrace) ++s_inBst;
                 continue;
             }
 
@@ -429,15 +431,18 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             // Check pathfinding
             int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
+                if (s_ptrace) ++s_noPass;
                 continue;
             }
 
             bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
             if (!canPath) {
+                if (s_ptrace) ++s_noPath;
                 continue;
             }
 
             // Valid cell found -- create planting action
+            if (s_ptrace) ++s_ok;
             uint32_t typeConstVal = *s_typeConst;
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
