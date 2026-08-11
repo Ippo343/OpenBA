@@ -460,8 +460,11 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
     EnsureMsgHelpers();
     {   // first few deliveries only — this is the handler the slot array depends on, and
         // "was it ever called at all" is the question its silence raises.
-        static int s_seen = 0;
-        if (s_seen++ < 6) {
+        // Per-message-id budget: a single shared counter let the 12 planting deliveries
+        // (msg 0) hide every harvest delivery (msg 1) behind an exhausted budget.
+        static int s_seen[8] = {0};
+        const int bucket = (msgId >= 0 && msgId < 8) ? msgId : 7;
+        if (s_seen[bucket]++ < 6) {
             std::fprintf(stderr, "[OrchardMsg] OnMessage(comp=%p msg=%d slot=%u)\n",
                          selfV, msgId, slotIdx);
             std::fflush(stderr);

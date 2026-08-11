@@ -574,9 +574,22 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
 
 // ============================================================
-// HarvestOrchard::Slot6 -- Insert/remove work entry
+// HarvestOrchard::Slot6 -- task COMPLETED (retail 0x1400ed880)
 // ============================================================
 // Simpler than HarvestArea -- single int key, no paired cell.
+//
+// ⚠ This slot must NOT restore the validity byte. Retail 0x1400ed880 is exactly
+// "walk the BST, remove the node if found, XOR AL,AL, RET" — there is no store to
+// [self+0x58] anywhere in the function. Only the CANCEL slot (0x1400ed810, idx 7)
+// writes validityArray[param4] = 1, and it does so on BOTH exits. The distinction is
+// the whole point: a cancelled pick goes back in the pool, a COMPLETED one does not.
+//
+// This port had Slot7's body copied into Slot6, so every completed pick immediately
+// re-marked its tree as available. Slot4 scans from i=0 and takes the lowest valid
+// index, so one worker re-harvested slot 0 forever: 85 assignments against a single
+// distinct picked slot, `picked` stuck at 1/12, and state 11 could never reach its
+// `picked >= live` latch. The [OrchardGrow] harness corroborated it — exactly one of
+// twelve trees was repeatedly zeroed and re-ripened.
 int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
@@ -594,16 +607,17 @@ int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*pa
         }
     }
 
-    // Mark cell as valid
-    char* validityArray = (char*)selfQ[0xb];
-    validityArray[param4] = 1;
+    // No validity-byte write here — see the header note. Retail: XOR AL,AL ; RET.
     return 0;
 }
 
 
 // ============================================================
-// HarvestOrchard::Slot7 -- Tree node lookup with validation
+// HarvestOrchard::Slot7 -- task CANCELLED (retail 0x1400ed810)
 // ============================================================
+// The mirror of Slot6: same BST walk, but it DOES restore the validity byte, on both
+// the found and not-found exits (0x1400ed84d and 0x1400ed865). Cancelling a pick
+// returns that tree to the pool.
 int HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;

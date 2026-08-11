@@ -216,9 +216,16 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
     {   // First few sends only. When a message never reaches its handler there are three
         // candidate stages — the action never ran, it ran against the wrong entity, or the
         // type-id scan missed — and only a report at the scan can tell them apart.
+        // ⚠ The budget is PER MESSAGE ID. It used to be one shared counter, which the 12
+        // planting sends (msg 0) exhausted before the first harvest send (msg 1) ever
+        // happened — so "zero msg=1 sends" read as a missing message when the message was
+        // simply unloggable. A saturating diagnostic reports its own budget, not the
+        // system. See reference_diagnostics_must_report_outcomes.
         static uint32_t s_tidOrchard = ::Object::GetTypeIdByName("OrchardComponent");
-        static int s_seen = 0;
-        if (componentTypeId == s_tidOrchard && s_seen++ < 8) {
+        static int s_seen[8] = {0};
+        const int msgId = *(int32_t*)(s + 0x34);
+        const int bucket = (msgId >= 0 && msgId < 8) ? msgId : 7;
+        if (componentTypeId == s_tidOrchard && s_seen[bucket]++ < 8) {
             std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
                          "scanned %d components, found=%p\n",
                          reinterpret_cast<void*>(entity), componentTypeId,
