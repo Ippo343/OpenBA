@@ -238,6 +238,58 @@ void DumpAll(int frame) {
                     }
                 }
                 std::fprintf(stderr, " radius=%d resourceCellsInRange=%d", radius, resInRange);
+
+                // resourceCellsInRange counts ANY entity parked in a cell — overwhelmingly
+                // TREES. HerbalistWork::Slot4 only accepts a resource whose entity+0x28
+                // matches an entry in the hut's own accept list (HerbalistDescription+0x20,
+                // count +0x28), so the all-resources number says nothing about whether the
+                // hut can forage. Count the MATCHING ones — that is the number the work
+                // actually gates on, and the one worth siting the building by.
+                if (std::strcmp(rows[r].name, "HerbalistComponent") == 0 &&
+                    grid && mw > 0 && radius > 0) {
+                    // Retail resolves the list off the HERBALIST component's own
+                    // description (comp+0x18), NOT the WorkPlaceComponent's — the work's
+                    // finder uses type id 0x1401c43a0, which is HerbalistComponent despite
+                    // the port naming its local `s_typeId_WorkplaceComponent`. `comp` here
+                    // is already that component.
+                    const uint32_t tidHerbDesc = Tid("HerbalistDescription");
+                    void* hdesc = nullptr;
+                    {
+                        void* d = *reinterpret_cast<void**>(
+                            reinterpret_cast<uintptr_t>(comp) + 0x18);
+                        if (d && tidHerbDesc && fn_IsDerivedFrom &&
+                            fn_IsDerivedFrom(d, tidHerbDesc)) hdesc = d;
+                    }
+                    int accepted = -1, listN = 0;
+                    if (hdesc) {
+                        uintptr_t hd = reinterpret_cast<uintptr_t>(hdesc);
+                        listN = *reinterpret_cast<int32_t*>(hd + 0x28);
+                        uintptr_t* list = *reinterpret_cast<uintptr_t**>(hd + 0x20);
+                        const uint32_t tidMap2 = Tid("MapComponent");
+                        void* mc2 = FindComp(ent, tidMap2);
+                        if (list && listN > 0 && mc2) {
+                            uintptr_t m2 = reinterpret_cast<uintptr_t>(mc2);
+                            const int cx = (*reinterpret_cast<int16_t*>(m2 + 0x2c) >> 1) +
+                                            *reinterpret_cast<int16_t*>(m2 + 0x28);
+                            const int cy = (*reinterpret_cast<int16_t*>(m2 + 0x2e) >> 1) +
+                                            *reinterpret_cast<int16_t*>(m2 + 0x2a);
+                            accepted = 0;
+                            for (int dy = -radius; dy < radius; ++dy)
+                                for (int dx = -radius; dx < radius; ++dx) {
+                                    if (dx * dx + dy * dy > radius * radius) continue;
+                                    const int x = cx + dx, y = cy + dy;
+                                    if (x < 0 || y < 0 || x >= mw || y >= mw) continue;
+                                    uintptr_t re = *reinterpret_cast<uintptr_t*>(
+                                        grid + (size_t)(y * mw + x) * 0x30 + 8);
+                                    if (!re) continue;
+                                    const uintptr_t rd = *reinterpret_cast<uintptr_t*>(re + 0x28);
+                                    for (int t = 0; t < listN; ++t)
+                                        if (list[t] == rd) { ++accepted; break; }
+                                }
+                        }
+                    }
+                    std::fprintf(stderr, " acceptList=%d GATHERABLE=%d", listN, accepted);
+                }
             }
             if (std::strcmp(rows[r].name, "HuntComponent") == 0) {
                 uintptr_t h = reinterpret_cast<uintptr_t>(comp);

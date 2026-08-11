@@ -2171,8 +2171,170 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                   "cropfield", 8, 8);
         ringPlace("BANISHED_BUILD_DEMO_HUNTERLODGE", "Template\\HunterLodge.rsc",
                   "hunterlodge", 8, 8);
-        ringPlace("BANISHED_BUILD_DEMO_GATHERERHUT", "Template\\GathererShelter.rsc",
-                  "gathererhut", 8, 8);
+        // The Gatherer's Hut is NOT ring-placeable for the same reason the fishing dock
+        // is not. HerbalistWork::Slot4 only accepts a resource whose entity+0x28 is in the
+        // hut's own accept list (HerbalistDescription+0x20, count +0x28) — four wild-food
+        // types. MEASURED at the cluster centre: 605 resource cells in radius 30 and
+        // GATHERABLE=0, because those cells are trees and stone, not berries or roots. The
+        // hut then forages forever and produces nothing, which is indistinguishable from a
+        // broken port. (An all-resources count does NOT answer this — it was 851 and read
+        // as "well sited".) So score candidates by the accept list itself, exactly as the
+        // dock block scores by its terrain mask.
+        {
+            const char* ge = std::getenv("BANISHED_BUILD_DEMO_GATHERERHUT");
+            if (ge && ge[0] && ge[0] != '0') {
+                void* gtmpl = ResolveTemplateByPath("Template\\GathererShelter.rsc");
+                int gw_ = 0, gh_ = 0;
+                if (const char* xpos = std::strchr(ge, 'x')) {
+                    gw_ = std::atoi(ge); gh_ = std::atoi(xpos + 1);
+                }
+                uintptr_t* acceptList = nullptr;
+                int acceptN = 0, gRadius = 0;
+                if (gtmpl) {
+                    if (gw_ <= 0 || gh_ <= 0) {
+                        void* cpd = FindDescriptionOnTemplate(gtmpl, TypeId("CreatePlacedDescription"));
+                        if (cpd) {
+                            gw_ = *(int32_t*)((uint8_t*)cpd + 0x44);
+                            gh_ = *(int32_t*)((uint8_t*)cpd + 0x48);
+                        }
+                        if (gw_ <= 0 || gh_ <= 0) { gw_ = 8; gh_ = 8; }
+                    }
+                    if (void* hd = FindDescriptionOnTemplate(gtmpl, TypeId("HerbalistDescription"))) {
+                        acceptList = *(uintptr_t**)((uint8_t*)hd + 0x20);
+                        acceptN    = *(int32_t*)((uint8_t*)hd + 0x28);
+                    }
+                    if (void* rd = FindDescriptionOnTemplate(gtmpl, TypeId("RadiusDescription")))
+                        gRadius = *(int32_t*)((uint8_t*)rd + 0x28);
+                }
+
+                void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                          ? *g_pGameWorldSingleton : nullptr;
+                uint8_t* mapObj = gws ? *(uint8_t**)((uint8_t*)gws + 0xf8) : nullptr;
+                const int width = mapObj ? *(int32_t*)mapObj : 0;
+                uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
+
+                if (!gtmpl) {
+                    fprintf(stderr, "[startTown::gathererhut] BANISHED_BUILD_DEMO_GATHERERHUT set "
+                            "but Template\\GathererShelter.rsc did not resolve; nothing spawned\n");
+                } else if (!grid || width <= 0 || !acceptList || acceptN <= 0 || gRadius <= 0) {
+                    fprintf(stderr, "[startTown::gathererhut] cannot score placement "
+                            "(grid=%p width=%d acceptList=%p acceptN=%d radius=%d) — placing blind "
+                            "would only produce a hut with nothing to forage; nothing spawned\n",
+                            (void*)grid, width, (void*)acceptList, acceptN, gRadius);
+                } else {
+                    const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
+                    const int kWindow = 90, kStride = 2;
+                    int bestX = 0, bestY = 0, bestScore = 0;
+                    long long bestDist = -1;
+                    bool found = false;
+                    for (int ty = townCy - kWindow; ty <= townCy + kWindow; ty += kStride) {
+                        for (int tx = townCx - kWindow; tx <= townCx + kWindow; tx += kStride) {
+                            if (tx < 1 || ty < 1 ||
+                                tx + gw_ >= width - 1 || ty + gh_ >= width - 1) continue;
+                            bool clash = false;
+                            for (int o = 0; o < occN; ++o) {
+                                if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + gw_ + 1 &&
+                                    ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + gh_ + 1) {
+                                    clash = true; break;
+                                }
+                            }
+                            if (clash) continue;
+
+                            const int cx = tx + gw_ / 2, cy = ty + gh_ / 2;
+                            int score = 0;
+                            for (int dy = -gRadius; dy < gRadius; ++dy)
+                                for (int dx = -gRadius; dx < gRadius; ++dx) {
+                                    if (dx * dx + dy * dy > gRadius * gRadius) continue;
+                                    const int x = cx + dx, y = cy + dy;
+                                    if (x < 0 || y < 0 || x >= width || y >= width) continue;
+                                    uintptr_t re = *(uintptr_t*)(grid + (size_t)(y * width + x) * 0x30 + 8);
+                                    if (!re) continue;
+                                    const uintptr_t rd = *(uintptr_t*)(re + 0x28);
+                                    for (int t = 0; t < acceptN; ++t)
+                                        if (acceptList[t] == rd) { ++score; break; }
+                                }
+                            if (score == 0) continue;
+                            const long long ddx = (long long)cx - townCx;
+                            const long long ddy = (long long)cy - townCy;
+                            const long long dist = ddx * ddx + ddy * ddy;
+                            if (score < bestScore) continue;
+                            if (score == bestScore && bestDist >= 0 && dist >= bestDist) continue;
+                            bestScore = score; bestDist = dist;
+                            bestX = tx; bestY = ty; found = true;
+                        }
+                    }
+                    if (!found) {
+                        // A zero score has two very different causes — "this map has no
+                        // wild food near the start" and "the key being compared is wrong" —
+                        // and they are indistinguishable from the count alone. Dump BOTH
+                        // sides: the hut's accept entries and the distinct resource keys
+                        // actually present, so the next reader can tell which it is.
+                        fprintf(stderr, "[startTown::gathererhut] no %dx%d footprint within %d "
+                                "tiles of the town centre has ANY of the hut's %d accepted "
+                                "resource types in radius %d; nothing spawned\n",
+                                gw_, gh_, kWindow, acceptN, gRadius);
+                        for (int t = 0; t < acceptN; ++t)
+                            fprintf(stderr, "[startTown::gathererhut]   acceptList[%d] = %p\n",
+                                    t, (void*)acceptList[t]);
+                        uintptr_t seen[12] = {0};
+                        int seenN = 0, sampled = 0;
+                        for (int y = townCy - kWindow; y <= townCy + kWindow && seenN < 12; ++y)
+                            for (int x = townCx - kWindow; x <= townCx + kWindow && seenN < 12; ++x) {
+                                if (x < 0 || y < 0 || x >= width || y >= width) continue;
+                                uintptr_t re = *(uintptr_t*)(grid + (size_t)(y * width + x) * 0x30 + 8);
+                                if (!re) continue;
+                                ++sampled;
+                                const uintptr_t rd = *(uintptr_t*)(re + 0x28);
+                                bool dup = false;
+                                for (int k = 0; k < seenN; ++k) if (seen[k] == rd) { dup = true; break; }
+                                if (!dup) seen[seenN++] = rd;
+                            }
+                        fprintf(stderr, "[startTown::gathererhut]   %d resource cell(s) sampled, "
+                                "%d distinct key(s) at entity+0x28:\n", sampled, seenN);
+                        for (int k = 0; k < seenN; ++k)
+                            fprintf(stderr, "[startTown::gathererhut]     key[%d] = %p\n",
+                                    k, (void*)seen[k]);
+                        // Fall back to a plain ring placement so the hut still EXISTS for
+                        // panel/dialog and state-machine testing — but say plainly that it
+                        // can never produce, so a later reader does not read "hut present,
+                        // zero output" as a port defect.
+                        for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r)
+                            for (int dy = -r; dy <= r && !found; ++dy)
+                                for (int dx = -r; dx <= r && !found; ++dx) {
+                                    if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                                    const int tx = townCx + dx, ty = townCy + dy;
+                                    if (tx < 1 || ty < 1 ||
+                                        tx + gw_ >= width - 1 || ty + gh_ >= width - 1) continue;
+                                    bool clash = false;
+                                    for (int o = 0; o < occN; ++o)
+                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + gw_ + 1 &&
+                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + gh_ + 1) {
+                                            clash = true; break;
+                                        }
+                                    if (!clash) { bestX = tx; bestY = ty; bestScore = 0; found = true; }
+                                }
+                        if (found)
+                            fprintf(stderr, "[startTown::gathererhut] FELL BACK to a "
+                                    "cluster-centre placement with GATHERABLE=0. The hut is "
+                                    "fine for panel / state-machine tests and will produce "
+                                    "NOTHING: standalone worldgen spawns only a handful of "
+                                    "natural-resource templates near the start and none of "
+                                    "them is in this hut's accept list. That is a WORLDGEN "
+                                    "gap, not a HerbalistComponent/HerbalistWork defect.\n");
+                    }
+                    if (found) {
+                        void* gent = placeStructure(gtmpl, bestX, bestY, 0, gw_, gh_,
+                                                    /*isDemoFoundation=*/false, -1);
+                        Occupy(bestX, bestY, gw_, gh_);
+                        if (gent) ++spawned;
+                        fprintf(stderr, "[startTown::gathererhut] demo gatherer hut tile=(%d,%d) "
+                                "fp=%dx%d radius=%d acceptTypes=%d GATHERABLE=%d ent=%p\n",
+                                bestX, bestY, gw_, gh_, gRadius, acceptN, bestScore, gent);
+                    }
+                }
+                fflush(stderr);
+            }
+        }
     }
 
     // ── BANISHED_BUILD_DEMO_FISHINGDOCK — one COMPLETED dock ON WATER ─────────────
