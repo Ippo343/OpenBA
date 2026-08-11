@@ -604,3 +604,41 @@ blocked the fishing dock all wave. One missing slot 6 plausibly closes two of th
 ⚠BANISHED_LIVE_MAP_SPAWN_CLAIM is NOT this. Tested: no change. That flag writes cell
 +0x00 (the owner/footprint claim, which is already working -- CNR's owner check passes).
 +0x00 and +0x08 are different slots with different writers.
+
+### The writer, named exactly
+
+`FUN_14009dc20` (our `MapComponent_overlay_dc20`) is the function that writes the tile:
+
+    *(longlong *)(lVar14 + 8) = *plVar9;    // for every cell in the rect
+
+It is reached from **MapComponent slot 6 = retail 0x1401241b0**, and our port gates that
+behind `BANISHED_LIVE_MAP_SPAWN_CLAIM`. So the machinery is fully ported -- it is
+OPT-IN and off by default, which is why every cell reads null in a default run.
+
+`desc+0x30` is the "claim at spawn" switch: natural resources set it (=1) and take their
+cell immediately; buildings leave it 0 and claim only when their ClearArea finishes.
+
+Measured with the flag on, `BANISHED_MAP_TRACE=1`:
+  - 400 slot-6 dispatches, **391 of them 1x1 with `desc+0x30=1 -> CLAIMING CELLS`**
+  - the 5x8 / 4x6 rects are buildings and correctly SKIP
+So the claim path runs, and runs for natural resources specifically.
+
+⚠But `noEntity` in the HarvestArea census is UNCHANGED with the flag on (measured 30,
+same as without). So claims fire for *some* natural resources while the crop cells stay
+null. The trace caps at the first N dispatches and worldgen trees flood it, so the 1x1
+lines above cannot be assumed to be crops.
+
+**Next step is narrow and specific**: print the CELL INDEX in the MapSpawnClaim trace and
+correlate one crop slot's cell index between (a) the claim dispatch and (b) HarvestArea's
+null read. Three outcomes, three different fixes:
+  - no claim ever fires for that cell  -> the crop's MapComponent slot 6 is not dispatched
+    (check the component's +0x20 & 1 capability bit, which is what FUN_1400c2f60 tests)
+  - a claim fires for a DIFFERENT cell -> the MapComponent rect (+0x28/+0x2a, set by
+    SetupModelAtCell) is stale or wrong at dispatch time
+  - a claim fires for the right cell and it is null later -> something clears it
+    (`pasturecomponent.cpp:603` is the only clearer in the port; dc20 itself also EVICTS a
+    stale occupant, which is a second candidate)
+
+Also note our ApplyOccupancy does not appear to re-check retail's `+0x20 & 0x100000`
+"already written" guard at the top the way 0x1401241b0 does; the trace already shows
+`alreadyWritten=1` on claims that proceed. Worth confirming against the disassembly.

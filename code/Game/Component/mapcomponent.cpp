@@ -489,7 +489,7 @@ static void MapComponent_OnAddedVSlot(void* s) {
     static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
     if (s_trace) {
         static int s_n = 0;
-        if (++s_n <= 30)
+        if (++s_n <= 400)
             fprintf(stderr, "[MapSpawnClaim] #%d comp=%p rect=(%d,%d %dx%d) desc+0x30=%d "
                     "desc+0x31=%d alreadyWritten=%d -> %s\n",
                     s_n, s, (int)*(int16_t*)(mc + 0x28), (int)*(int16_t*)(mc + 0x2a),
