@@ -556,6 +556,7 @@ static void PastureComponent_Slot4Clear(void* self) {
 }
 static int PastureComponent_Slot21Const(void*) { return 2; }
 
+extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
 static int   PastureComponent_GetDefaultState(void*) { return 2; }
 static void* PastureComponent_CreateState(void* self) {
     return reinterpret_cast<uint8_t*>(self) + 0x48;
@@ -565,6 +566,14 @@ static void* PastureComponent_CreateState(void* self) {
 static void PastureComponent_InstallLive(void* mem) {
     if (!PastureComponent_LiveOn()) return;
     PastureComponent_LiveVtable[1]  = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
+    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
+    // the original wave and nothing ever wrote it into the live vtable, so the
+    // coverage harness measured the slot as still holding the inert stub. Third
+    // instance of "ported but unwired" in this component family — worth wiring
+    // from InstallLive, the one place FillTypedVtable cannot erase.
+    PastureComponent_LiveVtable[3]  = reinterpret_cast<void*>(
+        static_cast<void(*)(PastureComponent*, void*)>(&PastureComponent_Shutdown));
+    PastureComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
     PastureComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PastureComponent_Slot4Clear);
     PastureComponent_LiveVtable[19] = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
     PastureComponent_LiveVtable[20] = reinterpret_cast<void*>(&PastureComponent_GetTypeIdVSlot);

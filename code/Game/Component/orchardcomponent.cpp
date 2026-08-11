@@ -865,6 +865,7 @@ static uint32_t OrchardComponent_Slot20GetTypeId(void*) {
 }
 static int OrchardComponent_Slot21Const(void*) { return 3; }
 
+extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
 static void OrchardCtrl_PopulateTableAndWireSlot15();
 
 CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
@@ -874,6 +875,14 @@ CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
 static void OrchardCtrl_PopulateTableAndWireSlot15() {
     // 13/14 are the panel command path and 15 is OnMessage. All three must be written
     // HERE, from inside InstallLive, for the FillTypedVtable reason above.
+    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
+    // the original wave and nothing ever wrote it into the live vtable, so the
+    // coverage harness measured the slot as still holding the inert stub. Third
+    // instance of "ported but unwired" in this component family — worth wiring
+    // from InstallLive, the one place FillTypedVtable cannot erase.
+    OrchardComponent_LiveVtable[3]  = reinterpret_cast<void*>(
+        static_cast<void(*)(OrchardComponent*, void*)>(&OrchardComponent_Shutdown));
+    OrchardComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
     OrchardComponent_LiveVtable[4]  = reinterpret_cast<void*>(&OrchardComponent_Slot4Clear);
     OrchardComponent_LiveVtable[19] = reinterpret_cast<void*>(&OrchardComponent_Slot19GetTypeInfo);
     OrchardComponent_LiveVtable[20] = reinterpret_cast<void*>(&OrchardComponent_Slot20GetTypeId);

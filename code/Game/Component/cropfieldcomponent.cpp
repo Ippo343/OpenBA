@@ -520,6 +520,7 @@ static uint32_t CropFieldComponent_Slot20GetTypeId(void*) {
 }
 static int CropFieldComponent_Slot21Const(void*) { return 3; }
 
+extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
 static void CropFieldCtrl_Populate();
 
 CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
@@ -529,6 +530,14 @@ CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
 static void CropFieldCtrl_Populate() {
     CropFieldComponent_LiveVtable[13] = reinterpret_cast<void*>(&CropFieldComponent_CanCommandVSlot);
     CropFieldComponent_LiveVtable[14] = reinterpret_cast<void*>(&CropFieldComponent_CommandVSlot);
+    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
+    // the original wave and nothing ever wrote it into the live vtable, so the
+    // coverage harness measured the slot as still holding the inert stub. Third
+    // instance of "ported but unwired" in this component family — worth wiring
+    // from InstallLive, the one place FillTypedVtable cannot erase.
+    CropFieldComponent_LiveVtable[3]  = reinterpret_cast<void*>(
+        static_cast<void(*)(CropFieldComponent*, void*)>(&CropFieldComponent_Shutdown));
+    CropFieldComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
     CropFieldComponent_LiveVtable[4]  = reinterpret_cast<void*>(&CropFieldComponent_Slot4Clear);
     CropFieldComponent_LiveVtable[19] = reinterpret_cast<void*>(&CropFieldComponent_Slot19GetTypeInfo);
     CropFieldComponent_LiveVtable[20] = reinterpret_cast<void*>(&CropFieldComponent_Slot20GetTypeId);
