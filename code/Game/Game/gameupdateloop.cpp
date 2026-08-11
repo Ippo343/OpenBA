@@ -685,6 +685,7 @@ extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_
 extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
 extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
+extern "C" void OrchardCutHarness_Tick(int frameNum);      // standalone/orchard_cut_harness.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -916,6 +917,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // BANISHED_ORCHARD_GROW is set (standalone/orchard_growth_harness.cpp). It advances two
     // simulation values only — every gate downstream of them still has to pass.
     OrchardGrowthHarness_Tick(s_frameNum);
+
+    // Click the panel's CUT button (command id 3) on the player's behalf, so state 20 can
+    // be exercised without a human. No-op unless BANISHED_ORCHARD_CUT is set
+    // (standalone/orchard_cut_harness.cpp). Destructive to the orchard it fires on.
+    OrchardCutHarness_Tick(s_frameNum);
 
     // One-shot at frame 120. Despite the name this is NOT purely a diagnostic: it
     // also publishes nine shared element type-id globals that other dialogs read

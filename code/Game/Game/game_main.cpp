@@ -85,6 +85,7 @@ extern "C" void FillControlUITypeIds();
 extern "C" void FillTypeIdGlobals_tracker();
 extern "C" void FillTypeIdGlobals_orchard();
 extern "C" void FillTypeIdGlobals_growth();
+extern "C" void FillTypeIdGlobals_cleararea();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
@@ -508,6 +509,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_tracker();           // production-stats panel — TrackerComponent id (c4b10)
     FillTypeIdGlobals_orchard();           // orchard panel type/yield — OrchardComponent id (c46b0)
     FillTypeIdGlobals_growth();            // GrowthComponent id (c77b0) — the finder every runtime-spawned natural resource goes through
+    FillTypeIdGlobals_cleararea();         // ClearAreaComponent (c71c8) + ClearAreaDescription (c7200) — fn_FindComponent_SM was a null-typeid miss game-wide
 
     if (ok != 0) {
         // Relativize the engine FileSystem resource directories. This was a

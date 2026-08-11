@@ -697,3 +697,21 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }
+
+// ============================================================
+// Shared with the ORCHARD controller's state 20 (the panel's "cut/replace" path).
+//
+// Retail's orchard state 20 calls the very same two leaves this file already ports:
+//   * enter    0x1400504e0 builds a ClearArea work with ClearArea_Ctor (0x1400e6960)
+//   * trans38  0x140050430 gates its return-to-planting on FUN_140118440
+// Re-porting either one into orchardcomponent_states.cpp would fork two copies of the
+// grid-scan semantics, so they are exported here instead of duplicated.
+// ============================================================
+extern "C" bool ClearAreaCtrl_IsDone(void* comp) { return ClearArea_IsDone(comp); }
+
+extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
+                                         uint8_t clearTrees, uint8_t clearGround,
+                                         uint8_t clearBuildings) {
+    ResolveStates();   // the orchard reaches this without going through a ClearArea state
+    return ClearArea_BuildWork(work, ownerEnt, descRef, clearTrees, clearGround, clearBuildings);
+}

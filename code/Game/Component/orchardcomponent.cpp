@@ -628,6 +628,52 @@ int OrchardPlantedCount(uintptr_t s) {
     return n;
 }
 
+// Reports what the panel was told, and WHY, one line per change of the deciding inputs.
+//
+// ⚠ Budget PER COMMAND ID, and fire ON CHANGE rather than first-N. A first-N budget CANNOT
+// answer "why is the harvest button greyed out": the panel polls CanCommand every frame from
+// the moment the orchard exists, so the first three polls are spent hundreds of frames before
+// the player ever opens the panel, and the values at the moment they actually looked are
+// never logged. That is exactly what happened on 2026-08-10 — the trace reported state=9
+// (still planting) for a question asked in state 10. Third instance of the saturating-counter
+// trap in this wave. It also prints the RETURN, not just the inputs: a diagnostic that makes
+// the reader re-derive the predicate is one the reader can get wrong.
+void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool hasType,
+                     char masterSwitch, int lastHarvestYear, uint8_t result) {
+    struct Key { int state, planted, slots, hasType, sw, year, result; bool valid; };
+    static Key s_last[8] = {};
+    const int bucket = (cmdId >= 0 && cmdId < 8) ? cmdId : 7;
+    Key k{curState, planted, slotCount, (int)hasType, (int)masterSwitch, lastHarvestYear,
+          (int)result, true};
+    Key& prev = s_last[bucket];
+    if (prev.valid && prev.state == k.state && prev.planted == k.planted &&
+        prev.slots == k.slots && prev.hasType == k.hasType && prev.sw == k.sw &&
+        prev.year == k.year && prev.result == k.result)
+        return;
+    prev = k;
+
+    uintptr_t world = s_pWorldSingleton2 ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton2) : 0;
+    uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
+    const int curYear = cal ? *reinterpret_cast<int32_t*>(cal) : -1;
+
+    // Name the gate that actually decided it, so a greyed button reports its own reason.
+    const char* why = "enabled";
+    if (result == 0) {
+        if (!hasType)                    why = "no tree type selected";
+        else if (cmdId == 1 && curState != 10) why = "not in state 10 (tend) — harvest only "
+                                                     "offered on a grown orchard";
+        else if (cmdId == 1)             why = "already harvested this year (+0x4c == curYear)";
+        else if (cmdId == 3 && planted == 0)   why = "nothing planted";
+        else if (cmdId == 3)             why = "already clearing (state 20)";
+        else                             why = "busy or fully planted";
+    }
+    std::fprintf(stderr, "[OrchardCmd] CanCommand(id=%d) -> %u (%s): state=%d planted=%d/%d "
+                 "hasType=%d switch=%d lastHarvestYear=%d curYear=%d\n",
+                 cmdId, result, why, curState, planted, slotCount, (int)hasType,
+                 (int)masterSwitch, lastHarvestYear, curYear);
+    std::fflush(stderr);
+}
+
 }  // namespace
 
 // idx13 CanCommand — retail 0x140051c90. Returns the button's enabled state.
@@ -659,46 +705,38 @@ extern "C" uint8_t OrchardComponent_CanCommand(void* selfV, int cmdId) {
     const int  slotCount  = *reinterpret_cast<int32_t*>(s + 0x58);
     const bool hasType    = (*reinterpret_cast<uintptr_t*>(s + 0x60) != 0);
 
-    {   // Budget PER COMMAND ID — a single shared counter would let whichever button the
-        // panel polls first hide the other three (the saturating-counter trap that cost a
-        // session on the harvest message). This answers the first question the dead-button
-        // report raises: is the UI even asking, and what are we telling it?
-        static int s_seen[8] = {0};
-        const int bucket = (cmdId >= 0 && cmdId < 8) ? cmdId : 7;
-        if (s_seen[bucket]++ < 3) {
-            std::fprintf(stderr, "[OrchardCmd] CanCommand(id=%d): state=%d planted=%d/%d "
-                         "hasType=%d switch=%d lastHarvestYear=%d\n",
-                         cmdId, curState, planted, slotCount, (int)hasType,
-                         (int)*reinterpret_cast<char*>(s + 0x48),
-                         *reinterpret_cast<int32_t*>(s + 0x4c));
-            std::fflush(stderr);
-        }
-    }
-
+    uint8_t result = 0;
     switch (cmdId) {
     case 0: {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         const bool busy = s_HasWorkSlot2 && s_HasWorkSlot2(wcIBP) != 0;
-        if ((!busy && planted < slotCount) || slotCount == 0) return hasType ? 1 : 0;
-        return 0;
+        if ((!busy && planted < slotCount) || slotCount == 0) result = hasType ? 1 : 0;
+        break;
     }
     case 1: {
-        if (curState != 10) return 0;
+        if (curState != 10) break;
         uintptr_t world = s_pWorldSingleton2 ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton2) : 0;
         uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
         const int year  = cal ? *reinterpret_cast<int32_t*>(cal) : 0;
-        if (*reinterpret_cast<int32_t*>(s + 0x4c) == year) return 0;
-        return hasType ? 1 : 0;
+        if (*reinterpret_cast<int32_t*>(s + 0x4c) == year) break;
+        result = hasType ? 1 : 0;
+        break;
     }
     case 2:
-        return static_cast<uint8_t>(
+        result = static_cast<uint8_t>(
             (static_cast<uint8_t>(-(*reinterpret_cast<char*>(s + 0x48) != 0)) & 2u) |
             (hasType ? 1u : 0u));
+        break;
     case 3:
-        return (planted > 0 && curState != 20) ? 1 : 0;
+        result = (planted > 0 && curState != 20) ? 1 : 0;
+        break;
     default:
-        return 0;
+        break;
     }
+    TraceCanCommand(cmdId, curState, planted, slotCount, hasType,
+                    *reinterpret_cast<char*>(s + 0x48), *reinterpret_cast<int32_t*>(s + 0x4c),
+                    result);
+    return result;
 }
 
 // idx14 Command — retail 0x140051ba0. Maps a button id to a NODE EVENT and posts it.

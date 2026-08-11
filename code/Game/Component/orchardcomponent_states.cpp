@@ -566,6 +566,26 @@ extern "C" char Orchard_Event3Plant(void* selfV, void* sm) {
 extern "C" char Orchard_Event5Clear(void* selfV, void* sm) {
     Resolve();
     if (!selfV) return 1;
+    {   // The panel proved it POSTS event 5 (the [OrchardCmd] Command(3) line), but nothing
+        // showed whether the event reached a handler — and with state 20's handlers null,
+        // "the event never arrived" and "it arrived and did nothing" looked identical.
+        // sm+0x0a is the requested state id after the request, sm+0x09 the current one.
+        // ⚠ sm+0x09 is the table INDEX, not a state id (registration order is
+        // [0]=2 [1]=9 [2]=10 [3]=12 [4]=11 [5]=20), so it is labelled as such. sm+0x0a is
+        // the requested STATE id — the two must not be printed under the same word.
+        static int s_n = 0;
+        if (s_n++ < 8) {
+            uint8_t* smb = reinterpret_cast<uint8_t*>(sm);
+            const int beforeIdx = sm ? static_cast<int>(static_cast<int8_t>(smb[9])) : -99;
+            OrchardRequestState(sm, 20);
+            std::fprintf(stderr, "[Orchard20] event 5 (cut): from table idx %d -> requested "
+                         "state %d (accepted=%d)\n", beforeIdx,
+                         sm ? static_cast<int>(smb[0x0a]) : -99,
+                         sm ? static_cast<int>(smb[0x0a] == 20) : 0);
+            std::fflush(stderr);
+            return 1;
+        }
+    }
     OrchardRequestState(sm, 20);
     return 1;
 }
@@ -887,6 +907,186 @@ extern "C" char Orchard_State11PerFrame(void* selfV, void* sm, void* /*time*/) {
     return 1;
 }
 
+// ============================================================
+// state 20 (0x14) — CLEAR / "cut the orchard down"
+//
+// This is the state the panel's CLEAR button (cmd id 3 -> node event 5) drives, and until
+// now it was registered with three nullptr handlers. ControllerLive::Dispatcher treats a
+// null handler as a graceful no-op, so the machine DID transition into state 20 and then
+// sat there doing nothing — which from the panel is indistinguishable from a dead button.
+// That is the user-reported "cut is clickable but does nothing".
+//
+// The two real leaves are already ported in clearareacomponent_states.cpp (retail's state
+// 20 calls the same two functions the ClearAreaComponent controller does), so they are
+// used through the exports rather than forked.
+// ============================================================
+extern "C" bool  ClearAreaCtrl_IsDone(void* comp);
+extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
+                                         uint8_t clearTrees, uint8_t clearGround,
+                                         uint8_t clearBuildings);
+
+namespace {
+
+// The entity's description carries a list of sub-descriptions at desc+0x28 (count +0x30).
+// State 20's enter scans it for the ClearAreaDescription and passes its +0x20 (the
+// resource filter) into the work item. Type id read via the .rdata slot, which
+// reg_cleararea_typeids.cpp now backs; GetTypeIdByName is the fallback for the same
+// reason OrchardDescTypeId has one.
+uint32_t ClearAreaDescTypeId() {
+    static uint32_t cached = 0;
+    if (cached) return cached;
+    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401c7200)) {
+        cached = *reinterpret_cast<uint32_t*>(slot);
+        if (cached) return cached;
+    }
+    cached = ::Object::GetTypeIdByName("ClearAreaDescription");
+    return cached;
+}
+
+void* FindClearAreaDescription(uintptr_t entity) {
+    const uint32_t want = ClearAreaDescTypeId();
+    uintptr_t descList = entity ? *reinterpret_cast<uintptr_t*>(entity + 0x28) : 0;
+    if (!descList || !want) return nullptr;
+    const int count = *reinterpret_cast<int32_t*>(descList + 0x30);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(descList + 0x28);
+    for (int i = 0; arr && i < count; ++i) {
+        void* elem = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (!elem) continue;
+        void** vt = *reinterpret_cast<void***>(elem);
+        if (!vt || !vt[2]) continue;                       // vtable+0x10 = GetTypeId
+        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(elem) != want) continue;
+        // Retail confirms the hit with IsDerivedFrom before accepting it, and BREAKS out of
+        // the loop either way — a type-id match that fails the derived test yields null.
+        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(elem, want)) return nullptr;
+        return elem;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// ============================================================
+// state 20 ENTER — retail 0x1400504e0 (Ghidra: ClearArea_impl_04e0)
+// Release any work slot the orchard is holding, then post ONE ClearArea work item at
+// priority 0x401 carrying the ClearAreaDescription's filter. The three literal flags
+// (1, 0, 1) are retail's — clear trees, leave the ground, clear buildings — and are NOT
+// read off the description the way ClearAreaComponent's own state 0 reads them.
+// ============================================================
+extern "C" char Orchard_State20Enter(void* selfV, void* /*sm*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t wcIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+    if (s_HasWorkSlot && s_HasWorkSlot(wcIBP)) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+        if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
+    }
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(s + 0x10);
+    void* caDesc = FindClearAreaDescription(entity);
+
+    void* work = nullptr;
+    if (caDesc && fn_MemAlloc) {
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+        if (mem) {
+            void* entityLocal = reinterpret_cast<void*>(entity);
+            work = ClearAreaCtrl_BuildWork(
+                mem, entityLocal,
+                *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(caDesc) + 0x20),
+                1, 0, 1);
+        }
+    }
+    {   // The whole point of porting this state is to make "cut" observable. Retail derefs
+        // caDesc+0x20 unguarded, so a miss here would be a FAULT in retail — meaning the
+        // orchard template is expected to carry a ClearAreaDescription. Report it loudly
+        // instead of faulting: if this line ever prints, the description list is the bug,
+        // not this handler.
+        static int s_n = 0;
+        if (s_n++ < 4) {
+            std::fprintf(stderr, "[Orchard20] enter: caDesc=%p work=%p slots=%d -> %s\n",
+                         caDesc, work, *reinterpret_cast<int32_t*>(s + 0x58),
+                         caDesc ? "post ClearArea (prio 0x401)"
+                                : "NO ClearAreaDescription on this entity — retail would "
+                                  "fault here; nothing posted, the cut will not progress");
+            std::fflush(stderr);
+        }
+    }
+    if (!work) return 1;
+
+    uintptr_t workIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    else workIBP = reinterpret_cast<uintptr_t>(work);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+    if (s_PostWork) s_PostWork(wcIBP, 0x401, 0, &workIBP);
+    return 1;
+}
+
+// ============================================================
+// state 20 UPDATE — retail 0x1400503e0
+// Unconditional release of the work slot (no HasWorkSlot test, unlike state 10's update).
+// ============================================================
+extern "C" char Orchard_State20Update(void* selfV, void* /*sm*/, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t wcIBP = 0;
+    if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+    if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
+    return 1;
+}
+
+// ============================================================
+// state 20 TRANS38 (per-frame) — retail 0x140050430
+// Find the entity's ClearAreaComponent (FUN_14000a170 = fn_FindComponent_SM) and ask
+// FUN_140118440 whether the footprint is clear yet. When it is, request state 9 — i.e.
+// a cut orchard re-plants itself with whatever tree type is now selected. That round trip
+// through state 9 is what makes "cut" the REPLACE command in the panel.
+// ============================================================
+extern "C" char Orchard_State20PerFrame(void* selfV, void* sm, void* /*time*/) {
+    Resolve();
+    if (!selfV) return 1;
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t caIBP = 0;
+    fn_FindComponent_SM(*reinterpret_cast<void**>(s + 0x10), &caIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&caIBP);
+
+    // SA: retail derefs the finder result unguarded (caComp+0x18 is the description). A
+    // null here is NOT benign — ClearAreaCtrl_IsDone answers `true` for a null component,
+    // which would bounce the orchard straight back to state 9 and read exactly like the
+    // "cut does nothing" symptom it is meant to fix. Report and stay put instead.
+    if (!caIBP) {
+        static int s_n = 0;
+        if (s_n++ < 4) {
+            std::fprintf(stderr, "[Orchard20] perFrame: entity has NO ClearAreaComponent — "
+                         "the cut cannot complete (retail would fault here)\n");
+            std::fflush(stderr);
+        }
+        return 1;
+    }
+
+    const bool done = ClearAreaCtrl_IsDone(reinterpret_cast<void*>(caIBP));
+    {   // "waiting on the woodcutters" and "finished" are the only two outcomes, and they
+        // look identical from outside; print the first few and then every 600 frames.
+        static int s_n = 0;
+        if (++s_n <= 4 || (s_n % 600) == 0) {
+            std::fprintf(stderr, "[Orchard20] perFrame #%d: cleared=%d -> %s\n",
+                         s_n, (int)done, done ? "request state 9 (replant)" : "still clearing");
+            std::fflush(stderr);
+        }
+    }
+    if (done) OrchardRequestState(sm, 9);
+    return 1;
+}
+
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.
 // State ids are literal; the names in comments are inferred from the bodies.
 extern "C" void OrchardCtrl_PopulateTable() {
@@ -967,7 +1167,9 @@ extern "C" void OrchardCtrl_PopulateTable() {
     // enter    0x1400504e0  ClearArea_impl_04e0: post a ClearArea work at prio 0x401
     // update   0x1400503e0  deactivate the workplace
     // trans38  0x140050430  when the footprint tests clear -> request state 9
-    TableRegisterState(t, 20, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 20, reinterpret_cast<void*>(&Orchard_State20Enter), nullptr,
+                       reinterpret_cast<void*>(&Orchard_State20PerFrame),
+                       reinterpret_cast<void*>(&Orchard_State20Update));
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 9, nullptr);
 

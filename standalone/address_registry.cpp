@@ -474,6 +474,7 @@ extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreateP
 extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker)
 extern void RegisterOrchardTypeIds();        // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard)
 extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth)
+extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + ClearAreaDescription c7200 storage (filled by FillTypeIdGlobals_cleararea)
 extern void RegisterOrchardGrowth();         // OrchardComponent::GetGrowth 51640 (orchard panel yield bar)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
@@ -672,6 +673,7 @@ static void RegisterCodeFunctions() {
     RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
     RegisterOrchardTypeIds();      // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard) — orchard panel type/yield + plant/tend work
     RegisterGrowthTypeIds();       // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth) — every natural resource spawned at runtime
+    RegisterClearAreaTypeIds();    // ClearAreaComponent c71c8 (backs fn_FindComponent_SM, null until now) + ClearAreaDescription c7200 — orchard state 20 "cut"
     RegisterOrchardGrowth();       // OrchardComponent::GetGrowth 51640 — fn_OrchardGetGrowth was null (EXEC-of-0 in OrchardUI::Slot7)
 
     // Player registration wave (round 1) — closure-safe tool sub-helpers.
