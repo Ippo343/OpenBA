@@ -95,6 +95,68 @@ Read the vtable **bytes**, not Ghidra's names — several are wrong by position:
 - `HerbalistWork_Ctor` @ `0x14004b160` is **HerbalistComponent's vtable slot 18**
   (CreateWork), not the HerbalistWork constructor.
 
+## Session 1 results (2026-08-11)
+
+### Landed
+- Shared ResourceProduce state machine ported (`resourceproducecomponent_states.cpp`).
+- Slot 18 CreateWork for all three subclasses (`resourceproduce_creatework.cpp`).
+- Fishing slots 19/20/21 (`fishingcomponent_produce.cpp`).
+- Fishing / Hunt / Herbalist promoted off `COMPONENT_INERT_FACTORY` to live controllers
+  (`BANISHED_LIVE_FISHING` / `_HUNTING` / `_GATHERER`, all still **opt-in**).
+- Placement harnesses: `BANISHED_BUILD_DEMO_CROPFIELD` / `_HUNTERLODGE` / `_GATHERERHUT`
+  (ring scan) and `_FISHINGDOCK` (terrain-scored, see below).
+- `BANISHED_FOOD_WORKERS=<n>` staffing stand-in for all four.
+- `BANISHED_FOOD_DIAG=<frames>` per-class census + town-storage totals.
+- 8 unregistered type-id globals (`reg_food_typeid.cpp`) + PI (`0x140172184`).
+
+### Measured state at end of session
+10 800 frames, no crash, all three buildings:
+`state 13 (producing) / staffed=2 / accepting=1`, dock rate `1.283`, hunt Time
+accumulator advancing. **Town storage only declines** (citizens eating) — nothing is
+deposited yet, which is why the three flags stay opt-in.
+
+### What is proven to work
+Component goes live → state 2 → state 13 → CreateWork mints the class's Work → posted
+to the reservation ledger → WorkPlace opened → worker seated → the Work's `Slot4`
+(Execute) runs. Breakpoint counts over one run: Herbalist Execute 145 / Slot6 54,
+Hunt 149 / 148, Fishing 114. So the works genuinely execute and complete.
+
+### The remaining gap: deposit
+The yield is NOT produced by the Work object. `HerbalistWork::Slot6` is only a BST
+removal (worker de-registration), and none of the three work files touch
+CreateRawMaterial. `HerbalistWork::Slot4` instead locates a NaturalResource in radius
+and pushes a **PerformWork action** (`0x1400c1eb0`, registered) onto the citizen; the
+yield must come from that action running to completion. That action stack is the next
+thing to trace.
+
+Two hypotheses already **refuted**, so don't re-spend them:
+- *"the buildings have no resources in range"* — the diag measures it: 851 resource
+  cells in the gatherer's radius 30, 748 in the hunter's radius 34.
+- *"the dock is badly placed"* — the placement harness scores candidates by exactly
+  the slot-21 predicate; the dock rates 1.28–1.32 on 327/611 water tiles.
+
+### Traps this wave paid for
+- **Out-param finder double-deref** (3 sites). These finders write the component into
+  the out-param and RETURN the out-param's ADDRESS, so retail's `*ret` and a local that
+  received the value are the same thing. The extra deref passes a VTABLE where a
+  component belongs.
+- **CreateWork must call the Work's `*_ResolveFuncs()`** — only the FACTORY path calls
+  it, so a directly-constructed Work carries null helper pointers.
+- **"VCALL-of-0" with `RAX == RCX == the object`** is a null *function pointer*, not a
+  vtable dispatch. The VEH dump's `vtable=` line is a guess.
+- **A 0-byte `standalone_crash.log` is not a crash** — the file is pre-created. Test its
+  SIZE, not its existence.
+- An unregistered type-id global makes a correct predicate silently always-false: the
+  dock rated `0.000` on measurably perfect water.
+
+### Next steps, in order
+1. Trace the PerformWork action to the deposit — the one missing link for all three.
+2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
+   ctor `0x14011afd0`, factory `0x140032ed0`); mirror the Orchard state machine.
+3. Port the state-2 -> 13 transition action `0x14012af90` (work-position map stamping),
+   currently registered null.
+4. Pasture gap closure, then the six dialogs.
+
 ## Current port status (start of wave)
 
 - Orchard: COMPLETE and default-on (`BANISHED_LIVE_ORCHARD/GROWTH/FRUIT`).

@@ -183,6 +183,62 @@ void DumpAll(int frame) {
                              (unsigned)*reinterpret_cast<uint8_t*>(f + 0x50),
                              *reinterpret_cast<float*>(f + 0x54));
             }
+            // Gatherer's Hut and Hunter Lodge both search their RADIUS for something
+            // that already exists in the world: HerbalistWork::Slot4 walks random cells
+            // in radius looking for a NaturalResource entity (cell+8) whose description
+            // is in the hut's herb list and whose growth clears the threshold; the hunt
+            // work looks for game. A building on cleared ground therefore executes its
+            // work, finds nothing, and produces nothing — which is indistinguishable
+            // from a broken port unless the resource count in range is reported.
+            if (std::strcmp(rows[r].name, "HerbalistComponent") == 0 ||
+                std::strcmp(rows[r].name, "HuntComponent") == 0) {
+                int resInRange = -1;
+                void* gwp = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                          ? *g_pGameWorldSingleton : nullptr;
+                uint8_t* mapObj = gwp ? *reinterpret_cast<uint8_t**>(
+                    reinterpret_cast<uintptr_t>(gwp) + 0xf8) : nullptr;
+                uint8_t* grid = mapObj ? *reinterpret_cast<uint8_t**>(mapObj + 0x80) : nullptr;
+                const int mw = mapObj ? *reinterpret_cast<int32_t*>(mapObj) : 0;
+                // Radius lives on the RadiusDescription in the entity's description
+                // list (entity+0x28), at +0x28 — the same read the work does.
+                int radius = 0;
+                const uint32_t tidRadius = Tid("RadiusDescription");
+                uintptr_t dlist = *reinterpret_cast<uintptr_t*>(
+                    static_cast<uint8_t*>(ent) + 0x28);
+                if (dlist && tidRadius) {
+                    const int dn = *reinterpret_cast<int32_t*>(dlist + 0x30);
+                    void** da = *reinterpret_cast<void***>(dlist + 0x28);
+                    for (int d = 0; d < dn && da; ++d)
+                        if (da[d] && fn_IsDerivedFrom && fn_IsDerivedFrom(da[d], tidRadius)) {
+                            radius = *reinterpret_cast<int32_t*>(
+                                reinterpret_cast<uintptr_t>(da[d]) + 0x28);
+                            break;
+                        }
+                }
+                if (grid && mw > 0 && radius > 0) {
+                    // Building tile centre, as the works compute it.
+                    const uint32_t tidMap = Tid("MapComponent");
+                    void* mc = FindComp(ent, tidMap);
+                    if (mc) {
+                        uintptr_t m = reinterpret_cast<uintptr_t>(mc);
+                        const int cx = (*reinterpret_cast<int16_t*>(m + 0x2c) >> 1) +
+                                        *reinterpret_cast<int16_t*>(m + 0x28);
+                        const int cy = (*reinterpret_cast<int16_t*>(m + 0x2e) >> 1) +
+                                        *reinterpret_cast<int16_t*>(m + 0x2a);
+                        resInRange = 0;
+                        for (int dy = -radius; dy < radius; ++dy)
+                            for (int dx = -radius; dx < radius; ++dx) {
+                                if (dx * dx + dy * dy > radius * radius) continue;
+                                const int x = cx + dx, y = cy + dy;
+                                if (x < 0 || y < 0 || x >= mw || y >= mw) continue;
+                                if (*reinterpret_cast<uintptr_t*>(
+                                        grid + (size_t)(y * mw + x) * 0x30 + 8) != 0)
+                                    ++resInRange;
+                            }
+                    }
+                }
+                std::fprintf(stderr, " radius=%d resourceCellsInRange=%d", radius, resInRange);
+            }
             if (std::strcmp(rows[r].name, "HuntComponent") == 0) {
                 uintptr_t h = reinterpret_cast<uintptr_t>(comp);
                 std::fprintf(stderr, " progress(+0x50)=%lld",
