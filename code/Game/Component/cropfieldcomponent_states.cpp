@@ -56,6 +56,10 @@ bool PlantArea_ResolveFuncs();
 bool TendArea_ResolveFuncs();
 bool HarvestArea_ResolveFuncs();
 
+// Watched by the citizen idle claim walk (citizenai_housing_idle.cpp) so we can tell
+// "never reached" from "reached and rejected".
+extern "C" void* g_pCropPlantWork = nullptr;
+
 namespace { struct CropFieldCtrlTag {}; }
 using CropFieldDispatch = ::ControllerLive::Dispatcher<CropFieldCtrlTag>;
 
@@ -260,6 +264,7 @@ void CF_PostWork(uintptr_t comp, void* work) {
     }
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
     s_postWork(workCompIbp, 1, 0, &workIbp);
+    g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
     if (s_t)
         std::fprintf(stderr, "[CropWork] POSTED work=%p to workComp=%p (assignedId=%d)\n",
                      work, (void*)workCompIbp,

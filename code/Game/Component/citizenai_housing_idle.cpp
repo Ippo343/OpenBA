@@ -83,6 +83,12 @@
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
+// Same probe idiom, pointed at the crop field's PlantArea. The field posts its work and
+// the scheduler assigns it an id, yet PlantArea::Execute is never called — so the open
+// question is whether the citizen claim walk ever REACHES that work, or whether it is
+// reached and rejected. Those need different fixes and are indistinguishable from
+// outside. Set by CF_PostWork (cropfieldcomponent_states.cpp).
+extern "C" void* g_pCropPlantWork;
 
 namespace {
 
@@ -520,6 +526,13 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
             typedef uint32_t (*fn20_t)(int64_t self, int64_t* citizenHolder, int64_t ctxArg);
             uint32_t r = reinterpret_cast<fn20_t>(vt[0x20 / 8])(payload, &citizen, param_1 + 0x130);
             // 2c-B probe: did the idle claim walk reach the spawned BuildStructure work?
+            if (g_pCropPlantWork && reinterpret_cast<void*>(payload) == g_pCropPlantWork) {
+                const char* ce = getenv("BANISHED_CROPFIELD_TRACE");
+                if (ce && ce[0] && ce[0] != '0')
+                    fprintf(stderr, "[CropWork] CLAIM-WALK reached the PlantArea work=%p "
+                            "Execute ret=%d citizen=%p\n",
+                            g_pCropPlantWork, static_cast<int>(r), reinterpret_cast<void*>(citizen));
+            }
             if (g_pBuildStructureWork && reinterpret_cast<void*>(payload) == g_pBuildStructureWork) {
                 const char* e = getenv("BANISHED_BUILD_TRACE");
                 if (e && e[0] && e[0] != '0')
