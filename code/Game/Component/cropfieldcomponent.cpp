@@ -392,6 +392,35 @@ extern "C" void   CropFieldCtrl_PopulateTable();
 // — their bodies are unported. When they are, write them from INSIDE this hook, never at
 // static init: FillTypedVtable rewrites slots 1..N on the first factory call and would
 // silently erase anything written earlier.
+
+// ── Family-A tail slots 4 / 19 / 20 / 21 ──────────────────────────────────────────
+// These four sit past the shared Component block and were the last cheap gaps the
+// slot-coverage harness reported for this class. All four are tiny in retail:
+//   slot 4  0x14011AE60  `*(uint64*)(self+0x50) = 0` — one store, nothing else.
+//   slot 19 0x140032F20  `MOV RAX,[rip+global]; RET` — returns the class's BaseTypeInfo.
+//   slot 20 0x140032F10  `MOV EAX,[rip+global]; RET` — returns the class's type id.
+//   slot 21 0x14011B2F0  `MOV EAX,3; RET`.
+//
+// ⚠ 19/20 read globals ADJACENT to (not identical with) the ones slots 1/2 use — they
+// are the controller-interface subobject's type info/id. We have no separate storage
+// for that subobject, so these return the class's own type info/id. That is a
+// stand-in, not byte-exact; it is strictly closer than the inert stub (which returned
+// null/garbage) and is flagged here so it is not mistaken for a finished port.
+static void CropFieldComponent_Slot4Clear(void* self) {
+    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x50) = 0;
+}
+static void* CropFieldComponent_Slot19GetTypeInfo(void*) {
+    static void* c = nullptr;
+    if (!c) c = ::Object::GetTypeInfoByName("CropFieldComponent");
+    return c;
+}
+static uint32_t CropFieldComponent_Slot20GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("CropFieldComponent");
+    return c;
+}
+static int CropFieldComponent_Slot21Const(void*) { return 3; }
+
 static void CropFieldCtrl_Populate();
 
 CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
@@ -399,6 +428,10 @@ CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
                                CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
 
 static void CropFieldCtrl_Populate() {
+    CropFieldComponent_LiveVtable[4]  = reinterpret_cast<void*>(&CropFieldComponent_Slot4Clear);
+    CropFieldComponent_LiveVtable[19] = reinterpret_cast<void*>(&CropFieldComponent_Slot19GetTypeInfo);
+    CropFieldComponent_LiveVtable[20] = reinterpret_cast<void*>(&CropFieldComponent_Slot20GetTypeId);
+    CropFieldComponent_LiveVtable[21] = reinterpret_cast<void*>(&CropFieldComponent_Slot21Const);
     CropFieldCtrl_PopulateTable();
 }
 REGISTER_TYPE(CropFieldComponent, "ControllerComponent",

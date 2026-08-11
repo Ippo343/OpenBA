@@ -836,6 +836,35 @@ extern "C" void   OrchardCtrl_PopulateTable();
 // The macro only fills 16/17 itself, but it calls PopulateFn from InstallLive AFTER
 // FillTypedVtable has run, so hanging the slot-15 write off the populate hook puts it in the
 // one place that survives. Idempotent: InstallLive runs per component instance.
+
+// ── Family-A tail slots 4 / 19 / 20 / 21 ──────────────────────────────────────────
+// These four sit past the shared Component block and were the last cheap gaps the
+// slot-coverage harness reported for this class. All four are tiny in retail:
+//   slot 4  0x140051DD0  `*(uint64*)(self+0x60) = 0` — one store, nothing else.
+//   slot 19 0x1400098C0  `MOV RAX,[rip+global]; RET` — returns the class's BaseTypeInfo.
+//   slot 20 0x1400098B0  `MOV EAX,[rip+global]; RET` — returns the class's type id.
+//   slot 21 0x1400523A0  `MOV EAX,3; RET`.
+//
+// ⚠ 19/20 read globals ADJACENT to (not identical with) the ones slots 1/2 use — they
+// are the controller-interface subobject's type info/id. We have no separate storage
+// for that subobject, so these return the class's own type info/id. That is a
+// stand-in, not byte-exact; it is strictly closer than the inert stub (which returned
+// null/garbage) and is flagged here so it is not mistaken for a finished port.
+static void OrchardComponent_Slot4Clear(void* self) {
+    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x60) = 0;
+}
+static void* OrchardComponent_Slot19GetTypeInfo(void*) {
+    static void* c = nullptr;
+    if (!c) c = ::Object::GetTypeInfoByName("OrchardComponent");
+    return c;
+}
+static uint32_t OrchardComponent_Slot20GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("OrchardComponent");
+    return c;
+}
+static int OrchardComponent_Slot21Const(void*) { return 3; }
+
 static void OrchardCtrl_PopulateTableAndWireSlot15();
 
 CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
@@ -845,6 +874,10 @@ CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
 static void OrchardCtrl_PopulateTableAndWireSlot15() {
     // 13/14 are the panel command path and 15 is OnMessage. All three must be written
     // HERE, from inside InstallLive, for the FillTypedVtable reason above.
+    OrchardComponent_LiveVtable[4]  = reinterpret_cast<void*>(&OrchardComponent_Slot4Clear);
+    OrchardComponent_LiveVtable[19] = reinterpret_cast<void*>(&OrchardComponent_Slot19GetTypeInfo);
+    OrchardComponent_LiveVtable[20] = reinterpret_cast<void*>(&OrchardComponent_Slot20GetTypeId);
+    OrchardComponent_LiveVtable[21] = reinterpret_cast<void*>(&OrchardComponent_Slot21Const);
     OrchardComponent_LiveVtable[13] = reinterpret_cast<void*>(&OrchardComponent_CanCommand);
     OrchardComponent_LiveVtable[14] = reinterpret_cast<void*>(&OrchardComponent_Command);
     OrchardComponent_LiveVtable[15] = reinterpret_cast<void*>(&OrchardComponent_OnMessage);
