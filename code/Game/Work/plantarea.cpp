@@ -443,12 +443,33 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
                         uintptr_t gd = mp ? *(uintptr_t*)(mp + 0x80) : 0;
                         if (gd) {
                             uintptr_t base = gd + (uintptr_t)srcCellIdx * 0x30;
+                            // Dump a CONTROL cell too — the same field's next cell,
+                            // which plants fine. One rejected cell in isolation says
+                            // nothing; the DIFFERENCE against a working neighbour names
+                            // the bit.
+                            int ctlCell = -1;
+                            if (i + 1 < fieldCellCount) {
+                                fn_InternalBasePtr_CheckPtr(&cropDescIBP);
+                                ctlCell = *(int*)((uintptr_t)(i + 1) * 0x20 +
+                                                  *(uintptr_t*)(cropDescIBP + 0x58));
+                            }
+                            uintptr_t cb = gd + (uintptr_t)ctlCell * 0x30;
                             std::fprintf(stderr,
                                 "[PlantArea] BLOCKED slot=%d cell=%d entity=%p "
-                                "terrain=0x%02x b2c=0x%02x floor=0x%02x flags0=0x%08x\n",
+                                "terrain=0x%02x b2c=0x%02x floor=0x%02x w0=0x%08x "
+                                "w4=0x%08x w28=0x%08x || CONTROL cell=%d terrain=0x%02x "
+                                "b2c=0x%02x floor=0x%02x w0=0x%08x w4=0x%08x w28=0x%08x\n",
                                 i, srcCellIdx, *(void**)(base + 8),
                                 *(uint8_t*)(base + 0x29), *(uint8_t*)(base + 0x2c),
-                                *(uint8_t*)(base + 0x2d), *(uint32_t*)(base + 0x00));
+                                *(uint8_t*)(base + 0x2d), *(uint32_t*)(base + 0x00),
+                                *(uint32_t*)(base + 0x04), *(uint32_t*)(base + 0x28),
+                                ctlCell,
+                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x29),
+                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x2c),
+                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x2d),
+                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x00),
+                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x04),
+                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x28));
                             std::fflush(stderr);
                             ++s_dumped;
                         }

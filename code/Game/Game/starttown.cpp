@@ -2105,6 +2105,33 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     {
         // The ring scan the pasture/orchard blocks above each open-code. Returns
         // false (and says so) when nothing fits, so a silent log means "never ran".
+        // Reject a candidate site unless EVERY footprint cell passes the workability
+        // predicate the work classes themselves use (Map_FindNearestPassable with the
+        // 0xe0f mask). Occupancy-only siting let a demo field straddle a cell no citizen
+        // can ever work.
+        auto ST_SiteIsWorkable = [&](int tx, int ty, int fw, int fh) -> bool {
+            if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
+            int* grid = *reinterpret_cast<int**>(
+                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            if (!grid) return true;
+            typedef int (*FNP_t)(int*, int, int, uint32_t);
+            static FNP_t s_fnp = nullptr;
+            static bool s_r = false;
+            if (!s_r) { s_fnp = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
+                        s_r = true; }
+            if (!s_fnp) return true;
+            const int mapW = *grid;
+            for (int yy = 0; yy < fh; ++yy) {
+                for (int xx = 0; xx < fw; ++xx) {
+                    const int cell = (ty + yy) * mapW + (tx + xx);
+                    if (cell < 0 || cell >= mapW * mapW) return false;
+                    if (s_fnp(grid, cell, cell, 0xe0f) < 0) return false;
+                }
+            }
+            return true;
+        };
+
+
         auto ringPlace = [&](const char* envVar, const char* tmplPath, const char* tag,
                              int fallbackW, int fallbackH) {
             const char* ev = std::getenv(envVar);
@@ -2148,7 +2175,19 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                 clash = true; break;
                             }
                         }
-                        if (!clash) { bestX = tx; bestY = ty; found = true; }
+                        if (clash) continue;
+                        // Every footprint cell must be WORKABLE, not merely unoccupied.
+                        // The player's placement tool enforces this in retail; this ring
+                        // scan did not, so a demo crop field could land with one corner on
+                        // terrain that Map_FindNearestPassable rejects. That one cell can
+                        // never be planted, `growing + done == total` never holds, and the
+                        // field parks one slot short of state 10 forever -- a harness
+                        // siting fault that reads exactly like a port bug. Measured:
+                        // blocked cell terrain byte 0x07 against 0x04 on its working
+                        // neighbour. Tested with the SAME predicate PlantArea uses, so a
+                        // site that passes here plants every cell.
+                        if (!ST_SiteIsWorkable(tx, ty, w, h)) continue;
+                        { bestX = tx; bestY = ty; found = true; }
                     }
                 }
             }
