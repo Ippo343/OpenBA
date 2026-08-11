@@ -333,7 +333,7 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
                      s_inBst = 0, s_noPass = 0, s_noPath = 0, s_ok = 0;
     if (s_ptrace) {
         ++s_calls;
-        if ((s_calls % 40) == 0) {
+        if ((s_calls % 10) == 0) {
             std::fprintf(stderr, "[PlantArea] after %lld Execute calls: maxWorkers=%lld "
                          "noMark=%lld alreadyInBst=%lld noPassableCell=%lld noPath=%lld "
                          "ACCEPTED=%lld  (slotCount=%d treeCount=%d cap=%d)\n",

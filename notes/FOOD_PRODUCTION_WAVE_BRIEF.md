@@ -421,6 +421,34 @@ plants are eating them, and the fix is to restore the mark on the failure path (
 does this through slot 7 / OnCancel — check whether our failure path routes there at
 all, since OnCancel was measured NOT HIT).
 
+### Final measured state of the crop-field chain
+
+Census threshold lowered to every 10 Execute calls so it actually reports:
+
+    [PlantArea] after 40 Execute calls: maxWorkers=10 noMark=812 alreadyInBst=0
+                noPassableCell=0 noPath=0 ACCEPTED=29 (slotCount=64 treeCount=0 cap=2)
+    [CropSlots] total=64 growing=60 done=0 | histogram 0:4 1:60 2:0
+
+Reading, and it is unambiguous:
+- **Pathfinding rejects NOTHING** (noPassableCell=0, noPath=0). The leftover cells are
+  not unreachable — an earlier guess that they were is wrong.
+- `noMark` dominates: the leftover cells have had their marks CLEARED but were never
+  planted. So marks ARE being consumed without a plant landing — the mechanism first
+  guessed several rounds ago, but for the right reason only now that pathing is excluded.
+- ACCEPTED=29 with ~60 cells planted confirms accepts are PAIRED (each clears two marks:
+  its own cell and `i+1`).
+
+⭐So the defect is the PAIRED path: an accept clears the mark for BOTH `i` and
+`pairedIdx`, but if the action only plants one of the pair the other cell is lost
+permanently — it can never be re-offered, and the field ends 2–4 cells short forever.
+Retail clears both marks too, so retail must plant both; check whether our
+`ShowTool_Action_Ctor3` call actually produces TWO CreateNaturalResource actions when
+`harvestMode == 2`, or only one. Compare the action chain built for harvestMode 1 vs 2.
+
+That single question is the last link in the crop-field chain: fix it and
+`growing + done == total` becomes satisfiable, state 10 is entered, the harvest arms get
+evaluated, HarvestArea runs, and the deposit path finally gets exercised.
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
