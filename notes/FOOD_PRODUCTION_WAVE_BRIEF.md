@@ -149,6 +149,29 @@ Two hypotheses already **refuted**, so don't re-spend them:
 - An unregistered type-id global makes a correct predicate silently always-false: the
   dock rated `0.000` on measurably perfect water.
 
+### Session 1b — two root causes found
+
+**Gatherer: blocked UPSTREAM by worldgen, not by the port.** `HerbalistWork::Slot4`
+ran 115 times and never reached its "valid herb found" branch, so the PerformWork
+action was never built and `RemoveNaturalResource::Main` (which actually produces) was
+reached ZERO times. A new nine-way rejection census (`BANISHED_GATHER_TRACE`) shows
+`herbTypeMismatch` dominating with `ACCEPTED=0`. Our comparison matches retail
+(0x1400ee3b0) key for key — the hut simply has nothing it accepts nearby: 605 resource
+cells in radius, `acceptList=4`, `GATHERABLE=0`, and only **3 distinct
+natural-resource templates exist anywhere within ±90 tiles**, none of them accepted.
+
+> ⚠ The earlier "851 resource cells, so it is well sited" reading was WRONG — it
+> counted any entity in a cell, overwhelmingly trees. Always count against the
+> building's own accept list. The diag now reports `GATHERABLE` for exactly this.
+
+**Fishing: unbounded recursion, fixed.** `FishingWork::Slot4 -> f8620 -> Slot4 …`
+until STACK_OVERFLOW. Slot4's fallback looks up whatever workplace stands on its attach
+cells; in retail `cell+8` there holds a NATURAL RESOURCE, in our standalone it holds the
+BUILDING ENTITY, so the dock found its own work. f8620's re-entrancy guard cannot help
+— retail stamps `work+0x2c` only AFTER Execute returns. Fixed by skipping our own
+entity, documented as a divergence whose real cause is upstream (`cell+8` should not
+carry the building entity).
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
