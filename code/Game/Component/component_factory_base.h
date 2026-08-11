@@ -36,6 +36,10 @@
 
 namespace ComponentFactory {
 
+// The address every inert vtable slot carries. A component slot equal to this has NOT
+// been reimplemented, whatever the source tree suggests — see food_placement_harness.
+void* InertStubSlot();
+
 // Slot count for an inert component vtable. 48 slots is comfortable headroom over
 // the largest real component vtable, so any in-range virtual call lands on a stub
 // rather than reading past the array.

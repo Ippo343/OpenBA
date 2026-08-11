@@ -86,6 +86,15 @@ void FillTypedVtable(void** vt, void* getTypeIdFn) {
 
 namespace ComponentFactory {
 
+// The address every inert slot carries. Exposed so harnesses can tell a slot that has
+// been reimplemented from one still holding the shared stub — the vtable array itself
+// lives in an anonymous namespace and is not reachable from outside this file, and
+// "is this slot live" is otherwise unanswerable from a probe.
+void* InertStubSlot() {
+    EnsureVtable();
+    return g_InertComponentVtable[1];
+}
+
 void InitInert(void* self, size_t size, uint32_t flags) {
     EnsureVtable();
     // Object::Internal base (sets +0x00 vtable + internal linkage at +0x08).
