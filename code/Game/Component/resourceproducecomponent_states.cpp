@@ -65,6 +65,7 @@ static fn_PostWork_t     s_postWork      = nullptr;   // 0x14012ec60
 static fn_SetAccepting_t s_setAccepting  = nullptr;   // 0x14012fc00
 static fn_SlotOccupied_t s_slotOccupied  = nullptr;   // 0x14012ead0
 static fn_SlotRelease_t  s_slotRelease   = nullptr;   // 0x14012eb50
+static fn_FindComp_t     s_findSM        = nullptr;   // 0x140003ea0 FindComponent_StateMachine
 static bool              s_resolved      = false;
 
 static void RP_Resolve() {
@@ -75,6 +76,7 @@ static void RP_Resolve() {
     s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
     s_slotOccupied = reinterpret_cast<fn_SlotOccupied_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_slotRelease  = reinterpret_cast<fn_SlotRelease_t>(ResolveAddr(Module::Exe, 0x14012eb50));
+    s_findSM       = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
     s_resolved = true;
 }
 
@@ -274,6 +276,80 @@ static char RP_Event3Resume(void* self, void* sm) {
                      self, (unsigned)paused);
     }
     return 1;
+}
+
+// ── component vtable slot 13 — retail 0x14012b520 — the panel COMMAND MASK ────────
+// Shared by every ResourceProduceComponent subclass (Ghidra labels it
+// "HerbalistComponent_Slot13", but the byte lives on the base vtable and all three food
+// subclasses inherit it — see notes/FOOD_PRODUCTION_WAVE_BRIEF.md).
+//
+// ⚠ This is NOT CanCommand(self, id). Retail's body takes only `self` and returns a
+// BITMASK of which panel commands are currently available:
+//     smc  = FindComponent_StateMachine(owner)                  (0x140003ea0)
+//     cur  = smc+0x52 (pending state); if negative, smc+0x50 (current state)
+//     mask = (cur != 14) ? 2 : 0                                 // pause offered
+//     if (self+0x48 == 0) mask |= ((unsigned)(cur - 13) < 2)     // resume offered
+// So bit 1 is "pause" (offered unless already paused in state 14) and bit 0 is
+// "resume" (offered while in state 13 or 14 and not flagged). Any extra argument a
+// caller passes is ignored, exactly as retail ignores it.
+extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self) {
+    RP_Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    if (!s_findSM) return 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
+    uintptr_t smcIbp = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
+    if (!smcIbp) return 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
+
+    int8_t cur = *reinterpret_cast<int8_t*>(smcIbp + 0x52);
+    if (cur < 0) cur = *reinterpret_cast<int8_t*>(smcIbp + 0x50);
+
+    uint8_t mask = (cur != 14) ? 2 : 0;
+    if (*reinterpret_cast<uint8_t*>(comp + 0x48) == 0)
+        mask |= (static_cast<uint32_t>(cur - 13) < 2u) ? 1 : 0;
+    return mask;
+}
+
+// ── component vtable slot 14 — retail 0x14012b5a0 — the panel COMMAND ─────────────
+//     smc = FindComponent_StateMachine(owner)
+//     node = *(smc+0x48); node->vtable[2](node, smc+0x48, smc+0x51, 0)   // PostEvent
+//     smc->vtable[8](smc, Time(0.0))                                      // force a tick
+//
+// ⚠ The event id is a hard-coded 0 (`XOR R9D,R9D` in the disassembly) and NO command id
+// is read — the slot takes only `self`. The shared state table registers event 3, not 0,
+// so this PostEvent finds no handler and returns 0 gracefully; the observable effect is
+// the forced tick that follows. That mismatch is retail's, reproduced rather than
+// "corrected": posting 3 here would be inventing behaviour the game does not have.
+extern "C" void ResourceProduceComponent_Command(void* self) {
+    RP_Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    if (!s_findSM) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
+    uintptr_t smcIbp = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
+    if (!smcIbp) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
+
+    const uintptr_t sm = smcIbp + 0x48;
+    void* node = *reinterpret_cast<void**>(sm);
+    if (node) {
+        void** nvt = *reinterpret_cast<void***>(node);
+        if (nvt && nvt[2]) {
+            const int curIdx = *reinterpret_cast<int8_t*>(smcIbp + 0x51);
+            reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[2])(
+                node, reinterpret_cast<void*>(sm), curIdx, 0);
+        }
+    }
+
+    // Force an immediate StateMachineComponent tick (its vtable slot 8) with Time(0).
+    void** svt = *reinterpret_cast<void***>(smcIbp);
+    if (svt && svt[8]) {
+        int64_t zeroTime = 0;
+        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        reinterpret_cast<void (*)(void*, void*)>(svt[8])(
+            reinterpret_cast<void*>(smcIbp), &zeroTime);
+    }
 }
 
 // ── table population — replica of ResourceProduceDescription_helper_b230 ──────────

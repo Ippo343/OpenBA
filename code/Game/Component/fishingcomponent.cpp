@@ -144,6 +144,8 @@ void FishingComponent_InitFuncs() {
 extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
 extern "C" void   RPCtrl_PopulateTable();
 extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);  // slot 18
+extern "C" uint8_t ResourceProduceComponent_CommandMask(void*);  // slot 13
+extern "C" void    ResourceProduceComponent_Command(void*);      // slot 14
 
 // Fishing is the only subclass in this wave that overrides the whole production-hook
 // block: 19/20 (enter/exit producing) and 21 (the per-frame rate tick).
@@ -163,6 +165,12 @@ CONTROLLER_LIVE_FACTORY_STATES(FishingComponent, 0x58, 0x80, 0x28, 2,
 
 static void FishingCtrl_PopulateAndWireHooks() {
     FishingComponent_LiveVtable[18] = reinterpret_cast<void*>(&FishingComponent_CreateWork);
+    // Slots 13/14 are the panel command path, shared by every
+    // ResourceProduceComponent subclass (retail 0x14012b520 / 0x14012b5a0).
+    // Without these the dialog harness measured every button on this panel dead:
+    // both slots still held the inert stub.
+    FishingComponent_LiveVtable[13] = reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
+    FishingComponent_LiveVtable[14] = reinterpret_cast<void*>(&ResourceProduceComponent_Command);
     FishingComponent_LiveVtable[19] = reinterpret_cast<void*>(&FishingComponent_OnEnterProducing);
     FishingComponent_LiveVtable[20] = reinterpret_cast<void*>(&FishingComponent_OnExitProducing);
     FishingComponent_LiveVtable[21] = reinterpret_cast<void*>(&FishingComponent_ProduceTick);

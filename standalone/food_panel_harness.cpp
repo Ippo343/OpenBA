@@ -131,15 +131,33 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                  fc.component, ent, comp, canCmd, doCmd);
 
     if (canCmd) {
-        std::fprintf(stderr, "[FoodPanel]   CanCommand(id) =");
+        // Slot 13 does NOT have one signature across the family. Orchard/Pasture/CropField
+        // implement CanCommand(self, id) and answer per command; the ResourceProduce base
+        // (0x14012b520, shared by Fishing/Hunt/Herbalist) takes only `self` and returns a
+        // BITMASK — bit 1 = pause offered, bit 0 = resume offered. Sweeping ids against a
+        // mask yields the same number eight times, so detect that and decode instead of
+        // reporting eight identical "verdicts" as if they were per-button answers.
+        uint8_t r[8];
         int enabled = 0;
+        bool uniform = true;
         for (int id = 0; id < 8; ++id) {
-            const uint8_t r = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, id);
-            if (r) ++enabled;
-            std::fprintf(stderr, " %d:%u", id, (unsigned)r);
+            r[id] = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, id);
+            if (r[id]) ++enabled;
+            if (r[id] != r[0]) uniform = false;
         }
-        std::fprintf(stderr, "   (%d of 8 enabled%s)\n", enabled,
-                     enabled == 0 ? "  <-- every button dead" : "");
+        if (uniform) {
+            std::fprintf(stderr, "[FoodPanel]   command MASK = 0x%02X  (pause=%s resume=%s)"
+                         "  [identical for every id -> the ResourceProduce mask form]%s\n",
+                         (unsigned)r[0],
+                         (r[0] & 2) ? "yes" : "no", (r[0] & 1) ? "yes" : "no",
+                         r[0] == 0 ? "  <-- no command offered" : "");
+        } else {
+            std::fprintf(stderr, "[FoodPanel]   CanCommand(id) =");
+            for (int id = 0; id < 8; ++id)
+                std::fprintf(stderr, " %d:%u", id, (unsigned)r[id]);
+            std::fprintf(stderr, "   (%d of 8 enabled%s)\n", enabled,
+                         enabled == 0 ? "  <-- every button dead" : "");
+        }
     }
 
     // ── open the panel ────────────────────────────────────────────────────────────

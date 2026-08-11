@@ -121,6 +121,8 @@ void HerbalistComponent_InitFuncs() {
 extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
 extern "C" void   RPCtrl_PopulateTable();
 extern "C" uintptr_t* HerbalistComponent_CreateWork(void*, uintptr_t*);   // slot 18
+extern "C" uint8_t ResourceProduceComponent_CommandMask(void*);  // slot 13
+extern "C" void    ResourceProduceComponent_Command(void*);      // slot 14
 
 static void HerbalistCtrl_PopulateAndWireHooks();
 
@@ -132,6 +134,12 @@ static void HerbalistCtrl_PopulateAndWireHooks() {
     // From inside InstallLive only — FillTypedVtable erases static-init slot writes.
     HerbalistComponent_LiveVtable[18] =
         reinterpret_cast<void*>(&HerbalistComponent_CreateWork);
+    // Slots 13/14 are the panel command path, shared by every
+    // ResourceProduceComponent subclass (retail 0x14012b520 / 0x14012b5a0).
+    // Without these the dialog harness measured every button on this panel dead:
+    // both slots still held the inert stub.
+    HerbalistComponent_LiveVtable[13] = reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
+    HerbalistComponent_LiveVtable[14] = reinterpret_cast<void*>(&ResourceProduceComponent_Command);
     RPCtrl_PopulateTable();
 }
 REGISTER_TYPE(HerbalistComponent, "ResourceProduceComponent",
