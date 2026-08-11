@@ -56,6 +56,100 @@ using CropFieldDispatch = ::ControllerLive::Dispatcher<CropFieldCtrlTag>;
 
 extern "C" void** CropFieldCtrl_NodeVtable() { return CropFieldDispatch::Vtable(); }
 
+// ── Resolved helpers ──────────────────────────────────────────────────────────────
+// 0x140002e10 FindComponent_WorkPlace(entity, outIBP) -> WorkPlaceComponent.
+// 0x14012fc00 WorkPlace SetAccepting(wpc, accepting)  -> drives WPC+0x50.
+namespace {
+
+typedef void (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
+typedef void (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
+
+fn_FindComp_t     s_findWpc      = nullptr;   // 0x140002e10
+fn_SetAccepting_t s_setAccepting = nullptr;   // 0x14012fc00
+const float*      s_fTempMin     = nullptr;   // 0x1401721d4 = 33.0f
+const float*      s_fYearSeconds = nullptr;   // 0x14017225c = 3600.0f
+const float*      s_fYearMonths  = nullptr;   // 0x1401721b8 = 12.0f
+bool              s_resolved     = false;
+
+void CF_Resolve() {
+    if (s_resolved) return;
+    s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
+    s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
+    s_fTempMin     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721d4));
+    s_fYearSeconds = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c));
+    s_fYearMonths  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
+    s_resolved = true;
+}
+
+// Push the component's +0x48 master switch into the workplace's accepting flag.
+// Shared by state-2 enter and the event-3 plant command, both of which do exactly
+// this before doing anything else.
+void CF_PushAccepting(uintptr_t comp) {
+    CF_Resolve();
+    if (!s_findWpc || !s_setAccepting) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
+    uintptr_t wpcIbp = 0;
+    s_findWpc(*reinterpret_cast<uintptr_t*>(comp + 0x10), &wpcIbp);
+    if (!wpcIbp) return;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
+    // wpcIbp already IS the component — the finder returns its out-param's address, so
+    // there is no second dereference here (the trap that crashed the RP family).
+    s_setAccepting(wpcIbp, *reinterpret_cast<char*>(comp + 0x48));
+}
+
+}  // namespace
+
+// ── state 2 enter — 0x14011a920 ───────────────────────────────────────────────────
+// Nothing but "publish my master switch to the workplace".
+static char CropField_State2Enter(void* self, void* /*sm*/) {
+    CF_PushAccepting(reinterpret_cast<uintptr_t>(self));
+    return 0;
+}
+
+// ── event 3 on state 2 — 0x14011a7b0 — the panel's PLANT command ──────────────────
+// Publish accepting, then request state 9.
+static char CropField_Event3Plant(void* self, void* sm) {
+    CF_PushAccepting(reinterpret_cast<uintptr_t>(self));
+    ::ControllerLive::RequestStateTransition(sm, 9);
+    return 1;
+}
+
+// ── state 2 per-frame — 0x14011a860 — the SEASONAL PLANTING TRIGGER ───────────────
+// Faithful shape:
+//   if (self+0x48 == 0) return 1;                       // field switched off
+//   if (weather(gw+0x130)+0x18 < 33.0f) return 1;       // too cold
+//   v = (int)((Time::AsSeconds(gw+0x128 + 8) / 3600.0f) * 12.0f);
+//   if (v < 0) return 1;
+//   if ((unsigned)(v - 3) > 8) Event3Plant(self, sm);   // -> state 9
+//
+// ⚠ That last test is an UNSIGNED compare on `v - 3`, so it is true both when v > 11
+// AND when v < 3 (the subtraction underflows to a huge unsigned). It is retail's
+// idiomatic "outside the closed window [3, 11]" check — i.e. plant in the cold months
+// at either end of the year, not mid-season. Writing it as a signed `v - 3 > 8` would
+// silently drop the entire v < 3 arm and the field would only ever plant late in the
+// year. Kept as an explicit unsigned cast so the behaviour cannot drift.
+static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
+    CF_Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (!fn_Time_AsSeconds || !s_fTempMin || !s_fYearSeconds || !s_fYearMonths) return 1;
+
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t seasonMgr = *reinterpret_cast<uintptr_t*>(gw + 0x128);
+    const uintptr_t weather   = *reinterpret_cast<uintptr_t*>(gw + 0x130);
+    if (!seasonMgr || !weather) return 1;
+
+    if (*reinterpret_cast<float*>(weather + 0x18) < *s_fTempMin) return 1;
+
+    const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(seasonMgr + 8));
+    const int v = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
+    if (v < 0) return 1;
+    if (static_cast<uint32_t>(v - 3) > 8u)
+        CropField_Event3Plant(self, sm);
+    return 1;
+}
+
 // Replica of the populator at 0x14011b150, in registration order. Order matters: it
 // fixes the state INDEX that StateMachine::Tick carries in its +0x09/+0x0a/+0x0b bytes.
 extern "C" void CropFieldCtrl_PopulateTable() {
@@ -67,10 +161,11 @@ extern "C" void CropFieldCtrl_PopulateTable() {
     // Slot 16 (GetDefaultState) is the shared 0x1400026c0 = `MOV EAX,2; RET`, so this
     // is where a new field starts. enter 0x14011a920 / trans38 0x14011a860; the event-3
     // body 0x14011a7b0 is the panel's plant command, mirroring the orchard's event 3.
-    TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&CropField_State2Enter), nullptr,
+                       reinterpret_cast<void*>(&CropField_State2PerFrame), nullptr);
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 9,  nullptr);
-    TableAddEvent(t, 3, nullptr);
+    TableAddEvent(t, 3, reinterpret_cast<void*>(&CropField_Event3Plant));
 
     // ── state 9 — PLANT ───────────────────────────────────────────────────────────
     // enter 0x14011a310 / trans38 0x14011a1e0.

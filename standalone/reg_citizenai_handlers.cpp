@@ -30,6 +30,10 @@ static const float k_rdata_172280 = -1.0f;   // MoveTo speed sentinel (-> random
 // its work — the search-area term `sqrtf(radiusSq * PI)`. Value read from Ghidra:
 // 0x140172184 = 0xdb0f4940 = 3.14159274f.
 static const float k_rdata_172184 =  3.14159274f;
+// CropFieldComponent state-2 per-frame (0x14011a860) planting gate: the field only
+// considers planting once the weather object's current temperature (gw+0x130, +0x18)
+// reaches this. 0x1401721d4 = 0x42040000 = 33.0f — one degree above freezing.
+static const float k_rdata_1721d4 = 33.0f;
 
 void RegisterCitizenAIHandlers() {
     RegisterExeAddr(0x1400c26c0, reinterpret_cast<uintptr_t>(&CitizenAI_PlayAnimationActionCtor5));
@@ -38,4 +42,5 @@ void RegisterCitizenAIHandlers() {
     RegisterExeAddr(0x1401721a0, reinterpret_cast<uintptr_t>(&k_rdata_1721a0));
     RegisterExeAddr(0x140172280, reinterpret_cast<uintptr_t>(&k_rdata_172280));
     RegisterExeAddr(0x140172184, reinterpret_cast<uintptr_t>(&k_rdata_172184));
+    RegisterExeAddr(0x1401721d4, reinterpret_cast<uintptr_t>(&k_rdata_1721d4));
 }
