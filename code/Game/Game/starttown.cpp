@@ -2088,6 +2088,230 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         }
     }
 
+    // ── Food-production demo buildings — CROP FIELD / HUNTER LODGE / GATHERER HUT ──
+    // Same rationale as BUILD_DEMO_PASTURE/ORCHARD above: all three are acquired only
+    // through tools that are still unported (drag-area for the crop field, placement
+    // for the two lodges), so without this there is no way to exercise their
+    // components or panels at all.
+    //
+    // Crop field is a ControllerComponent area like the orchard; hunter lodge and
+    // gatherer shelter are ResourceProduceComponent buildings sharing the state
+    // machine in resourceproducecomponent_states.cpp. Pair these with
+    // BANISHED_LIVE_HUNTING / BANISHED_LIVE_GATHERER (and BANISHED_LIVE_CROPFIELD)
+    // — spawning the building alone leaves the component inert.
+    //
+    // Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
+    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset.
+    {
+        // The ring scan the pasture/orchard blocks above each open-code. Returns
+        // false (and says so) when nothing fits, so a silent log means "never ran".
+        auto ringPlace = [&](const char* envVar, const char* tmplPath, const char* tag,
+                             int fallbackW, int fallbackH) {
+            const char* ev = std::getenv(envVar);
+            if (!ev || !ev[0] || ev[0] == '0') return;
+
+            void* tmpl = ResolveTemplateByPath(tmplPath);
+            int w = 0, h = 0;
+            if (const char* xpos = std::strchr(ev, 'x')) {      // "WxH" size override
+                w = std::atoi(ev); h = std::atoi(xpos + 1);
+            }
+            if (tmpl && (w <= 0 || h <= 0)) {
+                void* cpd = FindDescriptionOnTemplate(tmpl, TypeId("CreatePlacedDescription"));
+                if (cpd) {
+                    w = *(int32_t*)((uint8_t*)cpd + 0x44);
+                    h = *(int32_t*)((uint8_t*)cpd + 0x48);
+                }
+                // Drag-created areas (the crop field) carry a CreateDragDescription
+                // instead, so there is no authored footprint to read — hence the
+                // caller-supplied fallback rather than a hard-coded one here.
+                if (w <= 0 || h <= 0) { w = fallbackW; h = fallbackH; }
+            }
+            if (!tmpl) {
+                fprintf(stderr, "[startTown::%s] %s set but %s did not resolve; "
+                        "nothing spawned\n", tag, envVar, tmplPath);
+                fflush(stderr);
+                return;
+            }
+
+            const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+            int bestX = 0, bestY = 0;
+            bool found = false;
+            for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                for (int dy = -r; dy <= r && !found; ++dy) {
+                    for (int dx = -r; dx <= r && !found; ++dx) {
+                        if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                        const int tx = cx + dx, ty = cy + dy;
+                        bool clash = false;
+                        for (int o = 0; o < occN; ++o) {
+                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + w + 1 &&
+                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + h + 1) {
+                                clash = true; break;
+                            }
+                        }
+                        if (!clash) { bestX = tx; bestY = ty; found = true; }
+                    }
+                }
+            }
+            if (!found) {
+                fprintf(stderr, "[startTown::%s] no free %dx%d footprint within r=%d of "
+                        "cluster centre; nothing spawned\n", tag, w, h,
+                        kExtraHouseSearchRadius);
+            } else {
+                void* ent = placeStructure(tmpl, bestX, bestY, 0, w, h,
+                                           /*isDemoFoundation=*/false, -1);
+                Occupy(bestX, bestY, w, h);
+                if (ent) ++spawned;
+                fprintf(stderr, "[startTown::%s] demo %s tile=(%d,%d) fp=%dx%d ent=%p\n",
+                        tag, tag, bestX, bestY, w, h, ent);
+            }
+            fflush(stderr);
+        };
+
+        ringPlace("BANISHED_BUILD_DEMO_CROPFIELD", "Template\\CropField.rsc",
+                  "cropfield", 8, 8);
+        ringPlace("BANISHED_BUILD_DEMO_HUNTERLODGE", "Template\\HunterLodge.rsc",
+                  "hunterlodge", 8, 8);
+        ringPlace("BANISHED_BUILD_DEMO_GATHERERHUT", "Template\\GathererShelter.rsc",
+                  "gathererhut", 8, 8);
+    }
+
+    // ── BANISHED_BUILD_DEMO_FISHINGDOCK — one COMPLETED dock ON WATER ─────────────
+    // The dock is the one food building whose output depends on WHERE it sits:
+    // FishingComponent slot 21 (fishingcomponent_produce.cpp) rates the dock as
+    // matching/(total*0.5) over the tiles in its radius, where "matching" means the
+    // tile's terrain byte (cell+0x29) is set in the FishingDescription's accepted
+    // terrain mask (desc+0x2c). Drop it inland and the rate is 0 — a false negative
+    // that says nothing about whether the port is right.
+    //
+    // The trading-post block above seeds from the river POLYLINES, which is no use
+    // here: standalone worldgen never populates worldGeom+0x1e0 (measured — all
+    // entries {pts=NULL,n=0}), which is why that block has a cluster-centre fallback.
+    // So this searches the TERRAIN directly, scoring candidate tiles by exactly the
+    // predicate slot 21 will later evaluate. That makes the harness agree with the
+    // thing under test by construction instead of by luck.
+    {
+        const char* fe = std::getenv("BANISHED_BUILD_DEMO_FISHINGDOCK");
+        if (fe && fe[0] && fe[0] != '0') {
+            void* ftmpl = ResolveTemplateByPath("Template\\FishermansDock.rsc");
+            int fw = 0, fh = 0;
+            if (const char* xpos = std::strchr(fe, 'x')) {
+                fw = std::atoi(fe); fh = std::atoi(xpos + 1);
+            }
+            uint32_t mask = 0;
+            int radius = 0;
+            if (ftmpl) {
+                if (fw <= 0 || fh <= 0) {
+                    void* cpd = FindDescriptionOnTemplate(ftmpl, TypeId("CreatePlacedDescription"));
+                    if (cpd) {
+                        fw = *(int32_t*)((uint8_t*)cpd + 0x44);
+                        fh = *(int32_t*)((uint8_t*)cpd + 0x48);
+                    }
+                    if (fw <= 0 || fh <= 0) { fw = 8; fh = 8; }
+                }
+                if (void* fd = FindDescriptionOnTemplate(ftmpl, TypeId("FishingDescription")))
+                    mask = *(uint32_t*)((uint8_t*)fd + 0x2c);
+                if (void* rd = FindDescriptionOnTemplate(ftmpl, TypeId("RadiusDescription")))
+                    radius = *(int32_t*)((uint8_t*)rd + 0x28);
+            }
+
+            void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                     ? *g_pGameWorldSingleton : nullptr;
+            uint8_t* mapObj = gw ? *(uint8_t**)((uint8_t*)gw + 0xf8) : nullptr;
+            const int width = mapObj ? *(int32_t*)mapObj : 0;
+            uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
+
+            if (!ftmpl) {
+                fprintf(stderr, "[startTown::fishingdock] BANISHED_BUILD_DEMO_FISHINGDOCK "
+                        "set but Template\\FishermansDock.rsc did not resolve; nothing "
+                        "spawned\n");
+            } else if (!grid || width <= 0) {
+                fprintf(stderr, "[startTown::fishingdock] no terrain grid (map=%p grid=%p "
+                        "width=%d); nothing spawned\n", (void*)mapObj, (void*)grid, width);
+            } else if (mask == 0 || radius <= 0) {
+                fprintf(stderr, "[startTown::fishingdock] template has no usable "
+                        "FishingDescription mask (0x%08x) / RadiusDescription radius (%d); "
+                        "nothing spawned — placing blind would only produce a rate-0 dock\n",
+                        mask, radius);
+            } else {
+                // Score every candidate by the slot-21 predicate and keep the best that
+                // both fits and is nearest to town on ties. Bounded window + stride so
+                // this stays cheap on a large map.
+                const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
+                const int kWindow = 80, kStride = 2;
+                int bestX = 0, bestY = 0, bestScore = 0;
+                long long bestDist = -1;
+                bool found = false;
+
+                for (int ty = townCy - kWindow; ty <= townCy + kWindow; ty += kStride) {
+                    for (int tx = townCx - kWindow; tx <= townCx + kWindow; tx += kStride) {
+                        if (tx < 1 || ty < 1 ||
+                            tx + fw >= width - 1 || ty + fh >= width - 1) continue;
+                        bool clash = false;
+                        for (int o = 0; o < occN; ++o) {
+                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + fw + 1 &&
+                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + fh + 1) {
+                                clash = true; break;
+                            }
+                        }
+                        if (clash) continue;
+
+                        // The dock's own footprint must be on land, or placeStructure
+                        // drops a building into the water.
+                        bool footprintDry = true;
+                        for (int yy = ty; yy < ty + fh && footprintDry; ++yy)
+                            for (int xx = tx; xx < tx + fw; ++xx) {
+                                const uint8_t t =
+                                    *(grid + (size_t)(yy * width + xx) * 0x30 + 0x29);
+                                if ((mask >> (t & 0x1f)) & 1) { footprintDry = false; break; }
+                            }
+                        if (!footprintDry) continue;
+
+                        // Score exactly as slot 21 will: matching tiles in the disk.
+                        const int cx = tx + fw / 2, cy = ty + fh / 2;
+                        int score = 0;
+                        for (int dy = -radius; dy < radius; ++dy)
+                            for (int dx = -radius; dx < radius; ++dx) {
+                                if (dx * dx + dy * dy > radius * radius) continue;
+                                const int x = cx + dx, y = cy + dy;
+                                if (x < 0 || y < 0 || x >= width || y >= width) continue;
+                                const uint8_t t =
+                                    *(grid + (size_t)(y * width + x) * 0x30 + 0x29);
+                                if ((mask >> (t & 0x1f)) & 1) ++score;
+                            }
+                        if (score == 0) continue;
+
+                        const long long ddx = (long long)cx - townCx;
+                        const long long ddy = (long long)cy - townCy;
+                        const long long dist = ddx * ddx + ddy * ddy;
+                        if (score < bestScore) continue;
+                        if (score == bestScore && bestDist >= 0 && dist >= bestDist) continue;
+                        bestScore = score; bestDist = dist;
+                        bestX = tx; bestY = ty; found = true;
+                    }
+                }
+
+                if (!found) {
+                    fprintf(stderr, "[startTown::fishingdock] no %dx%d dry footprint with any "
+                            "fishable tile in r=%d within %d tiles of the town centre "
+                            "(mask=0x%08x); nothing spawned\n",
+                            fw, fh, radius, kWindow, mask);
+                } else {
+                    void* fent = placeStructure(ftmpl, bestX, bestY, 0, fw, fh,
+                                                /*isDemoFoundation=*/false, -1);
+                    Occupy(bestX, bestY, fw, fh);
+                    if (fent) ++spawned;
+                    fprintf(stderr, "[startTown::fishingdock] demo fishing dock tile=(%d,%d) "
+                            "fp=%dx%d radius=%d mask=0x%08x fishableTiles=%d "
+                            "(expected rate ~%.3f) ent=%p\n",
+                            bestX, bestY, fw, fh, radius, mask, bestScore,
+                            /* the disk area slot 21 will divide by */
+                            bestScore / (3.14159f * radius * radius * 0.5f), fent);
+                }
+            }
+            fflush(stderr);
+        }
+    }
+
     return spawned;
 }
 

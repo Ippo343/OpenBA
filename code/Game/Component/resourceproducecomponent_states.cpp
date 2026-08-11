@@ -124,6 +124,11 @@ static char RP_State13Enter(void* self, void* sm) {
     RP_Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(self);
 
+    // Entry trace as well as the outcome trace below: without it a crash anywhere in
+    // this body is indistinguishable from the state never being entered at all.
+    if (RP_Trace())
+        std::fprintf(stderr, "[RPTrace] State13Enter ENTER self=%p\n", self);
+
     if (*reinterpret_cast<uint8_t*>(comp + 0x48) != 0) {
         if (RP_Trace())
             std::fprintf(stderr, "[RPTrace] State13Enter self=%p paused -> request 14\n", self);
@@ -139,8 +144,12 @@ static char RP_State13Enter(void* self, void* sm) {
     uintptr_t workIbp = 0;
     typedef uintptr_t* (*fn_CreateWork_t)(void* self, uintptr_t* outIBP);
     fn_CreateWork_t createWork = reinterpret_cast<fn_CreateWork_t>(RP_VSlot(self, 18));
+    if (RP_Trace())
+        std::fprintf(stderr, "[RPTrace]   step1 owner=%p createWork=%p\n",
+                     (void*)owner, (void*)createWork);
     if (createWork) {
         createWork(self, &workIbp);
+        if (RP_Trace()) std::fprintf(stderr, "[RPTrace]   step2 work=%p\n", (void*)workIbp);
     } else if (RP_Trace()) {
         std::fprintf(stderr, "[RPTrace] State13Enter self=%p has NO slot-18 CreateWork\n", self);
     }
@@ -149,12 +158,16 @@ static char RP_State13Enter(void* self, void* sm) {
     uintptr_t workCompIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
+    if (RP_Trace())
+        std::fprintf(stderr, "[RPTrace]   step3 workComp=%p post=%p\n",
+                     (void*)workCompIbp, (void*)s_postWork);
     bool posted = false;
     if (s_postWork && workCompIbp != 0 && workIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, 0, &workIbp);
         posted = true;
     }
+    if (RP_Trace()) std::fprintf(stderr, "[RPTrace]   step4 posted=%d\n", (int)posted);
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
     // assigned but every gather bails "no target": the same trap the pasture wave hit.
@@ -164,7 +177,12 @@ static char RP_State13Enter(void* self, void* sm) {
     bool accepted = false;
     if (wpcIbp != 0 && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
-        s_setAccepting(*reinterpret_cast<uintptr_t*>(wpcIbp), 1);
+        // wpcIbp ALREADY holds the component pointer: the finder writes it into the
+        // out-param and returns the out-param's ADDRESS, so retail's `local_res18`
+        // and this local are the same value. Dereferencing again would pass the
+        // component's VTABLE pointer as the workplace — which is exactly what
+        // crashed here first time round.
+        s_setAccepting(wpcIbp, 1);
         accepted = true;
     }
 
@@ -190,9 +208,9 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     bool released = false;
     if (workCompIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
-        const uintptr_t workComp = *reinterpret_cast<uintptr_t*>(workCompIbp);
-        if (s_slotOccupied && s_slotRelease && s_slotOccupied(workComp)) {
-            s_slotRelease(workComp);
+        // Same out-param convention as State13Enter: this local is the component.
+        if (s_slotOccupied && s_slotRelease && s_slotOccupied(workCompIbp)) {
+            s_slotRelease(workCompIbp);
             released = true;
         }
     }

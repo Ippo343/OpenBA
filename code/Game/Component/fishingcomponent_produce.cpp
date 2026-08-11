@@ -93,8 +93,10 @@ bool TileCentre(uintptr_t comp, int* cx, int* cy) {
     s_findMap(entity, &mcIbp);
     if (!mcIbp) return false;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mcIbp);
-    const uintptr_t mc = *reinterpret_cast<uintptr_t*>(mcIbp);
-    if (!mc) return false;
+    // mcIbp already IS the MapComponent: the finder writes the component into the
+    // out-param and returns that out-param's address, so retail's `*self_00` and this
+    // local are the same value — no second dereference.
+    const uintptr_t mc = mcIbp;
     *cx = (*reinterpret_cast<int16_t*>(mc + 0x2c) >> 1) + *reinterpret_cast<int16_t*>(mc + 0x28);
     *cy = (*reinterpret_cast<int16_t*>(mc + 0x2e) >> 1) + *reinterpret_cast<int16_t*>(mc + 0x2a);
     return true;

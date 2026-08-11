@@ -26,6 +26,18 @@
 #include <cstdint>
 #include <cstdio>
 
+// Each Work reimpl resolves its own engine-function pointers in a *_ResolveFuncs()
+// that only the FACTORY path calls. CreateWork allocates and constructs directly —
+// exactly as retail does — so it must call the resolver itself, or the work goes out
+// with null helper pointers and dies the first time the scheduler asks it anything.
+// That is precisely how this first crashed: HerbalistWork::Slot10 (GetTarget) called
+// a null s_fn_FindSubEntity from inside the work-scheduler insert. The VEH dump read
+// it as "VCALL-of-0", but RAX == RCX == the entity is the signature of a null static
+// function pointer, not of a vtable dispatch.
+bool FishingWork_ResolveFuncs();
+bool HuntWork_ResolveFuncs();
+bool HerbalistWork_ResolveFuncs();
+
 // Work vtables are installed by the Work reimpls and published through the address
 // registry, so read them back the same way every other cross-module reference does
 // rather than reaching for the file-static arrays.
@@ -36,7 +48,10 @@ constexpr uintptr_t kHuntWorkVtable      = 0x140161620;
 constexpr uintptr_t kHerbalistWorkVtable = 0x1401615a0;
 
 typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
-typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out); // 0x140004680 (Position)
+// 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
+// uses. (It is a known misnomer: it resolves the InteractComponent, not a "position"
+// component. Kept faithful to retail's choice rather than "corrected".)
+typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
 typedef int   (*fn_ChildSum_t)(uintptr_t posComp, int kind);      // 0x140123070
 typedef void  (*fn_ArrayGrow_t)(void* vec, int count);            // 0x1400032e0
 typedef void  (*fn_ArrayResize04_t)(void* vec, int count);        // 0x1400021d0
@@ -51,7 +66,7 @@ bool               s_resolved   = false;
 void Resolve() {
     if (s_resolved) return;
     s_workCtor25 = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_findPos    = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_findPos    = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
     s_childSum   = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_arrayGrow  = reinterpret_cast<fn_ArrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_arrayRes04 = reinterpret_cast<fn_ArrayResize04_t>(ResolveAddr(Module::Exe, 0x1400021d0));
@@ -80,6 +95,7 @@ uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
 // nowhere to stand.
 extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
+    FishingWork_ResolveFuncs();
     void* mem = AllocWork(0x70);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -103,7 +119,11 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
         s_findPos(entity, &posIbp);
         if (posIbp) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIbp);
-            const uintptr_t pos = *reinterpret_cast<uintptr_t*>(posIbp);
+            // posIbp IS the component — the finder returns its out-param, so retail's
+            // `*pIVar3` and this local are the same value. Dereferencing again handed
+            // the component's VTABLE to the child-count helper, whose garbage result
+            // then sized the two arrays and blew up inside the Runtime allocator.
+            const uintptr_t pos = posIbp;
             const int n0 = s_childSum(pos, 0);
             const int n2 = s_childSum(pos, 2);
             s_arrayGrow(reinterpret_cast<void*>(w + 0x48), n0);
@@ -122,6 +142,7 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
 // compiler artefact of the two-level ctor); only the final store is observable.
 extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
+    HuntWork_ResolveFuncs();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -143,6 +164,7 @@ extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
 extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
+    HerbalistWork_ResolveFuncs();
     void* mem = AllocWork(0x60);
     if (!mem) return WrapIBP(out, nullptr);
 

@@ -682,6 +682,7 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
+extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
 extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
@@ -900,6 +901,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
     OrchardDiag_Tick(s_frameNum);
+
+    // Periodic census of ALL SIX food-production classes (state, staffing, fishing
+    // rate, hunt progress) plus town-storage totals by resource type — the number
+    // that actually answers "does this building feed the town". No-op unless
+    // BANISHED_FOOD_DIAG is set (standalone/food_production_diag.cpp).
+    FoodDiag_Tick(s_frameNum);
 
     // One-shot: force an untyped demo orchard's master switch on + assign a real
     // tree type via the live combo-select path, so the state-2->state-9 transition
