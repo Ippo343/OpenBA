@@ -556,3 +556,51 @@ one run each ([[reference-banished-seed-pins-worldgen-only]]).
 ⚠Do NOT read slot state 2 as "harvested" when judging this -- it is also what
 ValidateEntityRefs writes when it DROPS a stale slot. One run showed done=51 while
 still in state 9. Only a CreateRawMaterial in storage settles it.
+
+## ⭐ROOT CAUSE FOUND: nothing writes the map tile's +0x08 entity slot
+
+The crop field now plants 64/64, tends, triggers harvest, enters state 11 and posts a
+HarvestArea whose Execute runs every frame. It still deposits nothing, and the census
+says why:
+
+    [HarvestArea] calls=20 | autopickup=0 atCapacity=0 workerCap=0 noMark=306
+                  inBst=0 noEntity=29 noPass=0 noPath=0 ACCEPTED=0
+
+`noEntity` = `grid + cell*0x30 + 8` is NULL on every crop cell, so HarvestArea finds
+nothing to pick AND clears that cell's mark (retail-faithful), which is why noMark then
+dominates and ACCEPTED stays 0 forever.
+
+The crops DO exist: `CreateNaturalResource::AbstractImpl` runs 61+ times per field, with
+ZERO bails (its own CNR_BAIL trace never fires). Resources are created; they just never
+land on their tile.
+
+### Grep that proves it
+
+    grep "+ 8 + ... * 0x30" over code/  ->  SIX readers, ZERO writers
+      readers: createnaturalresource (its own "already occupied" test),
+               cropfieldcomponent:472, fishingwork:417, fishingwork:653,
+               pasturework:639
+      writer:  pasturecomponent:603 -- and that one CLEARS it to null
+
+Nothing in the port ever sets it.
+
+### Where retail writes it
+
+Not in CreateNaturalResource (retail 0x1400c6650 ends at RegisterEntity), and not in
+SetupModelAtCell (retail 0x140126540 -- our port is faithful, both only touch the
+position component's +0x28/+0x2a and the model transform). It is inside RegisterEntity
+0x1400c48a0, which calls **FUN_1400c2f60 = the OnAdded pass**: that walks the entity's
+component array and dispatches **vtable +0x30 (slot 6)** on each component whose
++0x20 & 1 is set.
+
+So the writer is a **component OnAdded (slot 6) on the spawned natural-resource
+entity**, and `code/Game/Component/naturalresourcecomponent.cpp` is 282 lines with NO
+slot 6 at all. That is the next thing to port.
+
+⚠This is NOT crop-field-specific. `fishingwork.cpp` reads the same tile field in two
+places, which is almost certainly the "gap downstream of the accepted spot" that has
+blocked the fishing dock all wave. One missing slot 6 plausibly closes two of the six.
+
+⚠BANISHED_LIVE_MAP_SPAWN_CLAIM is NOT this. Tested: no change. That flag writes cell
++0x00 (the owner/footprint claim, which is already working -- CNR's owner check passes).
++0x00 and +0x08 are different slots with different writers.

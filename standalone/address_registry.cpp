@@ -474,6 +474,7 @@ extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreateP
 extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker)
 extern void RegisterOrchardTypeIds();        // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard)
 extern void RegisterFoodTypeIds();           // Fishing/Hunt/Herbalist/CropField component+description type-id storage (filled by FillTypeIdGlobals_food)
+extern void RegisterRdataFloatConsts();     // 25 .rdata float constants resolved by code/ but registered nowhere; a null one is SILENT (cost the crop harvest)
 extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth)
 extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + ClearAreaDescription c7200 storage (filled by FillTypeIdGlobals_cleararea)
 extern void RegisterOrchardGrowth();         // OrchardComponent::GetGrowth 51640 (orchard panel yield bar)
@@ -674,6 +675,7 @@ static void RegisterCodeFunctions() {
     RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
     RegisterOrchardTypeIds();      // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard) — orchard panel type/yield + plant/tend work
     RegisterFoodTypeIds();         // food-production component/description type ids — without these the fishing rate mask reads 0 on perfect water
+    RegisterRdataFloatConsts();    // unregistered .rdata floats: hard guards go inert, soft `p ? *p : 0.0f` fallbacks silently use the WRONG value
     RegisterGrowthTypeIds();       // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth) — every natural resource spawned at runtime
     RegisterClearAreaTypeIds();    // ClearAreaComponent c71c8 (backs fn_FindComponent_SM, null until now) + ClearAreaDescription c7200 — orchard state 20 "cut"
     RegisterOrchardGrowth();       // OrchardComponent::GetGrowth 51640 — fn_OrchardGetGrowth was null (EXEC-of-0 in OrchardUI::Slot7)

@@ -324,6 +324,14 @@ static void* BST_Find(void* root, int key) {
 // 6. If pairable cell available, harvest two at once; else harvest one
 // 7. Create harvest action, assign work, register with citizen AI
 //
+// Harvest-assignment census counters. State 11 posts this work and its Execute runs
+// every frame; "runs but produces nothing" has EIGHT possible causes here and they need
+// different fixes, so each is counted separately. Two of them (atCapacity, workerCap)
+// return before the cell loop is even reached.
+static long long g_ha_calls = 0, g_ha_auto = 0, g_ha_cap = 0, g_ha_wcap = 0,
+                 g_ha_nomark = 0, g_ha_inbst = 0, g_ha_noent = 0, g_ha_nopass = 0,
+                 g_ha_nopath = 0, g_ha_ok = 0;
+
 int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
     // Harvest-assignment census. State 11 posts this work; whether a citizen ever
     // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
@@ -332,9 +340,13 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
         static int s_t = -1;
         if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
                        s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static long long s_calls = 0;
-        if (s_t && ((s_calls++ % 20) == 0)) {
-            std::fprintf(stderr, "[HarvestArea] Execute call %lld\n", s_calls);
+        ++g_ha_calls;
+        if (s_t && ((g_ha_calls % 20) == 0)) {
+            std::fprintf(stderr, "[HarvestArea] calls=%lld | autopickup=%lld atCapacity=%lld "
+                         "workerCap=%lld noMark=%lld inBst=%lld noEntity=%lld noPass=%lld "
+                         "noPath=%lld ACCEPTED=%lld\n",
+                         g_ha_calls, g_ha_auto, g_ha_cap, g_ha_wcap, g_ha_nomark,
+                         g_ha_inbst, g_ha_noent, g_ha_nopass, g_ha_nopath, g_ha_ok);
             std::fflush(stderr);
         }
     }
@@ -347,6 +359,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     // Step 1: Check auto-pickup
     int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &citizenRef);
     if (checkResult == 2) {
+        ++g_ha_auto;
         return 2;
     }
 
@@ -382,6 +395,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
+        ++g_ha_cap;
         return 1;
     }
 
@@ -393,6 +407,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
     if (treeCount > *(int*)(matDescIBP + 0x30)) {
+        ++g_ha_wcap;
         return 1;
     }
 
@@ -424,6 +439,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
             // Check if this cell's validity flag is set
             char* validityArray = (char*)selfQ[0xb]; // self->_field58
             if (validityArray[i] == 0) {
+                ++g_ha_nomark;
                 goto next_cell;
             }
 
@@ -432,6 +448,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                 int* bstRoot = (int*)selfQ[9]; // self->_field48
                 void* found = BST_Find(bstRoot, i);
                 if (found != nullptr) {
+                    ++g_ha_inbst;
                     goto next_cell;
                 }
             }
@@ -459,6 +476,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 
                 if (entityAtCell1 == 0) {
                     // No entity at cell -- mark as unavailable
+                    ++g_ha_noent;
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {

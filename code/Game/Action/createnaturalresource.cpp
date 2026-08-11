@@ -13,6 +13,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic below)
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 
 // ============================================================
@@ -213,6 +214,22 @@ void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* str
 // Returns 0 on success, 2 on failure (cell occupied or invalid).
 // ============================================================
 int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* actionStack) {
+    // Plant-action census. The crop field binds its slots from a SendComponentMessage
+    // that sits in the SAME action chain as this action, so a field can look fully
+    // planted (64 slots "growing") while this never runs -- and then HarvestArea finds
+    // no entity on any cell and clears every mark. Counting runs here separates
+    // "the plant action never executed" from "it executed and did not register".
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_n = 0;
+        if (s_t && ((s_n++ % 10) == 0)) {
+            std::fprintf(stderr, "[CreateNatRes] AbstractImpl run %lld (self=%p)\n",
+                         s_n, (void*)self);
+            std::fflush(stderr);
+        }
+    }
     CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
