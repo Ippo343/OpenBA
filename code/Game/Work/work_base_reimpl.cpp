@@ -128,7 +128,7 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 // ============================================================
 // Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.
 // ============================================================
-// Object::Internal::Internal(self); vtable = vtable_Work (0x1401612e0); +0x10 = entity
+// Object::Internal::Internal(self); vtable = vtable_Work (0x140161a80); +0x10 = entity
 // ptr (from *param2); sentinels +0x20/+0x28 = -1; and when an entity is present, compute
 // the work target cell (+0x28) from its MapComponent footprint (via FUN_140004680) and
 // store its WorkComponent (+0x18, via FUN_140003050). Faithful 1:1 port.
@@ -140,7 +140,10 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    uintptr_t vtWork = ResolveAddr(Module::Exe, 0x1401612e0);
+    // Was 0x1401612e0 — a 4-slot vtable belonging to a different class that happens to
+    // end exactly where the FishingWork type descriptor begins (0x1401612e0 + 0x20 =
+    // 0x140161300). Retail's own bytes settle it: 0x1400f730a LEA RAX,[0x140161a80].
+    uintptr_t vtWork = ResolveAddr(Module::Exe, 0x140161a80);
     if (vtWork) *reinterpret_cast<uintptr_t*>(s) = vtWork;
 
     *reinterpret_cast<uint64_t*>(s + 0x10) = 0;

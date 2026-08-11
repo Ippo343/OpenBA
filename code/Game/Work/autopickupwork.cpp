@@ -11,6 +11,8 @@
 // Decompiled from Application-x64.exe.
 
 #include "Work/autopickupwork_funcs.h"
+#include "Work/work_base_standalone.h"     // Work_Slot1 / Work_Slot12 / Work_PureCall
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -68,6 +70,47 @@ static void EnsureInit() {
     // Vtables
     s_vtable_Work = (void*)ResolveAddr(Module::Exe, WorkAddr::Vtable);
     s_vtable_AutoPickupWork = (void*)ResolveAddr(Module::Exe, AutoPickupWorkAddr::Vtable);
+}
+
+// ============================================================
+// The AutoPickupWork BASE vtable — exe 0x140160fa0 (AutoPickupWorkAddr::Vtable)
+// ============================================================
+// Registered NOWHERE until now, so every ResolveAddr of it returned 0 and both
+// s_vtable_AutoPickupWork writes below stored NULL. The slot values are the retail
+// bytes at 0x140160fa0 and they match this file's own per-slot comments exactly:
+//   +0x00 0x1400294e0 ScalarDtor · +0x18 0x1400e3f80 Serialize ·
+//   +0x28 0x1400f7540 Execute (`return 0`) · +0x40 0x1400e3f30 OnRemove ·
+//   +0x60 0x140006b10 nop · everything else 0x14003addc (_purecall).
+// Slots 1 and 2 (0x1400294d0 dtor thunk, 0x1400294c0 GetTypeId) are unported;
+// they get the shared stand-ins, as the concrete Work types do.
+//
+// ⚠ NOT 0x140161380 — that address is the RTTI type descriptor for ForesterWork
+// ("ForesterWork\0" in the bytes), which harvestorchard.cpp/harvestarea.cpp had
+// mistaken for this vtable. See the note in work_base_standalone.cpp.
+static uint32_t AutoPickupWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("AutoPickupWork");
+    return c;
+}
+
+static void* g_AutoPickupWork_Vtable[13] = {
+    (void*)&AutoPickupWork_ScalarDtor,  // +0x00 (0x1400294e0, PORTED)
+    (void*)&Work_Slot1,                 // +0x08 dtor thunk (0x1400294d0, unported)
+    (void*)&AutoPickupWork_GetTypeId,   // +0x10 GetTypeId  (0x1400294c0, unported)
+    (void*)&AutoPickupWork_Serialize,   // +0x18 (0x1400e3f80, PORTED)
+    (void*)&Work_PureCall,              // +0x20 _purecall
+    (void*)&AutoPickupWork_Execute,     // +0x28 (0x1400f7540, PORTED — `return 0`)
+    (void*)&Work_PureCall,              // +0x30 _purecall
+    (void*)&Work_PureCall,              // +0x38 _purecall
+    (void*)&AutoPickupWork_OnRemove,    // +0x40 (0x1400e3f30, PORTED)
+    (void*)&Work_PureCall,              // +0x48 _purecall
+    (void*)&Work_PureCall,              // +0x50 _purecall
+    (void*)&Work_PureCall,              // +0x58 _purecall
+    (void*)&Work_Slot12,                // +0x60 void nop (0x140006b10)
+};
+
+extern "C" void RegisterAutoPickupWorkVtable() {
+    RegisterExeAddr(AutoPickupWorkAddr::Vtable, (uintptr_t)g_AutoPickupWork_Vtable);  // 0x140160fa0
 }
 
 // ============================================================

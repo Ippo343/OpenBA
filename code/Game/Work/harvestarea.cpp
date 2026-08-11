@@ -233,8 +233,11 @@ bool HarvestArea_ResolveFuncs() {
 
     // Vtable addresses
     s_vtable_HarvestArea = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401614a0));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161380));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161300));
+    // ⚠ Were 0x140161380 / 0x140161300 — RTTI type descriptors ("ForesterWork\0" /
+    // "FishingWork\0"), not vtables; same adjacency error harvestorchard.cpp carried.
+    // The real base vtables are AutoPickupWorkAddr::Vtable / WorkAddr::Vtable.
+    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140160fa0));
+    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&

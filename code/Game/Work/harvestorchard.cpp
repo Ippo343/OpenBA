@@ -215,8 +215,16 @@ bool HarvestOrchard_ResolveFuncs() {
 
     // Vtable pointers
     s_vtable_HarvestOrchard = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161520));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161380));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161300));
+    // ⚠ These two were 0x140161380 / 0x140161300, which are NOT vtables: the bytes there
+    // read {0x140006b10, "ForesterWork\0"} and {0x140006b10, "FishingWork\0"} — the RTTI
+    // type descriptors that sit 0x20 in front of those classes' real vtables. An adjacency
+    // error. They resolved to 0 (harmless), but registering them under these names would
+    // have installed a pointer to ASCII string data as this object's vtable during the
+    // dtor chain. The real base vtables are 0x140160fa0 / 0x140161a80 — the values
+    // AutoPickupWork.h has carried all along, byte-verified against retail Work_Ctor25
+    // (0x1400f730a: LEA RAX,[0x140161a80]).
+    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140160fa0));
+    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_MeshInstance && s_fn_FindComp_OrchardDesc &&
@@ -276,8 +284,8 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_typeId_DescComp, "typeId_DescComp (0x1401c4288)");
         HO_MISS(s_fHalfCellOffset, "fHalfCellOffset (0x140172114)");
         HO_MISS(s_vtable_HarvestOrchard, "vtable_HarvestOrchard (0x140161520)");
-        HO_MISS(s_vtable_AutoPickupWork, "vtable_AutoPickupWork (0x140161380)");
-        HO_MISS(s_vtable_Work, "vtable_Work (0x140161300)");
+        HO_MISS(s_vtable_AutoPickupWork, "vtable_AutoPickupWork (0x140160fa0)");
+        HO_MISS(s_vtable_Work, "vtable_Work (0x140161a80)");
         #undef HO_MISS
     }
 #endif

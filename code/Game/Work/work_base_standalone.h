@@ -61,5 +61,16 @@ void* Work_GenericScalarDtor(void* self, unsigned int flags);
 // never reached in the current standalone scenarios.)
 void Work_SerializeNop(void* self, void* stream);
 
+// Stand-in for retail's _purecall vtable slots on the two BASE vtables (Work
+// 0x140161a80, AutoPickupWork 0x140160fa0). Reaching it means an object was
+// dispatched while only its base vtable was installed; it names itself on stderr
+// once rather than being a null call-of-0.
+int Work_PureCall(void);
+
+// Registers the two BASE vtables so ResolveAddr stops returning 0 for them. Both
+// are called from RegisterWorkBaseBatch() (standalone/reg_work_base.cpp).
+void RegisterWorkBaseVtable(void);        // 0x140161a80  Work
+void RegisterAutoPickupWorkVtable(void);  // 0x140160fa0  AutoPickupWork
+
 }  // extern "C"
 
