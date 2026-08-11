@@ -684,6 +684,7 @@ extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
+extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -909,6 +910,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // allocator structurally cannot make (it gates on roster != 0). No-op unless
     // BANISHED_ORCHARD_WORKERS is set (standalone/orchard_workers_harness.cpp).
     OrchardWorkersHarness_Tick(s_frameNum);
+
+    // Fast-forward tree maturity, then fruit ripeness, so the harvest half of the orchard
+    // state machine is reachable in one run rather than a multi-hour soak. No-op unless
+    // BANISHED_ORCHARD_GROW is set (standalone/orchard_growth_harness.cpp). It advances two
+    // simulation values only — every gate downstream of them still has to pass.
+    OrchardGrowthHarness_Tick(s_frameNum);
 
     // One-shot at frame 120. Despite the name this is NOT purely a diagnostic: it
     // also publishes nine shared element type-id globals that other dialogs read
