@@ -571,12 +571,36 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (!weather || !seasonMgr) return 1;
 
     bool harvestNow = false;
-    if (*reinterpret_cast<float*>(weather + 0x18) >= *s_fTempMin) {
+    bool seasonArm = false;
+    int  monthDbg = -1;
+    const float temp = *reinterpret_cast<float*>(weather + 0x18);
+    if (temp >= *s_fTempMin) {
         const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(seasonMgr + 8));
-        const int month = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
-        if (static_cast<uint32_t>(month - 6) <= 5u) harvestNow = true;
+        monthDbg = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
+        if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; seasonArm = true; }
     }
-    if (!harvestNow && CF_Maturity(comp) > *s_fRipe) harvestNow = true;
+    const float maturity = CF_Maturity(comp);
+    if (!harvestNow && maturity > *s_fRipe) harvestNow = true;
+
+    // State 10 is the ONLY path to state 11, and it has two independent arms. If the
+    // field never harvests, the arms fail for different reasons and need different
+    // fixes: a maturity that never climbs means the growth tick (slot 15 msg 1) is not
+    // advancing the crops, whereas a maturity that climbs while the season arm stays
+    // shut means the year window is the blocker. Print both.
+    {
+        static int s_ht = -1;
+        if (s_ht < 0) {
+            const char* he = std::getenv("BANISHED_CROPFIELD_TRACE");
+            s_ht = (he && he[0] && he[0] != '0') ? 1 : 0;
+        }
+        static int s_n2 = 0;
+        if (s_ht && (s_n2++ % 600) == 0)
+            std::fprintf(stderr, "[CropHarvest] temp=%.1f (min %.1f) month=%d seasonArm=%d "
+                         "maturity=%.4f (ripe>%.4f) -> harvest=%d\n",
+                         temp, *s_fTempMin, monthDbg, (int)seasonArm,
+                         maturity, *s_fRipe, (int)harvestNow);
+    }
+
     if (harvestNow) CropField_Event4Harvest(self, sm);
     return 1;
 }

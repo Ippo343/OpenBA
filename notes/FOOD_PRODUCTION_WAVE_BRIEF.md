@@ -395,6 +395,32 @@ ripeness constant and the weather/season branch result. If maturity never climbs
 growth tick (slot 15 msg 1) is not advancing the crops; if it does climb but the branch
 never fires, the season window is the blocker.
 
+### Current crop-field blocker: planting stalls at ~37/64, so state 10 is never entered
+
+Latest run (IsA fix in place, harvest-arm trace added):
+
+    [CropSlots] total=64 growing=37 done=0 | histogram 0:27 1:37 2:0
+    [CropHarvest] — never printed
+
+Two things this pins down:
+- `done=0` across the whole run: the IsA fix HOLDS. Slots no longer demote. The earlier
+  "42 done" was the pre-fix stale-demotion, as corrected above.
+- 27 cells sit at state 0, never planted. State 9 advances only on
+  `growing + done == total`; 37 + 0 of 64 never satisfies it, so state 10 is never
+  entered — which is why the CropHarvest trace (inside State10PerFrame) never prints and
+  why HarvestArea never runs.
+
+So the crop-field chain is now blocked at ONE point: PlantArea stops planting after
+~37 of 64 cells. Its own byte array at +0x58 is the gate (`validityArray[i] == 0` ->
+skip), and each accepted plant clears the mark for its cell and its pair. A plant that
+is accepted but never completes therefore consumes a mark permanently.
+
+⭐NEXT: in `PlantArea_Slot4_Impl`, log the surviving mark count each pass alongside
+ACCEPTED. If marks fall to zero while ~27 cells are still state 0, accepted-but-failed
+plants are eating them, and the fix is to restore the mark on the failure path (retail
+does this through slot 7 / OnCancel — check whether our failure path routes there at
+all, since OnCancel was measured NOT HIT).
+
 ### Next steps, in order
 1. Trace the PerformWork action to the deposit — the one missing link for all three.
 2. Crop Field: still entirely unported (`CropFieldComponent` 0x68, ControllerComponent,
