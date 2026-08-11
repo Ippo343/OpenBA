@@ -231,16 +231,39 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
 // Post a freshly built work to the reservation ledger, exactly as every state enter does.
 void CF_PostWork(uintptr_t comp, void* work) {
     CF_Resolve2();
-    if (!work || !s_findWork || !s_postWork) return;
+    // Report the OUTCOME, not the attempt. Every early return here looks identical from
+    // outside — the state enters, no work runs — and the crop field spent a whole round
+    // stuck at exactly that ambiguity. Gated on the crop trace so it costs nothing off.
+    static int s_t = -1;
+    if (s_t < 0) {
+        const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+        s_t = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (!work || !s_findWork || !s_postWork) {
+        if (s_t) std::fprintf(stderr, "[CropWork] POST SKIPPED work=%p findWork=%p post=%p\n",
+                              work, (void*)s_findWork, (void*)s_postWork);
+        return;
+    }
     uintptr_t workIbp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
     else workIbp = reinterpret_cast<uintptr_t>(work);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t workCompIbp = 0;
     s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
-    if (!workCompIbp) return;
+    if (!workCompIbp) {
+        // The crop field entity carries no WorkComponent, so there is no ledger to post
+        // to and no citizen can ever claim the work. Distinct from "posted and ignored".
+        if (s_t) std::fprintf(stderr, "[CropWork] POST FAILED: the field entity has NO "
+                              "WorkComponent (finder 0x140003050 returned null) — nothing "
+                              "can claim this work\n");
+        return;
+    }
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
     s_postWork(workCompIbp, 1, 0, &workIbp);
+    if (s_t)
+        std::fprintf(stderr, "[CropWork] POSTED work=%p to workComp=%p (assignedId=%d)\n",
+                     work, (void*)workCompIbp,
+                     *reinterpret_cast<int32_t*>(workCompIbp + 0x28));
 }
 
 // Release the held work slot if one is occupied (the 3050 -> ead0 -> eb50 idiom every
