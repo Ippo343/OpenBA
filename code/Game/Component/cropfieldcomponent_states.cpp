@@ -526,9 +526,14 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
     }
     if (done == total) {
         CF_ReleaseWorkSlot(comp);
+        std::fprintf(stderr, "[CropXition] state 9 -> 21 (all %d done)\n", total);
+        std::fflush(stderr);
         ::ControllerLive::RequestStateTransition(sm, 21);
     } else if (growing + done == total) {
         CF_ReleaseWorkSlot(comp);
+        std::fprintf(stderr, "[CropXition] state 9 -> 10 TEND (growing=%d done=%d total=%d)\n",
+                     growing, done, total);
+        std::fflush(stderr);
         ::ControllerLive::RequestStateTransition(sm, 10);
     }
     return 1;
@@ -538,6 +543,8 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
 // TendArea is 0x60 with no per-slot array and no desc field (vtable 0x140161990).
 static char CropField_State10Enter(void* self, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    std::fprintf(stderr, "[CropXition] STATE 10 ENTER - posting TendArea\n");
+    std::fflush(stderr);
     void* work = CF_MakeAreaWork(comp, 0x60, 0x140161990, false, 0, false);
     CF_PostWork(comp, work);
     return 1;
@@ -552,6 +559,8 @@ static char CropField_State10Update(void* self, void* /*sm*/) {
 // ── event 4 on state 10 — 0x140119f00 — the panel's HARVEST command ───────────────
 static char CropField_Event4Harvest(void* self, void* sm) {
     (void)self;
+    std::fprintf(stderr, "[CropXition] event 4 -> STATE 11 HARVEST\n");
+    std::fflush(stderr);
     ::ControllerLive::RequestStateTransition(sm, 11);
     return 1;
 }
