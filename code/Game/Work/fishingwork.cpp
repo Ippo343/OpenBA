@@ -596,6 +596,28 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             uintptr_t cellEntity = *(uintptr_t*)(mapData + 8 + (uintptr_t)cellIdx * 0x30);
             if (cellEntity == 0) continue;
 
+            // ⚠ KNOWN DIVERGENCE FROM RETAIL — self-assignment guard.
+            //
+            // This fallback asks "is there some OTHER workplace standing on my attach
+            // cells that this citizen could be assigned to instead?", looks up that
+            // workplace's WorkComponent id and hands it to FUN_1400f8620, which dispatches
+            // that work's Execute (vtable +0x20). In retail cell+8 on a dock's spot cells
+            // holds a NATURAL RESOURCE (it is the resource slot — HerbalistWork reads the
+            // same field to find herbs), so the work found is never this dock's own.
+            //
+            // In our standalone, cell+8 at the dock's own footprint holds the DOCK ENTITY,
+            // so the lookup returns THIS FishingWork and f8620 re-enters this very
+            // function with the same arguments — unbounded recursion and a STACK_OVERFLOW
+            // (measured: FishingWork_Slot4 -> f8620 -> FishingWork_Slot4 ... same self,
+            // same cellId=2). f8620's own re-entrancy guard cannot help: it stamps
+            // work+0x2c only AFTER Execute returns, so the stamp is never reached.
+            //
+            // Skipping our own entity is therefore restoring retail's behaviour, not
+            // papering over it — retail simply never encounters itself here. The real fix
+            // is upstream: cell+8 should not be carrying the building entity. Until that
+            // is corrected, this keeps the divergence contained and named.
+            if (cellEntity == *(uintptr_t*)((uintptr_t)self + 0x10)) continue;
+
             // Check for WorkplaceComponent (DAT_1401c8070) on cell entity
             fn_InternalBasePtr_CheckPtr(&cellEntity);
             uintptr_t cellEnt = *(uintptr_t*)&cellEntity;
