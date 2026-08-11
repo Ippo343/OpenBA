@@ -547,6 +547,30 @@ extern "C" char Orchard_Event4Harvest(void* selfV, void* sm) {
 }
 
 // ============================================================
+// event-3 handler — retail 0x140051450 (wired on state 2)
+// Unconditionally request state 9. This is the panel's "start planting" kick: the
+// Command slot (idx14) maps button id 0 to node event 3, and this bypasses the +0x48
+// master-switch gate that state 2's per-frame tests.
+// ============================================================
+extern "C" char Orchard_Event3Plant(void* selfV, void* sm) {
+    Resolve();
+    if (!selfV) return 1;
+    OrchardRequestState(sm, 9);
+    return 1;
+}
+
+// ============================================================
+// event-5 handler — retail 0x1400513e0 (wired on states 9, 10, 11 and 12)
+// Unconditionally request state 20 (0x14) — the clear/replace path, button id 3.
+// ============================================================
+extern "C" char Orchard_Event5Clear(void* selfV, void* sm) {
+    Resolve();
+    if (!selfV) return 1;
+    OrchardRequestState(sm, 20);
+    return 1;
+}
+
+// ============================================================
 // TryHarvest — retail 0x140051580 (called by the state 10 and 12 per-frame bodies)
 // The growth -> harvest trigger, and the only reader of GetGrowth outside the UI.
 //
@@ -878,6 +902,7 @@ extern "C" void OrchardCtrl_PopulateTable() {
                        reinterpret_cast<void*>(&Orchard_State2PerFrame), nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 9, nullptr);
+    TableAddEvent(t, 3, reinterpret_cast<void*>(&Orchard_Event3Plant));
 
     // ── state 9 — PLANT GRID ──────────────────────────────────────────────────────
     // enter    0x140051070  PlantOrchard_impl_1070: activates the workplace, reads the
@@ -891,6 +916,7 @@ extern "C" void OrchardCtrl_PopulateTable() {
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 20, nullptr);
+    TableAddEvent(t, 5, reinterpret_cast<void*>(&Orchard_Event5Clear));
 
     // ── state 10 — TEND / IDLE-GROWN ──────────────────────────────────────────────
     // enter    0x140050e30  hole -> state 12, else post a TendArea work
@@ -907,6 +933,8 @@ extern "C" void OrchardCtrl_PopulateTable() {
     TableAddTransition(t, 12, nullptr);
     TableAddTransition(t, 11, nullptr);
     TableAddTransition(t, 20, nullptr);
+    TableAddEvent(t, 5, reinterpret_cast<void*>(&Orchard_Event5Clear));
+    TableAddEvent(t, 4, reinterpret_cast<void*>(&Orchard_Event4Harvest));
 
     // ── state 12 — REPLANT GAPS ───────────────────────────────────────────────────
     // enter    0x140050ae0  PlantOrchard_impl_0ae0: post a PlantOrchard for the holes
@@ -920,6 +948,8 @@ extern "C" void OrchardCtrl_PopulateTable() {
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 11, nullptr);
     TableAddTransition(t, 20, nullptr);
+    TableAddEvent(t, 5, reinterpret_cast<void*>(&Orchard_Event5Clear));
+    TableAddEvent(t, 4, reinterpret_cast<void*>(&Orchard_Event4Harvest));
 
     // ── state 11 — HARVEST ────────────────────────────────────────────────────────
     // enter    0x140050800  HarvestOrchard_impl_0800: post a HarvestOrchard work, then
@@ -931,6 +961,7 @@ extern "C" void OrchardCtrl_PopulateTable() {
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 20, nullptr);
+    TableAddEvent(t, 5, reinterpret_cast<void*>(&Orchard_Event5Clear));
 
     // ── state 20 (0x14) — CLEAR ───────────────────────────────────────────────────
     // enter    0x1400504e0  ClearArea_impl_04e0: post a ClearArea work at prio 0x401

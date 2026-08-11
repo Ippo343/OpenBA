@@ -188,11 +188,17 @@ void FireForceStart(void* entityUI, int frameNum) {
                         "treeType(+0x60)=%s\n", ent, orchComp, switchBefore,
                 typeBefore ? "SET" : "UNTYPED");
 
-        // 1. Force the master switch on.
-        *reinterpret_cast<uint8_t*>(comp + 0x48) = 1;
-        ++switched;
-
-        // 2. Fill the tree type via the real combo-select path if it's still null.
+        // 1. Fill the tree type via the real combo-select path if it's still null.
+        //
+        // ⚠ ORDER MATTERS, and it did not used to. OrchardUI::Slot11 (retail 0x140075380)
+        // calls component vtable[14](comp, 2) — Command's TOGGLE — whenever the orchard
+        // goes from untyped to typed. That is retail's real "picking a tree type switches
+        // the orchard on" path. Until the command slot was wired (2026-08-10) it was an
+        // inert stub, so this harness compensated by writing +0x48 = 1 itself, FIRST.
+        // Now that the toggle works, doing both flips the switch on and then straight back
+        // off — measured: BEFORE switch=1, then `Command(2) toggle -> enabled=0`, and the
+        // orchard sat in state 2 planting nothing. So: let the real path run first, and
+        // only force the switch if it is still off afterwards.
         bool hasType = (typeBefore != 0);
         if (!hasType) {
             hasType = TryAssignRealTreeType(entityUI, ent, orchComp);
@@ -200,6 +206,17 @@ void FireForceStart(void* entityUI, int frameNum) {
             fprintf(stderr, "[OrchardForceStart]     already typed — leaving comp+0x60 alone\n");
         }
         if (hasType) ++typed;
+
+        // 2. Only now, and only if the real path did not already do it.
+        if (*reinterpret_cast<uint8_t*>(comp + 0x48) == 0) {
+            *reinterpret_cast<uint8_t*>(comp + 0x48) = 1;
+            ++switched;
+            fprintf(stderr, "[OrchardForceStart]     switch still off after the type-select "
+                            "path — forcing +0x48 = 1\n");
+        } else {
+            fprintf(stderr, "[OrchardForceStart]     switch already on via the REAL "
+                            "Command(2) path — no force needed\n");
+        }
 
         uint8_t   switchAfter = *reinterpret_cast<uint8_t*>(comp + 0x48);
         uintptr_t typeAfter   = *reinterpret_cast<uintptr_t*>(comp + 0x60);

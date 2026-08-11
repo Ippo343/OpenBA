@@ -62,6 +62,11 @@ struct TransEntry {        // 0x10 bytes
     int   _pad04;          // +0x04
     void* handler;         // +0x08
 };
+struct EventEntry {        // 0x10 bytes — same shape as TransEntry
+    int   eventId;         // +0x00
+    int   _pad04;          // +0x04
+    void* handler;         // +0x08
+};
 struct StateEntry {        // 0xf8 bytes
     int        id;             // +0x00
     int        _pad04;         // +0x04
@@ -71,11 +76,17 @@ struct StateEntry {        // 0xf8 bytes
     void*      updateHandler;  // +0x20
     TransEntry transitions[8]; // +0x28 .. +0xa8
     int        transitionCount;// +0xa8
-    uint8_t    _tail[0xf8 - 0xac];
+    uint8_t    _pad_ac[4];     // +0xac
+    EventEntry events[4];      // +0xb0 .. +0xf0   (see the PostEvent note below)
+    int        eventCount;     // +0xf0
+    uint8_t    _tail[0xf8 - 0xf4];
 };
 #pragma pack(pop)
 static_assert(sizeof(TransEntry) == 0x10, "TransEntry must be 0x10");
+static_assert(sizeof(EventEntry) == 0x10, "EventEntry must be 0x10");
 static_assert(sizeof(StateEntry) == 0xf8, "StateEntry must be 0xf8");
+static_assert(offsetof(StateEntry, events) == 0xb0, "events must sit at +0xb0");
+static_assert(offsetof(StateEntry, eventCount) == 0xf0, "eventCount must sit at +0xf0");
 
 struct StateTable {
     StateEntry entries[16];
@@ -104,6 +115,19 @@ inline void TableAddTransition(StateTable& t, int targetId, void* handler) {
     tr.targetId = targetId;
     tr.handler = handler;
     ++e.transitionCount;
+}
+// Replicates retail's AddEvent (0x140009c70): append {eventId, handler} to the
+// most-recently-registered state's event list. The panel's Command (component vtable
+// idx14) posts node events 3/4/5 through node slot 2, and without this the post finds
+// an empty list and the button click dies silently.
+inline void TableAddEvent(StateTable& t, int eventId, void* handler) {
+    if (t.count <= 0) return;
+    StateEntry& e = t.entries[t.count - 1];
+    if (e.eventCount >= 4) return;   // retail's capacity too: (0xf0-0xb0)/0x10 == 4
+    EventEntry& ev = e.events[e.eventCount];
+    ev.eventId = eventId;
+    ev.handler = handler;
+    ++e.eventCount;
 }
 // The real Step search: first entry whose id == input, else -1 (orig 0x14002f6d0).
 inline int TableFindIndex(const StateTable& t, int input) {
@@ -210,6 +234,29 @@ struct Dispatcher {
         if (!h) return 0;
         return reinterpret_cast<char (*)(void*, void*, void*)>(h)(NodeData(node), sm, time);
     }
+    // slot 2 (+0x10): PostEvent(node, sm, int curIdx, int eventId) -> char
+    // Ported 1:1 from the retail dispatcher at 0x140009da0 (orchard node vtable
+    // 0x14015a130 index 2), read as disassembly rather than trusting the vtable's
+    // Ghidra names, which are wrong by position for this whole family:
+    //     MOVSXD RAX,R8D ; LEA R8,[table] ; IMUL RAX,RAX,0xf8 ; ADD RAX,R8
+    //     MOVSXD R10,[RAX+0xf0]        <- eventCount, INLINE at +0xf0
+    //     ADD RAX,0xb0                 <- event array base
+    //     CMP [RAX],R9D / ADD RAX,0x10 <- linear scan, stride 0x10, id at +0x00
+    //     hit:  MOV RCX,[RCX+0x18] ; JMP [RAX+0x8]   <- tail-call, RDX=sm survives
+    //     miss: XOR AL,AL ; RET
+    // So a handler is called as handler(NodeData(node), sm) and returns char — the
+    // same shape as Enter/Update. A miss is a graceful 0, exactly as retail.
+    static char PostEvent(void* node, void* sm, int curIdx, int eventId) {
+        if (curIdx < 0 || curIdx >= table.count) return 0;
+        const StateEntry& e = table.entries[curIdx];
+        for (int i = 0; i < e.eventCount; ++i) {
+            if (e.events[i].eventId != eventId) continue;
+            void* h = e.events[i].handler;
+            if (!h) return 0;
+            return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
+        }
+        return 0;
+    }
     // Any other slot (dtor/GetTypeId/Serialize/…) — safe no-op.
     static void* Stub(void*, ...) { return nullptr; }
 
@@ -218,6 +265,7 @@ struct Dispatcher {
             for (int i = 0; i < 16; ++i) vtbl[i] = reinterpret_cast<void*>(&Stub);
             vtbl[0] = reinterpret_cast<void*>(&Step);
             vtbl[1] = reinterpret_cast<void*>(&RequestTransition);
+            vtbl[2] = reinterpret_cast<void*>(&PostEvent);
             vtbl[3] = reinterpret_cast<void*>(&Enter);
             vtbl[4] = reinterpret_cast<void*>(&Update);
             vtbl[5] = reinterpret_cast<void*>(&OnState);

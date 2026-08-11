@@ -559,6 +559,202 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
     }
 }
 
+// ============================================================
+// The PANEL COMMAND PATH — primary vtable idx13 (CanCommand) and idx14 (Command)
+// ============================================================
+// Slot indices verified from the vtable BYTES at 0x14015a180: +13*8 = 0x14015a1e8 reads
+// {0x140051c90, 0x140051ba0, 0x140051990, 0x1400026c0} — and the last two are the
+// addresses this file already cites for OnMessage (idx15) and GetDefaultState (idx16),
+// which is what pins the indexing.
+//
+// WHY THEY WERE MISSING: neither slot was ever assigned, so both kept the shared inert
+// stub MakeInertTyped installs — "returns 0 for every non-dtor slot". CanCommand
+// returning 0 unconditionally is exactly the reported symptom: every orchard panel
+// button renders disabled regardless of state, and a click dies at the first hop. This
+// is the same trap the slot-15 comment below documents, so the wiring hangs off the
+// same PopulateFn hook.
+namespace {
+
+typedef void* (*fn_FindSM_t)(uintptr_t entity, void* outIBP);      // 0x140003ea0
+typedef void* (*fn_Find_t)(uintptr_t entity, void* outIBP);        // shared finder shape
+typedef char  (*fn_HasWorkSlot2_t)(uintptr_t wc);                  // 0x14012ead0
+typedef uint64_t (*fn_SetWorkplaceActive2_t)(uintptr_t wp, char);  // 0x14012fc00
+
+fn_FindSM_t              s_FindStateMachine = nullptr;   // 0x140003ea0
+fn_Find_t                s_FindWork_3050    = nullptr;   // 0x140003050
+fn_Find_t                s_FindWorkPlace2e10= nullptr;   // 0x140002e10
+fn_HasWorkSlot2_t        s_HasWorkSlot2     = nullptr;   // 0x14012ead0
+fn_SetWorkplaceActive2_t s_SetWpActive2     = nullptr;   // 0x14012fc00
+bool                     s_cmdResolved      = false;
+
+void EnsureCmdHelpers() {
+    if (s_cmdResolved) return;
+    s_cmdResolved = true;
+    s_FindStateMachine = reinterpret_cast<fn_FindSM_t>(ResolveAddr(Module::Exe, 0x140003ea0));
+    s_FindWork_3050    = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
+    s_FindWorkPlace2e10= reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140002e10));
+    s_HasWorkSlot2     = reinterpret_cast<fn_HasWorkSlot2_t>(ResolveAddr(Module::Exe, 0x14012ead0));
+    s_SetWpActive2     = reinterpret_cast<fn_SetWorkplaceActive2_t>(
+                             ResolveAddr(Module::Exe, 0x14012fc00));
+    if (!s_FindStateMachine || !s_FindWork_3050 || !s_FindWorkPlace2e10 ||
+        !s_HasWorkSlot2 || !s_SetWpActive2) {
+        std::fprintf(stderr, "[OrchardCmd] UNRESOLVED:%s%s%s%s%s\n",
+            s_FindStateMachine  ? "" : " FindStateMachine(3ea0)",
+            s_FindWork_3050     ? "" : " FindWorkComponent(3050)",
+            s_FindWorkPlace2e10 ? "" : " FindWorkPlace(2e10)",
+            s_HasWorkSlot2      ? "" : " HasWorkSlot(12ead0)",
+            s_SetWpActive2      ? "" : " SetWorkplaceActive(12fc00)");
+        std::fflush(stderr);
+    }
+}
+
+// The SM's current state id: sm+0x52 (pending), falling back to sm+0x50 when negative.
+// NB these are offsets on the StateMachineComponent, and the `sm` the state handlers
+// use is that component + 0x48.
+int OrchardCurrentStateId(uintptr_t smc) {
+    int8_t v = *reinterpret_cast<int8_t*>(smc + 0x52);
+    if (v < 0) v = *reinterpret_cast<int8_t*>(smc + 0x50);
+    return v;
+}
+
+int OrchardPlantedCount(uintptr_t s) {
+    const int count = *reinterpret_cast<int32_t*>(s + 0x58);
+    uintptr_t slots = *reinterpret_cast<uintptr_t*>(s + 0x50);
+    int n = 0;
+    for (int i = 0; slots && i < count; ++i) {
+        const int st = *reinterpret_cast<int32_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 4);
+        if (st != 0 && st == 1) ++n;      // retail's redundant pair, kept verbatim
+    }
+    return n;
+}
+
+}  // namespace
+
+// idx13 CanCommand — retail 0x140051c90. Returns the button's enabled state.
+//   id 0 WORK    : (no work slot held && planted < slots) || slots == 0, ANDed with hasType
+//   id 1 HARVEST : state == 10 && lastHarvestYear(+0x4c) != current year, ANDed with hasType
+//   id 2 TOGGLE  : bit0 = hasType, bit1 = the +0x48 master switch (a BITFIELD, not a bool —
+//                  the panel reads bit 1 to draw the on/off state)
+//   id 3 CLEAR   : planted > 0 && state != 20
+// `hasType = (*(self+0x60) != 0)` is ANDed into ids 0/1/2 — an untyped orchard is
+// correctly inert in retail, which is why an unconfigured orchard shows dead buttons.
+extern "C" uint8_t OrchardComponent_CanCommand(void* selfV, int cmdId) {
+    EnsureCmdHelpers();
+    EnsureSubHelpers();
+    if (!selfV) return 0;
+    const uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t smcIBP = 0;
+    if (s_FindStateMachine) s_FindStateMachine(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t wcIBP = 0;
+    if (s_FindWork_3050) s_FindWork_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIBP);
+    if (!smcIBP) return 0;      // SA: retail derefs unguarded; every orchard entity has a
+                                // StateMachineComponent, so this can only fire if the
+                                // component was asked before its entity finished building.
+    const int  curState   = OrchardCurrentStateId(smcIBP);
+    const int  planted    = OrchardPlantedCount(s);
+    const int  slotCount  = *reinterpret_cast<int32_t*>(s + 0x58);
+    const bool hasType    = (*reinterpret_cast<uintptr_t*>(s + 0x60) != 0);
+
+    {   // Budget PER COMMAND ID — a single shared counter would let whichever button the
+        // panel polls first hide the other three (the saturating-counter trap that cost a
+        // session on the harvest message). This answers the first question the dead-button
+        // report raises: is the UI even asking, and what are we telling it?
+        static int s_seen[8] = {0};
+        const int bucket = (cmdId >= 0 && cmdId < 8) ? cmdId : 7;
+        if (s_seen[bucket]++ < 3) {
+            std::fprintf(stderr, "[OrchardCmd] CanCommand(id=%d): state=%d planted=%d/%d "
+                         "hasType=%d switch=%d lastHarvestYear=%d\n",
+                         cmdId, curState, planted, slotCount, (int)hasType,
+                         (int)*reinterpret_cast<char*>(s + 0x48),
+                         *reinterpret_cast<int32_t*>(s + 0x4c));
+            std::fflush(stderr);
+        }
+    }
+
+    switch (cmdId) {
+    case 0: {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+        const bool busy = s_HasWorkSlot2 && s_HasWorkSlot2(wcIBP) != 0;
+        if ((!busy && planted < slotCount) || slotCount == 0) return hasType ? 1 : 0;
+        return 0;
+    }
+    case 1: {
+        if (curState != 10) return 0;
+        uintptr_t world = s_pWorldSingleton2 ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton2) : 0;
+        uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
+        const int year  = cal ? *reinterpret_cast<int32_t*>(cal) : 0;
+        if (*reinterpret_cast<int32_t*>(s + 0x4c) == year) return 0;
+        return hasType ? 1 : 0;
+    }
+    case 2:
+        return static_cast<uint8_t>(
+            (static_cast<uint8_t>(-(*reinterpret_cast<char*>(s + 0x48) != 0)) & 2u) |
+            (hasType ? 1u : 0u));
+    case 3:
+        return (planted > 0 && curState != 20) ? 1 : 0;
+    default:
+        return 0;
+    }
+}
+
+// idx14 Command — retail 0x140051ba0. Maps a button id to a NODE EVENT and posts it.
+//   0 -> event 3 (plant/work)   1 -> event 4 (harvest)   3 -> event 5 (clear)
+//   2 -> no event at all: flip the +0x48 master switch and push it to the workplace.
+// The post itself is node vtable slot 2 (+0x10):
+//   (**(code**)(**(longlong**)(smc+0x48) + 0x10))(node, smc+0x48, (int)*(char*)(smc+0x51), eventId)
+// i.e. curIdx comes from smc+0x51, which is (smc+0x48)+0x09 — the same sm+0x09 field
+// OrchardRequestState reads. ControllerLive::Dispatcher::PostEvent implements that slot.
+extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
+    EnsureCmdHelpers();
+    if (!selfV) return;
+    const uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+    uintptr_t smcIBP = 0;
+    if (s_FindStateMachine) s_FindStateMachine(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);
+
+    int eventId;
+    switch (cmdId) {
+    case 0: eventId = 3; break;
+    case 1: eventId = 4; break;
+    case 3: eventId = 5; break;
+    case 2: {
+        // Toggle the master switch and mirror it onto the workplace. Retail returns here:
+        // no event is posted for this command.
+        *reinterpret_cast<char*>(s + 0x48) = (*reinterpret_cast<char*>(s + 0x48) == 0) ? 1 : 0;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
+        uintptr_t wpIBP = 0;
+        if (s_FindWorkPlace2e10) s_FindWorkPlace2e10(*reinterpret_cast<uintptr_t*>(s + 0x10), &wpIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIBP);
+        if (s_SetWpActive2) s_SetWpActive2(wpIBP, *reinterpret_cast<char*>(s + 0x48));
+        std::fprintf(stderr, "[OrchardCmd] Command(2) toggle -> enabled=%d\n",
+                     (int)*reinterpret_cast<char*>(s + 0x48));
+        std::fflush(stderr);
+        return;
+    }
+    default: return;
+    }
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIBP);
+    if (!smcIBP) return;
+    uintptr_t sm   = smcIBP + 0x48;
+    void*     node = *reinterpret_cast<void**>(sm);
+    std::fprintf(stderr, "[OrchardCmd] Command(%d) -> post node event %d (node=%p curIdx=%d)\n",
+                 cmdId, eventId, node, (int)*reinterpret_cast<int8_t*>(smcIBP + 0x51));
+    std::fflush(stderr);
+    if (!node) return;
+    void** vt = *reinterpret_cast<void***>(node);
+    if (!vt || !vt[2]) return;
+    typedef char (*fn_PostEvent_t)(void* node, void* sm, int curIdx, int eventId);
+    reinterpret_cast<fn_PostEvent_t>(vt[2])(
+        node, reinterpret_cast<void*>(sm),
+        static_cast<int>(*reinterpret_cast<int8_t*>(smcIBP + 0x51)), eventId);
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 //
 // Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent. While it was
@@ -606,6 +802,10 @@ CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
                                OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTableAndWireSlot15)
 
 static void OrchardCtrl_PopulateTableAndWireSlot15() {
+    // 13/14 are the panel command path and 15 is OnMessage. All three must be written
+    // HERE, from inside InstallLive, for the FillTypedVtable reason above.
+    OrchardComponent_LiveVtable[13] = reinterpret_cast<void*>(&OrchardComponent_CanCommand);
+    OrchardComponent_LiveVtable[14] = reinterpret_cast<void*>(&OrchardComponent_Command);
     OrchardComponent_LiveVtable[15] = reinterpret_cast<void*>(&OrchardComponent_OnMessage);
     OrchardCtrl_PopulateTable();
 }
