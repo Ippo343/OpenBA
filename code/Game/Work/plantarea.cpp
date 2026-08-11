@@ -432,6 +432,28 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
                 if (s_ptrace) ++s_noPass;
+                // Retail skips an impassable cell without clearing its mark, so a
+                // permanently blocked cell stalls the field forever. Dump what is
+                // sitting on the cell the first few times to tell "still holds an
+                // uncleared natural resource" from "terrain says impassable".
+                if (s_ptrace) {
+                    static int s_dumped = 0;
+                    if (s_dumped < 12 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                        uintptr_t mp = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+                        uintptr_t gd = mp ? *(uintptr_t*)(mp + 0x80) : 0;
+                        if (gd) {
+                            uintptr_t base = gd + (uintptr_t)srcCellIdx * 0x30;
+                            std::fprintf(stderr,
+                                "[PlantArea] BLOCKED slot=%d cell=%d entity=%p "
+                                "terrain=0x%02x b2c=0x%02x floor=0x%02x flags0=0x%08x\n",
+                                i, srcCellIdx, *(void**)(base + 8),
+                                *(uint8_t*)(base + 0x29), *(uint8_t*)(base + 0x2c),
+                                *(uint8_t*)(base + 0x2d), *(uint32_t*)(base + 0x00));
+                            std::fflush(stderr);
+                            ++s_dumped;
+                        }
+                    }
+                }
                 continue;
             }
 
@@ -540,7 +562,25 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
         // If we had no cells with validity flag set (anyUnplanted still true)
         // we return 1 below
         if (!anyUnplanted) {
-            // All cells assigned but none pathable -- return 1
+            // Scan found candidates but accepted none. Print which marks survive, so
+            // "the last pair is never offered" can be told from "it is offered and
+            // rejected downstream".
+            if (s_ptrace) {
+                static long long s_fruitless = 0;
+                if ((s_fruitless++ % 200) == 0) {
+                    char buf[256]; int n = 0; int live = 0;
+                    char* va = (char*)selfQ[0xb];
+                    for (int k = 0; k < fieldCellCount; ++k) {
+                        if (!va[k]) continue;
+                        ++live;
+                        if (n < (int)sizeof(buf) - 16)
+                            n += std::snprintf(buf + n, sizeof(buf) - n, " %d", k);
+                    }
+                    std::fprintf(stderr, "[PlantArea] fruitless scan #%lld: %d marks live:%s\n",
+                                 s_fruitless, live, live ? buf : " none");
+                    std::fflush(stderr);
+                }
+            }
             return 1;
         }
     }

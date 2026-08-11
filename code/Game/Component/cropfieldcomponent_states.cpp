@@ -507,6 +507,19 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
             std::fprintf(stderr, "[CropSlots] total=%d growing=%d done=%d | state histogram "
                          "0:%d 1:%d 2:%d 3:%d other:%d\n",
                          total, growing, done, hist[0], hist[1], hist[2], hist[3], other);
+            // Which slots are still at 0? Contiguous tail indices mean a pairing/edge
+            // boundary; scattered indices mean individual plant actions failed.
+            {
+                char buf[512]; int n = 0;
+                for (int i = 0; i < total && n < (int)sizeof(buf) - 24; ++i) {
+                    uint8_t* sl = SlotAt(comp, i);
+                    if (!sl || *reinterpret_cast<int32_t*>(sl + 0x04) != 0) continue;
+                    n += std::snprintf(buf + n, sizeof(buf) - n, " %d(cell=%d,mark=%u)",
+                                       i, *reinterpret_cast<int32_t*>(sl + 0x00),
+                                       (unsigned)sl[0x18]);
+                }
+                std::fprintf(stderr, "[CropSlots] state0 slots:%s\n", n ? buf : " none");
+            }
             std::fflush(stderr);
         }
         ++s_n;
