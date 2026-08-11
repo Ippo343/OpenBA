@@ -1,0 +1,51 @@
+[OrchardForceStart] ENABLED (BANISHED_ORCHARD_FORCE_START="1") — will fire once at frame 180
+[OrchardForceStart] firing at frame 180
+[OrchardForceStart] entity=0000020d0192e8f8 comp=0000020d01961ab0 BEFORE: switch(+0x48)=0 treeType(+0x60)=UNTYPED
+[OrchardCmd] CanCommand(id=2): state=2 planted=0/0 hasType=0 switch=0 lastHarvestYear=0
+[OrchardForceStart]     select orchard ent=0000020d0192e8f8 -> opened=1 dialog=0000020d02c228c0
+[OrchardForceStart]     OrchardUI=0000020d02bf2488 combo(+0x30)=0000020d02c26118 items=2
+[OrchardCmd] Command(2) toggle -> enabled=1
+[OrchardForceStart]     drove combo item=0 via OrchardUI::Slot9 -> comp+0x60=0000020d00e35a70 (SET from real template)
+[OrchardForceStart]     switch already on via the REAL Command(2) path — no force needed
+[OrchardForceStart] entity=0000020d0192e8f8 comp=0000020d01961ab0 AFTER:  switch(+0x48)=1 treeType(+0x60)=SET
+[OrchardForceStart] frame=180: 1 orchard(s) found, 0 switch(es) forced on, 1 ended up with a real tree type
+[OrchardCmd] CanCommand(id=1): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=2): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=2): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=3): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=1): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=3): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=1): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardCmd] CanCommand(id=3): state=9 planted=0/12 hasType=1 switch=1 lastHarvestYear=0
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=0)
+[OrchardMsg]   msg0 slot=0 tile=38004 -> entity=0000020d02cab9c0 natRes=0000020d02ca6c20 fruit=0000020d02b86138 => state 1
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=1)
+[OrchardMsg]   msg0 slot=1 tile=38006 -> entity=0000020d02c98a30 natRes=0000020d02b99138 fruit=0000020d02b7e5e0 => state 1
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=2)
+[OrchardMsg]   msg0 slot=2 tile=38008 -> entity=0000020d02ca3cd8 natRes=0000020d02cabc58 fruit=0000020d02b88408 => state 1
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=3)
+[OrchardMsg]   msg0 slot=3 tile=38010 -> entity=0000020d02c98370 natRes=0000020d02b859d8 fruit=0000020d02b75a90 => state 1
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=4)
+[OrchardMsg]   msg0 slot=4 tile=38772 -> entity=0000020d02b69a30 natRes=0000020d02c91108 fruit=0000020d02b7cc40 => state 1
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=0 slot=5)
+[OrchardMsg]   msg0 slot=5 tile=38774 -> entity=0000020d02cab500 natRes=0000020d02c9b828 fruit=0000020d02bb33e8 => state 1
+[OrchardMsg]   msg0 slot=6 tile=38776 -> entity=0000020d02ca0068 natRes=0000020d02b76450 fruit=0000020d02b93820 => state 1
+[OrchardMsg]   msg0 slot=7 tile=38778 -> entity=0000020d02c98520 natRes=0000020d02c981e0 fruit=0000020d02bafe50 => state 1
+[Orchard10] enter: holes=0 -> post TendArea
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=10)
+[Orchard11] enter: work=0000020d02ca6200 slots=12 grid=0000020d01756b18 treeType=0000020d00e35a70
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=0)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=1)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=2)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=3)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=4)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=1 slot=5)
+[Orchard10] enter: holes=0 -> post TendArea
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=3)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=7)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=2)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=3)
+[OrchardMsg] OnMessage(comp=0000020d01961ab0 msg=2 slot=1)
+[OrchardCmd] Command(2) toggle -> enabled=0
+[OrchardCmd] Command(2) toggle -> enabled=1
+[OrchardCmd] Command(3) -> post node event 5 (node=0000020d01961ad8 curIdx=2)
