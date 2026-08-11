@@ -119,6 +119,7 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize2 = nullptr;
 // Type-id globals consulted by the helpers.
 static uint32_t* s_pTypeId_ComponentEntity = nullptr;  // DWORD_1401c5d70
 static uint32_t* s_pTypeId_BuildStateComp = nullptr;   // DAT_1401c7b30
+static uint32_t* s_pTypeId_CropFieldDescription = nullptr;  // DAT_1401c7548
 
 static bool s_cropExtraInit = false;
 static void EnsureCropExtras() {
@@ -133,6 +134,8 @@ static void EnsureCropExtras() {
         ResolveAddr(Module::Exe, 0x1401c5d70));
     s_pTypeId_BuildStateComp = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7b30));
+    s_pTypeId_CropFieldDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7548));
     s_cropExtraInit = true;
 }
 
@@ -393,6 +396,96 @@ extern "C" void   CropFieldCtrl_PopulateTable();
 // static init: FillTypedVtable rewrites slots 1..N on the first factory call and would
 // silently erase anything written earlier.
 
+// ── slot 15 — OnMessage — retail 0x14011ab50 ──────────────────────────────────────
+// OnMessage(self, msgId, sender, slotIndex). Two messages, both addressed at ONE slot
+// of the field's grid (self+0x58, stride 0x20, indexed by the 4th argument):
+//
+//   msg 0 — PLANT BOUND. The PlantArea work has just created the crop entity on this
+//           slot's cell, so bind it: state (+0x04) = 1 "growing", stash the entity at
+//           +0x08 and its NaturalResource component at +0x10, then copy the slot's
+//           plant-mark byte (+0x18) into that component's +0x2d. This is what moves a
+//           slot from "empty" to "growing", which is in turn what the state-9
+//           per-frame handler counts to decide the field is planted and advance to
+//           state 10. Without it a field plants and never progresses.
+//
+//   msg 1 — GROW TICK. Find the slot entity's growth component, then advance it by
+//           Time(growthComp+0x28 * 300.0f * CropFieldDescription+0x24) through that
+//           component's own vtable slot 9 (+0x48). 300.0f is 0x140172234.
+//
+// Retail's profile build carries two assertion strings for this function — "message
+// send to planter harvester is wrong" and "map componment isn't initalized correctly!"
+// [sic] — i.e. it treats a bad slot index or an uninitialised map as programmer error
+// and derefs regardless. Kept unguarded to match, except where our standalone can
+// legitimately have no entity on the cell (msg 1 already tests that in retail too).
+extern "C" void CropFieldComponent_OnMessageVSlot(void* selfV, int msgId,
+                                                  void* /*sender*/, unsigned int slotIdx) {
+    EnsureHelpers();
+    EnsureCropExtras();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    const uintptr_t map = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!map) return;
+    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(map + 0x80);
+    const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x58);
+    if (!grid || !slots) return;
+
+    uint8_t* slot = reinterpret_cast<uint8_t*>(slots + (uintptr_t)slotIdx * 0x20);
+    const int cell = *reinterpret_cast<int32_t*>(slot + 0x00);
+    const uintptr_t entity = *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30);
+
+    if (msgId == 0) {
+        uintptr_t nrIbp = 0;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)&entity);
+        if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);
+        *reinterpret_cast<int32_t*>(slot + 0x04)   = 1;          // growing
+        *reinterpret_cast<uintptr_t*>(slot + 0x08) = entity;
+        *reinterpret_cast<uintptr_t*>(slot + 0x10) = nrIbp;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot + 0x10);
+        if (nrIbp)
+            *reinterpret_cast<char*>(nrIbp + 0x2d) = static_cast<char>(slot[0x18]);
+        return;
+    }
+
+    if (msgId == 1) {
+        if (!entity) return;
+        static void (*s_findGrowth)(int64_t, void*) = nullptr;
+        static const float* s_f300 = nullptr;
+        static bool s_r = false;
+        if (!s_r) {
+            s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
+                ResolveAddr(Module::Exe, 0x14000c460));
+            s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
+            s_r = true;
+        }
+        if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
+        uintptr_t growth = 0;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)&entity);
+        s_findGrowth((int64_t)entity, &growth);
+        if (!growth) return;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&growth);
+
+        void* desc = *reinterpret_cast<void**>(self + 0x18);
+        const uint32_t tidCropDesc =
+            s_pTypeId_CropFieldDescription ? *s_pTypeId_CropFieldDescription : 0;
+        if (!(desc && fn_IsDerivedFrom && tidCropDesc && fn_IsDerivedFrom(desc, tidCropDesc)))
+            return;
+
+        const float rate = *reinterpret_cast<float*>(
+            *reinterpret_cast<uintptr_t*>(growth + 0x38) + 0x28);
+        const float mult = *reinterpret_cast<float*>(
+            reinterpret_cast<uintptr_t>(desc) + 0x24);
+        int64_t t = 0;
+        fn_Time_Ctor_Float(&t, rate * (*s_f300) * mult);
+
+        void** gvt = *reinterpret_cast<void***>(growth);
+        if (gvt && gvt[9])
+            reinterpret_cast<void (*)(void*, void*)>(gvt[9])(
+                reinterpret_cast<void*>(growth), &t);
+    }
+}
+
 // ── slot 13 — CanCommand — retail 0x14011ada0 ─────────────────────────────────────
 // Decides which of the crop-field panel's three buttons are enabled. Unlike the
 // ResourceProduce family's slot 13 (which ignores its argument and returns a mask),
@@ -528,6 +621,7 @@ CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
                                CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
 
 static void CropFieldCtrl_Populate() {
+    CropFieldComponent_LiveVtable[15] = reinterpret_cast<void*>(&CropFieldComponent_OnMessageVSlot);
     CropFieldComponent_LiveVtable[13] = reinterpret_cast<void*>(&CropFieldComponent_CanCommandVSlot);
     CropFieldComponent_LiveVtable[14] = reinterpret_cast<void*>(&CropFieldComponent_CommandVSlot);
     // Slot 3 = Shutdown/Serialize. The body has been ported in this file since

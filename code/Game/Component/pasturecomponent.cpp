@@ -526,6 +526,84 @@ static uint64_t PastureComponent_CanCommandVSlot(void* s, int cmd) {
 static void  PastureComponent_CommandVSlot(void* s, int cmd) {
     Pasture_Command(s, cmd);
 }
+// ── slot 12 — retail 0x140127540 — claim the pasture's gate cells ─────────────────
+// Only acts on message id 4. For each kind-2 child attach point of the pasture's
+// position component it converts the point to a map cell, forces that cell's terrain
+// byte (+0x29) to 2, clears the cell's entity slot (+0x08) to a null IBP, and notifies
+// the two map subsystems:
+//     if (1 << terrain & 0x1e0) map+0xa2 |= 1, and FUN_1400a8c90(map+0x70, x, y)
+//     FUN_1400a6fe0(map+0x68, cell, 2, index)
+// The 0x1e0 mask is the "was this a resource/rough tile" test the orchard and
+// ResourceProduce paths use too; the |= records that at least one such tile changed so
+// the caller can refresh.
+//
+// This is the pasture's gate/entrance claim — the cells a herder walks through. With
+// the slot stubbed the terrain there was never converted, which is the same class of
+// omission as the MapComponent occupancy gap already recorded for this wave.
+extern "C" void PastureComponent_Slot12VSlot(void* selfV, int msgId) {
+    if (msgId != 4) return;
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    static void (*s_findPos)(int64_t, void*)            = nullptr;  // 0x140002ed0
+    static int  (*s_childCount)(int64_t, int)           = nullptr;  // 0x140123070
+    static void (*s_spotPos)(int64_t, float*, int, int, float*) = nullptr; // 0x140122e20
+    static void (*s_mapNotifyA)(int64_t, int, int)      = nullptr;  // 0x1400a8c90
+    static void (*s_mapNotifyB)(void*, int, int, uint64_t) = nullptr; // 0x1400a6fe0
+    static bool s_r = false;
+    if (!s_r) {
+        s_findPos    = reinterpret_cast<void(*)(int64_t, void*)>(ResolveAddr(Module::Exe, 0x140002ed0));
+        s_childCount = reinterpret_cast<int(*)(int64_t, int)>(ResolveAddr(Module::Exe, 0x140123070));
+        s_spotPos    = reinterpret_cast<void(*)(int64_t, float*, int, int, float*)>(
+            ResolveAddr(Module::Exe, 0x140122e20));
+        s_mapNotifyA = reinterpret_cast<void(*)(int64_t, int, int)>(ResolveAddr(Module::Exe, 0x1400a8c90));
+        s_mapNotifyB = reinterpret_cast<void(*)(void*, int, int, uint64_t)>(
+            ResolveAddr(Module::Exe, 0x1400a6fe0));
+        s_r = true;
+    }
+    if (!s_findPos || !s_childCount || !s_spotPos) return;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    int64_t posIbp = 0;
+    s_findPos(*reinterpret_cast<int64_t*>(self + 0x10), &posIbp);
+    if (!posIbp) return;
+
+    int* map = *reinterpret_cast<int**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!map) return;
+    const int width = *map;
+    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(map) + 0x80);
+    if (!grid || width <= 0) return;
+
+    for (uint32_t i = 0; (int)i < s_childCount(posIbp, 2); ++i) {
+        float p[3] = {0, 0, 0};
+        s_spotPos(posIbp, p, 2, (int)i, nullptr);
+        int x = (int)(p[0] + (float)(width >> 1));
+        int y = (int)(p[1] + (float)(width >> 1));
+        if (x < 0) x = 0; if (x >= width) x = width - 1;
+        if (y < 0) y = 0; if (y >= width) y = width - 1;
+        const int cell = width * y + x;
+
+        uintptr_t nullIbp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+
+        uint8_t* terrain = reinterpret_cast<uint8_t*>(grid + 0x29 + (uintptr_t)cell * 0x30);
+        const uint8_t was = *terrain;
+        const bool wasRough = ((1u << (was & 0x1f)) & 0x1e0u) != 0;
+        uint8_t* flag = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(map) + 0xa2);
+        *flag = static_cast<uint8_t>(*flag | (wasRough ? 1 : 0));
+        *terrain = 2;
+        if (wasRough && s_mapNotifyA)
+            s_mapNotifyA(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x70),
+                         cell % width, cell / width);
+        if (s_mapNotifyB)
+            s_mapNotifyB(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(map) + 0x68),
+                         cell, 2, i);
+        *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30) = nullIbp;
+    }
+}
+
 // ── Family-A tail slots 1 / 4 / 19 / 20 / 21 ──────────────────────────────────────
 // PastureComponent does not use the CONTROLLER_LIVE_FACTORY_STATES macro (it has this
 // hand-rolled InstallLive), so none of the shared slot fills reached it and the
@@ -565,6 +643,7 @@ static void* PastureComponent_CreateState(void* self) {
 // Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
 static void PastureComponent_InstallLive(void* mem) {
     if (!PastureComponent_LiveOn()) return;
+    PastureComponent_LiveVtable[12] = reinterpret_cast<void*>(&PastureComponent_Slot12VSlot);
     PastureComponent_LiveVtable[1]  = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
     // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
     // the original wave and nothing ever wrote it into the live vtable, so the
