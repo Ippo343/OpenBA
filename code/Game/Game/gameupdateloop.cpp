@@ -679,6 +679,7 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
+extern "C" void FoodPanel_Tick(void* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
@@ -889,6 +890,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // Dialog harness for the six food-production panels: opens each building's info
+    // panel and reports the controllers on it plus the component's CanCommand verdicts
+    // (what greys or enables each button). No-op unless BANISHED_FOOD_PANEL is set
+    // (standalone/food_panel_harness.cpp).
+    FoodPanel_Tick(self->m_entityUI, s_frameNum);
 
     // Kill N citizens on a chosen frame so the removal teardown (HandleLifeEvent ->
     // MarkForRemoval -> the +0x38 broadcast -> CitizenComponent::OnRemove) can be
