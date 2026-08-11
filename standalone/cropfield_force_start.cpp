@@ -1,0 +1,150 @@
+// standalone/cropfield_force_start.cpp
+// BANISHED_CROPFIELD_FORCE_START — switch a demo crop field ON and (optionally) fire
+// its plant command, so states 9/10/11 are reachable without the drag tool or panel.
+//
+// WHY: CropFieldComponent_Ctor seeds +0x48 = 0, and state-2 enter publishes that byte
+// into the workplace's accepting flag while the state-2 per-frame planting trigger
+// returns immediately unless it is set. So a freshly spawned demo field parks in state 2
+// forever — correctly. In retail the player drags the field out and picks a crop in the
+// panel, which is what sets it. This is the crop-field analogue of
+// BANISHED_ORCHARD_FORCE_START and, like it, only pokes already-published state.
+//
+// Values:
+//   1  set +0x48 = 1 and let the SEASONAL trigger fire the plant on its own. This is the
+//      faithful path and also tests the trigger itself, but it only fires inside the
+//      year window the trigger checks, so it can wait a long time.
+//   2  also post node event 3 (the panel's plant command) immediately — the same event
+//      the state table registers for state 2 — so state 9 is entered on the spot.
+//
+// Test-only, opt-in, default off.
+
+#include "resolve.h"
+#include "engine_funcs.h"
+#include "Object/factory_registration.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+namespace {
+
+constexpr int kStartFrame = 300;
+constexpr int kRetry      = 120;
+constexpr int kMaxTracked = 8;
+
+bool  s_init = false;
+int   s_mode = 0;
+void* s_done[kMaxTracked];
+int   s_doneN = 0;
+
+void Init() {
+    if (s_init) return;
+    s_init = true;
+    const char* e = std::getenv("BANISHED_CROPFIELD_FORCE_START");
+    if (!e || !e[0] || std::strcmp(e, "0") == 0) {
+        std::fprintf(stderr, "[CropStart] disabled (BANISHED_CROPFIELD_FORCE_START unset)\n");
+        std::fflush(stderr);
+        return;
+    }
+    s_mode = std::atoi(e);
+    if (s_mode <= 0) s_mode = 1;
+    std::fprintf(stderr, "[CropStart] ENABLED mode=%d — switch demo crop fields on%s\n",
+                 s_mode, s_mode >= 2 ? " and post the plant command" : "");
+    std::fflush(stderr);
+}
+
+bool AlreadyDone(void* c) {
+    for (int i = 0; i < s_doneN; ++i) if (s_done[i] == c) return true;
+    return false;
+}
+
+void* FindComp(void* ent, uint32_t tid) {
+    if (!ent || !tid) return nullptr;
+    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    for (int i = 0; i < n && a; ++i) {
+        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+        void* c = *cs;
+        if (!c) continue;
+        void** vt = *reinterpret_cast<void***>(c);
+        if (!vt || !vt[2]) continue;
+        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+    }
+    return nullptr;
+}
+
+// Post a node event through the entity's StateMachineComponent, exactly as
+// OrchardComponent_Command does: smc+0x48 is the SM, sm+0x00 the node, node vtable
+// slot 2 is PostEvent(node, sm, curIdx, eventId), and smc+0x51 carries the index.
+void PostNodeEvent(void* smc, int eventId) {
+    if (!smc) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(smc);
+    uintptr_t sm = s + 0x48;
+    void* node = *reinterpret_cast<void**>(sm);
+    if (!node) return;
+    void** vt = *reinterpret_cast<void***>(node);
+    if (!vt || !vt[2]) return;
+    const int curIdx = *reinterpret_cast<int8_t*>(s + 0x51);
+    reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2])(
+        node, reinterpret_cast<void*>(sm), curIdx, eventId);
+    std::fprintf(stderr, "[CropStart]   posted node event %d (node=%p curIdx=%d)\n",
+                 eventId, node, curIdx);
+}
+
+void Fire(int frame) {
+    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) return;
+    uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    if (!el) return;
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
+    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    const uint32_t tidCrop = ::Object::GetTypeIdByName("CropFieldComponent");
+    const uint32_t tidSM   = ::Object::GetTypeIdByName("StateMachineComponent");
+    if (!arr || n <= 0 || !tidCrop) return;
+
+    int found = 0;
+    for (int i = 0; i < n; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        void* comp = FindComp(ent, tidCrop);
+        if (!comp) continue;
+        ++found;
+        if (AlreadyDone(comp)) continue;
+
+        uintptr_t c = reinterpret_cast<uintptr_t>(comp);
+        const uint8_t before = *reinterpret_cast<uint8_t*>(c + 0x48);
+        *reinterpret_cast<uint8_t*>(c + 0x48) = 1;
+        if (s_doneN < kMaxTracked) s_done[s_doneN++] = comp;
+
+        std::fprintf(stderr, "[CropStart] frame=%d comp=%p master(+0x48) %u -> 1, "
+                     "hasCrop(+0x49)=%u slots(+0x60)=%d\n",
+                     frame, comp, (unsigned)before,
+                     (unsigned)*reinterpret_cast<uint8_t*>(c + 0x49),
+                     *reinterpret_cast<int32_t*>(c + 0x60));
+        if (s_mode >= 2) PostNodeEvent(FindComp(ent, tidSM), 3);
+        std::fflush(stderr);
+    }
+    if (found == 0) {
+        static bool said = false;
+        if (!said) {
+            said = true;
+            std::fprintf(stderr, "[CropStart] frame=%d: no CropFieldComponent in the world "
+                         "(set BANISHED_BUILD_DEMO_CROPFIELD=1 and BANISHED_LIVE_CROPFIELD=1?)\n",
+                         frame);
+            std::fflush(stderr);
+        }
+    }
+}
+
+}  // namespace
+
+extern "C" void CropFieldForceStart_Tick(int frameNum) {
+    Init();
+    if (s_mode <= 0) return;
+    if (frameNum < kStartFrame) return;
+    if (((frameNum - kStartFrame) % kRetry) != 0) return;
+    Fire(frameNum);
+}

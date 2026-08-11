@@ -683,6 +683,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_ha
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
+extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
 extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
 extern "C" void FoodWorkers_Tick(int frameNum);            // standalone/food_workers_harness.cpp
@@ -908,6 +909,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // that actually answers "does this building feed the town". No-op unless
     // BANISHED_FOOD_DIAG is set (standalone/food_production_diag.cpp).
     FoodDiag_Tick(s_frameNum);
+
+    // Switch a demo crop field on (and optionally fire its plant command) so states
+    // 9/10/11 are reachable without the drag tool. No-op unless
+    // BANISHED_CROPFIELD_FORCE_START is set (standalone/cropfield_force_start.cpp).
+    CropFieldForceStart_Tick(s_frameNum);
 
     // One-shot: force an untyped demo orchard's master switch on + assign a real
     // tree type via the live combo-select path, so the state-2->state-9 transition
