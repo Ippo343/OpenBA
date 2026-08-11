@@ -583,14 +583,24 @@ int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*
         }
     }
 
-    // Mark primary cell as valid (available for reassignment)
-    char* validityArray = (char*)selfQ[0xb];
-    validityArray[primaryIdx] = 1;
+    // ⚠ DO NOT restore the validity byte here. Retail's slot 6 (0x1400f3f60) removes the
+    // primary and paired indices from the BST and touches +0x58 NOT AT ALL; it is slot 7,
+    // OnCancel (0x1400f3ea0), that sets validity[idx] = 1 to put the cells back up for
+    // replanting. This port had slot 7's body in slot 6, so every COMPLETED plant
+    // immediately re-offered its own cell: the citizen replanted the same tile forever,
+    // and CreateNaturalResource bailed "tile already holds an entity" on every retry
+    // (measured: 129 plant attempts, 2 binds, the same cell 41318 every time).
+    //
+    // This is the identical Slot6/Slot7 swap the orchard wave already paid for — see
+    // reference note "Slot6 (COMPLETED) must NOT restore the validity byte". Same bug,
+    // different class, found the same way: by a counter showing work happening over and
+    // over with no progress.
+    //
+    // Retail's return here really is 0 in the low byte (`in_RAX & ...ff00`), so
+    // TryCompleteTask reporting false is faithful and was never the defect.
 
     // Handle paired cell (if within bounds)
     if ((int)pairedIdx < *(int*)(selfAddr + 0x60)) {
-        validityArray[pairedIdx] = 1;
-
         // Remove paired cell from BST
         int* node2 = (int*)selfQ[9];
         while (node2 != nullptr) {
