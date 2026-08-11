@@ -762,8 +762,14 @@ void GrowthComponent_InitFuncs() {
 // ===== Standalone factory =====
 // WORKED EXAMPLE of the inert->live component bring-up (Track C / Phase 1). By
 // DEFAULT GrowthComponent is inert exactly like every other standalone component
-// (all 48 vtable slots no-op stubs except +0x00 dtor / +0x10 GetTypeId), so the
-// default run is byte-for-byte unchanged.
+// (all 48 vtable slots no-op stubs except +0x00 dtor / +0x10 GetTypeId).
+//
+// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_GROWTH is now in kDefaultOnFlags, so the default
+// run is NO LONGER byte-for-byte unchanged — this component is LIVE by default and the env
+// var is only a kill-switch (=0). It went live together with BANISHED_LIVE_FRUIT and
+// BANISHED_LIVE_ORCHARD, on a measured orchard loop that ends with fruit in town storage.
+// This one is the broadest of the three: it drives EVERY runtime-spawned natural resource,
+// not just orchard trees.
 //
 // Set BANISHED_LIVE_GROWTH=1 (or the global BANISHED_LIVE_COMPONENTS=1) to graduate
 // it to a REAL per-type vtable. The COMPONENT_LIVE_FACTORY_S macro (the generalized

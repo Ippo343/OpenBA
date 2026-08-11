@@ -814,10 +814,13 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
 //     diagnostic is the ENTITY-level StateMachine state, a different thing — do not
 //     conflate them.)
 //
-// Opt-in for now (BANISHED_LIVE_ORCHARD), NOT in kDefaultOnFlags: the state table
-// currently registers null handlers, so this increment brings up the node and proves
-// it links and ticks without changing any behaviour. It graduates to default-on once
-// the per-state bodies land and produce verified planting/yield.
+// GRADUATED 2026-08-10: BANISHED_LIVE_ORCHARD is in kDefaultOnFlags, so the env var is now
+// only a kill-switch (=0) for A/B runs. It was opt-in while the state table registered null
+// handlers; all six states (2/9/10/12/11/20) now carry real bodies, and the loop is measured
+// end to end — plant, tend, harvest, 6 piles x 50 reaching town STORAGE, and cut/replant.
+// See kDefaultOnFlags in component_factory_base.cpp for the evidence, and note that
+// BANISHED_LIVE_GROWTH + BANISHED_LIVE_FRUIT graduated with it: without those two the trees
+// plant but never mature or bear, so the three are only meaningful together.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"

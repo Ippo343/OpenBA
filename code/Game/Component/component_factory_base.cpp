@@ -465,6 +465,40 @@ static const char* const kDefaultOnFlags[] = {
     // (buildings, whose capacity comes from TownStorage_BuildCompleteInit_7ff0 instead —
     // it deliberately does not test that byte). OFF => the same newborn at capacity 0.
     "BANISHED_LIVE_STORAGE_ONADDED",
+    // The orchard trio. OrchardComponent's controller (its 6-state table: 2 idle, 9 plant,
+    // 10 tend, 12 replant, 11 harvest, 20 clear) plus the two components its yield depends
+    // on — GrowthComponent (tree maturity at natRes+0x28) and FruitComponent (ripeness at
+    // fruit+0x30). All three graduate together because none of them produces an observable
+    // result alone: OrchardComponent without growth plants trees that never mature, and
+    // growth without fruit matures trees that never bear.
+    //
+    // Graduated 2026-08-10, the session that closed the last two gaps in the chain. The
+    // whole loop is measured end to end, not inferred:
+    //  * plant   — grid built (count(+0x58)=12), slot histogram 12x state 1, 12 tiles bound
+    //  * tend    — state 10 live, seasonal TendArea post/drop on the real month gate
+    //  * harvest — 12/12 slots picked, msg=1 arriving with ASCENDING slot indices,
+    //              HarvestOrchard executed=12, machine leaves state 11 for state 10
+    //  * YIELD   — 6 piles x 50 reach town STORAGE (a new resType 0 -> 300, measured by
+    //              summing every StorageComponent's inventory, twice on separate runs) and
+    //              then tick DOWN to 285 as the town eats it. Storage was the missing
+    //              measurement for three sessions: counting spawned piles is a different
+    //              question, since a pile nobody hauls is a yield of zero.
+    //  * cut     — the panel's CUT (cmd 3 -> node event 5) drives state 20, which clears
+    //              the footprint and returns to state 9 to REPLANT (9->10->20->9->10)
+    // Zero-byte crash log on every run above.
+    //
+    // ⚠ GROWTH and FRUIT are NOT orchard-only: GrowthComponent in particular is the finder
+    // every runtime-spawned natural resource goes through, so this changes behaviour for
+    // wild trees too. That breadth is the reason they were held opt-in this long; it is
+    // also why they are worth defaulting on now that the resource pipeline they feed is
+    // proven. Each remains a kill-switch (=0) for an A/B run.
+    //
+    // The BANISHED_ORCHARD_* harnesses stay opt-in and are NOT part of this: they are
+    // player stand-ins (WORKERS seats a citizen, GROW fast-forwards maturity, FORCE_START
+    // pokes the master switch, CUT clicks a destructive button), not features.
+    "BANISHED_LIVE_ORCHARD",
+    "BANISHED_LIVE_GROWTH",
+    "BANISHED_LIVE_FRUIT",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
