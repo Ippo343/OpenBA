@@ -240,6 +240,16 @@ bool PlantOrchard_ResolveFuncs() {
         if (!s_fn_ResizeByteArray) printf("  MISSING: ResizeByteArray\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_OrchardRefresh) printf("  MISSING: OrchardRefresh\n");
+        // The seven conditions below were in the `ok` expression but not in this list, so a
+        // failure caused by any of them printed "FAILED" with no reason at all — which is
+        // exactly what a 2026-08-10 orchard run hit. Report every term you test.
+        if (!fn_InternalBasePtr_CheckPtr) printf("  MISSING: InternalBasePtr_CheckPtr\n");
+        if (!fn_MemFreeStatic) printf("  MISSING: MemFreeStatic\n");
+        if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
+        if (!s_fHalfCellOffset) printf("  MISSING: fHalfCellOffset (0x140172114)\n");
+        if (!s_typeConst) printf("  MISSING: typeConst (0x1401c46b0 OrchardComponent type id)\n");
+        if (!s_vtable_PlantOrchard) printf("  MISSING: vtable_PlantOrchard (0x140161910)\n");
+        if (!s_vtable_Work) printf("  MISSING: vtable_Work (0x140161a80)\n");
     }
 #endif
 

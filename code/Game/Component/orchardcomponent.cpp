@@ -116,7 +116,14 @@ static fn_BaseIsA_t s_fn_BaseIsA = nullptr;
 typedef void* (*fn_IBPAccessor_t)(int64_t entity, void* outIBP);
 static fn_IBPAccessor_t s_fn_IBPAccessor52c0 = nullptr;
 // Type-id globals referenced by the serializer (entity-ref kind filters).
-static uint32_t* s_pTypeMapComp = nullptr;  // 0x1401c79e0 = MapComponent (TypeInfo)
+// ⚠ This was bound to 0x1401c79e0 (MapComponent) and named accordingly. Both retail sites
+// that use it — the ref serializer (0x14000a230) and ValidateRefs (0x140051830) — read
+// `dword [0x1401c5d70]` = ComponentEntity, verified from the disassembly. The old global is
+// a real, registered, NON-ZERO id of the wrong class, so every null check passed and the
+// filter simply rejected everything: reference_wrong_but_nonzero_typeid. The slot the two
+// sites test is a tile record's +0x08, which holds the ENTITY standing on the tile (dc20
+// stores the owner IBP from MapComponent+0x10) — an entity is never a MapComponent.
+static uint32_t* s_pTypeComponentEntity = nullptr;  // 0x1401c5d70 = ComponentEntity
 static uint32_t* s_pType7b30 = nullptr;             // DAT_1401c7b30
 static uint32_t* s_pType4250 = nullptr;             // DAT_1401c4250
 static void**    s_pWorldSingleton2 = nullptr;      // g_pGameWorldSingleton (0x1401c3dd8)
@@ -124,9 +131,20 @@ static void**    s_pWorldSingleton2 = nullptr;      // g_pGameWorldSingleton (0x
 static bool s_subResolved = false;
 static void EnsureSubHelpers() {
     if (s_subResolved) return;
-    s_fn_BaseIsA          = reinterpret_cast<fn_BaseIsA_t>(ResolveAddr(Module::Exe, 0x140002d40));
+    // Object::Base::IsA — retail calls it through the IAT dispatch slot at 0x140151410
+    // (`CALL qword ptr [0x140151410]` at 0x1400518bd). It was bound to exe 0x140002d40,
+    // which is not IsA at all but DynArray8_EraseByValue, and has no reimplementation, so
+    // ResolveAddr returned 0 and ValidateRefs' `s_fn_BaseIsA &&` guard failed every time —
+    // silently demoting every correctly-bound slot to "unusable" (measured: msg 0 bound
+    // entity+natRes+fruit, the very next validate pass tore it back down, and the orchardist
+    // replanted the same cell forever).
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
+        if (slot) s_fn_BaseIsA = *reinterpret_cast<fn_BaseIsA_t*>(slot);
+        if (!s_fn_BaseIsA) s_fn_BaseIsA = reinterpret_cast<fn_BaseIsA_t>(fn_IsA);
+    }
     s_fn_IBPAccessor52c0  = reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    s_pTypeMapComp= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    s_pTypeComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     s_pType7b30           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
     s_pType4250           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4250));
     s_pWorldSingleton2    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -180,8 +198,8 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
         if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 4), nullptr);
 
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 8, serializer);
-        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeMapComp &&
-            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeMapComp)))
+        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeComponentEntity)))
             *reinterpret_cast<void**>(e + 8) = nullptr;
 
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x10, serializer);
@@ -218,8 +236,8 @@ void OrchardComponent_ValidateRefs(void* selfV) {
         bool ok = false;
         if (live) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
-            if (s_fn_BaseIsA && s_pTypeMapComp &&
-                s_fn_BaseIsA(live, *s_pTypeMapComp)) {
+            if (s_fn_BaseIsA && s_pTypeComponentEntity &&
+                s_fn_BaseIsA(live, *s_pTypeComponentEntity)) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
                 int64_t accBuf = 0;
                 void* acc = s_fn_IBPAccessor52c0 ? s_fn_IBPAccessor52c0((int64_t)live, &accBuf) : nullptr;
@@ -230,6 +248,22 @@ void OrchardComponent_ValidateRefs(void* selfV) {
             }
         }
         if (ok) continue;
+        {   // This is the ONLY demotion out of state 1, and it silently undoes a successful
+            // msg-0 bind — the orchard planted a tree, then reported the slot as unusable and
+            // replanted the same cell forever. Four independent conditions decide it; say which
+            // one said no.
+            static int s_n = 0;
+            if (s_n++ < 8) {
+                void* bound = *reinterpret_cast<void**>(entry + 8);
+                std::fprintf(stderr, "[OrchardValidate] slot=%d tile=%d DEMOTING 1->2: live=%p "
+                             "bound=%p typeIdCompEntity=%u isA=%d liveEqBound=%d\n",
+                             i, tile, live, bound, s_pTypeComponentEntity ? *s_pTypeComponentEntity : 0u,
+                             (live && s_fn_BaseIsA && s_pTypeComponentEntity)
+                                 ? (int)s_fn_BaseIsA(live, *s_pTypeComponentEntity) : -1,
+                             (int)(live == bound));
+                std::fflush(stderr);
+            }
+        }
         // Stale -> mark removed (kind=2) and null the 3 IBP slots.
         *reinterpret_cast<int32_t*>(entry + 4) = 2;
         int64_t z = 0;
@@ -456,6 +490,20 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
         int64_t fruitIBP = 0;
         if (s_fn_FindFruit_a0b0) s_fn_FindFruit_a0b0(entity, &fruitIBP);
 
+        {   // msg 0 is the ONLY writer of the slot's {entity, natRes, fruit} triple, and its
+            // two outcomes — bound (state 1) and unusable (state 2) — are indistinguishable
+            // from the slot histogram alone. Say which of the three came back null.
+            static int s_n = 0;
+            if (s_n++ < 8) {
+                std::fprintf(stderr, "[OrchardMsg]   msg0 slot=%u tile=%d -> entity=%p "
+                             "natRes=%p fruit=%p => state %d\n", slotIdx,
+                             (int)*reinterpret_cast<int32_t*>(slot),
+                             reinterpret_cast<void*>(entity), reinterpret_cast<void*>(natResIBP),
+                             reinterpret_cast<void*>(fruitIBP),
+                             (entity && natResIBP && fruitIBP) ? 1 : 2);
+                std::fflush(stderr);
+            }
+        }
         if (entity != 0 && natResIBP != 0 && fruitIBP != 0) {
             *reinterpret_cast<int32_t*>(slot + 0x04) = 1;          // planted
             *reinterpret_cast<int64_t*>(slot + 0x08) = entity;

@@ -459,6 +459,49 @@ static void MapComponent_OnAddedVSlot(void* s) {
     // slot 6 (+0x30) — dispatched by ComponentEntity_OnAddedPass at register
     // time (MapComponent flags 0x83 have bit 0 set). Paint the minimap dot.
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/false);
+
+    // ...and then the SPAWN-TIME CELL CLAIM, the other half of what this slot does.
+    // Retail slot 6 is `MapComponent::Draw` (0x140124370), verified from the decompile:
+    //     if (MapDescription(mc+0x18)->+0x30) sub_41b0(mc);
+    // and 41b0 (0x1401241b0) is paint (desc+0x32) AND occupancy (desc+0x31 == 0) under one
+    // bit-0x100000 gate. Our port split the two and wired only the paint, so nothing wrote
+    // the entity into its tile record on any register-time path.
+    //
+    // That is the missing writer behind the orchard bind crash: PlantOrchard ->
+    // CreateNaturalResource spawns the tree, ActCNR_SetupModelAtCell_126540 fills THIS
+    // component's rect (+0x28/+0x2a and 1x1 at +0x2c — 0x140004680 is the MapComponent
+    // finder, not a "position" one), RegisterEntity dispatches slot 6 — and retail claims
+    // the cell right there. OrchardComponent::OnMessage(0) then reads
+    // *(mapGrid+0x80)[tile] + 8 and hands it to a component finder; with no claim that
+    // field is 0 and the faithful deref faults. Find the writer, don't guard the deref.
+    //
+    // desc+0x30 is precisely the "claim at spawn vs claim later" switch: natural resources
+    // set it and take their cell immediately, while a building leaves it clear and claims
+    // its footprint only when its ClearArea finishes (slot 12 / msg 1, see below).
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SPAWN_CLAIM")) return;
+    uint8_t* mc = reinterpret_cast<uint8_t*>(s);
+    uint8_t* desc = *(uint8_t**)(mc + 0x18);
+    if (!desc) return;
+    // Trust the linked description instead of re-deriving it through IsDerivedFrom — the
+    // same standalone accommodation PaintMinimapRect and DetachOccupancy_4750 already make
+    // (MapDescription is not in standalone's partial factory tree, so retail's cast yields
+    // null and every desc read here would fault).
+    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    if (s_trace) {
+        static int s_n = 0;
+        if (++s_n <= 30)
+            fprintf(stderr, "[MapSpawnClaim] #%d comp=%p rect=(%d,%d %dx%d) desc+0x30=%d "
+                    "desc+0x31=%d alreadyWritten=%d -> %s\n",
+                    s_n, s, (int)*(int16_t*)(mc + 0x28), (int)*(int16_t*)(mc + 0x2a),
+                    (int)*(int16_t*)(mc + 0x2c), (int)*(int16_t*)(mc + 0x2e),
+                    (int)desc[0x30], (int)desc[0x31],
+                    (int)((*(uint32_t*)(mc + 0x20) >> 0x14) & 1),
+                    desc[0x30] == 0 ? "SKIP (desc opts out of spawn-time claim)"
+                                    : "CLAIMING CELLS");
+        fflush(stderr);
+    }
+    if (desc[0x30] == 0) return;                 // retail: MapComponent::Draw's gate
+    MapComponent_ApplyOccupancy_41b0(s);         // 41b0's occupancy half (+ the 0x100000 bit)
 }
 static void MapComponent_DetachVSlot(void* s) {
     // Retail removal (0x1401242f0) first clears the minimap overlay rect via
