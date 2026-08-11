@@ -30,6 +30,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Local function pointers (resolved once by HarvestArea_ResolveFuncs)
@@ -324,6 +325,19 @@ static void* BST_Find(void* root, int key) {
 // 7. Create harvest action, assign work, register with citizen AI
 //
 int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
+    // Harvest-assignment census. State 11 posts this work; whether a citizen ever
+    // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
+    // Execute that finds nothing looks exactly like an Execute that is never called.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_calls = 0;
+        if (s_t && ((s_calls++ % 20) == 0)) {
+            std::fprintf(stderr, "[HarvestArea] Execute call %lld\n", s_calls);
+            std::fflush(stderr);
+        }
+    }
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 

@@ -515,3 +515,44 @@ recovery path is not merely ineffective -- it is never entered. Worth checking w
 the citizen holding it is still alive and still has the action chain, and whether
 Validate (which DOES run, 30 times) is expected to reclaim a stale claim and is
 returning "still valid" for a claim whose citizen has moved on.
+
+## Crop field: the chain now runs to HarvestArea (2026-08-11, later)
+
+Two fixes, in order, each unblocking the next stage:
+
+1. **Harness siting** (`a42b433`) — ringPlace checked occupancy but not workability, so
+   a demo field straddled a cell no citizen could work and `growing + done == total`
+   was permanently unsatisfiable. Blocked cell terrain 0x07 vs 0x04 on its working
+   neighbour. Now every footprint cell is tested with PlantArea's own 0xe0f predicate.
+   -> planting completes 64/64 and state 9 -> 10 fires.
+
+2. **Ripeness constant** (`cbe5ab0`) — `0x140172144` (0.99f) was never registered, so
+   `s_fRipe` was null and state 10's per-frame returned on the constants guard, BEFORE
+   its own census could print. Both harvest arms were dead from ONE missing .rdata
+   float. Siblings 0x1401721d4 (33.0f) and 0x14017225c (3600.0f) were registered
+   elsewhere, which made it look behavioural rather than structural.
+   -> event 4 -> state 11 -> HarvestArea posted -> HarvestArea::Execute runs.
+
+Measured end state:
+
+    [CropXition] state 9 -> 10 TEND (growing=64 done=0 total=64)
+    [CropXition] STATE 10 ENTER - posting TendArea
+    [CropXition] event 4 -> STATE 11 HARVEST
+    [CropXition] STATE 11 ENTER - posting HarvestArea
+    [HarvestArea] Execute call 1
+    [CropHarvest] temp=72.0 (min 33.0) maturity=0.6971 -> ripe
+
+### Still unproven: the deposit
+
+`BANISHED_PRODUCE_TRACE=1` counts CreateRawMaterial executions ([ORGANIC-PRODUCE]).
+On the run that reached state 11 the trace was not enabled; on the run with the trace
+enabled maturity had not yet reached ripe inside the window. **Get both in one run** --
+that single observation decides whether the crop field deposits.
+
+⚠Run-to-run variance is large: placement, weather and maturity timing all move, so a
+600s window sometimes reaches state 11 and sometimes does not. Never rank two fixes on
+one run each ([[reference-banished-seed-pins-worldgen-only]]).
+
+⚠Do NOT read slot state 2 as "harvested" when judging this -- it is also what
+ValidateEntityRefs writes when it DROPS a stale slot. One run showed done=51 while
+still in state 9. Only a CreateRawMaterial in storage settles it.
