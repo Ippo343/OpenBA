@@ -923,6 +923,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // that actually answers "does this building feed the town". No-op unless
     // BANISHED_FOOD_DIAG is set (standalone/food_production_diag.cpp).
     FoodDiag_Tick(s_frameNum);
+    { extern void FoodStockCensus_Tick(int); FoodStockCensus_Tick(s_frameNum); }
 
     // Switch a demo crop field on (and optionally fire its plant command) so states
     // 9/10/11 are reachable without the drag tool. No-op unless
