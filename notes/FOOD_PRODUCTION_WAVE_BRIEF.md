@@ -712,3 +712,33 @@ and is the natural place for a carcass yield.
 ⚠Do NOT conclude "hunting produces nothing" from a zero on the two current meters until
 that function is found -- if it deposits by a third route the meters cannot see it, which
 is exactly the error that made 61 real crop harvests read as zero on ORGANIC-PRODUCE.
+
+### Hunting narrowed to a component slot 7 on the animal entity
+
+Confirmed by reading retail, not by guessing:
+  - HuntComponent vtable = **0x140163770**; slot 21 (+0xa8) = **0x140006b10**, the BASE
+    NO-OP. Hunting genuinely does not produce via ProduceTick, so the RP produce path is
+    a dead end for this class -- do not look there again.
+  - HuntAnimal slot 4 (0x1400c8250) is 4 instructions: `return self->+0x38 == 0`, a
+    completion predicate, NOT the kill.
+  - The kill is HuntAnimal slot 6 Enter (0x1400c7de0); it ends by spawning a
+    **RemoveAnimal** action for the target.
+  - RemoveAnimal::AbstractImpl (retail 0x1400ca7f0) only marks the animal and queues it
+    to gameWorld+0xe8 +0xd0/+0xd8 -- our port is byte-faithful, verified against the
+    decompile.
+  - Natural old-age death in AnimalComponent also only marks + queues (correct -- an
+    animal dying of age should not yield).
+
+So the venison is produced when the MARKED animal is actually destroyed. The mechanism is
+already known from the crop-field work: `FUN_1400c2ea0` (MarkForRemoval) walks the
+entity's components and dispatches **vtable +0x38 (slot 7, "removed-from-world")** on
+every component whose capability flags (+0x20) have bit 1. Its twin FUN_1400c2f60 does
+the same for +0x30 (slot 6) on add.
+
+⭐NEXT, and it is now a small, bounded job: enumerate the components on a wild-deer
+entity, read each one's retail slot 7, and find the one that creates the raw material.
+`WildAnimalComponent`'s slot 7 in our port is 0x14012e2b0 (erases self from the herd) --
+worth re-checking against the bytes, because Ghidra's OnCreate/OnRemove labels in this
+codebase are known to be off by one
+([[reference-ghidra-oncreate-onremove-mislabel]]), so the producing slot may have been
+mapped to the wrong index.
