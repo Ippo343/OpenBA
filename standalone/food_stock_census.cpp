@@ -34,6 +34,7 @@ constexpr int kMaxMaterials = 64;
 bool s_init   = false;
 int  s_period = 0;
 int  s_prev[kMaxMaterials];
+long long s_gross[kMaxMaterials];   // cumulative POSITIVE delta = gross deposits
 bool s_seeded = false;
 
 void Init() {
@@ -74,11 +75,29 @@ extern "C" void FoodStockCensus_Tick(int frame) {
         if (cur < 0 || cur > lim) { s_prev[i] = cur; continue; }
         if (!s_seeded) { s_prev[i] = cur; continue; }
         if (cur != s_prev[i]) {
-            std::fprintf(stderr, "[FoodStock] material %2d: %d -> %d  (%+d, limit %d)\n",
-                         i, s_prev[i], cur, cur - s_prev[i], lim);
+            const int d = cur - s_prev[i];
+            // Track GROSS deposits, not net stock. Material 5 is the aggregate Food pool,
+            // so citizens eating drags the net down while production pushes it up and the
+            // two cancel — a class that genuinely deposits can show a FALLING stock.
+            // Summing only positive deltas isolates production, which is what makes a
+            // per-class A/B against a no-building control meaningful.
+            if (d > 0) s_gross[i] += d;
+            std::fprintf(stderr, "[FoodStock] material %2d: %d -> %d  (%+d, limit %d) "
+                         "grossDeposited=%lld\n",
+                         i, s_prev[i], cur, d, lim, s_gross[i]);
             s_prev[i] = cur;
             ++changed;
         }
+    }
+    // Totals line every 5 intervals, so a whole run summarises to one grep even when the
+    // interval deltas are noisy.
+    {
+        static int s_tick = 0;
+        if (s_seeded && (++s_tick % 5) == 0)
+            for (int i = 0; i < kMaxMaterials; ++i)
+                if (s_gross[i] > 0)
+                    std::fprintf(stderr, "[FoodStockTotal] material %2d grossDeposited=%lld\n",
+                                 i, s_gross[i]);
     }
     if (!s_seeded) {
         s_seeded = true;

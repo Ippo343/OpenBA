@@ -622,6 +622,22 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
                 amount, cell, (int)harvestFlag, (void*)descEnt, (void*)s_fn_88ef0);
         fflush(stderr);
     }
+    // ATTRIBUTED DEPOSIT METER. This call is the town-stock increment itself, so summing
+    // `amount` here credits food to the harvest that produced it. Net town stock cannot do
+    // that: material 5 is the aggregate Food pool, citizens eat from it continuously, and a
+    // control run with NO food building still showed +700 gross. A monotonic rise in the
+    // pool is therefore NOT evidence that a particular class deposited -- measure at the
+    // source instead of inferring from the total.
+    {
+        static int s_dt = -1;
+        if (s_dt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                        s_dt = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_units = 0, s_calls = 0;
+        if (harvestFlag) { s_units += amount; ++s_calls; }
+        if (s_dt && s_calls && (s_calls % 10) == 0)
+            fprintf(stderr, "[DepositMeter] harvest deposits: %lld calls, %lld units "
+                            "(last amount=%d)\n", s_calls, s_units, amount);
+    }
     if (s_fn_88ef0)
         s_fn_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,
                    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
