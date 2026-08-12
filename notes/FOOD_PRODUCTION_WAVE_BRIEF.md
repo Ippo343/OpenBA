@@ -742,3 +742,39 @@ worth re-checking against the bytes, because Ghidra's OnCreate/OnRemove labels i
 codebase are known to be off by one
 ([[reference-ghidra-oncreate-onremove-mislabel]]), so the producing slot may have been
 mapped to the wrong index.
+
+### Hunting root cause: HuntAnimal::Enter is NEVER DISPATCHED
+
+Measured, then confirmed against retail:
+
+  [HuntEnter]  (no output at all)          <- Enter never runs, not once
+  [RemoveAnimal] (no output at all)        <- so no RemoveAnimal is ever spawned
+  [HuntKill] ~280 polls                    <- and this was NOT counting kills
+
+⚠`[HuntKill]` counted HuntAnimal's slot 4, which disassembles to four instructions:
+`XOR EAX,EAX; CMP byte ptr [RCX+0x38],AL; SETZ AL; RET` — i.e. `return huntStarted == 0`.
+It is a COMPLETION PREDICATE polled every frame, not the kill. Reading 280 of those as
+"315 kills" was wrong and is corrected here. Slot 5 (+0x28, "Execute") is the SAME four
+instructions — neither slot does any work.
+
+The real body is slot 6 (+0x30, retail 0x1400c7de0, ~250 instructions): it picks a target,
+paths to it, spawns the RemoveAnimal, migrates the herd and finally sets +0x38. Nothing
+ever sets +0x38 because Enter never runs, so the predicate answers "not started" forever
+and the action never completes.
+
+**Our action executor is FAITHFUL.** Retail's executor FUN_1400c4c50 dispatches exactly
+`[RAX+0x20]` (0x1400c4ced), `[RAX+0x28]` (0x1400c4d57) and `[RAX+0x38]` (0x1400c4ddc) —
+verified by `filter_mnemonics="CALL"` on the disassembly. It never calls +0x30, and
+neither do we. So this is NOT a missing dispatch in our executor.
+
+Every xref to 0x1400c7de0 is DATA (vtable slots), so Enter is reachable only through a
++0x30 dispatch made by some OTHER retail caller.
+
+⭐NEXT: find that caller. Options in order of cost: (1) look at what dispatches +0x30 on
+an action elsewhere in the exe — the herd/animal update or the work's own tick are the
+likely owners, since the hunt is driven by the ANIMAL side, not the action stack;
+(2) check whether the base Action vtable's +0x30 has a name in a sibling class that IS
+driven, which would identify the calling subsystem by analogy.
+
+⚠Do NOT "fix" this by calling Enter from our executor. Retail demonstrably does not, so
+that would diverge; find the real driver.

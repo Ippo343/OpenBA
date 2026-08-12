@@ -321,11 +321,32 @@ int HuntAnimal_Execute_Impl(HuntAnimal* self, void* actionStack, void* time) {
 //    f. Clear animal entity's time at +0x50
 //    g. Set huntStarted flag at +0x38
 // ============================================================
+// HuntAnimal::Enter exit census. RemoveAnimal is never called and the hunt never
+// completes, so Enter must bail before it sets huntStarted (+0x38). Its five exits need
+// five different fixes, and "Enter ran" says nothing about which one fired -- exactly the
+// shape that hid the crop field's blockers. Count each.
+static long long g_hae_started = 0, g_hae_notReady = 0, g_hae_noTarget = 0,
+                 g_hae_inUse = 0, g_hae_noPath = 0, g_hae_pathInvalid = 0, g_hae_ok = 0;
+static void HAE_Report() {
+    static int s_t = -1;
+    if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                   s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    static long long s_n = 0;
+    if (s_t && ((++s_n % 20) == 0)) {
+        std::fprintf(stderr, "[HuntEnter] alreadyStarted=%lld notReady=%lld noTarget=%lld "
+                     "targetInUse=%lld noPath=%lld pathInvalid=%lld REACHED_KILL=%lld\n",
+                     g_hae_started, g_hae_notReady, g_hae_noTarget, g_hae_inUse,
+                     g_hae_noPath, g_hae_pathInvalid, g_hae_ok);
+        std::fflush(stderr);
+    }
+}
+
 void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     uint8_t* s = (uint8_t*)self;
 
     // If hunt already started, return early
     if (*(uint8_t*)(s + 0x38) != 0) {
+        ++g_hae_started; HAE_Report();
         return;
     }
 
@@ -333,6 +354,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* animalEntity = *(void**)(s + 0x20);
     if (!s_fn_IsAnimalReady(animalEntity)) {
+        ++g_hae_notReady; HAE_Report();
         return;
     }
 
@@ -372,6 +394,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     // If no result found, bail
     if (queryResult == nullptr) {
+        ++g_hae_noTarget; HAE_Report();
         return;
     }
 
