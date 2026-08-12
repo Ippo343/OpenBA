@@ -642,3 +642,40 @@ null read. Three outcomes, three different fixes:
 Also note our ApplyOccupancy does not appear to re-check retail's `+0x20 & 0x100000`
 "already written" guard at the top the way 0x1401241b0 does; the trace already shows
 `alreadyWritten=1` on claims that proceed. Worth confirming against the disassembly.
+
+## Deposit status by class, measured with attributed meters (end of 2026-08-11)
+
+Two attributed channels now exist, and BOTH must be checked before calling a class dead:
+  - `[DepositMeter]`  — 0x140088ef0 town-stock increment from RemoveNatRes(harvest).
+                        Crop field / orchard / gatherer foraging use this.
+  - `[DepositMeter2]` — RawMaterialComponent registering a raw-material ENTITY as it
+                        joins the world. A fish / carcass / cull uses this.
+Plus `BANISHED_FOOD_STOCK` for net + gross pool movement (context, NOT attribution).
+
+| class | deposit | evidence |
+|---|---|---|
+| Crop field | **YES** | `[DepositMeter] 10 calls, 200 units (20/harvest)` after a full plant 64/64 -> tend -> harvest -> state 11 chain |
+| Orchard | previously measured (closed wave) | not re-run here |
+| Hunting | **NO** | lodge builds and staffs, chain reaches producing, but NEITHER meter fires |
+| Fishing | not reached | demo dock did not spawn in these runs |
+| Gatherer | blocked upstream | `no 5x7 footprint within 90 tiles has ANY of the hut's 4 accepted resource types in radius 30` — worldgen, not the port |
+| Pasture | not run | — |
+
+### ⚠Method correction that matters for every remaining class
+
+Net town stock is NOT evidence of a deposit. Material 5 is the aggregate FOOD pool,
+citizens eat from it continuously, and a **CONTROL run with no food building at all
+showed +700 gross**. The crop field's original "+260 while harvesting" was smaller than
+that background. Attribute at the SOURCE — at the call that increments town stock —
+or the number proves nothing.
+
+Corollary already burned twice this wave: a zero on ONE meter is not "produces nothing".
+`[ORGANIC-PRODUCE]` read 0 through 61 real harvests because it counts a different code
+path. That is why hunting is metered on both channels above before being called dead.
+
+### Next for hunting (the closest unproven class)
+Neither channel fires, so the produce step itself is not running — not a delivery
+problem. Find which call HuntWork's completion is supposed to make (it is one of these
+two, or a third), then check the same three failure shapes that explained the crop field:
+an unregistered .rdata constant, a harness siting/staffing gap, and a guard that returns
+before its own trace can print.

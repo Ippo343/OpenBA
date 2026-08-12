@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -258,6 +259,22 @@ void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
         uintptr_t gameState = (uintptr_t)*s_pGameState;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
         void* entityChain = *(void**)(*(uintptr_t*)((uintptr_t)self + 0x10) + 0x28);
+        // SECOND attributed deposit channel. The crop/orchard/gatherer harvest path
+        // deposits through 0x140088ef0 with an explicit amount; a raw-material ENTITY
+        // (a fish, a carcass, a cull) instead registers itself here when it joins the
+        // world. Metering both means a zero on one channel cannot be read as "this class
+        // produces nothing" — the mistake that has already cost this wave twice.
+        {
+            static int s_t = -1;
+            if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                           s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            static long long s_n = 0;
+            ++s_n;
+            if (s_t && (s_n % 10) == 0) {
+                std::fprintf(stderr, "[DepositMeter2] raw-material entities registered: %lld\n", s_n);
+                std::fflush(stderr);
+            }
+        }
         s_fn_RegisterRawMaterial((void*)worldMgr, entityChain);
     }
 }
