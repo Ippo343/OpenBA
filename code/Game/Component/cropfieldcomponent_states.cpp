@@ -519,6 +519,27 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
                                        (unsigned)sl[0x18]);
                 }
                 std::fprintf(stderr, "[CropSlots] state0 slots:%s\n", n ? buf : " none");
+            // How many of this field's cells currently hold an entity on the MAP TILE?
+            // CreateNaturalResource verifies tile+8 is SET at plant time and HarvestArea
+            // finds it NULL later, at the SAME cell indices, with dc20 recording zero
+            // wipes. So the crops are being destroyed between the two. Sampling the live
+            // count each time this prints shows whether it starts full and decays, and
+            // roughly when.
+            {
+                const uintptr_t gwx = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+                const uintptr_t mp = gwx ? *reinterpret_cast<uintptr_t*>(gwx + 0xf8) : 0;
+                const uintptr_t gd = mp ? *reinterpret_cast<uintptr_t*>(mp + 0x80) : 0;
+                int live = 0;
+                if (gd) for (int i = 0; i < total; ++i) {
+                    uint8_t* sl = SlotAt(comp, i);
+                    if (!sl) continue;
+                    const int c = *reinterpret_cast<int32_t*>(sl + 0x00);
+                    if (*reinterpret_cast<uintptr_t*>(gd + 8 + (uintptr_t)c * 0x30)) ++live;
+                }
+                std::fprintf(stderr, "[CropTiles] %d/%d field cells hold an entity on the map tile\n",
+                             live, total);
+                std::fflush(stderr);
+            }
             }
             std::fflush(stderr);
         }
@@ -639,11 +660,29 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
             s_ht = (he && he[0] && he[0] != '0') ? 1 : 0;
         }
         static int s_n2 = 0;
-        if (s_ht && (s_n2++ % 600) == 0)
-            std::fprintf(stderr, "[CropHarvest] temp=%.1f (min %.1f) month=%d seasonArm=%d "
-                         "maturity=%.4f (ripe>%.4f) -> harvest=%d\n",
+        if (s_ht && (s_n2++ % 600) == 0) {
+            // Carry the live tile count into state 10 as well. It reaches ~56-64 by the
+            // end of state 9 and is 0 by the time HarvestArea runs, so the crops are
+            // lost DURING TEND. Printing it alongside maturity says whether they vanish
+            // gradually (something consuming them) or all at once (a sweep).
+            const uintptr_t gwx2 = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+            const uintptr_t mp2 = gwx2 ? *reinterpret_cast<uintptr_t*>(gwx2 + 0xf8) : 0;
+            const uintptr_t gd2 = mp2 ? *reinterpret_cast<uintptr_t*>(mp2 + 0x80) : 0;
+            const int tot2 = SlotCount(comp);
+            int live2 = 0;
+            if (gd2) for (int i = 0; i < tot2; ++i) {
+                uint8_t* sl = SlotAt(comp, i);
+                if (!sl) continue;
+                const int c = *reinterpret_cast<int32_t*>(sl + 0x00);
+                if (*reinterpret_cast<uintptr_t*>(gd2 + 8 + (uintptr_t)c * 0x30)) ++live2;
+            }
+            std::fprintf(stderr, "[CropHarvest] comp=%p entity=%p temp=%.1f (min %.1f) month=%d seasonArm=%d "
+                         "maturity=%.4f (ripe>%.4f) -> harvest=%d | tiles=%d/%d\n",
+                         (void*)comp, (void*)*reinterpret_cast<uintptr_t*>(comp + 0x10),
                          temp, *s_fTempMin, monthDbg, (int)seasonArm,
-                         maturity, *s_fRipe, (int)harvestNow);
+                         maturity, *s_fRipe, (int)harvestNow, live2, tot2);
+            std::fflush(stderr);
+        }
     }
 
     if (harvestNow) CropField_Event4Harvest(self, sm);

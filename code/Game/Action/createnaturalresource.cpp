@@ -375,6 +375,26 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     int typeGroup = *(int*)(*(uintptr_t*)(s + 0x20) + 0x20);
     s_fn_RegisterEntity((void**)entityListPtr, &entityRef, typeGroup);
 
+    // Read the tile back at the EXACT cell this action just spawned into. RegisterEntity
+    // is what dispatches the OnAdded pass (retail 0x1400c48a0 -> FUN_1400c2f60, vtable
+    // +0x30), and MapComponent slot 6 -> FUN_14009dc20 is what writes cell+8. If the
+    // slot is still null one instruction after registration, the claim did not happen
+    // for THIS cell -- which is the whole reason HarvestArea later reports noEntity.
+    // Checking here removes the need to correlate two logs by cell index.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_set = 0, s_null = 0, s_n = 0;
+        int64_t after = *(int64_t*)(cellArrayBase + 8 + (int64_t)cellIndex * 0x30);
+        if (after) ++s_set; else ++s_null;
+        if (s_t && (s_n++ < 8 || (s_n % 20) == 0)) {
+            std::fprintf(stderr, "[CNR-tile] after RegisterEntity: tile+8 SET=%lld NULL=%lld "
+                         "(last cell=%d -> %p)\n", s_set, s_null, cellIndex, (void*)after);
+            std::fflush(stderr);
+        }
+    }
+
     return 0;
 }
 

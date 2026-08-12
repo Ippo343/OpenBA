@@ -342,9 +342,10 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                        s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
         ++g_ha_calls;
         if (s_t && ((g_ha_calls % 20) == 0)) {
-            std::fprintf(stderr, "[HarvestArea] calls=%lld | autopickup=%lld atCapacity=%lld "
+            std::fprintf(stderr, "[HarvestArea] self=%p work-entity=%p | calls=%lld | autopickup=%lld atCapacity=%lld "
                          "workerCap=%lld noMark=%lld inBst=%lld noEntity=%lld noPass=%lld "
                          "noPath=%lld ACCEPTED=%lld\n",
+                         (void*)self, (void*)*(uintptr_t*)((uintptr_t)self + 0x10),
                          g_ha_calls, g_ha_auto, g_ha_cap, g_ha_wcap, g_ha_nomark,
                          g_ha_inbst, g_ha_noent, g_ha_nopass, g_ha_nopath, g_ha_ok);
             std::fflush(stderr);
@@ -477,6 +478,39 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                 if (entityAtCell1 == 0) {
                     // No entity at cell -- mark as unavailable
                     ++g_ha_noent;
+                    // Print the CELL INDEX harvest is reading. CreateNaturalResource
+                    // verifies tile+8 is SET at its own cellIndex immediately after
+                    // registering, so if both sides are healthy they must be reading the
+                    // SAME cell. Compare these against [CNR-tile]'s "last cell=".
+                    {
+                        static int s_ct = -1;
+                        if (s_ct < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                                        s_ct = (e && e[0] && e[0] != '0') ? 1 : 0; }
+                        static int s_shown = 0;
+                        if (s_ct && s_shown < 8) {
+                            ++s_shown;
+                            // Recompute the SAME tile address the independent way the
+                            // crop field's own trace uses (gw+0xf8 -> +0x80), and count
+                            // how many of the field's cells hold an entity right now. If
+                            // this says the tile is non-null, or the field is full, then
+                            // the read above is looking at the wrong place rather than
+                            // the crops being gone.
+                            const uintptr_t gwc = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+                            const uintptr_t mpc = gwc ? *(uintptr_t*)(gwc + 0xf8) : 0;
+                            const uintptr_t gdc = mpc ? *(uintptr_t*)(mpc + 0x80) : 0;
+                            const uintptr_t viaB = gdc ? *(uintptr_t*)(gdc + 8 + (uintptr_t)cellGridIdx * 0x30) : 0;
+                            int liveC = 0;
+                            if (gdc) for (int k = 0; k < fieldCellCount; ++k) {
+                                const int ck = *(int*)((uintptr_t)k * 0x20 + *(uintptr_t*)(cropDescIBP + 0x58));
+                                if (*(uintptr_t*)(gdc + 8 + (uintptr_t)ck * 0x30)) ++liveC;
+                            }
+                            std::fprintf(stderr, "[HarvestCell] slot=%d cell=%d viaHarvest=%p "
+                                         "viaGameWorld=%p gridSame=%d fieldLive=%d/%d\n",
+                                         i, cellGridIdx, (void*)entityAtCell1, (void*)viaB,
+                                         (int)(gridData == gdc), liveC, fieldCellCount);
+                            std::fflush(stderr);
+                        }
+                    }
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {

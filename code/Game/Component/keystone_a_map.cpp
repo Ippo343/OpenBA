@@ -258,6 +258,28 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         plVar9 = local_58;
                     }
                     iVar13 = iVar13 + 1;
+                    // Wipe census. dc20 writes either the owner entity or a NULL IBP
+                    // per cell (bVar19 picks, from the footprint mask). A building whose
+                    // mask says "walkable" therefore NULLS the tile -- and if a crop was
+                    // already standing there, the crop's tile entry is destroyed and
+                    // HarvestArea can never find it again. Count only the destructive
+                    // case: a cell that HELD something and is being cleared.
+                    {
+                        static int s_wt = -1;
+                        if (s_wt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                                        s_wt = (e && e[0] && e[0] != '0') ? 1 : 0; }
+                        int64_t prev = *reinterpret_cast<int64_t*>(lVar14 + 8);
+                        static long long s_wipes = 0, s_n = 0;
+                        if (prev != 0 && *plVar9 == 0) {
+                            ++s_wipes;
+                            if (s_wt && ((s_n++ % 10) == 0)) {
+                                std::fprintf(stderr, "[TileWipe] dc20 NULLing a cell that held "
+                                             "an entity: cell=%d prev=%p wipes=%lld\n",
+                                             iVar15, (void*)prev, s_wipes);
+                                std::fflush(stderr);
+                            }
+                        }
+                    }
                     *reinterpret_cast<int64_t*>(lVar14 + 8) = *plVar9;
                 } while (iVar13 < param_6);
             }

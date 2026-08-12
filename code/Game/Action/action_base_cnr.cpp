@@ -483,6 +483,23 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
 // registers the new entity.
 // ============================================================
 void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag) {
+    // Removal census. Crops vanish from their tiles between planting and harvest --
+    // measured tiles==growing exactly, with the difference showing up as slots that
+    // ValidateEntityRefs demoted to state 2. This is the only path that removes a
+    // natural resource, so counting it (and its harvest flag) says whether something is
+    // actively clearing the field's own crops and whether it produces anything.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_harv = 0, s_clear = 0, s_n = 0;
+        if (harvestFlag) ++s_harv; else ++s_clear;
+        if (s_t && ((s_n++ % 10) == 0)) {
+            std::fprintf(stderr, "[RemoveNatRes] harvestFlag=1 -> %lld, harvestFlag=0 (CLEAR) -> %lld\n",
+                         s_harv, s_clear);
+            std::fflush(stderr);
+        }
+    }
     EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
