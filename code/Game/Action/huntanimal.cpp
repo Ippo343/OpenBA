@@ -32,6 +32,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 
 // ============================================================
@@ -268,6 +269,20 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
 // Returns 1 if hunt not started (keep running), 0 if hunt completed.
 // ============================================================
 int HuntAnimal_AbstractImpl_Impl(HuntAnimal* self, void* actionStack) {
+    // Does the kill step run at all? Hunting fires NEITHER deposit meter, which means
+    // the produce step is not happening rather than food failing to be delivered. This
+    // action is the kill; counting it splits "the hunter never reaches an animal" from
+    // "it kills and the yield goes nowhere".
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static long long s_n = 0;
+        if (s_t && ((s_n++ % 5) == 0)) {
+            std::fprintf(stderr, "[HuntKill] HuntAnimal AbstractImpl run %lld\n", s_n);
+            std::fflush(stderr);
+        }
+    }
     HuntAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;

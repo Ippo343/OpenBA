@@ -679,3 +679,36 @@ problem. Find which call HuntWork's completion is supposed to make (it is one of
 two, or a third), then check the same three failure shapes that explained the crop field:
 an unregistered .rdata constant, a harness siting/staffing gap, and a guard that returns
 before its own trace can print.
+
+## Hunting: kills happen, yield does not (measured)
+
+  [HuntKill] HuntAnimal AbstractImpl run 63    (prints every 5 -> ~315 executions)
+  [DepositMeter]  0
+  [DepositMeter2] 0
+  [FoodDiag] HuntComponent staffed=2 accepting=1 radius=34 resourceCellsInRange=1109
+             progress(+0x50) climbing steadily
+
+So the hunting chain is live all the way to the KILL: the lodge builds, staffs, accepts,
+finds 1109 resource cells in range, the producing state ticks and its progress counter
+advances, and the HuntAnimal action executes ~315 times. Nothing then converts a kill
+into a raw material on either deposit channel.
+
+Where it is NOT:
+  - HuntWork slots 6/7/8 are BST bookkeeping only (BSTFindRemove / cancel loop)
+  - RemoveAnimal::AbstractImpl only MARKS the animal for removal and queues it to the
+    cleanup list -- it does not produce
+  - WildAnimalComponent is 271 lines with only OnRemove (erases self from the herd)
+  - the shared RP state-13 per-frame just dispatches component vtable slot 21, and only
+    FishingComponent has a ported ProduceTick (retail 0x14011ec10); Hunt's slot 21 is
+    either the base no-op 0x140006b10 or an override that has not been identified
+
+⭐NEXT for hunting: establish which retail function turns a killed animal into venison.
+Candidates to decompile, in order: HuntComponent's own slot 21 (+0xa8) in its retail
+vtable -- confirm whether it really is the base no-op or an override; then the animal
+entity's teardown path from the cleanup list that RemoveAnimal queues into
+(gameWorld+0xe8, +0xd0/+0xd8), since that is where a marked animal is actually destroyed
+and is the natural place for a carcass yield.
+
+⚠Do NOT conclude "hunting produces nothing" from a zero on the two current meters until
+that function is found -- if it deposits by a third route the meters cannot see it, which
+is exactly the error that made 61 real crop harvests read as zero on ORGANIC-PRODUCE.
