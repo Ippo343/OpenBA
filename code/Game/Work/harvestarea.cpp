@@ -388,6 +388,25 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;
     bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
 
+    // THE DEPOSIT METER. resEntry+0 is the town's current stock of this crop's material
+    // and resEntry+8 its limit (that is exactly what the atCapacity test above compares).
+    // Harvest is confirmed running -- 61 crops through the harvestFlag=1 arm -- so the
+    // only question left is whether the raw material reaches STORAGE. Printing the stock
+    // here answers it directly instead of by inference: a rising number IS the deposit.
+    {
+        static int s_dt = -1;
+        if (s_dt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                        s_dt = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static int s_last = -1;
+        const int cur = *(int*)(resEntry);
+        if (s_dt && cur != s_last) {
+            s_last = cur;
+            std::fprintf(stderr, "[CropStock] material %d: town stock = %d (limit %d)\n",
+                         materialIdx, cur, *(int*)(resEntry + 8));
+            std::fflush(stderr);
+        }
+    }
+
     // Set mesh visibility (group 2) based on capacity
     fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t meshIBP[2] = {0};
