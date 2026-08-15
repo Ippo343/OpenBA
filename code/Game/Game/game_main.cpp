@@ -27,6 +27,7 @@
 #include "Game/game.h"
 #include "Game/inputbindings.h"
 #include "stall_debug.h"
+#include "boot_state_watchdog.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -438,6 +439,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     printf("[GameMain] Engine::Startup returned %u\n", ok);
+    // Boot got past the point where the launcher dialog would have blocked it.
+    BootState::MarkStartupComplete();
     StallDebug::Mark("Engine::Startup");
 
     // On Engine::Startup failure, dump System::Error::_errorString

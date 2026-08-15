@@ -18,6 +18,7 @@
 #include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
+#include "boot_state_watchdog.h"
 #include "autostart.h"
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
@@ -1490,6 +1491,11 @@ static bool Init() {
     //     engine reads comes from the registry via Video::Configuration::Startup.
     DumpVideoRegistry("AT-BOOT");
     HarnessGuardUnattendedBoot();
+    // Start publishing boot state BEFORE Engine::Startup: the launcher dialog the guard
+    // above tries to suppress opens inside Startup, and if it does appear the process
+    // stays alive pumping messages while the log goes silent -- which reads exactly like
+    // a slow load. See boot_state_watchdog.cpp.
+    BootState::Start();
     StallDebug::Mark("registry probe + harness guard");
 
     // 2. Resolve Runtime-x64.dll and VideoDX11-x64.dll (ASLR)

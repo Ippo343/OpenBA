@@ -208,6 +208,33 @@ All logs land in `C:/GOG Games/Banished/` (the working directory at launch):
 - `standalone_debug.log` — stdout (TRACE/printf output, unbuffered)
 - `standalone_error.log` — stderr (survives abnormal exit; env-gated diagnostics print here)
 - `standalone_crash.log` — VEH crash dumps (see below)
+- `standalone_boot_state.txt` — one-line machine-readable boot state (see below)
+
+### Boot State — check this before concluding "it's still loading"
+
+**A quiet log does not mean the game is working.** The launcher dialog
+(`Engine::PlatformConfigure`) is no longer patched out — retail shows it whenever the
+previous run did not finish `Engine::Startup`, which in development means every time the
+process is killed. When it appears the process stays **alive and pumping messages** while
+`standalone_error.log` stops mid-boot, which looks exactly like a slow load. Any other
+modal Win32 dialog (assert, driver prompt) blocks boot identically.
+
+```bash
+tools/boot_state.sh              # one status line
+tools/boot_state.sh --wait 300   # block until RUNNING; bails INSTANTLY if blocked
+```
+
+Exit codes: `0` RUNNING · `1` NOT_RUNNING · `2` BLOCKED_DIALOG · `3` BOOTING ·
+`4` STALE (state file left by a pid that is gone).
+
+**Always poll boot with this rather than `grep -q` on the log** — a `grep`-until-timeout
+loop against a blocked boot burns the entire timeout for nothing. Published every second
+by `BootState::Start` (`standalone/boot_state_watchdog.cpp`); also logged as
+`[BootState]` lines, repeated every 15s while blocked so a log tail never goes silent.
+
+`HarnessGuardUnattendedBoot` already clears the arming bit when `BANISHED_AUTOSTART` /
+`BANISHED_AUTOQUIT` is set, so unattended runs normally boot clean — the watchdog is for
+when that guard does not apply (attended runs) or does not hold.
 
 ### Crash Diagnostics
 - VEH handler (`standalone/main.cpp`) catches ACCESS_VIOLATION/ILLEGAL_INSTRUCTION and fails fast to `standalone_crash.log` with fault address, registers, and stack trace
