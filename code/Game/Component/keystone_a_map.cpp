@@ -33,9 +33,34 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+
+// dc20 stale-occupant EVICTION tally. Counts only the arm that actually destroys
+// (MarkForRemoval + push onto the world removal queue), not the arm that skips an
+// already-marked entity — a counter that also counted the skip would read as
+// evidence of destruction when none happened.
+long g_dc20Evictions = 0;
+// ...and the DANGEROUS subset. MarkForRemoval (0x1400c2ea0) only broadcasts the
+// component +0x38 "removed from world" teardown — the pass where ModelComponent
+// RemoveObjects its scene geometry — when the entity's aggregated flag bit 1 (0x2)
+// is set; otherwise it just ORs in the 0x400 removal bit and the entity is queued
+// for destruction with its model STILL LINKED into Graphics::Scene. So an eviction
+// count alone is not the risk measure: this one is.
+long g_dc20EvictNoTeardown = 0;
+// Entity gate passed but NO component carries +0x20 bit 1, so the +0x38 broadcast
+// visits nobody and the scene geometry dangles anyway. Same end state as the
+// counter above, reached by a different door.
+long g_dc20EvictNoParticipant = 0;
+extern "C" void MapComponent_ReportDc20Evictions(const char* tag) {
+    std::fprintf(stderr,
+                 "[dc20Census:%s] evictions=%ld skipSceneTeardown=%ld noParticipatingComp=%ld\n",
+                 tag ? tag : "?", g_dc20Evictions, g_dc20EvictNoTeardown,
+                 g_dc20EvictNoParticipant);
+    std::fflush(stderr);
+}
 
 namespace {
 
@@ -191,6 +216,71 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                     }
                                 }
                                 if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
+                                    // Always-on tally (the trace above is opt-in AND capped at
+                                    // 40 lines, so nothing countable survived a default run).
+                                    // This branch DESTROYS an entity, so its rate is the single
+                                    // most load-bearing number in this file: it is how a
+                                    // spawned entity gets freed while its ModelComponent is
+                                    // still linked into Graphics::Scene.
+                                    ++g_dc20Evictions;
+                                    // [diag] BANISHED_DRAIN_AUDIT — was the victim's
+                                    // model ALREADY in Graphics::Scene when we marked it?
+                                    // A victim with modelId == -1 here gets nothing torn
+                                    // down by the +0x38 broadcast, so any LATER Draw on it
+                                    // registers a scene node no one will ever remove.
+                                    {
+                                        static int s_auditOn = -1;
+                                        if (s_auditOn < 0) { const char* e = std::getenv("BANISHED_DRAIN_AUDIT");
+                                                             s_auditOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
+                                        if (s_auditOn == 1) {
+                                            static int s_n = 0;
+                                            if (++s_n <= 20) {
+                                                int n = *reinterpret_cast<int*>(local_68 + 0x38);
+                                                int64_t arr = *reinterpret_cast<int64_t*>(local_68 + 0x30);
+                                                std::fprintf(stderr, "[drainAudit] dc20 EVICT victim=%p claimant=%p cell=%d flags=0x%x comps=%d models:",
+                                                             reinterpret_cast<void*>(local_68),
+                                                             reinterpret_cast<void*>(*param_2), iVar15,
+                                                             *reinterpret_cast<uint32_t*>(local_68 + 0x40), n);
+                                                static uint32_t s_tidModel = 0;
+                                                if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
+                                                    s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+                                                for (int ci = 0; ci < n && arr; ++ci) {
+                                                    int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)ci * 8);
+                                                    if (c <= 0x10000) continue;
+                                                    bool isModel = s_tidModel && s_tidModel != 0xFFFFFFFFu &&
+                                                                   fn_IsDerivedFrom &&
+                                                                   fn_IsDerivedFrom(reinterpret_cast<void*>(c), s_tidModel);
+                                                    std::fprintf(stderr, " [%d]cf=0x%x%s", ci,
+                                                                 *reinterpret_cast<uint32_t*>(c + 0x20),
+                                                                 isModel ? "" : "");
+                                                    if (isModel)
+                                                        std::fprintf(stderr, "(MODEL id=%d var=%d)",
+                                                                     *reinterpret_cast<int32_t*>(c + 0x16c),
+                                                                     (int)*reinterpret_cast<int16_t*>(c + 0x166));
+                                                }
+                                                std::fprintf(stderr, "\n");
+                                                std::fflush(stderr);
+                                            }
+                                        }
+                                    }
+                                    if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) & 2) == 0) {
+                                        ++g_dc20EvictNoTeardown;   // scene geometry will dangle
+                                    } else {
+                                        // Entity gate passed — but MarkForRemoval's broadcast
+                                        // only reaches components whose OWN +0x20 has bit 1.
+                                        // If none do, the broadcast is a no-op and the scene
+                                        // geometry dangles just the same. Measure that arm too;
+                                        // the entity-level counter above cannot see it.
+                                        int n = *reinterpret_cast<int*>(local_68 + 0x38);
+                                        int64_t arr = *reinterpret_cast<int64_t*>(local_68 + 0x30);
+                                        int participating = 0;
+                                        for (int ci = 0; ci < n && arr; ++ci) {
+                                            int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)ci * 8);
+                                            if (c && (*reinterpret_cast<uint32_t*>(c + 0x20) >> 1 & 1))
+                                                ++participating;
+                                        }
+                                        if (participating == 0) ++g_dc20EvictNoParticipant;
+                                    }
                                     if (fn_InternalBasePtr_CheckPtr)
                                         fn_InternalBasePtr_CheckPtr(&local_68);
                                     if (s_c2ea0) s_c2ea0(local_68);

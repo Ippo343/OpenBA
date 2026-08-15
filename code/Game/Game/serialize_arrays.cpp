@@ -390,6 +390,80 @@ extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
 }
 
 // ============================================================
+// Spawn-entry array resize — FUN_14000c520 (stride 0x10)
+// ============================================================
+// The growable array behind SpawnDescription+0x20: elements are
+// { ExternalPtr @+0x00 (8B), float minSpawnAge @+0x08, float maxSpawnAge @+0x0c }.
+// It cannot use GenericArrayResize because a NEW element is not zero-filled: the
+// original writes ptr=0, min=0.0f, and max = 0x41200000 = **10.0f** (see the
+// `*(undefined4*)((longlong)puVar9 + 0xc) = 0x41200000` stores in all four
+// unrolled arms and the scalar tail of the decompile). That 10.0f is a real
+// default — a spawn entry with no authored max age is eligible up to age 10 —
+// so zero-filling instead would give every defaulted entry the window [0,0] and
+// silently disable it.
+//
+// ⚠ This address was implemented in spawndescription.cpp but never registered,
+// which is why SpawnDescription::Serialize read the entry count into a LOCAL,
+// found `resize` null, and left the description at count=0 with a null array:
+// every tree carried an EMPTY spawn table, so no wild food could ever spawn and
+// the Gatherer's Hut had nothing it accepts anywhere on the map. Registered in
+// address_registry.cpp alongside the other resize variants.
+extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount) {
+    if (!arrayHeader) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Resize<0x10,spawn>] MemAlloc unavailable — leaving array "
+                   "unchanged (header=%p newCount=%d)\n", arrayHeader, newCount);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
+    void** dataSlot   = reinterpret_cast<void**>(hdr + 0x00);
+    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
+    int32_t* capSlot   = reinterpret_cast<int32_t*>(hdr + 0x0C);
+
+    const int oldCount = *countSlot;
+    if (newCount == oldCount) return;
+
+    void* oldData = *dataSlot;
+    *countSlot = newCount;
+
+    if (*capSlot < newCount) {
+        *capSlot = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *capSlot = newCount * 3;   // amortised growth, as the original
+        }
+        const size_t bytes = static_cast<size_t>(*capSlot) << 4;
+        *dataSlot = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
+    }
+
+    const int copyStart = (oldData == *dataSlot) ? oldCount : 0;
+    auto* dst = reinterpret_cast<uint8_t*>(*dataSlot);
+    if (dst) {
+        for (int slot = copyStart; slot < newCount; ++slot) {
+            uint8_t* e = dst + static_cast<size_t>(slot) * 0x10;
+            if (slot < oldCount) {
+                const uint8_t* src = reinterpret_cast<const uint8_t*>(oldData)
+                                   + static_cast<size_t>(slot) * 0x10;
+                std::memcpy(e, src, 0x10);
+            } else {
+                *reinterpret_cast<uint64_t*>(e + 0x00) = 0;      // ExternalPtr
+                *reinterpret_cast<float*>(e + 0x08)    = 0.0f;   // minSpawnAge
+                *reinterpret_cast<float*>(e + 0x0c)    = 10.0f;  // maxSpawnAge (0x41200000)
+            }
+        }
+    }
+
+    if (oldData != *dataSlot && oldData != nullptr) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    }
+}
+
+// ============================================================
 // Helper #6 — Array_Serialize stride 0x20 (FUN_14001bbf0)
 // ============================================================
 //

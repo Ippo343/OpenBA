@@ -25,12 +25,15 @@
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
+#include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)
+extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_a_map.cpp
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <vector>
+#include <functional>
 
 // ============================================================================
 // Economy Brick M-D — live town storage (BANISHED_LIVE_STORAGE, default OFF).
@@ -1147,6 +1150,132 @@ static int ExtraHousesRequested() {
 static void* ResolveTemplateByPath(const char* path);
 
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
+// Siting inputs of the demo gatherer hut, captured at placement so its
+// accepted-resource count can be retaken after the resource scatter (see the
+// ORDERING note at the capture site).
+static struct {
+    bool valid = false;
+    int cx = 0, cy = 0, radius = 0;
+    uintptr_t* acceptList = nullptr;
+    int acceptN = 0;
+    int scoreAtPlacement = 0;
+} g_demoGatherer;
+
+// Recount the accepted natural resources inside the demo hut's radius. Called
+// after StartTown_SpawnResources, so unlike the placement-time score this one
+// sees the wild food the trees' SpawnComponent seeded.
+static void StartTown_RecountGatherable() {
+    if (!g_demoGatherer.valid) return;
+    void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    uint8_t* mapObj = gws ? *(uint8_t**)((uint8_t*)gws + 0xf8) : nullptr;
+    const int width = mapObj ? *(int32_t*)mapObj : 0;
+    uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
+    if (!grid || width <= 0 || !g_demoGatherer.acceptList || g_demoGatherer.acceptN <= 0) return;
+
+    const int r = g_demoGatherer.radius;
+    int score = 0, anyResource = 0;
+    for (int dy = -r; dy < r; ++dy)
+        for (int dx = -r; dx < r; ++dx) {
+            if (dx * dx + dy * dy > r * r) continue;
+            const int x = g_demoGatherer.cx + dx, y = g_demoGatherer.cy + dy;
+            if (x < 0 || y < 0 || x >= width || y >= width) continue;
+            uintptr_t re = *(uintptr_t*)(grid + (size_t)(y * width + x) * 0x30 + 8);
+            if (!re) continue;
+            ++anyResource;
+            const uintptr_t rd = *(uintptr_t*)(re + 0x28);
+            for (int t = 0; t < g_demoGatherer.acceptN; ++t)
+                if (g_demoGatherer.acceptList[t] == rd) { ++score; break; }
+        }
+    fprintf(stderr, "[startTown::gathererhut] POST-SCATTER recount at (%d,%d) r=%d: "
+            "GATHERABLE=%d (was %d at placement, before any wild food existed); "
+            "%d resource cell(s) of any kind in radius\n",
+            g_demoGatherer.cx, g_demoGatherer.cy, r, score,
+            g_demoGatherer.scoreAtPlacement, anyResource);
+    fflush(stderr);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared siting state, published out of StartTown so a DEFERRED spawn can reuse it.
+//
+// The hunter lodge cannot be sited at StartTown time. Its whole job is to sit among
+// the deer — retail's HuntWork::Execute (0x1400eeff0) walks the hunter to a RANDOM
+// reachable cell inside the lodge's work radius and lets HuntAnimal's per-frame +0x30
+// tick take the kill opportunistically en route, so a lodge that is not already in
+// deer country never gets a hunter within the 8.0 kill radius (measured 2026-08-14:
+// nearestTyped 30.85..44.10, inR_typed=0 always).
+//
+// The only scorer for "deer country" is the character spatial-hash manager at gw+0x88,
+// and that index is EMPTY during world build — characters register themselves during
+// their own Startup. Scoring animal density at StartTown is therefore measuring an
+// empty index by construction, the same shape of ordering fault as the demo gatherer
+// hut scoring wild food before the resource scatter had run. So the lodge placement is
+// deferred a few hundred frames and driven from the game update loop instead;
+// everything it needs — the placement routine, the occupancy rects and the workability
+// predicate — is published here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Footprint rects of everything StartTown placed, so a deferred placement can avoid
+// landing on top of the founding cluster.
+struct STRect { int x, y, w, h; };
+static std::vector<STRect> g_stOccupied;
+
+// StartTown's placeStructure, captured BY VALUE so it outlives StartTown_SpawnStructures.
+// Its captures are the entity list, the map object and two type ids, all stable for the
+// life of the world — a by-reference capture would dangle the moment world build returned.
+static std::function<void*(void* /*tmpl*/, int /*tileX*/, int /*tileY*/, int /*orient*/,
+                           int /*w0*/, int /*h0*/, bool /*isDemoFoundation*/,
+                           int /*logIndex*/)> g_stPlaceStructure;
+
+// Reject a candidate site unless EVERY footprint cell passes the workability predicate
+// the work classes themselves use (Map_FindNearestPassable with the 0xe0f mask).
+// Occupancy-only siting let a demo crop field straddle a cell no citizen can ever work:
+// that one cell is never planted, `growing + done == total` never holds, and the field
+// parks one slot short of state 10 forever — a harness siting fault that reads exactly
+// like a port bug. Hoisted to file scope (it was a lambda inside StartTown_SpawnStructures
+// and captured nothing but globals) so the deferred placement applies the identical test.
+static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
+    int* grid = *reinterpret_cast<int**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!grid) return true;
+    typedef int (*FNP_t)(int*, int, int, uint32_t);
+    static FNP_t s_fnp = nullptr;
+    static bool s_r = false;
+    if (!s_r) { s_fnp = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
+                s_r = true; }
+    if (!s_fnp) return true;
+    const int mapW = *grid;
+    for (int yy = 0; yy < fh; ++yy) {
+        for (int xx = 0; xx < fw; ++xx) {
+            const int cell = (ty + yy) * mapW + (tx + xx);
+            if (cell < 0 || cell >= mapW * mapW) return false;
+            if (s_fnp(grid, cell, cell, 0xe0f) < 0) return false;
+        }
+    }
+    return true;
+}
+
+// Same one-tile-margin overlap test the in-StartTown ring scans use, against the
+// footprints StartTown recorded.
+static bool ST_ClashesWithStartTown(int tx, int ty, int fw, int fh) {
+    for (const STRect& r : g_stOccupied)
+        if (tx - 1 < r.x + r.w && r.x < tx + fw + 1 &&
+            ty - 1 < r.y + r.h && r.y < ty + fh + 1) return true;
+    return false;
+}
+
+// The deferred demo hunter lodge request, filled in by the food-demo block below and
+// consumed by StartTown_DeferredSpawn_Tick once the world has been running a while.
+static struct {
+    bool  wanted     = false;
+    bool  done       = false;
+    int   fireFrame  = 300;
+    int   w = 0, h = 0;
+    int   townCx = 0, townCy = 0;
+    int   workRadius = 0;      // RadiusDescription+0x28, in TILES
+    void* tmpl = nullptr;
+} g_deferredLodge;
+
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
     const int count = *(int32_t*)(startConfig + 0x88);
@@ -1169,7 +1298,13 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // the per-entry loop (as a faithful 1:1 lambda — same file-scope helpers/globals) so the
     // construction-demo foundation can be spawned as a FRESH extra building AFTER the loop
     // (follow-up #7) instead of cannibalising a real start house.
-    auto placeStructure = [&](void* tmpl, int tileX, int tileY, int orient,
+    //
+    // Captured BY VALUE (entity list, map object, two type ids — all stable for the life
+    // of the world) rather than by reference, so the copy published in g_stPlaceStructure
+    // below can still be called frames after world build has returned. See the DEFERRED
+    // SPAWN note above StartTown_SpawnStructures.
+    auto placeStructure = [entityList, game, tidMapComponent, tidModelComponent](
+                              void* tmpl, int tileX, int tileY, int orient,
                               int w0, int h0, bool isDemoFoundation, int logIndex) -> void* {
         // Instantiate + wrap.
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
@@ -1534,6 +1669,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fflush(stderr);
         return ent;
     };
+    g_stPlaceStructure = placeStructure;   // for the deferred spawn tick
 
     // Fresh construction-demo foundation (follow-up #7): the OLD path converted the FIRST
     // start-town residence itself into the demo foundation, leaving the player one home
@@ -1555,8 +1691,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     struct Rect { int x, y, w, h; };
     Rect occ[8 + 1 + kMaxExtraHouses + 8];
     int  occN = 0;
+    g_stOccupied.clear();
     auto Occupy = [&](int x, int y, int w, int h) {
         if (occN < (int)(sizeof(occ) / sizeof(occ[0]))) occ[occN++] = { x, y, w, h };
+        g_stOccupied.push_back({ x, y, w, h });   // unbounded copy for the deferred spawn
     };
     // Cluster bounding box, to centre the extra-house search on known-good ground.
     int bbX0 = 1 << 28, bbY0 = 1 << 28, bbX1 = -(1 << 28), bbY1 = -(1 << 28);
@@ -2105,33 +2243,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     {
         // The ring scan the pasture/orchard blocks above each open-code. Returns
         // false (and says so) when nothing fits, so a silent log means "never ran".
-        // Reject a candidate site unless EVERY footprint cell passes the workability
-        // predicate the work classes themselves use (Map_FindNearestPassable with the
-        // 0xe0f mask). Occupancy-only siting let a demo field straddle a cell no citizen
-        // can ever work.
-        auto ST_SiteIsWorkable = [&](int tx, int ty, int fw, int fh) -> bool {
-            if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
-            int* grid = *reinterpret_cast<int**>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-            if (!grid) return true;
-            typedef int (*FNP_t)(int*, int, int, uint32_t);
-            static FNP_t s_fnp = nullptr;
-            static bool s_r = false;
-            if (!s_r) { s_fnp = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
-                        s_r = true; }
-            if (!s_fnp) return true;
-            const int mapW = *grid;
-            for (int yy = 0; yy < fh; ++yy) {
-                for (int xx = 0; xx < fw; ++xx) {
-                    const int cell = (ty + yy) * mapW + (tx + xx);
-                    if (cell < 0 || cell >= mapW * mapW) return false;
-                    if (s_fnp(grid, cell, cell, 0xe0f) < 0) return false;
-                }
-            }
-            return true;
-        };
-
-
+        // The workability predicate it applies per candidate is the file-scope
+        // ST_SiteIsWorkable above (hoisted so the deferred hunter-lodge placement
+        // applies the identical test).
         auto ringPlace = [&](const char* envVar, const char* tmplPath, const char* tag,
                              int fallbackW, int fallbackH) {
             const char* ev = std::getenv(envVar);
@@ -2208,8 +2322,75 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
         ringPlace("BANISHED_BUILD_DEMO_CROPFIELD", "Template\\CropField.rsc",
                   "cropfield", 8, 8);
-        ringPlace("BANISHED_BUILD_DEMO_HUNTERLODGE", "Template\\HunterLodge.rsc",
-                  "hunterlodge", 8, 8);
+        // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
+        // Not ring-placed like the crop field, and for a sharper reason than the
+        // gatherer hut's: the lodge's siting input does not exist yet at all. The only
+        // thing that decides whether a lodge can ever produce is how many wild animals
+        // are inside its work radius, and the index that answers that — the character
+        // spatial-hash manager at gw+0x88 — is empty during world build because every
+        // character registers itself during its own Startup. A ring scan from the
+        // cluster centre put the lodge at tile (136,110), which is town, not deer
+        // country; with slot 9 and the cellIdx fix live the hunt then ran 19 000+ times
+        // and returned noTarget every single time, nearestTyped 30.85..44.10 against a
+        // kill radius of 8.0. Nothing was broken — the hunter never got near a deer.
+        //
+        // So record the request and let StartTown_DeferredSpawn_Tick place it a few
+        // hundred frames in, scoring candidates by live animal density. Set
+        // BANISHED_HUNTERLODGE_AT_START=1 to take the old cluster-centre ring placement
+        // instead (the A/B control for "did density siting actually matter?").
+        {
+            const char* he = std::getenv("BANISHED_BUILD_DEMO_HUNTERLODGE");
+            const char* atStart = std::getenv("BANISHED_HUNTERLODGE_AT_START");
+            const bool wantAtStart = (atStart && atStart[0] && atStart[0] != '0');
+            if (wantAtStart) {
+                ringPlace("BANISHED_BUILD_DEMO_HUNTERLODGE", "Template\\HunterLodge.rsc",
+                          "hunterlodge", 8, 8);
+            } else if (he && he[0] && he[0] != '0') {
+                void* htmpl = ResolveTemplateByPath("Template\\HunterLodge.rsc");
+                int hw = 0, hh = 0;
+                if (const char* xpos = std::strchr(he, 'x')) {   // "WxH" size override
+                    hw = std::atoi(he); hh = std::atoi(xpos + 1);
+                }
+                int hRadius = 0;
+                if (htmpl) {
+                    if (hw <= 0 || hh <= 0) {
+                        if (void* cpd = FindDescriptionOnTemplate(
+                                htmpl, TypeId("CreatePlacedDescription"))) {
+                            hw = *(int32_t*)((uint8_t*)cpd + 0x44);
+                            hh = *(int32_t*)((uint8_t*)cpd + 0x48);
+                        }
+                        if (hw <= 0 || hh <= 0) { hw = 8; hh = 8; }
+                    }
+                    if (void* rd = FindDescriptionOnTemplate(htmpl, TypeId("RadiusDescription")))
+                        hRadius = *(int32_t*)((uint8_t*)rd + 0x28);
+                }
+                if (!htmpl) {
+                    fprintf(stderr, "[startTown::hunterlodge] BANISHED_BUILD_DEMO_HUNTERLODGE "
+                            "set but Template\\HunterLodge.rsc did not resolve; nothing "
+                            "spawned\n");
+                } else {
+                    const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+                    g_deferredLodge.wanted     = true;
+                    g_deferredLodge.tmpl       = htmpl;
+                    g_deferredLodge.w          = hw;
+                    g_deferredLodge.h          = hh;
+                    g_deferredLodge.townCx     = cx;
+                    g_deferredLodge.townCy     = cy;
+                    g_deferredLodge.workRadius = hRadius > 0 ? hRadius : 34;
+                    if (const char* f = std::getenv("BANISHED_HUNTERLODGE_FRAME")) {
+                        int v = std::atoi(f);
+                        if (v > 0) g_deferredLodge.fireFrame = v;
+                    }
+                    fprintf(stderr, "[startTown::hunterlodge] DEFERRED to frame %d — fp=%dx%d "
+                            "workRadius=%d townCentre=(%d,%d). The animal index at gw+0x88 is "
+                            "empty during world build, so density scoring is only meaningful "
+                            "once the characters have started up.\n",
+                            g_deferredLodge.fireFrame, hw, hh, g_deferredLodge.workRadius,
+                            cx, cy);
+                }
+                fflush(stderr);
+            }
+        }
         // The Gatherer's Hut is NOT ring-placeable for the same reason the fishing dock
         // is not. HerbalistWork::Slot4 only accepts a resource whose entity+0x28 is in the
         // hut's own accept list (HerbalistDescription+0x20, count +0x28) — four wild-food
@@ -2354,12 +2535,14 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                 }
                         if (found)
                             fprintf(stderr, "[startTown::gathererhut] FELL BACK to a "
-                                    "cluster-centre placement with GATHERABLE=0. The hut is "
-                                    "fine for panel / state-machine tests and will produce "
-                                    "NOTHING: standalone worldgen spawns only a handful of "
-                                    "natural-resource templates near the start and none of "
-                                    "them is in this hut's accept list. That is a WORLDGEN "
-                                    "gap, not a HerbalistComponent/HerbalistWork defect.\n");
+                                    "cluster-centre placement. ⚠ A zero score HERE means "
+                                    "nothing: this scan runs inside the structures pass, "
+                                    "BEFORE StartTown_SpawnResources has scattered the trees "
+                                    "whose SpawnComponent produces the wild food this hut "
+                                    "accepts — so it is measuring a map with no wild food on "
+                                    "it by construction. Read the POST-SCATTER recount line "
+                                    "below instead; that is the count that decides whether "
+                                    "the hut can produce.\n");
                     }
                     if (found) {
                         void* gent = placeStructure(gtmpl, bestX, bestY, 0, gw_, gh_,
@@ -2369,6 +2552,20 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         fprintf(stderr, "[startTown::gathererhut] demo gatherer hut tile=(%d,%d) "
                                 "fp=%dx%d radius=%d acceptTypes=%d GATHERABLE=%d ent=%p\n",
                                 bestX, bestY, gw_, gh_, gRadius, acceptN, bestScore, gent);
+                        // ⚠ ORDERING: structures are placed BEFORE the resource scatter, and
+                        // the wild food the hut accepts is spawned BY that scatter (the trees'
+                        // SpawnComponent seed). So every score above — including a zero — was
+                        // measured against a map that has no wild food on it yet, which is
+                        // exactly how the old "worldgen spawns only 3 templates, none accepted"
+                        // reading arose. Stash the siting inputs so the score can be RETAKEN
+                        // after the scatter; that retake is the number that means anything.
+                        g_demoGatherer.valid = true;
+                        g_demoGatherer.cx = bestX + gw_ / 2;
+                        g_demoGatherer.cy = bestY + gh_ / 2;
+                        g_demoGatherer.radius = gRadius;
+                        g_demoGatherer.acceptList = acceptList;
+                        g_demoGatherer.acceptN = acceptN;
+                        g_demoGatherer.scoreAtPlacement = bestScore;
                     }
                 }
                 fflush(stderr);
@@ -2514,6 +2711,287 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     }
 
     return spawned;
+}
+
+// ============================================================================
+// DEFERRED SPAWN — demo hunter lodge, sited by live ANIMAL DENSITY.
+//
+// Driven from GameUpdateLoop::Update once per frame; everything below is a no-op
+// until the request recorded by the food-demo block above comes due. See the
+// DEFERRED SPAWN note above StartTown_SpawnStructures for why this cannot run at
+// world-build time.
+//
+// The scorer is the [HuntScan] slot walk from huntanimal.cpp, reused verbatim: it
+// reads the SAME character spatial-hash manager the hunt's proximity query walks
+// (gw+0x88; +0x10 slot array, stride 0x18 of {IBP, next+prev, cellIdx}, +0x18 count),
+// resolves each slot's CharacterComponent, and applies the SAME component-type test
+// (owner at +0x10, component array +0x30 / count +0x38, identity via vtable slot
+// +0x10 GetTypeId). That is deliberate: it means a site that scores N here is a site
+// where the query the hunter actually runs can see N animals.
+//
+// Scored in WORLD units, not tiles. The animals' positions come out of their
+// ModelComponent (+0x158..0x160) in world units, the work radius comes out of
+// RadiusDescription in tiles, and the two are only interchangeable if the tile->world
+// map is 1:1 — which is an assumption, not a fact. So measure the scale once from the
+// map itself (the world distance between two tiles ten apart) and convert. A wrong
+// scale here would silently shrink or inflate every radius test and look exactly like
+// "there are no deer near town".
+// ============================================================================
+namespace {
+
+struct DL_AnimalPos { float x, y, z; };
+
+// Walk the char manager slot array and collect the world position of every live
+// character whose owner entity carries `wantType`.
+int DL_CollectAnimals(void* gridPtr, int wantType, std::vector<DL_AnimalPos>& out,
+                      int* outLive) {
+    *outLive = 0;
+    if (!gridPtr) return 0;
+    const uint8_t* m = (const uint8_t*)gridPtr;
+    const uint8_t* slots = *(const uint8_t* const*)(m + 0x10);
+    const int slotCount = *(const int*)(m + 0x18);
+    if (!slots || slotCount <= 0) return 0;
+
+    for (int i = 0; i < slotCount && i < 4096; ++i) {
+        const uint8_t* slot = slots + (int64_t)i * 0x18;
+        if (*(const int*)(slot + 0x10) < 0) continue;      // not placed in a cell
+        void* charComp = *(void* const*)(slot + 0x00);
+        if (!charComp) continue;
+        ++(*outLive);
+        void* model = *(void* const*)((const uint8_t*)charComp + 0x68);
+        if (!model) continue;
+        void* owner = *(void* const*)((const uint8_t*)charComp + 0x10);
+        if (!owner || wantType == 0) continue;
+        const int cnt = *(const int*)((const uint8_t*)owner + 0x38);
+        void** comps = *(void** const*)((const uint8_t*)owner + 0x30);
+        bool match = false;
+        for (int c = 0; comps && c < cnt && c < 64; ++c) {
+            void* comp = comps[c];
+            if (!comp) continue;
+            typedef int (*getId_t)(void*);
+            getId_t g = *reinterpret_cast<getId_t*>(*(uintptr_t*)comp + 0x10);
+            if (g && g(comp) == wantType) { match = true; break; }
+        }
+        if (!match) continue;
+        out.push_back({ *(const float*)((const uint8_t*)model + 0x158),
+                        *(const float*)((const uint8_t*)model + 0x15c),
+                        *(const float*)((const uint8_t*)model + 0x160) });
+    }
+    return (int)out.size();
+}
+
+}  // namespace
+
+extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
+    if (!g_deferredLodge.wanted || g_deferredLodge.done) return;
+    if (frameNum < g_deferredLodge.fireFrame) return;
+    g_deferredLodge.done = true;      // one shot either way — never retry into a half-state
+
+    void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
+                                                                 : nullptr;
+    void* game = gws ? *(void**)((uint8_t*)gws + 0xf8) : nullptr;
+    void* gridPtr = gws ? *(void**)((uint8_t*)gws + 0x88) : nullptr;
+    if (!gws || !game || !g_stPlaceStructure || !fn_MapGetTerrainPos) {
+        fprintf(stderr, "[startTown::hunterlodge] deferred placement ABORTED at frame %d "
+                "(world=%p map=%p placeStructure=%s terrainPos=%s); nothing spawned\n",
+                frameNum, gws, game, g_stPlaceStructure ? "yes" : "NO",
+                fn_MapGetTerrainPos ? "yes" : "NO");
+        fflush(stderr);
+        return;
+    }
+
+    const int mapW = *(int32_t*)game;
+    const int w = g_deferredLodge.w, h = g_deferredLodge.h;
+
+    // The search type the hunt itself uses: *DAT_1401c8000, read exactly as
+    // huntanimal.cpp reads it, so the scorer cannot disagree with the query about what
+    // it is looking for. Cross-checked against the by-name id, because a by-name resolve
+    // of a misnamed global returns a real id of the WRONG class and every null test
+    // still passes.
+    int wantType = 0;
+    if (int* p = reinterpret_cast<int*>(ResolveAddr(Module::Exe, 0x1401c8000))) wantType = *p;
+    const uint32_t byName = ::Object::GetTypeIdByName("WildAnimalComponent");
+
+    std::vector<DL_AnimalPos> animals;
+    int live = 0;
+    DL_CollectAnimals(gridPtr, wantType, animals, &live);
+
+    // World units per tile, measured off this map rather than assumed. Ten tiles apart
+    // so terrain height noise on either sample cannot dominate the ratio.
+    float wpt = 1.0f;
+    {
+        const int ax = g_deferredLodge.townCx, ay = g_deferredLodge.townCy;
+        const int bx = (ax + 10 < mapW - 1) ? ax + 10 : ax - 10;
+        float pa[3] = {0,0,0}, pb[3] = {0,0,0};
+        StartTown_TileToWorld(game, ax, ay, pa);
+        StartTown_TileToWorld(game, bx, ay, pb);
+        const float d = std::sqrt((pb[0]-pa[0])*(pb[0]-pa[0]) + (pb[1]-pa[1])*(pb[1]-pa[1]));
+        if (d > 0.01f) wpt = d / 10.0f;
+    }
+    const float radiusWorld = (float)g_deferredLodge.workRadius * wpt;
+
+    fprintf(stderr, "[startTown::hunterlodge] deferred scan at frame %d: charSlots live=%d "
+            "wantType=%d (byName WildAnimalComponent=%u) animals=%d worldPerTile=%.3f "
+            "workRadius=%d tiles = %.1f world\n",
+            frameNum, live, wantType, byName, (int)animals.size(), wpt,
+            g_deferredLodge.workRadius, radiusWorld);
+
+    // ── Score every candidate footprint by how many animals sit inside the work
+    // radius of its centre. Same window/stride as the gatherer hut's resource scan;
+    // BANISHED_HUNTERLODGE_WINDOW widens it, because how far out the deer live is a
+    // property of the map, not a constant (first measured run: the densest site within
+    // 90 tiles held only 17 of 113 animals).
+    int kWindow = 90;
+    const int kStride = 2;
+    if (const char* wv = std::getenv("BANISHED_HUNTERLODGE_WINDOW")) {
+        int v = std::atoi(wv);
+        if (v > 0) kWindow = v;
+    }
+    int bestX = 0, bestY = 0, bestScore = 0;
+    long long bestDist = -1;
+    bool found = false;
+    const float r2 = radiusWorld * radiusWorld;
+    // Density landscape, so "17" can be read as "the best on offer" rather than "the
+    // scorer picked badly". A strictly-better score always wins below, so bestScore IS
+    // the window maximum — these two say how much of the window was even a candidate.
+    int candidates = 0, scoring = 0, unreachable = 0;
+
+    // ── The site must be in the TOWN'S CONNECTIVITY REGION. ──
+    // MEASURED 2026-08-14, and it is the whole reason a well-scored lodge still never
+    // hunted. `HuntWork::Slot4`'s fourth cell check is `Map_CanPathTo` (0x1400a00f0),
+    // which is NOT an A* — it is a region-equivalence test: both cells' region word at
+    // `cell+0x26` must be non-zero and EQUAL (the ids are flood-filled by ZoneRefresh
+    // 0x14009c480, gated on the dirty byte at map+0xa2 that Load sets). Scoring purely
+    // by animal density with a 200-tile window put the lodge at (184,49) across a region
+    // boundary from the town at (147,108): every one of the 35 candidate cells that
+    // reached that check failed it (22 terrain + 17 distance + 6 occupied + 35 noPath =
+    // 80 runs, MOVETO=0), so Execute took the in-place fallback every time and the
+    // hunter stood in town forever. The same build with the lodge inside the town's
+    // region scored noPath=0 and MOVETO=11/30.
+    //
+    // So apply the identical predicate at siting time. Without it, density scoring is
+    // actively harmful: the denser ground is often the far side of a river.
+    typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
+    static CanPathTo_t s_canPath = nullptr;
+    static bool s_canPathResolved = false;
+    if (!s_canPathResolved) {
+        s_canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+        s_canPathResolved = true;
+    }
+    const int townCell = g_deferredLodge.townCy * mapW + g_deferredLodge.townCx;
+
+    if (!animals.empty()) {
+        for (int ty = g_deferredLodge.townCy - kWindow;
+             ty <= g_deferredLodge.townCy + kWindow; ty += kStride) {
+            for (int tx = g_deferredLodge.townCx - kWindow;
+                 tx <= g_deferredLodge.townCx + kWindow; tx += kStride) {
+                if (tx < 1 || ty < 1 || tx + w >= mapW - 1 || ty + h >= mapW - 1) continue;
+                if (ST_ClashesWithStartTown(tx, ty, w, h)) continue;
+                if (!ST_SiteIsWorkable(tx, ty, w, h)) continue;
+                ++candidates;
+
+                const int cell = (ty + h / 2) * mapW + (tx + w / 2);
+                if (s_canPath && !s_canPath(reinterpret_cast<int*>(game), 0xe1f,
+                                            (uint32_t)cell, townCell)) {
+                    ++unreachable;
+                    continue;
+                }
+
+                float c[3] = {0,0,0};
+                StartTown_TileToWorld(game, tx + w / 2, ty + h / 2, c);
+                int score = 0;
+                for (const DL_AnimalPos& a : animals) {
+                    const float dx = a.x - c[0], dy = a.y - c[1];
+                    if (dx*dx + dy*dy <= r2) ++score;
+                }
+                if (score == 0) continue;
+                ++scoring;
+
+                // Best density wins; ties go to the site closest to town, so the lodge
+                // is no further out than the deer actually require.
+                const long long ddx = (long long)(tx + w / 2) - g_deferredLodge.townCx;
+                const long long ddy = (long long)(ty + h / 2) - g_deferredLodge.townCy;
+                const long long dist = ddx * ddx + ddy * ddy;
+                if (score < bestScore) continue;
+                if (score == bestScore && bestDist >= 0 && dist >= bestDist) continue;
+                bestScore = score; bestDist = dist;
+                bestX = tx; bestY = ty; found = true;
+            }
+        }
+    }
+
+    if (!found) {
+        // Say which of the two very different causes this is. "No animal is within
+        // radius of any candidate" and "the index/type test found nothing at all" both
+        // land here and need opposite fixes.
+        if (animals.empty())
+            fprintf(stderr, "[startTown::hunterlodge] NO ANIMALS VISIBLE at frame %d "
+                    "(live char slots=%d, wantType=%d). Either the deferral is still too "
+                    "early for the herds to have started up, or the search type id is "
+                    "wrong — a lodge placed now could not hunt whatever it is sited on.\n",
+                    frameNum, live, wantType);
+        else
+            fprintf(stderr, "[startTown::hunterlodge] %d animal(s) visible but NO free, "
+                    "workable %dx%d footprint within %d tiles of the town centre has any of "
+                    "them inside %.1f world units; falling back to a plain ring placement\n",
+                    (int)animals.size(), w, h, kWindow, radiusWorld);
+
+        // Place it anyway so the lodge EXISTS for panel / state-machine / slot-coverage
+        // testing — but the log above already says it cannot produce, so a later reader
+        // does not read zero kills as a port defect.
+        for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r)
+            for (int dy = -r; dy <= r && !found; ++dy)
+                for (int dx = -r; dx <= r && !found; ++dx) {
+                    if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                    const int tx = g_deferredLodge.townCx + dx;
+                    const int ty = g_deferredLodge.townCy + dy;
+                    if (tx < 1 || ty < 1 || tx + w >= mapW - 1 || ty + h >= mapW - 1) continue;
+                    if (ST_ClashesWithStartTown(tx, ty, w, h)) continue;
+                    if (!ST_SiteIsWorkable(tx, ty, w, h)) continue;
+                    const int fcell = (ty + h / 2) * mapW + (tx + w / 2);
+                    if (s_canPath && !s_canPath(reinterpret_cast<int*>(game), 0xe1f,
+                                                (uint32_t)fcell, townCell)) continue;
+                    bestX = tx; bestY = ty; bestScore = 0; found = true;
+                }
+    }
+
+    if (!found) {
+        fprintf(stderr, "[startTown::hunterlodge] no free workable %dx%d footprint at all; "
+                "nothing spawned\n", w, h);
+        fflush(stderr);
+        return;
+    }
+
+    void* ent = g_stPlaceStructure(g_deferredLodge.tmpl, bestX, bestY, 0, w, h,
+                                   /*isDemoFoundation=*/false, -1);
+    g_stOccupied.push_back({ bestX, bestY, w, h });
+
+    // Distance to the nearest animal is the number that predicts whether this lodge can
+    // ever kill: HuntAnimal's kill radius is 8.0 world units and the hunter only walks
+    // to a random cell inside the work radius, so a nearest-animal distance far outside
+    // the work radius means "sited wrong", not "hunt broken".
+    float nearest = -1.0f;
+    if (!animals.empty()) {
+        float c[3] = {0,0,0};
+        StartTown_TileToWorld(game, bestX + w / 2, bestY + h / 2, c);
+        float best = 1e30f;
+        for (const DL_AnimalPos& a : animals) {
+            const float dx = a.x - c[0], dy = a.y - c[1];
+            const float d = std::sqrt(dx*dx + dy*dy);
+            if (d < best) best = d;
+        }
+        nearest = best;
+    }
+    fprintf(stderr, "[startTown::hunterlodge] DEFERRED demo hunter lodge tile=(%d,%d) "
+            "fp=%dx%d frame=%d ANIMALS_IN_RADIUS=%d of %d total nearestAnimal=%.2f "
+            "(work radius %.1f world; %d candidate site(s) in a %d-tile window, %d "
+            "outside the town's connectivity region, %d with any animal at all) "
+            "ent=%p%s\n",
+            bestX, bestY, w, h, frameNum, bestScore, (int)animals.size(), nearest,
+            radiusWorld, candidates, kWindow, unreachable, scoring, ent,
+            bestScore == 0 ? "  <-- ZERO animals in radius: this lodge cannot produce"
+                           : "");
+    fflush(stderr);
 }
 
 // ============================================================================
@@ -4536,6 +5014,29 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
 // The forester's harvest gate reads the NaturalResourceComponent's growth field directly
 // (natResComp+0x28 >= threshold 1.0, foresterwork.cpp), so we set that field to a mature
 // value at spawn — the faithful END-STATE of a fully-grown tree (what 120db0 writes at
+// The 5cc0 initial sub-resource seed for one scattered resource, factored out so the
+// correct (post-register) call site and the BANISHED_SPAWN_INITIAL_PREREG A/B arm run
+// byte-identical code and differ ONLY in when they are called. See the ordering comment
+// at the call site and notes/generation_deviations.md deviation #4.
+static void SeedInitialSpawn(void* ent, uint32_t tidSpawnComp,
+                             int& withSpawnComp, int& withSpawnEntries) {
+    if (!ent) return;
+    void* sc = FindComponentOnEntity(ent, tidSpawnComp);
+    if (!sc) return;
+    ++withSpawnComp;
+    void* sd = *(void**)((uint8_t*)sc + 0x18);   // SpawnDescription
+    if (sd && *(int32_t*)((uint8_t*)sd + 0x28) > 0) ++withSpawnEntries;
+    if (withSpawnComp <= 3)
+        fprintf(stderr, "[startTown::res]   spawnComp[%d] sc=%p desc=%p "
+                "entries=%d array=%p\n", withSpawnComp, sc, sd,
+                sd ? *(int32_t*)((uint8_t*)sd + 0x28) : -1,
+                sd ? *(void**)((uint8_t*)sd + 0x20) : nullptr);
+    static const bool s_initialSeed =
+        ::ComponentFactory::LiveEnabled("BANISHED_SPAWN_INITIAL");
+    if (s_initialSeed)
+        SpawnComponent_InitialSpawn(reinterpret_cast<SpawnComponent*>(sc));
+}
+
 // progress=1.0). Gated BANISHED_MATURE_TREES (default OFF). `nrComp` is the
 // NaturalResourceComponent already located by the caller (PlaceResourceCell, for jitter).
 static void StartTown_MatureResource(void* nrComp) {
@@ -4591,6 +5092,13 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const uint32_t tidNRComp = TypeId("NaturalResourceComponent");  // DAT_1401c7b30
     const uint32_t tidMapComp = TypeId("MapComponent");             // DWORD_1401c79e0
     const uint32_t tidGrowth = TypeId("GrowthComponent");           // DAT_1401c77b0
+    // Wild-food chain diag: the gatherer's four accepted resources are spawned by the
+    // TREE's SpawnComponent (NaturalResourceTree.rsc's SpawnDescription), not by any
+    // worldgen pool. Count how many scattered resources actually carry that component
+    // and a populated SpawnDescription, so "no wild food" can never be confused
+    // between "never instantiated" and "instantiated but never ticked".
+    const uint32_t tidSpawnComp = TypeId("SpawnComponent");
+    int withSpawnComp = 0, withSpawnEntries = 0;
 
     // DIAG harness: BANISHED_RES_ONLY=<poolIndex> spawns only that pool (isolate trees).
     static const char* s_onlyEnv = std::getenv("BANISHED_RES_ONLY");
@@ -4757,7 +5265,38 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // BANISHED_LIVE_GROWTH is on it stages the tree at a random growth value.
                 StartTown_GrowthInitResource(ent, tidGrowth, rng);
 
+                // [A/B HARNESS] BANISHED_SPAWN_INITIAL_PREREG=1 restores the OLD,
+                // WRONG order (seed before register) purely so the crash mechanism
+                // can be re-measured on demand. Never set this outside an A/B run —
+                // it reproduces the Scene::Clean ACCESS_VIOLATION by design.
+                static const bool s_preRegSeed =
+                    std::getenv("BANISHED_SPAWN_INITIAL_PREREG") != nullptr;
+                if (s_preRegSeed) SeedInitialSpawn(ent, tidSpawnComp,
+                                                   withSpawnComp, withSpawnEntries);
+
                 fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+                // Wild-food chain diag (see tidSpawnComp above) + the initial
+                // sub-resource seed (ComponentEntity_impl_5cc0, retail call site
+                // 0x1400a1cb2, guarded there on the same "does this entity carry a
+                // SpawnComponent" test). This is what puts the gatherer's four
+                // accepted resources on the map at t=0; it was deviation #4 in
+                // notes/generation_deviations.md. Opt-in (BANISHED_SPAWN_INITIAL)
+                // until measured — it runs the full DoSpawn closure thousands of
+                // times during world build.
+                //
+                // ORDERING IS LOAD-BEARING — it must run AFTER RegisterEntity.
+                // Verified in Ghidra 2026-08-13: a12b0 registers the parent at
+                // 0x1400a1bf2 (CALL 0x1400c48a0) and only then finds the
+                // SpawnComponent (0x1400a1c9e) and calls 5cc0 (0x1400a1cb2).
+                // Registration is not bookkeeping: 0x1400c48a0 tails into
+                // FUN_1400c2f60, which dispatches component vtable +0x30 (slot 6,
+                // OnAdded) over the entity's component array — the pass that puts
+                // the parent's ModelComponent into Graphics::Scene. Seeding children
+                // first spawned them into a scene the parent had not yet joined.
+                if (!s_preRegSeed)
+                    SeedInitialSpawn(ent, tidSpawnComp, withSpawnComp, withSpawnEntries);
+
                 if (ent) { ++spawned; ++poolSpawned; }
                 if (poolSpawned >= poolCap) { capped = true; break; }
             }
@@ -4767,6 +5306,20 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 capped ? " (CAPPED)" : "");
         fflush(stderr);
     }
+    fprintf(stderr, "[startTown::res] SpawnComponent carriers: %d of %d scattered "
+            "resources have one, %d of those have a non-empty SpawnDescription "
+            "(tid(SpawnComponent)=%u)\n",
+            withSpawnComp, spawned, withSpawnEntries, tidSpawnComp);
+    fflush(stderr);
+    // Everything DoSpawn did up to here came from the worldgen seed pass, not from
+    // any per-tick Update — so this line attributes the initial wild-food placement.
+    SpawnComponent_ReportDoSpawnCensus("worldgen-seed");
+    // dc20's stale-occupant eviction tally at the same point. A spawned child sitting
+    // on a cell the parent later claims gets DESTROYED here while its ModelComponent is
+    // already linked into Graphics::Scene — the dangling node Scene::Clean faults on.
+    // With the correct (post-register) order the parent claims first and DoSpawn's
+    // TileFree rejects those cells, so this should stay at its baseline.
+    MapComponent_ReportDc20Evictions("worldgen-seed");
     return spawned;
 }
 
@@ -4992,6 +5545,10 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] resources: spawned %d; entityList count %d -> %d\n",
             nr, afterCitizens, afterRes);
     fflush(stderr);
+
+    // The demo gatherer hut was sited before any wild food existed; retake its
+    // accepted-resource count now that the scatter + seed pass have run.
+    StartTown_RecountGatherable();
 
     // ENVIRONMENT (impl_02f0) — ambient emitters + environment volumes.
     int ne = StartTown_SpawnEnvironment(sc, world);

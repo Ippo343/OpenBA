@@ -451,6 +451,29 @@ void ModelComponent_Draw(ModelComponent* self) {
             if (scene) {
                 uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
                 *(uint32_t*)(s + 0x16c) = id;
+                // [diag] BANISHED_DRAIN_AUDIT — a scene registration made on an entity
+                // that is ALREADY marked-for-removal (0x400) is a node the mark-time
+                // +0x38 teardown can never take back out: the entity is freed at the
+                // next drain with this id still live in Graphics::Scene. Counted here
+                // because the mark bit itself is not durable (NotifyEntityChanged
+                // 0x1400c3470 zeroes entity+0x40), so this arm sees only the re-adds
+                // that happen while the bit still stands — a floor, not the total.
+                {
+                    static int s_auditOn = -1;
+                    if (s_auditOn < 0) { const char* e = getenv("BANISHED_DRAIN_AUDIT");
+                                         s_auditOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
+                    if (s_auditOn == 1) {
+                        void* owner = *(void**)(s + 0x10);
+                        if (owner && ((*(uint32_t*)((uintptr_t)owner + 0x40) >> 10) & 1)) {
+                            static int s_n = 0;
+                            if (++s_n <= 20) {
+                                fprintf(stderr, "[drainAudit] Scene::AddObject on MARKED "
+                                        "entity=%p comp=%p id=%u\n", owner, (void*)self, id);
+                                fflush(stderr);
+                            }
+                        }
+                    }
+                }
 #if defined(_DEBUG)
                 static int s_drawLog = 0;
                 if (s_drawLog < 10) {

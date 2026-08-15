@@ -681,6 +681,7 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 extern "C" void FoodPanel_Tick(void* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
 extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/food_placement_harness.cpp
+extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
@@ -903,6 +904,15 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // inert stub. No-op unless BANISHED_FOOD_PLACE is set
     // (standalone/food_placement_harness.cpp).
     FoodPlace_Tick(s_frameNum);
+
+    // Deferred demo spawns that CANNOT be sited at world-build time because their
+    // siting input does not exist yet. Currently the hunter lodge, which is scored by
+    // live animal density out of the character spatial-hash manager at gw+0x88 — an
+    // index that is empty during StartTown because characters register during their own
+    // Startup. Must run BEFORE FoodWorkers_Tick's first pass (frame 400) so the lodge is
+    // staffable on that pass; it re-checks every 120 frames regardless. No-op unless
+    // BANISHED_BUILD_DEMO_HUNTERLODGE is set (code/Game/Game/starttown.cpp).
+    StartTown_DeferredSpawn_Tick(s_frameNum);
 
     // Kill N citizens on a chosen frame so the removal teardown (HandleLifeEvent ->
     // MarkForRemoval -> the +0x38 broadcast -> CitizenComponent::OnRemove) can be

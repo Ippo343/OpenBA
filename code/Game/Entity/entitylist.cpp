@@ -704,6 +704,109 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
            "entity %p\n", reinterpret_cast<void*>(ent));
 }
 
+// ============================================================
+// [diag] BANISHED_DRAIN_AUDIT — "why does a destroyed entity leave a LIVE node in
+// Graphics::Scene?" (the open question from the wild-food seed-crash wave).
+//
+// Nothing in the free path removes scene geometry: RemoveEntity only unlinks the
+// entity from the buckets/trees and DeletePtr's the last strong ref. The ONLY
+// unlink is MarkForRemoval's (0x1400c2ea0) +0x38 broadcast, fired at MARK time —
+// so any re-registration between the mark and the free ships a scene node that
+// points into memory the drain is about to recycle.
+//
+// Two things are measured on every entity the drain is about to free:
+//   markStillSet — is bit 0x400 still set at free time? A CLEARED bit means the
+//                  entity was un-marked after the mark (NotifyEntityChanged
+//                  0x1400c3470 ZEROES entity+0x40 and rebuilds it from the
+//                  component flag words, which do not carry 0x400) and was
+//                  therefore ticked again like a live entity.
+//   liveModel    — a ModelComponent-derived component whose modelId (+0x16c) is
+//                  >= 0, i.e. it is STILL registered in Graphics::Scene as the
+//                  allocation goes back to the heap. This is the dangling node.
+static bool DrainAudit() {
+    static int on = -1;
+    if (on < 0) { const char* e = std::getenv("BANISHED_DRAIN_AUDIT");
+                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return on == 1;
+}
+
+long g_drainFreed        = 0;   // entities freed by the drain
+long g_drainUnmarked     = 0;   // ...whose 0x400 removal bit was gone again
+long g_drainLiveModel    = 0;   // ...still holding a Graphics::Scene object id
+long g_drainLiveUnmarked = 0;   // both at once (the crash shape)
+
+extern "C" void EntityList_ReportDrainAudit(const char* tag) {
+    std::fprintf(stderr,
+                 "[drainAudit:%s] freed=%ld unmarked=%ld liveSceneNode=%ld both=%ld\n",
+                 tag ? tag : "?", g_drainFreed, g_drainUnmarked, g_drainLiveModel,
+                 g_drainLiveUnmarked);
+    std::fflush(stderr);
+}
+
+// Audit + LAST-CHANCE SCENE UNLINK for one entity the drain is about to free.
+//
+// ROOT CAUSE this closes (measured 2026-08-14, PREREG A/B arm): an entity can be
+// marked-for-removal BEFORE its own registration has run, so the mark-time +0x38
+// broadcast finds modelId == -1 and unlinks nothing; the registration OnAdded pass
+// (0x1400c2f60, component slot 6) then runs ModelComponent::Draw unconditionally —
+// it has no notion of the 0x400 removal bit — and registers geometry that lives
+// inside the allocation this drain is about to recycle. 44 of 109 freed entities in
+// the repro arm were freed exactly like that; Graphics::Scene::Clean then walks a
+// recycled node (RAX = two packed floats) and faults.
+//
+// Retail never needs a net here because it drains at the end of the same frame and
+// (in the correct order) nothing registers after a mark. Our drain is already a
+// deliberate SA deviation (see the one-frame deferral above), so the net lives here
+// rather than as a guard inside a byte-faithful function: re-fire the component's
+// own +0x38 handler, which is a no-op unless modelId >= 0 — i.e. unless something
+// really did re-register after the mark.
+static void AuditDyingEntity(int64_t entity) {
+    if (entity < 0x10000) return;
+
+    static uint32_t s_tidModel = 0;
+    if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
+        s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+
+    uint32_t flags   = *reinterpret_cast<uint32_t*>(entity + 0x40);
+    bool markStillSet = ((flags >> 10) & 1) != 0;
+
+    int models = 0, live = 0;
+    int   n   = *reinterpret_cast<int*>(entity + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
+    if (s_tidModel && s_tidModel != 0xFFFFFFFFu && fn_IsDerivedFrom) {
+        for (int i = 0; i < n && arr; ++i) {
+            int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
+            if (c < 0x10000) continue;
+            if (!fn_IsDerivedFrom(reinterpret_cast<void*>(c), s_tidModel)) continue;
+            ++models;
+            if (*reinterpret_cast<int32_t*>(c + 0x16c) < 0) continue;
+            ++live;
+            // Unlink it (vtable +0x38 = the removed-from-world handler; on
+            // ModelComponent that is Scene::RemoveObject + modelId = -1). Dispatched
+            // virtually so derived overrides (NaturalResourceComponent) still apply.
+            void** vt = *reinterpret_cast<void***>(c);
+            if (vt && vt[7])
+                reinterpret_cast<void(*)(void*)>(vt[7])(reinterpret_cast<void*>(c));
+        }
+    }
+
+    ++g_drainFreed;
+    if (!markStillSet) ++g_drainUnmarked;
+    if (live)          ++g_drainLiveModel;
+    if (live && !markStillSet) ++g_drainLiveUnmarked;
+
+    if ((live || !markStillSet) && DrainAudit()) {
+        static int s_lines = 0;
+        if (++s_lines <= 30) {
+            std::fprintf(stderr, "[drainAudit] entity=%p flags=0x%x mark0x400=%d "
+                         "models=%d liveSceneNodes=%d (unlinked)\n",
+                         reinterpret_cast<void*>(entity), flags, markStillSet ? 1 : 0,
+                         models, live);
+            std::fflush(stderr);
+        }
+    }
+}
+
 void EntityList_DrainRemovals(EntityList* self) {
     int32_t removalCount = self->removalList.count;
     if (removalCount <= 0) return;
@@ -716,12 +819,19 @@ void EntityList_DrainRemovals(EntityList* self) {
     EntityList_PreUpdate(self);
     EntityList_PostUpdateStaging(self);
 
+    const bool audit = DrainAudit();
     for (int64_t i = 0; i < removalCount; i++) {
         void* entityIBP = (void*)(*(int64_t*)((uintptr_t)self->removalList.data + i * 8));
+        AuditDyingEntity(reinterpret_cast<int64_t>(entityIBP));
         EntityList_RemoveEntity(self, &entityIBP);
     }
 
     fn_ExeArrayResize(&self->removalList, 0);
+
+    if (audit) {
+        static int s_summaries = 0;
+        if (++s_summaries <= 200) EntityList_ReportDrainAudit("drain");
+    }
 }
 
 // ============================================================

@@ -7,4 +7,13 @@
 // Update (vtable slot [9], 0x140055ad0): Periodic entity spawning.
 void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime);
 
+// Initial sub-resource seed (ComponentEntity_impl_5cc0, 0x140055cc0): called once
+// per scattered natural resource by the worldgen scatter so a new map starts with
+// wild food already under the trees. See the definition for why this is the only
+// producer of the Gatherer's Hut's accepted resources.
+void SpawnComponent_InitialSpawn(SpawnComponent* self);
+
+// Print the DoSpawn attempt/outcome tallies under a caller-supplied tag.
+extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag);
+
 void SpawnComponent_InitFuncs();

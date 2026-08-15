@@ -508,6 +508,27 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_ORCHARD",
     "BANISHED_LIVE_GROWTH",
     "BANISHED_LIVE_FRUIT",
+    // Wild-food spawning (SpawnComponent). Three formerly-independent opt-ins that
+    // are one feature — a tree's SpawnDescription is the SOLE producer of the four
+    // resources the Gatherer's Hut accepts (Onion/Blueberry/Mushroom/Root); they are
+    // not a worldgen pool. Graduated together 2026-08-13:
+    //   * LIVE_SPAWN    — SpawnComponent live factory: slot 4 Startup sizes the
+    //                     per-entry timer array, slot 9 Update ticks the growth window
+    //   * SPAWN_DOSPAWN — the per-tick spawn actually instantiates (was held off
+    //                     because the closure creates real entities)
+    //   * SPAWN_INITIAL — the worldgen seed pass (5cc0), so a NEW MAP starts with
+    //                     wild food on the ground instead of growing it over months
+    // SPAWN_INITIAL was the one that crashed: it took an ACCESS_VIOLATION in
+    // Graphics::Scene::Clean 4/4 runs until the call was moved AFTER
+    // fn_EntityList_RegisterEntity to match retail's a12b0 order (register at
+    // 0x1400a1bf2, THEN 5cc0 at 0x1400a1cb2) — registration is what runs the
+    // OnAdded/+0x30 pass that puts the parent's ModelComponent into the scene.
+    // Post-fix: 0/4 crashes, seed output unchanged at CREATED=249.
+    // See notes/generation_deviations.md (deviation #4).
+    // Each remains a kill-switch (=0) for an A/B run.
+    "BANISHED_LIVE_SPAWN",
+    "BANISHED_SPAWN_DOSPAWN",
+    "BANISHED_SPAWN_INITIAL",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

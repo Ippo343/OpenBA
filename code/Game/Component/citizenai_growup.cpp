@@ -195,19 +195,39 @@ static uint32_t ModelCell(int64_t model, int* mapGrid) {
     return static_cast<uint32_t>(w * row + col);
 }
 
-// Scan an InternalBasePtr-array node's children for the first item whose GetTypeId()
-// matches typeId, returning the derived object (null-guarded). Mirrors the inline
+// Scan an ENTITY's component array for the first component whose GetTypeId() matches
+// typeId, returning the derived object (null-guarded). Mirrors the inline
 // GetTypeId()/IsDerivedFrom scan repeated throughout these handlers.
-//   childArrayBase = node+0x28 (array of object* at 8-byte stride); count = node+0x30.
+//   componentArray = node+0x30 (array of object* at 8-byte stride); count = node+0x38.
+//
+// FIXED 2026-08-14 — this read +0x28/+0x30 (the node/list pair) and crashed. All three
+// call sites pass a component ENTITY, and retail's own loop inside 0x140115e60 is
+// unambiguous:
+//     if (0 < *(int *)(lVar4 + 0x38)) {                            // count  = +0x38
+//       puVar1 = (undefined8*)(*(longlong*)(lVar4 + 0x30) + i*8);  // array  = +0x30
+// (the same ENT_COMP_ARR/ENT_COMP_CNT pair starttown.cpp names). Reading +0x30 as the
+// count meant the count was the low 32 bits of the component-array POINTER — a huge
+// positive number — walked over a base taken from an unrelated field. Symptom was a
+// vtable word of 0xffffffffffffffef and an ACCESS_VIOLATION reading 0xffffffffffffffff.
+//
+// It stayed hidden because the only caller that reaches it needs a citizen actually
+// carrying goods with storage candidates collected (arrACount != 0); until the hunter
+// lodge was sited somewhere its worker could reach, that loop never ran.
+//
+// Retail also CheckPtrs EVERY element slot before dereferencing it — these are
+// InternalBasePtrs, and a stale one is exactly what a raw deref turns into a crash.
 static void* ScanForType(int64_t node, uint32_t typeId) {
     if (node == 0) return nullptr;
-    int count = *reinterpret_cast<int*>(node + 0x30);
-    int64_t base = *reinterpret_cast<int64_t*>(node + 0x28);
+    int64_t base = *reinterpret_cast<int64_t*>(node + 0x30);
+    int count = *reinterpret_cast<int*>(node + 0x38);
+    if (base == 0) return nullptr;
     for (int i = 0; i < count; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(base + static_cast<int64_t>(i) * 8);
+        CheckPtr(slot);                       // retail: CheckPtr(puVar1) before the deref
         int64_t obj = *slot;
         if (obj == 0) continue;
         int64_t vt = *reinterpret_cast<int64_t*>(obj);
+        if (vt == 0) continue;
         // vtable+0x10 = GetTypeId()
         uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
         if (tid == typeId) {
@@ -375,8 +395,11 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         // this row (StorageComponent_impl_cd80). If satisfied, commit.
         bool satisfied = false;
         for (int k = 0; k < arrACount; ++k) {
-            int64_t entry = *reinterpret_cast<int64_t*>(arrA + static_cast<int64_t>(k) * 2);
+            // CheckPtr BEFORE the read — retail is `CheckPtr(pfVar21); lVar4 = *pfVar21;`.
+            // Reading first and refreshing after uses the pre-refresh pointer, which is
+            // the stale value CheckPtr exists to replace.
             CheckPtr(reinterpret_cast<void*>(arrA + static_cast<int64_t>(k) * 2));
+            int64_t entry = *reinterpret_cast<int64_t*>(arrA + static_cast<int64_t>(k) * 2);
             // find that entry's StorageComponent
             void* sc = ScanForType(entry, s_tid_StorageComponent);
             int64_t scIBP = 0;

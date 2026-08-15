@@ -11,6 +11,7 @@
 // Original: 0x140055ad0 (114 instructions)
 
 #include "Component/spawncomponent_funcs.h"
+#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -52,10 +53,69 @@ void SpawnComponent_Startup(SpawnComponent* self);
 // ============================================================
 // SpawnComponent::Update (0x140055ad0)
 // ============================================================
+// ── Update rejection census (BANISHED_SPAWN_TRACE) ──────────────────────────
+// Every early return in Update is otherwise SILENT, so a quiet log reads
+// identically whether the slot is never dispatched, the body-init never ran, or
+// the growth window simply never opens. Count each exit reason and the distinct
+// components seen, and report periodically so "no spawns" always comes with a
+// why. (Project lesson: diagnostics must report OUTCOMES, not intent.)
+namespace {
+struct SpawnCensus {
+    long calls = 0;          // Update entered
+    long noTimerArray = 0;   // +0x28 still null after Startup attempt
+    long noTypeIds = 0;      // SpawnDescription / GrowthDescription global unresolved
+    long noResourceData = 0; // _unk18 empty
+    long noLinkedObj = 0;    // no sibling NaturalResourceComponent -> no growth to read
+    long noEntries = 0;      // SpawnDescription carries zero spawn entries
+    long reached = 0;        // made it into the per-entry loop
+    long inWindow = 0;       // an entry whose [minAge,maxAge] contains current growth
+    long outOfWindow = 0;
+    long noInterval = 0;     // no GrowthDescription on the spawn template
+    long fires = 0;          // timer crossed the interval
+    long dispatched = 0;     // DoSpawn actually called
+    float lastGrowth = -1.0f;
+    float lastMin = -1.0f, lastMax = -1.0f;
+};
+SpawnCensus g_spawnCensus;
+int g_spawnTraceOn = -1;
+// Set once the worldgen scatter has reported, so a later dispatch is provably
+// PER-TICK rather than seed-pass. Needed as the graduation positive assertion for
+// BANISHED_SPAWN_DOSPAWN: every worldgen-time census line is indistinguishable
+// between "per-tick gate is on" and "per-tick gate is a dead flag string".
+bool g_worldgenDone = false;
+
+bool SpawnTraceOn() {
+    if (g_spawnTraceOn < 0) {
+        const char* e = std::getenv("BANISHED_SPAWN_TRACE");
+        g_spawnTraceOn = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return g_spawnTraceOn == 1;
+}
+
+// Report on the 1st call and then every kReportEvery calls, so a run that only
+// ever hits one early-return arm still says so.
+void SpawnCensusTick() {
+    if (!SpawnTraceOn()) return;
+    const long kReportEvery = 20000;
+    const SpawnCensus& c = g_spawnCensus;
+    if (c.calls != 1 && (c.calls % kReportEvery) != 0) return;
+    fprintf(stderr,
+        "[SpawnCensus] calls=%ld | EXITS noTimerArray=%ld noTypeIds=%ld noResourceData=%ld "
+        "noLinkedObj=%ld noEntries=%ld | reached=%ld inWindow=%ld outOfWindow=%ld "
+        "noInterval=%ld fires=%ld dispatched=%ld | lastGrowth=%.4f window=[%.2f,%.2f]\n",
+        c.calls, c.noTimerArray, c.noTypeIds, c.noResourceData, c.noLinkedObj,
+        c.noEntries, c.reached, c.inWindow, c.outOfWindow, c.noInterval, c.fires,
+        c.dispatched, c.lastGrowth, c.lastMin, c.lastMax);
+    fflush(stderr);
+}
+}  // namespace
+
 void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
     SpawnComponent_InitFuncs();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+    ++g_spawnCensus.calls;
+    SpawnCensusTick();
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array at
@@ -67,8 +127,10 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
     if (*(uintptr_t*)(comp + 0x28) == 0) {
         if (*(uintptr_t*)(comp + 0x18) != 0)
             SpawnComponent_Startup(self);
-        if (*(uintptr_t*)(comp + 0x28) == 0)
+        if (*(uintptr_t*)(comp + 0x28) == 0) {
+            ++g_spawnCensus.noTimerArray;
             return;
+        }
     }
 
     // CheckPtr on owner IBP, then get linked object
@@ -81,14 +143,20 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
 
     // Get resource data via IsDerivedFrom check on _unk18
     void* baseObj = self->_unk18;
-    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) return;
+    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) {
+        ++g_spawnCensus.noTypeIds;
+        return;
+    }
     bool isDerived = fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId);
     void* resourceData = isDerived ? baseObj : nullptr;
     // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
     // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
     // _unk18 is the SpawnDescription the copy-ctor stored at +0x18 — trust it.
     if (!resourceData && baseObj) resourceData = baseObj;
-    if (!resourceData) return;
+    if (!resourceData) {
+        ++g_spawnCensus.noResourceData;
+        return;
+    }
 
     // CheckPtr on linked object IBP before reading growth
     if (fn_InternalBasePtr_CheckPtr)
@@ -96,8 +164,12 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
     // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
     // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
     // if a spawner lacks one in standalone.
-    if (linkedObjPtr == 0) return;
+    if (linkedObjPtr == 0) {
+        ++g_spawnCensus.noLinkedObj;
+        return;
+    }
     float currentGrowth = *(float*)(linkedObjPtr + 0x28);
+    g_spawnCensus.lastGrowth = currentGrowth;
 
     // Phase-1 bring-up verification trace (env BANISHED_SPAWN_TRACE, default off →
     // byte-unchanged): follow ONE component, printing its first per-entry timer
@@ -113,7 +185,11 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
 
     // Get spawn entry count from resourceData+0x28
     int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
-    if (entryCount <= 0) return;
+    if (entryCount <= 0) {
+        ++g_spawnCensus.noEntries;
+        return;
+    }
+    ++g_spawnCensus.reached;
 
     uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)resourceData + 0x20);
 
@@ -123,8 +199,13 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
         float minGrowth = *(float*)(entry + 0x08);
         float maxGrowth = *(float*)(entry + 0x0C);
 
-        if (currentGrowth < minGrowth || currentGrowth > maxGrowth)
+        g_spawnCensus.lastMin = minGrowth;
+        g_spawnCensus.lastMax = maxGrowth;
+        if (currentGrowth < minGrowth || currentGrowth > maxGrowth) {
+            ++g_spawnCensus.outOfWindow;
             continue;
+        }
+        ++g_spawnCensus.inWindow;
 
         // Accumulate delta time
         int64_t byteOffset = (int64_t)i * 8;
@@ -160,35 +241,139 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
             }
         }
 
-        if (!spawnIntervalComp) continue;
+        if (!spawnIntervalComp) {
+            ++g_spawnCensus.noInterval;
+            continue;
+        }
 
         // Convert spawn interval to ticks
         float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
         int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
 
         // Re-read timer pointer (DoSpawn may realloc)
-        // [CONSERVATIVE GATE] The full DoSpawn closure (0x140055780 +
-        // CanPlace/TileFree/CopyCtor/Register/…) is registered, so this path WILL
-        // instantiate real child entities into the world list. That spawn path is
-        // unexercised by autostart, so default-LIVE keeps it OFF (timers accumulate,
-        // observable + crash-safe); set BANISHED_SPAWN_DOSPAWN=1 to enable real
-        // spawning for controlled verification.
-        static int s_doSpawn = -1;
-        if (s_doSpawn < 0) {
-            const char* e = std::getenv("BANISHED_SPAWN_DOSPAWN");
-            s_doSpawn = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
+        // The full DoSpawn closure (0x140055780 + CanPlace/TileFree/CopyCtor/
+        // Register/…) is registered, so this path instantiates real child entities
+        // into the world list. Graduated default-on 2026-08-13 via kDefaultOnFlags;
+        // BANISHED_SPAWN_DOSPAWN=0 is now the kill-switch for an A/B run.
+        // Routed through LiveEnabled (NOT raw getenv) — a raw getenv here would
+        // ignore the default-on table entirely and read as a dead flag.
+        static const int s_doSpawn =
+            ::ComponentFactory::LiveEnabled("BANISHED_SPAWN_DOSPAWN") ? 1 : 0;
         pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         while (intervalTicks > 0 && *pTimer >= intervalTicks) {
             *pTimer -= intervalTicks;
-            if (s_doSpawn == 1 && s_fn_DoSpawn)
+            ++g_spawnCensus.fires;
+            if (s_doSpawn == 1 && s_fn_DoSpawn) {
+                // Graduation positive assertion: only the per-tick arm can print this,
+                // and only with the DOSPAWN gate live. Unconditional + one-shot.
+                if (g_worldgenDone) {
+                    static bool s_firstTick = true;
+                    if (s_firstTick) {
+                        s_firstTick = false;
+                        fprintf(stderr, "[SpawnLive] first PER-TICK DoSpawn dispatch "
+                                        "(BANISHED_SPAWN_DOSPAWN live, no env var set)\n");
+                        fflush(stderr);
+                    }
+                }
                 s_fn_DoSpawn(self, resourceData, i, 0);
+                ++g_spawnCensus.dispatched;
+            }
             if (s_traceState == 1 && self == s_lockComp && i == 0 && s_traceCount < 20) {
                 fprintf(stderr, "[SpawnTrace]   entry %d FIRE (doSpawn=%d)\n", i, s_doSpawn);
                 fflush(stderr);
             }
             pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         }
+    }
+}
+
+// ============================================================
+// SpawnComponent initial seed — ComponentEntity_impl_5cc0 (0x140055cc0)
+// ============================================================
+// Called once per scattered natural resource by FUN_1400a12b0 (the worldgen
+// scatter), right after the growth/age init and before the model-variant pick —
+// the retail call site is 0x1400a1cb2, guarded on the entity actually carrying a
+// SpawnComponent. This is what makes a NEW MAP start with wild food already on
+// the ground rather than growing it over months of sim: for every spawn entry
+// whose [minSpawnAge, maxSpawnAge] window contains the tree's freshly-randomized
+// growth, it dispatches DoSpawn `growth / GrowthDescription+0x20 + 1` times, so
+// an old tree gets proportionally more sub-resources under it than a sapling.
+//
+// This is the SOLE producer of the four resources the Gatherer's Hut accepts
+// (Onion / Blueberry / Mushroom / Root — see NaturalResourceTree.rsc's
+// SpawnDescription against GathererShelter.rsc's HerbalistDescription): they are
+// not a worldgen pool of their own. Deviation #4 in notes/generation_deviations.md
+// deferred this pass "until GrowthComponent is live"; BANISHED_LIVE_GROWTH is now
+// default-on, so the precondition is met and the pass is restored here.
+//
+// Standalone deviations, both bail-instead-of-crash on a shape retail guarantees:
+//   * the GrowthDescription lookup on the spawn template can miss in our partial
+//     factory tree — retail dereferences the result unconditionally;
+//   * a zero divisor at GrowthDescription+0x20 would make the repeat count
+//     meaningless (retail's data never has one).
+// The dead component-search over the OWNER's list at the top of 5cc0 (its result
+// is computed and discarded) is not reproduced.
+static void EnsureSpawnHelpers();   // defined with the DoSpawn closure below
+
+void SpawnComponent_InitialSpawn(SpawnComponent* self) {
+    SpawnComponent_InitFuncs();
+    EnsureSpawnHelpers();
+    if (!self || !s_fn_DoSpawn || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) return;
+
+    uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+
+    // Sibling NaturalResourceComponent — carries the growth value at +0x28.
+    uintptr_t ownerIBP = comp + 0x10;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ownerIBP);
+    uintptr_t natRes = 0;
+    if (s_fn_GetLinkedObject) s_fn_GetLinkedObject(*(void**)ownerIBP, &natRes);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&natRes);
+    if (natRes == 0) return;
+    const float growth = *(float*)(natRes + 0x28);
+
+    // SpawnDescription at +0x18 (IsDerivedFromOrTrust — same policy as Update).
+    void* baseObj = self->_unk18;
+    if (!baseObj) return;
+    void* spawnDesc = baseObj;
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId))
+        spawnDesc = baseObj;
+
+    const int entryCount = *(int*)((uintptr_t)spawnDesc + 0x28);
+    const uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)spawnDesc + 0x20);
+    if (entryCount <= 0 || !entryArrayBase) return;
+
+    for (int i = 0; i < entryCount; ++i) {
+        const uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
+        const float minAge = *(float*)(entry + 0x08);
+        const float maxAge = *(float*)(entry + 0x0C);
+        if (growth < minAge || growth > maxAge) continue;
+
+        // The spawn template entity; find its GrowthDescription for the divisor.
+        const int64_t host = *(int64_t*)entry;
+        if (!host) continue;
+        void* growthDesc = nullptr;
+        const int compCount = *(int*)(host + 0x30);
+        const int64_t compArr = *(int64_t*)(host + 0x28);
+        for (int j = 0; j < compCount && compArr; ++j) {
+            void* c = *(void**)(compArr + (int64_t)j * 8);
+            if (!c) continue;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            const uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)c + 0x10)))(c);
+            if (tid == *s_pSpawnTemplateTypeId) {
+                growthDesc = c;   // trust it; IsDerivedFrom is unreliable here
+                break;
+            }
+        }
+        if (!growthDesc) continue;
+
+        const float perSpawn = *(float*)((uintptr_t)growthDesc + 0x20);
+        if (!(perSpawn > 0.0f)) continue;
+        const int repeats = (int)(growth / perSpawn) + 1;
+        for (int r = 0; r < repeats; ++r) {
+            s_fn_DoSpawn(self, spawnDesc, i, 1);   // flag=1 => random orientation
+            ++g_spawnCensus.dispatched;
+        }
+        g_spawnCensus.inWindow += repeats;
     }
 }
 
@@ -307,15 +492,72 @@ static void EnsureSpawnHelpers() {
     s_scSpawnResolved = true;
 }
 
+// DoSpawn outcome census — `dispatched` above only counts CALLS, and DoSpawn
+// bails on six separate conditions before an entity exists. Counting the call is
+// not evidence of a spawn (project lesson: a counter that also counts the
+// non-events is not evidence), so track where each attempt actually ends.
+namespace {
+struct DoSpawnCensus {
+    long calls = 0;
+    long noWorld = 0, worldBitSet = 0, noTemplate = 0;
+    long densityRoll = 0;    // lost the density roll (the dominant EXPECTED outcome)
+    long offMap = 0;         // jittered tile outside the map
+    long cannotPlace = 0;    // terrain rejects it
+    long tileTaken = 0;      // TileFree said no
+    long allocFailed = 0;
+    long created = 0;        // entity constructed AND registered
+    long listClosed = 0;     // EntityList+0xE0 set -> 0x1400c48a0 DELETES instead of files
+} g_doSpawn;
+void DoSpawnReportForced(const char* tag) {
+    const DoSpawnCensus& d = g_doSpawn;
+    fprintf(stderr, "[DoSpawnCensus:%s] ", tag);
+    fprintf(stderr,
+        "calls=%ld -> CREATED=%ld | bail: noWorld=%ld worldBit=%ld noTemplate=%ld "
+        "densityRoll=%ld offMap=%ld cannotPlace=%ld tileTaken=%ld allocFailed=%ld "
+        "listClosed=%ld\n",
+        d.calls, d.created, d.noWorld, d.worldBitSet, d.noTemplate, d.densityRoll,
+        d.offMap, d.cannotPlace, d.tileTaken, d.allocFailed, d.listClosed);
+    fflush(stderr);
+}
+void DoSpawnReport() {
+    if (!SpawnTraceOn()) return;
+    const DoSpawnCensus& d = g_doSpawn;
+    if (d.calls != 1 && (d.calls % 20000) != 0) return;
+    fprintf(stderr,
+        "[DoSpawnCensus] calls=%ld -> CREATED=%ld | bail: noWorld=%ld worldBit=%ld "
+        "noTemplate=%ld densityRoll=%ld offMap=%ld cannotPlace=%ld tileTaken=%ld "
+        "allocFailed=%ld listClosed=%ld\n",
+        d.calls, d.created, d.noWorld, d.worldBitSet, d.noTemplate, d.densityRoll,
+        d.offMap, d.cannotPlace, d.tileTaken, d.allocFailed, d.listClosed);
+    fflush(stderr);
+}
+}  // namespace
+
+// Snapshot the DoSpawn outcome tallies at a named point (used by worldgen to
+// separate the initial 5cc0 seed from later per-tick spawning).
+extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag) {
+    DoSpawnReportForced(tag ? tag : "?");
+    g_worldgenDone = true;
+}
+
+// NOTE for whoever debugs the seed-pass crash next: 0x140120db0 is NOT "set
+// orientation" (the typedef name here is inherited and wrong) — it is
+// SetGrowthProgress, which derives the MESH SCALE through the GrowthComponent's
+// sibling links. Guarding both call sites on those links being populated (the test
+// StartTown_GrowthInitResource uses) was tried on 2026-08-13 and is NOT the cause:
+// BANISHED_LIVE_GROWTH is default-on, so the links ARE populated, the guard never
+// fired, and the crash reproduced byte-identically. Ruled out — don't re-spend it.
 void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag) {
     EnsureSpawnHelpers();
     uintptr_t self = (uintptr_t)selfP;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    ++g_doSpawn.calls;
+    DoSpawnReport();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { ++g_doSpawn.noWorld; return; }
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
 
     int* grid = *(int**)(gw + 0xf8);
     void* random = *(void**)(gw + 0xd8);
-    if ((*(uint32_t*)(gw + 0xd0) >> 10) & 1) return;
+    if ((*(uint32_t*)(gw + 0xd0) >> 10) & 1) { ++g_doSpawn.worldBitSet; return; }
 
     int64_t* entry = (int64_t*)((int64_t)entryIndex * 0x10 + *(int64_t*)((uintptr_t)resourceData + 0x20));
     int64_t host = *entry;
@@ -335,12 +577,12 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
             }
         }
     }
-    if (!templ) return;
+    if (!templ) { ++g_doSpawn.noTemplate; return; }
 
     // Density roll
     float roll = s_sc_RandFloat ? s_sc_RandFloat(random) : 1.0f;
     float density = s_sc_pUVScale ? (*s_sc_pUVScale / (float)*(int*)((uintptr_t)templ + 0x48)) : 0.0f;
-    if (roll > density) return;
+    if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
     // Owner tile
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
@@ -354,21 +596,25 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     int tol = *(int*)((uintptr_t)templ + 0x4c);
     int x = baseX + (s_sc_RandTol ? s_sc_RandTol(random, tol) : 0);
     int y = baseY + (s_sc_RandTol ? s_sc_RandTol(random, tol) : 0);
-    if (x < 0 || y < 0) return;
+    if (x < 0 || y < 0) { ++g_doSpawn.offMap; return; }
     int mapSize = *grid;
-    if (x >= mapSize || y >= mapSize) return;
+    if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
 
     float ca = s_sc_pConstA ? *s_sc_pConstA : 0.0f;
     float cb = s_sc_pConstB ? *s_sc_pConstB : 0.0f;
     bool canPlace = s_sc_CanPlace &&
         s_sc_CanPlace(grid, x, y, 4, ca, cb, 0.0f, '\0', '\0', 0) != '\0';
-    if (!canPlace) return;
-    if (!(s_sc_TileFree && s_sc_TileFree(templ, x, y) != '\0')) return;
+    if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
+    if (!(s_sc_TileFree && s_sc_TileFree(templ, x, y) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = *grid;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* newEntity = nullptr;
     if (mem && s_sc_CopyCtor) newEntity = s_sc_CopyCtor(mem, *entry);
+    // Retail carries a null entity through the remaining steps (every one of them
+    // is individually null-guarded, and the final Register would file a null IBP).
+    // Bailing here reaches the same end state without adding a junk entry.
+    if (!newEntity) { ++g_doSpawn.allocFailed; return; }
 
     int64_t entityIbp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entityIbp, newEntity);
@@ -394,9 +640,22 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     // Register with world entity list
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t regIbp = entityIbp;
-    if (s_sc_Register)
-        s_sc_Register(*(void**)(gw + 0xe8), &regIbp,
+    if (s_sc_Register) {
+        // EntityList::RegisterEntity (0x1400c48a0) opens with
+        //   if (*(char*)((char*)list + 0xE0)) { InternalBasePtr::DeletePtr(ibp); return; }
+        // i.e. a closed list DESTROYS the entity we just constructed instead of
+        // filing it. Counting the call as `created` would then be a counter that
+        // also counts the non-event, so read the flag first and tally separately —
+        // a deleted entity that already joined Graphics::Scene during its ctor is
+        // precisely the dangling scene node Scene::Clean faults on.
+        void* list = *(void**)(gw + 0xe8);
+        const bool closed = list && *((char*)list + 0xE0) != '\0';
+        s_sc_Register(list, &regIbp,
                       *(int*)(*(int64_t*)(*(int64_t*)(self + 0x10) + 0x28) + 0x20));
+        // Measurement only — the tail below stays byte-faithful to retail, which
+        // also carries on through the deleted IBP (its finders return null there).
+        if (closed) ++g_doSpawn.listClosed; else ++g_doSpawn.created;
+    }
 
     // Optional random orientation
     if (flag != '\0') {

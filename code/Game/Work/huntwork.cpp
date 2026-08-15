@@ -18,6 +18,35 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+
+// ── Slot4 destination census (BANISHED_CROPFIELD_TRACE, the hunt trace flag). ──
+// Retail's sub_bbc0 builds TWO different chains from this function's last argument:
+//   param6=1 -> MoveTo(chosen cell, Slow, 0xe1f) + HuntAnimal chained behind it
+//   param6=0 -> PerformWork(Time(5.0s)) IN PLACE  + HuntAnimal chained behind it
+// So a hunter that stands still is not necessarily broken — it is what the FALLBACK
+// branch faithfully does. `[HuntScan] nearestTyped` froze at 10.95 across four samples
+// 900 ticks apart, which is the signature of that branch being taken every time. The
+// four cell checks fail for four unrelated reasons and a single "fallback" count cannot
+// tell them apart, so count each one separately (cf. the HuntAnimal::Enter census, whose
+// five exits needed five different fixes).
+static long long g_hw_runs = 0, g_hw_moveTo = 0, g_hw_inPlace = 0;
+static long long g_hw_oob = 0, g_hw_terrain = 0, g_hw_dist = 0,
+                 g_hw_occupied = 0, g_hw_noPath = 0;
+static void HW_Report() {
+    static int s_t = -1;
+    if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                   s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    static long long s_n = 0;
+    if (s_t && ((++s_n % 10) == 0)) {
+        std::fprintf(stderr, "[HuntWork] runs=%lld MOVETO=%lld inPlace=%lld | fails: "
+                     "outOfBounds=%lld terrain=%lld distance=%lld occupied=%lld "
+                     "noPath=%lld\n",
+                     g_hw_runs, g_hw_moveTo, g_hw_inPlace, g_hw_oob, g_hw_terrain,
+                     g_hw_dist, g_hw_occupied, g_hw_noPath);
+        std::fflush(stderr);
+    }
+}
 
 // ============================================================
 // Local function pointers (resolved once by HuntWork_ResolveFuncs)
@@ -456,9 +485,12 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // -------------------------------------------------------
     uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
     bool allChecksPass = false;
+    ++g_hw_runs;
 
     // Only check if cell index is in bounds (negative X can produce bad index)
-    if (testCellX >= 0 && testCellX < mapSize) {
+    if (testCellX < 0 || testCellX >= mapSize) {
+        ++g_hw_oob;
+    } else {
         // Check 1: terrain type — skip resource terrain (0x1e0 mask)
         uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
         uint32_t terrainBit = 1u << (terrainByte & 0x1f);
@@ -472,10 +504,43 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
         uintptr_t cellEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
         bool emptyCell = (cellEntity == 0);
 
+        // Attribute the failure to the FIRST failing check only, so the columns sum to
+        // the fallback count instead of double-counting a cell that fails several.
+        if (!terrainOk)      ++g_hw_terrain;
+        else if (!distOk)    ++g_hw_dist;
+        else if (!emptyCell) ++g_hw_occupied;
+
         // Check 4: passability from random cell to citizen
         if (terrainOk && distOk && emptyCell) {
             bool canPath = (char)s_fn_Map_CanPathTo(mapGrid, 0xe1f, testCell, citizenGridCell) != 0;
             allChecksPass = canPath;
+            if (!canPath) ++g_hw_noPath;
+        }
+    }
+    if (allChecksPass) ++g_hw_moveTo; else ++g_hw_inPlace;
+    HW_Report();
+
+    // Where the hunter IS at each Execute, versus where the previous Execute sent it.
+    // Execute runs only ~10 times per run, so the hunter spends most of its life between
+    // these two points — and "did it arrive?" is the difference between a MoveTo that
+    // works and one that stalls. Printing every call (not sampled) because there are so
+    // few of them.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static int s_prevX = -1, s_prevY = -1;
+        if (s_t) {
+            const int ddx = (s_prevX >= 0) ? citizenCellX - s_prevX : 0;
+            const int ddy = (s_prevY >= 0) ? citizenCellY - s_prevY : 0;
+            std::fprintf(stderr, "[HuntWork] run=%lld hunterCell=(%d,%d) prevDest=(%d,%d) "
+                         "arrivalMiss=%d | newDest=(%d,%d) %s workCell=(%d,%d) r=%d\n",
+                         g_hw_runs, citizenCellX, citizenCellY, s_prevX, s_prevY,
+                         (s_prevX >= 0) ? (int)(ddx*ddx + ddy*ddy) : -1,
+                         testCellX, testCellY, allChecksPass ? "MOVETO" : "in-place",
+                         cellCol, cellRow, areaRadius);
+            std::fflush(stderr);
+            if (allChecksPass) { s_prevX = testCellX; s_prevY = testCellY; }
         }
     }
 

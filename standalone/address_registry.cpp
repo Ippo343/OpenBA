@@ -258,6 +258,7 @@ extern "C" {
     void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount);
     void Reimpl_Array_Serialize_Stride20(void* serializer, uint32_t count, void* arrayBase);
     void Reimpl_Array_Serialize_External_GraphicsMesh(void* serializer, int count, void* arrayBase);
     void Reimpl_Array_Serialize_External_Particle(void* serializer, int count, void* arrayBase);
@@ -800,6 +801,11 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x14001baf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride20));
     RegisterExeAddr(0x140001bb0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride08));
     RegisterExeAddr(0x14001bf10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride14));
+    // SpawnDescription's 16-byte spawn-entry array. Ungated: without it every
+    // SpawnDescription deserializes to count=0 (Serialize's count is a local that
+    // only the resize call commits), which empties the tree spawn tables that are
+    // the sole source of the Gatherer's Hut's four accepted resources.
+    RegisterExeAddr(0x14000c520, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride10_Spawn));
     RegisterExeAddr(0x14001bbf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_Stride20));
     RegisterExeAddr(0x14001bcc0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_GraphicsMesh));
     RegisterExeAddr(0x14001bff0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_Particle));
