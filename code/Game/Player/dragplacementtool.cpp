@@ -715,6 +715,21 @@ static uint32_t DragPlacementTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("DragPlacementTool");
     return c;
 }
+// Retail vtable 0x140161b90 slots 9/11/12 are literally the same three functions
+// BridgeTool/RoadTool/FencedTool use (read straight out of .rdata):
+//   +0x48 slot9  = 0x1400fc640  DragTool cancel-drag / allow-teardown
+//   +0x58 slot11 = 0x140004950  GetToolSettingTypeId — `*ret = 0; return ret;`
+//   +0x60 slot12 = 0x1400fc9d0  cursor id — `return 5`
+// Slot 11 must be real before this tool can be reached at all: SetEditMode
+// DEREFERENCES its return (entityui.cpp), so the Tool_Ret0 stub (nullptr) was a
+// guaranteed null-deref on activation — the same trap BridgeTool hit.
+extern "C" int DragTool_CancelDrag_Impl(void* self);
+static uint32_t* DragPlacementTool_GetSettingType(void*, uint32_t* ret) {
+    *ret = 0;
+    return ret;
+}
+static int DragPlacementTool_Slot12(void*) { return 5; }
+
 static void* g_DragPlacementTool_Vtable[15] = {
     (void*)&DragPlacementTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,                  // +0x08
@@ -725,10 +740,10 @@ static void* g_DragPlacementTool_Vtable[15] = {
     (void*)&DragTool_OnKey,              // +0x30 OnKey (base)
     (void*)&Tool_Ret0,                   // +0x38
     (void*)&DragPlacementTool_Draw_Impl, // +0x40 Draw
-    (void*)&Tool_Ret0,                   // +0x48
-    (void*)&Tool_Ret0,                   // +0x50
-    (void*)&Tool_Ret0,                   // +0x58
-    (void*)&Tool_Ret0,                   // +0x60
+    (void*)&DragTool_CancelDrag_Impl,    // +0x48 Slot9 cancel drag (retail 0x1400fc640)
+    (void*)&Tool_Ret0,                   // +0x50 retail 0x1400268a0 = shared `return 0`
+    (void*)&DragPlacementTool_GetSettingType, // +0x58 Slot11 (retail 0x140004950, *ret=0)
+    (void*)&DragPlacementTool_Slot12,    // +0x60 cursor id (retail 0x1400fc9d0 = 5)
     (void*)&DragPlacementTool_CalcPath,  // +0x68 CalcPath
     (void*)&DragPlacementTool_CalcCost,  // +0x70 CalcCost
 };

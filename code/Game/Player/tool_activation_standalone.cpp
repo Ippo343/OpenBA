@@ -215,6 +215,24 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     fprintf(stderr, "[Tools]   fenced node: CreateFenced=%u -> FencedTool=%u\n",
             tid_CreateFenced, tid_FencedTool);
 
+    // DragPlacementTool (orchard / crop-field drag-rectangle tool). Retail's
+    // EntityUI::Startup keys it on CreateDragDescription (0x1401c7430). Orchard.rsc and
+    // CropField.rsc declare `createdrag`, NOT the `createfenced` that Pasture.rsc uses —
+    // so with this node missing, Toolbar_ShowGroup_Impl's component-scan matched nothing,
+    // fell through to foundTypeId=0, and the lower-bound search resolved key 0 to the
+    // EditTool node. An orchard click therefore installed the world-SELECTION tool: no
+    // drag state, so no slot-8 red/green tile overlay and no CreateBar size/cost tooltip,
+    // while pasture (FencedTool) had both. DragPlacementTool extends DragTool, so
+    // DragTool_OnKey drives the drag, slot 14 (CalcCost) previews and slot 13 (CalcPath)
+    // commits. Slots 9/11/12 had to be un-stubbed first — SetEditMode derefs slot 11's
+    // return, exactly as it did for BridgeTool.
+    uint32_t tid_CreateDrag      = ::Object::ResolveTypeIdByNameLazy("CreateDragDescription");
+    uint32_t tid_DragPlacement   = ::Object::ResolveTypeIdByNameLazy("DragPlacementTool");
+    if (tid_CreateDrag && tid_DragPlacement)
+        Tree_Insert(tree, tid_CreateDrag, tid_DragPlacement);
+    fprintf(stderr, "[Tools]   drag node: CreateDrag=%u -> DragPlacementTool=%u\n",
+            tid_CreateDrag, tid_DragPlacement);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
             "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
             "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} "
