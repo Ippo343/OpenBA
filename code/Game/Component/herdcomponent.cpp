@@ -981,12 +981,26 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
     // (food sampling, tile validity, migration retarget), which retail derefs
     // unconditionally. A herd whose Populate never ran has +0x28 == 0, so bail
     // rather than fault; the herd simply stays idle.
-    if (self->data28 == 0) return;
+    // Update-entry census. The [Herd] census line below only prints once the
+    // respawn timer fires, so its absence cannot distinguish "Update never ran"
+    // from "ran but the timer never expired" from "bailed on a null +0x28".
+    static long long g_hu_calls = 0, g_hu_noPop = 0, g_hu_noCfg = 0, g_hu_fired = 0;
+    ++g_hu_calls;
+    if (self->data28 == 0) {
+        ++g_hu_noPop;
+        if ((g_hu_noPop % 2000) == 1) {
+            fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld\n",
+                    g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired);
+            fflush(stderr);
+        }
+        return;
+    }
 
     // Get config object via IsDerivedFrom check
     void* unk18 = self->_unk18;
     bool isDerived = fn_IsDerivedFrom(unk18, *s_pHerdTypeId);
     uint8_t* config = isDerived ? reinterpret_cast<uint8_t*>(unk18) : nullptr;
+    if (!config) ++g_hu_noCfg;
 
     // === Timer tick: accumulate time at +0x58 ===
     int64_t* spawnTimer = reinterpret_cast<int64_t*>(&self->data58);
@@ -997,7 +1011,21 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
     int64_t intervalTicks;
     fn_Time_Ctor_Float(&intervalTicks, intervalMinutes * *s_f300);
 
+    if ((g_hu_calls % 25) == 1) {
+        fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
+                "herd=%p members=%d timer=%lld interval=%lld cfgMin=%.3f\n",
+                g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired, (void*)self,
+                *reinterpret_cast<int32_t*>(&self->data40),
+                (long long)*spawnTimer, (long long)intervalTicks, intervalMinutes);
+        fflush(stderr);
+    }
+
     if (intervalTicks < *spawnTimer) {
+        ++g_hu_fired;
+        fprintf(stderr, "[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
+                g_hu_fired, (void*)self,
+                *reinterpret_cast<int32_t*>(&self->data40), g_hu_calls);
+        fflush(stderr);
         // Timer fired -- subtract interval
         *spawnTimer -= intervalTicks;
 

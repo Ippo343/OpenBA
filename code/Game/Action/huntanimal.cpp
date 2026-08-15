@@ -327,7 +327,8 @@ int HuntAnimal_Execute_Impl(HuntAnimal* self, void* actionStack, void* time) {
 // five different fixes, and "Enter ran" says nothing about which one fired -- exactly the
 // shape that hid the crop field's blockers. Count each.
 static long long g_hae_started = 0, g_hae_notReady = 0, g_hae_noTarget = 0,
-                 g_hae_inUse = 0, g_hae_noPath = 0, g_hae_pathInvalid = 0, g_hae_ok = 0;
+                 g_hae_inUse = 0, g_hae_noPath = 0, g_hae_pathInvalid = 0, g_hae_ok = 0,
+                 g_hae_found = 0;
 static void HAE_Report() {
     static int s_t = -1;
     if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
@@ -335,8 +336,9 @@ static void HAE_Report() {
     static long long s_n = 0;
     if (s_t && ((++s_n % 20) == 0)) {
         std::fprintf(stderr, "[HuntEnter] alreadyStarted=%lld notReady=%lld noTarget=%lld "
-                     "targetInUse=%lld noPath=%lld pathInvalid=%lld REACHED_KILL=%lld\n",
-                     g_hae_started, g_hae_notReady, g_hae_noTarget, g_hae_inUse,
+                     "TARGETFOUND=%lld targetInUse=%lld noPath=%lld pathInvalid=%lld "
+                     "REACHED_KILL=%lld\n",
+                     g_hae_started, g_hae_notReady, g_hae_noTarget, g_hae_found, g_hae_inUse,
                      g_hae_noPath, g_hae_pathInvalid, g_hae_ok);
         std::fflush(stderr);
     }
@@ -353,17 +355,66 @@ static void HAE_BruteScan(void* gridPtr, const float* pos, int wantType, float r
                    s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
     if (!s_t || !gridPtr) return;
     static long long s_n = 0;
-    if ((s_n++ % 900) != 0) return;
+    const long long callNo = s_n++;
 
     const uint8_t* m = (const uint8_t*)gridPtr;
     const uint8_t* slots = *(const uint8_t* const*)(m + 0x10);
     int slotCount = *(const int*)(m + 0x18);
     if (!slots) return;
+    if (slotCount > 4096) slotCount = 4096;
 
-    int live = 0, typed = 0, inRadiusAny = 0, inRadiusTyped = 0;
+    // ---- TEMPORARY INSTRUMENTATION (2026-08-15 hunt-radius investigation) ----
+    // The old version sampled only every 900th tick, so it described the distance
+    // distribution at 132 instants out of 114560 -- it could not answer the question
+    // that matters: does the nearest deer EVER dip under 8.0 on ANY tick? The distance
+    // pass below now runs on every tick; only the expensive part (the per-entity
+    // component-type probe) is cached per slot and refreshed every 512 calls, so the
+    // steady-state cost is ~132 float distances per tick. Printing is still every 900,
+    // but it reports the minimum and a histogram accumulated over ALL ticks between
+    // prints, plus the hunter's world position so a sample lines up with [HuntWork].
+    //
+    // BLIND SPOT — read the "<8" bin with this in mind: this function is only reached
+    // from the noTarget arm, i.e. on ticks where the query found NOTHING inside 8.0. So
+    // the "<8" bin is 0 and minEver floors at exactly 8.00 BY CONSTRUCTION, not because
+    // anything repels the deer. A tick with a deer inside 8.0 takes the other branch and
+    // is never sampled here. Use [HuntEnter] TARGETFOUND for that half of the picture.
+    static uint8_t s_typedCache[4096];
+    static int s_cachedSlots = 0;
+    if ((callNo % 512) == 0) {
+        s_cachedSlots = slotCount;
+        for (int i = 0; i < slotCount; ++i) {
+            s_typedCache[i] = 0;
+            const uint8_t* slot = slots + (int64_t)i * 0x18;
+            void* ent = *(void* const*)(slot + 0x00);
+            if (!ent || wantType == 0) continue;
+            // same component-type test the query applies: owner at +0x10, component array
+            // at +0x30 with count at +0x38, identity via vtable slot +0x10 (GetTypeId).
+            void* owner = *(void* const*)((const uint8_t*)ent + 0x10);
+            if (!owner) continue;
+            int cnt = *(const int*)((const uint8_t*)owner + 0x38);
+            void** comps = *(void** const*)((const uint8_t*)owner + 0x30);
+            for (int c = 0; comps && c < cnt && c < 64; ++c) {
+                void* comp = comps[c];
+                if (!comp) continue;
+                typedef int (*getId_t)(void*);
+                getId_t g = *reinterpret_cast<getId_t*>(*(uintptr_t*)comp + 0x10);
+                if (g && g(comp) == wantType) { s_typedCache[i] = 1; break; }
+            }
+        }
+    }
+    if (slotCount > s_cachedSlots) slotCount = s_cachedSlots;
+
+    static float s_minEver = 1e30f;
+    static float s_minWindow = 1e30f;
+    static float s_minEverPos[2] = {0.0f, 0.0f};
+    static long long s_bin[6] = {0, 0, 0, 0, 0, 0};
+    static long long s_ticks = 0;
+
+    int live = 0, typed = 0, inRadiusAny = 0;
+    int n8 = 0, n12 = 0, n16 = 0, n24 = 0, n34 = 0;
     float bestAny = 1e30f, bestTyped = 1e30f;
 
-    for (int i = 0; i < slotCount && i < 4096; ++i) {
+    for (int i = 0; i < slotCount; ++i) {
         const uint8_t* slot = slots + (int64_t)i * 0x18;
         if (*(const int*)(slot + 0x10) < 0) continue;          // not placed in a cell
         void* ent = *(void* const*)(slot + 0x00);
@@ -378,36 +429,44 @@ static void HAE_BruteScan(void* gridPtr, const float* pos, int wantType, float r
         if (d < bestAny) bestAny = d;
         if (d < radius) ++inRadiusAny;
 
-        // same component-type test the query applies: owner at +0x10, component array at
-        // +0x30 with count at +0x38, identity via vtable slot +0x10 (GetTypeId).
-        bool match = false;
-        if (wantType != 0) {
-            void* owner = *(void* const*)((const uint8_t*)ent + 0x10);
-            if (owner) {
-                int cnt = *(const int*)((const uint8_t*)owner + 0x38);
-                void** comps = *(void** const*)((const uint8_t*)owner + 0x30);
-                for (int c = 0; comps && c < cnt && c < 64; ++c) {
-                    void* comp = comps[c];
-                    if (!comp) continue;
-                    typedef int (*getId_t)(void*);
-                    getId_t g = *reinterpret_cast<getId_t*>(*(uintptr_t*)comp + 0x10);
-                    if (g && g(comp) == wantType) { match = true; break; }
-                }
-            }
-        }
-        if (match) {
-            ++typed;
-            if (d < bestTyped) bestTyped = d;
-            if (d < radius) ++inRadiusTyped;
-        }
+        if (!s_typedCache[i]) continue;
+        ++typed;
+        if (d < bestTyped) bestTyped = d;
+        if (d <  8.0f) ++n8;
+        if (d < 12.0f) ++n12;
+        if (d < 16.0f) ++n16;
+        if (d < 24.0f) ++n24;
+        if (d < 34.0f) ++n34;
     }
 
+    ++s_ticks;
+    if (bestTyped < s_minWindow) s_minWindow = bestTyped;
+    if (bestTyped < s_minEver) {
+        s_minEver = bestTyped; s_minEverPos[0] = pos[0]; s_minEverPos[1] = pos[1];
+    }
+    if      (bestTyped <  8.0f) ++s_bin[0];
+    else if (bestTyped < 12.0f) ++s_bin[1];
+    else if (bestTyped < 16.0f) ++s_bin[2];
+    else if (bestTyped < 24.0f) ++s_bin[3];
+    else if (bestTyped < 34.0f) ++s_bin[4];
+    else                        ++s_bin[5];
+
+    if ((callNo % 900) != 0) return;
+
     std::fprintf(stderr,
-        "[HuntScan] slots=%d live=%d wantType=%d typedTotal=%d | r=%.1f inR_any=%d "
-        "inR_typed=%d | nearestAny=%.2f nearestTyped=%.2f\n",
-        slotCount, live, wantType, typed, radius, inRadiusAny, inRadiusTyped,
-        bestAny > 1e29f ? -1.0f : bestAny, bestTyped > 1e29f ? -1.0f : bestTyped);
+        "[HuntScan] slots=%d live=%d typedTotal=%d hunter=(%.1f,%.1f) | now near=%.2f "
+        "n8=%d n12=%d n16=%d n24=%d n34=%d inR_any=%d nearAny=%.2f\n",
+        slotCount, live, typed, pos[0], pos[1],
+        bestTyped > 1e29f ? -1.0f : bestTyped, n8, n12, n16, n24, n34,
+        inRadiusAny, bestAny > 1e29f ? -1.0f : bestAny);
+    std::fprintf(stderr,
+        "[HuntScanAgg] ticks=%lld minWindow=%.2f minEver=%.2f at=(%.1f,%.1f) | tick bins "
+        "<8:%lld 8-12:%lld 12-16:%lld 16-24:%lld 24-34:%lld >=34:%lld\n",
+        s_ticks, s_minWindow > 1e29f ? -1.0f : s_minWindow,
+        s_minEver > 1e29f ? -1.0f : s_minEver, s_minEverPos[0], s_minEverPos[1],
+        s_bin[0], s_bin[1], s_bin[2], s_bin[3], s_bin[4], s_bin[5]);
     std::fflush(stderr);
+    s_minWindow = 1e30f;
 }
 
 void HuntAnimal_Enter_Impl(HuntAnimal* self) {
@@ -468,6 +527,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
         return;
     }
 
+    ++g_hae_found;   // FIX 2026-08-15: the query DOES succeed; nothing used to record it
     // Get the found entity from query result
     fn_InternalBasePtr_CheckPtr(&queryResult);
     void* foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
@@ -483,6 +543,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     if ((modelFlags >> 20) & 1) {
         // Entity already in use, bail
+        ++g_hae_inUse; HAE_Report();   // FIX 2026-08-15: exit was never counted
         return;
     }
 
@@ -543,6 +604,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     uint32_t pathCost = (uint32_t)s_fn_FindPathCost(mapPtr, fromCell, toCell, 0xe1f);
     if ((int)pathCost < 0) {
         // No valid path, bail
+        ++g_hae_noPath; HAE_Report();   // FIX 2026-08-15: exit was never counted
         return;
     }
 
@@ -550,6 +612,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     uint64_t pathValid = s_fn_CheckPathValid(mapPtr, 0xe1f, (uint64_t)pathCost, toCell);
     if ((char)pathValid == 0) {
         // Path not valid, bail
+        ++g_hae_pathInvalid; HAE_Report();   // FIX 2026-08-15: exit was never counted
         return;
     }
 
@@ -613,6 +676,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     *(uint64_t*)((uint8_t*)animalEntity + 0x50) = 0;
 
     *(uint8_t*)(s + 0x38) = 1;
+    ++g_hae_ok; HAE_Report();   // FIX 2026-08-15: the success arm was never counted
 }
 
 // ============================================================

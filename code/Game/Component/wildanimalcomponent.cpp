@@ -25,6 +25,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -179,8 +180,20 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 //       DynArray8_EraseByValue(self->data28 + 0x38, &ibp);
 //   }
 
+// Herd de-registration census. AdjustSize only spawns while members(+0x40) <
+// target, and target is derived from that same count -- so if this slot never
+// runs, dead deer stay counted, the target stays saturated, and the population
+// drains with no regrowth. "OnRemove is installed" is not evidence it is
+// dispatched; count both arms.
+static long long g_war_calls = 0, g_war_noHerd = 0;
 void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
     EnsureHelpers();
+
+    if (self->data28 == 0) ++g_war_noHerd;
+    ++g_war_calls;
+    const bool trace = (g_war_calls % 10) == 1 || getenv("BANISHED_HERD_TRACE");
+    const uintptr_t herdDbg = static_cast<uintptr_t>(self->data28);
+    const int before = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
 
     if (self->data28 != 0) {
         // Create InternalBasePtr from self (the component)
@@ -200,6 +213,14 @@ void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
             s_fn_EraseFromComponentList(
                 reinterpret_cast<void*>(entity + 0x38), &ibp);
         }
+    }
+
+    if (trace) {
+        const int after = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
+        fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
+                g_war_calls, g_war_noHerd, reinterpret_cast<void*>(herdDbg),
+                before, after, (before == after) ? "  ERASE-NO-OP" : "");
+        fflush(stderr);
     }
 }
 

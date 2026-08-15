@@ -524,9 +524,14 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                           At<int>(static_cast<uintptr_t>(corpseOwner), 0xd8) + 1,
                           &entity);
         }
-        if (HerdTraceEnv() || s_traceDeath++ < kTraceCap) {
-            fprintf(stderr, "[AnimalUpd] death: self=%p entity=%p age=%.2f deathAge=%.2f\n",
-                    static_cast<void*>(self), reinterpret_cast<void*>(entity), age, deathAge);
+        // Running total, not a capped sample: at kTraceCap=24 this read as
+        // "24 deaths" against a 47-animal drain and hid the fact that old age
+        // accounts for the whole thing. Print a total every 10.
+        ++s_traceDeath;
+        if (HerdTraceEnv() || s_traceDeath <= kTraceCap || (s_traceDeath % 10) == 0) {
+            fprintf(stderr, "[AnimalUpd] death #%d: self=%p entity=%p age=%.2f deathAge=%.2f\n",
+                    s_traceDeath, static_cast<void*>(self),
+                    reinterpret_cast<void*>(entity), age, deathAge);
         }
         return;
     }
