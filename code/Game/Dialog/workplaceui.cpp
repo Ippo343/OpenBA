@@ -198,6 +198,17 @@ void WorkplaceUI_Serialize(WorkPlaceUI* self) {
     fn_FindComponent_Work(entityInternal, &workComp);
 
     // Check the WorkComponent's WorkDescription at +0x18 (DAT_1401c80a8)
+    //
+    // DECLARED DEVIATION (2026-08-15, when idx4 was first wired into the vtable).
+    // Retail derefs workComp unguarded here because a WorkPlaceUI is only ever built
+    // over an entity that carries a WorkComponent. Ours is not: the workPlace panel is
+    // part of a SHARED dialog template that the framework instantiates for every
+    // selectable building, so this pass also runs over houses, barns and piles that
+    // legitimately have no WorkComponent — the case CLAUDE.md names as the one where a
+    // guard belongs. The buttons found above keep their .rsc default state, which is
+    // exactly what the un-wired idx4 left them at, so skipping here is a strict no-op
+    // for those buildings rather than a behaviour change.
+    if (!workComp) return;
     void* subComp = *(void**)((uintptr_t)workComp + 0x18);
     bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkDescription);
 
@@ -598,13 +609,14 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
 //
 // Vtable offsets (verified from the exe WorkPlaceUI vtable @ 0x14015e030):
 //   +0x00 (idx0) ScalarDtor   +0x10 (idx2) GetTypeId
-//   +0x20 (idx4) Serialize (0x140087940) — element discovery (skipped in SA)
+//   +0x20 (idx4) Serialize (0x140087940) — element discovery (WIRED 2026-08-15)
 //   +0x38 (idx7) Startup   (0x140087080) — full refresh (visibility subset in SA)
 //   +0x40 (idx8)           — base DialogController::OnUpdate (per-frame). The
 //                framework dispatches ONLY +0x40 each frame, so the visibility
 //                refresh is driven here so it stays live as buildings complete.
-//   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch (no-op in SA; the
-//                worker/job spinners aren't wired without Serialize's element IDs).
+//   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch. It reads the element ids
+//                idx4 stamps (0x1450..0x1454), so it only became reachable once idx4
+//                was wired; before that the note here read "no-op in SA".
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
@@ -630,8 +642,9 @@ uint32_t GetTypeId(void*) {
 void* Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = g_vt;
-    // No owned heap fields (Serialize is skipped in SA, so +0x30..+0x58 stay the
-    // zero-filled InternalBasePtr values the factory set). Just free self.
+    // No owned heap fields: +0x30..+0x58 hold InternalBasePtrs to elements the DIALOG
+    // owns (idx4 discovers them, it does not allocate them), so there is nothing to
+    // release here. Just free self.
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }
@@ -1040,6 +1053,15 @@ void W_OnUpdate(void* self, void* /*time*/) {
         WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
 }
 
+// idx4 (+0x20): Serialize — retail 0x140087940, the element-discovery pass. Runs once
+// when the dialog framework binds this controller to its element, finding the six named
+// children and stamping the button element ids that idx9 (OnRemove) dispatches on.
+void W_Serialize(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
+    WorkplaceUI_Serialize(reinterpret_cast<WorkPlaceUI*>(self));
+}
+
 // idx7 (+0x38): Startup — same visibility decision + count refresh on setup.
 void W_Startup(void* self) {
     EnsureGlobals();
@@ -1176,6 +1198,14 @@ struct Init {
         for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
         g_vt[0] = reinterpret_cast<void*>(&Dtor);
         g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        // idx4 Serialize (retail 0x140087940) — the element-discovery pass. Ported at
+        // the top of this file since the original wave but never written into g_vt, so
+        // the coverage probe measured it as still holding StubNop: "ported but unwired",
+        // the trap this codebase keeps re-hitting. Wiring it is what populates
+        // self->data30..data58 and stamps element ids 0x1450..0x1454 on the four
+        // spinner buttons plus workPlaceButton — the ids idx9 (OnRemove) dispatches on.
+        // Without it the worker/job spinners had no ids to arrive as at all.
+        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
         g_vt[7] = reinterpret_cast<void*>(&W_Startup);
         g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
         g_vt[9] = reinterpret_cast<void*>(&W_OnRemove);

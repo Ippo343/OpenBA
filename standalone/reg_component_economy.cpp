@@ -44,6 +44,10 @@ extern "C" uint8_t AttendanceComponent_CommandMask(void* self, int cmd);   // 0x
 extern "C" void    AttendanceComponent_Command(void* self, int cmd);       // 0x140043e80
 extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd);     // 0x14011f920
 extern "C" void    ForesterComponent_Command(void* self, int cmd);         // 0x14011f890
+extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out); // 0x14011f780
+extern "C" void    AttendanceComponent_SerializeSlot(void* self, void* stream);  // 0x140044410
+extern "C" void    AttendanceComponent_Unregister(void* self);             // 0x1400443d0
+extern "C" char    AttendanceComponent_AllFull(void* self);                // 0x140043db0
 
 extern void     InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);
 // InteractComponent_Draw takes the typed pointer; declared with a matching opaque sig.
@@ -119,12 +123,26 @@ void RegisterComponentBatch_economy() {
     // WorkPlaceComponent (the checkbox IS WPC+0x50 accepting).
     RegisterExeAddr(0x140043f10, reinterpret_cast<uintptr_t>(&AttendanceComponent_CommandMask));
     RegisterExeAddr(0x140043e80, reinterpret_cast<uintptr_t>(&AttendanceComponent_Command));
+    // Controller-promotion wave 2026-08-15. Slot 3 (Shutdown/Serialize, Ghidra's
+    // "AttendanceComponent_Controller_Slot13") and slot 7 (leave the town attendance
+    // registry, Ghidra's "AttendanceComponent_OnCreate" — the usual OnCreate/OnRemove
+    // mislabel). Slot 7 is also the first thing state 3's enter calls.
+    RegisterExeAddr(0x140044410, reinterpret_cast<uintptr_t>(&AttendanceComponent_SerializeSlot));
+    RegisterExeAddr(0x1400443d0, reinterpret_cast<uintptr_t>(&AttendanceComponent_Unregister));
+    // The private AttendanceComponent state table's three handlers
+    // (attendancecomponent_states.cpp). helper_3db0 is the per-description "every
+    // building of my kind is full" test that drives the closed/full mesh flag.
+    RegisterExeAddr(0x140043db0, reinterpret_cast<uintptr_t>(&AttendanceComponent_AllFull));
 
     // forestercomponent.cpp — vtable slots 13/14. The forester lodge is the one class in
     // this group that genuinely OVERRIDES the ResourceProduce base pair, because it has
     // two independent toggles (+0x50 plant / +0x51 cut) rather than one.
     RegisterExeAddr(0x14011f920, reinterpret_cast<uintptr_t>(&ForesterComponent_CommandMask));
     RegisterExeAddr(0x14011f890, reinterpret_cast<uintptr_t>(&ForesterComponent_Command));
+    // Controller-promotion wave 2026-08-15 — slot 18, CreateWork. Ghidra calls it
+    // "ForesterWork_CopyCtor"; it is ForesterComponent's slot 18, and its prologue
+    // re-arms the two work flags when the player has cleared both.
+    RegisterExeAddr(0x14011f780, reinterpret_cast<uintptr_t>(&ForesterComponent_CreateWork));
 
     // interactcomponent.cpp
     RegisterExeAddr(0x140004740, reinterpret_cast<uintptr_t>(&InteractComponent_FindWorkplaceComponent));

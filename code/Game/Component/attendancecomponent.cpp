@@ -97,9 +97,37 @@ static fn_AC_MeshSetFlag_t s_fn_AC_MeshSetFlag = nullptr;
 typedef char (*fn_AC_TryFindPartner_t)(void* citizen, int64_t* exclIBP);
 static fn_AC_TryFindPartner_t s_fn_AC_TryFindPartner = nullptr;
 
+// Slot-3 (Shutdown/Serialize) helpers — see AttendanceComponent_SerializeSlot below.
+// Component_Serialize 0x1401189b0; the three IO::Serializer dispatch slots; the queue
+// array grow 0x1400032e0; and DWORD_1401c7158, the CitizenComponent type id the
+// per-entry filter tests against.
+typedef void  (*fn_Component_Serialize_t)(void* self, void* stream);
+typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+typedef void  (*fn_Serializer_Dtor_t)(void* self);
+typedef void  (*fn_Serializer_SerializeInt_t)(void* self, void* field, const char* name);
+typedef void  (*fn_AC_ArrayGrow_t)(void* array, int count);
+static fn_Component_Serialize_t     s_fn_Component_Serialize     = nullptr;
+static fn_Serializer_Ctor_t         s_fn_Serializer_Ctor         = nullptr;
+static fn_Serializer_Dtor_t         s_fn_Serializer_Dtor         = nullptr;
+static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
+static fn_AC_ArrayGrow_t            s_fn_AC_ArrayGrow            = nullptr;
+static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
+
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
+    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1401189b0));
+    s_fn_AC_ArrayGrow = reinterpret_cast<fn_AC_ArrayGrow_t>(
+        ResolveAddr(Module::Exe, 0x1400032e0));
+    s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7158));
+    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ad8))
+        s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(s);
+    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ad0))
+        s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(s);
+    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ac8))
+        s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(s);
     s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
     s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
     s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
@@ -346,45 +374,155 @@ extern "C" void AttendanceComponent_Command(void* selfP, int /*cmd*/) {
         AttendanceComponent_ProcessQueue(selfP);
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid AttendanceComponent: size 0x58 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x8a (from AttendanceComponent_Ctor) + zeroed body.
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// Hand-expanded from COMPONENT_INERT_FACTORY(AttendanceComponent, 0x58, 0x8a) so slots
-// 13/14 above are reachable. While both held the inert stub the school's work checkbox
-// was greyed (slot 13 -> 0) and its click was a no-op.
+// ============================================================
+// Vtable slot 7 — retail 0x1400443d0 — leave the town attendance registry
+// ============================================================
+// Ghidra calls this "AttendanceComponent_OnCreate". It is slot 7, which on this
+// component family is OnRemove, not OnAdded — the usual off-by-one mislabel (see
+// reference_ghidra_oncreate_onremove_mislabel). The body is a single erase-by-value
+// from the town attendance list at gameWorld+0xf0 +0x60, the list that state 2's enter
+// appends to and that AttendanceComponent_AllFull walks. Without it a demolished
+// school stays in the list forever and every surviving school reads as "full".
 //
-// Opt-in until measured (BANISHED_LIVE_ATTENDANCE_CMD).
-static uint32_t AttendanceComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AttendanceComponent");
+// It is also called directly by state 3's enter (through the vtable), which is the
+// "close for the night" path — so this is not only teardown.
+extern "C" void AttendanceComponent_Unregister(void* selfP) {
+    EnsureAcHelpers();
+    if (!s_fn_AC_002cc0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    const uintptr_t town = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!town) return;
+    int64_t selfIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIbp, selfP);
+    s_fn_AC_002cc0(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);
+}
+
+// ============================================================
+// Vtable slot 3 — retail 0x140044410 — Shutdown / Serialize
+// ============================================================
+// Ghidra labels it "AttendanceComponent_Controller_Slot13"; the vtable BYTES at
+// 0x140158ce0 put it at index 3, which is Shutdown across this whole family.
+//
+//   Component_Serialize(self, stream)                       0x1401189b0
+//   { Serializer(stream, 0) }                               // empty block, subclass compat
+//   Serializer s(stream, 0)
+//   int n = self[+0x30];  s.Serialize(&n)                   // the waiting-queue count
+//   if (s[+8] == 0) GrowArray(self+0x28, n)                 // READING: size the array first
+//   for (i in 0..n) { InternalBasePtr::Serialize(&q[i], s)
+//                     if (q[i] && !IsDerivedFrom(q[i], CitizenComponent)) q[i] = 0 }
+//
+// The IsDerivedFrom filter is a load-bearing part of load, not a sanity check: a saved
+// queue entry whose citizen no longer exists deserializes to some other object, and
+// retail nulls the slot rather than letting ProcessQueue dispatch on it.
+extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
+    AttendanceComponent_InitFuncs();
+    EnsureAcHelpers();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+
+    if (s_fn_Component_Serialize) s_fn_Component_Serialize(selfP, stream);
+
+    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
+
+    // Empty block — retail opens and closes a Serializer with nothing in it.
+    uint8_t empty[24];
+    s_fn_Serializer_Ctor(empty, stream, 0);
+    s_fn_Serializer_Dtor(empty);
+
+    uint8_t ser[24];
+    s_fn_Serializer_Ctor(ser, stream, 0);
+
+    int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
+    if (s_fn_Serializer_SerializeInt) s_fn_Serializer_SerializeInt(ser, &count, nullptr);
+
+    // Serializer+0x08 == 0 means READING, so the queue array has to be grown to the
+    // deserialized count before the per-entry loop writes into it.
+    if (*reinterpret_cast<int32_t*>(ser + 8) == 0 && s_fn_AC_ArrayGrow)
+        s_fn_AC_ArrayGrow(reinterpret_cast<void*>(self + 0x28), count);
+
+    int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
+    for (int32_t i = 0; i < count && q; ++i, ++q) {
+        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(q, ser);
+        if (*q == 0) continue;
+        if (s_pTId_CitizenComponent && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), *s_pTId_CitizenComponent))
+            *q = 0;
+    }
+
+    s_fn_Serializer_Dtor(ser);
+}
+
+// ============================================================
+// Vtable slots 19/20/21 — the description accessors
+// ============================================================
+// All three are one-instruction bodies in retail:
+//   19 (0x1400026e0) MOV RAX,[0x1401c3f80]; RET   — the AttendanceDescription TypeInfo
+//   20 (0x1400026d0) MOV EAX,[0x1401c3f78]; RET   — the AttendanceDescription type id
+//   21 (0x140044700) MOV EAX,1;             RET
+// 19/20 read the .rdata pair that ComponentEntity uses to match a component to the
+// Description class it is built from. In standalone that .rdata is not mapped, so the
+// faithful answers come from the live type registry / the registered type-id storage
+// (0x1401c3f78 is filled by reg_economy_typeids.cpp) rather than from the globals.
+//
+// ⚠ Slot 21's retail body is at 0x140044700, NOT 0x140047000 — the coverage harness
+// carried a transposed digit and pointed at CemeteryDescription_sub_6fc0.
+#include "Object/factory_registration.h"
+
+static void* AttendanceComponent_GetDescTypeInfo(void*) {
+    static void* cached = nullptr;
+    if (!cached) cached = ::Object::GetTypeInfoByName("AttendanceDescription");
     return cached;
 }
-static void* AttendanceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static uint32_t AttendanceComponent_GetDescTypeId(void*) {
+    static uint32_t* storage = nullptr;
+    if (!storage) storage = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
+    return storage ? *storage : 0;
+}
+static int AttendanceComponent_Slot21Const(void*) { return 1; }
 
-// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init writes.
-static void AttendanceComponent_FinishVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ATTENDANCE_CMD")) return;
-    AttendanceComponent_InertVtable[13] =
-        reinterpret_cast<void*>(&AttendanceComponent_CommandMask);
-    AttendanceComponent_InertVtable[14] =
-        reinterpret_cast<void*>(&AttendanceComponent_Command);
-}
-extern "C" void* AttendanceComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x8a,
-        AttendanceComponent_InertVtable,
-        reinterpret_cast<void*>(&AttendanceComponent_InertGetTypeId));
-    AttendanceComponent_FinishVtable();
-    return p;
-}
-static void* AttendanceComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x8a,
-        AttendanceComponent_InertVtable,
-        reinterpret_cast<void*>(&AttendanceComponent_InertGetTypeId));
-    AttendanceComponent_FinishVtable();
-    return mem;
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#include "Component/component_factory_base.h"
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+// Promoted 2026-08-15 from the hand-expanded inert factory (which reached only slots
+// 13/14) to a full live ControllerComponent.
+//
+// The previous wave made the school's work checkbox clickable, but clicking it drove a
+// state machine that did not exist: slots 16/17 (GetDefaultState / CreateState) still
+// held the inert stub, so the StateMachineComponent never linked the embedded node and
+// neither state 2 (open) nor state 3 (closed) ever ran. That is the "live command pair,
+// inert controller" shape the coverage harness reported as 12/22.
+//
+// Size 0x58 / Flags 0x8a / NodeOff 0x38 / DefState 2 all read off
+// AttendanceComponent_Ctor (0x140044580): Component_Ctor's 0x80 OR'd with the leaf's
+// 0xa; the node vtable written to +0x38 and the owning-component back-pointer to +0x50
+// (= node + 0x18); and slot 16's `MOV EAX,2; RET`.
+//
+// ⚠ NodeOff is 0x38, not the ResourceProduce family's 0x28. AttendanceComponent is not
+// an RPC subclass and shares none of that table.
+extern "C" void** AttendanceCtrl_NodeVtable();      // attendancecomponent_states.cpp
+extern "C" void   AttendanceCtrl_PopulateTable();
+extern "C" void*  ControllerLive_ScalarDeletingDtor(void*, unsigned int);
+
+static void AttendanceCtrl_PopulateAndWireSlots();
+
+CONTROLLER_LIVE_FACTORY_STATES(AttendanceComponent, 0x58, 0x8a, 0x38, 2,
+                               "BANISHED_LIVE_ATTENDANCE",
+                               AttendanceCtrl_NodeVtable, AttendanceCtrl_PopulateAndWireSlots)
+
+static void AttendanceCtrl_PopulateAndWireSlots() {
+    // From inside InstallLive only — FillTypedVtable re-stubs the shared vtable on every
+    // instance creation, so every real slot must be (re)installed from here.
+    AttendanceComponent_LiveVtable[3]  = reinterpret_cast<void*>(&AttendanceComponent_SerializeSlot);
+    AttendanceComponent_LiveVtable[7]  = reinterpret_cast<void*>(&AttendanceComponent_Unregister);
+    AttendanceComponent_LiveVtable[9]  = reinterpret_cast<void*>(&AttendanceComponent_Update);
+    AttendanceComponent_LiveVtable[13] = reinterpret_cast<void*>(&AttendanceComponent_CommandMask);
+    AttendanceComponent_LiveVtable[14] = reinterpret_cast<void*>(&AttendanceComponent_Command);
+    AttendanceComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
+    AttendanceComponent_LiveVtable[19] = reinterpret_cast<void*>(&AttendanceComponent_GetDescTypeInfo);
+    AttendanceComponent_LiveVtable[20] = reinterpret_cast<void*>(&AttendanceComponent_GetDescTypeId);
+    AttendanceComponent_LiveVtable[21] = reinterpret_cast<void*>(&AttendanceComponent_Slot21Const);
+    AttendanceCtrl_PopulateTable();
 }
 REGISTER_TYPE(AttendanceComponent, "ControllerComponent",
               &AttendanceComponent_Factory, &AttendanceComponent_CreateInPlace);

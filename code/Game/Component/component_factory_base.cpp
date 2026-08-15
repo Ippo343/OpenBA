@@ -586,8 +586,32 @@ static const char* const kDefaultOnFlags[] = {
     // component's own node, so with slots 16/17 stubbed a click measured 0x02 -> 0x02.
     "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
     "BANISHED_LIVE_MARKET_CMD",
-    "BANISHED_LIVE_FORESTER_CMD",
-    "BANISHED_LIVE_ATTENDANCE_CMD",
+    // ── Forester / Attendance: promoted from "command pair only" to full live
+    //    controllers 2026-08-15, which is why the two flags are renamed rather than
+    //    added. BANISHED_LIVE_FORESTER_CMD / _ATTENDANCE_CMD gated slots 13/14 alone;
+    //    the new gates cover 13/14 AND the state machine, so leaving the old names in
+    //    the table would have silently dropped the command pair back to the inert stub
+    //    (measured: a control run with the new gates unset reports 15/22 and 10/22).
+    //
+    //    Graduated on the same measurement that motivated them. Slot-coverage probe,
+    //    identical seed and demo spawners, gates on vs off:
+    //      Forester    17/22 -> 22/22   (state 13 PRODUCING, workplace accepting=1)
+    //      Attendance  12/22 -> 22/22   (state  2 OPEN,      workplace accepting=1)
+    //    Both classes' state machines now link and tick: Forester runs the SHARED
+    //    ResourceProduce table (2 idle -> 13 producing -> 14 paused) and mints a real
+    //    ForesterWork through slot 18; Attendance runs its OWN two-state table
+    //    (2 open / 3 closed, node at +0x38 not +0x28), registering in the town
+    //    attendance list, minting a LocationWork and posting it to the citizen ledger.
+    //    Four-minute soak with Attendance's per-frame trans38 running every frame on a
+    //    placed school: zero-byte crash log.
+    //
+    //    ⚠ Forester's ctor default is behaviour, not padding: ForesterComponent_Ctor
+    //    writes +0x50 = 0x101 ("plant AND cut both ON"), so its factory is hand-expanded
+    //    rather than using CONTROLLER_LIVE_FACTORY_STATES (whose PopulateFn cannot reach
+    //    the instance). Without that write every lodge would be born with both work
+    //    flags clear.
+    "BANISHED_LIVE_FORESTER",
+    "BANISHED_LIVE_ATTENDANCE",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

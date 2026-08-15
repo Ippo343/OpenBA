@@ -168,37 +168,87 @@ extern "C" void ForesterComponent_Command(void* self, int cmd) {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
 
-// Hand-expanded from COMPONENT_INERT_FACTORY(ForesterComponent, 0x58, 0x80) so slots
-// 13/14 above are actually reachable. While both held the inert stub the lodge's two
-// work checkboxes were greyed (slot 13 -> 0) and inert (slot 14 -> no-op).
+// Promoted 2026-08-15 from the hand-expanded inert factory (which reached only slots
+// 13/14) to a full live ControllerComponent.
 //
-// Opt-in until measured (BANISHED_LIVE_FORESTER_CMD).
-static uint32_t ForesterComponent_InertGetTypeId(void*) {
+// The previous wave made the two work checkboxes clickable, but the lodge still did
+// nothing: ForesterComponent is a ResourceProduceComponent subclass, so all of its
+// production runs off the SHARED ResourceProduce state machine (idle 2 -> producing 13
+// -> paused 14), and that machine was never linked because slots 16/17
+// (GetDefaultState / CreateState) still held the inert stub. A clickable checkbox on a
+// state machine that does not exist is exactly the "live command pair, inert
+// controller" shape the coverage harness reported as 17/22.
+//
+// Size 0x58 / Flags 0x80 / NodeOff 0x28 / DefState 2 all come from
+// ForesterComponent_Ctor (0x14011fa40) -> ResourceProduceComponent_Ctor, the same
+// derivation as fishingcomponent.cpp.
+//
+// ⚠ NOT the macro. ForesterComponent_Ctor's own body is two stores:
+//       *(ComponentVtable**)self = &vtable_ForesterComponent;
+//       *(uint16*)(self + 0x50)  = 0x101;
+// and that second store is behaviour, not padding: it is what makes a freshly-built
+// lodge default to "plant AND cut both ON". Our factories zero-fill the body, so under
+// CONTROLLER_LIVE_FACTORY_STATES every lodge in the game would be born with both work
+// flags OFF — slot 13 would grey nothing but slot 14's edge test would see an idle
+// lodge, and CreateWork's re-arm (see resourceproduce_creatework.cpp) would be the only
+// thing ever turning them on. CONTROLLER_LIVE_FACTORY_STATES' PopulateFn takes no
+// arguments, so it cannot reach the instance; the macro is hand-expanded here purely to
+// get `mem` in scope for the ctor default.
+extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
+extern "C" void   RPCtrl_PopulateTable();
+extern "C" uintptr_t* ForesterComponent_CreateWork(void*, uintptr_t*);   // slot 18
+
+static uint32_t ForesterComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("ForesterComponent");
     return cached;
 }
-static void* ForesterComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void* ForesterComponent_LiveGetTypeInfo(void*) {
+    static void* cached = nullptr;
+    if (!cached) cached = ::Object::GetTypeInfoByName("ForesterComponent");
+    return cached;
+}
+static int   ForesterComponent_GetDefaultState(void*) { return 2; }      // slot 16
+static void* ForesterComponent_CreateState(void* self) {                 // slot 17
+    return reinterpret_cast<uint8_t*>(self) + 0x28;
+}
+static void* ForesterComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init writes.
-static void ForesterComponent_FinishVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FORESTER_CMD")) return;
-    ForesterComponent_InertVtable[13] = reinterpret_cast<void*>(&ForesterComponent_CommandMask);
-    ForesterComponent_InertVtable[14] = reinterpret_cast<void*>(&ForesterComponent_Command);
+// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init
+// writes, so every real slot is (re)installed from in here on every instance creation.
+static void ForesterComponent_InstallLive(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FORESTER")) return;
+    ForesterComponent_LiveVtable[1]  = reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeInfo);
+    ForesterComponent_LiveVtable[3]  = reinterpret_cast<void*>(&ForesterComponent_Shutdown);
+    ForesterComponent_LiveVtable[13] = reinterpret_cast<void*>(&ForesterComponent_CommandMask);
+    ForesterComponent_LiveVtable[14] = reinterpret_cast<void*>(&ForesterComponent_Command);
+    ForesterComponent_LiveVtable[16] = reinterpret_cast<void*>(&ForesterComponent_GetDefaultState);
+    ForesterComponent_LiveVtable[17] = reinterpret_cast<void*>(&ForesterComponent_CreateState);
+    ForesterComponent_LiveVtable[18] = reinterpret_cast<void*>(&ForesterComponent_CreateWork);
+    RPCtrl_PopulateTable();
+    if (!mem) return;
+    uint8_t* const p = reinterpret_cast<uint8_t*>(mem);
+    // Embedded state node at +0x28: node vtable at +0x00, owning component at +0x18.
+    *reinterpret_cast<void**>(p + 0x28)        = reinterpret_cast<void*>(RPCtrl_NodeVtable());
+    *reinterpret_cast<void**>(p + 0x28 + 0x18) = mem;
+    // ForesterComponent_Ctor's own two-store body (see the block comment above).
+    *reinterpret_cast<uint16_t*>(p + 0x50) = 0x101;
 }
 extern "C" void* ForesterComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x80,
-        ForesterComponent_InertVtable,
-        reinterpret_cast<void*>(&ForesterComponent_InertGetTypeId));
-    ForesterComponent_FinishVtable();
+        ForesterComponent_LiveVtable,
+        reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeId));
+    ForesterComponent_InstallLive(p);
     return p;
 }
 static void* ForesterComponent_CreateInPlace(void* mem) {
     if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x80,
-        ForesterComponent_InertVtable,
-        reinterpret_cast<void*>(&ForesterComponent_InertGetTypeId));
-    ForesterComponent_FinishVtable();
+        ForesterComponent_LiveVtable,
+        reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeId));
+    ForesterComponent_InstallLive(mem);
     return mem;
 }
 REGISTER_TYPE(ForesterComponent, "ResourceProduceComponent",

@@ -37,6 +37,7 @@
 bool FishingWork_ResolveFuncs();
 bool HuntWork_ResolveFuncs();
 bool HerbalistWork_ResolveFuncs();
+bool ForesterWork_ResolveFuncs();
 
 // Work vtables are installed by the Work reimpls and published through the address
 // registry, so read them back the same way every other cross-module reference does
@@ -46,6 +47,7 @@ namespace {
 constexpr uintptr_t kFishingWorkVtable   = 0x140161320;
 constexpr uintptr_t kHuntWorkVtable      = 0x140161620;
 constexpr uintptr_t kHerbalistWorkVtable = 0x1401615a0;
+constexpr uintptr_t kForesterWorkVtable  = 0x1401613a0;
 
 typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
 // 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
@@ -61,6 +63,9 @@ fn_FindComp_t      s_findPos    = nullptr;
 fn_ChildSum_t      s_childSum   = nullptr;
 fn_ArrayGrow_t     s_arrayGrow  = nullptr;
 fn_ArrayResize04_t s_arrayRes04 = nullptr;
+// 0x140003ea0 Entity_FindComponent_StateMachine — only ForesterComponent's slot 18
+// needs it (to read the live state id before re-arming the two work flags).
+fn_FindComp_t      s_findSM     = nullptr;
 bool               s_resolved   = false;
 
 void Resolve() {
@@ -70,6 +75,7 @@ void Resolve() {
     s_childSum   = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_arrayGrow  = reinterpret_cast<fn_ArrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_arrayRes04 = reinterpret_cast<fn_ArrayResize04_t>(ResolveAddr(Module::Exe, 0x1400021d0));
+    s_findSM     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
     s_resolved = true;
 }
 
@@ -173,6 +179,61 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) 
 
     if (s_workCtor25) s_workCtor25(mem, &entity);
     if (uintptr_t vt = ResolveAddr(Module::Exe, kHerbalistWorkVtable))
+        *reinterpret_cast<uintptr_t*>(mem) = vt;
+
+    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
+    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
+    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
+    *reinterpret_cast<uint32_t*>(w + 0x58) = 0;
+
+    return WrapIBP(out, mem);
+}
+
+// ── ForesterComponent::CreateWork — retail 0x14011f780 ────────────────────────────
+// Ghidra names this "ForesterWork_CopyCtor". It is neither a copy ctor nor part of
+// ForesterWork: it is ForesterComponent's slot 18, the same override every other
+// ResourceProduceComponent subclass supplies. The forester lodge's work object is
+// 0x60 bytes, same shape as HerbalistWork's (an AutoPickupWork subclass: retail
+// writes vtable_AutoPickupWork and then vtable_ForesterWork over it, and only the
+// second store is observable).
+//
+// ⚠ The one thing that is genuinely Forester-specific is the PROLOGUE, and it is not
+// bookkeeping — it re-arms the lodge's two work flags:
+//
+//     sm = FindComponent_StateMachine(entity)
+//     st = sm[+0x52]; if (st < 0) st = sm[+0x50]
+//     if (st != 14 && comp[+0x50] == 0 && comp[+0x51] == 0) *(u16*)(comp+0x50) = 0x101
+//
+// i.e. "if we are NOT in the paused state and the player has turned BOTH plant and
+// cut off, turn both back on". Retail relies on it because a lodge whose two flags
+// are both clear has nothing to do, yet state 13 (producing) was entered anyway —
+// this is the repair that keeps such a lodge from minting a work that can never run.
+// sm+0x52 is the pending state id and sm+0x50 the current one; the sign test is
+// retail's "no pending transition" check.
+extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
+    Resolve();
+    ForesterWork_ResolveFuncs();
+
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
+
+    if (s_findSM) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
+        uintptr_t smIbp = 0;
+        s_findSM(entity, &smIbp);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smIbp);
+        char st = *reinterpret_cast<char*>(smIbp + 0x52);
+        if (st < 0) st = *reinterpret_cast<char*>(smIbp + 0x50);
+        if (st != 14 && *reinterpret_cast<char*>(comp + 0x50) == 0
+                     && *reinterpret_cast<char*>(comp + 0x51) == 0)
+            *reinterpret_cast<uint16_t*>(comp + 0x50) = 0x101;
+    }
+
+    void* mem = AllocWork(0x60);
+    if (!mem) return WrapIBP(out, nullptr);
+
+    if (s_workCtor25) s_workCtor25(mem, &entity);
+    if (uintptr_t vt = ResolveAddr(Module::Exe, kForesterWorkVtable))
         *reinterpret_cast<uintptr_t*>(mem) = vt;
 
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);

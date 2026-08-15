@@ -107,7 +107,10 @@ const FoodClass kClasses[] = {
     { "attendance", "AttendanceComponent", "BANISHED_BUILD_DEMO_SCHOOLHOUSE", {
         0x40002860,0x40002660,0x40002650,0x40044410,0x40118a50,0x40118a60,0x40118820,0x400443d0,
         0x40118a70,0x40044370,0x40118a90,0x40118aa0,0x40118ab0,0x40043f10,0x40043e80,0x40118ae0,
-        0x400026c0,0x400026b0,0x40002800,0x400026e0,0x400026d0,0x40047000 } },
+        // ⚠ slot 21 is 0x140044700 (`MOV EAX,1; RET`). This row carried 0x140047000 —
+        // a transposed digit that pointed at CemeteryDescription_sub_6fc0. Corrected
+        // 2026-08-15 against the vtable bytes at 0x140158ce0.
+        0x400026c0,0x400026b0,0x40002800,0x400026e0,0x400026d0,0x40044700 } },
 };
 
 // Retail bodies that are literally `C2 00 00` (RET) plus 0xCC padding — verified by

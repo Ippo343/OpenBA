@@ -165,13 +165,19 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             if (r[id] != r[0]) uniform = false;
         }
         if (uniform && r[0] != 0) {
-            // ⚠ A uniform non-zero result does NOT identify the form. Corrected
-            // 2026-08-15: ForesterComponent's slot 13 (0x14011f920) is a genuine
-            // per-command CanCommand(self, id) — it reads the id and answers from
-            // +0x50/+0x51 — yet it returns 1 for every id on a fresh lodge, because
-            // both of its toggles are off and its `else` arm also returns 1. That is
-            // indistinguishable from the ResourceProduce mask here. Report the value
-            // and the bit decode, which are true either way; do not assert the form.
+            // ⚠ A uniform non-zero result does NOT identify the form: a per-command
+            // CanCommand whose toggles all happen to be off answers 1 for every id via
+            // its `else` arm, which is indistinguishable from the ResourceProduce mask.
+            // Report the value and the bit decode, which are true either way; do not
+            // assert the form.
+            //
+            // ⚠ The example this note used to cite — "ForesterComponent looks uniform
+            // on a fresh lodge" — is EXPIRED as of the controller promotion later on
+            // 2026-08-15. It was true only because our factory zero-filled the body;
+            // ForesterComponent_Ctor actually writes +0x50 = 0x101, and now that the
+            // hand-expanded factory reproduces that, a fresh lodge reports
+            // "0:1 1:3 2:3 3:1 …" — non-uniform, and it lands in the per-id branch
+            // below. The reasoning above still stands; the illustration no longer does.
             std::fprintf(stderr, "[FoodPanel]   command value = 0x%02X for every id "
                          "(bit1=%s bit0=%s; on the ResourceProduce base these mean "
                          "pause/resume offered). Form NOT determined — a per-command "
