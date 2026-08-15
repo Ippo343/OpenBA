@@ -137,6 +137,63 @@ void Fire(int frameNum) {
         }
         if (!foodComp) continue;
         ++found;
+
+        // TEMPORARY INSTRUMENTATION (2026-08-15). The hunting cabin's job-count up-arrow
+        // is greyed out, so a laborer can never be assigned to the hunt work class from
+        // the UI. WorkplaceUI::Startup (retail 0x140087080) enables it with exactly
+        // `workComp+0x30 < workDesc+0x2c`, where workDesc = workComp+0x18. Reading those
+        // through the UI needs the panel open, which no soak does -- so sample them
+        // straight off the entity here instead, which isolates the DATA question (did the
+        // WorkDescription deserialize?) from the UI question.
+        //
+        // HunterLodge.rsc ships _defaultWorkers=3 _minWorkerCount=1 _maxWorkerCount=4,
+        // so retail expects wpMax=3 < max=4 -> ENABLED. Print the ctor defaults' tell too:
+        // an undeserialized WorkDescription keeps min=1/max=100.
+        {
+            static long long s_dumpN = 0;
+            typedef void* (*fn_FindWork_t)(int64_t entity, void* outIBP);
+            uintptr_t f3050 = ResolveAddr(Module::Exe, 0x140003050);  // FindComponent_Work
+            if (f3050 && (s_dumpN++ % 5) == 0) {
+                uint64_t wIBP = 0;
+                reinterpret_cast<fn_FindWork_t>(f3050)(reinterpret_cast<int64_t>(ent), &wIBP);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wIBP);
+                if (!wIBP) {
+                    std::fprintf(stderr, "[JobArrowData] frame=%d: %s ent=%p has NO "
+                                 "WorkComponent (0x140003050 found nothing) — the panel's "
+                                 "jobType would be null\n", frameNum, foodName, ent);
+                } else {
+                    const uint64_t wd = *reinterpret_cast<uint64_t*>(wIBP + 0x18);
+                    const int32_t  cur = *reinterpret_cast<int32_t*>(wIBP + 0x30);
+                    if (!wd) {
+                        std::fprintf(stderr, "[JobArrowData] frame=%d: %s workComp=%p "
+                                     "+0x30=%d but DESCRIPTION (+0x18) IS NULL — jobType "
+                                     "null, arrows dead\n",
+                                     frameNum, foodName, (void*)wIBP, cur);
+                    } else {
+                        const int32_t dflt = *reinterpret_cast<int32_t*>(wd + 0x24);
+                        const int32_t mn   = *reinterpret_cast<int32_t*>(wd + 0x28);
+                        const int32_t mx   = *reinterpret_cast<int32_t*>(wd + 0x2c);
+                        const int32_t area = *reinterpret_cast<int32_t*>(wd + 0x30);
+                        const uint8_t allow = *reinterpret_cast<uint8_t*>(wd + 0x20);
+                        const uint8_t scale = *reinterpret_cast<uint8_t*>(wd + 0x34);
+                        std::fprintf(stderr,
+                            "[JobArrowData] frame=%d: %s workComp=%p desc=%p | "
+                            "wpMax(+0x30)=%d | _allowCountChange(+0x20)=%d "
+                            "_defaultWorkers(+0x24)=%d _minWorkerCount(+0x28)=%d "
+                            "_maxWorkerCount(+0x2c)=%d _maxArea(+0x30)=%d "
+                            "_scaleWithSize(+0x34)=%d -> upEnabled=%d downEnabled=%d%s\n",
+                            frameNum, foodName, (void*)wIBP, (void*)wd, cur,
+                            (int)allow, dflt, mn, mx, area, (int)scale,
+                            cur < mx ? 1 : 0, (cur != mn && cur > mn) ? 1 : 0,
+                            (mn == 1 && mx == 100 && dflt == 0)
+                                ? "  <-- CTOR DEFAULTS: WorkDescription never deserialized"
+                                : "");
+                    }
+                }
+                std::fflush(stderr);
+            }
+        }
+
         if (AlreadySeated(foodComp)) continue;
         ++considered;
 

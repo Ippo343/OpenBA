@@ -458,6 +458,41 @@ showUpDown:
 
     // Default job count button logic
     int jobMinCount = *(int*)((uintptr_t)jobType + 0x28);
+
+    // TEMPORARY INSTRUMENTATION (2026-08-15). The hunting cabin's job up-arrow is
+    // greyed out in the UI, so a laborer can never be assigned to the hunt work class
+    // organically -- the lodge is only ever staffed by the FOOD_WORKERS harness. The
+    // up-arrow's ONLY enable condition is wpMaxCount < jobType+0x2c, so a zero (or
+    // wrong-offset) max greys it permanently. Print BOTH sides of that comparison plus
+    // the predicate's outcome, not just the inputs. NOTE engine_funcs.h's
+    // WorkDescription field names are known-wrong, so +0x28/+0x2c may not be min/max.
+    {
+        static long long s_n = 0;
+        if ((++s_n % 120) == 1) {
+            const int jobMax = *(int*)((uintptr_t)jobType + 0x2c);
+            // The predicate measured TRUE (wpMax=3 < max=4) yet the player still sees a
+            // greyed arrow, so the enable VALUE is not the problem -- the next suspect is
+            // the call that carries it. Report the receiver of each arrow's vtable[8] so
+            // an unwired / stub slot 8 (which would swallow the enable and leave every
+            // arrow rendering greyed) is distinguishable from a genuine disable. Symbolize
+            // these with nm against standalone/build/reimpl-x64.exe.
+            void* bU = *(void**)(s + 0x50); void* bD = *(void**)(s + 0x58);
+            void* bWU = *(void**)(s + 0x40); void* bWD = *(void**)(s + 0x48);
+            std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
+                         "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "
+                         "jobUp=%p vt=%p vt[8]=%p | jobDown=%p vt[8]=%p | "
+                         "wkUp=%p vt[8]=%p | wkDown=%p vt[8]=%p\n",
+                         (void*)jobType, wpMaxCount, jobMinCount, jobMax,
+                         wpMaxCount < jobMax ? 1 : 0,
+                         (wpMaxCount != jobMinCount && wpMaxCount > jobMinCount) ? 1 : 0,
+                         bU, bU ? *(void**)bU : nullptr,
+                         bU ? (*(void***)bU)[8] : nullptr,
+                         bD, bD ? (*(void***)bD)[8] : nullptr,
+                         bWU, bWU ? (*(void***)bWU)[8] : nullptr,
+                         bWD, bWD ? (*(void***)bWD)[8] : nullptr);
+            std::fflush(stderr);
+        }
+    }
     {
         void* btnUp = *(void**)(s + 0x50);
         void** vtbl = *(void***)btnUp;

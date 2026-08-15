@@ -414,7 +414,15 @@ void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
                                reinterpret_cast<int64_t*>(self + 0x28));
         if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(self + 0x28));
         *reinterpret_cast<void**>(self + 0x28) = nullptr;
-        *reinterpret_cast<int*>(self + 0x30) = 0;
+        // Retail stores EIGHT bytes here -- `*(undefined8 *)(param_1 + 0x30) = 0;` --
+        // which clears the count (+0x30) AND the capacity (+0x34) in one write. This was
+        // ported as a 4-byte int store, so the stale capacity survived the generation
+        // reset. That desync is fatal on the next upsert: with cap still, say, 3 the
+        // `cap < newN` grow test below is false, so the array pointer (+0x28) stays NULL
+        // while the count is committed to 1; the copy loop's `if (!d) continue` then
+        // silently drops the entry, and the *following* upsert walks `*p` off a NULL
+        // array -- an ACCESS_VIOLATION reading 0 inside the kill->raw-material chain.
+        *reinterpret_cast<uint64_t*>(self + 0x30) = 0;
         *reinterpret_cast<int*>(self + 0x48) = gen;
     }
 
