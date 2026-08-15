@@ -786,7 +786,13 @@ namespace uistub_ProfessionUI {
 }
 REGISTER_TYPE(ProfessionUI, "UI::DialogController",
               &uistub_ProfessionUI::Factory, &uistub_ProfessionUI::InPlace);
-UI_DIALOG_STUB(RadiusUI,            "UI::DialogController", 0x38);
+// ---- RadiusUI: PROMOTED to the real reimpl (2026-08-15) ---------------------
+// Moved to code/Game/Dialog/radiusui_promote.cpp, which carries the REGISTER_TYPE
+// (never delete a stub REGISTER_TYPE — some are the only filler of a live type-id
+// global). The stub's 48 no-op slots left idx5/idx6 dead, so the coverage-radius
+// overlay never appeared on any radius building's info panel. It also zeroed +0x30,
+// which the real Factory seeds to -1.
+
 // ---- ResourceLimitUI: PROMOTED to the real reimpl (resource-limit bring-up) --
 // Each row of the Town Hall "Limits" tab (Log/Stone/Iron/Herbs/Tools/Fuel/Food/
 // Clothing/Alcohol/Coal/Textile) is a ResourceLimitUI child controller bound to a

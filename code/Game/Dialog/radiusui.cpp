@@ -9,6 +9,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // RadiusUI::Slot6 (vtable +0x30) — Remove radius overlay
@@ -40,6 +42,13 @@ void RadiusUI_Slot5(RadiusUI* self) {
 
     uint64_t entityBasePtr = 0;
     fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityBasePtr);
+
+    // SA-only guard (retail derefs this unguarded): retail can only route a RadiusUI
+    // controller to a live ComponentEntity, but our promoted vtable is also dispatched
+    // from the harness-driven panel open, where the data source (+0x28) can still be
+    // null on the first Slot5 before the framework seats it.
+    if (!entityBasePtr) { self->data30 = -1; return; }
 
     // Get class/template sub-object from entity+0x28
     uint64_t subObj = *(uint64_t*)(entityBasePtr + 0x28);
@@ -51,10 +60,11 @@ void RadiusUI_Slot5(RadiusUI* self) {
     uint64_t arrayBase = *(uint64_t*)(subObj + 0x28);
     for (int i = 0; i < count; i++) {
         void* comp = (void*)*(uint64_t*)(arrayBase + (uint64_t)i * 8);
-        // vtable[2] (offset 0x10) = GetTypeId
+        // vtable[2] (offset 0x10) = GetTypeId. Ghidra prints this as `(...)()` — that
+        // means "args unknown", NOT "no args"; the callee still reads `this` from RCX.
         void** vtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)();
-        int typeId = ((fn_GetTypeId_t)vtable[2])();
+        typedef int (*fn_GetTypeId_t)(void*);
+        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
         if (typeId == (int)radiusTypeId) {
             if (fn_IsDerivedFrom(comp, radiusTypeId)) {
                 radiusComp = comp;
@@ -63,9 +73,26 @@ void RadiusUI_Slot5(RadiusUI* self) {
         }
     }
 
-    // Find BuildComponent on the entity
+    // Find the placement component on the entity (0x1401c79e0 — labelled
+    // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
     uint64_t buildComp = 0;
     fn_FindComponent_Build((void*)entityBasePtr, &buildComp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildComp);
+
+    // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
+    // .rsc panel whose entity is a placed building carrying both components; our
+    // promoted controller is also mounted by the harness panel-open path, which can
+    // select an entity whose description has no RadiusDescription. Without this,
+    // 0x140055430 reads radiusComp+0x20 off a null pointer.
+    if (!buildComp || !radiusComp) {
+        if (std::getenv("BANISHED_DIALOG_TRACE")) {
+            fprintf(stderr, "[RadiusUI] Slot5 BAIL self=%p radiusComp=%p place=%p (comps=%d)\n",
+                    (void*)self, radiusComp, (void*)buildComp, count);
+            fflush(stderr);
+        }
+        self->data30 = -1;
+        return;
+    }
 
     // Calculate center tile index from BuildComponent coordinates:
     // +0x28 = int16 baseX, +0x2a = int16 baseY
@@ -77,6 +104,17 @@ void RadiusUI_Slot5(RadiusUI* self) {
 
     // Calculate radius and store display index
     self->data30 = fn_RadiusCalc(radiusComp, tileIndex);
+
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        fprintf(stderr,
+                "[RadiusUI] Slot5 self=%p radiusDesc=%p radius=%d origin=(%d,%d) "
+                "size=(%d,%d) tile=%d -> overlay=%d\n",
+                (void*)self, radiusComp, *(int*)((uintptr_t)radiusComp + 0x28),
+                (int)*(int16_t*)(buildComp + 0x28), (int)*(int16_t*)(buildComp + 0x2a),
+                (int)*(int16_t*)(buildComp + 0x2c), (int)*(int16_t*)(buildComp + 0x2e),
+                tileIndex, self->data30);
+        fflush(stderr);
+    }
 }
 
 // ============================================================
@@ -88,6 +126,10 @@ void RadiusUI_Slot5(RadiusUI* self) {
 // Original: 0x140077600, 28 bytes.
 
 void RadiusUI_Slot6(RadiusUI* self) {
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        fprintf(stderr, "[RadiusUI] Slot6 self=%p overlay=%d\n", (void*)self, self->data30);
+        fflush(stderr);
+    }
     if (self->data30 >= 0) {
         // Game/World singleton +0x110 = RadiusDisplayManager
         void* gameWorld = *g_pGameWorldSingleton;
