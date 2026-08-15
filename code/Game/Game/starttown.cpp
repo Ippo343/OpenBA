@@ -2597,15 +2597,28 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             }
             uint32_t mask = 0;
             int radius = 0;
+            // FishermansDock.rsc declares `int _footprintRotation = 180`, and that value
+            // is what MapComponent+0x30 feeds to dc20 as the mask rotation. Placing the
+            // dock at rotation 0 therefore samples its _pathBitmap in the wrong
+            // orientation, so the wrong cells get claimed. Scan the description's int
+            // block for the 0/90/180/270 rotation rather than hardcoding it — the field
+            // offset is not otherwise pinned in this codebase.
+            int fdockRot = 0;
             if (ftmpl) {
-                if (fw <= 0 || fh <= 0) {
-                    void* cpd = FindDescriptionOnTemplate(ftmpl, TypeId("CreatePlacedDescription"));
-                    if (cpd) {
+                void* cpd = FindDescriptionOnTemplate(ftmpl, TypeId("CreatePlacedDescription"));
+                if (cpd) {
+                    if (fw <= 0 || fh <= 0) {
                         fw = *(int32_t*)((uint8_t*)cpd + 0x44);
                         fh = *(int32_t*)((uint8_t*)cpd + 0x48);
                     }
-                    if (fw <= 0 || fh <= 0) { fw = 8; fh = 8; }
+                    // `_footprintRotation` sits at +0x40, immediately before _width
+                    // (+0x44) and _height (+0x48) — measured from the live description
+                    // (the retail exe carries no resource field names to look it up by).
+                    // FishermansDock.rsc sets it to 180.
+                    const int rv = *(int32_t*)((uint8_t*)cpd + 0x40);
+                    if (rv == 90 || rv == 180 || rv == 270) fdockRot = rv;
                 }
+                if (fw <= 0 || fh <= 0) { fw = 8; fh = 8; }
                 if (void* fd = FindDescriptionOnTemplate(ftmpl, TypeId("FishingDescription")))
                     mask = *(uint32_t*)((uint8_t*)fd + 0x2c);
                 if (void* rd = FindDescriptionOnTemplate(ftmpl, TypeId("RadiusDescription")))
@@ -2640,6 +2653,27 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 long long bestDist = -1;
                 bool found = false;
 
+                // ── The dock must be in the TOWN'S CONNECTIVITY REGION. ──
+                // Same predicate, same reason, as the hunter-lodge siting below:
+                // `FishingWork::Slot4` gates on `Map_CheckPassable` (0x1400a00f0) from
+                // the worker's cell to the dock's work spot, and that call is a
+                // REGION-EQUIVALENCE test (cell+0x26 non-zero and equal), not a path
+                // search. Scoring a dock purely by fishable water actively steers it to
+                // the far bank of a river — the best water is on the other side — and a
+                // dock there is unreachable without a bridge, so slot 4 returns at the
+                // passability check on every tick and not one fishing action is ever
+                // created. Measured 2026-08-15: a dock at (158,102) with 327 fishable
+                // tiles produced ZERO accepted spots for a whole run.
+                typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
+                static CanPathTo_t s_canPath = nullptr;
+                static bool s_canPathResolved = false;
+                if (!s_canPathResolved) {
+                    s_canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+                    s_canPathResolved = true;
+                }
+                const int townCell = townCy * width + townCx;
+                int candidates = 0, unreachable = 0;
+
                 for (int ty = townCy - kWindow; ty <= townCy + kWindow; ty += kStride) {
                     for (int tx = townCx - kWindow; tx <= townCx + kWindow; tx += kStride) {
                         if (tx < 1 || ty < 1 ||
@@ -2663,6 +2697,16 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                 if ((mask >> (t & 0x1f)) & 1) { footprintDry = false; break; }
                             }
                         if (!footprintDry) continue;
+                        ++candidates;
+
+                        // Reachable from town, or the worker can never stand on it.
+                        if (s_canPath &&
+                            !s_canPath(reinterpret_cast<int*>(mapObj), 0xe1f,
+                                       (uint32_t)((ty + fh / 2) * width + (tx + fw / 2)),
+                                       townCell)) {
+                            ++unreachable;
+                            continue;
+                        }
 
                         // Score exactly as slot 21 will: matching tiles in the disk.
                         const int cx = tx + fw / 2, cy = ty + fh / 2;
@@ -2691,19 +2735,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 if (!found) {
                     fprintf(stderr, "[startTown::fishingdock] no %dx%d dry footprint with any "
                             "fishable tile in r=%d within %d tiles of the town centre "
-                            "(mask=0x%08x); nothing spawned\n",
-                            fw, fh, radius, kWindow, mask);
+                            "(mask=0x%08x); nothing spawned — dry candidates=%d, of which "
+                            "%d were in a DIFFERENT connectivity region than town\n",
+                            fw, fh, radius, kWindow, mask, candidates, unreachable);
                 } else {
-                    void* fent = placeStructure(ftmpl, bestX, bestY, 0, fw, fh,
+                    void* fent = placeStructure(ftmpl, bestX, bestY, fdockRot, fw, fh,
                                                 /*isDemoFoundation=*/false, -1);
                     Occupy(bestX, bestY, fw, fh);
                     if (fent) ++spawned;
                     fprintf(stderr, "[startTown::fishingdock] demo fishing dock tile=(%d,%d) "
                             "fp=%dx%d radius=%d mask=0x%08x fishableTiles=%d "
-                            "(expected rate ~%.3f) ent=%p\n",
+                            "(expected rate ~%.3f) ent=%p rot=%d  [reachable siting: %d dry "
+                            "candidates, %d rejected as off-region; town=(%d,%d)]\n",
                             bestX, bestY, fw, fh, radius, mask, bestScore,
                             /* the disk area slot 21 will divide by */
-                            bestScore / (3.14159f * radius * radius * 0.5f), fent);
+                            bestScore / (3.14159f * radius * radius * 0.5f), fent, fdockRot,
+                            candidates, unreachable, townCx, townCy);
                 }
             }
             fflush(stderr);

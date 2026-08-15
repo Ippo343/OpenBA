@@ -170,6 +170,45 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                int64_t* param_8, int param_9) {
     EnsureInit();
 
+    // ── Footprint-mask census (BANISHED_MAPSTAMP_TRACE) ──────────────────────────
+    // param_8 is the building's ASCII footprint stamp. Where its char is '.', the loop
+    // below writes a NULL into cell+8 instead of the owner — that is how a building
+    // leaves walkable/drop cells free inside its own bounding rect. If the stamp is
+    // absent or zero-length the mask branch is skipped entirely and EVERY cell in the
+    // rect is claimed, which silently converts those free cells into permanently
+    // occupied ones. For the fishing dock that is fatal: its drop spots live inside its
+    // own rect, and FishingWork only frees a spot when cell+8 reads 0, so the dock
+    // catches `spotCount` fish and then stalls forever. Print the stamp once per rect
+    // size so a missing mask is visible rather than inferred.
+    {
+        static int s_st = -1;
+        if (s_st < 0) { const char* e = std::getenv("BANISHED_MAPSTAMP_TRACE");
+                        s_st = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_st) {
+            static int s_n = 0;
+            if (s_n < 24) {
+                ++s_n;
+                const int64_t stamp = param_8 ? *param_8 : 0;
+                const int stampLen = stamp ? *reinterpret_cast<int*>(stamp - 8) : -1;
+                std::fprintf(stderr, "[MapStamp] rect=(%d,%d) %dx%d rot=%d stamp=%p len=%d",
+                             param_4, param_5, param_6, param_7, param_9,
+                             (void*)stamp, stampLen);
+                if (stamp && stampLen > 0) {
+                    std::fprintf(stderr, " \"");
+                    for (int k = 0; k < stampLen && k < 160; ++k) {
+                        const char c = *reinterpret_cast<char*>(stamp + k);
+                        std::fprintf(stderr, "%c", (c == '\n') ? '/' : (c >= 32 ? c : '?'));
+                    }
+                    std::fprintf(stderr, "\"");
+                } else {
+                    std::fprintf(stderr, "  <-- NO MASK: every cell in the rect is claimed");
+                }
+                std::fprintf(stderr, "\n");
+                std::fflush(stderr);
+            }
+        }
+    }
+
     int iVar18 = 0;
     int iVar4 = param_7;
     if (0 < param_7) {

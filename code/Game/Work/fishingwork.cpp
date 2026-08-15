@@ -20,6 +20,7 @@
 #include "FishingWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -267,6 +268,22 @@ static void* FindComponentOnSubObject(uintptr_t subObj, uint32_t typeId) {
 }
 
 // ============================================================
+// Helper: BANISHED_FISHWORK_TRACE gate
+// ============================================================
+// Slot 4 has FOUR distinct silent `return 1` paths (at capacity, no empty citizen slot,
+// no free fishing spot, not passable). All four look identical in the log — nothing —
+// which is how a dock stranded across a river read exactly like a working one for a
+// whole wave. Each one now counts itself; this is the shared gate.
+static bool FishTraceOn() {
+    static int s = -1;
+    if (s < 0) {
+        const char* fe = std::getenv("BANISHED_FISHWORK_TRACE");
+        s = (fe && fe[0] && fe[0] != '0') ? 1 : 0;
+    }
+    return s == 1;
+}
+
+// ============================================================
 // Helper: Clamp coordinate to map bounds
 // ============================================================
 static inline int ClampToMap(int val, int mapSize) {
@@ -363,6 +380,17 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     }
 
     if (emptySlot == -1) {
+        // Every citizen slot on the work is occupied. Silent in retail; here it is one
+        // of the three ways slot 4 can decline to fish, and telling them apart is the
+        // whole point of the trace.
+        if (FishTraceOn()) {
+            static long long s_noSlot = 0;
+            if ((++s_noSlot % 400) == 1) {
+                std::fprintf(stderr, "[FishWork] no empty citizen slot x%lld "
+                             "(citizenCount=%d — all busy)\n", s_noSlot, citizenCount);
+                std::fflush(stderr);
+            }
+        }
         return 1;
     }
 
@@ -373,11 +401,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     // Slot4 ran 231 times without ever reaching the fishing action ctor, so every
     // candidate tile is being rejected — but "found nothing" cannot say by WHICH of the
     // two gates. Count them separately. Zero cost when the env var is unset.
-    static int s_ftrace = -1;
-    if (s_ftrace < 0) {
-        const char* fe = std::getenv("BANISHED_FISHWORK_TRACE");
-        s_ftrace = (fe && fe[0] && fe[0] != '0') ? 1 : 0;
-    }
+    const int s_ftrace = FishTraceOn() ? 1 : 0;
     static long long s_maskFail = 0, s_coverZero = 0, s_ok = 0, s_calls = 0;
     if (s_ftrace) {
         static int s_entryN = 0;
@@ -414,8 +438,25 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             int* spotState = (int*)(spotStates + (uintptr_t)i * 4);
             if (*spotState == 2) {
                 uintptr_t mapEntryBase = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
-                if (*(uintptr_t*)(mapEntryBase + 8 + (uintptr_t)cellIdx * 0x30) == 0) {
+                const uintptr_t occupant =
+                    *(uintptr_t*)(mapEntryBase + 8 + (uintptr_t)cellIdx * 0x30);
+                if (occupant == 0) {
                     *spotState = 0;
+                } else if (FishTraceOn()) {
+                    // The dock is permanently capped at `spotCount` catches if this
+                    // never reaches zero, so say what is still sitting there. A stale
+                    // claim (pile already hauled, cell slot never released) and a pile
+                    // genuinely still on the ground both stall the dock and need
+                    // opposite fixes.
+                    static long long s_blocked = 0;
+                    if ((++s_blocked % 600) == 1) {
+                        std::fprintf(stderr, "[FishWork] spot[%d] still blocked x%lld: "
+                                     "cell=%d tile=(%d,%d) worldPos=(%.2f,%.2f) "
+                                     "occupant=%p\n",
+                                     i, s_blocked, cellIdx, cx, cy,
+                                     spotPos[0], spotPos[1], (void*)occupant);
+                        std::fflush(stderr);
+                    }
                 }
             }
 
@@ -423,6 +464,122 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             if (freeSpot < 0 && *spotState == 0) {
                 freeSpot = i;
                 freeSpotMapCell = cellIdx;
+            }
+        }
+
+        // One-shot map of every drop spot: where the engine says it is, which cell that
+        // lands in, and what already owns that cell. The dock's own footprint mask
+        // leaves only some cells free, so a spot that resolves onto a claimed cell can
+        // never reset and permanently costs the dock one of its `spotCount` slots.
+        if (s_ftrace) {
+            static bool s_dumped = false;
+            if (!s_dumped) {
+                s_dumped = true;
+                uintptr_t mb = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
+                // 2e20 resolves a spot either from THIS entity's own node array or by
+                // recursing into child entities. Which one it takes decides whether the
+                // spots are the dock's own deck offsets or the child markers, so print
+                // the deciding numbers: the per-family own-counts at build+0x30/0x40/0x50
+                // and the child count at +0x30 of the position component.
+                {
+                    fn_InternalBasePtr_CheckPtr(&posIBP);
+                    uintptr_t pc = posIBP;
+                    void* build = pc ? *(void**)(pc + 0x18) : nullptr;
+                    std::fprintf(stderr, "[FishWork] spotSource: posComp=%p build=%p "
+                                 "ownCounts[m0]=%d [m1]=%d [m2]=%d childCount=%d\n",
+                                 (void*)pc, build,
+                                 build ? *(int*)((uintptr_t)build + 0x30) : -1,
+                                 build ? *(int*)((uintptr_t)build + 0x40) : -1,
+                                 build ? *(int*)((uintptr_t)build + 0x50) : -1,
+                                 pc ? *(int*)(pc + 0x30) : -1);
+                    // Raw mode-2 node offsets (array at build+0x48, stride 0x18, offset
+                    // xyz at +0) and the entity transform they are applied to. If the
+                    // offsets are large but the resolved spots are not, the transform is
+                    // wrong; if the offsets themselves are tiny, we are reading the
+                    // wrong family of positions.
+                    if (build) {
+                        float* arr2 = *(float**)((uintptr_t)build + 0x48);
+                        uintptr_t ent = *(uintptr_t*)(pc + 0x10);
+                        std::fprintf(stderr, "[FishWork]   nodeArr=%p", (void*)arr2);
+                        if (arr2)
+                            for (int i = 0; i < spotCount && i < 8; ++i) {
+                                float* nd = (float*)((uint8_t*)arr2 + (size_t)i * 0x18);
+                                std::fprintf(stderr, "  n%d=(%.2f,%.2f,%.2f)",
+                                             i, nd[0], nd[1], nd[2]);
+                            }
+                        std::fprintf(stderr, "  entity=%p\n", (void*)ent);
+                    }
+                }
+                // Occupancy map of the dock's own footprint rect. The mask leaves some
+                // cells unclaimed ('.'), and those are the only cells inside the rect
+                // where a fish pile can legally land. Printing the rect next to the drop
+                // spots says immediately whether the spots sit on free cells (the design
+                // the reset check assumes) or on claimed deck (a permanent stall).
+                {
+                    uintptr_t ent = *(uintptr_t*)(posIBP + 0x10);
+                    uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+                    void* mc = nullptr;
+                    if (ent && tidMap) {
+                        int n = *(int32_t*)(ent + 0x38);
+                        uintptr_t arr = *(uintptr_t*)(ent + 0x30);
+                        for (int k = 0; k < n && arr; ++k) {
+                            void** cs = (void**)(arr + (uintptr_t)k * 8);
+                            fn_InternalBasePtr_CheckPtr(cs);
+                            void* c = *cs;
+                            if (!c) continue;
+                            void** vt = *(void***)c;
+                            if (vt && vt[2] &&
+                                ((uint32_t(*)(void*))vt[2])(c) == tidMap) { mc = c; break; }
+                        }
+                    }
+                    if (mc) {
+                        uintptr_t m = (uintptr_t)mc;
+                        int ox = *(int16_t*)(m + 0x28), oy = *(int16_t*)(m + 0x2a);
+                        int rw = *(int16_t*)(m + 0x2c), rh = *(int16_t*)(m + 0x2e);
+                        int rot = *(int32_t*)(m + 0x30);
+                        std::fprintf(stderr, "[FishWork] dockRect=(%d,%d) %dx%d rot=%d "
+                                     "occupancy (o=claimed . =free):\n", ox, oy, rw, rh, rot);
+                        for (int ry = 0; ry < rh && ry < 32; ++ry) {
+                            std::fprintf(stderr, "[FishWork]   y=%3d ", oy + ry);
+                            for (int rx = 0; rx < rw && rx < 32; ++rx) {
+                                int c = mapSize * (oy + ry) + (ox + rx);
+                                std::fprintf(stderr, "%c",
+                                    *(uintptr_t*)(mb + 8 + (uintptr_t)c * 0x30) ? 'o' : '.');
+                            }
+                            std::fprintf(stderr, "\n");
+                        }
+                    }
+                }
+                for (int i = 0; i < spotCount && i < 16; ++i) {
+                    float p[3];
+                    fn_InternalBasePtr_CheckPtr(&posIBP);
+                    s_fn_Entity_GetSpotPosition((void*)posIBP, p, 2, i, nullptr);
+                    int h = mapSize >> 1;
+                    int x = ClampToMap((int)(p[0] + (float)h), mapSize);
+                    int y = ClampToMap((int)(p[1] + (float)h), mapSize);
+                    int c = mapSize * y + x;
+                    std::fprintf(stderr, "[FishWork] dropSpot[%d] world=(%.2f,%.2f) "
+                                 "tile=(%d,%d) cell=%d occupant=%p state=%d\n",
+                                 i, p[0], p[1], x, y, c,
+                                 *(void**)(mb + 8 + (uintptr_t)c * 0x30),
+                                 *(int*)(spotStates + (uintptr_t)i * 4));
+                }
+                std::fflush(stderr);
+            }
+        }
+
+        if (freeSpot < 0 && s_ftrace) {
+            // No spot is in state 0. State 1 = a fisher is on it; state 2 = a fish pile
+            // is still sitting on its cell and it stays blocked until that pile is
+            // hauled away. A dock that plateaus after exactly `spotCount` catches looks
+            // like this, so print the states rather than the fact that we found none.
+            static long long s_noSpot = 0;
+            if ((++s_noSpot % 400) == 1) {
+                std::fprintf(stderr, "[FishWork] no free spot x%lld — states:", s_noSpot);
+                for (int i = 0; i < spotCount && i < 16; ++i)
+                    std::fprintf(stderr, " [%d]=%d", i, *(int*)(spotStates + (uintptr_t)i * 4));
+                std::fprintf(stderr, "  (0=free 1=in-use 2=blocked-by-uncollected-pile)\n");
+                std::fflush(stderr);
             }
         }
 
@@ -459,9 +616,28 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             int scy = ClampToMap((int)(spotPos[1] + (float)spHalf), cMapSize);
             int spotCell = cMapSize * scy + scx;
 
-            // Check passability
+            // Check passability. This is NOT an A*: 0x1400a00f0 is the region-equivalence
+            // test (both cells' region word at cell+0x26 non-zero and EQUAL). A dock on
+            // the far bank of a river is therefore unreachable no matter how good its
+            // fishable-tile score, and this branch used to return silently — a working
+            // dock and a stranded one logged exactly the same nothing. Count it and print
+            // the two region ids, which name the cause outright.
             uint64_t passResult = fn_Map_CheckPassable(mapGridPtr, 0xe1f, (uint32_t)citizenCell, spotCell);
             if ((char)passResult == '\0') {
+                if (s_ftrace) {
+                    static long long s_noPath = 0;
+                    if ((++s_noPath % 40) == 1) {
+                        uintptr_t md = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
+                        const unsigned rc = *(uint16_t*)(md + 0x26 + (uintptr_t)citizenCell * 0x30);
+                        const unsigned rs = *(uint16_t*)(md + 0x26 + (uintptr_t)spotCell * 0x30);
+                        std::fprintf(stderr, "[FishWork] NO PATH x%lld: citizenCell=%d "
+                                     "(region=%u) -> dockSpotCell=%d (region=%u)%s\n",
+                                     s_noPath, citizenCell, rc, spotCell, rs,
+                                     (rc != rs) ? "  <-- DIFFERENT REGIONS: the dock is "
+                                                  "cut off (river/no bridge)" : "");
+                        std::fflush(stderr);
+                    }
+                }
                 return 1;
             }
 
