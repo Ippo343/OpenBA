@@ -431,6 +431,26 @@ extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
     void* desc = *(void**)(self + 0x18);
     const char* shape = desc ? *(const char**)((uint8_t*)desc + 0x28) : nullptr;
 
+    // [diag] BANISHED_MAPSTAMP_TRACE — pairs with dc20's "[MapStamp] rect=" claim line.
+    // Whether a completed building still owns its footprint in the ENTITY raster (cell+8)
+    // decides whether anything can ever be dropped on its own walkway cells, so the
+    // release side has to be as visible as the claim side.
+    {
+        static int s_st = -1;
+        if (s_st < 0) { const char* e = std::getenv("BANISHED_MAPSTAMP_TRACE");
+                        s_st = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_st) {
+            static int s_n = 0;
+            if (s_n < 40) {
+                ++s_n;
+                fprintf(stderr, "[MapStamp] RELEASE(4750) rect=(%d,%d) %dx%d rot=%d comp=%p\n",
+                        (int)*(int16_t*)(self + 0x28), (int)*(int16_t*)(self + 0x2a),
+                        (int)*(int16_t*)(self + 0x2c), (int)*(int16_t*)(self + 0x2e),
+                        *(int32_t*)(self + 0x30), (void*)self);
+                fflush(stderr);
+            }
+        }
+    }
     StartTown_UnmarkResourceCellGrid(game, ownerEntity,
                                      (int)*(int16_t*)(self + 0x28),
                                      (int)*(int16_t*)(self + 0x2a),

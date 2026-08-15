@@ -498,16 +498,27 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                     // wrong; if the offsets themselves are tiny, we are reading the
                     // wrong family of positions.
                     if (build) {
-                        float* arr2 = *(float**)((uintptr_t)build + 0x48);
                         uintptr_t ent = *(uintptr_t*)(pc + 0x10);
-                        std::fprintf(stderr, "[FishWork]   nodeArr=%p", (void*)arr2);
-                        if (arr2)
-                            for (int i = 0; i < spotCount && i < 8; ++i) {
-                                float* nd = (float*)((uint8_t*)arr2 + (size_t)i * 0x18);
-                                std::fprintf(stderr, "  n%d=(%.2f,%.2f,%.2f)",
-                                             i, nd[0], nd[1], nd[2]);
-                            }
-                        std::fprintf(stderr, "  entity=%p\n", (void*)ent);
+                        // All three families (use=0 / build=1 / create=2), because a
+                        // "create" list that sits on top of the deck is only wrong if the
+                        // OTHER families are spread across the footprint. If every family
+                        // is bunched within a tile of the origin the point list itself is
+                        // misparsed, not the drop-spot choice.
+                        static const char* kFam[3] = { "use", "build", "create" };
+                        for (int m = 0; m < 3; ++m) {
+                            float* arr2 = *(float**)((uintptr_t)build + 0x28 + m * 0x10);
+                            int cnt = *(int*)((uintptr_t)build + 0x30 + m * 0x10);
+                            std::fprintf(stderr, "[FishWork]   nodes[%s] arr=%p cnt=%d",
+                                         kFam[m], (void*)arr2, cnt);
+                            if (arr2)
+                                for (int i = 0; i < cnt && i < 8; ++i) {
+                                    float* nd = (float*)((uint8_t*)arr2 + (size_t)i * 0x18);
+                                    std::fprintf(stderr, "  n%d=(%.2f,%.2f,%.2f)dir(%.2f,%.2f,%.2f)",
+                                                 i, nd[0], nd[1], nd[2], nd[3], nd[4], nd[5]);
+                                }
+                            std::fprintf(stderr, "\n");
+                        }
+                        std::fprintf(stderr, "[FishWork]   entity=%p\n", (void*)ent);
                     }
                 }
                 // Occupancy map of the dock's own footprint rect. The mask leaves some
@@ -846,10 +857,26 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             // work+0x2c only AFTER Execute returns, so the stamp is never reached.
             //
             // Skipping our own entity is therefore restoring retail's behaviour, not
-            // papering over it — retail simply never encounters itself here. The real fix
-            // is upstream: cell+8 should not be carrying the building entity. Until that
-            // is corrected, this keeps the divergence contained and named.
-            if (cellEntity == *(uintptr_t*)((uintptr_t)self + 0x10)) continue;
+            // papering over it — retail simply never encounters itself here.
+            //
+            // UPSTREAM CAUSE FOUND 2026-08-15 and fixed: the dock's own footprint claim
+            // (dc20) was taking cell+8 on its '_' walkway cells, which are exactly where
+            // its four mode-2 drop spots sit. BANISHED_LIVE_WALKWAY_DROPCELLS (default on)
+            // leaves those cells unowned, so this branch should now be unreachable. It
+            // stays as a tripwire: if it ever fires again the claim is back, and the
+            // dock's 4-catch cap is back with it.
+            if (cellEntity == *(uintptr_t*)((uintptr_t)self + 0x10)) {
+                static bool s_warned = false;
+                if (!s_warned) {
+                    s_warned = true;
+                    std::fprintf(stderr, "[FishWork] WARNING: the dock itself is at cell+8 of "
+                                 "its own drop cell %d — the footprint claim is back "
+                                 "(BANISHED_LIVE_WALKWAY_DROPCELLS off, or a new writer). "
+                                 "The dock will cap at spotCount catches.\n", cellIdx);
+                    std::fflush(stderr);
+                }
+                continue;
+            }
 
             // Check for WorkplaceComponent (DAT_1401c8070) on cell entity
             fn_InternalBasePtr_CheckPtr(&cellEntity);

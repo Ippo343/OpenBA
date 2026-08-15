@@ -107,6 +107,31 @@ void InteractDescription_Serialize(void* self, void* stream) {
     if (loading && ext && fn_String_Equals && fn_Math_Vector3_FromYawPitch) {
         uint8_t* children = *(uint8_t**)((uintptr_t)ext + 0x30);
         int childCount = *(int32_t*)((uintptr_t)ext + 0x38);
+        // [diag] BANISHED_POINTLIST_TRACE — the RAW point list as loaded, before the
+        // use/build/create split. The parsed node arrays are only trustworthy if the
+        // names here read as words and the offsets span the building's footprint; a
+        // stride or field-offset error yields plausible-looking small floats, which is
+        // indistinguishable from real data once it reaches the node arrays.
+        {
+            static int s_pl = -1;
+            if (s_pl < 0) { const char* e = getenv("BANISHED_POINTLIST_TRACE");
+                            s_pl = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (s_pl && childCount > 0) {
+                fprintf(stderr, "[PointList] desc=%p ext=%p children=%d\n",
+                        self, ext, childCount);
+                for (int i = 0; children && i < childCount && i < 24; ++i) {
+                    uint8_t* c = children + (size_t)i * 0x18;
+                    const char* nm = *(const char**)c;
+                    const int nlen = nm ? *(const int*)(nm - 8) : -1;
+                    fprintf(stderr, "[PointList]   [%d] name=\"%.*s\"(len=%d) "
+                            "xyz=(%.3f,%.3f,%.3f) yaw=%.3f\n",
+                            i, (nlen > 0 && nlen < 64) ? nlen : 0, nm ? nm : "", nlen,
+                            *(float*)(c + 8), *(float*)(c + 0xc), *(float*)(c + 0x10),
+                            *(float*)(c + 0x14));
+                }
+                fflush(stderr);
+            }
+        }
         for (int i = 0; children && i < childCount; ++i) {
             uint8_t* child = children + (size_t)i * 0x18;  // {String@0, f@8, f@0xc, f@0x10, yaw@0x14}
             float yaw   = *(float*)(child + 0x14);

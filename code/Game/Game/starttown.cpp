@@ -213,6 +213,16 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
                 stampClass = (c == '#' || c == '_');
                 occupy     = (c != '.');
                 if (c == '_') cls = 2;       // road strip
+                // Mirror of dc20's BANISHED_LIVE_WALKWAY_DROPCELLS deviation — this path
+                // marks START-TOWN and demo-spawned buildings, so honouring it only in
+                // dc20 would leave those buildings' walkway cells claimed anyway.
+                if (c == '_') {
+                    static int s_fw = -1;
+                    if (s_fw < 0)
+                        s_fw = ::ComponentFactory::LiveEnabled(
+                                   "BANISHED_LIVE_WALKWAY_DROPCELLS") ? 1 : 0;
+                    if (s_fw) occupy = false;
+                }
             }
 
             if (stampClass) StartTown_WriteCellType((uint8_t*)game, cells, idx, cls);

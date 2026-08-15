@@ -387,6 +387,40 @@ static const char* const kDefaultOnFlags[] = {
     // measured slot0 mine=16/empty=4('.') CELL-PICK OK vs control mine=0 DEAD, trees keep
     // their +0x08 cells, 0 crash; default and FAB-scenario runs clean.
     "BANISHED_LIVE_ZONE_RASTER",
+    // ⚠ KNOWN DEVIATION FROM RETAIL, deliberately default-on. In dc20 (0x14009dc20) a
+    // footprint cell takes the owner entity in the ENTITY raster (cell+0x08) for every mask
+    // char except '.' — instruction-verified: `CMP CL,0x2e ; SETNZ BL` at 0x14009ddef, and
+    // `TEST BL,BL ; JZ` at 0x14009de21 picks owner-vs-null. With this flag on, a '_' cell
+    // (the building's own walkable strip) keeps its class-2 stamp and still evicts stale
+    // occupants, but does NOT take cell+0x08.
+    //
+    // Why: retail's FishingWork::Slot4 (0x1400e9f20) contains two mechanisms that are only
+    // coherent when the dock's four mode-2 "create" drop cells read cell+0x08 == 0 —
+    //   (1) the state-2 latch is cleared ONLY by `spotState==2 && cell+8==0`, and
+    //   (2) the no-free-spot fallback hands the entity found at cell+8 to f8620, which
+    //       dispatches that work's Execute — finding ITSELF there is unbounded recursion.
+    // Those cells are '_' on FishermansDock.rsc's _pathBitmap, so the claim latches all
+    // four spots after exactly spotCount catches and the dock stops for good, and it is
+    // also why our fallback needs a self-entity guard against a measured stack overflow.
+    //
+    // Blast radius is bounded: buildings block placement and answer the cell pick through
+    // the ZONE raster (cell+0x00 / the '.'-reserve counter at cell+0x28), not through
+    // cell+0x08 — f5d0 (0x14009f5d0), the per-cell placement predicate, reads `*cell` and
+    // `cell[0x28]` and never touches cell+8. dc20's stale-occupant eviction runs before the
+    // mask sample, so a building placed over trees still clears them on '_' cells too.
+    //
+    // Measured 2026-08-15, same harness, single change: default (this flag on) => 44 fish
+    // piles spawned, each landing EXACTLY on a drop-spot cell, spots recycling; with
+    // BANISHED_LIVE_WALKWAY_DROPCELLS=0 => 4 piles, all four spots latched at state 2,
+    // every pile rerouted off its spot by CreateRawMaterial.
+    //
+    // OPEN: which retail step leaves those cells unowned is NOT identified. Every link was
+    // checked byte-faithful — dc20/dee0/41b0/4750 (claim+release), d360 (zone), 2e20 and the
+    // PointList parse (the drop points ARE mid-deck), the mask string and its rotation, the
+    // MapComponent rect, bd40 (the reroute). The claim arrives through retail's own door
+    // (ClearArea state-2 enter -> msg 1 -> MapComponent slot 12), and no release for the
+    // dock's rect ever follows it. Find that step and this flag should go away.
+    "BANISHED_LIVE_WALKWAY_DROPCELLS",
     // Wild deer herds — verified end-to-end 2026-07-29 and soak-passed 2026-07-29
     // (20+ real minutes at FORCE_SPEED=10 ≈ a full deer lifespan: 16 herds, 108
     // deaths vs 119 AdjustSize repop spawns, per-herd census stable across three

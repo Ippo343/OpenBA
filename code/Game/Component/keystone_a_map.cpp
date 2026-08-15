@@ -34,6 +34,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
+#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -63,6 +64,14 @@ extern "C" void MapComponent_ReportDc20Evictions(const char* tag) {
 }
 
 namespace {
+
+// BANISHED_LIVE_WALKWAY_DROPCELLS — default-on deviation; the full rationale, the retail
+// bytes it contradicts, and the A/B numbers are on the flag in kDefaultOnFlags.
+static bool WalkwayDropCells() {
+    static int on = -1;
+    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WALKWAY_DROPCELLS") ? 1 : 0;
+    return on == 1;
+}
 
 // BANISHED_DC20_TRACE=1 — log dc20's stale-occupant eviction decisions (see the branch).
 static bool DC20Trace() {
@@ -190,9 +199,17 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                 ++s_n;
                 const int64_t stamp = param_8 ? *param_8 : 0;
                 const int stampLen = stamp ? *reinterpret_cast<int*>(stamp - 8) : -1;
-                std::fprintf(stderr, "[MapStamp] rect=(%d,%d) %dx%d rot=%d stamp=%p len=%d",
+                // WHO claimed. Retail has two distinct doors into 41b0 — slot 6 (spawn
+                // claim, gated on MapDescription+0x30) and slot 12 (ClearArea's state-2
+                // "message 1", i.e. claim-when-clearing-finishes) — and a harness/instant
+                // -build path can add a third that retail never walks. Which door ran
+                // decides whether an occupied cell is retail's behaviour or ours.
+                std::fprintf(stderr, "[MapStamp] rect=(%d,%d) %dx%d rot=%d stamp=%p len=%d "
+                             "caller=%p/%p",
                              param_4, param_5, param_6, param_7, param_9,
-                             (void*)stamp, stampLen);
+                             (void*)stamp, stampLen,
+                             __builtin_return_address(0),
+                             __builtin_extract_return_addr(__builtin_return_address(1)));
                 if (stamp && stampLen > 0) {
                     std::fprintf(stderr, " \"");
                     for (int k = 0; k < stampLen && k < 160; ++k) {
@@ -204,6 +221,30 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                     std::fprintf(stderr, "  <-- NO MASK: every cell in the rect is claimed");
                 }
                 std::fprintf(stderr, "\n");
+                // Which char the rotation math actually SAMPLES per grid cell. The stamp
+                // string alone cannot say whether the '.' cells land where the building
+                // expects them: the sampler assumes a row stride of (width+1), so any
+                // other separator (indentation, CRLF) silently shifts every row and the
+                // free cells end up somewhere else — indistinguishable from a correct
+                // stamp in the string dump above.
+                if (stamp && stampLen > 0) {
+                    for (int r = 0; r < param_7 && r < 32; ++r) {
+                        std::fprintf(stderr, "[MapStamp]   y=%3d ", param_5 + r);
+                        for (int c = 0; c < param_6 && c < 32; ++c) {
+                            const int dr = param_7 - 1 - r, dc = param_6 - 1 - c;
+                            int i11, i17, i8, i12;
+                            if (param_9 == 0x5a)      { i11 = param_6; i17 = param_7; i8 = dc; i12 = r;  }
+                            else if (param_9 == 0xb4) { i11 = param_7; i17 = param_6; i8 = dr; i12 = dc; }
+                            else if (param_9 == 0x10e){ i11 = param_6; i17 = param_7; i8 = c;  i12 = dr; }
+                            else                      { i11 = param_7; i17 = param_6; i8 = r;  i12 = c;  }
+                            const int idx = ((i11 - i8) - 1) * (i17 + 1) + i12;
+                            const char ch = (idx >= 0 && idx < stampLen)
+                                          ? *reinterpret_cast<char*>(stamp + idx) : '?';
+                            std::fprintf(stderr, "%c", (ch == '\n') ? '/' : (ch >= 32 ? ch : '?'));
+                        }
+                        std::fprintf(stderr, "\n");
+                    }
+                }
                 std::fflush(stderr);
             }
         }
@@ -367,6 +408,17 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         if (cVar1 == '_') {
                             bVar16 = 2;
                         }
+                        // ⚠ DELIBERATE DEVIATION — BANISHED_LIVE_WALKWAY_DROPCELLS (default
+                        // on; set =0 to restore the byte-faithful claim). Retail claims '_'
+                        // exactly like '#' (CMP CL,0x2e ; SETNZ BL). A '_' cell is the
+                        // building's own walkable strip and is where its produce is dropped,
+                        // and retail's FishingWork::Slot4 only works if those cells read
+                        // cell+8 == 0. Class stamp and stale-occupant eviction are untouched;
+                        // ownership for placement/picking lives in the ZONE raster (cell+0),
+                        // which this does not affect. Full rationale on the flag.
+                        if (cVar1 == '_' && WalkwayDropCells()) {
+                            bVar19 = false;
+                        }
                     }
 
                     uint8_t bVar10 = *reinterpret_cast<uint8_t*>(lVar14 + 0x29);
@@ -429,6 +481,26 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                                      int param_4, int param_5, int param_6,
                                      int64_t* param_7, int param_8) {
     EnsureInit();
+
+    // [diag] BANISHED_MAPSTAMP_TRACE — the RELEASE side. dee0 nulls cell+8 over the whole
+    // rect unconditionally, so "was this rect ever released again after 41b0 claimed it?"
+    // is the question that decides whether a completed building still owns its footprint
+    // in the entity raster. Paired with the [MapStamp] claim line.
+    {
+        static int s_st = -1;
+        if (s_st < 0) { const char* e = std::getenv("BANISHED_MAPSTAMP_TRACE");
+                        s_st = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_st) {
+            static int s_n = 0;
+            if (s_n < 40) {
+                ++s_n;
+                std::fprintf(stderr, "[MapStamp] RELEASE rect=(%d,%d) %dx%d rot=%d "
+                             "(cell+8 nulled over the whole rect)\n",
+                             param_3, param_4, param_5, param_6, param_8);
+                std::fflush(stderr);
+            }
+        }
+    }
 
     int iVar16 = 0;
     int iVar3 = param_6;
