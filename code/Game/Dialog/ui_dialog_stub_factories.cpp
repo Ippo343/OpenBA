@@ -1321,7 +1321,11 @@ UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);
 // ---- OrchardUI: PROMOTED to real SA vtable (orchardui.cpp) — the orchard panel's
 //      tree-type combo now populates and the yield bar tracks growth instead of
 //      sitting empty at 0. ----
-UI_DIALOG_STUB(CropUI,              "SelectResourceUI",     0x60);
+// ---- CropUI: PROMOTED to real SA vtable (cropui_promote.cpp) — it was the last
+//      member of this family still stubbed, which is why the crop field's "?"
+//      crop-select combo did nothing: idx4 never bound the element or stamped id
+//      500, so the dropdown had zero rows, and idx9 was a no-op so a pick could
+//      never reach idx11. ----
 // ---- PastureUI: PROMOTED to real SA vtable (pastureui.cpp) — livestock-type
 //      combo + animal-count slider now live; retires BANISHED_PASTURE_AUTOTYPE
 //      as the only way to type a pasture. ----

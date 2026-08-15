@@ -102,8 +102,14 @@ extern "C" void FillTypeIdGlobals_food() {
 // already registered elsewhere, which is exactly why only this one arm was dead.
 static const float k_rdata_172144 = 0.99f;
 
+// 0x14011b410 = mean crop maturity. CropUI's per-frame slot resolves this by address
+// (retail CropUI_Update calls it to drive the yield bar), so it has to be registered
+// even though the crop-field state machine reaches the same body directly.
+extern "C" float CropFieldComponent_Maturity(void* comp);
+
 void RegisterFoodTypeIds() {
     for (int i = 0; i < kSlotCount; ++i)
         RegisterExeAddr(g_slots[i].addr, reinterpret_cast<uintptr_t>(&g_slots[i].value));
     RegisterExeAddr(0x140172144, reinterpret_cast<uintptr_t>(&k_rdata_172144));
+    RegisterExeAddr(0x14011b410, reinterpret_cast<uintptr_t>(&CropFieldComponent_Maturity));
 }

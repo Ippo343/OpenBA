@@ -322,6 +322,13 @@ float CF_Maturity(uintptr_t comp) {
 
 }  // namespace
 
+// Retail 0x14011b410 — exposed so CropUI's per-frame slot can resolve it the way
+// retail does (CropUI_Update calls FUN_14011b410 to drive the yield bar). CF_Maturity
+// itself is in the anonymous namespace above; this is the registered entry point.
+extern "C" float CropFieldComponent_Maturity(void* comp) {
+    return comp ? CF_Maturity(reinterpret_cast<uintptr_t>(comp)) : 0.0f;
+}
+
 // ── state 2 enter — 0x14011a920 ───────────────────────────────────────────────────
 // Nothing but "publish my master switch to the workplace".
 static char CropField_State2Enter(void* self, void* /*sm*/) {
