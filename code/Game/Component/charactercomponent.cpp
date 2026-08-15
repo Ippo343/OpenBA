@@ -307,9 +307,59 @@ static void CharacterComponent_StartupVSlot(void* s) {
     CharacterComponent_BodyInit(reinterpret_cast<CharacterComponent*>(s));
 }
 static void CharacterComponent_Update9VSlot(void* s, void* t) {
+    // Retail forwards the Time operand RAW: slot 9 (0x140109480) does MOV R8,RDX at
+    // 0x1401094a8, and the slot-8 move-tick likewise leaves RDX untouched across its
+    // CALL to the executor. Character_UpdateAnimation then hands that same value to the
+    // action's +0x30 as param_3. Dereferencing it here put a Time VALUE where every
+    // action's tick expects whatever retail's RDX holds.
     CharacterComponent_Update(reinterpret_cast<CharacterComponent*>(s),
-                              *reinterpret_cast<int64_t*>(t));
+                              reinterpret_cast<int64_t>(t));
 }
+// ------------------------------------------------------------------
+// Slot 7 (+0x38) — CharacterComponent::OnRemove (retail 0x140109980), the RELEASE half
+// of the char-index allocation BodyInit folds in above. Retail body is exactly:
+//     FUN_1400c5400(self + 0x48);                       // tear down the action stack
+//     CharMgr_impl_8560(*(gw + 0x88), *(int*)(self+0x40));  // unlink from its cell list
+//     *(int*)(self + 0x40) = -1;
+//
+// Without it we allocate a char-index for every character and never give one back, so a
+// dead character's slot keeps a dangling InternalBasePtr AND stays linked in its spatial
+// cell. Nothing walked those lists until the action +0x30 tick went live (both callers of
+// the proximity query 0x140092260 are +0x30 slots), which is why this was invisible: the
+// query then reads the stale slot's entity +0x68 -> +0x160 and faults on freed memory.
+// Gated with the same flag as the allocation so the two halves can never be on separately.
+// ------------------------------------------------------------------
+typedef void (*fn_ActStackClear_t)(void* stackAt48);
+extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
+
+static void CharacterComponent_OnRemoveVSlot(void* s) {
+    if (!s) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(s);
+
+    static fn_ActStackClear_t s_clear = nullptr;
+    static int s_resolved = 0;
+    if (!s_resolved) {
+        s_resolved = 1;
+        s_clear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
+    }
+    if (s_clear) s_clear(p + 0x48);
+
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)
+                         : 0;
+    int idx = *reinterpret_cast<int32_t*>(p + 0x40);
+    // DEVIATION (ours, not retail's): retail passes +0x40 through unguarded, and
+    // impl_8560 writes `slots + idx*0x18` and pushes idx onto the free list without
+    // checking it -- so a -1 corrupts memory ahead of the slot array. Retail can do that
+    // because its OnAdd always allocated an index. Ours cannot: BodyInit only allocates
+    // when it found both a ModelComponent and a seeded gw+0x88, so a CharacterComponent
+    // can legitimately still hold the -1 sentinel here. Guard both operands for that
+    // reason alone; a character that never registered has nothing to release.
+    if (charMgr && idx >= 0) CharMgr_impl_8560(charMgr, idx);
+
+    *reinterpret_cast<int32_t*>(p + 0x40) = -1;
+}
+
 static void CharacterComponent_FinishLiveVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER")) {
         CharacterComponent_LiveVtable[4] =
@@ -317,6 +367,9 @@ static void CharacterComponent_FinishLiveVtable() {
         CharacterComponent_LiveVtable[8] =
             reinterpret_cast<void*>(&CharacterComponent_MoveTickVSlot);
     }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK"))
+        CharacterComponent_LiveVtable[7] =
+            reinterpret_cast<void*>(&CharacterComponent_OnRemoveVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_UPDATE9"))
         CharacterComponent_LiveVtable[9] =
             reinterpret_cast<void*>(&CharacterComponent_Update9VSlot);

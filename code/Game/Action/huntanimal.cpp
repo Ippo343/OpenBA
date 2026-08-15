@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <cmath>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -341,6 +342,74 @@ static void HAE_Report() {
     }
 }
 
+// Ground truth for noTarget, independent of the quadtree. Walks the char manager's slot
+// array directly (146 entries -- cheap, and no traversal to overflow, unlike the earlier
+// radius-400 probe). For each live slot: distance from the hunter, and whether its owner
+// entity carries the searched component type. This separates "the walk is still missing
+// cells" from "nothing of that type is anywhere near the hunter".
+static void HAE_BruteScan(void* gridPtr, const float* pos, int wantType, float radius) {
+    static int s_t = -1;
+    if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                   s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (!s_t || !gridPtr) return;
+    static long long s_n = 0;
+    if ((s_n++ % 900) != 0) return;
+
+    const uint8_t* m = (const uint8_t*)gridPtr;
+    const uint8_t* slots = *(const uint8_t* const*)(m + 0x10);
+    int slotCount = *(const int*)(m + 0x18);
+    if (!slots) return;
+
+    int live = 0, typed = 0, inRadiusAny = 0, inRadiusTyped = 0;
+    float bestAny = 1e30f, bestTyped = 1e30f;
+
+    for (int i = 0; i < slotCount && i < 4096; ++i) {
+        const uint8_t* slot = slots + (int64_t)i * 0x18;
+        if (*(const int*)(slot + 0x10) < 0) continue;          // not placed in a cell
+        void* ent = *(void* const*)(slot + 0x00);
+        if (!ent) continue;
+        ++live;
+        void* holder = *(void* const*)((const uint8_t*)ent + 0x68);
+        if (!holder) continue;
+        float dx = *(const float*)((const uint8_t*)holder + 0x158) - pos[0];
+        float dy = *(const float*)((const uint8_t*)holder + 0x15c) - pos[1];
+        float dz = *(const float*)((const uint8_t*)holder + 0x160) - pos[2];
+        float d = std::sqrt(dx*dx + dy*dy + dz*dz);
+        if (d < bestAny) bestAny = d;
+        if (d < radius) ++inRadiusAny;
+
+        // same component-type test the query applies: owner at +0x10, component array at
+        // +0x30 with count at +0x38, identity via vtable slot +0x10 (GetTypeId).
+        bool match = false;
+        if (wantType != 0) {
+            void* owner = *(void* const*)((const uint8_t*)ent + 0x10);
+            if (owner) {
+                int cnt = *(const int*)((const uint8_t*)owner + 0x38);
+                void** comps = *(void** const*)((const uint8_t*)owner + 0x30);
+                for (int c = 0; comps && c < cnt && c < 64; ++c) {
+                    void* comp = comps[c];
+                    if (!comp) continue;
+                    typedef int (*getId_t)(void*);
+                    getId_t g = *reinterpret_cast<getId_t*>(*(uintptr_t*)comp + 0x10);
+                    if (g && g(comp) == wantType) { match = true; break; }
+                }
+            }
+        }
+        if (match) {
+            ++typed;
+            if (d < bestTyped) bestTyped = d;
+            if (d < radius) ++inRadiusTyped;
+        }
+    }
+
+    std::fprintf(stderr,
+        "[HuntScan] slots=%d live=%d wantType=%d typedTotal=%d | r=%.1f inR_any=%d "
+        "inR_typed=%d | nearestAny=%.2f nearestTyped=%.2f\n",
+        slotCount, live, wantType, typed, radius, inRadiusAny, inRadiusTyped,
+        bestAny > 1e29f ? -1.0f : bestAny, bestTyped > 1e29f ? -1.0f : bestTyped);
+    std::fflush(stderr);
+}
+
 void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     uint8_t* s = (uint8_t*)self;
 
@@ -395,6 +464,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     // If no result found, bail
     if (queryResult == nullptr) {
         ++g_hae_noTarget; HAE_Report();
+        HAE_BruteScan(gridPtr, searchPos, searchTypeId, searchRadius);
         return;
     }
 

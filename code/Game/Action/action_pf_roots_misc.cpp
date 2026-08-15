@@ -356,7 +356,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
     while (true) {
         // Skip nodes with no population; pop down to the next populated node.
         int recIdx;
-        float cellF;
+        int cellIdx;
         while (true) {
             if (top < 0) {
                 return reinterpret_cast<int64_t*>(param_4);
@@ -369,9 +369,17 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
             //   cellIdx X=0x4c -> +0x3c ; e0 X=0x40 -> +0x30 ; e1 X=0x44 -> +0x34 ;
             //   e2 X=0x48 -> +0x38 ; c0 X=0x3c -> +0x2c ; c1 X=0x38 -> +0x28 ; c2 X=0x34 -> +0x24
             int64_t recBase = (int64_t)recIdx * 0x24;
-            cellF = *reinterpret_cast<float*>(walker + recBase + 0x3c);   // afStack_24cc[rec*9]
+            // cellIdx is an INT32, not a float. Ghidra types the walker buffer as
+            // `float afStack_24cc[2299]`, so this load prints as a float -- but the
+            // instruction at 0x14009240b is `MOVSXD RSI, dword ptr [RBP + R14*0x4 + 0x4c]`,
+            // a sign-extended integer load, and 18880 writes it with `MOV dword` as
+            // parentCell*4 + 1..4 (action_pf_geom.cpp:444). Reading the int bits AS a float
+            // and truncating collapsed every non-root cell to 0 (0x00000001 -> 1.4e-45 ->
+            // (int)0), so the walk only ever consulted cell 0's -- empty -- entity list and
+            // the query returned null at ANY radius with ANY filter.
+            cellIdx = *reinterpret_cast<int*>(walker + recBase + 0x3c);   // afStack_24cc[rec*9]
             if (0 < *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(region + 0x50) +
-                                            (int64_t)(int)cellF * 4)) break;
+                                            (int64_t)cellIdx * 4)) break;
             top = top - 1;
         }
         *reinterpret_cast<int*>(walker + 0x08) = top;
@@ -416,8 +424,8 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
             continue;
         }
 
-        // Node intersects: walk its entity list. iVar11 = head index at region+0x30[cellF].
-        int ent = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(region + 0x30) + (int64_t)(int)cellF * 4);
+        // Node intersects: walk its entity list. iVar11 = head index at region+0x30[cellIdx].
+        int ent = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(region + 0x30) + (int64_t)cellIdx * 4);
         int headSentinel = ent;
         if (-1 < ent) {
             do {
