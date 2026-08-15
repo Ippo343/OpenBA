@@ -522,13 +522,26 @@ void FollowUp(int frameNum) {
                 // no eligible citizens (faithful), or the record's key fields were never
                 // populated at all (a data-load gap). All-zero keys distinguish them, so
                 // print the raw pair for the first few citizens rather than only the count.
-                if (i < 3)
-                    std::fprintf(stderr, "[FoodPanel]       citizen[%d]=%p rec(+0x288)=%p "
-                                 "rec+0x28=0x%llx rec+0x30=0x%llx  (building key=0x%llx)\n",
+                if (i < 1) {
+                    // CitizenDescription carries THREE ExternalRef<Profession> (+0x20,
+                    // +0x28, +0x30); only the last two feed the attendance finders, so
+                    // print all three next to the two professions we can already name
+                    // (profReg+0x30 default/laborer, +0x38 builder). That turns three
+                    // anonymous pointers into an identified map instead of a guess.
+                    uintptr_t pr = *reinterpret_cast<uintptr_t*>(
+                                       reinterpret_cast<uintptr_t>(gw3) + 0xb0);
+                    std::fprintf(stderr, "[FoodPanel]       citizen[%d]=%p rec(+0x288)=%p\n"
+                                 "[FoodPanel]         rec+0x20=0x%llx  rec+0x28=0x%llx  rec+0x30=0x%llx\n"
+                                 "[FoodPanel]         schoolWPC+0x48=0x%llx  laborer(profReg+0x30)=0x%llx  "
+                                 "builder(profReg+0x38)=0x%llx\n",
                                  i, reinterpret_cast<void*>(cz), reinterpret_cast<void*>(rec),
+                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x20),
                                  (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x28),
                                  (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x30),
-                                 (unsigned long long)key);
+                                 (unsigned long long)key,
+                                 (unsigned long long)(pr ? *reinterpret_cast<uint64_t*>(pr + 0x30) : 0),
+                                 (unsigned long long)(pr ? *reinterpret_cast<uint64_t*>(pr + 0x38) : 0));
+                }
             }
             // Name the two keys the citizen record actually carries by finding the
             // building that requires each one. Citizens all share one record here, so
@@ -550,6 +563,37 @@ void FollowUp(int frameNum) {
                     }
                 }
                 const uint32_t tidWpc = Tid("WorkPlaceComponent");
+                // Dump the registry itself. sub_1930 (0x140111930) scans townMgr+0x60
+                // (count +0x68) — the ATTENDANCE component list, not the entity list:
+                // FindStorage appends the citizen into `found+0x28` with count
+                // `found+0x30`, which is AttendanceComponent's own queue. So a school
+                // that is absent from this list is unreachable no matter what its key
+                // is, and that is a different bug from a key mismatch. Print both.
+                std::fprintf(stderr, "[FoodPanel]       townMgr+0x60 attendance registry: %d entr%s\n",
+                             bN, bN == 1 ? "y" : "ies");
+                bool selfListed = false;
+                for (int i = 0; i < bN && bArr; ++i) {
+                    void** bs = reinterpret_cast<void**>(bArr + static_cast<uintptr_t>(i) * 8);
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(bs);
+                    uintptr_t b = reinterpret_cast<uintptr_t>(*bs);
+                    if (!b) continue;
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(b + 0x10));
+                    void* sub = *reinterpret_cast<void**>(b + 0x10);
+                    void* c = FindCompOnEntity(sub, tidWpc);
+                    const uint64_t k48 = c ? *reinterpret_cast<uint64_t*>(
+                                            reinterpret_cast<uintptr_t>(c) + 0x48) : 0;
+                    if (b == reinterpret_cast<uintptr_t>(s_seatComp) || sub == s_seatEntity)
+                        selfListed = true;
+                    if (i < 8)
+                        std::fprintf(stderr, "[FoodPanel]         [%d] comp=%p entity=%p wpc=%p "
+                                     "wpc+0x48=0x%llx queue(+0x30)=%d\n",
+                                     i, reinterpret_cast<void*>(b), sub, c,
+                                     (unsigned long long)k48,
+                                     *reinterpret_cast<int32_t*>(b + 0x30));
+                }
+                std::fprintf(stderr, "[FoodPanel]       this schoolhouse listed in the registry: %s\n",
+                             selfListed ? "YES"
+                                        : "NO  <-- sub_1930 can never see it; the key is not the problem");
                 for (int k = 0; k < 2; ++k) {
                     if (!want[k]) continue;
                     const char* owner = "NO BUILDING IN TOWN REQUIRES THIS KEY";
