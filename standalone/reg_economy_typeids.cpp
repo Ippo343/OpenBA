@@ -210,6 +210,18 @@ static uint32_t g_tid_CreateDragDescription    = 0;  // 0x1401c7430
 // AttendanceUI deref was a null-pointer crash-in-waiting. Audit 2026-07-19.
 static uint32_t g_tid_AttendanceDescription    = 0;  // 0x1401c3f78
 
+// 0x1401c3f40 AttendanceComponent — the id fn_FindComponent_Attendance searches by, and
+// AttendanceComponent's own vtable slot 2 (0x140002650 = `MOV EAX,[0x1401c3f40]; RET`).
+// The Description at 0x1401c3f78 above was registered in the 2026-07-19 audit and this
+// one, 0x38 bytes earlier, was MISSED — so the finder ran with a null id pointer, matched
+// nothing, and every caller got a null component back.
+//
+// Latent until 2026-08-15, when AttendanceUI was promoted out of UI_DIALOG_STUB: its
+// Slot4 does `*(void**)(attendComp + 0x18)` exactly as retail does, so clicking the
+// school read [0 + 0x18] and took an ACCESS_VIOLATION. Registering the storage is the
+// upstream fix — the deref itself is faithful and stays unguarded.
+static uint32_t g_tid_AttendanceComponent      = 0;  // 0x1401c3f40
+
 // 0x1401c7d28 ResidenceDescription — read by CitizenComp_helper_a4f0's cast gate
 // (citizencomponent.cpp:1495, education-vs-capacity check: null id -> res null ->
 // eduLevel forced 0 -> gate always passes) and residencecomponent.cpp:102. Same
@@ -256,6 +268,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
     RegisterExeAddr(0x1401c7430, reinterpret_cast<uintptr_t>(&g_tid_CreateDragDescription));
     RegisterExeAddr(0x1401c3f78, reinterpret_cast<uintptr_t>(&g_tid_AttendanceDescription));
+    RegisterExeAddr(0x1401c3f40, reinterpret_cast<uintptr_t>(&g_tid_AttendanceComponent));
     RegisterExeAddr(0x1401c7d28, reinterpret_cast<uintptr_t>(&g_tid_ResidenceDescription));
     RegisterExeAddr(0x1401c7d98, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
     RegisterExeAddr(0x1401c7628, reinterpret_cast<uintptr_t>(&g_tid_DestroyDescription));
@@ -286,6 +299,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
     g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
     g_tid_AttendanceDescription    = ::Object::GetTypeIdByName("AttendanceDescription");
+    g_tid_AttendanceComponent      = ::Object::GetTypeIdByName("AttendanceComponent");
     g_tid_ResidenceDescription     = ::Object::GetTypeIdByName("ResidenceDescription");
     g_tid_StateMachineComponent    = ::Object::GetTypeIdByName("StateMachineComponent");
     g_tid_DestroyDescription       = ::Object::GetTypeIdByName("DestroyDescription");

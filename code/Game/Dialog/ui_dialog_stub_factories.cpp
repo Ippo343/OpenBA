@@ -198,8 +198,102 @@ namespace uistub_HotKeyToolTipUI {
 REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
               &uistub_HotKeyToolTipUI::Factory, &uistub_HotKeyToolTipUI::InPlace);
 
+// ---- AttendanceUI: PROMOTED to the real reimpl (2026-08-15) ------------------
+// Symptom: the school panel read "students" with no number in front of it.
+//
+// Both bodies have been ported in code/Game/Dialog/attendanceui.cpp since that
+// file was written, and both were wired into NOTHING — the generic stub's 48
+// no-op slots. This is the "stub sweep is a WIRING job" shape again
+// (project_next_stub_controller_sweep): a ported body is not a reached body.
+//
+// The count is not a label of its own; it is TEXT PARAMETER 0 of the panel's
+// ProgressElement ("{0} students" in the .rsc). With idx7 a no-op the parameter
+// was never set, so the element rendered its literal remainder — the number was
+// not wrong, it was absent, which is exactly what "students" with nothing in
+// front of it looks like.
+//
+// Slot indices verified from the vtable BYTES at 0x14015b070 (11 slots wide; the
+// RTTI name string "Attendan..." starts immediately after idx10):
+//   idx4 (+0x20) 0x14005dd40 Slot4 — find the ProgressElement, set its MAXIMUM
+//                                    from AttendanceDescription+0x20 (capacity)
+//   idx7 (+0x38) 0x14005dc50 Slot7 — per-frame: set current value + text param 0
+// Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
+// these two is full behavioural coverage for this class.
+struct AttendanceUI;   // opaque; the reimpl casts internally
+extern void AttendanceUI_Slot4(AttendanceUI* self);
+extern void AttendanceUI_Slot7(AttendanceUI* self);
+namespace uistub_AttendanceUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("AttendanceUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // ProgressElement's type-id .rdata slot is null unless BANISHED_LIVE_ELEMENT_TIDS
+    // is on, and IsDerivedFrom(elem, 0) is always false — which would leave +0x30 null
+    // and turn Slot4's +0x124 write into a null-deref. Same private by-name resolve
+    // orchardui.cpp and cropui_promote.cpp use, for the same reason. See
+    // reference_gated_element_typeid_disables_controller.
+    static uint32_t s_progress = 0;
+    void EnsureTypeIds() {
+        static uint32_t s_entity=0, s_attDesc=0, s_attComp=0;
+        if (!g_TypeId_ProgressElement || !*g_TypeId_ProgressElement) {
+            if (!s_progress) s_progress = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
+            if (s_progress) g_TypeId_ProgressElement = &s_progress;
+        }
+        if (!g_TypeId_ComponentEntity) {
+            s_entity = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+            if (s_entity) g_TypeId_ComponentEntity = &s_entity;
+        }
+        if (!g_TypeId_AttendanceDescription || !*g_TypeId_AttendanceDescription) {
+            s_attDesc = ::Object::ResolveTypeIdByNameLazy("AttendanceDescription");
+            if (s_attDesc) g_TypeId_AttendanceDescription = &s_attDesc;
+        }
+        // fn_FindComponent_Attendance searches by this one. Its .rdata slot
+        // (0x1401c3f40) went unregistered until 2026-08-15 — the 2026-07-19 audit
+        // registered the Description 0x38 bytes later and missed the Component — so
+        // the finder ran with a null id, matched nothing, and Slot4's faithful
+        // `attendComp+0x18` read [0+0x18] the first time anyone clicked a school.
+        // reg_economy_typeids.cpp now supplies the storage; this keeps a resolve
+        // failure a skip rather than a repeat of that crash.
+        if (!g_TypeId_AttendanceComponent || !*g_TypeId_AttendanceComponent) {
+            s_attComp = ::Object::ResolveTypeIdByNameLazy("AttendanceComponent");
+            if (s_attComp) g_TypeId_AttendanceComponent = &s_attComp;
+        }
+    }
+    // Both reimpls dereference these globals unconditionally, as retail does. Skip
+    // rather than fault if any failed to resolve — a standalone-only failure mode
+    // (retail's .rdata is always populated), so the guard is here at the boundary
+    // rather than inside the faithful bodies.
+    bool Ready() {
+        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+            && g_TypeId_AttendanceDescription && *g_TypeId_AttendanceDescription
+            && g_TypeId_AttendanceComponent && *g_TypeId_AttendanceComponent;
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        AttendanceUI_Slot4(reinterpret_cast<AttendanceUI*>(self));
+    }
+    void Slot7(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        AttendanceUI_Slot7(reinterpret_cast<AttendanceUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    // ⚠ Declared AFTER g_init: StubVtableInit re-fills every slot with StubNop, so a
+    // slot written before it runs is erased (project_next_stub_controller_sweep).
+    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                                  g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_sw;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x38;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x38,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(AttendanceUI, "UI::DialogController",
+              &uistub_AttendanceUI::Factory, &uistub_AttendanceUI::InPlace);
+
 // ---- DialogController family ------------------------------------------------
-UI_DIALOG_STUB(AttendanceUI,        "UI::DialogController", 0x38);
 UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
 // ControlUI: PROMOTED to a real per-class standalone vtable in
