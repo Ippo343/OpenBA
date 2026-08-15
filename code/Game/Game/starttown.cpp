@@ -2332,6 +2332,26 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
         ringPlace("BANISHED_BUILD_DEMO_CROPFIELD", "Template\\CropField.rsc",
                   "cropfield", 8, 8);
+
+        // ── the four NON-food workplaces that carry the panel work checkbox ────────
+        // Added 2026-08-15 so the slot-13/14 wave is measurable: the coverage probe in
+        // food_placement_harness.cpp reads a component's LIVE vtable, and a per-type
+        // vtable is only filled by the first factory call for that type — so with no
+        // instance in the world there is literally nothing to measure. All four are
+        // ordinary placed structures with an authored CreatePlacedDescription, so the
+        // generic ring scan handles them and the fallback footprints are never used.
+        ringPlace("BANISHED_BUILD_DEMO_FORESTERLODGE", "Template\\ForesterLodge.rsc",
+                  "foresterlodge", 6, 6);
+        ringPlace("BANISHED_BUILD_DEMO_MARKET", "Template\\Market.rsc",
+                  "market", 10, 10);
+        ringPlace("BANISHED_BUILD_DEMO_SCHOOLHOUSE", "Template\\SchoolHouse.rsc",
+                  "schoolhouse", 6, 6);
+        // Tavern is the ConsumeProduceComponent carrier (wheat -> ale). If the probe
+        // reports ConsumeProduceComponent NOT PLACED with a tavern in the world, the
+        // component lives on a different template — Tailor/ToolMaker are the next
+        // candidates — and the table entry, not the port, is what needs correcting.
+        ringPlace("BANISHED_BUILD_DEMO_TAVERN", "Template\\Tavern.rsc",
+                  "tavern", 6, 6);
         // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
         // Not ring-placed like the crop field, and for a sharper reason than the
         // gatherer hut's: the lodge's siting input does not exist yet at all. The only

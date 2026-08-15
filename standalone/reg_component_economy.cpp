@@ -40,6 +40,10 @@ extern void     WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);
 
 extern void     AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);
 extern void     AttendanceComponent_ProcessQueue(void* self);
+extern "C" uint8_t AttendanceComponent_CommandMask(void* self, int cmd);   // 0x140043f10
+extern "C" void    AttendanceComponent_Command(void* self, int cmd);       // 0x140043e80
+extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd);     // 0x14011f920
+extern "C" void    ForesterComponent_Command(void* self, int cmd);         // 0x14011f890
 
 extern void     InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);
 // InteractComponent_Draw takes the typed pointer; declared with a matching opaque sig.
@@ -110,6 +114,17 @@ void RegisterComponentBatch_economy() {
     // attendancecomponent.cpp
     RegisterExeAddr(0x140002e10, reinterpret_cast<uintptr_t>(&AttendanceComponent_GetJobHostComponent));
     RegisterExeAddr(0x140043f60, reinterpret_cast<uintptr_t>(&AttendanceComponent_ProcessQueue));
+    // Vtable slots 13/14 — the panel command pair behind the "work" checkbox. Attendance
+    // is not a ResourceProduceComponent subclass; both bodies delegate to the entity's
+    // WorkPlaceComponent (the checkbox IS WPC+0x50 accepting).
+    RegisterExeAddr(0x140043f10, reinterpret_cast<uintptr_t>(&AttendanceComponent_CommandMask));
+    RegisterExeAddr(0x140043e80, reinterpret_cast<uintptr_t>(&AttendanceComponent_Command));
+
+    // forestercomponent.cpp — vtable slots 13/14. The forester lodge is the one class in
+    // this group that genuinely OVERRIDES the ResourceProduce base pair, because it has
+    // two independent toggles (+0x50 plant / +0x51 cut) rather than one.
+    RegisterExeAddr(0x14011f920, reinterpret_cast<uintptr_t>(&ForesterComponent_CommandMask));
+    RegisterExeAddr(0x14011f890, reinterpret_cast<uintptr_t>(&ForesterComponent_Command));
 
     // interactcomponent.cpp
     RegisterExeAddr(0x140004740, reinterpret_cast<uintptr_t>(&InteractComponent_FindWorkplaceComponent));

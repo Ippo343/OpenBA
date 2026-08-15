@@ -222,7 +222,24 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     if (s_findWpc) s_findWpc(owner, &wpcIbp);
     if (wpcIbp != 0 && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
-        s_setAccepting(*reinterpret_cast<uintptr_t*>(wpcIbp), 0);
+        // FIXED 2026-08-15 — this line used to read
+        //     s_setAccepting(*reinterpret_cast<uintptr_t*>(wpcIbp), 0);
+        // i.e. one deref too many. `s_findWpc(owner, &wpcIbp)` writes the COMPONENT
+        // POINTER into the local, so the extra `*` passed the WPC's own VTABLE POINTER
+        // as the component. SetAccepting then wrote `*(char*)(vtable+0x50)` and read
+        // `vtable+0x10` as the owner entity, so the mesh finder walked a garbage
+        // component array and dereferenced a -1 slot: ACCESS_VIOLATION reading
+        // 0xffffffffffffffff in FindComponentByTypeId.
+        //
+        // Retail 0x14012ad20 is unambiguous — `FUN_140002e10(param_1[2], &local_res8);
+        // Entity_impl_fc00(local_res8, '\0')` — the local goes in DIRECTLY. State13Enter
+        // above (the `s_setAccepting(wpcIbp, 1)` call) already had it right, so the two
+        // halves of the same pause/resume pair disagreed with each other in one file.
+        //
+        // Latent, not new: nothing reached state 14 until ConsumeProduce/Market were
+        // promoted to live controllers, because no ResourceProduce subclass had its
+        // state machine running in a default build.
+        s_setAccepting(wpcIbp, 0);
     }
 
     if (RP_Trace())

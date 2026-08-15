@@ -80,6 +80,34 @@ const FoodClass kClasses[] = {
         0x40006d60,0x40006b30,0x40006b20,0x4004b200,0x40118a50,0x40118a60,0x40118820,0x40118830,
         0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
         0x400026c0,0x40004080,0x4004b160,0x40006b10,0x40006b10,0x40006b10 } },
+
+    // ── the four NON-food classes carrying the panel work checkbox ────────────────
+    // Added 2026-08-15 for the slot-13/14 wave. Not food producers, but they share the
+    // exact same 22-slot component vtable shape, so the same coverage probe applies
+    // verbatim. Slots read from:
+    //   ConsumeProduce 0x140162a80  Market 0x140159c40
+    //   Forester       0x140163460  Attendance 0x140158ce0
+    // Watch slots 13/14 specifically: those are the ControlUI command pair, and until
+    // this wave every one of these four had the inert stub in both.
+    { "consumeproduce", "ConsumeProduceComponent", "BANISHED_BUILD_DEMO_TAVERN", {
+        0x40032460,0x400322f0,0x400322e0,0x40118e00,0x40118ef0,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
+        0x400026c0,0x40004080,0x40118d00,0x40006b10,0x40006b10,0x40006b10 } },
+    { "market",    "MarketComponent",    "BANISHED_BUILD_DEMO_MARKET", {
+        0x40008440,0x40008210,0x40008200,0x4004ead0,0x40118a50,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4012b520,0x4012b5a0,0x40118ae0,
+        0x400026c0,0x40004080,0x4004ea40,0x40006b10,0x40006b10,0x40006b10 } },
+    { "forester",  "ForesterComponent",  "BANISHED_BUILD_DEMO_FORESTERLODGE", {
+        0x40034a70,0x40034860,0x40034850,0x4011f960,0x40118a50,0x40118a60,0x40118820,0x40118830,
+        0x40118a70,0x40118a80,0x40118a90,0x40118aa0,0x40118ab0,0x4011f920,0x4011f890,0x40118ae0,
+        0x400026c0,0x40004080,0x4011f780,0x40006b10,0x40006b10,0x40006b10 } },
+    // ⚠ Attendance is the odd one out: NOT a ResourceProduceComponent subclass, so its
+    // slot 17 (CreateState) is 0x1400026b0 = `LEA RAX,[RCX+0x38]` (node at +0x38), not
+    // the family's +0x28, and slots 7/9/19/20/21 are its own rather than the shared no-ops.
+    { "attendance", "AttendanceComponent", "BANISHED_BUILD_DEMO_SCHOOLHOUSE", {
+        0x40002860,0x40002660,0x40002650,0x40044410,0x40118a50,0x40118a60,0x40118820,0x400443d0,
+        0x40118a70,0x40044370,0x40118a90,0x40118aa0,0x40118ab0,0x40043f10,0x40043e80,0x40118ae0,
+        0x400026c0,0x400026b0,0x40002800,0x400026e0,0x400026d0,0x40047000 } },
 };
 
 // Retail bodies that are literally `C2 00 00` (RET) plus 0xCC padding — verified by

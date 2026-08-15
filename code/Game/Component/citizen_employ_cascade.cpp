@@ -325,6 +325,21 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // ============================================================================
 // 0x14008c5f0 — strategy 3: shuffle houses, pick the house whose c7cf0 roster record
 // has the most idle laborers, then seat one from that record.
+//
+// A NULL `*availPtr` here is FAITHFUL — verified against retail 2026-08-15, do not
+// "fix" it with a guard. Retail's cascade 0x14008c3d0 guards exactly one of the four
+// strategies: `if (avail != 0)` wraps ca20 ALONE. ca20 needs the guard because it
+// DEREFS avail on entry (Entity_impl_7fb0(&avail) to get its position for the
+// nearest-residence sort); c5f0 and c4b0 only ever STORE the pointer
+// (AssignHousing(cz,&avail); cz+0x1f0 = profKey), so retail lets a null through on
+// purpose. The asymmetry in one 20-line function is the proof of intent.
+//
+// Consequence, also faithful: when FindAvailableBuilding returns null the citizen's
+// profession still flips with no roster attach, so WPC+0x60 does not move and the
+// panel redraws the same "N / M" (trace signature `via=idle roster 0->0`). That is a
+// symptom of an upstream registration miss — the workplace absent from the
+// townMgr+0x100 profession BST, roster >= capacity, or WPC+0x50 == 0 — NOT of a
+// missing null check here.
 // ============================================================================
 void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
     int64_t bestHouse = 0;   // local_58

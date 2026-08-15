@@ -563,6 +563,31 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_SPAWN",
     "BANISHED_SPAWN_DOSPAWN",
     "BANISHED_SPAWN_INITIAL",
+    // The panel WORK CHECKBOX on the four non-food workplaces — component vtable slots
+    // 13/14 (CanCommand / Command). Graduated 2026-08-15 on a measured A/B, not on a
+    // quiet run: with the flags off the slot-coverage probe read the inert stub in both
+    // slots on all four classes and every CanCommand id returned 0 (which is exactly what
+    // greys the checkbox every frame via ControlUI_Slot7); with them on, both slots hold
+    // real bodies and each class reports a class-correct, non-zero mask. A click through
+    // slot 14 then CHANGES that mask on all four — Forester 0x01->0x03, Attendance /
+    // ConsumeProduce / Market 0x03->0x01 — so this is "the button works", not merely
+    // "the button is wired". Zero-byte crash log across the run.
+    //
+    // Retail inheritance reproduced exactly, byte-verified from each class vtable:
+    // ConsumeProduce (0x140162a80) and Market (0x140159c40) inherit the ResourceProduce
+    // base pair 0x14012b520/0x14012b5a0 verbatim; Forester (0x140163460) overrides with
+    // 0x14011f920/0x14011f890 because it has TWO toggles (+0x50 plant / +0x51 cut); and
+    // Attendance (0x140158ce0) overrides with 0x140043f10/0x140043e80 because its
+    // checkbox IS the WorkPlaceComponent accepting flag.
+    //
+    // ⚠ ConsumeProduce and Market additionally needed the CONTROLLER_LIVE_FACTORY_STATES
+    // promotion, and wiring 13/14 alone was measurably NOT enough for them: the base
+    // slot 13 derives its mask from the state machine and the base slot 14 posts to the
+    // component's own node, so with slots 16/17 stubbed a click measured 0x02 -> 0x02.
+    "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
+    "BANISHED_LIVE_MARKET_CMD",
+    "BANISHED_LIVE_FORESTER_CMD",
+    "BANISHED_LIVE_ATTENDANCE_CMD",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

@@ -34,8 +34,21 @@
 // Both provided by the existing tool harness / dialog layer.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// Retail close path (port of Entity_impl_cc90 0x1400fcc90) — destroys the
+// DialogInstance and runs every controller's teardown. C++ linkage taking EditTool*,
+// so the real declaration is needed for the mangled name to match.
+// RadiusUI::Slot6 is dispatched through the controller's own vtable[6] instead of by
+// name, which is also the honest test: it proves the SLOT is filled, not just that a
+// body exists somewhere in the tree.
+#include "Player/edittool_funcs.h"
 
 namespace {
+
+// Shared env test: set and not "0"/"false".
+bool EnvOn(const char* name) {
+    const char* v = std::getenv(name);
+    return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
+}
 
 struct FoodClass {
     const char* key;        // BANISHED_FOOD_PANEL value
@@ -50,6 +63,12 @@ const FoodClass kClasses[] = {
     { "fishing",   "FishingComponent",   nullptr      },
     { "hunting",   "HuntComponent",      nullptr      },
     { "gatherer",  "HerbalistComponent", nullptr      },
+    // The four non-food workplaces whose command slots 13/14 were wired 2026-08-15.
+    // Their demo spawners are BANISHED_BUILD_DEMO_{TAVERN,MARKET,FORESTERLODGE,SCHOOLHOUSE}.
+    { "consumeproduce", "ConsumeProduceComponent", nullptr },
+    { "market",     "MarketComponent",    nullptr      },
+    { "forester",   "ForesterComponent",  nullptr      },
+    { "attendance", "AttendanceComponent", nullptr     },
 };
 const int kClassCount = (int)(sizeof(kClasses) / sizeof(kClasses[0]));
 
@@ -146,11 +165,19 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             if (r[id] != r[0]) uniform = false;
         }
         if (uniform && r[0] != 0) {
-            // A non-zero value repeated for every id is the ResourceProduce mask form.
-            std::fprintf(stderr, "[FoodPanel]   command MASK = 0x%02X  (pause=%s resume=%s)"
-                         "  [identical for every id -> the ResourceProduce mask form]\n",
+            // ⚠ A uniform non-zero result does NOT identify the form. Corrected
+            // 2026-08-15: ForesterComponent's slot 13 (0x14011f920) is a genuine
+            // per-command CanCommand(self, id) — it reads the id and answers from
+            // +0x50/+0x51 — yet it returns 1 for every id on a fresh lodge, because
+            // both of its toggles are off and its `else` arm also returns 1. That is
+            // indistinguishable from the ResourceProduce mask here. Report the value
+            // and the bit decode, which are true either way; do not assert the form.
+            std::fprintf(stderr, "[FoodPanel]   command value = 0x%02X for every id "
+                         "(bit1=%s bit0=%s; on the ResourceProduce base these mean "
+                         "pause/resume offered). Form NOT determined — a per-command "
+                         "CanCommand can be uniform when all its toggles are off.\n",
                          (unsigned)r[0],
-                         (r[0] & 2) ? "yes" : "no", (r[0] & 1) ? "yes" : "no");
+                         (r[0] & 2) ? "set" : "clear", (r[0] & 1) ? "set" : "clear");
         } else if (uniform) {
             // All zero says nothing about the FORM — a per-command CanCommand that
             // legitimately refuses everything looks identical to a mask of 0. Do not
@@ -165,6 +192,27 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                 std::fprintf(stderr, " %d:%u", id, (unsigned)r[id]);
             std::fprintf(stderr, "   (%d of 8 enabled%s)\n", enabled,
                          enabled == 0 ? "  <-- every button dead" : "");
+        }
+
+        // ── actually CLICK it (BANISHED_FOOD_PANEL_CLICK=1) ───────────────────────
+        // A filled slot 13 proves the checkbox can be DRAWN enabled; it does not prove
+        // the click does anything — slot 14 is a separate body and was independently
+        // dead here for months (the event-id 0-vs-3 mismatch, fixed in 330affb).
+        // Dispatch slot 14 and re-read slot 13: a working pair must CHANGE the mask,
+        // because pause and resume are mutually exclusive offers.
+        //
+        // Retail ignores the command id on the ResourceProduce base pair and on
+        // Attendance, but the Forester override reads it, so send id 1 (its "plant"
+        // toggle) rather than 0 — id 0 would be a no-op on the forester and would make
+        // a working slot 14 look dead.
+        if (doCmd && EnvOn("BANISHED_FOOD_PANEL_CLICK")) {
+            const uint8_t was = r[1];
+            reinterpret_cast<void (*)(void*, int)>(doCmd)(comp, 1);
+            const uint8_t now = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, 1);
+            std::fprintf(stderr, "[FoodPanel]   CLICK cmd=1 -> mask 0x%02X -> 0x%02X  %s\n",
+                         (unsigned)was, (unsigned)now,
+                         (now != was) ? "OK — the command changed state"
+                                      : "NO CHANGE — slot 14 ran but nothing moved");
         }
     }
 
@@ -212,6 +260,68 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         std::fprintf(stderr, "[FoodPanel]   (no dedicated panel controller class identified "
                      "for this building yet — the type ids above are the evidence)\n");
     }
+    std::fflush(stderr);
+
+    // ── TEARDOWN (BANISHED_FOOD_PANEL_CLOSE=1) ────────────────────────────────────
+    // Closes the panel we just opened. Until this existed the harness left every panel
+    // open, so RadiusUI::Slot6 (retail 0x140077600) and its `+0x30 = -1` reset were
+    // CODE-REVIEWED ONLY — never once executed in a run. RadiusUI is the first
+    // controller on the dock / hunter-lodge / gatherer-hut panels, so its teardown is
+    // the one that leaks a RadiusDisplayManager slot if it is wrong.
+    //
+    // Two stages, deliberately in this order:
+    //   (a) dispatch the controller's own idx6 and re-read +0x30 while the object is
+    //       still ALIVE. Reading it after CloseDialog would be a use-after-free, and a
+    //       freed-memory read that happens to contain -1 proves nothing.
+    //   (b) then run the real retail close path (EditTool_CloseInfoDialog ->
+    //       UI::UserInterface::CloseDialog), which destroys the DialogInstance and every
+    //       controller. Slot6 gets dispatched a second time there, so this also proves
+    //       the teardown is IDEMPOTENT — the second pass must see overlay=-1 and must
+    //       not call RadiusDisplay_Remove again on a slot it no longer owns.
+    //
+    // Pair with BANISHED_DIALOG_TRACE=1 to see the `[RadiusUI] Slot6 ... overlay=N` lines.
+    if (!EnvOn("BANISHED_FOOD_PANEL_CLOSE")) return;
+
+    const uint32_t tidRadius = Tid("RadiusUI");
+    void* radius = nullptr;
+    for (int i = 0; ctrlArr && i < cnt; ++i) {
+        void* c = ctrlArr[i];
+        if (!c) continue;
+        void** vt = *reinterpret_cast<void***>(c);
+        if (vt && vt[2] && reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tidRadius) {
+            radius = c; break;
+        }
+    }
+    if (!radius) {
+        std::fprintf(stderr, "[FoodPanel]   teardown: no RadiusUI on this panel "
+                     "(tid=%08X) — nothing to measure here\n", tidRadius);
+    } else {
+        const int before = *reinterpret_cast<int32_t*>(
+            reinterpret_cast<uintptr_t>(radius) + 0x30);
+        void** rvt = *reinterpret_cast<void***>(radius);
+        void* slot6 = rvt ? rvt[6] : nullptr;
+        if (!slot6) {
+            std::fprintf(stderr, "[FoodPanel]   teardown: RadiusUI idx6 is NULL — the "
+                         "controller is still stubbed\n");
+        } else {
+            reinterpret_cast<void(*)(void*)>(slot6)(radius);
+            const int after = *reinterpret_cast<int32_t*>(
+                reinterpret_cast<uintptr_t>(radius) + 0x30);
+            std::fprintf(stderr, "[FoodPanel]   teardown: RadiusUI=%p overlay %d -> %d  %s\n",
+                         radius, before, after,
+                         (after == -1)
+                             ? ((before >= 0) ? "OK (had a live overlay, released + reset)"
+                                              : "OK but VACUOUS — no overlay was ever built, so "
+                                                "the release path did not run; check Slot5")
+                             : "FAIL — +0x30 was not reset to -1");
+        }
+    }
+
+    // (b) the real close path.
+    EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool), reinterpret_cast<uintptr_t>(dialog));
+    void* after = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    std::fprintf(stderr, "[FoodPanel]   teardown: CloseInfoDialog -> tool dialog=%p %s\n",
+                 after, after ? "STILL OPEN — close path did not take" : "(closed)");
     std::fflush(stderr);
 }
 

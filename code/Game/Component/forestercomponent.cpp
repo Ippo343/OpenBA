@@ -103,9 +103,103 @@ void ForesterComponent_InitFuncs() {
 #endif
 }
 
+// ============================================================
+// Vtable slots 13/14 — the panel COMMAND pair
+// ============================================================
+// Unlike ConsumeProduce/Market (which inherit the ResourceProduce base pair verbatim),
+// ForesterComponent OVERRIDES both. Byte-verified from vtable_ForesterComponent
+// (0x140163460): slot 13 = 0x14011f920, slot 14 = 0x14011f890.
+//
+extern "C" void ResourceProduceComponent_Command(void* self);  // base slot 14, 0x14012b5a0
+
+// The forester lodge has TWO independent work toggles, not one:
+//   self+0x50 = "plant trees"   (command id 1)
+//   self+0x51 = "cut trees"     (command id 2)
+// The base pair has no concept of that, which is why this class overrides.
+
+// ── slot 13 — retail 0x14011f920 — per-command availability mask ──────────────────
+// Retail body:
+//     if (cmd == 1) return -(*(char*)(self+0x50) != 0) & 2 | 1;
+//     if (cmd == 2) return -(*(char*)(self+0x51) != 0) & 2 | 1;
+//     return 1;
+// `-(x) & 2 | 1` is the compiler's branchless form of `x ? 3 : 1`: bit 0 = "this command
+// is offered", bit 1 = "it is currently ON". So an unknown command id still returns 1
+// (offered, off) rather than 0 — returning 0 is what greys a ControlUI checkbox, and
+// retail deliberately never does that here.
+//
+// ⚠ Unlike the ResourceProduce base slot 13, this one DOES read its command-id argument.
+extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    if (cmd == 1) return *reinterpret_cast<char*>(comp + 0x50) ? 3 : 1;
+    if (cmd == 2) return *reinterpret_cast<char*>(comp + 0x51) ? 3 : 1;
+    return 1;
+}
+
+// ── slot 14 — retail 0x14011f890 — toggle one flag, notify only on edge ───────────
+// Retail snapshots "is any flag set" BEFORE the toggle, flips the flag the command
+// names, recomputes "is any flag set" AFTER, and calls the base slot-14 body only when
+// that aggregate CHANGED (none->some or some->none). Toggling "cut" while "plant" is
+// already on leaves the lodge working, so no state-machine event is posted — the edge
+// test is the whole point of the override, not an optimisation.
+//
+// The tail call Ghidra prints as `HerbalistComponent_Slot14(param_1)` is address
+// 0x14012b5a0 — the ResourceProduce BASE slot-14 body, already ported as
+// ResourceProduceComponent_Command. The "Herbalist" name is a subclass label Ghidra
+// attached to a base-vtable body; it is not the herbalist's function.
+extern "C" void ForesterComponent_Command(void* self, int cmd) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    char* const plant = reinterpret_cast<char*>(comp + 0x50);
+    char* const cut   = reinterpret_cast<char*>(comp + 0x51);
+
+    const char cutBefore = *cut;
+    const bool wasIdle   = (cutBefore == 0 && *plant == 0);
+    const bool wasActive = !wasIdle;
+
+    if (cmd == 1)      *plant = (*plant == 0) ? 1 : 0;
+    else if (cmd == 2) *cut   = (cutBefore == 0) ? 1 : 0;
+
+    const bool nowIdle   = (*cut == 0 && *plant == 0);
+    const bool nowActive = !nowIdle;
+
+    if ((wasIdle && nowActive) || (wasActive && nowIdle))
+        ResourceProduceComponent_Command(self);
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(ForesterComponent, 0x58, 0x80)
+
+// Hand-expanded from COMPONENT_INERT_FACTORY(ForesterComponent, 0x58, 0x80) so slots
+// 13/14 above are actually reachable. While both held the inert stub the lodge's two
+// work checkboxes were greyed (slot 13 -> 0) and inert (slot 14 -> no-op).
+//
+// Opt-in until measured (BANISHED_LIVE_FORESTER_CMD).
+static uint32_t ForesterComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ForesterComponent");
+    return cached;
+}
+static void* ForesterComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+
+// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init writes.
+static void ForesterComponent_FinishVtable() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FORESTER_CMD")) return;
+    ForesterComponent_InertVtable[13] = reinterpret_cast<void*>(&ForesterComponent_CommandMask);
+    ForesterComponent_InertVtable[14] = reinterpret_cast<void*>(&ForesterComponent_Command);
+}
+extern "C" void* ForesterComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x80,
+        ForesterComponent_InertVtable,
+        reinterpret_cast<void*>(&ForesterComponent_InertGetTypeId));
+    ForesterComponent_FinishVtable();
+    return p;
+}
+static void* ForesterComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x80,
+        ForesterComponent_InertVtable,
+        reinterpret_cast<void*>(&ForesterComponent_InertGetTypeId));
+    ForesterComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(ForesterComponent, "ResourceProduceComponent",
               &ForesterComponent_Factory, &ForesterComponent_CreateInPlace);

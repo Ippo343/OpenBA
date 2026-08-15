@@ -279,12 +279,112 @@ void AttendanceComponent_InitFuncs() {
 #endif
 }
 
+// ============================================================
+// Vtable slots 13/14 — the panel COMMAND pair
+// ============================================================
+// AttendanceComponent is NOT a ResourceProduceComponent subclass, so it shares nothing
+// with the base command pair. Byte-verified from vtable_AttendanceComponent
+// (0x140158ce0): slot 13 = 0x140043f10, slot 14 = 0x140043e80.
+//
+// Both bodies delegate to the entity's WorkPlaceComponent rather than holding state of
+// their own: the attendance building's "work" checkbox IS the workplace's accepting
+// flag (WPC+0x50). That is why this class overrides instead of inheriting — and why
+// both bodies start by re-finding the WPC off the owner entity (self+0x10) via
+// 0x140002e10, already resolved above as s_fn_GetBuildingComponent.
+
+extern void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00
+
+// ── slot 13 — retail 0x140043f10 — availability mask ──────────────────────────────
+// Retail body: find the WPC, then `return -(*(char*)(wpc+0x50) != 0) & 2 | 1;`
+// i.e. `accepting ? 3 : 1` — bit 0 "command offered", bit 1 "currently ON". It never
+// returns 0, so the checkbox is never greyed by this slot.
+//
+// ⚠ Retail takes only `self`; the command id the caller passes in RDX is ignored. We
+// declare the parameter so the vtable call is ABI-compatible, and ignore it as retail does.
+//
+// ⚠ The `wpc+0x50` deref is UNGUARDED in retail and left unguarded here: retail relies on
+// an attendance building always carrying a WorkPlaceComponent. If this ever faults, the
+// fault is an entity built without a WPC upstream — do not paper over it here.
+extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int /*cmd*/) {
+    AttendanceComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+    if (!s_fn_GetBuildingComponent) return 0;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    int64_t wpcIbp = 0;
+    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
+    return *reinterpret_cast<char*>(wpcIbp + 0x50) ? 3 : 1;
+}
+
+// ── slot 14 — retail 0x140043e80 — flip the workplace's accepting flag ────────────
+// Retail body:
+//     wpc = FindWorkPlaceComponent(self+0x10)
+//     cur = *(char*)(wpc+0x50)
+//     WorkPlaceComponent_SetAccepting(wpc, cur == 0)      // 0x14012fc00
+//     if (*(char*)(wpc+0x50) == 0) AttendanceComponent_ProcessQueue(self)
+//
+// The re-read after SetAccepting is load-bearing, not redundant: SetAccepting is a large
+// body (mesh-visual toggle, status-icon bit, and — when turning OFF — a loop that releases
+// every seated worker), and the queue drain must observe the flag it actually left behind.
+// Draining on the OFF edge is what sends the students//workers home; on the ON edge there
+// is nothing to drain.
+//
+// ⚠ Retail ignores the command id here too.
+extern "C" void AttendanceComponent_Command(void* selfP, int /*cmd*/) {
+    AttendanceComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+    if (!s_fn_GetBuildingComponent) return;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    int64_t wpcIbp = 0;
+    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
+    const char cur = *reinterpret_cast<char*>(wpcIbp + 0x50);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
+    WorkPlaceComponent_SetAccepting(wpcIbp, cur == 0);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
+    if (*reinterpret_cast<char*>(wpcIbp + 0x50) == 0)
+        AttendanceComponent_ProcessQueue(selfP);
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Inert-but-valid AttendanceComponent: size 0x58 + Object::Internal base + shared stub
 // vtable + capability flags +0x20=0x8a (from AttendanceComponent_Ctor) + zeroed body.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(AttendanceComponent, 0x58, 0x8a)
+// Hand-expanded from COMPONENT_INERT_FACTORY(AttendanceComponent, 0x58, 0x8a) so slots
+// 13/14 above are reachable. While both held the inert stub the school's work checkbox
+// was greyed (slot 13 -> 0) and its click was a no-op.
+//
+// Opt-in until measured (BANISHED_LIVE_ATTENDANCE_CMD).
+static uint32_t AttendanceComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("AttendanceComponent");
+    return cached;
+}
+static void* AttendanceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+
+// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init writes.
+static void AttendanceComponent_FinishVtable() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ATTENDANCE_CMD")) return;
+    AttendanceComponent_InertVtable[13] =
+        reinterpret_cast<void*>(&AttendanceComponent_CommandMask);
+    AttendanceComponent_InertVtable[14] =
+        reinterpret_cast<void*>(&AttendanceComponent_Command);
+}
+extern "C" void* AttendanceComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x8a,
+        AttendanceComponent_InertVtable,
+        reinterpret_cast<void*>(&AttendanceComponent_InertGetTypeId));
+    AttendanceComponent_FinishVtable();
+    return p;
+}
+static void* AttendanceComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x8a,
+        AttendanceComponent_InertVtable,
+        reinterpret_cast<void*>(&AttendanceComponent_InertGetTypeId));
+    AttendanceComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(AttendanceComponent, "ControllerComponent",
               &AttendanceComponent_Factory, &AttendanceComponent_CreateInPlace);

@@ -354,6 +354,68 @@ void ConsumeProduceComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(ConsumeProduceComponent, 0x70, 0x80)
+
+// Hand-expanded from COMPONENT_INERT_FACTORY(ConsumeProduceComponent, 0x70, 0x80) so
+// vtable slots 13/14 — the panel command pair — can carry real bodies.
+//
+// Why this was dead: the "work" checkbox on a building panel is a ControlUI (element id
+// 50000) whose click dispatches subComp->vtable[14] and whose per-frame enable test reads
+// subComp->vtable[13]. Both slots held the inert stub, so the click was a literal no-op
+// AND slot 13's 0 return greyed the checkbox every frame via ControlUI_Slot7. That is the
+// whole "the work checkbox does nothing on the non-food buildings" symptom.
+//
+// Byte-verified 2026-08-15 by reading vtable_ConsumeProduceComponent (0x140162a80):
+//   slot 13 = 0x14012b520   slot 14 = 0x14012b5a0
+// Those are EXACTLY the entries on vtable_ResourceProduceComponent (0x1401643f0), i.e.
+// ConsumeProduce declares no override and inherits the base pair verbatim. Both bodies
+// have been ported for some time as ResourceProduceComponent_CommandMask / _Command
+// (resourceproducecomponent_states.cpp) — this type simply never pointed at them.
+//
+// ⚠ Ghidra names those two bodies "HerbalistComponent_Slot13/14". That is a subclass
+// label on a BASE-vtable body; do not read it as "these belong to the herbalist".
+//
+// Opt-in until measured (BANISHED_LIVE_CONSUMEPRODUCE_CMD). A quiet run cannot tell a
+// working checkbox from a stubbed one, so this graduates only on a positive observation.
+// ⚠ MEASURED 2026-08-15: wiring 13/14 alone is NOT enough on this class. With only the
+// command pair filled, the panel probe read `command value = 0x02` (checkbox drawn
+// enabled, no longer greyed) but a click moved nothing — `mask 0x02 -> 0x02`. The base
+// slot 13 derives its mask from the STATE MACHINE, not from a component flag:
+//     cur  = smc+0x52 (pending) or smc+0x50 (current)
+//     mask = (cur != 14) ? 2 : 0;  if (self+0x48 == 0) mask |= ((unsigned)(cur-13) < 2)
+// and the base slot 14 posts its event to the component's own controller NODE. With the
+// component inert, slots 16/17 (GetDefaultState/CreateState) were stubs, the embedded
+// node at +0x28 was never linked into the entity's StateMachineComponent, and the post
+// had nowhere to land. So the promotion below is required, not optional — the same one
+// fishingcomponent.cpp already does.
+//
+// Macro arguments, byte-verified from vtable_ConsumeProduceComponent (0x140162a80):
+//   Size 0x70 / Flags 0x80 — unchanged from the previous inert factory.
+//   NodeOff 0x28  — slot 17 is the shared 0x140004080 `LEA RAX,[RCX+0x28]; RET`.
+//   DefState 2    — slot 16 is the shared 0x1400026c0 `MOV EAX,2; RET`.
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+
+extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
+extern "C" void   RPCtrl_PopulateTable();
+extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self);  // 0x14012b520
+extern "C" void    ResourceProduceComponent_Command(void* self);      // 0x14012b5a0
+
+// Slots 13/14 must be written from INSIDE InstallLive: MakeInertTyped -> FillTypedVtable
+// rewrites slots 1..N with the inert stub on the first factory call, so a static-init
+// write is silently erased. The macro calls PopulateFn from InstallLive AFTER
+// FillTypedVtable has run, which is the one surviving place.
+static void ConsumeProduceCtrl_PopulateAndWireCmd();
+
+CONTROLLER_LIVE_FACTORY_STATES(ConsumeProduceComponent, 0x70, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
+                               RPCtrl_NodeVtable, ConsumeProduceCtrl_PopulateAndWireCmd)
+
+static void ConsumeProduceCtrl_PopulateAndWireCmd() {
+    ConsumeProduceComponent_LiveVtable[13] =
+        reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
+    ConsumeProduceComponent_LiveVtable[14] =
+        reinterpret_cast<void*>(&ResourceProduceComponent_Command);
+    RPCtrl_PopulateTable();
+}
 REGISTER_TYPE(ConsumeProduceComponent, "ResourceProduceComponent",
               &ConsumeProduceComponent_Factory, &ConsumeProduceComponent_CreateInPlace);
