@@ -528,7 +528,8 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         }
     }
 
-    // --- Find workplace if needed ---
+    // --- Sick? find a care building (+0x68 is the DISEASE pointer, not a profession or
+    // a housed flag — see the note on CitizenComp_FindWorkplace, which is misnamed) ---
     if (*reinterpret_cast<int64_t*>(p + 0x68) != 0) {
         *reinterpret_cast<uint32_t*>(p + 0x88) |= 1;
         if (*reinterpret_cast<int64_t*>(p + 0x228) == 0) {
@@ -3006,9 +3007,26 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
 }
 
 // Reimpl of CitizenComponent_FindWorkplace (0x140111590):
-// pick the best reachable workplace (sub_1930 keyed by description+0x30), validate it
-// (sub_40f0), register the citizen into the workplace's worker array (3110), and store
+// pick the best reachable building (sub_1930 keyed by description+0x30), validate it
+// (sub_40f0), register the citizen into that building's attendee array (3110), and store
 // the assignment at +0x228. Returns true on success.
+//
+// ⚠ THE NAME IS WRONG AND THE Ghidra LABEL IS WRONG. This is NOT a workplace finder and
+// NOT the student finder (an earlier note claimed the latter). It is the SICK CITIZEN's
+// CARE-BUILDING finder — the hospital link. Proof:
+//   * Its only per-tick caller (CitizenComponent::Update, retail 0x1401131fe) gates it on
+//     `citizen+0x68 != 0`, and +0x68 is the DISEASE pointer: citizen_updatehealth.cpp
+//     writes it at catch time (`*(void**)(s + 0x68) = disease`) and zeroes it on recovery.
+//   * That same catch path calls this function IMMEDIATELY after setting +0x68, and the
+//     recovery path releases the +0x228 link.
+//   * On death the caller reads +0x68's string table for the cause-of-death text.
+// The sibling FindStorage (0x1401116f0, keyed by description+0x28 -> slot +0x230) is the
+// other attendance link and is the one a school would use. Both resolve through sub_1930,
+// which matches a candidate by `WorkPlaceComponent+0x48 == key`.
+// Measured 2026-08-15 on a staffed demo schoolhouse: neither key the citizen record
+// carries matches ANY building in town, and specifically not the schoolhouse's own +0x48
+// — so school attendance is blocked on a key mismatch, NOT on the building being
+// unstaffed. See [[project_wpc_first_seat_and_attendance_keys]].
 char CitizenComp_FindWorkplace(CitizenComponent* param_1) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);

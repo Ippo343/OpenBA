@@ -20,6 +20,12 @@
 // A class with no entity prints "NO ENTITY" rather than nothing, so a silent section can
 // never be mistaken for a passing one.
 //
+// BANISHED_FOOD_PANEL_SEAT=1 additionally measures the FIRST-SEAT path: it dumps the
+// workplace's profession key / accepting flag / roster / capacity / profession-BST
+// bucket, then dispatches WorkPlaceUI vtable slot 9 with the workerCountUp element id
+// (0x1450) and reports the roster delta. That click is the ONLY thing in retail or here
+// that can seat worker #1 — see the long note at the probe itself.
+//
 // Runs once, at a settle frame (default 900, override with BANISHED_FOOD_PANEL_FRAME) so
 // the world and the demo buildings exist. Test-only, opt-in, default off.
 
@@ -76,6 +82,21 @@ bool  s_init = false;
 char  s_want[32] = {0};
 int   s_fireFrame = 900;
 bool  s_fired = false;
+
+// Post-seat follow-up state (BANISHED_FOOD_PANEL_SEAT). The seat click proves the
+// roster moved; it does not prove anything DOWNSTREAM of a staffed building ran. For a
+// schoolhouse the downstream half is the student link, and its retail gate is exactly
+// "this workplace has a worker" — CitizenComponent::Update @0x1401131fe dispatches the
+// student finder 0x140111590 only for citizens with +0x68 set, and that finder's
+// validity test (0x1400440f0) requires the school to be staffed. So a teacher seated at
+// frame N should show students queuing some frames later, and if it does not, the defect
+// is downstream of this harness rather than in the seat. Report the queue over time so
+// the two are never conflated again.
+void*    s_seatComp   = nullptr;   // the workplace component we seated into
+void*    s_seatEntity = nullptr;
+int      s_seatFrame  = 0;
+int      s_followsLeft = 0;
+int      s_nextFollow = 0;
 
 void Init() {
     if (s_init) return;
@@ -268,6 +289,115 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
     std::fflush(stderr);
 
+    // ── FIRST-SEAT PROBE (BANISHED_FOOD_PANEL_SEAT=1) ─────────────────────────────
+    // Retail has NO organic first-seat for a workplace, and neither do we — that is
+    // faithful, not a gap. Proof, from Application-x64.exe:
+    //   * WPC+0x60 is the LIVE ROSTER COUNT, not a capacity or a request: Detach
+    //     (0x14012f7e0) removes from the +0x58 IBP array and then tests `+0x60 == 0`
+    //     to mean "roster is now empty, hide the worker mesh".
+    //   * The periodic employment allocator (0x1400d43b0) builds its Phase-2 need
+    //     table under `if (*(int *)(wpc + 0x60) != 0)`, seeding remaining AND the
+    //     denominator from that same roster count. It re-solves WHO fills the seats a
+    //     building already has; it structurally cannot open seat #1 anywhere.
+    //   * Build completion writes no roster at all. What it writes is the CAPACITY:
+    //     f670 (0x14012f670, the state-2 "built" enter reached via edf0) does
+    //     `WorkComponent+0x30 = CalcMaxWorkers(workComp)`. FindAvailableBuilding
+    //     (0x14008d100) and the citizen finder ffc0 (0x14010ffc0) both lazily refill
+    //     that same field when it reads 0, so a missed publish is self-healing.
+    //   * Seating is then citizen-driven per tick: CitizenComponent::Update @
+    //     0x1401135d1 — `if (citizen+0x248 == 0) { ffc0/0470; AssignHousing; }` — but
+    //     it searches ONLY the bucket for the citizen's OWN profession key (+0x1f0).
+    //     A laborer's default key has no bucket, so a laborer never self-seats.
+    //
+    // So the one thing that converts a laborer into this building's profession is the
+    // panel's workerCountUp click (element id 0x1450 -> WorkPlaceUI vtable slot 9).
+    // That single click is the entire first-seat mechanism, which makes it worth an
+    // explicit end-to-end measurement rather than a code read: dispatch the slot and
+    // report the roster DELTA. Everything downstream ("no teacher" -> "no students")
+    // hangs off this one dispatch.
+    if (EnvOn("BANISHED_FOOD_PANEL_SEAT")) {
+        void* wpc = FindCompOnEntity(ent, Tid("WorkPlaceComponent"));
+        void* wc  = FindCompOnEntity(ent, Tid("WorkComponent"));
+        if (!wpc) {
+            std::fprintf(stderr, "[FoodPanel]   seat: no WorkPlaceComponent on this entity — "
+                         "not an employer, nothing to seat\n");
+        } else {
+            const uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
+            const uint64_t key   = *reinterpret_cast<uint64_t*>(w + 0x48);
+            const int      accept= *reinterpret_cast<uint8_t*>(w + 0x50);
+            const int      roster= *reinterpret_cast<int32_t*>(w + 0x60);
+            const int      cap   = wc ? *reinterpret_cast<int32_t*>(
+                                        reinterpret_cast<uintptr_t>(wc) + 0x30) : -1;
+
+            // Is the owner registered in the town profession BST under that key? An
+            // unregistered workplace is invisible to BOTH finders, so a dead click
+            // would otherwise be indistinguishable from a broken slot 9.
+            int bucket = -1;
+            void* gw2 = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+            uintptr_t townMgr = gw2 ? *reinterpret_cast<uintptr_t*>(
+                                    reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
+            if (townMgr && key) {
+                uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
+                while (node) {
+                    if (key < node[0])      node = reinterpret_cast<uint64_t*>(node[4]);
+                    else if (key > node[0]) node = reinterpret_cast<uint64_t*>(node[5]);
+                    else { bucket = static_cast<int>(node[2]); break; }
+                }
+            }
+            std::fprintf(stderr, "[FoodPanel]   seat PRE: profKey(+0x48)=0x%llx accepting(+0x50)=%d "
+                         "roster(+0x60)=%d capacity(WC+0x30)=%d bstBucket=%d%s\n",
+                         (unsigned long long)key, accept, roster, cap, bucket,
+                         key == 0        ? "   <-- key 0: panel hides the spinner, cannot seat"
+                       : bucket < 0      ? "   <-- NOT REGISTERED in townMgr+0x100: both finders are blind to it"
+                       : accept == 0     ? "   <-- not accepting: FindAvailableBuilding skips it"
+                                         : "");
+
+            // Find the WorkPlaceUI controller on the dialog and dispatch ITS slot 9 —
+            // dispatching through the controller's own vtable is the honest test (it
+            // proves the slot is filled, not merely that a body exists somewhere).
+            const uint32_t tidWpUi = Tid("WorkPlaceUI");
+            void* wpUi = nullptr;
+            for (int i = 0; ctrlArr && i < cnt; ++i) {
+                void* c = ctrlArr[i];
+                if (!c) continue;
+                void** vt = *reinterpret_cast<void***>(c);
+                if (vt && vt[2] && reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tidWpUi) {
+                    wpUi = c; break;
+                }
+            }
+            if (!wpUi) {
+                std::fprintf(stderr, "[FoodPanel]   seat: WorkPlaceUI (tid=%08X) ABSENT from this "
+                             "dialog — the worker spinner does not exist here\n", tidWpUi);
+            } else {
+                void** uvt = *reinterpret_cast<void***>(wpUi);
+                void* slot9 = uvt ? uvt[9] : nullptr;
+                if (!slot9) {
+                    std::fprintf(stderr, "[FoodPanel]   seat: WorkPlaceUI vtable slot 9 is NULL — "
+                                 "the click handler was never installed\n");
+                } else {
+                    // msg 0x12 = button command, id 0x1450 = workerCountUp.
+                    reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
+                        wpUi, nullptr, 0x12, 0x1450, 0, 0);
+                    const int rosterNow = *reinterpret_cast<int32_t*>(w + 0x60);
+                    const int capNow = wc ? *reinterpret_cast<int32_t*>(
+                                           reinterpret_cast<uintptr_t>(wc) + 0x30) : -1;
+                    std::fprintf(stderr, "[FoodPanel]   seat CLICK workerCountUp(0x1450): "
+                                 "roster %d -> %d, capacity %d -> %d   %s\n",
+                                 roster, rosterNow, cap, capNow,
+                                 rosterNow > roster
+                                   ? "OK — the click seated a worker (first-seat path is LIVE)"
+                                   : "NO CHANGE — slot 9 ran but nobody was seated");
+                    if (rosterNow > roster) {
+                        s_seatComp   = wpc;
+                        s_seatEntity = ent;
+                        s_followsLeft = 6;      // ~6 reports
+                    }
+                }
+            }
+        }
+        std::fflush(stderr);
+    }
+
     // ── TEARDOWN (BANISHED_FOOD_PANEL_CLOSE=1) ────────────────────────────────────
     // Closes the panel we just opened. Until this existed the harness left every panel
     // open, so RadiusUI::Slot6 (retail 0x140077600) and its `+0x30 = -1` reset were
@@ -333,11 +463,144 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
 
 }  // namespace
 
+// Follow-up report on the workplace the seat probe staffed: does the roster HOLD, and
+// does anything downstream (the school's student queue) move now that it is staffed?
+void FollowUp(int frameNum) {
+    if (!s_seatComp) return;
+    const uintptr_t w = reinterpret_cast<uintptr_t>(s_seatComp);
+    const int roster = *reinterpret_cast<int32_t*>(w + 0x60);
+
+    // AttendanceComponent, when present: queue count at +0x30, capacity at desc+0x20.
+    int queued = -1, capacity = -1;
+    if (void* att = FindCompOnEntity(s_seatEntity, Tid("AttendanceComponent"))) {
+        const uintptr_t a = reinterpret_cast<uintptr_t>(att);
+        queued = *reinterpret_cast<int32_t*>(a + 0x30);
+        if (void* d = *reinterpret_cast<void**>(a + 0x18))
+            capacity = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
+    }
+    std::fprintf(stderr, "[FoodPanel]   seat +%d frames: roster(+0x60)=%d%s",
+                 frameNum - s_seatFrame, roster,
+                 roster == 0 ? "  <-- the seat did NOT hold, something detached the worker" : "");
+    if (queued >= 0)
+        std::fprintf(stderr, "  students queued(+0x30)=%d of %d%s",
+                     queued, capacity,
+                     queued == 0 ? "  <-- staffed but no student has linked yet" : "");
+    std::fprintf(stderr, "\n");
+
+    // If the building is staffed and STILL has no attendees, the defect is on the
+    // citizen side, so measure that side rather than guessing. Both attendance finders
+    // (0x140111590 -> citizen+0x228, 0x1401116f0 -> citizen+0x230) resolve through
+    // sub_1930 (0x140111930), which matches a candidate building by
+    // `WorkPlaceComponent+0x48 == key`, where the key is read off the CITIZEN's own
+    // record at +0x288 (+0x30 for the first slot, +0x28 for the second). So a citizen
+    // can only ever attend this building if one of those two keys EQUALS this
+    // building's profession key. Count that population directly — "N citizens carry the
+    // key" vs "0 do" separates a broken finder from a town that simply has nobody
+    // eligible, and those two have opposite fixes.
+    if (queued == 0 && roster > 0) {
+        void* gw3 = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+        uintptr_t tm = gw3 ? *reinterpret_cast<uintptr_t*>(
+                            reinterpret_cast<uintptr_t>(gw3) + 0xf0) : 0;
+        if (tm) {
+            const uint64_t key = *reinterpret_cast<uint64_t*>(w + 0x48);
+            uintptr_t czArr = *reinterpret_cast<uintptr_t*>(tm + 0xa0);
+            const int czN = *reinterpret_cast<int32_t*>(tm + 0xa8);
+            int total = 0, noRec = 0, k30 = 0, k28 = 0, linked228 = 0, linked230 = 0;
+            for (int i = 0; i < czN && czArr; ++i) {
+                void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+                uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                if (!cz) continue;
+                ++total;
+                uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
+                if (!rec) { ++noRec; continue; }
+                if (*reinterpret_cast<uint64_t*>(rec + 0x30) == key) ++k30;
+                if (*reinterpret_cast<uint64_t*>(rec + 0x28) == key) ++k28;
+                if (*reinterpret_cast<uint64_t*>(cz + 0x228)) ++linked228;
+                if (*reinterpret_cast<uint64_t*>(cz + 0x230)) ++linked230;
+                // "Nobody carries the key" has two very different causes: the town has
+                // no eligible citizens (faithful), or the record's key fields were never
+                // populated at all (a data-load gap). All-zero keys distinguish them, so
+                // print the raw pair for the first few citizens rather than only the count.
+                if (i < 3)
+                    std::fprintf(stderr, "[FoodPanel]       citizen[%d]=%p rec(+0x288)=%p "
+                                 "rec+0x28=0x%llx rec+0x30=0x%llx  (building key=0x%llx)\n",
+                                 i, reinterpret_cast<void*>(cz), reinterpret_cast<void*>(rec),
+                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x28),
+                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x30),
+                                 (unsigned long long)key);
+            }
+            // Name the two keys the citizen record actually carries by finding the
+            // building that requires each one. Citizens all share one record here, so
+            // those two keys are the town-wide "where do I go when sick / when a
+            // student" pair — if neither resolves to this building, the mismatch is the
+            // whole story and the owning building tells us which key is which.
+            {
+                uintptr_t bArr = *reinterpret_cast<uintptr_t*>(tm + 0x60);
+                const int bN = *reinterpret_cast<int32_t*>(tm + 0x68);
+                uint64_t want[2] = {0, 0};
+                if (czArr && czN > 0) {
+                    void** cs0 = reinterpret_cast<void**>(czArr);
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs0);
+                    if (uintptr_t cz0 = reinterpret_cast<uintptr_t>(*cs0)) {
+                        if (uintptr_t r0 = *reinterpret_cast<uintptr_t*>(cz0 + 0x288)) {
+                            want[0] = *reinterpret_cast<uint64_t*>(r0 + 0x28);
+                            want[1] = *reinterpret_cast<uint64_t*>(r0 + 0x30);
+                        }
+                    }
+                }
+                const uint32_t tidWpc = Tid("WorkPlaceComponent");
+                for (int k = 0; k < 2; ++k) {
+                    if (!want[k]) continue;
+                    const char* owner = "NO BUILDING IN TOWN REQUIRES THIS KEY";
+                    for (int i = 0; i < bN && bArr; ++i) {
+                        void** bs = reinterpret_cast<void**>(bArr + static_cast<uintptr_t>(i) * 8);
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(bs);
+                        uintptr_t b = reinterpret_cast<uintptr_t>(*bs);
+                        if (!b) continue;
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(b + 0x10));
+                        void* sub = *reinterpret_cast<void**>(b + 0x10);
+                        void* c = FindCompOnEntity(sub, tidWpc);
+                        if (!c) continue;
+                        if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x48) != want[k])
+                            continue;
+                        owner = "a building exists with this key";
+                        if (FindCompOnEntity(sub, Tid("AttendanceComponent")))
+                            owner = "an ATTENDANCE building (school/hospital) has this key";
+                        break;
+                    }
+                    std::fprintf(stderr, "[FoodPanel]       record key +0x%02x = 0x%llx -> %s%s\n",
+                                 k == 0 ? 0x28 : 0x30, (unsigned long long)want[k], owner,
+                                 want[k] == key ? "  == THIS building" : "");
+                }
+            }
+            std::fprintf(stderr, "[FoodPanel]     eligibility: %d citizens, %d with no +0x288 record; "
+                         "carrying THIS key: +0x30(slot 228)=%d +0x28(slot 230)=%d; "
+                         "already linked: +0x228=%d +0x230=%d%s\n",
+                         total, noRec, k30, k28, linked228, linked230,
+                         (k30 == 0 && k28 == 0)
+                           ? "   <-- NOBODY is eligible: the finders can never match this building"
+                           : "   <-- eligible citizens EXIST, so the finder or its sub_40f0 gate is refusing them");
+        }
+    }
+    std::fflush(stderr);
+}
+
 extern "C" void FoodPanel_Tick(void* entityUI, int frameNum) {
     Init();
-    if (!s_want[0] || s_fired) return;
+    if (!s_want[0]) return;
+    if (s_fired) {
+        if (s_followsLeft > 0 && frameNum >= s_nextFollow) {
+            --s_followsLeft;
+            s_nextFollow = frameNum + 600;
+            FollowUp(frameNum);
+        }
+        return;
+    }
     if (frameNum < s_fireFrame) return;
     s_fired = true;
+    s_seatFrame = frameNum;
+    s_nextFollow = frameNum + 600;
     if (!entityUI) {
         std::fprintf(stderr, "[FoodPanel] entityUI null at frame %d — cannot probe\n", frameNum);
         std::fflush(stderr);
