@@ -248,7 +248,14 @@ void FirePlacementTool() {
 // path without hand-wiring the tool.
 void FireActivatePlacement(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
+    // BANISHED_PLACEMENT_TEMPLATE overrides the building this drives, so the harness can
+    // reproduce a specific toolbar button. Needed for Template\FishermansDock.rsc: it is
+    // the one placeable carrying a RadiusDescription, which arms PlacementTool's
+    // HighlightAdd path (see Player_HighlightAdd_55430).
     const char* kTemplate = "Template\\WoodHouse.rsc";
+    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+        if (e[0]) kTemplate = e;
+    }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
     void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);

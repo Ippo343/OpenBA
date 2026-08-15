@@ -392,6 +392,15 @@ extern "C" int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
 
     int64_t gameWorld = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
     int mapSize = **reinterpret_cast<int**>(gameWorld + 0xf8);
+
+    // gw+0x110 holds a POINTER to the tile-highlight renderer, not the renderer
+    // itself. Retail (0x140055430): TradeWork_impl_0d80(*(longlong*)(gw + 0x110), ...).
+    // We passed `gw + 0x110` — so 0d80 read its slot array from gw+0x300/0x308 and
+    // the tessellator (0xace40) walked a garbage heightmap, faulting on the first
+    // sample. Only the fishing dock hits this: it is the one placeable whose
+    // description carries a RadiusDescription, which is what arms this path.
+    int64_t highlightMgr = *reinterpret_cast<int64_t*>(gameWorld + 0x110);
+    if (highlightMgr == 0) return -1;
     int row = param_2 / mapSize;
     int col = param_2 % mapSize;
     int r   = *reinterpret_cast<int*>(param_1 + 0x28);
@@ -399,7 +408,7 @@ extern "C" int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     uint32_t uv = *reinterpret_cast<uint32_t*>(&uvScale);
 
-    return TradeWork_impl_0d80(gameWorld + 0x110,
+    return TradeWork_impl_0d80(highlightMgr,
                                col - r, row - r, r + col, r + row,
                                0xff, 0, target, 0,
                                uv, 0, 0, uv, uv,
