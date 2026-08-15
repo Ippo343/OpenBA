@@ -48,8 +48,21 @@ typedef uint8_t (*LW_FindWalkablePos_t)(uintptr_t posComp, uintptr_t descOffset,
 typedef uint8_t (*LW_FindWalkablePosSub_t)(uintptr_t entity, int index,
                                             float* srcPos, float* outPos, int* outDist);
 
-// Pathfinding_WalkTowards action constructor (0x1400f8620)
+// Pathfinding_WalkTowards action constructor (0x1400bb490)
 // Creates a WalkTowards action: (citizenIBP, priority, position, flag1, fScale, flag2)
+//
+// ⚠ This read 0x1400f8620 until 2026-08-15 — a DIFFERENT function entirely
+// (WorkGrid_TryAssignWorkplace, a 4-arg BST search over a work grid, registered under
+// that name in standalone/reg_work_grid.cpp and used correctly by cleararea /
+// fishingwork / pasturework). Calling it with WalkTowards' six arguments walked a
+// "BST" out of the float destination array and faulted READ of -1.
+//
+// It never fired before because nothing in the world had ever CONSTRUCTED a
+// LocationWork: the only producer is AttendanceComponent's state-2 enter, and that
+// controller was inert until the promotion wave. The first live school posted a
+// LocationWork, a citizen picked it up out of Idle, and Slot4 crashed a few seconds
+// in. Classic latent leaf surfaced by a new feature — see
+// reference_registered_but_never_executed.
 typedef void (*LW_WalkTowards_Ctor_t)(void* citizenIBP, int priority,
                                        float* position, int flag1, float fScale, uint32_t flag2);
 
@@ -139,9 +152,9 @@ bool LocationWork_ResolveFuncs() {
     s_fn_FindWalkablePosSub = reinterpret_cast<LW_FindWalkablePosSub_t>(
         ResolveAddr(Module::Exe, 0x140122b00));
 
-    // WalkTowards action constructor
+    // WalkTowards action constructor (see the typedef comment for the 0x1400f8620 mixup)
     s_fn_WalkTowards_Ctor = reinterpret_cast<LW_WalkTowards_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400f8620));
+        ResolveAddr(Module::Exe, 0x1400bb490));
 
     // Validation and cleanup
     s_fn_ValidateEntity = reinterpret_cast<LW_ValidateEntity_t>(
