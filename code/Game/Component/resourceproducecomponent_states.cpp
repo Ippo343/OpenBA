@@ -317,10 +317,25 @@ extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self) {
 //     smc->vtable[8](smc, Time(0.0))                                      // force a tick
 //
 // ⚠ The event id is a hard-coded 0 (`XOR R9D,R9D` in the disassembly) and NO command id
-// is read — the slot takes only `self`. The shared state table registers event 3, not 0,
-// so this PostEvent finds no handler and returns 0 gracefully; the observable effect is
-// the forced tick that follows. That mismatch is retail's, reproduced rather than
-// "corrected": posting 3 here would be inventing behaviour the game does not have.
+// is read — the slot takes only `self`.
+//
+// CORRECTED 2026-08-15. The comment here used to claim the id-0-vs-3 mismatch was
+// "retail's, reproduced rather than corrected". That was a misread, and it made the
+// work pause/resume button a permanent no-op. Retail's event registrar for THIS
+// description is `ResourceProduceDescription_helper_b230_sub_7f90` @ 0x140037f90, whose
+// bytes are:
+//     4883EC18            SUB  RSP,0x18
+//     8B05 06491A00       MOV  EAX,[rip+...]
+//     C70424 00000000     MOV  dword ptr [RSP],0x0    <-- event id LITERAL 0; ECX discarded
+//     48897424 08         MOV  [RSP+0x8],RDX          <-- handler
+// So `sub_7f90(3, handler)` registers the handler under id **0**, and slot 14 posts 0 —
+// in retail they MATCH. Our port transcribed the ignored first argument as the id, which
+// is what broke it.
+//
+// The contrast proves the registrars really do differ, so this is not a blanket rule:
+// the orchard's twin registrar 0x140009c70 has `890C24` (MOV [RSP],ECX) and stores its
+// real id — which is why the orchard/cropfield tables keyed 3/4/5 are correct as written.
+// See the TableAddEvent calls in RPCtrl_PopulateTable below.
 extern "C" void ResourceProduceComponent_Command(void* self) {
     RP_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
@@ -378,12 +393,18 @@ extern "C" void RPCtrl_PopulateTable() {
                        reinterpret_cast<void*>(&RP_State13PerFrame), nullptr);
     TableAddTransition(t, 14, nullptr);
     TableAddTransition(t, 3,  reinterpret_cast<void*>(&RP_Trans13to3));
-    TableAddEvent(t, 3, reinterpret_cast<void*>(&RP_Event3Pause));
+    // Event id 0, NOT 3 — retail's registrar 0x140037f90 hardcodes 0 and discards the id
+    // argument (see the byte listing on ResourceProduceComponent_Command above). Slot 14
+    // posts 0, so registering 3 here meant PostEvent's linear scan never matched and the
+    // work pause button did nothing.
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&RP_Event3Pause));
 
     // ── state 14 — PAUSED / not accepting ─────────────────────────────────────────
     TableRegisterState(t, 14, reinterpret_cast<void*>(&RP_State14Enter), nullptr,
                        nullptr, nullptr);
     TableAddTransition(t, 13, nullptr);
     TableAddTransition(t, 3,  nullptr);
-    TableAddEvent(t, 3, reinterpret_cast<void*>(&RP_Event3Resume));
+    // Event id 0 for the same reason as the pause handler above. State 13 maps 0 -> Pause
+    // and state 14 maps 0 -> Resume, so the single posted event toggles.
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&RP_Event3Resume));
 }
