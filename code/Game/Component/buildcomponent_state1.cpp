@@ -405,103 +405,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                              matCount, found, acceptMask, totalQty, multiplier);
         }
 
-        // ---------------------------------------------------------------------------
-        // *** TWO CONVENTIONS SET WPC+0x50 IN THIS CODEBASE. READ BOTH BEFORE GREPPING. ***
-        //   (a) WorkPlaceComponent_SetAccepting()  — workplacecomponent.cpp:503, the
-        //       faithful Entity_impl_fc00 (0x14012fc00) port. Sets +0x50 AND drives the
-        //       status-icon side effects (clears closed/disabled bits; raises the
-        //       "no workers" warning when the roster is empty).
-        //   (b) the RAW FIELD WRITE just below — sets +0x50 only, no icon.
-        // A `grep SetAccepting` CANNOT SEE (b). That blind spot cost a wrong root-cause
-        // call on 2026-07-30 ("the only true-setter is starttown.cpp:394"). If you are
-        // auditing who makes a workplace accepting, grep for `0x50` too.
-        //
-        // Retail does NOT hand-roll this: FUN_14012f520 ("enter Builder profession",
-        // ported at destroycomponent_workerrelease.cpp:222 and registered) ends with
-        // WorkPlaceUI_helper_fb00(...) then Entity_impl_fc00(wpc, 1) — i.e. the full
-        // SetAccepting, icon included. So converting (b) to a real SetAccepting call is
-        // justifiable on faithfulness grounds; but the *properly* faithful change is to
-        // call the already-ported f520 here instead of hand-rolling a subset of it, which
-        // also brings ee60's worker release, the profession re-key, the BST register and
-        // SetMaxWorkers. That is a real behaviour change and wants its own gated task —
-        // do not do it as a drive-by while touching this comment.
-        // ---------------------------------------------------------------------------
-        // Enable the site's WorkPlaceComponent so citizens actually gather for it.
-        // GatherRawMaterials::Execute (0x1400ebe40) gates the whole haul on the site's
-        // WorkPlaceComponent (0x1401c80e0) "accepting" flag (+0x50): when 0 it returns
-        // immediately ("workplace disabled") and never searches for source storage. In
-        // retail that flag is set by the WorkPlaceComponent's own live lifecycle; in the
-        // standalone exe that component is inert, so +0x50 stays 0 and no construction
-        // haul ever runs. Set it here (construction-start) via the SAME finder GRM uses,
-        // reproducing the accepting state a live WorkPlaceComponent would hold. (The full
-        // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
-        // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
-        if (s_findWpc2e10) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
-            uintptr_t wpcIbp = 0;
-            s_findWpc2e10(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
-            if (wpcIbp != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
-                void* wpc = *reinterpret_cast<void**>(&wpcIbp);
-                if (wpc) {
-                    char prev = *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50);
-                    *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;
-                    if (BCS1_Trace())
-                        std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
-                                     wpc, (int)prev);
-                    // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
-                    // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
-                    // handler FUN_14012f520 does this (the inert WPC controller never runs it in
-                    // standalone). This keeps the seated builders consistent: the employment tick's
-                    // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
-                    // workplace's required profession (+0x48), so +0x48 must read Builder.
-                    //
-                    // NOTE (legacy off-path rationale): registering the site into the
-                    // townMgr+0x100 profession BST makes BuildPathGraph (0x1400d70c0) produce
-                    // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
-                    // its Phase-5B AssignHousing(null) churn over every idle laborer. That churn
-                    // was ORIGINALLY believed to deadlock the WPC Scene mesh-visual toggle, which
-                    // is why the off-path defers the SEAT to State8Enter (direct CitizenEmploy_
-                    // SeatWorkersAt against the site entity) instead of registering. That deadlock
-                    // is now neutralized by g_wpcRosterOnly (held across the allocator body, the
-                    // builder pool, and the profession spinner), so the NATURAL register path below
-                    // is default-on and verified safe: a 30s autostart run with a registered site
-                    // stays hang-free and the town-hall Professions panel shows the site's real
-                    // Builder capacity ("X of 3" via the CapProbe in builder_pool_driver.cpp — the
-                    // same WorkPlaceComponent/WorkComponent/CalcMaxWorkers path ProfessionUI_Slot8
-                    // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
-                    // way: seating at construction start would convert the idle Laborers that HAUL
-                    // the raw materials into Builders before any hauling. Laborers haul; Builders build.
-                    uintptr_t gwPtr = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
-                    uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
-                    uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
-                    if (builderMarker != 0)
-                        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
-
-                    // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
-                    // the townMgr+0x100 profession BST keyed Builder — the step retail does at
-                    // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
-                    // This is what makes FindAvailableBuilding (0x14008d100) able to locate the
-                    // site, so the tick-driven Builder pool seats idle laborers here. Capacity
-                    // (WorkComponent+0x30) is computed lazily by FindAvailableBuilding via
-                    // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
-                    // allocator's AssignHousing churn (which townMgr+0x100 population activates)
-                    // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
-                    // Off = the legacy path (no register; State8Enter direct-seats the builders).
-                    if (BCS1_BuilderNatural() && townMgr) {
-                        TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
-                        if (BCS1_Trace())
-                            std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder + REGISTERED townMgr+0x100 (WPC+0x48=0x%llx, natural flow)\n",
-                                         (unsigned long long)builderMarker);
-                    } else if (BCS1_Trace()) {
-                        std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
-                                     (unsigned long long)builderMarker);
-                    }
-                }
-            } else if (BCS1_Trace()) {
-                std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");
-            }
-        }
     } else {
         // -------- Materials present / instant: force transition to state 8 --------
         // Retail (0x140108290 else-branch):
@@ -530,6 +433,124 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                          (int)haveAll, (int)instant, buildComp,
                          *reinterpret_cast<int32_t*>(self + 0x4c));
     }
+
+    // ===========================================================================
+    // WORKPLACE HAND-OFF — runs on BOTH legs of the branch above (moved out of the
+    // spawn leg 2026-08-15).
+    //
+    // This block used to live inside `if (!haveAll && instant == 0)`, i.e. only when
+    // the site had to gather materials. That is not where retail puts it: retail's
+    // WorkPlaceComponent controller runs FUN_14012f520 ("enter Builder profession")
+    // at construction START, unconditionally — it has nothing to do with materials.
+    //
+    // The consequence of the misplacement was total, not partial. An instant-built or
+    // fully-stocked site never got WPC+0x48 = Builder, so at completion
+    // WorkPlaceComponent_LeaveBuilderProfession bailed on its `key == 0` guard and
+    // never assigned the building's NATURAL profession from the description (+0x20)
+    // either. +0x48 stayed 0 for the entity's whole life, and WorkplaceUI_Startup
+    // hides the entire workplace panel when +0x48 == 0 (faithful to retail
+    // 0x140087080) — so no worker up/down spinner and no work-stopped icon on ANY
+    // workplace: orchard, crop field, fishing dock, hunter lodge, gatherer hut.
+    // Measured 2026-08-15: 23642 `[WorkPlaceUI] HIDDEN` lines, 0 shown, across 6
+    // distinct entities; `[BuildTrace] ... profession 0x0 -> 0x0` on every site.
+    // ===========================================================================
+    // *** TWO CONVENTIONS SET WPC+0x50 IN THIS CODEBASE. READ BOTH BEFORE GREPPING. ***
+    //   (a) WorkPlaceComponent_SetAccepting()  — workplacecomponent.cpp:503, the
+    //       faithful Entity_impl_fc00 (0x14012fc00) port. Sets +0x50 AND drives the
+    //       status-icon side effects (clears closed/disabled bits; raises the
+    //       "no workers" warning when the roster is empty).
+    //   (b) the RAW FIELD WRITE just below — sets +0x50 only, no icon.
+    // A `grep SetAccepting` CANNOT SEE (b). That blind spot cost a wrong root-cause
+    // call on 2026-07-30 ("the only true-setter is starttown.cpp:394"). If you are
+    // auditing who makes a workplace accepting, grep for `0x50` too.
+    //
+    // Retail does NOT hand-roll this: FUN_14012f520 ("enter Builder profession",
+    // ported at destroycomponent_workerrelease.cpp:222 and registered) ends with
+    // WorkPlaceUI_helper_fb00(...) then Entity_impl_fc00(wpc, 1) — i.e. the full
+    // SetAccepting, icon included. So converting (b) to a real SetAccepting call is
+    // justifiable on faithfulness grounds; but the *properly* faithful change is to
+    // call the already-ported f520 here instead of hand-rolling a subset of it, which
+    // also brings ee60's worker release, the profession re-key, the BST register and
+    // SetMaxWorkers. That is a real behaviour change and wants its own gated task —
+    // do not do it as a drive-by while touching this comment.
+    // ---------------------------------------------------------------------------
+    // Enable the site's WorkPlaceComponent so citizens actually gather for it.
+    // GatherRawMaterials::Execute (0x1400ebe40) gates the whole haul on the site's
+    // WorkPlaceComponent (0x1401c80e0) "accepting" flag (+0x50): when 0 it returns
+    // immediately ("workplace disabled") and never searches for source storage. In
+    // retail that flag is set by the WorkPlaceComponent's own live lifecycle; in the
+    // standalone exe that component is inert, so +0x50 stays 0 and no construction
+    // haul ever runs. Set it here (construction-start) via the SAME finder GRM uses,
+    // reproducing the accepting state a live WorkPlaceComponent would hold. (The full
+    // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
+    // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
+    if (s_findWpc2e10) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+        uintptr_t wpcIbp = 0;
+        s_findWpc2e10(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
+        if (wpcIbp != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
+            void* wpc = *reinterpret_cast<void**>(&wpcIbp);
+            if (wpc) {
+                char prev = *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50);
+                *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;
+                if (BCS1_Trace())
+                    std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
+                                 wpc, (int)prev);
+                // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
+                // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
+                // handler FUN_14012f520 does this (the inert WPC controller never runs it in
+                // standalone). This keeps the seated builders consistent: the employment tick's
+                // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
+                // workplace's required profession (+0x48), so +0x48 must read Builder.
+                //
+                // NOTE (legacy off-path rationale): registering the site into the
+                // townMgr+0x100 profession BST makes BuildPathGraph (0x1400d70c0) produce
+                // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
+                // its Phase-5B AssignHousing(null) churn over every idle laborer. That churn
+                // was ORIGINALLY believed to deadlock the WPC Scene mesh-visual toggle, which
+                // is why the off-path defers the SEAT to State8Enter (direct CitizenEmploy_
+                // SeatWorkersAt against the site entity) instead of registering. That deadlock
+                // is now neutralized by g_wpcRosterOnly (held across the allocator body, the
+                // builder pool, and the profession spinner), so the NATURAL register path below
+                // is default-on and verified safe: a 30s autostart run with a registered site
+                // stays hang-free and the town-hall Professions panel shows the site's real
+                // Builder capacity ("X of 3" via the CapProbe in builder_pool_driver.cpp — the
+                // same WorkPlaceComponent/WorkComponent/CalcMaxWorkers path ProfessionUI_Slot8
+                // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
+                // way: seating at construction start would convert the idle Laborers that HAUL
+                // the raw materials into Builders before any hauling. Laborers haul; Builders build.
+                uintptr_t gwPtr = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+                uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
+                uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
+                if (builderMarker != 0)
+                    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
+
+                // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
+                // the townMgr+0x100 profession BST keyed Builder — the step retail does at
+                // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
+                // This is what makes FindAvailableBuilding (0x14008d100) able to locate the
+                // site, so the tick-driven Builder pool seats idle laborers here. Capacity
+                // (WorkComponent+0x30) is computed lazily by FindAvailableBuilding via
+                // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
+                // allocator's AssignHousing churn (which townMgr+0x100 population activates)
+                // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
+                // Off = the legacy path (no register; State8Enter direct-seats the builders).
+                if (BCS1_BuilderNatural() && townMgr) {
+                    TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
+                    if (BCS1_Trace())
+                        std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder + REGISTERED townMgr+0x100 (WPC+0x48=0x%llx, natural flow)\n",
+                                     (unsigned long long)builderMarker);
+                } else if (BCS1_Trace()) {
+                    std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
+                                 (unsigned long long)builderMarker);
+                }
+            }
+        } else if (BCS1_Trace()) {
+            std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");
+        }
+    }
+
 
     return 1;
 }
