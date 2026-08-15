@@ -344,6 +344,28 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                     else { bucket = static_cast<int>(node[2]); break; }
                 }
             }
+            // WPC+0x48 is seated from `WorkPlaceDescription+0x20`, but only retail's f670
+            // guards that read with IsDerivedFrom(WPC+0x18, WorkPlaceDescription) first —
+            // StartTown_ActivateWorkplace reads +0x18 -> +0x20 RAW, and a start-town
+            // building never runs f670. If +0x18 is some other description, +0x20 is the
+            // wrong field of the wrong object and the key matches nothing. Check the type.
+            {
+                void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
+                const uint32_t tidWpd = Tid("WorkPlaceDescription");
+                uint32_t got = 0;
+                if (wpDesc) {
+                    void** dvt = *reinterpret_cast<void***>(wpDesc);
+                    if (dvt && dvt[2]) got = reinterpret_cast<uint32_t(*)(void*)>(dvt[2])(wpDesc);
+                }
+                std::fprintf(stderr, "[FoodPanel]   seat PRE: WPC+0x18 desc=%p typeId=%08X "
+                             "(WorkPlaceDescription=%08X) desc+0x20=0x%llx  %s\n",
+                             wpDesc, got, tidWpd,
+                             (unsigned long long)(wpDesc ? *reinterpret_cast<uint64_t*>(
+                                 reinterpret_cast<uintptr_t>(wpDesc) + 0x20) : 0),
+                             !wpDesc              ? "NO DESCRIPTION"
+                           : (got == tidWpd)      ? "type OK — +0x20 really is the work profession"
+                                                  : "WRONG TYPE — +0x48 was seated from the wrong object");
+            }
             std::fprintf(stderr, "[FoodPanel]   seat PRE: profKey(+0x48)=0x%llx accepting(+0x50)=%d "
                          "roster(+0x60)=%d capacity(WC+0x30)=%d bstBucket=%d%s\n",
                          (unsigned long long)key, accept, roster, cap, bucket,
@@ -616,6 +638,73 @@ void FollowUp(int frameNum) {
                     std::fprintf(stderr, "[FoodPanel]       record key +0x%02x = 0x%llx -> %s%s\n",
                                  k == 0 ? 0x28 : 0x30, (unsigned long long)want[k], owner,
                                  want[k] == key ? "  == THIS building" : "");
+                }
+                // The SCHOOL key is the third ref, +0x20, consumed by the misnamed
+                // CitizenComp_TryFindPartner (0x140111840) — enrollment, which runs ONLY
+                // at the child->adult transition. So an empty queue here is expected
+                // unless somebody actually grew up during the run.
+                if (czArr && czN > 0) {
+                    int minors = 0, students = 0;
+                    for (int i = 0; i < czN; ++i) {
+                        void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+                        uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                        if (!cz) continue;
+                        uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
+                        if (rec && *reinterpret_cast<float*>(cz + 0x3c)
+                                     < *reinterpret_cast<float*>(rec + 0x44)) ++minors;
+                        if (*reinterpret_cast<uint64_t*>(cz + 0x208)) ++students;
+                    }
+                    std::fprintf(stderr, "[FoodPanel]       enrolment population: %d below adult age "
+                                 "(+0x3c < rec+0x44), %d already enrolled (+0x208)%s\n",
+                                 minors, students,
+                                 minors == 0
+                                   ? "   <-- nobody can enrol: enrolment fires only on the "
+                                     "child->adult edge, and every founder spawned adult"
+                                   : "");
+                    // Minors exist but none has crossed the adult edge during this short
+                    // run, so waiting proves nothing either way. Drive the enroller
+                    // (0x140111840) directly on one minor: that isolates "the finder /
+                    // sub_40f0 gate refuses" from "the edge simply has not fired yet",
+                    // which a soak alone cannot separate.
+                    if (minors > 0 && students == 0) {
+                        typedef char (*Enrol_t)(void*, int64_t*);
+                        static Enrol_t s_enrol = nullptr;
+                        static bool s_res = false;
+                        if (!s_res) { s_res = true;
+                            s_enrol = reinterpret_cast<Enrol_t>(ResolveAddr(Module::Exe, 0x140111840)); }
+                        void* victim = nullptr;
+                        for (int i = 0; i < czN && !victim; ++i) {
+                            void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
+                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+                            uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                            if (!cz) continue;
+                            uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
+                            if (rec && *reinterpret_cast<float*>(cz + 0x3c)
+                                         < *reinterpret_cast<float*>(rec + 0x44))
+                                victim = reinterpret_cast<void*>(cz);
+                        }
+                        if (!s_enrol || !victim) {
+                            std::fprintf(stderr, "[FoodPanel]       enrol probe: %s\n",
+                                         !s_enrol ? "0x140111840 unresolved" : "no minor found");
+                        } else {
+                            // Read the queue off the ATTENDANCE component the enroller
+                            // picked (citizen+0x208), NOT off `w` — `w` is the
+                            // WorkPlaceComponent, whose +0x30 is an unrelated field, and
+                            // printing it made a successful enrolment read as "queue 0 -> 0".
+                            int64_t seed = 0;
+                            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&seed, nullptr);
+                            const char ok = s_enrol(victim, &seed);
+                            uintptr_t att = *reinterpret_cast<uintptr_t*>(
+                                                reinterpret_cast<uintptr_t>(victim) + 0x208);
+                            std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
+                                         "returned %d, +0x208=%p, that component's queue(+0x30)=%d   %s\n",
+                                         victim, (int)ok, reinterpret_cast<void*>(att),
+                                         att ? *reinterpret_cast<int32_t*>(att + 0x30) : -1,
+                                         ok ? "OK — enrolment works; the edge just had not fired"
+                                            : "REFUSED — the finder or its sub_40f0 gate is the defect");
+                        }
+                    }
                 }
             }
             std::fprintf(stderr, "[FoodPanel]     eligibility: %d citizens, %d with no +0x288 record; "

@@ -3078,8 +3078,27 @@ void CitizenComp_FindStorage(CitizenComponent* param_1) {
 }
 
 // Reimpl of CitizenComponent_TryFindPartner (0x140111840):
-// like FindWorkplace but keyed by description+0x20; on success stores the partner at
-// +0x208 and sets the had-partner flag (+0x220). param_2 seeds the exclusion IBP.
+// like FindWorkplace but keyed by description+0x20; on success stores the result at
+// +0x208 and sets the been-here-already flag (+0x220). param_2 seeds the exclusion IBP.
+//
+// ⚠ THE NAME IS WRONG — this is SCHOOL ENROLLMENT, not partner-finding. It is the third
+// and last caller of sub_1930, and it consumes the third of CitizenDescription's three
+// ExternalRef<Profession> slots. Proof:
+//   * On success it appends the citizen into `found+0x28` with count `found+0x30` — that
+//     is AttendanceComponent's own waiting queue, not anything to do with a spouse.
+//   * The graduation path FUN_140115a50 does the exact inverse: it erases the citizen
+//     from `(+0x208)+0x28` and clears +0x208. So +0x208 holds an ATTENDANCE COMPONENT.
+//   * Measured 2026-08-15: `CitizenDescription+0x20` is byte-identical to the demo
+//     schoolhouse's own WorkPlaceComponent+0x48, while +0x28 (FindStorage) and +0x30
+//     (the disease-gated hospital finder) match no building in town.
+//
+// Its ONLY caller is the child->adult transition in Update (`!isAdult && adultAge <=
+// newAge && +0x208 == 0`), which is Banished's "at coming of age, become a student if a
+// school will take you, else a laborer" fork — hence the 10-vs-9 life event there.
+// CONSEQUENCE for testing: a founder spawned already at adult age has isAdult == true on
+// its first tick and NEVER crosses that edge, so it can never enrol. An empty school in a
+// short soak is therefore CORRECT, not a defect — you need a citizen that actually grows
+// up while a staffed school exists. See [[project_wpc_first_seat_and_attendance_keys]].
 char CitizenComp_TryFindPartner(CitizenComponent* param_1, int64_t* param_2) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
