@@ -143,7 +143,11 @@ typedef void (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotInd
 static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;
 
 // CitizenComponent_AssignHousing(self, housingPtr)
-// At 0x140114f80
+// At 0x140111ee0 (writes citizen+0x248). The address in this comment used to read
+// 0x140114f80, which never matched the binding 12 lines below or the three other files
+// that resolve this function (citizencomponent_lifecycle.cpp, citizen_assign_citizens.cpp
+// x2) — all four agree on 0x140111ee0. Corrected 2026-08-15: a stale ADDRESS in a comment
+// is the same trap as a wrong binding, just slower-acting.
 typedef void (*fn_AssignHousing_t)(void* self, void* housingPtr);
 static fn_AssignHousing_t s_fn_AssignHousing = nullptr;
 

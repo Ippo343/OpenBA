@@ -870,7 +870,10 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             comp = *slot;
             if (!comp) continue;
             vt = *(uintptr_t*)comp;
-            // BANISHED_LIVE_RESIDENCE_REGISTRY — OPT-IN (not in kDefaultOnFlags).
+            // BANISHED_LIVE_RESIDENCE_REGISTRY — GRADUATED to kDefaultOnFlags 2026-08-15
+            // (`=0` is now the kill-switch). See the A/B in component_factory_base.cpp:
+            // this one erased list silently disabled every move-out, and therefore every
+            // second-generation marriage, in the whole project.
             //
             // Slot 7 (vtable +0x38, "ResidenceComponent::OnCreate") does TWO things:
             //   1. ResidenceComponent_helper_9ef0 (0x140129ef0) — init/evict. Wanted.
@@ -892,11 +895,14 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             // rather than an invariant becomes a lie and disguises the gap it creates.
             //
             // Flag ON: call the init half directly, skipping the erase. Flag off: byte-identical.
+            // Read through LiveEnabled, NOT raw getenv: kDefaultOnFlags is consulted ONLY
+            // inside ComponentFactory::LiveEnabled, so a raw getenv here would make the
+            // table entry a silent no-op — unset would stay OFF while `=0` still worked,
+            // i.e. it would look graduated, pass the kill-switch test, and not be on.
             static int s_residenceRegistry = -1;
-            if (s_residenceRegistry < 0) {
-                const char* e = std::getenv("BANISHED_LIVE_RESIDENCE_REGISTRY");
-                s_residenceRegistry = (e && e[0] && e[0] != '0') ? 1 : 0;
-            }
+            if (s_residenceRegistry < 0)
+                s_residenceRegistry =
+                    ::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE_REGISTRY") ? 1 : 0;
             if (s_residenceRegistry) {
                 typedef void (*fn_ResidenceInit_t)(void*);
                 uintptr_t initFn = ResolveAddr(Module::Exe, 0x140129ef0);
@@ -4406,6 +4412,159 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             fuelSeeded, g_foundingHouseIBPs.size(), kSeedFuelPerHouse,
             (unsigned long long)fuelTmpl, fuelFlags,
             fuelTmpl == 0 ? "  <-- NO fuel raw-material template found (bit 6)" : "");
+    fflush(stderr);
+}
+
+// ── BANISHED_FOOD_TOPUP=<frames> — periodic food abundance (test scaffolding) ──────
+// StartTown_SeedHouseInventory is a ONE-SHOT: it fills each house to the seed budget and
+// nothing ever refills it. Measured 2026-08-15 (seed 12345, FORCE_SPEED=40, 25 citizens):
+// the town eats ~600 units per 1000 frames, so a 1800-unit start stock is gone by frame
+// 5000 and the whole population starves between 6000 and 8000. That die-off dominates
+// EVERY long-run measurement — including the demographic ones — because it kills the
+// cohort before any of them can be observed.
+//
+// It also silently suppresses the life-planning section in CitizenComponent::Update: that
+// whole block (housing / workplace / MARRIAGE) runs only while the citizen's action stack
+// is empty (*(self+0x278)+0x60 == -1). A starving citizen is permanently inside a
+// food-seeking action, so it never marries and never moves out. "Nobody marries" and
+// "everybody starves" are therefore the SAME observation, and the marriage path cannot be
+// judged at all until food is off the table.
+//
+// This refills food on the same faithful path the one-shot seed uses (AddItem 0x14012d000
+// into the house's own StorageComponent) and to the SAME budget, so it cannot overfill:
+// `target` is the seed's own maxFoodUnits, which already reserves the fuel volume and one
+// carry-load of headroom, and we only ever add `target - have`. Nothing else is touched.
+//
+// This is NOT a food economy and is not a fix for one — it is the "enough food" half of
+// the question "given enough food and housing, does the births/deaths cycle sustain a
+// population?". Test-only, opt-in, default 0 (byte-unchanged when unset).
+// extern "C": the call site is a block-scope `extern void` declaration inside
+// GameUpdateLoop_Update, which is itself an extern "C" function — so that declaration
+// inherits C linkage and a C++-mangled definition here does not satisfy it.
+extern "C" void StartTown_FoodTopUp_Tick(int frame) {
+    static int s_period = -1;
+    if (s_period < 0) {
+        const char* e = std::getenv("BANISHED_FOOD_TOPUP");
+        s_period = (e && e[0]) ? std::atoi(e) : 0;
+        if (s_period > 0) {
+            fprintf(stderr, "[FoodTopUp] ENABLED — refilling house food to the seed budget "
+                            "every %d frames (test scaffolding, not a producer)\n", s_period);
+            fflush(stderr);
+        }
+    }
+    if (s_period <= 0 || frame <= 0 || (frame % s_period) != 0) return;
+    if (g_foundingHouseIBPs.empty()) return;
+
+    void* townMgr = nullptr;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+    if (!townMgr) return;
+
+    typedef void (*fn_AddItem_t)(int64_t storage, int64_t material, int n);   // 0x14012d000
+    fn_AddItem_t addItem = reinterpret_cast<fn_AddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
+    typedef int (*fn_GetResCount_t)(int64_t comp);                            // 0x14012a9d0
+    fn_GetResCount_t getResCount =
+        reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
+    // StorageComponent::QueryCount — the OCCUPIED VOLUME of the container, the same value
+    // StorageComponent::CanAdd (0x14012cd80) tests against capacity (+0x38). getResCount
+    // above only sums EDIBLE units, so it cannot see firewood; this can.
+    typedef uint32_t (*fn_QueryCount_t)(void* self);                          // 0x14012cf10
+    fn_QueryCount_t queryCount =
+        reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
+    if (!addItem || !getResCount) return;
+
+    // Same edible-template pick as the one-shot seed (RawMaterialDescription+0x5c bit 5).
+    const uint32_t tidRawMat = TypeId("RawMaterialDescription");
+    const int   tmplCount = *(int32_t*)((uint8_t*)townMgr + 0x118);
+    const int64_t tmplArr = *(int64_t*)((uint8_t*)townMgr + 0x110);
+    int64_t  foodTmpl = 0, fuelTmpl = 0;
+    uint32_t foodFlags = 0, fuelFlags = 0;
+    int      foodVol = 1, fuelVol = 1;
+    for (int t = 0; t < tmplCount && (foodTmpl == 0 || fuelTmpl == 0); ++t) {
+        int64_t tmpl = tmplArr ? *(int64_t*)(tmplArr + (int64_t)t * 8) : 0;
+        void* desc = tmpl ? FindDescriptionOnTemplate(reinterpret_cast<void*>(tmpl), tidRawMat) : nullptr;
+        if (!desc) continue;
+        const uint32_t flags = *(uint32_t*)((uint8_t*)desc + 0x5c);
+        if (foodTmpl == 0 && (flags & 0x20)) { foodTmpl = tmpl; foodFlags = flags; foodVol = *(int32_t*)((uint8_t*)desc + 0x48); }
+        if (fuelTmpl == 0 && (flags & 0x40)) { fuelTmpl = tmpl; fuelFlags = flags; fuelVol = *(int32_t*)((uint8_t*)desc + 0x48); }
+    }
+    if (foodTmpl == 0) return;
+
+    const uint32_t tidStorage   = TypeId("StorageComponent");
+    const uint32_t tidResidence = TypeId("ResidenceComponent");
+    int kSeedFuelPerHouse = 400;
+    if (const char* fe = std::getenv("BANISHED_SEED_FUEL")) {
+        const int v = std::atoi(fe);
+        if (v >= 0) kSeedFuelPerHouse = v;
+    }
+    static int s_foodFirst = -1;
+    if (s_foodFirst < 0)
+        s_foodFirst = ::ComponentFactory::LiveEnabled("BANISHED_SEED_FOOD_FIRST") ? 1 : 0;
+
+    int houses = 0, refilled = 0, unitsAdded = 0, fuelRefilled = 0, fuelAdded = 0;
+    for (int64_t houseIBP : g_foundingHouseIBPs) {
+        if (!houseIBP) continue;
+        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
+        if (!sc) continue;
+        const uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
+        if ((mask & foodFlags) == 0) continue;
+        ++houses;
+
+        // Identical budget to the one-shot seed — see the clamp note there.
+        const int cap = *(int32_t*)((uint8_t*)sc + 0x38);
+        const int fuelVolume = (fuelTmpl != 0 && (mask & fuelFlags) != 0)
+                             ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
+        const int carryLoad = 100;
+        // ⚠The top-up ALWAYS reserves the fuel volume, even though the one-shot seed skips
+        // that subtraction under SEED_FOOD_FIRST. Reason: the seed runs once, at a moment
+        // when fuel is added right after it, so "food first" is safe there. Here food is
+        // re-topped every period, and food-first meant food re-claimed the whole budget on
+        // every tick and fuel got exactly ZERO free volume forever — measured: "fuel 0/30
+        // house(s) +0 unit(s)" on every line while the town marched toward freezing. A
+        // sustained town needs BOTH, so both get a share.
+        (void)s_foodFirst;
+        int foodBudget = cap - carryLoad - fuelVolume;
+        if (foodBudget < 0) foodBudget = 0;
+        const int target = foodBudget / (foodVol > 0 ? foodVol : 1);
+        if (target <= 0) continue;
+
+        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        const int have = rescomp ? getResCount(reinterpret_cast<int64_t>(rescomp)) : 0;
+        const int add  = target - have;
+        if (add > 0) {
+            addItem(reinterpret_cast<int64_t>(sc), foodTmpl, add);
+            ++refilled;
+            unitsAdded += add;
+        }
+
+        // ── FIREWOOD ───────────────────────────────────────────────────────────────
+        // Measured 2026-08-15, and it is what ended the first successful soak: food alone
+        // is NOT enough to keep a town alive. The residence heat tick burns one fuel unit
+        // per burn interval out of this same StorageComponent, `BANISHED_SEED_FUEL` is a
+        // ONE-SHOT seed, and standalone has no woodcutter — so the reserve simply runs out.
+        // A town that had grown 22 -> 77 over 32000 frames froze SOLID between frames
+        // 32000 and 34000: the last census read warmth(+0x48) avg 13.2 / max 19.0 against
+        // a death threshold of 20.0, i.e. the whole population was one tick from the edge.
+        // Refilling food and not fuel just moves the wall.
+        //
+        // Sized off the container's own occupied volume (QueryCount, the value CanAdd
+        // tests) rather than a unit count, because food and fuel share ONE volume budget —
+        // topping fuel up blind is exactly how the original seed overfilled the house and
+        // made CanAdd refuse every later delivery.
+        if (fuelTmpl != 0 && (mask & fuelFlags) != 0 && queryCount) {
+            const int used = static_cast<int>(queryCount(sc));
+            const int freeVol = cap - carryLoad - used;
+            const int addFuel = (freeVol > 0 ? freeVol : 0) / (fuelVol > 0 ? fuelVol : 1);
+            if (addFuel > 0) {
+                addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, addFuel);
+                ++fuelRefilled;
+                fuelAdded += addFuel;
+            }
+        }
+    }
+    fprintf(stderr, "[FoodTopUp] frame %d: refilled %d/%d house(s) +%d food unit(s); "
+            "fuel %d/%d house(s) +%d unit(s)\n",
+            frame, refilled, houses, unitsAdded, fuelRefilled, houses, fuelAdded);
     fflush(stderr);
 }
 

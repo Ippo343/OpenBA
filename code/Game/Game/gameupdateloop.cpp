@@ -922,6 +922,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // unless BANISHED_KILL_CITIZENS is set.
     CitizenDeathHarness_Tick(s_frameNum);
 
+    // Periodic house-food refill. Takes STARVATION out of a long demographic soak, which
+    // otherwise kills the whole cohort (~frame 6000-8000 at 25 citizens) long before any
+    // birth/marriage rate can be measured. No-op unless BANISHED_FOOD_TOPUP is set.
+    { extern void StartTown_FoodTopUp_Tick(int); StartTown_FoodTopUp_Tick(s_frameNum); }
+
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);

@@ -216,6 +216,28 @@ static const char* const kDefaultOnFlags[] = {
     // body reads scene id 0 where the ctor writes -1, and RemoveObject(scene,0) freezes),
     // and progress guards on the two ring walks.
     "BANISHED_LIVE_CITIZEN_ONREMOVE",
+    // Residence registry (starttown.cpp:897) — call ResidenceComponent's init half
+    // (0x140129ef0) directly instead of dispatching vtable slot 7, whose body calls
+    // 0x140002cc0 = ERASE-BY-VALUE. Every house registered into townMgr+0x20 and was
+    // erased one line later, so the list read 0 for the entire run.
+    //
+    // That single empty list silently disabled the whole second generation.
+    // CitizenComponent::Update's find-your-own-home scan (sub_0e70) skips its entire body
+    // when townMgr+0x28 == 0, so it always returned null; the guardian link +0x258 is
+    // cleared ONLY on that scan succeeding (sub_1fa0(self, null)); and the marriage gate
+    // requires +0x258 == 0. Net effect: no citizen could ever move out, therefore none
+    // could ever marry, therefore the town had exactly its six founding couples forever
+    // and died out when they aged past maxAge (~15).
+    //
+    // Graduated 2026-08-15 on an A/B at identical seed (12345, FORCE_SPEED=40), food held
+    // abundant by BANISHED_FOOD_TOPUP so starvation could not confound it. Flag OFF:
+    // count(+0x28)=0 at every census, 12 ERASE lines, noGuardian=0 and ELIGIBLE=0 through
+    // frame 10000 with 24 EMPTY houses, spouse pinned at 12. Flag ON: count=30, ZERO ERASE
+    // lines, noGuardian=1 and ELIGIBLE=1 by frame 2000, and spouse 12 -> 14 by frame 4000 —
+    // the first second-generation marriages this project has measured. spouse > 12 is a
+    // value only the live path can produce, which is what makes this a positive run rather
+    // than an absence-of-symptom one.
+    "BANISHED_LIVE_RESIDENCE_REGISTRY",
     // WorkPlaceComponent::SetAccepting accepting=false (the pause path: closed indicator,
     // icon clears, roster eviction) — verified live 2026-07-25 once the real bug was fixed
     // at source. The three faults it first hit were all BuildUI_Slot9 passing a c8070
