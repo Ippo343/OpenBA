@@ -210,7 +210,8 @@ confirm no crash and no `[StatusIcon] GUARD:` line. Automated runs cannot inject
 
 ## Testing notes
 
-* **The upgrade harness needs `BANISHED_BUILDER_AUTOPOOL=1`.** Without it,
+* **EXPIRED 2026-08-15:** BANISHED_BUILDER_AUTOPOOL / BANISHED_PASTURE_HERDERS were RETIRED 2026-08-15 — the flags no longer exist and are ignored. Seating is done by the panel-click driver (standalone/panel_staffing_driver.cpp), which auto-arms on unattended runs; BANISHED_AUTOSTAFF=0 disables it.
+* ~~The upgrade harness needs `BANISHED_BUILDER_AUTOPOOL=1`.~~ Without it,
   `BuilderPool_Tick` returns at `if (!AutoPoolOn())` (auto-seating is spinner-driven by
   default), so no builder is ever seated, `BuildComponent+0x48` stays 0 forever and the
   harness sits at `delivered=0 required=30` until its 36000-frame timeout. This cost a whole

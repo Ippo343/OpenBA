@@ -1926,7 +1926,8 @@ void UpgradeTick(int frameNum) {
 //      BANISHED_BRIDGE_TEMPLATE     default "Template\\WoodBridge.rsc"
 //      BANISHED_BRIDGE_POLL         poll period in frames (default 600)
 //      BANISHED_BRIDGE_WAIT_FRAMES  give-up budget (default 60000)
-// Needs BANISHED_BUILDER_AUTOPOOL=1 (nothing gets built without it) and is much
+// Builders are seated by standalone/panel_staffing_driver.cpp on unattended runs (the
+// old BANISHED_BUILDER_AUTOPOOL bypass was retired 2026-08-15); this run is much
 // faster under BANISHED_FORCE_SPEED=40.
 extern "C" void* g_BridgeLastMaster;
 extern "C" void* g_BridgeLastSegments[32];

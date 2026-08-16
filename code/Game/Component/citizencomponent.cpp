@@ -48,10 +48,14 @@ static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
 typedef float (*fn_RandFloat_t)(void* random);
 static fn_RandFloat_t s_fn_RandFloat = nullptr;
 
-// CitizenComponent_TryFindPartner(self, outIBP) -> char (bool)
-// At 0x14010fe40
-typedef char (*fn_TryFindPartner_t)(void* self, void* outIBP);
-static fn_TryFindPartner_t s_fn_TryFindPartner = nullptr;
+// CitizenComponent_TryEnrolInSchool(self, outIBP) -> char (bool)
+// At 0x140111840. Ghidra called it TryFindPartner for months; it is school enrolment
+// (desc+0x20 -> AttendanceComponent queue -> citizen+0x208). Renamed in Ghidra and here
+// 2026-08-15 — the misnomer had already propagated into four files. The resolve site
+// below is the authority on the address; the old "0x14010fe40" note here was a different
+// function entirely (helper_fe40).
+typedef char (*fn_TryEnrolInSchool_t)(void* self, void* outIBP);
+static fn_TryEnrolInSchool_t s_fn_TryEnrolInSchool = nullptr;
 
 // CitizenComponent_PostLifeEvent(self, eventType, severity, strParam)
 // At 0x140113af0 — posts a life-event message to the event log (gw+0x138).
@@ -80,10 +84,11 @@ static fn_ConsumeFood_t s_fn_ConsumeFood = nullptr;
 typedef void (*fn_ConsumeFuel_t)(void* self);
 static fn_ConsumeFuel_t s_fn_ConsumeFuel = nullptr;
 
-// CitizenComponent_FindWorkplace(self)
-// At 0x140115530
-typedef void (*fn_FindWorkplace_t)(void* self);
-static fn_FindWorkplace_t s_fn_FindWorkplace = nullptr;
+// CitizenComponent_FindCareBuilding(self) — the SICK citizen's hospital finder
+// (desc+0x30 -> citizen+0x228), gated on the disease pointer citizen+0x68. Not a
+// workplace finder despite the old name; see the resolve site below for the address.
+typedef void (*fn_FindCareBuilding_t)(void* self);
+static fn_FindCareBuilding_t s_fn_FindCareBuilding = nullptr;
 
 // CitizenComponent_FindStorage(self)
 // At 0x140115770
@@ -246,7 +251,7 @@ static void EnsureHelpers() {
     if (slot) s_fn_Time_FromSeconds = *reinterpret_cast<fn_Time_FromSeconds_t*>(slot);
 
     // Direct exe addresses for CitizenComponent sub-functions
-    s_fn_TryFindPartner = reinterpret_cast<fn_TryFindPartner_t>(
+    s_fn_TryEnrolInSchool = reinterpret_cast<fn_TryEnrolInSchool_t>(
         ResolveAddr(Module::Exe, 0x140111840));  // CitizenComponent::TryFindPartner (CALL @140112f82 in Update); 0x14010fe40 was helper_fe40 (wrong fn)
     s_fn_PostLifeEvent = reinterpret_cast<fn_PostLifeEvent_t>(
         ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::PostLifeEvent (CALL @140112f9e in Update; ex-"AssignState")
@@ -258,7 +263,7 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140112990));  // CitizenComponent::ConsumeFood (CALL @1401133e7 in Update)
     s_fn_ConsumeFuel = reinterpret_cast<fn_ConsumeFuel_t>(
         ResolveAddr(Module::Exe, 0x140112ae0));  // CitizenComponent::ConsumeFuel (CALL @14011342a in Update)
-    s_fn_FindWorkplace = reinterpret_cast<fn_FindWorkplace_t>(
+    s_fn_FindCareBuilding = reinterpret_cast<fn_FindCareBuilding_t>(
         ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
         ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
@@ -383,7 +388,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
             // Not yet had partner — try to find one
             int64_t localIBP = 0;
             fn_InternalBasePtr_Ctor(&localIBP, nullptr);
-            char found = s_fn_TryFindPartner ? s_fn_TryFindPartner(self, &localIBP) : 0;
+            char found = s_fn_TryEnrolInSchool ? s_fn_TryEnrolInSchool(self, &localIBP) : 0;
             eventType = 10;
             if (found == 0) {
                 eventType = 9;
@@ -529,11 +534,11 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     }
 
     // --- Sick? find a care building (+0x68 is the DISEASE pointer, not a profession or
-    // a housed flag — see the note on CitizenComp_FindWorkplace, which is misnamed) ---
+    // a housed flag — see the note on CitizenComp_FindCareBuilding, which is misnamed) ---
     if (*reinterpret_cast<int64_t*>(p + 0x68) != 0) {
         *reinterpret_cast<uint32_t*>(p + 0x88) |= 1;
         if (*reinterpret_cast<int64_t*>(p + 0x228) == 0) {
-            if (s_fn_FindWorkplace) s_fn_FindWorkplace(self);
+            if (s_fn_FindCareBuilding) s_fn_FindCareBuilding(self);
         }
     }
 
@@ -3023,11 +3028,13 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
 // The sibling FindStorage (0x1401116f0, keyed by description+0x28 -> slot +0x230) is the
 // other attendance link and is the one a school would use. Both resolve through sub_1930,
 // which matches a candidate by `WorkPlaceComponent+0x48 == key`.
-// Measured 2026-08-15 on a staffed demo schoolhouse: neither key the citizen record
-// carries matches ANY building in town, and specifically not the schoolhouse's own +0x48
-// — so school attendance is blocked on a key mismatch, NOT on the building being
-// unstaffed. See [[project_wpc_first_seat_and_attendance_keys]].
-char CitizenComp_FindWorkplace(CitizenComponent* param_1) {
+// ⚠ EXPIRED CLAIM, corrected 2026-08-15 (same day it was written): this comment used to
+// say school attendance was blocked on a key mismatch because neither +0x28 nor +0x30
+// matches the schoolhouse. Nothing is blocked — the SCHOOL key is the THIRD ref, +0x20,
+// consumed by CitizenComp_TryEnrolInSchool (0x140111840), and it matches the schoolhouse's
+// WPC+0x48 exactly. This finder was never supposed to reach a school.
+// See [[project_wpc_first_seat_and_attendance_keys]].
+char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
@@ -3077,11 +3084,13 @@ void CitizenComp_FindStorage(CitizenComponent* param_1) {
     }
 }
 
-// Reimpl of CitizenComponent_TryFindPartner (0x140111840):
-// like FindWorkplace but keyed by description+0x20; on success stores the result at
-// +0x208 and sets the been-here-already flag (+0x220). param_2 seeds the exclusion IBP.
+// Reimpl of CitizenComponent_TryEnrolInSchool (0x140111840):
+// same shape as the care-building finder but keyed by description+0x20; on success stores
+// the AttendanceComponent at +0x208 and sets the been-here-already flag (+0x220). param_2
+// seeds the exclusion IBP.
 //
-// ⚠ THE NAME IS WRONG — this is SCHOOL ENROLLMENT, not partner-finding. It is the third
+// Renamed here and in Ghidra 2026-08-15; it shipped as "TryFindPartner" long enough for
+// the misnomer to reach four files. It is SCHOOL ENROLLMENT, not partner-finding: the third
 // and last caller of sub_1930, and it consumes the third of CitizenDescription's three
 // ExternalRef<Profession> slots. Proof:
 //   * On success it appends the citizen into `found+0x28` with count `found+0x30` — that
@@ -3099,7 +3108,7 @@ void CitizenComp_FindStorage(CitizenComponent* param_1) {
 // its first tick and NEVER crosses that edge, so it can never enrol. An empty school in a
 // short soak is therefore CORRECT, not a defect — you need a citizen that actually grows
 // up while a staffed school exists. See [[project_wpc_first_seat_and_attendance_keys]].
-char CitizenComp_TryFindPartner(CitizenComponent* param_1, int64_t* param_2) {
+char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
@@ -3135,7 +3144,7 @@ void CitizenComponent_InitFuncs() {
            "FindStorage=%p HealthSetFlag=%p AssignWorkplace=%p CheckPtr_slot=%p\n",
            (void*)s_fn_PostLifeEvent, (void*)s_fn_HandleLifeEvent,
            (void*)s_fn_UpdateHealth, (void*)s_fn_ConsumeFood,
-           (void*)s_fn_ConsumeFuel, (void*)s_fn_FindWorkplace,
+           (void*)s_fn_ConsumeFuel, (void*)s_fn_FindCareBuilding,
            (void*)s_fn_FindStorage, (void*)s_fn_HealthSetFlag,
            (void*)s_fn_AssignWorkplace, (void*)s_fn_CheckPtr_slot);
 #endif

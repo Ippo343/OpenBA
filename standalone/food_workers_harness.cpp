@@ -235,8 +235,9 @@ void Fire(int frameNum) {
                      frameNum, foodName, foodComp, (void*)wpcIBP,
                      (unsigned long long)profKey, seated, s_count, before, after,
                      after > before ? "" :
-                        "  <-- NO SEAT LANDED HERE (no idle laborer? BUILDER_AUTOPOOL takes "
-                        "them; or the seat went to another workplace on the same key)");
+                        "  <-- NO SEAT LANDED HERE (no idle laborer? the panel-staffing "
+                        "driver may already have seated them; or the seat went to another "
+                        "workplace on the same key)");
         std::fflush(stderr);
     }
 

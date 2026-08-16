@@ -37,7 +37,8 @@ BANISHED_LIVE_INTERACT_ONADD=1 ./reimpl-x64.exe
 * Commits with `CalcPath`, dumps the master and every segment's component set, then polls the
   build sites every `BANISHED_BRIDGE_POLL` frames (default 600) until each reports
   `delivered >= required`. `BANISHED_BRIDGE_WAIT_FRAMES` bounds the wait.
-* `BANISHED_BUILDER_AUTOPOOL=1` is **required** — nothing gets built without it.
+* ~~`BANISHED_BUILDER_AUTOPOOL=1` is **required** — nothing gets built without it.~~
+  **EXPIRED 2026-08-15:** BANISHED_BUILDER_AUTOPOOL / BANISHED_PASTURE_HERDERS were RETIRED 2026-08-15 — the flags no longer exist and are ignored. Seating is done by the panel-click driver (standalone/panel_staffing_driver.cpp), which auto-arms on unattended runs; BANISHED_AUTOSTAFF=0 disables it.
 
 The verdict line is `[Bridge] COMPLETE — builders finished the bridge.`
 

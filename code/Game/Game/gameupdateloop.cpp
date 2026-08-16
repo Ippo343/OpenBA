@@ -684,6 +684,8 @@ extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/foo
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
+extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
+extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
@@ -923,6 +925,17 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
+
+    // THE VIRTUAL PLAYER: clicks workerCountUp (the retail first-seat path) on every
+    // under-capacity workplace. Automatic for unattended runs only; replaces the old
+    // BANISHED_PASTURE_HERDERS / BANISHED_BUILDER_AUTOPOOL cascade-bypass stand-ins
+    // (standalone/panel_staffing_driver.cpp).
+    PanelStaffingDriver_Tick(self->m_entityUI, s_frameNum);
+
+    // Age + enrolment census, so "the school is empty" can be told apart from "no minor
+    // has crossed the adult edge yet". No-op unless BANISHED_SCHOOL_SOAK is set
+    // (standalone/school_soak_probe.cpp).
+    SchoolSoakProbe_Tick(s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).

@@ -94,8 +94,8 @@ static fn_AC_002cc0_t      s_fn_AC_002cc0 = nullptr;
 static fn_AC_FindMesh_t    s_fn_AC_FindMesh = nullptr;
 static fn_AC_MeshSetFlag_t s_fn_AC_MeshSetFlag = nullptr;
 // CitizenComponent::TryFindPartner (0x140111840) — registered by Batch A cascade round.
-typedef char (*fn_AC_TryFindPartner_t)(void* citizen, int64_t* exclIBP);
-static fn_AC_TryFindPartner_t s_fn_AC_TryFindPartner = nullptr;
+typedef char (*fn_AC_TryEnrolInSchool_t)(void* citizen, int64_t* exclIBP);
+static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 
 // Slot-3 (Shutdown/Serialize) helpers — see AttendanceComponent_SerializeSlot below.
 // Component_Serialize 0x1401189b0; the three IO::Serializer dispatch slots; the queue
@@ -135,7 +135,7 @@ static void EnsureAcHelpers() {
     s_fn_AC_002cc0     = reinterpret_cast<fn_AC_002cc0_t>(ResolveAddr(Module::Exe, 0x140002cc0));
     s_fn_AC_FindMesh   = reinterpret_cast<fn_AC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_fn_AC_MeshSetFlag= reinterpret_cast<fn_AC_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_AC_TryFindPartner = reinterpret_cast<fn_AC_TryFindPartner_t>(ResolveAddr(Module::Exe, 0x140111840));
+    s_fn_AC_TryEnrolInSchool = reinterpret_cast<fn_AC_TryEnrolInSchool_t>(ResolveAddr(Module::Exe, 0x140111840));
     s_acHelpersResolved = true;
 }
 
@@ -173,7 +173,7 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     if (reroll != '\0') {
         int64_t exclIbp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&exclIbp, nullptr);
-        char found = s_fn_AC_TryFindPartner ? s_fn_AC_TryFindPartner(workerP, &exclIbp) : 0;
+        char found = s_fn_AC_TryEnrolInSchool ? s_fn_AC_TryEnrolInSchool(workerP, &exclIbp) : 0;
         if (found == '\0') {
             int64_t z = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&z, nullptr);

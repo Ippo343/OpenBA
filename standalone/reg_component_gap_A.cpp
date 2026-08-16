@@ -46,9 +46,9 @@ extern void     CitizenComp_ConsumeFuel(CitizenComponent* self);   // 0x140112ae
 extern void     CitizenComp_AssignHousing(CitizenComponent* self, int64_t* param2); // 0x140111ee0
 extern bool     CitizenComp_sub_40f0(int64_t building, void* citizenIBP);           // 0x1400440f0
 extern int64_t* CitizenComp_sub_1930(int64_t self, int64_t* outBest, void* exclIBP, int64_t key); // 0x140111930
-extern char     CitizenComp_FindWorkplace(CitizenComponent* self);                 // 0x140111590
+extern char     CitizenComp_FindCareBuilding(CitizenComponent* self);                 // 0x140111590
 extern void     CitizenComp_FindStorage(CitizenComponent* self);                   // 0x1401116f0
-extern char     CitizenComp_TryFindPartner(CitizenComponent* self, int64_t* param2); // 0x140111840
+extern char     CitizenComp_TryEnrolInSchool(CitizenComponent* self, int64_t* param2); // 0x140111840
 
 // Reimpl bodies live in code/Game/Component/attendancecomponent.cpp (non-static).
 extern void AttendanceComponent_ReleaseLink1650(void* workerP);
@@ -91,9 +91,9 @@ void RegisterComponentGap_A() {
     // cascade round (snapshot3): citizen-lifecycle finder chain (bottom-up)
     RegisterExeAddr(0x1400440f0, reinterpret_cast<uintptr_t>(&CitizenComp_sub_40f0));       // reachability test
     RegisterExeAddr(0x140111930, reinterpret_cast<uintptr_t>(&CitizenComp_sub_1930));       // closest-building scan
-    RegisterExeAddr(0x140111590, reinterpret_cast<uintptr_t>(&CitizenComp_FindWorkplace));
+    RegisterExeAddr(0x140111590, reinterpret_cast<uintptr_t>(&CitizenComp_FindCareBuilding));
     RegisterExeAddr(0x1401116f0, reinterpret_cast<uintptr_t>(&CitizenComp_FindStorage));
-    RegisterExeAddr(0x140111840, reinterpret_cast<uintptr_t>(&CitizenComp_TryFindPartner));
+    RegisterExeAddr(0x140111840, reinterpret_cast<uintptr_t>(&CitizenComp_TryEnrolInSchool));
     RegisterExeAddr(0x140111ee0, reinterpret_cast<uintptr_t>(&CitizenComp_AssignHousing));
 
     // attendancecomponent.cpp

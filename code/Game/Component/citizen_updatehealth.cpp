@@ -48,14 +48,14 @@ namespace {
 typedef uint8_t u8;
 
 // ---- exe functions already ported+registered (reused via ResolveAddr) -------
-typedef void  (*fn_FindWorkplace_t)(void* self);                 // 0x140111590
+typedef void  (*fn_FindCareBuilding_t)(void* self);                 // 0x140111590
 typedef void  (*fn_ReleaseLink_t)(void* self);                   // 0x1401159b0
 typedef void  (*fn_QInit_t)(void* walker, float* map, uint32_t zLoBits, uint32_t zHiBits); // 0x140018dd0
 typedef void  (*fn_QSubdiv_t)(void* walker);                     // 0x140018880
 typedef void  (*fn_AddCitizenEvent_t)(void* eventLog, int eventType, int severity,
                                       void* entityIBP, void* nameStr, void* titleStr,
                                       void* extraStr);           // 0x140094e00
-static fn_FindWorkplace_t   s_findWorkplace  = nullptr;
+static fn_FindCareBuilding_t   s_findCareBuilding  = nullptr;
 static fn_ReleaseLink_t     s_releaseLink    = nullptr;          // Entity_impl_59b0
 static fn_QInit_t           s_qinit          = nullptr;
 static fn_QSubdiv_t         s_qsubdiv        = nullptr;
@@ -94,7 +94,7 @@ static void EnsureInit() {
     if (s_init) return;
     s_init = true;
 
-    s_findWorkplace  = reinterpret_cast<fn_FindWorkplace_t>(ResolveAddr(Module::Exe, 0x140111590));
+    s_findCareBuilding  = reinterpret_cast<fn_FindCareBuilding_t>(ResolveAddr(Module::Exe, 0x140111590));
     s_releaseLink    = reinterpret_cast<fn_ReleaseLink_t>(ResolveAddr(Module::Exe, 0x1401159b0));
     s_qinit          = reinterpret_cast<fn_QInit_t>(ResolveAddr(Module::Exe, 0x140018dd0));
     s_qsubdiv        = reinterpret_cast<fn_QSubdiv_t>(ResolveAddr(Module::Exe, 0x140018880));
@@ -351,7 +351,7 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
         (tol * *(float*)(desc + 0x98) + *(float*)(desc + 0x94)) * SecsPerMonth());
     *(int64_t*)(s + 0x78) = TimeFromSeconds(
         *(float*)((uintptr_t)disease + 0x30) * SecsPerMonth());
-    if (s_findWorkplace) s_findWorkplace(self);
+    if (s_findCareBuilding) s_findCareBuilding(self);
 }
 
 // ============================================================

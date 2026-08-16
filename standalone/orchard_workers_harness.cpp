@@ -182,7 +182,8 @@ void Fire(int frameNum) {
                 static_cast<unsigned long long>(profKey), seated, s_count,
                 rosterBefore, rosterAfter,
                 rosterAfter > rosterBefore ? "" :
-                    "  <-- NO SEAT LANDED HERE (no idle laborer? BUILDER_AUTOPOOL takes them; "
+                    "  <-- NO SEAT LANDED HERE (no idle laborer? the panel-staffing driver "
+                    "may already have seated them; "
                     "or the seat went to another workplace on the same profession key)");
         std::fflush(stderr);
     }

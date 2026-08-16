@@ -640,7 +640,7 @@ void FollowUp(int frameNum) {
                                  want[k] == key ? "  == THIS building" : "");
                 }
                 // The SCHOOL key is the third ref, +0x20, consumed by the misnamed
-                // CitizenComp_TryFindPartner (0x140111840) — enrollment, which runs ONLY
+                // CitizenComp_TryEnrolInSchool (0x140111840) — enrollment, which runs ONLY
                 // at the child->adult transition. So an empty queue here is expected
                 // unless somebody actually grew up during the run.
                 if (czArr && czN > 0) {
