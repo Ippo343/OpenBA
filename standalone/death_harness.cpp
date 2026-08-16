@@ -318,6 +318,17 @@ void Census(int frameNum) {
     // quiet — which is exactly how the 2026-07-25 die-off was first misread as a hang.
     float hungerMax = 0.0f, hungerSum = 0.0f, thirstMax = 0.0f, thirstSum = 0.0f;
     int   sick = 0;
+    // Lifespan audit. CitizenComponent::Update kills on `*(p+0x40) <= *(p+0x3c)`
+    // (maxAge <= age) via HandleLifeEvent(self, 2), and that handler ALWAYS returns 1
+    // and ALWAYS queues the entity for removal — so an "overdue" citizen (age past its
+    // own maxAge) that is still in this list means the old-age branch is not being
+    // reached, not that it declined to fire. The founding spawn rolls
+    // maxAge = RandFloat * desc+0x3c + desc+0x38, i.e. [15,17) with the retail
+    // constants, so once the oldest passes 15 some deaths are due. Counting `overdue`
+    // separates "nobody is old enough yet" from "the check never runs" — two states
+    // that look identical on the population curve alone.
+    int   overdue = 0, noMaxAge = 0;
+    float maxAgeMin = 1e9f, maxAgeMax = -1e9f;
     for (int i = 0; i < n; i++) {
         int64_t c = list[i];
         if (!c) continue;
@@ -335,6 +346,15 @@ void Census(int frameNum) {
         if (hunger > hungerMax) hungerMax = hunger;
         if (thirst > thirstMax) thirstMax = thirst;
         if (*reinterpret_cast<int64_t*>(c + 0x68) != 0) sick++;
+
+        const float cAge   = *reinterpret_cast<float*>(c + 0x3c);
+        const float cMaxAge = *reinterpret_cast<float*>(c + 0x40);
+        if (cMaxAge <= 0.0f) noMaxAge++;
+        else {
+            if (cMaxAge < maxAgeMin) maxAgeMin = cMaxAge;
+            if (cMaxAge > maxAgeMax) maxAgeMax = cMaxAge;
+            if (cMaxAge <= cAge) overdue++;
+        }
 
         int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
         if (!desc) continue;
@@ -393,6 +413,12 @@ void Census(int frameNum) {
                  "thirst avg=%.1f max=%.1f (death %.1f) sick(+0x68)=%d\n",
                  n ? hungerSum / n : 0.0f, hungerMax, hungerDeath,
                  n ? thirstSum / n : 0.0f, thirstMax, thirstDeath, sick);
+    // ⚠`thirst` above is really WARMTH/COLD (+0x48) — a town can freeze at 20.0 while
+    // hunger sits comfortably at 5. See project_population_sustainability_soak.
+    std::fprintf(stderr, "[FamilyCensus]   lifespan(+0x40): OVERDUE(age>=maxAge)=%d "
+                 "maxAge min=%.2f max=%.2f zero/unset=%d\n",
+                 overdue, (maxAgeMin > 1e8f ? 0.0f : maxAgeMin),
+                 (maxAgeMax < -1e8f ? 0.0f : maxAgeMax), noMaxAge);
     std::fflush(stderr);
     BirthGate(frameNum, list, n);
 }
