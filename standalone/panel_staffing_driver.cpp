@@ -85,6 +85,20 @@ void Init() {
 
 uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
 
+void* FindComp(void* ent, uint32_t tid);
+
+// The building's status-icon bitfield (StatusIconComponent+0xF0). Bit 4 (0x10) is the
+// "no workers" warning: raised by WorkPlaceComponent_SetAccepting on an unstaffed
+// workplace and cleared ONLY by WorkplaceComponent_Attach. Printed either side of the
+// click so a seat that fills the roster while leaving the icon up is legible as such
+// rather than being reported as a working seat. -1 = no StatusIconComponent.
+int IconMask(void* ent) {
+    static uint32_t tid = 0;
+    if (!tid) tid = Tid("StatusIconComponent");
+    void* si = FindComp(ent, tid);
+    return si ? (int)*reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(si) + 0xF0) : -1;
+}
+
 void* FindComp(void* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
     const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
@@ -131,6 +145,22 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
         void** uvt = *reinterpret_cast<void***>(wpUi);
         void* slot9 = uvt ? uvt[9] : nullptr;
         if (slot9) {
+            // BANISHED_AUTOSTAFF_UNSEAT=1 — click workerCountDown (0x1451) once on a
+            // staffed workplace before seating. The DOWN click is the path the old
+            // g_wpcRosterOnly guards were justified by ("READ of 0x10 in Detach's e710
+            // getter, hit when the player LOWERS a count"), and an add-only soak never
+            // touches it, so removing those guards can only be called measured if this
+            // runs. The seat loop below immediately refills the seat.
+            static const int unseat = EnvOn("BANISHED_AUTOSTAFF_UNSEAT") ? 1 : 0;
+            if (unseat && *reinterpret_cast<int32_t*>(wpc + 0x60) > 0) {
+                const int b = *reinterpret_cast<int32_t*>(wpc + 0x60);
+                reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
+                    wpUi, nullptr, 0x12, 0x1451, 0, 0);
+                std::fprintf(stderr, "[AutoStaff] UNSEAT click: roster %d -> %d\n",
+                             b, *reinterpret_cast<int32_t*>(wpc + 0x60));
+                std::fflush(stderr);
+                ++want;   // refill the seat we just freed
+            }
             for (int i = 0; i < want; ++i) {
                 const int before = *reinterpret_cast<int32_t*>(wpc + 0x60);
                 // msg 0x12 = button command, id 0x1450 = workerCountUp.
@@ -181,20 +211,31 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
         // and let the next pass see the real number.
         int cap = wcP ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(wcP) + 0x30) : 0;
         if (cap <= 0) cap = 1;
-        const bool wants = key != 0 && accept != 0 && roster < cap;
+        // With UNSEAT armed a FULL workplace is still worth visiting — the point of that
+        // mode is to drive the down-click, and a building at capacity is exactly where a
+        // player lowers a count.
+        const bool wants = key != 0 && accept != 0 &&
+                           (roster < cap || (EnvOn("BANISHED_AUTOSTAFF_UNSEAT") && roster > 0));
         if (s_trace)
             std::fprintf(stderr, "[AutoStaff]   ent=%p key=0x%llx accepting=%d roster=%d cap=%d %s\n",
                          ent, (unsigned long long)key, accept, roster, cap,
                          wants ? "-> clicking" : "(skip)");
         if (!wants) continue;
 
+        const int iconBefore = IconMask(ent);
         const int gained = SeatViaPanel(entityUI, ent, wpc, cap - roster);
+        const int iconAfter  = IconMask(ent);
+        const int rosterNow  = *reinterpret_cast<int32_t*>(wpc + 0x60);
         if (gained > 0 || s_trace)
             std::fprintf(stderr, "[AutoStaff] frame %d: ent=%p key=0x%llx roster %d -> %d "
-                         "(cap %d)%s\n", frameNum, ent, (unsigned long long)key, roster,
-                         *reinterpret_cast<int32_t*>(wpc + 0x60), cap,
+                         "(cap %d) icon 0x%x -> 0x%x%s%s\n", frameNum, ent,
+                         (unsigned long long)key, roster, rosterNow, cap,
+                         iconBefore, iconAfter,
                          gained == 0 ? "  <-- click made no seat (no idle laborer, or this "
-                                       "panel has no WorkPlaceUI)" : "");
+                                       "panel has no WorkPlaceUI)" : "",
+                         (rosterNow > 0 && iconAfter > 0 && (iconAfter & 0x10))
+                             ? "  <-- STUCK: roster filled but the no-workers bit 4 is "
+                               "still set (the ? icon stays up)" : "");
     }
     std::fflush(stderr);
 }

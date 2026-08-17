@@ -798,17 +798,16 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 // Original: 0x1400763c0.
 
 static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
-    // The add/remove cascade below reaches WorkplaceComponent Attach/Detach, whose
-    // gameplay-time Scene mesh-visual block dereferences inert standalone objects and
-    // faults (READ of 0x10 in Detach's e710 getter when the player lowered a builder
-    // count). Do the bare roster mutation only — the same guard the builder pool and the
-    // employment allocator hold around AssignHousing. (The original runs the full visual path.)
-    extern bool g_wpcRosterOnly;
-    struct RosterGuard {
-        bool prev;
-        RosterGuard() { prev = g_wpcRosterOnly; g_wpcRosterOnly = true; }
-        ~RosterGuard() { g_wpcRosterOnly = prev; }
-    } _rosterGuard;
+    // NO g_wpcRosterOnly guard (removed 2026-08-17). It used to be held here because the
+    // Attach/Detach visual block "faults on inert standalone objects (READ of 0x10 in
+    // Detach's e710 getter when the player lowered a builder count)". That exact fault is
+    // now guarded at the source — workplacecomponent.cpp:276 returns early on a null
+    // accessor — so the premise expired and the guard outlived it. Holding it here was not
+    // free: the same flag gates Attach's clear of the "no workers" status bit, so every
+    // seat made through this spinner left the ? icon up over a fully-staffed building.
+    // g_wpcRosterOnly is a world-BUILD shim (see its definition); a spinner click is
+    // gameplay time, which is exactly when the visual is meant to run. See the block above
+    // WorkPlaceUI idx9 in workplaceui.cpp for the full measurement.
     uintptr_t s = (uintptr_t)self;
     int64_t idx = (int64_t)profIndex;
 

@@ -2239,21 +2239,15 @@ void TownHallUI_OnProfessionButton(TownHallUI* self, int index) {
 // TownHallUI::OnProfessionSpinner (was FUN_14007dd10)
 // ============================================================
 void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
-    // The add/remove cascade below reaches WorkplaceComponent Attach/Detach, whose
-    // gameplay-time Scene mesh-visual block dereferences inert standalone objects and
-    // faults (READ of 0x10 in Detach's e710 getter, hit when the player LOWERS a
-    // count — which this handler does via fn_CitizenList_RemoveWorker). The two
-    // sibling spinners already hold this guard (ProfessionUI_HandleSpinner
-    // professionui.cpp:806, WorkPlaceUI W_OnRemove workplaceui.cpp:934); this one did
-    // not, leaving the town-hall Professions tab as the one unguarded seat path.
-    // (The original runs the full visual path; our objects can't survive it.)
-    extern bool g_wpcRosterOnly;
-    struct RosterGuard {
-        bool prev;
-        RosterGuard() { prev = g_wpcRosterOnly; g_wpcRosterOnly = true; }
-        ~RosterGuard() { g_wpcRosterOnly = prev; }
-    } _rosterGuard;
-
+    // NO g_wpcRosterOnly guard (removed 2026-08-17, together with the two sibling
+    // spinners this comment used to point at). The fault it named — READ of 0x10 in
+    // Detach's e710 getter on a LOWER, which this handler does via
+    // fn_CitizenList_RemoveWorker — is now guarded at the source
+    // (workplacecomponent.cpp:276 returns early on a null accessor). "Our objects can't
+    // survive it" stopped being true when that guard landed. Meanwhile the flag also
+    // gates Attach's clear of the "no workers" status bit, so holding it left the ? icon
+    // up over every building staffed from this tab. Measured on the lower path too: a
+    // seat -> unseat -> re-seat cycle drives Detach's full visual tail with no fault.
     uintptr_t s = (uintptr_t)self;
     uintptr_t entryBase = *(uintptr_t*)(s + 0x40);
     int64_t entryOff = (int64_t)index * 0x40;

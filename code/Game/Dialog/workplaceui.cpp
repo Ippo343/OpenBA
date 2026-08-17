@@ -1076,9 +1076,29 @@ void W_Startup(void* self) {
 // this building's profession (WorkPlaceComponent+0x48), the per-building equivalent of the
 // town-hall Professions spinner. Reuses the same registered cascade (RequestWorker =
 // FindAvailableBuilding, then FindIdle/Working/Student/Any = cbf0/ca20/c5f0/c4b0 to convert
-// a laborer; RemoveWorker to pull one). Held under g_wpcRosterOnly so the gameplay-time Scene
-// mesh-visual block in WorkplaceComponent Attach/Detach — which faults on inert SA objects
-// (READ of 0x10) — is skipped, exactly like the town-hall path and the builder pool.
+// a laborer; RemoveWorker to pull one).
+//
+// ⚠ THE g_wpcRosterOnly HOLD IS GONE (2026-08-17), and its removal is the fix for the
+// stuck "?" icon. The old note here read "held under g_wpcRosterOnly so the gameplay-time
+// Scene mesh-visual block in WorkplaceComponent Attach/Detach — which faults on inert SA
+// objects (READ of 0x10) — is skipped". Two things were wrong with that:
+//
+//   1. g_wpcRosterOnly is a WORLD-BUILD shim. Its own definition (workplacecomponent.cpp
+//      :221) says so: the mesh toggle calls Graphics::Scene::Remove/AddObject, which
+//      deadlocks when driven mid-build, and "default false -> the per-tick gameplay
+//      AssignHousing path is unchanged (full faithful visual)". A panel click is gameplay
+//      time — exactly when the toggle IS meant to run. This path borrowed a build-time
+//      shim into gameplay.
+//   2. The READ of 0x10 it named was Detach's Getter_e710 on a null accessor, and that is
+//      now guarded at the source (workplacecomponent.cpp:276, "a null accessor means
+//      nothing renderable to toggle"). The premise expired when that guard landed; the
+//      hold outlived it.
+//
+// The cost was not cosmetic-only in appearance: WorkPlaceComponent_SetAccepting raises the
+// "no workers" warning (status bit 4) on an unstaffed workplace, and WorkplaceComponent_
+// Attach's clear of that bit sits inside `if (!g_wpcRosterOnly)`. So EVERY seat a player
+// made left the ? icon up over a fully-staffed building. Measured before: roster 0 -> 4
+// with `icon 0x10 -> 0x10`. After: `icon 0x10 -> 0x0`.
 void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
     // Trace only button-command events (msg 0x12); the panel also receives a stream of
     // hover/enter/leave events on this slot which would otherwise flood the log.
@@ -1134,8 +1154,10 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
     if (!citizenList) return;
 
-    bool prevRoster = ::g_wpcRosterOnly;
-    ::g_wpcRosterOnly = true;
+    // NO g_wpcRosterOnly HOLD HERE — see the block above idx9 for why the old one had to
+    // go. This path runs at GAMEPLAY time, which is precisely when the visual toggle is
+    // meant to run, so Attach/Detach do their full faithful work including the status-icon
+    // clear.
 
     // Roster before the seat/pull, so the trace can show whether the click stuck.
     uint32_t rosterBefore = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(wpc) + 0x60);
@@ -1181,8 +1203,6 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
         who = "remove";
         if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
     }
-
-    ::g_wpcRosterOnly = prevRoster;
 
     // Diagnostic: did the click move the site roster? (BUILD_TRACE or DIALOG_TRACE)
     if (std::getenv("BANISHED_BUILD_TRACE") || std::getenv("BANISHED_DIALOG_TRACE")) {
