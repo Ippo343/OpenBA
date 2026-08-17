@@ -114,7 +114,11 @@ void HerbalistComponent_InitFuncs() {
 // Retail's HerbalistComponent vtable overrides slot 18 ONLY; 19/20/21 stay the base
 // no-ops, so all production happens citizen-side in HerbalistWork.
 //
-// Opt-in until a positive-outcome run measures gathered food reaching storage.
+// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// kill-switch (=0). The positive run: seed 12345, demo hut staffed 4/4 and accepting in
+// both arms — OFF left the hut parked with GATHERABLE CLIMBING 15 -> 26 (the resources
+// were there and nobody was picking them); ON drained it 15 -> 2 and added resource
+// types the OFF arm never produced. Full A/B in component_factory_base.cpp.
 #include "Component/controller_live_base.h"
 #include "Component/controller_state_table.h"
 

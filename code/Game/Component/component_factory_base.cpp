@@ -634,6 +634,38 @@ static const char* const kDefaultOnFlags[] = {
     //    flags clear.
     "BANISHED_LIVE_FORESTER",
     "BANISHED_LIVE_ATTENDANCE",
+    // The four remaining ResourceProduce food classes — graduated 2026-08-17. Held
+    // opt-in long after each was individually verified, which made the DEFAULT build
+    // the broken one: with the inert factory the state node at comp+0x28 is never
+    // installed, so the shared ResourceProduce state machine never runs, slot 18
+    // CreateWork is never called, and NO WORK IS EVER POSTED. Workers seat normally
+    // (roster fills, accepting=1) and then stand around with nothing to claim — the
+    // "we assign workers and nothing gets produced" report. Orchard and Pasture were
+    // already default-on, which is exactly why only these four looked broken.
+    //
+    // A/B at seed 12345, FORCE_SPEED=40, 7200 frames, BANISHED_FOOD_DIAG=1200, demo
+    // buildings placed by BANISHED_BUILD_DEMO_*. Every arm had the buildings staffed
+    // and accepting in BOTH halves, so this measures production, not seating:
+    //
+    //   CropField + Fishing   OFF: dock registered(+0x50)=0 rate(+0x54)=0.000,
+    //                              7 resource types, town food 4441 -> 1755 (pure drain)
+    //                          ON: dock registered=1 rate=1.444, fish resType 161 -> 374
+    //                              (+213), a 9th resType (crops) appears once a crop is
+    //                              chosen, food 4663 -> 3093
+    //   Hunt + Gatherer       OFF: HuntComponent progress(+0x50) pinned at 0 for the whole
+    //                              run, Herbalist GATHERABLE climbing 15 -> 26 (nobody
+    //                              picking), 7 resource types, food 4434 -> 1762
+    //                          ON: progress 0 -> 9.57e16, GATHERABLE drained 15 -> 2,
+    //                              11 resource types (four the OFF arm never had), food
+    //                              4434 -> 2170
+    //
+    // Each ON arm asserts a value only the live path can produce (a non-zero dock rate,
+    // a moving hunt progress, resource types that do not exist otherwise), so these are
+    // positive runs rather than clean ones. No crash log in any ON arm.
+    "BANISHED_LIVE_CROPFIELD",
+    "BANISHED_LIVE_FISHING",
+    "BANISHED_LIVE_HUNTING",
+    "BANISHED_LIVE_GATHERER",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

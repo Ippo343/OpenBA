@@ -133,9 +133,13 @@ void FishingComponent_InitFuncs() {
 //   DefState 2 — primary slot 16 (GetDefaultState) is the shared 0x1400026c0 =
 //                `MOV EAX,2; RET`.
 //
-// Opt-in (NOT in kDefaultOnFlags) until a positive-outcome run measures fish actually
-// reaching storage. A clean run proves nothing here — an unentered state machine and a
-// working one both log nothing.
+// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// kill-switch (=0). The positive-outcome run the old note asked for: at seed 12345 with
+// the demo dock staffed 4/4 in both arms, OFF left registered(+0x50)=0 rate(+0x54)=0.000
+// and no fish resource type in town storage at all; ON gave registered=1 rate=1.444 and
+// the fish type climbing 161 -> 374 over 6000 frames. A clean run still proves nothing
+// here, which is why the assertion is the rate and the fish count, not the absence of a
+// crash. See the block in component_factory_base.cpp for the full A/B.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"
