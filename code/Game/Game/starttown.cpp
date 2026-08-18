@@ -5481,6 +5481,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         fflush(stderr);
 
         int poolSpawned = 0;
+        int zoneSkips   = 0;   // cells refused by the ZONE-raster test below
         bool capped = false;
         for (int y = 0; y < dim && !capped; ++y) {
             for (int x = 0; x < dim; ++x) {
@@ -5490,6 +5491,26 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
 
                 const int idx = dim * y + x;
                 if (*(void**)(cells + (size_t)idx * CELL_STRIDE + CELL_OCCUPANT)) continue;  // occupied
+                // ...and skip cells claimed in the ZONE raster (cell+0) even when the
+                // ENTITY raster (cell+8) is free. This pass runs AFTER the structures are
+                // placed (measured: dock at log line 381, scatter at 482), so it can drop
+                // a tree inside a finished building. cell+8 alone does not catch that,
+                // because BANISHED_LIVE_WALKWAY_DROPCELLS (default on) deliberately leaves
+                // a dock's '_' walkway cells at cell+8 == 0 — which is exactly where its
+                // mode-2 drop spots sit.
+                //
+                // Retail needs no such test: dc20 claims every mask char but '.'
+                // (`cmp $0x2e,%cl ; setne %bl`), so in retail cell+8 on those cells holds
+                // the dock and the existing check suffices. This is the compensating half
+                // of our walkway deviation and should be removed with it.
+                //
+                // It is not cosmetic. A tree on a drop cell has NaturalResource/Growth/
+                // Spawn and NO WorkComponent, and FishingWork slot 4's fallback derefs
+                // that component's +0x28 unguarded — faithfully (retail 0x1400ea775).
+                // Reproduced at seed 999: tree on the dock's spot[3] (88,124), the one
+                // spot of four that never cycled while the other three ran
+                // 0 -> pile -> 0 normally.
+                if (*(void**)(cells + (size_t)idx * CELL_STRIDE)) { ++zoneSkips; continue; }
                 const int dy = y - spawnY, dx = x - spawnX;
                 // Verification harness (env BANISHED_RES_IN_TOWN): allow resources to
                 // scatter into the town site so trees land in front of the start camera
@@ -5582,9 +5603,9 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 if (poolSpawned >= poolCap) { capped = true; break; }
             }
         }
-        fprintf(stderr, "[startTown::res] [%d] tmpl=%p desc=%p thr=%.3f dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s\n",
+        fprintf(stderr, "[startTown::res] [%d] tmpl=%p desc=%p thr=%.3f dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s zoneSkips=%d\n",
                 e, tmpl, desc, threshold, density, hMin, hMax, slopeMin, poolSpawned,
-                capped ? " (CAPPED)" : "");
+                capped ? " (CAPPED)" : "", zoneSkips);
         fflush(stderr);
     }
     fprintf(stderr, "[startTown::res] SpawnComponent carriers: %d of %d scattered "

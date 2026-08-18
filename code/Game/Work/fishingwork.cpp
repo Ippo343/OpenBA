@@ -422,6 +422,56 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     int freeSpot = -1;
     int freeSpotMapCell = -1;
 
+    // ── ONE-SHOT SPOT GEOMETRY CENSUS (BANISHED_FISHWORK_TRACE) ─────────────────────
+    // The whole dock knot turns on ONE unanswered question: do the mode-2 spots sit on
+    // the dock's OWN claimed cells, or on free ones? Retail's dc20 claims every mask
+    // char except '.' (`cmp $0x2e,%cl ; setne %bl`, and '_' additionally forces terrain
+    // class 2), so a spot on a '#'/'_' cell is permanently occupied by the dock and its
+    // state-2 reset (`occupant == 0`) can never fire — which is the 4-catch cap. A spot
+    // on a '.' cell has no such problem. Printing the class byte (cell+0x29) next to the
+    // occupant answers it directly instead of by inference: class 2 == this dock's '_'
+    // walkway. Runs once per dock, so it is free to leave in.
+    // Sampled on CHANGE, not once: the question is not only what the spot cells hold but
+    // WHEN they change. A tree that is present at the first fishing tick was left there
+    // by placement; one that appears later was spawned past a gate that should have
+    // rejected it. Those need opposite fixes, and a single sample cannot tell them apart.
+    if (FishTraceOn() && spotCount > 0) {
+        static long long s_calls = 0;
+        ++s_calls;
+        static void* s_lastOcc[8][8] = {};
+        static void* s_dockOf[8] = {};
+        static int   s_seenN = 0;
+        void* dockEnt = *(void**)((uintptr_t)selfAddr + 0x10);
+        int slot = -1;
+        for (int k = 0; k < s_seenN; ++k) if (s_dockOf[k] == dockEnt) slot = k;
+        if (slot < 0 && s_seenN < 8) { slot = s_seenN++; s_dockOf[slot] = dockEnt; }
+        if (slot >= 0) {
+            uintptr_t base = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
+            for (int i = 0; i < spotCount && i < 8; ++i) {
+                float sp[3];
+                fn_InternalBasePtr_CheckPtr(&posIBP);
+                s_fn_Entity_GetSpotPosition((void*)posIBP, sp, 2, i, nullptr);
+                const int h2 = mapSize >> 1;
+                const int gx = ClampToMap((int)(sp[0] + (float)h2), mapSize);
+                const int gy = ClampToMap((int)(sp[1] + (float)h2), mapSize);
+                const uintptr_t cell = base + (uintptr_t)(mapSize * gy + gx) * 0x30;
+                const uintptr_t zone = *(uintptr_t*)cell;
+                const uintptr_t occ  = *(uintptr_t*)(cell + 8);
+                if (s_lastOcc[slot][i] == (void*)occ && s_calls > 1) continue;
+                const void* prev = s_lastOcc[slot][i];
+                s_lastOcc[slot][i] = (void*)occ;
+                std::fprintf(stderr, "[FishWork] spotgeom call#%lld dock=%p spot[%d] "
+                             "tile=(%d,%d) class(+0x29)=%u zone(cell+0)=%p "
+                             "entity(cell+8)=%p (was %p)%s state=%d\n", s_calls, dockEnt,
+                             i, gx, gy, (unsigned)*(uint8_t*)(cell + 0x29), (void*)zone,
+                             (void*)occ, prev,
+                             occ == (uintptr_t)dockEnt ? " <-- THE DOCK ITSELF" : "",
+                             *(int*)(spotStates + (uintptr_t)i * 4));
+            }
+            std::fflush(stderr);
+        }
+    }
+
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
