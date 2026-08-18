@@ -69,6 +69,15 @@ int InvokeAllRegistrations();
 // caching the result in a function-local static after first hit.
 uint32_t GetTypeIdByName(const char* name);
 
+// Reverse of the above: the registered type NAME for a runtime type id, or nullptr if
+// no registered type carries it. Diagnostics only — this is a linear walk of the whole
+// registration list, so never call it on a hot path. It exists because a raw type id in
+// a log ("component tid=0x9d9af271") is unreadable, and because this codebase has
+// repeatedly mis-labelled a DAT_ type-id global in comments (0x1401c8070 is called
+// WorkComponent, StorageLocationComponent AND MatDesc in different files). Printing the
+// name the RUNNING binary resolves settles which one is right.
+const char* GetTypeNameById(uint32_t typeId);
+
 // The BaseTypeInfo pointer for a registered type. Component vtable slot 1 (GetTypeInfo)
 // returns this; in retail it is a per-class .rdata global 8 bytes after the type id.
 void* GetTypeInfoByName(const char* name);

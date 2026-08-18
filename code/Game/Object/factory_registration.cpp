@@ -57,6 +57,14 @@ uint32_t GetTypeIdByName(const char* name) {
     return 0;
 }
 
+const char* GetTypeNameById(uint32_t typeId) {
+    if (typeId == 0 || typeId == 0xFFFFFFFFu) return nullptr;
+    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
+        if (*reinterpret_cast<uint32_t*>(&r->storage) == typeId) return r->typeName;
+    }
+    return nullptr;
+}
+
 // The BaseTypeInfo POINTER for a registered type — the same thing each class's
 // GetTypeInfo virtual (vtable slot 1) returns in retail, where it reads a per-class
 // .rdata global sitting 8 bytes after the type-id global (e.g. FishingComponent's id at

@@ -1335,6 +1335,51 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         int rot = orient;
         while (rot < 0) rot += ROT_FULL;
 
+        // ── STANDING-RESOURCE RESIDUE CHECK ─────────────────────────────────────────
+        // This lambda instant-stamps a finished structure onto the map. The retail route
+        // to a finished structure is placement tool -> foundation -> a ClearArea work
+        // that DESTROYS the natural resources inside the footprint -> build, so by the
+        // time a building exists its footprint is empty. Nothing here reproduces the
+        // clear, so a start-town / demo structure can end up standing on live trees.
+        //
+        // That is not cosmetic. FishingWork slot 4's fallback (fishingwork.cpp) reads the
+        // WorkComponent of whatever entity holds cell+8 on one of its spot cells and
+        // derefs it unguarded at +0x28 — faithfully; retail does the same at
+        // 0x1400ea775..0x1400ea793 and relies on the footprint being clear. A surviving
+        // tree has NaturalResource/Growth/Spawn and NO WorkComponent, so it is a null
+        // deref (READ of 0x28). Reproduced at seed 999: dock at (85,120), tree left
+        // standing on drop cell (88,124).
+        //
+        // Reported unconditionally when non-zero, because a silent residue reads exactly
+        // like a clean placement right up until something walks the cell.
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            uint8_t* mapObj = *(uint8_t**)((uint8_t*)*g_pGameWorldSingleton + 0xf8);
+            uint8_t* grid   = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
+            const int mw    = mapObj ? *(int32_t*)mapObj : 0;
+            static uint32_t tidNat = 0;
+            if (!tidNat) tidNat = TypeId("NaturalResourceComponent");
+            if (grid && mw > 0 && tidNat) {
+                int residue = 0, fx = -1, fy = -1;
+                for (int yy = tileY; yy < tileY + fpH; ++yy) {
+                    for (int xx = tileX; xx < tileX + fpW; ++xx) {
+                        if (xx < 0 || yy < 0 || xx >= mw || yy >= mw) continue;
+                        uintptr_t occ = *(uintptr_t*)(grid + 8 +
+                                        (uintptr_t)(mw * yy + xx) * 0x30);
+                        if (!occ) continue;
+                        if (FindComponentOnEntity((void*)occ, tidNat)) {
+                            if (!residue) { fx = xx; fy = yy; }
+                            ++residue;
+                        }
+                    }
+                }
+                if (residue)
+                    fprintf(stderr, "[startTown::residue] structure at (%d,%d) %dx%d is "
+                            "being stamped over %d standing natural-resource cell(s) "
+                            "(first (%d,%d)) — no ClearArea ran, so they survive under the "
+                            "building\n", tileX, tileY, fpW, fpH, residue, fx, fy);
+            }
+        }
+
         // MapComponent grid placement (resolvable now that components carry a real
         // GetTypeId — Foundation E).
         fn_InternalBasePtr_CheckPtr(&entIBP);

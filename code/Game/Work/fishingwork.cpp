@@ -907,6 +907,69 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             fn_InternalBasePtr_Ctor(&workplaceIBP, workplaceComp);
             fn_InternalBasePtr_CheckPtr(&workplaceIBP);
 
+            // ── GUARD FOR ONE OF OUR OWN DEVIATIONS (READ of 0x28) ───────────────────
+            // The `*(int*)(workplaceIBP + 0x28)` below is FAITHFUL. Verified against
+            // retail 0x1400ea775..0x1400ea793: the not-found arm does
+            // `xor edx,edx; Ctor(&ibp, edx); CheckPtr; mov rax,[ibp]; mov r8d,[rax+0x28]`
+            // and the found arm `cmovne`s the component into the same rdx before joining
+            // at 0x1400ea777, so BOTH arms reach the same unguarded deref. Retail is
+            // relying on an invariant, and we know exactly which one — and exactly which
+            // of our deviations breaks it. Measured end to end, seed 999:
+            //
+            //  1. Retail's footprint claim (dc20) writes the owner entity into cell+8 for
+            //     '#' AND '_' cells alike — `CMP CL,0x2e ; SETNZ BL`, only '.' is free.
+            //     BANISHED_LIVE_WALKWAY_DROPCELLS (default ON, keystone_a_map.cpp:411)
+            //     deliberately treats '_' as '.' so the dock's drop cells read cell+8 == 0.
+            //     That flag is what lifted the dock's 4-catch cap.
+            //  2. SpawnComponent's DoSpawn gate TileFree (0x140120c30) tests cell+8 —
+            //     `mov 0x8(%rax,%rcx,8),%rax ; test ; je reject`. An unclaimed drop cell
+            //     therefore reads as free ground. The other gate, CanPlace (0x14009f5d0),
+            //     rejects on the ZONE raster cell+0, which dc20 never writes for a
+            //     building, so nothing else stops it.
+            //  3. So a TREE spawns on the dock's pier after the dock is built. Confirmed
+            //     by two measurements in one run: the footprint held ZERO standing
+            //     natural resources at placement (startTown::residue silent), and a tree
+            //     stood on drop cell (88,124) later.
+            //  4. A tree carries MapComponent/ModelComponent/NaturalResourceComponent/
+            //     GrowthComponent/SpawnComponent and NO WorkComponent, so the lookup
+            //     below returns null and retail's deref faults.
+            //
+            // In retail step 1 never happens, cell+8 holds the DOCK, and the dock HAS a
+            // WorkComponent — so retail's unguarded deref is safe by construction. This
+            // guard therefore compensates for OUR deviation, which is the one case the
+            // project's "don't fix a faithful crash with a null check" rule allows. It
+            // MUST be removed when the '_' claim is restored, which is blocked on finding
+            // retail's step that frees a claimed drop cell for a drop (still unfound).
+            //
+            // The dump names the occupant so a NEW upstream writer can't hide behind this.
+            if (!workplaceComp) {
+                static int s_n = 0;
+                if (++s_n <= 8) {
+                    const uint32_t want = *s_typeId_1401c8070;
+                    const char* wantName = ::Object::GetTypeNameById(want);
+                    std::fprintf(stderr,
+                        "[FishWork] +0x28 NULL: spot[%d] cell=%d tile=(%d,%d) "
+                        "cellEntity=%p dock=%p wanted tid=0x%x (%s) — entity carries "
+                        "%d component(s):\n", i, cellIdx, cx, cy, (void*)cellEnt,
+                        (void*)*(uintptr_t*)((uintptr_t)self + 0x10), want,
+                        wantName ? wantName : "UNREGISTERED", compCount);
+                    for (int k = 0; k < compCount; ++k) {
+                        uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
+                        fn_InternalBasePtr_CheckPtr(s2);
+                        uintptr_t c2 = *s2;
+                        if (!c2) { std::fprintf(stderr, "[FishWork]     [%d] <null>\n", k); continue; }
+                        uintptr_t v2 = *(uintptr_t*)c2;
+                        typedef uint32_t (*GetTypeId_t)();
+                        uint32_t t2 = ((GetTypeId_t)(*(uintptr_t*)(v2 + 0x10)))();
+                        const char* n2 = ::Object::GetTypeNameById(t2);
+                        std::fprintf(stderr, "[FishWork]     [%d] tid=0x%x %s\n",
+                                     k, t2, n2 ? n2 : "(unregistered)");
+                    }
+                    std::fflush(stderr);
+                }
+                continue;   // skip this spot — see the block above; remove with the '_' claim
+            }
+
             // Try assignment via FUN_1400f8620
             uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
             void* citizenRef = *(void**)citizenIBP;
