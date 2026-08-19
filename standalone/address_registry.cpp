@@ -1270,6 +1270,16 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z"));
     RegisterDispatchSlot(0x140151e78,   // Math::Scalar::Max(const Scalar&) const -> Scalar
         (uintptr_t)ResolveExport("?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z"));
+
+    // Math::Vector4::Vector4(const Scalar&) — broadcasts one float into all four lanes
+    // (Runtime 0x18001d750 is literally four copies of *rdx). This is the slot
+    // GrowthComponent::SetGrowthProgress (0x140120db0) and its per-frame twin use to
+    // build the MeshInstance VISUAL SCALE for every non-crop natural resource. With the
+    // slot empty our port's `if (s_fn_Vec4)` guard turned the whole write into a silent
+    // no-op, so every runtime-spawned tree kept the MeshInstance ctor default of
+    // (1,1,1,1) and rendered full-grown from the instant it was planted.
+    RegisterDispatchSlot(0x140152958,
+        (uintptr_t)ResolveExport("??0Vector4@Math@@QEAA@AEBVScalar@1@@Z"));
     // sinf / cosf used by the heading quaternion (clean CRT-wrapper reimpls, sqrtf precedent).
     RegisterExeAddr(0x140131c90, reinterpret_cast<uintptr_t>(&CharacterComponent_Sinf_131c90));
     RegisterExeAddr(0x140131090, reinterpret_cast<uintptr_t>(&CharacterComponent_Cosf_131090));

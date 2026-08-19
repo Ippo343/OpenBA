@@ -20,5 +20,11 @@
 // 6. If growth > growthScale and conditions met: harvest, reset growth
 void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime);
 
+// ApplyVisualScale (vtable slot [10], +0x50, 0x14011fea0): eases the model's
+// MeshInstance visual scale toward the current growth value. Dispatched by
+// EntityList::PostUpdateNodeHandler for components carrying flag bit 4, which
+// GrowthComponent_Update sets whenever growth advances.
+void GrowthComponent_ApplyVisualScale(GrowthComponent* self);
+
 // Init: resolve all internal function pointers (called once at startup)
 void GrowthComponent_InitFuncs();

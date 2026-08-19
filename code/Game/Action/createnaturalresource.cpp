@@ -375,6 +375,34 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     int typeGroup = *(int*)(*(uintptr_t*)(s + 0x20) + 0x20);
     s_fn_RegisterEntity((void**)entityListPtr, &entityRef, typeGroup);
 
+    // [diag] BANISHED_CROPFIELD_TRACE — what does the spawned resource's MODEL look
+    // like right after the variant pick? Reports the mesh/variant pair, the scene id
+    // (+0x16c, -1 == never added to Graphics::Scene) and the MeshInstance visual scale
+    // block (+0x134..+0x140), which is the ONLY thing that makes a growing plant small.
+    {
+        static int s_md = -1;
+        if (s_md < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                        s_md = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static int s_mn = 0;
+        // NOTE: the locals are misnamed — 0x1400052c0 finds the NaturalResource
+        // component and 0x140003f60 the ModelComponent (proven by GrowthComponent
+        // ::Startup, which stores them at +0x28 and +0x30 respectively).
+        uint8_t* mc = *(uint8_t**)&nrCompIBP2;      // the real ModelComponent
+        uint8_t* nr = *(uint8_t**)&modelCompIBP;    // the real NaturalResourceComponent
+        if (s_md && mc && s_mn++ < 12) {
+            std::fprintf(stderr, "[CNR-model] cell=%d variantIdx=%d modelVariant=%d "
+                         "nodes@+0xf0=%p sceneId=%d visualScale=(%.3f %.3f %.3f %.3f) "
+                         "growth=%.3f\n",
+                         cellIndex, (int)*(int16_t*)(mc + 0x164), (int)*(int16_t*)(mc + 0x166),
+                         *(void**)(mc + 0x28 + 0xf0), *(int32_t*)(mc + 0x16c),
+                         *(float*)(mc + 0x134), *(float*)(mc + 0x138),
+                         *(float*)(mc + 0x13c), *(float*)(mc + 0x140),
+                         nr ? *(float*)(nr + 0x28) : -1.0f);
+            std::fflush(stderr);
+        }
+    }
+
+
     // Read the tile back at the EXACT cell this action just spawned into. RegisterEntity
     // is what dispatches the OnAdded pass (retail 0x1400c48a0 -> FUN_1400c2f60, vtable
     // +0x30), and MapComponent slot 6 -> FUN_14009dc20 is what writes cell+8. If the

@@ -280,6 +280,37 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
         *reinterpret_cast<float*>(target + 0x140) = uvScale;
     }
 
+    // [diag] BANISHED_CROPFIELD_TRACE — did the spawn-time scale write land on a real
+    // ModelComponent? +0x28/+0x30/+0x38 are populated by GrowthComponent::Startup; if
+    // this runs BEFORE that, every link here is stale and the visual scale never moves.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
+                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static int s_n = 0;
+        if (s_t && s_n++ < 10) {
+            int64_t model = *reinterpret_cast<int64_t*>(s + 0x30);
+            std::fprintf(stderr, "[SetGrowth] self=%p progress=%.3f growthScale(+0x4c)=%.3f "
+                         "growth=%.3f disp(+0x48)=%.3f res=%p model=%p desc=%p cropBranch=%d vec4fn=%p",
+                         (void*)s, progress, *reinterpret_cast<float*>(s + 0x4c), growth,
+                         *reinterpret_cast<float*>(s + 0x48),
+                         (void*)*reinterpret_cast<int64_t*>(s + 0x28), (void*)model,
+                         (void*)*reinterpret_cast<int64_t*>(s + 0x38),
+                         *reinterpret_cast<int64_t*>(s + 0x38)
+                             ? (int)*reinterpret_cast<int8_t*>(*reinterpret_cast<int64_t*>(s + 0x38) + 100)
+                             : -1,
+                         (void*)s_fn_Vec4);
+            if (model)
+                std::fprintf(stderr, " visualScale=(%.3f %.3f %.3f %.3f)",
+                             *reinterpret_cast<float*>(model + 0x134),
+                             *reinterpret_cast<float*>(model + 0x138),
+                             *reinterpret_cast<float*>(model + 0x13c),
+                             *reinterpret_cast<float*>(model + 0x140));
+            std::fprintf(stderr, "\n");
+            std::fflush(stderr);
+        }
+    }
+
     int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
     float rf = 0.0f;
     if (fn_Random_RandFloat) {

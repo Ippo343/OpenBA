@@ -70,6 +70,18 @@ static float* s_fFreezeGrowth = nullptr;   // DAT_140172288 = growth rate at fre
 // DAT_1401722b0 -- double mask for fabsf (0x7FFFFFFFFFFFFFFF)
 static uint64_t* s_dblAbsMask = nullptr;
 
+// Visual-scale smoothing constants used by slot 10 (0x14011fea0), read from .rdata so
+// they stay tied to the binary rather than being re-typed here.
+static float* s_fScaleEps      = nullptr;  // DAT_1401720b8 = 0.001f  (snap threshold)
+static float* s_fScaleOldW     = nullptr;  // DAT_140172144 = 0.99f   (previous weight)
+static float* s_fScaleNewW     = nullptr;  // DAT_1401720c0 = 0.01f   (target weight)
+static float* s_fCropSpreadDiv = nullptr;  // DAT_1401720f4 = 0.15f   (crop x/y ramp)
+
+// Math::Vector4::Vector4(const Scalar&) via .rdata dispatch slot 0x140152958 — broadcasts
+// one float into all four lanes.
+typedef void (*fn_Vec4FromScalar_t)(void* out16, const float* scalar);
+static fn_Vec4FromScalar_t s_fn_Vec4FromScalar = nullptr;
+
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -99,6 +111,16 @@ static void EnsureHelpers() {
     s_fFreezeTemp = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721d0));
     s_fFreezeGrowth = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172288));
     s_dblAbsMask = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
+
+    s_fScaleEps      = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720b8));
+    s_fScaleOldW     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172144));
+    s_fScaleNewW     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720c0));
+    s_fCropSpreadDiv = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720f4));
+
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152958);
+        if (slot) s_fn_Vec4FromScalar = *reinterpret_cast<fn_Vec4FromScalar_t*>(slot);
+    }
 
     s_helpersResolved = true;
 }
@@ -375,6 +397,129 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
                 s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
             }
         }
+    }
+}
+
+// ============================================================
+// GrowthComponent::ApplyVisualScale (vtable slot [10], +0x50, original 0x14011fea0)
+// ============================================================
+// THE per-frame link between a resource's growth value and how big it is drawn.
+// EntityList::PostUpdateNodeHandler (0x1400c2c70) dispatches component slot 10 on every
+// component whose flags carry bit 4, and GrowthComponent::Update is what sets that bit
+// each time growth advances. Without this body the bit was set, the dispatch happened,
+// and the inert stub returned — so the MeshInstance visual scale stayed at the engine
+// ctor default of (1,1,1,1) and EVERY tree/crop rendered full-grown from the frame it
+// was planted. Measured before the fix: a just-spawned crop at growth 0.000 already had
+// visualScale=(1,1,1,1) with a mesh bound and a live scene id.
+//
+// Shape (1:1 with the disassembly):
+//   target = min(resource+0x28 growth, 1.0), then raised to the description floor
+//            (desc+0x60) so a resource never draws smaller than its minimum.
+//   self+0x48 is the SMOOTHED displayed scale: snap when already within 0.001, else
+//            ease 1% per tick (0.99*cur + 0.01*target) — this is what makes a tree grow
+//            visibly rather than pop between sizes.
+//   desc+0x64 selects the CROP form: x/y spread to full within the first 15% of growth
+//            (0x1401720f4 = 0.15f) while z carries the height, versus the uniform
+//            Vector4-broadcast form used by trees and every other natural resource.
+//   The flag-4 clear only happens once the scale has CONVERGED, which is what keeps the
+//   component in the post-update list across the whole ramp.
+void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
+    EnsureHelpers();
+    uintptr_t c = reinterpret_cast<uintptr_t>(self);
+
+    // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
+    // GrowthComponent::Startup, which runs on every spawned resource before the first
+    // post-update pass. A null here means Startup did not run, which is the bug to fix.
+    if (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
+        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
+        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0) {
+        return;
+    }
+
+    const float kOne          = s_fOne ? *s_fOne : 1.0f;
+    const float kEpsilon      = s_fScaleEps ? *s_fScaleEps : 0.001f;
+    const float kSmoothOld    = s_fScaleOldW ? *s_fScaleOldW : 0.99f;
+    const float kSmoothNew    = s_fScaleNewW ? *s_fScaleNewW : 0.01f;
+    const float kCropSpreadDiv = s_fCropSpreadDiv ? *s_fCropSpreadDiv : 0.15f;
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(c + 0x28));
+    uintptr_t resource = *reinterpret_cast<uintptr_t*>(c + 0x28);
+    float target = *reinterpret_cast<float*>(resource + 0x28);   // growth 0..n
+    if (target > kOne) target = kOne;
+
+    uintptr_t desc = *reinterpret_cast<uintptr_t*>(c + 0x38);
+    float descFloor = *reinterpret_cast<float*>(desc + 0x60);
+    if (descFloor > target) target = descFloor;
+
+    float cur = *reinterpret_cast<float*>(c + 0x48);
+    const float diff = std::fabs(target - cur);
+    const bool converged = (kEpsilon > diff);
+    if (converged) {
+        *reinterpret_cast<float*>(c + 0x48) = target;
+    } else {
+        *reinterpret_cast<float*>(c + 0x48) = cur * kSmoothOld + target * kSmoothNew;
+    }
+
+    const float scale = *reinterpret_cast<float*>(c + 0x48);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(c + 0x30));
+    uintptr_t model = *reinterpret_cast<uintptr_t*>(c + 0x30);
+
+    if (*reinterpret_cast<int8_t*>(desc + 0x64) != 0) {
+        // Crop form: spread (x,y) reaches full early, height (z) tracks growth.
+        float spread = scale / kCropSpreadDiv;
+        if (spread < 0.0f)      spread = 0.0f;
+        else if (spread > kOne) spread = kOne;
+        *reinterpret_cast<float*>(model + 0x134) = spread;
+        *reinterpret_cast<float*>(model + 0x138) = spread;
+        *reinterpret_cast<float*>(model + 0x13c) = scale;
+        *reinterpret_cast<float*>(model + 0x140) = kOne;
+    } else {
+        // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
+        float scalar = scale;
+        uint8_t vec4[16];
+        if (s_fn_Vec4FromScalar) {
+            s_fn_Vec4FromScalar(vec4, &scalar);
+            const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
+            *reinterpret_cast<uint32_t*>(model + 0x134) = v[0];
+            *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
+            *reinterpret_cast<uint32_t*>(model + 0x13c) = v[2];
+            *reinterpret_cast<uint32_t*>(model + 0x140) = v[3];
+        }
+    }
+
+    // BANISHED_GROWTH_TRACE — proof the post-update dispatch reaches this body and that
+    // the displayed scale actually eases toward growth. Follows ONE component.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
+                       s_t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
+        static void* s_lock = nullptr;
+        static int s_n = 0;
+        if (s_t && !s_lock) s_lock = self;
+        if (s_t && self == s_lock && (s_n % 200) == 0 && s_n < 4000) {
+            std::fprintf(stderr, "[ScaleTrace] comp=%p growth=%.4f target=%.4f "
+                         "displayed=%.4f model visualScale=(%.3f %.3f %.3f %.3f)%s\n",
+                         (void*)self, *reinterpret_cast<float*>(resource + 0x28), target,
+                         scale, *reinterpret_cast<float*>(model + 0x134),
+                         *reinterpret_cast<float*>(model + 0x138),
+                         *reinterpret_cast<float*>(model + 0x13c),
+                         *reinterpret_cast<float*>(model + 0x140),
+                         converged ? " CONVERGED" : "");
+            std::fflush(stderr);
+        }
+        ++s_n;
+    }
+
+    if (!converged) return;   // stay registered until the ease-in finishes
+
+    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t newFlags = oldFlags & ~0x10u;
+    *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xffff) != 0 &&
+        *reinterpret_cast<uintptr_t*>(c + 0x10) != 0) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(c + 0x10));
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
     }
 }
 
@@ -788,7 +933,8 @@ void GrowthComponent_InitFuncs() {
 #include <cstdlib>
 #include <cstring>
 
-COMPONENT_LIVE_FACTORY_S(GrowthComponent, 0x50, 0xcb, "BANISHED_LIVE_GROWTH",
-                         GrowthComponent_Update, GrowthComponent_Startup)
+COMPONENT_LIVE_FACTORY_SP(GrowthComponent, 0x50, 0xcb, "BANISHED_LIVE_GROWTH",
+                          GrowthComponent_Update, GrowthComponent_Startup,
+                          GrowthComponent_ApplyVisualScale)
 REGISTER_TYPE(GrowthComponent, "Component",
               &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);

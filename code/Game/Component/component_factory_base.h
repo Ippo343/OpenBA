@@ -252,6 +252,55 @@ bool LiveEnabled(const char* envVar);
         return mem;                                                           \
     }
 
+// As COMPONENT_LIVE_FACTORY_S, plus the POST-UPDATE slot (vtable +0x50 / index 10 —
+// dispatched by EntityList::PostUpdateNodeHandler on every component whose flags carry
+// bit 4). That slot is where a component reacts to its own Update having changed
+// something, and it shares the component's env var because the pair is one feature: the
+// Update sets the bit, the post-update consumes it and clears it again. GrowthComponent
+// is the worked example — Update accumulates growth, slot 10 eases the model's visual
+// scale toward it. The PostUpdate fn is `void PostUpdateFn(Name* self)`.
+#define COMPONENT_LIVE_FACTORY_SP(Name, Size, Flags, EnvVar, UpdateFn, StartupFn, \
+                                  PostUpdateFn)                                   \
+    static uint32_t Name##_LiveGetTypeId(void*) {                                 \
+        static uint32_t cached = 0;                                               \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);               \
+        return cached;                                                            \
+    }                                                                             \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];        \
+    static void Name##_UpdateVSlot(void* s, void* t) {                            \
+        UpdateFn(reinterpret_cast<Name*>(s), reinterpret_cast<int64_t*>(t));      \
+    }                                                                             \
+    static void Name##_StartupVSlot(void* s) {                                    \
+        StartupFn(reinterpret_cast<Name*>(s));                                    \
+    }                                                                             \
+    static void Name##_PostUpdateVSlot(void* s) {                                 \
+        PostUpdateFn(reinterpret_cast<Name*>(s));                                 \
+    }                                                                             \
+    static void Name##_FinishLiveVtable() {                                       \
+        if (::ComponentFactory::LiveEnabled(EnvVar)) {                            \
+            Name##_LiveVtable[4] =                                                \
+                reinterpret_cast<void*>(&Name##_StartupVSlot);                    \
+            Name##_LiveVtable[9] =                                                \
+                reinterpret_cast<void*>(&Name##_UpdateVSlot);                     \
+            Name##_LiveVtable[10] =                                               \
+                reinterpret_cast<void*>(&Name##_PostUpdateVSlot);                 \
+        }                                                                         \
+    }                                                                             \
+    extern "C" void* Name##_Factory(void) {                                       \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),             \
+            Name##_LiveVtable,                                                    \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                      \
+        Name##_FinishLiveVtable();                                                \
+        return p;                                                                 \
+    }                                                                             \
+    static void* Name##_CreateInPlace(void* mem) {                                \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),         \
+            Name##_LiveVtable,                                                    \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                      \
+        Name##_FinishLiveVtable();                                                \
+        return mem;                                                               \
+    }
+
 // As COMPONENT_LIVE_FACTORY_S, plus the OnAdded slot (vtable +0x30 / index 6 —
 // dispatched by ComponentEntity_OnAddedPass at EntityList_RegisterEntity time)
 // under its OWN env var, so a component can keep Startup+Update live (proven,
