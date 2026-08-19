@@ -545,6 +545,41 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     if ((modelFlags >> 20) & 1) {
         // Entity already in use, bail
         ++g_hae_inUse; HAE_Report();   // FIX 2026-08-15: exit was never counted
+        // IN-USE CONTENTION CENSUS (BANISHED_TRACKER_TRACE=1). Bit 20 is a RESERVATION
+        // that HuntAnimal::Enter takes on its target (0x140107260, from the RemoveAnimal
+        // ctor) and that is consumed when the hunter's chain finally runs RemoveAnimal.
+        // A high inUse count is FAITHFUL contention if it is a handful of deer being
+        // re-found while their kill is in flight, and a LEAK if the distinct-entity
+        // count keeps climbing. The raw counter cannot tell those apart, so track
+        // distinct targets and the per-target hit counts.
+        {
+            static int t = -1;
+            if (t < 0) { const char* e = std::getenv("BANISHED_TRACKER_TRACE");
+                         t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (t) {
+                static void* ents[32] = {nullptr};
+                static long long hits[32] = {0};
+                static int nEnts = 0;
+                static long long total = 0, overflow = 0;
+                void* key = *(void**)((uint8_t*)queryResult + 0x10);
+                ++total;
+                int slot = -1;
+                for (int i = 0; i < nEnts; i++) if (ents[i] == key) { slot = i; break; }
+                if (slot < 0) {
+                    if (nEnts < 32) { slot = nEnts++; ents[slot] = key; }
+                    else ++overflow;
+                }
+                if (slot >= 0) ++hits[slot];
+                if ((total % 200) == 0) {
+                    std::fprintf(stderr, "[HuntInUse] hits=%lld distinctTargets=%d "
+                                 "(cap 32, unrecorded=%lld) top:", total, nEnts, overflow);
+                    for (int i = 0; i < nEnts && i < 6; i++)
+                        std::fprintf(stderr, " %p=%lld", ents[i], hits[i]);
+                    std::fprintf(stderr, "\n");
+                    std::fflush(stderr);
+                }
+            }
+        }
         return;
     }
 
