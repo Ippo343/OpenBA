@@ -525,6 +525,20 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                 uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
                 if (builderMarker != 0)
                     *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
+                // BANISHED_PROFKEY_TRACE - pairs with the [ProfKey] lines in
+                // workplacecomponent.cpp. If this never prints for a building, State1Enter
+                // did not run for it, so LeaveBuilderProfession bails at completion and
+                // WPC+0x48 stays 0 - the workPlace ribbon is hidden for the entity's life.
+                {
+                    static int s_pkTrace = -1;
+                    if (s_pkTrace < 0) {
+                        const char* pe = std::getenv("BANISHED_PROFKEY_TRACE");
+                        s_pkTrace = (pe && pe[0] && pe[0] != '0') ? 1 : 0;
+                    }
+                    if (s_pkTrace)
+                        std::fprintf(stderr, "[ProfKey] State1Enter INSTALLED builder key wpc=%p +0x48=0x%llx\n",
+                                     wpc, (unsigned long long)builderMarker);
+                }
 
                 // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
                 // the townMgr+0x100 profession BST keyed Builder — the step retail does at

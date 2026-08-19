@@ -210,16 +210,27 @@ void ProbeClass(const FoodClass& fc) {
     if (void* smc = FindComp(ent, Tid("StateMachineComponent")))
         state = *reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(smc) + 0x51);
     int staffed = -1, accepting = -1;
+    unsigned long long profKey = 0;
+    bool haveWpc = false;
     if (void* wpc = FindComp(ent, Tid("WorkPlaceComponent"))) {
         uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
+        haveWpc   = true;
         staffed   = *reinterpret_cast<int32_t*>(w + 0x60);
         accepting = *reinterpret_cast<uint8_t*>(w + 0x50);
+        // +0x48 = profession key. WorkplaceUI_Startup hides the ENTIRE workPlace
+        // ribbon (worker up/down spinner + stop-sign icon) when this is 0 -
+        // faithful to retail 0x140087080. profKey=0 therefore means no worker
+        // arrows regardless of what the .rsc declares; read this field first for
+        // any "that panel has no worker arrows" report.
+        profKey = *reinterpret_cast<unsigned long long*>(w + 0x48);
     }
 
     std::fprintf(stderr, "[FoodPlace] %-19s PLACED x%d  ent=%p comp=%p tile=(%d,%d) fp=%dx%d "
-                 "SM=%s stateIdx=%d staffed=%d accepting=%d\n",
+                 "SM=%s stateIdx=%d staffed=%d accepting=%d profKey(+0x48)=0x%llx%s\n",
                  fc.component, instances, ent, comp, tx, ty, fw, fh,
-                 hasSM ? "yes" : "NO", state, staffed, accepting);
+                 hasSM ? "yes" : "NO", state, staffed, accepting, profKey,
+                 !haveWpc ? " [NO WorkPlaceComponent]"
+                          : (profKey == 0 ? "  <-- RIBBON HIDDEN (no worker spinner)" : ""));
 
     // ── slot coverage ─────────────────────────────────────────────────────────────
     // A slot still equal to the shared inert stub is NOT reimplemented. This is the

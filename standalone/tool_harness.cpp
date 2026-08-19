@@ -425,7 +425,15 @@ void FireRoadTool(void* entityUI) {
 void FirePastureTool(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
 
+    // BANISHED_PLACEMENT_TEMPLATE also overrides the FENCED tool, so this path can
+    // place any drag-area building - crop field and orchard included - through the
+    // real tool rather than the instant-build spawner. That distinction matters:
+    // spawned-complete fields are seated by StartTown_ActivateWorkplace, so only a
+    // TOOL-placed field reproduces the missing-profession case.
     const char* kTemplate = "Template\\Pasture.rsc";
+    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+        if (e[0]) kTemplate = e;
+    }
     fprintf(stderr, "[ToolHarness][pasture] resolving template \"%s\"...\n", kTemplate);
     void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness][pasture]   -> %p\n", tmpl);
