@@ -166,6 +166,20 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_CITIZENAI",
     "BANISHED_LIVE_CHARACTER",
     "BANISHED_LIVE_CHARACTER_MOVETICK",
+    // GRADUATED 2026-08-18 — the action Enter tick (CharacterComponent slot 9 ->
+    // Character_UpdateAnimation -> action vtable +0x30). This is the ONLY dispatcher of
+    // slot +0x30, so with it off HuntAnimal::Enter never ran: the hunter chased deer
+    // forever, never killed, and the hunting cabin's production panel sat at 0 — which
+    // read as "the panel display is dead" rather than "nothing writes to it".
+    // A/B, seed 12345, demo hunter lodge staffed 3/3, ~8 min each arm:
+    //   OFF: [ActionTick] never printed at all (slot 9 not installed), [HuntEnter] census
+    //        never printed (Enter called 0 times), [TrackerUpsert] 0, panel items=0.
+    //   ON : REACHED_KILL=6, [TrackerUpsert] UPSERT=18 NO_TRACKER=0 (venison qty 100/60,
+    //        leather qty 4) all onto the LODGE entity, and ProductionUI list=0 items=2.
+    //   No crash in either arm (standalone_crash.log empty at 459 s).
+    // Its stale-char-slot hazard is covered: CharacterComponent::OnRemove (slot 7) is
+    // installed by BANISHED_LIVE_CHARACTER_MOVETICK, which is default-on above.
+    "BANISHED_LIVE_CHARACTER_UPDATE9",
     "BANISHED_LIVE_STATEMACHINE",
     "BANISHED_LIVE_RESIDENCE",
     "BANISHED_LIVE_HOUSING",

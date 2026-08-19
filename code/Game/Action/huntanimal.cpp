@@ -334,7 +334,8 @@ static void HAE_Report() {
     if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
                    s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
     static long long s_n = 0;
-    if (s_t && ((++s_n % 20) == 0)) {
+    ++s_n;
+    if (s_t && (s_n <= 3 || (s_n % 20) == 0)) {
         std::fprintf(stderr, "[HuntEnter] alreadyStarted=%lld notReady=%lld noTarget=%lld "
                      "TARGETFOUND=%lld targetInUse=%lld noPath=%lld pathInvalid=%lld "
                      "REACHED_KILL=%lld\n",

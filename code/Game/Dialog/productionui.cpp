@@ -13,6 +13,7 @@
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // ProductionUI struct layout:
@@ -247,6 +248,17 @@ void ProductionUI_Slot4(ProductionUI* self) {
 //
 // Original helper: 0x140075A50.
 
+// PANEL-READ METER (BANISHED_TRACKER_TRACE=1). Pairs with [TrackerUpsert] on the writer
+// side: this reports what the panel actually FINDS, so "0 shown" can be told apart from
+// "0 written". listIndex 0 reads tracker+0x28/+0x30 (the live/this-year array the upsert
+// fills), listIndex 1 reads +0x38/+0x40 (the previous-year archive).
+static bool ProductionUI_TraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_TRACKER_TRACE");
+                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+
 static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(self + 0x28);
@@ -270,7 +282,16 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     // fault here. Skipping the list update is the correct standalone behaviour —
     // there is nothing to show. Do NOT widen this into "null checks everywhere":
     // if the pasture/crop entity itself lacks a tracker, that is an upstream bug.
-    if (!tracker) return;
+    if (!tracker) {
+        if (ProductionUI_TraceOn()) {
+            static long long nNull = 0;
+            if ((++nNull % 600) == 1)
+                fprintf(stderr, "[ProductionUI] list=%d NO_TRACKER entity=%p (n=%lld)\n",
+                        listIndex, entityPtr, nNull);
+            fflush(stderr);
+        }
+        return;
+    }
 
     // Check if game world item count changed; rebuild tracker if so
     int gameItemCount = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0x128);
@@ -294,6 +315,16 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get element array for this list
     uintptr_t elemArrayPtr = *(uintptr_t*)(self + ((int64_t)listIndex + 3) * 0x10);
     int elemCount = *(int*)(self + (int64_t)listIndex * 0x10 + 0x38);
+
+    if (ProductionUI_TraceOn()) {
+        static long long nTick = 0;
+        if ((++nTick % 1200) < 2)
+            fprintf(stderr, "[ProductionUI] list=%d entity=%p tracker=%p items=%d "
+                            "elems=%d gen=%d stamp=%d\n",
+                    listIndex, entityPtr, (void*)tracker, itemCount, elemCount,
+                    gameItemCount, *(int*)(tracker + 0x48));
+        fflush(stderr);
+    }
 
     int i = 0;
     while (i < itemCount) {
