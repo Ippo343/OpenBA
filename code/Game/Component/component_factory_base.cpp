@@ -666,6 +666,24 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_FISHING",
     "BANISHED_LIVE_HUNTING",
     "BANISHED_LIVE_GATHERER",
+
+    // ── Workplace profession seat for non-constructed buildings ───────────────────
+    // Seats WorkPlaceComponent+0x48 from the description on a workplace that never
+    // passes through the BuildComponent hand-off. WorkplaceUI_Startup hides the whole
+    // workPlace ribbon (worker up/down spinner AND stop-sign icon) when +0x48 == 0, so
+    // a player-placed crop field or orchard had no worker arrows for its entire life.
+    //
+    // MEASURED 2026-08-18, player-built crop field + orchard:
+    //   OFF: [WorkPlaceUI] 0 shown / 5466 HIDDEN, profession(+0x48)=NULL; the field is
+    //        never staffable ([FoodWorkers] "+0x50=0" for 9500 frames).
+    //   ON:  [ProfKey] SEATED NATURAL for CropFieldComponent AND OrchardComponent
+    //        (both key 0x...778a68 - they share the Farmer profession), ribbon
+    //        2 shown / 0 hidden, arrows visible and the buildings work.
+    // The ON arm asserts a value only the live path produces (a SEATED NATURAL line
+    // and a non-zero +0x48 on an entity with no BuildComponent), so this is a positive
+    // run. Houses/storage keep key 0 - their description declares no profession - and
+    // construction sites are excluded outright, so the Builder hand-off is untouched.
+    "BANISHED_LIVE_SM_BUILT_HOOK",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

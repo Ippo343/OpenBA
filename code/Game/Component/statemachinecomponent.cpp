@@ -19,6 +19,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/statemachinecomponent_funcs.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -829,6 +830,119 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     }
 }
 
+// ------------------------------------------------------------------
+// State-2 ("built") workplace hand-off -- see the call site in the Update
+// adapter below for why this lives here rather than on the WPC controller.
+// Opt-in while unproven, per the project's new-feature rule; graduate into
+// kDefaultOnFlags once a soak confirms it.
+extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* workPlaceComp);
+
+static bool SMBuiltTrace() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_SM_STATE_TRACE");
+        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on == 1;
+}
+
+// MUST go through ComponentFactory::LiveEnabled, not a raw getenv: only LiveEnabled
+// consults kDefaultOnFlags, so a raw getenv is INVISIBLE to graduation and the
+// feature stays off no matter what the table says (the env var then reads as an
+// explicit override, which is exactly backwards).
+static bool SMBuiltHookEnabled() {
+    static int on = -1;
+    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_BUILT_HOOK") ? 1 : 0;
+    return on == 1;
+}
+
+// Which gameplay class does this entity represent? Names checked OUTER so the
+// distinctive component wins over Storage/Residence, which ride along on nearly
+// every building and would otherwise answer for all of them.
+static const char* SMOwnerClass(StateMachineComponent* self) {
+    static const char* kNames[] = {
+        "CropFieldComponent", "OrchardComponent", "PastureComponent",
+        "FishingComponent", "HuntComponent", "HerbalistComponent",
+        "ForesterComponent", "ResidenceComponent", "StorageComponent",
+    };
+    int64_t ownerRef = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0x10);
+    if (!ownerRef) return "?";
+    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
+    int count = *reinterpret_cast<int*>(ent + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
+    if (!arr || count <= 0 || count > 256) return "?";
+    for (unsigned k = 0; k < sizeof(kNames)/sizeof(kNames[0]); k++) {
+        uint32_t want = ::Object::GetTypeIdByName(kNames[k]);
+        if (!want) continue;
+        for (int i = 0; i < count; i++) {
+            void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
+            if (!comp) continue;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == want) return kNames[k];
+        }
+    }
+    return "(other)";
+}
+
+// BANISHED_SM_STATE_TRACE - every state transition for the food/production classes,
+// so the "built" state index can be MEASURED rather than assumed. Residence/storage
+// are excluded to keep the volume readable.
+static bool SMStateTraceEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_SM_STATE_TRACE");
+        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on == 1;
+}
+
+static void StateMachineComponent_SeatWorkplaceOnBuilt(StateMachineComponent* self) {
+    if (!self) return;
+    int64_t ownerRef = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0x10);
+    if (!ownerRef) return;
+    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
+    int count  = *reinterpret_cast<int*>(ent + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
+    if (!arr || count <= 0 || count > 256) return;
+    const uint32_t want  = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    const uint32_t build = ::Object::GetTypeIdByName("BuildComponent");
+    if (!want) return;
+    void* wpc = nullptr;
+    bool hasBuild = false;
+    for (int i = 0; i < count; i++) {
+        void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
+        if (!comp) continue;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == want)  wpc = comp;
+        if (build && tid == build) hasBuild = true;
+    }
+    // Report the decision once per component: a silent skip is indistinguishable
+    // from "never ran", and that ambiguity has already cost two blind rounds.
+    static void* s_said[128];
+    static int s_saidN = 0;
+    bool said = false;
+    for (int i = 0; i < s_saidN; i++) if (s_said[i] == self) { said = true; break; }
+    const char* why = nullptr;
+    if (!wpc)          why = "no WorkPlaceComponent on entity";
+    else if (hasBuild) why = "entity has a BuildComponent - construction owns the key";
+    if (!said && s_saidN < 128 && SMBuiltTrace()) {
+        s_said[s_saidN++] = self;
+        uint64_t key = wpc ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) : 0;
+        void* d = wpc ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(wpc) + 0x18) : nullptr;
+        uint64_t nat = d ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) : 0;
+        std::fprintf(stderr, "[SMSeat] %-22s sm=%p wpc=%p key=0x%llx desc=%p natural=0x%llx -> %s\n",
+                     SMOwnerClass(self), (void*)self, wpc,
+                     (unsigned long long)key, d, (unsigned long long)nat,
+                     why ? why : (key ? "key already set (nothing to do)"
+                                      : (nat ? "SEATING NOW" : "description declares no profession")));
+        std::fflush(stderr);
+    }
+    if (why) return;
+    WorkPlaceComponent_EnterBuiltState_Full(wpc);
+}
+
 // Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
 // bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
 // UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
@@ -926,12 +1040,87 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
     // GUARD: no child state node linked yet -> nothing to tick. Skipping is
     // correct (the engine's SM does nothing until a ControllerComponent links a
     // state) and avoids the bare-root Step(-1) parent-walk null deref.
+    // BANISHED_SM_STATE_TRACE: report ONCE per component whether this entity's SM
+    // actually has a linked controller node. Without one the adapter returns here
+    // and the SM never ticks at all - so no state transition, and no state-2 built
+    // hook, can ever fire for that entity.
+    if (SMStateTraceEnabled()) {
+        static void* s_seen[128];
+        static int s_seenCount = 0;
+        bool known = false;
+        for (int i = 0; i < s_seenCount; i++) if (s_seen[i] == self) { known = true; break; }
+        if (!known && s_seenCount < 128) {
+            const char* cls = SMOwnerClass(self);
+            if (std::strcmp(cls, "?") != 0 && std::strcmp(cls, "(other)") != 0 &&
+                std::strcmp(cls, "ResidenceComponent") != 0 &&
+                std::strcmp(cls, "StorageComponent") != 0) {
+                s_seen[s_seenCount++] = self;
+                std::fprintf(stderr, "[SMState] FIRST TICK %-22s sm=%p firstChild=%p state(+0x51)=%d pending(+0x52)=%d%s\n",
+                             cls, (void*)self, firstChild, (int)*(base + 0x51), (int)*(base + 0x52),
+                             firstChild ? "" : "  <-- NO CONTROLLER NODE LINKED: this SM never ticks");
+                std::fflush(stderr);
+            }
+        }
+    }
+
     if (firstChild == nullptr) return;
+
+    // First-tick seat attempt. A completed but UNPLANTED crop field sits in state 0
+    // forever (measured: 0 transitions until a crop is chosen), so a transition-only
+    // trigger can never give it a profession - yet the panel should show its worker
+    // arrows the moment it is built. Idempotent: once the key is seated the callee
+    // returns immediately.
+    if (SMBuiltHookEnabled()) {
+        static void* s_first[128];
+        static int s_firstN = 0;
+        bool seen = false;
+        for (int i = 0; i < s_firstN; i++) if (s_first[i] == self) { seen = true; break; }
+        if (!seen && s_firstN < 128) {
+            s_first[s_firstN++] = self;
+            StateMachineComponent_SeatWorkplaceOnBuilt(self);
+        }
+    }
 
     // Forward the Time pointer opaquely as the int64 param (Tick passes it
     // straight through to the Transition virtuals; nothing in this path derefs
     // it as a value).
+    //
+    // BANISHED_LIVE_SM_BUILT_HOOK: watch for the entity state machine ENTERING
+    // state 2 ("built"). Retail dispatches the WorkPlaceComponent controller's
+    // state-2 enter (edf0) here, which is what seats a finished building's
+    // profession into WPC+0x48 -- the field WorkplaceUI_Startup uses to show or
+    // hide the whole workPlace ribbon. Our WPC is inert, so that dispatch was
+    // collapsed into BuildComponent_State8Finalize; a player-placed crop field or
+    // orchard has no BuildComponent completion and so never got a profession at
+    // all (measured: 0 shown / 5466 HIDDEN on a hand-built field). Edge-triggered
+    // so it fires once per completion, not every tick.
+    const uint8_t stateBefore = *(base + 0x51);
     StateMachineComponent_Update(self, reinterpret_cast<int64_t>(time));
+    const uint8_t stateAfter = *(base + 0x51);
+    if (stateAfter != stateBefore && SMStateTraceEnabled()) {
+        const char* cls = SMOwnerClass(self);
+        if (std::strcmp(cls, "ResidenceComponent") != 0 &&
+            std::strcmp(cls, "StorageComponent") != 0 &&
+            std::strcmp(cls, "?") != 0 && std::strcmp(cls, "(other)") != 0) {
+            std::fprintf(stderr, "[SMState] %-22s sm=%p state %d -> %d\n",
+                         cls, (void*)self, (int)stateBefore, (int)stateAfter);
+            std::fflush(stderr);
+        }
+    }
+    // Seat the natural profession on ANY state change, not on a fixed index.
+    // MEASURED 2026-08-18: a player-built crop field goes 0 -> 1 on crop selection
+    // and NEVER visits state 2, so the retail WPC controller's "state 2 -> edf0"
+    // index does not exist in a field's own state space. Keying off index 2 (or any
+    // single index) is therefore the wrong shape for this family.
+    //
+    // The seat itself is guarded inside the callee: it fires only when WPC+0x48 is 0
+    // AND the description declares a profession, so houses/storage (+0x20 == 0) are
+    // skipped and any building that already holds a key is untouched. The remaining
+    // hazard is CONSTRUCTION: a site under construction must read Builder, not its
+    // natural profession, so entities that own a BuildComponent are left entirely to
+    // the existing State1Enter / LeaveBuilderProfession hand-off.
+    if (stateAfter != stateBefore && SMBuiltHookEnabled())
+        StateMachineComponent_SeatWorkplaceOnBuilt(self);
 }
 
 // ------------------------------------------------------------------

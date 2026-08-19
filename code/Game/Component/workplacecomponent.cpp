@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/workplacecomponent_funcs.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (ProfKeyOwnerClass diagnostic)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -718,6 +719,49 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLoca
 // reachable only when the WorkComponent still holds a work id (+0x28 >= 0); at build
 // completion State8OneShot has already dequeued the BuildStructure work, so there is
 // normally nothing to re-key. Logged once if the branch is ever taken.
+// BANISHED_PROFKEY_TRACE - low-noise trace of the two events that decide whether a
+// finished building ever gets a profession key in WPC+0x48. That field gates the whole
+// workPlace ribbon (worker up/down spinner + stop sign) in WorkplaceUI_Startup, so a
+// building that misses both events silently has no worker arrows. BUILD_TRACE covers
+// this ground too but floods ~60k lines and slows the sim; these fire once per building.
+static bool ProfKeyTrace() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_PROFKEY_TRACE");
+        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return on == 1;
+}
+
+// Name the building a [ProfKey] line refers to, by scanning the owner entity's
+// component array for a recognisable gameplay component. Diagnostic only.
+static const char* ProfKeyOwnerClass(uintptr_t self) {
+    static const char* kNames[] = {
+        "CropFieldComponent", "OrchardComponent", "PastureComponent",
+        "FishingComponent", "HuntComponent", "HerbalistComponent",
+        "ForesterComponent", "MarketComponent", "AttendanceComponent",
+        "ConsumeProduceComponent", "ResidenceComponent", "StorageComponent",
+    };
+    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
+    if (!ownerRef) return "?";
+    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
+    int count = *reinterpret_cast<int*>(ent + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
+    if (!arr || count <= 0 || count > 256) return "?";
+    for (unsigned k = 0; k < sizeof(kNames)/sizeof(kNames[0]); k++) {
+        uint32_t want = ::Object::GetTypeIdByName(kNames[k]);
+        if (!want) continue;
+        for (int i = 0; i < count; i++) {
+            void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
+            if (!comp) continue;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == want) return kNames[k];
+        }
+    }
+    return "(other)";
+}
+
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     EnsureHelpers();
     EnsureEe60Helpers();
@@ -728,7 +772,16 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
     uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
     uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
-    if (key == 0 || key != builderKey) return;   // not a construction workplace
+    if (key == 0 || key != builderKey) {
+        if (ProfKeyTrace())
+            std::fprintf(stderr, "[ProfKey] LeaveBuilder BAILED wpc=%p key(+0x48)=0x%llx builderKey=0x%llx"
+                         " -- natural profession NOT assigned; ribbon stays hidden\n",
+                         selfP, (unsigned long long)key, (unsigned long long)builderKey);
+        return;   // not a construction workplace
+    }
+    if (ProfKeyTrace())
+        std::fprintf(stderr, "[ProfKey] LeaveBuilder ENTER wpc=%p key(+0x48)=0x%llx == builderKey\n",
+                     selfP, (unsigned long long)key);
 
     // Remove the owner entity from the Builder bucket in the profession BST.
     int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
@@ -806,6 +859,16 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     }
 
     *reinterpret_cast<uint64_t*>(self + 0x48) = naturalKey;
+    if (ProfKeyTrace())
+        std::fprintf(stderr, "[ProfKey] LeaveBuilder SET %-22s wpc=%p desc(+0x18)=%p descIsWPDesc=%d natural(+0x48)=0x%llx%s\n",
+                     ProfKeyOwnerClass(self), selfP, desc,
+                     (desc && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc && *s_TypeId_WorkPlaceDesc)
+                         ? (int)fn_IsDerivedFrom(desc, *s_TypeId_WorkPlaceDesc) : -1,
+                     (unsigned long long)naturalKey,
+                     naturalKey == 0
+                         ? (desc ? "  <-- desc PRESENT but its +0x20 profession is 0"
+                                 : "  <-- desc is NULL (WPC+0x18 never linked)")
+                         : "");
     WorkPlaceComponent_OnCreateInit(selfP);   // ee60 — release every seated worker
 }
 
@@ -841,6 +904,71 @@ extern "C" void WorkPlaceComponent_EnterBuiltState(void* selfP) {
     if (!townMgr) return;
     int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
     ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, key);
+}
+
+// ============================================================
+// WorkPlaceComponent_EnterBuiltState_Full — state-2 ("built") entry for ANY workplace
+// ============================================================
+// Retail dispatches edf0 from the WorkPlaceComponent controller's own state-2 enter, so
+// EVERY workplace gets its profession seated the moment its entity's state machine
+// reaches state 2. Our WorkPlaceComponent is inert (no controller node), and the port
+// collapsed that dispatch into BuildComponent_State8Finalize — which is strictly
+// narrower than retail's trigger. A player-placed CROP FIELD or ORCHARD completes
+// through its OWN state machine and has no BuildComponent completion, so it never
+// reached the hand-off at all:
+//
+//   MEASURED 2026-08-18, hand-built crop field: WPC+0x48 = NULL, and
+//   [WorkPlaceUI] 0 shown / 5466 HIDDEN -- WorkplaceUI_Startup hides the whole
+//   workPlace ribbon (worker up/down spinner AND the stop-sign icon) on +0x48 == 0.
+//   The same session logged 8 construction hand-offs, all storage/houses/fishing dock,
+//   and ZERO events for the crop field or orchard.
+//
+// TRIGGER: driven from StateMachineComponent on the entity's FIRST TICK and on any
+// state change - NOT on state index 2. Retail keys the WPC controller off state 2,
+// but a field has its own state space: a player-placed crop field sits in state 0
+// until a crop is chosen (measured: zero transitions), so an index-keyed trigger
+// never fires for the very buildings this exists to fix.
+//
+// EnterBuiltState alone does not fix them: it delegates to LeaveBuilderProfession, which
+// bails on `key == 0`. A field never ran State1Enter, so it never held the Builder key
+// there is nothing to "leave". The natural profession therefore has to be seated
+// directly from the description, which is exactly what StartTown_ActivateWorkplace
+// already does for spawned-complete buildings (starttown.cpp) -- and why demo-spawned
+// fields have working arrows while player-built ones do not.
+//
+// A house or storage barn keeps key 0: their WorkPlaceDescription+0x20 is legitimately
+// zero, so the natural-seat branch skips them and the profession BST (the EMPLOYER list)
+// stays correct.
+extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
+    if (!selfP) return;
+    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+
+    // 1) The construction hand-off. No-op unless the Builder key is currently installed,
+    //    so buildings that DID go through BuildComponent behave exactly as before.
+    WorkPlaceComponent_EnterBuiltState(selfP);
+
+    // 2) Never-constructed workplaces (crop field / orchard): seat the natural profession.
+    if (*reinterpret_cast<uint64_t*>(self + 0x48) != 0) return;
+    void* desc = *reinterpret_cast<void**>(self + 0x18);
+    uint64_t natural = desc
+        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0;
+    if (natural == 0) return;   // house / storage: correctly professionless
+
+    *reinterpret_cast<uint64_t*>(self + 0x48) = natural;
+    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(selfP), true);
+
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        if (townMgr) {
+            int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
+            ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, natural);
+        }
+    }
+
+    if (ProfKeyTrace())
+        std::fprintf(stderr, "[ProfKey] SEATED NATURAL %-22s wpc=%p desc=%p +0x48=0x%llx (no construction hand-off ran)\n",
+                     ProfKeyOwnerClass(self), selfP, desc, (unsigned long long)natural);
 }
 
 // ============================================================
