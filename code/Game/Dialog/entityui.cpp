@@ -627,9 +627,50 @@ void EntityUI_Slot7(EntityUI* self) {
 
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 void* pagesElem = *(void**)(s + 0x40);
+                // Retail (0x140066d80) assigns the ACTIVE page into the same register it
+                // then conditionally overwrites:
+                //     iVar6 = GetActivePage(pages);
+                //     if (iVar6 != 4) iVar6 = descPage;
+                //     SetActivePage(pages, iVar6);
+                // i.e. page 4 -- the user page, which is the production-statistics page --
+                // is DELIBERATELY preserved across this per-frame pass. Our port kept the
+                // `!= 4` test but not the assignment, so on page 4 it wrote back the STALE
+                // build-state pageIdx instead of 4: clicking the statistics button showed
+                // the production page for one frame and the panel snapped back to the
+                // default page every frame after (the reported 'statistics flicker').
                 int activePage = pagesElem ? fn_PageElement_GetActivePage(pagesElem) : 0;
+                const int staleIdx = pageIdx;   // what the pre-fix port wrote back
+                pageIdx = activePage;
                 if (activePage != 4) {
                     pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
+                }
+                // PAGE-4 STICK TEST (BANISHED_PAGE4_TEST=1, test-only). Forces the user
+                // page once -- the same state a click on the production-statistics button
+                // leaves behind -- then reports, per pass, the page this function decided
+                // AND the page the pre-fix code would have written. One run shows both
+                // arms, so 'it sticks now' is measured rather than argued.
+                {
+                    static int s_on = -1;
+                    if (s_on < 0) {
+                        const char* e = std::getenv("BANISHED_PAGE4_TEST");
+                        s_on = (e && e[0] && e[0] != '0') ? 1 : 0;
+                    }
+                    if (s_on == 1 && pagesElem) {
+                        static long long n = 0;
+                        static bool forced = false;
+                        ++n;
+                        if (!forced && n > 120) {
+                            forced = true;
+                            fn_PageElement_SetActivePage(pagesElem, 4);
+                            pageIdx = 4;   // this pass must not overwrite its own force
+                            std::fprintf(stderr, "[Page4Test] forced active page 4\n");
+                        } else if (forced && (n % 30) == 0) {
+                            std::fprintf(stderr,
+                                "[Page4Test] entry activePage=%d -> writing %d (pre-fix would write %d)\n",
+                                activePage, pageIdx, (activePage == 4) ? staleIdx : pageIdx);
+                        }
+                        std::fflush(stderr);
+                    }
                 }
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             } else {
