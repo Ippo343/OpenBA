@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // ProductionUI struct layout:
@@ -259,6 +260,13 @@ static bool ProductionUI_TraceOn() {
     return s == 1;
 }
 
+static bool ProductionUI_FlickerOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_PRODUI_FLICKER");
+                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+
 static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(self + 0x28);
@@ -302,6 +310,9 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         *(uint64_t*)(tracker + 0x28) = 0;
         *(uint64_t*)(tracker + 0x30) = 0;
         *(int*)(tracker + 0x48) = gameItemCount;
+        if (ProductionUI_FlickerOn())
+            fprintf(stderr, "[ProdFlicker] list=%d YEAR-ROLL archive: gen=%d tracker=%p\n",
+                    listIndex, gameItemCount, (void*)tracker);
     }
 
     // Get item count for this list
@@ -325,6 +336,17 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
                     gameItemCount, *(int*)(tracker + 0x48));
         fflush(stderr);
     }
+
+    // FLICKER METER (BANISHED_PRODUI_FLICKER=1). The panel is redrawn from scratch every
+    // frame; a value the player sees blinking must be CHANGING between frames. Build a
+    // per-list signature of exactly what this pass will show and log only transitions,
+    // so a steady panel prints nothing and a flickering one prints its whole cycle.
+    char sig[320];
+    int sigLen = 0;
+    const bool flickerOn = ProductionUI_FlickerOn();
+    if (flickerOn)
+        sigLen = snprintf(sig, sizeof(sig), "items=%d elems=%d tracker=%p arr=%p |",
+                          itemCount, elemCount, (void*)tracker, (void*)elemArrayPtr);
 
     int i = 0;
     while (i < itemCount) {
@@ -369,6 +391,10 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             itemArray = *(uintptr_t*)(tracker + 0x38);
         }
         int count = *(int*)(itemArray + (uintptr_t)i * 0x10 + 0x08);
+
+        if (flickerOn && sigLen > 0 && sigLen < (int)sizeof(sig) - 40)
+            sigLen += snprintf(sig + sigLen, sizeof(sig) - sigLen, " [%d]desc=%p n=%d",
+                               i, resourceDesc, count);
 
         // Create sprite from ResourceDescription
         uintptr_t rd = (uintptr_t)resourceDesc;
@@ -417,6 +443,21 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         fn_Element_SetFlagsOnOff(numberElem, 1, 0);
 
         i++;
+    }
+
+    if (flickerOn) {
+        static char s_prev[2][320] = {{0}, {0}};
+        static long long s_frame[2] = {0, 0};
+        static int s_changes[2] = {0, 0};
+        const int L = (listIndex == 0) ? 0 : 1;
+        ++s_frame[L];
+        if (strcmp(s_prev[L], sig) != 0) {
+            if (++s_changes[L] <= 200)
+                fprintf(stderr, "[ProdFlicker] list=%d frame#%lld gen=%d stamp=%d %s\n",
+                        listIndex, s_frame[L], gameItemCount, *(int*)(tracker + 0x48), sig);
+            snprintf(s_prev[L], sizeof(s_prev[L]), "%s", sig);
+            fflush(stderr);
+        }
     }
 }
 

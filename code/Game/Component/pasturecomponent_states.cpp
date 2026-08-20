@@ -34,6 +34,7 @@
 
 #include "Component/controller_state_table.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -605,6 +606,21 @@ extern "C" char Pasture_State3Enter(void* data, void* /*sm*/) {
 // ============================================================
 namespace {
 
+// DROP-OUTCOME METER (BANISHED_PASTURE_TRACE=1). The accumulator is spent BEFORE the
+// three skip tests below, so a pasture can consume production every cycle and still
+// place nothing and upsert nothing — which reads on the panel exactly like 'no
+// production at all'. Name the arm.
+void PastureDropReport(int arm, void* self) {
+    if (!Trace()) return;
+    static const char* kArms[5] = {"DROPPED", "NO_STOCKTABLE", "STOCK_AT_LIMIT",
+                                   "NO_POS_OR_HELPERS", "NO_FREE_CELL"};
+    static long long n[5] = {0, 0, 0, 0, 0};
+    if ((n[arm]++ % 20) != 0) return;
+    std::fprintf(stderr, "[Pasture] produce-drop -> %s pasture=%p (n=%lld)\n",
+                 kArms[arm], self, n[arm]);
+    std::fflush(stderr);
+}
+
 void PastureProduce(void* self) {
     if (!s_FindMapComp || !s_Capacity || !s_FindRawDesc) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
@@ -646,14 +662,32 @@ void PastureProduce(void* self) {
     uintptr_t stockTable = *reinterpret_cast<uintptr_t*>(gs + 0x170);
     const int resIdx = *reinterpret_cast<int*>((uintptr_t)lsDesc + 0x28);
 
+    // ACCUMULATOR METER (BANISHED_PASTURE_TRACE=1). The production loop below is a
+    // pure function of pasture+0x44 vs rawDesc+0x40; when the panel shows nothing the
+    // first question is whether the accumulator is moving at all (it is credited by
+    // LivestockComponent::Update, one tick per pastured animal per interval), not
+    // whether the drop path works. Report both numbers, not just the outcome.
+    if (Trace()) {
+        static long long nProd = 0;
+        if ((nProd++ % 600) == 0) {
+            std::fprintf(stderr, "[Pasture] produce-check: pasture=%p accum(+0x44)=%d "
+                         "perUnit=%d animals=%d\n",
+                         self, PastureAccum(self), perUnit, PastureCount(self));
+            std::fflush(stderr);
+        }
+    }
+
     int rounds = 0;
     while (PastureAccum(self) > perUnit && ++rounds <= 16) {
         PastureAccum(self) -= perUnit;
-        if (!stockTable) continue;
+        if (!stockTable) { PastureDropReport(1, self); continue; }
         const int limit = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20 + 8);
         const int stock = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20);
-        if (stock >= limit) continue;
-        if (!posIBP || !s_FootprintN || !s_FootprintAt || !s_EntityCopy) continue;
+        if (stock >= limit) { PastureDropReport(2, self); continue; }
+        if (!posIBP || !s_FootprintN || !s_FootprintAt || !s_EntityCopy) {
+            PastureDropReport(3, self);
+            continue;
+        }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
         CheckPtr(&posIBP);
@@ -678,7 +712,57 @@ void PastureProduce(void* self) {
             uint64_t occ = *reinterpret_cast<uint64_t*>(tiles + (uintptr_t)cell * 0x30 + 8);
             if (occ == 0) { placedCell = cell; break; }
         }
-        if (placedCell < 0) break;
+        if (placedCell < 0) {
+            PastureDropReport(4, self);
+            // OCCUPANT DUMP: name what actually holds every candidate cell. cell+8 is
+            // the ENTITY raster; a pasture whose own footprint claim (or its own
+            // livestock) sits on every drop cell can never place a pile, and the panel
+            // then reads identically to 'no production'.
+            if (Trace()) {
+                static long long nDump = 0;
+                if ((nDump++ % 20) == 0) {
+                    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(
+                        reinterpret_cast<uintptr_t>(grid) + 0x80);
+                    std::fprintf(stderr, "[Pasture] drop-cells: pasture=%p nCells=%d\n",
+                                 self, nCells);
+                    for (int c = 0; c < nCells && c < 8 && tiles; ++c) {
+                        float xy[3] = {0, 0, 0};
+                        CheckPtr(&posIBP);
+                        s_FootprintAt(static_cast<int64_t>(posIBP), xy, 2, c, nullptr);
+                        const int dim = *grid;
+                        int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
+                        int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));
+                        if (gx < 0) gx = 0; if (gx >= dim) gx = dim - 1;
+                        if (gy < 0) gy = 0; if (gy >= dim) gy = dim - 1;
+                        const int cell = dim * gy + gx;
+                        uint64_t occ = *reinterpret_cast<uint64_t*>(
+                            tiles + (uintptr_t)cell * 0x30 + 8);
+                        const char* what = "?";
+                        if (occ) {
+                            uintptr_t ent = static_cast<uintptr_t>(occ);
+                            int nc = *reinterpret_cast<int*>(ent + 0x38);
+                            uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
+                            if (nc > 0 && arr) {
+                                void* comp = *reinterpret_cast<void**>(arr);
+                                if (comp) {
+                                    uint32_t t = reinterpret_cast<uint32_t(*)(void*)>(
+                                        (*(void***)comp)[2])(comp);
+                                    const char* n = ::Object::GetTypeNameById(t);
+                                    if (n) what = n;
+                                }
+                            }
+                        }
+                        std::fprintf(stderr, "  cell[%d] idx=%d occ=%p firstComp=%s%s\n",
+                                     c, cell, reinterpret_cast<void*>(occ), what,
+                                     (occ == (uint64_t)(uintptr_t)PastureOwner(self))
+                                         ? "  <- THE PASTURE ITSELF" : "");
+                    }
+                    std::fflush(stderr);
+                }
+            }
+            break;
+        }
+        PastureDropReport(0, self);
 
         void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
         void* ent = mem ? s_EntityCopy(mem, produced) : nullptr;

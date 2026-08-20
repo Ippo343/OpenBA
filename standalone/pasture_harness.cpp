@@ -11,6 +11,7 @@
 // address only resolves when reg_pasture_live.cpp registered it).
 #include "resolve.h"
 #include "engine_funcs.h"
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
@@ -62,10 +63,47 @@ static void PastureTendHarness_Tick(int frameNum) {
 // remains: the driver keys off WPC accepting/roster/capacity, which a typed pasture sets
 // via Slot14 cmd 2 just like any other employer.
 
+// BANISHED_PASTURE_PRODUCE=<frame interval> — production-accumulator stand-in.
+// LivestockComponent::Update is the only writer of pasture+0x44 and it is LIVE (traced
+// arm CREDIT/BELOW_THRESHOLD under BANISHED_PASTURE_TRACE), but its interval is
+// desc+0x2C * 300s == 9e8 ticks, i.e. tens of minutes of wall clock even at speed 40 —
+// far too slow to exercise the production PANEL. Every N frames this credits each typed
+// pasture with +8, which is what a handful of livestock intervals would have credited.
+// It does not touch the drop/tracker path: PastureProduce still decides everything
+// downstream, so what the panel then shows is the real code under test.
+static void PastureProduceHarness_Tick(int frameNum) {
+    static int s_interval = -2;
+    if (s_interval == -2) {
+        const char* e = std::getenv("BANISHED_PASTURE_PRODUCE");
+        if (!e || !e[0] || e[0] == '0') s_interval = -1;
+        else {
+            int v = std::atoi(e);
+            s_interval = (v > 1) ? v : 300;
+            fprintf(stderr, "[PastureProduce] armed: +8 accumulator every %d frames\n",
+                    s_interval);
+        }
+    }
+    if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!gs) return;
+    int n = *reinterpret_cast<int*>(gs + 0x98);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    if (n <= 0 || !list) return;
+    for (int i = 0; i < n; ++i) {
+        void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        if (!pasture) continue;
+        if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
+        *reinterpret_cast<int*>((uintptr_t)pasture + 0x44) += 8;
+    }
+}
+
 static const int kFillRetry = 300;
 
 extern "C" void PastureFillHarness_Tick(int frameNum) {
     PastureTendHarness_Tick(frameNum);
+    PastureProduceHarness_Tick(frameNum);
     static int s_fillFrame = -2;              // -2 = env unread, -1 = disabled
     if (s_fillFrame == -2) {
         const char* e = std::getenv("BANISHED_PASTURE_FILL");
