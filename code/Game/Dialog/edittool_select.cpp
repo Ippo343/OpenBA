@@ -120,6 +120,9 @@ void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
 //   self       = EditTool* (RCX)
 //   entityIBPv = InternalBasePtr* to the selected entity (RDX); *entityIBPv = entity ptr
 // ============================================================================
+extern "C" void* g_LastSelectStore[4] = {};
+extern "C" int   g_LastSelectStoreIdx = 0;
+
 extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     EnsureFuncs();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
@@ -285,6 +288,11 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     }
 
     *reinterpret_cast<uint64_t*>(self + 0x28) = resultDialog;
+    // [diag] ring of the last 4 entities this store committed — read back by
+    // tool_base_render.cpp's ReportBadSelectionRef when cb40 finds a non-canonical
+    // ref, to tell "a bad value was stored here" from "self isn't an EditTool".
+    g_LastSelectStore[g_LastSelectStoreIdx & 3] = reinterpret_cast<void*>(*entityIBP);
+    g_LastSelectStoreIdx = (g_LastSelectStoreIdx + 1) & 3;
     *reinterpret_cast<uint64_t*>(self + 0x30) = *entityIBP;
     if (s_fn_c9e0) s_fn_c9e0(selfV);
 }

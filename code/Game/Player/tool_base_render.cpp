@@ -69,6 +69,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+// [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
+extern "C" void* g_LastSelectStore[4];
+extern "C" int   g_LastSelectStoreIdx;
+
 // Gated diagnostic (BANISHED_OUTLINE_TRACE) — reports where the selection-outline
 // chain reaches/bails; off unless the env is set.
 static int s_outlineTrace = -1;
@@ -706,9 +710,87 @@ add_prebuilt:
 // Entity_impl_cb40 (0x1400fcb40) — clear highlight on all of the entity's
 //   HighlightComponents (set +0x11c = 0, then repaint via c4a0). self = EditTool*.
 // ===========================================================================
+// [tripwire] cb40 dereferences self+0x30 as the selected ENTITY. That is only true
+// when `self` is an EditTool: on every DragTool-derived tool (FencedTool, RoadTool,
+// RemovalTool, BridgeTool, DragPlacementTool) the same offset is the endCell /
+// lastEndCell int pair, so an idle build tool reads as the pointer 0xffffffff'ffffffff
+// and a mid-drag one as e.g. 0xffffffff00008263 — measured 2026-08-19, the AV then
+// lands in the 0x140004740 component finder reading entity+0x38. Root cause was the
+// CALLERS handing over whatever tool sat at EntityUI+0x28 (fixed: EditTool_IsEditTool /
+// EditTool_HarnessAcquire in edittool.cpp, plus the ToolUI close-button gate). These two
+// reporters stay as a tripwire — nothing should reach them now, and if something does,
+// the line names the tool class rather than leaving an unexplained AV.
+void ReportBadSelectionRef(int64_t self, int64_t ref) {
+    static int budget = 8;
+    if (budget <= 0) return;
+    --budget;
+    void** vt = *reinterpret_cast<void***>(self);
+    // Print the raw facts FIRST: if `self` is a freed/recycled block, the virtual
+    // GetTypeId below can itself fault, and a dump that never printed proves nothing.
+    std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
+                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(vt),
+                 static_cast<unsigned long long>(ref));
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);
+    std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
+                 "%016llx %016llx %016llx %016llx %016llx\n",
+                 (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
+                 (unsigned long long)w[3], (unsigned long long)w[4], (unsigned long long)w[5],
+                 (unsigned long long)w[6], (unsigned long long)w[7]);
+    std::fprintf(stderr, "[HighlightClear]   last 4 entities stored into EditTool+0x30: "
+                 "%p %p %p %p (newest first)\n",
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 3) & 3],
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 2) & 3],
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 1) & 3],
+                 g_LastSelectStore[g_LastSelectStoreIdx & 3]);
+    std::fflush(stderr);
+    // Only now the virtual probe (a live EditTool answers; a recycled block may not).
+    if (vt && vt[2]) {
+        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(self));
+        const char* n = ::Object::GetTypeNameById(tid);
+        std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
+        std::fflush(stderr);
+    }
+}
+
+// [diag] companion of ReportBadSelectionRef for the other failure shape: the stored
+// entity pointer is canonical but the object behind it is gone (freed and recycled),
+// so the component array/count the finder reads are nonsense.
+void ReportDeadSelectedEntity(int64_t self, uint64_t ent, uint64_t arr, int32_t cnt) {
+    static int budget = 8;
+    if (budget <= 0) return;
+    --budget;
+    std::fprintf(stderr, "[HighlightClear] DEAD selected entity: tool=%p entity=%p "
+                 "entity+0x30(compArray)=0x%llx entity+0x38(count)=%d entity+0x40(flags)=0x%x\n",
+                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(ent),
+                 static_cast<unsigned long long>(arr), cnt,
+                 *reinterpret_cast<uint32_t*>(ent + 0x40));
+    std::fprintf(stderr, "[HighlightClear]   last 4 entities stored into EditTool+0x30: "
+                 "%p %p %p %p (newest first)\n",
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 3) & 3],
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 2) & 3],
+                 g_LastSelectStore[(g_LastSelectStoreIdx + 1) & 3],
+                 g_LastSelectStore[g_LastSelectStoreIdx & 3]);
+    std::fflush(stderr);
+}
+
 void Impl_cb40(int64_t self) {
     EnsureFuncs();
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
+    {
+        const uint64_t ref = *reinterpret_cast<uint64_t*>(self + 0x30);
+        if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
+            ReportBadSelectionRef(self, (int64_t)ref);
+        } else {
+            // The pointer itself can look fine while the ENTITY behind it is freed and
+            // its allocation recycled — that is the other shape the reported crash can
+            // take, since the finder faults on entity+0x30 (component array) rather
+            // than on the entity pointer. Screen the two fields the finder reads.
+            const uint64_t arr = *reinterpret_cast<uint64_t*>(ref + 0x30);
+            const int32_t  cnt = *reinterpret_cast<int32_t*>(ref + 0x38);
+            const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
+            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, ref, arr, cnt);
+        }
+    }
 
     CheckPtr(reinterpret_cast<void*>(self + 0x30));
     uint64_t contIBP = 0;

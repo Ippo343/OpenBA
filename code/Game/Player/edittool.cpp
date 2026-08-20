@@ -31,6 +31,7 @@ static int SelDiagOn() {
 
 // Forward decl (full header is included in the STANDALONE factory block at file end).
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
+void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // ============================================================
 // EditTool vtable addresses (for vtable chain in Dtor)
@@ -958,10 +959,61 @@ extern "C" void RegisterEditToolVtable() {
 // no-op, so the first building/citizen hit is what opens. Returns 1 if a dialog opened.
 // Drive the select path on ONE specific entity (a definitive UIDescription-bearing building
 // from the founding-house capture). Returns 1 if an info dialog opened (editTool+0x28 set).
+// Is `tool` really an EditTool? EntityUI+0x28 holds whatever tool is CURRENTLY active
+// — after any build/placement tool has been activated (SetEditMode with a template)
+// that is a DragTool-derived object, and EditTool's fields alias its fields: EditTool
+// +0x28/+0x30 (dialog IBP / selected-entity IBP) sit exactly on DragTool's dragState
+// and endCell/lastEndCell int pair. Driving the select path on one of those reads the
+// two cell ints as an entity pointer — measured 2026-08-19 with the pasture harness:
+// FencedTool+0x30 = 0xffffffff00008263 (endCell 0x8263, lastEndCell -1), which
+// Entity_impl_cb40 handed straight to the 0x140004740 component finder and faulted on
+// entity+0x38. So the answer decides whether this pointer may be used as an EditTool.
+extern "C" bool EditTool_IsEditTool(void* tool) {
+    if (!tool) return false;
+    static uint32_t tid = 0;
+    if (tid == 0 || tid == 0xFFFFFFFFu) tid = ::Object::GetTypeIdByName("EditTool");
+    if (tid == 0 || tid == 0xFFFFFFFFu || !fn_IsDerivedFrom) return false;
+    return fn_IsDerivedFrom(tool, tid);
+}
+
+// Get an EditTool to drive a panel with, the way a player does: if the active tool is
+// something else (a build tool the harness or the player left armed), switch back to
+// edit mode first — SetEditMode(pc, 0) destroys that tool and installs an EditTool —
+// rather than reinterpreting it. Returns null if no EditTool could be activated.
+extern "C" void* EditTool_HarnessAcquire(void* entityUI) {
+    if (!entityUI) return nullptr;
+    void* tool = *(void**)((uintptr_t)entityUI + 0x28);
+    if (EditTool_IsEditTool(tool)) return tool;
+    if (tool) {
+        static int warned = 0;
+        if (warned < 4) {
+            ++warned;
+            printf("[EditSel] active tool %p is not an EditTool — switching to edit mode "
+                   "(SetEditMode 0) before touching a panel\n", tool);
+            fflush(stdout);
+        }
+    }
+    EntityUI_SetEditMode_Impl(entityUI, 0);
+    tool = *(void**)((uintptr_t)entityUI + 0x28);
+    return EditTool_IsEditTool(tool) ? tool : nullptr;
+}
+
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
     EnsureEditFuncs();
     if (!editTool || !entity) return 0;
     if (!fn_EditTool_SelectEntity) { printf("[EditSel] fn_EditTool_SelectEntity null (M2 unported?)\n"); return 0; }
+    // Refuse a non-EditTool outright: d3b0 would write the dialog + entity refs into
+    // whatever object this is, and Entity_impl_cb40 would deref its +0x30 as an entity.
+    if (!EditTool_IsEditTool(editTool)) {
+        static int warned = 0;
+        if (warned < 4) {
+            ++warned;
+            printf("[EditSel] REFUSED: %p is not an EditTool (its +0x30 is not a selected "
+                   "entity) — call EditTool_HarnessAcquire first\n", editTool);
+            fflush(stdout);
+        }
+        return 0;
+    }
     // Clear any prior selection ref so d3b0 doesn't early-out on a repeat.
     uintptr_t entityParam = (uintptr_t)entity;
     fn_EditTool_SelectEntity(editTool, &entityParam);

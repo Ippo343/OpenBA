@@ -39,6 +39,9 @@
 
 // Both provided by the existing tool harness / dialog layer.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+extern "C" bool  EditTool_IsEditTool(void* tool);
+extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // Retail close path (port of Entity_impl_cc90 0x1400fcc90) — destroys the
 // DialogInstance and runs every controller's teardown. C++ linkage taking EditTool*,
@@ -244,11 +247,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // ── open the panel ────────────────────────────────────────────────────────────
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    // Must be an EditTool, not merely "a tool" — see EditTool_HarnessAcquire.
+    void* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) {
         std::fprintf(stderr, "[FoodPanel]   EditTool activation FAILED — cannot open a panel\n");
         return;
@@ -472,6 +472,68 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                                               : "OK but VACUOUS — no overlay was ever built, so "
                                                 "the release path did not run; check Slot5")
                              : "FAIL — +0x30 was not reset to -1");
+        }
+    }
+
+    // BANISHED_FOOD_PANEL_CLOSE=2 — close through the PLAYER'S path: the panel's
+    // ToolUI close button (slot 9, msg 0x12 id 1), not EditTool_CloseInfoDialog.
+    // That is the call site in the open HighlightClear crash report ("closing a
+    // panel"), and it differs from the harness close in one way that matters: it
+    // reaches Impl_cb40 through the ACTIVE tool it looks up itself, instead of the
+    // tool the caller already holds.
+    if (std::getenv("BANISHED_FOOD_PANEL_CLOSE") &&
+        std::getenv("BANISHED_FOOD_PANEL_CLOSE")[0] == '2') {
+        const uint32_t tidToolUI = Tid("ToolUI");
+        void* toolUi = nullptr;
+        for (int i = 0; ctrlArr && i < cnt; ++i) {
+            void* c = ctrlArr[i];
+            if (!c) continue;
+            void** vt = *reinterpret_cast<void***>(c);
+            if (vt && vt[2] && fn_IsDerivedFrom &&
+                fn_IsDerivedFrom(c, tidToolUI)) { toolUi = c; break; }
+        }
+        // BANISHED_FOOD_PANEL_ARM_BUILDTOOL=1 — arm a BUILD tool while the panel is
+        // still open, then click close. That is the player sequence the HighlightClear
+        // crash was reported from: EntityUI+0x28 now holds a FencedTool, whose +0x30 is
+        // the drag endCell pair rather than a selected entity, and the close handler
+        // used to hand it to Entity_impl_cb40 regardless of type.
+        if (EnvOn("BANISHED_FOOD_PANEL_ARM_BUILDTOOL")) {
+            void* tmpl = StartTown_ResolveTemplateByPath("Template\\Pasture.rsc");
+            if (!tmpl) {
+                std::fprintf(stderr, "[FoodPanel]   teardown: Pasture template unresolved — "
+                             "build tool NOT armed\n");
+            } else {
+                EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+                void* armed = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+                std::fprintf(stderr, "[FoodPanel]   teardown: armed build tool %p at "
+                             "EntityUI+0x28 before the close click\n", armed);
+            }
+            std::fflush(stderr);
+        }
+        if (!toolUi) {
+            std::fprintf(stderr, "[FoodPanel]   teardown: no ToolUI-derived controller on "
+                         "this panel — cannot drive the close button\n");
+        } else {
+            void** uvt = *reinterpret_cast<void***>(toolUi);
+            void* slot9 = uvt ? uvt[9] : nullptr;
+            std::fprintf(stderr, "[FoodPanel]   teardown: close BUTTON via ToolUI=%p slot9=%p\n",
+                         toolUi, slot9);
+            std::fflush(stderr);
+            if (slot9)
+                reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
+                    toolUi, nullptr, 0x12, 1, 0, 0);
+            // Re-read the CURRENT active tool: with ARM_BUILDTOOL the EditTool we
+            // opened with has been destroyed by SetEditMode, so the captured `tool`
+            // pointer is dangling and must not be dereferenced.
+            void* nowTool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+            void* afterBtn = (nowTool && EditTool_IsEditTool(nowTool))
+                ? *reinterpret_cast<void**>(static_cast<uint8_t*>(nowTool) + 0x28) : nullptr;
+            std::fprintf(stderr, "[FoodPanel]   teardown: close button -> activeTool=%p%s "
+                         "dialogRef=%p %s\n", nowTool,
+                         (nowTool && !EditTool_IsEditTool(nowTool)) ? " (not an EditTool)" : "",
+                         afterBtn, afterBtn ? "STILL SET" : "(cleared)");
+            std::fflush(stderr);
+            return;
         }
     }
 

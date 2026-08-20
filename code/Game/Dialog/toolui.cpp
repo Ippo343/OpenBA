@@ -29,6 +29,7 @@
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
 
 // Forward declaration — defined in entityui.cpp
+extern "C" bool EditTool_IsEditTool(void* tool);   // code/Game/Player/edittool.cpp
 extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                         uint32_t x, uint32_t y);
 
@@ -562,7 +563,16 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
                 uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
                 if (pc) {
                     void* activeTool = *(void**)(pc + 0x28);
-                    if (activeTool) {
+                    // ONLY an EditTool keeps a selected entity at +0x30. When a build
+                    // tool is armed instead, that offset is DragTool's endCell /
+                    // lastEndCell int pair, and cb40 would hand those two ints to the
+                    // component finder as an entity pointer (measured 2026-08-19:
+                    // FencedTool+0x30 = 0xffffffff00008263 -> AV in the finder), while
+                    // the two stores below would clobber the tool's drag state. A build
+                    // tool has no selection to clear, so skip the whole block.
+                    // EntityList_ClearToolSelectionForDyingEntities already gates the
+                    // same way on the same field.
+                    if (activeTool && EditTool_IsEditTool(activeTool)) {
                         // Deselect like retail cc90 steps (1)+(2): clear the
                         // selection highlight (Entity_impl_cb40 reads the entity
                         // from tool+0x30, so call it BEFORE nulling), then drop

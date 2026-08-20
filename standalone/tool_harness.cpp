@@ -71,6 +71,7 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 extern "C" int EditTool_HarnessSelectNearby(void* editTool);
 // Drive the select path on a specific entity (edittool.cpp) — returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+extern "C" void* EditTool_HarnessAcquire(void* entityUI);
 // Select a citizen recovered from the Picking::Scene (edittool.cpp) — tests CitizenUI.
 extern "C" int EditTool_HarnessSelectCitizen(void* editTool);
 // A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
@@ -729,12 +730,7 @@ void FireUtilityDialog() {
 // cursor. The live path (real mouse click) runs through EditTool::OnKey every frame.
 void FireSelectEntity(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        fprintf(stderr, "[ToolHarness] no active tool — installing default EditTool via SetEditMode(pc,0)...\n");
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[ToolHarness] EditTool activation FAILED (no tool at entityUI+0x28). "
                "Ensure BANISHED_LIVE_TOOLS=1 so the mode-tree (with the key=0 EditTool node) is built.\n");
@@ -765,12 +761,7 @@ void FireSelectEntity(void* entityUI) {
 // so the opened dialog is controlled by CitizenUI (name/age/profession/hearts).
 void FireSelectCitizen(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        fprintf(stderr, "[ToolHarness] no active tool — installing default EditTool via SetEditMode(pc,0)...\n");
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[ToolHarness] EditTool activation FAILED. Ensure BANISHED_LIVE_TOOLS=1.\n");
         return;
@@ -949,12 +940,7 @@ void FirePinPanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[PinPanel] ERROR: entityUI null\n"); return; }
 
     // 1. Activate the default EditTool (mode-tree needs BANISHED_LIVE_TOOLS=1).
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        fprintf(stderr, "[PinPanel] installing default EditTool via SetEditMode(pc,0)...\n");
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[PinPanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
 
     // 2. Open a founding-house info dialog.
@@ -1026,12 +1012,7 @@ void FirePinPanel(void* entityUI) {
 void FireHousePanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[HousePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        fprintf(stderr, "[HousePanel] installing default EditTool via SetEditMode(pc,0)...\n");
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[HousePanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
 
     // Open the FIRST founding house that yields a dialog. BANISHED_HOUSEPANEL_INDEX
@@ -1069,11 +1050,7 @@ void FireHousePanel(void* entityUI) {
 void FirePasturePanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[PasturePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[PasturePanel] EditTool activation FAILED\n"); return; }
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -1183,11 +1160,7 @@ void FirePasturePanel(void* entityUI) {
 void FireOrchardPanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[OrchardPanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[OrchardPanel] EditTool activation FAILED\n"); return; }
 
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
@@ -1299,11 +1272,7 @@ void FireOrchardPanel(void* entityUI) {
 void FireTradePanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[TradePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[TradePanel] EditTool activation FAILED\n"); return; }
 
 

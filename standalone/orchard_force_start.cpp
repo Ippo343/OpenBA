@@ -33,6 +33,7 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // EditTool select-by-entity harness hook (standalone/tool_harness.cpp) — opens the
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+extern "C" void* EditTool_HarnessAcquire(void* entityUI);
 
 namespace {
 
@@ -71,11 +72,7 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
         return false;
     }
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: EditTool activation "
                         "FAILED (no tool at entityUI+0x28) — is BANISHED_LIVE_TOOLS=1?\n");

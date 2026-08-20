@@ -46,6 +46,7 @@
 #include <cstring>
 
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+extern "C" void* EditTool_HarnessAcquire(void* entityUI);
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 namespace {
@@ -119,11 +120,11 @@ void* FindComp(void* ent, uint32_t tid) {
 // Returns the number of seats actually gained (0 = the click had no effect, which is a
 // real answer: no idle laborer, or no WorkPlaceUI on this building's panel).
 int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    if (!tool) {
-        EntityUI_SetEditMode_Impl(entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-    }
+    // Not just "is a tool active" — is it an EDIT tool. A build tool left armed by a
+    // placement harness sits in the same slot, and its +0x28/+0x30 are drag state, not
+    // dialog/entity refs (the FencedTool crash, 2026-08-19). Acquire switches edit mode
+    // back the way a player would.
+    void* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) return 0;
 
     EditTool_HarnessSelectEntity(tool, ent);
