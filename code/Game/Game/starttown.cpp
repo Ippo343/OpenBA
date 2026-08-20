@@ -1911,6 +1911,17 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // animals (BANISHED_PASTURE_FILL=<frame>, standalone/pasture_harness.cpp) to come
     // alive. Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
     // Test-only, default off (byte-unchanged when unset).
+    //
+    // ⚠ THIS SPAWNS THE MASTER ONLY -- no AnimalShelter, no fence sections. The real
+    // acquisition path (FencedTool::CalcPath) creates those as MultiObject children, and
+    // InteractComponent slot 6 rebuilds the master's interact child list from them. The
+    // master's own InteractDescription is EMPTY in Pasture.rsc, so with no children the
+    // kind-2 ("create") point count is 0 and the per-frame produce tail can never place a
+    // pile: it spends the accumulator and takes the NO_FREE_CELL arm forever, which reads
+    // downstream exactly like 'the pasture produces nothing' and leaves the production-
+    // statistics panel permanently empty. Measured 2026-08-19. For anything about produce,
+    // piles, the tracker or the production panel use BANISHED_TOOL_HARNESS=pasture (a real
+    // tool-placed pasture: same rig then drops on schedule and the panel counts up).
     {
         const char* pe = std::getenv("BANISHED_BUILD_DEMO_PASTURE");
         if (pe && pe[0] && pe[0] != '0') {

@@ -725,6 +725,46 @@ void PastureProduce(void* self) {
                         reinterpret_cast<uintptr_t>(grid) + 0x80);
                     std::fprintf(stderr, "[Pasture] drop-cells: pasture=%p nCells=%d\n",
                                  self, nCells);
+                    // nCells comes from Pf_RecursiveChildSum_123070(pos, 2): the kind-2
+                    // count on the position component's InteractDescription (+0x50),
+                    // summed over child entities. Zero has three different causes -- no
+                    // description, a description that fails the InteractDescription cast
+                    // (a silently-zeroed seed), or a genuinely empty point list. Print
+                    // all three inputs so they can never be confused again.
+                    // MEASURED 2026-08-19: a pasture's own InteractDescription is empty
+                    // in Pasture.rsc; every create point comes from the AnimalShelter
+                    // SECTION, reached through the master's interact CHILD list, which
+                    // InteractComponent slot 6 rebuilds from the MultiObject children.
+                    // children=0 therefore means the pasture has no sections at all --
+                    // i.e. it was spawned by BANISHED_BUILD_DEMO_PASTURE rather than
+                    // placed with the fenced tool. Not a defect in this file.
+                    {
+                        uintptr_t pc = static_cast<uintptr_t>(posIBP);
+                        void* desc = pc ? *reinterpret_cast<void**>(pc + 0x18) : nullptr;
+                        const char* dn = "<none>";
+                        uint32_t dt = 0;
+                        if (desc) {
+                            dt = reinterpret_cast<uint32_t(*)(void*)>((*(void***)desc)[2])(desc);
+                            const char* n = ::Object::GetTypeNameById(dt);
+                            if (n) dn = n;
+                        }
+                        std::fprintf(stderr, "  pos=%p desc=%p type=%s(0x%x) "
+                                     "kinds[0/1/2]=%d/%d/%d children=%d\n",
+                                     reinterpret_cast<void*>(pc), desc, dn, dt,
+                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x30) : -1,
+                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x40) : -1,
+                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x50) : -1,
+                                     pc ? *reinterpret_cast<int*>(pc + 0x30) : -1);
+                        // and the point-list external the three arrays are parsed
+                        // from (InteractDescription+0x20): an empty child list means
+                        // the model carried no named points at all, which is a
+                        // different failure from 'no CREATE points'.
+                        void* ext = desc ? *reinterpret_cast<void**>((uintptr_t)desc + 0x20)
+                                         : nullptr;
+                        std::fprintf(stderr, "  pointList ext=%p children=%d\n",
+                                     ext,
+                                     ext ? *reinterpret_cast<int*>((uintptr_t)ext + 0x38) : -1);
+                    }
                     for (int c = 0; c < nCells && c < 8 && tiles; ++c) {
                         float xy[3] = {0, 0, 0};
                         CheckPtr(&posIBP);
