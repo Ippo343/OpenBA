@@ -504,13 +504,20 @@ static uint32_t* PathTool_GetSettingType(void*, uint32_t* ret) {
     if (ret) *ret = 0;
     return ret;
 }
+// Defined in pathtool_setselected.cpp (exe 0x1400dd250).
+extern "C" void PathTool_ClearHighlight_d250(int64_t self);
+
 static void* g_PathTool_Vtable[13] = {
     (void*)&PathTool_Dtor,       // +0x00 Dtor
     (void*)&Tool_Slot1,          // +0x08
     (void*)&PathTool_GetTypeId,  // +0x10 GetTypeId
     (void*)&Tool_Persist,        // +0x18 Serialize (base)
     (void*)&Tool_Ret0,           // +0x20 (exe RET nop)
-    (void*)&Tool_Ret0,           // +0x28 (cleanup highlight)
+    // +0x28 Shutdown — retail 0x1400de930 is a bare JMP to thunk_helper_d250 (clear the
+    // selection highlight). ShowGroup calls this slot on the OUTGOING tool before it is
+    // deleted, so stubbing it as Tool_Ret0 left the last selected building lit forever
+    // once the Paths tool was switched away or disabled.
+    (void*)&PathTool_ClearHighlight_d250,  // +0x28 Shutdown = clear highlight
     (void*)&PathTool_OnKey,      // +0x30 OnKey
     (void*)&Tool_Ret0,           // +0x38 (exe RET nop)
     (void*)&PathTool_Draw,       // +0x40 Draw
