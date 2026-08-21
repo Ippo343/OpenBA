@@ -43,6 +43,10 @@
 // matching the original asm pattern: MOV RAX,[slot]; MOV EDX,[RAX]
 // This avoids stale cached pointers that may point to wrong data.
 // ============================================================
+// BANISHED_TRADEUI_EVENTDIAG gate; defined next to the event dispatcher below, but
+// used earlier by the row-setup tracing in TradeUI_Serialize.
+static bool TradeEventDiagOn();
+
 static uint32_t ReadDispatchTypeId(uintptr_t ghidraSlotAddr) {
     uintptr_t slot = ResolveAddr(Module::Exe, ghidraSlotAddr);
     if (!slot) return 0;
@@ -1174,10 +1178,37 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId);
 
+        // DECLARED DEVIATION (measured 2026-08-21) — retail sets ONLY user data here, and
+        // that is faithfully reproduced; the SetElementId call after it is ours.
+        //
+        // The UI framework delivers a msg-0x15 (spinner changed) notification with param4
+        // taken from the element's own id, Element+0x88 (SetElementId). It never reads
+        // user data, Element+0x80 (SetUserData): both GetUserData and SetUserData in
+        // Runtime-x64.dll are referenced ONLY from the export table, so no code inside the
+        // framework consults +0x80 at all. Measured directly — every element that carries
+        // an id arrives with param4 == that id (1, 100, 50000...), while all four TradeUI
+        // spinner families arrived as `ud(+0x80)=2000 elemId(+0x88)=-1 id=-1` and were
+        // discarded by the dispatcher below, whose ranges start at exactly these values.
+        // OnStorageSpinner therefore never ran, and a typed quantity was silently dropped:
+        // the spinner moved on screen and nothing was ever written to the building.
+        //
+        // Why retail works regardless is not established here. What IS established is that
+        // the id is what the framework sends and retail's own dispatcher matches on it, so
+        // the id has to be set for any of these spinners to function.
+        //
+        // ProfessionUI hit this first and resolved it the same way (professionui.cpp:498)
+        // — its town-hall spinner works because it sets BOTH. This mirrors that precedent
+        // across all four TradeUI spinner families: order amount (7000+), storage (2000+),
+        // sell (3000+) and buy (4000+). The user-data write is left in place because it is
+        // what retail does and something may yet read it.
+        //
         // Set user data on spinner (original uses fn_Element_SetUserData, NOT SetElementId)
         fn_InternalBasePtr_Ctor(r0, spinner);
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_Element_SetUserData(*(void**)r0, (void*)(uintptr_t)(baseId + 1000));
+        // ...and the element id the msg-0x15 notification actually carries (see above).
+        fn_InternalBasePtr_CheckPtr(r0);
+        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId + 1000);
 
         // Build 0x20-byte entry: {label, number, button, spinner}
         uint64_t entry[4] = {(uint64_t)label, (uint64_t)number, (uint64_t)button, (uint64_t)spinner};
@@ -1272,9 +1303,29 @@ void TradeUI_Serialize(TradeUI* self) {
         void* e2 = *(void**)c2;
 
         // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
+        // Verified against retail 0x140084dd0: it really does call SetUserData (+0x80)
+        // here with i+2000, and never SetElementId (+0x88) on this element.
         fn_InternalBasePtr_Ctor(c0, e1);
         fn_InternalBasePtr_CheckPtr(c0);
         fn_Element_SetUserData(*(void**)c0, (void*)(uintptr_t)(i + 2000));
+        // ...and the element id the msg-0x15 notification actually carries — without this
+        // the storage spinner's event arrives as id=-1 and is discarded (see the deviation
+        // note in the tablePurchase loop above).
+        fn_InternalBasePtr_CheckPtr(c0);
+        fn_Element_SetElementId(*(void**)c0, i + 2000);
+
+        // Report WHICH object got the tag, and read the tag back off it. If the elements
+        // that later raise events are different pointers than these, the rows firing the
+        // events are not the rows we tagged (a clone-ordering fault) — which is the
+        // difference between "the write did not happen" and "it happened to the wrong
+        // object", two causes that look identical from the panel.
+        if (TradeEventDiagOn()) {
+            void* tagged = *(void**)c0;
+            fprintf(stderr, "[TradeRow] storage row %d: row=%p label=%p spin=%p num=%p "
+                    "-> tagged %p ud(+0x80)=%lld\n", i, rowElem, e0, e1, e2, tagged,
+                    tagged ? (long long)*(uintptr_t*)((uintptr_t)tagged + 0x80) : -1);
+            fflush(stderr);
+        }
 
         // Build 0x18-byte entry: {e0, e1, e2}
         uint64_t entry[3] = {(uint64_t)e0, (uint64_t)e1, (uint64_t)e2};
@@ -1337,6 +1388,10 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
         fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 3000));
+        // ...and the element id the msg-0x15 notification carries (see the deviation note
+        // in the tablePurchase loop above).
+        fn_InternalBasePtr_CheckPtr(c);
+        fn_Element_SetElementId(*(void**)c, i + 3000);
 
         // Build 0x20-byte entry: {child1, child0, child2, child3}
         // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
@@ -1402,6 +1457,10 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
         fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 4000));
+        // ...and the element id the msg-0x15 notification carries (see the deviation note
+        // in the tablePurchase loop above).
+        fn_InternalBasePtr_CheckPtr(c);
+        fn_Element_SetElementId(*(void**)c, i + 4000);
 
         // Build 0x20-byte entry: {child1, child2, child3, child0}
         // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
@@ -1714,8 +1773,54 @@ void TradeUI_OnCreate(TradeUI* self) {
 // eventType 0x14 IDs, so eventType 0x12 events can also trigger 0x14 handlers
 // if no 0x12 match was found.
 
+// BANISHED_TRADEUI_EVENTDIAG=1 — report every event this dispatcher receives, and
+// whether it landed on a handler. A trade-panel spinner that visibly moves but does
+// not persist has three candidate causes that look identical from the outside:
+//   * the click never reaches slot 9 at all,
+//   * it reaches the dispatcher but falls outside every id range (each range is
+//     [base, base + count), and a count that never got filled makes the range EMPTY,
+//     so the event is silently discarded),
+//   * it reaches the handler and the write is overwritten downstream.
+// Printing the id ALONGSIDE every live range makes the second case legible at a
+// glance, and the explicit discard line below turns "no output" into a real answer
+// instead of an ambiguous silence.
+static bool TradeEventDiagOn() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_TRADEUI_EVENTDIAG");
+        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return on != 0;
+}
+
 void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     uintptr_t s = (uintptr_t)self;
+
+    if (TradeEventDiagOn()) {
+        void* tableSell = *(void**)(s + 0xC8);
+        void* tableBuy  = *(void**)(s + 0xD0);
+        // param2 is the element that raised the event. Retail routes spinner changes by
+        // a value it writes ONLY into Element::SetUserData (+0x80) — Element::SetElementId
+        // is a DIFFERENT field (+0x88), and retail never sets it on these rows. So dump
+        // both off the raising element: whichever one carries 2000+idx is the field the
+        // framework is expected to deliver as eventId.
+        // param2 is an InternalBasePtr* (a stack {object, generation} pair), NOT the
+        // element itself — an earlier version of this line read the stack slot directly
+        // and printed garbage. Deref one level to reach the raising element.
+        const void* elem = param2 ? *(void**)param2 : nullptr;
+        long long ud = elem ? (long long)*(uintptr_t*)((uintptr_t)elem + 0x80) : -1;
+        int elemId = elem ? *(int*)((uintptr_t)elem + 0x88) : -1;
+        fprintf(stderr,
+                "[TradeEvt] type=0x%x id=0x%x elem=%p ud(+0x80)=%lld elemId(+0x88)=%d | "
+                "storage[0x7d0,+%d) sell[0xbb8,+%d) "
+                "buy[0xfa0,+%d) order[0x1388,+%d] orderAmt[0x1b58,+%d) purchase[0x1f40,+%d]\n",
+                eventType, eventId, elem, ud, elemId,
+                *(int*)(s + 0x58),
+                tableSell ? *(int*)((uintptr_t)tableSell + 0xC0) : -1,
+                tableBuy  ? *(int*)((uintptr_t)tableBuy  + 0xC0) : -1,
+                *(int*)(s + 0x98), *(int*)(s + 0x98), *(int*)(s + 0xa8));
+        fflush(stderr);
+    }
 
     int switchVal = eventType - 0x12;
     if (switchVal == 0) {
@@ -1820,7 +1925,13 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         int orderCount = *(int*)(s + 0x98);
         if (eventId >= 0x1b58 && eventId < orderCount + 0x1b58) {
             TradeUI_OnOrderAmountSpinner(self, eventId - 0x1b58);
+            return;
         }
+    }
+    if (TradeEventDiagOn()) {
+        fprintf(stderr, "[TradeEvt] id=0x%x matched NO spinner range -> event DISCARDED "
+                "(the widget moved on screen but nothing was written)\n", eventId);
+        fflush(stderr);
     }
     return;
 
@@ -2331,6 +2442,18 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     // If we got a result back (found existing), update its qty
     if (retval) {
         *(int*)((uintptr_t)retval + 8) = newVal;
+    }
+
+    if (TradeEventDiagOn()) {
+        // Read the value BACK out of the tree node rather than echoing newVal — an echo
+        // of the input proves only that this function ran, which is exactly the mistake
+        // this project keeps re-learning. readback != newVal means the insert did not
+        // take; readback == newVal here but a reverted spinner on screen means the
+        // overwrite happens downstream, in the refresh below.
+        fprintf(stderr, "[TradeStore] idx=%d newVal=%d res=%p insertRetval=%p readback=%d\n",
+                idx, newVal, resourceEntity, retval,
+                retval ? *(int*)((uintptr_t)retval + 8) : -1);
+        fflush(stderr);
     }
 
     TradeUI_RefreshSellTable(self);
