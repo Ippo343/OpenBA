@@ -407,8 +407,28 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
 
     // (2) drop the tool's dialog + selected-entity refs so the tick early-outs and
     // the same footprint can be re-selected later.
+    // Retail cc90 runs cb40 UNCONDITIONALLY (above), then gates everything below on
+    // tool+0x28 being non-null. Returning here still clears the outline, which is
+    // the whole point of the right-click path.
+    if (!dialogPtr) return;
+
     self->entityRef = 0;
     self->lastEntityRef = 0;
+
+    // PIN CHECK. Retail cc90 reads the dialog's ToolUI controller and closes only
+    // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
+    // caller had already done this check, so it was omitted here -- but slot 5 (tool
+    // teardown) has NOT, and without it a right-click would close pinned panels too.
+    if (s_fn_GetController && s_pTypeId_ToolUI) {
+        uintptr_t ctrl = 0;
+        s_fn_GetController((void*)dialogPtr, &ctrl, *s_pTypeId_ToolUI);
+        if (ctrl != 0) {
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&ctrl);
+            if (s_fn_IsDerived && s_fn_IsDerived((void*)ctrl, *s_pTypeId_ToolUI)) {
+                if (*(char*)(ctrl + 0x40) != 0) return;   // pinned -> leave it open
+            }
+        }
+    }
 
     // (3) close the dialog. The caller ran the pin check (retail cc90 re-checks it;
     // we are only reached from the unpinned branch). CloseDialog takes the
@@ -420,8 +440,9 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     if (!userInterface) return;
     uint64_t dialogRef = dialogPtr;
     fn_UI_CloseDialog(userInterface, (void*)&dialogRef);
-    // Rare event (entity died with its panel open) — always log one line.
-    printf("[EditTool] entity died -> closed its info dialog %p\n", (void*)dialogPtr);
+    // Fires on entity-death AND on right-click deselect (vtable slot 5), so this
+    // must not claim a cause it cannot know.
+    printf("[EditTool] deselect -> closed info dialog %p\n", (void*)dialogPtr);
     fflush(stdout);
 }
 
@@ -929,13 +950,32 @@ static uint32_t* EditTool_GetSettingTypeId(void*, uint32_t* retbuf) {
     if (retbuf) *retbuf = 0;
     return retbuf;
 }
+// Slot5 (+0x28) -- retail EditTool vtable 0x140161ca0 holds 0x1400fd2e0 here, which
+// is a JMP thunk straight to 0x1400fcc90 (EditTool deselect + close info dialog).
+// SetEditMode teardown (entityui.cpp, the only slot-5 caller in this build) invokes
+// it, and that is HOW retail clears the selection outline AND closes the panel when
+// the player right-clicks. We had Tool_Ret0 here, so the dialog closed by another
+// route while the outline stayed on the building forever.
+//
+// NOT the same as registering 0x1400fcc90 by address: that address ALSO backs a
+// per-frame deactivate slot on a DIFFERENT vtable (0x1401ee710), and registering it
+// made cc90 run every frame and wipe the outline one frame after it was set
+// (reg_player_render.cpp records the measurement: c9e0=1 vs cc90=8973). Wiring only
+// our own vtable slot keeps the single tool-switch caller and avoids that.
+static void EditTool_DeselectClose_Slot5(void* selfRaw) {
+    EditTool* self = reinterpret_cast<EditTool*>(selfRaw);
+    if (!self) return;
+    // Retail reads the dialog IBP from tool+0x28 itself.
+    EditTool_CloseInfoDialog(self, static_cast<uintptr_t>(self->entityRef));
+}
 static void* g_EditTool_Vtable[13] = {
     (void*)&EditTool_Dtor_Impl,      // +0x00 Dtor
     (void*)&Tool_Slot1,              // +0x08
     (void*)&EditTool_GetTypeId,      // +0x10 GetTypeId
     (void*)&Tool_Persist,            // +0x18 Serialize (base)
+    // +0x20 is genuinely a no-op: retail 0x1400fd2f0 is literally RET 0 (c2 00 00).
     (void*)&Tool_Ret0,               // +0x20
-    (void*)&Tool_Ret0,               // +0x28
+    (void*)&EditTool_DeselectClose_Slot5,  // +0x28 deselect+close (thunk -> 0x1400fcc90)
     (void*)&EditTool_OnKey_Impl,     // +0x30 OnKey
     (void*)&EditTool_Startup_Impl,   // +0x38 Startup
     (void*)&Tool_Ret0,               // +0x40

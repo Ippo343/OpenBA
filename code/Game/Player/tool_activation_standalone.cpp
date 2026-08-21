@@ -266,15 +266,30 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     void* tool = *(void**)toolSlot;
     if (!tool) return -1;
+    char onKeyResult;
     {
         void** vt = *(void***)tool;
         typedef char (*OnKey_t)(void*, char);
-        ((OnKey_t)vt[6])(tool, (char)activeFlag);   // vt[6] = +0x30
+        onKeyResult = ((OnKey_t)vt[6])(tool, (char)activeFlag);   // vt[6] = +0x30
     }
 
     // Right-click cancel (action 6 = MouseRight) when active and not tool-locked
     // (EntityUI+0x80 == 0): tool +0x48 "can-deactivate?" (our stub returns 0) -> clear.
-    if (activeFlag != 0 && *(char*)(pc + 0x80) == 0) {
+    // Retail (0x1400ff6e0) gates the input branches on OnKey returning NON-ZERO:
+    //     cVar2 = (**(vt + 0x30))();
+    //     if (cVar2 != 0) { ...save-view hotkeys...; ...right-click cancel... }
+    // We discarded that return and ran the cancel check every frame, so a
+    // right-DRAG (how the camera is rotated) reached the slot-9 test while a
+    // tool was armed. PlacementTool slot 9 is Tool_Ret0 => "cannot stay" =>
+    // SetEditMode(pc,0) tore the tool down, which also clears EntityUI+0x20 and
+    // so unchecks the toolbar button. Right-click DOES cancel placement in
+    // retail; the defect was reaching that test on a frame OnKey vetoed.
+    //
+    // Scoped to this branch ONLY: helper_f6e0 is input dispatch, while the
+    // Serialize (+0x38) preview update and cursor id below come from
+    // EntityUI::Update, which this function also fronts. Gating those too
+    // would freeze the ghost mesh on any frame OnKey returned 0.
+    if (onKeyResult != 0 && activeFlag != 0 && *(char*)(pc + 0x80) == 0) {
         void* km = ToolKeyMap();
         if (km && fn_KeyMap_Pressed && fn_KeyMap_Pressed(km, 0, 6)) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
