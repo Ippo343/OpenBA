@@ -836,6 +836,17 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
 // Opt-in while unproven, per the project's new-feature rule; graduate into
 // kDefaultOnFlags once a soak confirms it.
 extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* workPlaceComp);
+// RETIRED under BANISHED_LIVE_WPC_CONTROLLER (graduated 2026-08-20). The live WPC
+// controller carries retail's own state table -- state 0 enter = f520 (become a Builder
+// workplace), state 2 enter = edf0 (leave Builder, re-key to the natural profession) --
+// so the SM dispatches the hand-off at the right STATE instead of on first tick.
+// This stand-in has no state gate at all, and that is a visible fault, not a cosmetic
+// one: a player-placed crop field has no BuildComponent (so the guard below misses it)
+// and its natural Farmer key landed at state 0, i.e. while the tile was still being
+// cleared. WorkPlaceUI_OnCreate (0x140087080) shows the whole workPlace ribbon whenever
+// +0x48 != 0, so the panel offered farmer worker arrows on a site under construction --
+// retail shows the BUILDER there. Kept only for the kill-switch configuration.
+extern "C" bool WorkPlaceComponent_ControllerLive();
 
 static bool SMBuiltTrace() {
     static int on = -1;
@@ -899,6 +910,7 @@ static bool SMStateTraceEnabled() {
 
 static void StateMachineComponent_SeatWorkplaceOnBuilt(StateMachineComponent* self) {
     if (!self) return;
+    if (WorkPlaceComponent_ControllerLive()) return;   // the real controller owns the key
     int64_t ownerRef = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0x10);
     if (!ownerRef) return;
     uintptr_t ent = static_cast<uintptr_t>(ownerRef);

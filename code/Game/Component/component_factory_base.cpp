@@ -698,6 +698,32 @@ static const char* const kDefaultOnFlags[] = {
     // run. Houses/storage keep key 0 - their description declares no profession - and
     // construction sites are excluded outright, so the Builder hand-off is untouched.
     "BANISHED_LIVE_SM_BUILT_HOOK",
+
+    // ── The REAL WorkPlaceComponent controller (supersedes the hook above) ────────
+    // Retail wiring, Ghidra-verified against vtable 0x140164d30, ctor 0x14012f2e0 and
+    // the state-table builder 0x14012f3a0: state 0 enter = ee40 -> f520 "become a
+    // Builder workplace", state 2 enter = edf0 "built: leave Builder, re-key to the
+    // description's own profession", state 3 enter = ed60 "demolish: release + erase".
+    //
+    // Graduated 2026-08-20 to fix a REPORTED fault the stand-ins could not fix: the
+    // SM_BUILT_HOOK above fires on the entity's FIRST TICK with no state gate, and a
+    // player-placed crop field has no BuildComponent for its guard to catch. Measured
+    // with BANISHED_SM_STATE_TRACE=1 on a field dragged over trees:
+    //   OFF: [SMState] FIRST TICK CropFieldComponent state(+0x51)=0 immediately
+    //        followed by [SMSeat] ... -> SEATING NOW. The Farmer key is installed at
+    //        state 0 -- while the tile is still being cleared -- and since
+    //        WorkPlaceUI_OnCreate (0x140087080) shows the workPlace ribbon whenever
+    //        +0x48 != 0, the panel offered FARMER worker arrows on a construction
+    //        site. Retail shows the Builder there and the Farmer only at completion.
+    //   ON:  the controller's own node takes the 0 -> 2 transition, so [WPCCtrl]
+    //        "state-0 (construction/f520)" precedes "state-2 (built/edf0)" and the
+    //        natural key appears only on the second -- a value only the live path can
+    //        produce (the stand-in never logs a state-0 enter at all).
+    // Promoting this retires all three stand-ins, each already gated on
+    // WorkPlaceComponent_ControllerLive(): BuildComponent_State8Finalize's explicit
+    // edf0 call, the registration half of StartTown_SpawnStructures, and (added with
+    // this graduation) StateMachineComponent_SeatWorkplaceOnBuilt.
+    "BANISHED_LIVE_WPC_CONTROLLER",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
