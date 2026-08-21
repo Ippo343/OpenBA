@@ -192,6 +192,23 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
     }
     uint64_t ibpBuf[1] = {0};
     fn_InternalBasePtr_Ctor(ibpBuf, result);
+
+    // Outcome diagnostic (BANISHED_TRADEUI_ELEMDIAG=1). Prints all three states
+    // separately, because a null return has two very different causes:
+    //   found=0            -> the name is not in the loaded dialog template
+    //   found!=0 derived=0 -> the element exists but the type-id is wrong/zero
+    // Every one of the 15 phase-1 lookups is dereferenced unguarded further down,
+    // so a silent null here surfaces as an AV several calls later.
+    {
+        static const char* diag = getenv("BANISHED_TRADEUI_ELEMDIAG");
+        if (diag && diag[0] && diag[0] != '0') {
+            fprintf(stderr, "[TradeElem] %-16s found=%p typeId=%u derived=%d result=%p\n",
+                    name, elem, typeId ? *typeId : 0u,
+                    (elem && typeId) ? (int)fn_IsDerivedFrom(elem, *typeId) : -1, result);
+            fflush(stderr);
+        }
+    }
+
     fn_String_Dtor(strBuf);
     return result;
 }

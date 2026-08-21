@@ -118,7 +118,24 @@ void* g_elementTypeInfo[kElementTypeSlotCount] = {};
 }  // namespace
 
 void RegisterElementTypeIds() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ELEMENT_TIDS")) return;
+    // This function runs from AddressRegistryInit (main.cpp:1531), which is BEFORE
+    // main.cpp:1683 rebinds stderr to standalone_error.log — so every fprintf(stderr)
+    // below goes to a console nobody reads and is lost. That made the report useless
+    // exactly when it mattered: "no [ElemTid] line" looked like "the gate is off" when
+    // it could equally have been "the gate is on and the report was discarded".
+    // Mirror everything to our own file, which has no such ordering dependency.
+    FILE* rep = fopen("standalone_elemtid.log", "w");
+
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ELEMENT_TIDS")) {
+        if (rep) {
+            fprintf(rep, "[ElemTid] GATE OFF (BANISHED_LIVE_ELEMENT_TIDS) - no element "
+                         "type-id slot registered\n");
+            fclose(rep);
+        }
+        return;
+    }
+    if (rep) fprintf(rep, "[ElemTid] gate ON - registering %d slots\n",
+                     kElementTypeSlotCount);
 
     int resolved = 0;
     for (int i = 0; i < kElementTypeSlotCount; i++) {
@@ -130,14 +147,24 @@ void RegisterElementTypeIds() {
             // IsDerivedFrom'ing against a garbage id.
             fprintf(stderr, "[ElemTid] %s (%s): export NOT FOUND — slot left unregistered\n",
                     s.label, s.mangled);
+            if (rep) fprintf(rep, "[ElemTid] MISS %-32s %s  (export NOT FOUND)\n",
+                             s.label, s.mangled);
             continue;
         }
         RegisterExeAddr(s.slotAddr, reinterpret_cast<uintptr_t>(&g_elementTypeInfo[i]));
         resolved++;
+        if (rep) fprintf(rep, "[ElemTid] OK   %-32s slot=0x%llx typeInfo=%p id=%u\n",
+                         s.label, (unsigned long long)s.slotAddr, g_elementTypeInfo[i],
+                         *reinterpret_cast<uint32_t*>(g_elementTypeInfo[i]));
     }
 
     fprintf(stderr, "[ElemTid] registered %d/%d element type-id slots\n",
             resolved, kElementTypeSlotCount);
+    if (rep) {
+        fprintf(rep, "[ElemTid] registered %d/%d element type-id slots\n",
+                resolved, kElementTypeSlotCount);
+        fclose(rep);
+    }
     fflush(stderr);
 }
 
