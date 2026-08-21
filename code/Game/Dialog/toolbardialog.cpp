@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <windows.h>   // VirtualQuery — trace-only pointer validation (see TraceReadableStr)
 
 // ------------------------------------------------------------
 // BANISHED_TOOL_TRACE — diagnostic-only tracing for the toolbar-click ->
@@ -50,6 +51,44 @@ static bool ToolTraceOn() {
 }
 #define TOOLTRACE(...) do { if (ToolTraceOn()) { \
     fprintf(stderr, "[ToolTrace] " __VA_ARGS__); fflush(stderr); } } while (0)
+
+// ------------------------------------------------------------
+// Trace-only: the .rsc path a Toolbar item was loaded from, which is the only
+// human-readable identity a toolbar button has (button indices are positional and
+// the display string is a localized UIString, not an identifier).
+//
+// A System::Filename is a single qword holding a pointer to the character data, so
+// the read is one deref — but this runs on a pointer we did not allocate, in a trace
+// path, so validate it with VirtualQuery first: a garbage qword must degrade to "?"
+// rather than take down a debug session that is mid-repro.
+// ------------------------------------------------------------
+static bool TraceReadableStr(const void* p) {
+    if (!p) return false;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery(p, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    if (!(mbi.Protect & readable)) return false;
+    return !(mbi.Protect & PAGE_GUARD);
+}
+
+// Returns a pointer into `out` (never null). Caller keeps `out` alive while printing.
+static const char* ToolbarItemPath(uintptr_t item, char* out, size_t outSize) {
+    out[0] = '?'; out[1] = '\0';
+    if (!fn_External_GetPath) return out;
+    uintptr_t fnStorage = 0;
+    fn_External_GetPath((void*)item, &fnStorage);
+    const char* s = reinterpret_cast<const char*>(fnStorage);
+    if (TraceReadableStr(s)) {
+        size_t i = 0;
+        for (; i + 1 < outSize && s[i] >= 0x20 && s[i] < 0x7f; i++) out[i] = s[i];
+        out[i] = '\0';
+        if (i == 0) { out[0] = '?'; out[1] = '\0'; }
+    }
+    if (fn_Filename_Dtor) fn_Filename_Dtor(&fnStorage);
+    return out;
+}
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -350,7 +389,8 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
                     typedef uint32_t (*GetTypeId_t)(void*);
                     tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)sub + 0x10)))(sub);
                 }
-                TOOLTRACE("    sub[%d]=%p typeId=%u\n", i, sub, tid);
+                const char* tn = ::Object::GetTypeNameById(tid);
+                TOOLTRACE("    sub[%d]=%p typeId=%u(%s)\n", i, sub, tid, tn ? tn : "?");
             }
         } else {
             TOOLTRACE("  groupData=NULL — scan will find nothing (tool cleared)\n");
@@ -454,8 +494,11 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         }
     }
 
-    TOOLTRACE("ShowGroup SCAN RESULT foundTypeId=%u foundNode=%p%s\n",
-              foundTypeId, (void*)foundNode,
+    TOOLTRACE("ShowGroup SCAN RESULT foundTypeId=%u(%s) foundNode=%p%s\n",
+              foundTypeId,
+              ::Object::GetTypeNameById(foundTypeId)
+                  ? ::Object::GetTypeNameById(foundTypeId) : "?",
+              (void*)foundNode,
               foundTypeId == 0 ? "  <-- NO MATCH: clearing tool, click is a no-op" : "");
 
     // When groupId=0 (ESC/clear tools), no matching type exists — just clear controller and return
@@ -473,8 +516,11 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
     void* toolController = isToolCtrl ? newObj : nullptr;
 
-    TOOLTRACE("ShowGroup CREATE toolTypeId=%u -> obj=%p isToolController=%d%s\n",
-              factoryTypeId, newObj, (int)isToolCtrl,
+    TOOLTRACE("ShowGroup CREATE toolTypeId=%u(%s) -> obj=%p isToolController=%d%s\n",
+              factoryTypeId,
+              ::Object::GetTypeNameById(factoryTypeId)
+                  ? ::Object::GetTypeNameById(factoryTypeId) : "?",
+              newObj, (int)isToolCtrl,
               newObj == nullptr ? "  <-- factory returned NULL (type not registered)"
                                 : (!isToolCtrl ? "  <-- NOT a ToolController, discarded" : ""));
 
@@ -1610,9 +1656,12 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
         int32_t actionType = *(int32_t*)(item + 0x48);
 
-        TOOLTRACE("OnEvent CLICK self=%p btn=%d item=%p actionType=%d "
+        char pathBuf_trace[128];
+        TOOLTRACE("OnEvent CLICK self=%p btn=%d item=%p path=%s actionType=%d "
                   "item+0x4C=%d item+0x58=%p elem=%p checked(+0xD8)=%d\n",
-                  self, buttonIndex, (void*)item, actionType,
+                  self, buttonIndex, (void*)item,
+                  ToolTraceOn() ? ToolbarItemPath(item, pathBuf_trace, sizeof pathBuf_trace) : "",
+                  actionType,
                   *(int32_t*)(item + 0x4C), *(void**)(item + 0x58),
                   (void*)localElemRef,
                   localElemRef ? *(uint8_t*)(localElemRef + 0xD8) : -1);
@@ -1766,10 +1815,23 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             point[1] = camY;
             point[2] = camZ;
 
-            // Close sub-dialog and reset radio selection
+            // Close sub-dialog and reset radio selection.
+            // Retail resolves the parent InternalBasePtr BEFORE reading it:
+            //   (*fn_InternalBasePtr_CheckPtr_slot)(param_1 + 0x28);
+            //   pDVar6 = *(DialogInstance **)(param_1 + 0x28);
+            // Our port had dropped that CheckPtr, so the read could see an
+            // unresolved lazy/weak handle instead of the parent dialog.
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x28));
             void* parentDialog = *(void**)(s + 0x28);
             bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
+            TOOLTRACE("CenterOnPoint self=%p parentSlot(+0x28)=%p tid=%u isDerived=%d\n",
+                      self, parentDialog, *g_TypeId_ToolbarDialogParent, (int)isDerivedParent);
+            // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
+            // this cast is expected to always succeed. It used to fail because our
+            // ToolbarDialog vtable's GetTypeId slot forwarded to the DialogInstance
+            // base, making every ToolbarDialog report as its own base class — fixed at
+            // the source in toolbar_vtable_standalone.cpp.
             ToolbarDialog_CloseSubDialog_Impl(typedParent);
             break;
         }

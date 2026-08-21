@@ -80,6 +80,24 @@ static void* ToolbarDialog_ScalarDtor_SA(void* self, uint32_t flags) {
     return self;
 }
 
+// +0x10 GetTypeId — retail's ToolbarDialog_Slot2 (0x1400216f0) is literally
+// `return DWORD_1401c5d38;`, i.e. the ToolbarDialog type-id.
+//
+// This slot used to forward to the Runtime UI::DialogInstance base virtual, so every
+// ToolbarDialog we built reported its type as the BASE class. IsDerivedFrom walks the
+// type tree UPWARDS, so asking "is this DialogInstance a ToolbarDialog?" is correctly
+// false — the cast in OnEvent case 5 (CenterOnPoint, the camera save-view buttons)
+// therefore failed and handed CloseSubDialog a null `this`, which retail derefs
+// unguarded (FUN_1400b9730 reads param_1+0xe8 with no check). Live crash 2026-08-20.
+//
+// Return the SAME storage the reader compares against — g_TypeId_ToolbarDialogParent
+// points at the registered storage for 0x1401c5d38 (reg_economy_typeids.cpp), exactly
+// as retail has both sides read the one DWORD_1401c5d38. That makes the two
+// self-consistent by construction rather than by two independent name lookups.
+static uint32_t ToolbarDialog_GetTypeId_SA(void* /*self*/) {
+    return g_TypeId_ToolbarDialogParent ? *g_TypeId_ToolbarDialogParent : 0u;
+}
+
 // The 10-slot standalone ToolbarDialog vtable (mirror of exe 0x14015fa00). The
 // base-forward slots (+0x08/+0x10/+0x18/+0x38/+0x48) are filled at init with the raw
 // Runtime virtuals so they are dispatched with their exact native arg lists; kept
@@ -87,7 +105,7 @@ static void* ToolbarDialog_ScalarDtor_SA(void* self, uint32_t flags) {
 void* g_ToolbarDialog_Vtable_Standalone[10] = {
     reinterpret_cast<void*>(&ToolbarDialog_ScalarDtor_SA), // +0x00 ScalarDtor
     nullptr,                                                // +0x08 TypeName   (Runtime base)
-    nullptr,                                                // +0x10 GetTypeId  (Runtime base)
+    reinterpret_cast<void*>(&ToolbarDialog_GetTypeId_SA),   // +0x10 GetTypeId (own — see above)
     nullptr,                                                // +0x18 Serialize1 (Runtime base)
     reinterpret_cast<void*>(&ToolbarDialog_Startup),        // +0x20 Startup (RET 0)
     reinterpret_cast<void*>(&ToolbarDialog_Shutdown),       // +0x28 Shutdown
@@ -110,7 +128,8 @@ extern "C" void ToolbarStandalone_Init() {
 
     auto* vt = g_ToolbarDialog_Vtable_Standalone;
     if (!vt[1]) vt[1] = reinterpret_cast<void*>(ResolveExport(kSym_TypeName));      // +0x08
-    if (!vt[2]) vt[2] = reinterpret_cast<void*>(ResolveExport(kSym_Type));          // +0x10
+    // vt[2] (+0x10 GetTypeId) is our OWN slot now, not a base forward — see
+    // ToolbarDialog_GetTypeId_SA above. Do not overwrite it with kSym_Type.
     if (!vt[3]) vt[3] = reinterpret_cast<void*>(ResolveExport(kSym_Persist));       // +0x18
     if (!vt[7]) vt[7] = reinterpret_cast<void*>(ResolveExport(kSym_OnUpdate));      // +0x38
     if (!vt[9]) vt[9] = reinterpret_cast<void*>(ResolveExport(kSym_OnSerSettings)); // +0x48

@@ -58,6 +58,7 @@
 
 
 #include "resolve.h"
+#include <cstdio>
 #include "Object/factory_registration.h"
 #include <cstdint>
 
@@ -243,6 +244,29 @@ static uint32_t g_tid_StateMachineComponent    = 0;  // 0x1401c7d98
 // registered centrally so every reader benefits.
 static uint32_t g_tid_DestroyDescription       = 0;  // 0x1401c7628
 
+// 0x1401c5d38 ToolbarDialog — the BaseTypeInfo built by RegisterType_ToolbarDialog
+// (0x14014cfb5: BaseTypeInfo(&DWORD_1401c5d38, "ToolbarDialog", "UI::DialogInstance",
+// 0, Factory_ToolbarDialog, ...)). Readers take the FIRST DWORD (the type id), so a
+// plain uint32 storage is what the slot needs, exactly like the ids above.
+//
+// Read by ToolbarDialog::OnEvent case 5 (CenterOnPoint — the camera save-view
+// buttons 1..5) to cast the parent dialog (self+0x28) before closing the sub-toolbar,
+// and by ToolbarDialog_OnRemove / ToolbarDialog_Slot2.
+//
+// UNREGISTERED -> ResolveAddr returned 0 -> engine_funcs.cpp's
+// g_TypeId_ToolbarDialogParent stayed NULL -> `*g_TypeId_ToolbarDialogParent`
+// faulted. Crashed live 2026-08-20 on the first click of any camera save-view
+// button: ACCESS_VIOLATION READ of 0 at ToolbarDialog_OnEvent+0x855, which
+// disassembles to `MOV EDX,[RAX]` with RAX = the null global. The deref is faithful
+// to retail (`IsDerivedFrom(pDVar6, DWORD_1401c5d38)`) and stays unguarded —
+// registering the storage is the upstream fix.
+//
+// "ToolbarDialog" is an exe REGISTER_TYPE (ui_dialog_stub_factories.cpp:1446,
+// UI_DIALOG_STUB(ToolbarDialog, "UI::DialogInstance", 0x108)), so
+// Object::GetTypeIdByName resolves it — unlike the Runtime-registered UI *element*
+// slots in reg_element_typeids.cpp.
+static uint32_t g_tid_ToolbarDialog            = 0;  // 0x1401c5d38
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -272,6 +296,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7d28, reinterpret_cast<uintptr_t>(&g_tid_ResidenceDescription));
     RegisterExeAddr(0x1401c7d98, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
     RegisterExeAddr(0x1401c7628, reinterpret_cast<uintptr_t>(&g_tid_DestroyDescription));
+    RegisterExeAddr(0x1401c5d38, reinterpret_cast<uintptr_t>(&g_tid_ToolbarDialog));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -303,5 +328,13 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_ResidenceDescription     = ::Object::GetTypeIdByName("ResidenceDescription");
     g_tid_StateMachineComponent    = ::Object::GetTypeIdByName("StateMachineComponent");
     g_tid_DestroyDescription       = ::Object::GetTypeIdByName("DestroyDescription");
+    g_tid_ToolbarDialog            = ::Object::GetTypeIdByName("ToolbarDialog");
+    // Graduation check: a registered-but-ZERO slot is invisible to every
+    // null-POINTER guard downstream (IsDerivedFrom would just match nothing and the
+    // sub-toolbar would silently stay open). Say so loudly if the name ever moves.
+    if (g_tid_ToolbarDialog == 0) {
+        fprintf(stderr, "[TypeId] WARNING: GetTypeIdByName(\"ToolbarDialog\") == 0 — "
+                        "camera save-view buttons will no-op their sub-dialog close\n");
+    }
 }
 
