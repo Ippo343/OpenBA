@@ -607,6 +607,12 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     // upgrade haul-away resolving the house position). Zero-vec fallback,
     // same policy as the ModelComponent fallback below.
     if (!build) {
+        // A caller landing here has almost certainly picked the WRONG finder: this
+        // wants an InteractComponent (0x140002ed0, type DWORD_1401c7900), whose +0x18
+        // IS an InteractDescription. A BuildComponent (0x14000d6c0, DWORD_1401c7008)
+        // carries a BuildDescription, a SIBLING of InteractDescription -- the cast can
+        // never pass, and the zero vec below silently becomes the map centre.
+        // (Cost PathTool's route builder every workplace position; fixed 2026-08-20.)
         static bool warned = false;
         if (!warned) {
             warned = true;

@@ -53,7 +53,10 @@ typedef void     (*fn_Yield_t)(void* app);                                      
 
 static fn_HighlightRefresh_t s_c4a0   = nullptr;
 static fn_FindComp_t         s_2e10   = nullptr;   // WorkPlace-ish finder
-static fn_FindComp_t         s_8090   = nullptr;   // Storage-ish finder
+static fn_FindComp_t         s_8090   = nullptr;   // RESIDENCE finder (Ghidra mislabels
+                                                   // 0x140008090 "FindComponent_Storage"; the
+                                                   // disasm tail-calls 0x140006270 with the
+                                                   // ResidenceComponent type id).
 static fn_AnchorCell_t       s_7fb0   = nullptr;
 static fn_AStar_t            s_9cfb0  = nullptr;
 static fn_ListFree_t         s_21d0   = nullptr;
@@ -317,7 +320,21 @@ static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
     int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x238);
     CheckPtr(&workplace);
     uint64_t posIBP = 0;
-    fn_FindComponent_Position((void*)workplace, &posIBP);
+    // 🐞 MISNAMED-FINDER TRAP (6th instance). The disasm at 0x1400de629 calls
+    // 0x140002ed0 = fn_Entity_FindComponent_Position -> InteractComponent (type
+    // DWORD_1401c7900), NOT the inline fn_FindComponent_Position in engine_funcs.h,
+    // which is 0x14000d6c0 -> BuildComponent (DWORD_1401c7008). Both are spelled
+    // "..._Position" and both return an IBP, so the wrong one compiles and runs.
+    // It matters because 0x140122e20 casts the component's +0x18 description to
+    // InteractDescription: an InteractComponent carries one, a BuildComponent
+    // carries a BuildDescription (a SIBLING of InteractDescription, not a base —
+    // factory_registrations.csv:232/273 both list parent "Description"). The cast
+    // failed, our SA-GUARD returned a zero vector, and e5d0 mapped (0,0,0) to
+    // cell (w>>1, w>>1) = the dead CENTRE of the map. Every route therefore started
+    // at the map centre instead of the workplace door -- and because the centre is
+    // the same cell for every workplace, N workers collapsed into N identical
+    // src/dst pairs (the "duplicate routes" report).
+    fn_Entity_FindComponent_Position((uintptr_t)workplace, &posIBP);
     CheckPtr(&posIBP);
     float vec[3] = {0, 0, 0};
     if (s_122e20) s_122e20(*(int64_t*)&posIBP, vec, 0, 0, nullptr);
@@ -465,7 +482,8 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     uint64_t local_res20 = 0;   // FUN_140002e10 result (workplace-ish component)
     if (s_2e10) s_2e10(*(int64_t*)(param_1 + 0x28), &local_res20);
     CheckPtr((void*)(param_1 + 0x28));
-    uint64_t local_res18 = 0;   // Entity_FindComponent_Storage (8090) result
+    uint64_t local_res18 = 0;   // ResidenceComponent (8090) - its +0x50/+0x58 is the
+                                // occupant list: outer groups (0x10 stride) of citizens.
     if (s_8090) s_8090(*(int64_t*)(param_1 + 0x28), &local_res18);
     CheckPtr((void*)(param_1 + 0x28));
     uint64_t local_2098 = 0;    // CitizenAI component
@@ -491,7 +509,9 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                 uint64_t housing = 0;
                 { uint64_t tmp = local_2098; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
                 int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
-                int wpCell = PathSel_WorkplaceCell_e5d0(local_2098, &local_2098);
+                uint64_t selIBP = local_2098;   // retail uses a COPY here (local_2080),
+                                                // not the live CitizenAI IBP slot.
+                int wpCell = PathSel_WorkplaceCell_e5d0(local_2098, &selIBP);
                 *(int32_t*)(entryBuf + 0x00) = wpCell;      // srcCell
                 *(int32_t*)(entryBuf + 0x04) = anchorCell;  // dstCell
                 *(int32_t*)(entryBuf + 0x08) = 0;           // pathCount
