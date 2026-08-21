@@ -307,8 +307,15 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 // ============================================================
 // Toolbar_ShowGroup_Impl (was fn_Toolbar_ShowGroup, FUN_140102b60)
 //
+// THE single port of retail 0x140102b60. This function was independently ported
+// TWICE — the second copy was entityui.cpp's EntityUI_SetEditMode_Impl, which is
+// now a thin forwarder into this body. Both names, both signatures and every
+// existing call site are preserved; only the duplicate body is gone.
+//
 // Shows/hides a tool group dialog. Called with gameSubsys (PlayerController at
-// gameWorld+0x120) and a groupId (toolbar item type ID).
+// gameWorld+0x120) and a groupId (toolbar item type ID). The SetEditMode spelling
+// calls the same object "playerController" / "entityUI" and the same argument
+// "mode" — they are the same object and the same field set.
 //
 // Logic:
 //   1. If lockToggle flag (+0x80) is set and groupId != 0, use locked group (+0x88)
@@ -336,16 +343,31 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 //   +0x30: int32_t subItemCount
 //
 // ToolController vtable:
-//   +0x20: Start()
-//   +0x28: Close()
+//   +0x20: Start()      == vtbl[4]  (Startup, in the SetEditMode spelling)
+//   +0x28: Close()      == vtbl[5]  (Shutdown, in the SetEditMode spelling)
 //   +0x58: GetToolSettingTypeId(retBuf) -> int* (returns ptr to typeId, 0 = none)
+//                       == vtbl[11]
+// The two ports spelled the teardown slot differently — *(vtbl + 0x28) here and
+// vtbl[5] in the SetEditMode copy. 5*8 == 0x28: SAME SLOT. Byte offsets are used
+// throughout this body.
 //
 // ToolController instance fields (set before Start):
 //   +0x10: void* playerController (back-pointer)
 //   +0x18: InternalBasePtr toolSetting
 //   +0x20: int64_t groupId
+//
+// groupId == 0 IS A REAL LOOKUP, NOT A "CLEAR" NO-OP.
+// The tool registry always contains a node keyed 0 -> EditTool (see
+// BuildToolModeTree in tool_activation_standalone.cpp; the runtime log line
+// "node{0 -> EditTool=...}" shows it). With groupId 0 the component scan finds
+// nothing, foundTypeId stays 0, and the exact-match pass below then hits that
+// key-0 node and CREATES the EditTool. That is how the default EditTool gets
+// installed at all — retail EntityUI::Update relies on it via SetEditMode(pc, 0).
+// An earlier version of this body returned early on foundTypeId == 0 on the
+// premise that "no matching type exists"; the log disproves that premise, and
+// the early-out would have killed entity selection outright. Do not reinstate it.
 // ============================================================
-static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
+void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     uintptr_t pc = (uintptr_t)gameSubsys;
     // Step 1: If lockToggle is set and groupId is non-zero, override with locked group
     if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
@@ -360,6 +382,8 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Step 3: Store new group, close existing controller if any
     *(int64_t*)(pc + 0x20) = groupId;
+    TOOLTRACE("SETGROUP pc=%p wrote +0x20=%p readback=%p (ctrl +0x28=%p)\n",
+              (void*)pc, (void*)groupId, *(void**)(pc + 0x20), *(void**)(pc + 0x28));
     if (*(int64_t*)(pc + 0x28) != 0) {
         // CheckPtr on the InternalBasePtr
         fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
@@ -463,7 +487,13 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         }
     }
 
-    // Step 5: BST search for the foundTypeId to get the matching ToolNode
+    // Step 5: BST search for the foundTypeId to get the matching ToolNode.
+    // Retail is exact-match-or-NULL here: its loop head re-zeroes the result
+    // register on EVERY iteration (`while (puVar14 = 0, puVar10 != 0)`), so a
+    // failed search yields 0, NOT a lower_bound node. An earlier version of this
+    // body had a second "lower_bound fallback" pass; retail has no such pass and
+    // it only ever fed the foundTypeId == 0 early-out that is documented above as
+    // a bug. Both are gone.
     uintptr_t foundNode = 0;
     uintptr_t searchNode = *(uintptr_t*)(pc + 0x10);
     while (searchNode != 0) {
@@ -477,33 +507,22 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             break;
         }
     }
-    // If not found exactly, foundNode stays 0 — but the original code uses
-    // the last "less-or-equal" node (lower_bound). Match that behavior:
-    if (foundNode == 0) {
-        // Re-do search tracking lower_bound (last node where key <= foundTypeId)
-        searchNode = *(uintptr_t*)(pc + 0x10);
-        while (searchNode != 0) {
-            uint32_t key = *(uint32_t*)searchNode;
-            if (foundTypeId < key) {
-                searchNode = *(uintptr_t*)(searchNode + 0x20);
-            } else {
-                foundNode = searchNode;
-                if (foundTypeId <= key) break;
-                searchNode = *(uintptr_t*)(searchNode + 0x28);
-            }
-        }
-    }
-
     TOOLTRACE("ShowGroup SCAN RESULT foundTypeId=%u(%s) foundNode=%p%s\n",
               foundTypeId,
               ::Object::GetTypeNameById(foundTypeId)
                   ? ::Object::GetTypeNameById(foundTypeId) : "?",
               (void*)foundNode,
-              foundTypeId == 0 ? "  <-- NO MATCH: clearing tool, click is a no-op" : "");
+              foundTypeId == 0 ? "  <-- no group match: falls through to the key-0"
+                                 " node (default EditTool)" : "");
 
-    // When groupId=0 (ESC/clear tools), no matching type exists — just clear controller and return
-    if (foundTypeId == 0) {
-        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
+    // DELIBERATE DIVERGENCE FROM RETAIL (per CLAUDE.md: a guard is legitimate only
+    // where our standalone genuinely differs from retail). Retail does NOT test the
+    // search result — it goes straight to Factory::CreateObject(..., puVar14[2]) and
+    // null-derefs if the registry held no matching key, because retail's registry
+    // always does. Ours is built by BuildToolModeTree and can legitimately be empty
+    // or partial in a standalone run, so guard the deref rather than fault. Every
+    // other step below stays byte-faithful.
+    if (foundNode == 0) {
         return;
     }
 
@@ -1534,6 +1553,13 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
                 // If button is currently checked (+0xD8 != 0), uncheck it
                 if (localRef != 0 && *(uint8_t*)(localRef + 0xD8) != 0) {
+                    // Traced because this is the ONLY place a toolbar button is
+                    // silently unchecked from the per-frame update, which is what a
+                    // "the button un-clicks itself" report looks like from outside.
+                    // It fires only on the 1->0 transition, so it cannot flood.
+                    TOOLTRACE("UNCHECK item=%d gameSys=%p activeDialog=%p groupId=%p elem=%p\n",
+                              i, (void*)gameSys, (void*)activeDialog, (void*)groupId,
+                              (void*)localRef);
                     *(uint8_t*)(localRef + 0xD8) = 0;
                 }
             }

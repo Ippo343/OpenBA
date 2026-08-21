@@ -113,6 +113,24 @@ static bool BuildComplete_Impl(void* posComp)
 // ============================================================
 // EntityUI_SetEditMode (0x140102b60)
 // ============================================================
+// FORWARDER. Retail 0x140102b60 was ported twice, independently: once here as
+// EntityUI_SetEditMode_Impl and once in toolbardialog.cpp as
+// Toolbar_ShowGroup_Impl. Same object (gameWorld+0x120), same fields, same
+// retail function. The single surviving body is Toolbar_ShowGroup_Impl; this
+// name is kept because ~15 call sites use it, and it forwards unchanged.
+//
+// What this copy had WRONG, and why the other body won:
+//   * Its in-order scan did `goto done_search` on the FIRST matching node.
+//     Retail's inner component loop breaks, but the OUTER traversal runs to
+//     the end of the tree, so the LAST match wins. The surviving body does
+//     the full traversal.
+// What this copy had RIGHT, and the other body did not:
+//   * No early-out on foundTypeId == 0. The registry holds a node keyed 0 ->
+//     EditTool, so mode 0 exact-matches it and CREATES the default EditTool.
+//     That is the whole reason SetEditMode(pc, 0) installs an EditTool and
+//     entity selection works. The other body returned early there; that
+//     early-out is deleted, not inherited.
+//
 // Sets the player controller's active tool. Walks a BST at +0x10
 // (tool type registry) to find the matching tool entry for the
 // given mode. Creates a new tool controller via Factory::CreateObject
@@ -128,192 +146,37 @@ static bool BuildComplete_Impl(void* posComp)
 //   +0x88: override mode (uint64)
 //
 // BST node layout (0x30 bytes, keyed by typeId at +0x00):
-//   +0x00: typeId (uint32_t) — key for BST ordering
-//   +0x08: toolTypeId (uint32_t) — passed to Factory::CreateObject
-//   +0x10: settingPtr (void*) — cached ToolSetting object
+//   +0x00: typeId (uint32_t) - key for BST ordering
+//   +0x08: toolTypeId (uint32_t) - passed to Factory::CreateObject
+//   +0x10: settingPtr (void*) - cached ToolSetting object
 //   +0x18: parent (node*), +0x20: left (node*), +0x28: right (node*)
+
+// The surviving port of 0x140102b60 (code/Game/Dialog/toolbardialog.cpp).
+void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);
 
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 {
     uintptr_t pc = (uintptr_t)playerController;
 
-    // If override flag is set and mode != 0, use stored override mode
-    if (*(char*)(pc + 0x80) != 0 && mode != 0) {
-        mode = *(uint64_t*)(pc + 0x88);
-    }
-
-    // Check if already in this mode with a valid tool
-    uint64_t curMode = *(uint64_t*)(pc + 0x20);
-    void* curTool = *(void**)(pc + 0x28);
-    if (curMode == mode && curTool != nullptr && mode != 0)
-        return;
-
-    // Set new mode
-    *(uint64_t*)(pc + 0x20) = mode;
-
-    // Destroy existing tool if present
-    if (*(void**)(pc + 0x28) != nullptr) {
-        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
-        // Call vtable[5] (offset 0x28) = Shutdown on the tool
-        void* tool = *(void**)(pc + 0x28);
-        void** vtbl = *(void***)(tool);
-        typedef void (*VCall_Shutdown_t)(void*);
-        ((VCall_Shutdown_t)vtbl[5])(tool);
-        // DeletePtr releases the object
-        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
-    }
-
-    // Find the matching tool type in the BST at +0x10
-    // Walk to the rightmost node first (find max for reverse iteration)
-    uint32_t foundTypeId = 0;
-    uint32_t* bstNode = *(uint32_t**)(pc + 0x10);
-    uint32_t* foundNode = nullptr;
-
-    if (bstNode == nullptr)
-        goto create_tool;
-
-    // Walk to rightmost leaf (last in-order)
+    // This name and Toolbar_ShowGroup_Impl are ONE retail function (0x140102b60);
+    // they were two independent ports until they were collapsed. Both spellings
+    // write +0x20, so a SetEditMode(pc,0) from anywhere clears the toolbar's
+    // active group and tears down the live tool (then reinstalls the default
+    // EditTool from the key-0 node). Log the RETURN ADDRESS so the
+    // actual caller is identifiable instead of guessed at.
     {
-        uint32_t* node = bstNode;
-        while (*(uint32_t**)(node + 8) != nullptr) {  // +0x20 = left child (8 = 0x20/4)
-            node = *(uint32_t**)(node + 8);
-        }
-
-        // Reverse in-order traversal looking for tool matching mode
-        uint32_t* cur = node;
-        while (cur != nullptr) {
-            // Check if this tool entry's description contains a component
-            // matching mode's type
-            uint64_t descMode = *(uint64_t*)(pc + 0x20);
-            if (descMode != 0) {
-                uint32_t nodeKey = *cur;
-                int descCount = *(int*)(descMode + 0x30);
-                void** descArray = *(void***)(descMode + 0x28);
-                for (int i = 0; i < descCount; i++) {
-                    void* comp = descArray[i];
-                    void** cvtbl = *(void***)comp;
-                    typedef int (*fn_GetTypeId_t)(void*);
-                    int typeId = ((fn_GetTypeId_t)cvtbl[2])(comp);
-                    if ((uint32_t)typeId == nodeKey) {
-                        if (comp != nullptr) {
-                            foundTypeId = nodeKey;
-                        }
-                        goto done_search;
-                    }
-                }
-            }
-
-            // Move to predecessor in BST
-            if (cur == nullptr) break;
-            uint32_t* rightChild = *(uint32_t**)(cur + 10);  // +0x28
-            if (rightChild != nullptr) {
-                // Go right, then left to the bottom
-                uint32_t* next = rightChild;
-                while (*(uint32_t**)(next + 8) != nullptr) {  // +0x20
-                    next = *(uint32_t**)(next + 8);
-                }
-                cur = next;
-            } else {
-                // Go up until we come from a right child
-                uint32_t* parent = *(uint32_t**)(cur + 6);  // +0x18
-                if (parent != nullptr) {
-                    if (*(uint32_t**)(parent + 8) != cur) {  // +0x20 = left != cur
-                        // We came from left — find ancestor where we're from right
-                        while (parent != nullptr && *(uint32_t**)(parent + 10) == cur) {
-                            cur = parent;
-                            parent = *(uint32_t**)(parent + 6);
-                        }
-                        cur = parent;
-                    } else {
-                        cur = parent;
-                    }
-                } else {
-                    cur = nullptr;
-                }
-            }
-        }
-    }
-done_search:
-
-    // Find BST node matching foundTypeId
-    {
-        uint32_t* node = *(uint32_t**)(pc + 0x10);
-        foundNode = nullptr;
-        while (node != nullptr) {
-            if (foundTypeId < *node) {
-                node = *(uint32_t**)(node + 8);  // left
-            } else if (foundTypeId <= *node) {
-                foundNode = node;
-                break;
-            } else {
-                node = *(uint32_t**)(node + 10);  // right
-            }
+        static const char* t = getenv("BANISHED_TOOL_TRACE");
+        if (t && t[0] && t[0] != '0') {
+            fprintf(stderr, "[ToolTrace] SETEDITMODE pc=%p mode=%p cur+0x20=%p cur+0x28=%p ret=%p\n",
+                    playerController, (void*)mode, *(void**)(pc + 0x20),
+                    *(void**)(pc + 0x28), __builtin_return_address(0));
+            fflush(stderr);
         }
     }
 
-create_tool:
-    if (foundNode == nullptr) return;
-
-    // Create tool controller via Factory::CreateObject
-    {
-        void* factory = *(void**)*g_pFactorySingleton;
-        uint32_t toolTypeId = foundNode[2];  // +0x08
-        void* newObj = fn_Factory_CreateObject(factory, toolTypeId);
-
-        // IsDerivedFrom check for ToolController type
-        bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
-        void* toolCtrl = isToolCtrl ? newObj : nullptr;
-
-        // Wrap in InternalBasePtr and store at +0x28
-        uint64_t ibpBuf[1] = {0};
-        fn_InternalBasePtr_Ctor(ibpBuf, toolCtrl);
-        *(uint64_t*)(pc + 0x28) = ibpBuf[0];
-
-        // If node's setting (+0x10) is null, create one via vtable call
-        void* setting = *(void**)((uintptr_t)foundNode + 0x10);
-        if (setting == 0) {
-            fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
-            void* tool = *(void**)(pc + 0x28);
-            void** tvtbl = *(void***)tool;
-            // vtable[11] (offset 0x58): GetSettingTypeId(this, retval) -> int*
-            typedef int* (*VCall_GetSettingTypeId_t)(void*, void*);
-            uint64_t settingBuf[1] = {0};
-            int* settingResult = ((VCall_GetSettingTypeId_t)tvtbl[11])(tool, settingBuf);
-
-            if (*settingResult != 0) {
-                fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
-                tool = *(void**)(pc + 0x28);
-                tvtbl = *(void***)tool;
-                settingBuf[0] = 0;
-                int* sr2 = ((VCall_GetSettingTypeId_t)tvtbl[11])(tool, settingBuf);
-                uint32_t settingTypeId = *(uint32_t*)sr2;
-
-                void* settingObj = fn_Factory_CreateObject(factory, settingTypeId);
-                bool isSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
-                void* typedSetting = isSetting ? settingObj : nullptr;
-
-                uint64_t settIbp[1] = {0};
-                fn_InternalBasePtr_Ctor(settIbp, typedSetting);
-                *(uint64_t*)((uintptr_t)foundNode + 0x10) = settIbp[0];
-            }
-        }
-
-        // Setup tool: tool+0x10=controller, tool+0x20=mode, tool+0x18=setting
-        setting = *(void**)((uintptr_t)foundNode + 0x10);
-        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
-        void* activeTool = *(void**)(pc + 0x28);
-        uint64_t activeMode = *(uint64_t*)(pc + 0x20);
-        *(uintptr_t*)((uintptr_t)activeTool + 0x10) = pc;
-        *(uint64_t*)((uintptr_t)activeTool + 0x20) = activeMode;
-        *(void**)((uintptr_t)activeTool + 0x18) = (void*)setting;
-
-        // Call tool's vtable[4] (offset 0x20) = Startup
-        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
-        activeTool = *(void**)(pc + 0x28);
-        void** atVtbl = *(void***)activeTool;
-        typedef void (*VCall_Startup_t)(void*);
-        ((VCall_Startup_t)atVtbl[4])(activeTool);
-    }
+    // Forward to the single implementation. int64_t vs uint64_t is a spelling
+    // difference only - the field at +0x20 is one 8-byte slot either way.
+    Toolbar_ShowGroup_Impl(playerController, (int64_t)mode);
 }
 
 // ============================================================
