@@ -30,8 +30,10 @@
 // laborer remains the click stops moving the roster and this pass gives up on that
 // building for the interval.
 //
-// Enabled automatically for UNATTENDED runs (BANISHED_AUTOSTART / BANISHED_AUTOQUIT),
-// where there is provably no player. Attended runs leave seating to the human.
+// Enabled automatically for UNATTENDED runs (BANISHED_AUTOQUIT), where there is
+// provably no player. Attended runs leave seating to the human — including
+// BANISHED_AUTOSTART runs, which only skip the menu and are the normal way a person
+// launches the game (see the long note in Init()).
 //   BANISHED_AUTOSTAFF=0        force off even when unattended
 //   BANISHED_AUTOSTAFF=<n>      force on, re-check every n frames (n>1)
 //   BANISHED_AUTOSTAFF_TRACE=1  log every considered building, not just seats
@@ -73,7 +75,25 @@ void Init() {
     } else {
         // No explicit request: stand in for the player only when nobody is at the
         // keyboard. An attended session must keep its own agency over staffing.
-        const bool unattended = EnvOn("BANISHED_AUTOSTART") || EnvOn("BANISHED_AUTOQUIT");
+        //
+        // BANISHED_AUTOSTART is NOT part of that test, despite naming an automated
+        // thing. It means only "skip the menu and start a game" — `make sa-run` sets
+        // it for every ordinary interactive session, so treating it as "no player"
+        // armed this driver underneath a human
+        // and made every panel in the game close by itself.
+        //
+        // The cost of that miscategorisation was entirely diagnostic: SeatViaPanel
+        // acquires the SHARED EditTool, selects its own subject and then calls
+        // EditTool_CloseInfoDialog, so it silently destroyed whatever panel the player
+        // had open, roughly every five seconds. It logs only when it actually gains a
+        // seat, so a workplace permanently under capacity (roster 6 of cap 12) re-ran
+        // the whole open/click/close cycle forever while printing nothing at all —
+        // indistinguishable, from the outside, from the panels being broken.
+        //
+        // BANISHED_AUTOQUIT is the honest signal: a run that intends to exit on its own
+        // is one nobody is watching. An interactive session that still wants the virtual
+        // player can ask for it explicitly with BANISHED_AUTOSTAFF=1.
+        const bool unattended = EnvOn("BANISHED_AUTOQUIT");
         s_interval = unattended ? kIntervalDflt : -1;
     }
     if (s_interval > 0) {
