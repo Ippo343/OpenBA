@@ -302,6 +302,19 @@ static void ResolveDrawFuncs() {
     s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
         ResolveAddr(Module::Exe, 0x140101270));
 
+    // Each of these guards its call site with `if (ptr)`, so an UNRESOLVED helper
+    // silently leaves canRemove=false for every tile — indistinguishable in the tile
+    // colours from "nothing here is removable". Report the resolve outcomes once so a
+    // null helper can never masquerade as a legitimate no-op result.
+    if (std::getenv("BANISHED_REMOVE_TRACE")) {
+        fprintf(stderr, "[RemoveTrace] RESOLVE sub48a0=%p sub4770=%p sub4670=%p "
+                "GetParentEntity=%p IsMarkedForDestruction=%p ScreenToCell=%p\n",
+                (void*)s_fn_RemovalSub48a0, (void*)s_fn_RemovalSub4770,
+                (void*)s_fn_RemovalSub4670, (void*)s_fn_GetParentEntity,
+                (void*)s_fn_IsMarkedForDestruction, (void*)s_fn_ScreenToCell);
+        fflush(stderr);
+    }
+
     s_drawFuncsResolved = true;
 }
 
@@ -501,6 +514,29 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                                     fn_InternalBasePtr_CheckPtr(&parentIBP);
                                 if (s_fn_IsMarkedForDestruction) {
                                     canRemove = s_fn_IsMarkedForDestruction(parentIBP);
+                                }
+                            }
+                            if (std::getenv("BANISHED_REMOVE_TRACE")) {
+                                static int s_f43dbg = 0;
+                                if (s_f43dbg < 16) {
+                                    // 0x14012ead0 is NOT "IsMarkedForDestruction" (Ghidra's
+                                    // label is wrong): it reads the entity's key at +0x28 and
+                                    // looks it up in the BST under gameWorld+0x118 -> +0x30,
+                                    // returning whether that node holds a non-null pointer.
+                                    // i.e. "is this entity in the town registry". Dump the
+                                    // registry root and the key so an EMPTY registry cannot
+                                    // be mistaken for a legitimate "not applicable" result.
+                                    uintptr_t gw  = (uintptr_t)(*g_pGameWorldSingleton);
+                                    uintptr_t reg = *(uintptr_t*)(gw + 0x118);
+                                    void* bstRoot = reg ? *(void**)(reg + 0x30) : nullptr;
+                                    fprintf(stderr, "[RemoveTrace]   f43-branch entity=%p "
+                                            "parentIBP=%p parentKey(+0x28)=%d reg(gw+0x118)=%p "
+                                            "bstRoot(+0x30)=%p -> canRemove=%d\n",
+                                            entityForCheck, (void*)parentIBP,
+                                            parentIBP ? *(int*)(parentIBP + 0x28) : -1,
+                                            (void*)reg, bstRoot, (int)canRemove);
+                                    fflush(stderr);
+                                    s_f43dbg++;
                                 }
                             }
                         }
