@@ -18,12 +18,16 @@
 //   0x14009f5d0  f5d0      — single-cell terrain/occupancy validity test. ALREADY
 //                            registered (reg_player_path.cpp → PlayerPath_CharComp_f5d0);
 //                            resolved via ResolveAddr here.
-//   0x1400b0f90  0f90      — vertical-down-ray terrain height sampler. ALREADY registered
-//                            (reg_pf_road.cpp → Pf_CellQuadRayWrap_0f90). Only used by
-//                            08c0's FIRST loop (road-segment quads), which is DEAD on the
-//                            building-placement path (param_4 record count is always 0
-//                            from sub_1380), so its void-return registration is harmless
-//                            here. Resolved via ResolveAddr.
+//   0x1400b0f90  0f90      — vertical-down-ray terrain height sampler, RETURNS the hit
+//                            height as a float (Ghidra types it void; see the disassembly
+//                            quoted at its definition in action_pf_road.cpp).
+//                            ⚠ The FIRST loop below is NOT dead. It is empty on the
+//                            building-placement path (sub_1380 passes {0,0}), but
+//                            PathTool::Draw fills param_4 with worker-route SEGMENTS, and
+//                            that loop is the only consumer of this height. While 0f90 was
+//                            registered as void-returning, every segment got a garbage Z
+//                            and the Paths overlay drew a bar floating above the map.
+//                            Do not re-describe this loop as dead.
 //
 // Each function is a 1:1 port of the Ghidra decompile + disassembly. Registration is in
 // standalone/reg_player_tilerender.cpp (RegisterPlayerTileRenderBatch), wired into
@@ -196,8 +200,9 @@ extern "C" void PlayerTileRender_TerrainCorners_b10e0(int64_t param_1, int col, 
 //   position = terrain corner (b10e0), uv = a per-vertex atlas template rotated by the
 //   record angle and offset by the record's texture-variant column, color = record RGBA.
 // param_3 = the placement tile records (5 ints each = col,row,variant,color,angle).
-// param_4 = an optional road-segment record set — ALWAYS EMPTY on the building-placement
-// path (sub_1380 passes {0,0}); its first loop is faithfully ported but dead here.
+// param_4 = a line/segment record set (0x20 bytes each: col1,row1,variant,color,angle,
+// col2,row2,width). Empty on the building-placement path (sub_1380 passes {0,0}), but
+// PathTool::Draw fills it with the worker-route segments — this loop is live there.
 // 1:1 port of the Ghidra decompile + disassembly (vertex layout pinned against
 // 0x140100fc0 / 0x140101130).
 extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ctx,

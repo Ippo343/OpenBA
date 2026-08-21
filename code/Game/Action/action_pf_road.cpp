@@ -432,10 +432,25 @@ int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4 /*Vector3* dir*/, f
 //   origin (p5) = (param_2[0], param_2[1], DAT_140172208)   [RSP+0x50..0x58]
 //   dir    (p4) = (0, 0, DAT_140172280)                     [RSP+0x60..0x68]
 //   maxT   (p6) = DAT_140172228 (single float)
-//   p7 = outHit scratch, p8 = outT scratch, p9 = param_3.
-// cell = ((param_2 + half) truncated). The aa20 result is discarded (the original's empty
-// `if (bVar1) return; return;`).
-void Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
+//   p7 = outHit scratch, p8 = scratch, p9 = param_3.
+// cell = ((param_2 + half) truncated).
+//
+// ⚠ RETURNS A FLOAT — the terrain hit HEIGHT. Ghidra types this `void` and renders the
+// tail as `if (bVar1) { return; } return;`, which reads as "result discarded". The
+// disassembly says otherwise:
+//     CALL 0x1400aaa20 ; TEST AL,AL ; JZ miss
+//     MOVSS XMM0,[RSP+0x78] ; RET      <- hit : return outHit[2]  (Z of the ray hit)
+//   miss: XORPS XMM0,XMM0 ; RET        <- miss: return 0.0f
+// [RSP+0x78] is the third float of the p7 outHit buffer.
+//
+// This port previously returned void and threw the result away, on the belief that the
+// only caller was 0x1401008c0's "always empty" line-record loop. That loop is NOT dead:
+// PathTool::Draw fills it with the worker-route segments. With no value in XMM0 the
+// caller used whatever garbage was there as each segment's Z, so the Paths overlay drew
+// its line as a bar floating high above the map (and, under perspective, far off to one
+// side) while the point markers — which use a different helper (b10e0) — sat correctly
+// on the terrain. Found live 2026-08-20.
+float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
     EnsureInit();
     const float* pD208 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172208));
     const float* pD280 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
@@ -452,13 +467,17 @@ void Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
     float maxT = pD228 ? *pD228 : 0.0f;    // p6 = DAT_140172228 (single float)
 
     float half = static_cast<float>(*reinterpret_cast<int*>(self + 0xc0) >> 1);
-    float outHit[3] = {0, 0, 0};           // p7
-    float outT = 0.0f;                     // p8 ([RSP+0x78], read back as the result but discarded)
+    // p7 spans [R11-0x18 .. R11-0x10] — three floats, and the third IS the return value.
+    // p8 is a separate scratch (retail's local_res10, a float[6]); size both generously so
+    // a callee that writes more than we expect cannot clobber the neighbouring local.
+    float outHit[4]  = {0, 0, 0, 0};       // p7 — outHit[2] is the returned height
+    float scratch[8] = {0, 0, 0, 0, 0, 0, 0, 0};  // p8
 
-    Pf_CellQuadRay_aa20(self,
-                        static_cast<int>(origin[0] + half),
-                        static_cast<int>(origin[1] + half),
-                        dir, origin, &maxT, outHit, &outT, param_3);
+    int hit = Pf_CellQuadRay_aa20(self,
+                                  static_cast<int>(origin[0] + half),
+                                  static_cast<int>(origin[1] + half),
+                                  dir, origin, &maxT, outHit, scratch, param_3);
+    return hit ? outHit[2] : 0.0f;
 }
 
 // ============================================================

@@ -17,7 +17,7 @@ void  Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t ble
 void  Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);
 int   Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6,
                           float* p7, float* p8, uint32_t* p9);
-void  Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3);
+float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3);
 void  Pf_RegionDirty4_b150(int64_t self, int x, int y);
 void  Pf_FineCellDirty_a8c90(int64_t self, int x, int y);
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);
