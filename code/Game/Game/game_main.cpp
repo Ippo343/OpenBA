@@ -85,6 +85,7 @@ extern "C" void FillTypeIdGlobals_citizen_lifeevent();
 extern "C" void FillControlUITypeIds();
 extern "C" void FillTypeIdGlobals_tracker();
 extern "C" void FillTypeIdGlobals_orchard();
+extern "C" void FillTypeIdGlobals_market();
 extern "C" void FillTypeIdGlobals_food();
 extern "C" void FillTypeIdGlobals_growth();
 extern "C" void FillTypeIdGlobals_cleararea();
@@ -512,6 +513,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillControlUITypeIds();                // ControlUIConfig id (0x1401c4e20) — gates EVERY ControlUI button (work/split/empty)
     FillTypeIdGlobals_tracker();           // production-stats panel — TrackerComponent id (c4b10)
     FillTypeIdGlobals_orchard();           // orchard panel type/yield — OrchardComponent id (c46b0)
+    FillTypeIdGlobals_market();            // MarketWork slot 4 — MarketComponent (c44f0) + MarketDescription (c4528) ids
     FillTypeIdGlobals_food();              // fishing/hunt/gatherer/cropfield component + description ids
     FillTypeIdGlobals_growth();            // GrowthComponent id (c77b0) — the finder every runtime-spawned natural resource goes through
     FillTypeIdGlobals_cleararea();         // ClearAreaComponent (c71c8) + ClearAreaDescription (c7200) — fn_FindComponent_SM was a null-typeid miss game-wide

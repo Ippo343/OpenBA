@@ -45,6 +45,14 @@ const char* const kClasses[] = {
     "HuntComponent",
     "HerbalistComponent",
     "CropFieldComponent",
+    // 2026-08-22: added. MarketComponent shares this family's staffing route exactly —
+    // same RPC state table, same code=1 ledger post, same per-profession bucket keyed on
+    // WPC+0x48 — but it was missing here, so BANISHED_FOOD_WORKERS never seated a market
+    // and every market measured staffed=0. That is why MarketWork's vtable slot 4
+    // (Execute) recorded ZERO dispatches: slot 4 is purely claim-driven (retail has no
+    // unconditional per-tick call of it anywhere), and an unstaffed workplace is invisible
+    // to the citizen claim walk. It was never a dispatch defect.
+    "MarketComponent",
 };
 constexpr int kClassCount = (int)(sizeof(kClasses) / sizeof(kClasses[0]));
 

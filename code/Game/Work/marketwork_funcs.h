@@ -22,10 +22,9 @@
 // vs HerbalistWork BST nodes which use +0x08=parent, +0x10=left, +0x18=right
 // ============================================================
 
-// Slot4 (vtable +0x20): Main market trading logic (~400+ instructions).
-// DISABLED hook (MOV RAX,RSP). Extremely complex -- calls original for now.
-// Uses int return type (bug class 7).
-int MarketWork_Slot4_Impl(MarketWork* self, void* entityIBP, uint64_t param3, uint64_t param4);
+// Slot4 (vtable +0x20) is MarketWork_Execute_Impl -- see its declaration below.
+// (The old note here said it "calls original for now"; there is no original to
+// call any more, the standalone exe is the only build.)
 
 // Slot6 (vtable +0x30): Add entity to BST. DISABLED hook (relative CALL).
 // Calls MarketWork_sub_aaa0(self+0x48, param2) then returns false.
@@ -55,9 +54,23 @@ void* MarketWork_Slot10_Impl(MarketWork* self, void* outPtr);
 // ENABLED hook. Version=1 serializer with v0/v1 migration path.
 void MarketWork_Serialize_Impl(MarketWork* self, void* stream);
 
-// Execute (vtable +0x28): 3 bytes, returns false. Too small to hook.
-// Implemented for standalone exe only.
-bool MarketWork_Execute_Impl(MarketWork* self);
+// Execute (vtable index 4, +0x20): retail 0x1400eff80 -- the market hauling /
+// demand planner. Ghidra misnames it "MarketWork_Serialize"; it is not
+// serialization (slot 3, 0x1400f1d70, is the real Serialize).
+//
+// Signature recovered from the ONLY call site, the citizen idle claim-walk at
+// retail 0x1400f7b60 (Helper_sub_7b60, citizenai_housing_idle.cpp:506, vcall at
+// :527) -- THREE args, and the return is a TRI-STATE:
+//     2 = claimed, the caller's walk STOPS
+//     1 = examined but declined; the caller stamps work+0x2c with sched+8
+//     0 = keep walking, no stamp
+// Slot 9 (Validate) is dispatched immediately before this, unconditionally.
+// param_3 is sched+0x130; retail slot 4 never reads it.
+//
+// STAGE 1 ONLY so far: retail 0x1400eff80..0x1400f021f (guards, the two cheap
+// "return 1" rejections and the "already carrying -> return 2" arm). Everything
+// from 0x1400f021f on returns 0.
+int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx);
 
 // ScalarDtor body: Sets vtables down chain, frees tree nodes, calls base dtor.
 // Uses DIFFERENT tree cleanup (FUN_14002af40) -- frees node data at +0x08.

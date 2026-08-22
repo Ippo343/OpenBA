@@ -441,6 +441,7 @@ extern void RegisterWorkWalkposBatch();
 // Work-gap LEAF wave — 17 closure-safe per-class job helpers — reg_work_leaf.cpp ;
 // bodies: work_leaf_{clear,market,gather,hunt}.cpp (4-batch opus fan-out, lead-verified).
 extern void RegisterWorkLeafBatch();
+extern void RegisterMarketWorkBstBatch();
 // Wave 3 (Action) — StateMachine action exe-helpers, closure-safe subsets.
 // reg files: reg_action_cnr.cpp / reg_action_hunt.cpp ; bodies: code/Game/Action/action_base_*.cpp.
 extern void RegisterActionCnrBatch();    // CreateNaturalResource cluster (10, file closure-clean)
@@ -478,6 +479,7 @@ extern void RegisterEconomyTypeIds();        // Phase 3 economy: building-find t
 extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreatePlacedDescription c7468 / ModelComponent c7a50 / ModelDescription c7a88 (gated BANISHED_LIVE_DECAL)
 extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker)
 extern void RegisterOrchardTypeIds();        // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard)
+extern void RegisterMarketTypeIds();         // MarketComponent c44f0 + MarketDescription c4528 storage (filled by FillTypeIdGlobals_market)
 extern void RegisterFoodTypeIds();           // Fishing/Hunt/Herbalist/CropField component+description type-id storage (filled by FillTypeIdGlobals_food)
 extern void RegisterRdataFloatConsts();     // 25 .rdata float constants resolved by code/ but registered nowhere; a null one is SILENT (cost the crop harvest)
 extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth)
@@ -597,6 +599,7 @@ static void RegisterCodeFunctions() {
     RegisterWorkImpl2Batch();
     RegisterWorkWalkposBatch();   // walkable-position search cluster (122be0/122b00/f6ef0)
     RegisterWorkLeafBatch();      // 17 closure-safe per-class job leaves (clear/market/gather/hunt)
+    RegisterMarketWorkBstBatch(); // 12-fn MarketWork BST/erase/serialize + 2 qsorts + 1 array grow
     // Wave 3 (Action) — closure-safe subsets: CreateNaturalResource cluster (10) +
     // Hunt/RemoveAnimal/CompleteRoad (6). Move/CompleteTask subsets land in a follow-up.
     RegisterActionCnrBatch();
@@ -685,6 +688,7 @@ static void RegisterCodeFunctions() {
     RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
     RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
     RegisterOrchardTypeIds();      // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard) — orchard panel type/yield + plant/tend work
+    RegisterMarketTypeIds();       // MarketComponent c44f0 + MarketDescription c4528 storage — MarketWork slot 4 component scan + description narrowing
     RegisterFoodTypeIds();         // food-production component/description type ids — without these the fishing rate mask reads 0 on perfect water
     RegisterRdataFloatConsts();    // unregistered .rdata floats: hard guards go inert, soft `p ? *p : 0.0f` fallbacks silently use the WRONG value
     RegisterGrowthTypeIds();       // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth) — every natural resource spawned at runtime
