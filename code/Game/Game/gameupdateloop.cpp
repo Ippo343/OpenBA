@@ -684,6 +684,7 @@ extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/foo
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
+extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
 extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
@@ -930,6 +931,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
+
+    // Force-feed the market one resource past 2x its target share so MarketWork
+    // slot 4 stage 3 can take its SURPLUS SHED arm (0x1400f09eb) — the only path in
+    // that function haulers never reach on their own, because they stock the market
+    // TO its target and stop. No-op unless BANISHED_MARKET_OVERSTOCK is set
+    // (standalone/market_overstock_harness.cpp).
+    MarketOverstock_Tick(s_frameNum);
 
     // THE VIRTUAL PLAYER: clicks workerCountUp (the retail first-seat path) on every
     // under-capacity workplace. Automatic for unattended runs only; replaces the old
