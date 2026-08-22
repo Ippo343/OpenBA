@@ -42,9 +42,19 @@
 static uint32_t g_tid_MarketComponent   = 0;  // 0x1401c44f0
 static uint32_t g_tid_MarketDescription = 0;  // 0x1401c4528
 
+// 0x1401c7ee8 StorageLocationComponent (writer StorageLocationComponent_RegisterType
+// 0x14014fb90, factory_registrations.csv:299). Also registered nowhere. MarketWork slot 4
+// stage 5 reads it to find the winning building's adjacent drop cell, and the already-ported
+// 0x14008d590 reads the same constant at 0x14008d764.
+// ⚠ code/Game/Action/action_pf_roots_route.cpp:48 calls this slot "route/path comp (?)" —
+// that guess is WRONG; the CSV writer names the class. Left that comment alone rather than
+// edit an unrelated file, but do not trust it.
+static uint32_t g_tid_StorageLocationComponent = 0;  // 0x1401c7ee8
+
 extern "C" void FillTypeIdGlobals_market() {
     g_tid_MarketComponent   = ::Object::GetTypeIdByName("MarketComponent");
     g_tid_MarketDescription = ::Object::GetTypeIdByName("MarketDescription");
+    g_tid_StorageLocationComponent = ::Object::GetTypeIdByName("StorageLocationComponent");
 
     if (g_tid_MarketComponent == 0)
         std::fprintf(stderr, "[MarketTypeId] ERROR: GetTypeIdByName(\"MarketComponent\") "
@@ -62,10 +72,19 @@ extern "C" void FillTypeIdGlobals_market() {
         std::fprintf(stderr, "[MarketTypeId] 0x1401c4528 = %u (0x%08X)\n",
                      g_tid_MarketDescription, g_tid_MarketDescription);
 
+    if (g_tid_StorageLocationComponent == 0)
+        std::fprintf(stderr, "[MarketTypeId] ERROR: GetTypeIdByName(\"StorageLocationComponent\") "
+                             "returned 0 — slot 0x1401c7ee8 is live but EMPTY; MarketWork slot 4 "
+                             "stage 5 will not find a drop cell\n");
+    else
+        std::fprintf(stderr, "[MarketTypeId] 0x1401c7ee8 = %u (0x%08X)\n",
+                     g_tid_StorageLocationComponent, g_tid_StorageLocationComponent);
+
     std::fflush(stderr);
 }
 
 void RegisterMarketTypeIds() {
     RegisterExeAddr(0x1401c44f0, reinterpret_cast<uintptr_t>(&g_tid_MarketComponent));
     RegisterExeAddr(0x1401c4528, reinterpret_cast<uintptr_t>(&g_tid_MarketDescription));
+    RegisterExeAddr(0x1401c7ee8, reinterpret_cast<uintptr_t>(&g_tid_StorageLocationComponent));
 }

@@ -1067,6 +1067,17 @@ static void RegisterDispatchSlots() {
     // executor c4c50) call through null. Names = the exe's own import strings at each slot RVA.
     RegisterDispatchSlot(0x140152ab0,   // Object::InternalBasePtr::CheckPtr(this) const [protected, IEBA]
         (uintptr_t)ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
+    // MarketWork slot 4 stage 5 builds each FindPath argument with ctor-then-Copy. Both
+    // slots were unregistered, so they resolved to 0 and calling them would have been an
+    // EXEC-of-0 on exactly the path we are trying to exercise; marketwork.cpp carries a
+    // fallback through fn_InternalBasePtr_Ctor for that case, which these registrations
+    // retire.
+    // ⚠ Names read from `objdump -p Runtime-x64.dll`, NOT guessed. Copy is IEAA
+    // (protected), not QEAA — the obvious guess is wrong and would resolve to nullptr.
+    RegisterDispatchSlot(0x140152ac0,   // Object::InternalBasePtr::InternalBasePtr(this) [default ctor]
+        (uintptr_t)ResolveExport("??0InternalBasePtr@Object@@QEAA@XZ"));
+    RegisterDispatchSlot(0x140152ab8,   // Object::InternalBasePtr::Copy(this, const InternalBasePtr&) [protected, IEAA]
+        (uintptr_t)ResolveExport("?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z"));
     RegisterDispatchSlot(0x140152aa0,   // Object::InternalBasePtr::Serialize(this, Serializer&)
         (uintptr_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x140152458,   // Math::Vector2::Dot(this, other) const -> Scalar
