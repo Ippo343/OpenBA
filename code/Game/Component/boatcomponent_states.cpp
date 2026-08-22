@@ -144,6 +144,12 @@ inline void* Slot(uintptr_t addr) {
 inline const float* Flt(uintptr_t addr) {
     return reinterpret_cast<const float*>(ResolveAddr(Module::Exe, addr));
 }
+// Tiny per-slot formatter so one fprintf can print seven "value or UNRESOLVED" fields.
+inline const char* FmtF(int slot, float v) {
+    static char buf[7][24];
+    std::snprintf(buf[slot], sizeof(buf[slot]), "%.3f", v);
+    return buf[slot];
+}
 
 void Resolve() {
     if (s_resolved) return;
@@ -183,6 +189,29 @@ void Resolve() {
         (void*)s_FindModel, (void*)s_FindCharacter, (void*)s_FindSMC,
         (void*)s_V3Length, (void*)s_V3NormalizeLen, (void*)s_V3Normalize,
         (void*)s_V3Heading, (void*)s_V3Ctor3f, (void*)s_SMTick, (void*)s_MarkRemoval);
+
+    // ⚠ REPORT THE OUTCOME, NOT THE INTENT. Every use of these constants is guarded
+    // `if (s_fX && ...)`, so an unresolved one does not crash and does not log — it
+    // DELETES the test it guards. That is exactly how the first run of this file sailed a
+    // boat past its own dock: 0x1401721f4 was never registered, so the arrival test was
+    // simply not there, and the boat ran the full 987-point route and scrapped itself.
+    {
+        const bool ok = s_fArrive && s_fPointSpace && s_fSpeedBase && s_fSpeedScale &&
+                        s_fSpeedMin && s_fDockRange && s_fApproach;
+        std::fprintf(stderr,
+            "[BoatCtrl] consts: arrive(172180)=%s pointSpace(17219c)=%s "
+            "speedBase(17214c)=%s speedScale(1720ec)=%s speedMin(17210c)=%s "
+            "dockRange(1720fc)=%s approachSq(1721f4)=%s%s\n",
+            s_fArrive     ? FmtF(0, *s_fArrive)     : "UNRESOLVED",
+            s_fPointSpace ? FmtF(1, *s_fPointSpace) : "UNRESOLVED",
+            s_fSpeedBase  ? FmtF(2, *s_fSpeedBase)  : "UNRESOLVED",
+            s_fSpeedScale ? FmtF(3, *s_fSpeedScale) : "UNRESOLVED",
+            s_fSpeedMin   ? FmtF(4, *s_fSpeedMin)   : "UNRESOLVED",
+            s_fDockRange  ? FmtF(5, *s_fDockRange)  : "UNRESOLVED",
+            s_fApproach   ? FmtF(6, *s_fApproach)   : "UNRESOLVED",
+            ok ? "" : "   <-- an UNRESOLVED constant silently removes the test it guards; "
+                      "the boat will sail its whole route and never dock");
+    }
     std::fflush(stderr);
 }
 
@@ -512,6 +541,51 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
             *reinterpret_cast<float*>(model + 0x168) = yaw;
             s_GeomSetXform(reinterpret_cast<void*>(model + 0x28),
                            reinterpret_cast<const void*>(model + 0x148));
+        }
+    }
+
+    // ── ROUTE WATER AUDIT (trace-only, once per boat) ────────────────────────────
+    // Settles by measurement the question a screenshot cannot: is the route the boat is
+    // about to sail actually navigable water end to end, or does the A* leg cut across
+    // land between two unconnected channels? Samples the terrain class of every route
+    // point's cell and reports non-water counts PER SEGMENT, because the segments have
+    // very different expectations — the approach/departure polylines run OFF-MAP (the
+    // route builder's own entry/exit points are outside the grid) and are skipped, while
+    // both A* legs must be 100% water or the pathfinder and the renderer disagree.
+    // Water mask 0x380 = the boat pathfinder's own terrain class set.
+    if (TraceEnabled()) {
+        void* gwv = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
+                                                                      : nullptr;
+        uint8_t* mapObj = gwv ? *reinterpret_cast<uint8_t**>(
+                                    reinterpret_cast<uint8_t*>(gwv) + 0xf8) : nullptr;
+        uint8_t* grid   = mapObj ? *reinterpret_cast<uint8_t**>(mapObj + 0x80) : nullptr;
+        const int width = mapObj ? *reinterpret_cast<int32_t*>(mapObj) : 0;
+        const int n     = *reinterpret_cast<int32_t*>(boat + 0x68);
+        if (grid && width > 0) {
+            const int half = width / 2;
+            const uint32_t mask = 0x380u;
+            int offMap = 0, water = 0, land = 0, firstLand = -1;
+            for (int i = 0; i < n; ++i) {
+                const float* pt = route + (size_t)i * 3;
+                const int cx = (int)(pt[0] + (float)half);
+                const int cy = (int)(pt[1] + (float)half);
+                if (cx < 0 || cy < 0 || cx >= width || cy >= width) { ++offMap; continue; }
+                const uint8_t t = *(grid + (size_t)(cy * width + cx) * 0x30 + 0x29);
+                if ((mask >> (t & 0x1f)) & 1) { ++water; }
+                else { ++land; if (firstLand < 0) firstLand = i; }
+            }
+            std::fprintf(stderr,
+                "[BoatCtrl] route audit: n=%d offMap=%d water=%d LAND=%d%s\n",
+                n, offMap, water, land,
+                land ? "   <-- the route crosses non-water cells; the boat will sail "
+                       "over ground there" : "");
+            if (firstLand >= 0) {
+                const float* pt = route + (size_t)firstLand * 3;
+                std::fprintf(stderr, "[BoatCtrl]   first land point idx=%d world=(%.2f,%.2f) "
+                                     "tile=(%d,%d)\n", firstLand, pt[0], pt[1],
+                             (int)(pt[0] + (float)half), (int)(pt[1] + (float)half));
+            }
+            std::fflush(stderr);
         }
     }
 

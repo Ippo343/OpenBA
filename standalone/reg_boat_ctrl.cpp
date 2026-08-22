@@ -37,7 +37,36 @@ int  BoatCtrl_NextRoutePoint(void*, const float*, float); // 0x1400a70c0
 void BoatCtrl_DriveToward(void*, const float*, float, float);  // 0x14010a0e0
 }
 
+// ── .rdata float constants the boat state machine reads ──────────────────────────
+// MEASURED 2026-08-22: without these the machine runs, steers and sails the whole
+// route — and never docks. Every one of them sits behind an `if (s_fX && ...)` guard,
+// so an unresolved constant does not crash or log, it silently DELETES the test:
+//   0x1401721f4 null => the state 0 -> 1 arrival test never fires. Boat 1 passed within
+//                       6.32 units of the dock (gate is 8.0), kept going through the
+//                       out-leg, ran out of route at index 983 and scrapped itself.
+//   0x14017219c null => next-waypoint spacing 0, so 0x1400a70c0 returns cur+1 every
+//                       time and the boat crawls all 987 points one at a time instead
+//                       of skipping to the next point >= 6 units away.
+//   0x1401720fc null => the state 1 -> 2 dock test never fires either.
+//   0x14017210c null => the state-1 speed clamp loses its lower bound.
+// See [[reference-registered-but-filled-with-zero]] — the same shape, one level down:
+// here it is the ADDRESS that never resolved, so the null-guard ate the branch.
+//
+// 0x140172180 (3.0) and 0x14017214c (1.0) are already registered elsewhere
+// (reg_citizenai_handlers.cpp / reg_citizenai_actionctors.cpp), and 0x1401720ec (0.125)
+// in reg_component_gap_A.cpp — which is exactly why this was hard to see: the waypoint
+// advance worked, so the boat visibly sailed and looked healthy.
+static const float k_rdata_17219c = 6.0f;    // 0x40C00000  next-waypoint spacing
+static const float k_rdata_1721f4 = 64.0f;   // 0x42800000  state 0->1 gate, SQUARED (8.0)
+static const float k_rdata_1720fc = 0.2f;    // 0x3E4CCCCD  state 1->2 dock range
+static const float k_rdata_17210c = 0.33f;   // 0x3EA8F5C3  state-1 speed clamp, low
+
 void RegisterBoatCtrlAddrs() {
+    RegisterExeAddr(0x14017219c, reinterpret_cast<uintptr_t>(&k_rdata_17219c));
+    RegisterExeAddr(0x1401721f4, reinterpret_cast<uintptr_t>(&k_rdata_1721f4));
+    RegisterExeAddr(0x1401720fc, reinterpret_cast<uintptr_t>(&k_rdata_1720fc));
+    RegisterExeAddr(0x14017210c, reinterpret_cast<uintptr_t>(&k_rdata_17210c));
+
     RegisterExeAddr(0x1400453f0, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Enter));
     RegisterExeAddr(0x140045190, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Update));
     RegisterExeAddr(0x140045250, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Tick));
