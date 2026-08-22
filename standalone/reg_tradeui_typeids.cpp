@@ -84,6 +84,19 @@ static uint32_t g_tid_TradeDescription = 0;      // 0x1401c4bb8
 static uint32_t g_tid_ValueDescription = 0;      // 0x1401c4bf0
 static uint32_t g_tid_ComponentDescription = 0;  // 0x1401c7318
 
+// ── BoatComponent (0x1401c4020) — added with the merchant-arrival layer ──────
+// Read by retail 0x14000eb20, the FindComponent(BoatComponent) that the merchant
+// spawn (0x14005aa60) and the controller teardown (0x14005b160) both use to get at
+// the boat's route. Unseeded it reads 0, the finder matches nothing, and the spawned
+// merchant boat gets no route at all — inert, not crashing, which is the failure
+// mode reference_gated_element_typeid_disables_controller describes.
+//
+// Type identity is not inferred from the finder: BoatComponent_RegisterType writes
+// this exact address at 0x14014a8a5 and BoatComponent_GetType reads it at
+// 0x1400036c0. It rides the same TRADE_TIDS gate because the boat route is the only
+// thing in the build that reads it.
+static uint32_t g_tid_BoatComponent = 0;         // 0x1401c4020
+
 extern "C" void FillTypeIdGlobals_tradeui() {
     // No-op in effect unless the storage was registered above (gate on); writing it
     // when unregistered is harmless because nothing reads this static directly.
@@ -91,14 +104,15 @@ extern "C" void FillTypeIdGlobals_tradeui() {
     g_tid_TradeDescription = ::Object::GetTypeIdByName("TradeDescription");
     g_tid_ValueDescription = ::Object::GetTypeIdByName("ValueDescription");
     g_tid_ComponentDescription = ::Object::GetTypeIdByName("ComponentDescription");
+    g_tid_BoatComponent = ::Object::GetTypeIdByName("BoatComponent");
 
     // Report the OUTCOME. A 0 here means the type never registered exe-side and the
     // reader will silently match nothing rather than fault — the failure mode that
     // made 0x1401c4b80 invisible for the life of the project.
     fprintf(stderr, "[TradeTid] TradeComponent=%u TradeDescription=%u "
-            "ValueDescription=%u ComponentDescription=%u\n",
+            "ValueDescription=%u ComponentDescription=%u BoatComponent=%u\n",
             g_tid_TradeComponent, g_tid_TradeDescription,
-            g_tid_ValueDescription, g_tid_ComponentDescription);
+            g_tid_ValueDescription, g_tid_ComponentDescription, g_tid_BoatComponent);
     fflush(stderr);
 }
 
@@ -112,5 +126,6 @@ void RegisterTradeUITypeIds() {
         RegisterExeAddr(0x1401c4bb8, reinterpret_cast<uintptr_t>(&g_tid_TradeDescription));
         RegisterExeAddr(0x1401c4bf0, reinterpret_cast<uintptr_t>(&g_tid_ValueDescription));
         RegisterExeAddr(0x1401c7318, reinterpret_cast<uintptr_t>(&g_tid_ComponentDescription));
+        RegisterExeAddr(0x1401c4020, reinterpret_cast<uintptr_t>(&g_tid_BoatComponent));
     }
 }

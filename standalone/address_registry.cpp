@@ -1260,6 +1260,14 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z"));
     RegisterDispatchSlot(0x140151418,   // Math::Transform::Transform(const Transform&) [copy ctor]
         (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@AEBV01@@Z"));
+    // Math::Quaternion::Rotate(const Vector3&) const -> Vector3 (member value-return:
+    // RCX=this, RDX=retbuf, R8=vec). Read by the attach-point resolver 0x140123880 to
+    // turn a description-local yaw into a world heading, and by action_pf_road.cpp,
+    // which has been reading this slot since the road wave and getting NULL — it
+    // null-guards, so the miss was silent there. Name is the exe's import string at
+    // the slot RVA and matches Runtime export [3589].
+    RegisterDispatchSlot(0x1401525f0,
+        (uintptr_t)ResolveExport("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
     RegisterDispatchSlot(0x1401529a8,   // Picking::Scene::SetTransform(uint id, const Transform&)
         (uintptr_t)ResolveExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z"));
     // Picking::Scene::SetMeshUserData(uint id, void* userData, int, int, callback*) —

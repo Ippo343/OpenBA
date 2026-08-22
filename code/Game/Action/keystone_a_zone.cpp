@@ -58,7 +58,7 @@ typedef void (*fn_EnqCmd1_t)(int64_t self, int idx, void* val, void* p4);       
 typedef void (*fn_EnqCmd4_t)(int64_t self, uint8_t a, void* b, void* c);           // 0x1400a68b0
 typedef void (*fn_EnqCmd0_t)(int64_t self, int v, void* p3, void* p4);             // 0x1400a6b20
 typedef int* (*fn_EnqTrade_t)(int64_t self, int* ret, void* a2, void* a3);         // 0x1400a6c10
-typedef void (*fn_CopyPath_t)(void* self, void* ret, void* p5, int p6);            // 0x1400a6d50
+typedef int  (*fn_CopyPath_t)(void* self, void* ret, void* p5, int p6);            // 0x1400a6d50
 
 static fn_EnqCmd1_t  s_fn_EnqCmd1  = nullptr;
 static fn_EnqCmd4_t  s_fn_EnqCmd4  = nullptr;
@@ -120,8 +120,14 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
 //   (Thread* param_1, uint param_2, ulonglong param_3, void* param_4,
 //    longlong param_5, int param_6)
 // ============================================================================
-void RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
-                          void* param_4, int64_t param_5, int param_6) {
+// ⚠ RETURNS THE PATH LENGTH. Ghidra types both this and its tail call `void`, but
+// 1400a6edf is a tail call into 0x1400a6d50, whose EAX is min(maxLen, cells found) —
+// and the boat route builder (boatcomponent_route.cpp) tests exactly that value to
+// decide whether a leg found anything. This port was `void` until the merchant-arrival
+// layer needed it; the pre-existing caller below discards the value, so widening it
+// changes nothing else. See reference_discarded_return_reenables_gated_branch.
+int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
+                         void* param_4, int64_t param_5, int param_6) {
     EnsureFns();
     // The request slot is TWO ADJACENT ints, not two independent locals: a6c10 ->
     // TradeComponent_impl_6240 (0x1400a6240) writes BOTH `*param_2` (slot index, retail
@@ -151,10 +157,9 @@ void RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
             if (*reinterpret_cast<int*>(base + 4 + static_cast<int64_t>(slotIndex) * 0x18) == slotKey &&
                 *reinterpret_cast<char*>(base + static_cast<int64_t>(slotIndex) * 0x18) != '\0') {
                 // MoveTo_helper_6d50(param_1, slot, param_5, param_6)
-                if (s_fn_CopyPath)
-                    s_fn_CopyPath(reinterpret_cast<void*>(param_1), slot,
-                                  reinterpret_cast<void*>(param_5), param_6);
-                return;
+                if (!s_fn_CopyPath) return 0;
+                return s_fn_CopyPath(reinterpret_cast<void*>(param_1), slot,
+                                     reinterpret_cast<void*>(param_5), param_6);
             }
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)

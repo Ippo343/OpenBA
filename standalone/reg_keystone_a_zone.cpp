@@ -13,7 +13,7 @@
 #include "resolve.h"
 #include <cstdint>
 
-extern void RoadTool_helper_6e30(int64_t, unsigned int, uint64_t, void*, int64_t, int); // 0x1400a6e30
+extern int  RoadTool_helper_6e30(int64_t, unsigned int, uint64_t, void*, int64_t, int); // 0x1400a6e30
 extern void Pf_EnqueueCmd3_a6f00(int64_t, uint32_t, uint64_t, void*);                    // 0x1400a6f00
 extern void ZoneComponent_sub_d360(int*, int64_t*, int, int, unsigned int, int, int64_t*, int); // 0x14009d360
 extern void RoadTool_sub_ce00(int64_t, unsigned int, unsigned int, uint64_t, void*, int64_t, uint8_t, uint8_t); // 0x14009ce00

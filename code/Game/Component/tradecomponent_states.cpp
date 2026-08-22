@@ -77,6 +77,10 @@
 
 #include "Work/tradework_funcs.h"
 
+// Layer 2 lives in boatcomponent_route.cpp (retail 0x14000eb20 / 0x1400456e0).
+extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP);
+extern "C" void  BoatComponent_SetDestination(int64_t boatComp, int64_t* destEntityIBP);
+
 namespace { struct TradeCtrlTag {}; }
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
 
@@ -93,6 +97,10 @@ typedef char     (*fn_HasWorkSlot_t)(int64_t sched);
 typedef void*    (*fn_WorkCtor25_t)(void* work, void* entityIBP);
 typedef uint64_t (*fn_PostWork_t)(int64_t sched, int code, char flag, void* workIBP);
 typedef void*    (*fn_TimeCtor_t)(void* outTime, float seconds);
+typedef void*    (*fn_EntityCopyCtor_t)(void* mem, void* templateEntity);
+typedef void     (*fn_EntityListAdd_t)(void* entityList, void* entityIBP, int category);
+typedef void     (*fn_StateMachineTick_t)(void* sm, void* time, char a, char b);
+typedef void     (*fn_ListErase_t)(void* listBase, void* valuePtr);
 
 fn_Find_t         s_FindWorkPlace = nullptr;   // 0x140002e10
 fn_Find_t         s_FindSched     = nullptr;   // 0x140003050
@@ -101,6 +109,11 @@ fn_WorkCtor25_t   s_WorkCtor25    = nullptr;   // 0x1400f72e0
 fn_PostWork_t     s_PostWork      = nullptr;   // 0x14012ec60
 fn_TimeCtor_t     s_TimeCtor      = nullptr;   // dispatch slot [0x140152b00]
 void**            s_TradeWorkVtbl = nullptr;   // 0x140161a10
+// Layer 2 (merchant spawn / teardown) leaves.
+fn_EntityCopyCtor_t   s_EntityCopyCtor   = nullptr;   // 0x1400c3720
+fn_EntityListAdd_t    s_EntityListAdd    = nullptr;   // 0x1400c48a0
+fn_StateMachineTick_t s_StateMachineTick = nullptr;   // 0x1400a9660
+fn_ListErase_t        s_ListErase        = nullptr;   // 0x140002cc0
 bool              s_resolved      = false;
 
 void Resolve() {
@@ -112,6 +125,10 @@ void Resolve() {
     s_WorkCtor25    = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_TradeWorkVtbl = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a10));
+    s_EntityCopyCtor   = reinterpret_cast<fn_EntityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
+    s_EntityListAdd    = reinterpret_cast<fn_EntityListAdd_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_StateMachineTick = reinterpret_cast<fn_StateMachineTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
+    s_ListErase        = reinterpret_cast<fn_ListErase_t>(ResolveAddr(Module::Exe, 0x140002cc0));
     if (uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00))
         s_TimeCtor = *reinterpret_cast<fn_TimeCtor_t*>(slot);
 
@@ -119,11 +136,13 @@ void Resolve() {
     // state machine into a machine that runs and does nothing — believable and wrong.
     std::fprintf(stderr,
         "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p workCtor=%p post=%p "
-        "timeCtor=%p tradeWorkVtbl=%p\n",
+        "timeCtor=%p tradeWorkVtbl=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
         reinterpret_cast<void*>(s_FindWorkPlace), reinterpret_cast<void*>(s_FindSched),
         reinterpret_cast<void*>(s_HasWorkSlot),   reinterpret_cast<void*>(s_WorkCtor25),
         reinterpret_cast<void*>(s_PostWork),      reinterpret_cast<void*>(s_TimeCtor),
-        reinterpret_cast<void*>(s_TradeWorkVtbl));
+        reinterpret_cast<void*>(s_TradeWorkVtbl),
+        reinterpret_cast<void*>(s_EntityCopyCtor), reinterpret_cast<void*>(s_EntityListAdd),
+        reinterpret_cast<void*>(s_StateMachineTick), reinterpret_cast<void*>(s_ListErase));
     std::fflush(stderr);
 }
 
@@ -135,6 +154,17 @@ void* TradeDesc(uintptr_t comp) {
     void* raw = *reinterpret_cast<void**>(comp + 0x18);
     if (!g_TypeInfo_TradeDescription || !fn_IsDerivedFrom) return nullptr;
     return fn_IsDerivedFrom(raw, *g_TypeInfo_TradeDescription) ? raw : nullptr;
+}
+
+// Merchant-spawn trace (BANISHED_BOAT_TRACE, shared with the route builder so one env
+// var lights the whole arrival path).
+bool TradeSpawnTrace() {
+    static int t = -1;
+    if (t < 0) {
+        const char* e = std::getenv("BANISHED_BOAT_TRACE");
+        t = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return t != 0;
 }
 
 // Rate-limited outcome trace for the state-2 enter. Prints on EVERY branch, including
@@ -198,8 +228,21 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
     const float tol = fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f;
-    const float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
-                                 *reinterpret_cast<float*>(rec + 4)) * 300.0f;
+    float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
+                           *reinterpret_cast<float*>(rec + 4)) * 300.0f;
+
+    // TEST HARNESS, opt-in: BANISHED_TRADE_MERCHANT_SECONDS overrides the countdown.
+    // Retail's first merchant is ~5700 game-seconds out, which is far past the end of any
+    // reasonable unattended run — so without this the arrival path can only be verified by
+    // a soak, and "nothing happened" would be indistinguishable from "it is broken".
+    // Unset (or <= 0) leaves the retail value untouched, so a normal run is byte-identical.
+    {
+        const char* ov = std::getenv("BANISHED_TRADE_MERCHANT_SECONDS");
+        if (ov && ov[0]) {
+            const float f = static_cast<float>(std::atof(ov));
+            if (f > 0.0f) seconds = f;
+        }
+    }
 
     if (!s_TimeCtor) return;
     uint64_t t[4] = {0, 0, 0, 0};
@@ -347,6 +390,148 @@ extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
 }
 
 // ============================================================
+// state 2 trans38 (per frame) - 0x14005aa60   THE MERCHANT SPAWN
+// ============================================================
+// Counts the merchant timer at comp+0x78 down; when it reaches zero it CLONES the
+// TraderBoat entity out of the TradeDescription, hands the clone to the route builder,
+// registers it with the world entity list and asks for state 0x12 (inbound).
+//
+// This is the handler layer 1 left as a null: it was blocked on the route builder
+// (0x1400456e0), because a boat that is created but never routed is worse than no boat.
+// That builder is now ported in boatcomponent_route.cpp.
+//
+// RETURN VALUE: retail always returns a value whose LOW BYTE is zero - the not-yet
+// branch returns the delta-time with the low byte masked off, and the fired branch masks
+// the transition result the same way. So: 0, on every path.
+extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
+    Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
+    const int64_t dt = deltaTime ? *reinterpret_cast<int64_t*>(deltaTime) : 0;
+    *reinterpret_cast<int64_t*>(comp + 0x78) -= dt;
+    if (*reinterpret_cast<int64_t*>(comp + 0x78) >= 1) return 0;
+
+    void* desc = TradeDesc(comp);
+
+    // Clone the merchant entity from the description's template (desc+0x30).
+    void* boat = nullptr;
+    void* mem = fn_MemAllocStatic ? fn_MemAllocStatic(0x48, 8) : nullptr;
+    if (mem && s_EntityCopyCtor)
+        boat = s_EntityCopyCtor(mem, *reinterpret_cast<void**>(
+                                         reinterpret_cast<uintptr_t>(desc) + 0x30));
+
+    uint64_t boatIBP[2] = {0, 0};
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(boatIBP, boat);
+    *reinterpret_cast<uint64_t*>(comp + 0x80) = boatIBP[0];
+
+    // Route it to THIS post. The destination is the trading post's own entity (comp+0x10).
+    int64_t destIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
+    uint64_t boatCompIBP[2] = {0, 0};
+    void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
+                                                 boatCompIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(boatComp);
+    // eb20 returns its OUT-PARAM, so `boatComp` is always non-null; the component is the
+    // value inside it. Retail derefs that value unguarded because a merchant template
+    // always carries a BoatComponent.
+    //
+    // The guard below is a STANDALONE-ONLY difference, not a softened retail deref: the
+    // BoatComponent type-id slot (0x1401c4020) is seeded behind BANISHED_LIVE_TRADE_TIDS,
+    // and with that gate off the finder matches nothing and hands back 0. Crashing on a
+    // gate the player can turn off is not a faithful reproduction of anything, so say
+    // which gate is missing instead. If this fires with TRADE_TIDS on, the merchant
+    // template genuinely lacks the component and THAT is the bug.
+    const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
+    if (boatCompPtr) {
+        BoatComponent_SetDestination(boatCompPtr, &destIBP);
+    } else {
+        std::fprintf(stderr, "[TradeCtrl] merchant has NO BoatComponent (type-id slot "
+                             "0x1401c4020 unseeded? needs BANISHED_LIVE_TRADE_TIDS) — "
+                             "boat spawned with no route\n");
+        std::fflush(stderr);
+    }
+
+    // Publish the entity. The category is the template's own (template+0x20).
+    int64_t regIBP = *reinterpret_cast<int64_t*>(comp + 0x80);
+    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    if (gw && s_EntityListAdd && desc) {
+        void* tmpl = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30);
+        s_EntityListAdd(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
+                        &regIBP,
+                        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+    }
+
+    // OUTCOME, not intent: the route point count is the only thing that says the boat can
+    // actually sail. "A boat was allocated" and "a boat has a route" are different claims.
+    if (TradeSpawnTrace()) {
+        std::fprintf(stderr,
+            "[TradeCtrl] merchant spawn: desc=%p boat=%p boatComp=%p routePts=%d -> state 0x12\n",
+            desc, boat, reinterpret_cast<void*>(boatCompPtr),
+            boatCompPtr ? *reinterpret_cast<int*>(static_cast<uintptr_t>(boatCompPtr) + 0x68) : -1);
+        std::fflush(stderr);
+    }
+
+    // Retail ticks the machine once first when it has no current state yet
+    // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.
+    uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
+    if (sm && static_cast<int8_t>(sm[9]) < 0 && s_StateMachineTick) {
+        uint8_t zeroTime[8] = {};
+        if (s_TimeCtor) s_TimeCtor(zeroTime, 0.0f);
+        s_StateMachineTick(smV, zeroTime, 0, 0);
+    }
+    ::ControllerLive::RequestStateTransition(smV, 0x12);
+    return 0;
+}
+
+// ============================================================
+// shared transition 3 - 0x14005b160   TEARDOWN
+// ============================================================
+// Carried by every state. Unregisters the post from the world's trading-post list, and if
+// a merchant is present hands the boat back (a NULL destination is what tells the route
+// builder to release it), frees the post's item array and clears the docked merchant
+// index.
+//
+// comp+0x50 / +0x58 here are the TradeComponent's ITEM array base and count - NOT the
+// BoatComponent's route head, which occupies the same offsets on a different object. The
+// two are easy to confuse when reading b160 and 56e0 side by side.
+extern "C" char TradeCtrl_Teardown(void* selfV) {
+    Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
+
+    int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
+    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    if (gw && s_ListErase) {
+        s_ListErase(reinterpret_cast<void*>(
+                        *reinterpret_cast<uintptr_t*>(
+                            reinterpret_cast<uintptr_t>(gw) + 0xf0) + 0x30),
+                    &entityIBP);
+    }
+
+    if (*reinterpret_cast<int64_t*>(comp + 0x80) != 0) {
+        int64_t nullDest = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullDest, nullptr);
+        if (fn_InternalBasePtr_CheckPtr)
+            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
+        uint64_t boatCompIBP[2] = {0, 0};
+        void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
+                                                     boatCompIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(boatComp);
+        const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
+        if (boatCompPtr) BoatComponent_SetDestination(boatCompPtr, &nullDest);
+
+        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(comp + 0x50));
+        *reinterpret_cast<uint64_t*>(comp + 0x50) = 0;
+        *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
+        *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;      // no merchant docked
+
+        uint64_t clearIBP[2] = {0, 0};
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(clearIBP, nullptr);
+        *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
+    }
+    return 1;
+}
+
+// ============================================================
 // Table build — replicates 0x14005c650
 // ============================================================
 // Idempotent: InstallLive runs once per component instance.
@@ -359,16 +544,16 @@ extern "C" void TradeCtrl_PopulateTable() {
     TableRegisterState(t, 2,
         reinterpret_cast<void*>(&TradeCtrl_State2_Enter),   // +0x08 enter  (abd0)
         nullptr,                                            // +0x10 trans30 (retail: 0)
-        nullptr,                                            // +0x18 trans38 (aa60 — NOT PORTED)
+        reinterpret_cast<void*>(&TradeCtrl_State2_Tick),    // +0x18 trans38 (aa60)
         nullptr);                                           // +0x20 update  (retail: 0)
-    TableAddTransition(t, 3, nullptr);                      // b160 — NOT PORTED
+    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 0x12, nullptr);
 
     // state 0x12 — merchant inbound
     TableRegisterState(t, 0x12,
         reinterpret_cast<void*>(&TradeCtrl_State12_Enter),  // aa50
         nullptr, nullptr, nullptr);
-    TableAddTransition(t, 3, nullptr);                      // b160 — NOT PORTED
+    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 0x13, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddEvent(t, 9, nullptr);                           // a850 — NOT PORTED
@@ -380,7 +565,7 @@ extern "C" void TradeCtrl_PopulateTable() {
         nullptr,
         reinterpret_cast<void*>(&TradeCtrl_State13_Tick),   // a780
         nullptr);                                           // a6d0 — NOT PORTED
-    TableAddTransition(t, 3, nullptr);                      // b160 — NOT PORTED
+    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 2, nullptr);
     TableAddEvent(t, 0xa, nullptr);                         // b240 — NOT PORTED
 

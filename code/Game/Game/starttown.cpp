@@ -2163,7 +2163,18 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // cluster centre. Path 0 is still preferred on ties only.
                     const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
                     long long bestDist = -1;
+                    // TEST HARNESS, opt-in: BANISHED_TRADINGPOST_PATH=<n> considers only
+                    // polyline n. The retail route builder A*s from polyline 0 to the dock,
+                    // so "nearest to town" siting can (and by default does) put the post on
+                    // a channel the boat never enters — which reads as a broken route
+                    // builder when it is really a broken test fixture. =0 is the setup that
+                    // actually exercises the arrival path. Unset = unchanged behaviour.
+                    int onlyPath = -1;
+                    if (const char* pe = std::getenv("BANISHED_TRADINGPOST_PATH")) {
+                        if (pe[0]) onlyPath = std::atoi(pe);
+                    }
                     for (int p = 0; p < pathCount; ++p) {
+                        if (onlyPath >= 0 && p != onlyPath) continue;
                         uint8_t* entry = pathArr + (size_t)p * 0x10;
                         const float* pts = *(const float**)entry;
                         const int ptCount = *(int32_t*)(entry + 8);
@@ -2212,7 +2223,18 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     // costs nothing.
                                     const long long ddx = (long long)(tx + tw / 2) - townCx;
                                     const long long ddy = (long long)(ty + th / 2) - townCy;
-                                    const long long dist = ddx * ddx + ddy * ddy;
+                                    long long dist = ddx * ddx + ddy * ddy;
+                                    // With BANISHED_TRADINGPOST_PATH set, rank by SETBACK
+                                    // first and distance only as a tie-break. Nearest-to-
+                                    // town on its own picks the most INLAND fit, because
+                                    // stepping away from the water is stepping toward the
+                                    // town — measured 2026-08-22: setback 17, dock 10 tiles
+                                    // from the nearest water, and both A* legs correctly
+                                    // returned 0. A dock the boat cannot reach makes the
+                                    // route builder look broken when it is doing exactly
+                                    // what it should.
+                                    if (onlyPath >= 0)
+                                        dist = (long long)s * 1000000LL + (ddx * ddx + ddy * ddy);
                                     if (bestDist >= 0 && dist >= bestDist) continue;
                                     bestDist = dist;
                                     bestX = tx; bestY = ty; bestSetback = s;
