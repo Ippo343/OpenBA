@@ -575,6 +575,40 @@ static void TradeComponent_Slot14VSlot(void* s) {
     TradeComponent_Slot14(reinterpret_cast<TradeComponent*>(s));
 }
 
+// ── Controller state machine (tradecomponent_states.cpp) ─────────────────────────
+// The controller sub-object the note above left inert. Retail's TradeComponent vtable
+// 0x14015acd0 holds slot 16 = 0x1400026c0 (`MOV EAX,2; RET`) and slot 17 = 0x14000dba0
+// (`LEA RAX,[RCX+0x88]; RET`), so the node lives at +0x88, its back-pointer at +0xa0,
+// and the machine starts in state 2. Its own opt-in flag rather than riding
+// BANISHED_LIVE_TRADE_COMPONENT: the panel gate is verified, this is not.
+extern "C" void** TradeCtrl_NodeVtable();
+extern "C" void   TradeCtrl_PopulateTable();
+
+static int   TradeComponent_GetDefaultState(void*) { return 2; }
+static void* TradeComponent_CreateState(void* self) {
+    return reinterpret_cast<uint8_t*>(self) + 0x88;
+}
+static void* TradeComponent_LiveGetTypeInfo(void*) {
+    static void* cached = nullptr;
+    if (!cached) cached = ::Object::GetTypeInfoByName("TradeComponent");
+    return cached;
+}
+
+// Wire the node ON THE INSTANCE. This must happen after MakeInertTyped/InitInertTyped
+// (FillTypedVtable rewrites the vtable slots, erasing anything written earlier) —
+// see reference_live_vtable_slot_must_be_wired_in_installlive.
+static void TradeComponent_InstallController(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_CTRL")) return;
+    TradeComponent_LiveVtable[1]  = reinterpret_cast<void*>(&TradeComponent_LiveGetTypeInfo);
+    TradeComponent_LiveVtable[16] = reinterpret_cast<void*>(&TradeComponent_GetDefaultState);
+    TradeComponent_LiveVtable[17] = reinterpret_cast<void*>(&TradeComponent_CreateState);
+    TradeCtrl_PopulateTable();
+    if (!mem) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
+    *reinterpret_cast<void**>(p + 0x88) = reinterpret_cast<void*>(TradeCtrl_NodeVtable());
+    *reinterpret_cast<void**>(p + 0xa0) = mem;   // node+0x18 = owning component
+}
+
 static void TradeComponent_FinishLiveVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT")) {
         TradeComponent_LiveVtable[6] =
@@ -597,6 +631,7 @@ extern "C" void* TradeComponent_Factory(void) {
     // whose sentinel is still 0 is the state that just crashed.
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
         TradeComponent_CtorInit(p);
+    TradeComponent_InstallController(p);
     return p;
 }
 
@@ -607,6 +642,7 @@ static void* TradeComponent_CreateInPlace(void* mem) {
     TradeComponent_FinishLiveVtable();
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
         TradeComponent_CtorInit(mem);
+    TradeComponent_InstallController(mem);
     return mem;
 }
 

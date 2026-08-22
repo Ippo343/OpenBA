@@ -480,6 +480,7 @@ extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (f
 extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + ClearAreaDescription c7200 storage (filled by FillTypeIdGlobals_cleararea)
 extern void RegisterOrchardGrowth();         // OrchardComponent::GetGrowth 51640 (orchard panel yield bar)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
+extern void RegisterTradeCtrlBatch();        // TradeComponent state machine, layer 1 (BANISHED_LIVE_TRADE_CTRL)
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterTradeUILeavesBatch();     // Wave A: TradeUI DynArray clear leaves (16050/16130/16200)
 extern void RegisterTradeUICheckoutBatch();   // Wave D: TradeUI checkout (81420) + leaves (5baa0/5a490)
@@ -631,6 +632,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAILeisure();       // Leisure (+99d0/fd50/a720)
     RegisterCitizenAIHousingIdle();   // FindHousing/Idle + AVL subtree
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
+    RegisterTradeCtrlBatch();        // TradeComponent SM handlers — gated BANISHED_LIVE_TRADE_CTRL
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterTradeUILeavesBatch();    // Wave A — TradeUI DynArray clear leaves (3 of the 10 gate deps)
     RegisterTradeUICheckoutBatch();  // Wave D — TradeUI checkout; opt-in via BANISHED_LIVE_TRADE_CHECKOUT
