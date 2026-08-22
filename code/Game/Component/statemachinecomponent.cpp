@@ -65,7 +65,13 @@ static bool s_resolved = false;
 // ============================================================
 // Resolve helpers (call once from Install)
 // ============================================================
+// Defined below the factory macro (it writes into the macro-generated LiveVtable).
+static void StateMachineComponent_InstallTreeTickSlot();
+
 void StateMachineComponent_ResolveHelpers() {
+    // Idempotent and self-guarded; sits ahead of the s_resolved early-out so the slot is
+    // installed on the very first entry from ANY of the four call sites.
+    StateMachineComponent_InstallTreeTickSlot();
     if (s_resolved) return;
 
     s_fn_Tick = reinterpret_cast<fn_StateMachine_Tick_t>(
@@ -1152,6 +1158,7 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
 // 2026-07-20 stockpile regression turned on, so it does not go live independently.
 static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
     if (!self) return;
+    StateMachineComponent_InstallTreeTickSlot();
     StateMachineComponent_BodyInit(self);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED") &&
         *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x38) == nullptr) {
@@ -1191,5 +1198,55 @@ COMPONENT_LIVE_FACTORY_SOA(StateMachineComponent, 0x58, 0xcd,
                            StateMachineComponent_StartupSlot,
                            "BANISHED_LIVE_SM_ONADDED",
                            StateMachineComponent_OnAddedSlot)
+
+// ------------------------------------------------------------------
+// Slot 8 (+0x40) — retail 0x14012b640: StateMachine::Tick(sm, time, 0, 1).
+// THE SECOND PER-FRAME TICK, and until now the missing half of the dispatcher.
+//
+// Retail drives the state machine from TWO vtable slots every frame, not one:
+//   idx 9 = 0x14012b620  Tick(sm, time, useAlt=1, run=1)  <- EntityList bucket
+//                                                            round-robin (vtbl[9])
+//   idx 8 = 0x14012b640  Tick(sm, time, useAlt=0, run=1)  <- EntityList::TreeNodeHandler
+//                                                            (entitylist.cpp, vtbl[8])
+// The `useAlt` flag is what selects the node's per-frame column: Tick's run phase calls
+// node slot +0x38 when it is 1 and node slot +0x30 when it is 0 (0x1400a97b1 vs
+// 0x1400a97e3). We had only ever wired idx 9, so every trans30 handler in the project
+// was unreachable — which is exactly why the merchant boat parked: BoatComponent's state
+// table (0x1400468a0) registers NO trans38 handler at all, only trans30.
+//
+// The TreeNodeHandler side of this was already ported and correct; it calls vtbl[8] on
+// components whose flag bit 2 is set. Only the SMC end was stubbed.
+//
+// SAFETY: at the time of writing NO other controller table in code/Game/Component
+// registers a non-null trans30 handler (checked across every TableRegisterState call
+// site), so for every existing controller this slot dispatches into the table, finds a
+// null handler and returns 0 — the same graceful no-op retail performs for an
+// unregistered slot. It is gated anyway, on the boat controller's own flag, so an A/B
+// run can isolate it.
+static void StateMachineComponent_TreeTickVSlot(void* s, void* t) {
+    StateMachineComponent* self = reinterpret_cast<StateMachineComponent*>(s);
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+    StateMachineComponent_ResolveHelpers();
+    if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
+        StateMachineComponent_BodyInit(self);
+    // Same guard as the Update adapter: an unlinked chain would drive Tick's parent-walk
+    // through the bare root's Step(-1).
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr) return;
+    StateMachineComponent_OnRemove(self, reinterpret_cast<int64_t>(t));   // Tick(...,0,1)
+}
+
+static void StateMachineComponent_InstallTreeTickSlot() {
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_BOAT_CTRL")) return;
+    StateMachineComponent_LiveVtable[8] =
+        reinterpret_cast<void*>(&StateMachineComponent_TreeTickVSlot);
+    std::fprintf(stderr, "[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch "
+                         "(retail 0x14012b640, Tick useAlt=0)\n");
+    std::fflush(stderr);
+}
+
 REGISTER_TYPE(StateMachineComponent, "Component",
               &StateMachineComponent_Factory, &StateMachineComponent_CreateInPlace);

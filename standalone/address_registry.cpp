@@ -481,6 +481,7 @@ extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + Clear
 extern void RegisterOrchardGrowth();         // OrchardComponent::GetGrowth 51640 (orchard panel yield bar)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterTradeCtrlBatch();        // TradeComponent state machine, layer 1 (BANISHED_LIVE_TRADE_CTRL)
+extern void RegisterBoatCtrlAddrs();         // BoatComponent state machine, layer 4 (BANISHED_LIVE_BOAT_CTRL)
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterTradeUILeavesBatch();     // Wave A: TradeUI DynArray clear leaves (16050/16130/16200)
 extern void RegisterTradeUICheckoutBatch();   // Wave D: TradeUI checkout (81420) + leaves (5baa0/5a490)
@@ -633,6 +634,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAIHousingIdle();   // FindHousing/Idle + AVL subtree
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterTradeCtrlBatch();        // TradeComponent SM handlers — gated BANISHED_LIVE_TRADE_CTRL
+    RegisterBoatCtrlAddrs();         // BoatComponent SM handlers — gated BANISHED_LIVE_BOAT_CTRL
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterTradeUILeavesBatch();    // Wave A — TradeUI DynArray clear leaves (3 of the 10 gate deps)
     RegisterTradeUICheckoutBatch();  // Wave D — TradeUI checkout; opt-in via BANISHED_LIVE_TRADE_CHECKOUT
@@ -1065,6 +1067,14 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z"));
     RegisterDispatchSlot(0x140151298,   // Math::Vector3::Dot(this, other) const -> Scalar
         (uintptr_t)ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
+    // Boat controller (boatcomponent_states.cpp): the two Vector3 value-return forms the
+    // boat's steering core 0x1400463d0 and its state-1/3 handlers call. Both take a
+    // hidden retbuf in RDX (Scalar is not returned in a register here — 0x140046482 and
+    // 0x140044dd1 both LEA the destination first).
+    RegisterDispatchSlot(0x140151290,   // Math::Vector3::Length(this) const -> Scalar
+        (uintptr_t)ResolveExport("?Length@Vector3@Math@@QEBA?AVScalar@2@XZ"));
+    RegisterDispatchSlot(0x1401512b8,   // Math::Vector3::Normalize(this, Scalar& outLen) -> Vector3
+        (uintptr_t)ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z"));
     RegisterDispatchSlot(0x1401512a0,   // Math::Vector3::FromYawPitch(Scalar&,Scalar&) -> Vector3
         // Static value-return ABI: RCX=hidden retbuf, RDX=yaw, R8=pitch. Read by
         // PerformWork::AbstractImpl (performwork.cpp) to convert the chop yaw into a

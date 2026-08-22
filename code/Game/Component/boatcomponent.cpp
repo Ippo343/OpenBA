@@ -280,6 +280,64 @@ void BoatComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(BoatComponent, 0x98, 0x80)
+
+// ── Controller state machine (boatcomponent_states.cpp) ──────────────────────────
+// BoatComponent is a state-machine component in exactly TradeComponent's shape, and the
+// geometry is read off its retail vtable 0x140158f40 rather than guessed:
+//   slot 16 = 0x140003730 (`XOR EAX,EAX; RET`)  => the machine starts in state 0
+//   slot 17 = 0x140003720 (`LEA RAX,[RCX+0x78]`) => node at +0x78, back-pointer at +0x90
+// The ctor (0x140046800) confirms both: it writes node vtable 0x140158ef0 to +0x78 and
+// `this` to +0x90 (= node+0x18).
+extern "C" void** BoatCtrl_NodeVtable();
+extern "C" void   BoatCtrl_PopulateTable();
+
+static uint32_t BoatComponent_LiveGetTypeId2(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("BoatComponent");
+    return cached;
+}
+static void* BoatComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static int   BoatComponent_GetDefaultState(void*) { return 0; }
+static void* BoatComponent_CreateState(void* self) {
+    return reinterpret_cast<uint8_t*>(self) + 0x78;
+}
+static void* BoatComponent_LiveGetTypeInfo(void*) {
+    static void* cached = nullptr;
+    if (!cached) cached = ::Object::GetTypeInfoByName("BoatComponent");
+    return cached;
+}
+
+// Wire the node ON THE INSTANCE, after MakeInertTyped/InitInertTyped — FillTypedVtable
+// rewrites the vtable slots and would erase anything written earlier.
+// See reference_live_vtable_slot_must_be_wired_in_installlive.
+static void BoatComponent_InstallController(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_BOAT_CTRL")) return;
+    BoatComponent_LiveVtable[1]  = reinterpret_cast<void*>(&BoatComponent_LiveGetTypeInfo);
+    BoatComponent_LiveVtable[16] = reinterpret_cast<void*>(&BoatComponent_GetDefaultState);
+    BoatComponent_LiveVtable[17] = reinterpret_cast<void*>(&BoatComponent_CreateState);
+    BoatCtrl_PopulateTable();
+    if (!mem) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
+    *reinterpret_cast<void**>(p + 0x78) = reinterpret_cast<void*>(BoatCtrl_NodeVtable());
+    *reinterpret_cast<void**>(p + 0x90) = mem;   // node+0x18 = owning component
+}
+
+extern "C" void* BoatComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x98, 0x80,
+        BoatComponent_LiveVtable,
+        reinterpret_cast<void*>(&BoatComponent_LiveGetTypeId2));
+    BoatComponent_InstallController(p);
+    return p;
+}
+
+static void* BoatComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x98, 0x80,
+        BoatComponent_LiveVtable,
+        reinterpret_cast<void*>(&BoatComponent_LiveGetTypeId2));
+    BoatComponent_InstallController(mem);
+    return mem;
+}
+
 REGISTER_TYPE(BoatComponent, "ControllerComponent",
               &BoatComponent_Factory, &BoatComponent_CreateInPlace);

@@ -209,12 +209,26 @@ struct Dispatcher {
         if (!h) return;
         reinterpret_cast<void (*)(void*)>(h)(NodeData(node));
     }
-    // slot 6 (+0x30): Transition — dispatch table[idx].trans30Handler(node+0x18)
-    static char Trans30(void* node, void* /*sm*/, void* /*time*/, int idx) {
+    // slot 6 (+0x30): Transition — dispatch table[idx].trans30Handler(node+0x18, sm, time)
+    // ⚠ THIS IS ALSO A PER-FRAME HANDLER, and it is the ONLY per-frame column some
+    // controllers use. StateMachine::Tick's run phase picks +0x38 when its `useAlt`
+    // argument is 1 and +0x30 when it is 0 (0x1400a97b1 vs 0x1400a97e3), and retail
+    // drives BOTH every frame through two different StateMachineComponent vtable slots:
+    // idx 9 = 0x14012b620 Tick(...,1,1) from the EntityList bucket round-robin, and
+    // idx 8 = 0x14012b640 Tick(...,0,1) from EntityList::TreeNodeHandler. BoatComponent's
+    // state table (0x1400468a0) registers NO trans38 handler at all — every per-frame
+    // handler it owns is in this column.
+    //
+    // Same tail-JMP ABI as Trans38: the exe dispatcher does `MOV RCX,[RCX+0x18]; JMP h`
+    // with RDX=sm and R8=time passing through, so handlers receive (data, sm, time).
+    // Forwarding them is required, not cosmetic — 0x140045250 and 0x140044ff0 both read
+    // sm to request their state transition. Handlers that take fewer arguments simply
+    // ignore the extra registers.
+    static char Trans30(void* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].trans30Handler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
+        return reinterpret_cast<char (*)(void*, void*, void*)>(h)(NodeData(node), sm, time);
     }
     // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm, time)
     // ⚠ This is the PER-FRAME handler. StateMachineComponent::Update calls

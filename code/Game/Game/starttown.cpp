@@ -2145,6 +2145,11 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // puts the post under water and fails for a misleading reason.
                     static const int kBankFallback = 6;
                     int bestX = 0, bestY = 0, bestSetback = -1, bestPath = -1, bestPt = -1;
+                    // The chosen ORIENTATION, and the footprint extents that go with it.
+                    // Every other demo building in this file is placed at rotation 0; the
+                    // trading post is the one that cannot be, because its dock is a fixed
+                    // offset in the building's LOCAL frame — see the rotation note below.
+                    int bestRot = 0, bestFpW = tw, bestFpH = th;
                     bool found = false;
                     int pointsSeen = 0;
 
@@ -2317,22 +2322,68 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                             ++pointsSeen;
 
                             for (int s = sMin; s <= sMin + kSetbackRange; ++s) {
+                              // ── ROTATION ─────────────────────────────────────────────
+                              // Rotation 0 alone cannot site this post on the main channel.
+                              // The pier offset is fixed in the building's LOCAL frame
+                              // (~(1.66,-6.53), pointing one way), so at a fixed rotation
+                              // the setback search can only step the footprint N/S/E/W —
+                              // it can never TURN the building to face the water. Measured
+                              // 2026-08-22 with BANISHED_TRADINGPOST_PATH=0: no candidate on
+                              // polyline 0 passed the reachability test at all, because the
+                              // fixed pier direction points inland off the coastline ring.
+                              //
+                              // So try all four orientations per candidate and rotate the
+                              // pier offset with them. placeStructure already takes the
+                              // orientation (in DEGREES, raw — it is handed straight to
+                              // Transform::FromYawPitchOffset as the yaw) and swaps the
+                              // footprint axes for 90/270; nothing in the demo block used it
+                              // until now.
+                              //
+                              // The rotation sense of the offset is NOT read off retail — the
+                              // pier's world position comes from `modelTransform * localPos`
+                              // (boatcomponent_route.cpp, 0x140123880) and we do not
+                              // replicate that matrix here, we apply the CCW-about-+Z
+                              // rotation below. It is MEASURED instead, and the measurement
+                              // is the log pair this block already prints:
+                              //   2026-08-22, seed 12345, chosen rot=90 -> predicted pier
+                              //   world (49.00,-1.00); the route builder independently
+                              //   resolved the dock at (49.03,-0.34).
+                              // Sub-tile agreement on a 90 placement is what pins the sense —
+                              // a wrong sign would put 90 where 270 belongs, tiles away and
+                              // usually on dry land. If that pair ever disagrees on a 90/270
+                              // placement, negate the sine terms in kPierRot.
+                              static const int   kRotDeg[4]    = { 0, 90, 180, 270 };
+                              static const float kPierRot[4][4] = {   // {xx,xy,yx,yy}
+                                  {  1.0f,  0.0f,  0.0f,  1.0f },     //   0
+                                  {  0.0f, -1.0f,  1.0f,  0.0f },     //  90 CCW
+                                  { -1.0f,  0.0f,  0.0f, -1.0f },     // 180
+                                  {  0.0f,  1.0f, -1.0f,  0.0f },     // 270
+                              };
+                              for (int ri = 0; ri < 4; ++ri) {
+                                const int rotDeg = kRotDeg[ri];
+                                // placeStructure swaps the axes for 90/270 (and only those);
+                                // mirror that here so the footprint we test is the footprint
+                                // it stamps.
+                                const int fpW = (rotDeg == 90 || rotDeg == 270) ? th : tw;
+                                const int fpH = (rotDeg == 90 || rotDeg == 270) ? tw : th;
+                                const float prX = kPierRot[ri][0] * pierX + kPierRot[ri][1] * pierY;
+                                const float prY = kPierRot[ri][2] * pierX + kPierRot[ri][3] * pierY;
                                 // 4 cardinals: post footprint placed s tiles off the water.
                                 const int cand[4][2] = {
-                                    { rx + s,      ry - th / 2 },   // east of the river
-                                    { rx - s - tw, ry - th / 2 },   // west
-                                    { rx - tw / 2, ry + s      },   // south
-                                    { rx - tw / 2, ry - s - th },   // north
+                                    { rx + s,      ry - fpH / 2 },   // east of the river
+                                    { rx - s - fpW, ry - fpH / 2 },  // west
+                                    { rx - fpW / 2, ry + s      },   // south
+                                    { rx - fpW / 2, ry - s - fpH },  // north
                                 };
                                 for (int d = 0; d < 4; ++d) {
                                     const int tx = cand[d][0], ty = cand[d][1];
                                     if (tx < 1 || ty < 1 ||
-                                        tx + tw >= mapSize - 1 || ty + th >= mapSize - 1)
+                                        tx + fpW >= mapSize - 1 || ty + fpH >= mapSize - 1)
                                         continue;
                                     bool clash = false;
                                     for (int o = 0; o < occN; ++o) {
-                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + tw + 1 &&
-                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + th + 1) {
+                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + fpW + 1 &&
+                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + fpH + 1) {
                                             clash = true; break;
                                         }
                                     }
@@ -2340,9 +2391,11 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     // Distance from the footprint centre to the town
                                     // centre. Strictly-less keeps the earliest path on a
                                     // tie, preserving the old path-0 preference where it
-                                    // costs nothing.
-                                    const long long ddx = (long long)(tx + tw / 2) - townCx;
-                                    const long long ddy = (long long)(ty + th / 2) - townCy;
+                                    // costs nothing — and, now, the earliest ROTATION, so a
+                                    // run that never needed to turn the building still
+                                    // places it at 0 exactly as before.
+                                    const long long ddx = (long long)(tx + fpW / 2) - townCx;
+                                    const long long ddy = (long long)(ty + fpH / 2) - townCy;
                                     const long long trueDist = ddx * ddx + ddy * ddy;
                                     long long dist = trueDist;
                                     // Where this candidate's pier would land, and whether a
@@ -2350,8 +2403,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     bool pierOk = false;
                                     int pierCell = -1;
                                     if (!reach.empty() && havePier) {
-                                        const int px = (int)((float)tx + (float)tw * 0.5f + pierX);
-                                        const int py = (int)((float)ty + (float)th * 0.5f + pierY);
+                                        const int px = (int)((float)tx + (float)fpW * 0.5f + prX);
+                                        const int py = (int)((float)ty + (float)fpH * 0.5f + prY);
                                         if (px >= 0 && py >= 0 && px < mapSize && py < mapSize) {
                                             pierCell = py * mapSize + px;
                                             pierOk = reach[pierCell] != 0;
@@ -2380,8 +2433,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     bestPierOk = pierOk;
                                     bestPierCell = pierCell;
                                     bestX = tx; bestY = ty; bestSetback = s;
+                                    bestRot = rotDeg; bestFpW = fpW; bestFpH = fpH;
                                     bestPath = p; bestPt = j; found = true;
                                 }
+                              }
                             }
                         }
                     }
@@ -2437,15 +2492,18 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                 "r=%d of the cluster centre; nothing spawned\n",
                                 tw, th, pathCount, pointsSeen, kExtraHouseSearchRadius);
                     } else {
-                        void* tent = placeStructure(ttmpl, bestX, bestY, 0, tw, th,
+                        // placeStructure takes the pre-rotation footprint (w0,h0) and swaps
+                        // the axes itself; Occupy needs the POST-rotation extents.
+                        void* tent = placeStructure(ttmpl, bestX, bestY, bestRot, tw, th,
                                                     /*isDemoFoundation=*/false, -1);
-                        Occupy(bestX, bestY, tw, th);
+                        Occupy(bestX, bestY, bestFpW, bestFpH);
                         if (tent) ++spawned;
                         if (bestPath >= 0)
                             fprintf(stderr, "[startTown::tradingpost] demo trading post "
-                                    "tile=(%d,%d) fp=%dx%d setback=%d from river path[%d] "
+                                    "tile=(%d,%d) fp=%dx%d rot=%d setback=%d from river path[%d] "
                                     "point[%d] townCentre=(%d,%d) dist=%.1f ent=%p%s\n",
-                                    bestX, bestY, tw, th, bestSetback, bestPath, bestPt,
+                                    bestX, bestY, bestFpW, bestFpH, bestRot, bestSetback,
+                                    bestPath, bestPt,
                                     townCx, townCy,
                                     bestTrueDist >= 0 ? std::sqrt((double)bestTrueDist) : -1.0,
                                     tent,
@@ -2461,13 +2519,14 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                     "(%d,%d) world(%.2f,%.2f) reachable=%s — compare against "
                                     "the route builder's own [BoatRoute] dock= line\n",
                                     bestPierCell % mapSize, bestPierCell / mapSize,
-                                    (float)bestX + (float)tw * 0.5f + pierX - (float)half,
-                                    (float)bestY + (float)th * 0.5f + pierY - (float)half,
+                                    (float)(bestPierCell % mapSize) - (float)half,
+                                    (float)(bestPierCell / mapSize) - (float)half,
                                     bestPierOk ? "yes" : "NO");
                         else
                             fprintf(stderr, "[startTown::tradingpost] demo trading post "
-                                    "tile=(%d,%d) fp=%dx%d ent=%p  (cluster-centre fallback, "
-                                    "NOT river-adjacent)\n", bestX, bestY, tw, th, tent);
+                                    "tile=(%d,%d) fp=%dx%d rot=%d ent=%p  (cluster-centre "
+                                    "fallback, NOT river-adjacent)\n",
+                                    bestX, bestY, bestFpW, bestFpH, bestRot, tent);
                     }
                 }
             }
