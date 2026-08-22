@@ -144,9 +144,17 @@ static uint32_t* s_typeId_HerdComponent = nullptr;  // DAT_1401c78c8
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 
 // Vtable pointers for dtor chain
+//
+// The Work BASE vtable is 0x140161a80, byte-verified in retail: HuntWork_Ctor
+// disassembles to `0x1400ef749: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
+// The AutoPickupWork vtable it then overwrites with is 0x140160fa0 (the next LEA
+// in the same ctor); only after that comes this class's own vtable.
+// These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
+// both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
+// (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
 static void** s_vtable_HuntWork = nullptr;       // 0x140161620
-static void** s_vtable_AutoPickupWork = nullptr;  // 0x140161340
-static void** s_vtable_Work = nullptr;             // 0x1401612e0
+static void** s_vtable_AutoPickupWork = nullptr;  // 0x140160fa0
+static void** s_vtable_Work = nullptr;             // 0x140161a80
 
 static bool s_hunt_funcs_resolved = false;
 
@@ -247,9 +255,9 @@ bool HuntWork_ResolveFuncs() {
     s_vtable_HuntWork = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161620));
     s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161340));
+        ResolveAddr(Module::Exe, 0x140160fa0));
     s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401612e0));
+        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&

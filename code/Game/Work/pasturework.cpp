@@ -166,9 +166,17 @@ static uint32_t* s_typeId_NatResComponent = nullptr;    // DWORD_1401c7ba0 = Pas
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 
 // Vtable pointers for dtor chain
+//
+// The Work BASE vtable is 0x140161a80, byte-verified in retail: PastureWork_Ctor
+// disassembles to `0x1400f2da9: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
+// The AutoPickupWork vtable it then overwrites with is 0x140160fa0 (the next LEA
+// in the same ctor); only after that comes this class's own vtable.
+// These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
+// both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
+// (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
 static void** s_vtable_PastureWork = nullptr;     // 0x1401617a0
-static void** s_vtable_AutoPickupWork = nullptr;   // 0x140161340
-static void** s_vtable_Work = nullptr;              // 0x1401612e0
+static void** s_vtable_AutoPickupWork = nullptr;   // 0x140160fa0
+static void** s_vtable_Work = nullptr;              // 0x140161a80
 
 // Original Slot4 exe function pointer for fallback (complex function)
 typedef int (*PW_OrigSlot4_t)(void* self, void* param2, uint64_t param3, uint64_t param4);
@@ -299,9 +307,9 @@ bool PastureWork_ResolveFuncs() {
     s_vtable_PastureWork = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401617a0));
     s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161340));
+        ResolveAddr(Module::Exe, 0x140160fa0));
     s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401612e0));
+        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&

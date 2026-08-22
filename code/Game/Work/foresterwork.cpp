@@ -125,9 +125,17 @@ static FW_FindSubEntity_t             s_fn_FindSubEntity = nullptr;
 static FW_TreeNodeCleanup_t           s_fn_TreeNodeCleanup = nullptr;
 
 // Vtable pointers for dtor chain
+//
+// The Work BASE vtable is 0x140161a80, byte-verified in retail: ForesterWork_Ctor
+// disassembles to `0x1400ebac9: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
+// The AutoPickupWork vtable it then overwrites with is 0x140160fa0 (the next LEA
+// in the same ctor); only after that comes this class's own vtable.
+// These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
+// both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
+// (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
 static void** s_vtable_ForesterWork = nullptr;     // 0x1401613a0
-static void** s_vtable_AutoPickupWork = nullptr;   // 0x140161340
-static void** s_vtable_Work = nullptr;              // 0x1401612e0
+static void** s_vtable_AutoPickupWork = nullptr;   // 0x140160fa0
+static void** s_vtable_Work = nullptr;              // 0x140161a80
 
 // fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom
 // all from engine_funcs.h (no local copies needed)
@@ -234,9 +242,9 @@ bool ForesterWork_ResolveFuncs() {
     s_vtable_ForesterWork = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401613a0));
     s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161340));
+        ResolveAddr(Module::Exe, 0x140160fa0));
     s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401612e0));
+        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Dispatch slots (indirect through IAT)
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
@@ -388,8 +396,8 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_FindSubEntity) printf("  MISSING: s_fn_FindSubEntity\n");
         if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
         if (!s_vtable_ForesterWork) printf("  MISSING: s_vtable_ForesterWork (0x1401613a0)\n");
-        if (!s_vtable_AutoPickupWork) printf("  MISSING: s_vtable_AutoPickupWork (0x140161340)\n");
-        if (!s_vtable_Work) printf("  MISSING: s_vtable_Work (0x1401612e0)\n");
+        if (!s_vtable_AutoPickupWork) printf("  MISSING: s_vtable_AutoPickupWork (0x140160fa0)\n");
+        if (!s_vtable_Work) printf("  MISSING: s_vtable_Work (0x140161a80)\n");
         if (!s_typeId_WorkplaceComponent) printf("  MISSING: s_typeId_WorkplaceComponent (c7740)\n");
         if (!s_typeId_RadiusComponent) printf("  MISSING: s_typeId_RadiusComponent (c7778)\n");
         if (!s_typeId_MaterialComponent) printf("  MISSING: s_typeId_MaterialComponent (c4870)\n");

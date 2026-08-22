@@ -116,8 +116,14 @@ static uint32_t* s_typeId_OrchardAreaComponent = nullptr;  // DWORD_1401c46b0
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 
 // Vtable pointers for dtor chain
+//
+// The Work BASE vtable is 0x140161a80, byte-verified in retail: TendArea_Ctor
+// disassembles to `0x1400f5a1d: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
+// This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
+// address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
+// "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
 static void** s_vtable_TendArea = nullptr;  // 0x140161990
-static void** s_vtable_Work = nullptr;       // 0x1401612e0
+static void** s_vtable_Work = nullptr;       // 0x140161a80
 
 static bool s_tend_funcs_resolved = false;
 
@@ -207,7 +213,7 @@ bool TendArea_ResolveFuncs() {
     s_vtable_TendArea = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161990));
     s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401612e0));
+        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&

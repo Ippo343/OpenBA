@@ -152,8 +152,14 @@ static uint32_t* s_typeId_RawMatComp = nullptr;     // DWORD_1401c7cb8
 static uint32_t* s_typeId_PosDesc = nullptr;        // DAT_1401c7938
 
 // Vtable pointers for dtor chain
+//
+// The Work BASE vtable is 0x140161a80, byte-verified in retail: GatherRawMaterials_Ctor
+// disassembles to `0x1400ec8bd: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
+// This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
+// address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
+// "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
 static void** s_vtable_GatherRawMaterials = nullptr;  // 0x140161420
-static void** s_vtable_Work = nullptr;                 // 0x1401612e0
+static void** s_vtable_Work = nullptr;                 // 0x140161a80
 
 static bool s_resolved = false;
 
@@ -232,7 +238,7 @@ bool GatherRawMaterials_ResolveFuncs() {
     s_vtable_GatherRawMaterials = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161420));
     s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401612e0));
+        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Dispatch slots (indirect through IAT)
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);

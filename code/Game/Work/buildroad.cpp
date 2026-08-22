@@ -200,8 +200,10 @@ void* BuildRoad_ScalarDtor_Impl(BuildRoad* self, uint32_t flags) {
     BuildRoad_ResolveFuncs();
     // Set BuildRoad vtable (for correct virtual dispatch during destruction)
     self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
-    // Set Work vtable (base class destructor phase). 0x140161a80 is not registered
-    // in standalone — keep the (non-null) BuildRoad vtable rather than nulling it.
+    // Set Work vtable (base class destructor phase). 0x140161a80 IS registered now —
+    // RegisterWorkBaseVtable() (code/Game/Work/work_base_standalone.cpp) is called from
+    // RegisterWorkBaseBatch() — so this branch is taken. The guard is kept only because
+    // this dtor can run before that batch on the direct-construction path.
     if (uintptr_t wv = ResolveAddr(Module::Exe, BuildRoadAddr::WorkVtable))
         self->vtable = (void*)wv;
     // Call Object::Internal::~Internal

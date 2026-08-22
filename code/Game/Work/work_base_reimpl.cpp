@@ -140,9 +140,11 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    // Was 0x1401612e0 — a 4-slot vtable belonging to a different class that happens to
-    // end exactly where the FishingWork type descriptor begins (0x1401612e0 + 0x20 =
-    // 0x140161300). Retail's own bytes settle it: 0x1400f730a LEA RAX,[0x140161a80].
+    // Was 0x1401612e0, which is not a vtable at all: it is the INTERIOR of FireWork's
+    // 13-slot vtable (starts 0x1401612a0, ends 0x140161308 where the "FishingWork" name
+    // string sits), i.e. FireWork vtable + 0x40 = slot 8. Ghidra reports ZERO xrefs to
+    // 0x1401612e0; every Work-hierarchy ctor/dtor LEAs 0x140161a80 instead
+    // (0x1400f730a LEA RAX,[0x140161a80] right here in retail's Work_Ctor25).
     uintptr_t vtWork = ResolveAddr(Module::Exe, 0x140161a80);
     if (vtWork) *reinterpret_cast<uintptr_t*>(s) = vtWork;
 
