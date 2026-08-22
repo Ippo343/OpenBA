@@ -65,7 +65,9 @@
 // (today NOTHING posts trade work except the player clicking the toggle) and a
 // deliberately visible stopping point, not a silent partial.
 //
-// GATED: BANISHED_LIVE_TRADE_CTRL, opt-in and NOT in kDefaultOnFlags. Unproven.
+// GATED: BANISHED_LIVE_TRADE_CTRL. GRADUATED 2026-08-22 into kDefaultOnFlags, so it is
+// now a KILL-SWITCH (=0), not an opt-in. Proven end to end: timer -> merchant spawn ->
+// route -> dock -> manifest -> auto-trade delivering goods.
 
 #include "Component/controller_state_table.h"
 #include "engine_funcs.h"

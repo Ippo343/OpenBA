@@ -64,7 +64,9 @@
 // boat+0x40 = the dock position   boat+0x50 = the CURRENT waypoint
 // boat+0x60/+0x68/+0x6c = route array/count/capacity   boat+0x70 = waypoint index
 //
-// GATED: BANISHED_LIVE_BOAT_CTRL, opt-in and NOT in kDefaultOnFlags. Unproven.
+// GATED: BANISHED_LIVE_BOAT_CTRL. GRADUATED 2026-08-22 into kDefaultOnFlags, so it is
+// now a KILL-SWITCH (=0), not an opt-in. Proven: the hull sails its route and both dock
+// gates fire at their exact retail thresholds.
 
 #include "Component/controller_state_table.h"
 #include "Component/component_factory_base.h"

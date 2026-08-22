@@ -584,12 +584,45 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
 
     const uint32_t tidRawMat = g_TypeId_RawMaterialDescription ? *g_TypeId_RawMaterialDescription : 0;
 
+    // What the merchant is actually offering, with the raw-material flag word that each
+    // order mask is tested against. Without this, a "0 delivered" outcome cannot be told
+    // apart from "the merchant brought one good that nobody had ordered".
+    if (DockTrace()) {
+        const int lines = *reinterpret_cast<int32_t*>(comp + 0x58);
+        std::fprintf(stderr, "[TradeDock] manifest has %d line(s), storage volume %d/%d:\n",
+                     lines, volume, volumeCap);
+        for (int k = 0; k < lines; ++k) {
+            const uintptr_t line = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(comp + 0x50)) +
+                                   static_cast<uintptr_t>(k) * 0x10;
+            void* rm = FindChildByTypeId(
+                static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(line)), tidRawMat);
+            std::fprintf(stderr,
+                "[TradeDock]   line[%d] good=%p price=%d stock=%d rawMat=%p "
+                "flags(+0x5c)=0x%x unitVolume(+0x48)=%d\n",
+                k, *reinterpret_cast<void**>(line),
+                *reinterpret_cast<int32_t*>(line + 0x08),
+                *reinterpret_cast<int32_t*>(line + 0x0c), rm,
+                rm ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c) : 0u,
+                rm ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : -1);
+        }
+    }
+
     const int orderCount = *reinterpret_cast<int32_t*>(comp + 0x48);
     for (int o = 0; o < orderCount; ++o) {
         const uintptr_t order = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(comp + 0x40)) +
                                 static_cast<uintptr_t>(o) * 0x0c;
         const int orderAmount = *reinterpret_cast<int32_t*>(order + 0x08);
-        if (orderAmount == 0) continue;
+        if (orderAmount == 0) {
+            // OUTCOME, not intent: an order row with amount 0 is a category the player
+            // never asked for. Retail skips it, and a post with 14 all-zero rows buying
+            // nothing is CORRECT behaviour, not a broken buy loop. Print both arms so the
+            // two cannot be confused.
+            if (DockTrace())
+                std::fprintf(stderr, "[TradeDock]   order[%d] mask=0x%x amount=0 -> SKIP "
+                             "(no standing order for this category)\n",
+                             o, *reinterpret_cast<uint32_t*>(order + 0x00));
+            continue;
+        }
         const uint32_t orderMask = *reinterpret_cast<uint32_t*>(order + 0x00);
 
         // ── 1. what the post can afford: everything unreserved in its storage ──────
@@ -657,6 +690,21 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
                 if (++cursor >= candidates.count) cursor = 0;
                 if (bought >= availQty) break;         // merchant is out of stock
             }
+        }
+
+        // Which arm actually stopped this order. "The buy loop ran" and "the buy loop
+        // bought something" are separate claims; only the readback settles the second.
+        if (DockTrace()) {
+            const char* why = "order filled";
+            if (candidates.count == 0)       why = "NO manifest line matches this mask";
+            else if (availQty <= 0)          why = "matching lines are out of stock";
+            else if (sellValue <= 0)         why = "post has nothing sellable (sellValue=0)";
+            else if (bought < orderAmount)   why = "ran out of money / stock / storage volume";
+            std::fprintf(stderr,
+                "[TradeDock]   order[%d] mask=0x%x want=%d | sellValue=%d candidates=%d "
+                "availQty=%d -> bought=%d spent=%d (%s)\n",
+                o, orderMask, orderAmount, sellValue, candidates.count, availQty,
+                bought, spent, why);
         }
 
         // ── 4. sell to cover `spent` ──────────────────────────────────────────────

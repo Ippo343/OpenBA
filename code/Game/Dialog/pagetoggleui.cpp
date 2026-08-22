@@ -14,10 +14,12 @@
 // Retail reads this through exe .rdata exref 0x1401516a8 (import string
 // "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A" — read out of the exe's
 // own .rdata at 0x1401b8ce8, and an export of Runtime-x64.dll). In standalone the
-// whole element-type-id table lives in standalone/reg_element_typeids.cpp, which
-// is GATED on BANISHED_LIVE_ELEMENT_TIDS and therefore OFF by default — so
-// g_TypeId_CheckboxElement is normally null and FindElementType(root, 0) can
-// never match, leaving +0x30 null for Slot7 to fault on.
+// whole element-type-id table lives in standalone/reg_element_typeids.cpp, gated on
+// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into kDefaultOnFlags 2026-08-22 and is
+// now a kill-switch, so g_TypeId_CheckboxElement is normally POPULATED — but it can still
+// be null when someone A/Bs with BANISHED_LIVE_ELEMENT_TIDS=0, and then
+// FindElementType(root, 0) can never match, leaving +0x30 null for Slot7 to fault on.
+// The private-resolve below is what keeps that arm safe, so it stays.
 //
 // We deliberately do NOT publish into g_TypeId_CheckboxElement: that global is
 // shared with ControlUI, and filling the shared element-id globals on the default

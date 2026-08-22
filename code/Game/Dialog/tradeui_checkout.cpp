@@ -49,27 +49,23 @@
 // It is called out to the existing port here rather than duplicated.
 //
 // ── Why this is opt-in ───────────────────────────────────────────────────────
-// One dependency is genuinely missing: 0x14005ace0, the livestock spawn. It is
-// not a leaf — it is ~150 lines with its own closure (Entity_impl_2e20, the
-// world RNG, ComponentEntity_CopyCtor, HerdComponent_helper_7400,
-// AnimalComponent_UpdateBehavior, FUN_1400c3470, FUN_1400c48a0, type-id
-// 0x1401c6f98) and is the "livestock acquisition" wave in its own right.
-// fn_Building_AddBuyToStorage therefore resolves null.
+// UPDATE: the one genuinely missing dependency, 0x14005ace0 (the livestock
+// spawn), is now ported in code/Game/Component/tradecomponent_livestock.cpp and
+// registered, so fn_Building_AddBuyToStorage resolves and all three buy arms are
+// complete. Nothing in the checkout is unported any more.
 //
-// Everything else in the checkout is ported and registered, and the sell phase
-// and the raw-material/agriculture buy phases are complete. But this function
-// mutates storage, town resource counters and the town availability pools, and
-// none of that has ever run in standalone. So the whole thing is gated on
-// BANISHED_LIVE_TRADE_CHECKOUT (opt-in, per the CLAUDE.md rule that unproven
-// features start outside kDefaultOnFlags). Once it has been exercised it should
-// move to kDefaultOnFlags and the flag become a kill-switch.
+// The gate BANISHED_LIVE_TRADE_CHECKOUT remains, because this function mutates
+// storage, town resource counters and the town availability pools, and that has
+// to be exercised before it can be trusted by default (the CLAUDE.md rule that
+// unproven features start outside kDefaultOnFlags). Once a run shows a purchase
+// committing correctly, this moves into kDefaultOnFlags and the flag becomes a
+// kill-switch.
 //
-// With the gate OFF the click is inert, exactly as it was before this file
-// existed. With the gate ON, a livestock purchase still commits its order and
-// registers the availability — only the animals fail to appear, and that path
-// says so once on stderr rather than silently returning plausible numbers.
+// With the gate OFF the click is inert — which is exactly the "pressing Trade
+// does nothing" symptom, and is the gate working as designed, not a defect.
 
 #include "Dialog/ui_panels.h"
+#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -115,13 +111,14 @@ void ResolveOnce() {
                                ResolveAddr(Module::Exe, 0x1401c79a8));
 }
 
-// The checkout is opt-in until it has been exercised — see the header block.
+// GRADUATED 2026-08-22 — routed through ComponentFactory::LiveEnabled, which consults
+// kDefaultOnFlags, so BANISHED_LIVE_TRADE_CHECKOUT is now a KILL-SWITCH (=0) rather than
+// an opt-in. This was a raw getenv() before, and a raw getenv() cannot see the table at
+// all: adding the name to kDefaultOnFlags without this change would have looked like a
+// graduation and changed nothing (the SPAWN_DOSPAWN trap).
 bool CheckoutEnabled() {
     static int s_on = -1;
-    if (s_on < 0) {
-        const char* v = getenv("BANISHED_LIVE_TRADE_CHECKOUT");
-        s_on = (v && *v && v[0] != '0' && v[0] != 'f' && v[0] != 'F') ? 1 : 0;
-    }
+    if (s_on < 0) s_on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_CHECKOUT") ? 1 : 0;
     return s_on != 0;
 }
 
@@ -288,6 +285,13 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     uintptr_t townMgr   = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf0);
 
+    // OUTCOME counters. A click that commits nothing and a click that commits a full
+    // basket look identical from outside this function, and "the button did nothing" is
+    // exactly the report this wave was opened on — so the tail below prints what actually
+    // moved, not that the handler was entered.
+    int soldRows = 0, soldUnits = 0, boughtRows = 0, boughtUnits = 0;
+    const int creditBefore = *reinterpret_cast<int*>(townMgr + 0x1ac);
+
     // ── Phase 1: sell rows ───────────────────────────────────────────────────
     // self+0x30 array, self+0x38 count, stride 0x20.
     //   entry+0x00  purchased/sold resource entity ptr
@@ -300,6 +304,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             uintptr_t entry    = sellBase + static_cast<uintptr_t>(i) * 0x20;
             int qty = *reinterpret_cast<int*>(entry + 0x18);
             if (qty == 0) continue;
+            ++soldRows; soldUnits += qty;
 
             fn_InternalBasePtr_CheckPtr(&storagePtr);
             void* storage = reinterpret_cast<void*>(storagePtr[0]);
@@ -352,6 +357,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             uintptr_t entry   = buyBase + static_cast<uintptr_t>(i) * 0x18;
             int qty = *reinterpret_cast<int*>(entry + 0x10);
             if (qty == 0) continue;
+            ++boughtRows; boughtUnits += qty;
 
             void* bought = *reinterpret_cast<void**>(entry);
 
@@ -383,16 +389,21 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
                 if (fn_Building_AddBuyToStorage) {
                     fn_Building_AddBuyToStorage(reinterpret_cast<void*>(tradePtr[0]), bought, qty);
                 } else {
-                    // 0x14005ace0 is the unported livestock spawn. The order is
-                    // still committed and the animal type is still unlocked for
-                    // pastures — only the delivered animals are missing.
+                    // 0x14005ace0 IS ported now
+                    // (code/Game/Component/tradecomponent_livestock.cpp) and
+                    // registered in reg_tradeui_checkout.cpp, so this arm survives
+                    // only as EXEC-of-0 insurance for a build where that
+                    // registration wave is not linked in. The order is still
+                    // committed and the animal type is still unlocked for pastures
+                    // — only the delivered animals would be missing.
                     static bool s_warned = false;
                     if (!s_warned) {
                         s_warned = true;
                         fprintf(stderr, "[TradeUI] livestock purchased, but the spawn leaf "
-                                        "(0x14005ace0) is NOT PORTED — the order is committed "
-                                        "and the type is unlocked, but NO ANIMALS were "
-                                        "delivered.\n");
+                                        "(0x14005ace0) did not resolve — is "
+                                        "reg_tradeui_checkout.cpp linked? The order is "
+                                        "committed and the type is unlocked, but NO ANIMALS "
+                                        "were delivered.\n");
                         fflush(stderr);
                     }
                 }
@@ -408,6 +419,12 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
                 + static_cast<uintptr_t>(i) * 0x18 + 0x10) = 0;
         }
     }
+
+    fprintf(stderr, "[TradeCheckout] committed: sold %d unit(s) over %d row(s), "
+                    "bought %d unit(s) over %d row(s), town trade credit %d -> %d\n",
+            soldUnits, soldRows, boughtUnits, boughtRows,
+            creditBefore, *reinterpret_cast<int*>(townMgr + 0x1ac));
+    fflush(stderr);
 
     // ── Phase 3: repaint ─────────────────────────────────────────────────────
     TradeUI_RefreshDisplay(self, 0, 0, 0);

@@ -88,9 +88,10 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // (UI::NumberElement — the engine_funcs label "SpinnerElement" is a known
 // misnomer, see standalone/reg_element_typeids.cpp:35).
 //
-// That element-type-id table is registered by reg_element_typeids.cpp but GATED
-// on BANISHED_LIVE_ELEMENT_TIDS, which is NOT in kDefaultOnFlags — so by default
-// both globals are null. We resolve PRIVATE copies by name rather than filling
+// That element-type-id table is registered by reg_element_typeids.cpp, gated on
+// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into kDefaultOnFlags 2026-08-22, so by
+// default both globals are now POPULATED; they are null only when someone A/Bs with
+// BANISHED_LIVE_ELEMENT_TIDS=0. We resolve PRIVATE copies by name rather than filling
 // g_TypeId_LabelElement / g_TypeId_SpinnerElement, because those globals are
 // shared with townhallui / helpui / toolbardialog and waking them on the default
 // path is precisely the broad change that gate exists to hold back. When the gate

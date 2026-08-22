@@ -193,6 +193,45 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_SELECTION_OUTLINE",
     "BANISHED_LIVE_EVENTS",
     "BANISHED_LIVE_CITIZEN_CARRY",
+    // GRADUATED 2026-08-22 — the TradeUI checkout (buttonTrade, 0x140081420). This was
+    // the whole of the "pressing Trade does nothing" report: the handler was ported,
+    // registered and correctly dispatched, and returned early on an opt-in gate, so the
+    // click was inert by design and looked broken.
+    // POSITIVE RUN (seed 12345, demo trading post, merchant docked, gate forced on):
+    // a player click on Trade bought iron tools from the docked merchant and the panel
+    // updated — a result only the live path can produce.
+    // Its one previously-unported dependency, 0x14005ace0 (the livestock spawn), is now
+    // ported in code/Game/Component/tradecomponent_livestock.cpp and registered, so no
+    // arm of the checkout is a stub any more.
+    "BANISHED_LIVE_TRADE_CHECKOUT",
+    // GRADUATED 2026-08-22 — the rest of the trade lane, in one go, on the strength of a
+    // full chain running end to end: merchant timer -> boat spawn -> A* route -> sail ->
+    // dock (both gates at their exact retail thresholds) -> manifest -> auto-trade
+    // delivering 20 units, plus a player click on Trade buying iron tools. Storage,
+    // town trade credit and the availability pools all move.
+    //
+    // These four were the three stacked type-id/component gates that made the trading
+    // post crash on click (see project_trade_storage_tool_wave) plus the two controller
+    // state machines. None of them ever needed fix code — they were pre-existing work
+    // behind flags nothing set. With them in the table a plain `make sa-run` gets a
+    // working trading post for the first time.
+    //
+    // ⚠ ELEMENT_TIDS CARRIES A KNOWN, MEASURED, UNEXPLAINED DELTA. A 6-run A/B
+    // (seed 424242, ~500 s/arm, 2026-08-21 `ebdda28`) moved deer AnimalUpd MoveTo
+    // meanAttempts 1.45 (off) -> 1.76 (on); TRADE_TIDS was indistinguishable from off, so
+    // ELEMENT_TIDS is the channel. It is NOT frame pacing (mean fps 140.5-140.8 in every
+    // arm). The mechanism was never identified; the leading, incomplete hypothesis is an
+    // RNG-stream shift, since BANISHED_SEED pins world-gen only and the world RNG at
+    // gw+0xd8 is unseeded. Graduated anyway as an explicit call: the trade lane is
+    // verified and the delta is a pathing-efficiency wobble, not a failure. If deer or
+    // hunting throughput regresses, re-run that A/B before looking anywhere else.
+    "BANISHED_LIVE_ELEMENT_TIDS",
+    "BANISHED_LIVE_TRADE_TIDS",
+    "BANISHED_LIVE_TRADE_COMPONENT",
+    // The two controller state machines: TradeComponent's (merchant timer/spawn/dock)
+    // and BoatComponent's own 5-state machine (the hull actually moving along its route).
+    "BANISHED_LIVE_TRADE_CTRL",
+    "BANISHED_LIVE_BOAT_CTRL",
     // CitizenComponent vtable slot 6 (+0x30, the OnAdded broadcast) -> OnAdd 0x140114000,
     // the append into the town citizen list townMgr+0xa0. Graduated 2026-07-26: without it
     // newborns were created, entered the world entity list, and joined no population system
