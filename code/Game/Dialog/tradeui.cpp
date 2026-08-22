@@ -1043,6 +1043,34 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     }
 }
 
+// Positive readback for the SpinnerElement::SetElementId tagging below. The override
+// (Runtime 0x1800d7e10) writes the id into TWO places: the spinner's own Element+0x88
+// and the inner edit element reached through **(spinner+0xa0). That inner write is the
+// half the Element base setter never performs, so a matching inner id is a value only
+// the faithful call can produce -- the difference between "we tagged something" and
+// "we tagged what retail tags". One line per family (row 0 only) under
+// BANISHED_TRADEUI_EVENTDIAG; every branch prints, including a MISMATCH.
+static void TradeUI_ReportSpinnerTag(const char* family, int idx, void* spinner, int id) {
+    if (idx != 0 || !TradeEventDiagOn()) return;
+    if (!spinner) {
+        fprintf(stderr, "[TradeSpinnerTag] %s row0 id=%d spinner=NULL -- nothing tagged\n",
+                family, id);
+        fflush(stderr);
+        return;
+    }
+    uintptr_t sp = (uintptr_t)spinner;
+    int own = *(int*)(sp + 0x88);
+    void** innerPtr = *(void***)(sp + 0xa0);
+    void* inner = innerPtr ? *innerPtr : nullptr;
+    int innerId = inner ? *(int*)((uintptr_t)inner + 0x88) : -1;
+    fprintf(stderr,
+            "[TradeSpinnerTag] %s row0 id=%d spinner=%p own(+0x88)=%d inner=%p "
+            "inner(+0x88)=%d %s\n",
+            family, id, spinner, own, inner, innerId,
+            (own == id && inner && innerId == id) ? "OK" : "MISMATCH");
+    fflush(stderr);
+}
+
 void TradeUI_Serialize(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
@@ -1178,37 +1206,17 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId);
 
-        // DECLARED DEVIATION (measured 2026-08-21) — retail sets ONLY user data here, and
-        // that is faithfully reproduced; the SetElementId call after it is ours.
-        //
-        // The UI framework delivers a msg-0x15 (spinner changed) notification with param4
-        // taken from the element's own id, Element+0x88 (SetElementId). It never reads
-        // user data, Element+0x80 (SetUserData): both GetUserData and SetUserData in
-        // Runtime-x64.dll are referenced ONLY from the export table, so no code inside the
-        // framework consults +0x80 at all. Measured directly — every element that carries
-        // an id arrives with param4 == that id (1, 100, 50000...), while all four TradeUI
-        // spinner families arrived as `ud(+0x80)=2000 elemId(+0x88)=-1 id=-1` and were
-        // discarded by the dispatcher below, whose ranges start at exactly these values.
-        // OnStorageSpinner therefore never ran, and a typed quantity was silently dropped:
-        // the spinner moved on screen and nothing was ever written to the building.
-        //
-        // Why retail works regardless is not established here. What IS established is that
-        // the id is what the framework sends and retail's own dispatcher matches on it, so
-        // the id has to be set for any of these spinners to function.
-        //
-        // ProfessionUI hit this first and resolved it the same way (professionui.cpp:498)
-        // — its town-hall spinner works because it sets BOTH. This mirrors that precedent
-        // across all four TradeUI spinner families: order amount (7000+), storage (2000+),
-        // sell (3000+) and buy (4000+). The user-data write is left in place because it is
-        // what retail does and something may yet read it.
-        //
-        // Set user data on spinner (original uses fn_Element_SetUserData, NOT SetElementId)
+        // The spinner carries the id the msg-0x15 (spinner changed) notification sends
+        // as param4. Retail tags it through SpinnerElement::SetElementId (exe dispatch slot
+        // 0x140151cd8 -> "?SetElementId@SpinnerElement@UI@@QEAAXH@Z", Runtime 0x1800d7e10),
+        // NOT Element::SetUserData and NOT the Element base SetElementId. The override
+        // writes +0x88 on the spinner AND on the inner edit element at *(spinner+0xa0), so
+        // both halves of the widget answer to the same id. Faithful, verified at the four
+        // retail call sites (EDX = base+0x3e8 / +0x7d0 / +0xbb8 / +0xfa0).
         fn_InternalBasePtr_Ctor(r0, spinner);
         fn_InternalBasePtr_CheckPtr(r0);
-        if (*(void**)r0) fn_Element_SetUserData(*(void**)r0, (void*)(uintptr_t)(baseId + 1000));
-        // ...and the element id the msg-0x15 notification actually carries (see above).
-        fn_InternalBasePtr_CheckPtr(r0);
-        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId + 1000);
+        if (*(void**)r0) fn_SpinnerElement_SetElementId(*(void**)r0, baseId + 1000);
+        TradeUI_ReportSpinnerTag("purchase", row, *(void**)r0, baseId + 1000);
 
         // Build 0x20-byte entry: {label, number, button, spinner}
         uint64_t entry[4] = {(uint64_t)label, (uint64_t)number, (uint64_t)button, (uint64_t)spinner};
@@ -1302,17 +1310,14 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(c2);
         void* e2 = *(void**)c2;
 
-        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
-        // Verified against retail 0x140084dd0: it really does call SetUserData (+0x80)
-        // here with i+2000, and never SetElementId (+0x88) on this element.
+        // child(1) is a SpinnerElement, not a slider: retail tags it through
+        // SpinnerElement::SetElementId (slot 0x140151cd8), which sets +0x88 on the spinner
+        // and on its inner edit element at *(spinner+0xa0). Retail call site 0x140085d40,
+        // EDX = i + 0x7d0. See the tablePurchase loop above.
         fn_InternalBasePtr_Ctor(c0, e1);
         fn_InternalBasePtr_CheckPtr(c0);
-        fn_Element_SetUserData(*(void**)c0, (void*)(uintptr_t)(i + 2000));
-        // ...and the element id the msg-0x15 notification actually carries — without this
-        // the storage spinner's event arrives as id=-1 and is discarded (see the deviation
-        // note in the tablePurchase loop above).
-        fn_InternalBasePtr_CheckPtr(c0);
-        fn_Element_SetElementId(*(void**)c0, i + 2000);
+        fn_SpinnerElement_SetElementId(*(void**)c0, i + 2000);
+        TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
 
         // Report WHICH object got the tag, and read the tag back off it. If the elements
         // that later raise events are different pointers than these, the rows firing the
@@ -1384,14 +1389,12 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(c);
         void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
-        // Set user data on SliderElement (original uses fn_Element_SetUserData, NOT SetElementId)
+        // child(3) is a SpinnerElement (the "SliderElement" naming is the same mislabel
+        // reg_element_typeids.cpp:36 documents). Retail call site 0x14008614e, EDX = i+0xbb8.
         fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
-        fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 3000));
-        // ...and the element id the msg-0x15 notification carries (see the deviation note
-        // in the tablePurchase loop above).
-        fn_InternalBasePtr_CheckPtr(c);
-        fn_Element_SetElementId(*(void**)c, i + 3000);
+        fn_SpinnerElement_SetElementId(*(void**)c, i + 3000);
+        TradeUI_ReportSpinnerTag("sell", i, *(void**)c, i + 3000);
 
         // Build 0x20-byte entry: {child1, child0, child2, child3}
         // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
@@ -1453,14 +1456,12 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(c);
         void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
-        // Set user data on SliderElement (original uses fn_Element_SetUserData, NOT SetElementId)
+        // child(3) is a SpinnerElement (same mislabel as the sell loop).
+        // Retail call site 0x14008653e, EDX = i + 0xfa0.
         fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
-        fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 4000));
-        // ...and the element id the msg-0x15 notification carries (see the deviation note
-        // in the tablePurchase loop above).
-        fn_InternalBasePtr_CheckPtr(c);
-        fn_Element_SetElementId(*(void**)c, i + 4000);
+        fn_SpinnerElement_SetElementId(*(void**)c, i + 4000);
+        TradeUI_ReportSpinnerTag("buy", i, *(void**)c, i + 4000);
 
         // Build 0x20-byte entry: {child1, child2, child3, child0}
         // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
@@ -1800,10 +1801,10 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         void* tableSell = *(void**)(s + 0xC8);
         void* tableBuy  = *(void**)(s + 0xD0);
         // param2 is the element that raised the event. Retail routes spinner changes by
-        // a value it writes ONLY into Element::SetUserData (+0x80) — Element::SetElementId
-        // is a DIFFERENT field (+0x88), and retail never sets it on these rows. So dump
-        // both off the raising element: whichever one carries 2000+idx is the field the
-        // framework is expected to deliver as eventId.
+        // the element's own id, +0x88, tagged via SpinnerElement::SetElementId. Both
+        // +0x80 (user data) and +0x88 are dumped here because an earlier reading had the
+        // tag going into user data; whichever one carries 2000+idx is the field the
+        // framework actually delivers as eventId.
         // param2 is an InternalBasePtr* (a stack {object, generation} pair), NOT the
         // element itself — an earlier version of this line read the stack slot directly
         // and printed garbage. Deref one level to reach the raising element.
