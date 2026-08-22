@@ -14,10 +14,12 @@
 // (FindComponent(BoatComponent)), 0x140123880 (named attach point), 0x1400a7310 (nearest
 // route point) and 0x14009ffc0 (one water A* leg), all in boatcomponent_route.cpp.
 //
+// LAYER 3 (2026-08-22) added the DOCKED state: a800 (enter) and a6d0 (update/leaving),
+// plus the two leaves they were blocked on — 0x14005b580 (the merchant manifest
+// generator) and 0x140059ad0 (auto-trade), both in tradecomponent_dock.cpp.
+//
 // Still absent, and still deliberately so — an unregistered address reports "NOT
 // IMPLEMENTED" if anything reaches for it, which is the honest state:
-//   0x14005a800 / 0x14005a6d0  dock enter/leave — blocked on 0x14005b580 (merchant
-//                              manifest) and 0x140059ad0 (auto-buy)
 //   0x14005a850                dock event-log line — needs the EventLog string chain
 //   0x14005b240                dismiss event — retail inlines all of StateMachine::Tick
 // See the header of tradecomponent_states.cpp for the full table.
@@ -43,6 +45,11 @@ extern "C" int   BoatRoute_NearestPointIndex(void* arr, const float* pt);     //
 extern "C" int   BoatRoute_FindWaterPath(int64_t terrain, void* u2, unsigned from,
                                          uint64_t to, void* u5, int64_t out); // 0x14009ffc0
 extern "C" void  BoatComponent_SetDestination(int64_t comp, int64_t* destIBP);// 0x1400456e0
+// Layer 3 — the docked state.
+extern "C" void  TradeComponent_BuildMerchantManifest(void* self);           // 0x14005b580
+extern "C" void  TradeComponent_AutoTrade(void* self);                       // 0x140059ad0
+extern "C" char  TradeCtrl_State13_Enter(void* self, void* sm);              // 0x14005a800
+extern "C" char  TradeCtrl_State13_Update(void* self, void* sm);             // 0x14005a6d0
 
 void RegisterTradeCtrlBatch() {
     RegisterExeAddr(0x14005abd0, reinterpret_cast<uintptr_t>(&TradeCtrl_State2_Enter));
@@ -60,4 +67,12 @@ void RegisterTradeCtrlBatch() {
     RegisterExeAddr(0x1400a7310, reinterpret_cast<uintptr_t>(&BoatRoute_NearestPointIndex));
     RegisterExeAddr(0x14009ffc0, reinterpret_cast<uintptr_t>(&BoatRoute_FindWaterPath));
     RegisterExeAddr(0x1400456e0, reinterpret_cast<uintptr_t>(&BoatComponent_SetDestination));
+    // Layer 3 — the docked state. b580 and 9ad0 have no caller in the image other than
+    // a800/a6d0 (checked: their only non-data xrefs are 0x14005a809, 0x14005a831 and
+    // 0x14005a6e8), so registering them buys nothing at runtime. They are registered
+    // anyway so that the registry, not a source grep, is the authority on what is done.
+    RegisterExeAddr(0x14005b580, reinterpret_cast<uintptr_t>(&TradeComponent_BuildMerchantManifest));
+    RegisterExeAddr(0x140059ad0, reinterpret_cast<uintptr_t>(&TradeComponent_AutoTrade));
+    RegisterExeAddr(0x14005a800, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Enter));
+    RegisterExeAddr(0x14005a6d0, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Update));
 }

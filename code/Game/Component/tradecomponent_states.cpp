@@ -36,9 +36,10 @@
 //     event 9    a850  boat docked: write the event-log line, -> 0x13
 //     event 0xb  a9c0  boat lost/despawned: drop the merchant ref, -> 2
 //   state 0x13 MERCHANT DOCKED (the panel can trade)
-//     enter   a800  build the merchant's manifest, arm the stay timer, auto-buy
+//     enter   a800  build the merchant's manifest, arm the stay timer, auto-trade
 //     trans38 a780  per-frame: stay timer expired and not mid-trade -> 2
-//     update  a6d0  leaving: auto-sell, release the boat, clear the manifest
+//     update  a6d0  leaving: auto-trade, release the boat, clear the manifest
+//                   (both in tradecomponent_dock.cpp — layer 3)
 //     event 0xa  b240  player dismissed the merchant -> 2 (inline SM tick)
 //   every state carries transition 3 -> b160, the shared teardown.
 //
@@ -55,8 +56,6 @@
 //                than half-done.
 //   0x14005b160  shared teardown — also calls 0x1400456e0 (with a null ref, its
 //                "release the boat" branch).
-//   0x14005a800 / 0x14005a6d0  dock enter/leave — blocked on 0x14005b580 (the merchant
-//                manifest generator) and 0x140059ad0 (auto-buy, ~2.5 KB).
 //   0x14005a850  dock event-log line — needs the EventLog string/format chain.
 //   0x14005b240  dismiss event — retail inlines the whole of StateMachine::Tick here.
 //
@@ -80,6 +79,10 @@
 // Layer 2 lives in boatcomponent_route.cpp (retail 0x14000eb20 / 0x1400456e0).
 extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP);
 extern "C" void  BoatComponent_SetDestination(int64_t boatComp, int64_t* destEntityIBP);
+
+// Layer 3 lives in tradecomponent_dock.cpp (retail 0x14005a800 / 0x14005a6d0).
+extern "C" char TradeCtrl_State13_Enter(void* self, void* sm);    // 0x14005a800
+extern "C" char TradeCtrl_State13_Update(void* self, void* sm);   // 0x14005a6d0
 
 namespace { struct TradeCtrlTag {}; }
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
@@ -561,10 +564,10 @@ extern "C" void TradeCtrl_PopulateTable() {
 
     // state 0x13 — merchant docked
     TableRegisterState(t, 0x13,
-        nullptr,                                            // a800 — NOT PORTED
-        nullptr,
+        reinterpret_cast<void*>(&TradeCtrl_State13_Enter),  // a800  (layer 3)
+        nullptr,                                            // retail: 0
         reinterpret_cast<void*>(&TradeCtrl_State13_Tick),   // a780
-        nullptr);                                           // a6d0 — NOT PORTED
+        reinterpret_cast<void*>(&TradeCtrl_State13_Update));// a6d0  (layer 3)
     TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 2, nullptr);
     TableAddEvent(t, 0xa, nullptr);                         // b240 — NOT PORTED
