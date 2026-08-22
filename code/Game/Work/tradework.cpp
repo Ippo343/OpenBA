@@ -104,10 +104,24 @@ bool TradeWork_ResolveFuncs() {
     if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<TrW_Serializer_Ctor_t*>(iatSerCtor);
     uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<TrW_Serializer_Dtor_t*>(iatSerDtor);
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140151460);
-    if (iatMemAlloc) s_fn_MemAlloc = *reinterpret_cast<TrW_MemAlloc_t*>(iatMemAlloc);
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x140151468);
-    if (iatMemFree) s_fn_MemFree = *reinterpret_cast<TrW_MemFree_t*>(iatMemFree);
+    // WRONG SLOTS (fixed 2026-08-21). These used to read exe dispatch slots
+    // 0x140151460 / 0x140151468 as MemAlloc / MemFree. 0x140151460 is NOT MemAlloc —
+    // it is Graphics::Geometry::GetTransform, verified from the disassembly at
+    // 0x1400fe1b5 and already documented at code/Game/Player/placementtool.cpp:78.
+    // So TW_PushEntry's array grow called GetTransform(size, align), which ran on
+    // garbage operands and took an ACCESS_VIOLATION (READ of 0x94) the first time a
+    // citizen actually executed a TradeWork. A resolved pointer that is a REAL but
+    // WRONG function — the failure mode reference_locationwork_walktowards_wrong_addr
+    // describes.
+    //
+    // The allocator this code wants is the STATIC form,
+    // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z (size, alignment), exe slot
+    // 0x140152b60 — which is what retail calls at its own array-grow sites (e.g.
+    // 0x140085d9f in TradeUI_Serialize). engine_funcs already binds it correctly as
+    // fn_MemAllocStatic, and this file was ALREADY using its counterpart
+    // fn_MemFreeStatic a few functions further down, so the pair is now consistent.
+    s_fn_MemAlloc = reinterpret_cast<TrW_MemAlloc_t>(fn_MemAllocStatic);
+    s_fn_MemFree  = reinterpret_cast<TrW_MemFree_t>(fn_MemFreeStatic);
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<TrW_MemFreeStatic_t>(fn_MemFreeStatic);
@@ -817,6 +831,21 @@ bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
 void* TradeWork_Slot10_Impl(TradeWork* self, void* outPtr) {
+    // Resolve here as well as in Slot4. A TradeWork does NOT always arrive through
+    // TradeWork_Factory / TradeWork_CreateInPlace: TradeComponent_Slot14 (the panel's
+    // work checkbox) hand-rolls the allocation — MemAlloc + WorkCtor25 + a manual
+    // vtable store — so the factory path, which is the only thing that calls
+    // ResolveFuncs, is skipped entirely. The scheduler then calls GetTarget from
+    // WorkScheduler_Insert BEFORE Slot4 ever runs, so every s_fn_* here was still its
+    // static nullptr and s_fn_FindSubEntity below faulted as EXEC-of-0.
+    //
+    // (The crash dumper reported that as "VCALL-of-0 ... vtable=ComponentEntity", which
+    // is its documented guess: it takes RCX as `this` and prints its first qword. RCX
+    // was the entity argument, not a receiver, and the null slots in that vtable were
+    // unrelated. The registers were the giveaway — RCX=entity, RDX=&subIBP, matching
+    // this call's signature exactly.)
+    TradeWork_ResolveFuncs();
+
     uintptr_t selfAddr = (uintptr_t)self;
 
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));

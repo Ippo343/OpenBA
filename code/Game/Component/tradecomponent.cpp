@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/tradecomponent_funcs.h"
+#include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -227,6 +228,14 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
     char newState;
     if (enable) {
         void* work = nullptr;
+        // This allocation deliberately mirrors retail rather than going through
+        // TradeWork_Factory, but TradeWork's file-static function pointers are resolved
+        // ONLY on the factory path (TradeWork_Factory / TradeWork_CreateInPlace). Posting
+        // a hand-built work therefore handed the scheduler an object whose helpers were
+        // all still null, and WorkScheduler_Insert -> TradeWork::GetTarget faulted on the
+        // first one it used. Resolve explicitly here, exactly as the factory would.
+        // See reference_creatework_must_call_work_resolvefuncs.
+        TradeWork_ResolveFuncs();
         if (fn_MemAlloc && g_pMemAllocSingleton && s_tc_WorkCtor25 && s_tc_TradeWorkVtable) {
             work = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
             if (work) {
