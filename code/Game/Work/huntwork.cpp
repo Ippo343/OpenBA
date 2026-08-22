@@ -224,13 +224,14 @@ bool HuntWork_ResolveFuncs() {
     if (iatSerDtorSlot)
         s_fn_Serializer_Dtor = *reinterpret_cast<HuW_Serializer_Dtor_t*>(iatSerDtorSlot);
 
-    // MemAlloc/MemFree from dispatch slots
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140151460);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<HuW_MemAlloc_t*>(iatMemAlloc);
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x140151468);
-    if (iatMemFree)
-        s_fn_MemFree = *reinterpret_cast<HuW_MemFree_t*>(iatMemFree);
+    // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
+    // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
+    // (see placementtool.cpp:78). Since that slot is registered, the pointer was
+    // non-null and WRONG, so the first array grow called GetTransform(size, align) and
+    // took an ACCESS_VIOLATION. Diagnosed in tradework.cpp, where a TradeWork actually
+    // reached its grow path; the same wrong pair was copied into five work classes.
+    s_fn_MemAlloc = reinterpret_cast<HuW_MemAlloc_t>(fn_MemAllocStatic);
+    s_fn_MemFree  = reinterpret_cast<HuW_MemFree_t>(fn_MemFreeStatic);
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<HuW_MemFreeStatic_t>(fn_MemFreeStatic);

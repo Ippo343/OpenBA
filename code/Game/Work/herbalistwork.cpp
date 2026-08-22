@@ -215,13 +215,14 @@ bool HerbalistWork_ResolveFuncs() {
     if (iatSerInt)
         s_fn_Serializer_SerializeInt = *reinterpret_cast<HW_Serializer_SerializeInt_t*>(iatSerInt);
 
-    // MemAlloc/MemFree from dispatch slots
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140151460);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<HW_MemAlloc_t*>(iatMemAlloc);
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x140151468);
-    if (iatMemFree)
-        s_fn_MemFree = *reinterpret_cast<HW_MemFree_t*>(iatMemFree);
+    // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
+    // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
+    // (see placementtool.cpp:78). Since that slot is registered, the pointer was
+    // non-null and WRONG, so the first array grow called GetTransform(size, align) and
+    // took an ACCESS_VIOLATION. Diagnosed in tradework.cpp, where a TradeWork actually
+    // reached its grow path; the same wrong pair was copied into five work classes.
+    s_fn_MemAlloc = reinterpret_cast<HW_MemAlloc_t>(fn_MemAllocStatic);
+    s_fn_MemFree  = reinterpret_cast<HW_MemFree_t>(fn_MemFreeStatic);
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<HW_MemFreeStatic_t>(fn_MemFreeStatic);

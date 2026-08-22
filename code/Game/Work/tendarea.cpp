@@ -176,10 +176,14 @@ bool TendArea_ResolveFuncs() {
     if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<TAW_Serializer_Dtor_t*>(iatSerDtor);
     uintptr_t iatSerSer = ResolveAddr(Module::Exe, 0x140152ac8);
     if (iatSerSer) s_fn_Serializer_Serialize = *reinterpret_cast<TAW_Serializer_Serialize_t*>(iatSerSer);
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140151460);
-    if (iatMemAlloc) s_fn_MemAlloc = *reinterpret_cast<TAW_MemAlloc_t*>(iatMemAlloc);
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x140151468);
-    if (iatMemFree) s_fn_MemFree = *reinterpret_cast<TAW_MemFree_t*>(iatMemFree);
+    // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
+    // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
+    // (see placementtool.cpp:78). Since that slot is registered, the pointer was
+    // non-null and WRONG, so the first array grow called GetTransform(size, align) and
+    // took an ACCESS_VIOLATION. Diagnosed in tradework.cpp, where a TradeWork actually
+    // reached its grow path; the same wrong pair was copied into five work classes.
+    s_fn_MemAlloc = reinterpret_cast<TAW_MemAlloc_t>(fn_MemAllocStatic);
+    s_fn_MemFree  = reinterpret_cast<TAW_MemFree_t>(fn_MemFreeStatic);
     uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
     if (iatVec3Ctor) s_fn_Vector3_Ctor = *reinterpret_cast<TAW_Vector3_Ctor_t*>(iatVec3Ctor);
 
