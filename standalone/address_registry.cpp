@@ -388,6 +388,10 @@ extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
 extern void RegisterAnimalSerialize();
+// Terraform wave (2026-08-22) — the tunnel-mouth terrain deformation. reg file:
+// reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
+extern void RegisterTerraformLive();
+extern void RegisterMultiObjectForwarder();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -563,6 +567,8 @@ static void RegisterCodeFunctions() {
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
     RegisterAnimalSerialize();
+    RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
+    RegisterMultiObjectForwarder();  // msg relay to multi-part child entities
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();
@@ -1270,6 +1276,16 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z"));
     RegisterDispatchSlot(0x140151418,   // Math::Transform::Transform(const Transform&) [copy ctor]
         (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@AEBV01@@Z"));
+    // Picking::PickingMesh::Vertices(int lod) const -> const Array<Vector3>&
+    // Read by TerraformComponent's build-complete mesh pass (exe 0x140056b50) to walk the
+    // TunnelFloor/TunnelCeiling picking meshes that carve the tunnel-mouth heightmap. This
+    // was the LAST unregistered slot in that chain: with it null the pass bailed, so a
+    // finished tunnel drew its DecalComponent overlay but got no terrain deformation.
+    // Measured 2026-08-22 — the run logged "MeshPass(ceiling) SKIPPED — Transform/PickingMesh
+    // runtime slots unresolved" while FootprintPass in the SAME message converted 21 cells,
+    // which is what isolated this one slot rather than the whole component.
+    RegisterDispatchSlot(0x140151478,
+        (uintptr_t)ResolveExport("?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z"));
     // Math::Quaternion::Rotate(const Vector3&) const -> Vector3 (member value-return:
     // RCX=this, RDX=retbuf, R8=vec). Read by the attach-point resolver 0x140123880 to
     // turn a description-local yaw into a world heading, and by action_pf_road.cpp,

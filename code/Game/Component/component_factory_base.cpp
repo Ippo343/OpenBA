@@ -239,6 +239,49 @@ static const char* const kDefaultOnFlags[] = {
     // fourteen births, no crash, and it makes StartTown_RegisterTownCitizens redundant
     // (that pass now reports 0 registered / 24 already done by the broadcast).
     "BANISHED_LIVE_CITIZEN_ONADD",
+    // GRADUATED 2026-08-22 — tunnel terrain deformation, in two parts.
+    //
+    // The report was "a placed tunnel builds but has no depth at the mouth". The black
+    // overlay a player sees there is DecalComponent (Terrain/TiledDecals/TunnelMaterial),
+    // which was already live; the DEPTH is not a mesh or a sprite at all — it is a real
+    // carve of the terrain heightmap, and nothing was performing it.
+    //
+    // TERRAFORM: TerraformComponent was spawned by COMPONENT_INERT_FACTORY, so every
+    // instance carried the shared stub vtable. Its Shutdown and OnRemove bodies had been
+    // ported by an earlier wave and were unreachable, and the three functions that do the
+    // work had no port at all: 0x140056b50 (walk a TerraformDescription picking mesh,
+    // transform each vertex by the owner's ModelComponent transform at +0x148, write the
+    // heightmap), 0x140057120 (footprint terrain-type 10 -> 6) and 0x140057310 (vtable
+    // slot 12, gated on msg 4). notes/component_goals.md called the component COMPLETE
+    // and decomp/components/audit.md said "OnCreate passthrough"; both were wrong.
+    //
+    // MULTIOBJECT: slot 12 (0x140125490) is the child-entity message FORWARDER — it walks
+    // the child array at +0x48 and dispatches slot 12 on every component of every child.
+    // It was inert too, and that was the actual root cause: Tunnel.rsc's own
+    // `TerraformDescription terraform {}` block is EMPTY. The floor/ceiling picking meshes
+    // live on Template/TunnelStart.rsc — the two MOUTH SEGMENTS. BuildComponent state 8
+    // broadcasts msg 4 through 0x1400c2b70, which walks ONE entity (the master), so
+    // without the forwarder the segments that own the meshes were never told.
+    //
+    // POSITIVE RUN (2026-08-22, user-built tunnel, both flags on, 41 min uptime, empty
+    // standalone_crash.log). Three components received msg 4 where one did before:
+    //   master  FootprintPass rect=(77,122 15x3) converted=21
+    //   mouth A ceiling verts=82 applied=13  floor verts=4 applied=4
+    //   mouth B ceiling verts=82 applied=16  floor verts=4 applied=4
+    // The two 1x1 entities are exactly the ends of the master's 15x3 span. User confirmed
+    // the deformation and shadow render and that citizens path through the tunnel.
+    //
+    // applied < verts is the mask test working, not a partial failure: vertices whose
+    // surrounding cells fail _ceilingModifyBits/_floorModifyBits are skipped by design.
+    //
+    // ⚠ MULTIOBJECT IS AN UNFILTERED RELAY — it forwards EVERY message id to EVERY
+    // component of EVERY child of EVERY multi-part structure (bridges, roads, multi-tile
+    // buildings), not just msg 4 on tunnels. It is faithful to retail 0x140125490, and
+    // components that do not implement slot 12 hold stubs, but it is the widest-reaching
+    // half of this wave. If a multi-part structure starts behaving oddly, kill-switch this
+    // one first (BANISHED_LIVE_MULTIOBJECT=0) before suspecting the terraform half.
+    "BANISHED_LIVE_TERRAFORM",
+    "BANISHED_LIVE_MULTIOBJECT",
     // Organic construction pipeline — verified end-to-end 2026-07-22 (foundation ->
     // real gather/haul -> real build labor via MsgReceive -> completion -> staffed).
     // The three were formerly independent opt-ins; graduated together as one feature.

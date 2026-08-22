@@ -2,11 +2,11 @@
 // Clean reimplementation of TerraformComponent lifecycle methods from Application-x64.exe.
 //
 // TerraformComponent (0x48 bytes) — manages terrain modification during construction.
-// Fields: +0x28=Vector3 array, +0x30=count, +0x38=tile index array, +0x40=tile count
+// Fields: +0x28/+0x30/+0x34 = original-terrain undo record, +0x38/+0x40/+0x44 = retyped cells
 //
 // Vtable at 0x14015a880. Two non-trivial overrides:
 //   Shutdown (0x140057500) — Serialize Vector3 array
-//   OnCreate (0x140057350) — Apply terrain heights + tile type updates
+//   OnRemove (0x140057350) — Restore original terrain heights + tile types
 //
 
 #include "Component/terraformcomponent_funcs.h"
@@ -38,11 +38,11 @@ static fn_Vector3_Serialize_t s_fn_Vector3_Serialize = nullptr;
 typedef void (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
 static fn_ResizeVec3Array_t s_fn_ResizeVec3Array = nullptr;
 
-// Terrain helpers for OnCreate
+// Terrain helpers for the OnRemove restore + the completion passes
 // CitizenAI_impl_b150 (0x1400ab150) — terrain region-dirty recalc around (x,y).
 // NOTE: the literal was previously 0x1400a4b50 (a dropped/transposed digit) which
 // lands mid-FUN_1400a4b30, an unrelated merchant-name binary search. The true callee
-// in TerraformComponent::OnCreate is CitizenAI_impl_b150 @ 0x1400ab150.
+// in TerraformComponent OnRemove is CitizenAI_impl_b150 @ 0x1400ab150.
 typedef void (*fn_TerrainRecalc_t)(void* terrainGrid, int x, int y);
 static fn_TerrainRecalc_t s_fn_TerrainRecalc = nullptr;
 
@@ -59,9 +59,12 @@ static fn_TerrainVisualUpdate_t s_fn_TerrainVisualUpdate = nullptr;
 typedef void (*fn_TerrainTypeSet_t)(void* thread, int index, int type, uint64_t param4);
 static fn_TerrainTypeSet_t s_fn_TerrainTypeSet = nullptr;
 
-static float* s_pHeightScale = nullptr;  // DAT_140172230
+static float* s_pHeightScale = nullptr;  // DAT_140172230 == 256.0f
 
 static bool s_initialized = false;
+
+// Resolves the deformation-pass helpers (defined with those passes further down).
+static void TerraformDeformResolve();
 
 // ============================================================
 // TerraformComponent::Shutdown (0x140057500)
@@ -101,18 +104,22 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
 }
 
 // ============================================================
-// TerraformComponent::OnCreate (0x140057350)
+// TerraformComponent OnRemove — vtable slot 7 (0x140057350)
 // ============================================================
-// Applies stored terrain heights from Vector3 array to the terrain grid,
-// then updates tile types for the tile index array.
-
-void TerraformComponent_OnCreate(TerraformComponent* self) {
+// Ghidra labels this OnCreate; it is the TEARDOWN half. It REPLAYS the undo record
+// this component built at build-complete: it writes the ORIGINAL terrain heights back
+// from the Vector3 array at +0x28, and puts every recorded map cell's terrain type
+// back to 10 (the value the footprint pass converted to 6). Applying it at creation
+// would restore terrain that was never deformed; the "OnCreate/OnRemove off by one"
+// Ghidra mislabel is a known trap in this project, and the direction of the writes
+// (10 here vs 10 -> 6 in the completion pass) is what settles it.
+void TerraformComponent_OnRemove(TerraformComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
-    float heightScale = s_pHeightScale ? *s_pHeightScale : 1.0f;
+    float heightScale = s_pHeightScale ? *s_pHeightScale : 256.0f;
 
     // Phase 1: Apply Vector3 terrain heights
     uintptr_t terrainGrid = *(uintptr_t*)(gameWorld + 0x110);
@@ -216,6 +223,8 @@ void TerraformComponent_InitFuncs() {
     s_fn_Vector3_Serialize = reinterpret_cast<fn_Vector3_Serialize_t>(
         ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
+    TerraformDeformResolve();
+
     s_initialized = true;
 }
 
@@ -254,15 +263,407 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
     if (s_fn_RegionDirty) s_fn_RegionDirty(regionMgr, &scratch, &cellIdx);
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid TerraformComponent
-// (size 0x48, +0x20 capability flags 0x83, Object::Internal base + shared stub
-// vtable, zeroed body). Size from TerraformComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+
+// ============================================================
+// Terrain-deformation driver (previously unported)
+// ============================================================
+// Retail dispatch chain for the tunnel mouth:
+//
+//   TerraformComponent vtable +0x60 (slot 12, 0x140057310) — the per-component
+//   MESSAGE slot — fires on msgId == 4 (build complete) and runs three passes:
+//
+//     1. MeshPass(self, ceiling=true)   0x140056b50 with param_2 = 1
+//     2. MeshPass(self, ceiling=false)  0x140056b50 with param_2 = 0
+//     3. FootprintPass(self)            0x140057120
+//
+// MeshPass is the deformation itself. It walks every vertex of a Picking::PickingMesh
+// carried by the TerraformDescription, transforms it into world space by the owner's
+// ModelComponent transform, and writes the terrain HEIGHTMAP under it. That carve is
+// what reads on screen as the dark recess at a tunnel entrance — there is no separate
+// "hole" mesh or sprite; the depth is real geometry. (The flat overlay on top is the
+// DecalComponent's Terrain/TiledDecals/TunnelMaterial, a different, already-live path.)
+//
+// The two mesh/mask pairs on TerraformDescription (from Template/TunnelStart.rsc):
+//     desc +0x20 = _floorMesh      desc +0x30 = _floorModifyBits
+//     desc +0x28 = _ceilingMesh    desc +0x34 = _ceilingModifyBits
+// Floor pass lowers terrain where the mesh sits BELOW it (the trench the road runs in);
+// ceiling pass raises terrain where the mesh sits ABOVE it (the hill over the mouth).
+// Only the ceiling pass records an undo entry — faithful to retail.
+
+#include <cstring>
+#include <cstdlib>
+
+typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
+typedef void  (*fn_CheckPtrSlot_t)(void* ibp);
+typedef void* (*fn_TransformCopy_t)(void* self, const void* src);
+typedef void* (*fn_TransformMul_t)(const void* self, void* retVec3, const void* vec);
+typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
+typedef float* (*fn_TerrainSample_t)(int* tileGrid, float* out, const float* in,
+                                     char flag, void* extra);
+typedef void* (*fn_TfMemAlloc_t)(uint64_t size, int align);
+typedef void  (*fn_TfMemFree_t)(void* p);
+typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
+
+static fn_FindCompOut_t     s_fn_FindComp_Model  = nullptr;  // 0x140003f60 (ModelComponent)
+static fn_FindCompOut_t     s_fn_FindComp_Map    = nullptr;  // 0x140004680 (MapComponent)
+static fn_CheckPtrSlot_t    s_fn_CheckPtr        = nullptr;  // slot 0x140152ab0
+static fn_TransformCopy_t   s_fn_TransformCopy   = nullptr;  // slot 0x140151418
+static fn_TransformMul_t    s_fn_TransformMul    = nullptr;  // slot 0x140151470
+static fn_MeshVertices_t    s_fn_MeshVertices    = nullptr;  // slot 0x140151478
+static fn_TerrainSample_t   s_fn_TerrainSample   = nullptr;  // 0x14009f3e0
+static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
+static fn_TfMemFree_t       s_fn_MemFree         = nullptr;  // slot 0x140152b68
+static fn_IsDerivedFromId_t s_fn_IsDerivedFrom   = nullptr;  // slot 0x140152a98
+static const uint32_t*      s_pTid_TerraformDesc = nullptr;  // 0x1401c49f8
+static const float*         s_pVertexBias        = nullptr;  // 0x140172100 == 0.25f
+static const float*         s_pCellStep          = nullptr;  // 0x14017214c == 1.0f (g_fUVScale)
+
+static void TerraformDeformResolve() {
+    s_fn_FindComp_Model = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_FindComp_Map   = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_TerrainSample  = reinterpret_cast<fn_TerrainSample_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_pTid_TerraformDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c49f8));
+    s_pVertexBias       = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172100));
+    s_pCellStep         = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
+
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x140152ab0);
+    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtrSlot_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151418);
+    if (slot) s_fn_TransformCopy = *reinterpret_cast<fn_TransformCopy_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151470);
+    if (slot) s_fn_TransformMul = *reinterpret_cast<fn_TransformMul_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151478);
+    if (slot) s_fn_MeshVertices = *reinterpret_cast<fn_MeshVertices_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152b60);
+    if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_TfMemAlloc_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152b68);
+    if (slot) s_fn_MemFree = *reinterpret_cast<fn_TfMemFree_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a98);
+    if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
+}
+
+// One-shot trace, BANISHED_TRACE_TERRAFORM=1.
+static bool TerraformTraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = getenv("BANISHED_TRACE_TERRAFORM"); s = (e && *e && *e != '0') ? 1 : 0; }
+    return s != 0;
+}
+
+// Resolve the component's owning entity (component +0x10 is an InternalBasePtr).
+static void* TerraformOwnerEntity(uintptr_t self) {
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    return *reinterpret_cast<void**>(self + 0x10);
+}
+
+// Both finders return their result through an InternalBasePtr out-param.
+static void* TerraformFindComp(fn_FindCompOut_t finder, void* entity) {
+    if (!finder || !entity) return nullptr;
+    uintptr_t out[2] = {0, 0};
+    finder(entity, out);
+    if (!out[0]) return nullptr;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(out);
+    return reinterpret_cast<void*>(out[0]);
+}
+
+// Array push_back, byte-faithful to the inlined grow in 0x140056b50 / 0x140057120:
+// growth is newCount*3 once the array is non-empty, exact-fit on the first element.
+static void TerraformArrayPush(void** pData, int32_t* pCount, int32_t* pCap,
+                               const void* elem, size_t elemSize) {
+    if (!s_fn_MemAlloc) return;
+    const int oldCount = *pCount;
+    const int newCount = oldCount + 1;
+    void* oldData = *pData;
+
+    *pCount = newCount;
+    if (*pCap < newCount) {
+        *pCap = (oldCount != 0) ? newCount * 3 : newCount;
+        *pData = s_fn_MemAlloc(static_cast<uint64_t>(*pCap) * static_cast<uint64_t>(elemSize), 4);
+    }
+    // Buffer reused -> only the new tail element is written; reallocated -> copy all.
+    int i = (oldData == *pData) ? oldCount : 0;
+    for (; i < newCount; ++i) {
+        uint8_t* dst = reinterpret_cast<uint8_t*>(*pData) + static_cast<size_t>(i) * elemSize;
+        const uint8_t* src = (i < oldCount)
+            ? reinterpret_cast<const uint8_t*>(oldData) + static_cast<size_t>(i) * elemSize
+            : reinterpret_cast<const uint8_t*>(elem);
+        memcpy(dst, src, elemSize);
+    }
+    if (oldData != *pData && s_fn_MemFree) s_fn_MemFree(oldData);
+}
+
+// Terrain type byte of the map cell containing world point (wx, wy). Retail truncates
+// toward zero (CVTTSS2SI) after biasing by half the grid, then clamps to the grid.
+static uint8_t TerraformCellType(int* tileGrid, float wx, float wy) {
+    const int gw = *tileGrid;
+    int cx = static_cast<int>(wx + static_cast<float>(gw >> 1));
+    int cy = static_cast<int>(wy + static_cast<float>(gw >> 1));
+    if (cx < 0) cx = 0;
+    if (cx >= gw) cx = gw - 1;
+    if (cy < 0) cy = 0;
+    if (cy >= gw) cy = gw - 1;
+    const uintptr_t tileData = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(tileGrid) + 0x80);
+    const int64_t idx = static_cast<int64_t>(gw) * cy + cx;
+    return *reinterpret_cast<uint8_t*>(tileData + 0x29 + idx * 0x30);
+}
+
+// ------------------------------------------------------------
+// 0x140056b50 — one heightmap pass over a TerraformDescription picking mesh.
+// ------------------------------------------------------------
+void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
+    const uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
+
+    // Every way this pass can silently do nothing is reported once. A deformation that
+    // does not happen is invisible in a log otherwise, and the failure modes here are all
+    // "a pointer or type id resolved to zero" — the exact class of bug that reads as
+    // "the feature is broken" when it is really "the feature never ran".
+    auto bail = [&](const char* why) {
+        static int n = 0;
+        if (n < 8) { ++n;
+            fprintf(stderr, "[Terraform] MeshPass(%s) SKIPPED self=%p — %s\n",
+                    ceiling ? "ceiling" : "floor", reinterpret_cast<void*>(self), why);
+            fflush(stderr);
+        }
+    };
+
+    // desc = component +0x18, accepted only if it really is a TerraformDescription.
+    // Retail derefs the description unguarded (it is always there); the checks below are
+    // OUR resolution failures, not retail's, which is why they bail rather than fault.
+    void* descRaw = *reinterpret_cast<void**>(selfA + 0x18);
+    if (!s_fn_IsDerivedFrom)    { bail("IsDerivedFrom slot 0x140152a98 unresolved"); return; }
+    if (!s_pTid_TerraformDesc || *s_pTid_TerraformDesc == 0) {
+        bail("TerraformDescription type id (0x1401c49f8) is null/zero"); return;
+    }
+    if (!descRaw) { bail("component +0x18 description is null"); return; }
+    if (!s_fn_IsDerivedFrom(descRaw, *s_pTid_TerraformDesc)) {
+        bail("description is not a TerraformDescription"); return;
+    }
+    void* desc = descRaw;
+
+    // The owner's ModelComponent carries the placed transform at +0x148.
+    void* model = TerraformFindComp(s_fn_FindComp_Model, TerraformOwnerEntity(selfA));
+    if (!model) { bail("owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
+    // Name the exact slot — "one of three is null" cost a whole run to narrow once.
+    if (!s_fn_TransformCopy) { bail("slot 0x140151418 Transform copy-ctor unresolved"); return; }
+    if (!s_fn_TransformMul)  { bail("slot 0x140151470 Transform::operator* unresolved"); return; }
+    if (!s_fn_MeshVertices)  { bail("slot 0x140151478 PickingMesh::Vertices unresolved"); return; }
+    // Retail copy-constructs a Transform on the stack. Oversized on purpose so a
+    // larger-than-expected Transform cannot clobber the next local.
+    alignas(16) uint8_t xform[0x80] = {};
+    s_fn_TransformCopy(xform, reinterpret_cast<const void*>(
+        reinterpret_cast<uintptr_t>(model) + 0x148));
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t terrainGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0x110);
+    int* tileGrid = *reinterpret_cast<int**>(gameWorld + 0xF8);
+    if (!terrainGrid || !tileGrid) { bail("gameWorld terrain/tile grid null"); return; }
+
+    void* mesh = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(desc) + (ceiling ? 0x28 : 0x20));
+    const uint32_t modifyBits = *reinterpret_cast<uint32_t*>(
+        reinterpret_cast<uintptr_t>(desc) + (ceiling ? 0x34 : 0x30));
+    if (!mesh) { bail(ceiling ? "desc+0x28 _ceilingMesh is null" : "desc+0x20 _floorMesh is null"); return; }
+
+    const float bias        = s_pVertexBias  ? *s_pVertexBias  : 0.25f;
+    const float cellStep    = s_pCellStep    ? *s_pCellStep    : 1.0f;
+    const float heightScale = s_pHeightScale ? *s_pHeightScale : 256.0f;
+    const uint32_t notMask  = ~modifyBits;
+
+    int applied = 0;
+    void* verts = s_fn_MeshVertices(mesh, 0);
+    const int vertCount = verts
+        ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(verts) + 8) : 0;
+
+    for (int i = 0; i < vertCount; ++i) {
+        // Re-query per iteration exactly as retail does.
+        void* arr = s_fn_MeshVertices(mesh, 0);
+        if (!arr) break;
+        const uint8_t* data = *reinterpret_cast<const uint8_t**>(arr);
+        const void* localVtx = data + static_cast<size_t>(i) * 0xC;
+
+        float world[3] = {0.0f, 0.0f, 0.0f};
+        s_fn_TransformMul(xform, world, localVtx);
+
+        // p = transformed vertex, nudged a quarter cell so it lands inside a cell
+        // rather than exactly on the shared corner.
+        const float p[3] = { world[0] + bias, world[1] + bias, world[2] + 0.0f };
+
+        // Original terrain point under p: (x, y, currentHeight). This is the undo record.
+        float original[3] = {0.0f, 0.0f, 0.0f};
+        if (s_fn_TerrainSample) s_fn_TerrainSample(tileGrid, original, p, '\0', nullptr);
+
+        // Every cell sharing this heightmap vertex must be a terrain type the mask allows.
+        // NOTE: retail samples (x,y), (x-1,y), (x-1,y-1) and then (x-1,y) AGAIN — the
+        // fourth sample repeats the second instead of testing (x,y-1). Verified in the
+        // disassembly at 0x140056e60..0x140056e77 (MOVSS [RSP+0x30]; SUBSS XMM1,XMM7),
+        // identical to the second sample's 0x140056d3d. Replicated as-is: "fixing" it
+        // would widen the mask test and deform cells retail leaves alone.
+        uint32_t bits = 0;
+        bits |= 1u << (TerraformCellType(tileGrid, p[0],            p[1])            & 0x1F);
+        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1])            & 0x1F);
+        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1] - cellStep) & 0x1F);
+        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1])            & 0x1F);
+        if ((notMask & bits) != 0) continue;
+
+        // Ceiling raises terrain up to the mesh; floor lowers terrain down to it.
+        const bool apply = ceiling ? (original[2] < p[2]) : (p[2] < original[2]);
+        if (!apply) continue;
+
+        const float half = static_cast<float>(*reinterpret_cast<int*>(terrainGrid + 0xC0) >> 1);
+        const int mapX = static_cast<int>(p[0] + half);
+        const int mapY = static_cast<int>(p[1] + half);
+
+        const uintptr_t heightArray = *reinterpret_cast<uintptr_t*>(terrainGrid + 0xD8);
+        const int stride = *reinterpret_cast<int*>(terrainGrid + 0xD0);
+        *reinterpret_cast<int16_t*>(heightArray +
+            (static_cast<int64_t>(stride) * mapY + mapX) * 2) =
+            static_cast<int16_t>(static_cast<int>(p[2] * heightScale));
+
+        if (s_fn_TerrainRecalc)
+            s_fn_TerrainRecalc(reinterpret_cast<void*>(terrainGrid), mapX, mapY);
+        ++applied;
+
+        if (ceiling) {
+            TerraformArrayPush(&self->heightRecord, &self->heightCount, &self->heightCap,
+                               original, 0xC);
+        }
+    }
+
+    if (TerraformTraceOn()) {
+        fprintf(stderr, "[Terraform] MeshPass self=%p %s mesh=%p verts=%d mask=0x%x "
+                        "applied=%d rec=%d\n",
+                reinterpret_cast<void*>(self), ceiling ? "ceiling" : "floor", mesh,
+                vertCount, modifyBits, applied, self->heightCount);
+        fflush(stderr);
+    }
+}
+
+// ------------------------------------------------------------
+// 0x140057120 — footprint terrain-type pass.
+// Over the owner's MapComponent footprint rect, every cell currently of terrain type
+// 10 becomes type 6, and its index is recorded so OnRemove can put it back.
+// ------------------------------------------------------------
+void TerraformComponent_FootprintPass(TerraformComponent* self) {
+    const uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
+
+    void* mapComp = TerraformFindComp(s_fn_FindComp_Map, TerraformOwnerEntity(selfA));
+    if (!mapComp) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int* tileGrid = *reinterpret_cast<int**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF8);
+    if (!tileGrid) return;
+
+    const uintptr_t m = reinterpret_cast<uintptr_t>(mapComp);
+    const int x0 = *reinterpret_cast<int16_t*>(m + 0x28);
+    const int y0 = *reinterpret_cast<int16_t*>(m + 0x2A);
+    const int w  = *reinterpret_cast<int16_t*>(m + 0x2C);
+    const int h  = *reinterpret_cast<int16_t*>(m + 0x2E);
+
+    const uintptr_t tileData = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(tileGrid) + 0x80);
+    int converted = 0;
+
+    for (int y = y0; y < y0 + h; ++y) {
+        for (int x = x0; x < x0 + w; ++x) {
+            const int idx = *tileGrid * y + x;
+            uint8_t* type = reinterpret_cast<uint8_t*>(
+                tileData + 0x29 + static_cast<int64_t>(idx) * 0x30);
+            if (*type != 10) continue;
+
+            *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(tileGrid) + 0xA2) |= 1;
+            *type = 6;
+            if (s_fn_TerrainVisualUpdate) {
+                s_fn_TerrainVisualUpdate(*reinterpret_cast<void**>(
+                        reinterpret_cast<uintptr_t>(tileGrid) + 0x70),
+                    idx % *tileGrid, idx / *tileGrid);
+            }
+            if (s_fn_TerrainTypeSet) {
+                s_fn_TerrainTypeSet(*reinterpret_cast<void**>(
+                        reinterpret_cast<uintptr_t>(tileGrid) + 0x68),
+                    idx, 6, 0);
+            }
+            TerraformArrayPush(&self->tileRecord, &self->tileCount, &self->tileCap, &idx, 4);
+            ++converted;
+        }
+    }
+
+    if (TerraformTraceOn()) {
+        fprintf(stderr, "[Terraform] FootprintPass self=%p rect=(%d,%d %dx%d) converted=%d\n",
+                reinterpret_cast<void*>(self), x0, y0, w, h, converted);
+        fflush(stderr);
+    }
+}
+
+// ------------------------------------------------------------
+// 0x140057310 — vtable slot 12, the per-component MESSAGE slot.
+// Message id 4 is the build-complete broadcast (the same one PastureComponent's
+// slot 12 gates on). Everything else is ignored.
+// ------------------------------------------------------------
+extern "C" void TerraformComponent_Slot12(void* selfV, int msgId) {
+    if (msgId != 4 || !selfV) return;
+    TerraformComponent_InitFuncs();
+    TerraformComponent* self = reinterpret_cast<TerraformComponent*>(selfV);
+    if (TerraformTraceOn()) {
+        fprintf(stderr, "[Terraform] msg 4 -> deform self=%p desc=%p\n",
+                selfV, self->description);
+        fflush(stderr);
+    }
+    TerraformComponent_MeshPass(self, /*ceiling=*/true);
+    TerraformComponent_MeshPass(self, /*ceiling=*/false);
+    TerraformComponent_FootprintPass(self);
+}
+
+// ============================================================
+// Live vtable
+// ============================================================
+// Slots wired (all three bodies live in this file and were previously unreachable —
+// the factory handed out the shared inert stub vtable, so nothing ran at all):
+//   [3]  Shutdown/Serialize  0x140057500 — persists the undo record
+//   [7]  OnRemove            0x140057350 — replays the undo record
+//   [12] Message             0x140057310 — applies the deformation on msg 4
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(TerraformComponent, 0x48, 0x83)
+static uint32_t TerraformComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TerraformComponent");
+    return cached;
+}
+static void* TerraformComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void TerraformComponent_ShutdownVSlot(void* s, void* stream) {
+    TerraformComponent_InitFuncs();
+    TerraformComponent_Shutdown(reinterpret_cast<TerraformComponent*>(s), stream);
+}
+static void TerraformComponent_OnRemoveVSlot(void* s) {
+    TerraformComponent_InitFuncs();
+    TerraformComponent_OnRemove(reinterpret_cast<TerraformComponent*>(s));
+}
+
+// Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn, so the
+// live slots must be (re)written here rather than at static-init time.
+static void TerraformComponent_InstallLive() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TERRAFORM")) return;
+    TerraformComponent_LiveVtable[3]  = reinterpret_cast<void*>(&TerraformComponent_ShutdownVSlot);
+    TerraformComponent_LiveVtable[7]  = reinterpret_cast<void*>(&TerraformComponent_OnRemoveVSlot);
+    TerraformComponent_LiveVtable[12] = reinterpret_cast<void*>(&TerraformComponent_Slot12);
+}
+
+extern "C" void* TerraformComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x83,
+        TerraformComponent_LiveVtable,
+        reinterpret_cast<void*>(&TerraformComponent_LiveGetTypeId));
+    TerraformComponent_InstallLive();
+    return p;
+}
+static void* TerraformComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x83,
+        TerraformComponent_LiveVtable,
+        reinterpret_cast<void*>(&TerraformComponent_LiveGetTypeId));
+    TerraformComponent_InstallLive();
+    return mem;
+}
 REGISTER_TYPE(TerraformComponent, "Component",
               &TerraformComponent_Factory, &TerraformComponent_CreateInPlace);

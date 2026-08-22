@@ -222,6 +222,75 @@ void MultiObjectComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(MultiObjectComponent, 0x60, 0x82)
+// -- slot 12 (+0x60) -- retail 0x140125490 -- the child-entity MESSAGE FORWARDER -----
+// Pure relay, no message filter: for every child entity in the array at +0x48 (count at
+// +0x50), dispatch slot 12 on EVERY component that child carries, with the same msgId.
+//
+// This is how a multi-part structure's parts learn that the structure finished. It was
+// inert, and that is why a completed Tunnel had no terrain deformation: Tunnel.rsc's own
+// `TerraformDescription terraform {}` block is EMPTY -- the floor/ceiling picking meshes
+// live on Template/TunnelStart.rsc, i.e. on the two MOUTH SEGMENTS, not on the master.
+// BuildComponent state 8 broadcasts msg 4 to the master only (0x1400c2b70 walks ONE
+// entity), so without this forwarder the segments that actually own the meshes were never
+// told, and their TerraformComponent slot 12 never ran.
+//
+// Measured 2026-08-22: with terraform live but this still inert, the trace showed exactly
+// one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
+// and FootprintPass converting 18 cells -- master-level work only, no carve.
+extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
+    MultiObjectComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+
+    const int childCount = *reinterpret_cast<int*>(self + 0x50);
+    const uintptr_t children = *reinterpret_cast<uintptr_t*>(self + 0x48);
+    if (childCount <= 0 || !children) return;
+
+    for (int i = 0; i < childCount; ++i) {
+        void** childSlot = reinterpret_cast<void**>(children + static_cast<uintptr_t>(i) * 8);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(childSlot);
+        uintptr_t child = reinterpret_cast<uintptr_t>(*childSlot);
+        if (!child) continue;
+
+        const int compCount = *reinterpret_cast<int*>(child + 0x38);
+        const uintptr_t comps = *reinterpret_cast<uintptr_t*>(child + 0x30);
+        for (int k = 0; k < compCount && comps; ++k) {
+            void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8);
+            if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void**>(&comp));
+            if (!comp) continue;
+            typedef void (*MsgSlot_t)(void*, int);
+            MsgSlot_t fn = *reinterpret_cast<MsgSlot_t*>(
+                *reinterpret_cast<uintptr_t*>(comp) + 0x60);
+            if (fn) fn(comp, msgId);
+        }
+    }
+}
+
+static uint32_t MultiObjectComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("MultiObjectComponent");
+    return cached;
+}
+static void* MultiObjectComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn.
+static void MultiObjectComponent_InstallLive() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MULTIOBJECT")) return;
+    MultiObjectComponent_LiveVtable[12] = reinterpret_cast<void*>(&MultiObjectComponent_Slot12);
+}
+
+extern "C" void* MultiObjectComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x82,
+        MultiObjectComponent_LiveVtable,
+        reinterpret_cast<void*>(&MultiObjectComponent_LiveGetTypeId));
+    MultiObjectComponent_InstallLive();
+    return p;
+}
+static void* MultiObjectComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x82,
+        MultiObjectComponent_LiveVtable,
+        reinterpret_cast<void*>(&MultiObjectComponent_LiveGetTypeId));
+    MultiObjectComponent_InstallLive();
+    return mem;
+}
 REGISTER_TYPE(MultiObjectComponent, "ControllerComponent",
               &MultiObjectComponent_Factory, &MultiObjectComponent_CreateInPlace);

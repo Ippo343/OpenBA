@@ -89,7 +89,7 @@ standalone-exe ready.
 | SpawnComponent | 0x14015a670 | spawncomponent.cpp | **COMPLETE** |
 | StorageDisplayComponent | 0x14015a780 | storagedisplaycomponent.cpp | **COMPLETE** — all 5 slots |
 | StorageLocationComponent | 0x140164880 | storagelocationcomponent.cpp | **COMPLETE** |
-| TerraformComponent | 0x14015a880 | terraformcomponent.cpp | **COMPLETE** |
+| TerraformComponent | 0x14015a880 | terraformcomponent.cpp | **COMPLETE** — slots 3/7/12 wired (BANISHED_LIVE_TERRAFORM). Was previously marked COMPLETE while the factory handed out the INERT stub vtable, so nothing ran and tunnels got no terrain carve; the deformation trio (0x140056b50 mesh pass, 0x140057120 footprint pass, 0x140057310 msg-4 driver) was unported. |
 | TombstoneComponent | 0x14015a980 | tombstonecomponent.cpp | **COMPLETE** |
 | TornadoComponent | 0x14015aa80 | tornadocomponent.cpp | **COMPLETE** (Serialize+OnRemove delegate to original) |
 | TrackerComponent | 0x14015ab80 | trackercomponent.cpp | **COMPLETE** |

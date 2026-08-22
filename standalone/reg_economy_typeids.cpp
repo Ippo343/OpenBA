@@ -267,6 +267,13 @@ static uint32_t g_tid_DestroyDescription       = 0;  // 0x1401c7628
 // slots in reg_element_typeids.cpp.
 static uint32_t g_tid_ToolbarDialog            = 0;  // 0x1401c5d38
 
+// 0x1401c49f8 TerraformDescription — read by TerraformComponent's build-complete
+// deformation pass (exe 0x140056b50) to confirm the component's description (+0x18)
+// really is a TerraformDescription before reading the floor/ceiling picking meshes at
+// desc +0x20 / +0x28. Unregistered -> ResolveAddr 0 -> the IsDerivedFrom test is skipped
+// and the pass bails, so the tunnel mouth never gets its heightmap carve.
+static uint32_t g_tid_TerraformDescription     = 0;  // 0x1401c49f8
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -297,6 +304,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7d98, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
     RegisterExeAddr(0x1401c7628, reinterpret_cast<uintptr_t>(&g_tid_DestroyDescription));
     RegisterExeAddr(0x1401c5d38, reinterpret_cast<uintptr_t>(&g_tid_ToolbarDialog));
+    RegisterExeAddr(0x1401c49f8, reinterpret_cast<uintptr_t>(&g_tid_TerraformDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -329,6 +337,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_StateMachineComponent    = ::Object::GetTypeIdByName("StateMachineComponent");
     g_tid_DestroyDescription       = ::Object::GetTypeIdByName("DestroyDescription");
     g_tid_ToolbarDialog            = ::Object::GetTypeIdByName("ToolbarDialog");
+    g_tid_TerraformDescription     = ::Object::GetTypeIdByName("TerraformDescription");
     // Graduation check: a registered-but-ZERO slot is invisible to every
     // null-POINTER guard downstream (IsDerivedFrom would just match nothing and the
     // sub-toolbar would silently stay open). Say so loudly if the name ever moves.

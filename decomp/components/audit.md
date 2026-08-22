@@ -66,7 +66,7 @@ Classifies every hooked vtable slot across all component reimpl files.
 | Population | populationcomponent.cpp | 1 | 1 | 0 | Update full reimpl |
 | Quarry | quarrycomponent.cpp | 1 | 1 | 0 | Shutdown done |
 | Spawn | spawncomponent.cpp | 1 | 1 | 0 | Update full reimpl |
-| Terraform | terraformcomponent.cpp | 2 | 1 | 1 | Shutdown done, OnCreate passthrough |
+| Terraform | terraformcomponent.cpp | 5 | 5 | 0 | Shutdown + OnRemove (Ghidra mislabels it OnCreate) + msg-4 deformation trio |
 | Tombstone | tombstonecomponent.cpp | 3 | 3 | 0 | ALL done |
 | Tornado | tornadocomponent.cpp | 3 | 0 | 3 | ALL passthrough (complex) |
 | Tracker | trackercomponent.cpp | 1 | 0 | 1 | Shutdown passthrough |
