@@ -761,7 +761,14 @@ inline void fn_FindComponent_Position(void* entity, void* retval) {
 inline void fn_FindComponent_Destroy(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_DestroyComponent_FC);
 }
-// fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140
+// fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140.
+// ⚠ MISNAMED, kept only because the name is load-bearing across the tree: 0x140015140
+// matches DWORD_1401c4b80 = TradeComponent (verified at instruction level 2026-08-21),
+// so this is a TRADING-POST finder, not a "building" finder. Anything reading its result
+// as "is there a building here?" is wrong — see the animal habitat test in
+// animalcomponent.cpp, whose comment said exactly that until it was corrected.
+// Consequence for gating: this finder returns null for EVERY entity while
+// BANISHED_LIVE_TRADE_TIDS is off, and non-null only for a trading post when it is on.
 inline void fn_FindComponent_Building(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TradeComponent_FC);
 }

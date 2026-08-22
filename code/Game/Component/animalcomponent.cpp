@@ -632,8 +632,15 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&occupant);
                 int64_t buildingIBP = 0;
                 fn_FindComponent_Building(reinterpret_cast<void*>(occupant), &buildingIBP);
-                // A building on the tile does NOT disqualify it; an occupant that
-                // is not a building does (retail: blocked = (found == nullptr)).
+                // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
+                // matches DWORD_1401c4b80, which is TradeComponent, not any notion of
+                // "building". Verified at instruction level, and retail's own animal
+                // update (0x140106420) calls exactly this function at 0x140106650.
+                // So the real rule is: a TRADING POST on the tile does not disqualify
+                // it; every other occupant does. That also bounds the blast radius of
+                // BANISHED_LIVE_TRADE_TIDS on animal pathing — the only tiles whose
+                // verdict changes when 0x1401c4b80 is registered are trading-post
+                // tiles. See reference_misnamed_component_finders.
                 blocked = (buildingIBP == 0);
             }
 
