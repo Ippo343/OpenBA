@@ -38,6 +38,7 @@ bool FishingWork_ResolveFuncs();
 bool HuntWork_ResolveFuncs();
 bool HerbalistWork_ResolveFuncs();
 bool ForesterWork_ResolveFuncs();
+bool MarketWork_ResolveFuncs();
 
 // Work vtables are installed by the Work reimpls and published through the address
 // registry, so read them back the same way every other cross-module reference does
@@ -48,6 +49,7 @@ constexpr uintptr_t kFishingWorkVtable   = 0x140161320;
 constexpr uintptr_t kHuntWorkVtable      = 0x140161620;
 constexpr uintptr_t kHerbalistWorkVtable = 0x1401615a0;
 constexpr uintptr_t kForesterWorkVtable  = 0x1401613a0;
+constexpr uintptr_t kMarketWorkVtable     = 0x140161710;
 
 typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
 // 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
@@ -240,6 +242,44 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
     *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
     *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
     *reinterpret_cast<uint32_t*>(w + 0x58) = 0;
+
+    return WrapIBP(out, mem);
+}
+
+// ── MarketComponent::CreateWork — retail 0x14004ea40 ─────────────────────────
+// ⚠ Ghidra labels 0x14004ea40 "MarketWork_Ctor". It is NOT the MarketWork ctor — it
+// is MarketComponent's slot 18, the same override every ResourceProduceComponent
+// subclass supplies. Exactly the misnomer flagged at the top of this file for
+// HerbalistComponent (0x14004b160 "HerbalistWork_Ctor").
+//
+// Byte-for-byte the same shape as HuntComponent's: MemAlloc(0x58) + Work_Ctor25 over
+// the entity at comp+0x10 + vtable_MarketWork + zero {+0x48 qword, +0x50 dword}.
+// There is NO Forester-style prologue in the retail body — no state-machine read, no
+// flag re-arm — so none is added here.
+//
+// A live probe measured this slot still holding the inert stub, i.e. no MarketWork was
+// ever minted: state 13's enter (0x14012ae60) calls slot 18 to create the work and post
+// it to the citizen reservation ledger, so a stubbed slot silently means "market never
+// offers a job".
+extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
+    Resolve();
+    // CreateWork allocates and constructs DIRECTLY, bypassing the factory path that
+    // would otherwise call this — see the note at the top of the file. Skipping it is
+    // how the Herbalist path shipped a work with null static function pointers.
+    MarketWork_ResolveFuncs();
+    void* mem = AllocWork(0x58);
+    if (!mem) return WrapIBP(out, nullptr);
+
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(self) + 0x10);
+
+    if (s_workCtor25) s_workCtor25(mem, &entity);
+    if (uintptr_t vt = ResolveAddr(Module::Exe, kMarketWorkVtable))
+        *reinterpret_cast<uintptr_t*>(mem) = vt;
+
+    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
+    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
+    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
 
     return WrapIBP(out, mem);
 }

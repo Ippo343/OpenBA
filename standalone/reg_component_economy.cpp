@@ -45,6 +45,7 @@ extern "C" void    AttendanceComponent_Command(void* self, int cmd);       // 0x
 extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd);     // 0x14011f920
 extern "C" void    ForesterComponent_Command(void* self, int cmd);         // 0x14011f890
 extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out); // 0x14011f780
+extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out);   // 0x14004ea40
 extern "C" void    AttendanceComponent_SerializeSlot(void* self, void* stream);  // 0x140044410
 extern "C" void    AttendanceComponent_Unregister(void* self);             // 0x1400443d0
 extern "C" char    AttendanceComponent_AllFull(void* self);                // 0x140043db0
@@ -143,6 +144,12 @@ void RegisterComponentBatch_economy() {
     // "ForesterWork_CopyCtor"; it is ForesterComponent's slot 18, and its prologue
     // re-arms the two work flags when the player has cleared both.
     RegisterExeAddr(0x14011f780, reinterpret_cast<uintptr_t>(&ForesterComponent_CreateWork));
+
+    // marketcomponent.cpp / resourceproduce_creatework.cpp — slot 18, CreateWork.
+    // Ghidra calls 0x14004ea40 "MarketWork_Ctor"; it is MarketComponent's slot 18 and
+    // has the same shape as HuntComponent's (MemAlloc 0x58 + Work_Ctor25 + vtable).
+    // It was still the inert base stub, so no MarketWork was ever minted.
+    RegisterExeAddr(0x14004ea40, reinterpret_cast<uintptr_t>(&MarketComponent_CreateWork));
 
     // interactcomponent.cpp
     RegisterExeAddr(0x140004740, reinterpret_cast<uintptr_t>(&InteractComponent_FindWorkplaceComponent));

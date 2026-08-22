@@ -121,8 +121,17 @@ extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.c
 extern "C" void   RPCtrl_PopulateTable();
 extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self);  // 0x14012b520
 extern "C" void    ResourceProduceComponent_Command(void* self);      // 0x14012b5a0
+extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out);  // 0x14004ea40
+                                                     // resourceproduce_creatework.cpp
 
-// Slots 13/14 must be written from INSIDE InstallLive — FillTypedVtable erases
+// Slot 3 = Shutdown/Serialize. MarketComponent_Shutdown (above in this file) is the
+// real 0x14004ead0 body and has been since it was ported — nothing ever wrote it into
+// a vtable, so it was dead code. Dispatched as (self, stream).
+static void MarketComponent_ShutdownVSlot(void* self, void* stream) {
+    MarketComponent_Shutdown(reinterpret_cast<MarketComponent*>(self), stream);
+}
+
+// Slots 13/14/3/18 must be written from INSIDE InstallLive — FillTypedVtable erases
 // static-init writes on the first factory call.
 static void MarketCtrl_PopulateAndWireCmd();
 
@@ -131,6 +140,18 @@ CONTROLLER_LIVE_FACTORY_STATES(MarketComponent, 0x50, 0x80, 0x28, 2,
                                RPCtrl_NodeVtable, MarketCtrl_PopulateAndWireCmd)
 
 static void MarketCtrl_PopulateAndWireCmd() {
+    // Byte-verified 2026-08-22 from vtable_MarketComponent (0x140159c40):
+    //   slot 3 = 0x14004ead0 (MarketComponent::Shutdown)
+    //   slot 18 = 0x14004ea40 (MarketComponent::CreateWork — MarketWork ctor:
+    //             MemAlloc(0x58,8), Work_Ctor25(owner IBP), vtable_MarketWork,
+    //             +0x48 = 0, +0x50 = 0)
+    // A live-probe slot census over a placed market read these two as the only
+    // MISSING entries of the 22 (7 ported, 13 equivalent-noop). Both bodies existed
+    // already; neither was reachable.
+    MarketComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&MarketComponent_ShutdownVSlot);
+    MarketComponent_LiveVtable[18] =
+        reinterpret_cast<void*>(&MarketComponent_CreateWork);
     MarketComponent_LiveVtable[13] =
         reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
     MarketComponent_LiveVtable[14] =
