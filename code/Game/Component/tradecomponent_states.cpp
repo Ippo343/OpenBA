@@ -56,8 +56,9 @@
 //                than half-done.
 //   0x14005b160  shared teardown — also calls 0x1400456e0 (with a null ref, its
 //                "release the boat" branch).
-//   0x14005a850  dock event-log line — needs the EventLog string/format chain.
 //   0x14005b240  dismiss event — retail inlines the whole of StateMachine::Tick here.
+//   (0x14005a850, the dock event-log line, WAS in this list — ported 2026-08-22 once the
+//    boat state machine gave it a caller; it reuses eventlog.cpp's AddEvent.)
 //
 // So with this layer alone the machine runs, sits in state 2, and re-posts trade work
 // on its own; it does not yet advance to 0x12/0x13. That is a real behaviour change
@@ -379,6 +380,50 @@ extern "C" char TradeCtrl_State13_Tick(void* selfV, void* sm, void* deltaTime) {
 }
 
 // ============================================================
+// state 0x12 event 9 — 0x14005a850   THE MERCHANT HAS DOCKED
+// ============================================================
+// Raised by the BOAT, not by anything on this side: BoatComponent's state-2 enter
+// (0x140044f70, boatcomponent_states.cpp) posts event 9 to this component's
+// StateMachineComponent the moment the hull is within 0.2 of the pier. State 0x12 has no
+// per-frame handler at all, so until something raised this event the post could never
+// leave "merchant inbound" and the whole of layer 3 was unreachable.
+//
+// Retail INLINES the event-log writer here rather than calling it, but the entry it
+// builds is field-for-field the 4-arg AddEvent overload (0x140095580) that eventlog.cpp
+// already ports, with eventType 0xd and severity 2 — checked, not assumed:
+//     color   0xff8080ff == EventLog_SeverityColor(2)
+//     +0x10   0xd        == eventType
+//     +0x14   2          == severity
+//     +0x18   tileIdx    == EventLog_TileIndex(&entityIBP)   (comp+0x10)
+//     +0x1c   5          == EventLog_IconIndex(0xd)
+//     +0x20   -1         == EventLog_PopupIndex(0xd)
+// so reusing AddEvent reproduces the inlined body exactly instead of duplicating it.
+//
+// The event log lives at gameWorld+0x138 (g_pGameWorldSingleton IS the GameUpdateLoop).
+extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
+
+extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
+    Resolve();
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
+
+    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
+                                                                 : nullptr;
+    if (gw) {
+        void* eventLog = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x138);
+        // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
+        // helper takes an InternalBasePtr*, not the entity).
+        int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
+        EventLog_AddEvent(eventLog, 0xd, 2, &entityIBP);
+    }
+
+    ::ControllerLive::RequestStateTransition(sm, 0x13);
+    std::fprintf(stderr, "[TradeCtrl] event 9: MERCHANT DOCKED comp=%p -> state 0x13\n",
+                 (void*)comp);
+    std::fflush(stderr);
+    return 1;
+}
+
+// ============================================================
 // state 0x12 event 0xb — 0x14005a9c0
 // ============================================================
 // The inbound boat went away without docking: clear the merchant reference at
@@ -559,7 +604,7 @@ extern "C" void TradeCtrl_PopulateTable() {
     TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 0x13, nullptr);
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 9, nullptr);                           // a850 — NOT PORTED
+    TableAddEvent(t, 9, reinterpret_cast<void*>(&TradeCtrl_Event09_MerchantDocked));  // a850
     TableAddEvent(t, 0xb, reinterpret_cast<void*>(&TradeCtrl_Event0B_MerchantLost));
 
     // state 0x13 — merchant docked

@@ -20,7 +20,6 @@
 //
 // Still absent, and still deliberately so — an unregistered address reports "NOT
 // IMPLEMENTED" if anything reaches for it, which is the honest state:
-//   0x14005a850                dock event-log line — needs the EventLog string chain
 //   0x14005b240                dismiss event — retail inlines all of StateMachine::Tick
 // See the header of tradecomponent_states.cpp for the full table.
 //
@@ -33,6 +32,7 @@ extern "C" char  TradeCtrl_State2_Enter(void* self, void* sm);              // 0
 extern "C" char  TradeCtrl_State12_Enter(void* self, void* sm);             // 0x14005aa50
 extern "C" char  TradeCtrl_State13_Tick(void* self, void* sm, void* dt);    // 0x14005a780
 extern "C" char  TradeCtrl_Event0B_MerchantLost(void* self, void* sm);      // 0x14005a9c0
+extern "C" char  TradeCtrl_Event09_MerchantDocked(void* self, void* sm);   // 0x14005a850
 extern "C" void  TradeComponent_ArmMerchantTimer(void* self);               // 0x14005b450
 extern "C" int   TradeComponent_PickMerchantTier(void* self);               // 0x14005b4f0
 extern "C" void* TradeWork_CtorFromEntity(void* mem, void* entityIBP);      // 0x1400f6ea0
@@ -56,6 +56,7 @@ void RegisterTradeCtrlBatch() {
     RegisterExeAddr(0x14005aa50, reinterpret_cast<uintptr_t>(&TradeCtrl_State12_Enter));
     RegisterExeAddr(0x14005a780, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Tick));
     RegisterExeAddr(0x14005a9c0, reinterpret_cast<uintptr_t>(&TradeCtrl_Event0B_MerchantLost));
+    RegisterExeAddr(0x14005a850, reinterpret_cast<uintptr_t>(&TradeCtrl_Event09_MerchantDocked));
     RegisterExeAddr(0x14005b450, reinterpret_cast<uintptr_t>(&TradeComponent_ArmMerchantTimer));
     RegisterExeAddr(0x14005b4f0, reinterpret_cast<uintptr_t>(&TradeComponent_PickMerchantTier));
     RegisterExeAddr(0x1400f6ea0, reinterpret_cast<uintptr_t>(&TradeWork_CtorFromEntity));
