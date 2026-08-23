@@ -108,6 +108,10 @@ static fn_FindIBP_t         s_find2e10  = nullptr;  // workplace-ext
 static fn_FindIBP_t         s_find4740  = nullptr;  // yard0 (+0x58 multiplier)
 static fn_FindIBP_t         s_find4680  = nullptr;  // FootprintComponent (type 1401c79e0)
 static fn_FindIBP_t         s_find3f60  = nullptr;  // model/transform comp (ClearPathQueue)
+static fn_FindIBP_t         s_find2f90  = nullptr;  // Entity_FindComponent_MeshInstance
+typedef void (*fn_MeshSetFlag_t)(void* meshComp, uint8_t flagIdx, char value); // 0x14012c3f0
+static fn_MeshSetFlag_t     s_meshFlag  = nullptr;
+static uint32_t*            s_tidModelDesc = nullptr;      // DWORD_1401c7a88 (ModelDescription)
 static fn_HasWork_t         s_ead0      = nullptr;
 static fn_StopWork_t        s_eb50      = nullptr;
 static fn_PostWork_t        s_ec60      = nullptr;
@@ -133,6 +137,9 @@ static void EnsureResolved() {
     s_find4740  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_find4680  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_find3f60  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_find2f90  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140002f90));
+    s_meshFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
+    s_tidModelDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_ead0      = reinterpret_cast<fn_HasWork_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_eb50      = reinterpret_cast<fn_StopWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_ec60      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
@@ -1146,10 +1153,120 @@ extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
 }
 
 // ============================================================
+// State 6 event 2 — 0x14011d390.
+// ============================================================
+// The whole body is the request-transition idiom (identical to
+// ImmigrationDescription_helper_9ac0, 0x1400a9ac0) asking for state 7. State 6 is
+// the burning/collapsing stage and 7 is the destroyed-building rest state, so this
+// is "the fire is out — show the rubble panel". Nothing in the shipped UI posts
+// event 2 today (the Remove/Rebuild buttons are state 7 / events 0-1), but the
+// registration exists in dd00, so the handler does too.
+extern "C" char Destroy_State6Event2_ToRubble_d390(void* /*data*/, void* sm) {
+    ::ControllerLive::RequestStateTransition(sm, 7);
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] state-6 event 2 -> request state 7\n");
+        std::fflush(stderr);
+    }
+    return 1;
+}
+
+// ============================================================
+// States 4 AND 5, event 0 — 0x14011bcc0 (registered twice by dd00).
+// ============================================================
+// The CANCEL of an in-flight demolition/upgrade: states 4 (haul the storage away)
+// and 5 (spawn the replacement) both accept it. It stops the site work and sends the
+// machine back to whatever "not being destroyed" state fits the building's current
+// model variant.
+//
+// Retail derefs the three finder results unguarded — a building sitting in state 4/5
+// always carries a MeshInstance, a production yard and (for the variant math) a model
+// component. Those derefs stay faithful; only the finders our port may not have
+// registered are null-checked, which is a standalone concern, not a retail one.
+extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
+    EnsureResolved();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    int64_t entity = OwnerEntity(comp);
+
+    // Read first (retail order): does the building have a build yard at all?
+    int64_t build = FindOn(entity, s_findD6c0);
+
+    // MeshInstance state flag 5 off (the "under construction/demolition" overlay) and
+    // stop the production yard's worker.
+    int64_t mesh = FindOn(entity, s_find2f90);
+    if (s_meshFlag) s_meshFlag(reinterpret_cast<void*>(mesh), 5, 0);
+    int64_t yard = FindOn(entity, s_find3050);
+    if (s_eb50) s_eb50(yard);
+
+    // comp+0x50 — the "this was a REPLACEMENT/upgrade, not a plain demolish" flag that
+    // state-4 enter and the panel buttons set. Cancelling one of those leaves nothing
+    // standing, so the machine goes to the destroyed-building rest state instead.
+    if (*reinterpret_cast<int8_t*>(comp + 0x50) != 0) {
+        int64_t wp = FindOn(entity, s_find2e10);
+        if (wp && s_f670) s_f670(wp);
+        ::ControllerLive::RequestStateTransition(sm, 7);
+        if (Trace()) {
+            std::fprintf(stderr, "[DestroySM] state-4/5 event 0 (CANCEL) comp=%llx "
+                                 "+0x50 set -> request state 7\n",
+                         static_cast<unsigned long long>(comp));
+            std::fflush(stderr);
+        }
+        return 1;
+    }
+
+    int next;
+    if (!build) {
+        // No build yard: nothing was under construction, go straight back to state 2.
+        next = 2;
+    } else {
+        // Pick the resume state from how far the model got. The variant source is the
+        // yard-0 component's (+0x48) referenced entity when there is one — the
+        // construction SITE — otherwise this entity itself.
+        int64_t yard0  = FindOn(entity, s_find4740);
+        int64_t target = entity;
+        if (yard0) target = *reinterpret_cast<int64_t*>(
+                                *reinterpret_cast<int64_t*>(yard0 + 0x48));
+
+        int64_t model = FindOn(target, s_find3f60);
+        int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);
+        int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);
+        void*   obj = *reinterpret_cast<void**>(model + 0x18);
+        void*   modelDesc = (fn_IsDerivedFrom && s_tidModelDesc &&
+                             fn_IsDerivedFrom(obj, *s_tidModelDesc)) ? obj : nullptr;
+
+        if (modelVariant < 0) {
+            next = 0;                       // no mesh chosen yet — back to the start
+        } else {
+            // group[variantIdx] is 0x18 bytes; +0x10 is the mesh COUNT (+0x08 is the
+            // mesh array — the same layout destroycomponent_state6.cpp walks).
+            int64_t groups = *reinterpret_cast<int64_t*>(
+                reinterpret_cast<uintptr_t>(modelDesc) + 0x20);
+            int meshCount = *reinterpret_cast<int*>(
+                groups + 0x10 + static_cast<int64_t>(variantIdx) * 0x18);
+            next = (modelVariant == meshCount - 1) ? 2 : 8;
+        }
+    }
+
+    ::ControllerLive::RequestStateTransition(sm, next);
+
+    // Release the workplace roster AFTER the request on this arm (retail order).
+    int64_t wp = FindOn(entity, s_find2e10);
+    if (wp && s_f670) s_f670(wp);
+
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] state-4/5 event 0 (CANCEL) comp=%llx entity=%llx "
+                             "build=%llx -> request state %d\n",
+                     static_cast<unsigned long long>(comp),
+                     static_cast<unsigned long long>(entity),
+                     static_cast<unsigned long long>(build), next);
+        std::fflush(stderr);
+    }
+    return 1;
+}
+
+// ============================================================
 // Dispatcher + state table for the DestroyComponent controller.
-// Faithful graph from DestroyDescription_helper_dd00 (0x14011dd00); the
-// per-transition action handlers (0x14011bcc0/d390/d2a0/d1a0) are deferred
-// (null = graceful no-op in the dispatcher).
+// Faithful graph from DestroyDescription_helper_dd00 (0x14011dd00). All four event
+// handlers (0x14011bcc0/d390/d2a0/d1a0) are now ported and registered.
 // ============================================================
 namespace { struct DestroyCtrlTag {}; }
 using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
@@ -1171,6 +1288,8 @@ extern "C" void DestroyCtrl_PopulateTable() {
                        nullptr, reinterpret_cast<void*>(&Destroy_State6Tick_d490),
                        reinterpret_cast<void*>(&Destroy_State6Update_d400));
     TableAddTransition(t, 7, nullptr);
+    // sub_4020(2, d390) — state 6's only event.
+    TableAddEvent(t, 2, reinterpret_cast<void*>(&Destroy_State6Event2_ToRubble_d390));
 
     TableRegisterState(t, 7, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 0, nullptr);
@@ -1186,6 +1305,8 @@ extern "C" void DestroyCtrl_PopulateTable() {
                        nullptr);
     TableAddTransition(t, 5, nullptr);
     TableAddTransition(t, 2, nullptr);
+    // sub_4020(0, bcc0) — cancel, registered on state 4 AND state 5.
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State45Event0_Cancel_bcc0));
 
     TableRegisterState(t, 5, reinterpret_cast<void*>(&Destroy_State5Enter_cc70),
                        nullptr, reinterpret_cast<void*>(&Destroy_State5Tick_c120),
@@ -1194,4 +1315,5 @@ extern "C" void DestroyCtrl_PopulateTable() {
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 7, nullptr);
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State45Event0_Cancel_bcc0));
 }

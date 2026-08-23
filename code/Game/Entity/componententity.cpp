@@ -21,6 +21,10 @@
 #include <cstdint>
 #include <cstdio>
 
+// TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
+// code/Game/Component/destroycomponent_state6.cpp.
+extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEntityIbp);
+
 // ============================================================
 // Resolved addresses (lazy-init)
 // ============================================================
@@ -47,6 +51,33 @@ static void DtorBody(ComponentEntity* self) {
 
     // Shutdown flagged components
     ComponentEntity_ShutdownComponents(self);
+
+    // Retail's weak-ref invalidation, restored (was missing from this port).
+    // 0x1400c357c-0x1400c359d: build an InternalBasePtr onto the dying entity and hand
+    // it to TownManager::AbortCitizenActionsFor (0x140089e30, GameWorld+0xf0), which
+    // walks every citizen's CitizenAIComponent action stack and tears down any stack
+    // holding an action that references this entity (Action vtable slot 9 GetTarget ->
+    // slot 8 Abort). Without it, an in-flight SendComponentMessage keeps its +0x20
+    // target pointing at this block; nothing else invalidates that ref (CheckPtr is an
+    // empty function in the shipping Runtime), so once the block is freed AND RECYCLED
+    // every downstream probe in SendComponentMessage::AbstractImpl is defeated - the
+    // pointer is canonical, the memory is readable, and the marked-for-removal bit
+    // reads clear because those bytes now belong to something else. That is the crash
+    // that kept moving (+0x1a4 sentinel deref -> +0x24a garbage vtable dispatch) as
+    // each downstream guard was added. This is the correct layer: the refs die with
+    // the entity, while it is still addressable. Same idea as the drain's
+    // EntityList_ClearToolSelectionForDyingEntities, but retail-authored.
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        if (townMgr) {
+            void* entityIbp = nullptr;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entityIbp, self);
+            else                         entityIbp = self;
+            TownMgr_AbortCitizenActionsFor_89e30(reinterpret_cast<void*>(townMgr),
+                                                 &entityIbp);
+        }
+    }
 
     // Iterate component IBPs: null each out, then delete old value
     int count = self->componentCount;

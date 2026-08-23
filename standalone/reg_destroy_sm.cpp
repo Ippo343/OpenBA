@@ -33,7 +33,7 @@
 //
 // Deliberately NOT registered (deferred; keep NOT-IMPLEMENTED tracking honest):
 //   0x140128f50 PickingComponent pick-mesh rebuild (state 6 skips it, logged once),
-//   0x14011bcc0/d390/d2a0/d1a0 transition actions, 0x14012ea20 (in-TU only),
+//   0x14012ea20 (in-TU only),
 //   0x140086fb0 config Serialize (reached via the registered vtable, never by address).
 //
 // The workplace pair the state machine drives (0x14012f670 worker release / 0x14012f520
@@ -48,6 +48,8 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm);
 extern "C" char Destroy_State4Tick_cec0(void* data, void* sm, void* time);
 extern "C" char Destroy_State5Enter_cc70(void* data, void* sm);
 extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* time);
+extern "C" char Destroy_State6Event2_ToRubble_d390(void* data, void* sm);
+extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm);
 extern "C" char Destroy_StorageEmpty_da80(int64_t comp);
 extern "C" char Destroy_TargetDiffers_e600(int64_t comp);
 extern "C" char Destroy_TargetIsCurrent_e5b0(int64_t comp);
@@ -69,6 +71,10 @@ void RegisterDestroySmBatch() {
     RegisterExeAddr(0x14011cec0, reinterpret_cast<uintptr_t>(&Destroy_State4Tick_cec0));
     RegisterExeAddr(0x14011cc70, reinterpret_cast<uintptr_t>(&Destroy_State5Enter_cc70));
     RegisterExeAddr(0x14011c120, reinterpret_cast<uintptr_t>(&Destroy_State5Tick_c120));
+    // The remaining two DestroyComponent event handlers (dd00's sub_4020 pairs):
+    // state 6 event 2, and state 4 + state 5 event 0.
+    RegisterExeAddr(0x14011d390, reinterpret_cast<uintptr_t>(&Destroy_State6Event2_ToRubble_d390));
+    RegisterExeAddr(0x14011bcc0, reinterpret_cast<uintptr_t>(&Destroy_State45Event0_Cancel_bcc0));
     RegisterExeAddr(0x14011da80, reinterpret_cast<uintptr_t>(&Destroy_StorageEmpty_da80));
     RegisterExeAddr(0x14011e600, reinterpret_cast<uintptr_t>(&Destroy_TargetDiffers_e600));
     RegisterExeAddr(0x14011e5b0, reinterpret_cast<uintptr_t>(&Destroy_TargetIsCurrent_e5b0));
