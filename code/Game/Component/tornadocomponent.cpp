@@ -618,12 +618,31 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
 
     // --- 2. the quadtree radius query ---
     struct { uintptr_t data; int count; int cap; } found = { 0, 0, 0 };
+    const char* queryState = "ran";
     {
         float radius = static_cast<float>(*reinterpret_cast<int32_t*>(d + 0x30));
         float pos[3] = { px, py, pz };
         void* scratch = nullptr;
-        if (g_h.radiusQuery)
-            g_h.radiusQuery(reinterpret_cast<float*>(map), &scratch, pos, &radius, 0, &found);
+        // The quadtree this query walks is the CHARACTER SPATIAL-HASH MANAGER at
+        // GameWorld+0x88, NOT the map grid. Retail 0x14005825c loads 0x88(g_GameWorld)
+        // into rcx immediately before the call; gw+0xf8 (r14, loaded at 0x140058188) is
+        // a separate live value in the same function, used for the cell raster above --
+        // which is exactly why passing it here looked plausible. It is not a quadtree,
+        // so 0x140092990 read its +0x50 node-count table as garbage and faulted on null.
+        // citizen_updatehealth.cpp:687 was already calling this correctly.
+        //
+        // The null test is a DELIBERATE standalone-only deviation, not a papered-over
+        // fault: retail always has this manager, but ours is built by CharManager_Seed
+        // (charmanager_seed.cpp), which early-returns unless MoveTickEnabled(). With
+        // that gate off gw+0x88 is legitimately null here, so skip the query rather
+        // than fault. Every other deref in this function stays unguarded.
+        void* quadtree = *reinterpret_cast<void**>(g + 0x88);
+        if (g_h.radiusQuery && quadtree)
+            g_h.radiusQuery(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);
+        else
+            queryState = quadtree ? "SKIPPED(no radiusQuery fn)"
+                                  : "SKIPPED(GameWorld+0x88 quadtree is null - "
+                                    "CharManager_Seed gated off by MoveTickEnabled)";
 
         for (int i = 0; i < found.count; i++) {
             void* slot = reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8);
@@ -663,10 +682,11 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
     if (found.data && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(found.data));
 
     TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d building=%d "
-                  "building-NOFIRE=%d animal=%d citizen=%d (query returned %d)\n",
+                  "building-NOFIRE=%d animal=%d citizen=%d (quadtree query %s, returned %d)\n",
                   *reinterpret_cast<float*>(s + 0x58), *reinterpret_cast<float*>(s + 0x5c),
                   *reinterpret_cast<int32_t*>(d + 0x30), *reinterpret_cast<int32_t*>(d + 0x34),
-                  hitTree, hitBuilding, hitBuildingNoFire, hitAnimal, hitCitizen, found.count);
+                  hitTree, hitBuilding, hitBuildingNoFire, hitAnimal, hitCitizen,
+                  queryState, found.count);
 }
 
 // ============================================================
