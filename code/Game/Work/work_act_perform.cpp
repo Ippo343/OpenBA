@@ -76,7 +76,21 @@ typedef void*  (*WAP_fn_MemAlloc_t)(uint64_t size, uint32_t align); // 0x140152b
 typedef void*  (*WAP_fn_ObjInternalCtor_t)(void* self);       // 0x140152768
 typedef void*  (*WAP_fn_TimeCtor_t)(void* retval, float seconds);   // 0x140152b00
 typedef void*  (*WAP_fn_Vec3Ctor_t)(void* self, float x, float y, float z); // 0x140152a30
-typedef void*  (*WAP_fn_Vec3Normalize_t)(void* self);         // 0x1401512c0
+// 0x1401512c0 — ?Normalize@Vector3@Math@@QEBA?AV12@XZ. Returns a NEW Vector3 BY VALUE,
+// so the Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes) and
+// the retail call site loads it: `lea -0x41(%rbp),%rdx` at 0x1400bab2f, right before
+// `lea -0x29(%rbp),%rcx` and the call.
+//
+// ⚠ FIXED 2026-08-22. This typedef used to take ONE argument, so Normalize wrote its
+// three floats through whatever RDX happened to hold. work_base_actionctor.cpp carries
+// the identical function with the correct two-arg form AND a comment describing this
+// exact failure ("the organic herder's first-claim crash") — the fix simply never
+// reached this second copy, because this call site was unreachable: FireWork returned
+// early on found=0 for as long as no water source was ever registered. The moment the
+// well registration landed, the very first bucket run faulted inside Runtime's
+// Vector3::Normalize writing to a Runtime CODE address. See
+// reference_one_retail_fn_ported_twice_diverges and reference_byvalue_return_hidden_rdx.
+typedef void*  (*WAP_fn_Vec3Normalize_t)(void* self, void* outVec3); // 0x1401512c0
 typedef float  (*WAP_fn_Vec3Heading_t)(void* self);           // 0x1401512d8
 
 static WAP_fn_Entity29a0_t          s_wap_Entity29a0      = nullptr;
@@ -252,7 +266,8 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         // 0x1400bab05: XMM = [pos4+k] - [pos3+k]  (k = 8,4,0 → z,y,x)
         s_wap_Vec3Ctor(v3, pos4[0] - pos3[0], pos4[1] - pos3[1], pos4[2] - pos3[2]);
         if (s_wap_Vec3Normalize) {
-            void* n = s_wap_Vec3Normalize(v3);
+            float nv[3] = { 0.0f, 0.0f, 0.0f };   // the hidden RDX return slot
+            void* n = s_wap_Vec3Normalize(v3, nv);
             if (s_wap_Vec3Heading && n) headingB = s_wap_Vec3Heading(n);
         }
     }

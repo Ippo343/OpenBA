@@ -49,6 +49,10 @@ extern void ResidenceComponent_CopyInnerArray(void* dst, void* src);
 // ---- wellcomponent.cpp (WELL cluster: remove-by-IBP + grid-cell compaction leaf) ----
 extern void WellComp_UnregisterEntity_91ba0(int64_t manager, void* ibp);
 extern void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value);
+extern void WellComp_RegisterEntity_91cb0(int64_t manager, void* ibp);
+extern void WellComp_AddCellEntry_88a80(int64_t manager, int x, int y, int value);
+extern "C" char WellComponent_EnterBuilt(void* comp, void* sm);
+extern "C" char WellComponent_EnterDemolish(void* comp, void* sm);
 
 // ---- nomadcomponent.cpp (controller rebuild) ----
 // DEFERRED by lead (NOT registered): 0x140102b60 has no unregistered FUN_ callees, but it
@@ -80,5 +84,12 @@ void RegisterComponentGap_B() {
     // wellcomponent.cpp  (WELL cluster — bottom-up closure landed)
     RegisterExeAddr(0x1400889e0, reinterpret_cast<uintptr_t>(&WellComp_RemoveCellEntry_889e0));
     RegisterExeAddr(0x140091ba0, reinterpret_cast<uintptr_t>(&WellComp_UnregisterEntity_91ba0));
+    // The REGISTER half of the same pair (added 2026-08-22, fire lane): without these
+    // the water-source array and the coarse cell index the FireWork search walks are
+    // never written, so every fire reports buckets=0.
+    RegisterExeAddr(0x140088a80, reinterpret_cast<uintptr_t>(&WellComp_AddCellEntry_88a80));
+    RegisterExeAddr(0x140091cb0, reinterpret_cast<uintptr_t>(&WellComp_RegisterEntity_91cb0));
+    RegisterExeAddr(0x14005cf20, reinterpret_cast<uintptr_t>(&WellComponent_EnterBuilt));
+    RegisterExeAddr(0x14005cee0, reinterpret_cast<uintptr_t>(&WellComponent_EnterDemolish));
     // nomadcomponent.cpp 0x140102b60 DEFERRED (see note above) — not registered.
 }
