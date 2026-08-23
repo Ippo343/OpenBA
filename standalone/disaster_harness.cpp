@@ -106,6 +106,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Dialog/ui_panels.h"          // DebugUI, DebugUI_Slot9
+#include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -459,16 +460,41 @@ void ForceTornado(int frameNum, int want) {
 // DebugUI instance. Resolve the DiseaseDescription here instead, exactly the way
 // DebugUI::Slot4 populates that combo (debugui.cpp:1253-1262) — walk the external
 // resource list at gameWorld+0xA8 and keep the entries derived from
-// g_TypeId_DiseaseDescription.
+// the type of the DISEASE EXTERNAL.
+//
+// TWO DIFFERENT SYSTEMS SHARE THE WORD "disease", and this arm read the wrong handle.
+// `g_TypeId_DiseaseDescription` is a misnomer twice over:
+//   * the id it holds is registered under the name "Disease" (the citizen-illness
+//     external authored in Game/Disease/*.rsc), NOT the crop lane DiseaseDescription
+//     (the CropField/Orchard/Pasture component description); and
+//   * it is filled by exactly one thing - debugui_sa::EnsureGlobals(), the DebugUI
+//     lazy heal - because ResolveAddr(Exe, 0x1401c5948) returns 0 in standalone.
+// So in a run that never builds a DebugUI the global is NULL, FindDiseaseDescription
+// returned early with found=0, and the log blamed BANISHED_LIVE_DISEASELIST for a
+// resource list that had in fact loaded fine. Resolve "Disease" BY NAME here instead:
+// same id the DebugUI heal would install, minus the ordering dependency.
 
-void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned) {
+// The "Disease" external type id, resolved BY NAME so this arm does not depend on a
+// DebugUI ever existing. 0 = never registered, 0xFFFFFFFF = the pre-Startup sentinel;
+// both are reported as distinct outcomes by the caller, never silently filtered on.
+uint32_t DiseaseExternalTypeId() {
+    static uint32_t id = 0;
+    if (!id || id == 0xFFFFFFFFu) id = ::Object::GetTypeIdByName("Disease");
+    return id;
+}
+
+void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
+                             uint32_t* outTypeId, bool* outListPresent) {
     *outFound = 0; *outScanned = 0;
+    *outTypeId = DiseaseExternalTypeId();
+    *outListPresent = false;
     uintptr_t gw = GameWorld();
     if (!gw) return nullptr;
     void* externalList = *reinterpret_cast<void**>(gw + 0xa8);
     if (!externalList) return nullptr;
-    if (!fn_ExternalList_GetResourceCount || !fn_IsDerivedFrom ||
-        !g_TypeId_DiseaseDescription) return nullptr;
+    *outListPresent = true;
+    if (!fn_ExternalList_GetResourceCount || !fn_IsDerivedFrom) return nullptr;
+    if (!*outTypeId || *outTypeId == 0xFFFFFFFFu) return nullptr;
 
     const int count = fn_ExternalList_GetResourceCount(externalList);
     *outScanned = count;
@@ -480,7 +506,7 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned) {
     for (int i = 0; i < count; ++i) {
         void* res = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!res) continue;
-        if (!fn_IsDerivedFrom(res, *g_TypeId_DiseaseDescription)) continue;
+        if (!fn_IsDerivedFrom(res, *outTypeId)) continue;
         if (*outFound == wantIdx) chosen = res;
         ++(*outFound);
     }
@@ -489,17 +515,31 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned) {
 
 void ForceSick(int frameNum, int want) {
     int found = 0, scanned = 0;
-    void* disease = FindDiseaseDescription(s_sickDiseaseIdx, &found, &scanned);
-    DLOG("Sick", "frame %d: external resource list scanned=%d DiseaseDescription(s)=%d "
-         "chosenIdx=%d chosen=%p\n", frameNum, scanned, found, s_sickDiseaseIdx, disease);
+    uint32_t diseaseTid = 0;
+    bool listPresent = false;
+    void* disease = FindDiseaseDescription(s_sickDiseaseIdx, &found, &scanned,
+                                           &diseaseTid, &listPresent);
+    DLOG("Sick", "frame %d: gameWorld+0xA8 list=%s scanned=%d Disease typeId=%u "
+         "matches=%d chosenIdx=%d chosen=%p\n",
+         frameNum, listPresent ? "present" : "ABSENT", scanned, diseaseTid,
+         found, s_sickDiseaseIdx, disease);
 
     if (!disease) {
-        if (found == 0)
-            DLOG("Sick", "no DiseaseDescription in the resource list — is "
-                 "BANISHED_LIVE_DISEASELIST set? gameWorld+0xA8 is loaded from "
-                 "Game/Disease/Diseases.rsc by GameUpdateLoop::Load step 1, and that load "
-                 "is installed only under that gate. This is NOT evidence that citizen "
-                 "disease is broken. Nobody infected.\n");
+        // Four distinct causes, never collapsed into one message.
+        if (!listPresent)
+            DLOG("Sick", "gameWorld+0xA8 is NULL - the external list was never loaded. "
+                 "GameUpdateLoop::Load step 1 loads Game/Disease/Diseases.rsc only under "
+                 "BANISHED_LIVE_DISEASELIST. Nobody infected.\n");
+        else if (!diseaseTid || diseaseTid == 0xFFFFFFFFu)
+            DLOG("Sick", "the Disease type id is %s, so IsDerivedFrom can never match and "
+                 "the scan of %d resource(s) is meaningless. This is a type-REGISTRATION "
+                 "problem, not an empty list. Nobody infected.\n",
+                 diseaseTid ? "the 0xFFFFFFFF pre-Startup sentinel" : "0 (never registered)",
+                 scanned);
+        else if (found == 0)
+            DLOG("Sick", "the list loaded (%d resource(s)) and the Disease type id is live "
+                 "(%u), but NOTHING in it derives from that type. Nobody infected.\n",
+                 scanned, diseaseTid);
         else
             DLOG("Sick", "BANISHED_FORCE_SICK_DISEASE=%d is out of range (%d available). "
                  "Nobody infected.\n", s_sickDiseaseIdx, found);
@@ -560,6 +600,17 @@ void ForceSick(int frameNum, int want) {
 // component array), and take the FIRST entry whose owner carries a
 // CropFieldComponent. Deterministic and nameable.
 //
+// ⚠ AND ON THE FIELD ACTUALLY HAVING PLANTS. Retail CheckCure (0x1400481b0) reports a
+// field cured when NO NaturalResource entity remains on its tiles, and Infect
+// (0x1400483a0) opens by calling it: an empty or freshly-placed field is infected and
+// cured in the same call, logging INFECT-SKIPPED reason=already-cureable. That is
+// CORRECT retail behaviour, not a defect - but it makes for a worthless test, because
+// "the infestation logic is dead" and "the crop had not sprouted yet" look identical in
+// the outcome count. So this arm PRE-FILTERS on CheckCure and reports the two
+// separately. Crops take in-game weeks to sprout: pair BANISHED_FORCE_INFEST with
+// BANISHED_FORCE_INFEST_FRAME set late (or _PERIOD set, so the arm re-arms and keeps
+// polling) and let a farmer plant the field first.
+//
 // ⚠ HARD DEPENDENCY ON THE CROP LANE'S GATE. That registry is populated by exactly
 // one thing: DiseaseComponent's OnAdded (vtable slot 6), which is only installed when
 // BANISHED_LIVE_CROPDISEASE is set. With the gate off the registry is EMPTY and this
@@ -580,7 +631,7 @@ void ForceInfest(int frameNum, int want) {
 
     void* picks[64];
     int   pickTiles[64][2];
-    int   nPick = 0, ownerless = 0, notCropField = 0;
+    int   nPick = 0, ownerless = 0, notCropField = 0, barren = 0;
 
     for (int i = 0; i < n && nPick < 64; ++i) {
         void* comp = RegistrySlot(arr, i);
@@ -592,6 +643,12 @@ void ForceInfest(int frameNum, int want) {
         void* owner = *ownerSlot;
         if (!owner) { ++ownerless; continue; }
         if (!ComponentByName(owner, "CropFieldComponent")) { ++notCropField; continue; }
+        // Nothing growing on it yet -> Infect would cure it in the same call. Count it
+        // as its own outcome instead of letting it dilute the infestation result.
+        if (DiseaseComp_CheckCure(reinterpret_cast<DiseaseComponent*>(comp))) {
+            ++barren;
+            continue;
+        }
         int x = 0, y = 0;
         EntityTile(owner, &x, &y);          // best effort; tile is for the log only
         picks[nPick] = comp;
@@ -599,15 +656,24 @@ void ForceInfest(int frameNum, int want) {
         ++nPick;
     }
 
-    DLOG("Infest", "frame %d: %d DiseaseComponent(s) in the registry — cropFields=%d "
-         "skippedNoOwner=%d skippedNotCropField=%d\n",
-         frameNum, n, nPick, ownerless, notCropField);
+    DLOG("Infest", "frame %d: %d DiseaseComponent(s) in the registry - cropFields=%d "
+         "skippedNoOwner=%d skippedNotCropField=%d skippedNoLivingPlants=%d\n",
+         frameNum, n, nPick, ownerless, notCropField, barren);
 
     if (nPick == 0) {
-        DLOG("Infest", "%d DiseaseComponent(s) ARE registered (so BANISHED_LIVE_CROPDISEASE "
-             "is on and slot 6 ran) but none belongs to a crop field. Set "
-             "BANISHED_BUILD_DEMO_CROPFIELD=1 so there is a field to infest. "
-             "Nothing infested.\n", n);
+        if (barren > 0)
+            DLOG("Infest", "%d crop field(s) ARE registered but every one of them is "
+                 "already cureable - no NaturalResource plant remains on its tiles, so "
+                 "retail Infect would cure it in the same call (INFECT-SKIPPED "
+                 "reason=already-cureable). This is CORRECT retail behaviour and says "
+                 "NOTHING about the infestation logic: the field has not been sown yet. "
+                 "Let a farmer plant it, then re-arm (BANISHED_FORCE_INFEST_PERIOD keeps "
+                 "this arm polling). Nothing infested.\n", barren);
+        else
+            DLOG("Infest", "%d DiseaseComponent(s) ARE registered (so BANISHED_LIVE_CROPDISEASE "
+                 "is on and slot 6 ran) but none belongs to a crop field. Set "
+                 "BANISHED_BUILD_DEMO_CROPFIELD=1 so there is a field to infest. "
+                 "Nothing infested.\n", n);
         return;
     }
 

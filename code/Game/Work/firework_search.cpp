@@ -4,7 +4,7 @@
 //   FireWork_helper_81d0          @ 0x1400881d0  -> FireWork_SpiralSearch_81d0
 //   FireWork_helper_81d0_sub_8730 @ 0x140088730  -> FireWork_SpiralCell_8730
 //
-// FireWork_SpiralSearch_81d0 scans the coarse cell grid of the GameWorld in an
+// FireWork_SpiralSearch_81d0 scans the TownManager's coarse cell index in an
 // expanding ring spiral around a centre cell (param_2). For every in-bounds cell it
 // invokes the per-cell helper (8730), which walks that cell's entity list, filters by
 // flag/type, validates reachability (a00f0 + f810 path queries) and tracks the closest
@@ -18,6 +18,23 @@
 //     of the found entity, random-index it (Random::Rand over the recursive child count),
 //     resolve its world position (Entity_impl_2e20) and anchor cell (Entity_impl_7fb0), then
 //     write both terrain positions.
+//
+// ⚠ param_1 IS NOT THE GameWorld. Slot 4 passes `*(GameWorld+0xF0)` -- the
+// TownManager -- and that is faithful: retail 0x1400e977c does `mov rsi,rcx` with rsi
+// loaded from `0xf0(g_GameWorld)`. The three fields this pair walks are TownManager
+// fields, and the GameWorld's same-numbered fields are unrelated (GW+0xE0 = camera
+// holder, GW+0x130 = weather sim, GW+0x140 = save/load), so reading them off the wrong
+// object yields garbage rather than a clean null:
+//
+//   TownManager+0xE0/+0xE8   water-source entity refs (registered by 0x140091cb0)
+//   TownManager+0x130/+0x138 water cell-id pairs
+//   TownManager+0x140/+0x148 COARSE CELL INDEX over both: (W>>3)^2 buckets of stride
+//                            0x10 = {int* ids, int count}. Sized by the GameWorld
+//                            world-init at 0x1400975c7 -- see gameupdateloop_load.cpp
+//                            Step 31. It is NOT sized by the TownManager ctor
+//                            (0x140090a30 only zeroes it), so a port that skips that
+//                            call site leaves the base null and the first ring probe
+//                            faults at coarseCell*0x10.
 //
 // Faithful, offset-by-offset port of the decompiled exe helpers; do not "improve" behavior.
 // Every numeric constant, the spiral index arithmetic and the per-cell call argument order
@@ -86,7 +103,7 @@ static inline float HalfCell() { return s_pHalfCell ? *s_pHalfCell : 0.5f; }
 // FireWork_SpiralCell_8730  (FUN_140088730)
 //   Per-cell check: walk the entity-id list of coarse cell `param_3`, and for each
 //   burnable + reachable entity update the closest-target trackers (param_7/8/9).
-// param_1 = GameWorld, param_2 = WorldGrid (int*), param_3 = coarse cell index,
+// param_1 = TownManager (= *(GameWorld+0xF0)), param_2 = WorldGrid (int*), param_3 = coarse cell index,
 // param_4/param_5 = ring offsets (used for the radius-vs-limit early reject),
 // param_6 = source cell, param_7 = &bestCost, param_8 = &bestId, param_9 = &bestIBP.
 // ===========================================================================
@@ -195,7 +212,7 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
 //   Expanding-ring spiral over the coarse cell grid around centre cell param_2,
 //   bounded by half-search-extent param_3. Returns true (low byte) when it wrote
 //   the two terrain positions to param_4/param_5.
-// param_1 = GameWorld, param_2 = centre cell, param_3 = search extent (fine units),
+// param_1 = TownManager (= *(GameWorld+0xF0)), param_2 = centre cell, param_3 = search extent (fine units),
 // param_4 / param_5 = out Vector3 (two terrain positions).
 // ===========================================================================
 int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_3,
@@ -282,7 +299,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         int64_t lVar7 = static_cast<int64_t>(local_b8);
         float half = static_cast<float>(*piVar1 >> 1) - HalfCell();
 
-        // First terrain position: cell id at GameWorld+0x130[best].
+        // First terrain position: cell id at TownManager+0x130[best].
         int cellA = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(param_1 + 0x130) + lVar7 * 8);
         float inXY_a[3];
@@ -295,7 +312,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         param_4[1] = outA[1];
         param_4[2] = outA[2];
 
-        // Second terrain position: cell id at GameWorld+0x130[best] +4.
+        // Second terrain position: cell id at TownManager+0x130[best] +4.
         int cellB = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(param_1 + 0x130) + 4 + lVar7 * 8);
         float half2 = static_cast<float>(*piVar1 >> 1) - HalfCell();

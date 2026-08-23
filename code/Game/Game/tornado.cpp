@@ -49,6 +49,24 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+
+// Discriminator for the tornado ParticleComponent null (see particlecomponent.cpp
+// EMPTY GEOMETRY). Every OTHER ParticleAttachment in the game points at a
+// `ParticleSystem` resource -- a complete Runtime class -- and resolves. The tornado
+// alone points at THIS class, whose registration is deliberately dormant. Two very
+// different failures produce the same null ExternalPtr, and only this trace separates
+// them: factory never called => External::Load found no type at all; factory called
+// but the pointer still null => the object was built and then REJECTED (the dormant
+// slot 5 Serialize cannot read Tornado.rsc bodies).
+static void TornadoFactoryTrace(const char* who, void* p) {
+    static int budget = 0;
+    if (budget >= 8) return;
+    budget++;
+    fprintf(stderr, "[Tornado/particle] %s -> %p (dormant-safe: vtable stays Particle, "
+            "slot5 Serialize + slot8 CreateInstance NOT installed)\n", who, p);
+    fflush(stderr);
+}
 
 static void* Tornado_Build(void* p) {
     if (!p) return nullptr;
@@ -83,12 +101,15 @@ static void* Tornado_Build(void* p) {
     return p;
 }
 extern "C" void* Tornado_CreateInPlace_SA(void* mem) {
+    TornadoFactoryTrace("CreateInPlace", mem);
     return Tornado_Build(mem);
 }
 extern "C" void* Tornado_Factory_SA(void) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
     void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x90, 8);
-    return Tornado_Build(p);
+    void* built = Tornado_Build(p);
+    TornadoFactoryTrace("Factory", built);
+    return built;
 }
 REGISTER_TYPE(Tornado, "Graphics::Particle",
               &Tornado_Factory_SA, &Tornado_CreateInPlace_SA);

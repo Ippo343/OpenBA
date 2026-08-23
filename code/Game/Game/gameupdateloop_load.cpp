@@ -1224,7 +1224,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
 
     // Step 31 — worldgen (new-game branch, savedState==0). M5 5b first-light:
     // build the terrain mesh (base perlin island) + the gameplay tile-grid map
-    // arrays. DEFERRED to later 5b slices: TradeComponent trade-map resize,
+    // arrays + the TownManager coarse cell index (0x1400975c7). DEFERRED to later 5b slices:
     // CreateNaturalResource (trees/stone — spawns worker threads), and
     // FUN_1400a3300 start-town + initial-citizen spawn (which also sets the
     // camera position — until then the camera stays at the ctor default, framing
@@ -1252,6 +1252,35 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // Map dimension from the terrain size-table row (sizeRow[0]).
             int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);
             uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;
+
+            // Retail call site 0x1400975c7, immediately after the map dimension is
+            // read and BEFORE the +0x148 tile arrays: size the TownManager's coarse
+            // cell index to (mapWidth >> 3)^2 entries.
+            //
+            //     rcx = *(GameWorld+0xF0) + 0x140 ; edx = (W>>3) * (W>>3)
+            //     call 0x140017640                ; array-of-arrays resize
+            //
+            // The array is TownManager+0x140 (header {ptr, count, cap}; each of the
+            // count entries is a {int* ids, int count} bucket, stride 0x10), indexed
+            // by COARSE cell = (row>>3)*(W>>3) + (col>>3). It is the spatial index the
+            // FireWork water search walks: FireWork_SpiralCell_8730 does
+            // `*(townMgr+0x140) + coarseCell*0x10` with no null test, exactly as retail
+            // does, because retail sized it here. Left unsized the base stayed null and
+            // the first ring probe faulted reading 0x2510 (= coarse cell 593 * 0x10).
+            // This was the "TradeComponent trade-map resize" deferred at Step 31.
+            {
+                uint8_t* townMgr = *(uint8_t**)(p + 0xF0);
+                if (townMgr && dim > 0) {
+                    const int coarse = (int)dim >> 3;
+                    Reimpl_FUN_140017640(townMgr + 0x140, coarse * coarse);
+                    fprintf(stderr, "[TownMgr] coarse cell index sized: dim=%u coarse=%d "
+                            "buckets=%d base=%p (FireWork water search indexes this; a "
+                            "null base faults at coarseCell*0x10)\n",
+                            dim, coarse, coarse * coarse,
+                            *(void**)(townMgr + 0x140));
+                    fflush(stderr);
+                }
+            }
 
             // Gameplay tile-grid arrays at the map struct (+0x148): store dim,
             // allocate two dim*dim arrays (+0x18/+0x28), zero the +0x28 one.

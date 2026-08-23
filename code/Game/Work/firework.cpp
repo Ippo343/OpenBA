@@ -222,6 +222,24 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     int searchRadius = *(int*)((uintptr_t)citizenComp + 0xf8);
     bool found = s_fn_FindFire(mapData, centerCell, searchRadius, srcPos, destPos);
 
+    // Outcome of the TownManager water search (0x1400881d0). This is the ONLY place
+    // that walks townMgr+0x140, so it is also the only place that proves the coarse
+    // cell index was sized at world-init (gameupdateloop_load.cpp Step 31). Before that
+    // resize landed, this call faulted at coarseCell*0x10 instead of returning.
+    // found=0 is NOT a failure by itself: with no water source registered the buckets
+    // are legitimately empty and retail returns 0 too.
+    {
+        static int s_fwBudget = 0;
+        if (s_fwBudget < 8) {
+            s_fwBudget++;
+            fprintf(stderr, "[FireWork] water search: townMgr=%p buckets=%p centerCell=%u "
+                    "radius=%d -> found=%d\n",
+                    (void*)mapData, *(void**)(mapData + 0x140), centerCell,
+                    searchRadius, (int)found);
+            fflush(stderr);
+        }
+    }
+
     if (!found) {
         return 0;
     }

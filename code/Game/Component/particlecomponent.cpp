@@ -681,6 +681,7 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
     PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
     int total = *(int32_t*)(s + 0x40);
     if (!emArr || !geoArr) return;
+    int nullRes = 0, nullInst = 0;
     for (int i = 0; i < total; i++) {
         void* res = *(void**)(emArr + (size_t)i * 0x28);
         void* inst = nullptr;
@@ -692,13 +693,34 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
                 inst = ((fn_createInst_t)rvt[8])(res);
             }
         }
+        // A null here is FATAL LATER, not here: ParticleComponent_Draw (slot 6 OnAdded)
+        // reads geoArr[i].geo->+0x7C with no test, exactly as retail 0x140053029 does,
+        // because in retail this slot is always populated. Say so at the site that
+        // produced the null, or the only evidence is an AV reading address 0x7c.
+        if (!res)  ++nullRes;
+        if (!inst) ++nullInst;
         geoArr[i].geo = inst;
         ParticleComponent_Place(self, i);
     }
     if (PCTraceOn() && s_pcTraceBudget < 64) {
         s_pcTraceBudget++;
-        printf("[Particle] setup self=%p emitters=%d\n", (void*)self, total);
+        printf("[Particle] setup self=%p emitters=%d nullResource=%d nullInstance=%d\n",
+               (void*)self, total, nullRes, nullInst);
         fflush(stdout);
+    }
+    if (nullRes || nullInst) {
+        static int s_pcNullBudget = 0;
+        if (s_pcNullBudget < 16) {
+            s_pcNullBudget++;
+            fprintf(stderr, "[Particle] EMPTY GEOMETRY self=%p emitters=%d "
+                    "nullResource=%d nullInstance=%d -- slot 6 OnAdded (Draw) WILL fault "
+                    "reading 0x7c on the first such emitter. nullResource!=0 means the "
+                    "ParticleAttachment _particle external never resolved; nullInstance "
+                    "with nullResource==0 means the resource resolved but its vtable+0x40 "
+                    "CreateInstance returned null.\n",
+                    (void*)self, total, nullRes, nullInst);
+            fflush(stderr);
+        }
     }
 }
 
