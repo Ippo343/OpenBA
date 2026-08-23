@@ -312,6 +312,10 @@ static void StartTown_PickMeshProbe(void* entity) {
 // Consequences of skipping it (observed): the new building is unclickable (EditTool's
 // pick finds nothing in the region-map cell array), does not block navigation, and its
 // removal-side cell clear stays disarmed (bit 0x100000).
+// decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp a completed
+// building's footprint decal from _initialAlpha to full opacity.
+extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
+
 extern "C" void StartTown_RegisterRuntimeBuilding(void* entity) {
     if (!entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* game = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf8);
@@ -1688,6 +1692,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         "-> %d (mult=%u)\n", logIndex, required, mult);
                 fflush(stderr);
             }
+            // Start-town houses are force-completed and never run BuildComponent's 8->2
+            // transition, so nothing would fire the decal's completion ramp. Retail's
+            // DecalComponent Slot12(msg=1) equivalent — without this they would paint at
+            // the authored _initialAlpha (0.5) forever, the washed-out foundation look.
+            // This is the fourth "stamp as built", alongside the model, +0x52 and delivered.
+            DecalComponent_MarkOwnerBuilt(entity);
         }
 
         // Run the OnCreate pass on the freshly-registered entity (deferred-activation

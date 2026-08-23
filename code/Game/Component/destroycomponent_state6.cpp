@@ -43,11 +43,12 @@
 // material set at DestroyDescription+0x28) and re-stamps the ground decal
 // (DecalComponent+0x28 = DestroyDescription+0x2c — the scorch mark).
 //
-// ── DestroyDescription fields, named from these bodies ──────────────────────
-// destroydescription.cpp calls them _val0/_val1/_val2. They are:
-//   +0x28 _val0 (default 1)  rubble MATERIAL-SET index  -> GraphicsMesh::GetMaterialList
-//   +0x2c _val1 (default 1)  rubble DECAL state         -> DecalComponent+0x28
-//   +0x30 _val2 (default 0)  rubble MESH-VARIANT floor  -> ModelComponent+0x166 min
+// ── DestroyDescription fields ───────────────────────────────────────────────
+// The names are the AUTHORED ones (field-name strings in Tools-x64.exe, keys in
+// Template/*.rsc); the roles were confirmed from these bodies:
+//   +0x28 _damagedSkin     rubble MATERIAL-SET index  -> GraphicsMesh::GetMaterialList
+//   +0x2c _damagedDecal    rubble DECAL state         -> DecalComponent+0x28
+//   +0x30 _minDamageLevel  rubble MESH-VARIANT floor  -> ModelComponent+0x166 min
 //
 // ── STANDALONE deviations (each logged once at runtime) ─────────────────────
 //   * The PickingComponent pick-mesh rebuild (0x140128f50) is skipped — it is not
@@ -412,31 +413,21 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
     uintptr_t d = reinterpret_cast<uintptr_t>(dd);
     const int rubbleMaterialSet = *reinterpret_cast<int*>(d + 0x28);
     const int rubbleDecalState  = *reinterpret_cast<int*>(d + 0x2c);
-    int rubbleMeshFloor         = *reinterpret_cast<int*>(d + 0x30);
+    const int rubbleMeshFloor   = *reinterpret_cast<int*>(d + 0x30);
 
-    // STANDALONE: DestroyDescription+0x30 never gets a real value — the third int of
-    // its Serialize reads off the end of the record and comes back 0xE1E1E1E1 (the
-    // Runtime's uninit fill). See the OPEN DEFECT note in destroydescription.cpp; it
-    // is a description-loading bug, not a state-6 one, and it is NOT diagnosed. A
-    // mesh-variant floor cannot be negative, so refuse the value and fall back to 0
-    // (collapse all the way to variant 0) rather than clamping a mesh index to
-    // garbage. Buildings whose authored floor is > 0 will over-collapse until the
-    // load defect is fixed.
-    if (rubbleMeshFloor < 0 || rubbleMeshFloor > 0x7fff) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::fprintf(stderr, "[Collapse] DestroyDescription+0x30 (rubble mesh floor) is "
-                                 "%d — not a mesh-variant index; using 0. The description's "
-                                 "third int is not being deserialized (see destroydescription.cpp)\n",
-                         rubbleMeshFloor);
-            std::fflush(stderr);
-        }
-        rubbleMeshFloor = 0;
-    }
+    // _minDamageLevel is very often a hugely negative number (0xE1E1E1E1), and that is
+    // CORRECT — not a deserialize bug. The resource compiler always emits the slot but
+    // fills it with uninitialised memory when the .rsc omits the field, and only
+    // Template/Market.rsc authors it (`int _minDamageLevel = 1`). See the long note in
+    // destroydescription.cpp. An earlier revision of this function "refused" an
+    // out-of-range value and substituted 0; that produced the right answer for the
+    // wrong reason and printed a misleading warning, so it is gone. Retail's ordering
+    // below already absorbs the garbage.
 
-    // One step down the damage-stage ladder, floored at 0 and then clamped UP to the
-    // description's rubble floor — a building can never step past its rubble mesh.
+    // One step down the damage-stage ladder. Retail (0x14011d5d0) clamps to >= 0 FIRST
+    // and only THEN raises to the description's floor — so a negative _minDamageLevel
+    // never binds and the building collapses all the way to variant 0, while Market's
+    // floor of 1 stops it at variant 1. The order of these two tests is load-bearing.
     const int cur = static_cast<int>(*reinterpret_cast<int16_t*>(mc + 0x166));
     int next = cur - 1;
     if (next < 0) next = 0;

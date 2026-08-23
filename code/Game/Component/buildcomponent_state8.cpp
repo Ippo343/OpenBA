@@ -659,6 +659,10 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
 // the state machine cannot dispatch it — it is driven from the 8->2 completion below.
 extern "C" void WorkPlaceComponent_EnterBuiltState(void* workPlaceComp);
 
+// decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp the finished building's
+// footprint decal from _initialAlpha to full opacity. Inert component, so driven here.
+extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
+
 // Run that state-2 enter on the finished building's WorkPlaceComponent. Without it the
 // Builder key survives completion and WorkPlaceUI (which shows the spinner iff
 // WPC+0x48 != 0) keeps the construction worker up/down buttons on a finished house.
@@ -707,7 +711,14 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     // want a second pass). Hook kept only for the kill-switch configuration.
     if (!WorkPlaceComponent_ControllerLive())
         BuildComponent_ClearBuilderWorkplace(bc);
+
+    // Same collapse for the ground decal: retail's DecalComponent Slot12(msg=1) fires on
+    // the 8->2 completion and ramps the footprint from _initialAlpha (the translucent
+    // under-construction look) to fully opaque. Our DecalComponent is inert, so drive it
+    // here. Unconditional and idempotent — it no-ops once the decal is already at 1.0.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
+    DecalComponent_MarkOwnerBuilt(*reinterpret_cast<void**>(bc + 0x10));
+
     uintptr_t storageIBP = 0;
     if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);
     if (storageIBP == 0) return;

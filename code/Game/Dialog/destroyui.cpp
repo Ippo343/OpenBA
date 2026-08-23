@@ -94,9 +94,19 @@ static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
 // ============================================================
 // DestroyComponent action helpers (common pattern)
 // ============================================================
-// Reclaim/Rebuild/Destroy all call the StateMachine at BuildState+0x48:
-//   vtable[2](sm, sm_ref, current_state_byte, param)
-// where param = 0 (reclaim/rebuild) or 1 (destroy).
+// ⚠ NAMING: fn_FindComponent_BuildState is FUN_140003ea0, which is really the
+// STATEMACHINECOMPONENT finder (it matches g_BaseTypeInfo_StateMachineComponent).
+// Every offset used below is an SMC offset; the name is wrong, the code is not.
+//
+// Reclaim/Rebuild/Destroy all POST AN EVENT on the state machine at SMC+0x48:
+//   vtable[2](node, &SMC[0x48], current_sub_state, eventId)
+// where eventId = 0 (reclaim/rebuild) or 1 (destroy). SMC+0x48 is the Tick context:
+// +0x00 is the CURRENT node (StateMachine_Tick re-points it to the deepest active
+// node each pass) and +0x51 is its sub-state index — so for a collapsed building
+// this lands on the DestroyComponent's node in state 7. The handlers for events 0
+// and 1 there are Destroy_State7Event0_Rebuild_d2a0 / Destroy_State7Event1_Remove_d1a0
+// in destroycomponent_states.cpp; until 2026-08-23 they were registered as null and
+// the dispatcher's graceful no-op swallowed every click.
 //
 // Reclaim (14011e400): also calls destroyComp->vtable[4](self)
 // Rebuild (14011e470): finds BuildState on entity at destroyComp+0x10

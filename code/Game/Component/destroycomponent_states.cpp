@@ -34,9 +34,13 @@
 //           countdown runs out. transitions {7}.
 //   state 7 (terminal):         no handlers. transitions {0, 8, 5}.
 //
-// Retail transition-action handlers (sub_4020 conds: 0x14011bcc0 / 0x14011d390
-// / 0x14011d2a0 / 0x14011d1a0) are DEFERRED — registered as null, which the
-// ControllerLive dispatcher treats as a graceful no-op.
+// sub_4020 registers per-state EVENT handlers (node vtable slot 2 = PostEvent), which
+// is how the DestroyUI panel's buttons reach this machine — NOT transition actions.
+// State 7's two, 0x14011d2a0 (rebuild/reclaim) and 0x14011d1a0 (remove), are now
+// PORTED below; they were null, and a null handler is a graceful no-op in the
+// ControllerLive dispatcher, so every click on a destroyed building's panel was
+// swallowed. Still DEFERRED (null): 0x14011d390 (state 6 event 2) and 0x14011bcc0
+// (states 4 and 5, event 0).
 //
 // The live DFA cursor lives on the entity's StateMachineComponent; the pump
 // that the UpgradeUI click handler calls (0x14011dfa0, ported disasm-faithfully
@@ -87,7 +91,14 @@ typedef void  (*fn_MarkForRemoval_t)(int64_t entity);           // 0x1400c2ea0
 typedef void  (*fn_DynArrInsert_t)(int64_t* arr, int count, void* ibp); // 0x140003110
 typedef void* (*fn_CopyCtor_t)(void* mem, void* templ);         // 0x1400c3720
 typedef void  (*fn_RegEntity_t)(void* entityList, void* entityIBP, int category); // 0x1400c48a0
-typedef void  (*fn_SetTransform_t)(int64_t fp, void* xyz, int yaw);  // 0x140003870
+// WARNING: THE THIRD ARG IS A FLOAT. 0x140003870 reads it from XMM2 (`movaps xmm6,xmm2`
+// at +0x14) — the Microsoft x64 float slot, NOT R8D. Declaring it `int` put the value in
+// R8D and left XMM2 holding stale garbage, so a rebuilt building came out at an arbitrary
+// yaw (user-reported on a storage barn, 2026-08-23; the spawn trace showed
+// yaw=1119092736 = 0x42B40000 = 90.0f — an obvious float bit pattern read as an int).
+// Ghidra types it `undefined4` and passes the raw 4 bytes, which hides the mistake.
+// Inverse of [reference_int_arg_typed_as_float_hides_at_index_zero].
+typedef void  (*fn_SetTransform_t)(int64_t fp, void* xyz, float yaw);  // 0x140003870
 typedef void  (*fn_SetOrient_t)(int64_t fp, uint16_t orient, int16_t p3); // 0x1401253d0
 typedef void* (*fn_Work_Ctor25_t)(void* self, void* pEntity);   // 0x1400f72e0
 
@@ -196,29 +207,33 @@ static bool DestroyWorkersOn() {
 }
 
 // ============================================================
-// Demolition-labor progress bridge (BANISHED_DESTROY_SYNC_LABOR, default ON when
-// LIVE_DESTROY is up; only "=0" disables). Destroy-side twin of the construction
-// pipeline's BANISHED_BUILD_SYNC_LABOR (construction_force_harness.cpp
-// CreditBuildProgress).
+// Demolition-labor progress bridge — RETIRED 2026-08-23, now OPT-IN
+// (BANISHED_DESTROY_SYNC_LABOR=1).
 //
 // In retail, DestroyComponent+0x54 (demolition progress) is raised one unit per
-// completed builder demolish-PerformWork, which posts a SendComponentMessage
-// carrying the DestroyComponent type-id → vtable slot 15 (DestroyComponent_MsgReceive
-// 0x14011daf0) → ++comp+0x54. The standalone CitizenAI executor never reaches that
-// timed-work completion node (the identical gap the gather/build halves hit at
-// DropOff→CompleteTask and PerformWork→component-message), so +0x54 stays 0 and the
-// state-5 tick (0x14011c120) wedges forever at its progress<target gate — the
-// "deconstruction stuck at N%" symptom.
+// completed builder demolish-PerformWork, which posts a SendComponentMessage carrying
+// the DestroyComponent type-id → vtable slot 15 (DestroyComponent_MsgReceive
+// 0x14011daf0) → ++comp+0x54. This bridge existed because the standalone CitizenAI
+// executor was believed never to reach that completion node, leaving +0x54 at 0 and
+// wedging the state-5 tick (0x14011c120) on its progress<target gate.
 //
-// Stand in for the missing message: credit +0x54 toward the +0x58 target computed by
-// state-5 enter, each tick, ramped over BANISHED_DESTROY_DEMO_FRAMES (default 600 ≈
-// 10s) so the bar is watchable. Runs only inside the state-5 tick (progress<target),
-// exactly where the real labor message would fire. Faithful to the retail end-state:
-// once +0x54 reaches +0x58 the tick proceeds to worker-release + spawn/scatter.
+// That premise is now FALSE, and measured so: with the bridge disabled, a Remove
+// clicked on a burnt building recruited real builders and drove +0x54 to its target
+// through the genuine message path, all the way to worker-release + spawn/scatter.
+// The bridge was no longer standing in for a missing mechanism — it was RACING a
+// working one and masking it, auto-filling the panel's progress bar in ~10s with no
+// citizen involved (which is exactly how it was noticed: "does it need a citizen to
+// work on it?"). Default-ON scaffolding that outlives its gap hides the real thing.
+//
+// Kept, opt-in, for bisecting a future regression in the labor path — set
+// BANISHED_DESTROY_SYNC_LABOR=1 to auto-credit +0x54 again (ramped over
+// BANISHED_DESTROY_DEMO_FRAMES, default 600 ≈ 10s). Inverse of
+// [feedback_no_env_flags_for_working_features]: a verified feature goes default-on, so
+// the stand-in it replaces must come default-off.
 static bool DemoSyncLaborOn() {
     static const int s = [] {
         const char* e = std::getenv("BANISHED_DESTROY_SYNC_LABOR");
-        return (e && e[0] == '0') ? 0 : 1;   // default ON; only "=0" disables
+        return (e && e[0] && e[0] != '0') ? 1 : 0;   // default OFF; only "=1" enables
     }();
     return s == 1;
 }
@@ -845,25 +860,40 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     }
 
     // 1) Capture the OLD footprint (grid cell + rotation) and world transform.
+    // s_find4680 (FUN_140004680) is the MAPCOMPONENT finder — the same component
+    // DecalComponent_Draw reads its decal rect from (mapComp +0x28 minX, +0x2a minY,
+    // +0x2c width, +0x2e height, +0x30 rotation).
+    //
+    // ⚠ `rot` is 32-BIT. Retail c120 reads `*(int*)(fp + 0x30)` and writes
+    // `*(int*)(new + 0x30)`, and normalises with `+= 0x168` (360) — it is a rotation
+    // in DEGREES, the ONLY one of these five fields that is not a short. This port
+    // had it as int16_t on both sides: the low half landed correctly (0/90/180/270
+    // all fit), so the rebuilt building's MESH looked right, but the high half was
+    // left as whatever ComponentEntity_CopyCtor put there. DecalComponent_Draw reads
+    // the field as a full uint32_t, so the decal got `garbage<<16 | rot` and painted
+    // its foundation at the wrong orientation — the "rebuilt house's decal footprint
+    // doesn't match" report (2026-08-23). Same class as the narrowed-store trap in
+    // [reference_narrowed_8byte_store_desyncs_count_and_cap].
     int64_t fp = FindOn(entity, s_find4680);
-    int16_t sx = 0, sy = 0, sc = 0, sd = 0, rot = 0;
+    int16_t sx = 0, sy = 0, sc = 0, sd = 0;
+    int32_t rot = 0;
     if (fp) {
         sx = *reinterpret_cast<int16_t*>(fp + 0x28);
         sy = *reinterpret_cast<int16_t*>(fp + 0x2a);
         sc = *reinterpret_cast<int16_t*>(fp + 0x2c);
         sd = *reinterpret_cast<int16_t*>(fp + 0x2e);
-        rot = *reinterpret_cast<int16_t*>(fp + 0x30);
+        rot = *reinterpret_cast<int32_t*>(fp + 0x30);
     }
     int64_t pq = FindOn(entity, s_find3f60);
     float tf[3] = {0, 0, 0};
-    int yaw = 0;
+    float yaw = 0.0f;
     uint16_t orient = 0;
     if (pq) {
         tf[0] = *reinterpret_cast<float*>(pq + 0x158);
         tf[1] = *reinterpret_cast<float*>(pq + 0x15c);
         tf[2] = *reinterpret_cast<float*>(pq + 0x160);
         orient = *reinterpret_cast<uint16_t*>(pq + 0x164);
-        yaw = *reinterpret_cast<int*>(pq + 0x168);
+        yaw = *reinterpret_cast<float*>(pq + 0x168);
     }
 
     // 2) Release workers from the old workplace, i.e. leave the BUILDER profession
@@ -932,9 +962,10 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                         *reinterpret_cast<int16_t*>(nfp + 0x2a) = sy;
                         *reinterpret_cast<int16_t*>(nfp + 0x2c) = sc;
                         *reinterpret_cast<int16_t*>(nfp + 0x2e) = sd;
-                        int r = rot;
+                        // 32-bit, like retail — see the capture-side note above.
+                        int32_t r = rot;
                         while (r < 0) r += 360;   // retail: += 0x168 until >= 0
-                        *reinterpret_cast<int16_t*>(nfp + 0x30) = static_cast<int16_t>(r);
+                        *reinterpret_cast<int32_t*>(nfp + 0x30) = r;
                     }
                     int64_t npq = FindOn(reinterpret_cast<int64_t>(newEntity), s_find3f60);
                     if (npq) {
@@ -973,9 +1004,11 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                     }
 
                     std::fprintf(stderr, "[DestroySM] UPGRADE SPAWN: new entity=%p from "
-                                         "template=%llx at cell(%d,%d) rot=%d cat=%d\n",
+                                         "template=%llx at cell(%d,%d) %dx%d rot=%d "
+                                         "orient=%u yaw=%.1f cat=%d\n",
                                  newEntity, static_cast<unsigned long long>(target),
-                                 sx, sy, rot, category);
+                                 sx, sy, sc, sd, rot,
+                                 static_cast<unsigned>(orient), static_cast<double>(yaw), category);
                     std::fflush(stderr);
                 }
             }
@@ -997,6 +1030,120 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 extern "C" char Destroy_State6Enter_d4d0(void* data, void* sm);
 extern "C" char Destroy_State6Update_d400(void* data, void* sm);
 extern "C" char Destroy_State6Tick_d490(void* data, void* sm, void* time);
+
+// ============================================================
+// State-7 EVENT handlers — the destroyed-building panel's buttons.
+// ============================================================
+// DestroyUI's three buttons (destroyui.cpp Slot9: buttonReclaim 0x1771,
+// buttonRebuild 0x1772, buttonDestroy 0x1773) all end in the same retail idiom
+// (0x14011e400 / 0x14011e470 / 0x14011e4d0):
+//
+//   smc  = FindStateMachineComponent(entity)     // FUN_140003ea0
+//   node = *(smc + 0x48)                          // the CURRENT node, re-pointed by Tick
+//   node->vtable[2](node, smc + 0x48, (int)(int8)smc[0x51], eventId)
+//
+// i.e. they POST AN EVENT (node vtable slot 2 = PostEvent) on whatever node the
+// state machine is currently sitting on — for a collapsed building that is the
+// DestroyComponent's node, in state 7. eventId is 0 for reclaim/rebuild and 1 for
+// destroy, which is exactly what DestroyDescription_helper_dd00 registers on state 7:
+//   sub_4020(0, 0x14011d2a0)   <- rebuild / reclaim
+//   sub_4020(1, 0x14011d1a0)   <- destroy / remove
+//
+// Both handlers were registered as NULL here, and ControllerLive::PostEvent treats a
+// null handler as a graceful no-op — so every click on a destroyed building's Remove
+// or Rebuild button was swallowed silently. That is the whole bug.
+//
+// Both bodies are near-identical: re-seat the workplace onto the Builder profession,
+// then request state 5 (the rebuild/demolish worker state). They differ only in how
+// they set the DestroyComponent's +0x51 "has a build yard" flag, and in whether they
+// clear the queued upgrade target at +0x60.
+
+// Shared prologue: retail's FUN_14012f520 on the 2e10 (WorkPlaceComponent) match.
+static void Destroy_ReseatWorkplaceOnBuilder(int64_t entity) {
+    int64_t wp = FindOn(entity, s_find2e10);
+    if (!wp) return;
+    typedef void (*fn_f520_t)(int64_t);
+    static fn_f520_t f520 = reinterpret_cast<fn_f520_t>(
+        ResolveAddr(Module::Exe, 0x14012f520));
+    if (f520 && DestroyWorkersOn()) {
+        f520(wp);
+        return;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        std::fprintf(stderr, "[DestroySM] FUN_14012f520 (panel-button workplace re-seat) "
+                     "SKIPPED — %s. The button still requests state 5; the workplace just "
+                     "keeps its old profession and roster.\n",
+                     f520 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
+                          : "NOT REGISTERED (resolved to 0)");
+        std::fflush(stderr);
+    }
+}
+
+// State 7 event 0 — 0x14011d2a0. "Rebuild" (buttonRebuild) and "Reclaim"
+// (buttonReclaim; 0x14011e400 posts the same event 0, then additionally calls the
+// component's own vtable slot 4).
+extern "C" char Destroy_State7Event0_Rebuild_d2a0(void* data, void* sm) {
+    EnsureResolved();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    int64_t entity = OwnerEntity(comp);
+
+    Destroy_ReseatWorkplaceOnBuilder(entity);
+
+    // Retail sets the flag unconditionally here (unlike state-4 enter / the destroy
+    // event, which both gate it on a BuildComponent being present).
+    *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
+
+    // +0x60 = the queued upgrade/replacement description. Re-pointing it at the
+    // entity's OWN description (entity+0x28) is what makes this "rebuild what was
+    // here" rather than "build the upgrade that was queued" — DestroyUI's
+    // CanRebuild (0x14011e600) tests exactly this equality to decide whether the
+    // panel shows the upgrade text.
+    if (entity) {
+        *reinterpret_cast<int64_t*>(comp + 0x60) =
+            *reinterpret_cast<int64_t*>(static_cast<uintptr_t>(entity) + 0x28);
+    }
+
+    // Retail runs a nested Tick(Time(0)) first when smc[0x51] < 0; ControllerLive's
+    // RequestStateTransition bounds-checks the index instead, so a not-yet-settled
+    // machine simply defers the request by one tick. See the note on that helper.
+    ::ControllerLive::RequestStateTransition(sm, 5);
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] state-7 event 0 (REBUILD) comp=%llx entity=%llx "
+                             "-> request state 5\n",
+                     static_cast<unsigned long long>(comp),
+                     static_cast<unsigned long long>(entity));
+        std::fflush(stderr);
+    }
+    return 1;
+}
+
+// State 7 event 1 — 0x14011d1a0. "Remove" (buttonDestroy).
+extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
+    EnsureResolved();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    int64_t entity = OwnerEntity(comp);
+
+    Destroy_ReseatWorkplaceOnBuilder(entity);
+
+    // Same BuildComponent (d6c0) gate as state-4 enter: only a building with a build
+    // yard gets the flag. Retail does NOT touch +0x60 here — the queued upgrade, if
+    // any, survives the removal.
+    int64_t prod = FindOn(entity, s_findD6c0);
+    if (prod) *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
+
+    ::ControllerLive::RequestStateTransition(sm, 5);
+    if (Trace()) {
+        std::fprintf(stderr, "[DestroySM] state-7 event 1 (REMOVE) comp=%llx entity=%llx "
+                             "build=%llx -> request state 5\n",
+                     static_cast<unsigned long long>(comp),
+                     static_cast<unsigned long long>(entity),
+                     static_cast<unsigned long long>(prod));
+        std::fflush(stderr);
+    }
+    return 1;
+}
 
 // ============================================================
 // Dispatcher + state table for the DestroyComponent controller.
@@ -1029,6 +1176,10 @@ extern "C" void DestroyCtrl_PopulateTable() {
     TableAddTransition(t, 0, nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 5, nullptr);
+    // sub_4020(0, d2a0) / sub_4020(1, d1a0) — the destroyed-building panel's
+    // Rebuild/Reclaim and Remove buttons. Registration order matches dd00.
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State7Event0_Rebuild_d2a0));
+    TableAddEvent(t, 1, reinterpret_cast<void*>(&Destroy_State7Event1_Remove_d1a0));
 
     TableRegisterState(t, 4, reinterpret_cast<void*>(&Destroy_State4Enter_cfd0),
                        nullptr, reinterpret_cast<void*>(&Destroy_State4Tick_cec0),

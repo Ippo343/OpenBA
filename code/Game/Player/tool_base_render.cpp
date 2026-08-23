@@ -952,6 +952,41 @@ void Impl_HighlightFollow(int64_t self) {
     if (*reinterpret_cast<char*>(hi + 0x11c) == 0) return;          // highlight not active
     if (*reinterpret_cast<int32_t*>(hi + 0x120) < 0) return;        // not currently in the scene
 
+    // --- Rebuild the outline when the selected model's MESH VARIANT changes ---------
+    // The building branch of c4a0 bakes an EdgeMesh from the ModelComponent's variant
+    // indices (+0x164 style, +0x166 damage stage) ONCE, at select time, and the
+    // per-frame Update below only re-syncs the TRANSFORM. Nothing rebuilt the geometry,
+    // so a building selected before a fire kept its intact silhouette all the way down
+    // the rubble ladder — the collapse step (0x14011d5d0) drives +0x166 DOWN 2->1->0 and
+    // the outline never noticed (user-reported 2026-08-23). c4a0 is idempotent: it drops
+    // the scene object, releases the built EdgeMesh (+0xf8) and re-derives both from the
+    // component's CURRENT variant, so re-running it on change is the whole fix.
+    // NOT a retail concern: retail's Graphics::Scene rebuilds highlight geometry as part
+    // of its own tick; our scene is a passive render container (see the note above).
+    {
+        uint64_t mdl = 0;
+        FindModelComp(entity, &mdl);
+        if (mdl) {
+            CheckPtr(&mdl);
+            uint32_t key =
+                (static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x164)) << 16) |
+                 static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x166));
+            // One selection is active at a time (EditTool+0x30), so a single-slot
+            // cache keyed on the HighlightComponent is enough; re-arm on a new one.
+            static uint64_t s_lastHi  = 0;
+            static uint32_t s_lastKey = 0;
+            if (hi != s_lastHi) {
+                s_lastHi = hi;
+                s_lastKey = key;
+            } else if (key != s_lastKey) {
+                s_lastKey = key;
+                OT("variant changed (0x%08x) -> rebuilding outline hi=%p", key, (void*)hi);
+                Impl_c4a0(static_cast<int64_t>(hi));
+                return;   // rebuilt this frame; Update re-syncs on the next one
+            }
+        }
+    }
+
     void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance
     if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
 

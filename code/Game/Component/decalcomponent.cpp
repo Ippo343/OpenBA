@@ -354,13 +354,22 @@ void DecalComponent_Draw(DecalComponent* self) {
     //     DURING-CONSTRUCTION (half-built, translucent foundation) value.
     //   * When the building COMPLETES, DecalComponent Slot12(msg=1) sets +0x30 = 1.0
     //     (0x3f800000) and re-adds the decal -> a fully-opaque finished foundation.
-    // Neither lifecycle slot runs on our inert standalone components, and start-town
-    // buildings spawn ALREADY COMPLETE, so seed the completed alpha (1.0) directly.
-    // (Using _initialAlpha=0.5 drew every finished foundation at half opacity — the
-    // washed-out look vs retail. Confirmed against retail RenderDoc event 1230:
-    // vsout lightFogAlpha.w = 1.0.) A real construction pipeline would instead start
-    // this at 0.5 and drive the Slot12(msg=1) ramp to 1.0 on completion.
-    if (self->decalScale == 0.0f) self->decalScale = 1.0f;
+    // This used to hardcode 1.0 because nothing drove the completion ramp, and
+    // _initialAlpha=0.5 then left every FINISHED foundation washed out. The ramp is now
+    // wired (DecalComponent_EnterBuiltState below, driven from BuildComponent's 8->2
+    // State8Finalize and from start-town's force-complete stamp), so seed the authored
+    // value like retail: a building under construction paints its footprint at
+    // _initialAlpha and goes fully opaque when it completes. Templates that are never
+    // "built" author _initialAlpha=1.0 themselves (e.g. Pasture), so they are unaffected.
+    //
+    // This is what the 2026-08-23 "rebuilt house shows the OLD decal" report was: the
+    // replacement is a fresh FOUNDATION, but it painted the completed building's
+    // full-opacity footprint immediately, so the ground looked unchanged from before the
+    // fire. Material/tile/rotation/variant were all already correct (traced).
+    if (self->decalScale == 0.0f) {
+        float initialAlpha = *reinterpret_cast<float*>(dd + 0x20);   // _initialAlpha
+        self->decalScale = (initialAlpha > 0.0f) ? initialAlpha : 1.0f;
+    }
 
     // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
@@ -663,6 +672,47 @@ static void DecalComponent_TickVSlot(void* s, void* /*time*/) {
     if (cc->decalId < 0) DecalComponent_Draw(cc);   // retry the build until the material is ready
     if (cc->decalId >= 0) DecalComponent_SetDrawFlag(s, false);   // placed → un-bucket
 }
+// Retail DecalComponent Slot12(msg=1) — "the building completed": set decalScale
+// (+0x30) to 1.0 and re-add the decal so the half-built translucent footprint becomes
+// the fully-opaque finished one. Our DecalComponent is inert (no message slot), so this
+// is driven explicitly from the two places a building becomes complete:
+//   * BuildComponent_State8Finalize (the 8->2 transition) — the normal construction path
+//   * StartTown's force-complete stamp — start-town houses skip the build states
+// Same collapse, and for the same reason, as WorkPlaceComponent_EnterBuiltState.
+extern "C" void DecalComponent_EnterBuiltState(void* s) {
+    DecalComponent* cc = reinterpret_cast<DecalComponent*>(s);
+    if (!cc) return;
+    if (cc->decalScale == 1.0f) return;          // already opaque — nothing to redo
+    cc->decalScale = 1.0f;
+    DecalComponent_OnCreate(cc);                 // release the current slot (decalId = -1)
+    DecalComponent_SetDrawFlag(s, true);         // re-bucket: the tick rebuilds it at 1.0
+    if (DecalTraceOn()) {
+        fprintf(stderr, "[Decal] EnterBuiltState self=%p -> alpha 1.0, rebuilding\n", s);
+        fflush(stderr);
+    }
+}
+
+// Find the owner entity's DecalComponent and run the completion ramp on it.
+extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
+    if (!entity) return;
+    uint32_t tid = DecalComponent_LiveGetTypeId(nullptr);
+    if (!tid) return;
+    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
+    int count = *reinterpret_cast<int32_t*>(e + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    if (!arr) return;
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        typedef uint32_t (*GT_t)(void*);
+        if (((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp) != tid) continue;
+        DecalComponent_EnterBuiltState(comp);
+        return;
+    }
+}
+
 static void DecalComponent_FinishLiveVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
         DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);

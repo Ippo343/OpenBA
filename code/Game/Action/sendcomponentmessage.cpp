@@ -177,13 +177,31 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
     // own paths (the serialize side nulls +0x20 when it is not an Entity, and the
     // no-component branch below returns 2), so failing the action is faithful in effect.
     // Same guard shape as PlayAnimation's PlayAnim_TargetLooksLive.
-    if (!entity || !ForceWork::Readable(reinterpret_cast<void*>(entity), 0x40) ||
+    // A non-canonical pointer is the torn-down sentinel, not an address (edittool.cpp:328
+    // and tool_base_render.cpp use the same range test).
+    const bool canonical = entity >= 0x10000 && entity <= 0x00007FFFFFFFFFFFULL;
+    // MARKED-FOR-REMOVAL (entity+0x40 bit 0x400) is the missing test. The readability
+    // probes below only prove the memory is mapped — a dying entity is still perfectly
+    // readable in the window between MarkForRemoval (which broadcasts +0x38 and lets each
+    // component release its world registrations) and the EntityList drain that frees it.
+    // Deliver a labor message in that window and the component scan below walks slots that
+    // teardown has already reset to the -1 sentinel, and `*(uintptr_t*)comp` faults on
+    // address 0xffffffffffffffff. That is the crash after 3-4 burn/rebuild cycles
+    // (2026-08-23): repeated demolitions keep citizens holding in-flight messages against
+    // buildings that are mid-teardown. Same aliveness test the dialog controllers already
+    // use (SA_DialogEntityAlive / destroyui.cpp DataSourceAlive).
+    const bool dying = canonical &&
+        ForceWork::Readable(reinterpret_cast<void*>(entity), 0x44) &&
+        ((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0;
+    if (!entity || !canonical || dying ||
+        !ForceWork::Readable(reinterpret_cast<void*>(entity), 0x40) ||
         !ForceWork::Readable(*reinterpret_cast<void**>(entity + 0x30), 8)) {
         static int s_reported = 0;
         if (s_reported++ < 20) {
             std::fprintf(stderr, "[SendCompMsg] ABORT: target entity=%p is not live "
-                         "(msgId=%d compType=%u) — action dropped instead of reading "
-                         "freed memory\n", reinterpret_cast<void*>(entity),
+                         "(canonical=%d dying=%d msgId=%d compType=%u) — action dropped "
+                         "instead of reading freed memory\n",
+                         reinterpret_cast<void*>(entity), (int)canonical, (int)dying,
                          *(int32_t*)(s + 0x34), componentTypeId);
             std::fflush(stderr);
         }
@@ -199,6 +217,12 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
         uintptr_t compIBP = compArray + (uintptr_t)i * 8;
         fn_InternalBasePtr_CheckPtr((void*)compIBP);
         uintptr_t comp = *(uintptr_t*)compIBP;
+
+        // Backstop for the same sentinel one level down: an entity that is NOT marked for
+        // removal can still carry an individually released slot. Retail derefs this
+        // unguarded and is right to — it never puts a sentinel in a live entity's array —
+        // so skip the slot rather than clamping it, and keep the scan going.
+        if (comp < 0x10000 || comp > 0x00007FFFFFFFFFFFULL) continue;
 
         // Get component type ID via vtable+0x10
         uintptr_t compVtable = *(uintptr_t*)comp;

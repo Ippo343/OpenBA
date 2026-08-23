@@ -128,13 +128,28 @@ static bool Grid_GroundClear(int* grid, int x1, int y1, int w, int h) {
 }
 
 // FUN_14009dac0 — every cell in the rect is empty (no occupant entity at tile+0x08).
-static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h) {
+//
+// STANDALONE DEVIATION (2026-08-23): `selfEntity`, and the `occ != selfEntity` test,
+// are ours — retail's FUN_14009dac0 tests only `occ != 0`. Retail can afford that
+// because nothing writes a *foundation's own* entity into cell+0x08; we do.
+// StartTown_MarkBuildingCells stamps the owner into every footprint cell so runtime-
+// spawned buildings are click-pickable, and it is called (only) from the rebuild/
+// upgrade spawn in destroycomponent_states.cpp. Without the skip, the replacement
+// building is its own obstruction: ClearArea state 0 posts clear-work, IsDone's
+// AllEmpty branch reports done=0 forever, the SM parks in state 0 and never reaches
+// BuildComponent's state 1 — so builders never deliver and the rebuilt house sits at
+// 0% for good (user-reported 2026-08-23; measured as every footprint cell holding the
+// new entity's own pointer). ClearArea_CountRemaining already skips self this exact
+// way; this makes the two agree.
+static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, void* selfEntity) {
     int width = *grid;
     uintptr_t tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;
-            if (*reinterpret_cast<uint64_t*>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8) != 0)
+            void* occ = *reinterpret_cast<void**>(
+                tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
+            if (occ != nullptr && occ != selfEntity)
                 return false;
         }
     }
@@ -220,8 +235,11 @@ static bool ClearArea_IsDone(void* comp) {
 
     bool groundOK = (flag1 == 0) || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
+    // Owner entity — skipped by the AllEmpty scan; see the note on Grid_AllEmpty.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
+    void* selfEntity = *reinterpret_cast<void**>(c + 0x10);
     const bool allEmptyBranch = (flag0 == 0 || flag2 != 0);
-    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h)
+    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, selfEntity)
                                      : Grid_NoTargetResource(grid, x1, y1, w, h, descRef);
 
     // [diag] Which branch decides "done", over which rect, and what the grid holds there.
