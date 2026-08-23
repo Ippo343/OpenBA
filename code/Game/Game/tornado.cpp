@@ -27,14 +27,18 @@
 // (code/Game/Component/tornadocomponent.cpp, vtable 0x14015aa80), which does not
 // touch this class at all.
 //
-// PARTIALLY DORMANT FACTORY. We run the real Graphics::Particle base ctor, fill the
-// Tornado float block, and then install a COPY of the base vtable with the two slots
-// this class actually needs overridden -- slot 3 GetFileVersion and slot 5 Serialize.
-// We still do NOT install the exe subclass vtable 0x140160190 itself: those entries are
-// exe->Runtime thunks that do not resolve standalone. Remaining divergence: GetTypeId
-// (slot 2) still reports Particle, and slot 8 CreateInstance is still the base, so the
-// instance is a plain ParticleInstance with no swirl -- there is a funnel, but it does
-// not spin.
+// FULLY OVERRIDDEN FACTORY. We run the real Graphics::Particle base ctor, fill the
+// Tornado float block, and then install a COPY of the base vtable with every slot this
+// class overrides replaced: 1 GetTypeName, 2 GetTypeId, 3 GetFileVersion, 5 Serialize,
+// 6 recreate, 7 destruct, 8 CreateInstance, 9 createInPlace. We still do NOT install
+// the exe subclass vtable 0x140160190 itself: those entries are exe->Runtime thunks
+// that do not resolve standalone.
+//
+// Slots 6/7/8 of Graphics::Particle are all _purecall (0x18007ec28) -- the base class
+// is abstract, there is nothing to "fall back to" -- so the moment Serialize made the
+// resource load, slot 8 fired and the process died with R6025. That aborts through the
+// MSVC runtime dialog, not a VEH exception, so standalone_crash.log stays EMPTY and
+// tools/boot_state.sh reports BLOCKED_DIALOG. Same for ParticleInstance slot 1.
 //
 // WHY SLOT 5 STOPPED BEING OPTIONAL (2026-08-22 follow-up wave)
 // -------------------------------------------------------------
@@ -58,6 +62,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstddef>
+#include <cmath>
 
 // Kept from the diagnosis pass: it separates the two failures that both end in a null
 // ExternalPtr. Factory never called => External::Load found no type at all. Factory
@@ -68,8 +74,8 @@ static void TornadoFactoryTrace(const char* who, void* p) {
     static int budget = 0;
     if (budget >= 8) return;
     budget++;
-    fprintf(stderr, "[Tornado/particle] %s -> %p (slots 3/5/6/7/8/9 installed; the "
-            "instance update is still a stub)\n", who, p);
+    fprintf(stderr, "[Tornado/particle] %s -> %p (slots 1/2/3/5/6/7/8/9 installed; the "
+            "instance swirl runs on slot 1)\n", who, p);
     fflush(stderr);
 }
 
@@ -112,14 +118,9 @@ void* s_tornadoVtable[kTornadoSlots];
 bool  s_vtableReady = false;
 
 // Graphics::ParticleInstance is 10 slots and slot 1 -- the per-frame update -- is
-// _purecall too; TornadoInstance overrides it at 0x1400d2470 with the swirl sim.
-// Our ParticleComponent port dispatches that slot from three places
-// (particlecomponent.cpp Place, OnUpdate2 and UpdateTick), so handing back a plain
-// base instance would abort on the first frame. Until 0x1400d2470 is ported the slot
-// gets an explicit no-op: the funnel exists and does not spin. That is a DELIBERATE
-// behavioural gap, recorded here because the old header claimed the base
-// CreateInstance "yields a plain ParticleInstance" -- there is no base CreateInstance
-// to yield one, and no usable base update either.
+// _purecall; TornadoInstance overrides it at 0x1400d2470 with the swirl simulation,
+// ported below. vtable_TornadoInstance (0x1401601e0) really is ten slots -- index 10
+// already holds string bytes -- so copy exactly ten and override exactly slot 1.
 constexpr int kInstanceSlots = 10;
 void* s_instVtable[kInstanceSlots];
 bool  s_instVtableReady = false;
@@ -127,15 +128,385 @@ bool  s_instVtableReady = false;
 typedef void* (*fn_ParticleInstance_Ctor_t)(void* self);
 fn_ParticleInstance_Ctor_t s_particleInstanceCtor = nullptr;
 
-void TornadoInstance_Update_Stub(void*, void*) {
-    static bool said = false;
-    if (!said) {
-        said = true;
-        fprintf(stderr, "[Tornado/particle] instance update is a NO-OP stub: "
-                "TornadoInstance::Update (0x1400d2470) is not ported, and the base "
-                "Graphics::ParticleInstance slot 1 is _purecall. The funnel will not "
-                "swirl or emit.\n");
+// Retail slot 2 (0x140024e70) returns *0x1401c6160 -- the type id REGISTER_TYPE fills
+// in; slot 1 (0x140024e80) returns the matching name. Ours used to fall through to the
+// base Particle table, which reports Particle. TornadoInstance::Update gates on
+// IsDerivedFrom(resource, Tornado) and treats a false as "no resource", so leaving
+// slot 2 on the base would have silently deleted the whole simulation -- the same
+// class of bug as the toolbar GetTypeId one.
+uint32_t TornadoTypeId() {
+    static uint32_t id = 0;
+    if (!id || id == 0xFFFFFFFFu) id = ::Object::GetTypeIdByName("Tornado");
+    return id;
+}
+uint32_t    Tornado_GetTypeId(void*)   { return TornadoTypeId(); }
+const char* Tornado_GetTypeName(void*) { return "Tornado"; }
+
+// ---------------------------------------------------------------------------
+// TornadoInstance::Update -- retail 0x1400d2470, INSTANCE vtable slot 1.
+//
+// vtable_TornadoInstance (0x1401601e0) is exactly ten slots -- index 10 already holds
+// string bytes ("Weather...") -- and slot 1 is the only one the subclass overrides.
+// The base Graphics::ParticleInstance slot 1 is _purecall, so this body is not an
+// optimisation: without it the first frame aborts with R6025.
+//
+// Layouts, all read off the retail body:
+//   TornadoInstance  +0xc0 Tornado* resource  +0xc8 pool*  +0xd8 float funnel spin (deg)
+//   pool             +0x00 Box(min xyz,max xyz)  +0x18 particle array (stride 0x58)
+//                    +0x20 maxCount  +0x28 liveCount  +0x30 spawn accumulator (Time)
+//                    +0x38 total accumulator (Time, written but never read here)
+//   Tornado resource -- names below are the ToolKit ones, from
+//   ToolKit/resource/ParticleSystems/Tornado/Tornado.rsc, which lists exactly the
+//   15 fields Tornado::Serialize reads and in the same order, confirming the map:
+//     +0x48 _tornadoWidth 20   +0x4c _tornadoHeight 75   +0x50 _funnelWidth 26
+//     +0x54 _funnelSpin 30     +0x58 _particleSpinSpeed 400  +0x5c _emissionRate 20
+//     +0x60 _particleLifeTime 30  +0x64 _particleLifeTimeTol 2
+//     +0x68 _particleStartSize 2.5  +0x6c _particleEndSize 15
+//     +0x70 _particleScaleSize 30   +0x74/+0x78 start/end Color
+//     +0x80 _particleFadeIn 0.05    +0x88 _particleFadeOut 1.0
+//   _particleStartSize/_particleEndSize are used as a CLAMP RANGE here, not as a
+//   size ramp -- the ramp is _particleScaleSize times the radius profile.
+//
+// Each Color is unpacked BYTE +2 -> .x, +1 -> .y, +0 -> .z, with byte +3 carried
+// separately as the alpha. Both call sites do it identically (spawn 0x1400d25f2,
+// per-particle 0x1400d26b1), so the reversal is retail, not a transcription slip. It is
+// almost certainly a BGRA->RGB unpack rather than a deliberate channel swap, but
+// Tornado.rsc uses greys (0xFFC0C0C0 / 0x80909090) so the run cannot distinguish the
+// two; only the alpha half is proven, by the measured 1.00 -> 0.50 fade.
+// ---------------------------------------------------------------------------
+struct TornadoParticle {          // 0x58, stride proven by `imul $0x58`
+    int64_t lifetime;             // +0x00
+    int64_t age;                  // +0x08
+    float   pos[3];               // +0x10
+    float   prevPos[3];           // +0x1c
+    float   color[3];             // +0x28
+    float   prevColor[3];         // +0x34
+    float   alpha;                // +0x40
+    float   prevAlpha;            // +0x44
+    float   angle;                // +0x48
+    float   prevAngle;            // +0x4c
+    float   size;                 // +0x50
+    float   prevSize;             // +0x54
+};
+static_assert(sizeof(TornadoParticle) == 0x58, "TornadoParticle stride");
+static_assert(offsetof(TornadoParticle, angle) == 0x48, "TornadoParticle angle");
+
+struct TornadoPool {
+    float            box[6];      // +0x00  min xyz / max xyz -- IS the Box for SetBounds
+    TornadoParticle* items;       // +0x18
+    int32_t          maxCount;    // +0x20
+    int32_t          pad24;
+    int32_t          liveCount;   // +0x28
+    int32_t          pad2c;
+    int64_t          spawnAccum;  // +0x30
+    int64_t          totalAccum;  // +0x38
+};
+static_assert(offsetof(TornadoPool, items) == 0x18, "TornadoPool items");
+static_assert(offsetof(TornadoPool, spawnAccum) == 0x30, "TornadoPool spawnAccum");
+
+// Runtime leaves. Every one is resolved by mangled export name rather than through a
+// .rdata dispatch slot: the nine slots this body uses (0x1401513f0, 0x140151320,
+// 0x140151400, 0x1401525e8, 0x1401527a8, 0x1401527d0, 0x1401527e0, 0x1401527e8,
+// 0x1401527f0) are NOT in standalone/address_registry.cpp, so ResolveAddr would hand
+// back a null slot.
+typedef bool   (*fn_PIUpdate_t)(void* self);                      // ParticleInstance::Update
+typedef bool   (*fn_IsDerived_t)(const void* obj, uint32_t tid);  // Object::Base::IsDerivedFrom
+typedef float  (*fn_AsSeconds_t)(const void* time);
+typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
+typedef float  (*fn_RandFloatTol_t)(void* rng);                   // symmetric, [-1,1)
+typedef void*  (*fn_V3CtorScalar_t)(void* self, const float* s);  // Vector3(const Scalar&)
+typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
+typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
+typedef void*  (*fn_V3Lerp_t)(const void* a, void* ret, const void* b, const float* t);
+typedef void*  (*fn_ScalarLerp_t)(void* a, void* ret, const float* b, const float* t);
+
+struct TornadoInstFuncs {
+    fn_PIUpdate_t     baseUpdate;
+    fn_IsDerived_t    isDerived;
+    fn_AsSeconds_t    asSeconds;
+    fn_TimeCtor_t     timeCtor;
+    fn_RandFloatTol_t randFloatTol;
+    fn_V3CtorScalar_t v3CtorScalar;
+    fn_BoxExtend_t    boxExtend;
+    fn_SetBounds_t    setBounds;
+    fn_V3Lerp_t       v3Lerp;
+    fn_ScalarLerp_t   scalarLerp;
+    void*             rng;        // Graphics::Particle::_rng, the static the retail body uses
+    bool              ok;
+};
+
+const TornadoInstFuncs& InstFuncs() {
+    static TornadoInstFuncs f = {};
+    static bool done = false;
+    if (done) return f;
+    done = true;
+    f.baseUpdate   = (fn_PIUpdate_t)    ResolveExport("?Update@ParticleInstance@Graphics@@QEAA_NXZ");
+    f.isDerived    = (fn_IsDerived_t)   ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
+    f.asSeconds    = (fn_AsSeconds_t)   ResolveExport("?AsSeconds@Time@System@@QEBAMXZ");
+    f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
+    f.randFloatTol = (fn_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
+    f.v3CtorScalar = (fn_V3CtorScalar_t)ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z");
+    f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
+    f.setBounds    = (fn_SetBounds_t)   ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
+    f.v3Lerp       = (fn_V3Lerp_t)      ResolveExport("?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z");
+    f.scalarLerp   = (fn_ScalarLerp_t)  ResolveExport("?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z");
+    f.rng          =                    ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
+    f.ok = f.baseUpdate && f.isDerived && f.asSeconds && f.timeCtor && f.randFloatTol &&
+           f.v3CtorScalar && f.boxExtend && f.setBounds && f.v3Lerp && f.scalarLerp && f.rng;
+    if (!f.ok) {
+        fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: baseUpdate=%p isDerived=%p "
+                "asSeconds=%p timeCtor=%p rand=%p v3ctor=%p extend=%p setBounds=%p v3lerp=%p "
+                "scalarLerp=%p rng=%p -- the funnel will stand still\n",
+                (void*)f.baseUpdate, (void*)f.isDerived, (void*)f.asSeconds, (void*)f.timeCtor,
+                (void*)f.randFloatTol, (void*)f.v3CtorScalar, (void*)f.boxExtend,
+                (void*)f.setBounds, (void*)f.v3Lerp, (void*)f.scalarLerp, f.rng);
         fflush(stderr);
+    }
+    return f;
+}
+
+inline float ResF(const void* res, int off) {
+    return *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(res) + off);
+}
+inline const uint8_t* ResB(const void* res, int off) {
+    return reinterpret_cast<const uint8_t*>(res) + off;
+}
+
+// Retail's sinf/cosf are the exe's own arg-reduced libm bodies at 0x140131c90 /
+// 0x140131090, already reimplemented as the CRT calls in Component/character_trig.cpp.
+// The same precedent applies here: a sub-ULP difference moves a dust particle.
+void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
+    const TornadoInstFuncs& f = InstFuncs();
+    if (!f.ok) return;
+
+    uint8_t* inst = reinterpret_cast<uint8_t*>(self);
+
+    // Base ParticleInstance::Update is the frame gate: it returns false when this
+    // instance has already been stepped this frame.
+    if (!f.baseUpdate(self)) return;
+
+    void*        resource = *reinterpret_cast<void**>(inst + 0xc0);
+    TornadoPool* pool     = *reinterpret_cast<TornadoPool**>(inst + 0xc8);
+
+    // Retail: `cmovne rbx,rsi` -- rsi is the resource only when IsDerivedFrom(Tornado)
+    // holds, else 0, and every later read (`divss 0x5c(%rsi)`) would fault on it. In
+    // retail that branch is unreachable because slot 2 GetTypeId reports Tornado. In
+    // standalone it is reachable if our vtable copy ever loses the slot-2 override, so
+    // this is a DELIBERATE deviation: bail loudly instead of faulting on a null we
+    // manufactured ourselves.
+    const uint32_t tornadoTid = TornadoTypeId();
+    if (!resource || !f.isDerived(resource, tornadoTid)) {
+        static bool said = false;
+        if (!said) {
+            said = true;
+            fprintf(stderr, "[Tornado/particle] Update bailed: resource=%p is not a Tornado "
+                    "(tid=%u). Retail cannot reach this -- our vtable slot 2 GetTypeId must "
+                    "be reporting the base Particle again.\n", resource, tornadoTid);
+            fflush(stderr);
+        }
+        return;
+    }
+    const void* res = resource;
+
+    const int64_t dt = *dtPtr;
+    pool->spawnAccum += dt;
+    pool->totalAccum += dt;
+
+    // ---- spawn ------------------------------------------------------------
+    int64_t period = 0;
+    f.timeCtor(&period, 1.0f / ResF(res, 0x5c));       // 1 / _emissionRate, in ticks
+
+    const uint8_t* cStart = ResB(res, 0x74);
+    const uint8_t* cEnd   = ResB(res, 0x78);
+
+    while (pool->spawnAccum > period) {
+        if (pool->liveCount >= pool->maxCount) break;
+        pool->spawnAccum -= period;
+
+        TornadoParticle* p = &pool->items[pool->liveCount++];
+        p->age = 0;
+
+        int64_t life = 0;
+        f.timeCtor(&life, ResF(res, 0x60) + f.randFloatTol(f.rng) * ResF(res, 0x64));
+        p->lifetime = life;
+
+        p->alpha = p->prevAlpha = 0.0f;                 // retail: one 8-byte zero at +0x40
+
+        p->color[0] = p->prevColor[0] = cStart[2] / 255.0f;
+        p->color[1] = p->prevColor[1] = cStart[1] / 255.0f;
+        p->color[2] = p->prevColor[2] = cStart[0] / 255.0f;
+
+        float zero = 0.0f, v3[3] = { 0.0f, 0.0f, 0.0f };
+        const float* z = reinterpret_cast<const float*>(f.v3CtorScalar(v3, &zero));
+        p->pos[0] = p->prevPos[0] = z[0];
+        p->pos[1] = p->prevPos[1] = z[1];
+        p->pos[2] = p->prevPos[2] = z[2];
+
+        p->angle = p->prevAngle = f.randFloatTol(f.rng) * 180.0f;
+        p->size  = p->prevSize  = ResF(res, 0x68);      // _particleStartSize
+    }
+
+    // ---- the growth box is rebuilt from scratch every frame, starting at the
+    //      ORIGIN rather than at an inverted-infinite box. Retail, faithfully. ----
+    {
+        float zero = 0.0f, a[3], b[3];
+        const float* z1 = reinterpret_cast<const float*>(f.v3CtorScalar(a, &zero));
+        const float* z2 = reinterpret_cast<const float*>(f.v3CtorScalar(b, &zero));
+        pool->box[0] = z2[0]; pool->box[1] = z2[1]; pool->box[2] = z2[2];
+        pool->box[3] = z1[0]; pool->box[4] = z1[1]; pool->box[5] = z1[2];
+    }
+
+    const float startColor[3] = { cStart[2] / 255.0f, cStart[1] / 255.0f, cStart[0] / 255.0f };
+    const float endColor[3]   = { cEnd[2]   / 255.0f, cEnd[1]   / 255.0f, cEnd[0]   / 255.0f };
+    const float startAlpha    = cStart[3] / 255.0f;
+    const float endAlpha      = cEnd[3]   / 255.0f;
+
+    const float dtSec = f.asSeconds(dtPtr);
+
+    // The whole funnel rotates: +0xd8 accumulates degrees at the resource's spin rate.
+    const float spin = *reinterpret_cast<float*>(inst + 0xd8) + dtSec * ResF(res, 0x54);  // _funnelSpin
+    *reinterpret_cast<float*>(inst + 0xd8) = spin;
+    const float spinRad = spin * 0.01745329f;
+    const float sinG = sinf(spinRad);
+    const float cosG = cosf(spinRad);
+
+    // 90 deg/sec is a HARDCODED constant in the retail body (0x140172204), not
+    // _particleSpinSpeed -- that one (+0x58) drives the helical angle below instead.
+    const float spinDelta = dtSec * 90.0f;             // per-particle billboard spin
+
+    const float width      = ResF(res, 0x48);   // _tornadoWidth
+    const float height     = ResF(res, 0x4c);   // _tornadoHeight
+    const float funnelW    = ResF(res, 0x50);   // _funnelWidth
+    const float spinSpeed  = ResF(res, 0x58);   // _particleSpinSpeed
+    const float sizeFloor  = ResF(res, 0x68);   // _particleStartSize -- clamp LOW
+    const float sizeCeil   = ResF(res, 0x6c);   // _particleEndSize   -- clamp HIGH
+    const float sizeScale  = ResF(res, 0x70);   // _particleScaleSize
+    const int64_t fadeOutTicks = *reinterpret_cast<const int64_t*>(ResB(res, 0x88));
+
+    // ---- per particle, walked BACKWARDS (retail counts down from liveCount-1) ----
+    for (int i = pool->liveCount - 1; i >= 0; --i) {
+        TornadoParticle* p = &pool->items[i];
+        p->age += dt;
+
+        const float t = f.asSeconds(&p->age) / f.asSeconds(&p->lifetime);
+
+        // Lateral swirl: a cosine wobble that grows with age, biased so young
+        // particles start inside the funnel (the -0.33 is retail's).
+        const float wob   = cosf((t - 0.2f) * 3.1415927f * 2.0f);
+        const float swirl = (wob * 0.5f + 0.5f) * (t + 0.5f) - 0.33f;
+        const float offX  = sinG * funnelW * swirl;
+        const float offY  = cosG * funnelW * swirl;
+
+        // Radius profile: a cubic bulge around t=0.4 plus a quadratic flare past t=0.3.
+        float tail = t - 0.3f;
+        if (!(tail > 0.0f)) tail = 0.0f;
+        const float c   = t - 0.4f;
+        const float rad = fabsf(c * c * c) * 3.7f + 0.05f + tail * tail * 4.0f;
+
+        const float a    = spinSpeed * 0.31830987f * t;   // spinSpeed / pi * t
+        const float sinA = sinf(a);
+        const float cosA = cosf(a);
+
+        p->prevPos[0] = p->pos[0];
+        p->prevPos[1] = p->pos[1];
+        p->prevPos[2] = p->pos[2];
+
+        const float px = width * (sinA * rad) + offX;
+        const float py = width * (cosA * rad) + offY;
+        // The billboard's own spin angle also lifts it: retail folds |angle|/40 into z.
+        const float pz = fabsf(p->angle) / 40.0f + t * height;
+
+        p->pos[0] = px;
+        p->pos[1] = py;
+        p->pos[2] = pz;
+
+        {
+            const float v[3] = { px, py, pz };
+            float retBox[6];
+            const float* nb = reinterpret_cast<const float*>(f.boxExtend(pool->box, retBox, v));
+            for (int k = 0; k < 6; ++k) pool->box[k] = nb[k];
+        }
+
+        float newAngle = spinDelta + p->angle;
+        if (newAngle > 180.0f) newAngle -= 360.0f;
+        p->prevAngle = p->angle;
+        p->angle     = newAngle;
+
+        // Retail recomputes the age ratio here; the age has not changed since, so it is
+        // the same value of t, reused as the colour/alpha interpolant.
+        const float u = f.asSeconds(&p->age) / f.asSeconds(&p->lifetime);
+
+        float sz = rad * sizeScale;
+        if (sizeFloor > sz)      sz = sizeFloor;
+        else if (sz > sizeCeil)  sz = sizeCeil;
+        p->prevSize = p->size;
+        p->size     = sz;
+
+        {
+            float lerped[3];
+            const float* cc =
+                reinterpret_cast<const float*>(f.v3Lerp(startColor, lerped, endColor, &u));
+            p->prevColor[0] = p->color[0];
+            p->prevColor[1] = p->color[1];
+            p->prevColor[2] = p->color[2];
+            p->color[0] = cc[0];
+            p->color[1] = cc[1];
+            p->color[2] = cc[2];
+        }
+
+        // Alpha envelope: fade in over resource +0x80, then fade out over +0x88
+        // measured backwards from death. Retail computes BOTH and picks with a compare.
+        const float   fadeInT  = f.asSeconds(&p->age) / f.asSeconds(ResB(res, 0x80));
+        const int64_t outAge   = fadeOutTicks - p->lifetime + p->age;
+        const float   fadeOutT = f.asSeconds(&outAge) / f.asSeconds(ResB(res, 0x88));
+
+        float env = (1.0f < fadeInT) ? (1.0f - fadeOutT) : fadeInT;
+        if (env > 1.0f)      env = 1.0f;
+        else if (0.0f > env) env = 0.0f;
+
+        float slot = 0.0f;
+        float a0   = startAlpha;
+        const float* la =
+            reinterpret_cast<const float*>(f.scalarLerp(&a0, &slot, &endAlpha, &u));
+        p->alpha = p->prevAlpha = env * (*la);
+    }
+
+    f.setBounds(self, pool);
+
+    // Outcome trace, budgeted. "the swirl is running" is not observable from the
+    // absence of a crash: a pool that never spawns, a period that came out infinite
+    // (emissionRate == 0) and a live sim all look identical in a quiet log. Print the
+    // numbers that separate them -- live/max, the spawn period in ticks, the box the
+    // renderer will cull against, and one particle's actual position.
+    {
+        static int ticks = 0;
+        static int budget = 0;
+        // Spread the samples: the pool cannot spawn before the accumulator crosses
+        // one period, so three consecutive frames would only ever show live=0.
+        ++ticks;
+        if (budget < 8 && (ticks <= 2 || ticks % 120 == 0)) {
+            ++budget;
+            const TornadoParticle* s = (pool->liveCount > 0) ? &pool->items[0] : nullptr;
+            fprintf(stderr, "[Tornado/particle] tick %d: live=%d/%d period=%lld ticks "
+                    "spin=%.1fdeg box=(%.2f,%.2f,%.2f)-(%.2f,%.2f,%.2f) p0=(%.2f,%.2f,%.2f) "
+                    "size=%.2f alpha=%.2f\n",
+                    ticks, pool->liveCount, pool->maxCount, (long long)period, spin,
+                    pool->box[0], pool->box[1], pool->box[2],
+                    pool->box[3], pool->box[4], pool->box[5],
+                    s ? s->pos[0] : 0.0f, s ? s->pos[1] : 0.0f, s ? s->pos[2] : 0.0f,
+                    s ? s->size : 0.0f, s ? s->alpha : 0.0f);
+            fflush(stderr);
+        }
+    }
+
+    // ---- reap: erase every particle whose age reached its lifetime, shifting the
+    //      tail down one slot. Retail re-tests the same index after a removal. ----
+    for (int i = 0; i < pool->liveCount; ++i) {
+        TornadoParticle* arr = pool->items;
+        if (arr[i].age < arr[i].lifetime) continue;
+        --pool->liveCount;
+        for (int j = i; j < pool->liveCount; ++j) pool->items[j] = pool->items[j + 1];
+        --i;
     }
 }
 
@@ -229,7 +600,7 @@ void* Tornado_CreateInstance(void*) {
         void** vt = *reinterpret_cast<void***>(p);
         if (vt) {
             for (int k = 0; k < kInstanceSlots; ++k) s_instVtable[k] = vt[k];
-            s_instVtable[1] = reinterpret_cast<void*>(&TornadoInstance_Update_Stub);
+            s_instVtable[1] = reinterpret_cast<void*>(&TornadoInstance_Update);
             s_instVtableReady = true;
         }
     }
@@ -272,6 +643,8 @@ void InstallTornadoVtable(void* p) {
             s_baseVtable[k]    = vt[k];
             s_tornadoVtable[k] = vt[k];
         }
+        s_tornadoVtable[1] = reinterpret_cast<void*>(&Tornado_GetTypeName);
+        s_tornadoVtable[2] = reinterpret_cast<void*>(&Tornado_GetTypeId);
         s_tornadoVtable[3] = reinterpret_cast<void*>(&Tornado_GetFileVersion);
         s_tornadoVtable[5] = reinterpret_cast<void*>(&Tornado_Serialize);
         s_tornadoVtable[6] = reinterpret_cast<void*>(&Tornado_Recreate);
@@ -293,17 +666,17 @@ static void* Tornado_Build(void* p) {
     // Tornado-specific defaults (FUN_1400d23c0). Field meanings are from
     // Tornado::Serialize (0x1400d2210, which names the types) cross-read against
     // TornadoInstance::Update (0x1400d2470, which consumes them).
-    *(float*)(s + 0x48) = 4.0f;    // 0x40800000  radial swirl amplitude
-    *(float*)(s + 0x4c) = 20.0f;   // 0x41a00000  vertical rise over a particle's life
-    *(float*)(s + 0x50) = 5.0f;    // 0x40a00000  outer sweep amplitude
-    *(float*)(s + 0x54) = 45.0f;   // 0x42340000  spin rate, degrees/sec
-    *(float*)(s + 0x58) = 1.0f;    // 0x3f800000  per-particle angular frequency
-    *(float*)(s + 0x5c) = 1.0f;    // 0x3f800000  emission RATE (interval = 1/x seconds)
-    *(float*)(s + 0x60) = 10.0f;   // 0x41200000  particle lifetime, base
-    *(float*)(s + 0x64) = 0.0f;    //             particle lifetime, random tolerance
-    *(float*)(s + 0x68) = 0.2f;    // 0x3e4ccccd  min size clamp (also the initial size)
-    *(float*)(s + 0x6c) = 3.0f;    // 0x40400000  max size clamp
-    *(float*)(s + 0x70) = 30.0f;   // 0x41f00000  size scale, clamped into [+0x68,+0x6c]
+    *(float*)(s + 0x48) = 4.0f;    // 0x40800000  _tornadoWidth
+    *(float*)(s + 0x4c) = 20.0f;   // 0x41a00000  _tornadoHeight (rise over a life)
+    *(float*)(s + 0x50) = 5.0f;    // 0x40a00000  _funnelWidth (outer sweep)
+    *(float*)(s + 0x54) = 45.0f;   // 0x42340000  _funnelSpin, degrees/sec
+    *(float*)(s + 0x58) = 1.0f;    // 0x3f800000  _particleSpinSpeed
+    *(float*)(s + 0x5c) = 1.0f;    // 0x3f800000  _emissionRate (interval = 1/x seconds)
+    *(float*)(s + 0x60) = 10.0f;   // 0x41200000  _particleLifeTime
+    *(float*)(s + 0x64) = 0.0f;    //             _particleLifeTimeTol
+    *(float*)(s + 0x68) = 0.2f;    // 0x3e4ccccd  _particleStartSize (also the spawn size)
+    *(float*)(s + 0x6c) = 3.0f;    // 0x40400000  _particleEndSize
+    *(float*)(s + 0x70) = 30.0f;   // 0x41f00000  _particleScaleSize, clamped into [+0x68,+0x6c]
     // +0x74 and +0x78 are two System::Colors — START and END tint — NOT "a qword -1".
     // Serialize reads them with System::Color::Serialize, and the instance update
     // divides their bytes by 255.0 (DAT_14017222c). All-0xFF = opaque white at both
