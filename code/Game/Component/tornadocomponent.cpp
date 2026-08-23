@@ -32,13 +32,13 @@
 // inside Game_SpawnTornado (0x14005fd20), whose only caller is the debug panel.
 // That function is already ported at code/Game/Dialog/debugui.cpp (command 329).
 //
-// GATE: BANISHED_LIVE_TORNADO (opt-in; deliberately NOT in kDefaultOnFlags — this
-// is a new, unproven feature). Trace tag [Tornado] on stderr.
+// GATE: BANISHED_LIVE_TORNADO — DEFAULT-ON since 2026-08-22 (kDefaultOnFlags); the
+// env var is now a kill-switch (=0). Trace tag [Tornado] on stderr.
 //
-// DEFERRED: the Tornado *particle* visual (Tornado vtable slots 5/8 and
-// TornadoInstance::Update 0x1400d2470) is not ported. The component runs without
-// it; the cost is the funnel's appearance, plus whatever the dormant particle does
-// to the lifetime gate above — which is exactly why that gate is traced.
+// The particle half is done too: Tornado vtable slots 1/2/3/5/6/7/8/9 and
+// TornadoInstance::Update (0x1400d2470) are all ported in code/Game/Game/tornado.cpp,
+// so the lifetime gate above is now driven by a real particle system finishing rather
+// than by a dormant one.
 
 #include "Component/tornadocomponent_funcs.h"
 #include "engine_funcs.h"

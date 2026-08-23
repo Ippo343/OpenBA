@@ -806,6 +806,21 @@ static const char* const kDefaultOnFlags[] = {
     // edf0 call, the registration half of StartTown_SpawnStructures, and (added with
     // this graduation) StateMachineComponent_SeatWorkplaceOnBuilt.
     "BANISHED_LIVE_WPC_CONTROLLER",
+    // GRADUATED 2026-08-22 — TornadoComponent (slots 3/4/8). Held opt-in as an
+    // "unproven feature" until the particle half existed; with TornadoInstance::Update
+    // ported (commit bb9a1f9) the whole mechanic runs end to end and has been watched
+    // in-game, rendering.
+    // POSITIVE RUN (BANISHED_FORCE_TORNADO=1, FORCE_SPEED=40): spawn -> 129-waypoint
+    // fractal walk -> 340 trees felled over 7274 damage ticks -> "particle finished,
+    // entity queued for destruction", crash log empty. Nothing about that outcome is
+    // reachable with the gate off: the component owns the movement, so the funnel just
+    // sits at its spawn point and damages nothing.
+    //
+    // ⚠ building=0 on all 7274 ticks. NOT evidence the building arm is dead — arm 3
+    // (the (2R+1)^2 cell sweep) is the same code that produced the 340 tree hits and
+    // calls the same counter; the forced path simply walked through forest, not town.
+    // Aim a forced tornado at the town centre before concluding anything either way.
+    "BANISHED_LIVE_TORNADO",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {
