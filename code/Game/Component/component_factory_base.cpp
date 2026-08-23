@@ -820,6 +820,25 @@ static const char* const kDefaultOnFlags[] = {
     // (the (2R+1)^2 cell sweep) is the same code that produced the 340 tree hits and
     // calls the same counter; the forced path simply walked through forest, not town.
     // Aim a forced tornado at the town centre before concluding anything either way.
+    // GRADUATED 2026-08-22 — the fire disaster lane itself (FireComponent vtable
+    // slots 3/9/15: the per-frame burn tick, the spread roll, and the water-applied
+    // message). Graduated together with BANISHED_LIVE_WELL below, which is the only
+    // thing that can END a fire; the two were measured as a pair because either one
+    // alone is only half a mechanic.
+    // A/B, seed 12345, 24 extra houses, forced fire every 8000 frames, 12 min per arm,
+    // with NO BANISHED_LIVE_* set in either arm -- the lane had to arm itself from this
+    // table, which is the positive-run requirement and the demonstration in one:
+    //   NO WELL: 27 fires, ALL ended reason=timer-expired, 0 buckets (water search
+    //            missed 7000 of 7000), 48 further ignitions refused being-demolished
+    //            as the fire kept reaching collapsing structures, and the town fell
+    //            41 -> 20 citizens. Spread census caught=65 rolled-no=108 empty=219.
+    //   WELL   : 7 fires, ALL ended reason=buckets-reached-threshold, 700 buckets
+    //            peaking at 100/100, water search found=746 missed=4, and the town
+    //            grew 26 -> 100 monotonically. Spread barely got a chance: 8 attempts.
+    //   standalone_crash.log empty in both arms.
+    // So the mechanic is complete in both directions: fire spreads and destroys a town
+    // that cannot fight it, and the brigade stops every fire in a town that can.
+    "BANISHED_LIVE_FIRE",
     // GRADUATED 2026-08-22 — WellComponent's controller state machine (state 2 "built"
     // -> TownManager::RegisterWaterSource). Until this lane existed only the UNregister
     // half was ported, so townMgr+0xE0/+0x140 were never written and the FireWork spiral

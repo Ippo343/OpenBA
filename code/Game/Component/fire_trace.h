@@ -9,8 +9,14 @@
 // does not flood the log; the per-tick ignition roll is the only high-frequency
 // site and it is sampled, not printed every tick.
 //
-// Enabled whenever the lane is enabled (BANISHED_LIVE_FIRE); set
-// BANISHED_FIRE_TRACE=0 to silence it while keeping the mechanic live.
+// OPT-IN: set BANISHED_FIRE_TRACE=1 to turn it on.
+//
+// It used to default to "follow the lane gate" by reading BANISHED_LIVE_FIRE with a RAW
+// getenv. That was fine while the lane was opt-in and is a lie now that the lane is in
+// kDefaultOnFlags: the var is normally unset, so the raw read sees nothing and reports
+// the lane as off while it is in fact running (the exact trap recorded in
+// reference_harness_env_gotchas / the trade-checkout gate). A graduated mechanic should
+// not flood a normal run's log either, so the fallback is now simply OFF.
 
 #include <cstdio>
 #include <cstdlib>
@@ -22,10 +28,6 @@ inline bool On() {
     if (v < 0) {
         const char* e = std::getenv("BANISHED_FIRE_TRACE");
         v = (e && e[0] && e[0] != '0') ? 1 : 0;
-        if (!e) {                       // unset => follow the lane gate
-            const char* g = std::getenv("BANISHED_LIVE_FIRE");
-            v = (g && g[0] && g[0] != '0') ? 1 : 0;
-        }
     }
     return v == 1;
 }

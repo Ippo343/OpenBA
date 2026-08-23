@@ -540,6 +540,10 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 // ============================================================
 // FireComponent_SpreadToNeighbors (0x140049130)
 // ============================================================
+// Spread census — see the comment at the roll site below.
+static int s_spreadTries = 0, s_spreadCaught = 0, s_spreadRolledNo = 0;
+static int s_spreadEmptyCell = 0, s_spreadNoFireComp = 0;
+
 extern "C" void FireComponent_Spread_130(void* self) {
     EnsureInit();
     if (!self) return;
@@ -646,19 +650,32 @@ extern "C" void FireComponent_Spread_130(void* self) {
 
             const float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
             const bool caught = roll < chance;
-            FIRE_TRACE_N(24, "[Fire] spread from=%p cell=(%d,%d) neighbour=%p chance=%.3f "
-                             "roll=%.3f -> %s\n",
-                         self, cx, cy, (void*)neighbourFire, chance, roll,
-                         caught ? "CAUGHT" : "no");
+            ++s_spreadTries; if (caught) ++s_spreadCaught; else ++s_spreadRolledNo;
+            // A running census, not a first-N budget: 24 lines burn out inside the FIRST
+            // fire, so a soak that spreads for ten minutes looks identical in the log to
+            // one that never spreads at all (the same trap as the FireWork water search).
+            if (s_spreadTries <= 8 || (s_spreadTries % 100) == 0)
+                FIRE_TRACE("[Fire] spread #%d from=%p cell=(%d,%d) neighbour=%p "
+                           "chance=%.3f roll=%.3f -> %s  (census: caught=%d rolled-no=%d "
+                           "empty=%d no-firecomp=%d)\n",
+                           s_spreadTries, self, cx, cy, (void*)neighbourFire, chance, roll,
+                           caught ? "CAUGHT" : "no", s_spreadCaught, s_spreadRolledNo,
+                           s_spreadEmptyCell, s_spreadNoFireComp);
             if (caught) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&neighbourFire);
                 FireComponent_Ignite_610(reinterpret_cast<void*>(neighbourFire));
             }
         } else {
-            FIRE_TRACE_N(24, "[Fire] spread from=%p cell=(%d,%d) -> %s\n",
-                         self, cx, cy,
-                         (occupant == 0) ? "empty cell"
-                                         : "occupant has NO FireComponent");
+            ++s_spreadTries;
+            if (occupant == 0) ++s_spreadEmptyCell; else ++s_spreadNoFireComp;
+            if (s_spreadTries <= 8 || (s_spreadTries % 100) == 0)
+                FIRE_TRACE("[Fire] spread #%d from=%p cell=(%d,%d) -> %s  (census: "
+                           "caught=%d rolled-no=%d empty=%d no-firecomp=%d)\n",
+                           s_spreadTries, self, cx, cy,
+                           (occupant == 0) ? "empty cell"
+                                           : "occupant has NO FireComponent",
+                           s_spreadCaught, s_spreadRolledNo, s_spreadEmptyCell,
+                           s_spreadNoFireComp);
         }
     } while (*reinterpret_cast<int64_t*>(s + 0x30) > 0);
 
