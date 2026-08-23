@@ -49,6 +49,8 @@ extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32
 extern "C" bool  FireComponent_IsBeingDemolished_11e690(void* destroyComp);     // 0x14011e690
 extern "C" bool  FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* t);
 extern "C" void  FireComponent_StopBurning_11ea10(void* destroyComp);           // 0x14011ea10
+extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP);    // 0x140005840
+extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP); // 0x140009790
 
 // ---- type-id global storage (values filled by FillTypeIdGlobals_fire) ----
 extern uint32_t g_tid_FireDescription;   // 0x1401c4218
@@ -84,6 +86,19 @@ void RegisterFireBatch() {
     // --- THE TWO TYPE-ID GLOBALS (breaks #3 and #4) ---
     RegisterExeAddr(0x1401c4218, reinterpret_cast<uintptr_t>(&g_tid_FireDescription));
     RegisterExeAddr(0x1401c41e0, reinterpret_cast<uintptr_t>(&g_tid_FireComponent));
+
+    // --- THE TWO SHARED FINDERS (code/Game/Component/entity_finders_disaster.cpp) ---
+    // 0x140005840 FindComponent<FireComponent> was registered NOWHERE until
+    // 2026-08-23. TornadoComponent's building arm is gated on `buildComp && fireComp`
+    // and resolves this address for the second half, so with it null the arm was
+    // unreachable — a tornado could cross a town and ignite nothing, reporting
+    // `building=0` exactly like a tornado that crossed empty forest. 0x140009790
+    // FindComponent<CitizenComponent> killed the tornado's citizen arm the same way.
+    // Both type-id globals were already registered and filled; only the finders were
+    // missing. Registered here rather than in reg_tornado.cpp because the fire lane
+    // owns the FireComponent half and one file should own both.
+    RegisterExeAddr(0x140005840, reinterpret_cast<uintptr_t>(&Entity_FindComponent_Fire_5840));
+    RegisterExeAddr(0x140009790, reinterpret_cast<uintptr_t>(&Entity_FindComponent_Citizen_9790));
 
     // --- .rdata const ---
     RegisterExeAddr(0x1401722c0, reinterpret_cast<uintptr_t>(&g_DAT_1401722c0));

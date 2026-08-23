@@ -262,6 +262,36 @@ void TornadoComponent_InitFuncs() {
     g_h.fireIgnite      = reinterpret_cast<fn_FireIgnite_t>(ResolveAddr(Module::Exe, 0x14011e7b0));
     g_h.fireIgniteFinish= reinterpret_cast<fn_FireIgniteFinish_t>(ResolveAddr(Module::Exe, 0x14011ea10));
 
+    // ── Arm-viability report ────────────────────────────────────────────────
+    // Each damage arm needs EVERY leaf on its own path; a single null one makes the
+    // arm silently unreachable and its counter reads 0 exactly like "the funnel never
+    // crossed one". That is what hid an unregistered FindComponent<FireComponent>
+    // (0x140005840) for a whole wave: the building arm could not fire, and
+    // `building=0 building-NOFIRE=0` on 40,000 damage ticks looked like bad luck.
+    // Print each arm's verdict ONCE, unconditionally — not behind the trace env,
+    // because the case that matters is the one nobody is looking at.
+    {
+        auto arm = [](const char* name, bool ok, const char* missing) {
+            std::fprintf(stderr, "[Tornado] arm %-9s %s%s%s\n", name,
+                         ok ? "LIVE" : "DEAD", ok ? "" : " — unresolved: ",
+                         ok ? "" : missing);
+        };
+        arm("tree",     g_h.findNaturalResource && g_h.findGrowth && g_h.growthKnockdown,
+            "findNaturalResource/findGrowth/growthKnockdown");
+        arm("building", g_h.findBuild && g_h.findFire && g_h.findFireOwner &&
+                        g_h.fireIgnite && g_h.fireIgniteFinish,
+            "findBuild(d6c0)/findFire(5840)/findFireOwner(5780)/ignite(e7b0)/finish(ea10)");
+        arm("animal",   g_h.findAnimal && g_h.markForRemoval && g_h.arrayResizeFill8,
+            "findAnimal(5500)/markForRemoval/arrayResizeFill8");
+        arm("citizen",  g_h.findCitizen && g_h.citizenLifeEvent,
+            "findCitizen(9790)/citizenLifeEvent(116dd0)");
+        arm("audio",    g_h.findAudio && g_h.audioMoveEmitters,
+            "findAudio(2280 - its type-id global 0x1401c3e60 is unregistered too)");
+        arm("path",     g_h.terrainClamp != nullptr,
+            "terrainClamp(9f3e0) - endpoints are NOT terrain-clamped");
+        std::fflush(stderr);
+    }
+
     g_h.meshIsAnimating      = ResolveSlotPtr<fn_MeshIsAnimating_t>(0x1401514b0);
     g_h.vec3NormalizeLen     = ResolveSlotPtr<fn_Vec3NormalizeLen_t>(0x1401512b8);
     g_h.vec3Normalize        = ResolveSlotPtr<fn_Vec3Normalize_t>(0x1401512c0);
@@ -441,6 +471,22 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     if (g_h.findNaturalResource) { CheckPtr(entityIbp); g_h.findNaturalResource(entity, &natResComp); }
     if (g_h.findCitizen)         { CheckPtr(entityIbp); g_h.findCitizen(entity, &citizenComp); }
     if (g_h.findAnimal)           { CheckPtr(entityIbp); g_h.findAnimal(entity, &animalComp); }
+
+    // The first few buildings the funnel touches, and which way the arm went.
+    // Unconditional and one-shot: if this never appears, no tornado has swept a
+    // building's cell and the arm is merely untested — a fact `building=0` cannot
+    // convey on its own. See the arm-viability report in TornadoComponent_InitFuncs.
+    if (buildComp) {
+        static int n = 0;
+        if (n++ < 4) {
+            std::fprintf(stderr, "[Tornado] STRUCK a building: entity=%p build=%llx fire=%llx"
+                                 " -> arm %s\n",
+                         entity, (unsigned long long)buildComp, (unsigned long long)fireComp,
+                         fireComp ? "TAKEN (igniting)"
+                                  : "SKIPPED - entity carries no FireComponent");
+            std::fflush(stderr);
+        }
+    }
 
     if (natResComp != 0 && growthComp != 0) {
         // --- tree / crop: stop it walking its growth queue and knock it down ---
