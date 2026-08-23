@@ -1,163 +1,234 @@
 // code/Game/Component/firecomponent.cpp
-// Clean reimplementation of FireComponent::Update from Application-x64.exe.
+// FireComponent — the per-frame tick (vtable slot 9), the Serialize slot (3), and
+// the standalone factory that installs a REAL vtable for slots 3, 9 and 15.
 //
-// Two-state fire system:
-//   Active (field30 != 0): countdown timer decrements each tick. When spread
-//     timer (field38) expires, spreads fire to neighbors. When main timer
-//     (field30) expires, extinguishes.
-//   Inactive (field30 == 0): accumulates time, randomly ignites based on
-//     probability check against building data.
+// Two-state fire:
+//   idle    (fireTimer == 0) — accumulate dt into +0x40 and roll for ignition,
+//                              unless GameWorld+0xD0 bit 6 ("no fire") is set.
+//   burning (fireTimer != 0) — count both timers down; spread when the spread
+//                              timer expires; extinguish when the fire timer does.
 //
-// Original: 0x140048fb0 (53 instructions)
+// Original: 0x140048fb0 (53 instructions).
+//
+// ⚠ WHY THIS FILE USED TO DO NOTHING AT ALL — three stacked reasons, all fixed:
+//   1. The factory was COMPONENT_INERT_FACTORY, so vtable slot 9 was Inert_Stub and
+//      FireComponent_Update had no caller anywhere in the tree.
+//   2. Ignite / Spread / Extinguish were unported, so ResolveAddr returned 0 and
+//      every call site here was skipped by a null guard.
+//   3. The FireDescription type-id global (0x1401c4218) was unregistered, so
+//      IsDerivedFrom could never match and an added `if (buildingData)` guard
+//      deleted the ignition roll outright. That guard is GONE — retail calls
+//      FUN_1400a9290 unconditionally and so do we; see FireDesc() in
+//      firecomponent_ignite.cpp for how the description is now obtained.
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Component/fire_trace.h"
 #include "Component/firecomponent_funcs.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 
+// Leaf bodies (firecomponent_ignite.cpp).
+extern "C" void FireComponent_Ignite_610(void* self);
+extern "C" void FireComponent_Spread_130(void* self);
+extern "C" void FireComponent_Extinguish_4c0(void* self);
+extern "C" void FireComponent_WaterApplied_090(void* self, int msg);
+extern uint32_t g_tid_FireDescription;
+
+namespace {
+
+// FUN_1400a9290 — {rate, weight} probability roll (registered: reg_action_move.cpp).
+// Reads BOTH floats of the pair and CLEARS *time on every call, both arms.
+typedef bool (*fn_ProbCheck_t)(void* timeAccum, float* pair, void* rng);
+fn_ProbCheck_t s_probCheck = nullptr;
+bool s_init = false;
+
+void EnsureInit() {
+    if (s_init) return;
+    s_probCheck = reinterpret_cast<fn_ProbCheck_t>(ResolveAddr(Module::Exe, 0x1400a9290));
+    s_init = true;
+}
+
+}  // namespace
+
 // ============================================================
-// Resolved helpers
+// FireComponent::Update (vtable slot 9, 0x140048fb0)
 // ============================================================
+void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
+    EnsureInit();
+    if (!self || !pDeltaTime) return;
 
-// FireComponent_Ignite(this) -- sets fire active, initializes timers (0x140049610)
-typedef void (*fn_FireComponent_Ignite_t)(void* self);
-static fn_FireComponent_Ignite_t s_fn_Ignite = nullptr;
+    const int64_t dt = *pDeltaTime;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    int64_t* pFireTimer   = reinterpret_cast<int64_t*>(s + 0x30);
+    int64_t* pSpreadTimer = reinterpret_cast<int64_t*>(s + 0x38);
+    int64_t* pAccum       = reinterpret_cast<int64_t*>(s + 0x40);
 
-// FireComponent_SpreadToNeighbors(this) -- spreads fire to adjacent buildings (0x140049130)
-typedef void (*fn_FireComponent_SpreadToNeighbors_t)(void* self);
-static fn_FireComponent_SpreadToNeighbors_t s_fn_SpreadToNeighbors = nullptr;
+    if (*pFireTimer == 0) {
+        // ---- idle: roll for a new fire ----
+        const uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                           ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+        if (!gw) return;
 
-// FireComponent_Extinguish(this) -- puts out the fire, resets state (0x1400494c0)
-typedef void (*fn_FireComponent_Extinguish_t)(void* self);
-static fn_FireComponent_Extinguish_t s_fn_Extinguish = nullptr;
+        // GameWorld+0xD0 is the debug / new-game flag word: bit0 zeroCost, bit1 noHunger,
+        // bit2 noCold, bit3 noHealth, bit4 noSick, bit5 noCropDisease, BIT6 noFire,
+        // bit7 noTornado. NewGameDialog::StartGame writes the whole word explicitly
+        // (newgamedialog.cpp:740): disaster combo index 0 => 0 (fire ON), otherwise
+        // 0xF0 (bits 4-7 => fire OFF). It is never left uninitialised.
+        const uint32_t worldFlags = *reinterpret_cast<uint32_t*>(gw + 0xD0);
+        if ((worldFlags >> 6) & 1) {
+            FIRE_TRACE_N(1, "[Fire] tick suppressed: GameWorld+0xD0=0x%08x has bit 6 "
+                            "(noFire) SET — disasters were switched off for this game\n",
+                         worldFlags);
+            return;
+        }
+        FIRE_TRACE_N(1, "[Fire] tick live: GameWorld+0xD0=0x%08x (bit 6 clear — fire enabled)\n",
+                     worldFlags);
 
-// FUN_1400a9290 -- probability check: accumulates time, rolls random vs threshold
-// Returns true if random event triggers.
-typedef bool (*fn_ProbabilityCheck_t)(void* timeAccum, float* fireData, void* random);
-static fn_ProbabilityCheck_t s_fn_ProbabilityCheck = nullptr;
+        *pAccum += dt;
 
-// Game state singleton pointer (DAT_1401c3dd8)
-// +0xD0: flags (bit 6 = fire disabled)
-// +0xD8: Random* rng
-static void** s_pGameState = nullptr;
+        // Retail: FUN_1400a9290(&accum, (float*)(desc + 0x44), gw->rng) — called
+        // UNCONDITIONALLY with the description pointer, which retail always has.
+        // No `if (desc)` here: that guard is what used to delete this roll.
+        void* obj = *reinterpret_cast<void**>(s + 0x18);
+        void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, g_tid_FireDescription))
+                   ? obj : nullptr;
+        if (!s_probCheck) return;
+        void* rng = *reinterpret_cast<void**>(gw + 0xD8);
+        float* pair = reinterpret_cast<float*>(
+            reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::IgniteChance0);
 
-// Type ID at DAT_1401c4218 = FireDescription's BaseTypeInfo (writer
-// FireDescription_Register 0x14014ac25) — retail FireComponent_* validate their
-// description against it. (Older comment said "building/structure component";
-// other files that resolved c4218 as "ComponentEntity" were mistranscriptions —
-// the real ComponentEntity id is 0x1401c5d70.)
-static uint32_t* s_pFireDescTypeId = nullptr;
+        const bool fired = s_probCheck(pAccum, pair, rng);
+        FIRE_TRACE_N(12, "[Fire] ignition roll comp=%p pair={%.4f,%.4f} -> %s\n",
+                     (void*)self, pair[0], pair[1], fired ? "FIRED" : "no");
+        if (fired) {
+            FireComponent_Ignite_610(self);
+            return;
+        }
+    } else {
+        // ---- burning: count down ----
+        *pFireTimer   -= dt;
+        *pSpreadTimer -= dt;
 
-static bool s_initialized = false;
+        if (*pFireTimer > 0 && *pSpreadTimer < 1)
+            FireComponent_Spread_130(self);
 
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_Ignite = reinterpret_cast<fn_FireComponent_Ignite_t>(
-        ResolveAddr(Module::Exe, 0x140049610));
-    s_fn_SpreadToNeighbors = reinterpret_cast<fn_FireComponent_SpreadToNeighbors_t>(
-        ResolveAddr(Module::Exe, 0x140049130));
-    s_fn_Extinguish = reinterpret_cast<fn_FireComponent_Extinguish_t>(
-        ResolveAddr(Module::Exe, 0x1400494c0));
-    s_fn_ProbabilityCheck = reinterpret_cast<fn_ProbabilityCheck_t>(
-        ResolveAddr(Module::Exe, 0x1400a9290));
-
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pFireDescTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4218));
-
-    s_initialized = true;
+        if (*pFireTimer < 1)
+            FireComponent_Extinguish_4c0(self);
+    }
 }
 
 // ============================================================
-// FireComponent::Update (vtable slot [9], 0x140048fb0)
+// FireComponent::Shutdown / Serialize (vtable slot 3, 0x140049a90)
 // ============================================================
-// Two-state fire: active (countdown + spread + extinguish) vs
-// inactive (accumulate time + random fire-start probability).
+// Component_Serialize, then a version-1 Serializer block:
+//   Time  +0x30, Time +0x38, int +0x28,
+//   and, only when the stream version > 0, int +0x2c.
+// This is the third independent body proving +0x28 / +0x2c are two int32s.
+void FireComponent_Shutdown(FireComponent* self, void* stream) {
+    if (!self || !stream) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
-void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
-    EnsureHelpers();
+    if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
+    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
 
-    int64_t dt = *pDeltaTime;
-    int64_t* pFireTimer = (int64_t*)&self->field30;
-    int64_t* pSpreadTimer = (int64_t*)&self->field38;
-    int64_t* pAccumulator = (int64_t*)&self->field40;
-
-    if (*pFireTimer == 0) {
-        // Inactive state: check if fire should start
-
-        // Check if fire is disabled in game flags (bit 6 of flags at +0xD0)
-        if (s_pGameState && *s_pGameState) {
-            uint32_t gameFlags = *(uint32_t*)((uintptr_t)*s_pGameState + 0xD0);
-            if ((gameFlags >> 6) & 1) {
-                return;  // Fire disabled
-            }
-        }
-
-        // Get building data via IsDerivedFrom check on +0x18
-        void* baseObj = self->_unk18;
-        void* buildingData = nullptr;
-        if (baseObj && fn_IsDerivedFrom && s_pFireDescTypeId) {
-            bool isDerived = fn_IsDerivedFrom(baseObj, *s_pFireDescTypeId);
-            if (isDerived) {
-                buildingData = baseObj;
-            }
-        }
-
-        // Accumulate time and check random fire probability
-        *pAccumulator += dt;
-
-        if (s_fn_ProbabilityCheck && buildingData && s_pGameState && *s_pGameState) {
-            void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
-            float* fireData = (float*)((uintptr_t)buildingData + 0x44);
-            bool shouldIgnite = s_fn_ProbabilityCheck(pAccumulator, fireData, rng);
-            if (shouldIgnite) {
-                if (s_fn_Ignite) {
-                    s_fn_Ignite(self);
-                }
-                return;
-            }
-        }
-    } else {
-        // Active state: count down timers
-        *pFireTimer -= dt;
-        *pSpreadTimer -= dt;
-
-        // If fire still burning but spread timer expired, spread to neighbors
-        if (*pFireTimer > 0 && *pSpreadTimer < 1) {
-            if (s_fn_SpreadToNeighbors) {
-                s_fn_SpreadToNeighbors(self);
-            }
-        }
-
-        // If main fire timer expired, extinguish
-        if (*pFireTimer < 1) {
-            if (s_fn_Extinguish) {
-                s_fn_Extinguish(self);
-            }
-        }
+    uint8_t ser[24];
+    g_fn_Serializer_Ctor(ser, stream, 1);
+    if (g_fn_Time_Serialize) {
+        g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
+        g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
     }
+    g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x28), nullptr);
+    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(ser) > 0)
+        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x2c), nullptr);
+    g_fn_Serializer_Dtor(ser);
 }
 
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
 void FireComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[FireComponent] Funcs resolved: Ignite=%p Spread=%p Extinguish=%p ProbCheck=%p\n",
-           (void*)s_fn_Ignite, (void*)s_fn_SpreadToNeighbors,
-           (void*)s_fn_Extinguish, (void*)s_fn_ProbabilityCheck);
-#endif
+    EnsureInit();
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Object/factory_registration.h"
+// ============================================================
+// Standalone factory — a REAL vtable, not the all-stubs inert one.
+// ============================================================
+// FireComponent overrides six slots in retail (0, 1, 2, 3, 9, 15 — read from the
+// vtable BYTES at 0x140159380, which ends at 0x1401593ff where FireDescription's
+// begins). The inert base gives us 0 (ScalarDtor) and 2 (GetTypeId); this fills
+// the three that carry the mechanic:
+//   3  Serialize      FireComponent_Shutdown
+//   9  Update         FireComponent_Update       <- the per-frame tick
+//   15 water applied  FireComponent_WaterApplied <- SendComponentMessage +0x78
+//
+// ⚠ The slot writes MUST happen after InitInertTyped/MakeInertTyped, never at
+// static-init time: FillTypedVtable re-stubs the table on first construction and
+// would erase them (reference_live_vtable_slot_must_be_wired_in_installlive).
+//
+// GATE: BANISHED_LIVE_FIRE — OPT-IN. Deliberately NOT in kDefaultOnFlags: this is
+// a brand-new lane with no positive soak yet. With the gate off the vtable is
+// byte-for-byte the previous inert one and the run is unchanged.
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(FireComponent, 0x48, 0x88)
+#include "address_registry.h"
+
+static uint32_t FireComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("FireComponent");
+    return cached;
+}
+
+static void* g_FireComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void FireComponent_UpdateVSlot(void* self, void* dt) {
+    FireComponent_Update(reinterpret_cast<FireComponent*>(self),
+                         reinterpret_cast<int64_t*>(dt));
+}
+static void FireComponent_SerializeVSlot(void* self, void* stream) {
+    FireComponent_Shutdown(reinterpret_cast<FireComponent*>(self), stream);
+}
+static void FireComponent_WaterVSlot(void* self, int msg) {
+    FireComponent_WaterApplied_090(self, msg);
+}
+
+static void FireComponent_FinishLiveVtable() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FIRE")) return;
+    g_FireComponent_LiveVtable[3]  = reinterpret_cast<void*>(&FireComponent_SerializeVSlot);
+    g_FireComponent_LiveVtable[9]  = reinterpret_cast<void*>(&FireComponent_UpdateVSlot);
+    g_FireComponent_LiveVtable[15] = reinterpret_cast<void*>(&FireComponent_WaterVSlot);
+    static bool announced = false;
+    if (!announced) {
+        announced = true;
+        FIRE_TRACE("[Fire] FireComponent vtable LIVE: slot3=Serialize slot9=Update "
+                   "slot15=WaterApplied\n");
+    }
+}
+
+extern "C" void* FireComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(
+        0x48, 0x88, g_FireComponent_LiveVtable,
+        reinterpret_cast<void*>(&FireComponent_LiveGetTypeId));
+    FireComponent_FinishLiveVtable();
+    return p;
+}
+
+static void* FireComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(
+        mem, 0x48, 0x88, g_FireComponent_LiveVtable,
+        reinterpret_cast<void*>(&FireComponent_LiveGetTypeId));
+    FireComponent_FinishLiveVtable();
+    return mem;
+}
+
+// Register the vtable at its exe address so anything resolving 0x140159380 (and
+// SendComponentMessage's +0x78 dispatch in particular) lands on our table.
+extern "C" void RegisterFireComponentVtable() {
+    RegisterExeAddr(FireComponentAddr::Vtable,
+                    reinterpret_cast<uintptr_t>(g_FireComponent_LiveVtable));
+}
+
 REGISTER_TYPE(FireComponent, "Component",
               &FireComponent_Factory, &FireComponent_CreateInPlace);

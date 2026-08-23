@@ -595,19 +595,23 @@ void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
 // Shared slot helpers: work_base_standalone.{h,cpp}.
 //
 // FLAGS (this file lacks several canonical functions):
-//   - slot0  ScalarDtor : NO FireWork_ScalarDtor_Impl defined  -> /*FLAG*/ nullptr
-//   - slot3  Serialize  : NO FireWork_Serialize_Impl defined   -> /*FLAG*/ nullptr
+//   - slot0  ScalarDtor : NO FireWork_ScalarDtor_Impl defined  -> Work_GenericScalarDtor
+//   - slot3  Serialize  : FireWork_Serialize_Impl (0x1400e9a50) — LANDED 2026-08-22
 //   - slot4  Execute    : named FireWork_Slot4_Impl  (3-arg: self, citizenIBP, time)
 //   - slot6  OnComplete : named FireWork_Slot6_Impl
 //   - slot7  OnCancel   : named FireWork_Slot7_Impl
 //   - slot8  Cleanup    : named FireWork_Slot8_Impl
 //   - slot9  Validate   : named FireWork_Slot9_Impl
 //   - slot10 GetTarget  : named FireWork_Slot10_Impl
-//   - slot11 GetPriority: NO FireWork_GetPriority_Impl defined -> /*FLAG*/ nullptr
-//   - Ctor              : NO FireWork_Ctor_Impl defined (only exe addr
-//                         FireWorkAddr::Ctor 0x1400e9b50) -> factory cannot
-//                         construct -> /*FLAG*/ returns null until a Ctor_Impl
-//                         (or in-place exe-ctor call) is written.
+//   - slot5             : Work_Slot5 — retail 0x1400f7540 is also `return 0`, so this
+//                         is NOT a divergence (it was previously listed as one).
+//   - slot11            : FireWork_Slot11_Impl (0x14002a220) — LANDED 2026-08-22.
+//                         `return *(int*)(this+0x58) > 0`; was pinned to 0.
+//   - Ctor              : the REAL producer is the 3-arg 0x1400e9bd0, ported as
+//                         FireWork_CtorFull_e9bd0 (firecomponent_ignite.cpp) and
+//                         registered — FireComponent::Ignite is its only caller.
+//                         The factory below stays the generic fallback for the
+//                         type-registry cascade.
 //   - ResolveFuncs      : FireWork_ResolveFuncs() (does NOT resolve a vtable;
 //                         the original vtable install lives in the exe Ctor).
 // ============================================================
@@ -621,19 +625,68 @@ static uint32_t FireWork_GetTypeId(void*) {
     return c;
 }
 
+// ============================================================
+// Slot3 Serialize (vtable +0x18, 0x1400e9a50) — was Work_SerializeNop.
+// ============================================================
+//   Work::Serialize(this, stream)                       0x1400f7400
+//   Serializer ser(stream, 0)
+//   CitizenAI_impl_96b0(this + 0x50, ser)               0x1400296b0  (the BST)
+//   Serializer::Serialize(ser, (int*)(this + 0x48))                  (the capacity)
+//   ~Serializer(ser)
+// Both sub-calls are already ported and registered (reg_work_base.cpp:49,
+// reg_work_bst.cpp:19), so this is a plain transcription.
+int FireWork_Serialize_Impl(FireWork* self, void* stream) {
+    if (!self || !stream) return 0;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    typedef void (*FW_WorkSerialize_t)(void* self, void* stream);
+    typedef void (*FW_BSTSerialize_t)(void* bstRoot, void* serializer);
+    static FW_WorkSerialize_t s_workSer = nullptr;
+    static FW_BSTSerialize_t  s_bstSer  = nullptr;
+    if (!s_workSer)
+        s_workSer = reinterpret_cast<FW_WorkSerialize_t>(ResolveAddr(Module::Exe, 0x1400f7400));
+    if (!s_bstSer)
+        s_bstSer  = reinterpret_cast<FW_BSTSerialize_t>(ResolveAddr(Module::Exe, 0x1400296b0));
+
+    if (s_workSer) s_workSer(self, stream);
+    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return 0;
+
+    uint8_t ser[24];
+    g_fn_Serializer_Ctor(ser, stream, 0);
+    if (s_bstSer) s_bstSer(reinterpret_cast<void*>(s + 0x50), ser);
+    g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x48), nullptr);
+    g_fn_Serializer_Dtor(ser);
+    return 0;
+}
+
+// ============================================================
+// Slot11 (vtable +0x58, 0x14002a220) — was Work_SlotRet0 (pinned to 0).
+// ============================================================
+// Retail body, in full: `XOR EAX,EAX ; CMP [RCX+0x58],EAX ; SETG AL ; RET`
+// i.e. `return *(int*)(this + 0x58) > 0` — "does this fire currently have any
+// firefighters assigned". +0x58 is the assigned count Slot4 compares against the
+// +0x48 capacity, NOT the +0x50 field the five FishingWork-family siblings read,
+// which is why work_base_standalone.h's Work_Slot11_HasActiveTasks helper is
+// explicitly documented as unusable here.
+int FireWork_Slot11_Impl(FireWork* self) {
+    if (!self) return 0;
+    return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(self) + 0x58) > 0 ? 1 : 0;
+}
+
 static void* g_FireWork_Vtable[13] = {
     (void*)&Work_GenericScalarDtor,                // +0x00 ScalarDtor (NO FireWork_ScalarDtor_Impl)
     (void*)&Work_Slot1,              // +0x08 slot1 (null)
     (void*)&FireWork_GetTypeId,      // +0x10 GetTypeId
-    (void*)&Work_SerializeNop,                // +0x18 Serialize (NO FireWork_Serialize_Impl in this file)
+    (void*)&FireWork_Serialize_Impl, // +0x18 Serialize (0x1400e9a50)
     (void*)&FireWork_Slot4_Impl,     // +0x20 Execute   (FireWork_Slot4_Impl)
-    (void*)&Work_Slot5,              // +0x28 slot5 (returns 0)
+    (void*)&Work_Slot5,              // +0x28 slot5 — retail 0x1400f7540 IS `return 0`;
+                                     //       Work_Slot5 is identical. NOT a divergence.
     (void*)&FireWork_Slot6_Impl,     // +0x30 OnComplete(FireWork_Slot6_Impl)
     (void*)&FireWork_Slot7_Impl,     // +0x38 OnCancel  (FireWork_Slot7_Impl)
     (void*)&FireWork_Slot8_Impl,     // +0x40 Cleanup   (FireWork_Slot8_Impl)
     (void*)&FireWork_Slot9_Impl,     // +0x48 Validate  (FireWork_Slot9_Impl)
     (void*)&FireWork_Slot10_Impl,    // +0x50 GetTarget (FireWork_Slot10_Impl)
-    (void*)&Work_SlotRet0,                // +0x58 GetPriority (NO FireWork_GetPriority_Impl)
+    (void*)&FireWork_Slot11_Impl,    // +0x58 slot11 (0x14002a220: +0x58 > 0)
     (void*)&Work_Slot12,             // +0x60 slot12 (void nop)
 };
 

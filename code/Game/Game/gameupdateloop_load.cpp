@@ -8,10 +8,12 @@
 //
 // FIRST SLICE (milestone 5a): build every subsystem object so m_game is non-null
 // and the loop runs. DEFERRED to later slices:
-//   - the 8 Object::ExternalList::Find resource loads (Diseases/Profession/Material/
-//     Help/Environment/MusicList/SkyMesh/StringTables) — left null; consumers guarded.
-//     (exe-typed ones are factory-cascade landmines; Runtime-typed ones are cheap to
-//     re-add once the skeleton is proven.) See project_gameupdateloop_load_map.
+//   - the Object::ExternalList::Find resource loads (Material/Environment/MusicList/
+//     SkyMesh/StringTables) — left null; consumers guarded. (exe-typed ones are
+//     factory-cascade landmines; Runtime-typed ones are cheap to re-add once the
+//     skeleton is proven.) See project_gameupdateloop_load_map.
+//     NO LONGER deferred: Diseases (step 1, +0xA8), Profession (step 2, +0xB0),
+//     HelpTopics (step 4, +0xA0) — each behind its own env gate.
 //   - the SkyMesh MeshInstance (+0x108, step 28) — needs vtable 0x14015e240 registered.
 //   - the deep worldgen (step 31): FUN_1400b0230 / CreateNaturalResource_impl_ef20 /
 //     FUN_1400a3300 — real terrain + citizens; milestone 5b.
@@ -203,6 +205,97 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
             *(void**)(p + 0xA0), list, (int)isList,
             (isList && fn_ExternalList_GetResourceCount)
                 ? fn_ExternalList_GetResourceCount(list) : -1);
+    fflush(stderr);
+}
+
+// ============================================================
+// Step 1 — Diseases load (citizen-plague bring-up 2026-08-22)
+// ============================================================
+// Retail's step 1 does ExternalList::Find(param_1[1], &out,
+// "Game/Disease/Diseases.rsc", ExternalList typeId) and stores the result at +0xA8.
+// The string is in the exe at 0x14015e428. That store was deferred with the rest of
+// the step 1-4 Finds, and it is the SINGLE reason no citizen can ever fall ill:
+// CitizenComponent::CatchDisease (0x140112620, citizen_updatehealth.cpp:378-379)
+// reads gw+0xA8 and returns immediately when it is null. Everything downstream —
+// CatchDisease -> Infect -> SpreadDisease -> FindCareBuilding -> RecoverOrDie — is
+// already ported, registered and wired; it has simply never had a disease to draw.
+// DebugUI's citizen-plague trigger (0x14005ff30) reads the same slot.
+//
+// Modelled on LoadHelpTopics_Step4 rather than LoadProfessionList_Step2: gw+0xA8 is
+// an Object::ExternalList (CatchDisease walks `*(list+0x20)` by index and calls
+// ExternalList::GetResourceCount on it), exactly like gw+0xA0 — whereas gw+0xB0 is a
+// ProfessionList External. Same FindOrLoad primitive, same retail type gate.
+//
+// OPT-IN (BANISHED_LIVE_DISEASELIST) — unproven; NOT in kDefaultOnFlags. Graduating it
+// needs a positive measured run (a citizen actually catching, spreading and recovering
+// from a disease). Default OFF keeps the run byte-identical to before this change.
+static bool DiseaseListEnvOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_DISEASELIST");
+        en = (e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0) ? 1 : 0;
+    }
+    return en == 1;
+}
+
+static void LoadDiseaseList_Step1(uint8_t* p) {
+    *(void**)(p + 0xA8) = nullptr;
+
+    if (!DiseaseListEnvOn()) {
+        fprintf(stderr, "[GUL::DiseaseList] OFF — gw+0xa8=NULL (set BANISHED_LIVE_DISEASELIST=1 "
+                "to load Game/Disease/Diseases.rsc; citizens cannot fall ill while null)\n");
+        fflush(stderr);
+        return;
+    }
+
+    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        fprintf(stderr, "[GUL::DiseaseList] SKIP — loader fns/factory unavailable "
+                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
+                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
+                (void*)fn_Filename_Dtor,
+                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+        fflush(stderr);
+        return;
+    }
+
+    uint8_t fname[16] = {0};
+    fn_Filename_CtorCStr(fname, "Game/Disease/Diseases.rsc");
+    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
+    fn_Filename_Dtor(fname);
+
+    // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
+    // exe .rdata slot retail reads is unfilled in standalone).
+    static const uint32_t* s_extListTypeInfo = reinterpret_cast<const uint32_t*>(
+        ResolveExport("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A"));
+    bool isList = false;
+    if (list && s_extListTypeInfo && fn_IsDerivedFrom)
+        isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
+    if (isList) *(void**)(p + 0xA8) = list;
+
+    int count = (isList && fn_ExternalList_GetResourceCount)
+                    ? fn_ExternalList_GetResourceCount(list) : -1;
+    fprintf(stderr, "[GUL::DiseaseList] gw+0xa8=%p (loaded=%p isExternalList=%d diseases=%d)\n",
+            *(void**)(p + 0xA8), list, (int)isList, count);
+
+    // Per-entry tuning dump. Disease+0x40 is the RECIPROCAL mortality — RecoverOrDie
+    // computes (1/x)/careMult, so a zero here is an infinite death chance (every sick
+    // citizen dies the instant the illness runs out). The factory default IS 0
+    // (disease.cpp:82), so an entry reading 0 means the .rsc never wrote the field.
+    // Report it; do not clamp it — that would hide a real load failure.
+    if (isList && count > 0) {
+        uintptr_t arr = *(uintptr_t*)((uintptr_t)list + 0x20);
+        for (int i = 0; i < count && arr; i++) {
+            uint8_t* d = *(uint8_t**)(arr + (uintptr_t)i * 8);
+            if (!d) { fprintf(stderr, "[GUL::DiseaseList]   [%d] NULL entry\n", i); continue; }
+            fprintf(stderr, "[GUL::DiseaseList]   [%d] %p spreadMonths(+0x30)=%.3f "
+                    "contagion(+0x34)=%.3f radius(+0x38)=%.3f weight(+0x3c)=%.3f "
+                    "recipMortality(+0x40)=%.3f%s\n",
+                    i, (void*)d, *(float*)(d + 0x30), *(float*)(d + 0x34),
+                    *(float*)(d + 0x38), *(float*)(d + 0x3c), *(float*)(d + 0x40),
+                    (*(float*)(d + 0x40) == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
+        }
+    }
     fflush(stderr);
 }
 
@@ -818,10 +911,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // g_pGameWorldSingleton = this loop (read by AddGlobalObject / Audio::Pause at the tail).
     if (g_pGameWorldSingleton) *g_pGameWorldSingleton = loopVoid;
 
-    // Steps 1-4: resource Finds (Diseases/Profession/Material/Help) — DEFERRED (leave null),
-    // EXCEPT step 2 ProfessionList (the citizen-economy keystone) under BANISHED_LIVE_PROFESSIONLIST
-    // and step 4 HelpTopics (the only consumer is the help dialog).
-    *(void**)(p + 0xA8) = nullptr;  // diseases
+    // Steps 1-4: resource Finds (Diseases/Profession/Material/Help). Only step 3
+    // (UI material) is still DEFERRED (left null; consumers guarded).
+    //   step 1 Diseases    → +0xA8, opt-in BANISHED_LIVE_DISEASELIST (unblocks citizen illness)
+    //   step 2 Professions  → +0xB0, the citizen-economy keystone (BANISHED_LIVE_PROFESSIONLIST)
+    //   step 4 HelpTopics   → +0xA0, consumed only by the help dialog
+    LoadDiseaseList_Step1(p);       // step 1 → +0xA8 (diseases); env-gated, else null
     LoadProfessionList_Step2(p);    // step 2 → +0xB0 (professions); env-gated, else null
     *(void**)(p + 0xB8) = nullptr;  // ui material
     LoadHelpTopics_Step4(p);        // step 4 → +0xA0 (help topics)

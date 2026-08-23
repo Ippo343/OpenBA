@@ -1,20 +1,50 @@
 #pragma once
-// Function declarations for deeply reimplemented FireComponent methods.
-// Called from engine/reimpl/firecomponent.cpp wrappers.
+// Function declarations for the deeply reimplemented FireComponent methods.
 
 #include "FireComponent.h"
 #include <cstdint>
 
 // ============================================================
-// FireComponent -- building fire simulation
-// Vtable: 0x140159380
-// Size: 0x48 bytes
+// FireComponent — building fire simulation
+// Vtable: 0x140159380 (16 slots; FireDescription's vtable starts at 0x140159400)
+// Size:   0x48 bytes
+// Overridden slots: 0, 1, 2, 3, 9, 15 — see engine/types/FireComponent.h for the
+// byte-verified table. Slots 4-8 and 10-14 are bare `RET` base stubs.
 // ============================================================
 
-// Update (vtable slot [9], 0x140048fb0): Two-state fire system.
-// Active (field30 != 0): countdown + spread + extinguish.
-// Inactive (field30 == 0): accumulate time + random fire-start probability.
+// Update (slot 9, 0x140048fb0): idle => accumulate + roll for ignition;
+// burning => count down, spread, extinguish.
 void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime);
 
-// Init: resolve all internal function pointers (called once at startup)
+// Shutdown / Serialize (slot 3, 0x140049a90): Time +0x30, Time +0x38, int +0x28,
+// and int +0x2c when the stream version > 0.
+void FireComponent_Shutdown(FireComponent* self, void* stream);
+
+// Resolve internal function pointers (called once at startup).
 void FireComponent_InitFuncs();
+
+// ---- leaf bodies, firecomponent_ignite.cpp ----
+extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
+extern "C" void FireComponent_Spread_130(void* self);          // 0x140049130
+extern "C" void FireComponent_Extinguish_4c0(void* self);      // 0x1400494c0
+extern "C" void FireComponent_WaterApplied_090(void* self, int msg);  // 0x140049090
+extern "C" void FireComp_MarkDanger_99c0(void* self, short delta);    // 0x1400499c0
+extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t unused,
+                                               int xMin, int yMin, int xMax, int yMax,
+                                               short delta);           // 0x14009fa80
+extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx);
+extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32_t capacity);
+
+// ---- shared with the TORNADO lane, firecomponent_smstate.cpp ----
+// The tornado building-damage arm resolves these through ResolveAddr; they are
+// ported and registered ONCE so both lanes dispatch the same body.
+extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp);   // 0x14011e690
+extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp,
+                                                  const int64_t* burnTime);  // 0x14011e7b0
+extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp);         // 0x14011ea10
+
+// Vtable registration (0x140159380) — called from address_registry.cpp.
+extern "C" void RegisterFireComponentVtable();
+
+// Type-id globals, filled after Engine::Startup from game_main.cpp.
+extern "C" void FillTypeIdGlobals_fire();

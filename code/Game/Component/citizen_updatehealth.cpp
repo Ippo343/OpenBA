@@ -42,6 +42,8 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
 
@@ -131,6 +133,181 @@ static inline int64_t TimeFromSeconds(float secs) {
     int64_t t = 0;
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
     return t;
+}
+
+// ============================================================
+// [Plague] soak instrumentation (DIAG ONLY — no behaviour change)
+// ============================================================
+// Every line reports an OUTCOME, printed from inside the guard it describes, with
+// both arms covered. Default ON; kill with BANISHED_PLAGUE_TRACE=0. The only
+// high-frequency site (the per-citizen catch roll) is a periodic census, not a
+// per-call line; every other event is inherently rare.
+static bool PlagueTraceOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_PLAGUE_TRACE");
+        en = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return en == 1;
+}
+
+// Catch-roll census. Printed every kCensusPeriod rolls so a soak gets a steady
+// pulse whether or not anyone ever gets ill — a silent log would otherwise be
+// indistinguishable from "the roll never runs".
+static const long kCensusPeriod = 4000;
+static long s_rollCalls = 0, s_rollSkippedNoWindow = 0, s_rollFired = 0;
+static long s_rollEpidemicBlocked = 0;
+static double s_rollChanceSum = 0.0;
+static float  s_rollChanceMax = 0.0f;
+
+// Periodic census of the catch roll — the "not fired" arm. Without this a soak in
+// which nobody ever falls ill produces an empty log, which reads identically to the
+// roll never running at all.
+static void PlagueCensusTick() {
+    if (!PlagueTraceOn()) return;
+    if (s_rollCalls % kCensusPeriod != 0) return;
+    fprintf(stderr,
+            "[Plague] CENSUS rolls=%ld fired=%ld noWindow(B<=0)=%ld epidemicBlocked=%ld "
+            "meanChance=%.8f maxChance=%.8f\n",
+            s_rollCalls, s_rollFired, s_rollSkippedNoWindow, s_rollEpidemicBlocked,
+            (s_rollCalls > s_rollSkippedNoWindow)
+                ? s_rollChanceSum / (double)(s_rollCalls - s_rollSkippedNoWindow) : 0.0,
+            s_rollChanceMax);
+    fflush(stderr);
+}
+
+// One-shot tuning report: the numbers the cure arm depends on. Valid on the first
+// UpdateHealth call — the CitizenDescription is fully populated by then.
+static bool s_bootReported = false;
+
+// Hospital census. RE-ARMS until it has proof the registry is populated, because an
+// assertion of absence is only valid once the list is known to be non-empty.
+//
+// ⚠ WHAT THIS LIST ACTUALLY IS (root-caused 2026-08-22 after a smoke run reported
+// "buildings=0" on a town that plainly had buildings):
+// FindCareBuilding -> sub_1930 (0x140111930) walks townMgr+0x60 / count +0x68, and that
+// is the TOWN ATTENDANCE REGISTRY, not a building list. It is appended by
+// AttendanceComponent state-2 enter (retail 0x140043c90 — the OPEN transition), so a
+// building appears in it only once it HAS an AttendanceComponent AND that component has
+// opened. The real building/house registry is a different array, townMgr+0x20 / +0x28
+// (the one Game::StartRandomFire and the employment scan use).
+// The earlier label "buildings=" was therefore wrong, and wrong in the worst direction:
+// it made an empty attendance registry read as an empty town. Both counts are now
+// printed so the two cases can never be confused again.
+static bool s_censusDone = false;
+static long s_censusTries = 0;
+
+static void PlagueHospitalCensus(void* gw, void* healerProf) {
+    if (s_censusDone) return;
+    ++s_censusTries;
+
+    uintptr_t mgr = gw ? *(uintptr_t*)((uintptr_t)gw + 0xf0) : 0;
+    if (!mgr) {
+        if (s_censusTries == 1) {
+            fprintf(stderr, "[Plague] BOOT: town manager (gw+0xf0) NULL — census re-arming\n");
+            fflush(stderr);
+        }
+        return;
+    }
+
+    int attendance = *(int*)(mgr + 0x68);          // townMgr+0x60/+0x68 — what sub_1930 walks
+    int buildings  = *(int*)(mgr + 0x28);          // townMgr+0x20/+0x28 — the real building list
+    int citizens   = *(int*)(mgr + 0xa8);
+
+    if (attendance <= 0) {
+        // NOT an assertion of absence. Say plainly that we cannot answer yet.
+        if (s_censusTries == 1 || (s_censusTries % 5000) == 0) {
+            fprintf(stderr,
+                    "[Plague] BOOT: hospital census DEFERRED — attendance registry "
+                    "(townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. "
+                    "buildings(townMgr+0x28)=%d citizens(+0xa8)=%d try=%ld. A building "
+                    "joins that registry only when its AttendanceComponent reaches state 2 "
+                    "(the OPEN transition), which is after StartTown. Re-arming.\n",
+                    buildings, citizens, s_censusTries);
+            fflush(stderr);
+        }
+        if (s_censusTries >= 200000) {
+            s_censusDone = true;
+            fprintf(stderr,
+                    "[Plague] BOOT: hospital census GAVE UP after %ld tries — the attendance "
+                    "registry never became non-empty. buildings(townMgr+0x28)=%d. If the town "
+                    "has buildings, nothing is completing the AttendanceComponent OPEN "
+                    "transition, and FindCareBuilding / FindStorage / TryEnrolInSchool are ALL "
+                    "blind for the same reason. That is the thing to chase, not the hospital.\n",
+                    s_censusTries, buildings);
+            fflush(stderr);
+        }
+        return;
+    }
+
+    // Registry is populated — an answer here is now meaningful.
+    s_censusDone = true;
+    uint32_t tidWpc = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    uintptr_t arr = *(uintptr_t*)(mgr + 0x60);
+    int withWpc = 0, matches = 0;
+    for (int i = 0; i < attendance && arr && tidWpc; i++) {
+        uintptr_t comp = *(uintptr_t*)(arr + (uintptr_t)i * 8);
+        if (!comp) continue;
+        uintptr_t entity = *(uintptr_t*)(comp + 0x10);
+        if (!entity) continue;
+        int n = *(int*)(entity + 0x38);
+        uintptr_t comps = *(uintptr_t*)(entity + 0x30);
+        for (int j = 0; j < n && comps; j++) {
+            uintptr_t c = *(uintptr_t*)(comps + (uintptr_t)j * 8);
+            if (!c) continue;
+            uint32_t (*getTid)(void*) = *(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10);
+            if (!getTid || getTid((void*)c) != tidWpc) continue;
+            ++withWpc;
+            if (*(void**)(c + 0x48) == healerProf && healerProf != nullptr) ++matches;
+            break;
+        }
+    }
+    fprintf(stderr,
+            "[Plague] BOOT: hospital census — attendanceRegistry(townMgr+0x68)=%d "
+            "withWorkPlaceComponent=%d matchingHealerProfession=%d "
+            "buildings(townMgr+0x28)=%d tidWorkPlaceComponent=%u settledAfter=%ld tries%s\n",
+            attendance, withWpc, matches, buildings, tidWpc, s_censusTries,
+            (matches == 0) ? "  <== NO HOSPITAL IN THE ATTENDANCE REGISTRY: FindCareBuilding"
+                             " can never link, so the cure arm is unreachable. Check that the"
+                             " hospital template carries an AttendanceDescription and that its"
+                             " AttendanceComponent has OPENED." : "");
+    fflush(stderr);
+}
+
+static void PlagueBootReport(u8* citizen) {
+    if (!PlagueTraceOn()) return;
+
+    void* gw = GameWorld();
+    u8* desc = *(u8**)(citizen + 0x288);
+    if (!desc) {
+        if (!s_bootReported) {
+            s_bootReported = true;
+            fprintf(stderr, "[Plague] BOOT: citizen+0x288 (CitizenDescription) is NULL — "
+                            "no tuning available\n");
+            fflush(stderr);
+        }
+        return;
+    }
+
+    void* healerProf = *(void**)(desc + 0x30);
+
+    if (!s_bootReported) {
+        s_bootReported = true;
+        float careMult = *(float*)(desc + 0x128);
+        fprintf(stderr,
+                "[Plague] BOOT: careMult(desc+0x128)=%.4f%s healerProf(desc+0x30)=%p "
+                "maxHealth(+0x70)=%.3f durBase(+0x94)=%.3f durSpread(+0x98)=%.3f "
+                "immunityMonths(+0x9c)=%.3f diseaseList(gw+0xa8)=%p tidDisease=%u\n",
+                careMult,
+                (careMult == 0.0f) ? "  <== ZERO: (1/recipMortality)/0 is INFINITE, every"
+                                     " treated citizen dies instantly" : "",
+                healerProf, *(float*)(desc + 0x70), *(float*)(desc + 0x94),
+                *(float*)(desc + 0x98), *(float*)(desc + 0x9c),
+                gw ? *(void**)((uintptr_t)gw + 0xa8) : nullptr, s_tidDisease);
+        fflush(stderr);
+    }
+
+    PlagueHospitalCensus(gw, healerProf);
 }
 
 } // namespace
@@ -314,12 +491,31 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
     EnsureInit();
     u8* s = (u8*)self;
     void* gw = GameWorld();
-    if (!self || !disease || !gw) return;
+    if (!self || !disease || !gw) {
+        if (PlagueTraceOn())
+            fprintf(stderr, "[Plague] INFECT skip=nullarg citizen=%p disease=%p gw=%p\n",
+                    self, disease, gw), fflush(stderr);
+        return;
+    }
 
-    if (*(int64_t*)(s + 0x68) != 0) return;
-    if (*(int64_t*)(s + 0x70) > 0) return;
+    if (*(int64_t*)(s + 0x68) != 0) {
+        if (PlagueTraceOn())
+            fprintf(stderr, "[Plague] INFECT skip=alreadySick citizen=%p\n", self), fflush(stderr);
+        return;
+    }
+    if (*(int64_t*)(s + 0x70) > 0) {
+        if (PlagueTraceOn())
+            fprintf(stderr, "[Plague] INFECT skip=immune citizen=%p immunityTicks=%lld\n",
+                    self, (long long)*(int64_t*)(s + 0x70)), fflush(stderr);
+        return;
+    }
     uintptr_t p1f0 = *(uintptr_t*)(s + 0x1f0);
-    if (p1f0 && *(char*)(p1f0 + 0x4d) != 0 && *(int64_t*)(s + 0x248) != 0) return;
+    if (p1f0 && *(char*)(p1f0 + 0x4d) != 0 && *(int64_t*)(s + 0x248) != 0) {
+        if (PlagueTraceOn())
+            fprintf(stderr, "[Plague] INFECT skip=exemptProfessionAndHoused citizen=%p\n",
+                    self), fflush(stderr);
+        return;
+    }
 
     void* rng = *(void**)((uintptr_t)gw + 0xd8);
 
@@ -352,6 +548,21 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
     *(int64_t*)(s + 0x78) = TimeFromSeconds(
         *(float*)((uintptr_t)disease + 0x30) * SecsPerMonth());
     if (s_findCareBuilding) s_findCareBuilding(self);
+
+    // Both arms: whether the care link actually got made. +0x228 == 0 here means
+    // FindCareBuilding (0x140111590 -> sub_1930 0x140111930) found no building whose
+    // WorkPlaceComponent+0x48 matches CitizenDescription+0x30 — no hospital, or the
+    // profession ref is null. Without it RecoverOrDie uses careMult 1.0.
+    if (PlagueTraceOn()) {
+        fprintf(stderr,
+                "[Plague] INFECT ok citizen=%p disease=%p durationTicks=%lld "
+                "spreadTicks=%lld care(+0x228)=%s finderResolved=%d\n",
+                self, disease, (long long)*(int64_t*)(s + 0x70),
+                (long long)*(int64_t*)(s + 0x78),
+                (*(int64_t*)(s + 0x228) != 0) ? "LINKED" : "NOT-LINKED",
+                s_findCareBuilding ? 1 : 0);
+        fflush(stderr);
+    }
 }
 
 // ============================================================
@@ -365,13 +576,31 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
     EnsureInit();
     void* gw = GameWorld();
     if (!self || !gw || !fn_IsDerivedFrom || !fn_ExternalList_GetResourceCount ||
-        !fn_Random_RandFloat || s_tidDisease == 0)
+        !fn_Random_RandFloat || s_tidDisease == 0) {
+        // One-shot: this is a structural condition, true for every citizen every tick.
+        static bool once = false;
+        if (PlagueTraceOn() && !once && (once = true))
+            fprintf(stderr, "[Plague] CATCH bail=unresolved citizen=%p gw=%p IsDerivedFrom=%p "
+                    "GetResourceCount=%p RandFloat=%p tidDisease=%u\n",
+                    self, gw, (void*)fn_IsDerivedFrom, (void*)fn_ExternalList_GetResourceCount,
+                    (void*)fn_Random_RandFloat, s_tidDisease), fflush(stderr);
         return;
-    if (CitizenComp_AnyCitizenSick(*(void**)((uintptr_t)gw + 0xf0))) return;
+    }
+    if (CitizenComp_AnyCitizenSick(*(void**)((uintptr_t)gw + 0xf0))) {
+        ++s_rollEpidemicBlocked;
+        return;   // censused, not logged per-call: happens for every citizen every tick
+    }
 
     void* rng = *(void**)((uintptr_t)gw + 0xd8);
     void* list = *(void**)((uintptr_t)gw + 0xa8);
-    if (!list) return;
+    if (!list) {
+        // One-shot: structural, true for every citizen every tick while the flag is off.
+        static bool once = false;
+        if (PlagueTraceOn() && !once && (once = true))
+            fprintf(stderr, "[Plague] CATCH bail=noDiseaseList (gw+0xa8 NULL — set "
+                    "BANISHED_LIVE_DISEASELIST=1) citizen=%p\n", self), fflush(stderr);
+        return;
+    }
     int count = fn_ExternalList_GetResourceCount(list);
 
     struct { uintptr_t data; int count; int cap; } cum = { 0, 0, 0 };
@@ -387,16 +616,30 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
 
     float target = fn_Random_RandFloat(rng) * total;
     float prev = 0.0f;
+    int picked = -1;
     for (int i = 0; i < count; i++) {
         float c = ((float*)cum.data)[i];
         if (prev <= target && target < c) {
             uintptr_t entry = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)list + 0x20) +
                                             (uintptr_t)i * 8);
             void* d = fn_IsDerivedFrom((void*)entry, s_tidDisease) ? (void*)entry : nullptr;
+            picked = i;
+            if (PlagueTraceOn()) {
+                fprintf(stderr, "[Plague] CATCH draw citizen=%p entries=%d totalWeight=%.4f "
+                        "target=%.4f -> idx=%d disease=%p\n",
+                        self, count, total, target, i, d);
+                fflush(stderr);
+            }
             CitizenComp_Infect(self, d);
             break;
         }
         prev = c;
+    }
+    // Other arm: no bucket matched (total weight 0, or an empty list).
+    if (picked < 0 && PlagueTraceOn()) {
+        fprintf(stderr, "[Plague] CATCH draw citizen=%p entries=%d totalWeight=%.4f "
+                "target=%.4f -> NO BUCKET (nothing drawn)\n", self, count, total, target);
+        fflush(stderr);
     }
     if (cum.data) fn_MemFreeStatic((void*)cum.data);
 }
@@ -416,7 +659,14 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
     if (!disease) return;
 
     void* rng = *(void**)((uintptr_t)gw + 0xd8);
-    if (fn_Random_RandFloat(rng) > *(float*)((uintptr_t)disease + 0x34)) return;
+    float contagionRoll = fn_Random_RandFloat(rng);
+    float contagion = *(float*)((uintptr_t)disease + 0x34);
+    if (contagionRoll > contagion) {
+        if (PlagueTraceOn())
+            fprintf(stderr, "[Plague] SPREAD citizen=%p roll=FAILED (%.4f > contagion %.4f)\n",
+                    self, contagionRoll, contagion), fflush(stderr);
+        return;
+    }
 
     float radius = *(float*)((uintptr_t)disease + 0x38);
     uint32_t typeId = s_tidCitizen;
@@ -432,6 +682,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
                      *(float*)(model + 0x160) };
 
     struct { uintptr_t data; int count; int cap; } found = { 0, 0, 0 };
+    void* victim = nullptr;   // diag only
     void* scratch = nullptr;
     Map_RadiusQuery_92990(*(float**)((uintptr_t)gw + 0x88), &scratch, pos, &radius,
                           (int)typeId, &found);
@@ -450,9 +701,23 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&citizenIBP);
         if (citizenIBP && *(int64_t*)((uintptr_t)citizenIBP + 0x68) == 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&citizenIBP);
+            victim = (void*)citizenIBP;
+            if (PlagueTraceOn()) {
+                fprintf(stderr, "[Plague] SPREAD citizen=%p roll=PASSED (%.4f <= %.4f) "
+                        "radius=%.2f hits=%d -> INFECTING victim=%p\n",
+                        self, contagionRoll, contagion, radius, found.count, victim);
+                fflush(stderr);
+            }
             CitizenComp_Infect((void*)citizenIBP, disease);
             break;
         }
+    }
+    // Other arm: the roll passed but nobody in range was eligible.
+    if (!victim && PlagueTraceOn()) {
+        fprintf(stderr, "[Plague] SPREAD citizen=%p roll=PASSED (%.4f <= %.4f) "
+                "radius=%.2f hits=%d -> NO ELIGIBLE VICTIM (all self or already sick)\n",
+                self, contagionRoll, contagion, radius, found.count);
+        fflush(stderr);
     }
     fn_MemFreeStatic((void*)found.data);   // original frees even when null
 }
@@ -475,13 +740,29 @@ extern "C" char CitizenComp_RecoverOrDie(void* self) {
     void* disease = *(void**)(s + 0x68);
     float deathChance = (1.0f / *(float*)((uintptr_t)disease + 0x40)) / mult;
 
+    bool treated = (*(int64_t*)(s + 0x228) != 0);
     if (deathChance >= r) {                     // COMISS deathChance,r; !JC
+        if (PlagueTraceOn()) {
+            fprintf(stderr, "[Plague] RESOLVE citizen=%p outcome=DIED deathChance=%.5f "
+                    "roll=%.5f recipMortality(+0x40)=%.3f careMult=%.4f care(+0x228)=%s\n",
+                    self, deathChance, r, *(float*)((uintptr_t)disease + 0x40), mult,
+                    treated ? "LINKED" : "NOT-LINKED");
+            fflush(stderr);
+        }
         if (s_releaseLink) s_releaseLink(self);
         return 0;                               // dead
     }
     *(int64_t*)(s + 0x78) = 0;
     *(int64_t*)(s + 0x70) = TimeFromSeconds(*(float*)(desc + 0x9c) * SecsPerMonth());
     *(int64_t*)(s + 0x68) = 0;
+    if (PlagueTraceOn()) {
+        fprintf(stderr, "[Plague] RESOLVE citizen=%p outcome=RECOVERED deathChance=%.5f "
+                "roll=%.5f recipMortality(+0x40)=%.3f careMult=%.4f care(+0x228)=%s "
+                "immunityTicks=%lld\n",
+                self, deathChance, r, *(float*)((uintptr_t)disease + 0x40), mult,
+                treated ? "LINKED" : "NOT-LINKED", (long long)*(int64_t*)(s + 0x70));
+        fflush(stderr);
+    }
     if (s_releaseLink) s_releaseLink(self);
     return 1;                                   // recovered
 }
@@ -502,6 +783,8 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
     void* gw = GameWorld();
     if (!self || !dt || !gw) return 1;
 
+    PlagueBootReport(s);
+
     if (*(int64_t*)(s + 0x68) == 0) {
         *(int64_t*)(s + 0x70) -= *dt;
         if (*(int64_t*)(s + 0x70) < 0) *(int64_t*)(s + 0x70) = 0;
@@ -517,8 +800,11 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
         float A = (*(float*)(desc + 0x8c) - a) * m + a;
         float B = (*(float*)(desc + 0x90) - b) * m + b;
 
+        ++s_rollCalls;
         if (!(B > 0.0f)) {                       // COMISS 0,B; !JC (B <= 0 or NaN)
+            ++s_rollSkippedNoWindow;
             *(int64_t*)(s + 0x60) = 0;
+            PlagueCensusTick();
             return 1;
         }
         float elapsed = fn_Time_AsSeconds ? fn_Time_AsSeconds(s + 0x60) : 0.0f;
@@ -526,7 +812,20 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
         float denom = A * MonthsPerYear() * SecsPerMonth() * B;
         float ratio = elapsed / denom;
         float r = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
-        if (ratio > r) CitizenComp_CatchDisease(self);
+        s_rollChanceSum += (double)ratio;
+        if (ratio > s_rollChanceMax) s_rollChanceMax = ratio;
+        if (ratio > r) {
+            ++s_rollFired;
+            if (PlagueTraceOn()) {
+                fprintf(stderr, "[Plague] ROLL citizen=%p FIRED chance=%.6f roll=%.6f "
+                        "health=%.2f/%.2f A=%.4f B=%.4f elapsed=%.2fs\n",
+                        self, ratio, r, *(float*)(s + 0x50), *(float*)(desc + 0x70),
+                        A, B, elapsed);
+                fflush(stderr);
+            }
+            CitizenComp_CatchDisease(self);
+        }
+        PlagueCensusTick();
         return 1;
     }
 

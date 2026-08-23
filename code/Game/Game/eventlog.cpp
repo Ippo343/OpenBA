@@ -426,3 +426,25 @@ extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta) 
         }
     }
 }
+
+// ============================================================
+// Shared-leaf exports (for the address registry / other event writers)
+// ============================================================
+// These three are retail leaves used by more than one event writer. The crop
+// infestation writer (DiseaseComponent::Infect, 0x1400483a0) inlines a THIRD
+// entry-append variant — 3 format args, fixed colour 0xFFFF6060, icon 2,
+// popup -1 — so it needs the primitives rather than AddEvent/AddCitizenEvent.
+// Exported here instead of re-ported there: porting one retail function twice
+// lets the two copies diverge (see reference_one_retail_fn_ported_twice_diverges).
+
+extern "C" void EventLog_ArrayGrow_Reg(void* arrBase, int newCount, const void* newEntry) {
+    EventArray_Grow(arrBase, newCount, newEntry);
+}
+
+extern "C" void EventLog_YearString_Reg(void* gameWorld, void* retStr) {
+    EventLog_YearString(gameWorld, retStr);
+}
+
+extern "C" void EventLog_SeasonString_Reg(void* gameWorld, void* eventLog, void* retStr) {
+    EventLog_SeasonString(gameWorld, eventLog, retStr);
+}

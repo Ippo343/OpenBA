@@ -3038,6 +3038,17 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
 // consumed by CitizenComp_TryEnrolInSchool (0x140111840), and it matches the schoolhouse's
 // WPC+0x48 exactly. This finder was never supposed to reach a school.
 // See [[project_wpc_first_seat_and_attendance_keys]].
+// [Plague] soak trace — same kill-switch as citizen_updatehealth.cpp's tag.
+// Default ON; BANISHED_PLAGUE_TRACE=0 disables. Diagnostic only.
+static bool CareTraceOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_PLAGUE_TRACE");
+        en = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return en == 1;
+}
+
 char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
@@ -3045,8 +3056,8 @@ char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
     int64_t found = 0;
     int64_t keyIBP = 0;
     fn_InternalBasePtr_Ctor(&keyIBP, nullptr);
-    CitizenComp_sub_1930(reinterpret_cast<int64_t>(param_1), &found, &keyIBP,
-                         *reinterpret_cast<int64_t*>(desc + 0x30));
+    int64_t healerProf = *reinterpret_cast<int64_t*>(desc + 0x30);
+    CitizenComp_sub_1930(reinterpret_cast<int64_t>(param_1), &found, &keyIBP, healerProf);
     if (found != 0) {
         fn_InternalBasePtr_Ctor(&keyIBP, param_1);
         fn_InternalBasePtr_CheckPtr(&found);
@@ -3057,8 +3068,32 @@ char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
                 s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
                                    *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
             *reinterpret_cast<int64_t*>(p + 0x228) = found;
+            // [Plague] outcome: linked. Only reached for a sick citizen (the two call
+            // sites both gate on +0x68 != 0), so this is inherently low volume.
+            if (CareTraceOn()) {
+                fprintf(stderr, "[Plague] CARE citizen=%p LINKED building=%p "
+                        "healerProf(desc+0x30)=%p\n",
+                        (void*)param_1, (void*)found, (void*)healerProf);
+                fflush(stderr);
+            }
             return 1;
         }
+        // Other arm: a profession-matching building exists but sub_40f0 rejected it.
+        if (CareTraceOn()) {
+            fprintf(stderr, "[Plague] CARE citizen=%p NOT-LINKED reason=candidateRejected "
+                    "(sub_40f0) building=%p healerProf(desc+0x30)=%p\n",
+                    (void*)param_1, (void*)found, (void*)healerProf);
+            fflush(stderr);
+        }
+        return 0;
+    }
+    // Other arm: sub_1930 found no building whose WorkPlaceComponent+0x48 == desc+0x30.
+    if (CareTraceOn()) {
+        fprintf(stderr, "[Plague] CARE citizen=%p NOT-LINKED reason=%s "
+                "healerProf(desc+0x30)=%p\n", (void*)param_1,
+                (healerProf == 0) ? "healerProfessionRefIsNull" : "noMatchingBuilding",
+                (void*)healerProf);
+        fflush(stderr);
     }
     return 0;
 }

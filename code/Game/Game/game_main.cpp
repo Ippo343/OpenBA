@@ -69,6 +69,10 @@ extern "C" void FillComponentTypeIdGlobals_animal();
 // idempotent, also self-fills lazily on the first live animal tick).
 extern "C" void FillComponentTypeIdGlobals_animal_update();
 extern "C" void FillComponentTypeIdGlobals_animal_serialize();
+// Tornado lane — ParticleComponent type-id global 0x1401c4720. Root cause of the
+// 2026-08-22 fire-arm crash: unregistered, so the shared finder 0x140005200 missed
+// on every entity and FireComponent::Ignite faulted on the null. See reg_tornado.cpp.
+extern "C" void FillTypeIdGlobals_tornado();
 // Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
 extern "C" void FillTypeIdGlobals_actionchild();
 // Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
@@ -80,6 +84,8 @@ extern "C" void FillTypeIdGlobals_citizenai();
 extern "C" void FillTypeIdGlobals_tradeui();
 extern "C" void ReportTypeIdGlobals_elements();
 extern "C" void FillTypeIdGlobals_worktail_fire();
+extern "C" void FillTypeIdGlobals_fire();
+extern "C" void FillTypeIdGlobals_cropdisease();
 // step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
 extern "C" void FillTypeIdGlobals_citizen_lifeevent();
 extern "C" void FillControlUITypeIds();
@@ -496,6 +502,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_fruit();
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
+    FillTypeIdGlobals_tornado();           // ParticleComponent id 0x1401c4720 (fire + tornado both depend on it)
     FillComponentTypeIdGlobals_animal();   // herd/animal/livestock ids (self-gated)
     FillComponentTypeIdGlobals_animal_update(); // Character comp/desc ids (self-gated)
     FillComponentTypeIdGlobals_animal_serialize(); // serialize-only PopulationComponent/Component ids
@@ -503,6 +510,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
     FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
     FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
+    FillTypeIdGlobals_fire();              // Fire lane — FireDescription 0x1401c4218 + FireComponent 0x1401c41e0
+    FillTypeIdGlobals_cropdisease();       // Crop infestation — Disease Component/Description ids
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)

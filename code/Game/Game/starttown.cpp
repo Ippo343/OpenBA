@@ -1750,7 +1750,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // Footprint rects of everything placed, so the extra-house search can avoid overlaps.
     // Bounded: 8 start structures + 1 demo foundation + kMaxExtraHouses.
     struct Rect { int x, y, w, h; };
-    Rect occ[8 + 1 + kMaxExtraHouses + 8];
+    Rect occ[8 + 1 + kMaxExtraHouses + 16];
     int  occN = 0;
     g_stOccupied.clear();
     auto Occupy = [&](int x, int y, int w, int h) {
@@ -2650,6 +2650,25 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // candidates — and the table entry, not the port, is what needs correcting.
         ringPlace("BANISHED_BUILD_DEMO_TAVERN", "Template\\Tavern.rsc",
                   "tavern", 6, 6);
+        // ── the two DISASTER-RESPONSE buildings (disaster wave 2026-08-22) ────────
+        // Neither mechanic can be observed end to end without its response building in
+        // the world, and the autostart town founds neither:
+        //   Well        — the water source the FireWork spiral search looks for. Without
+        //                 one the bucket brigade may still run (the search's cell mask
+        //                 0xe07 plausibly admits river cells too, unconfirmed), but a
+        //                 well makes the extinguish path deterministic instead of
+        //                 dependent on how close the founding cluster sat to water.
+        //   DoctorHouse — Banished's "hospital". This is the ONLY way a sick citizen can
+        //                 be treated: FindCareBuilding matches a building whose
+        //                 WorkPlaceComponent+0x48 equals CitizenDescription+0x30 (the
+        //                 healer profession), and the care link is the whole medical
+        //                 benefit (it divides the death roll and suspends hunger).
+        // Both are ordinary placed structures with an authored CreatePlacedDescription,
+        // so the generic ring scan sizes them and the fallbacks are never used.
+        ringPlace("BANISHED_BUILD_DEMO_WELL", "Template\\Well.rsc",
+                  "well", 3, 3);
+        ringPlace("BANISHED_BUILD_DEMO_HOSPITAL", "Template\\DoctorHouse.rsc",
+                  "hospital", 7, 7);
         // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
         // Not ring-placed like the crop field, and for a sharper reason than the
         // gatherer hut's: the lodge's siting input does not exist yet at all. The only

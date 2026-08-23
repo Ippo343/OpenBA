@@ -129,6 +129,7 @@ extern "C" {
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireDescriptionVtable();
+    void RegisterFireComponentVtable();
     void RegisterFishingDescriptionVtable();
     void RegisterFloorDescriptionVtable();
     void RegisterForesterDescriptionVtable();
@@ -492,6 +493,8 @@ extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWo
 extern void RegisterTradeUILeavesBatch();     // Wave A: TradeUI DynArray clear leaves (16050/16130/16200)
 extern void RegisterTradeUICheckoutBatch();   // Wave D: TradeUI checkout (81420) + leaves (5baa0/5a490)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
+extern void RegisterFireBatch();             // Fire disaster lane: ignite/spread/extinguish/slot15 + the 2 type-id globals
+extern void RegisterCropDiseaseBatch();      // Crop infestation / livestock disease (DiseaseComponent 48xxx)
 extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: PastureWork Slot4 (f2370) registration
 extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road enqueue (a6f00/9d360/9ce00/a6e30)
 extern void RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A: residence RB-tree (17230/15ec0/172f0/17460/14b40)
@@ -539,6 +542,7 @@ extern void RegisterToolbarUtilityBatch(); // GUI Phase 4: utility-dialog helper
 extern void RegisterEditToolSelectBatch(); // EditTool select-entity->open-info-dialog (fd3b0 Entity_impl_d3b0)
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
 extern void RegisterComponentGap_C();      // Component GAP batch C visuals leaves: b0d00 TerrainDecalRemove + aa440 StatusIcon bounds
+extern "C" void RegisterTornadoLane();     // Tornado wave: vtable 14015aa80 + slots 3/4/8 + path/damage leaves
 extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
 extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
 extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
@@ -648,6 +652,8 @@ static void RegisterCodeFunctions() {
     RegisterTradeUILeavesBatch();    // Wave A — TradeUI DynArray clear leaves (3 of the 10 gate deps)
     RegisterTradeUICheckoutBatch();  // Wave D — TradeUI checkout; opt-in via BANISHED_LIVE_TRADE_CHECKOUT
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
+    RegisterFireBatch();             // Fire disaster lane (standalone/reg_fire.cpp)
+    RegisterCropDiseaseBatch();      // Crop infestation — opt-in via BANISHED_LIVE_CROPDISEASE
     RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail — PastureWork Slot4 (f2370) registration
     RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A — zone+road enqueue cluster
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
@@ -747,6 +753,12 @@ static void RegisterCodeFunctions() {
     //   Phase-4 utility path; teardown/refresh helpers null-guarded: fc9e0 gated on
     //   BANISHED_SELECTION_OUTLINE (reg_player_render), fcc90 deliberately never
     //   registered (per-frame EditTool deactivate slot — see reg_player_render.cpp).
+
+    // Tornado lane (BANISHED_LIVE_TORNADO): component vtable 0x14015aa80 plus the
+    // three overridden slots (3 Serialize / 4 Startup / 8 per-frame Update) and the
+    // movement + damage leaves. Also carries the first port of the Vector3 array
+    // grow 0x14000cf40, ParticleComponent 0x140053720 and AudioComponent 0x140042960.
+    RegisterTornadoLane();
 
     RegisterComponentGap_C();      // Component GAP batch C visuals leaves — 0x1400b0d00
     //   TerrainDecalSystem release-one-slot (DecalComponent::OnCreate detach; without it every
@@ -1682,6 +1694,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireDescriptionVtable();
+    RegisterFireComponentVtable();
     RegisterFishingDescriptionVtable();
     RegisterFloorDescriptionVtable();
     RegisterForesterDescriptionVtable();

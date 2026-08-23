@@ -67,10 +67,17 @@ void WellComponent_Shutdown(WellComponent* self, void* stream) {
 // Registers the owning entity with the world manager's water source list.
 
 void WellComponent_OnCreate(WellComponent* self) {
-    // Create InternalBasePtr on stack from owner entity
+    // ⚠ FIXED 2026-08-22 (fire lane): retail 0x14005cf60 is
+    //     InternalBasePtr::InternalBasePtr(&local, param_1)   // param_1 == THIS
+    //     FUN_140091ba0(*(gw + 0xf0), &local)
+    // — it wraps the COMPONENT, not the owner entity. This passed `self->owner`,
+    // so the IBP handed to 0x140091ba0 identified the wrong object and its
+    // scan-for-matching-IBP could never hit. Latent while WellComponent was inert
+    // (slot 7 was never installed); it matters now that the FireWork spiral search
+    // depends on wells being findable in the gw+0xf0 entity index.
     uint8_t basePtr[24];
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(basePtr, self->owner);
+        fn_InternalBasePtr_Ctor(basePtr, self);
 
     // Push to world manager's water source array at +0xF0
     if (s_pWorldManager && *s_pWorldManager && s_fn_ArrayPushEntity) {
