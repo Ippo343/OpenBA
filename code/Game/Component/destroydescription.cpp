@@ -10,11 +10,27 @@
 //   +0x2c: int32 _val1           (default 1)
 //   +0x30: int32 _val2           (default 0)
 //
+// Named from their only consumer, the state-6 collapse (destroycomponent_state6.cpp):
+//   _val0 = rubble MATERIAL-SET index, _val1 = rubble DECAL state,
+//   _val2 = rubble MESH-VARIANT floor.
+//
 // Serialize (FUN_14011de70) stream order:
 //   1. ExternalPtr serialize (+0x20)   FUN_140002340
 //   2. int (+0x28)
 //   3. int (+0x2c)
 //   4. int (+0x30)
+//
+// ⚠ OPEN DEFECT (found 2026-08-23, state-6 bring-up): the THIRD int read runs off the
+// end of the record. Probed on the live path, every DestroyDescription reads
+// 1/1/0 going into the three calls (the ctor defaults) and 1/1/0xE1E1E1E1 coming out
+// — so _val0/_val1 take real stream values and _val2 takes the Runtime's uninit fill.
+// Retail's own ctor (0x140033c30) sets ONLY +0x20/+0x28/+0x2c and leaves +0x30 to
+// Serialize, and retail's Serialize (above) reads all three unconditionally at
+// version 0 exactly as we do — so the divergence is upstream of this function: either
+// our ExternalPtr serialize for +0x20 consumes a different byte count than retail's
+// FUN_140002340, or the stream is genuinely two ints short. NOT diagnosed. Until it
+// is, destroycomponent_state6.cpp refuses an out-of-range _val2 rather than clamping
+// a mesh index to garbage — see the note there.
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 

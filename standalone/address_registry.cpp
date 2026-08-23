@@ -1226,6 +1226,14 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??1MeshInstance@Graphics@@UEAA@XZ"));
     RegisterDispatchSlot(0x140151498,                       // MeshInstance::SetMesh
         (uintptr_t)ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
+    // Material swap — read by ModelComp_SetMaterialSet_125020 (the DestroyComponent
+    // state-6 rubble step, destroycomponent_state6.cpp), which re-points a collapsing
+    // building's MeshInstance onto the mesh's BURNT material set. Unregistered, the
+    // rubble renders with its intact materials and the fire looks like a mesh swap only.
+    RegisterDispatchSlot(0x140152288,                       // GraphicsMesh::GetMaterialList(int) const
+        (uintptr_t)ResolveExport("?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z"));
+    RegisterDispatchSlot(0x140151408,                       // MeshInstance::SetMaterialInstance
+        (uintptr_t)ResolveExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z"));
     RegisterDispatchSlot(0x1401514b0,                       // MeshInstance::IsAnimating
         (uintptr_t)ResolveExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ"));
     RegisterDispatchSlot(0x140152990,                       // MeshInstance::Serialize

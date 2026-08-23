@@ -42,6 +42,11 @@
 static uint32_t g_tid_CreatePlacedDescription = 0;  // 0x1401c7468
 static uint32_t g_tid_ModelComponent          = 0;  // 0x1401c7a50
 static uint32_t g_tid_ModelDescription        = 0;  // 0x1401c7a88
+// 0x1401c7580 is DecalComponent — the RegisterType at 0x14014edd0 passes
+// rdx="Decal" / r8="Component", the same name+suffix pair ModelComponent uses at
+// 0x14014f3d0. Read by the shared FindComponent<DecalComponent> (0x14000b630),
+// which the DestroyComponent state-6 rubble step uses to re-stamp the scorch mark.
+static uint32_t g_tid_DecalComponent          = 0;  // 0x1401c7580
 // FencedTool (pasture/crop-field) Startup constants — engine_funcs.cpp reads all
 // three via ResolveAddr; unregistered they stayed null, FencedTool_Startup found
 // no CreateFencedDescription, and the first fenced activation crashed on the
@@ -73,6 +78,7 @@ extern "C" void FillPipelineTypeIds() {
     g_tid_CreatePlacedDescription = ::Object::GetTypeIdByName("CreatePlacedDescription");
     g_tid_ModelComponent          = ::Object::GetTypeIdByName("ModelComponent");
     g_tid_ModelDescription        = ::Object::GetTypeIdByName("ModelDescription");
+    g_tid_DecalComponent          = ::Object::GetTypeIdByName("DecalComponent");
     g_tid_CreateFencedDescription = ::Object::GetTypeIdByName("CreateFencedDescription");
     g_tid_MapDescription          = ::Object::GetTypeIdByName("MapDescription");
     g_tid_RotationSetting         = ::Object::GetTypeIdByName("RotationSetting");
@@ -89,6 +95,7 @@ void RegisterPipelineTypeIds() {
     RegisterExeAddr(0x1401c7468, reinterpret_cast<uintptr_t>(&g_tid_CreatePlacedDescription));
     RegisterExeAddr(0x1401c7a50, reinterpret_cast<uintptr_t>(&g_tid_ModelComponent));
     RegisterExeAddr(0x1401c7a88, reinterpret_cast<uintptr_t>(&g_tid_ModelDescription));
+    RegisterExeAddr(0x1401c7580, reinterpret_cast<uintptr_t>(&g_tid_DecalComponent));
     RegisterExeAddr(0x1401c4100, reinterpret_cast<uintptr_t>(&g_tid_CreateFencedDescription));
     RegisterExeAddr(0x1401c7a18, reinterpret_cast<uintptr_t>(&g_tid_MapDescription));
     RegisterExeAddr(0x1401c63c8, reinterpret_cast<uintptr_t>(&g_tid_RotationSetting));

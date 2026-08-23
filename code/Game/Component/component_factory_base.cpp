@@ -301,6 +301,16 @@ static const char* const kDefaultOnFlags[] = {
     // building-upgrade path is dead without it — DestroyComponent installs no vtable slots
     // and no state table, so the UpgradeUI click pumps a state machine that does not exist.
     "BANISHED_LIVE_DESTROY",
+    // DestroyComponent state 6 — the COLLAPSE/RUBBLE arm fire and tornado take
+    // (destroycomponent_state6.cpp). Verified 2026-08-23: with 2 houses force-ignited the
+    // fire spread to a third and all 3 walked state-6 enter -> countdown -> rubble steps
+    // (mesh variant 2 -> 1 -> 0, 8 steps over a 4-minute soak) with an empty crash log, no
+    // null-vtable-slot skips in the action-abort walk, and no assert. Held opt-in for
+    // exactly one run: it cancels live citizen actions and empties a live StorageComponent
+    // mid-frame, which is the churn class that has faulted before. Without it the whole
+    // disaster lane is cosmetically dead — a burning building keeps its intact mesh until
+    // the fire's own state machine forces state 7.
+    "BANISHED_LIVE_DESTROY_COLLAPSE",
     // CitizenComponent::OnRemove (vtable slot 7) — verified end-to-end 2026-07-25 by A/B:
     // with it OFF, killing 5 citizens leaves all 5 in townMgr+0xa0 and the game takes an
     // ACCESS_VIOLATION shortly after; with it ON the list drains exactly (22->17, one per

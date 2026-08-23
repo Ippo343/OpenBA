@@ -26,10 +26,12 @@
 //           onto the old footprint and register it into the world
 //           (EntityList::RegisterEntity 0x1400c48a0, category from
 //           template+0x20). transitions {0, 2, 8, 7}.
-//   state 6 (collapse/rubble):  enter 0x14011d4d0 / 0x14011d400 / 0x14011d490 —
-//           DEFERRED (rubble-mesh path: sub_d5d0 0x14011d5d0 + sub_5020
-//           0x140125020 need Graphics::MeshInstance::SetMesh /
-//           GetMaterialList, unported). Safe one-shot-logging stub below.
+//   state 6 (collapse/rubble):  enter 0x14011d4d0, update 0x14011d400, tick
+//           0x14011d490 — PORTED in destroycomponent_state6.cpp (with the rubble
+//           step 0x14011d5d0 and the material re-point 0x140125020). The arm fire
+//           and tornado take: the model steps DOWN its damage-stage mesh variants
+//           to the DestroyDescription+0x30 rubble floor as the +0x48 burn
+//           countdown runs out. transitions {7}.
 //   state 7 (terminal):         no handlers. transitions {0, 8, 5}.
 //
 // Retail transition-action handlers (sub_4020 conds: 0x14011bcc0 / 0x14011d390
@@ -53,7 +55,8 @@
 // STANDALONE deviations (each logged once at runtime):
 //   * state-3 mesh/scene ops (Scene::RemoveObject, rubble-mesh swap) skipped —
 //     visual-only; mirrors residencecomponent.cpp's SetMeshFlag skip.
-//   * state 6 (bulldoze rubble) deferred entirely.
+//   * state 6's pick-mesh rebuild (0x140128f50) is skipped — see
+//     destroycomponent_state6.cpp.
 // NOW PORTED: sub_c530 contents-scatter (0x14011c530) — reclaimed goods spill as
 // RawMaterial ground piles over the footprint (was: dropped). See below.
 //
@@ -986,19 +989,14 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 }
 
 // ============================================================
-// State 6 enter — 0x14011d4d0. DEFERRED (rubble/collapse path).
+// State 6 (collapse/rubble) — PORTED in destroycomponent_state6.cpp.
 // ============================================================
-extern "C" char Destroy_State6Enter_d4d0(void* data, void* sm) {
-    (void)data; (void)sm;
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        std::fprintf(stderr, "[DestroySM] NOT-IMPLEMENTED state-6 collapse/rubble "
-                             "(0x14011d4d0/d400/d490) — deferred stub\n");
-        std::fflush(stderr);
-    }
-    return 1;
-}
+// enter 0x14011d4d0 / update 0x14011d400 / trans38-tick 0x14011d490, plus the
+// rubble step 0x14011d5d0 and the material re-point 0x140125020. Gated at runtime
+// by BANISHED_LIVE_DESTROY_COLLAPSE; see that file's header for the mechanism.
+extern "C" char Destroy_State6Enter_d4d0(void* data, void* sm);
+extern "C" char Destroy_State6Update_d400(void* data, void* sm);
+extern "C" char Destroy_State6Tick_d490(void* data, void* sm, void* time);
 
 // ============================================================
 // Dispatcher + state table for the DestroyComponent controller.
@@ -1021,8 +1019,10 @@ extern "C" void DestroyCtrl_PopulateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 6, nullptr);
 
+    // sub_3e50(6, A=d4d0, B=d400, D=d490): A -> enter, B -> update, D -> trans38.
     TableRegisterState(t, 6, reinterpret_cast<void*>(&Destroy_State6Enter_d4d0),
-                       nullptr, nullptr, nullptr);
+                       nullptr, reinterpret_cast<void*>(&Destroy_State6Tick_d490),
+                       reinterpret_cast<void*>(&Destroy_State6Update_d400));
     TableAddTransition(t, 7, nullptr);
 
     TableRegisterState(t, 7, nullptr, nullptr, nullptr, nullptr);
