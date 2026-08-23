@@ -228,14 +228,19 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     // resize landed, this call faulted at coarseCell*0x10 instead of returning.
     // found=0 is NOT a failure by itself: with no water source registered the buckets
     // are legitimately empty and retail returns 0 too.
+    // A first-N budget cannot measure a soak: it burns out inside the first fire and then
+    // reports nothing for the next hour. Print the first few calls in full, then a running
+    // CENSUS of both outcomes -- a run that starts finding water and later stops is
+    // invisible to a budget and obvious in a census.
     {
-        static int s_fwBudget = 0;
-        if (s_fwBudget < 8) {
-            s_fwBudget++;
-            fprintf(stderr, "[FireWork] water search: townMgr=%p buckets=%p centerCell=%u "
-                    "radius=%d -> found=%d\n",
-                    (void*)mapData, *(void**)(mapData + 0x140), centerCell,
-                    searchRadius, (int)found);
+        static int s_fwCalls = 0, s_fwFound = 0, s_fwMissed = 0;
+        ++s_fwCalls;
+        if (found) ++s_fwFound; else ++s_fwMissed;
+        if (s_fwCalls <= 4 || (s_fwCalls % 250) == 0) {
+            fprintf(stderr, "[FireWork] water search #%d: townMgr=%p buckets=%p "
+                    "centerCell=%u radius=%d -> found=%d  (census: found=%d missed=%d)\n",
+                    s_fwCalls, (void*)mapData, *(void**)(mapData + 0x140), centerCell,
+                    searchRadius, (int)found, s_fwFound, s_fwMissed);
             fflush(stderr);
         }
     }
