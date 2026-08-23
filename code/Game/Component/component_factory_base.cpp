@@ -820,6 +820,20 @@ static const char* const kDefaultOnFlags[] = {
     // (the (2R+1)^2 cell sweep) is the same code that produced the 340 tree hits and
     // calls the same counter; the forced path simply walked through forest, not town.
     // Aim a forced tornado at the town centre before concluding anything either way.
+    // GRADUATED 2026-08-22 — WellComponent's controller state machine (state 2 "built"
+    // -> TownManager::RegisterWaterSource). Until this lane existed only the UNregister
+    // half was ported, so townMgr+0xE0/+0x140 were never written and the FireWork spiral
+    // search returned found=0 on every run ever recorded, with wells standing in the town.
+    // A/B, seed 12345, 24 extra houses, forced fire every 8000 frames, ~12 min each arm:
+    //   OFF: 0 registrations, water search found=0 / missed=12000, 0 buckets, all 25 fires
+    //        ended reason=timer-expired, and the town COLLAPSED 46 -> 30 citizens as the
+    //        houses burned (45 further ignitions refused reason=being-demolished).
+    //   ON : 1 registration, found=500 / missed=0, 500 buckets (peaking 100/100), all 5
+    //        fires ended reason=buckets-reached-threshold, town grew 26 -> 99 monotonically.
+    //   standalone_crash.log empty in both arms; no new UNRESOLVED/ABORTED/INCOMPLETE lines.
+    // The two arms are frame-identical through 15000, i.e. the flag changes the fire
+    // outcome and nothing else.
+    "BANISHED_LIVE_WELL",
     "BANISHED_LIVE_TORNADO",
 };
 bool LiveEnabled(const char* envVar) {
