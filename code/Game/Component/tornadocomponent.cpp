@@ -424,7 +424,8 @@ extern "C" bool Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
 // NOT ported here (a peer owns them); when they resolve null the arm is inert and
 // says so, instead of silently doing nothing.
 static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
-                                 int* hitTree, int* hitBuilding, int* hitBuildingNoFire,
+                                 int* hitTree, int* hitTreeNoKnock,
+                                 int* hitBuilding, int* hitBuildingNoFire,
                                  int* hitAnimal, int* hitCitizen) {
     (void)unusedFirstArg;
 
@@ -455,8 +456,15 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
             CheckPtr(&natResComp);
             *reinterpret_cast<int32_t*>(static_cast<uintptr_t>(natResComp) + 0x28) = 0;
             CheckPtr(&natResComp);
-            if (g_h.growthKnockdown)
-                g_h.growthKnockdown(reinterpret_cast<void*>(static_cast<uintptr_t>(natResComp)));
+            // 0x140126780 is what actually FELLS the tree: it sets flag bit 0x200000,
+            // notifies, and starts fall animation mode 2. Zeroing +0x28 alone only empties
+            // the resource. Count the two outcomes apart -- a hitTree that also counted an
+            // unresolved knockdown would report a felled forest that is still standing.
+            if (!g_h.growthKnockdown) {
+                if (hitTreeNoKnock) ++*hitTreeNoKnock;
+                return;
+            }
+            g_h.growthKnockdown(reinterpret_cast<void*>(static_cast<uintptr_t>(natResComp)));
             if (hitTree) ++*hitTree;
         }
         return;
@@ -541,7 +549,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
 // registered with its real signature for any other caller.
 extern "C" void Tornado_StrikeEntity_583c0(int64_t unusedFirstArg, void* entityIbp) {
     Tornado_StrikeEntityCounted(unusedFirstArg, entityIbp,
-                                nullptr, nullptr, nullptr, nullptr, nullptr);
+                                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
 // ============================================================
@@ -584,7 +592,8 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
     const float py = oy + *reinterpret_cast<float*>(s + 0x5c);
     const float pz = 0.0f + *reinterpret_cast<float*>(s + 0x60);
 
-    int hitTree = 0, hitBuilding = 0, hitBuildingNoFire = 0, hitAnimal = 0, hitCitizen = 0;
+    int hitTree = 0, hitTreeNoKnock = 0, hitBuilding = 0, hitBuildingNoFire = 0;
+    int hitAnimal = 0, hitCitizen = 0;
 
     const int N = *map;
     uintptr_t cells = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
@@ -610,8 +619,8 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
                                         &probe);
             if (probe != 0) {
                 int64_t ibp = cellEntity;
-                Tornado_StrikeEntityCounted(cellEntity, &ibp, &hitTree, &hitBuilding,
-                                     &hitBuildingNoFire, &hitAnimal, &hitCitizen);
+                Tornado_StrikeEntityCounted(cellEntity, &ibp, &hitTree, &hitTreeNoKnock,
+                                     &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
     }
@@ -650,7 +659,7 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
             int64_t ownerEntity =
                 *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(slot) + 0x10);
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,
-                                 &hitTree, &hitBuilding, &hitBuildingNoFire,
+                                 &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
         }
     }
@@ -673,20 +682,21 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
                     *reinterpret_cast<int64_t*>(cells + 8 + static_cast<uintptr_t>(off) * 0x30);
                 if (cellEntity == 0) continue;
                 // Retail passes `off * 6` here — junk into a dead parameter. Kept.
-                Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitBuilding,
-                                     &hitBuildingNoFire, &hitAnimal, &hitCitizen);
+                Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitTreeNoKnock,
+                                     &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
     }
 
     if (found.data && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(found.data));
 
-    TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d building=%d "
-                  "building-NOFIRE=%d animal=%d citizen=%d (quadtree query %s, returned %d)\n",
+    TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d tree-NOKNOCK=%d "
+                  "building=%d building-NOFIRE=%d animal=%d citizen=%d "
+                  "(quadtree query %s, returned %d)\n",
                   *reinterpret_cast<float*>(s + 0x58), *reinterpret_cast<float*>(s + 0x5c),
                   *reinterpret_cast<int32_t*>(d + 0x30), *reinterpret_cast<int32_t*>(d + 0x34),
-                  hitTree, hitBuilding, hitBuildingNoFire, hitAnimal, hitCitizen,
-                  queryState, found.count);
+                  hitTree, hitTreeNoKnock, hitBuilding, hitBuildingNoFire, hitAnimal,
+                  hitCitizen, queryState, found.count);
 }
 
 // ============================================================
