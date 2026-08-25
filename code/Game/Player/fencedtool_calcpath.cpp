@@ -202,6 +202,21 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     void* model = FindOn(s_findModel, ent, &entIBP);
     if (model) ApplyModelYaw(model, static_cast<float>(angleDeg), centre);
 
+    // Report WHERE every fence piece is put. A "gate model ended up in a lake" report is
+    // unactionable without this: it cannot distinguish a bad cell rect (the caller walked
+    // the wrong edge) from a bad world position (CellWorldPos / the terrain lookup) from a
+    // piece that is simply drawn at z=0, which is lake level. Section 5 is the Gate.
+    {
+        static int n = 0;
+        if (n < 24) { ++n;
+            fprintf(stderr, "[FencePiece] idx=%d%s cell=(%d,%d) %dx%d angle=%d "
+                            "world=(%.2f, %.2f, %.2f) mapWidth=%d\n",
+                    sectionIdx, (sectionIdx == 5) ? " GATE" : "", x, y, w, h, angleDeg,
+                    centre[0], centre[1], centre[2], mapGrid ? *mapGrid : -1);
+            fflush(stderr);
+        }
+    }
+
     // Append to the master's MultiObject list (arr at +0x48, count at +0x50).
     CheckPtr(multiObjIBPSlot);
     uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiObjIBPSlot);

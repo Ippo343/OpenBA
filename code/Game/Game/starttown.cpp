@@ -2679,6 +2679,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                   "well", 3, 3);
         ringPlace("BANISHED_BUILD_DEMO_HOSPITAL", "Template\\DoctorHouse.rsc",
                   "hospital", 7, 7);
+        // -- the two remaining TOWN SERVICES (town-service wave 2026-08-23) ---------
+        // Neither is founded by the autostart town, and neither can be observed at all
+        // without an instance in the world:
+        //   Cemetery - the burial destination. CitizenComponent::HandleLifeEvent asks
+        //              Cemetery_FindNearestWithSlot_9740 for the nearest graveyard with
+        //              a free plot; that walks *(GameWorld+0xf0)+0x40, which only the
+        //              CemeteryComponent state-2 enter ever writes.
+        //   Chapel   - the plain radius happiness source (HappinessDescription mode 5,
+        //              so it is active the moment it is built, with no staff or goods
+        //              requirement). It registers into *(GameWorld+0xf0)+0x50.
+        // Both are ordinary placed structures with an authored CreatePlacedDescription,
+        // so the generic ring scan sizes them and the fallbacks are never used.
+        ringPlace("BANISHED_BUILD_DEMO_CEMETERY", "Template\\Cemetery.rsc",
+                  "cemetery", 8, 8);
+        ringPlace("BANISHED_BUILD_DEMO_CHAPEL", "Template\\Chapel.rsc",
+                  "chapel", 8, 8);
         // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
         // Not ring-placed like the crop field, and for a sharper reason than the
         // gatherer hut's: the lodge's siting input does not exist yet at all. The only

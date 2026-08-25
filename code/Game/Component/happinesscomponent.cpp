@@ -46,6 +46,32 @@ static fn_ArrayPushBasePtr_t s_fn_ArrayPushBasePtr = nullptr;
 typedef void (*fn_SetEntityIndex_t)(void* self, int16_t index);
 static fn_SetEntityIndex_t s_fn_SetEntityIndex = nullptr;
 
+// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
+// (0x140002cc0 above, despite its legacy name, is the ERASE -- see the 1:1 port in
+// cemeterycomponent.cpp. The two are the register/unregister pair for townMgr+0x50.)
+typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
+static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
+
+// 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) -- the owner's
+// workplace, used by the "needs staff" arm of IsActive.
+typedef void (*fn_GetJobHost_t)(uintptr_t entity, void* outIBP);
+static fn_GetJobHost_t s_fn_GetJobHost = nullptr;
+
+// 0x140006270 Entity_FindComponent_Storage(entity, outIBP) -- the "needs goods" arm.
+typedef void (*fn_FindStorage_t)(uintptr_t entity, void* outIBP);
+static fn_FindStorage_t s_fn_FindStorage = nullptr;
+
+// InternalBasePtr::CheckPtr (slot 0x140152ab0) / IsDerivedFrom (slot 0x140152a98).
+typedef void (*fn_CheckPtr_t)(void* ibp);
+static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
+typedef bool (*fn_IsDerivedFrom_t)(void* obj, uint32_t typeId);
+static fn_IsDerivedFrom_t s_fn_IsDerivedFrom = nullptr;
+
+// Type-id .rdata globals: HappinessDescription (0x1401c42f8) and the
+// RawMaterialDescription (0x1401c7cb8) whose +0x5c flags the goods test masks.
+static const uint32_t* s_pTid_HappinessDesc = nullptr;
+static const uint32_t* s_pTid_RawMatDesc    = nullptr;
+
 // Global: DAT_1401c3dd8 -- pointer to game world/population manager
 static void** s_pGameWorld = nullptr;
 
@@ -78,6 +104,22 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152a58);
     if (slot) s_fn_Serializer_SerializeBool = reinterpret_cast<fn_Serializer_SerializeBool_t>(
         *reinterpret_cast<uintptr_t*>(slot));
+
+    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_GetJobHost = reinterpret_cast<fn_GetJobHost_t>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+    s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
+        ResolveAddr(Module::Exe, 0x140006270));
+    s_pTid_HappinessDesc = reinterpret_cast<const uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c42f8));
+    s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7cb8));
+
+    slot = ResolveAddr(Module::Exe, 0x140152ab0);
+    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a98);
+    if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFrom_t*>(slot);
 
     s_initialized = true;
 }
@@ -293,12 +335,280 @@ void HappinessComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x50 (HappinessComponent_Factory MemAlloc), flags 0x82 (Ctor 0x14004ab60:
-// Component base sets +0x20=0x80, leaf OR 0x2 => 0x82).
+// ============================================================
+// HappinessComponent::IsActive -- 0x14004a550
+// ============================================================
+// Decides whether this happiness source is currently DOING anything. Read off the
+// disassembly at 0x14004a550; the three arms, in retail's order:
+//
+//   1. desc[+0x20] == 5  -> unconditionally active. This is the plain radius source
+//      (the chapel / well / town square kind): being built is enough.
+//   2. desc[+0x24] != 0  -> needs staff. Find the owner's workplace via
+//      AttendanceComponent_GetJobHostComponent (0x140002e10); with no workplace the
+//      staffing test is skipped entirely, otherwise a workplace with no worker
+//      (+0x60 == 0), or one that is closed (+0x50 == 0), makes it inactive.
+//   3. desc[+0x25] != 0  -> needs goods. Walk the owner's StorageComponent slots
+//      (0x140006270; slot records are 0x10 bytes, first qword = the stored good's
+//      entity) and AND that good's RawMaterialDescription flags (+0x5c) against the
+//      happiness description's accepted-goods mask (+0x28). Active if any slot matches.
+//      This is the tavern: it cheers nobody up until there is ale in it.
+//
+// NOTE the inner RawMaterialDescription lookup is deliberately left unguarded. Retail
+// falls out of that loop with RCX == 0 and reads [RCX+0x5c] regardless -- it relies on
+// every stored good carrying a RawMaterialDescription. Guarding it here would silently
+// skip the mask test rather than restore the behaviour, so the deref stays faithful; if
+// it ever faults, the good in storage is what is wrong.
+extern "C" bool HappinessComponent_IsActive(void* selfV) {
+    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
+    EnsureHelpers();
+
+    const uintptr_t su = reinterpret_cast<uintptr_t>(self);
+    void* descRaw = *reinterpret_cast<void**>(su + 0x18);
+    const uintptr_t desc =
+        (descRaw && s_fn_IsDerivedFrom && s_pTid_HappinessDesc &&
+         s_fn_IsDerivedFrom(descRaw, *s_pTid_HappinessDesc))
+            ? reinterpret_cast<uintptr_t>(descRaw) : 0;
+
+    if (*reinterpret_cast<int*>(desc + 0x20) == 5) return true;
+
+    if (*reinterpret_cast<uint8_t*>(desc + 0x24) != 0) {
+        void* ownerSlot = *reinterpret_cast<void**>(su + 0x10);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(su + 0x10));
+        ownerSlot = *reinterpret_cast<void**>(su + 0x10);
+
+        void* wpIbp = nullptr;
+        if (s_fn_GetJobHost) s_fn_GetJobHost(reinterpret_cast<uintptr_t>(ownerSlot), &wpIbp);
+        if (wpIbp) {
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&wpIbp);
+            const uintptr_t wp = reinterpret_cast<uintptr_t>(wpIbp);
+            if (*reinterpret_cast<int*>(wp + 0x60) == 0) return false;
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&wpIbp);
+            if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(wpIbp) + 0x50) == 0)
+                return false;
+        }
+    }
+
+    if (*reinterpret_cast<uint8_t*>(desc + 0x25) == 0) return true;
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(su + 0x10));
+    void* owner = *reinterpret_cast<void**>(su + 0x10);
+
+    void* storeIbp = nullptr;
+    if (s_fn_FindStorage) s_fn_FindStorage(reinterpret_cast<uintptr_t>(owner), &storeIbp);
+
+    const uint32_t wantMask = *reinterpret_cast<uint32_t*>(desc + 0x28);
+    bool matched = false;
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
+    uintptr_t store = reinterpret_cast<uintptr_t>(storeIbp);
+    if (!store) return false;
+
+    for (int i = 0; i < *reinterpret_cast<int*>(store + 0x30); ++i) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
+        store = reinterpret_cast<uintptr_t>(storeIbp);
+        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(store + 0x28);
+        const uintptr_t good  = *reinterpret_cast<uintptr_t*>(slots + static_cast<uintptr_t>(i) * 0x10);
+
+        uintptr_t rawMatDesc = 0;
+        if (good && s_pTid_RawMatDesc) {
+            const int       n   = *reinterpret_cast<int*>(good + 0x30);
+            const uintptr_t arr = *reinterpret_cast<uintptr_t*>(good + 0x28);
+            for (int j = 0; j < n; ++j) {
+                void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
+                if (!c) continue;
+                typedef uint32_t (*GetTypeId_t)(void*);
+                const uint32_t tid =
+                    (reinterpret_cast<GetTypeId_t>(
+                        *reinterpret_cast<uintptr_t*>(
+                            *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                if (tid == *s_pTid_RawMatDesc) {
+                    if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, *s_pTid_RawMatDesc))
+                        rawMatDesc = reinterpret_cast<uintptr_t>(c);
+                    break;
+                }
+            }
+        }
+        // Faithful unguarded read -- see the note above.
+        matched |= (wantMask & *reinterpret_cast<uint32_t*>(rawMatDesc + 0x5c)) != 0;
+    }
+    return matched;
+}
+
+// ============================================================
+// HappinessComponent::Register -- 0x14004a4f0
+// ============================================================
+// Stamp the happiness radius onto the map (a300 with state 1), append the component's
+// IBP to the TownManager happiness list at *(GameWorld+0xF0)+0x50 (count at +0x58),
+// and latch self[+0x28] so it is not registered twice.
+extern "C" void HappinessComponent_Register(void* selfV) {
+    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
+    EnsureHelpers();
+
+    if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, 1);
+
+    uint8_t basePtr[24] = {};
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
+
+    if (s_fn_ArrayPush && s_pGameWorld && *s_pGameWorld) {
+        const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
+        if (townMgr) {
+            const int count = *reinterpret_cast<int*>(townMgr + 0x58);
+            s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x50), count + 1, basePtr);
+
+            static int n = 0;
+            if (n < 8) { ++n;
+                fprintf(stderr, "[Happiness] source REGISTERED: comp=%p townMgr=%p "
+                                "happinessCount=%d\n", selfV,
+                        reinterpret_cast<void*>(townMgr),
+                        *reinterpret_cast<int*>(townMgr + 0x58));
+                fflush(stderr);
+            }
+        }
+    }
+    self->happinessFlag = 1;
+}
+
+// ============================================================
+// HappinessComponent::Unregister -- 0x14004a4a0
+// ============================================================
+// The mirror of Register, and byte-identical to the body of slot 7 / the state-3 enter
+// minus their `if (self[+0x28])` guard.
+extern "C" void HappinessComponent_Unregister(void* selfV) {
+    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
+    EnsureHelpers();
+
+    uint8_t basePtr[24] = {};
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
+
+    if (s_fn_ArrayPushBasePtr && s_pGameWorld && *s_pGameWorld) {
+        const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
+        if (townMgr)
+            s_fn_ArrayPushBasePtr(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
+    }
+    if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, -1);
+    self->happinessFlag = 0;
+}
+
+// ============================================================
+// HappinessComponent state 2 / 13 "built" enter -- 0x14004a9f0
+// ============================================================
+// Register on entry, but only if not already registered and currently active.
+extern "C" char HappinessComponent_EnterBuilt(void* comp, void* /*sm*/) {
+    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(comp);
+    if (self->happinessFlag == 0 && HappinessComponent_IsActive(comp))
+        HappinessComponent_Register(comp);
+    return 0;
+}
+
+// ============================================================
+// HappinessComponent state 2 / 13 trans38 tick -- 0x14004a9a0
+// ============================================================
+// The per-frame column (StateMachine::Tick's +0x38 handler). It re-evaluates IsActive
+// every tick and moves the source in and out of the town list as the conditions change
+// -- a tavern that runs out of ale drops out here and re-registers when it is restocked.
+// This is the only state-table column HappinessComponent populates, which is why its
+// RegisterState instantiation (0x140005e30) is the 3-argument one: the extra stack
+// argument lands in the trans38 slot at table entry +0x18.
+extern "C" char HappinessComponent_Tick38(void* comp, void* /*sm*/, void* /*time*/,
+                                          int /*idx*/) {
+    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(comp);
+    const bool active     = HappinessComponent_IsActive(comp);
+    const bool registered = (self->happinessFlag != 0);
+
+    if (!registered && active)      HappinessComponent_Register(comp);
+    else if (registered && !active) HappinessComponent_Unregister(comp);
+    return 0;
+}
+
+// HappinessComponent state-3 "demolish" enter -- 0x14004a940. Byte-identical to the
+// slot-7 removal hook (0x14004aa20), guard included.
+extern "C" char HappinessComponent_EnterDemolish(void* comp, void* /*sm*/) {
+    HappinessComponent_OnCreate(reinterpret_cast<HappinessComponent*>(comp));
+    return 0;
+}
+
+// ===== Standalone factory =====
+// The WellComponent pattern, with two differences read off vtable 0x1401595d0:
+// slot 17 (CreateState) is 0x140005be0 -> self+0x30, NOT self+0x28 -- HappinessComponent
+// carries its own byte at +0x28 and the controller sub-object is shifted -- and the
+// state table has a third state (13) plus the trans38 column.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_state_table.h"
 
-COMPONENT_INERT_FACTORY(HappinessComponent, 0x50, 0x82)
+namespace { struct HappinessCtrlTag {}; }
+using HappinessCtrlDispatch = ::ControllerLive::Dispatcher<HappinessCtrlTag>;
+
+// The retail table, transcribed from 0x14004ac10 call for call. Its RegisterState
+// instantiation (0x140005e30) copies the caller's 5th stack argument into the entry's
+// +0x18 field -- verified in the callee (it reads [rsp+0x170] into [rsp+0x48]), which is
+// the trans38 column. States 2 and 13 pass 0x14004a9a0 there; state 3 passes null.
+static void HappinessComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = HappinessCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&HappinessComponent_EnterBuilt),
+                       nullptr, reinterpret_cast<void*>(&HappinessComponent_Tick38), nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 13, reinterpret_cast<void*>(&HappinessComponent_EnterBuilt),
+                       nullptr, reinterpret_cast<void*>(&HappinessComponent_Tick38), nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&HappinessComponent_EnterDemolish),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
+}
+
+static uint32_t HappinessComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("HappinessComponent");
+    return cached;
+}
+static void* HappinessComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void HappinessComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
+    HappinessComponent_Shutdown(reinterpret_cast<HappinessComponent*>(s), stream);
+}
+static void HappinessComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
+    HappinessComponent_OnCreate(reinterpret_cast<HappinessComponent*>(s));
+}
+static int   HappinessComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
+static void* HappinessComponent_CreateState(void* self) {               // 0x140005be0
+    return reinterpret_cast<uint8_t*>(self) + 0x30;
+}
+
+static void HappinessComponent_FinishLiveVtable(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HAPPINESS")) return;
+    HappinessComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HappinessComponent_ShutdownVSlot);
+    HappinessComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HappinessComponent_OnRemoveVSlot);
+    HappinessComponent_LiveVtable[16] = reinterpret_cast<void*>(&HappinessComponent_GetDefaultState);
+    HappinessComponent_LiveVtable[17] = reinterpret_cast<void*>(&HappinessComponent_CreateState);
+    HappinessComponent_PopulateStateTable();
+    if (mem) {
+        // Embedded state node at +0x30 (slot 17), not +0x28.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x30) =
+            reinterpret_cast<void*>(HappinessCtrlDispatch::Vtable());
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x30 + 0x18) = mem;
+    }
+}
+
+extern "C" void* HappinessComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x82,
+        HappinessComponent_LiveVtable,
+        reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
+    HappinessComponent_FinishLiveVtable(p);
+    return p;
+}
+static void* HappinessComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, 0x82,
+        HappinessComponent_LiveVtable,
+        reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
+    HappinessComponent_FinishLiveVtable(mem);
+    return mem;
+}
+
 REGISTER_TYPE(HappinessComponent, "ControllerComponent",
               &HappinessComponent_Factory, &HappinessComponent_CreateInPlace);

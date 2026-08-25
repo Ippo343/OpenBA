@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void*, int, const char*); // 0x140116dd0
 // CitizenComponent_sub_1fa0 (0x140111fa0) — re-parent a citizen: detach from the current
@@ -595,6 +596,57 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     }
 
     if (s_count <= 0 || s_fired || frameNum < s_atFrame) return;
+
+    // BANISHED_KILL_WHEN_CEMETERY_READY=1 -- hold the kill until the town actually has a
+    // graveyard that can accept a burial, instead of racing a fixed frame number.
+    //
+    // Needed because the ONLY way to get a cemetery with a usable plot array is to build
+    // one with the real tool: the plot grid is derived from the MultiObjectComponent's
+    // child entities (the gate tile), and the ringPlace demo spawner creates a bare
+    // entity with no children, so its plot array stays empty forever. A fixed
+    // BANISHED_KILL_AT_FRAME therefore fires either before the player has placed one or
+    // long after, and a "nobody was buried" result proves nothing either way.
+    //
+    // Ready = at least one cemetery in the town list at townMgr+0x40 (count +0x48) whose
+    // own plot count (cemComp+0x50) is non-zero.
+    {
+        static int s_waitCemetery = -1;
+        if (s_waitCemetery < 0) {
+            const char* e = std::getenv("BANISHED_KILL_WHEN_CEMETERY_READY");
+            s_waitCemetery = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+            if (s_waitCemetery)
+                std::fprintf(stderr, "[DeathHarness] kill DEFERRED until a cemetery with a "
+                             "non-empty plot array exists (build one with the real tool)\n"),
+                std::fflush(stderr);
+        }
+        if (s_waitCemetery) {
+            int64_t tm = 0; int64_t* l; int c;
+            int readyPlots = 0, cemN = 0;
+            if (TownList(&l, &c, &tm) && tm) {
+                cemN = *reinterpret_cast<int*>(tm + 0x48);
+                int64_t arr = *reinterpret_cast<int64_t*>(tm + 0x40);
+                for (int i = 0; i < cemN && arr; ++i) {
+                    int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
+                    if (!comp) continue;
+                    const int plots = *reinterpret_cast<int*>(comp + 0x50);
+                    if (plots > readyPlots) readyPlots = plots;
+                }
+            }
+            if (readyPlots <= 0) {
+                static int s_nag = 0;
+                if ((frameNum % 600) == 0 && s_nag < 20) { ++s_nag;
+                    std::fprintf(stderr, "[DeathHarness] waiting: %d cemetery(ies) registered, "
+                                 "best plot count = %d\n", cemN, readyPlots);
+                    std::fflush(stderr);
+                }
+                return;
+            }
+            std::fprintf(stderr, "[DeathHarness] cemetery READY at frame %d: %d registered, "
+                         "%d plots -- proceeding with the kill\n", frameNum, cemN, readyPlots);
+            std::fflush(stderr);
+        }
+    }
+
     s_fired = true;
 
     int64_t* list; int n; int64_t townMgr;

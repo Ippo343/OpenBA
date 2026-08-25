@@ -276,10 +276,26 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
             uint8_t localTransform[96];
             memset(localTransform, 0, sizeof(localTransform));
             float zeroPitch = 0.f;
-            float zeroOffset[3] = {0.f, 0.f, 0.f};
 
+            // R9 = `offset`, the world position FencedPlacementParams just wrote --
+            // NOT a zero vector. Retail 0x1400dcb55 loads R9 from [rsp+0x50], which is
+            // the very same buffer (r11-0x38) it passed as arg 6 to the params call at
+            // 0x1400dcb25. Passing a separate zeroed vector here pinned the fence/gate
+            // ghost mesh at world (0,0,0) instead of under the cursor -- the map origin
+            // is water, so the preview appeared to be standing in a random lake.
+            // PlacementTool's equivalent (0x1400fdff3) already carried a comment saying
+            // exactly this; the fenced path was the one that had it wrong.
             if (fn_Transform_FromYawPitchOffset) {
-                fn_Transform_FromYawPitchOffset(localTransform, outYaw, &zeroPitch, zeroOffset);
+                fn_Transform_FromYawPitchOffset(localTransform, outYaw, &zeroPitch, offset);
+            }
+
+            {
+                static int n = 0;
+                if (n < 12) { ++n;
+                    fprintf(stderr, "[FencedGhost] preview transform: offset=(%.2f, %.2f, %.2f)\n",
+                            offset[0], offset[1], offset[2]);
+                    fflush(stderr);
+                }
             }
 
             // Set transform on mesh

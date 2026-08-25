@@ -16,8 +16,12 @@
 //                  its only unregistered callee 0x1400889e0 (pure leaf, grid-cell int-array
 //                  compaction). Closure now bottoms out (FUN_140004680 reg, CheckPtr/IBP-ctor
 //                  engine). Both ported in wellcomponent.cpp.
-//   DEFER (NOT registered):
-//                  0x140047200 CemeteryComponent::Draw (self-resolving passthrough -> recursion).
+//   DEFER CLOSED  : 0x140047200 CemeteryComponent::Draw was deferred here as a
+//                  "self-resolving passthrough -> recursion". That passthrough WAS the
+//                  bug -- the slot builds the grave-plot cell list, not a draw, and
+//                  resolving its own address gave null, so the list stayed empty and no
+//                  burial was ever possible. Ported and registered in
+//                  standalone/reg_town_services.cpp; do not re-add here.
 //   RESOLVED since this wave (registrations live elsewhere — do not re-add here):
 //                  0x14010dca0 BuildCandidateStateList + 0x14010f1f0 ValidateAndEnterState and
 //                      their helpers (GetHappiness/HasSufficientResources[2]/SortByPriority)

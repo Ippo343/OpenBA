@@ -8,7 +8,7 @@
 // Constructor sets:
 //   vtable = 0x1401590a0
 //   controllerVtable = 0x140159050
-//   +0x48 = 0, +0x50 = 0
+//   +0x48 = 0 (plot array), +0x50 = 0 (count), +0x54 = 0 (capacity)
 //   flags |= 0x83
 
 #include <cstdint>
@@ -32,12 +32,18 @@ struct CemeteryComponent {
     void*    controllerData1;   // +0x38
     void*    selfPtr;           // +0x40
 
-    void*    field48;           // +0x48: zeroed
-    void*    field50;           // +0x50: zeroed
+    // Grave-plot cell list. A plain DynArray<int>: the plot-grid builder
+    // (slot 6, 0x140047200) fills it from the footprint, and both the state-2
+    // "built" enter (0x140046fc0) and Cemetery_PickFreeSlot_6c60 walk it.
+    int32_t* plots;             // +0x48: cell indices
+    int32_t  plotCount;         // +0x50
+    int32_t  plotCapacity;      // +0x54
 };
 
 static_assert(sizeof(CemeteryComponent) == 0x58, "CemeteryComponent size mismatch");
 static_assert(offsetof(CemeteryComponent, vtable) == 0x00, "");
 static_assert(offsetof(CemeteryComponent, controllerVtable) == 0x28, "");
 static_assert(offsetof(CemeteryComponent, selfPtr) == 0x40, "");
-static_assert(offsetof(CemeteryComponent, field48) == 0x48, "");
+static_assert(offsetof(CemeteryComponent, plots) == 0x48, "");
+static_assert(offsetof(CemeteryComponent, plotCount) == 0x50, "");
+static_assert(offsetof(CemeteryComponent, plotCapacity) == 0x54, "");

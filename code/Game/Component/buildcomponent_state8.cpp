@@ -376,7 +376,7 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                     s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
                     if (BC8_Trace())
                         std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p buildPositions=%d)\n",
-                                     meshCount, bsWork, *reinterpret_cast<void**>(workCompIBP),
+                                     meshCount, bsWork, (void*)workCompIBP,
                                      *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(bsWork) + 0x58));
 
                     // ---- 2c-B: seat Builders now that the build work exists ----

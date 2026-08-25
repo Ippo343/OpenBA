@@ -354,7 +354,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
             if (BCS1_Trace())
                 std::fprintf(stderr, "[BuildTrace] posted gather work to ledger via ec60 (code 0x2001), workComp=%p work=%p\n",
-                             *reinterpret_cast<void**>(workCompIbp), work);
+                             (void*)workCompIbp, work);
         } else if (BCS1_Trace()) {
             std::fprintf(stderr, "[BuildTrace] (gather post skipped: liveHaul=%d postFn=%p workComp=%p)\n",
                          (int)liveHaul, (void*)s_postEc60, (void*)workCompIbp);

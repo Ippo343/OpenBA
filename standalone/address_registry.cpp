@@ -503,6 +503,7 @@ extern "C" void RegisterBuildActions();       // Construction 2c: SetupBuildActi
 extern "C" void RegisterTownStorageSeed();    // Economy M-D world half: d230/7ff0/91660/a1f00 (storage registry + start-resource seeder)
 extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: NeedsUpdate 112260 + helper_21e0 (+ rdata floats)
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
+extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
 extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain (cemetery/tombstone/mourning, 7 fns)
 extern "C" void RegisterCitizen25Tick();      // openfuncs step 2.5(b) — behavior-tick group + EventLog_AddEvent
 extern "C" void RegisterEventLogCitizen();    // citizen life-event chain: PostLifeEvent (ex-"AssignState") + AddCitizenEvent + TileIndex
@@ -659,6 +660,7 @@ static void RegisterCodeFunctions() {
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
     RegisterTownWorkplaceRegistry(); // Phase 3 economy — profession-BST workplace insert
     RegisterBuildActions();          // Construction 2c — SetupBuildActions build-labor action chain (0x1400c0690)
+    RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables
     RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain
     RegisterTownStorageSeed();       // Economy M-D — storage-location registry + start-resource seeder
     RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)

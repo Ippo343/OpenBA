@@ -153,13 +153,13 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
 
     // Set text param 0: burial count
     uint8_t strBuf[8];
-    fn_String_Format(strBuf, "%d", (unsigned int)burialCount);
+    fn_String_Format(strBuf, "%i", (unsigned int)burialCount);
     fn_ProgressElement_SetProgressTextParameter(progress, 0, strBuf);
     fn_String_Dtor(strBuf);
 
     // Set text param 1: max slots
     int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
-    fn_String_Format(strBuf, "%d", (unsigned int)maxSlots);
+    fn_String_Format(strBuf, "%i", (unsigned int)maxSlots);
     fn_ProgressElement_SetProgressTextParameter(progress, 1, strBuf);
     fn_String_Dtor(strBuf);
 }

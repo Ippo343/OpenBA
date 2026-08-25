@@ -32,9 +32,16 @@ static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
 typedef void (*fn_Serializer_Dtor_t)(void* self);
 static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 
-// FUN_140002cc0 -- pushes an InternalBasePtr into a dynamic array
-typedef void (*fn_ArrayPushBasePtr_t)(void* arrayBase, void* internalBasePtr);
-static fn_ArrayPushBasePtr_t s_fn_ArrayPushBasePtr = nullptr;
+// FUN_140002cc0 -- ERASE-by-value from an InternalBasePtr array {ptr@+0, count@+8}.
+// (The legacy name here said "push"; the body at 0x140002cc0 scans for a matching
+// resolved pointer, shifts the tail down and decrements the count -- see the 1:1 port
+// in cemeterycomponent.cpp CemeteryListErase_Reimpl. It is the UNregister.)
+typedef void (*fn_ArrayEraseBasePtr_t)(void* arrayBase, void* internalBasePtr);
+static fn_ArrayEraseBasePtr_t s_fn_ArrayEraseBasePtr = nullptr;
+
+// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
+typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
+static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
 
 // Global: DAT_1401c3dd8 -- pointer to game world/population manager
 static void** s_pWorldManager = nullptr;
@@ -49,8 +56,11 @@ static void EnsureHelpers() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    s_fn_ArrayPushBasePtr = reinterpret_cast<fn_ArrayPushBasePtr_t>(
+    s_fn_ArrayEraseBasePtr = reinterpret_cast<fn_ArrayEraseBasePtr_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
+
+    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
 
     s_pWorldManager = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -93,26 +103,36 @@ void HealerComponent_Shutdown(HealerComponent* self, void* stream) {
 }
 
 // ============================================================
-// HealerComponent::OnCreate (vtable slot [7], 0x14004ae70)
+// HealerComponent::OnRemove (vtable slot [7], 0x14004ae70)
 // ============================================================
-// Creates InternalBasePtr from owner, pushes to healer list at
-// (manager+0xF0)+0x70.
+// UNregisters from the TownManager healer list at *(GameWorld+0xF0)+0x70.
+//
+// Ghidra labels this slot OnCreate; the retail body is an ERASE, and the matching
+// REGISTER is the state-2 enter at the bottom of this file -- the same OnCreate /
+// OnRemove off-by-one every ControllerComponent in this tree carries.
+//
+// Two fixes vs. the first port, both read straight off 0x14004ae70:
+//   * retail wraps `self` (the COMPONENT: `mov rdx,rcx`), not `self->owner`. An IBP
+//     built from the owner entity identifies the wrong object, so the erase scan
+//     could never match -- exactly the bug WellComponent::OnRemove carried until the
+//     fire lane went live.
+//   * 0x140002cc0 is the erase, not a push. It was being called as if it appended.
+// Latent until now: slot 7 was never installed while the component was inert.
 
-void HealerComponent_OnCreate(HealerComponent* self) {
+void HealerComponent_OnRemove(HealerComponent* self) {
     EnsureHelpers();
 
-    uint8_t basePtr[24];
+    uint8_t basePtr[24] = {};
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(basePtr, self->owner);
+        fn_InternalBasePtr_Ctor(basePtr, self);
     }
 
-    // Push to healer list at (manager + 0xF0) + 0x70
-    if (s_fn_ArrayPushBasePtr && s_pWorldManager && *s_pWorldManager) {
-        void* manager = *s_pWorldManager;
-        void* healerArray = reinterpret_cast<void*>(
-            *reinterpret_cast<uintptr_t*>(
-                reinterpret_cast<uintptr_t>(manager) + 0xF0) + 0x70);
-        s_fn_ArrayPushBasePtr(healerArray, basePtr);
+    if (s_fn_ArrayEraseBasePtr && s_pWorldManager && *s_pWorldManager) {
+        void* gameWorld = *s_pWorldManager;
+        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
+        if (townMgr)
+            s_fn_ArrayEraseBasePtr(reinterpret_cast<void*>(townMgr + 0x70), basePtr);
     }
 }
 
@@ -122,15 +142,151 @@ void HealerComponent_OnCreate(HealerComponent* self) {
 void HealerComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[HealerComponent] Funcs resolved: Serialize=%p ArrayPush=%p WorldMgr=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayPushBasePtr,
-           (void*)s_pWorldManager);
+    printf("[HealerComponent] Funcs resolved: Serialize=%p Erase=%p Push=%p WorldMgr=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayEraseBasePtr,
+           (void*)s_fn_ArrayPush, (void*)s_pWorldManager);
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================
+// HealerComponent state-2 "built" enter -- 0x14004ae30
+// ============================================================
+// REGISTERS the hospital in the TownManager healer list:
+//     InternalBasePtr::Ctor(&ibp, self)            // the COMPONENT, not the owner
+//     town = *(*0x1401c3dd8 + 0xf0)
+//     ArrayPush(town + 0x70, town[0x78] + 1, &ibp)
+// Retail returns 0 in AL so the state machine's Enter walk continues past this node.
+//
+// This is the whole reason a built hospital was invisible to the town: with the
+// component inert nothing ever entered state 2, so the healer array at townMgr+0x70
+// stayed empty for the life of the save and the sick had nowhere to be sent.
+extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
+    HealerComponent_InitFuncs();
+    if (!fn_InternalBasePtr_Ctor || !s_fn_ArrayPush ||
+        !s_pWorldManager || !*s_pWorldManager) return 0;
+
+    uint8_t ibp[24] = {};
+    fn_InternalBasePtr_Ctor(ibp, comp);
+
+    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*s_pWorldManager) + 0xF0);
+    if (!townMgr) return 0;
+
+    const int count = *reinterpret_cast<int*>(townMgr + 0x78);
+    s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x70), count + 1, ibp);
+
+    {
+        static int n = 0;
+        if (n < 8) { ++n;
+            fprintf(stderr, "[Healer] hospital REGISTERED: comp=%p townMgr=%p "
+                            "healerCount=%d\n", comp, reinterpret_cast<void*>(townMgr),
+                    *reinterpret_cast<int*>(townMgr + 0x78));
+            fflush(stderr);
+        }
+    }
+    return 0;
+}
+
+// HealerComponent state-3 "demolish" enter -- 0x14004adf0. Byte-identical to the
+// slot-7 removal hook (0x14004ae70): wrap the component, call the erase.
+extern "C" char HealerComponent_EnterDemolish(void* comp, void* /*sm*/) {
+    HealerComponent_OnRemove(reinterpret_cast<HealerComponent*>(comp));
+    return 0;
+}
+
+// ===== Standalone factory =====
+// The WellComponent pattern one for one: same size class (0x48), same flags (0x82),
+// the same slot 16 (GetDefaultState -> 2, shared fn 0x1400026c0) and slot 17
+// (CreateState -> self+0x28, shared fn 0x140004080), and a two-state retail table.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(HealerComponent, 0x48, 0x82)
+#include "Component/controller_state_table.h"
+
+namespace { struct HealerCtrlTag {}; }
+using HealerCtrlDispatch = ::ControllerLive::Dispatcher<HealerCtrlTag>;
+
+// The retail table, transcribed from 0x14004b020 call for call. Its RegisterState
+// instantiation (0x1400066e0) zero-fills the trans30/trans38/update columns, so every
+// handler but Enter is null -- verified in the callee, not assumed from the call site.
+static void HealerComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = HealerCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&HealerComponent_EnterBuilt),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableAddTransition(t, 13, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&HealerComponent_EnterDemolish),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
+}
+
+static uint32_t HealerComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("HealerComponent");
+    return cached;
+}
+static void* HealerComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void HealerComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
+    HealerComponent_Shutdown(reinterpret_cast<HealerComponent*>(s), stream);
+}
+static void HealerComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
+    HealerComponent_OnRemove(reinterpret_cast<HealerComponent*>(s));
+}
+static int   HealerComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
+static void* HealerComponent_CreateState(void* self) {               // 0x140004080
+    return reinterpret_cast<uint8_t*>(self) + 0x28;
+}
+
+static void HealerComponent_FinishLiveVtable(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER")) return;
+    HealerComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HealerComponent_ShutdownVSlot);
+    HealerComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HealerComponent_OnRemoveVSlot);
+    HealerComponent_LiveVtable[16] = reinterpret_cast<void*>(&HealerComponent_GetDefaultState);
+    HealerComponent_LiveVtable[17] = reinterpret_cast<void*>(&HealerComponent_CreateState);
+    HealerComponent_PopulateStateTable();
+    if (mem) {
+        // Embedded state node at +0x28: dispatcher vtable + the node+0x18
+        // back-pointer the tail-called handlers read as their `this`.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
+            reinterpret_cast<void*>(HealerCtrlDispatch::Vtable());
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
+    }
+}
+
+extern "C" void* HealerComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x82,
+        HealerComponent_LiveVtable,
+        reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
+    HealerComponent_FinishLiveVtable(p);
+    {
+        static int n = 0;
+        if (n < 4) { ++n;
+            fprintf(stderr, "[Healer] HealerComponent CREATED (factory) comp=%p live=%d\n",
+                    p, ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER") ? 1 : 0);
+            fflush(stderr);
+        }
+    }
+    return p;
+}
+static void* HealerComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x82,
+        HealerComponent_LiveVtable,
+        reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
+    HealerComponent_FinishLiveVtable(mem);
+    {
+        static int n = 0;
+        if (n < 4) { ++n;
+            fprintf(stderr, "[Healer] HealerComponent CREATED (in-place) comp=%p live=%d\n",
+                    mem, ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER") ? 1 : 0);
+            fflush(stderr);
+        }
+    }
+    return mem;
+}
+
 REGISTER_TYPE(HealerComponent, "ControllerComponent",
               &HealerComponent_Factory, &HealerComponent_CreateInPlace);

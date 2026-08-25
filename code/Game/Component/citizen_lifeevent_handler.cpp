@@ -38,6 +38,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
 #include <cmath>
 
 // ---------------------------------------------------------------- resolved deps
@@ -403,21 +404,48 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     uint32_t cell = static_cast<uint32_t>(size * cy + cx);
 
     // --- Find a cemetery; spawn the tombstone; pick the family flag ---
+    // BURIAL OUTCOME TRACE. Every arm below used to be silent, so "nobody was buried"
+    // and "everybody was buried" produced identical logs -- and for the whole life of
+    // this port the answer was always the first one, because the cemetery list at
+    // *(gw+0xf0)+0x40 had no writer at all. Report the town-level count, the per-cemetery
+    // plot count, and which branch was taken, so a regression names itself.
+    const uintptr_t townMgrForTrace = *reinterpret_cast<uintptr_t*>(world + 0xf0);
+    const int cemCountForTrace =
+        townMgrForTrace ? *reinterpret_cast<int*>(townMgrForTrace + 0x48) : -1;
+
     void* cem = nullptr;
     Cemetery_FindNearestWithSlot_9740(*reinterpret_cast<void**>(world + 0xf0), &cem, cell);
     uint32_t flags;
     if (!cem) {
         flags = (eventType != 2) ? 0x80u : 0x2u;
+        fprintf(stderr, "[Burial] NO GRAVE: citizen=%p cell=%u townCemeteries=%d "
+                        "(0 => the state-2 registrar never ran; >0 => every cemetery is "
+                        "full, unreachable, or has an empty plot array) flags=0x%x\n",
+                selfV, cell, cemCountForTrace, flags);
+        fflush(stderr);
     } else {
         flags = 0x40u;
         ChkPtr(&cem);
+        const int plotsForTrace =
+            *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(cem) + 0x50);
         int slot = static_cast<int>(Cemetery_PickFreeSlot_6c60(cem));
         if (slot >= 0) {   // [STANDALONE GUARD] retail indexes unguarded (9740 just proved >= 0)
             int graveCell = *reinterpret_cast<int*>(
                 *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(cem) + 0x48)
                 + static_cast<int64_t>(slot) * 4);
             Cemetery_SpawnTombstone_6a90(cem, graveCell, cell, world);
+            fprintf(stderr, "[Burial] BURIED: citizen=%p cem=%p townCemeteries=%d "
+                            "plots=%d slot=%d graveCell=%d\n",
+                    selfV, cem, cemCountForTrace, plotsForTrace, slot, graveCell);
+        } else {
+            // The flag still says buried (retail sets 0x40 before picking), but no
+            // tombstone exists -- worth saying out loud, it is not the same outcome.
+            fprintf(stderr, "[Burial] CEMETERY FOUND BUT NO SLOT: citizen=%p cem=%p "
+                            "plots=%d (plots==0 => BuildPlotGrid bailed; see "
+                            "[CemeteryPlots]) flags=0x%x\n",
+                    selfV, cem, plotsForTrace, flags);
         }
+        fflush(stderr);
     }
 
     // --- OR the flag into partner (+0x258), parent (+0x250) + its ring, own ring ---

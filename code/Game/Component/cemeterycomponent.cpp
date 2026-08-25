@@ -45,9 +45,39 @@ static fn_ResizeIntArray_t s_fn_ResizeIntArray = nullptr;
 typedef void (*fn_ListAdd_t)(void* listBase, void* ptrValue);
 static fn_ListAdd_t s_fn_ListAdd = nullptr;
 
-// Original Draw function (too complex to reimplement: 233 instrs, grid rendering)
-typedef void (*fn_CemeteryDraw_t)(void* self);
-static fn_CemeteryDraw_t s_fn_OriginalDraw = nullptr;
+// FUN_140004680 -- member-ABI FindComponent<MapComponent>(entity, outIBP) -> outIBP.
+// (registered by reg_component_nature)
+typedef void** (*fn_FindMapComp_t)(uintptr_t entity, void** outIBP);
+static fn_FindMapComp_t s_fn_FindMapComp = nullptr;
+
+// FUN_140004740 -- member-ABI FindComponent<MultiObjectComponent>(entity, outIBP).
+// (ported in interactcomponent.cpp, registered by reg_component_economy)
+typedef void  (*fn_FindMultiComp_t)(uintptr_t entity, void* outIBP);
+static fn_FindMultiComp_t s_fn_FindMultiComp = nullptr;
+
+// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
+typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
+static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
+
+// 0x1400a6fe0 PfEnqueueCmd2(pfQueue, cellIdx, cmd) / 0x1400a8c90 FineCellDirty.
+typedef void (*fn_PfEnqueueCmd2_t)(void* queue, int cellIdx, int cmd);
+static fn_PfEnqueueCmd2_t s_fn_PfEnqueueCmd2 = nullptr;
+typedef void (*fn_FineCellDirty_t)(void* obj, int cellIdx, int row);
+static fn_FineCellDirty_t s_fn_FineCellDirty = nullptr;
+
+// System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) dispatch slots.
+typedef void* (*fn_CemMemAlloc_t)(uint64_t size, int align);
+static fn_CemMemAlloc_t s_fn_MemAlloc = nullptr;
+typedef void  (*fn_CemMemFree_t)(void* p);
+static fn_CemMemFree_t s_fn_MemFree = nullptr;
+
+// InternalBasePtr::CheckPtr -- resolves a lazy/weak pointer in place. Slot 0x140152ab0.
+typedef void (*fn_CheckPtr_t)(void* ibp);
+static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
+
+// TombstoneComponent type id (.rdata DAT_1401c4a30, storage + fill in
+// standalone/reg_citizen_lifeevent_handler.cpp).
+static const uint32_t* s_pTid_Tombstone = nullptr;
 
 static void** s_g_pGameState = nullptr;
 
@@ -99,22 +129,161 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
 }
 
 // ============================================================
-// CemeteryComponent::Draw (vtable slot [6], 0x140047200)
+// DynArray<int>::Push -- inlined by the plot-grid builder at 0x1400473a2
 // ============================================================
-// Complex cemetery grid rendering: 233 instructions. Iterates grid cells,
-// checks orientation/rotation, allocates memory for plot indices, builds
-// plot grid based on entity rotation. Delegates to original function.
-void CemeteryComponent_Draw(CemeteryComponent* self) {
-    if (s_fn_OriginalDraw)
-        s_fn_OriginalDraw(self);
+// {ptr @+0x48, count @+0x50, capacity @+0x54}. Retail grows the capacity to 3*newCount
+// when the array is already non-empty and this push is the one that overflows it
+// (`lea eax,[rbx+rbx*2]`), reallocs, copies the old elements, writes the new one past
+// the old count, then frees the old block. 1:1, including the "copy or fill" branch --
+// indices below the old count come from the old block, the rest get the new value.
+static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
+    const int      oldCount = self->plotCount;
+    const int      newCount = oldCount + 1;
+    int32_t* const oldPtr   = self->plots;
+
+    self->plotCount = newCount;
+    if (newCount > self->plotCapacity) {
+        // `lea eax,[rbx+rbx*2]` -- the 3x over-allocate applies only once the array is
+        // already non-empty; the very first push allocates exactly one element.
+        self->plotCapacity = (oldCount != 0) ? newCount * 3 : newCount;
+        if (!s_fn_MemAlloc) { self->plotCount = oldCount; self->plotCapacity = 0; return; }
+        self->plots = reinterpret_cast<int32_t*>(
+            s_fn_MemAlloc(static_cast<uint64_t>(self->plotCapacity) * 4, 4));
+    }
+    if (!self->plots) { self->plotCount = oldCount; self->plots = oldPtr; return; }
+
+    // Retail starts the write at 0 when the block moved (so the old elements are copied
+    // across) and at oldCount when it did not (only the new element is written).
+    for (int i = (oldPtr != self->plots) ? 0 : oldCount; i < newCount; ++i)
+        self->plots[i] = (i < oldCount) ? oldPtr[i] : cell;
+
+    if (oldPtr != self->plots && oldPtr && s_fn_MemFree) s_fn_MemFree(oldPtr);
+}
+
+
+// ============================================================
+// CemeteryComponent::BuildPlotGrid (vtable slot [6], 0x140047200)
+// ============================================================
+// Ghidra calls this slot Draw; it draws nothing. It BUILDS the grave-plot cell list
+// (self->plots / plotCount / plotCapacity) from the footprint, and it is the reason a
+// graveyard could never accept a burial: the previous port here was a passthrough to
+// `ResolveAddr(Module::Exe, 0x140047200)` -- its OWN address, which resolves to null in
+// standalone -- so the call was silently skipped, the plot array stayed empty, and
+// Cemetery_PickFreeSlot_6c60 returned -1 for every death, forever.
+//
+// Retail shape (0x140047200), read off the disassembly:
+//   map    = FindComponent<MapComponent>(owner)      // footprint x,y,w,h at +0x28..+0x2e
+//   rot    = map[+0x30]                              // 0 / 90 / 180 / 270
+//   world  = *(*0x1401c3dd8 + 0xf8)                  // terrain; *world = map width
+//   multi  = FindComponent<MultiObjectComponent>(owner)
+//   gate   = FindComponent<MapComponent>(*(multi+0x48)[0])   // the FIRST child entity
+//   The gate child is the cemetery's entrance tile; its coordinate along the footprint's
+//   long axis gives the two columns (`door`, `door-1`) that stay clear as the path in.
+//   The footprint is then inset by one tile on every side (x0/y0 += 1, w/h -= 2) and
+//   every OTHER row is walked, skipping the two door columns -- that alternation is what
+//   makes graves sit in rows with a gap to walk between them.
+//
+// Which axis the door is measured on, and which loop steps by two, swaps with rotation:
+// rot 0/180 walk rows outer, rot 90/270 walk columns outer. Both arms are transcribed.
+#define CEM_TRACE(fmt, ...) do { static int _n = 0; if (_n < 12) { ++_n; \
+    fprintf(stderr, "[CemeteryPlots] " fmt "\n", ##__VA_ARGS__); fflush(stderr); } } while (0)
+void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
+    CemeteryComponent_InitFuncs();
+    CEM_TRACE("enter comp=%p owner=%p", (void*)self, self->owner);
+    if (!s_fn_FindMapComp || !s_fn_FindMultiComp || !s_g_pGameState || !*s_g_pGameState) {
+        CEM_TRACE("BAIL deps: findMap=%p findMulti=%p gs=%p",
+                  (void*)s_fn_FindMapComp, (void*)s_fn_FindMultiComp,
+                  (void*)(s_g_pGameState ? *s_g_pGameState : nullptr));
+        return;
+    }
+
+    const uintptr_t entity = reinterpret_cast<uintptr_t>(self->owner);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&self->owner);
+
+    void* mapIbp = nullptr;
+    s_fn_FindMapComp(entity, &mapIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&mapIbp);
+    if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
+    const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
+
+    int x0  = *reinterpret_cast<int16_t*>(map + 0x28);
+    int y0  = *reinterpret_cast<int16_t*>(map + 0x2a);
+    int w   = *reinterpret_cast<int16_t*>(map + 0x2c);
+    int h   = *reinterpret_cast<int16_t*>(map + 0x2e);
+    const int rot = *reinterpret_cast<int*>(map + 0x30);
+
+    const uintptr_t world = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*s_g_pGameState) + 0xF8);
+    if (!world) { CEM_TRACE("BAIL no world"); return; }
+    const int mapWidth = *reinterpret_cast<int*>(world);
+
+    // The gate child: multi->children[0], then that entity's MapComponent.
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&self->owner);
+    uint8_t multiIbp[24] = {};
+    s_fn_FindMultiComp(entity, multiIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(multiIbp);
+    const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
+    if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
+    const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
+    if (!childArr) { CEM_TRACE("BAIL no child array"); return; }
+    // Retail copies children[0] into a local and calls CheckPtr on THAT COPY
+    // (0x1400472a7..0x1400472af) before using it -- the child slot holds a lazy/weak
+    // InternalBasePtr, and reading it raw yields an unresolved value. Skipping this
+    // step produced a gate 37 tiles outside a 12-wide footprint (door=38), so the two
+    // path-in columns were never excluded and every tile became a plot.
+    void* gateEnt = *reinterpret_cast<void**>(childArr);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&gateEnt);
+    if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
+
+    void* gateIbp = nullptr;
+    s_fn_FindMapComp(reinterpret_cast<uintptr_t>(gateEnt), &gateIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&gateIbp);
+    if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
+    // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
+    // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
+    // already. Dereferencing it once more hands back the component's VTABLE, and
+    // [vtable+0x28] is a slice of a function pointer -- which read as door=38 on a
+    // 12-wide footprint and door=383 on a 6-wide one, so the two path-in columns were
+    // never excluded and every tile became a grave plot.
+    const uintptr_t gateMap = reinterpret_cast<uintptr_t>(gateIbp);
+    if (!gateMap) { CEM_TRACE("BAIL gate map null"); return; }
+
+    // Door offset along the axis the footprint runs on for this rotation.
+    const bool rotated = (rot != 0 && rot != 180);
+    int door = rotated ? (*reinterpret_cast<int16_t*>(gateMap + 0x2a) - y0)
+                       : (*reinterpret_cast<int16_t*>(gateMap + 0x28) - x0);
+
+    // Inset by one tile all round; the door pair moves with it.
+    ++door; ++x0; ++y0; w -= 2; h -= 2;
+    const int doorPrev = door - 1;
+
+    CEM_TRACE("footprint x0=%d y0=%d w=%d h=%d rot=%d door=%d mapWidth=%d",
+              x0, y0, w, h, rot, door, mapWidth);
+    if (rotated) {
+        // 90 / 270: outer walks the width by twos, inner walks the height.
+        for (int col = 0; col < w; col += 2)
+            for (int row = 0; row < h; ++row) {
+                if (row == door || row == doorPrev) continue;
+                CemeteryComponent_PushPlot(self, (row + y0) * mapWidth + col + x0);
+            }
+    } else {
+        // 0 / 180: outer walks the height by twos, inner walks the width.
+        for (int row = 0; row < h; row += 2)
+            for (int col = 0; col < w; ++col) {
+                if (col == door || col == doorPrev) continue;
+                CemeteryComponent_PushPlot(self, (row + y0) * mapWidth + col + x0);
+            }
+    }
+    CEM_TRACE("built plots=%d cap=%d", self->plotCount, self->plotCapacity);
 }
 
 // ============================================================
-// CemeteryComponent::OnCreate (vtable slot [7], 0x1400471C0)
+// CemeteryComponent::OnRemove (vtable slot [7], 0x1400471C0)
 // ============================================================
-// Creates InternalBasePtr from owner entity, adds it to the cemetery list
-// at GameState+0xF0+0x40.
-void CemeteryComponent_OnCreate(CemeteryComponent* self) {
+// UNregisters from the TownManager cemetery list at *(GameWorld+0xF0)+0x40.
+// Ghidra labels the slot OnCreate; 0x140002cc0 is the ERASE (see the 1:1 port of it
+// further down this file). The matching REGISTER is the state-2 enter at the bottom.
+void CemeteryComponent_OnRemove(CemeteryComponent* self) {
     uint8_t ptrBuf[8];
     if (fn_InternalBasePtr_Ctor)
         fn_InternalBasePtr_Ctor(ptrBuf, self->owner);
@@ -182,8 +351,25 @@ void CemeteryComponent_InitFuncs() {
     s_fn_ListAdd = reinterpret_cast<fn_ListAdd_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
-    s_fn_OriginalDraw = reinterpret_cast<fn_CemeteryDraw_t>(
-        ResolveAddr(Module::Exe, 0x140047200));
+    s_fn_FindMapComp = reinterpret_cast<fn_FindMapComp_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_FindMultiComp = reinterpret_cast<fn_FindMultiComp_t>(
+        ResolveAddr(Module::Exe, 0x140004740));
+    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_PfEnqueueCmd2 = reinterpret_cast<fn_PfEnqueueCmd2_t>(
+        ResolveAddr(Module::Exe, 0x1400a6fe0));
+    s_fn_FineCellDirty = reinterpret_cast<fn_FineCellDirty_t>(
+        ResolveAddr(Module::Exe, 0x1400a8c90));
+    s_pTid_Tombstone = reinterpret_cast<const uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4a30));
+
+    slot = ResolveAddr(Module::Exe, 0x140152b60);
+    if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152b68);
+    if (slot) s_fn_MemFree = *reinterpret_cast<fn_CemMemFree_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152ab0);
+    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     s_g_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -191,21 +377,200 @@ void CemeteryComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p ListAdd=%p Draw=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ListAdd,
-           (void*)s_fn_OriginalDraw);
+    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p Erase=%p FindMap=%p FindMulti=%p Push=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
+           (void*)s_fn_FindMultiComp, (void*)s_fn_ArrayPush);
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid CemeteryComponent
-// (size 0x58, +0x20 capability flags 0x83, Object::Internal base + shared stub
-// vtable, zeroed body). Size from CemeteryComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================
+// CemeteryComponent state-2 "built" enter -- 0x140046fc0
+// ============================================================
+// Two jobs, in order:
+//   1. Register the graveyard: ArrayPush(town+0x40, town[0x48]+1, IBP(self)).
+//      This is the list `Cemetery_FindNearestWithSlot_9740` walks on every death. With
+//      the component inert nothing ever entered state 2, so it was empty for the life of
+//      the save and no citizen could ever be buried.
+//   2. Claim the plot cells: for each cell in self->plots, if the cell already holds an
+//      entity that owns a TombstoneComponent, leave it alone (a loaded save re-entering
+//      state 2 keeps its existing graves); otherwise clear the cell's entity slot, stamp
+//      its zone byte to 2, and tell the pathfinder and the fine-cell raster.
+//
+// The cell record is 0x30 bytes: +0x08 entity IBP, +0x29 zone byte. Retail returns 0 in
+// AL so the state machine's Enter walk continues past this node.
+extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
+    CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
+    CemeteryComponent_InitFuncs();
+    if (!fn_InternalBasePtr_Ctor || !s_fn_ArrayPush || !s_g_pGameState || !*s_g_pGameState)
+        return 0;
+
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(*s_g_pGameState);
+    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xF0);
+    if (!townMgr) return 0;
+
+    uint8_t ibp[24] = {};
+    fn_InternalBasePtr_Ctor(ibp, self);
+    const int count = *reinterpret_cast<int*>(townMgr + 0x48);
+    s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x40), count + 1, ibp);
+
+    const uintptr_t world = *reinterpret_cast<uintptr_t*>(gw + 0xF8);
+    if (!world) return 0;
+
+    int claimed = 0;
+    for (int i = 0; i < self->plotCount; ++i) {
+        const int cellIdx = self->plots[i];
+        const uintptr_t cells = *reinterpret_cast<uintptr_t*>(world + 0x80);
+        if (!cells) break;
+        const uintptr_t cell = cells + static_cast<uintptr_t>(cellIdx) * 0x30;
+
+        // Already occupied by a grave? Leave the plot as it stands.
+        void* occupant = *reinterpret_cast<void**>(cell + 0x08);
+        if (occupant) {
+            void* probe = occupant;
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&probe);
+            bool hasTombstone = false;
+            if (probe && s_pTid_Tombstone) {
+                const uintptr_t ent = reinterpret_cast<uintptr_t>(probe);
+                const int       n   = *reinterpret_cast<int*>(ent + 0x38);
+                const uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
+                for (int j = 0; j < n; ++j) {
+                    void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
+                    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+                    void* c = *slot;
+                    if (!c) continue;
+                    typedef uint32_t (*GetTypeId_t)(void*);
+                    const uint32_t tid =
+                        (reinterpret_cast<GetTypeId_t>(
+                            *reinterpret_cast<uintptr_t*>(
+                                *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                    if (tid == *s_pTid_Tombstone) { hasTombstone = true; break; }
+                }
+            }
+            if (hasTombstone) continue;
+        }
+
+        // Free plot: stamp the zone byte, notify, and null the entity slot.
+        const uint8_t zone = *reinterpret_cast<uint8_t*>(cell + 0x29);
+        const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
+        *reinterpret_cast<uint8_t*>(world + 0xA2) |= walkableZone ? 1 : 0;
+        *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
+
+        if (walkableZone && s_fn_FineCellDirty) {
+            const int mapWidth = *reinterpret_cast<int*>(world);
+            void* fine = *reinterpret_cast<void**>(world + 0x70);
+            if (fine && mapWidth) s_fn_FineCellDirty(fine, cellIdx, cellIdx / mapWidth);
+        }
+        if (s_fn_PfEnqueueCmd2) {
+            void* pf = *reinterpret_cast<void**>(world + 0x68);
+            if (pf) s_fn_PfEnqueueCmd2(pf, cellIdx, 2);
+        }
+
+        uint8_t nullIbp[24] = {};
+        fn_InternalBasePtr_Ctor(nullIbp, nullptr);
+        *reinterpret_cast<void**>(cell + 0x08) = *reinterpret_cast<void**>(nullIbp);
+        ++claimed;
+    }
+
+    {
+        static int n = 0;
+        if (n < 8) { ++n;
+            fprintf(stderr, "[Cemetery] graveyard REGISTERED: comp=%p townMgr=%p "
+                            "cemeteryCount=%d plots=%d claimed=%d\n",
+                    compV, reinterpret_cast<void*>(townMgr),
+                    *reinterpret_cast<int*>(townMgr + 0x48), self->plotCount, claimed);
+            fflush(stderr);
+        }
+    }
+    return 0;
+}
+
+// CemeteryComponent state-3 "demolish" enter -- 0x140046f80. Byte-identical to the
+// slot-7 removal hook (0x1400471c0): wrap the component, call the erase.
+extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* /*sm*/) {
+    CemeteryComponent_OnRemove(reinterpret_cast<CemeteryComponent*>(comp));
+    return 0;
+}
+
+// ===== Standalone factory =====
+// The WellComponent pattern: same slot 16 (GetDefaultState -> 2, shared fn 0x1400026c0)
+// and slot 17 (CreateState -> self+0x28, shared fn 0x140004080), and a two-state retail
+// table. Size 0x58 / flags 0x83 keep the values the inert factory used.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_state_table.h"
 
-COMPONENT_INERT_FACTORY(CemeteryComponent, 0x58, 0x83)
+namespace { struct CemeteryCtrlTag {}; }
+using CemeteryCtrlDispatch = ::ControllerLive::Dispatcher<CemeteryCtrlTag>;
+
+// The retail table, transcribed from 0x1400477a0 call for call. Its RegisterState
+// instantiation (0x140004250) zero-fills the trans30/trans38/update columns, so every
+// handler but Enter is null -- verified in the callee, not assumed from the call site.
+static void CemeteryComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = CemeteryCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&CemeteryComponent_EnterBuilt),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&CemeteryComponent_EnterDemolish),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
+}
+
+static uint32_t CemeteryComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("CemeteryComponent");
+    return cached;
+}
+static void* CemeteryComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void CemeteryComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
+    CemeteryComponent_Shutdown(reinterpret_cast<CemeteryComponent*>(s), stream);
+}
+static void CemeteryComponent_DrawVSlot(void* s) {                     // vtable index 6
+    CemeteryComponent_BuildPlotGrid(reinterpret_cast<CemeteryComponent*>(s));
+}
+static void CemeteryComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
+    CemeteryComponent_OnRemove(reinterpret_cast<CemeteryComponent*>(s));
+}
+static int   CemeteryComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
+static void* CemeteryComponent_CreateState(void* self) {               // 0x140004080
+    return reinterpret_cast<uint8_t*>(self) + 0x28;
+}
+
+static void CemeteryComponent_FinishLiveVtable(void* mem) {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_CEMETERY")) return;
+    CemeteryComponent_LiveVtable[3]  = reinterpret_cast<void*>(&CemeteryComponent_ShutdownVSlot);
+    CemeteryComponent_LiveVtable[6]  = reinterpret_cast<void*>(&CemeteryComponent_DrawVSlot);
+    CemeteryComponent_LiveVtable[7]  = reinterpret_cast<void*>(&CemeteryComponent_OnRemoveVSlot);
+    CemeteryComponent_LiveVtable[16] = reinterpret_cast<void*>(&CemeteryComponent_GetDefaultState);
+    CemeteryComponent_LiveVtable[17] = reinterpret_cast<void*>(&CemeteryComponent_CreateState);
+    CemeteryComponent_PopulateStateTable();
+    if (mem) {
+        // Embedded state node at +0x28: dispatcher vtable + the node+0x18
+        // back-pointer the tail-called handlers read as their `this`.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
+            reinterpret_cast<void*>(CemeteryCtrlDispatch::Vtable());
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
+    }
+}
+
+extern "C" void* CemeteryComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x83,
+        CemeteryComponent_LiveVtable,
+        reinterpret_cast<void*>(&CemeteryComponent_LiveGetTypeId));
+    CemeteryComponent_FinishLiveVtable(p);
+    return p;
+}
+static void* CemeteryComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x83,
+        CemeteryComponent_LiveVtable,
+        reinterpret_cast<void*>(&CemeteryComponent_LiveGetTypeId));
+    CemeteryComponent_FinishLiveVtable(mem);
+    return mem;
+}
+
 REGISTER_TYPE(CemeteryComponent, "ControllerComponent",
               &CemeteryComponent_Factory, &CemeteryComponent_CreateInPlace);

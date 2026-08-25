@@ -15,9 +15,16 @@
 // serializer blocks (component section + controller section).
 void HealerComponent_Shutdown(HealerComponent* self, void* stream);
 
-// OnCreate (vtable slot [7], 0x14004ae70): Registers owning entity with the
-// healer list in the population manager at (manager+0xF0)+0x70.
-void HealerComponent_OnCreate(HealerComponent* self);
+// OnRemove (vtable slot [7], 0x14004ae70): UNregisters the COMPONENT from the
+// TownManager healer list at *(GameWorld+0xF0)+0x70. Ghidra labels the slot
+// OnCreate; the body is an erase. The matching REGISTER is the state-2 enter.
+void HealerComponent_OnRemove(HealerComponent* self);
+
+// Controller state-machine enters (retail table 0x14004b020):
+//   state 2 "built"    0x14004ae30 -- append the component IBP to townMgr+0x70
+//   state 3 "demolish" 0x14004adf0 -- erase it again
+extern "C" char HealerComponent_EnterBuilt(void* comp, void* sm);
+extern "C" char HealerComponent_EnterDemolish(void* comp, void* sm);
 
 // Init: resolve all internal function pointers (called once at startup)
 void HealerComponent_InitFuncs();

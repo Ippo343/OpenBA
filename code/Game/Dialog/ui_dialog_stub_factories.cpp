@@ -220,6 +220,9 @@ REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
 // Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
 // these two is full behavioural coverage for this class.
 struct AttendanceUI;   // opaque; the reimpl casts internally
+struct CemeteryUI;     // opaque; the reimpl casts internally
+extern void CemeteryUI_Slot4(CemeteryUI* self);
+extern void CemeteryUI_Slot7(CemeteryUI* self);
 extern void AttendanceUI_Slot4(AttendanceUI* self);
 extern void AttendanceUI_Slot7(AttendanceUI* self);
 namespace uistub_AttendanceUI {
@@ -294,7 +297,66 @@ REGISTER_TYPE(AttendanceUI, "UI::DialogController",
               &uistub_AttendanceUI::Factory, &uistub_AttendanceUI::InPlace);
 
 // ---- DialogController family ------------------------------------------------
-UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
+// CemeteryUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-23. The panel bodies in
+// code/Game/Dialog/cemeteryui.cpp were fully ported but wired into NOTHING -- the stub
+// vtable left slots 4 and 7 as no-ops, so neither ProgressElement text parameter was
+// ever set and the panel rendered a literal "  of   graves" with both numbers blank.
+// Same shape as AttendanceUI directly above.
+namespace uistub_CemeteryUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) {
+        static uint32_t c = 0;
+        if (!c) c = ::Object::GetTypeIdByName("CemeteryUI");
+        return c;
+    }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self;
+        *reinterpret_cast<void**>(self) = g_vt;
+        if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+        return self;
+    }
+    static uint32_t s_cemComp = 0, s_tomb = 0;
+    void EnsureTypeIds() {
+        // Both are .rdata globals the faithful bodies dereference unconditionally.
+        // 0x1401c4090 (CemeteryComponent) had no registered storage at all until the
+        // town-service wave; the lazy resolve here is the same belt-and-braces the
+        // AttendanceUI block carries, so a resolve failure is a skip, not a fault.
+        if (!g_TypeId_CemeteryComponent || !*g_TypeId_CemeteryComponent) {
+            s_cemComp = ::Object::ResolveTypeIdByNameLazy("CemeteryComponent");
+            if (s_cemComp) g_TypeId_CemeteryComponent = &s_cemComp;
+        }
+        if (!g_TypeId_TombstoneComponent || !*g_TypeId_TombstoneComponent) {
+            s_tomb = ::Object::ResolveTypeIdByNameLazy("TombstoneComponent");
+            if (s_tomb) g_TypeId_TombstoneComponent = &s_tomb;
+        }
+    }
+    bool Ready() {
+        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+            && g_TypeId_CemeteryComponent && *g_TypeId_CemeteryComponent
+            && g_TypeId_TombstoneComponent && *g_TypeId_TombstoneComponent;
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        CemeteryUI_Slot4(reinterpret_cast<CemeteryUI*>(self));
+    }
+    void Slot7(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        CemeteryUI_Slot7(reinterpret_cast<CemeteryUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
+    // so a slot written before it runs is erased (project_next_stub_controller_sweep).
+    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                                  g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_sw;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x38;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x38,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(CemeteryUI, "UI::DialogController",
+              &uistub_CemeteryUI::Factory, &uistub_CemeteryUI::InPlace);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
 // ControlUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/controlui.cpp (wires Slot4/7/8/9 so the generic

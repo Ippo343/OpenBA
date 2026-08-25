@@ -681,6 +681,20 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, pos);
     }
 
+    // Where the ghost mesh is actually being put this frame. If the preview appears
+    // somewhere the cursor is not, this line says whether `pos` (the cursor world
+    // position from sub_da00) is wrong or whether something downstream moved the mesh.
+    {
+        static int n = 0;
+        if (n < 24) { ++n;
+            fprintf(stderr, "[Preview] ghost transform: pos=(%.2f, %.2f, %.2f) yaw=%.2f "
+                            "cells=(%d,%d)..(%d,%d) mesh=%p\n",
+                    pos[0], pos[1], pos[2], yaw[0], startCol, startRow, endCol, endRow,
+                    self->meshInstance);
+            fflush(stderr);
+        }
+    }
+
     if (s_fn_GeomSetTransform && self->meshInstance) {
         s_fn_GeomSetTransform(self->meshInstance, localTransform);
     }
