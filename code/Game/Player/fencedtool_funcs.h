@@ -19,7 +19,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key);
 void FencedTool_Serialize_Impl(FencedTool* self, void* param2, char param3);
 
 // Shutdown (vtable +0x48, Slot9): Removes scene object, calls base DragTool::Shutdown.
-void FencedTool_Shutdown(FencedTool* self);
+int  FencedTool_Shutdown(FencedTool* self);
 
 // CalcCost (vtable +0x70, Slot14): Validates rectangular fence region.
 // Returns 0=valid, 1=too small, 2=too large, 3=blocked.

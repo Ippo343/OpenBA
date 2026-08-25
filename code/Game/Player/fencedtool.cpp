@@ -206,12 +206,21 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     return 1;
 }
 
+extern "C" int DragTool_CancelDrag_Impl(void* self);  // 0x1400fc640 (dragtool.cpp)
+
 // ============================================================
 // FencedTool::Shutdown (vtable +0x48, Slot9)
 // ============================================================
-// Removes scene object if added, resets ID to -1, calls base DragTool::Shutdown.
+// Removes scene object if added, resets ID to -1, then TAIL-JUMPS to the shared
+// DragTool cancel-drag (0x1400fc640) — so its return value IS that function's:
+// non-zero = "I cancelled my drag, keep me alive", zero = "OK to tear me down".
+// EntityUI_ToolTick_SA reads that byte to decide whether a right-click destroys the
+// tool. This was declared `void` and only forwarded through the fn_DragTool_Shutdown
+// pointer, which resolves NULL in standalone (0x1400fc640 was never registered) — so
+// mid-drag the fence drag was never cancelled, the CreateBar dialog was never closed,
+// and the caller read a garbage EAX for the keep-alive decision.
 // Original: 0x1400dcd10
-void FencedTool_Shutdown(FencedTool* self) {
+int FencedTool_Shutdown(FencedTool* self) {
     EnsureSceneFuncs();
 
     // Remove scene object if added
@@ -223,10 +232,11 @@ void FencedTool_Shutdown(FencedTool* self) {
         self->sceneObjectId = (uint32_t)-1;
     }
 
-    // Call base DragTool::Shutdown (0x1400fc640)
-    if (fn_DragTool_Shutdown) {
-        fn_DragTool_Shutdown(self);
-    }
+    // Tail-call the shared DragTool cancel-drag (retail `JMP 0x1400fc640`) and return
+    // its result. Called by symbol, not through the exe-address pointer: our port of
+    // 0x1400fc640 is DragTool_CancelDrag_Impl, and the address is now registered to it
+    // too (standalone/reg_player_drag.cpp) for callers that do go by address.
+    return DragTool_CancelDrag_Impl(self);
 }
 
 // ============================================================

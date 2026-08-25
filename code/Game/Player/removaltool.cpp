@@ -650,6 +650,7 @@ static uint32_t* RemovalTool_GetSettingType(void*, uint32_t* ret) {
     if (ret) *ret = 0;
     return ret;
 }
+extern "C" int DragTool_CancelDrag_Impl(void* self);   // 0x1400fc640 (dragtool.cpp)
 static void* g_RemovalTool_Vtable[15] = {
     (void*)&RemovalTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,            // +0x08
@@ -660,7 +661,15 @@ static void* g_RemovalTool_Vtable[15] = {
     (void*)&DragTool_OnKey,        // +0x30 OnKey (base)
     (void*)&Tool_Ret0,             // +0x38
     (void*)&RemovalTool_Draw,      // +0x40 Draw
-    (void*)&Tool_Ret0,             // +0x48
+    // +0x48 Slot9 — retail 0x1400fc640, the SHARED DragTool cancel-drag/"can-deactivate?".
+    // This was Tool_Ret0, i.e. "always OK to tear me down". EntityUI's right-click path
+    // (EntityUI_ToolTick_SA) asks this slot first: non-zero means the tool cancelled its
+    // own drag and STAYS; zero means teardown proceeds. Slot 5 (+0x28) is genuinely empty
+    // on every DragTool subclass (retail 0x140104bc0 = `ret 0`), so slot 9 is the ONLY
+    // thing that closes the CreateBar cost dialog. With Tool_Ret0 here, a right-click
+    // mid-drag deleted the tool while its dialog was still open — the dialog outlived its
+    // owner and nothing could dismiss it. Same slot Road/Bridge/DragPlacement already use.
+    (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag (retail 0x1400fc640)
     (void*)&Tool_Ret0,             // +0x50
     (void*)&RemovalTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
     (void*)&Tool_Ret0,             // +0x60
