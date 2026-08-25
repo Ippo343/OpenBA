@@ -814,6 +814,25 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
         float r = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
         s_rollChanceSum += (double)ratio;
         if (ratio > s_rollChanceMax) s_rollChanceMax = ratio;
+        // [Plague] ROLL-INPUTS -- diagnostic only. The census reported meanChance and
+        // maxChance as exactly 0.00000000 over 200k rolls with the disease list loaded,
+        // which the aggregate alone cannot explain: it is either elapsed==0 (the +0x60
+        // accumulator never reaching this read) or a denom so large the ratio underflows
+        // the 8-decimal print. Those need different fixes, so print the raw terms of the
+        // first few rolls instead of guessing.
+        {
+            static int nInputs = 0;
+            if (PlagueTraceOn() && nInputs < 6) {
+                ++nInputs;
+                fprintf(stderr, "[Plague] ROLL-INPUTS citizen=%p elapsed=%.9fs A=%.6f "
+                        "B=%.6f monthsPerYear=%.2f secsPerMonth=%.2f denom=%.6f "
+                        "ratio=%.9f roll=%.6f health(+0x50)=%.3f maxHealth(desc+0x70)=%.3f "
+                        "townMult(mgr+0x1a8)=%.6f\n",
+                        self, elapsed, A, B, MonthsPerYear(), SecsPerMonth(), denom,
+                        ratio, r, *(float*)(s + 0x50), *(float*)(desc + 0x70), m);
+                fflush(stderr);
+            }
+        }
         if (ratio > r) {
             ++s_rollFired;
             if (PlagueTraceOn()) {

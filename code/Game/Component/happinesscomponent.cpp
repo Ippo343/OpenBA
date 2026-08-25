@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -491,13 +493,66 @@ extern "C" void HappinessComponent_Unregister(void* selfV) {
     self->happinessFlag = 0;
 }
 
+//
+// [Happiness] TRANSITION TRACE -- diagnostic only, no behaviour change.
+// Register()'s own trace caps at 8 lines and fires only on the ADD, so the interesting
+// event (a tavern dropping out when the ale runs dry, then coming back when it is
+// restocked) was invisible: by the time a source flips, the 8-line budget is long spent
+// on the founding chapel/well. This logs only the EDGE, and prints the three descriptor
+// bytes that select which arm of IsActive decided it -- mode(+0x20)==5 is the plain
+// radius source (chapel), needsStaff(+0x24) the staffed one, needsGoods(+0x25) the
+// tavern. Steady state is silent, so the budget is spent on real flips.
+// Default ON; BANISHED_HAPPINESS_TRACE=0 disables.
+static bool HappinessTraceOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_HAPPINESS_TRACE");
+        en = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return en == 1;
+}
+
+static void HappinessLogEdge(void* comp, const char* edge) {
+    if (!HappinessTraceOn()) return;
+    static int n = 0;
+    if (n >= 64) return;
+    ++n;
+    const uintptr_t su = reinterpret_cast<uintptr_t>(comp);
+    void* descRaw = *reinterpret_cast<void**>(su + 0x18);
+    int  mode = -1, needsStaff = -1, needsGoods = -1;
+    unsigned wantMask = 0;
+    if (descRaw && s_fn_IsDerivedFrom && s_pTid_HappinessDesc &&
+        s_fn_IsDerivedFrom(descRaw, *s_pTid_HappinessDesc)) {
+        const uintptr_t d = reinterpret_cast<uintptr_t>(descRaw);
+        mode       = *reinterpret_cast<int*>(d + 0x20);
+        needsStaff = *reinterpret_cast<uint8_t*>(d + 0x24);
+        needsGoods = *reinterpret_cast<uint8_t*>(d + 0x25);
+        wantMask   = *reinterpret_cast<uint32_t*>(d + 0x28);
+    }
+    int townCount = -1;
+    if (s_pGameWorld && *s_pGameWorld) {
+        const uintptr_t tm = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
+        if (tm) townCount = *reinterpret_cast<int*>(tm + 0x58);
+    }
+    fprintf(stderr, "[Happiness] %s comp=%p mode(desc+0x20)=%d needsStaff(+0x24)=%d "
+            "needsGoods(+0x25)=%d wantMask(+0x28)=0x%x townHappinessCount=%d\n",
+            edge, comp, mode, needsStaff, needsGoods, wantMask, townCount);
+    fflush(stderr);
+}
+
 // ============================================================
 // HappinessComponent state 2 / 13 "built" enter -- 0x14004a9f0
 // ============================================================
 // Register on entry, but only if not already registered and currently active.
 extern "C" char HappinessComponent_EnterBuilt(void* comp, void* /*sm*/) {
     HappinessComponent* self = reinterpret_cast<HappinessComponent*>(comp);
-    if (self->happinessFlag == 0 && HappinessComponent_IsActive(comp))
+    const bool active = HappinessComponent_IsActive(comp);
+    // [Happiness] state-2 ENTER reached. Logged unconditionally (budgeted) because a
+    // chapel in the world producing NO happiness line at all cannot distinguish
+    // "the enter never ran" from "it ran and IsActive said no" -- different faults.
+    HappinessLogEdge(comp, active ? "ENTER state2 -> ACTIVE" : "ENTER state2 -> inactive");
+    if (self->happinessFlag == 0 && active)
         HappinessComponent_Register(comp);
     return 0;
 }
@@ -517,8 +572,13 @@ extern "C" char HappinessComponent_Tick38(void* comp, void* /*sm*/, void* /*time
     const bool active     = HappinessComponent_IsActive(comp);
     const bool registered = (self->happinessFlag != 0);
 
-    if (!registered && active)      HappinessComponent_Register(comp);
-    else if (registered && !active) HappinessComponent_Unregister(comp);
+    if (!registered && active) {
+        HappinessComponent_Register(comp);
+        HappinessLogEdge(comp, "TICK38 -> ACTIVE (registered)");
+    } else if (registered && !active) {
+        HappinessComponent_Unregister(comp);
+        HappinessLogEdge(comp, "TICK38 -> INACTIVE (unregistered)");
+    }
     return 0;
 }
 
@@ -595,11 +655,22 @@ static void HappinessComponent_FinishLiveVtable(void* mem) {
     }
 }
 
+static void HappinessFactoryProbe(const char* how, void* p) {
+    if (!HappinessTraceOn()) return;
+    static int n = 0;
+    if (n >= 6) return;
+    ++n;
+    fprintf(stderr, "[Happiness] FACTORY %s -> comp=%p liveGate(BANISHED_LIVE_HAPPINESS)=%d\n",
+            how, p, ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HAPPINESS") ? 1 : 0);
+    fflush(stderr);
+}
+
 extern "C" void* HappinessComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x82,
         HappinessComponent_LiveVtable,
         reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
     HappinessComponent_FinishLiveVtable(p);
+    HappinessFactoryProbe("Factory", p);
     return p;
 }
 static void* HappinessComponent_CreateInPlace(void* mem) {
@@ -607,6 +678,7 @@ static void* HappinessComponent_CreateInPlace(void* mem) {
         HappinessComponent_LiveVtable,
         reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
     HappinessComponent_FinishLiveVtable(mem);
+    HappinessFactoryProbe("CreateInPlace", mem);
     return mem;
 }
 

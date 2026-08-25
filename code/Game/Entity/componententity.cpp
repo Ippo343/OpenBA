@@ -20,6 +20,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
 // code/Game/Component/destroycomponent_state6.cpp.
@@ -545,6 +546,15 @@ ComponentEntity* ComponentEntity_CtorDefault(ComponentEntity* self) {
 // Creates entity from description: counts valid components, allocates array,
 // creates each via Factory, sets owner/description, calls RefreshEntityFlags
 // then StartupComponents.
+static bool EntityRosterTraceOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_ENTITY_ROSTER");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
     EnsureResolved();
     uintptr_t s = (uintptr_t)self;
@@ -603,6 +613,51 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
             uint32_t typeId = 0;
             getTypeId((void*)compTemplate, &typeId);
             if (typeId != 0) validCount++;
+        }
+    }
+
+    // [CtorFromDesc] HAPPINESS probe -- diagnostic only, opt-in via
+    // BANISHED_ENTITY_ROSTER=1. HappinessDescription instances exist in the world but
+    // their +0x40 GetComponentTypeId is never called. A plain first-N-entities dump
+    // cannot answer why: the budget is spent on trees and citizens long before the
+    // chapel is placed. So instead of dumping entities, this watches for the ONE thing
+    // in question -- a description sub-block whose own type is HappinessDescription --
+    // and dumps that entity's whole roster when it appears. If the run ends with
+    // happinessSubBlocksSeen == 0, the chapel's description list genuinely does not
+    // carry one and the fault is upstream of this ctor entirely.
+    if (EntityRosterTraceOn() && descCompCount > 0) {
+        static uint32_t tidHappinessDesc = 0;
+        if (tidHappinessDesc == 0)
+            tidHappinessDesc = ::Object::GetTypeIdByName("HappinessDescription");
+        bool hasHappiness = false;
+        for (int64_t i = 0; i < (int64_t)descCompCount && tidHappinessDesc; i++) {
+            uintptr_t descArr = *(uintptr_t*)(desc + 0x28);
+            uintptr_t compTemplate = *(uintptr_t*)(descArr + (uintptr_t)i * 8);
+            typedef uint32_t (*fn_SelfTypeId_t)(void*);
+            uint32_t selfTid = (*(fn_SelfTypeId_t*)(*(uintptr_t*)compTemplate + 0x10))((void*)compTemplate);
+            if (selfTid == tidHappinessDesc) { hasHappiness = true; break; }
+        }
+        static int nHit = 0;
+        if (hasHappiness && nHit < 6) {
+            ++nHit;
+            fprintf(stderr, "[CtorFromDesc] HAPPINESS-CARRIER entity=%p desc=%p "
+                    "descCompCount=%d validCount=%d\n",
+                    (void*)self, descriptionPtr, descCompCount, validCount);
+            for (int64_t i = 0; i < (int64_t)descCompCount; i++) {
+                uintptr_t descArr = *(uintptr_t*)(desc + 0x28);
+                uintptr_t compTemplate = *(uintptr_t*)(descArr + (uintptr_t)i * 8);
+                uintptr_t compVtable = *(uintptr_t*)compTemplate;
+                typedef uint32_t (*fn_SelfTypeId_t)(void*);
+                uint32_t selfTid = (*(fn_SelfTypeId_t*)(compVtable + 0x10))((void*)compTemplate);
+                typedef void (*fn_GetTypeId_t)(void*, uint32_t*);
+                uint32_t compTid = 0;
+                (*(fn_GetTypeId_t*)(compVtable + 0x40))((void*)compTemplate, &compTid);
+                const char* dn = ::Object::GetTypeNameById(selfTid);
+                const char* cn = ::Object::GetTypeNameById(compTid);
+                fprintf(stderr, "[CtorFromDesc]   [%d] descType=%s(%u) -> component=%s(%u)\n",
+                        (int)i, dn ? dn : "?", selfTid, cn ? cn : "(none)", compTid);
+            }
+            fflush(stderr);
         }
     }
 

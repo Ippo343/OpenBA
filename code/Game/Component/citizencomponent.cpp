@@ -2894,20 +2894,34 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
 // test whether a candidate building (param_1) has a free worker slot AND is reachable
 // from the citizen's (param_2) home tile. Returns true iff reachable. Closure-safe:
 // callees 002ed0/122e20/002e10/0a00f0 all registered.
+// [Plague] sub_40f0 exit reporter. The finder's counters proved the DoctorHouse matches
+// the healer key and is then rejected HERE, but this function has three independent
+// rejections -- a full attendee roster, an unstaffed building, and a failed reachability
+// test -- and they need different fixes. g_sub40f0_exit records which one fired:
+//   1 = roster full / AttendanceDescription cast failed (cap 0)
+//   2 = building has no worker (+0x60 == 0)
+//   3 = the 0x140a00f0 path test said unreachable
+//   0 = accepted
+int g_sub40f0_exit = 0, g_sub40f0_count = 0, g_sub40f0_cap = 0, g_sub40f0_attTid = 0;
+
 bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     EnsureCallees();
+    g_sub40f0_exit = 0;
     uint8_t* cp = reinterpret_cast<uint8_t*>(param_1);
     void* obj = *reinterpret_cast<void**>(cp + 0x18);
     uint32_t attTid = s_TypeId_AttendanceDesc3f78 ? *s_TypeId_AttendanceDesc3f78 : 0;
     void* res = (obj && attTid && fn_IsDerivedFrom(obj, attTid)) ? obj : nullptr;
     int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
-    if (*reinterpret_cast<int*>(cp + 0x30) >= cap) return false;
+    g_sub40f0_attTid = (int)attTid;
+    g_sub40f0_cap    = cap;
+    g_sub40f0_count  = *reinterpret_cast<int*>(cp + 0x30);
+    if (*reinterpret_cast<int*>(cp + 0x30) >= cap) { g_sub40f0_exit = 1; return false; }
 
     fn_InternalBasePtr_CheckPtr(cp + 0x10);
     int64_t bldgIBP = 0;
     if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*reinterpret_cast<int64_t*>(cp + 0x10), &bldgIBP);
     fn_InternalBasePtr_CheckPtr(&bldgIBP);
-    if (*reinterpret_cast<int*>(bldgIBP + 0x60) == 0) return false;
+    if (*reinterpret_cast<int*>(bldgIBP + 0x60) == 0) { g_sub40f0_exit = 2; return false; }
 
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
@@ -2940,6 +2954,7 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
     char ok = s_fn_FUN_140a00f0 ? s_fn_FUN_140a00f0(mapInfo, 0xe1f, fromCell, toCell) : 0;
+    if (!ok) g_sub40f0_exit = 3;
     return ok != 0;
 }
 
@@ -2948,8 +2963,20 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
 // whose WorkplaceComponent's job key (+0x48) matches param_4 and that is reachable
 // (sub_40f0). Returns the best building's IBP via param_2. Closure-safe: sub_40f0 +
 // 0x140087fb0 + 0x140008830 all registered.
+// [Plague] sub_1930 outcome counters. FindCareBuilding's "noMatchingBuilding" message
+// covers TWO different causes -- no candidate whose WorkPlaceComponent+0x48 equals the
+// key, AND a candidate that matched the key but was rejected by sub_40f0 -- because both
+// leave *param_2 == 0. The boot census independently reported matchingHealerProfession=1
+// for the same registry, so the two arms had to be split before the cause could be named.
+int g_sub1930_walked = 0, g_sub1930_haveWpc = 0, g_sub1930_profMatch = 0,
+    g_sub1930_reject40f0 = 0, g_sub1930_accepted = 0;
+int g_sub1930_lastExit = 0, g_sub1930_lastCount = 0, g_sub1930_lastCap = 0;
+extern int g_sub40f0_exit, g_sub40f0_count, g_sub40f0_cap;
+
 int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, int64_t param_4) {
     EnsureCallees();
+    g_sub1930_walked = g_sub1930_haveWpc = g_sub1930_profMatch =
+        g_sub1930_reject40f0 = g_sub1930_accepted = 0;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
     int64_t srcWp = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x238);
@@ -2989,15 +3016,26 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
                 break;
             }
         }
+        ++g_sub1930_walked;
+        if (wp) ++g_sub1930_haveWpc;
+
         int64_t wpIBP = 0;
         fn_InternalBasePtr_Ctor(&wpIBP, wp);
         fn_InternalBasePtr_CheckPtr(&wpIBP);
         if (*reinterpret_cast<int64_t*>(wpIBP + 0x48) != param_4) continue;
+        ++g_sub1930_profMatch;
 
         int64_t selfIBP = 0;
         fn_InternalBasePtr_Ctor(&selfIBP, reinterpret_cast<void*>(param_1));
         fn_InternalBasePtr_CheckPtr(&cand);
-        if (!CitizenComp_sub_40f0(cand, &selfIBP)) continue;
+        if (!CitizenComp_sub_40f0(cand, &selfIBP)) {
+            ++g_sub1930_reject40f0;
+            g_sub1930_lastExit  = g_sub40f0_exit;
+            g_sub1930_lastCount = g_sub40f0_count;
+            g_sub1930_lastCap   = g_sub40f0_cap;
+            continue;
+        }
+        ++g_sub1930_accepted;
 
         fn_InternalBasePtr_CheckPtr(&cand);
         int64_t candSubIBP = *reinterpret_cast<int64_t*>(cand + 0x10);
@@ -3087,12 +3125,20 @@ char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
         }
         return 0;
     }
-    // Other arm: sub_1930 found no building whose WorkPlaceComponent+0x48 == desc+0x30.
+    // Other arm: sub_1930 returned nothing. Which of its two exits that was is
+    // reported from the counters, not guessed from the null result.
     if (CareTraceOn()) {
+        const char* reason =
+            (healerProf == 0)          ? "healerProfessionRefIsNull" :
+            (g_sub1930_walked == 0)    ? "attendanceRegistryEmpty" :
+            (g_sub1930_profMatch == 0) ? "noBuildingWithMatchingWPC_0x48" :
+                                         "profMatchedButRejectedBySub40f0";
         fprintf(stderr, "[Plague] CARE citizen=%p NOT-LINKED reason=%s "
-                "healerProf(desc+0x30)=%p\n", (void*)param_1,
-                (healerProf == 0) ? "healerProfessionRefIsNull" : "noMatchingBuilding",
-                (void*)healerProf);
+                "healerProf(desc+0x30)=%p walked=%d haveWPC=%d profMatch=%d "
+                "reject40f0=%d accepted=%d sub40f0Exit=%d(1=rosterFull/capCastFail,2=noWorker,3=unreachable) attendeeCount=%d cap=%d\n", (void*)param_1, reason,
+                (void*)healerProf, g_sub1930_walked, g_sub1930_haveWpc,
+                g_sub1930_profMatch, g_sub1930_reject40f0, g_sub1930_accepted,
+                g_sub1930_lastExit, g_sub1930_lastCount, g_sub1930_lastCap);
         fflush(stderr);
     }
     return 0;
