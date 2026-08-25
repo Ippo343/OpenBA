@@ -10,6 +10,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -55,6 +56,14 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     uint64_t testBuf = 0;
     fn_DialogInstance_FindElement(dialogInst, &testBuf, nameBuf);
     bool hasCombo = (testBuf != 0);
+    {
+        static int nh = 0;
+        if (nh < 6) {
+            ++nh;
+            fprintf(stderr, "[CPUI] Slot4 hasCombo(comboProduct found)=%d\n", hasCombo ? 1 : 0);
+            fflush(stderr);
+        }
+    }
     fn_String_Dtor(nameBuf);
 
     if (hasCombo) {
@@ -78,6 +87,28 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         // Iterate description entries and populate combo
         // cpComp+0x28 = entries array ptr, cpComp+0x30 = entry count, stride 0x28
         uintptr_t cp = (uintptr_t)cpComp;
+        // [CPUI] the Tavern's Product combo renders EMPTY. Three different things
+        // produce that same blank dropdown and they need different fixes:
+        //   * hasCombo false      -> the "comboProduct" element was never found, so this
+        //                           whole block is skipped (no crash, blank combo)
+        //   * cpComp null         -> the IsDerivedFrom below tests the DESCRIPTION at
+        //                           component+0x18 against the COMPONENT type id, which
+        //                           is the wrong class entirely
+        //   * entryCount == 0     -> the recipe array on the description never
+        //                           deserialized (see the unregistered-resize trap)
+        // Print all three rather than guessing between them.
+        {
+            static int n = 0;
+            if (n < 6) {
+                ++n;
+                fprintf(stderr, "[CPUI] Slot4 comp=%p desc(comp+0x18)=%p cpComp(afterCast)=%p "
+                        "entryCount(desc+0x30)=%d entriesBase(desc+0x28)=%p\n",
+                        (void*)component, *(void**)((uintptr_t)component + 0x18), cpComp,
+                        cpComp ? *(int*)(cp + 0x30) : -1,
+                        cpComp ? *(void**)(cp + 0x28) : nullptr);
+                fflush(stderr);
+            }
+        }
         int entryCount = *(int*)(cp + 0x30);
         uintptr_t entriesBase = *(uintptr_t*)(cp + 0x28);
 

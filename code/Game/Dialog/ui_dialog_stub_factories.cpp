@@ -220,6 +220,11 @@ REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
 // Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
 // these two is full behavioural coverage for this class.
 struct AttendanceUI;   // opaque; the reimpl casts internally
+struct ConsumeProduceUI;   // opaque; the reimpl casts internally
+extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
+extern void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
+extern void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t p2, int p3, int p4);
+
 struct CemeteryUI;     // opaque; the reimpl casts internally
 extern void CemeteryUI_Slot4(CemeteryUI* self);
 extern void CemeteryUI_Slot7(CemeteryUI* self);
@@ -357,7 +362,85 @@ namespace uistub_CemeteryUI {
 }
 REGISTER_TYPE(CemeteryUI, "UI::DialogController",
               &uistub_CemeteryUI::Factory, &uistub_CemeteryUI::InPlace);
-UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
+// ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
+// rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
+// "Potato 300" and a Product combo -- but the combo was ALWAYS EMPTY, so no product
+// could ever be selected and the tavern brewed nothing. The three slot bodies in
+// code/Game/Dialog/consumeproduceui.cpp were fully ported and wired into NOTHING: the
+// stub vtable left 4/7/9 as no-ops, so the combo was never populated (Slot4), the
+// progress bar never moved (Slot7) and a selection could never be written back to the
+// component (Slot9). Same shape as CemeteryUI directly above.
+//
+// This is also what kept HappinessComponent's GOODS arm untestable: a tavern with no
+// product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
+// source can never register. Wiring the panel is the prerequisite for that A/B.
+namespace uistub_ConsumeProduceUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) {
+        static uint32_t c = 0;
+        if (!c) c = ::Object::GetTypeIdByName("ConsumeProduceUI");
+        return c;
+    }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self;
+        *reinterpret_cast<void**>(self) = g_vt;
+        if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+        return self;
+    }
+    static uint32_t s_cpDesc = 0, s_combo = 0, s_rawMat = 0;
+    void EnsureTypeIds() {
+        // .rdata globals the faithful bodies dereference unconditionally. Note
+        // g_TypeId_ConsumeProduceComponent is MISNAMED: it is bound to 0x1401c7388,
+        // which is the ConsumeProduce*Description* id -- and that is correct, because
+        // the object it guards is the description at component+0x18. Retail reads the
+        // same global at 0x14005f445. Do not "fix" the cast to the component id.
+        if (!g_TypeId_ConsumeProduceComponent || !*g_TypeId_ConsumeProduceComponent) {
+            s_cpDesc = ::Object::ResolveTypeIdByNameLazy("ConsumeProduceDescription");
+            if (s_cpDesc) g_TypeId_ConsumeProduceComponent = &s_cpDesc;
+        }
+        if (!g_TypeId_ComboElement || !*g_TypeId_ComboElement) {
+            s_combo = ::Object::ResolveTypeIdByNameLazy("ComboElement");
+            if (s_combo) g_TypeId_ComboElement = &s_combo;
+        }
+        if (!g_TypeId_RawMaterialDescription || !*g_TypeId_RawMaterialDescription) {
+            s_rawMat = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
+            if (s_rawMat) g_TypeId_RawMaterialDescription = &s_rawMat;
+        }
+    }
+    bool Ready() {
+        return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+            && g_TypeId_ComboElement && *g_TypeId_ComboElement
+            && g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+            && g_TypeId_ConsumeProduceComponent && *g_TypeId_ConsumeProduceComponent
+            && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription;
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        ConsumeProduceUI_Slot4(reinterpret_cast<ConsumeProduceUI*>(self));
+    }
+    void Slot7(void* self) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        ConsumeProduceUI_Slot7(reinterpret_cast<ConsumeProduceUI*>(self));
+    }
+    void Slot9(void* self, uint64_t p2, int p3, int p4) {
+        EnsureTypeIds();
+        if (!self || !Ready()) return;
+        ConsumeProduceUI_Slot9(reinterpret_cast<ConsumeProduceUI*>(self), p2, p3, p4);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
+    // so a slot written before it runs is erased (project_next_stub_controller_sweep).
+    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                                  g_vt[7]=reinterpret_cast<void*>(&Slot7);
+                                  g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_sw;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x40;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x40,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ConsumeProduceUI, "UI::DialogController",
+              &uistub_ConsumeProduceUI::Factory, &uistub_ConsumeProduceUI::InPlace);
 // ControlUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/controlui.cpp (wires Slot4/7/8/9 so the generic
 // component-command buttons — pasture work/split/empty, element id 50000,
