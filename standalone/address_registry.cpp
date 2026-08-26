@@ -67,6 +67,7 @@ extern "C" {
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
+    void RegisterMenuDialogVtables();
     void RegisterMenuSceneVtable();
     void RegisterGeometryVtable();
     void RegisterWeatherVtable();
@@ -1630,6 +1631,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
+    RegisterMenuDialogVtables();
     RegisterMenuSceneVtable();
 
     // Weather vtable + factory at exe 0x140160290 — needed for MenuScene

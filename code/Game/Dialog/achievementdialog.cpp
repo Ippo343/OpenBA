@@ -347,3 +347,34 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
     fn_ProgressElement_SetProgressTextParameter(progressElem, 0, textBuf);
     fn_String_Dtor(textBuf);
 }
+
+// ============================================================
+// AchievementDialog::Slot8 (vtable +0x40, exe 0x14005D440) -- OnCommand
+// ============================================================
+// Byte-identical to GoalDialog::Slot8 (0x1400697C0): on a button click (msg 0x12)
+// from buttonOk (id 100), wrap self in an InternalBasePtr and ask the UserInterface
+// at self+0x10 to close this dialog. Without it the Achievements panel had no way to
+// dismiss itself -- the Setup body sets buttonOk id 100 and nothing consumed it.
+void AchievementDialog_Slot8(AchievementDialog* self, void* /*param2*/,
+                             int param3, int param4) {
+    if (param3 == 0x12 && param4 == 100) {
+        uint8_t selfIBP[16];
+        fn_InternalBasePtr_Ctor(selfIBP, self);
+        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    }
+}
+
+// ============================================================
+// WARNING -- AchievementDialog_Slot14 / _Slot17 above are MISATTRIBUTED
+// ============================================================
+// Their retail addresses (0x14005DD40 / 0x14005DC50) are .rdata entries 14 and 17
+// counting from 0x14015b020, but AchievementDialog's own vtable ENDS at index 9.
+// Those two are slots 4 and 7 of the NEXT table, which starts at 0x14015b070 and is
+// AttendanceUI's (its name string sits right after it in .rdata). Both bodies read
+// +0x20/+0x28/+0x30 and an AttendanceComponent -- DialogController layout, not
+// DialogInstance layout -- so on a real AchievementDialog they would read the wrong
+// fields. The SAME two retail functions are already ported under their correct names
+// as AttendanceUI_Slot4 / AttendanceUI_Slot7 (attendanceui.cpp), and it is those
+// copies that are wired. Neither of the two below is installed anywhere; they are
+// kept only so the addresses stay searchable. Do not wire them into the
+// AchievementDialog vtable (menu_dialog_standalone_vtables.cpp).

@@ -391,6 +391,9 @@ void AchievementDialog_Slot6(AchievementDialog* self);
 // Slot7 (vtable +0x38, exe 0x14005D480): RET 0 no-op (3 bytes).
 int AchievementDialog_Slot7(AchievementDialog* self);
 
+// Slot8 (vtable +0x40, exe 0x14005D440): OnCommand -- buttonOk (id 100) closes.
+void AchievementDialog_Slot8(AchievementDialog* self, void* param2, int param3, int param4);
+
 // Slot14 (vtable +0x70): Finds ProgressElement by type, stores at +0x30,
 // reads attendance capacity from sub-component, sets progress max.
 void AchievementDialog_Slot14(AchievementDialog* self);
