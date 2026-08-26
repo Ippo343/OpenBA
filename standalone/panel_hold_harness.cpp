@@ -9,6 +9,11 @@
 // barrel icon, say -- can only be seen by a human clicking the building, which an
 // autostart run has nobody to do.
 //
+// (The tavern barrel that motivated this turned out to be RETAIL behaviour -- the
+// Inventory tab covers it in the real game too, confirmed against the shipped exe -- so
+// that particular icon is NOT a defect and must not be "fixed". The harness earned its
+// keep by settling the question, and the next layout report will need it just the same.)
+//
 // This does the same select, skips the close, and then stops. One panel, held open for
 // the rest of the run, ready for a window capture.
 //
