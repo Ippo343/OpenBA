@@ -18,7 +18,7 @@ void HappinessComponent_Shutdown(HappinessComponent* self, void* stream);
 // OnCreate (vtable slot [7], 0x14004aa20): If happinessFlag != 0,
 // registers owner with game state happiness list, sets index to -1,
 // then clears flag.
-void HappinessComponent_OnCreate(HappinessComponent* self);
+void HappinessComponent_OnRemove(HappinessComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
 void HappinessComponent_InitFuncs();

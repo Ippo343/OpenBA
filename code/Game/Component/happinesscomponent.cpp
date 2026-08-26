@@ -7,7 +7,8 @@
 //
 // Vtable at 0x1401595d0:
 //   [3] Shutdown  = 0x14004aa80 -- serialize base + happinessFlag
-//   [7] OnCreate  = 0x14004aa20 -- register with happiness list
+//   [7] OnRemove  = 0x14004aa20 -- ERASE from the happiness list (Ghidra names this
+//                                  slot OnCreate on several components; it is the remove side)
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -39,9 +40,15 @@ static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
 static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
 
-// FUN_140002cc0 -- pushes an InternalBasePtr into a dynamic array
-typedef void (*fn_ArrayPushBasePtr_t)(void* arrayBase, void* internalBasePtr);
-static fn_ArrayPushBasePtr_t s_fn_ArrayPushBasePtr = nullptr;
+// 0x140002cc0 DynArray8_EraseByValue -- REMOVES every element equal to *value, shifting
+// the tail down and decrementing the count. It is NOT a push, despite the name this
+// typedef carried until 2026-08-25; the append counterpart is DynArray8_ResizeFill
+// (0x140003110), which is what Register uses. Ghidra's own plate comment on the callee
+// records that leaving it unnamed already caused two component OnCreate/OnRemove vtable
+// entries to be mislabelled as the create side. Renamed here so nobody "fixes"
+// Unregister into duplicating the source it is supposed to remove.
+typedef void (*fn_ArrayEraseByValue_t)(void* arrayBase, void* internalBasePtr);
+static fn_ArrayEraseByValue_t s_fn_ArrayEraseByValue = nullptr;
 
 // FishingComponent_impl_a300 -- sets index on entity to given value
 // Complex helper that looks up building type, finds linked component, sets map index.
@@ -87,7 +94,7 @@ static void EnsureHelpers() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    s_fn_ArrayPushBasePtr = reinterpret_cast<fn_ArrayPushBasePtr_t>(
+    s_fn_ArrayEraseByValue = reinterpret_cast<fn_ArrayEraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
     s_fn_SetEntityIndex = reinterpret_cast<fn_SetEntityIndex_t>(
         ResolveAddr(Module::Exe, 0x14004a300));
@@ -165,7 +172,7 @@ void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) {
 }
 
 // ============================================================
-// HappinessComponent::OnCreate (vtable slot [7], 0x14004aa20)
+// HappinessComponent::OnRemove (vtable slot [7], 0x14004aa20)
 // ============================================================
 // Ghidra decompilation:
 //   if (param_1[0x28] != 0) {
@@ -175,7 +182,7 @@ void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) {
 //     param_1[0x28] = 0
 //   }
 
-void HappinessComponent_OnCreate(HappinessComponent* self) {
+void HappinessComponent_OnRemove(HappinessComponent* self) {
     EnsureHelpers();
 
     if (self->happinessFlag != 0) {
@@ -185,13 +192,22 @@ void HappinessComponent_OnCreate(HappinessComponent* self) {
             fn_InternalBasePtr_Ctor(basePtr, self);
         }
 
-        // Push to happiness list at (gameWorld->+0xF0)->+0x50
-        if (s_fn_ArrayPushBasePtr && s_pGameWorld && *s_pGameWorld) {
+        // ERASE from the happiness list at (gameWorld->+0xF0)->+0x50.
+        //
+        // This said "Push" until 2026-08-25 and the function was called OnCreate.
+        // Both were wrong and they were the SAME wrong: 0x140002cc0 is
+        // DynArray8_EraseByValue, so a slot that erases, sets the entity index to
+        // -1 and clears the registered flag is the REMOVE side. Ghidra mislabels
+        // this pair on several components (its own plate comment on the callee
+        // records two more), and the mislabel is load-bearing here because the
+        // file already refers to 0x14004aa20 as "the slot-7 removal hook"
+        // elsewhere -- the name and the behaviour disagreed in one file.
+        if (s_fn_ArrayEraseByValue && s_pGameWorld && *s_pGameWorld) {
             void* manager = *s_pGameWorld;
             void* happinessArray = reinterpret_cast<void*>(
                 *reinterpret_cast<uintptr_t*>(
                     reinterpret_cast<uintptr_t>(manager) + 0xF0) + 0x50);
-            s_fn_ArrayPushBasePtr(happinessArray, basePtr);
+            s_fn_ArrayEraseByValue(happinessArray, basePtr);
         }
 
         // Set entity index to -1
@@ -332,7 +348,7 @@ void HappinessComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[HappinessComponent] Funcs resolved: Serialize=%p ArrayPush=%p SetIdx=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayPushBasePtr,
+           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayEraseByValue,
            (void*)s_fn_SetEntityIndex);
 #endif
 }
@@ -514,11 +530,11 @@ extern "C" void HappinessComponent_Unregister(void* selfV) {
     uint8_t basePtr[24] = {};
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
 
-    if (s_fn_ArrayPushBasePtr && s_pGameWorld && *s_pGameWorld) {
+    if (s_fn_ArrayEraseByValue && s_pGameWorld && *s_pGameWorld) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
         if (townMgr)
-            s_fn_ArrayPushBasePtr(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
+            s_fn_ArrayEraseByValue(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
     }
     if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, -1);
     self->happinessFlag = 0;
@@ -616,7 +632,7 @@ extern "C" char HappinessComponent_Tick38(void* comp, void* /*sm*/, void* /*time
 // HappinessComponent state-3 "demolish" enter -- 0x14004a940. Byte-identical to the
 // slot-7 removal hook (0x14004aa20), guard included.
 extern "C" char HappinessComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    HappinessComponent_OnCreate(reinterpret_cast<HappinessComponent*>(comp));
+    HappinessComponent_OnRemove(reinterpret_cast<HappinessComponent*>(comp));
     return 0;
 }
 
@@ -664,7 +680,7 @@ static void HappinessComponent_ShutdownVSlot(void* s, void* stream) {   // vtabl
     HappinessComponent_Shutdown(reinterpret_cast<HappinessComponent*>(s), stream);
 }
 static void HappinessComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
-    HappinessComponent_OnCreate(reinterpret_cast<HappinessComponent*>(s));
+    HappinessComponent_OnRemove(reinterpret_cast<HappinessComponent*>(s));
 }
 static int   HappinessComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
 static void* HappinessComponent_CreateState(void* self) {               // 0x140005be0

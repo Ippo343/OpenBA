@@ -232,5 +232,37 @@ extern "C" void TavernStockProbe_Tick(int frameNum) {
             }
         }
     }
+
+    // BANISHED_TAVERN_DRAIN=<frame> -- empty the tavern's storage once, at that frame.
+    //
+    // Proves the OTHER direction of the happiness goods arm. Registering is only half
+    // the contract: Tick38 must also UNREGISTER when the ale runs out, and that branch
+    // calls DynArray8_EraseByValue (0x140002cc0) against the town list -- code that has
+    // never executed, on a slot Ghidra mislabels as the create side. A register that is
+    // never undone leaves a stale InternalBasePtr in *(GameWorld+0xf0)+0x50 forever.
+    //
+    // Why a fixture rather than waiting: nothing drained the tavern in 8000+ frames of
+    // soak. Whatever hauls finished goods out of a producer is a separate subsystem,
+    // and its absence must not block testing this branch.
+    //
+    // HOW it drains matters. HappinessComponent::IsActive iterates i < store+0x30 (the
+    // SLOT COUNT) and reads each slot's description at slots[i*0x10] -- it never looks
+    // at the units held. So the arm goes false when the ale SLOT disappears, not when
+    // its count hits zero, which is exactly what the earlier trace showed
+    // (slots=1 sawFlags=0x21 -> slots=0 sawFlags=0x0). Setting the slot count to 0
+    // reproduces the empty-storage state the arm actually tests. The slot array itself
+    // is left allocated; nothing here frees engine memory.
+    {
+        static bool s_drained = false;
+        const char* de = std::getenv("BANISHED_TAVERN_DRAIN");
+        const int at = (de && de[0]) ? std::atoi(de) : 0;
+        if (!s_drained && at > 0 && frameNum >= at && cpStorage) {
+            const uintptr_t st = reinterpret_cast<uintptr_t>(cpStorage);
+            const int before = *reinterpret_cast<int32_t*>(st + 0x30);
+            *reinterpret_cast<int32_t*>(st + 0x30) = 0;
+            s_drained = true;
+            fprintf(stderr, "[Stock] DRAIN: tavern storage=%p slot count %d -> 0 (expect Happiness TICK38 -> INACTIVE next tick)\n", cpStorage, before);
+        }
+    }
     fflush(stderr);
 }
