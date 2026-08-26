@@ -54,6 +54,11 @@
 #include <cstdlib>
 #include <cstring>
 
+// Our port of StateMachine::Tick (retail 0x1400a9660), defined in
+// statemachinecomponent.cpp and registered for that address. RequestStateTransition
+// below needs it for the retail nested-tick idiom on a not-yet-entered SM.
+void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4);
+
 namespace ControllerLive {
 
 #pragma pack(push, 1)
@@ -298,19 +303,30 @@ template <class Tag> void*      Dispatcher<Tag>::vtbl[16] = {};
 // The SM object layout: +0x00 cur-node, +0x09 current node-local index (int8),
 // +0x0a pending state id (int8), +0x0b transition-target index (int8). StateMachine::Tick
 // picks up +0x0a/+0x0b on its next pass to run the transition action and enter the target.
-// (The exe first runs a nested Tick when sm->index < 0; we instead bail — RequestTransition
-// bounds-checks curIdx, so a <0 index simply defers the request one tick.)
+//
+// When sm->index (+0x09) is < 0 the SM has never entered a state (a pending default is
+// still undrained), so the slot-8 lookup has no current state to search from. Retail
+// runs a nested StateMachine_Tick(sm, Time(0), 0, 0) first to drain the pending enter,
+// then re-reads BOTH the node pointer and +0x09 before requesting — the tick can change
+// the active node. Verified at two retail call sites: 0x14012ae60 (the RP pause path)
+// and 0x14012b310 (ConsumeProduceAction_helper_b310). We do the same. With both flag
+// args 0 the nested Tick skips its action phase — the only consumer of the time arg —
+// so a plain 0 stands in for retail's Time(0.0) byte-for-byte. If the SM has nothing
+// pending either, the nested Tick is a no-op, +0x09 stays negative, and the slot-8
+// dispatcher bounds-rejects the request exactly as before.
 inline void RequestStateTransition(void* sm, int desiredStateId) {
     if (!sm) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(sm);
-    void* node = *reinterpret_cast<void**>(s + 0x00);
+    if (*reinterpret_cast<int8_t*>(s + 0x09) < 0)
+        ::StateMachine_TickReimpl(sm, 0, 0, 0);
+    void* node = *reinterpret_cast<void**>(s + 0x00);   // re-read after the nested tick
     if (!node) return;
     void* vt = *reinterpret_cast<void**>(node);
     if (!vt) return;
     typedef int (*RT_t)(void*, int, int*);
     RT_t rt = *reinterpret_cast<RT_t*>(reinterpret_cast<uint8_t*>(vt) + 0x08);
     if (!rt) return;
-    int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);
+    int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);  // re-read after the nested tick
     int desired = desiredStateId;
     int idx = rt(node, curIdx, &desired);
     // +0x0b is a transition index that is only meaningful RELATIVE TO THE STATE THAT
