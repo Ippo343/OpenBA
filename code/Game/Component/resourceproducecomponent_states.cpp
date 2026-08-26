@@ -131,6 +131,21 @@ static char RP_State13Enter(void* self, void* sm) {
     if (RP_Trace())
         std::fprintf(stderr, "[RPTrace] State13Enter ENTER self=%p\n", self);
 
+    // The pause flag is the LOW BYTE of the qword at +0x48 (retail: `(char)param_1[9]`),
+    // and nothing in our port ever writes it non-zero. So either something retail-side
+    // sets it, or it was never initialised and we are reading whatever the allocator
+    // left. Print the WHOLE qword: a clean 1 means a deliberate pause, anything
+    // pointer-shaped means uninitialised memory. Log both arms, so "entered producing"
+    // and "bounced to paused" are distinguishable.
+    if (std::getenv("BANISHED_SEAT_TRACE")) {
+        std::fprintf(stderr, "[RP13] self=%p qword(+0x48)=0x%016llx lowByte=%u -> %s\n",
+                     self,
+                     (unsigned long long)*reinterpret_cast<uint64_t*>(comp + 0x48),
+                     (unsigned)*reinterpret_cast<uint8_t*>(comp + 0x48),
+                     (*reinterpret_cast<uint8_t*>(comp + 0x48) != 0) ? "PAUSE(14)" : "produce");
+        std::fflush(stderr);
+    }
+
     if (*reinterpret_cast<uint8_t*>(comp + 0x48) != 0) {
         if (RP_Trace())
             std::fprintf(stderr, "[RPTrace] State13Enter self=%p paused -> request 14\n", self);
@@ -274,6 +289,15 @@ static void RP_Trans13to3(void* self) {
 static char RP_Event3Pause(void* self, void* sm) {
     if (RP_Trace())
         std::fprintf(stderr, "[RPTrace] Event3 on state13 self=%p -> request 14 (pause)\n", self);
+    // Event 0 TOGGLES (13 -> pause, 14 -> resume), so a single stray post closes a
+    // producing workplace: state 14 calls SetAccepting(false), which raises the
+    // "work is disabled at this location" sign AND evicts the roster. Trace the
+    // poster — an unasked-for pause is the whole bug.
+    if (std::getenv("BANISHED_SEAT_TRACE")) {
+        std::fprintf(stderr, "[RPPause] state13 -> 14 self=%p ret=%p\n",
+                     self, __builtin_return_address(0));
+        std::fflush(stderr);
+    }
     ::ControllerLive::RequestStateTransition(sm, 14);
     return 1;
 }

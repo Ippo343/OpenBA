@@ -889,8 +889,18 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                                         uintptr_t pathSrc = *(uintptr_t*)entityFieldPtr;
 
+                                        // arg2 is the CITIZEN entity IBP, not the world entity
+                                        // list. FindPath immediately does *(*arg2 + 0x278) to
+                                        // reach the CitizenAIComponent and clean its task list;
+                                        // handing it (GameWorld+0xf0) walked a non-canonical
+                                        // "list" pointer and faulted in TaskListCleanup.
+                                        // Retail (0x1400e87b9): [RBP] = *R12 (= *entityIBP) and
+                                        // LEA RDX,[RBP] — the same &(*entityIBP) the sibling
+                                        // call at 0x1400e83f4 passes.
+                                        uintptr_t pathCitizen = *(uintptr_t*)entityIBP;
+
                                         fn_Pathfinding_FindPath(
-                                            &foundStorage, &worldEntityList,
+                                            &foundStorage, &pathCitizen,
                                             *(int*)((uintptr_t)self + 0x20), &pathSrc,
                                             (float*)&fetchPos, &fetchDest, searchPos2,
                                             (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);
@@ -1123,9 +1133,31 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         (void)0;
     }
 
-    // Reset production state via helper
-    fn_InternalBasePtr_CheckPtr(&smCompIBP);
-    s_fn_ResetProductionState(smCompIBP);
+    // ResetProductionState IS 0x14012b310, and b310 is not a passive "reset": it drives
+    // the ResourceProduce state machine 13 -> 14 (PAUSED). State 14's enter calls
+    // SetAccepting(wpc, false), which raises the "work is disabled at this location"
+    // sign AND evicts the entire worker roster — permanently, because state 14 has no
+    // per-frame handler and the only 14 -> 13 requester is the panel's resume event.
+    //
+    // Retail GUARDS this call; we did not. At 0x1400e8eca:
+    //     TEST AL,AL
+    //     JNZ  0x1400e8ee1        ; skip straight to the SetActiveState(3,0) tail
+    //     CALL 0x14012b310        ; only reached when AL == 0
+    // AL is helper_93a0 (0x1401193a0) — our `canProduce`. So the (depleted &&
+    // canProduce) arm must SKIP b310 and only set model state 3, keeping its workers.
+    //
+    // Symptom this caused: a woodcutter works normally until the depletion test flips
+    // (~500-1000 frames), is still under its produce limit (canProduce=1), and where
+    // retail would idle the model and keep the roster, we paused the building and
+    // threw the worker back to laborer. The `[CPWork] canProduce=1 depleted=1` line
+    // logged immediately before State14Enter is exactly this arm.
+    //
+    // The !depleted && !canProduce path (the goto above) still reaches b310, since
+    // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
+    if ((char)canProduce == '\0') {
+        fn_InternalBasePtr_CheckPtr(&smCompIBP);
+        s_fn_ResetProductionState(smCompIBP);
+    }
 
     // Set active state = 3, disabled
     fn_InternalBasePtr_CheckPtr(&meshCompIBP);

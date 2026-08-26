@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -240,6 +241,18 @@ bool g_wpcRosterOnly = false;
 void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
+
+    // The roster decrement lives in RemoveFromList below. ee60 is NOT the only drain
+    // (measured: a seat vanished with zero [SeatDrain] hits), so trace the unseat at
+    // its true source, with the caller's return address. Uncapped; symbolize with
+    // tools/symbolize.py.
+    if (std::getenv("BANISHED_SEAT_TRACE")) {
+        fprintf(stderr, "[SeatDrain] Detach wpc=%p roster(+0x60)=%d key(+0x48)=0x%llx ret=%p\n",
+                (void*)comp, *(int*)(comp + 0x60),
+                (unsigned long long)*(uint64_t*)(comp + 0x48),
+                __builtin_return_address(0));
+        fflush(stderr);
+    }
 
     if (s_fn_WPC_RemoveFromList) s_fn_WPC_RemoveFromList((int64_t*)(comp + 0x58), workerIbp);
     // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
@@ -510,6 +523,18 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
 
+    // accepting=false is the PAUSE path: it raises the "work is disabled at this
+    // location" indicator AND evicts the whole roster. Trace its caller — this is the
+    // level that actually decides a workplace should close.
+    if (std::getenv("BANISHED_SEAT_TRACE") && !accepting) {
+        fprintf(stderr, "[SetAccept] CLOSE wpc=%p was(+0x50)=%d roster(+0x60)=%d "
+                        "key(+0x48)=0x%llx ret=%p\n",
+                (void*)comp, (int)*(char*)(comp + 0x50), *(int*)(comp + 0x60),
+                (unsigned long long)*(uint64_t*)(comp + 0x48),
+                __builtin_return_address(0));
+        fflush(stderr);
+    }
+
     *(char*)(comp + 0x50) = accepting ? 1 : 0;
 
     // BANISHED_LIVE_WPC_PAUSE — DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-25); the
@@ -634,6 +659,18 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
     EnsureHelpers();
     EnsureEe60Helpers();
     uintptr_t self = (uintptr_t)selfP;
+
+    // ee60 is THE roster drain (the loop below runs to +0x60 == 0) and it has five
+    // retail callers (f670, f520, ed60, OnRemove x2) plus vtable slots. When a seat
+    // silently disappears, the only useful fact is WHICH caller drained it — so log
+    // the return address, uncapped. Symbolize with tools/symbolize.py.
+    if (std::getenv("BANISHED_SEAT_TRACE") && *(int*)(self + 0x60) > 0) {
+        fprintf(stderr, "[SeatDrain] ee60 wpc=%p roster(+0x60)=%d key(+0x48)=0x%llx ret=%p\n",
+                selfP, *(int*)(self + 0x60),
+                (unsigned long long)*(uint64_t*)(self + 0x48),
+                __builtin_return_address(0));
+        fflush(stderr);
+    }
 
     while (*(int*)(self + 0x60) > 0) {
         // Termination depends on the detach below removing worker[0] from this

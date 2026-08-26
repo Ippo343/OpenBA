@@ -313,6 +313,20 @@ inline void RequestStateTransition(void* sm, int desiredStateId) {
     int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);
     int desired = desiredStateId;
     int idx = rt(node, curIdx, &desired);
+    // +0x0b is a transition index that is only meaningful RELATIVE TO THE STATE THAT
+    // WAS CURRENT WHEN IT WAS WRITTEN. If Tick ever re-reads the pair after the state
+    // has already changed, the same index selects a different target — e.g. requesting
+    // 13 from state 2 writes idx 0, and idx 0 read from state 13 is the transition to
+    // 14 (PAUSED). Log the pair with the state it was computed against so a stale
+    // re-application is visible.
+    if (std::getenv("BANISHED_SEAT_TRACE")) {
+        std::fprintf(stderr, "[SMReq] sm=%p curIdx=%d want=%d -> idx=%d desired=%d "
+                             "(pending was 0x0a=%d 0x0b=%d)\n",
+                     sm, curIdx, desiredStateId, idx, desired,
+                     (int)*reinterpret_cast<int8_t*>(s + 0x0a),
+                     (int)*reinterpret_cast<int8_t*>(s + 0x0b));
+        std::fflush(stderr);
+    }
     if (idx >= 0) {
         *reinterpret_cast<int8_t*>(s + 0x0b) = static_cast<int8_t>(idx);
         *reinterpret_cast<int8_t*>(s + 0x0a) = static_cast<int8_t>(desired);

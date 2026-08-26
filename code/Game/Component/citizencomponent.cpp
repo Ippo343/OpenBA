@@ -2868,6 +2868,19 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t* slot = reinterpret_cast<int64_t*>(p + 0x248);
+    // Trace THIS function's own caller. Tracing it from inside Detach only ever
+    // re-identified AssignHousing itself; the interesting frame is one level up, and
+    // guessing which of its call sites it was has been wrong three times. Fires only
+    // when a job is actually being dropped (*slot != 0 -> Detach).
+    if (*slot != 0 && std::getenv("BANISHED_SEAT_TRACE")) {
+        fprintf(stderr, "[SeatWho] AssignHousing citizen=%p oldJob=0x%llx newJob=0x%llx "
+                        "prof(+0x1f0)=0x%llx ret=%p\n",
+                (void*)param_1, (unsigned long long)*slot,
+                (unsigned long long)(param_2 ? *param_2 : 0),
+                (unsigned long long)*reinterpret_cast<int64_t*>(p + 0x1f0),
+                __builtin_return_address(0));
+        fflush(stderr);
+    }
     if (*slot != 0) {
         fn_InternalBasePtr_CheckPtr(slot);
         int64_t buildingIBP = 0;

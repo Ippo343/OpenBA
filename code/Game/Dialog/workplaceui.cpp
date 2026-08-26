@@ -15,6 +15,7 @@
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (stale weak-ref guard)
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>   // std::getenv — used by the seat trace below (also re-included later)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -518,6 +519,21 @@ showUpDown:
     }
 }
 
+// Diagnostic-only: the site's job capacity (WorkComponent+0x30), read the same way
+// the panel's roster/capacity label does. Never used outside the seat trace.
+static uint32_t WPC_DebugCapacity(void* wpComp) {
+    if (!wpComp) return 0;
+    if (!(g_TypeId_WorkComponent && *g_TypeId_WorkComponent)) return 0;
+    uintptr_t w = reinterpret_cast<uintptr_t>(wpComp);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
+    void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
+    uint64_t workC = 0;
+    fn_FindComponent_Work(parentEntity, &workC);
+    fn_InternalBasePtr_CheckPtr(&workC);
+    if (!workC) return 0;
+    return *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(workC) + 0x30);
+}
+
 // ============================================================
 // WorkplaceUI::OnRemove (vtable +0x48) — Button dispatch
 // ============================================================
@@ -558,6 +574,18 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
         uint64_t workerSlot = retBuf;
         uint8_t assignBuf[16];
         fn_CitizenList_AssignWorker(citizenList, assignBuf, &workerSlot, profId);
+        // Report the OUTCOME, not the intent: roster is WPC+0x60, and the whole
+        // question is whether this click moves it. Printing only "clicked" would
+        // conflate "nobody was available" with "the seat write is dead".
+        if (std::getenv("BANISHED_SEAT_TRACE")) {
+            fprintf(stderr, "[SeatClick] UP wpc=%p prof=0x%llx requested=0x%llx "
+                            "roster(+0x60)=%u cap(workC+0x30)=%u\n",
+                    wpComp, (unsigned long long)profId,
+                    (unsigned long long)retBuf,
+                    wpComp ? *(uint32_t*)((uintptr_t)wpComp + 0x60) : 0u,
+                    WPC_DebugCapacity(wpComp));
+            fflush(stderr);
+        }
     } else if (id == 0x1451) {
         // workerCountDown — remove worker from profession
         uint64_t profId = *(uint64_t*)((uintptr_t)wpComp + 0x48);

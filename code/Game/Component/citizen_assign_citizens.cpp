@@ -236,6 +236,34 @@ void NormalizeMismatched(void* citizenV, uintptr_t reg) {
     if (!wpComp) return;                                // no workplace comp -> nothing to sync
     int64_t reqProf   = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(wpComp) + 0x48);
     int64_t curProf   = *reinterpret_cast<int64_t*>(c + 0x1f0);
+
+    // A building can carry MORE THAN ONE WorkPlaceComponent — a construction workplace
+    // (so citizens can be assigned to build it) plus the production one. FindWorkplaceComp
+    // returns whichever the type scan hits FIRST, so if that is the construction seat the
+    // comparison below is against the wrong profession and a correctly-seated worker gets
+    // reset to laborer. Dump every WPC on the entity so the trace shows which was picked.
+    if (std::getenv("BANISHED_SEAT_TRACE") && reqProf != curProf) {
+        fprintf(stderr, "[SeatReset] citizen=%p picked wpComp=%p reqProf=0x%llx curProf=0x%llx\n",
+                citizenV, wpComp, (unsigned long long)reqProf, (unsigned long long)curProf);
+        uintptr_t ent = reinterpret_cast<uintptr_t>(assigned);
+        int cnt = *reinterpret_cast<int*>(ent + 0x38);
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
+        for (int i = 0; arr && i < cnt; ++i) {
+            void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+            if (!comp) continue;
+            uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+            if (!vt) continue;
+            uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(
+                *reinterpret_cast<void**>(vt + 0x10))(comp);
+            fprintf(stderr, "[SeatReset]   comp[%d]=%p tid=0x%x +0x48=0x%llx%s\n",
+                    i, comp, tid,
+                    (unsigned long long)*reinterpret_cast<uint64_t*>(
+                        reinterpret_cast<uintptr_t>(comp) + 0x48),
+                    comp == wpComp ? "  <-- PICKED" : "");
+        }
+        fflush(stderr);
+    }
+
     if (reqProf == curProf) return;                     // already matches
 
     int64_t defaultKey = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(reg) + 0x30);
@@ -473,6 +501,26 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
         if (*reinterpret_cast<int64_t*>(cb + 0x1f0) != key ||
             *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
+            // The `+0x248 != 0` arm strips the workplace off ANY citizen in `idle`,
+            // including one correctly seated at a building. `idle` (Phase 3) is every
+            // healthy citizen with no active action — it is NOT filtered to laborers,
+            // despite this file's own comments calling it the "idle-laborer set". A
+            // seated worker standing idle (e.g. its building has no input) therefore
+            // qualifies and gets evicted back to laborer.
+            if (std::getenv("BANISHED_SEAT_TRACE") &&
+                *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
+                int64_t defKey = *reinterpret_cast<int64_t*>(
+                    reinterpret_cast<uint8_t*>(reg) + 0x30);
+                fprintf(stderr, "[Seat5B] STRIP citizen=%p prof(+0x1f0)=0x%llx "
+                                "job(+0x248)=0x%llx newKey=0x%llx laborerKey=0x%llx%s\n",
+                        c,
+                        (unsigned long long)*reinterpret_cast<int64_t*>(cb + 0x1f0),
+                        (unsigned long long)*reinterpret_cast<int64_t*>(cb + 0x248),
+                        (unsigned long long)key, (unsigned long long)defKey,
+                        *reinterpret_cast<int64_t*>(cb + 0x1f0) != defKey
+                            ? "  <-- EMPLOYED, not a laborer" : "");
+                fflush(stderr);
+            }
             int64_t nullWp = 0;
             s_assignHousing(c, &nullWp);
             *reinterpret_cast<int64_t*>(cb + 0x1f0) = key;

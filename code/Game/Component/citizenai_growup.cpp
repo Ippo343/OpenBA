@@ -195,31 +195,40 @@ static uint32_t ModelCell(int64_t model, int* mapGrid) {
     return static_cast<uint32_t>(w * row + col);
 }
 
-// Scan an ENTITY's component array for the first component whose GetTypeId() matches
-// typeId, returning the derived object (null-guarded). Mirrors the inline
+// Scan a node's object array for the first entry whose GetTypeId() matches typeId,
+// returning the derived object (null-guarded). Mirrors the inline
 // GetTypeId()/IsDerivedFrom scan repeated throughout these handlers.
-//   componentArray = node+0x30 (array of object* at 8-byte stride); count = node+0x38.
 //
-// FIXED 2026-08-14 — this read +0x28/+0x30 (the node/list pair) and crashed. All three
-// call sites pass a component ENTITY, and retail's own loop inside 0x140115e60 is
-// unambiguous:
-//     if (0 < *(int *)(lVar4 + 0x38)) {                            // count  = +0x38
-//       puVar1 = (undefined8*)(*(longlong*)(lVar4 + 0x30) + i*8);  // array  = +0x30
-// (the same ENT_COMP_ARR/ENT_COMP_CNT pair starttown.cpp names). Reading +0x30 as the
-// count meant the count was the low 32 bits of the component-array POINTER — a huge
-// positive number — walked over a base taken from an unrelated field. Symptom was a
-// vtable word of 0xffffffffffffffef and an ACCESS_VIOLATION reading 0xffffffffffffffff.
+// THE ARRAY/COUNT PAIR IS NOT THE SAME AT EVERY CALL SITE — it depends on what kind of
+// node the caller passes, and retail spells both out:
 //
-// It stayed hidden because the only caller that reaches it needs a citizen actually
-// carrying goods with storage candidates collected (arrACount != 0); until the hunter
-// lodge was sited somewhere its worker could reach, that loop never ran.
+//   +0x30 array / +0x38 count  — a component ENTITY, e.g. inside 0x140115e60:
+//       if (0 < *(int *)(lVar4 + 0x38)) {                            // count = +0x38
+//         puVar1 = (undefined8*)(*(longlong*)(lVar4 + 0x30) + i*8);  // array = +0x30
+//     (the ENT_COMP_ARR/ENT_COMP_CNT pair starttown.cpp names.)
+//
+//   +0x28 array / +0x30 count  — a storage ROW node, e.g. inside 0x14010c890:
+//       if (0 < *(int *)(lVar4 + 0x30)) {                            // count = +0x30
+//         ... *(longlong *)(lVar4 + 0x28) + idx*8                    // array = +0x28
+//
+// HISTORY — this helper was born reading +0x28/+0x30 for everyone, which crashed the
+// 0x140115e60 (LongTermPlan) caller. The 2026-08-14 "fix" flipped it to +0x30/+0x38 for
+// everyone, which fixed that caller and silently broke the two 0x14010c890 (GrowUp) row
+// scans in the other direction. Both edits shared the same false premise: that one pair
+// fits every call site. It does not, so the pair is now the caller's to state.
+//
+// The GrowUp breakage stayed hidden for ten days because it needs a citizen actually
+// reaching the eat arm with a stocked storage. Its signature is an ACCESS_VIOLATION
+// reading 0x00000005_00000005 — reading 8 bytes at row+0x30 when the row keeps a
+// count/capacity int32 PAIR there, so a 5-item/5-capacity row becomes a "pointer".
 //
 // Retail also CheckPtrs EVERY element slot before dereferencing it — these are
 // InternalBasePtrs, and a stale one is exactly what a raw deref turns into a crash.
-static void* ScanForType(int64_t node, uint32_t typeId) {
+static void* ScanForType(int64_t node, uint32_t typeId,
+                         int arrOff = 0x30, int cntOff = 0x38) {
     if (node == 0) return nullptr;
-    int64_t base = *reinterpret_cast<int64_t*>(node + 0x30);
-    int count = *reinterpret_cast<int*>(node + 0x38);
+    int64_t base = *reinterpret_cast<int64_t*>(node + arrOff);
+    int count = *reinterpret_cast<int*>(node + cntOff);
     if (base == 0) return nullptr;
     for (int i = 0; i < count; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(base + static_cast<int64_t>(i) * 8);
@@ -636,7 +645,9 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     int64_t rowArrBase = *reinterpret_cast<int64_t*>(tStorNode + 0x28);   // local_b8+0x28
     for (int row = 0; row < rowCount; ++row) {
         int64_t rowEnt = *reinterpret_cast<int64_t*>(rowArrBase + static_cast<int64_t>(row) * 0x10);
-        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription);
+        // storage ROW node: array +0x28 / count +0x30 (retail 0x14010c890), NOT the
+        // +0x30/+0x38 entity pair — see the ScanForType header.
+        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription, 0x28, 0x30);
         if (!rm) continue;
         uint32_t flag = (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c)) >> 0xd;
         if ((flag & 1) == 0) continue;
@@ -663,7 +674,9 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     int ordinal = 0;
     for (int row = 0; row < rowCount; ++row) {
         int64_t rowEnt = *reinterpret_cast<int64_t*>(rowArrBase + static_cast<int64_t>(row) * 0x10);
-        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription);
+        // storage ROW node: array +0x28 / count +0x30 (retail 0x14010c890), NOT the
+        // +0x30/+0x38 entity pair — see the ScanForType header.
+        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription, 0x28, 0x30);
         if (!rm) continue;
         uint32_t flag = (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c)) >> 0xd;
         if ((flag & 1) == 0) continue;
