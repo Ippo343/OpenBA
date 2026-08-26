@@ -497,6 +497,12 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
         static void* s_lock = nullptr;
         static int s_n = 0;
         if (s_t && !s_lock) s_lock = self;
+        // s_n counts calls FOR THE LOCKED COMPONENT ONLY. It used to increment on every
+        // component's call while the print also required self == s_lock, so with a few
+        // hundred growth components in a world the two conditions coincided almost never
+        // and the trace emitted ~1 line for a whole run — which reads exactly like "the
+        // ramp stopped running" when it is in fact still ticking every frame. Do not
+        // move the ++ back outside this block.
         if (s_t && self == s_lock && (s_n % 200) == 0 && s_n < 4000) {
             std::fprintf(stderr, "[ScaleTrace] comp=%p growth=%.4f target=%.4f "
                          "displayed=%.4f model visualScale=(%.3f %.3f %.3f %.3f)%s\n",
@@ -508,7 +514,29 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
                          converged ? " CONVERGED" : "");
             std::fflush(stderr);
         }
-        ++s_n;
+        if (s_t && self == s_lock) ++s_n;
+
+        // The locked component is whichever one ticked first — in a fresh world that is
+        // a world-gen tree, already mature and CONVERGED, which tells us nothing about a
+        // sapling that will not grow. So also follow the components that are actively
+        // RAMPING (not yet converged): those are the young plants, i.e. exactly the ones
+        // a "never reaches full size" report is about. Rate-limited so a forest of
+        // saplings cannot flood the log.
+        // Sample rate, NOT a budget: an early cap here was silently exhausted by the
+        // world-gen saplings in the first minute, so a forester planted later produced
+        // no lines at all — indistinguishable from "the forester's trees never ramp".
+        // Keep the trickle running for the whole session; the cap is only a runaway stop.
+        static int s_rampSeen = 0, s_rampPrinted = 0;
+        if (s_t && !converged && s_rampPrinted < 4000 && (s_rampSeen % 600) == 0) {
+            std::fprintf(stderr, "[ScaleRamp] comp=%p growth=%.4f target=%.4f "
+                         "displayed=%.4f floor(desc+0x60)=%.4f cropForm=%d\n",
+                         (void*)self, *reinterpret_cast<float*>(resource + 0x28), target,
+                         scale, descFloor,
+                         (int)*reinterpret_cast<int8_t*>(desc + 0x64));
+            std::fflush(stderr);
+            ++s_rampPrinted;
+        }
+        if (s_t && !converged) ++s_rampSeen;
     }
 
     if (!converged) return;   // stay registered until the ease-in finishes
