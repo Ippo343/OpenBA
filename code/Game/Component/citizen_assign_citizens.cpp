@@ -51,7 +51,9 @@
 //            cbf0/ca20/c5f0/c4b0 cascade). Do not plan around "the allocator will
 //            staff it" — it will not. builder_pool_driver.cpp has this right.
 //   Phase 3  Idle pass: for each idle+healthy citizen — normalize (same as phase 1),
-//            insert into the idle-laborer set, bump the per-profession count map
+//            insert into the idle set (NOT laborer-filtered — retail's gate is just
+//            adult && no-active-action; an employed citizen standing idle is in it
+//            too, verified against 0x1400d43b0), bump the per-profession count map
 //            (keyed by +0x1f0), and add a {cost,citizen} candidate (cost from
 //            sub_6060) to every NeedEntry's cost-tree.
 //   Phase 4  Priority: score each NeedEntry = (int)(minCost * (uvScale - filled)),
@@ -501,12 +503,19 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
         if (*reinterpret_cast<int64_t*>(cb + 0x1f0) != key ||
             *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
-            // The `+0x248 != 0` arm strips the workplace off ANY citizen in `idle`,
-            // including one correctly seated at a building. `idle` (Phase 3) is every
-            // healthy citizen with no active action — it is NOT filtered to laborers,
-            // despite this file's own comments calling it the "idle-laborer set". A
-            // seated worker standing idle (e.g. its building has no input) therefore
-            // qualifies and gets evicted back to laborer.
+            // This arm strips the workplace off ANY citizen in `idle`, including one
+            // correctly seated at a building, and that is RETAIL BEHAVIOUR — checked
+            // 2026-08-25, do not "fix" it. Retail's Phase 3 gate (0x1400d43b0, the
+            // townMgr+0xa0 walk) is exactly
+            //     if (*(float*)(desc+0x44) <= *(float*)(cz+0x3c) && *(cz+0x208) == 0)
+            // i.e. adult AND no active action, with NO laborer filter — byte-for-byte
+            // what IsIdleHealthy() does above. The "idle-laborer set" phrasing in this
+            // file's header comment is the thing that is wrong, not the code.
+            //
+            // This was briefly suspected of causing a woodcutter to lose its worker.
+            // It was not: measured, this arm never fired for that case. The real cause
+            // was an unguarded b310 in ConsumeProduce_Execute pausing the building
+            // (see consumeproduce.cpp).
             if (std::getenv("BANISHED_SEAT_TRACE") &&
                 *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
                 int64_t defKey = *reinterpret_cast<int64_t*>(
@@ -518,7 +527,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
                         (unsigned long long)*reinterpret_cast<int64_t*>(cb + 0x248),
                         (unsigned long long)key, (unsigned long long)defKey,
                         *reinterpret_cast<int64_t*>(cb + 0x1f0) != defKey
-                            ? "  <-- EMPLOYED, not a laborer" : "");
+                            ? "  (employed, not a laborer — retail does this too)" : "");
                 fflush(stderr);
             }
             int64_t nullWp = 0;

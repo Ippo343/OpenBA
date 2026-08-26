@@ -350,9 +350,23 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     for (int i = 0; i < ibpCount; i++) {
         s_fn_IBP_Serialize(&ibpArray[i], serializerBuf);
 
-        // After deserialize, validate the entity type
+        // After deserialize, validate the entity type.
+        //
+        // GUARDED because standalone GENUINELY DIFFERS from retail here, not to paper
+        // over a faithful crash: in retail DAT_1401c7158 is always a live CitizenComponent
+        // type id, but in our build that .rdata slot is registered only when
+        // BANISHED_LIVE_CITIZENAI_CITID (or _TIDS) is on — deliberately opt-in, see
+        // standalone/reg_citizenai_typeids.cpp. Off by default, ResolveAddr returns NULL
+        // and `*s_typeId_1401c7158` dereferences it. Autostart never reached this (it is
+        // Serialize-side), so it sat here as a save/load crash waiting to happen.
+        //
+        // When the id is unavailable we KEEP the ref rather than clearing it. Retail's
+        // intent is "drop refs that are not citizen entities"; with no id we cannot tell,
+        // and these refs are citizens in the overwhelming majority, so clearing them would
+        // destroy live state — strictly worse than skipping a check we cannot perform.
+        // Same both-pointer-and-value shape as completetask.cpp's reader.
         void* ptr = (void*)ibpArray[i];
-        if (ptr != nullptr) {
+        if (ptr != nullptr && s_typeId_1401c7158 && *s_typeId_1401c7158) {
             bool valid = fn_IsDerivedFrom(ptr, *s_typeId_1401c7158);
             if (!valid) {
                 ibpArray[i] = 0;  // null out invalid refs

@@ -119,7 +119,6 @@ void WorkplaceUI_Startup(WorkPlaceUI* self);
 
 // OnRemove (vtable +0x48): Dispatches worker count up/down, job count up/down,
 // and workplace toggle button clicks.
-void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id);
 
 // ============================================================
 // UpgradeUI

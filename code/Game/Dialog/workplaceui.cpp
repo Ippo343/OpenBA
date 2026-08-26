@@ -519,88 +519,14 @@ showUpDown:
     }
 }
 
-// Diagnostic-only: the site's job capacity (WorkComponent+0x30), read the same way
-// the panel's roster/capacity label does. Never used outside the seat trace.
-static uint32_t WPC_DebugCapacity(void* wpComp) {
-    if (!wpComp) return 0;
-    if (!(g_TypeId_WorkComponent && *g_TypeId_WorkComponent)) return 0;
-    uintptr_t w = reinterpret_cast<uintptr_t>(wpComp);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
-    void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
-    uint64_t workC = 0;
-    fn_FindComponent_Work(parentEntity, &workC);
-    fn_InternalBasePtr_CheckPtr(&workC);
-    if (!workC) return 0;
-    return *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(workC) + 0x30);
-}
-
-// ============================================================
-// WorkplaceUI::OnRemove (vtable +0x48) — Button dispatch
-// ============================================================
-// Handles worker count up/down (0x1450/0x1451), job count up/down
-// (0x1452/0x1453), and workplace button toggle (0x1454).
-//
-// Original: 0x1400877e0.
-
-void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
-    (void)param2;
-    if (msg != 0x12) return;
-#ifdef _DEBUG
-    printf("[WorkPlaceUI] OnRemove: msg=0x%x id=0x%x\n", msg, id);
-#endif
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Get entity from data source
-    void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
-    void* entity = isEntity ? dataSource : nullptr;
-    uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
-    void* entityPtr = *(void**)entityBuf;
-
-    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0)
-    void* wpComp = nullptr;
-    fn_FindComponent_WorkPlace(entityPtr, &wpComp);
-
-    // Get citizen list singleton
-    void* citizenList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
-
-    if (id == 0x1450) {
-        // workerCountUp — request new worker for profession
-        uint64_t profId = *(uint64_t*)((uintptr_t)wpComp + 0x48);
-        uint64_t retBuf = 0;
-        fn_CitizenList_RequestWorker(citizenList, &retBuf, profId);
-        uint64_t workerSlot = retBuf;
-        uint8_t assignBuf[16];
-        fn_CitizenList_AssignWorker(citizenList, assignBuf, &workerSlot, profId);
-        // Report the OUTCOME, not the intent: roster is WPC+0x60, and the whole
-        // question is whether this click moves it. Printing only "clicked" would
-        // conflate "nobody was available" with "the seat write is dead".
-        if (std::getenv("BANISHED_SEAT_TRACE")) {
-            fprintf(stderr, "[SeatClick] UP wpc=%p prof=0x%llx requested=0x%llx "
-                            "roster(+0x60)=%u cap(workC+0x30)=%u\n",
-                    wpComp, (unsigned long long)profId,
-                    (unsigned long long)retBuf,
-                    wpComp ? *(uint32_t*)((uintptr_t)wpComp + 0x60) : 0u,
-                    WPC_DebugCapacity(wpComp));
-            fflush(stderr);
-        }
-    } else if (id == 0x1451) {
-        // workerCountDown — remove worker from profession
-        uint64_t profId = *(uint64_t*)((uintptr_t)wpComp + 0x48);
-        fn_CitizenList_RemoveWorker(citizenList, profId);
-    } else if (id == 0x1452) {
-        // jobCountUp — increase job count
-        WorkplaceUI_AdjustWorkerCount_Impl(self, 1);
-    } else if (id == 0x1453) {
-        // jobCountDown — decrease job count
-        WorkplaceUI_AdjustWorkerCount_Impl(self, -1);
-    } else if (id == 0x1454) {
-        // workPlaceButton — toggle workplace enabled state
-        WorkplaceUI_ToggleWorkplace_Impl(self);
-    }
-}
+// NOTE - the older duplicate port of retail 0x1400877e0 that used to live here
+// (WorkplaceUI_OnRemove) has been REMOVED. It was fully written but wired into no
+// vtable, so it never executed: slot 9 is workplaceui_sa::W_OnRemove, further down
+// this file. Keeping both was an active trap - a diagnostic added to the dead copy
+// during the 2026-08-25 seat investigation never fired, which cost a measurement
+// cycle. The live copy is also the CORRECT one: it routes jobCountUp/Down
+// (0x1452/0x1453) to SetMaxWorkers, where the dead copy ran the seat cascade for
+// both spinner pairs. If you need the old body, it is in git history.
 
 // ============================================================
 // STANDALONE promotion — real WorkPlaceUI controller vtable
