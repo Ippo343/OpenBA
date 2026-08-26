@@ -212,10 +212,25 @@ void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
     void* entity = self->owner;
     if (!entity) return;
 
-    // Get component list from entity: +0x28 = array ptr, +0x30 = count
+    // Walk the entity DESCRIPTION's child list, not the component array.
+    //
+    // ComponentEntity keeps its description at +0x28 and its COMPONENT array at +0x30
+    // (count +0x38); a description keeps its CHILD list at +0x28 with the count at
+    // +0x30. What is being searched for here is ConsumeProduce*Description*, so retail
+    // costs one extra deref: 0x140118ef0 does `RBP = *(entity+0x28)` and only then
+    // reads [RBP+0x30] as the count and [RBP+0x28] as the array. Its slot-18 sibling
+    // (0x140118d00) does exactly the same.
+    //
+    // This read the two fields straight off the entity, so `compCount` was the low half
+    // of the component-array POINTER (a huge positive number) and `compArray` was the
+    // description object -- the very first iteration would have called GetTypeId on the
+    // description's own vtable pointer. It never faulted only because slot 4 was wired
+    // nowhere and this whole body was dead. See the two-lists note in the wave memo.
     uintptr_t entityAddr = (uintptr_t)entity;
-    void** compArray = *(void***)(entityAddr + 0x28);
-    int compCount = *(int*)(entityAddr + 0x30);
+    uintptr_t descRoot = *(uintptr_t*)(entityAddr + 0x28);
+    if (!descRoot) return;
+    void** compArray = *(void***)(descRoot + 0x28);
+    int compCount = *(int*)(descRoot + 0x30);
 
     // Find ConsumeProduceDescription in component list
     void* desc = nullptr;
@@ -400,6 +415,16 @@ extern "C" void   RPCtrl_PopulateTable();
 extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self);  // 0x14012b520
 extern "C" void    ResourceProduceComponent_Command(void* self);      // 0x14012b5a0
 
+// Slot 18 (+0x90) CreateWork -- retail 0x140118d00, ported in
+// resourceproduce_creatework.cpp alongside its five siblings. Slot 18 is _purecall on
+// the ResourceProduceComponent base vtable, so leaving it as the inert stub is not
+// "inherits the base" -- it is "the building never mints a work". Measured on a staffed
+// demo tavern: a four-minute soak logged ZERO "[ConsumeProduce]" lines, so the work
+// class was never instantiated and the tavern brewed nothing, which in turn is what
+// kept HappinessComponent's goods arm (desc+0x25) permanently inactive -- the tavern's
+// storage held only its potato input (RawMaterial flags 0x22 against wantMask 0x20000).
+extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);  // slot 18
+
 // Slots 13/14 must be written from INSIDE InstallLive: MakeInertTyped -> FillTypedVtable
 // rewrites slots 1..N with the inert stub on the first factory call, so a static-init
 // write is silently erased. The macro calls PopulateFn from InstallLive AFTER
@@ -410,11 +435,33 @@ CONTROLLER_LIVE_FACTORY_STATES(ConsumeProduceComponent, 0x70, 0x80, 0x28, 2,
                                "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
                                RPCtrl_NodeVtable, ConsumeProduceCtrl_PopulateAndWireCmd)
 
+// void*-ABI adapters for the two lifecycle slots. Slot 3 takes the stream; slot 4
+// takes only self (it reads the template, it does not serialize).
+static void ConsumeProduceComponent_ShutdownVSlot(void* self, void* stream) {
+    ConsumeProduceComponent_Shutdown(reinterpret_cast<ConsumeProduceComponent*>(self), stream);
+}
+static void ConsumeProduceComponent_StartupVSlot(void* self) {
+    ConsumeProduceComponent_Serialize(reinterpret_cast<ConsumeProduceComponent*>(self));
+}
+
 static void ConsumeProduceCtrl_PopulateAndWireCmd() {
     ConsumeProduceComponent_LiveVtable[13] =
         reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
     ConsumeProduceComponent_LiveVtable[14] =
         reinterpret_cast<void*>(&ResourceProduceComponent_Command);
+    ConsumeProduceComponent_LiveVtable[18] =
+        reinterpret_cast<void*>(&ConsumeProduceComponent_CreateWork);
+    // Slots 3 (Shutdown/serialize, 0x140118e00) and 4 (Startup -- init the consume
+    // config from the building template, 0x140118ef0). Both bodies have been ported in
+    // this file for a long time and were registered and wired NOWHERE, so the inert stub
+    // ran instead: consumeResourceId (+0x50) kept the ctor zero instead of the
+    // description's +0x4c, and the consume-rate array at +0x58 was never sized. Most of
+    // the component family already wires this pair (attendance, cropfield, decal,
+    // destroy, disease...); this class simply never pointed at its own bodies.
+    ConsumeProduceComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&ConsumeProduceComponent_ShutdownVSlot);
+    ConsumeProduceComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&ConsumeProduceComponent_StartupVSlot);
     RPCtrl_PopulateTable();
 }
 REGISTER_TYPE(ConsumeProduceComponent, "ResourceProduceComponent",

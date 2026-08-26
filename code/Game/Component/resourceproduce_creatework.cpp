@@ -25,6 +25,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // Each Work reimpl resolves its own engine-function pointers in a *_ResolveFuncs()
 // that only the FACTORY path calls. CreateWork allocates and constructs directly —
@@ -50,6 +51,7 @@ constexpr uintptr_t kHuntWorkVtable      = 0x140161620;
 constexpr uintptr_t kHerbalistWorkVtable = 0x1401615a0;
 constexpr uintptr_t kForesterWorkVtable  = 0x1401613a0;
 constexpr uintptr_t kMarketWorkVtable     = 0x140161710;
+constexpr uintptr_t kConsumeProduceWorkVtable = 0x140161220;
 
 typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
 // 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
@@ -282,4 +284,184 @@ extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
     *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
 
     return WrapIBP(out, mem);
+}
+
+// ── ConsumeProduceComponent::CreateWork — retail 0x140118d00 ──────────────────
+// The SIXTH member of this family, and the one that was still missing: the tavern
+// (and every other consume→produce workshop) had slot 18 holding the inert stub, so
+// state 13's enter never minted a ConsumeProduce work and the building never brewed.
+// Measured: a four-minute staffed-tavern soak logged ZERO "[ConsumeProduce]" lines —
+// not even ResolveFuncs, which the factory path prints — proving the work class was
+// never instantiated at all, while the panel showed the tavern staffed 1 of 1.
+//
+// This one differs from its five siblings in that it reads two authored ints out of
+// the building's ConsumeProduceDescription and passes them to a purpose-built work
+// ctor (0x1400e9200), rather than zeroing a couple of fields inline:
+//
+//   entity   = *(self + 0x10)                    -- the owner IBP, CheckPtr'd first
+//   descRoot = *(entity + 0x28)                  -- ComponentEntity+0x28 is the entity
+//                                                   DESCRIPTION, not the component array
+//                                                   (that is +0x30). Retail searches the
+//                                                   description's CHILD list here.
+//   cpDesc   = first child whose GetTypeId == ConsumeProduceDescription (0x1401c7388)
+//   work     = ConsumeProduceAction_Ctor(MemAlloc(0x78,8), &entity,
+//                                        &cpDesc[+0x38], cpDesc[+0x3c])
+//
+// ⚠ retail dereferences cpDesc UNGUARDED after the loop — with no matching child it
+// reads [0x38] off a null and faults. That deref is left faithful: a ConsumeProduce
+// building always carries its own description, and a guard here would silently mint a
+// work with garbage recipe ints instead of restoring the behaviour.
+//
+// ⚠ the second int is genuinely an INT, not a float: retail loads it with
+// `MOV R9D,dword ptr [RBX+0x3c]` — the integer register, not XMM3. Checked
+// deliberately because a float arg declared int lands in the wrong register.
+bool ConsumeProduce_ResolveFuncs();
+
+extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
+                                           const int* productIdx, int second);
+
+// ── ConsumeProduceAction ctor — retail 0x1400e9200 ────────────────────────────
+// Not the plain 0x1400e9340 ctor the Work FACTORY uses: this is the 4-argument one
+// slot 18 calls, which seeds the recipe fields and sizes the two work arrays off the
+// building's child attach points. Same childSum(0)/childSum(2) shape as FishingWork's
+// ctor, but the arrays live at +0x58 (IBP array, grown) and +0x68 (int array, resized
+// then zero-filled with the count at +0x70).
+extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
+                                           const int* productIdx, int second) {
+    Resolve();
+    if (!mem) return nullptr;
+    const uintptr_t w = reinterpret_cast<uintptr_t>(mem);
+
+    if (s_workCtor25) s_workCtor25(mem, entityIbp);
+    if (uintptr_t vt = ResolveAddr(Module::Exe, kConsumeProduceWorkVtable))
+        *reinterpret_cast<uintptr_t*>(mem) = vt;
+
+    *reinterpret_cast<uint8_t*>(w + 0x48)  = 0;
+    *reinterpret_cast<uint32_t*>(w + 0x4c) = 0;
+    *reinterpret_cast<uint32_t*>(w + 0x50) = productIdx ? *productIdx : 0;
+    *reinterpret_cast<uint32_t*>(w + 0x54) = static_cast<uint32_t>(second);
+    *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
+    *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
+    *reinterpret_cast<uint64_t*>(w + 0x68) = 0;
+    *reinterpret_cast<uint64_t*>(w + 0x70) = 0;
+
+    if (s_findPos && s_childSum && s_arrayGrow && s_arrayRes04) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIbp);
+        uintptr_t posIbp = 0;
+        s_findPos(*entityIbp, &posIbp);
+        if (posIbp) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIbp);
+            // posIbp IS the component — the finder returns its own out-param. Retail's
+            // `*pIVar3` and this local are the same value; dereferencing again would
+            // hand the component's VTABLE to the child-count helper (the trap the
+            // fishing port hit).
+            const int n0 = s_childSum(posIbp, 0);
+            const int n2 = s_childSum(posIbp, 2);
+            s_arrayGrow(reinterpret_cast<void*>(w + 0x58), n0);
+            s_arrayRes04(reinterpret_cast<void*>(w + 0x68), n2);
+            const int cnt = *reinterpret_cast<int32_t*>(w + 0x70);
+            uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x68);
+            if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
+        }
+    }
+    return mem;
+}
+
+extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
+
+extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* out) {
+    Resolve();
+    ConsumeProduce_ResolveFuncs();
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(
+            reinterpret_cast<uintptr_t>(self) + 0x10));
+
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(self) + 0x10);
+    if (!entity) return WrapIBP(out, nullptr);
+
+    // ComponentEntity +0x28 = description (+0x30 is the component array — do not
+    // confuse the two; the search below is over DESCRIPTIONS).
+    const uintptr_t descRoot = *reinterpret_cast<uintptr_t*>(entity + 0x28);
+    void* cpDesc = nullptr;
+    if (descRoot && g_TypeId_ConsumeProduceComponent) {
+        const uint32_t want = *g_TypeId_ConsumeProduceComponent;   // 0x1401c7388 = the
+                                                                   // ConsumeProduce*Description*
+                                                                   // id; the global name is a
+                                                                   // documented misnomer.
+        const int    n   = *reinterpret_cast<int32_t*>(descRoot + 0x30);
+        void** const arr = *reinterpret_cast<void***>(descRoot + 0x28);
+        for (int i = 0; i < n && arr; ++i) {
+            void* c = arr[i];
+            if (!c) continue;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            const uint32_t tid = (reinterpret_cast<GetTypeId_t>(
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+            if (tid == want) {
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) cpDesc = c;
+                break;
+            }
+        }
+    }
+
+    void* mem = AllocWork(0x78);
+    void* obj = nullptr;
+    if (mem) {
+        // Faithful unguarded description read — see the note above.
+        const uintptr_t d = reinterpret_cast<uintptr_t>(cpDesc);
+        const int first  = *reinterpret_cast<int32_t*>(d + 0x38);
+        const int second = *reinterpret_cast<int32_t*>(d + 0x3c);
+        obj = ConsumeProduceAction_Ctor(mem, &entity, &first, second);
+    }
+
+    // BANISHED_TAVERN_RECIPE=<n> -- pick which of the seven ale recipes the building
+    // brews, by writing consumeResourceId (+0x50).
+    //
+    // This is a SUPPLY-SIDE test fixture, not a stand-in for the Product combo. The
+    // combo is separately proven: ConsumeProduceUI::Slot4 populates all seven entries
+    // and its Slot9 is the real writer of this same field. What this exists for is that
+    // the authored default is recipe 0, "Ale [Apple]", and an autostart town has no
+    // orchard -- so the tavern waits on a fruit that cannot exist and the happiness
+    // goods arm stays untestable for reasons that have nothing to do with the port.
+    //
+    // Recipes, dumped live from the description (all seven produce AleSmall, flags
+    // 0x20000 = the tavern happiness wantMask, so ANY of them satisfies the goods arm):
+    //   0 Apple  1 Berries  2 Cherry  3 Peach  4 Pear  5 Plum   (input flags 0x21)
+    //   6 Wheat                                                 (input flags 0x30)
+    // Berries (1) is the one a town can actually supply quickly -- wild food via
+    // BANISHED_BUILD_DEMO_GATHERERHUT, rather than waiting on orchard maturity.
+    {
+        static int s_want = -2;
+        if (s_want == -2) {
+            const char* e = std::getenv("BANISHED_TAVERN_RECIPE");
+            s_want = (e && e[0]) ? std::atoi(e) : -1;
+        }
+        if (s_want >= 0 && cpDesc) {
+            const int n = *reinterpret_cast<int*>(
+                reinterpret_cast<uintptr_t>(cpDesc) + 0x30);
+            int* sel = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x50);
+            if (s_want < n && *sel != s_want) {
+                fprintf(stderr, "[Recipes] BANISHED_TAVERN_RECIPE: %d -> %d\n",
+                        *sel, s_want);
+                fflush(stderr);
+                *sel = s_want;
+            }
+        }
+    }
+
+    // Dump the recipe table once. "No materials" on the panel is ambiguous between
+    // "the selected recipe eats something the town has none of" and "hauling never
+    // delivers"; the table plus the live selection separates them.
+    ConsumeProduce_DumpRecipes(cpDesc,
+                               *reinterpret_cast<int*>(
+                                   reinterpret_cast<uintptr_t>(self) + 0x50));
+
+    static int n = 0;
+    if (n < 4) { ++n;
+        fprintf(stderr, "[ConsumeProduce] CreateWork self=%p entity=%p cpDesc=%p "
+                        "work=%p\n", self, (void*)entity, cpDesc, obj);
+        fflush(stderr);
+    }
+    return WrapIBP(out, obj);
 }

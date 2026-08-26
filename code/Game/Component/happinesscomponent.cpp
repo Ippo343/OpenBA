@@ -337,6 +337,31 @@ void HappinessComponent_InitFuncs() {
 #endif
 }
 
+static bool HappinessTraceOn();
+// [Happiness] GOODS-ARM PROBE -- diagnostic only, no behaviour change.
+// The desc+0x25 arm is the one arm never yet exercised: it needs ale actually sitting
+// in the tavern's own StorageComponent. A bare "inactive" edge line cannot separate
+// "no StorageComponent at all" from "storage found but empty" from "goods present but
+// the mask misses" -- three different faults. Print the outcome, not the intent, and
+// only when it CHANGES, so a steady state is silent and the budget survives to the flip.
+static void HappinessLogGoods(void* comp, const void* store, int slotCount,
+                              unsigned wantMask, unsigned sawFlags, int matched) {
+    if (!HappinessTraceOn()) return;
+    static int n = 0;
+    static const void* lastComp = nullptr;
+    static int lastSlots = -2, lastMatched = -2;
+    static unsigned lastSaw = 0xFFFFFFFFu;
+    if (comp == lastComp && slotCount == lastSlots && matched == lastMatched &&
+        sawFlags == lastSaw) return;
+    lastComp = comp; lastSlots = slotCount; lastMatched = matched; lastSaw = sawFlags;
+    if (n >= 48) return;
+    ++n;
+    fprintf(stderr, "[Happiness] GOODS comp=%p store=%p slots=%d wantMask=0x%x "
+            "sawFlags=0x%x -> %s\n", comp, store, slotCount, wantMask, sawFlags,
+            matched ? "ACTIVE" : "inactive");
+    fflush(stderr);
+}
+
 // ============================================================
 // HappinessComponent::IsActive -- 0x14004a550
 // ============================================================
@@ -400,10 +425,11 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
 
     const uint32_t wantMask = *reinterpret_cast<uint32_t*>(desc + 0x28);
     bool matched = false;
+    uint32_t sawFlags = 0;   // probe only: OR of every stored good's RawMaterial flags
 
     if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
     uintptr_t store = reinterpret_cast<uintptr_t>(storeIbp);
-    if (!store) return false;
+    if (!store) { HappinessLogGoods(selfV, nullptr, -1, wantMask, 0, 0); return false; }
 
     for (int i = 0; i < *reinterpret_cast<int*>(store + 0x30); ++i) {
         if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
@@ -431,8 +457,13 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
             }
         }
         // Faithful unguarded read -- see the note above.
-        matched |= (wantMask & *reinterpret_cast<uint32_t*>(rawMatDesc + 0x5c)) != 0;
+        const uint32_t flags = *reinterpret_cast<uint32_t*>(rawMatDesc + 0x5c);
+        sawFlags |= flags;
+        matched |= (wantMask & flags) != 0;
     }
+    HappinessLogGoods(selfV, reinterpret_cast<void*>(store),
+                      *reinterpret_cast<int*>(store + 0x30), wantMask, sawFlags,
+                      matched ? 1 : 0);
     return matched;
 }
 

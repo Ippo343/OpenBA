@@ -46,6 +46,9 @@ extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd);     // 0x
 extern "C" void    ForesterComponent_Command(void* self, int cmd);         // 0x14011f890
 extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out); // 0x14011f780
 extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out);   // 0x14004ea40
+extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* out); // 0x140118d00
+extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
+                                          const int* productIdx, int second); // 0x1400e9200
 extern "C" void    AttendanceComponent_SerializeSlot(void* self, void* stream);  // 0x140044410
 extern "C" void    AttendanceComponent_Unregister(void* self);             // 0x1400443d0
 extern "C" char    AttendanceComponent_AllFull(void* self);                // 0x140043db0
@@ -150,6 +153,15 @@ void RegisterComponentBatch_economy() {
     // has the same shape as HuntComponent's (MemAlloc 0x58 + Work_Ctor25 + vtable).
     // It was still the inert base stub, so no MarketWork was ever minted.
     RegisterExeAddr(0x14004ea40, reinterpret_cast<uintptr_t>(&MarketComponent_CreateWork));
+
+    // resourceproduce_creatework.cpp -- the SIXTH slot-18 CreateWork, and the one that
+    // was still missing entirely: ConsumeProduceComponent (the tavern and every other
+    // consume->produce workshop). With the slot inert, state 13 minted no work and the
+    // building brewed nothing -- measured as ZERO "[ConsumeProduce]" log lines across a
+    // four-minute staffed-tavern soak. 0x1400e9200 is the 4-argument work ctor slot 18
+    // calls (NOT the plain 0x1400e9340 ctor the Work factory uses).
+    RegisterExeAddr(0x140118d00, reinterpret_cast<uintptr_t>(&ConsumeProduceComponent_CreateWork));
+    RegisterExeAddr(0x1400e9200, reinterpret_cast<uintptr_t>(&ConsumeProduceAction_Ctor));
 
     // interactcomponent.cpp
     RegisterExeAddr(0x140004740, reinterpret_cast<uintptr_t>(&InteractComponent_FindWorkplaceComponent));

@@ -388,6 +388,34 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
 
 // Find a component by type ID on an entity (iterates component list at +0x30/+0x38).
 // Returns the component pointer, or nullptr if not found.
+// Find a DESCRIPTION by type id in an object's child list at +0x28 (count +0x30).
+//
+// This is NOT the same walk as FindComponentOnEntity above, and the difference is
+// load-bearing: a ComponentEntity keeps its COMPONENT array at +0x30 with the count at
+// +0x38, while a description keeps its CHILD list at +0x28 with the count at +0x30. A
+// StorageComponent slot record holds a DESCRIPTION in its first qword, so the material
+// lookup has to use this form. Retail inlines exactly this loop at 0x1400e7d0f
+// (`*(int*)(uVar11 + 0x30)` / `*(longlong*)(uVar11 + 0x28)`), and HappinessComponent
+// ::IsActive walks the same slot the same way.
+//
+// Reusing the component-list finder here is what made Execute fault on its very first
+// live pass once slot-18 CreateWork started minting work: reading the count from
+// matEntity+0x38 and the array from +0x30 landed inside the slot's (capacity, stored)
+// int pair, so the "component pointer" came back as 0x0000000500000005 -- two adjacent
+// int32 5s -- and the vtable read off it was the access violation.
+static void* FindDescriptionOnObject(uintptr_t obj, uint32_t typeId) {
+    int count = *(int*)(obj + 0x30);
+    uintptr_t arr = *(uintptr_t*)(obj + 0x28);
+    for (int i = 0; i < count; i++) {
+        void* c = *(void**)(arr + (uintptr_t)i * 8);
+        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10))(c);
+        if (t == typeId) {
+            return fn_IsDerivedFrom(c, typeId) ? c : nullptr;
+        }
+    }
+    return nullptr;
+}
+
 static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
     int count = *(int*)(entity + 0x38);
     uintptr_t compArray = *(uintptr_t*)(entity + 0x30);
@@ -527,6 +555,19 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     // Check produce threshold
     fn_InternalBasePtr_CheckPtr(&smComp2IBP);
     uint64_t canProduce = s_fn_CheckProduceThreshold(smComp2IBP);
+    // [CPWork] the gate that decides whether the tavern is allowed to make more at
+    // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
+    // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
+    // forever and produces nothing, which reads exactly like a broken produce path.
+    {
+        static int n = 0; static int last = -1;
+        const int cp = (int)(char)canProduce;
+        if (n < 8 && cp != last) { ++n; last = cp;
+            fprintf(stderr, "[CPWork] canProduce(threshold)=%d depleted=%d\n",
+                    cp, resourcesDepleted ? 1 : 0);
+            fflush(stderr);
+        }
+    }
 
     // ============================================================
     // BRANCH: Not depleted
@@ -595,6 +636,27 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         int citizenCell = cellY * mapSize + cellX;
 
         // --- Iterate input materials for active product ---
+        // [CPWork] Execute had NEVER run before slot-18 CreateWork was wired, so its
+        // first live pass faulted here: FindComponentOnEntity was handed matEntity
+        // 0x0000000500000005 -- two adjacent int32 5s, i.e. a (capacity,stored) pair read
+        // where a good POINTER belongs. Print the storage the loop is actually walking so
+        // it can be compared against the one HappinessComponent::IsActive reports for the
+        // same building; if they differ, the StorageComponent finder is the fault, not the
+        // slot stride. Budgeted, outcome-only.
+        {
+            static int n = 0;
+            if (n < 6) { ++n;
+                const uintptr_t sd = storageCompIBP ? *(uintptr_t*)(storageCompIBP + 0x28) : 0;
+                fprintf(stderr, "[CPWork] Execute storageComp=%p ibp=%p data=%p count=%d "
+                        "slot0=%p tid_storage=%u activeProduct=%d cpSel(+0x50)=%d\n",
+                        storageComp, (void*)storageCompIBP, (void*)sd,
+                        storageCompIBP ? *(int*)(storageCompIBP + 0x30) : -1,
+                        sd ? *(void**)sd : nullptr,
+                        g_TypeId_StorageComponent_FC ? *g_TypeId_StorageComponent_FC : 0u,
+                        activeProductIdx, *(int*)(smCompIBP + 0x50));
+                fflush(stderr);
+            }
+        }
         int inputCount = *(int*)(storageCompIBP + 0x30);
         if (inputCount > 0) {
             uintptr_t inputOffset = 0;
@@ -626,7 +688,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                 // Material doesn't match -- need to find and haul it
                 // Get available amount from storage
-                void* rawMatComp = FindComponentOnEntity(matEntity, *g_TypeId_RawMaterialDescription);
+                void* rawMatComp = FindDescriptionOnObject(matEntity, *g_TypeId_RawMaterialDescription);
 
                 // Check remaining amount in storage: capacity - currently stored
                 int available = *(int*)(inputOffset + 8 + storageData) - *(int*)(inputOffset + 0xc + storageData);
@@ -1002,6 +1064,23 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     *(int*)(smComp3IBP + 0x68) += 1;
                 }
 
+                // [CPWork] THE PRODUCE GATE. This is the moment a batch of ale exists;
+                // everything before it is the citizen walking and hauling. Report the
+                // OUTCOME and both sides of the comparison, because "no ale" has three
+                // shapes that look identical from outside: the gate never reached, the
+                // gate reached but the accumulated cycle count never catches the
+                // description threshold, and the gate passing with nothing downstream.
+                {
+                    static int n = 0;
+                    static int lastAcc = -1;
+                    if (n < 12 && (canFinish || self->field_4c != lastAcc)) {
+                        ++n; lastAcc = self->field_4c;
+                        fprintf(stderr, "[CPWork] produceGate acc(+0x4c)=%d need(desc+0x40)=%d -> %s\n",
+                                self->field_4c, *(int*)(cpDescAddr + 0x40),
+                                canFinish ? "PRODUCED" : "not yet");
+                        fflush(stderr);
+                    }
+                }
                 // Create work action chain
                 uintptr_t citizenRef4 = *(uintptr_t*)entityIBP;
                 uintptr_t workEntityRef = *(uintptr_t*)((uintptr_t)self + 0x10);

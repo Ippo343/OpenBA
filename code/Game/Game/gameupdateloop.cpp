@@ -686,7 +686,8 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_ha
 extern "C" void DisasterHarness_Tick(int frameNum);       // standalone/disaster_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
-extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
+extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);
+extern "C" void TavernStockProbe_Tick(int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
@@ -955,6 +956,9 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // BANISHED_PASTURE_HERDERS / BANISHED_BUILDER_AUTOPOOL cascade-bypass stand-ins
     // (standalone/panel_staffing_driver.cpp).
     PanelStaffingDriver_Tick(self->m_entityUI, s_frameNum);
+    // Town-stock cross-reference: report which ale recipes the town can actually
+    // supply right now (BANISHED_TAVERN_STOCK=<interval>, off by default).
+    TavernStockProbe_Tick(s_frameNum);
 
     // Age + enrolment census, so "the school is empty" can be told apart from "no minor
     // has crossed the adult edge yet". No-op unless BANISHED_SCHOOL_SOAK is set
