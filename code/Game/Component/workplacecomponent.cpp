@@ -1066,7 +1066,10 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
             }
             // Validate: if ptr dereferences to non-null, check IsDerivedFrom
             void* obj = *(void**)ptr;
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkerType) {
+            // s_TypeId_WorkerType must hold a CRC, not merely be a registered slot —
+            // IsDerivedFrom(obj, 0) never matches and would null out every worker ref.
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch &&
+                s_TypeId_WorkerType && *s_TypeId_WorkerType) {
                 bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkerType);
                 if (!valid) {
                     *(uint64_t*)ptr = 0;  // Clear invalid reference

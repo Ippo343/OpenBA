@@ -707,7 +707,22 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
     }
 
     uint32_t taskTypeId = s_TypeId_CompleteTask ? *s_TypeId_CompleteTask : 0;
-    if (taskTypeId == 0) return false;
+
+    // [CITID A/B] Report BOTH arms. With 0x1401c7158 unregistered this returns false for
+    // every citizen, so Validate evicts the whole build BST; with the slot filled the
+    // IsDerivedFrom loop below actually runs. Print the first few outcomes of each arm so
+    // the two runs are comparable rather than both looking silently "fine".
+    static int s_dormant = 0, s_kept = 0, s_dropped = 0;
+    struct Rep { static void go(uint32_t tid, int d, int k, int dr) {
+        fprintf(stderr, "[CITID/BuildValidate] tid=%u dormantSkips=%d kept=%d dropped=%d\n",
+                tid, d, k, dr);
+        fflush(stderr);
+    } };
+
+    if (taskTypeId == 0) {
+        if (++s_dormant <= 3 || s_dormant % 500 == 0) Rep::go(0, s_dormant, s_kept, s_dropped);
+        return false;
+    }
 
     // Check IBP is valid
     if (*(uintptr_t*)citizenIBP == 0) return false;
@@ -747,11 +762,15 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
             // Check if task's priority (+0x30) matches work's priority (+0x20)
             if (*(int*)(taskPtr + 0x30) == self->field_20) {
                 if (outTask) *outTask = taskPtr;
+                if (++s_kept <= 3 || s_kept % 500 == 0)
+                    Rep::go(taskTypeId, s_dormant, s_kept, s_dropped);
                 return true;
             }
         }
     }
 
+    if (++s_dropped <= 3 || s_dropped % 500 == 0)
+        Rep::go(taskTypeId, s_dormant, s_kept, s_dropped);
     return false;
 }
 

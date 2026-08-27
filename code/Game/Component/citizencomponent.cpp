@@ -2050,8 +2050,9 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     // which is BaseTypeInfo("CitizenComponent"), NOT CitizenAIComponent (see the corrected
     // note in standalone/reg_citizenai_typeids.cpp).
     //
-    // [STANDALONE GAP → CRASH FIX] That .rdata global is only filled behind the opt-in
-    // BANISHED_LIVE_CITIZENAI_CITID/_TIDS gate, so on a default run it reads 0, the find
+    // [STANDALONE GAP → CRASH FIX] That .rdata global used to be filled only behind the
+    // opt-in BANISHED_LIVE_CITIZENAI_CITID gate (GRADUATED 2026-08-26 — now default-on,
+    // kill-switch =0). With the kill-switch set it still reads 0, the find
     // matches nothing, and the deferred init below was called with a NULL component:
     // ACCESS_VIOLATION reading 0x10 inside CitizenComp_DeferredInit_117080's first
     // `*(self+0x10)` (observed on the very first in-game birth, ~frame 5000, release

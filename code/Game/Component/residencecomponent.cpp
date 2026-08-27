@@ -422,7 +422,11 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
             void* ibp = (void*)(inner + (uintptr_t)i * 8);
             if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(ibp, serializer);
             void* val = *(void**)ibp;
-            if (val && s_TypeId_Resident && fn_IsDerivedFrom &&
+            // Require the VALUE, not just the pointer: with 0x1401c7158 registered the
+            // slot exists from startup but only holds the CRC after FillTypeIdGlobals_citizenai.
+            // IsDerivedFrom(val, 0) matches nothing, so a bare pointer check would clear
+            // every resident ref in that window.
+            if (val && s_TypeId_Resident && *s_TypeId_Resident && fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(val, *s_TypeId_Resident)) {
                 *(uint64_t*)ibp = 0;
             }

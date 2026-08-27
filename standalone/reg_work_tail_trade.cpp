@@ -37,6 +37,13 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t param3, uin
 // name, which inherited the same wrong assumption. BaseTypeInfo is 0x70 bytes;
 // CitizenAIComponent's block is the adjacent one at 0x1401c70e8.)
 //
+// SUPERSEDED 2026-08-26: the "separate, deliberate task" named at the end of this note
+// HAPPENED — BANISHED_LIVE_CITIZENAI_CITID graduated to default-on, so 0x1401c7158 IS now
+// registered and filled (standalone/reg_citizenai_typeids.cpp). The ~30 readers listed
+// below therefore see a live CRC on a default run. The private static here is harmless and
+// stays (it is the same value), but the reason given for it no longer holds. Read the
+// paragraph below as history, not as current policy.
+//
 // IMPORTANT: this is a PRIVATE static for c8a0 only — we deliberately do NOT
 // RegisterExeAddr(0x1401c7158) to the global registry. ~30 existing reimpls (completetask,
 // createrawmaterial, dropoff, huntanimal, the PerformWork ctors, Entity_FindComponent_CitizenAI,

@@ -85,8 +85,11 @@ static float* s_fYawMax = nullptr;
 // TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenComponent_FC).
 // engine_funcs.h has it as g_TypeId_CitizenComponent_FC, but that global is filled from
 // exe slot 0x1401c7158, whose registration is env-gated (BANISHED_LIVE_CITIZENAI_CITID,
-// standalone/reg_citizenai_typeids.cpp) and therefore NULL on a default run. Serialize
-// derefs it unguarded, exactly as retail does -- so keep a private copy resolved by name.
+// standalone/reg_citizenai_typeids.cpp). That gate GRADUATED 2026-08-26 and is default-on,
+// so the slot is normally live now -- but its kill-switch (=0) still yields NULL, and
+// Serialize derefs it unguarded exactly as retail does, so keep the private by-name copy.
+// Verified in the graduation A/B: the by-name CRC and the slot value are the same number
+// (2704017556), so the two paths agree.
 // Same CRC as retail's slot (0x14014e7b5 = Object::BaseTypeInfo(&DWORD_1401c7158,
 // "CitizenComponent", ...), +0x00 is the type id), and no blast radius on the ~30 other
 // readers the gate exists to hold back.

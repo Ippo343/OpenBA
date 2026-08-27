@@ -355,10 +355,11 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
         // GUARDED because standalone GENUINELY DIFFERS from retail here, not to paper
         // over a faithful crash: in retail DAT_1401c7158 is always a live CitizenComponent
         // type id, but in our build that .rdata slot is registered only when
-        // BANISHED_LIVE_CITIZENAI_CITID (or _TIDS) is on — deliberately opt-in, see
-        // standalone/reg_citizenai_typeids.cpp. Off by default, ResolveAddr returns NULL
-        // and `*s_typeId_1401c7158` dereferences it. Autostart never reached this (it is
-        // Serialize-side), so it sat here as a save/load crash waiting to happen.
+        // BANISHED_LIVE_CITIZENAI_CITID is set. That flag GRADUATED 2026-08-26 and is now
+        // default-on (kill-switch =0), so the common case is a live id — but the guard
+        // stays, because the kill-switch still produces a NULL slot and this is
+        // Serialize-side, which autostart never reaches, so a regression here would only
+        // ever surface as a save/load crash. See standalone/reg_citizenai_typeids.cpp.
         //
         // When the id is unavailable we KEEP the ref rather than clearing it. Retail's
         // intent is "drop refs that are not citizen entities"; with no id we cannot tell,

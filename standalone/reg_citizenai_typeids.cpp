@@ -20,20 +20,26 @@
 //       the other readers: TradeComponent_impl_f760, PlayAnimation_Action_Ctor4,
 //       HappinessComponent_Controller_Slot12).
 //
-// GATED ON LIVE OPT-IN (registration-gated like reg_component_spawn): a default
-// (env-off) run — including the standard `make sa-run` env set — is byte-for-byte
-// unchanged. Rationale: with the gate ON,
-// ~30 currently-dormant readers activate at once — Serialize IsDerivedFrom checks
-// (autostart-inert, save/load-correct: see the 2026-07-19 reader sweep — every
-// c7158 Action/Work consumer is Serialize/Validate-side) AND the SendComponentMessage
+// REGISTRATION-GATED (like reg_component_spawn): when a gate is off, ResolveAddr of that
+// slot stays 0 and every reader keeps its null-guarded skip.
+//
+// c7158 GRADUATED 2026-08-26 — BANISHED_LIVE_CITIZENAI_CITID is in kDefaultOnFlags, so it
+// is ON by default and the env var is now a KILL-SWITCH (=0). A default run is therefore
+// NO LONGER byte-for-byte unchanged at this slot: the ~30 c7158 readers see a real CRC.
+// That is the same CRC several of them already reached by private GetTypeIdByName copies,
+// which is why the A/B showed no behavioural delta beyond the slot ceasing to be
+// UNRESOLVED. See the graduation note in component_factory_base.cpp for the measurement
+// and for what it does not cover (no save/load in the soak).
+//
+// c70e8 and c42c0 REMAIN OPT-IN. Turning c70e8 on activates ~20 SendComponentMessage
 // action ctors, whose constructed actions then carry a real target-type id when they
-// execute. The receive side (CitizenAIComponent message handling) is Phase-1
-// territory; A/B the gate to observe. When off, ResolveAddr(0x1401cXXXX) stays 0
-// and every reader keeps its null-guarded skip, exactly as before this wave.
+// execute; the receive side (CitizenAIComponent message handling) is Phase-1 territory.
+// A/B those gates separately before graduating either.
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
+#include <cstdio>
 
 // Backing storage (filled after Engine::Startup — Object::Factory::Startup assigns
 // the real CRC ids only then; filling at registration time would store 0xFFFFFFFF).
@@ -46,6 +52,17 @@ extern "C" void FillTypeIdGlobals_citizenai() {
     g_tid_CitizenAIComponent = ::Object::GetTypeIdByName("CitizenAIComponent");
     g_tid_CitizenComponent   = ::Object::GetTypeIdByName("CitizenComponent");
     g_tid_HappinessComponent = ::Object::GetTypeIdByName("HappinessComponent");
+
+    // Report the OUTCOME, not the intent: for each slot print whether the registry
+    // actually resolves it (gate on) and what a reader will now see there. A slot that
+    // says reg=0 is still dormant no matter what the gate string was.
+    auto slot = [](uintptr_t a) { return ResolveAddr(Module::Exe, a); };
+    fprintf(stderr, "[CITID] c70e8(CitizenAI) reg=%p val=%u | c7158(Citizen) reg=%p val=%u"
+                    " | c42c0(Happiness) reg=%p val=%u\n",
+            (void*)slot(0x1401c70e8), g_tid_CitizenAIComponent,
+            (void*)slot(0x1401c7158), g_tid_CitizenComponent,
+            (void*)slot(0x1401c42c0), g_tid_HappinessComponent);
+    fflush(stderr);
 }
 
 void RegisterCitizenAITypeIds() {
@@ -57,9 +74,10 @@ void RegisterCitizenAITypeIds() {
     // GetTypeIdByName before enabling around save/load) and the child-birth
     // FindCompByTypeId (citizencomponent.cpp:1906). BANISHED_LIVE_CITIZENAI_TIDS (or
     // the global BANISHED_LIVE_COMPONENTS, via LiveEnabled) turns on all three.
-    // NOTE: deliberately NOT "BANISHED_LIVE_CITIZENAI" — the Makefile's sa-run already
-    // sets that env for the handler/statemachine bring-up; reusing it would silently
-    // flip these fills on for every standard test run.
+    // NOTE: deliberately NOT "BANISHED_LIVE_CITIZENAI" — that flag is default-on for the
+    // handler/statemachine bring-up; reusing it would silently flip the two still-opt-in
+    // fills (c70e8, c42c0) on as well.
+    // _TIDS turns on all three, so setting it also opts INTO the two ungraduated slots.
     const bool all = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_TIDS");
     if (all || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_HAPPYID"))
         RegisterExeAddr(0x1401c42c0, reinterpret_cast<uintptr_t>(&g_tid_HappinessComponent));

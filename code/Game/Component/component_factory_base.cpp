@@ -864,6 +864,26 @@ static const char* const kDefaultOnFlags[] = {
     // outcome and nothing else.
     "BANISHED_LIVE_WELL",
     "BANISHED_LIVE_TORNADO",
+    // GRADUATED 2026-08-26 — the CitizenComponent type-id .rdata slot DWORD_1401c7158
+    // (standalone/reg_citizenai_typeids.cpp). Registration-gated, so with it off the slot
+    // is UNRESOLVED and roughly thirty readers take a null-guarded skip; several of them
+    // had already grown private GetTypeIdByName("CitizenComponent") copies to work around
+    // exactly that, which is the shape of a gate that should not exist any more.
+    // A/B, seed 424242, autostart, ~4 min each arm, identical binary:
+    //   OFF: [CITID] c7158 reg=0 val=2704017556, and the boot sweep prints
+    //        "NOT IMPLEMENTED: exe function at 0x1401c7158".
+    //   ON : [CITID] c7158 reg=<addr> val=2704017556 — the SAME CRC the private by-name
+    //        copies resolve — and that NOT IMPLEMENTED line is GONE. It is the ONLY
+    //        difference between the two runs' normalised error logs; tag sets are
+    //        identical, crash log empty in both arms.
+    // Scope of what this does NOT prove: the soak neither saves nor loads, so the
+    // Serialize-side IsDerivedFrom validators (the bulk of the readers) stayed dormant,
+    // and BuildStructure's CheckCitizenHasTask never fired in either arm — see the note
+    // on it in code/Game/Work/buildstructure.cpp, whose "TypeInfo_CompleteTask" label for
+    // this slot contradicts the RegisterType ground truth and is a separate open.
+    // The value-vs-pointer guards in residence/workplace/attendance were tightened in the
+    // same commit so a registered-but-not-yet-filled slot cannot clear live refs.
+    "BANISHED_LIVE_CITIZENAI_CITID",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

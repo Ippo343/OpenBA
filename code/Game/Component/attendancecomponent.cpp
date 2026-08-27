@@ -443,7 +443,9 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     for (int32_t i = 0; i < count && q; ++i, ++q) {
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(q, ser);
         if (*q == 0) continue;
-        if (s_pTId_CitizenComponent && fn_IsDerivedFrom &&
+        // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
+        // IsDerivedFrom(x, 0) would drop every attendee.
+        if (s_pTId_CitizenComponent && *s_pTId_CitizenComponent && fn_IsDerivedFrom &&
             !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), *s_pTId_CitizenComponent))
             *q = 0;
     }
