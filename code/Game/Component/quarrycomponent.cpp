@@ -61,11 +61,57 @@ void QuarryComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid QuarryComponent: size 0x28 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x83 (from QuarryComponent_Ctor) + zeroed body.
+// Size 0x28 + Object::Internal base + capability flags +0x20=0x83 (from
+// QuarryComponent_Ctor) + zeroed body.
+//
+// This was COMPONENT_INERT_FACTORY until the quarry-carve wave: every instance carried
+// the shared 48-slot stub vtable, so the Shutdown body above was unreachable and the
+// terrain deformation had no port at all. The pit a quarry digs is a heightmap carve
+// driven from two vtable slots — bodies in quarrycomponent_deform.cpp:
+//   [3]  Shutdown  0x140055230 (this file)
+//   [12] Message   0x1400550f0 — initial carve at _initialDepth on msg 4 (build done)
+//   [15] Message   0x140054b80 — progressive carve + terrain conversion, sent by
+//                                ConsumeProduce on every completed production cycle
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(QuarryComponent, 0x28, 0x83)
+extern "C" void QuarryComponent_Slot12(void* self, int msgId);
+extern "C" void QuarryComponent_Slot15(void* self);
+
+static uint32_t QuarryComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("QuarryComponent");
+    return cached;
+}
+static void* QuarryComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void QuarryComponent_ShutdownVSlot(void* s, void* stream) {
+    QuarryComponent_InitFuncs();
+    QuarryComponent_Shutdown(reinterpret_cast<QuarryComponent*>(s), stream);
+}
+
+// Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn, so the
+// live slots must be (re)written here rather than at static-init time.
+static void QuarryComponent_InstallLive() {
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_QUARRY")) return;
+    QuarryComponent_LiveVtable[3]  = reinterpret_cast<void*>(&QuarryComponent_ShutdownVSlot);
+    QuarryComponent_LiveVtable[12] = reinterpret_cast<void*>(&QuarryComponent_Slot12);
+    QuarryComponent_LiveVtable[15] = reinterpret_cast<void*>(&QuarryComponent_Slot15);
+}
+
+extern "C" void* QuarryComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x28, 0x83,
+        QuarryComponent_LiveVtable,
+        reinterpret_cast<void*>(&QuarryComponent_LiveGetTypeId));
+    QuarryComponent_InstallLive();
+    return p;
+}
+static void* QuarryComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x28, 0x83,
+        QuarryComponent_LiveVtable,
+        reinterpret_cast<void*>(&QuarryComponent_LiveGetTypeId));
+    QuarryComponent_InstallLive();
+    return mem;
+}
 REGISTER_TYPE(QuarryComponent, "Component",
               &QuarryComponent_Factory, &QuarryComponent_CreateInPlace);

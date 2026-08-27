@@ -2695,6 +2695,14 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                   "cemetery", 8, 8);
         ringPlace("BANISHED_BUILD_DEMO_CHAPEL", "Template\\Chapel.rsc",
                   "chapel", 8, 8);
+        // ── QUARRY (quarry-carve wave 2026-08-26) ────────────────────────────────
+        // The pit a quarry digs is a terrain HEIGHTMAP carve applied from two
+        // QuarryComponent vtable slots (see quarrycomponent_deform.cpp). Neither can be
+        // observed without a quarry in the world, and the autostart town founds none.
+        // 21x17 is the authored CreatePlacedDescription footprint — the biggest thing
+        // the ring scan places, so give it room by keeping it last in the list.
+        ringPlace("BANISHED_BUILD_DEMO_QUARRY", "Template\\Quarry.rsc",
+                  "quarry", 21, 17);
         // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
         // Not ring-placed like the crop field, and for a sharper reason than the
         // gatherer hut's: the lodge's siting input does not exist yet at all. The only

@@ -394,6 +394,7 @@ extern void RegisterAnimalSerialize();
 // reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
 extern void RegisterTerraformLive();
 extern void RegisterMultiObjectForwarder();
+extern void RegisterQuarryLive();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -577,6 +578,7 @@ static void RegisterCodeFunctions() {
     RegisterAnimalSerialize();
     RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
     RegisterMultiObjectForwarder();  // msg relay to multi-part child entities
+    RegisterQuarryLive();          // QuarryComponent pit carve (terrain heightmap)
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();
