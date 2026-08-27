@@ -27,10 +27,16 @@
 //   Neither cd150 nor ccf60 writes heightfield+0x08. They only POPULATE the
 //   scratch feature lists that the LATER stamp stages (e910/ec50) read to carve
 //   the heightmap:
-//     * cd150 pushes mountain "satellite" + "center" points into listC (+0x38)
-//       and one record per range into detailRecs (+0x48). e910/ec50 later stamp
-//       these as positive radial bumps into maskC (a MAX/additive mask) using
-//       exp 2.0 / scale 1.778 — i.e. they RAISE terrain into mountain ranges.
+//     * cd150 pushes "satellite" + "center" points into the radial-stamp list
+//       (+0x38) and one record per range into the water-feature list (+0x48).
+//       CORRECTION (verified against retail 0x1400ceac2/aca and the eee0 call at
+//       worldgen_f390_rivers.cpp): e910/ec50 stamp the +0x38 entries into maskC
+//       with MAX, strength 2.0, exp 2.25 — and the final height is
+//       `h = maskB*h*maskA - maskC`, i.e. maskC is SUBTRACTED. These CARVE
+//       circular depressions; they do NOT raise terrain. The older "positive
+//       radial bumps / RAISE terrain into mountain ranges" note here was wrong
+//       and sent a reader looking for a sign bug that does not exist.
+//       The +0x48 records are what b260 phase 2 reads as its tarn features.
 //     * ccf60 pushes validated polylines (river/coast branch paths) into the
 //       array-of-arrays at hf+0x18 (via cc850's deep-append at param_1+0x18).
 //       The river network (cd460) + stamp stages later carve these DOWN toward
@@ -59,10 +65,10 @@
 static constexpr int HF_GRIDSIZE   = 0x00;   // int  dim (== sizeRow[0]*2)
 static constexpr int HF_PATHLIST   = 0x18;   // array-of-arrays of polylines (cc850 deep-appends here)
 static constexpr int HF_PATHCOUNT  = 0x20;   // int  count of paths in HF_PATHLIST (branch-select bound)
-static constexpr int HF_LISTC      = 0x38;   // {void*,int,int,int} mountain satellites+centers (0xC elem {x,y,radius})
-static constexpr int HF_LISTC_CNT  = 0x40;   // int  count of LISTC
-static constexpr int HF_DETAILRECS = 0x48;   // {void*,int,int,int} per-range records (0xC elem {x,y,bandX})
-static constexpr int HF_DETAIL_CNT = 0x50;   // int  count of DETAILRECS
+static constexpr int HF_BASINSTAMPS = 0x38;  // radial carve stamps (0xC elem {x,y,radius}) -> maskC, SUBTRACTED
+static constexpr int HF_BASIN_CNT   = 0x40;  // int  count of the above
+static constexpr int HF_WATERFEATS  = 0x48;  // b260 phase-2 tarn features (0xC elem {x,y,radius=bandX})
+static constexpr int HF_WATERFEATS_CNT = 0x50;   // int  count of the above
 static constexpr int HF_RANDOM     = 0x58;   // System::Random
 static constexpr int HF_SIZEROW    = 0xa28;  // int* size-table row
 
@@ -621,16 +627,16 @@ extern "C" void wg_f390_ranges(void* hf) {
             float satX = reach * dir[0] * amp + dy;         // local_res20
             float satY = reach * dir[1] * amp + dx;         // fStackX_24
             float rec[3] = { satX, satY, radius };
-            AppendVec3((uint8_t*)hf + HF_LISTC, *(int*)((uint8_t*)hf + HF_LISTC_CNT) + 1, rec);
+            AppendVec3((uint8_t*)hf + HF_BASINSTAMPS, *(int*)((uint8_t*)hf + HF_BASIN_CNT) + 1, rec);
         }
 
-        // range center -> listC (+0x38): {dy, dx, bandX - radiusMin}
+        // range center -> radial carve stamps (+0x38): {dy, dx, bandX - radiusMin}
         float center[3] = { dy, dx, (float)(bandX - radiusMin) };
-        AppendVec3((uint8_t*)hf + HF_LISTC, *(int*)((uint8_t*)hf + HF_LISTC_CNT) + 1, center);
+        AppendVec3((uint8_t*)hf + HF_BASINSTAMPS, *(int*)((uint8_t*)hf + HF_BASIN_CNT) + 1, center);
 
-        // per-range record -> detailRecs (+0x48): {dy, dx, bandX}
+        // per-range record -> b260 phase-2 tarn features (+0x48): {dy, dx, bandX}
         float detail[3] = { dy, dx, fBandX };
-        AppendVec3((uint8_t*)hf + HF_DETAILRECS, *(int*)((uint8_t*)hf + HF_DETAIL_CNT) + 1, detail);
+        AppendVec3((uint8_t*)hf + HF_WATERFEATS, *(int*)((uint8_t*)hf + HF_WATERFEATS_CNT) + 1, detail);
     }
 }
 

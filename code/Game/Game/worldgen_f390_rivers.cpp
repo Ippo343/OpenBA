@@ -63,7 +63,8 @@ static constexpr int HF_GRIDSIZE   = 0x00;   // int dim (= sizeRow[0]*2)        
 static constexpr int HF_HEIGHTMAP  = 0x08;   // {float* data,int cnt,int cap}    param_1[2]=data,[4]=cnt
 static constexpr int HF_PATCHLIST  = 0x18;   // {void* data,int count,int _}     param_1[6]=data,[8]=count
 static constexpr int HF_LISTB      = 0x28;   // river points {void*,int cnt,..}  param_1[10]=data,[0xc]=count
-static constexpr int HF_LISTC      = 0x38;   // mtn satellites {void*,int cnt,..}param_1[0xe]=data,[0x10]=count
+static constexpr int HF_LISTC      = 0x38;   // radial carve stamps (NOT peaks: fed to maskC, which is
+                                             // SUBTRACTED) {void*,int cnt,..} param_1[0xe]=data,[0x10]=count
 static constexpr int HF_RANDOM     = 0x58;   // System::Random (~0x9C8 bytes)
 static constexpr int HF_SIZEROW    = 0xa28;  // int* size-table row
 

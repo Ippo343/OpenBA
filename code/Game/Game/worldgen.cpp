@@ -66,8 +66,17 @@ static constexpr int HF_HEIGHTMAP  = 0x08;   // {float* data, int count, int cap
 static constexpr int HF_PATCHLIST  = 0x18;   // {void* data, int count, int _} — feature patches
 static constexpr int HF_DETAILCNTA = 0x20;   // int  count passed to sub_f0a0
 static constexpr int HF_LISTB      = 0x28;   // {void*,int,int,int} river points
-static constexpr int HF_LISTC      = 0x38;   // {void*,int,int,int} mountain satellites
-static constexpr int HF_DETAILRECS = 0x48;   // {void*,int,int,int} cliff polys
+// +0x38: cd150's radial-stamp list, 0xC elems {x, y, radius}. Named "mountain
+// satellites" historically, but that name is BACKWARDS about what they do: the
+// e910/ec50 stamp feeds them to eee0 with MAX into maskC (strength 2.0, exp 2.25,
+// retail 0x1400ceac2/aca), and the final height is `h = maskB*h*maskA - maskC` —
+// maskC is SUBTRACTED. So these carve circular DEPRESSIONS, not peaks. They are
+// what produces the round basins dotted across the valley floor.
+static constexpr int HF_BASINSTAMPS = 0x38;  // {void*,int,int,int} radial carve stamps
+// +0x48: one 0xC record per mountain range {x, y, bandX}. Despite the old name
+// "cliff polys", this is the array b260 PHASE 2 reads as the water features
+// {x, y, radius} — the tarn disks. Count at +0x50. See water_contour_mesh.cpp.
+static constexpr int HF_WATERFEATS  = 0x48;  // {void*,int,int,int} b260 phase-2 tarn features
 static constexpr int HF_RANDOM     = 0x58;   // System::Random (~0x9C8 bytes), seeded
 static constexpr int HF_TERRAINGEN = 0xa20;  // TerrainGenerator* back-ptr
 static constexpr int HF_SIZEROW    = 0xa28;  // int* = gen->sizeTable + sizeIdx*0x44
@@ -591,6 +600,43 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
             fprintf(stderr, "[WATER-DIAG] heightmap %dx%d: hmin=%.3f hmax=%.3f "
                     "underCells(<=-0.75)=%ld/%d\n", N, N, hmin, hmax, under, N * N);
         }
+        // Satellite-sign check: cd150's listC (+0x38, stride 0xC {x,y,radius})
+        // entries are meant to become POSITIVE radial bumps (mountain peaks) via
+        // the e910/ec50 stamp. If the map instead shows a round PIT at each
+        // satellite, the stamp sign/mask is inverted and those pits are what is
+        // flooding + reading as dark holes. Report the OUTCOME: sample the carved
+        // heightmap at each satellite centre and bucket it.
+        if (fmap) {
+            uint8_t* lc = (uint8_t*)(h + HF_BASINSTAMPS);
+            float* pts = *(float**)lc;
+            int  n = *(int*)(h + 0x40);
+            int peaks = 0, pits = 0, flat = 0, underw = 0, oob = 0;
+            float lo = 1e9f, hi = -1e9f, rawLo = 1e9f, rawHi = -1e9f;
+            for (int i = 0; pts && i < n; ++i) {
+                float sx = pts[i * 3 + 0], sy = pts[i * 3 + 1];
+                if (sx < rawLo) rawLo = sx; if (sx > rawHi) rawHi = sx;
+                if (sy < rawLo) rawLo = sy; if (sy > rawHi) rawHi = sy;
+                int ci = (int)sx, ri = (int)sy;
+                if (ci < 0 || ci >= N || ri < 0 || ri >= N) { ++oob; continue; }
+                float z = fmap[(size_t)ri * N + ci];
+                if (z < lo) lo = z; if (z > hi) hi = z;
+                if (z <= -0.75f) ++underw;
+                if (z > 4.0f) ++peaks; else if (z < 0.0f) ++pits; else ++flat;
+            }
+            fprintf(stderr, "[WATER-DIAG] listC satellites n=%d at-centre height: "
+                    "peaks(>4)=%d pits(<0)=%d flat=%d underwater(<=-0.75)=%d "
+                    "range=[%.2f,%.2f] rawXY=[%.1f,%.1f] oob=%d N=%d\n",
+                    n, peaks, pits, flat, underw,
+                    (double)lo, (double)hi, (double)rawLo, (double)rawHi, oob, N);
+        }
+        // Assumption-free dump: write the carved float heightmap so the terrain can
+        // be inspected directly (round craters? where? how many?) without trusting
+        // any scratch-list layout. BANISHED_WATER_DIAG only.
+        if (fmap) {
+            FILE* fh = fopen("C:/GOG Games/Banished/heightmap_dump.raw", "wb");
+            if (fh) { fwrite(&N, 4, 1, fh); fwrite(fmap, 4, (size_t)N * N, fh); fclose(fh);
+                      fprintf(stderr, "[WATER-DIAG] heightmap dumped: %dx%d floats\n", N, N); }
+        }
         fflush(stderr);
     }
 
@@ -843,8 +889,8 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     wg_TradeCore_c4b0(wg, (int32_t*)hf);
 
     // Teardown (reverse of construction; first-light lists are empty no-ops).
-    wg_FreeScalarList(hf + HF_DETAILRECS);
-    wg_FreeScalarList(hf + HF_LISTC);
+    wg_FreeScalarList(hf + HF_WATERFEATS);
+    wg_FreeScalarList(hf + HF_BASINSTAMPS);
     wg_FreeScalarList(hf + HF_LISTB);
     wg_FreePatchList (hf + HF_PATCHLIST);
     wg_FreeScalarList(hf + HF_HEIGHTMAP);
