@@ -755,6 +755,7 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
         if (est < 16) est = 16;
         WeldSet weld; WeldInit(&weld, 0x10, est);
         int idxAdded = 0;
+        int fUnder = 0, fEmit = 0;
 
         for (int row = ymin; row < ymax; ++row) {
             for (int col = xmin; col < xmax; ++col) {
@@ -774,7 +775,18 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
                     float dy = corner[k][1] - cy;
                     float dz = corner[k][2] - 0.0f;
                     float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-                    float w = 1.0f - (dist - radius) / 2.0f;   // fVar38 == 2.0
+                    // b260 @0x1400aba4b: DIVSS XMM0,XMM10 — the divisor is XMM10, which
+                    // 0x1400ab745/49 set to `radius + kRadMargin` (the SAME value that
+                    // bounds the bbox), NOT the bare 2.0 constant. The old `/ 2.0f` made
+                    // the falloff reach zero at radius+2 instead of 2*radius+2, so
+                    // `someInterior` was a circle inscribed in the bbox and the shore
+                    // read as a hard rim. With the correct divisor `w > 0` holds across
+                    // the whole bbox (measured: interior == cellsTested), so the gate
+                    // reduces to `someUnderwater` and the shore falloff is gradual.
+                    // NOTE: this is NOT why unmeshed ponds look like dark holes — those
+                    // are basins that reach neither list b260 meshes. See
+                    // project_water_contour_phase2_tarns_dark.
+                    float w = 1.0f - (dist - radius) / r2;
                     if (w >= 0.0f) {
                         if (w > 1.0f) w = 1.0f;
                         if (w > 0.0f) someInterior = true;     // (==0 does not mark interior)
@@ -784,9 +796,9 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
                     weight[k] = w;
                 }
 
-                if (diag) { ++dCells; if (someUnderwater) ++dUnder; if (someInterior) ++dInterior; }
+                if (diag) { ++dCells; if (someUnderwater) { ++dUnder; ++fUnder; } if (someInterior) ++dInterior; }
                 if (!(someInterior && someUnderwater)) continue;
-                if (diag) ++dEmitCells;
+                if (diag) { ++dEmitCells; ++fEmit; }
 
                 // Weld the 4 corners, then emit two triangles (i0,i1,i2),(i0,i2,i3).
                 uint16_t ci[4];
@@ -817,6 +829,19 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
 
         re[2] = weld.verts.count;
         re[3] = idxAdded;
+
+        // Per-feature outcome (BANISHED_WATER_DIAG): the question is whether this
+        // feature's bbox (center +/- (radius+2)) actually COVERS its lake. If the
+        // underwater cells inside the bbox saturate its edges, the lake is bigger
+        // than the feature says and the water gets clipped to a rectangle.
+        if (diag) {
+            int bw = xmax - xmin, bh = ymax - ymin;
+            fprintf(stderr, "[WATER-DIAG]   feat[%d] c=(%.1f,%.1f) radius=%.2f "
+                    "bbox=%dx%d cells=%d under=%d emit=%d verts=%d idx=%d\n",
+                    f, cx, cy, radius, bw, bh, bw * bh,
+                    fUnder, fEmit, weld.verts.count, idxAdded);
+            fflush(stderr);
+        }
         WeldFree(&weld);
     }
 
