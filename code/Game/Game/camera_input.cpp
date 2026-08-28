@@ -261,6 +261,29 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
         }
     }
 
+    // Harness (env BANISHED_CAMERA_PIN=x,y[,dist]): pin the camera focus to a world
+    // position every frame, overriding pan/follow, so a verification run can look at a
+    // known spot (e.g. the demo quarry) without keyboard input. World coords are
+    // cell - (mapDim/2 - 0.5); dist defaults to 40.
+    static int s_pin = -1;
+    static float s_pinX = 0, s_pinY = 0, s_pinDist = 40.0f;
+    if (s_pin < 0) {
+        const char* e = std::getenv("BANISHED_CAMERA_PIN");
+        s_pin = 0;
+        if (e && e[0]) {
+            float px, py, pd;
+            int got = std::sscanf(e, "%f,%f,%f", &px, &py, &pd);
+            if (got >= 2) { s_pinX = px; s_pinY = py; if (got >= 3) s_pinDist = pd; s_pin = 1; }
+        }
+    }
+    if (s_pin) {
+        *(float*)(pc + 0x1c) = s_pinX;
+        *(float*)(pc + 0x20) = s_pinY;
+        *(float*)(pc + 0x24) = 0.0f;
+        *(float*)(pc + 0x30) = s_pinDist;
+        *(float*)(ui + 0x3c) = s_pinDist;   // zoom target, so smoothing doesn't fight it
+    }
+
     // ── decrement the controller's input timer (+0x48) ──
     int64_t* tmr = (int64_t*)(ui + 0x48);
     *tmr -= timeTicks;
