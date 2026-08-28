@@ -142,6 +142,26 @@ is the path to use for verifying any rendering / gameplay / world-build change.
   sets the env var for the debuggee; "Launch Standalone (debug)" stops at the menu.
 - To exercise the menu itself (not auto-advance), use `make sa-run-menu`.
 
+### Camera Pinning (deterministic screenshots)
+
+`BANISHED_CAMERA_PIN=x,y[,dist]` (`code/Game/Game/camera_input.cpp`) pins the camera
+focus to a world position every frame, overriding pan/follow — the autostart camera
+otherwise roams and lands differently every run, which makes screenshot comparisons
+meaningless. Use it to park the view on the thing under test, screenshot, and get the
+identical framing on every run of the same seed.
+
+- **World coords**: `world = buildCell − mapDim/2` (e.g. small map: cell − 128). For a
+  placed structure, take the tile from its `[startTown::…] tile=(x,y) fp=WxH` log line
+  and pin the footprint center: `x + W/2 − 128, y + H/2 − 128`.
+  (The 512 terrain grid has a 128-cell non-playable border; build cells map 1:1 onto its
+  center — there is NO 2-cells-per-tile scaling.)
+- `dist` defaults to 40; ~50 frames a 21x17 building with context.
+- Env is read once at startup — relaunch to move the pin. Placement is deterministic
+  per seed+flags, so a wrong guess costs one probe run: read the tile from the log,
+  relaunch with the corrected pin.
+- Example (the demo quarry verification):
+  `BANISHED_SEED=12345 BANISHED_BUILD_DEMO_QUARRY=1 BANISHED_CAMERA_PIN=9.5,-0.5,50`
+
 ### Standalone Build Architecture
 
 `make standalone` / `make standalone-debug`
