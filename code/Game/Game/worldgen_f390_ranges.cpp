@@ -45,7 +45,8 @@
 //   up only after e910/ec50 run. Recorded magnitudes (for the orchestrator):
 //     - mountain center "radius" field = bandX - radiusMin  (in grid units)
 //     - mountain satellite "radius" field = RandFloat*(radiusMin-radiusMax)+radiusMax
-//     - both later become additive height bumps (peaks), strength scaled 1.778.
+//     - both are CARVE radii: e910/ec50 stamp them into maskC (MAX, str 2.0,
+//       exp 2.25) and SUBTRACT — round lake pits, not peaks (see CORRECTION above).
 //     - secondary paths are zero-height polylines; they become carve channels.
 // ----------------------------------------------------------------------------
 //
@@ -563,12 +564,12 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 //   for each range (rangeCount):
 //     dx = RandFloatTol() * yExtent             (range center jitter, x)
 //     dy = RandFloatTol() * yExtent             (range center jitter, y)
-//     amp = 0.5                                  (fVar19, grows per satellite)
+//     amp = 0.5                                  (fVar19, RESET to 0.5 per satellite)
 //     for each satellite (satellitesPerRange):
 //       radius = RandFloat()*(radiusMin - radiusMax) + radiusMax
 //       g      = RandFloat()
 //       _t     = RandFloatTol()                  (feeds the normalize input pair)
-//       amp    = g*amp + amp
+//       amp    = g*0.5 + 0.5                     (retail reloads 0.5 each iteration)
 //       n = normalize( RandFloatTol(), RandFloatTol() )   (random unit dir)
 //       reach = bandX - radius
 //       satX = reach * n.x * amp + dy
@@ -578,8 +579,8 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 //     detailRecs.push_back( { dy, dx, bandX } )              // +0x48  (per-range record)
 //
 //   HEIGHT EFFECT: writes NO heights. Populates listC/detailRecs that the later
-//   stamp stages (e910/ec50) read to RAISE radial mountain bumps (additive MAX
-//   mask, exp 2.0, strength 1.778). Bump magnitude = the "radius" fields above.
+//   stamp stages (e910/ec50) read to CARVE round lake pits (maskC MAX, exp 2.25,
+//   strength 2.0, SUBTRACTED). Carve radius = the "radius" fields above.
 // ============================================================
 extern "C" void wg_f390_ranges(void* hf) {
     rg_EnsureInit();
@@ -608,13 +609,17 @@ extern "C" void wg_f390_ranges(void* hf) {
     for (int r = 0; r < rangeCount; ++r) {
         float dx = rftol(rng) * yExtent;                    // fVar14
         float dy = rftol(rng) * yExtent;                    // fVar15
-        float amp = kHalf;                                  // fVar19
 
         for (int s = 0; s < satPerRange; ++s) {
             float radius = rfloat(rng) * (float)(radiusMin - radiusMax) + (float)radiusMax;  // fVar18
             float g      = rfloat(rng);                     // fVar16
             float t3     = rftol(rng);                      // fVar17 (3rd RandFloatTol)
-            amp = g * amp + amp;                            // fVar19 = fVar16*fVar19 + fVar19
+            // fVar19 = fVar16*fVar19 + fVar19, but retail RELOADS fVar19 = DAT_140172114
+            // (0.5) at the tail of EVERY satellite iteration, so amp is per-satellite in
+            // [0.5, 1.0] — never compounding. reach*amp <= bandX keeps every satellite
+            // inside the range's bandX radius (= the +0x48 water-feature radius b260
+            // phase 2 meshes).
+            float amp = g * kHalf + kHalf;
 
             // random unit direction. The original packs {local_res18, fVar17}:
             //   local_res18 = RandFloatTol() (drawn AFTER fVar17), local_res1c = fVar17.
