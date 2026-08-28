@@ -209,7 +209,8 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
         static int s_contour = -2;
         if (s_contour == -2) {
             const char* c = std::getenv("BANISHED_WATER_CONTOUR");
-            s_contour = (c && c[0] && c[0] != '0') ? 1 : 0;
+            // GRADUATED 2026-08-27: contour default-on (=0 kill-switch -> flat sheet).
+            s_contour = (c && c[0] == '0') ? 0 : 1;
         }
         void* waterVBData = *reinterpret_cast<void**>(selfBytes + 0x160 + 8);
         static int s_waterMatSel = -2;

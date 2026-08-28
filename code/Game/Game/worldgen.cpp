@@ -667,18 +667,20 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     Reimpl_TradeWork_sub_c1e0(wg);
 
     // 7. b260 water mesh. Two modes:
-    //    * BANISHED_WATER_CONTOUR=1 -> the faithful b260 CONTOUR mesh (rivers
+    //    * default -> the faithful b260 CONTOUR mesh (rivers
     //      flow / lake shore rings; UV follows each water body's centerline).
     //      Builds into VB+0x160/IB+0x180 with per-body ranges at +0x1c0/+0x1d0,
     //      drawn by geometry_draw.cpp modes 0x6000/0x8000. param_2 = hf
     //      (centerlines at hf+0x18, features at hf+0x48).
-    //    * default -> the minimal flat WATER overlay mesh at sea level into the
+    //    * BANISHED_WATER_CONTOUR=0 -> the minimal flat WATER overlay mesh at sea level into the
     //      same VB+0x160/IB+0x180 (mode 0xA000). BANISHED_NO_WATER=1 disables.
     {
         const char* contour = getenv("BANISHED_WATER_CONTOUR");
         const char* nw = getenv("BANISHED_NO_WATER");
         bool noWater = (nw && nw[0] && nw[0] != '0');
-        if (contour && contour[0] && contour[0] != '0') {
+        // GRADUATED 2026-08-27: contour mesh default-on; =0 falls back to the
+        // flat stand-in sheet (which floods the quarry pit).
+        if (!(contour && contour[0] == '0')) {
             WorldGen_BuildContourWaterMesh(wg, hf);
         } else if (!noWater) {
             WorldGen_BuildWaterMesh(wg);
