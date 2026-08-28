@@ -282,6 +282,12 @@ static const char* const kDefaultOnFlags[] = {
     // one first (BANISHED_LIVE_MULTIOBJECT=0) before suspecting the terraform half.
     "BANISHED_LIVE_TERRAFORM",
     "BANISHED_LIVE_MULTIOBJECT",
+    // GRADUATED 2026-08-27 — quarry pit carve + decal verified together: msg-4 carve at
+    // _initialDepth, Slot15 production re-carve, terrain chunks 119/120 rebuilt with the
+    // carved heights (hmin=-358 = -1.4*256), pit + rock decal both visible on screen.
+    // The final blocker was TerraformComponent_RegionRecalc silently no-oping on a null
+    // s_fn_RegionDirty when no tunnel had initialized terraform's statics.
+    "BANISHED_LIVE_QUARRY",
     // Organic construction pipeline — verified end-to-end 2026-07-22 (foundation ->
     // real gather/haul -> real build labor via MsgReceive -> completion -> staffed).
     // The three were formerly independent opt-ins; graduated together as one feature.

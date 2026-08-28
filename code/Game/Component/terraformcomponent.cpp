@@ -236,6 +236,12 @@ void TerraformComponent_InitFuncs() {
 // manager is at terrainGrid+0xe8. Faithful 1:1 port; closure = CitizenAI_impl_a4f0
 // (0x14001a4f0, registered).
 void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
+    // Self-resolving: QuarryComponent calls this without going through any other
+    // terraform entry point, and an unresolved s_fn_RegionDirty would silently drop
+    // every dirty mark — the carve lands in the int16 heightmap but the terrain VB
+    // never refreshes, so no pit shows and the decal (which follows the carved,
+    // lower heights) is fully depth-rejected behind the stale terrain.
+    TerraformComponent_InitFuncs();
     int64_t grid = (int64_t)terrainGridV;
     int cell = *(int*)(grid + 0xc8);
     if (cell == 0) return;
