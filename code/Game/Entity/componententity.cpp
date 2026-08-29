@@ -47,6 +47,7 @@ static void EnsureResolved() {
 // frees component array, calls Object::Internal::~Internal.
 // Called from Dtor (Slot0). Named "Ctor" in Ghidra (misleading).
 extern "C" void WorkSerProbe_NoteEntityDtor(void* entity);  // standalone/work_ser_probe.cpp
+extern "C" int  EntityCompValidate(void*, void*, void*, int);  // standalone/entity_comp_validator.cpp
 
 static void DtorBody(ComponentEntity* self) {
     WorkSerProbe_NoteEntityDtor(self);
@@ -321,6 +322,13 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
         }
     }
 
+    // BANISHED_COMP_VALIDATE=1 — on the SAVE leg, check every component slot
+    // BEFORE anything is written. A non-null slot that is not a live object is
+    // what puts 0xAA-pattern objId/typeId into the stream and makes the LOAD
+    // index PersistObject's id map out of bounds. Diagnostic only.
+    if (encodingMode != 0)
+        EntityCompValidate(self, self->description, self->components, (int)compCount);
+
     // Serialize each component IBP
     uintptr_t ibpArr = (uintptr_t)self->components;
     int64_t cnt = (int64_t)(int)compCount;
@@ -333,8 +341,8 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
             static int s_trace = -1;
             if (s_trace < 0) { const char* e = std::getenv("BANISHED_SERIALIZE_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
             if (s_trace == 1) {
-                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin\n",
-                        (void*)self, (long long)i, compCount);
+                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin raw=%p\n",
+                        (void*)self, (long long)i, compCount, *(void**)ibpAddr);
                 fflush(stderr);
             }
             // Serialize the InternalBasePtr
@@ -360,15 +368,44 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 // diffing the two traces per component finds an ASYMMETRIC
                 // serializer (read size != write size — a silent desync that
                 // corrupts every later component without crashing).
-                uint32_t pos = 0;
+                // +0x8C is the cursor only for a CompressedMemoryStream (its
+                // MemoryStream sub-object starts at +0x68); a PLAIN MemoryStream
+                // keeps it at +0x24. Print both -- whichever ADVANCES is the real
+                // one. A pos that never moves across components means we are
+                // reading an unrelated dword, not that the stream stalled.
+                uint32_t pos = 0, pos24 = 0;
                 {
                     void* strm = serializer ? *(void**)serializer : nullptr;
-                    if (strm) pos = *(uint32_t*)((uint8_t*)strm + 0x8C);
+                    if (strm) {
+                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);
+                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);
+                        // Neither documented cursor moves for THIS stream type, so
+                        // find the real one instead of guessing a third offset:
+                        // snapshot the first 0x100 bytes and report which dwords
+                        // changed since the previous component. The cursor is the
+                        // one that advances monotonically by each component's size.
+                        static uint32_t prev[64];
+                        static bool haveprev = false;
+                        uint32_t cur[64];
+                        for (int k = 0; k < 64; ++k)
+                            cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);
+                        if (haveprev) {
+                            char buf[512]; int n = 0;
+                            for (int k = 0; k < 64 && n < 400; ++k)
+                                if (cur[k] != prev[k])
+                                    n += snprintf(buf + n, sizeof(buf) - n,
+                                                  " +0x%02X:%u->%u", k * 4, prev[k], cur[k]);
+                            fprintf(stderr, "[CompEnt::Ser]   streamDelta%s\n",
+                                    n ? buf : " (none)");
+                        }
+                        for (int k = 0; k < 64; ++k) prev[k] = cur[k];
+                        haveprev = true;
+                    }
                 }
-                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld -> %p tid=%08x (%s) pos=%u\n",
+                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld -> %p tid=%08x (%s) pos8C=%u pos24=%u\n",
                         (void*)self, (long long)i, c, tid,
                         c ? (::Object::GetTypeNameById(tid) ? ::Object::GetTypeNameById(tid) : "?") : "null",
-                        pos);
+                        pos, pos24);
                 fflush(stderr);
             }
             // Verify component is derived from Component base; null out if not
