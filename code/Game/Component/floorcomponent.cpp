@@ -500,17 +500,26 @@ void FloorComponent_InitFuncs() {
 //                                                     calls this very slot itself)
 //  [12]  +0x60  Message     FloorComponent_Slot12    (0x14011f520 — on msg 1, place)
 //
-// SLOT 11 (+0x58, 0x14011f540) IS DELIBERATELY LEFT UNWIRED — it is DEAD IN RETAIL.
-// The body is real (guard `if (floorFlag != 0)` then a verbatim inline f390, i.e. "if a
-// floor is already placed, re-place it with the current transform"), but nothing in the
-// shipped exe can reach it. The only entity-level dispatcher of component slot +0x58 is
-// FUN_1400c2bf0 — the exact sibling of the slot-12 broadcaster ModelComponent_helper_2b70
-// (0x1400c2b70), sitting 0x80 bytes after it — and it has ZERO callers: its single Ghidra
-// xref, 0x1401ebc20, is inside .pdata (0x1401e1000-0x1401f33ff), i.e. its own unwind
-// record, not a call site and not a vtable entry. By contrast 2b70 has 16 callers.
-// A leftover hook, not a live path. Wiring it would be a deviation that nothing drives.
-// (Verified 2026-08-29; re-check before "fixing" a floor that fails to follow a moved
-// entity — the answer would be a new caller, not this slot.)
+// SLOT 11 (+0x58, 0x14011f540) IS THE LOAD-TIME RE-PLACE — WIRED (corrected 2026-08-29).
+// Body: `if (floorFlag == 0) return;` then a verbatim inline f390 — "the save said this
+// component had a floor placed, so place it again with the current transform". That is
+// exactly why floorFlag is the ONE FloorComponent field the serializer persists.
+//
+// ⚠ THIS BLOCK PREVIOUSLY CLAIMED THE SLOT WAS DEAD IN RETAIL. That was wrong, and the
+// mistake is instructive: the earlier sweep looked only for ENTITY-level dispatchers of
+// +0x58, found FUN_1400c2bf0 (which really does have zero callers — its lone xref
+// 0x1401ebc20 is its own .pdata unwind record), and stopped. A byte-pattern scan for
+// `FF 50 58` finds a SECOND dispatcher: 0x1400c47c5, inside FUN_1400c4730 — the
+// load-only EntityList post-load pass (`if (stream+8 == 0)`), which
+// GameUpdateLoop::Serialize (0x140095a90) calls at 0x140095d3f. We already port and call
+// that pass (EntityList_PostLoad_c4730, gameupdateloop_serialize.cpp), so the dispatcher
+// was live all along and only the slot was missing.
+//
+// Symptom while unwired: after a LOAD, dock/bridge walkers fall through to the riverbed.
+// cell+0x2d (the per-cell floor counter) IS restored — FUN_14001ac10 serializes it — so
+// f3e0 (0x14009f3e0) enters its refine branch, but the deck mesh was never re-added to
+// the map's Picking::Scene, so Intersect misses and Z falls back to terrain height.
+// New games were unaffected because slot 12 / msg 1 places the floor at build time.
 //
 // SLOT 6 IS NOT THE PATH FOR BUILDINGS. It gates on the FloorDescription bool at +0x28,
 // which the .rsc calls `_addOnCreate`, and ONLY the bridge templates set it:
@@ -565,6 +574,20 @@ static void FloorComponent_Slot12VSlot(void* s, int msgId) {
     FloorComponent_SubF390(s);
 }
 
+// FloorComponent slot 11 (+0x58, 0x14011f540): the LOAD-TIME re-place. Retail's body is
+// `if (floorFlag == 0) return;` followed by a verbatim inline copy of f390 — so delegate
+// rather than duplicate, exactly as slot 12 does.
+static void FloorComponent_Slot11VSlot(void* s) {
+    FloorComponent* fc = reinterpret_cast<FloorComponent*>(s);
+    // Logged BEFORE the floorFlag test so the trace discriminates "hook never
+    // dispatched" from "dispatched but floorFlag was lost in the serializer".
+    if (MapQuery_FloorTraceOn())
+        std::fprintf(stderr, "[Floor] slot11 postload self=%p floorFlag=%u floorId=%d\n",
+                     s, (unsigned)fc->floorFlag, (int)fc->floorId);
+    if (fc->floorFlag == 0) return;
+    FloorComponent_SubF390(s);
+}
+
 static void FloorComponent_FinishVtable() {
     // Slot 3 is unconditional: serializer wiring is not a feature flag (a base-only
     // slot 3 silently resets floorFlag across a save/load).
@@ -572,6 +595,7 @@ static void FloorComponent_FinishVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FLOOR")) {
         FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
         FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
+        FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
         FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
     }
 }
