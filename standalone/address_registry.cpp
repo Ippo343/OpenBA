@@ -1358,6 +1358,22 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
     RegisterDispatchSlot(0x1401529a8,   // Picking::Scene::SetTransform(uint id, const Transform&)
         (uintptr_t)ResolveExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z"));
+    // Picking::Scene::Intersect(start, dir, maxDist, &hitPos, &hitNormal) -> hit id or -1.
+    // The ray-cast half of every mesh-precise pick. Read by:
+    //   * CharacterComponent_impl_f3e0 (0x14009f534) — the deck/floor height refine that
+    //     stands a citizen ON a dock or bridge instead of on the terrain under it
+    //     (mapquery.cpp; that file falls back to the export by name if this is null).
+    //   * PathTool (0x1400dd710 area) and EditTool — entity picking. EditTool already
+    //     resolves it by mangled name; PathTool only ever read this slot, so its mesh
+    //     pick has been dead, which is the "buildings are click-the-middle picky" report.
+    RegisterDispatchSlot(0x140152428,
+        (uintptr_t)ResolveExport("?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z"));
+    // Picking::Scene::GetUserData(uint hitId) -> void* (the owning entity). Registered
+    // alongside Intersect deliberately: a hit id with no way to resolve its owner is a
+    // pick that cannot select anything, so Intersect ALONE would leave PathTool exactly
+    // as broken (it null-guards this pointer and silently skips the mesh pick).
+    RegisterDispatchSlot(0x140152890,
+        (uintptr_t)ResolveExport("?GetUserData@Scene@Picking@@QEBAPEAXI@Z"));
     // Picking::Scene::SetMeshUserData(uint id, void* userData, int, int, callback*) —
     // re-points an ALREADY-registered pick mesh at a different owner. Exactly two exe
     // callers: BridgeTool::CalcPath (0x1400fab75, re-owns each deck segment to the master

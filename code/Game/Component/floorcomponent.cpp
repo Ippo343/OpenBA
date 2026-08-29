@@ -5,19 +5,41 @@
 // Fields: floorFlag (byte +0x28), floorId (int32 +0x2C, init -1).
 // Manages floor/ground plane rendering for buildings.
 //
-// Vtable at 0x140163360:
+// Vtable at 0x140163360 (dumped; every other slot is the base Component default):
 //   [3] Shutdown  = 0x14011F560 -- serialize floorFlag as bool
-//   [6] Draw      = 0x14011F340 -- IsDerivedFrom check + conditional floor render
-//   [7] OnCreate  = 0x14011F2A0 -- remove existing floor mesh
-//  [11] OnUpdate2 = 0x14011F540 -- 12-byte stub (unhookable, not reimplemented here)
+//   [6] OnAdded   = 0x14011F340 -- Ghidra "Draw"; place the floor iff desc `_addOnCreate`
+//   [7] OnRemove  = 0x14011F2A0 -- Ghidra "OnCreate"; remove the floor mesh
+//  [11] (dead)    = 0x14011F540 -- NOT a stub: a real re-place body, but nothing in the
+//                                  shipped exe dispatches component slot +0x58. See the
+//                                  long note at the factory below before touching it.
+//  [12] Message   = 0x14011F520 -- on message 1, place the floor (the path buildings use)
+//  [19]           = 0x14011F6E0
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/floorcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"          // GetTypeIdByName
+#include "Component/component_factory_base.h"     // LiveEnabled + inert factory helpers
 #include <cstdint>
 #include <cstdio>
+
+// BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
+bool MapQuery_FloorTraceOn();
+
+// Standalone-safe type-id resolution. Both ids the retail bodies read live in raw
+// .rdata (DAT_1401c7708 FloorDescription, DWORD_1401c79e0 MapComponent); ResolveAddr
+// on a .rdata address returns null unless a reg_*.cpp explicitly maps it, and a
+// registered-but-unfilled slot reads 0 — either way every IsDerivedFrom/GetTypeId
+// compare below would silently fail. Fall back to the standalone type registry.
+static uint32_t FloorTypeIdByName(const char* name, uint32_t* rdataSlot) {
+    if (rdataSlot && *rdataSlot != 0 && *rdataSlot != 0xFFFFFFFFu) return *rdataSlot;
+    uint32_t id = ::Object::GetTypeIdByName(name);
+    return (id == 0xFFFFFFFFu) ? 0 : id;
+}
+
+static void EnsureSubHelpers();
 
 // ============================================================
 // Resolved helpers
@@ -150,16 +172,36 @@ void FloorComponent_Shutdown(FloorComponent* self, void* stream) {
 
 void FloorComponent_Draw(FloorComponent* self) {
     EnsureHelpers();
+    EnsureSubHelpers();
 
-    if (!s_fn_IsDerivedFrom_d || !s_pFloorBuildingTypeId) return;
+    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
+    if (!s_fn_IsDerivedFrom_d || !descTid) {
+        if (MapQuery_FloorTraceOn())
+            std::fprintf(stderr, "[Floor] Draw self=%p bailed: isDerivedFrom=%p descTid=%u\n",
+                         (void*)self, (void*)s_fn_IsDerivedFrom_d, descTid);
+        return;
+    }
 
     void* obj = self->_unk18;
-    bool isDerived = s_fn_IsDerivedFrom_d(obj, *s_pFloorBuildingTypeId);
+    bool isDerived = s_fn_IsDerivedFrom_d(obj, descTid);
     void* building = isDerived ? obj : nullptr;
 
-    if (!building) return;
+    // Retail dereferences `building+0x28` unconditionally (CMOVNZ leaves RDX=0 on a
+    // failed cast and it reads [0x28]) because its data guarantees a FloorComponent's
+    // +0x18 IS a FloorDescription. Keep the null test — a standalone entity can carry
+    // the component without the description surviving the copy-ctor.
+    if (!building) {
+        if (MapQuery_FloorTraceOn())
+            std::fprintf(stderr, "[Floor] Draw self=%p: +0x18 (%p) is not a FloorDescription\n",
+                         (void*)self, obj);
+        return;
+    }
 
+    // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
     uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
+    if (MapQuery_FloorTraceOn())
+        std::fprintf(stderr, "[Floor] Draw self=%p desc=%p enabled=%u floorId=%d\n",
+                     (void*)self, building, (unsigned)flag, (int)self->floorId);
     if (flag != 0) {
         if (s_fn_FloorSubF390) {
             s_fn_FloorSubF390(self);
@@ -194,15 +236,22 @@ void FloorComponent_OnCreate(FloorComponent* self) {
             s_fn_CheckPtr(&entityData);
         }
 
-        // Extract coordinates from entity data
-        int16_t x = *(int16_t*)(entityData + 0x28);
-        int16_t y = *(int16_t*)(entityData + 0x2a);
-        int16_t w = *(int16_t*)(entityData + 0x2c);
-        int16_t h = *(int16_t*)(entityData + 0x2e);
+        // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
+        // footprint we cannot decrement the per-cell counters, but we must still drop
+        // the mesh and reset the id or the scene keeps a dangling deck.
+        if (entityData != 0) {
+            int16_t x = *(int16_t*)(entityData + 0x28);
+            int16_t y = *(int16_t*)(entityData + 0x2a);
+            int16_t w = *(int16_t*)(entityData + 0x2c);
+            int16_t h = *(int16_t*)(entityData + 0x2e);
 
-        if (s_fn_RemoveFloorMesh) {
-            s_fn_RemoveFloorMesh(pScene, (uint32_t)self->floorId,
-                (int)x, (int)y, (int)w, (int)h);
+            if (s_fn_RemoveFloorMesh) {
+                s_fn_RemoveFloorMesh(pScene, (uint32_t)self->floorId,
+                    (int)x, (int)y, (int)w, (int)h);
+            }
+        } else if (MapQuery_FloorTraceOn()) {
+            std::fprintf(stderr, "[Floor] OnRemove self=%p: no MapComponent — mesh %d left "
+                                 "in the scene\n", (void*)self, (int)self->floorId);
         }
 
         self->floorId = -1;
@@ -217,8 +266,16 @@ void FloorComponent_OnCreate(FloorComponent* self) {
 // Type ID globals used by the helpers.
 // DWORD_1401c79e0 -- NaturalResource entity-data component type ID (FindComponentByType).
 static uint32_t* s_pNatResTypeId = nullptr;
-// DAT_1401c7708 -- floor building type ID (already resolved as s_pFloorBuildingTypeId).
-// Picking::Scene::AddMesh (FUN at Runtime/exe) + Entity_ClearPathQueue (FUN_140005200).
+// DAT_1401c7708 -- FloorDescription type ID (already resolved as s_pFloorBuildingTypeId).
+// Picking::Scene::AddMesh (Runtime export) + the ModelComponent finder.
+//
+// ⚠ The finder is Entity_ClearPathQueue = FUN_140003f60 (type id DWORD_1401c7a50 =
+// ModelComponent), NOT 0x140005200. This file resolved 0x140005200 for a long time —
+// that address is a DIFFERENT same-shaped finder that searches for DAT_1401c4720
+// (ParticleComponent). Ghidra prints the label "Entity_ClearPathQueue" in f390's
+// pseudo-C but the CALL at 0x14011f41c targets 0x140003f60; the wrong one would have
+// returned a ParticleComponent (or null) and f390 would then have read a Transform out
+// of the wrong object's +0x148. Disassembly-verified 2026-08-29.
 typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
 static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
 typedef uint32_t (*fn_SceneAddMesh_t)(void* scene, void* mesh, void* xform,
@@ -231,7 +288,7 @@ static bool s_subResolved = false;
 static void EnsureSubHelpers() {
     if (s_subResolved) return;
     s_pNatResTypeId   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
+    s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140003f60));
     // Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
     // 0x1801252e0, NOT 0x1800f8d80. The latter is int3 PADDING, not a function entry —
     // calling it raises a breakpoint exception. It survived only because floors are never
@@ -257,7 +314,7 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
     EnsureHelpers(); EnsureSubHelpers();
     uintptr_t o = reinterpret_cast<uintptr_t>(owner);
     void* found = nullptr;
-    uint32_t wantTypeId = s_pNatResTypeId ? *s_pNatResTypeId : 0;
+    uint32_t wantTypeId = FloorTypeIdByName("MapComponent", s_pNatResTypeId);
     int count = *reinterpret_cast<int*>(o + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
     for (int i = 0; i < count; ++i) {
@@ -320,6 +377,15 @@ void FloorComponent_SubF390(void* selfV) {
     int64_t resIBP = 0;
     if (s_fn_GetEntityData) s_fn_GetEntityData(*reinterpret_cast<void**>(self + 2), &resIBP);
     if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
+    // [SA-GUARD] Retail reads the footprint shorts unguarded — its MapComponent is always
+    // there. In standalone the find can miss (the type registry can lag), and a null here
+    // would stamp cell records at address 0x28.
+    if (resIBP == 0) {
+        if (MapQuery_FloorTraceOn())
+            std::fprintf(stderr, "[Floor] f390 self=%p: no MapComponent on the owner — "
+                                 "no footprint, floor NOT placed\n", selfV);
+        return;
+    }
     int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
     int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
     int16_t fw    = *reinterpret_cast<int16_t*>(resIBP + 0x2c);
@@ -331,15 +397,57 @@ void FloorComponent_SubF390(void* selfV) {
     if (s_fn_CheckPtr) s_fn_CheckPtr(&entAcc);
     uintptr_t ent = *reinterpret_cast<uintptr_t*>(&entAcc);
 
+    // [SA-SCOPED FALLBACK] The finder's type id is the shared raw .rdata 0x1401c7a50
+    // (ModelComponent), which reg_pipeline_typeids fills only behind BANISHED_LIVE_DECAL.
+    // Scan the owner ourselves when it comes back empty — the transform below is the
+    // floor mesh's world placement, so a null here parks the deck at address 0x148.
+    if (ent == 0) {
+        static uint32_t s_tidModel = 0;
+        if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
+            s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        uintptr_t owner = *reinterpret_cast<uintptr_t*>(self + 2);
+        if (owner && s_tidModel && s_tidModel != 0xFFFFFFFFu) {
+            int n = *reinterpret_cast<int*>(owner + 0x38);
+            uintptr_t arr = *reinterpret_cast<uintptr_t*>(owner + 0x30);
+            for (int k = 0; k < n && arr; ++k) {
+                void* c = *reinterpret_cast<void**>(arr + (uintptr_t)k * 8);
+                if (!c) continue;
+                uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
+                typedef uint32_t (*getTid_t)(void*);
+                if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) {
+                    ent = reinterpret_cast<uintptr_t>(c);
+                    break;
+                }
+            }
+        }
+    }
+    if (ent == 0) {
+        if (MapQuery_FloorTraceOn())
+            std::fprintf(stderr, "[Floor] f390 self=%p: no ModelComponent on the owner — "
+                                 "no transform, floor NOT placed\n", selfV);
+        return;
+    }
+
     // Copy the 7-uint transform block from ent+0x148..+0x160.
     uint32_t xform[7];
     for (int k = 0; k < 7; ++k)
         xform[k] = *reinterpret_cast<uint32_t*>(ent + 0x148 + (uintptr_t)k * 4);
 
     void* building = *reinterpret_cast<void**>(self + 3);
-    void* meshOwner = (s_pFloorBuildingTypeId && fn_IsDerivedFrom &&
-                       fn_IsDerivedFrom(building, *s_pFloorBuildingTypeId)) ? building : nullptr;
+    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
+    void* meshOwner = (descTid && fn_IsDerivedFrom &&
+                       fn_IsDerivedFrom(building, descTid)) ? building : nullptr;
     void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
+    // desc+0x20 is the PickingMesh ExternalPtr (FishermansDockFloor.rsc = the dock's
+    // "floor" sub-object). Without it there is nothing for the height ray to hit, and
+    // bumping the per-cell counters would then make every f3e0 on those cells pay for a
+    // ray-cast that can only miss — so bail before touching the grid.
+    if (!mesh) {
+        if (MapQuery_FloorTraceOn())
+            std::fprintf(stderr, "[Floor] f390 self=%p: desc=%p descTid=%u — no floor mesh "
+                                 "(+0x20), floor NOT placed\n", selfV, building, descTid);
+        return;
+    }
 
     uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
     int mapW = *mapInfo;
@@ -357,6 +465,12 @@ void FloorComponent_SubF390(void* selfV) {
                                    mesh, xform, 0, 0, 0, 0);
     *reinterpret_cast<uint8_t*>(self + 5) = 1;
     *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
+
+    if (MapQuery_FloorTraceOn())
+        std::fprintf(stderr, "[Floor] f390 PLACED self=%p tile=(%d,%d) fp=%dx%d "
+                             "deckZ=%.3f meshId=%u\n",
+                     selfV, (int)baseX, (int)baseY, (int)fw, (int)fh,
+                     *reinterpret_cast<float*>(&xform[6]), meshId);
 }
 
 // ============================================================
@@ -371,9 +485,120 @@ void FloorComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ===== Standalone factory =====
+//
+// Hand-rolled rather than COMPONENT_LIVE_FACTORY_ONADDED because this component needs
+// THREE real slots plus a non-zero field default, and no macro covers that shape:
+//
+//   [3]  +0x18  Serialize   FloorComponent_Shutdown  (floorFlag round-trips a save)
+//   [6]  +0x30  OnAdded     FloorComponent_Draw      (Ghidra's "Draw" — dispatched by
+//                                                     ComponentEntity_OnAddedPass; the
+//                                                     ctor's flags bit 0 is what enrols it)
+//   [7]  +0x38  OnRemove    FloorComponent_OnCreate  (Ghidra's "OnCreate" — the usual
+//                                                     OnCreate/OnRemove off-by-one; the
+//                                                     body REMOVES the mesh, and f390
+//                                                     calls this very slot itself)
+//  [12]  +0x60  Message     FloorComponent_Slot12    (0x14011f520 — on msg 1, place)
+//
+// SLOT 11 (+0x58, 0x14011f540) IS DELIBERATELY LEFT UNWIRED — it is DEAD IN RETAIL.
+// The body is real (guard `if (floorFlag != 0)` then a verbatim inline f390, i.e. "if a
+// floor is already placed, re-place it with the current transform"), but nothing in the
+// shipped exe can reach it. The only entity-level dispatcher of component slot +0x58 is
+// FUN_1400c2bf0 — the exact sibling of the slot-12 broadcaster ModelComponent_helper_2b70
+// (0x1400c2b70), sitting 0x80 bytes after it — and it has ZERO callers: its single Ghidra
+// xref, 0x1401ebc20, is inside .pdata (0x1401e1000-0x1401f33ff), i.e. its own unwind
+// record, not a call site and not a vtable entry. By contrast 2b70 has 16 callers.
+// A leftover hook, not a live path. Wiring it would be a deviation that nothing drives.
+// (Verified 2026-08-29; re-check before "fixing" a floor that fails to follow a moved
+// entity — the answer would be a new caller, not this slot.)
+//
+// SLOT 6 IS NOT THE PATH FOR BUILDINGS. It gates on the FloorDescription bool at +0x28,
+// which the .rsc calls `_addOnCreate`, and ONLY the bridge templates set it:
+//   WoodBridge*.rsc      FloorDescription { _mesh = ...; bool _addOnCreate = true; }
+//   FishermansDock.rsc   FloorDescription { _mesh = ...; }          <- absent => false
+// (same for IronMine / SchoolHouse / TradingPost). A dock's deck is placed by slot 12
+// instead, on message 1 — the "this structure is now solid" broadcast that
+// ModelComponent_helper_2b70(entity, 1) sends from the ClearArea state-2 enter, and the
+// same message MapComponent's slot 12 uses to claim its footprint cells. Wiring only
+// slot 6 logs `enabled=0` and places nothing, which is what the first run of this change
+// did.
+//
+// floorId defaults to -1, not 0. The inert factory zeroes the body, and f390 opens with
+// `if (floorId >= 0) <remove the existing mesh>` — a zeroed id would make the very first
+// placement try to remove picking-mesh 0 (someone else's mesh) before adding its own.
+//
+// Flags are 0x43 (FloorComponent_Ctor 0x14011f636: `OR EAX,0x43`). The previous 0xC3 here
+// had a spurious bit 7 and put the component in an update bucket retail never uses.
+//
+// Gated on BANISHED_LIVE_FLOOR, DEFAULT-ON since 2026-08-29 (kDefaultOnFlags) — the env
+// var is now a kill-switch (=0) for A/B runs. With it off this is byte-for-byte the old
+// inert component. What it turns on: docks/bridges register their
+// deck mesh into the map's Picking::Scene and bump each covered cell's floor counter
+// (+0x2d), which is what makes the height query in mapquery.cpp stand a citizen ON the
+// deck instead of on the terrain beneath it.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(FloorComponent, 0x30, 0xC3)
+
+static uint32_t FloorComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0 || cached == 0xFFFFFFFFu) cached = ::Object::GetTypeIdByName("FloorComponent");
+    return cached;
+}
+static void* FloorComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void FloorComponent_SerVSlot(void* s, void* stream) {
+    FloorComponent_Shutdown(reinterpret_cast<FloorComponent*>(s), stream);
+}
+static void FloorComponent_OnAddedVSlot(void* s) {
+    FloorComponent_Draw(reinterpret_cast<FloorComponent*>(s));
+}
+static void FloorComponent_OnRemoveVSlot(void* s) {
+    FloorComponent_OnCreate(reinterpret_cast<FloorComponent*>(s));
+}
+// FloorComponent_Slot12 (0x14011f520): `if (msg != 1) return;` followed by a verbatim
+// inline copy of f390 — so delegate rather than duplicate the body.
+static void FloorComponent_Slot12VSlot(void* s, int msgId) {
+    if (MapQuery_FloorTraceOn())
+        std::fprintf(stderr, "[Floor] slot12 self=%p msg=%d floorId=%d\n",
+                     s, msgId, (int)reinterpret_cast<FloorComponent*>(s)->floorId);
+    if (msgId != 1) return;
+    FloorComponent_SubF390(s);
+}
+
+static void FloorComponent_FinishVtable() {
+    // Slot 3 is unconditional: serializer wiring is not a feature flag (a base-only
+    // slot 3 silently resets floorFlag across a save/load).
+    FloorComponent_LiveVtable[3] = reinterpret_cast<void*>(&FloorComponent_SerVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FLOOR")) {
+        FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
+        FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
+        FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
+    }
+}
+
+static void FloorComponent_InitBody(void* p) {
+    if (!p) return;
+    FloorComponent* fc = reinterpret_cast<FloorComponent*>(p);
+    fc->floorFlag = 0;
+    fc->floorId   = -1;   // FloorComponent_Ctor 0x14011f62f
+}
+
+extern "C" void* FloorComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(
+        0x30, 0x43, FloorComponent_LiveVtable,
+        reinterpret_cast<void*>(&FloorComponent_LiveGetTypeId));
+    FloorComponent_FinishVtable();
+    FloorComponent_InitBody(p);
+    return p;
+}
+static void* FloorComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(
+        mem, 0x30, 0x43, FloorComponent_LiveVtable,
+        reinterpret_cast<void*>(&FloorComponent_LiveGetTypeId));
+    FloorComponent_FinishVtable();
+    FloorComponent_InitBody(mem);
+    return mem;
+}
+
 REGISTER_TYPE(FloorComponent, "Component",
               &FloorComponent_Factory, &FloorComponent_CreateInPlace);

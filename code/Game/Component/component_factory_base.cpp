@@ -214,6 +214,19 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_REGIONMAP",
     "BANISHED_LIVE_STORAGEDISPLAY",
     "BANISHED_LIVE_DECAL",
+    // GRADUATED 2026-08-29 — walkable floors (dock / bridge decks). Two halves, one flag:
+    // FloorComponent slots 6/7/12 register the deck picking mesh into the MAP's
+    // Picking::Scene and bump each covered cell's floor counter (cellRec+0x2d), and the
+    // matching refine in mapquery.cpp's f3e0 ray-casts that scene so a citizen's per-frame
+    // Z lands on the deck instead of the riverbed under it.
+    // POSITIVE RUN (seed 12345, BANISHED_BUILD_DEMO_FISHINGDOCK=1, ~2 min, no crash):
+    // two docks placed their floors — the demo one at tile (78,134) in shallow water
+    // (deck z 0.157 vs terrain 0.004, a subtle correction) and a second at (99,120) out
+    // in deep water, where the same trace reads deck z -0.075 / 0.339 against terrain
+    // -1.853 / -1.883 — a FULL BODY HEIGHT of correction. 126k refine hits, zero crashes;
+    // the gate-off arm logged 0 hits and an identical world build. User-verified visually
+    // on both docks: fishermen stand on the boards and path along them as intended.
+    "BANISHED_LIVE_FLOOR",
     "BANISHED_LIVE_TOOLS",
     "BANISHED_LIVE_PICKING",
     "BANISHED_LIVE_PARTICLE",
