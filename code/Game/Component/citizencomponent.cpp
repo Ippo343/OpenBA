@@ -3306,13 +3306,8 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
     if (!self) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
 
-    // ctor (0x140114770) scalar -1/4 sentinels the inert factory zeroed. The 0xCB
-    // flags + the MeshInstance sub-object (+0xB8) are already set/zeroed by the
-    // factory; CitizenAI never reads the mesh, so a zeroed mesh is safe here.
-    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
-    *reinterpret_cast<int32_t*>(p + 0xA8)  = -1;
-    *reinterpret_cast<int64_t*>(p + 0x1D8) = -1;
-    *reinterpret_cast<int64_t*>(p + 0x1E0) = 4;
+    // ctor scalars moved to CitizenComponent_CtorScalars — see the note there.
+
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
     int64_t owner = *reinterpret_cast<int64_t*>(p + 0x10);
@@ -3537,10 +3532,41 @@ static void CitizenComponent_FinishLiveVtable() {
         CitizenComponent_LiveVtable[15] =
             reinterpret_cast<void*>(&CitizenComponent_NeedsUpdateVSlot);
 }
+// Faithful port of the scalar half of CitizenComponent::CitizenComponent
+// (0x140114770). MUST run at CONSTRUCTION, not at Startup.
+//
+// Retail's load path (ComponentEntity::Serialize 0x1400c3140) rebuilds a
+// stream-restored component through Object::Factory::CreateObject -> ctor, then
+// calls ONLY RefreshEntityFlags — vtable +0x20 (Startup) is NEVER dispatched for
+// it. Retail's serializer (0x140114160) re-supplies +0x30/+0xa8/+0x1e0 from the
+// stream but deliberately SKIPS +0x1dc, the live Graphics::Scene object handle,
+// because the ctor already put -1 there and a handle from a previous session is
+// meaningless. Our sentinels used to live in the Startup body, so on a LOAD they
+// never ran and the inert factory's zero-fill left +0x1dc = 0. HideTool
+// (0x1401176e0) then passed its `>= 0` guard and called
+// Scene::RemoveObject(scene, 0) on a handle the scene never issued: Runtime
+// 0x18005f140 walks quadtree parents via `parent = (i-1) >> 2` ARITHMETIC-shifted,
+// so a free slot's nodeIndex of -1 is a fixed point and the loop NEVER TERMINATES.
+// That was the post-load freeze (main thread spinning at 0x18005f14f).
+//
+// Fixing it here rather than guarding HideTool is the faithful direction: retail
+// legitimately passes that guard, and ActCt_HideTool_1176e0 stays byte-faithful.
+// This also removes a latent bug in the other direction — the Startup body would
+// clobber a freshly loaded toolId (+0x1d8) back to -1.
+static void CitizenComponent_CtorScalars(void* selfV) {
+    if (!selfV) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
+    *reinterpret_cast<int32_t*>(p + 0xA8)  = -1;
+    *reinterpret_cast<int64_t*>(p + 0x1D8) = -1;   // toolId AND sceneObjectId
+    *reinterpret_cast<int64_t*>(p + 0x1E0) = 4;
+}
+
 extern "C" void* CitizenComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x290, 0xCB,
         CitizenComponent_LiveVtable,
         reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
+    CitizenComponent_CtorScalars(p);        // retail ctor 0x140114770
     CitizenComponent_FinishLiveVtable();
     return p;
 }
@@ -3548,6 +3574,7 @@ static void* CitizenComponent_CreateInPlace(void* mem) {
     if (mem) ::ComponentFactory::InitInertTyped(mem, 0x290, 0xCB,
         CitizenComponent_LiveVtable,
         reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
+    CitizenComponent_CtorScalars(mem);      // retail ctor 0x140114770
     CitizenComponent_FinishLiveVtable();
     return mem;
 }
