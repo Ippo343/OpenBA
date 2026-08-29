@@ -1048,8 +1048,23 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
         s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
     }
 
-    // On load (version byte in serializer+8 == 0), resize array
-    if (*(int*)((uintptr_t)serializer + 8) == 0) {
+    // On load, resize the worker array to the count just read.
+    //
+    // ⚠ This tested `*(int*)(serializer + 8) == 0`, but IO::Serializer +0x08 is
+    // m_encoding — a POINTER, never 0 — so the resize NEVER ran on either leg.
+    // The loading flag lives on the STREAM (MemoryStream +0x08), which is how
+    // ComponentEntity_Serialize and goals_serialize.cpp test it. With the resize
+    // dead, +0x58 stayed null on load and the `workerArray` guard below silently
+    // skipped reading `count` worker IBPs that the save had written — and each of
+    // those pulls a worker's ENTITY inline, so the save wrote hundreds of bytes
+    // the load never consumed. That desynced the stream for every later object:
+    // a subsequent entity's component record was read off misaligned bytes,
+    // handing InternalFactory::PersistObject a bogus objId (0xAAA12C08, identical
+    // across saves because it is stream content, not heap garbage) which it used
+    // to index its id map out of bounds -> ACCESS_VIOLATION on load.
+    const uintptr_t serStream = *(uintptr_t*)serializer;
+    const bool loadingLeg = serStream && (*(int*)(serStream + 8) == 0);
+    if (loadingLeg) {
         if (s_fn_ResizeIBPArray) {
             s_fn_ResizeIBPArray((void*)((uintptr_t)self + 0x58), countBuf);
         }
@@ -1058,6 +1073,27 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     // Serialize each worker InternalBasePtr and validate type
     void* workerArray = *(void**)((uintptr_t)self + 0x58);
     int64_t count = (int64_t)countBuf;
+    // BANISHED_COMP_VALIDATE=1 — the worker loop is the prime suspect for the
+    // save/load desync: each worker IBP can pull a whole entity inline, so a leg
+    // that skips the loop consumes far fewer bytes than the leg that ran it.
+    // Report BOTH arms (see reference_diagnostics_must_report_outcomes): the
+    // `workerArray` guard silently turns a failed resize into a skipped read.
+    {
+        static int s_wpc = -1;
+        if (s_wpc < 0) { const char* e = std::getenv("BANISHED_COMP_VALIDATE");
+                         s_wpc = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        static int n = 0;
+        if (s_wpc && n < 40) { ++n;
+            fprintf(stderr, "[WPCSer] %s self=%p count=%d arr=%p -> %s\n",
+                    loadingLeg ? "LOAD" : "SAVE",
+                    (void*)self, (int)count, workerArray,
+                    (count == 0) ? "no workers (nothing to read)"
+                                 : (workerArray ? "LOOP RUNS"
+                                                : "LOOP SKIPPED — ASYMMETRIC, "
+                                                  "count>0 but array null"));
+            fflush(stderr);
+        }
+    }
     if (count > 0 && workerArray) {
         uintptr_t ptr = (uintptr_t)workerArray;
         for (int64_t i = 0; i < count; i++) {
