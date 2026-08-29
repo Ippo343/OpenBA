@@ -61,6 +61,18 @@ bool LooksLikeObject(const void* p) {
     return mbi.Type == MEM_IMAGE;
 }
 
+// Object::Internal keeps its serialisation id at +0x8. Valid ids are small
+// non-negative indices into InternalFactory's id map (or -1 "unregistered");
+// a town never holds millions of objects, so anything outside this range
+// indexes PersistObject's map out of bounds on load.
+constexpr int32_t kMaxSaneObjId = 1 << 24;
+bool IdLooksSane(const void* obj) {
+    if (!Readable(obj, 0x10)) return false;
+    const int32_t id = *reinterpret_cast<const int32_t*>(
+        reinterpret_cast<const uint8_t*>(obj) + 8);
+    return id >= -1 && id < kMaxSaneObjId;
+}
+
 const char* TypeNameOf(const void* obj) {
     if (!LooksLikeObject(obj)) return nullptr;
     typedef uint32_t (*fn_gtid_t)(const void*);
@@ -101,7 +113,16 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
         void* obj = *slot;
         // A null slot is legal (IBP::Serialize writes "absent"); only a NON-null
         // value that is not a live object is the bug we are hunting.
-        if (obj && !LooksLikeObject(obj)) ++bad;
+        if (!obj) continue;
+        // Two distinct failures: (a) not a live object at all; (b) a live
+        // object whose Object::Internal id is junk. (b) is the one that bites:
+        // InternalBasePtr::Serialize writes that id as the stream objId and the
+        // LOAD feeds it to PersistObject as idMap[objId]. The crash under chase
+        // had objId=0xAAA12C08 IDENTICAL across two saves from two towns, so it
+        // is deterministic, not heap noise. The first version of this probe only
+        // tested (a) and so stayed silent on exactly the case it was written for.
+        if (!LooksLikeObject(obj)) { ++bad; continue; }
+        if (!IdLooksSane(obj)) ++bad;
     }
     if (!bad) return 0;
 
@@ -127,7 +148,12 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
             fprintf(stderr, "[CompValidate]   slot %2d = %p  *** NOT AN OBJECT (unreadable) ***\n",
                     i, obj);
         } else {
-            fprintf(stderr, "[CompValidate]   slot %2d = %p  %s\n", i, obj, n ? n : "(null)");
+            const int32_t oid = (obj && Readable(obj, 0x10))
+                ? *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(obj) + 8) : 0;
+            fprintf(stderr, "[CompValidate]   slot %2d = %p  %-28s objId=%d%s\n",
+                    i, obj, n ? n : "(null)", oid,
+                    (obj && !IdLooksSane(obj))
+                        ? "   *** BAD OBJECT ID -> load indexes out of bounds ***" : "");
         }
     }
     fflush(stderr);
