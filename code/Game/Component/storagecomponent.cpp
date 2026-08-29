@@ -215,17 +215,30 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
         s_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x38), nullptr);
     }
 
-    // Serialize field3c via serializer vtable call (+0x98)
-    uintptr_t serializerObj = *(uintptr_t*)serializer;  // first qword is internal ptr
-    uintptr_t serVtable = *(uintptr_t*)serializerObj;
-    // Ghidra: (**(code**)(serVtable + 0x98))(serializerObj, self+0x3c, 0)
-    typedef void (*fn_SerVtable98_t)(void* ser, void* field, int name);
-    fn_SerVtable98_t serVtable98 = *(fn_SerVtable98_t*)(serVtable + 0x98);
-    // Note: the Ghidra shows local_18 (the internal serializer ptr) being used
-    // We pass the serializer's internal pointer, not the stack buffer
-    if (serVtable98) {
-        serVtable98((void*)serializerObj, (void*)(selfAddr + 0x3c), 0);
+    // Serialize field3c through the serializer's ENCODING object at Serializer+0x08 —
+    // NOT the Stream at Serializer+0x00. IO::Serializer::Serializer (Runtime 0x1800b9960)
+    // lays it out as { Stream* @+0x00, Encoding* @+0x08 }, and retail dispatches off the
+    // ENCODING (0x14012c7fc: MOV RCX,[RSP+0x30] = serializer+8; CALL [RAX+0x98]).
+    //
+    // ⚠ This read +0x00, so it called the STREAM's vtable slot 0x98 with this=Stream —
+    // a different class, same slot index. Measured: the two slots resolve to different
+    // functions, and the stream one writes EIGHT bytes at self+0x3c, running off the end
+    // of a 0x40-byte StorageComponent and zeroing the boundary tag of the very next heap
+    // block — which is this component's own slot array. That poisoned the allocator free
+    // list on EVERY StorageComponent at load, and the game died much later inside
+    // Allocate/UnlinkFreeTag (hence LOAD DONE, a healthy-looking run, then a crash with
+    // no obvious connection). Probe evidence: tag@+0x40 0x0e -> 0, and
+    // 0x00002000076e40be -> 0x0000200000000000 (low dword zeroed = an 8-byte write).
+    //
+    // Third arg mirrors retail's XOR R8D,R8D.
+    uintptr_t encoding = *(uintptr_t*)((uintptr_t)serializer + 8);
+    if (encoding) {
+        uintptr_t encVtable = *(uintptr_t*)encoding;
+        typedef void (*fn_EncSer98_t)(void* enc, void* field, const char* name);
+        fn_EncSer98_t encSer98 = *(fn_EncSer98_t*)(encVtable + 0x98);
+        if (encSer98) encSer98((void*)encoding, (void*)(selfAddr + 0x3c), nullptr);
     }
+
 
     // Version 0 migration: if loading and version==0, copy from StorageDescription
     if (s_fn_Serializer_GetVersion) {
