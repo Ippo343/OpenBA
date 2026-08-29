@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "scene_watch.h"
 
 // ============================================================
 // Resolved helpers for Update
@@ -1914,6 +1915,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
                                                                 reinterpret_cast<void*>(param_1 + 5))
                                   : 0xffffffff;
                 *reinterpret_cast<uint32_t*>(param_1 + 0x20) = id;
+                SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "CitizenComponent::ShowTool");
             }
             int64_t timeVal = 0;
             if (s_fn_TimeFromFloat) s_fn_TimeFromFloat(&timeVal, 0.0f);
@@ -2608,8 +2610,26 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
         static int s_cwn = 0;
         if (s_cwn < 8) { ++s_cwn;
-            fprintf(stderr, "[CheckWP] citizenCell=%u workplaceCell=%d mapW=%d res=%d\n",
-                    cellIdx, regionId, mapW, (int)res);
+            // The last gate in FUN_1400a00f0 is the per-cell region id (tile+0x26)
+            // in the stride-0x30 tile array at mapInfo+0x80; a same-cell query can
+            // only fail when that id is 0. Print both tiles' kind (+0x29) and
+            // region id so "positions are wrong" and "the grid was never stamped"
+            // stop looking alike.
+            const uint8_t* tiles = *reinterpret_cast<uint8_t* const*>(
+                reinterpret_cast<const uint8_t*>(mapInfo) + 0x80);
+            unsigned srcRegion = 0, dstRegion = 0, srcKind = 0, dstKind = 0;
+            if (tiles) {
+                const uint8_t* ts = tiles + (size_t)cellIdx * 0x30;
+                const uint8_t* td = tiles + (size_t)regionId * 0x30;
+                srcRegion = *reinterpret_cast<const uint16_t*>(ts + 0x26);
+                dstRegion = *reinterpret_cast<const uint16_t*>(td + 0x26);
+                srcKind = ts[0x29];
+                dstKind = td[0x29];
+            }
+            fprintf(stderr, "[CheckWP] citizenCell=%u workplaceCell=%d mapW=%d res=%d\n"
+                            "          tiles=%p srcRegion=%u dstRegion=%u srcKind=%u dstKind=%u\n",
+                    cellIdx, regionId, mapW, (int)res,
+                    (const void*)tiles, srcRegion, dstRegion, srcKind, dstKind);
             fflush(stderr);
         }
     }

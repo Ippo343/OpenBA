@@ -418,10 +418,17 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     uint32_t flags;
     if (!cem) {
         flags = (eventType != 2) ? 0x80u : 0x2u;
-        fprintf(stderr, "[Burial] NO GRAVE: citizen=%p cell=%u townCemeteries=%d "
-                        "(0 => the state-2 registrar never ran; >0 => every cemetery is "
-                        "full, unreachable, or has an empty plot array) flags=0x%x\n",
-                selfV, cell, cemCountForTrace, flags);
+        // eventType names the CAUSE; without it every death in the log looks alike:
+        // 0 starvation, 1 thirst, 2 old age, 3 health, 6 disease, 7 other.
+        static const char* kCause[] = {"starvation", "thirst", "old-age", "health",
+                                       "?4", "?5", "disease", "other"};
+        fprintf(stderr, "[Burial] NO GRAVE: citizen=%p cause=%d(%s) cell=%u "
+                        "townCemeteries=%d (0 => the state-2 registrar never ran; "
+                        ">0 => every cemetery is full, unreachable, or has an empty "
+                        "plot array) flags=0x%x\n",
+                selfV, eventType,
+                (eventType >= 0 && eventType < 8) ? kCause[eventType] : "?",
+                cell, cemCountForTrace, flags);
         fflush(stderr);
     } else {
         flags = 0x40u;

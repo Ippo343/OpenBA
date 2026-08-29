@@ -14,6 +14,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/statusiconcomponent_funcs.h"
+#include "scene_watch.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -288,6 +289,7 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
             void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
             if (scene) {
                 uint32_t newId = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
+                SceneWatch_Note(newId, (void*)(s + 0x28), "StatusIconComponent::OnAdded");
 
                 // Set flags: OR bit 2 (0x04) into flags at +0x20
                 uint32_t oldFlags = *(uint32_t*)(s + 0x20);
@@ -699,6 +701,7 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
         if (s_fn_Scene_AddObject && scene) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;
+            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Update");
         }
     }
     if (*(int32_t*)(c + 0x100) < 0) return;
@@ -820,6 +823,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;
+            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
         }
         if (s_fn_Time_Ctor) {
             uint8_t timeObj[8];

@@ -78,6 +78,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "scene_watch.h"
 
 namespace {
 
@@ -283,6 +284,7 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
                                               reinterpret_cast<void*>(mi + 0x28))
                 : 0xffffffffu;
             *reinterpret_cast<uint32_t*>(mi + 0x100) = id;
+            SceneWatch_Note(id, reinterpret_cast<void*>(mi + 0x28), "CitizenAI::Gather carry-mesh");
         }
         int64_t t0 = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t0, 0.0f);

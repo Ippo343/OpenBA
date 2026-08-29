@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/modelcomponent_funcs.h"
+#include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -451,6 +452,7 @@ void ModelComponent_Draw(ModelComponent* self) {
             if (scene) {
                 uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
                 *(uint32_t*)(s + 0x16c) = id;
+                SceneWatch_Note(id, (void*)(s + 0x28), "ModelComponent::Draw");
                 // [diag] BANISHED_DRAIN_AUDIT — a scene registration made on an entity
                 // that is ALREADY marked-for-removal (0x400) is a node the mark-time
                 // +0x38 teardown can never take back out: the entity is freed at the

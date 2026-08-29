@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "scene_watch.h"
 
 static bool ACT_Trace() {
     static int t = -1;
@@ -539,5 +540,6 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         uint32_t objId = s_SceneAddObject(scene, reinterpret_cast<void*>(e + 0xb8));
         *reinterpret_cast<int*>(e + 0x1d8) = toolId;
         *reinterpret_cast<uint32_t*>(e + 0x1dc) = objId;
+        SceneWatch_Note(objId, reinterpret_cast<void*>(e + 0xb8), "ShowTool 0x1401173b0");
     }
 }

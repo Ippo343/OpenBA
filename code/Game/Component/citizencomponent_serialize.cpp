@@ -146,10 +146,34 @@ inline bool Loading(void* stream) {
 
 void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
     const uint32_t* tid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, addr));
+    void* before = *reinterpret_cast<void**>(ibp);
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(ibp, ser);
     void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && fn_IsDerivedFrom && tid && *tid && !fn_IsDerivedFrom(obj, *tid))
+    const bool checked = (obj && fn_IsDerivedFrom && tid && *tid);
+    const bool derived = checked ? fn_IsDerivedFrom(obj, *tid) : true;
+    if (checked && !derived)
         *reinterpret_cast<uint64_t*>(ibp) = 0;
+
+    // [diag] BANISHED_IBP_TRACE — an IBP that reads null after a load has three
+    // possible stories that must be told apart: the stream held null,
+    // InternalBasePtr::Serialize could not resolve the persisted id, or the value
+    // arrived intact and this validation threw it away because the type-id global
+    // is wrong. Only the RAW value, before the null-out, distinguishes them.
+    static int s_on = -1;
+    if (s_on < 0) { const char* e = std::getenv("BANISHED_IBP_TRACE");
+                    s_on = (e && *e && e[0] != '0') ? 1 : 0; }
+    if (s_on) {
+        static int n = 0;
+        if (n < 40) {
+            ++n;
+            fprintf(stderr, "[IBPTrace] tid@%llx=%u  in=%p raw=%p checked=%d "
+                            "derived=%d out=%p\n",
+                    (unsigned long long)addr, tid ? *tid : 0u, before, obj,
+                    checked ? 1 : 0, derived ? 1 : 0,
+                    *reinterpret_cast<void**>(ibp));
+            fflush(stderr);
+        }
+    }
 }
 
 

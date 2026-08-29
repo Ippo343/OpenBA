@@ -14,6 +14,7 @@
 //
 
 #include "Component/particlecomponent_funcs.h"
+#include "scene_watch.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -612,7 +613,10 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
         ((fn_geoUpdate_t)vt[1])(ge->geo, &zeroTime);
     }
     if (fn_Graphics_Scene_AddObject)
+    {
         ge->sceneId = (int32_t)fn_Graphics_Scene_AddObject(scene, ge->geo);
+        SceneWatch_Note((uint32_t)ge->sceneId, ge->geo, "ParticleComponent");
+    }
 
     if (PC_RebucketEntity()) {
         uint32_t oldFlags = *(uint32_t*)(s + 0x20);

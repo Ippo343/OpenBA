@@ -33,6 +33,8 @@
 //
 
 #include "engine_funcs.h"
+#include <windows.h>
+#include <cstdio>
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>   // qsort
@@ -398,6 +400,25 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
 
     if (*pWorkplace == newWp && *pSlot == slotIndex)
         return;   // no change
+
+    // [diag] A citizen losing its workplace is how "everyone froze after a load"
+    // starts: +0x238 goes null, the AI has nothing to plan, and the town starves.
+    // Only the UN-assignment is interesting, and only its CALLER identifies which
+    // rule decided the job was invalid -- so report the return address and let nm
+    // name it (image base 0x140000000).
+    if (*pWorkplace != 0 && newWp == 0) {
+        static int n = 0;
+        if (n < 25) {
+            ++n;
+            std::fprintf(stderr, "[Unassign] #%d citizen=%p oldWp=%llx slot %d->%d "
+                         "caller=%p (static 0x%llx)\n", n, selfV,
+                         (unsigned long long)*pWorkplace, *pSlot, slotIndex,
+                         __builtin_return_address(0),
+                         (unsigned long long)((uintptr_t)__builtin_return_address(0)
+                             - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));
+            std::fflush(stderr);
+        }
+    }
 
     // --- Remove from the old workplace roster. ---
     if (*pWorkplace != 0) {

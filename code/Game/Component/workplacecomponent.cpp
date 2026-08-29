@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "scene_watch.h"
 
 // ============================================================
 // Resolved helpers
@@ -335,6 +336,7 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
                 uint32_t id = fn_SceneAddObject(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60),
                                                 (void*)(mesh + 5));
                 *(uint32_t*)(mesh + 0x20) = id;
+                SceneWatch_Note(id, (void*)(mesh + 5), "WorkPlaceComponent carry-mesh");
             }
         }
         uint64_t t = 0;

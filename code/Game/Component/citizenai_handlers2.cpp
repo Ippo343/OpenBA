@@ -58,6 +58,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "scene_watch.h"
 
 namespace {
 
@@ -337,6 +338,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                                                               reinterpret_cast<void*>(mi + 0x28))
                                 : 0xffffffffu;
                             *reinterpret_cast<uint32_t*>(mi + 0x100) = id;
+                            SceneWatch_Note(id, reinterpret_cast<void*>(mi + 0x28), "CitizenAI::handlers2 carry-mesh");
                         }
                         int64_t t0 = 0;
                         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t0, 0.0f);

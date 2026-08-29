@@ -99,6 +99,7 @@
 // exercises them, verify against Ghidra before trusting the result.
 
 #include "engine_funcs.h"
+#include <cstdio>
 #include "resolve.h"
 #include "address_registry.h"
 #include <cstdint>
@@ -150,6 +151,29 @@ void EnsureResolved() {
     s_tid_PopulationComponent = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4790));
     s_tid_BuildComponent      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
     s_resolved = true;
+}
+
+// ------------------------------------------------------------
+// Registry census — the TownManager's 16 IBP registries in one line.
+//
+// Every town service reads one of these arrays (residences +0x20, cemeteries
+// +0x40, attendance +0x60, ...) and every one of them is filled ONLY by a
+// state-2 "enter" registrar, which a load never re-fires (the state machine is
+// restored already in state 2). So on the load leg these counts ARE the town:
+// if they come out zero, citizens have no homes, no jobs and no services, which
+// looks like "everyone froze, then starved".
+void RegistryCensus(uint8_t* base, const char* leg, const char* when) {
+    static const struct { int off; const char* name; } kReg[] = {
+        {0x08, "entA"},   {0x18, "entB"},   {0x28, "residence"}, {0x38, "entC"},
+        {0x48, "cemetery"}, {0x58, "happiness"}, {0x68, "attendance"}, {0x78, "healer"},
+        {0x88, "livestock"}, {0x98, "pasture"}, {0xa8, "citizen"}, {0xb8, "herd"},
+        {0xc8, "population"}, {0xd8, "build"}, {0xe8, "well"}, {0xf8, "disease"},
+    };
+    std::fprintf(stderr, "[TownCensus] %s %s:", leg, when);
+    for (const auto& r : kReg)
+        std::fprintf(stderr, " %s=%d", r.name, *reinterpret_cast<int32_t*>(base + r.off));
+    std::fprintf(stderr, "\n");
+    std::fflush(stderr);
 }
 
 // ------------------------------------------------------------
@@ -537,6 +561,9 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     void* ser = serBuf;
     g_fn_Serializer_Ctor(ser, stream, 6);
 
+    const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
+    RegistryCensus(base, leg, "enter");
+
     SerializeIBPArray(base + 0x00, ser, g_TypeId_ComponentEntity);
     SerializeIBPArray(base + 0x10, ser, g_TypeId_ComponentEntity);
     SerializeIBPArray(base + 0x30, ser, g_TypeId_ComponentEntity);
@@ -681,6 +708,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(base + 0x1b0), nullptr);
     }
 
+    RegistryCensus(base, leg, "exit ");
     g_fn_Serializer_Dtor(ser);
 }
 

@@ -63,6 +63,8 @@ static bool LiveToolsEnabled() {
 // delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
 // apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
 #include "renderdoc_integration.h"
+#include "scene_watch.h"
+#include "citizen_vitals.h"
 
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
 // used as a standalone fallback for the Dialog type-id when the exe data slot
@@ -1379,6 +1381,12 @@ post_simulation:
         // Result intentionally unused — matches original binary behavior.
         (void)dir;
     }
+
+    // [diag] BANISHED_SCENE_WATCH — validate the node array BEFORE Clean walks it,
+    // so a recycled node is reported the frame it appears rather than whenever
+    // Clean's vtable+0x40 dispatch happens to reach it ("EXEC of <heap address>").
+    SceneWatch_Check(self->m_graphicsScene);
+    if (g_pGameWorldSingleton) CitizenVitals_Tick(*g_pGameWorldSingleton);
 
     // Step 15: Graphics::Scene::Clean
     TRACE("[GameUpdateLoop::Update] calling Graphics::Scene::Clean...\n");
