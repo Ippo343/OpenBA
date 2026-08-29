@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -153,13 +154,44 @@ void WorkComponent_Draw(WorkComponent* self) {
 }
 
 // ============================================================
-// WorkComponent::OnCreate (vtable slot [7], 0x14012e6c0)
+// WorkComponent slot [7] = +0x38, 0x14012e6c0 — CANCEL MY WORK ON REMOVAL
 // ============================================================
-// Check if work slot is available (via BST lookup using workId).
-// If available, register it with the work slot manager.
+// Ghidra names this "OnCreate"; it is the REMOVE hook (the documented
+// OnCreate/OnRemove off-by-one). ComponentEntity::MarkForRemoval
+// (0x1400c2ea0) broadcasts vtable +0x38 to every component whose +0x20
+// flags have bit 1 — retail's ctor sets +0x20 |= 3, so WorkComponent is in
+// that broadcast — and it fires BEFORE the 0x400 removal bit, i.e. while the
+// entity is still fully alive.
+//
+// Retail body: `if (ead0(self)) eb50(self)` — "if the work I posted is still
+// in the goals tree, cancel it", and eb50 is what calls Goals::RemoveWork
+// (0x1400f8e30). This is the ONLY route by which a raw-material pile's Pickup
+// leaves the goals trees: Pickup::OnComplete (0x1400f2ec0) returns false in
+// retail too, so CompleteTask never removes it. A pile is created by
+// RawMaterialComponent (0x1401291d0, which posts the Pickup through this
+// component) and dies on an expiry timer in RawMaterialComponent::Update.
+//
+// UNWIRED until 2026-08-29: the body was ported but nothing installed it in
+// slot 7, so EVERY Pickup ever posted stayed in the goals trees with a freed
+// target entity. The next save walked one and faulted in Work::Serialize
+// (0x1400f7400) dereferencing the dead target — measured as work ids 3..22,
+// one per haul, zero exceptions. See [[reference_ported_registered_but_unwired]].
 
-void WorkComponent_OnCreate(WorkComponent* self) {
+void WorkComponent_OnRemove_CancelWork(WorkComponent* self) {
     EnsureHelpers();
+
+    // Report the OUTCOME, not the intent: a run with zero stranded Pickups
+    // proves nothing unless this hook is shown to have actually fired.
+    static int s_probe = -1;
+    if (s_probe < 0) s_probe = std::getenv("BANISHED_WORK_SER_PROBE") ? 1 : 0;
+    if (self && s_probe) {
+        static int n = 0;
+        if (n < 30) { ++n;
+            std::fprintf(stderr, "[WorkComp] slot7 removal hook: comp=%p workId=%d\n",
+                         (void*)self, (int)self->workId);
+            std::fflush(stderr);
+        }
+    }
 
     if (!self) return;
 
@@ -290,6 +322,57 @@ void WorkComponent_InitFuncs() {
 #include "Component/component_factory_base.h"
 
 // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-COMPONENT_INERT_FACTORY_SER(WorkComponent, 0x38, 0x83, WorkComponent_Shutdown)
+static uint32_t WorkComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("WorkComponent");
+    return cached;
+}
+
+static void* WorkComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static void WorkComponent_SerVSlot(void* s, void* stream) {
+    WorkComponent_Shutdown(reinterpret_cast<WorkComponent*>(s), stream);
+}
+static void WorkComponent_OnRemoveVSlot(void* s) {
+    WorkComponent_OnRemove_CancelWork(reinterpret_cast<WorkComponent*>(s));
+}
+
+static void WorkComponent_FinishVtable() {
+    // Slot 3 unconditional — serializer wiring is not a feature flag.
+    WorkComponent_LiveVtable[3] = reinterpret_cast<void*>(&WorkComponent_SerVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_WORKCOMP_ONREMOVE"))
+        WorkComponent_LiveVtable[7] = reinterpret_cast<void*>(&WorkComponent_OnRemoveVSlot);
+}
+
+// Retail ctor 0x14012e820 seeds these; our factory previously left them zeroed.
+// This is load-bearing for the slot-7 hook: workId 0 is a VALID work id, so an
+// unseeded component would ask the goals tree to cancel work 0 — someone else's
+// task — instead of no-oping. -1 is retail's "I have posted no work" sentinel,
+// and 0x80000000 is the same sentinel for workFlags (PostWork 0x14012ec60 tests
+// it explicitly: `*(int*)(self+0x2c) == -0x80000000`).
+static void WorkComponent_InitBody(void* p) {
+    if (!p) return;
+    WorkComponent* wc = reinterpret_cast<WorkComponent*>(p);
+    wc->workId    = -1;
+    wc->workFlags = 0x80000000u;
+    wc->workState = 0;
+}
+
+extern "C" void* WorkComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(
+        0x38, 0x83, WorkComponent_LiveVtable,
+        reinterpret_cast<void*>(&WorkComponent_LiveGetTypeId));
+    WorkComponent_FinishVtable();
+    WorkComponent_InitBody(p);
+    return p;
+}
+static void* WorkComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(
+        mem, 0x38, 0x83, WorkComponent_LiveVtable,
+        reinterpret_cast<void*>(&WorkComponent_LiveGetTypeId));
+    WorkComponent_FinishVtable();
+    WorkComponent_InitBody(mem);
+    return mem;
+}
 REGISTER_TYPE(WorkComponent, "Component",
               &WorkComponent_Factory, &WorkComponent_CreateInPlace);

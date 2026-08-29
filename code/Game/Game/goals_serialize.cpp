@@ -498,8 +498,11 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
 // array (stride 0x10). outParam forwarded through (unused directly here, matches retail:
 // it's read by param_4 but never dereferenced inside this function body).
 // ============================================================
+extern "C" void WorkSerProbe_NoteGoalsArray(void*, int);  // standalone/work_ser_probe.cpp
+
 extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, int64_t* arrayBase, int32_t* /*outParam*/) {
     EnsureDeps();
+    WorkSerProbe_NoteGoalsArray(arrayBase, count);
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
     int64_t* slot = arrayBase;
     for (int32_t s = 0; s < count; ++s, slot += 2) {

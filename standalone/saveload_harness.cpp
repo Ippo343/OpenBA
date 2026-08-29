@@ -149,11 +149,34 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
                             "(%d frames elapsed)\n",
                     frameNum, frameNum - s_triggeredFrame);
             DumpSaveDir("post-save");
-            s_state = 3;
+            // BANISHED_SAVE_TEST_REPEAT=<frames>: keep saving on an interval.
+            // A save only crashes once the world has produced the offending
+            // state (e.g. a stale Work in the goals tree), so one early save
+            // proves nothing — re-arm and keep probing as the town ages.
+            static int s_repeat = -2;
+            if (s_repeat == -2) {
+                const char* e = std::getenv("BANISHED_SAVE_TEST_REPEAT");
+                s_repeat = (e && e[0]) ? std::atoi(e) : 0;
+            }
+            if (s_repeat > 0) {
+                s_triggeredFrame = frameNum + s_repeat;
+                s_state = 4;
+            } else {
+                s_state = 3;
+            }
         } else if ((frameNum - s_triggeredFrame) % 300 == 0) {
             fprintf(stderr, "[SaveTest] frame %d: still saving (op=%d)\n",
                     frameNum, op);
             fflush(stderr);
+        }
+        return;
+    }
+
+    if (s_state == 4) {
+        if (frameNum >= s_triggeredFrame) {
+            fprintf(stderr, "[SaveTest] frame %d: re-arming (repeat save)\n", frameNum);
+            fflush(stderr);
+            s_state = 0;
         }
         return;
     }

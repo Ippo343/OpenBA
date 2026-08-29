@@ -19,9 +19,10 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream);
 // Calls FUN_14012e5c0 to compute capacity, stores result at +0x30.
 void WorkComponent_Draw(WorkComponent* self);
 
-// OnCreate (vtable slot [7], 0x14012e6c0): Register work slot.
-// Checks BST for available slot, registers if found.
-void WorkComponent_OnCreate(WorkComponent* self);
+// Slot [7] (+0x38, 0x14012e6c0): CANCEL the work this component posted.
+// Ghidra calls it OnCreate; it is the removal hook, broadcast by
+// ComponentEntity::MarkForRemoval (0x1400c2ea0). See workcomponent.cpp.
+void WorkComponent_OnRemove_CancelWork(WorkComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
 void WorkComponent_InitFuncs();

@@ -207,6 +207,25 @@ static const char* const kDefaultOnFlags[] = {
     // Its stale-char-slot hazard is covered: CharacterComponent::OnRemove (slot 7) is
     // installed by BANISHED_LIVE_CHARACTER_MOVETICK, which is default-on above.
     "BANISHED_LIVE_CHARACTER_UPDATE9",
+    // GRADUATED 2026-08-29 — WorkComponent slot 7 (+0x38, 0x14012e6c0), the removal
+    // hook that cancels the work this component posted (-> eb50 -> Goals::RemoveWork
+    // 0x1400f8e30). Ghidra names it "OnCreate"; it is the REMOVE side, and nothing
+    // installed it, so it had never run once. A raw-material pile posts a Pickup
+    // through its WorkComponent and then dies on RawMaterialComponent::Update's expiry
+    // timer -- with slot 7 empty the Pickup stayed in the goals trees pointing at the
+    // freed pile, and the next save faulted in Work::Serialize (0x1400f7400) deref'ing
+    // the dead target. This was the in-game "crash when saving", reported 2026-08-29.
+    // Pickup::OnComplete returning false is retail-faithful (0x1400f2ec0 does the same),
+    // so CompleteTask never removes a Pickup -- slot 7 is the ONLY route.
+    // A/B, autostart town, probe = BANISHED_WORK_SER_PROBE:
+    //   OFF: every Pickup leaked -- work ids 3..22, one per haul, 0 exceptions; save
+    //        walked one and took an ACCESS_VIOLATION on a 0x1482_00000000 vtable.
+    //   ON : 28 slot-7 cancels (ids 3..31), 0 DANGLING-CREATED, 0 STALE at save,
+    //        SAVE DONE + Auto.sav 4.27 MB, crash log empty.
+    // Paired with the retail ctor seeds (workId=-1, workFlags=0x80000000) the inert
+    // factory was leaving zeroed -- load-bearing, since 0 is a VALID work id and an
+    // unseeded component would cancel work 0 instead of no-oping.
+    "BANISHED_LIVE_WORKCOMP_ONREMOVE",
     "BANISHED_LIVE_STATEMACHINE",
     "BANISHED_LIVE_RESIDENCE",
     "BANISHED_LIVE_HOUSING",
