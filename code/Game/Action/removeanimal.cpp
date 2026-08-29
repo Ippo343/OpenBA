@@ -179,6 +179,10 @@ uint32_t RemoveAnimal_BaseDtor_Impl() {
 // type validation on deserialization.
 // ============================================================
 void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    RemoveAnimal_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t localSerializer1[16];
     uint8_t localSerializer2[24];

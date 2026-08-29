@@ -107,6 +107,10 @@ void* SendComponentMessage_ScalarDtor_Impl(SendComponentMessage* self, uint32_t 
 // message ID, and two uint params.
 // ============================================================
 void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    SendComponentMessage_ResolveFuncs();
     uint8_t ser1[24];
     uint8_t ser2[24];
 

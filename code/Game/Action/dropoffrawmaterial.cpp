@@ -173,6 +173,10 @@ uint32_t DropOffRawMaterial_BaseDtor_Impl() {
 // Serializes: status(+0x18), storage(+0x30), source(+0x38), resource(+0x28), flag(+0x20), count(+0x24)
 // ============================================================
 void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    DropOffRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

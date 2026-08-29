@@ -20,6 +20,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <initializer_list>
 
 // ------------------------------------------------------------------
 // String-array destructors. Each is `{ void* data; int count; int cap; }`
@@ -74,10 +75,18 @@ void Game_MusicPlayerDtor(void* self) {
 // ------------------------------------------------------------------
 void Game_ImageCaptureDtor(void* self) {
     uint8_t* b = reinterpret_cast<uint8_t*>(self);
-    void** obj = *reinterpret_cast<void***>(b + 8);
-    if (obj) reinterpret_cast<void(*)(void*, int)>(*obj)(obj, 1);
-    obj = *reinterpret_cast<void***>(b + 0x10);
-    if (obj) reinterpret_cast<void(*)(void*, int)>(*obj)(obj, 1);
+    // Retail is (**(code **)*puVar1)(puVar1, 1): deref the object to get its
+    // vtable, deref THAT to get slot 0, then call. This port had only one deref
+    // and so called the vtable's own address as if it were code — EXEC of
+    // g_NoiseUI_ImageBufferVtable_Standalone when GameUpdateLoop::Shutdown
+    // finally reached the minimap ImageBuffers.
+    for (int off : {8, 0x10}) {
+        void* obj = *reinterpret_cast<void**>(b + off);
+        if (!obj) continue;
+        void** vtbl = *reinterpret_cast<void***>(obj);
+        if (!vtbl || !vtbl[0]) continue;
+        reinterpret_cast<void(*)(void*, int)>(vtbl[0])(obj, 1);
+    }
     if (fn_MemFreeStatic) {
         fn_MemFreeStatic(*reinterpret_cast<void**>(b + 0x28));
         *reinterpret_cast<void**>(b + 0x28) = nullptr;
@@ -131,8 +140,11 @@ void Game_WeatherDtor(void* self) {
             void* geom = arr[i];
             if (geom) {
                 if (removeGlobal && scene) removeGlobal(scene, geom);
-                void** v = reinterpret_cast<void**>(geom);
-                reinterpret_cast<void(*)(void*, int)>(*v)(geom, 1);
+                // Retail: (**(code **)*puVar2)(puVar2, 1) — object -> vtable ->
+                // slot 0. Same one-deref-short bug as Game_ImageCaptureDtor above.
+                void** vtbl = *reinterpret_cast<void***>(geom);
+                if (vtbl && vtbl[0])
+                    reinterpret_cast<void(*)(void*, int)>(vtbl[0])(geom, 1);
             }
         }
     }

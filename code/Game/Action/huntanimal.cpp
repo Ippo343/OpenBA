@@ -231,6 +231,10 @@ uint32_t HuntAnimal_BaseDtor_Impl() {
 //             herd entity(+0x28) with type check, huntStarted flag(+0x38).
 // ============================================================
 void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    HuntAnimal_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];

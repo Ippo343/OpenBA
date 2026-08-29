@@ -49,6 +49,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
@@ -716,6 +717,37 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
 // ============================================================
 // 0x140095a90 — master GameUpdateLoop serializer
 // ============================================================
+
+// ---------------------------------------------------------------------------
+// BANISHED_SER_TRACE — stream-cursor probe.
+//
+// A load that dies inside a sub-serializer is almost always a *stream desync*
+// that started in an earlier section: one side wrote N bytes, the other read
+// M. There is no IO::Stream::Tell export, so dump the head of the stream
+// object at each section boundary — whichever qword advances monotonically is
+// the cursor. Run once saving and once loading with the env var set and diff
+// the two traces: the first section where the cursors stop matching is the
+// section that is wrong.
+// ---------------------------------------------------------------------------
+static bool SerTraceOn() {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_SER_TRACE");
+        s_on = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return s_on != 0;
+}
+
+static void SerTrace(void* stream, const char* stage) {
+    if (!SerTraceOn() || !stream) return;
+    const uint64_t* q = reinterpret_cast<const uint64_t*>(stream);
+    fprintf(stderr, "[SerTrace] %-4s %-22s",
+            IsSaving(stream) ? "SAVE" : "LOAD", stage);
+    for (int i = 0; i < 8; i++) fprintf(stderr, " %016llx", (unsigned long long)q[i]);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
 extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
                                                void* p3, int* outParam) {
     (void)p3;
@@ -766,12 +798,19 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
+    SerTrace(stream, "pre-camera");
     s_fn_Camera_988c0(*(void**)(self + 0xe0), stream);
+    SerTrace(stream, "pre-entlist");
     s_fn_EntList_c44a0(*(void**)(self + 0xe8), stream);
+    SerTrace(stream, "pre-geom");
     s_fn_Geom_b04d0(*(void**)(self + 0x110), stream);
+    SerTrace(stream, "pre-citlist");
     s_fn_CitList_8f760(*(void**)(self + 0xf0), stream, nullptr, outParam);
+    SerTrace(stream, "pre-grid");
     s_fn_Grid_9f100(*(void**)(self + 0xf8), stream);
+    SerTrace(stream, "pre-goals");
     s_fn_Goals_f9240(*(void**)(self + 0x118), stream, nullptr, outParam);
+    SerTrace(stream, "post-goals");
     EntityUI_Serialize_102920(*(void**)(self + 0x120), stream);
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.

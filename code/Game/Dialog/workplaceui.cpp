@@ -353,6 +353,12 @@ showUpDown:
 
     int workplaceWorkerCount = 0;
     int laborerCount = 0;
+    static int s_censusOn = -1;
+    if (s_censusOn < 0) {
+        const char* e = std::getenv("BANISHED_WP_CITIZEN_CENSUS");
+        s_censusOn = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    static int s_censusPrinted = 0;
 
     int citizenCount = *(int*)((uintptr_t)citizenList + 0xa8);
     for (int i = 0; i < citizenCount; i++) {
@@ -364,9 +370,25 @@ showUpDown:
         // XMM0 is strictly BELOW, so the skip is `<`, not `<=`. A citizen sitting
         // exactly on the adulthood threshold counts as an adult in retail and was
         // being dropped here.
-        if (*(float*)((uintptr_t)citizen + 0x3c) <
-            *(float*)((uintptr_t)citizenProf + 0x44)) continue;
-        if (*(uintptr_t*)((uintptr_t)citizen + 0x208) != 0) continue;
+        const float citAge = *(float*)((uintptr_t)citizen + 0x3c);
+        const float adultAge = *(float*)((uintptr_t)citizenProf + 0x44);
+        const uintptr_t gate208 = *(uintptr_t*)((uintptr_t)citizen + 0x208);
+        // One-shot census: laborers=0 out of a full town means this loop rejected
+        // everyone. Print WHICH gate did it (age vs +0x208) plus the profession the
+        // citizen actually carries, so "no laborers" can be told apart from
+        // "everyone was skipped".
+        if (s_censusOn && s_censusPrinted < 12) {
+            ++s_censusPrinted;
+            fprintf(stderr, "[WPCit] #%d cit=%p age=%.2f adultAge=%.2f gate208=%p "
+                    "prof1f0=%p laborProf=%p verdict=%s\n",
+                    s_censusPrinted, (void*)citizen, citAge, adultAge, (void*)gate208,
+                    *(void**)((uintptr_t)citizen + 0x1f0), laborerProf,
+                    (citAge < adultAge) ? "skip:child"
+                        : (gate208 != 0 ? "skip:+0x208" : "counted"));
+            fflush(stderr);
+        }
+        if (citAge < adultAge) continue;
+        if (gate208 != 0) continue;
 
         // Check if assigned to this workplace's profession
         void* assignedProf = *(void**)((uintptr_t)citizen + 0x1f0);

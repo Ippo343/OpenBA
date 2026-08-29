@@ -177,6 +177,10 @@ uint32_t RemoveNaturalResource_BaseDtor_Impl() {
 // Serializes: status(+0x18), entity(+0x20) with type check, entity(+0x28) with type check, bool(+0x30)
 // ============================================================
 void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    RemoveNaturalResource_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

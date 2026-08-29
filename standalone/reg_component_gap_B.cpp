@@ -58,14 +58,20 @@ extern void WellComp_AddCellEntry_88a80(int64_t manager, int x, int y, int value
 extern "C" char WellComponent_EnterBuilt(void* comp, void* sm);
 extern "C" char WellComponent_EnterDemolish(void* comp, void* sm);
 
-// ---- nomadcomponent.cpp (controller rebuild) ----
-// DEFERRED by lead (NOT registered): 0x140102b60 has no unregistered FUN_ callees, but it
-// instantiates a controller via Object::Factory::CreateObject and then drives its vtable
-// (+0x20 Startup, +0x58 query, +0x28 teardown). That is the tool/dialog-controller-vtable
-// bring-up territory that crashes in standalone (Player wave: g_ToolUI_ChildDialog_Vtable
-// 0x14015f5a0) and was already skipped in Component wave 1. Static "no FUN_ callees" is
-// necessary-but-not-sufficient — the indirect vtable calls are the hidden dependency.
-// Body NomadComp_RebuildController_b60 is kept in nomadcomponent.cpp (dormant) but unwired.
+// ---- 0x140102b60 — tool-group activation (EntityUI::SetTool spelling) ----
+// The old deferral note here has EXPIRED. It was written when the only body was
+// nomadcomponent.cpp's dormant NomadComp_RebuildController_b60 and the controller-vtable
+// bring-up still crashed in standalone. Since then the tool waves landed a live, exercised
+// port of this exact retail function: Toolbar_ShowGroup_Impl (code/Game/Dialog/toolbardialog.cpp),
+// which entityui.cpp's EntityUI_SetEditMode_Impl forwards into and which ~15 in-game call
+// sites drive every frame.
+//
+// Leaving the ADDRESS unregistered while the BODY works meant every caller that reaches it
+// through ResolveAddr got a null instead. GameUpdateLoop::Shutdown is one of those callers:
+// retail does FUN_140102b60(*(param_1 + 0x120), 0) and our port does the same, so loading a
+// save from inside a running game (Load tears the current loop down first) called through a
+// null pointer and died with EXEC-of-0.
+extern void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);
 
 void RegisterComponentGap_B() {
     // citizenaicomponent.cpp
@@ -95,5 +101,6 @@ void RegisterComponentGap_B() {
     RegisterExeAddr(0x140091cb0, reinterpret_cast<uintptr_t>(&WellComp_RegisterEntity_91cb0));
     RegisterExeAddr(0x14005cf20, reinterpret_cast<uintptr_t>(&WellComponent_EnterBuilt));
     RegisterExeAddr(0x14005cee0, reinterpret_cast<uintptr_t>(&WellComponent_EnterDemolish));
-    // nomadcomponent.cpp 0x140102b60 DEFERRED (see note above) — not registered.
+    // 0x140102b60 — the live port is Toolbar_ShowGroup_Impl (see note above).
+    RegisterExeAddr(0x140102b60, reinterpret_cast<uintptr_t>(&Toolbar_ShowGroup_Impl));
 }

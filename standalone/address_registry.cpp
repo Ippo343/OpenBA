@@ -540,6 +540,7 @@ extern void RegisterCitizenListSerialize(); // save/load wave: CitizenBehavior s
 extern void RegisterGoalsSerialize();       // save/load wave: goal/tutorial-mgr serialize (f9240)
 extern void RegisterGameGridSerialize();    // save/load wave: game map-grid serialize (9f100)
 extern void RegisterGulSerialize();         // save/load wave: SaveRestore keystone (959c0/95a90) + small subs
+extern "C" void RegisterGulTeardown();      // GameUpdateLoop::Shutdown chain (c3d30/c3e60/907b0/1024d0/f8ff0)
 extern void RegisterSaveLoadDialog();       // save/load wave: SaveLoadDialog ctor (b8270) + vtable (14015f900)
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
@@ -713,6 +714,7 @@ static void RegisterCodeFunctions() {
     RegisterGoalsSerialize();       // save/load wave (code/Game/Game/goals_serialize.cpp)
     RegisterGameGridSerialize();    // save/load wave (code/Game/Game/gamegrid_serialize.cpp)
     RegisterGulSerialize();         // save/load wave (code/Game/Game/gameupdateloop_serialize.cpp)
+    RegisterGulTeardown();          // teardown chain (code/Game/Game/gameupdateloop_teardown.cpp)
     RegisterSaveLoadDialog();       // save/load wave (code/Game/Dialog/saveloaddialog.cpp)
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)

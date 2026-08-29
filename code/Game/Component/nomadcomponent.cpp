@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -409,7 +410,34 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
         int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
         char active = (*reinterpret_cast<fn_ctrl_active_t*>(vt + 0x50))(
             reinterpret_cast<void*>(ctrl), &entityRef);
-        if (active != '\0' && s_fn_FUN_140102b60) s_fn_FUN_140102b60(param_1, 0);
+        // 0x140102b60 is EntityUI::SetEditMode / Toolbar::ShowGroup — resetting the
+        // active tool to mode 0 when the entity it was bound to goes away. This call
+        // was DEAD for the whole life of the project (0x140102b60 was ported but never
+        // registered); registering it for GameUpdateLoop::Shutdown woke it up. Waking
+        // it coincided with the workplace/residence panels going inert, so it is gated
+        // while that is confirmed: SetEditMode(pc, 0) tears down the live tool
+        // controller at +0x28, which is what those panels' spinners hang off.
+        // BANISHED_LIVE_ENTITYUI_RESETTOOL=1 re-arms the retail behaviour.
+        if (active != '\0' && s_fn_FUN_140102b60) {
+            static int s_armed = -1;
+            if (s_armed < 0) {
+                // Kill-switch, not opt-in: this is retail behaviour. It was gated
+                // OFF for one A/B while the workplace/residence panels were being
+                // diagnosed, and the trace proved it innocent — zero hits across a
+                // full session, so it cannot have caused those panels' symptoms
+                // (root cause was StartTown_SeedLaborerProfessions seeding nobody).
+                // Re-armed default-on; =0 disables for a future A/B.
+                const char* e = std::getenv("BANISHED_LIVE_ENTITYUI_RESETTOOL");
+                s_armed = (e && *e && e[0] == '0') ? 0 : 1;
+            }
+            static int s_hits = 0;
+            if (++s_hits <= 16) {
+                fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d armed=%d self=%p\n",
+                        s_hits, s_armed, (void*)param_1);
+                fflush(stderr);
+            }
+            if (s_armed) s_fn_FUN_140102b60(param_1, 0);
+        }
     }
 
     int64_t entity = *reinterpret_cast<int64_t*>(param_2);

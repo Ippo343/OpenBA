@@ -39,6 +39,10 @@
 #include <cstdio>
 #include <cstring>
 
+// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
+extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
+extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
+
 // ============================================================
 // Helper: Find element by name in dialog instance
 // ============================================================
@@ -266,8 +270,8 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* matInstFinal = nullptr;
             if (matInst) {
                 fn_MaterialInstance_Ctor(matInst);
-                // Patch vtable to exe subclass
-                *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+                // Patch vtable to the exe's MaterialInstance vtable copy
+                ThumbVtable_StampMaterialInstance(matInst);
                 matInstFinal = matInst;
             }
             entry[6] = (uint64_t)matInstFinal;
@@ -307,7 +311,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* sheetFinal = nullptr;
             if (sheet) {
                 fn_SpriteSheet_Ctor(sheet);
-                *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
+                ThumbVtable_StampSpriteSheet(sheet);
                 sheetFinal = sheet;
             }
 

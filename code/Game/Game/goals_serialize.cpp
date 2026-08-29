@@ -72,7 +72,27 @@
 #include "Object/factory_registration.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+
+// BANISHED_SER_TRACE — count probe for the Goals trees. A load that dies inside
+// one of these is a stream desync; the counts are the cheapest way to see it
+// (a sane save has small counts, a desynced read has garbage ones).
+static bool GoalsTraceOn() {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_SER_TRACE");
+        s_on = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return s_on != 0;
+}
+static void GoalsTrace(const char* what, bool loading, int a, int b) {
+    if (!GoalsTraceOn()) return;
+    fprintf(stderr, "[GoalsSer] %-4s %-12s %d %d\n", loading ? "LOAD" : "SAVE", what, a, b);
+    fflush(stderr);
+}
+
 
 namespace {
 
@@ -391,9 +411,15 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
+    GoalsTrace("d340", loading, count, 0);
     if (loading) {
-        int32_t* root = reinterpret_cast<int32_t*>(treeField[0]);
         for (int32_t i = 0; i < count; ++i) {
+            // Retail re-reads *param_1 on every iteration — the previous insertion
+            // may have installed (or rebalanced) the root. Hoisting this read out of
+            // the loop (as an earlier copy of the d060 body did) leaves `root` pinned
+            // at the entry value, so every key takes the "empty tree" path and
+            // overwrites the single root node instead of building the tree.
+            int32_t* root = reinterpret_cast<int32_t*>(treeField[0]);
             int32_t key = 0;
             if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &key, nullptr);
             void* payload = nullptr;
@@ -465,6 +491,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     }
 }
 
+
 // ============================================================
 // 0x14002d060 — 14/15-slot Layout-B tree array serializer. count = number of slots
 // (0xe or 0xf, version-gated by the caller). arrayBase = base of the {root,count} header
@@ -478,6 +505,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
     for (int32_t s = 0; s < count; ++s, slot += 2) {
         int32_t slotCount = static_cast<int32_t>(slot[1]);
         if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &slotCount, nullptr);
+        GoalsTrace("d060.slot", loading, s, slotCount);
 
         if (loading) {
             for (int32_t i = 0; i < slotCount; ++i) {
@@ -562,30 +590,30 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
     if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
+    GoalsTrace("d5f0", loading, count, 0);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
-            uint64_t key = 0;
-            uint8_t recordBuf[0x18]; // {u64 key@0, ptr subtreeRoot@8, u32 int@0x10, pad@0x14}
+            // Record layout (retail's local_40/local_38/local_30 triple):
+            //   +0x00 u64 external key, +0x08 subtree root, +0x10 u32 subtree count.
+            // The {root,count} header d340 fills IS record+0x08 — retail passes
+            // &local_38, not a separate pair. Building the subtree somewhere else and
+            // then inserting the record loses every Work subtree on load.
+            uint8_t recordBuf[0x18];
             std::memset(recordBuf, 0, sizeof(recordBuf));
-            if (s_externalRefSerialize) s_externalRefSerialize(&key, serializer);
-            *reinterpret_cast<uint64_t*>(recordBuf) = key;
+            if (s_externalRefSerialize) s_externalRefSerialize(recordBuf, serializer);
 
-            // Build the record's subtree via the single-tree serializer (d340), same as
-            // retail's TradeWork_impl_d5f0_sub_d340 call on a stack {root,count} header.
-            int64_t subtreeField[2] = { 0, 0 };
+            int64_t* subtreeField = reinterpret_cast<int64_t*>(recordBuf + 8);
             Goals_SingleTree_Serialize_d340(subtreeField, serializer);
 
             void* outNode = nullptr;
             Goals_LayoutC_Insert_ccf0(reinterpret_cast<uint64_t*>(treeField), &outNode, recordBuf);
-            // Free the temp subtree we built above — the insert either linked it into the
-            // fresh node (when the record is new) or discarded it (record already present);
-            // either way our stack-local copy at subtreeField must be released here, matching
-            // retail's FUN_14000e320 free-then-MemFree pair on the temp {root,count} header.
+            // The insert deep-copies the record, so the subtree we just built is ours to
+            // release — retail's FUN_14000e320 free-then-MemFree pair on the same header.
             if (subtreeField[0] != 0) {
                 void* subRoot = reinterpret_cast<void*>(subtreeField[0]);
                 if (s_freeB) {
-                    s_freeB(&subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
-                    s_freeB(&subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
+                    s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
+                    s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
                 }
                 if (fn_MemFreeStatic) fn_MemFreeStatic(subRoot);
             }
@@ -611,8 +639,13 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
         };
         for (uint8_t* cNode = leftmostC(root); cNode; cNode = nextC(cNode)) {
             if (s_externalRefSerialize) s_externalRefSerialize(cNode, serializer);
-            int64_t subtreeField[2] = { *reinterpret_cast<int64_t*>(cNode + 0x08), 0 };
-            Goals_SingleTree_Serialize_d340(subtreeField, serializer);
+            // Retail passes plVar5+1 — the node's OWN {root@+0x08, count@+0x10}
+            // header. Copying the root into a stack pair with a zeroed count made
+            // d340 write "0 entries" and then walk the real subtree anyway, so the
+            // save stream carried N records the load never read back: the reader
+            // stopped at count 0 and hit those records as the next record's key.
+            Goals_SingleTree_Serialize_d340(
+                reinterpret_cast<int64_t*>(cNode + 0x08), serializer);
         }
     }
 }

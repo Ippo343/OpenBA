@@ -3814,19 +3814,44 @@ static void StartTown_SeedLaborerProfessions() {
                 "— Profession.rsc not live; Job line stays blank\n"); fflush(stderr);
         return;
     }
-    int seeded = 0;
-    for (void* c : g_foundingCitizens) {
-        if (!c) continue;
-        int64_t cz   = reinterpret_cast<int64_t>(c);
+    // Walk the LIVE citizen list (CitizenBehavior at gw+0xf0: data +0xa0, count +0xa8)
+    // — the very array WorkPlaceUI's laborer count walks — instead of
+    // g_foundingCitizens.
+    //
+    // g_foundingCitizens is filled ONLY inside StartTown_AssignFoundingHousing's
+    // per-family house loop, and that function returns early when there are no founding
+    // houses to pair families to. A start config with no starting houses is the NORMAL
+    // case, so on most new games this pass logged "seeded 0/0" and every colonist kept
+    // +0x1f0 == 0: not a Laborer, not employed, and invisible to the hire scan in
+    // CitizenComponent_impl_c4b0, which only considers citizens whose +0x1f0 ==
+    // laborerKey. Visible symptom: the workplace panel's worker up-arrow permanently
+    // greyed out, since it enables on laborerCount > 0. Retail has no such coupling —
+    // FUN_140117080 seeds the default profession per citizen at spawn, housing or not.
+    void* citList = *reinterpret_cast<void**>(
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    if (!citList) {
+        fprintf(stderr, "[startTown::laborer] citizen list (gw+0xf0) null — cannot seed\n");
+        fflush(stderr);
+        return;
+    }
+    int64_t* czArr = *reinterpret_cast<int64_t**>(reinterpret_cast<uint8_t*>(citList) + 0xa0);
+    int      czCnt = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(citList) + 0xa8);
+    int seeded = 0, adults = 0;
+    for (int i = 0; czArr && i < czCnt; ++i) {
+        int64_t cz = czArr[i];
+        if (!cz) continue;
         int64_t desc = *reinterpret_cast<int64_t*>(cz + 0x288);
-        bool adult = desc && *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(cz + 0x3c);
-        if (adult && *reinterpret_cast<int64_t*>(cz + 0x1f0) == 0) {
+        if (!desc) continue;
+        // Same adulthood test as retail 0x1400873d2: age (+0x3c) >= desc+0x44.
+        if (*reinterpret_cast<float*>(cz + 0x3c) < *reinterpret_cast<float*>(desc + 0x44))
+            continue;                    // child: keeps +0x1f0 == 0 (Student branch)
+        ++adults;
+        if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == 0) {
             *reinterpret_cast<uint64_t*>(cz + 0x1f0) = laborerKey; ++seeded;
         }
     }
-    fprintf(stderr, "[startTown::laborer] seeded Laborer on %d/%zu founding adults "
-            "(laborerKey=0x%llx)\n", seeded, g_foundingCitizens.size(),
-            (unsigned long long)laborerKey);
+    fprintf(stderr, "[startTown::laborer] seeded Laborer on %d/%d adults (of %d citizens, laborerKey=0x%llx)\n",
+            seeded, adults, czCnt, (unsigned long long)laborerKey);
     fflush(stderr);
 }
 

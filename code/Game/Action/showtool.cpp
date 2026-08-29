@@ -184,6 +184,10 @@ bool ShowTool_ResolveFuncs() {
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
 // ============================================================
 void ShowTool_Serialize_Impl(void* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    ShowTool_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

@@ -36,6 +36,10 @@
 #include <cstdint>
 #include <cstring>
 
+// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
+extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
+extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
+
 // ============================================================
 // Helper types
 // ============================================================
@@ -403,7 +407,7 @@ void ModDialog_Slot4(ModDialog* self) {
         entry.matInstance = nullptr;
         if (matInst) {
             fn_MaterialInstance_Ctor(matInst);
-            *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+            ThumbVtable_StampMaterialInstance(matInst);
             entry.matInstance = matInst;
         }
 
@@ -437,7 +441,7 @@ void ModDialog_Slot4(ModDialog* self) {
         entry.spriteSheet = nullptr;
         if (sprSheet) {
             fn_SpriteSheet_Ctor(sprSheet);
-            *(uintptr_t*)sprSheet = g_ModDialog_SpriteSheetVtable;
+            ThumbVtable_StampSpriteSheet(sprSheet);
             entry.spriteSheet = sprSheet;
 
             // Set materialInstance at +0x30

@@ -151,6 +151,10 @@ void* CompleteTask_ScalarDtor_Impl(CompleteTask* self, uint32_t flags) {
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
 void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
+    // Reached through the registered vtable, which the factory path never
+    // has to touch — an exe-ctor-built action arrives here with the file
+    // statics still null. Lazy-resolve like the other entry points do.
+    CompleteTask_ResolveFuncs();
     uint8_t ser1[24];
     uint8_t ser2[24];
 

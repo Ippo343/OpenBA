@@ -76,6 +76,8 @@
 #include "engine_funcs.h"
 #include "Game/serialize_externals.h"
 #include <cstdint>
+#include <cstdlib>
+#include <cstdio>
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
@@ -150,6 +152,38 @@ void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 }
 
+
+// ---------------------------------------------------------------------------
+// BANISHED_CITIZEN_CENSUS=1 — per-citizen assignment probe.
+//
+// The citizen panel reads its "home" and "job" straight off these fields, so if
+// it shows unassigned after a load, either the save leg wrote nulls or the load
+// leg failed to restore them. Dump the same fields on entry (save leg: the live
+// values about to be written) and on exit (load leg: what came back) and diff
+// the two legs. Capped so a big town does not flood the log.
+// ---------------------------------------------------------------------------
+void CitizenCensus(void* self, void* ser, const char* leg) {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_CITIZEN_CENSUS");
+        s_on = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    if (!s_on) return;
+    static int s_saved = 0, s_loaded = 0;
+    int& n = (leg[0] == 'S') ? s_saved : s_loaded;
+    if (n >= 12) return;
+    ++n;
+    auto Q = [self](int off) {
+        return *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(self) + off);
+    };
+    (void)ser;
+    fprintf(stderr, "[CitCensus] %s #%d self=%p prof1f0=%p prof1f8=%p "
+            "ibp208=%p ibp228=%p ibp230=%p ent238=%p ent248=%p desc288=%p\n",
+            leg, n, self, Q(0x1f0), Q(0x1f8), Q(0x208), Q(0x228), Q(0x230),
+            Q(0x238), Q(0x248), Q(0x288));
+    fflush(stderr);
+}
+
 } // namespace
 
 extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
@@ -161,6 +195,10 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
 
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 3);
+
+    const bool loading =
+        (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(stream) + 8) == 0);
+    if (!loading) CitizenCensus(self, ser, "SAVE");
 
     if (g_fn_String_Serialize) g_fn_String_Serialize(At(self, 0x28), ser);
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x38), nullptr);
@@ -273,6 +311,8 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     }
 
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x34), nullptr);
+
+    if (loading) CitizenCensus(self, ser, "LOAD");
 
     g_fn_Serializer_Dtor(ser);
 }

@@ -16,6 +16,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
+extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
+extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
+
 // ============================================================
 // SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
 // from an ImageBuffer, find the named image element, set sprite.
@@ -55,11 +59,8 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     void* materialPtr = nullptr;
     if (matInst) {
         fn_MaterialInstance_Ctor(matInst);
-        // Set vtable to the UI MaterialInstance vtable. In standalone this shared
-        // ModDialog subclass vtable (0x14015c400) is not registered → 0; keep the
-        // base vtable the ctor installed so later dispatch stays valid.
-        if (g_ModDialog_MaterialInstanceVtable)
-            *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+        // Set vtable to the exe's MaterialInstance vtable copy (0x14015c400).
+        ThumbVtable_StampMaterialInstance(matInst);
         materialPtr = matInst;
     }
     *materialOut = materialPtr;
@@ -100,10 +101,8 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     void* spriteSheet = nullptr;
     if (sheet) {
         fn_SpriteSheet_Ctor(sheet);
-        // Set vtable to the UI SpriteSheet vtable (guard null in standalone —
-        // keep the base ctor vtable if the ModDialog subclass isn't registered).
-        if (g_ModDialog_SpriteSheetVtable)
-            *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
+        // Set vtable to the exe's SpriteSheet vtable copy (0x14015c3b0).
+        ThumbVtable_StampSpriteSheet(sheet);
         spriteSheet = sheet;
     }
     *spriteSheetOut = spriteSheet;

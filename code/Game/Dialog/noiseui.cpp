@@ -21,6 +21,10 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
+extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
+extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
+
 // Helper: find element by name in parent element, cast to InternalBasePtr
 static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     uint8_t nameStr[8], retBuf[16], bpBuf[8];
@@ -64,7 +68,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* materialPtr = nullptr;
     if (matInst) {
         fn_MaterialInstance_Ctor(matInst);
-        *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+        ThumbVtable_StampMaterialInstance(matInst);
         materialPtr = matInst;
     }
     *materialOut = materialPtr;
@@ -97,7 +101,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* spriteSheet = nullptr;
     if (sheet) {
         fn_SpriteSheet_Ctor(sheet);
-        *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
+        ThumbVtable_StampSpriteSheet(sheet);
         spriteSheet = sheet;
     }
     *spriteSheetOut = spriteSheet;
