@@ -1491,9 +1491,38 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             fprintf(stderr, "[GUL::Load] post-load rebuild: game=%p dim=%d\n", game, dim);
             fflush(stderr);
             if (game && dim > 0) {
-                MapTileGrid_Build(game, dim);   // tile classification (Game+0x80)
+                // MapTileGrid_Build is a WORLDGEN-ONLY step and must NOT run here.
+                // It reallocates the stride-0x30 cell array and reclassifies it from
+                // terrain, and the resize helper zeroes +0x26 for every "brand-new"
+                // element -- so calling it after SaveRestore threw away the grid the
+                // save had just restored, per-cell REGION IDS included (measured: the
+                // array pointer changes and ids 3/3/3/2 become 0/0/0/0 across the call).
+                //
+                // Those ids are the last gate in FUN_1400a00f0, which is what
+                // CitizenComponent::CheckWorkplaceValid uses: with every id 0 the test
+                // fails even for a citizen standing ON its own workplace, so
+                // CitizenComponent::Update unassigned every citizen from its job a few
+                // hundred frames after the load. The town then stood still and starved.
+                // The grid is serialized (GameGrid_SerializeCellArray_ac10 round-trips
+                // +0x26), so on the load path there is nothing to rebuild.
                 Pathfinder_Seed(game, dim);     // A* worker object (game+0x68)
                 Region_Seed(game, dim);         // region graph + pair cache (+0x70/+0x78)
+
+                // Regression canary. The per-cell region id (tile+0x26) is the last
+                // gate in FUN_1400a00f0; if a future rebuild step reintroduces the
+                // wipe, these read 0 and every citizen silently loses its job a few
+                // hundred frames later. One line per load.
+                {
+                    const uint8_t* tiles =
+                        *reinterpret_cast<const uint8_t* const*>((const uint8_t*)game + 0x80);
+                    fprintf(stderr, "[GridProbe] tiles=%p regionIds:", (const void*)tiles);
+                    if (tiles)
+                        for (int c = 32000; c <= 35000; c += 500)
+                            fprintf(stderr, " [%d]=%u/kind%u", c,
+                                    *reinterpret_cast<const uint16_t*>(tiles + (size_t)c*0x30 + 0x26),
+                                    tiles[(size_t)c*0x30 + 0x29]);
+                    fprintf(stderr, "\n"); fflush(stderr);
+                }
             }
         }
     }
