@@ -1869,6 +1869,14 @@ void* CitizenComp_helper_ff80(int64_t self, void* outIBP) {
 // set/clear bit `flagIndex` in the status mask (+0xf0 == param_1[0x1e]); when the mask
 // becomes empty/non-empty, add/remove the geometry from the scene and toggle the +0x20
 // scene id and the +4 "in scene" flag, then notify the owning entity.
+static long g_si_calls = 0, g_si_uninit = 0, g_si_suppressed = 0, g_si_added = 0;
+static int  g_si_prints = 0;
+static bool SiCensusOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_SI_CENSUS"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
     EnsureCallees();
     fn_InternalBasePtr_CheckPtr(param_1 + 2);
@@ -1881,6 +1889,27 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
         }
         uint32_t changed;
         uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+        // [STANDALONE GUARD D4] geometry (+0x28 == param_1[5]) vtable installed?
+        // See the long note in the clear-branch below: both scene calls depend on it.
+        const bool inited = (param_1[5] != 0);
+
+        // [diag] BANISHED_SI_CENSUS - report BOTH arms. "No bad scene nodes" is only a
+        // fix if the icons still REGISTER; if `inited` were false the guard would suppress
+        // every AddObject and the SceneWatch silence would mean the feature is off, not
+        // healthy. So count uninitialised components separately from suppressed adds.
+        // See [[reference_diagnostics_must_report_outcomes]].
+        if (SiCensusOn()) {
+            ++g_si_calls;
+            if (!inited) ++g_si_uninit;
+            if ((int)param_1[0x1e] != 0 && !inited) ++g_si_suppressed;
+            if (g_si_prints < 24) {   // this setter fires rarely; print every early call
+                ++g_si_prints;
+                std::fprintf(stderr, "[SIcensus] calls=%ld uninit(geomVtable==0)=%ld "
+                             "suppressedAdds=%ld addObjectDone=%ld\n",
+                             g_si_calls, g_si_uninit, g_si_suppressed, g_si_added);
+                std::fflush(stderr);
+            }
+        }
         if ((int)param_1[0x1e] == 0) {
             // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
             // carries the inert factory's zero-fill: the embedded geometry's vtable
@@ -1891,8 +1920,25 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             // for HighlightComponent in 0f97d16). Repair the sentinel instead of removing.
             // Reachable on the default path since the pause port graduated: SetAccepting's
             // accepting=false branch CLEARS icon flags 2/3/4, and clearing the last flag on
-            // an uninitialised icon lands exactly here. The AddObject side below needs no
-            // guard — an uninitialised +0x100 == 0 fails its `< 0` test.
+            // an uninitialised icon lands exactly here.
+            //
+            // WARNING: the old note here claimed "the AddObject side below needs no guard -
+            // an uninitialised +0x100 == 0 fails its `< 0` test". That was FALSE, and it was
+            // falsified BY THE LINE BELOW: repairing the sentinel to -1 is exactly what makes
+            // `+0x100 < 0` true, so the next time a flag is SET this function registered a
+            // geometry whose vtable is still 0 into the Graphics::Scene.
+            // `[SceneWatch] BAD=1 ... vtable=0000000000000000` on a 21-minute load soak
+            // (2026-08-29) is that node, and it is the `EXEC of <heap>` in Scene::Clean.
+            // The upstream fix is StatusIconComponent_CtorScalars (statusiconcomponent.cpp),
+            // which now builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
+            // has it, so `inited` below is true for loaded icons too. The gate stays as the
+            // same [STANDALONE GUARD D4] its twin StatusIcon_Toggle carries.
+            //
+            // WARNING: THIS FUNCTION IS PORTED TWICE - see
+            // [[reference_one_retail_fn_ported_twice_diverges]]. The other copy is
+            // StatusIcon_Toggle (statusiconcomponent.cpp), which HAD the guard; THIS copy is
+            // the one reg_component_people.cpp registers for 0x14012c3f0, so the guarded
+            // twin never ran. Change both or neither.
             if (param_1[5] == 0) {
                 if (*reinterpret_cast<int32_t*>(param_1 + 0x20) == 0)
                     *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
@@ -1908,14 +1954,24 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             changed = after ^ before;
         } else {
             int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
-            if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
+            if (inited && settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                 (int)param_1[0x20] < 0) {
                 uint32_t id = fn_Graphics_Scene_AddObject
                                   ? fn_Graphics_Scene_AddObject(*reinterpret_cast<void**>(gw + 0x60),
                                                                 reinterpret_cast<void*>(param_1 + 5))
                                   : 0xffffffff;
                 *reinterpret_cast<uint32_t*>(param_1 + 0x20) = id;
-                SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "CitizenComponent::ShowTool");
+                SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "StatusIcon(12c3f0)::Add");
+                ++g_si_added;
+                // Report the SET arm explicitly. The census above prints only the first
+                // N calls, so without this a registration that happens late would never
+                // appear and "no bad scene nodes" would stay ambiguous between "fixed"
+                // and "never registers anything".
+                if (SiCensusOn() && g_si_added <= 8) {
+                    std::fprintf(stderr, "[SIcensus] ADDOBJECT #%ld id=%u geomVtable=%p\n",
+                                 g_si_added, id, reinterpret_cast<void*>(param_1[5]));
+                    std::fflush(stderr);
+                }
             }
             int64_t timeVal = 0;
             if (s_fn_TimeFromFloat) s_fn_TimeFromFloat(&timeVal, 0.0f);

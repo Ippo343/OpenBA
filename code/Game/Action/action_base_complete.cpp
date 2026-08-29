@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "scene_watch.h"
+#include <windows.h>
 
 static bool ACT_Trace() {
     static int t = -1;
@@ -337,6 +338,28 @@ static uint32_t*             s_pTid_FenceDesc = nullptr;  // DAT_1401c7a88
 static uint32_t*             s_pTid_RawMat    = nullptr;  // DAT_1401c7cb8
 static bool                  s_showInit       = false;
 
+// [diag] BANISHED_SHOWTOOL_TRACE support. ReadableU is used ONLY by the probe, never as a
+// guard on the faithful path -- it decides whether the trace prints a value or a 0.
+// It must be a REAL page test, not a range test: the value this open is chasing
+// (0x100000001) passes any plausible range check, so a range-only probe would fault on
+// exactly the pointer it was added to report.
+inline bool ReadableU(uintptr_t a) {
+    if (a < 0x10000 || a >= 0x00007FFFFFFFFFFFULL) return false;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery(reinterpret_cast<void*>(a), &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    const DWORD prot = mbi.Protect;
+    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+    return (prot & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                    PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
+}
+
+inline bool ToolTraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_SHOWTOOL_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+
 static void EnsureShow() {
     if (s_showInit) return;
     s_SetMesh        = reinterpret_cast<fn_SetMesh_t>(ReadDispatchSlot(0x140151498));
@@ -408,6 +431,42 @@ void ActCt_HideTool_1176e0(void* entityV) {
 void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     EnsureShow();
     uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
+
+    // [diag] BANISHED_SHOWTOOL_TRACE — dump every link 73b0 is about to deref, BEFORE it
+    // derefs them. The post-load re-show (CitizenComponent slot 11, +0x1d8 != -1) faults
+    // on this path with a READ of 0x100000001, and a crash log alone cannot say WHICH
+    // link is bad: the toolId>=0 branch chains desc(+0x288) -> meshArray(+0x138) ->
+    // element[toolId], and the tail chains charComp(+0x278) -> model(+0x68) -> +0xe8.
+    // Printing both chains turns the next run into a measurement instead of a repro.
+    // Reports the value it READ at each step, so a link that is merely null is
+    // distinguishable from one holding stream garbage. See
+    // [[reference_diagnostics_must_report_outcomes]].
+    if (ToolTraceOn()) {
+        static int n = 0;
+        if (n++ < 24) {
+            const uintptr_t parentP = ReadableU(e + 0x10) ? *reinterpret_cast<uintptr_t*>(e + 0x10) : 0;
+            const uintptr_t chP     = ReadableU(e + 0x278) ? *reinterpret_cast<uintptr_t*>(e + 0x278) : 0;
+            const uintptr_t modelP  = ReadableU(chP + 0x68) ? *reinterpret_cast<uintptr_t*>(chP + 0x68) : 0;
+            const uintptr_t descP   = ReadableU(e + 0x288) ? *reinterpret_cast<uintptr_t*>(e + 0x288) : 0;
+            const uintptr_t arrP    = ReadableU(descP + 0x138) ? *reinterpret_cast<uintptr_t*>(descP + 0x138) : 0;
+            const int32_t   arrCnt  = ReadableU(descP + 0x140) ? *reinterpret_cast<int32_t*>(descP + 0x140) : -1;
+            const int32_t   arrCap  = ReadableU(descP + 0x144) ? *reinterpret_cast<int32_t*>(descP + 0x144) : -1;
+            const uintptr_t elem    = (arrP && toolId >= 0 && ReadableU(arrP + static_cast<uintptr_t>(toolId) * 8))
+                                    ? *reinterpret_cast<uintptr_t*>(arrP + static_cast<uintptr_t>(toolId) * 8) : 0;
+            std::fprintf(stderr,
+                "[ToolTrace] e=%p toolId=%d sceneId=%d | parent=%p flags=%#x | char=%p model=%p mesh(+0xe8)=%p"
+                " | desc=%p arr(+0x138)=%p cnt=%d cap=%d elem[%d]=%p\n",
+                reinterpret_cast<void*>(e), toolId,
+                ReadableU(e + 0x1dc) ? *reinterpret_cast<int32_t*>(e + 0x1dc) : -999,
+                reinterpret_cast<void*>(parentP),
+                ReadableU(parentP + 0x40) ? *reinterpret_cast<uint32_t*>(parentP + 0x40) : 0u,
+                reinterpret_cast<void*>(chP), reinterpret_cast<void*>(modelP),
+                reinterpret_cast<void*>(ReadableU(modelP + 0xe8) ? *reinterpret_cast<uintptr_t*>(modelP + 0xe8) : 0),
+                reinterpret_cast<void*>(descP), reinterpret_cast<void*>(arrP), arrCnt, arrCap,
+                toolId, reinterpret_cast<void*>(elem));
+            std::fflush(stderr);
+        }
+    }
 
     CheckPtr(reinterpret_cast<void*>(e + 0x10));
     uintptr_t parent = *reinterpret_cast<uintptr_t*>(e + 0x10);

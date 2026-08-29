@@ -318,6 +318,20 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     // *(uint*)(plVar2+4) at the assignment, NOT a value captured before the branch —
     // the add-branch's MeshInstance::Update (vtable +0x40) can mutate this flags word).
     uint32_t changed;
+    // NOTE this block is retail 0x14012c3f0 INLINED, and that function is ported in TWO
+    // other places as well -- CitizenComp_FUN_14012c3f0 (citizencomponent.cpp, the copy
+    // reg_component_people.cpp registers) and StatusIcon_Toggle (statusiconcomponent.cpp).
+    // Three copies, each historically unsafe in a DIFFERENT half; see
+    // [[reference_one_retail_fn_ported_twice_diverges]]. Touch one, check all three.
+    //
+    // Both hazards here are closed UPSTREAM by StatusIconComponent_CtorScalars
+    // (statusiconcomponent.cpp), which builds the embedded geometry and sets
+    // sceneObjId(+0x100) = -1 at CONSTRUCTION, so they hold for stream-restored icons too:
+    //   * the clear arm below tests `>= 0` with NO sentinel repair, so an uninitialised
+    //     sceneId of 0 used to PASS it and call Scene::RemoveObject(scene, 0) on a handle
+    //     the scene never issued -- the non-terminating quadtree walk (d06def5), a FREEZE;
+    //   * the set arm used to AddObject a geometry whose vtable was still 0 -- the corrupt
+    //     scene node behind the `EXEC of <heap>` in Scene::Clean.
     if ((int)mesh[0x1e] == 0) {
         if ((int)*(uint32_t*)(mesh + 0x20) >= 0) {
             if (fn_SceneRemoveObject && g_pGameWorldSingleton)
