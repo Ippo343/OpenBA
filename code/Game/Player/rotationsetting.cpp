@@ -8,6 +8,7 @@
 // methods are reimplemented; this is a dormant landmine-removal factory.
 
 #include "tool_base_standalone.h"
+#include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 #include "resolve.h"
@@ -18,12 +19,33 @@ static uint32_t RotationSetting_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("RotationSetting");
     return c;
 }
+// Faithful port of RotationSetting_ScalarDtor (0x140026dd0): reset the vtable,
+// Object::Internal::~Internal, free when the flag says so. It does NOT touch +0x10.
+//
+// WARNING: this used the shared Tool_ScalarDtor, which DeletePtr's an owner IBP at
+// +0x10. RotationSetting has no owner there -- +0x10 is the rotation VALUE (the exe
+// factory seeds it to 0, see the header note above). Once the player rotates a
+// placement it holds 1..3, and the generic dtor handed that integer to
+// InternalBasePtr::DeletePtr, which dereferenced it: an in-game Load crashed in
+// GameUpdateLoop::Shutdown -> ~EntityUI -> IbpTree_Clear -> TreeNodeFree -> here,
+// faulting on a READ of address 0x1 (and 0x2 on another run -- both plain rotation
+// indices). Retail never had that deref; it was ours.
+static void* RotationSetting_ScalarDtor(void* self, unsigned int flags);
+
 static void* g_RotationSetting_Vtable[4] = {
-    (void*)&Tool_ScalarDtor,         // +0x00 Dtor (generic Internal teardown)
+    (void*)&RotationSetting_ScalarDtor, // +0x00 Dtor (0x140026dd0, faithful)
     (void*)&Tool_Slot1,              // +0x08 slot1 (null)
     (void*)&RotationSetting_GetTypeId, // +0x10 GetTypeId
     (void*)&Tool_Persist,            // +0x18 Serialize (base)
 };
+static void* RotationSetting_ScalarDtor(void* self, unsigned int flags) {
+    if (!self) return self;
+    *(void**)self = g_RotationSetting_Vtable;
+    if (fn_ObjectInternal_Dtor) fn_ObjectInternal_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
 extern "C" void RegisterRotationSettingVtable() {
     RegisterExeAddr(0x140160710, (uintptr_t)g_RotationSetting_Vtable);
 }
