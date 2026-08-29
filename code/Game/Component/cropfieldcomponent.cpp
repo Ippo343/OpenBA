@@ -362,8 +362,15 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
         s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
     }
 
-    // On load (serializer mode == 0), resize entity list
-    if (*(int*)((uintptr_t)serializer + 8) == 0) {
+    // On load, resize the entity list to the count just read.
+    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
+    // the loading flag leaves this load-only branch dead on BOTH legs, so the
+    // array is never grown and the loop below silently skips reading the IBPs
+    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
+    // Same defect as WorkPlaceComponent (21b3b33); see
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    const uintptr_t cfStream = *(uintptr_t*)serializer;
+    if (cfStream && *(int*)(cfStream + 8) == 0) {
         if (s_fn_ResizeEntityList) {
             s_fn_ResizeEntityList((void*)((uintptr_t)self + 0x58), countBuf);
         }

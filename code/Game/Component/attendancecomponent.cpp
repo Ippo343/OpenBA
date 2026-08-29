@@ -434,9 +434,16 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
     if (s_fn_Serializer_SerializeInt) s_fn_Serializer_SerializeInt(ser, &count, nullptr);
 
-    // Serializer+0x08 == 0 means READING, so the queue array has to be grown to the
-    // deserialized count before the per-entry loop writes into it.
-    if (*reinterpret_cast<int32_t*>(ser + 8) == 0 && s_fn_AC_ArrayGrow)
+    // The queue array has to be grown to the deserialized count before the
+    // per-entry loop writes into it.
+    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
+    // the loading flag leaves this load-only branch dead on BOTH legs, so the
+    // array is never grown and the loop below silently skips reading the IBPs
+    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
+    // Same defect as WorkPlaceComponent (21b3b33); see
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    const uintptr_t acStream = *reinterpret_cast<uintptr_t*>(ser);
+    if (acStream && *reinterpret_cast<int32_t*>(acStream + 8) == 0 && s_fn_AC_ArrayGrow)
         s_fn_AC_ArrayGrow(reinterpret_cast<void*>(self + 0x28), count);
 
     int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
