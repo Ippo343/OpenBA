@@ -9,6 +9,9 @@
 #include <cstdlib>
 
 
+// Ported Component base Serialize (absorbresourcecomponent.cpp, retail 0x1401189b0).
+void Component_SerializeReimpl(void* self, void* stream);
+
 namespace {
 
 // Kill-switch for the Object::Internal unregistration below (BANISHED_INTERNAL_UNREG=0
@@ -64,10 +67,24 @@ void* g_InertComponentVtable[ComponentFactory::kInertVtableSlots] = {
 };
 bool g_vtableInit = false;
 
+// Component base stream-Serialize (retail 0x1401189b0, ported in
+// absorbresourcecomponent.cpp). Save/load wave 2026-08-27: slot 3 (+0x18) must
+// NOT be an inert no-op — the save/load persist machinery vcalls it on every
+// component, and retail's base restores the owner-entity IBP (+0x10), the
+// capability flags (+0x20) and the description ref (+0x18). A no-op left every
+// unported component with a NULL owner after load (the post-load +0x58 refresh
+// then crashed in the first component that dereferenced it). Types with a real
+// ported Serialize still win — their InstallLive/Finish fills overwrite [3]
+// after FillTypedVtable runs.
+void Component_SerializeReimpl_Fwd(void* self, void* stream) {
+    ::Component_SerializeReimpl(self, stream);
+}
+
 void EnsureVtable() {
     if (g_vtableInit) return;
     for (size_t i = 1; i < ComponentFactory::kInertVtableSlots; ++i)
         g_InertComponentVtable[i] = reinterpret_cast<void*>(&Inert_Stub);
+    g_InertComponentVtable[3] = reinterpret_cast<void*>(&Component_SerializeReimpl_Fwd);
     g_vtableInit = true;
 }
 
@@ -80,6 +97,7 @@ void FillTypedVtable(void** vt, void* getTypeIdFn) {
     for (size_t i = 1; i < ComponentFactory::kInertVtableSlots; ++i)
         vt[i] = reinterpret_cast<void*>(&Inert_Stub);
     vt[2] = getTypeIdFn;                          // +0x10 GetTypeId (real)
+    vt[3] = reinterpret_cast<void*>(&Component_SerializeReimpl_Fwd);  // +0x18 base Serialize
 }
 
 }  // namespace
@@ -93,6 +111,15 @@ namespace ComponentFactory {
 void* InertStubSlot() {
     EnsureVtable();
     return g_InertComponentVtable[1];
+}
+
+// The base-only stream-Serialize every typed vtable starts with (slot [3]).
+// Exposed so the slot-3 inventory dump (factory_registration.cpp) can tell a
+// class with a REAL wired serializer from one silently losing its per-instance
+// state on save/load (save/load wave 2026-08-28 — this trap shipped 21+ times).
+void* BaseSerializeSlot() {
+    EnsureVtable();
+    return g_InertComponentVtable[3];
 }
 
 void InitInert(void* self, size_t size, uint32_t flags) {

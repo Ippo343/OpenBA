@@ -3512,7 +3512,15 @@ extern "C" void CitizenComponent_OnAdd(void* citizenComp);   // 0x140114000
 static void CitizenComponent_OnAddVSlot(void* s) {
     CitizenComponent_OnAdd(s);
 }
+extern "C" void CitizenComponent_Serialize(void* self, void* stream);
+static void CitizenComponent_SerializeVSlot(void* s, void* stream) {
+    CitizenComponent_Serialize(s, stream);
+}
 static void CitizenComponent_FinishLiveVtable() {
+    // Save/load wave (2026-08-27): slot 3 is the stream Serialize — wired
+    // unconditionally so save/load round-trips this component's real state.
+    CitizenComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&CitizenComponent_SerializeVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONADD"))
         CitizenComponent_LiveVtable[6] =
             reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);

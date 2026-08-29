@@ -420,11 +420,53 @@ void AmbientEnvironmentComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+
 // Route the per-tick Update slot (vtable +0x48 / index 9) to the biome-ambient
 // reimpl when BANISHED_AMBIENT_AUDIO (or the global BANISHED_LIVE_COMPONENTS) is
-// set — default ON via the env check inside Update. The factory opt-in below uses
-// the same env so the vtable slot is only wired when the feature is enabled.
-COMPONENT_LIVE_FACTORY(AmbientEnvironmentComponent, 0x48, 0x88,
-                       "BANISHED_AMBIENT_AUDIO", AmbientEnvironmentComponent_Update)
+// set — default ON via the env check inside Update.
+//
+// Hand-expanded from COMPONENT_LIVE_FACTORY (rather than using the macro as-is)
+// to ALSO wire slot 3 (stream Serialize, retail 0x1400437e0 — see
+// ambientenvironmentcomponent_serialize.cpp) UNCONDITIONALLY: serialize
+// round-trip is not an opt-in feature the way the biome-audio Update is
+// (save/load wave 2026-08-28). The write happens inside the factory function
+// body, never at namespace scope, so FillTypedVtable's per-instance vtable
+// copy (which runs before this) can't erase it.
+extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream);
+
+static uint32_t AmbientEnvironmentComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("AmbientEnvironmentComponent");
+    return cached;
+}
+static void* AmbientEnvironmentComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void AmbientEnvironmentComponent_UpdateVSlot(void* s, void* t) {
+    AmbientEnvironmentComponent_Update(reinterpret_cast<AmbientEnvironmentComponent*>(s),
+                                       reinterpret_cast<int64_t*>(t));
+}
+static void AmbientEnvironmentComponent_SerializeVSlot(void* s, void* stream) {
+    AmbientEnvironmentComponent_Serialize(s, stream);
+}
+static void AmbientEnvironmentComponent_FinishLiveVtable() {
+    AmbientEnvironmentComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&AmbientEnvironmentComponent_SerializeVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_AMBIENT_AUDIO"))
+        AmbientEnvironmentComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&AmbientEnvironmentComponent_UpdateVSlot);
+}
+extern "C" void* AmbientEnvironmentComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x88,
+        AmbientEnvironmentComponent_LiveVtable,
+        reinterpret_cast<void*>(&AmbientEnvironmentComponent_LiveGetTypeId));
+    AmbientEnvironmentComponent_FinishLiveVtable();
+    return p;
+}
+static void* AmbientEnvironmentComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x88,
+        AmbientEnvironmentComponent_LiveVtable,
+        reinterpret_cast<void*>(&AmbientEnvironmentComponent_LiveGetTypeId));
+    AmbientEnvironmentComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(AmbientEnvironmentComponent, "Component",
               &AmbientEnvironmentComponent_Factory, &AmbientEnvironmentComponent_CreateInPlace);

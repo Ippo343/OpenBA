@@ -241,6 +241,7 @@ void ImmigrationComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(ImmigrationComponent, 0x68, 0x80)
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+COMPONENT_INERT_FACTORY_SER(ImmigrationComponent, 0x68, 0x80, ImmigrationComponent_Shutdown)
 REGISTER_TYPE(ImmigrationComponent, "ControllerComponent",
               &ImmigrationComponent_Factory, &ImmigrationComponent_CreateInPlace);

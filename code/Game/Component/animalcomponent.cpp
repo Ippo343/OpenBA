@@ -893,14 +893,63 @@ void AnimalComponent_InitFuncs() {
 // Live under BANISHED_LIVE_ANIMAL_UPDATE, wiring the three retail slots this file
 // implements: [4] Startup, [6] OnAdded, [9] Update. Default (flag unset) is
 // byte-for-byte identical to the previous COMPONENT_INERT_FACTORY.
+//
+// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_SOA to
+// ALSO wire slot 3 (Serialize, retail 0x140106e40, body in animalwave_serialize.cpp)
+// UNCONDITIONALLY. Ported but never installed: a loaded save's AnimalComponent kept
+// the base-Component serialize, so age/deathAge/wander state all reset to 0 on
+// load — deathAge=0 immediately reads as "already dead" (age > deathAge), which is
+// the animal-instant-death-after-load symptom.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_LIVE_FACTORY_SOA(AnimalComponent, 0x58, 0xC9,
-                           "BANISHED_LIVE_ANIMAL_UPDATE",
-                           AnimalComponent_Update,
-                           AnimalComponent_Startup,
-                           "BANISHED_LIVE_ANIMAL_UPDATE",
-                           AnimalComponent_OnAdd)
+extern "C" void AnimalComponent_Serialize(void* self, void* stream);
+
+static uint32_t AnimalComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("AnimalComponent");
+    return cached;
+}
+static void* AnimalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void AnimalComponent_UpdateVSlot(void* s, void* t) {
+    AnimalComponent_Update(reinterpret_cast<AnimalComponent*>(s),
+                            reinterpret_cast<int64_t*>(t));
+}
+static void AnimalComponent_StartupVSlot(void* s) {
+    AnimalComponent_Startup(reinterpret_cast<AnimalComponent*>(s));
+}
+static void AnimalComponent_OnAddedVSlot(void* s) {
+    AnimalComponent_OnAdd(reinterpret_cast<AnimalComponent*>(s));
+}
+static void AnimalComponent_SerializeVSlot(void* self, void* stream) {
+    AnimalComponent_Serialize(self, stream);
+}
+static void AnimalComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE")) {
+        AnimalComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&AnimalComponent_StartupVSlot);
+        AnimalComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&AnimalComponent_UpdateVSlot);
+    }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE"))
+        AnimalComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&AnimalComponent_OnAddedVSlot);
+    AnimalComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&AnimalComponent_SerializeVSlot);
+}
+extern "C" void* AnimalComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0xC9,
+        AnimalComponent_LiveVtable,
+        reinterpret_cast<void*>(&AnimalComponent_LiveGetTypeId));
+    AnimalComponent_FinishLiveVtable();
+    return p;
+}
+static void* AnimalComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0xC9,
+        AnimalComponent_LiveVtable,
+        reinterpret_cast<void*>(&AnimalComponent_LiveGetTypeId));
+    AnimalComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(AnimalComponent, "Component",
               &AnimalComponent_Factory, &AnimalComponent_CreateInPlace);

@@ -223,6 +223,8 @@ static uint32_t LivestockComponent_LiveGetTypeId(void*) {
 }
 static void* LivestockComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
+extern "C" void LivestockComponent_Serialize(void* self, void* stream);
+
 static void LivestockComponent_OnAddVSlot(void* s) {
     LivestockComponent_OnAdd(reinterpret_cast<LivestockComponent*>(s));
 }
@@ -233,7 +235,15 @@ static void LivestockComponent_UpdateVSlot(void* s, void* t) {
     LivestockComponent_Update(reinterpret_cast<LivestockComponent*>(s),
                               t ? *reinterpret_cast<int64_t*>(t) : 0);
 }
+static void LivestockComponent_SerializeVSlot(void* self, void* stream) {
+    LivestockComponent_Serialize(self, stream);
+}
+// Slot 3 (Serialize, retail 0x140123e10, body in animalwave_serialize.cpp) wired
+// UNCONDITIONALLY (save/load wave 2026-08-28): a loaded save's LivestockComponent
+// otherwise kept the base-Component serialize, so the assigned-pasture backref
+// (+0x28) and production timer (+0x30) reset to null/0 on load.
 static void LivestockComponent_InstallLive() {
+    LivestockComponent_LiveVtable[3] = reinterpret_cast<void*>(&LivestockComponent_SerializeVSlot);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE")) return;
     LivestockComponent_LiveVtable[6] = reinterpret_cast<void*>(&LivestockComponent_OnAddVSlot);
     LivestockComponent_LiveVtable[7] = reinterpret_cast<void*>(&LivestockComponent_OnRemoveVSlot);

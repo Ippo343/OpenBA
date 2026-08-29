@@ -776,8 +776,22 @@ static void BuildComponent_OnAddedVSlot(void* s) {
     BuildComponent_OnAddedThunk(s);
     g_BC_OnAddedCaller = 0;
 }
+// Slot 3 = Shutdown/Serialize (0x140108d80). The body has been ported in this file
+// since the original wave (BuildComponent_Shutdown, above) but nothing ever wrote it
+// into the live vtable, so a loaded save's BuildComponent kept the FillTypedVtable
+// base-Component serialize only — buildState/buildProgress/buildFlag (+0x48/+0x4c/
+// +0x50) and both entity-IBP arrays (+0x60/+0x70) never round-tripped, resetting every
+// construction site to its ctor default on the first post-load tick. Wired
+// here, inside InstallLive (save/load wave 2026-08-27) — like the two OnAdded/OnRemove
+// slots below it rides BANISHED_LIVE_BUILDCTRL, which is DEFAULT-ON (kDefaultOnFlags),
+// so on the default path this is effectively unconditional; the two slots below stay
+// individually opt-in on their OWN env vars regardless.
+static void BuildComponent_ShutdownVSlot(void* self, void* stream) {
+    BuildComponent_Shutdown(reinterpret_cast<BuildComponent*>(self), stream);
+}
 static void BuildComponent_InstallMsgSlot() {
     BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
+    BuildComponent_LiveVtable[3] = reinterpret_cast<void*>(&BuildComponent_ShutdownVSlot);
 
     // Slot 7 (+0x38) is the removed-from-world broadcast, NOT OnCreate — 0x140108cb0 is
     // misnamed in Ghidra exactly like CitizenComponent's 0x140113ca0 was. It removes the

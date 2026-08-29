@@ -611,7 +611,18 @@ static void* ResidenceComponent_CreateState(void* self) {           // 0x1400040
 
 // Graduate the live slots + install the real state-node dispatcher. Idempotent
 // (called from every Factory/CreateInPlace, like CONTROLLER_LIVE_FACTORY_STATES).
+static void ResidenceComponent_ShutdownVSlot(void* self, void* stream) {
+    ResidenceComponent_Shutdown(reinterpret_cast<ResidenceComponent*>(self), stream);
+}
 static void ResidenceComponent_FinishLiveVtable(void* mem) {
+    // Slot 3 (stream Serialize, retail 0x14012a170) wired UNCONDITIONALLY, same
+    // rationale as StorageComponent: serialize round-trip is not an opt-in
+    // feature. Ported since the residence wave but never written into the live
+    // vtable — a loaded save's residence kept the base-Component serialize and
+    // the resident array (+0x50/+0x58) stayed null, crashing the first post-load
+    // HasSufficientResources (reads rows+8 == address 0x8). Save/load wave 2026-08-28.
+    ResidenceComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&ResidenceComponent_ShutdownVSlot);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) return;
     ResidenceComponent_LiveVtable[4] =
         reinterpret_cast<void*>(&ResidenceComponent_SerializeVSlot);

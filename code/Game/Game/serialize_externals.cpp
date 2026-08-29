@@ -234,3 +234,18 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
                                 typeIdPtr, "Toolbar");
 }
+
+// ============================================================
+// 0x1400192a0 — Object::ExternalPtr<EnvironmentDescription>::Serialize.
+// Byte-identical to the generic ExternalPtr<T>::Serialize; validation type =
+// EnvironmentDescription (DAT_1401c5980, written by
+// EnvironmentDescription_RegisterType). Used by the weather-sim serializer
+// (0x140093c90, save/load wave 2026-08-27) for its +0x00 environment resource.
+// ============================================================
+extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(
+    void* refField, void* serializer) {
+    static uint32_t s_tid = 0;
+    if (!s_tid) s_tid = ::Object::GetTypeIdByName("EnvironmentDescription");
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
+                                s_tid ? &s_tid : nullptr, "EnvironmentDescription");
+}

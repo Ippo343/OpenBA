@@ -58,6 +58,8 @@ extern "C" {
     void  GameUpdateLoop_Draw(void* self, float alpha);
     // +0x30 Load — the M5 world build (code/Game/Game/gameupdateloop_load.cpp).
     void  GameUpdateLoop_Load(void* self);
+    // +0x38 SaveRestore — code/Game/Game/gameupdateloop_serialize.cpp.
+    void  GameUpdateLoop_SaveRestore(void* self, char save, void* savedState, int* outParam);
 }
 
 namespace {
@@ -77,11 +79,13 @@ void GUL_DrawFailed(void* self) {
 // GameLoadDialogLoopT AsyncLoader worker dispatches this slot on a background thread.
 
 // +0x38 SaveRestore(self, saveFlag, savedState, outParam) — serializes loop
-// state to/from a Save::SavedState. Never invoked when GENERATING a new game
-// (only when restoring a .sav). Safe no-op for the new-game path. Real impl
-// (exe field serializer 0x140095a90) required before load-from-save (M5+).
+// state to/from a Save::SavedState. REAL since the save/load wave 2026-08-27:
+// routes to the ported 0x1400959c0 (code/Game/Game/gameupdateloop_serialize.cpp),
+// which wraps the master serializer 0x140095a90 in a CompressedMemoryStream and
+// Store/Retrieves the SavedState. Invoked by Save::SaveLoad::UpdateSave (save=1)
+// and by GameUpdateLoop::Load's restore branch (save=0).
 void GUL_SaveRestore(void* self, char saveFlag, void* savedState, int* outParam) {
-    (void)self; (void)saveFlag; (void)savedState; (void)outParam;
+    GameUpdateLoop_SaveRestore(self, saveFlag, savedState, outParam);
 }
 
 // +0x40 OnVideoError — releases GPU buffers on a D3D device-lost event.

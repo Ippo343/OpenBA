@@ -571,10 +571,15 @@ static void MapComponent_Slot12VSlot(void* s, int msgId) {
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY")) return;
     MapComponent_ApplyOccupancy_41b0(s);
 }
+static void MapComponent_SerVSlot(void* s, void* stream) {
+    MapComponent_Shutdown(reinterpret_cast<MapComponent*>(s), stream);
+}
 static void MapComponent_FinishVtable() {
     MapComponent_InertVtable[6]  = reinterpret_cast<void*>(&MapComponent_OnAddedVSlot);
     MapComponent_InertVtable[7]  = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
     MapComponent_InertVtable[12] = reinterpret_cast<void*>(&MapComponent_Slot12VSlot);
+    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+    MapComponent_InertVtable[3]  = reinterpret_cast<void*>(&MapComponent_SerVSlot);
 }
 extern "C" void* MapComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x83,

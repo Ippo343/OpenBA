@@ -37,6 +37,7 @@
 #include "redzone_alloc.h"
 #include "frame_limiter.h"
 #include "common.h"
+#include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
@@ -248,6 +249,28 @@ void Stub_Destroy(UpdateLoop* self, int flags) {
 
 void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     StallDebug::Phase startupPhase("MenuDLT::Stub_Startup");
+
+    // Menu-side Save::SaveLoad (+0xb70) — retail MenuDLT keeps its own SaveLoad
+    // and ticks it every frame (MenuDLT::Update 0x14009b71f calls the
+    // ?Update@SaveLoad dispatch slot on *(self+0xb70)); the menu Load button's
+    // list-scan/load operations can only progress through that tick. The ctor
+    // also publishes Save::SaveLoad::_singleton, which SaveLoadDialog and the
+    // autosave path read. (Save/load wave 2026-08-27.)
+    {
+        uintptr_t s = reinterpret_cast<uintptr_t>(self);
+        if (*reinterpret_cast<void**>(s + 0xb70) == nullptr) {
+            typedef void* (*fn_slctor_t)(void* self);
+            static fn_slctor_t s_slCtor = reinterpret_cast<fn_slctor_t>(
+                ResolveExport("??0SaveLoad@Save@@QEAA@XZ"));
+            void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x90, 4) : nullptr;
+            if (mem && s_slCtor) {
+                s_slCtor(mem);
+                *reinterpret_cast<void**>(s + 0xb70) = mem;
+                printf("[MenuDLT::Startup] menu SaveLoad created at +0xb70 = %p\n", mem);
+            }
+        }
+    }
+
     void* dialogExt = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Startup] self=%p remainder=%lld m_dialogExternal=%p\n",
            (void*)self, (long long)remainder, dialogExt);
@@ -365,6 +388,11 @@ void Stub_Shutdown(UpdateLoop* self) {
 
 bool Stub_Update(UpdateLoop* self, void* time) {
     StallDebug::Tick("MenuDLT::Update");
+    // One-shot slot-3 serializer inventory (BANISHED_DUMP_SLOT3=1, else no-op).
+    // Menu time is the earliest point where Object::Factory::Startup has run,
+    // so factory-cached type ids are real (pre-Startup they cache 0xFFFFFFFF).
+    { static bool s_dumped = false;
+      if (!s_dumped) { s_dumped = true; ::Object::DumpSlot3Inventory(); } }
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
@@ -384,6 +412,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     if (tick <= 4 || (tick % 300) == 0) {
         printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
                (void*)self, time, tick);
+    }
+
+    // Retail step 1 also ticks the menu-side Save::SaveLoad (+0xb70, created in
+    // Stub_Startup): `if (*(self+0xb70)) SaveLoad::Update(*(self+0xb70), time)`
+    // at 0x14009b71f. Without this the menu Load button's list-scan and load
+    // operations never progress. (Save/load wave 2026-08-27.)
+    {
+        void* menuSaveLoad = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(self) + 0xb70);
+        if (menuSaveLoad && fn_SaveLoad_Update)
+            fn_SaveLoad_Update(menuSaveLoad, time);
     }
 
     // Auto-start driver (env-var gated): once the menu has settled, inject the

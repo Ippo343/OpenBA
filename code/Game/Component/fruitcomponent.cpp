@@ -291,7 +291,52 @@ void FruitComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_LIVE_FACTORY_S(FruitComponent, 0x38, 0x88, "BANISHED_LIVE_FRUIT",
-                         FruitComponent_Update, FruitComponent_Startup)
+// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to
+// ALSO wire slot 3 (Shutdown/Serialize, 0x14004a070 — Ghidra mislabel, see
+// fruitcomponent_serialize.cpp). Wired UNCONDITIONALLY, same rationale as
+// GrowthComponent/ResidenceComponent/StorageComponent: serialize round-trip
+// is not an opt-in feature the way the live ripening simulation is. Without
+// this, a loaded save's FruitComponent kept the base-Component serialize and
+// its ripeness (+0x30) / fruitFlag (+0x34) came back zeroed.
+extern "C" void FruitComponent_Serialize(void* self, void* stream);
+static uint32_t FruitComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("FruitComponent");
+    return cached;
+}
+static void* FruitComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void FruitComponent_UpdateVSlot(void* s, void* t) {
+    FruitComponent_Update(reinterpret_cast<FruitComponent*>(s), reinterpret_cast<int64_t*>(t));
+}
+static void FruitComponent_StartupVSlot(void* s) {
+    FruitComponent_Startup(reinterpret_cast<FruitComponent*>(s));
+}
+static void FruitComponent_SerializeVSlot(void* self, void* stream) {
+    FruitComponent_Serialize(self, stream);
+}
+static void FruitComponent_FinishLiveVtable() {
+    FruitComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&FruitComponent_SerializeVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FRUIT")) {
+        FruitComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
+        FruitComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
+    }
+}
+extern "C" void* FruitComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,
+        FruitComponent_LiveVtable,
+        reinterpret_cast<void*>(&FruitComponent_LiveGetTypeId));
+    FruitComponent_FinishLiveVtable();
+    return p;
+}
+static void* FruitComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x88,
+        FruitComponent_LiveVtable,
+        reinterpret_cast<void*>(&FruitComponent_LiveGetTypeId));
+    FruitComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(FruitComponent, "Component",
               &FruitComponent_Factory, &FruitComponent_CreateInPlace);

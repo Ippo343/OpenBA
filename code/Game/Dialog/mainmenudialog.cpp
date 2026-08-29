@@ -149,6 +149,10 @@ void MainMenuDialog_OpenLoad(MainMenuDialog* self) {
                                          *(void**)(s + 0xB8));  // game world ptr
     }
     AddDialogToUI(self, dlgObj);
+    // Standalone: expose the instance so the BANISHED_AUTOLOAD driver
+    // (standalone/autostart.cpp) can select a save + inject the Load click.
+    extern void* g_StandaloneSaveLoadDialog;
+    g_StandaloneSaveLoadDialog = dlgObj;
 }
 
 // OpenSave (0x1400B38B0): "Dialog/SaveLoad.rsc", size 0x160, mode=0 (save)
@@ -962,6 +966,17 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     case kButton_Options:
         printf("[MainMenuDialog::OnCommand] -> OpenOptions\n");
         MainMenuDialog_OpenOptions(reinterpret_cast<MainMenuDialog*>(self));
+        break;
+    case kButton_Load:
+        // Save/load wave 2026-08-27: SaveLoadDialog ctor + vtable are now
+        // registered, the menu-side Save::SaveLoad exists (+0xb70) and is
+        // ticked — the retail load-from-save path is standalone-ready.
+        printf("[MainMenuDialog::OnCommand] -> OpenLoad (SaveLoadDialog)\n");
+        MainMenuDialog_OpenLoad(reinterpret_cast<MainMenuDialog*>(self));
+        break;
+    case kButton_Save:
+        printf("[MainMenuDialog::OnCommand] -> OpenSave (SaveLoadDialog)\n");
+        MainMenuDialog_OpenSave(reinterpret_cast<MainMenuDialog*>(self));
         break;
     case kButton_Map:
         printf("[MainMenuDialog::OnCommand] -> OpenMap (MapParamsDialog)\n");

@@ -382,9 +382,14 @@ static void ZoneComponent_DetachVSlot(void* s) {
     if (!ZoneRasterLive()) return;
     ZoneComponent_OnCreate(reinterpret_cast<ZoneComponent*>(s));
 }
+static void ZoneComponent_SerVSlot(void* s, void* stream) {
+    ZoneComponent_Shutdown(reinterpret_cast<ZoneComponent*>(s), stream);
+}
 static void ZoneComponent_FinishVtable() {
     ZoneComponent_InertVtable[6] = reinterpret_cast<void*>(&ZoneComponent_OnAddedVSlot);
     ZoneComponent_InertVtable[7] = reinterpret_cast<void*>(&ZoneComponent_DetachVSlot);
+    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+    ZoneComponent_InertVtable[3] = reinterpret_cast<void*>(&ZoneComponent_SerVSlot);
 }
 extern "C" void* ZoneComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x28, 0x83,

@@ -78,6 +78,15 @@ uint32_t GetTypeIdByName(const char* name);
 // name the RUNNING binary resolves settles which one is right.
 const char* GetTypeNameById(uint32_t typeId);
 
+// Diagnostic (BANISHED_DUMP_SLOT3=1): walk every registered *Component type,
+// invoke its factory once, and report whether vtable slot [3] (+0x18, the
+// stream Serialize the save/load persist machinery vcalls) is a real per-class
+// serializer or still the base-only Component serialize (= per-instance state
+// silently resets on save/load). Must run AFTER Object::Factory::Startup —
+// factories cache GetTypeIdByName results, which are sentinel 0xFFFFFFFF
+// before Startup. Leaks one small object per class; diagnostics only.
+void DumpSlot3Inventory();
+
 // The BaseTypeInfo pointer for a registered type. Component vtable slot 1 (GetTypeInfo)
 // returns this; in retail it is a per-class .rdata global 8 bytes after the type id.
 void* GetTypeInfoByName(const char* name);

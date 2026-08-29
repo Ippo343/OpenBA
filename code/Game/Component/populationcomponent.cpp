@@ -558,8 +558,55 @@ void PopulationComponent_InitFuncs() {
 // and +0x40 cell count it needs for real density simulation.
 //
 // Pair with BANISHED_LIVE_HERD so the herds it creates actually tick.
-COMPONENT_LIVE_FACTORY_S(PopulationComponent, 0x70, 0xCB,
-                         "BANISHED_LIVE_POPULATION",
-                         PopulationComponent_Update, PopulationComponent_Startup)
+//
+// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to ALSO
+// wire slot 3 (Serialize, retail 0x1400544a0 — Ghidra mislabels it "Shutdown",
+// body PopulationComponent_Serialize_Real in animalwave_serialize.cpp, registered
+// in reg_animal_serialize.cpp) UNCONDITIONALLY. Ported but never installed: a
+// loaded save's PopulationComponent kept the base-Component serialize, so the
+// PopulationDescription backref, habitability grid, density cells, and herd-entity
+// list all reset to null/0 on load.
+extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream);
+
+static uint32_t PopulationComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("PopulationComponent");
+    return cached;
+}
+static void* PopulationComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void PopulationComponent_UpdateVSlot(void* s, void* t) {
+    PopulationComponent_Update(reinterpret_cast<PopulationComponent*>(s),
+                                reinterpret_cast<int64_t*>(t));
+}
+static void PopulationComponent_StartupVSlot(void* s) {
+    PopulationComponent_Startup(reinterpret_cast<PopulationComponent*>(s));
+}
+static void PopulationComponent_SerializeVSlot(void* self, void* stream) {
+    PopulationComponent_Serialize_Real(self, stream);
+}
+static void PopulationComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION")) {
+        PopulationComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&PopulationComponent_StartupVSlot);
+        PopulationComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&PopulationComponent_UpdateVSlot);
+    }
+    PopulationComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&PopulationComponent_SerializeVSlot);
+}
+extern "C" void* PopulationComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x70, 0xCB,
+        PopulationComponent_LiveVtable,
+        reinterpret_cast<void*>(&PopulationComponent_LiveGetTypeId));
+    PopulationComponent_FinishLiveVtable();
+    return p;
+}
+static void* PopulationComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x70, 0xCB,
+        PopulationComponent_LiveVtable,
+        reinterpret_cast<void*>(&PopulationComponent_LiveGetTypeId));
+    PopulationComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(PopulationComponent, "Component",
               &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);

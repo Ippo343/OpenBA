@@ -182,7 +182,8 @@ static void HarnessGuardUnattendedBoot() {
         const char* v = getenv(n);
         return v && v[0] && strcmp(v, "0") != 0 && strcmp(v, "false") != 0;
     };
-    const bool unattended = envSet("BANISHED_AUTOSTART") || envSet("BANISHED_AUTOQUIT");
+    const bool unattended = envSet("BANISHED_AUTOSTART") || envSet("BANISHED_AUTOQUIT") ||
+                            envSet("BANISHED_AUTOLOAD");
     if (!unattended) {
         printf("[Standalone] Attended run — launcher dialog left to retail rules "
                "(it appears iff the last run did not finish Engine::Startup)\n");

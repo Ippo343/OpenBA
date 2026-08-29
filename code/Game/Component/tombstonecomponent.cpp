@@ -71,6 +71,10 @@ static bool s_initialized = false;
 // TombstoneComponent::Shutdown (0x1400578E0)
 // ============================================================
 void TombstoneComponent_Shutdown(TombstoneComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
+    // its own helpers (only Startup/Update did), so on a load-from-save path where
+    // Shutdown fires first every s_fn_* below could still be null.
+    TombstoneComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -291,8 +295,50 @@ void TombstoneComponent_InitFuncs() {
 // (reg_component_tombstone.cpp); every other helper was already registered.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_LIVE_FACTORY_S(TombstoneComponent, 0x30, 0x88,
-                         "BANISHED_LIVE_TOMBSTONE",
-                         TombstoneComponent_Update, TombstoneComponent_Startup)
+
+// hand-expanded (save/load wave 2026-08-28): COMPONENT_LIVE_FACTORY_S plus
+// UNCONDITIONAL slot 3 (stream Serialize) wiring — save/load round-trip is not
+// an opt-in feature. Everything else identical to the macro expansion.
+static uint32_t TombstoneComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TombstoneComponent");
+    return cached;
+}
+static void* TombstoneComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void TombstoneComponent_UpdateVSlot(void* s, void* t) {
+    TombstoneComponent_Update(reinterpret_cast<TombstoneComponent*>(s),
+                               reinterpret_cast<int64_t*>(t));
+}
+static void TombstoneComponent_StartupVSlot(void* s) {
+    TombstoneComponent_Startup(reinterpret_cast<TombstoneComponent*>(s));
+}
+static void TombstoneComponent_ShutdownVSlot(void* s, void* stream) {
+    TombstoneComponent_Shutdown(reinterpret_cast<TombstoneComponent*>(s), stream);
+}
+static void TombstoneComponent_FinishLiveVtable() {
+    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+    TombstoneComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&TombstoneComponent_ShutdownVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOMBSTONE")) {
+        TombstoneComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
+        TombstoneComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
+    }
+}
+extern "C" void* TombstoneComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x88,
+        TombstoneComponent_LiveVtable,
+        reinterpret_cast<void*>(&TombstoneComponent_LiveGetTypeId));
+    TombstoneComponent_FinishLiveVtable();
+    return p;
+}
+static void* TombstoneComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x30, 0x88,
+        TombstoneComponent_LiveVtable,
+        reinterpret_cast<void*>(&TombstoneComponent_LiveGetTypeId));
+    TombstoneComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(TombstoneComponent, "Component",
               &TombstoneComponent_Factory, &TombstoneComponent_CreateInPlace);

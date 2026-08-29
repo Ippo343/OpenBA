@@ -568,8 +568,13 @@ static void RawMaterialComponent_OnAddedVSlot(void* s) {
     if (!s || !RawMatPickupLive()) return;
     RawMaterialComponent_Draw(reinterpret_cast<RawMaterialComponent*>(s));
 }
+static void RawMaterialComponent_SerVSlot(void* s, void* stream) {
+    RawMaterialComponent_Shutdown(reinterpret_cast<RawMaterialComponent*>(s), stream);
+}
 static void RawMaterialComponent_FinishVtable() {
     RawMaterialComponent_InertVtable[6] = reinterpret_cast<void*>(&RawMaterialComponent_OnAddedVSlot);
+    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+    RawMaterialComponent_InertVtable[3] = reinterpret_cast<void*>(&RawMaterialComponent_SerVSlot);
 }
 extern "C" void* RawMaterialComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x89,

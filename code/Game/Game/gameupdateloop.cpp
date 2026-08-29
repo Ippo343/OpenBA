@@ -683,6 +683,7 @@ extern "C" void FoodPanel_Tick(void* entityUI, int frameNum);  // standalone/foo
 extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/food_placement_harness.cpp
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
+extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum); // standalone/saveload_harness.cpp
 extern "C" void DisasterHarness_Tick(int frameNum);       // standalone/disaster_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
@@ -925,6 +926,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // exercised without waiting decades of game time for a natural death. No-op
     // unless BANISHED_KILL_CITIZENS is set.
     CitizenDeathHarness_Tick(s_frameNum);
+
+    // Trigger the retail autosave path on demand and log the operation's
+    // progress + the resulting .sav. No-op unless BANISHED_SAVE_TEST is set
+    // (standalone/saveload_harness.cpp).
+    SaveLoadHarness_Tick(self, s_frameNum);
 
     // Fire / citizen-disease / crop-infestation / tornado on demand. Every disaster
     // rolls its own dice inside its own component tick, and those chances are

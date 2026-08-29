@@ -122,6 +122,7 @@ static void* GetDecalDescription(void* self) {
 //   2. Serializer(version=1): serialize decalScale (float at +0x30)
 //   3. If version > 0: serialize decalState (int at +0x28)
 void DecalComponent_Shutdown(DecalComponent* self, void* stream) {
+    DecalComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -713,7 +714,15 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
     }
 }
 
+static void DecalComponent_ShutdownVSlot(void* self, void* stream) {
+    DecalComponent_Shutdown(reinterpret_cast<DecalComponent*>(self), stream);
+}
+
 static void DecalComponent_FinishLiveVtable() {
+    // Slot 3 (stream Shutdown/Serialize, retail 0x14011b820) wired UNCONDITIONALLY,
+    // save/load wave 2026-08-28 — previously the class fell through to base-only
+    // Component_SerializeReimpl and decalScale/decalState silently reset on load.
+    DecalComponent_LiveVtable[3] = reinterpret_cast<void*>(&DecalComponent_ShutdownVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
         DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
         DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);

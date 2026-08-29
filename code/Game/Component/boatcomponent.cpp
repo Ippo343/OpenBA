@@ -74,6 +74,7 @@ static bool s_initialized = false;
 //      - Int at +0x70 (dock ID)
 //      - Vector3 array at +0x60 (count at +0x68) -- route waypoints
 void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
+    BoatComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)
@@ -308,10 +309,20 @@ static void* BoatComponent_LiveGetTypeInfo(void*) {
     return cached;
 }
 
+static void BoatComponent_ShutdownVSlot(void* self, void* stream) {
+    BoatComponent_Shutdown(reinterpret_cast<BoatComponent*>(self), stream);
+}
+
 // Wire the node ON THE INSTANCE, after MakeInertTyped/InitInertTyped — FillTypedVtable
 // rewrites the vtable slots and would erase anything written earlier.
 // See reference_live_vtable_slot_must_be_wired_in_installlive.
 static void BoatComponent_InstallController(void* mem) {
+    // Slot 3 (stream Shutdown/Serialize, retail 0x1400465d0) wired UNCONDITIONALLY —
+    // save/load wave 2026-08-28. Previously the boat controller fell through to the
+    // base Component_SerializeReimpl whenever BANISHED_LIVE_BOAT_CTRL was off, and
+    // even when on, this early-out skipped it entirely — a loaded save's boat kept
+    // its route/position/dock fields silently reset.
+    BoatComponent_LiveVtable[3] = reinterpret_cast<void*>(&BoatComponent_ShutdownVSlot);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_BOAT_CTRL")) return;
     BoatComponent_LiveVtable[1]  = reinterpret_cast<void*>(&BoatComponent_LiveGetTypeInfo);
     BoatComponent_LiveVtable[16] = reinterpret_cast<void*>(&BoatComponent_GetDefaultState);

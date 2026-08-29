@@ -62,6 +62,10 @@ static bool s_initialized = false;
 // ============================================================
 
 void NaturalResourceComponent_Shutdown(NaturalResourceComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
+    // but never called anywhere, so every s_fn_* below stayed null and load silently
+    // skipped this component's fields.
+    NaturalResourceComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -261,11 +265,20 @@ static uint32_t NaturalResourceComponent_InertGetTypeId(void*) {
 }
 static void* NaturalResourceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
 
+static void NaturalResourceComponent_SerVSlot(void* s, void* stream) {
+    NaturalResourceComponent_Shutdown(reinterpret_cast<NaturalResourceComponent*>(s), stream);
+}
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+static void NaturalResourceComponent_FinishVtableSer() {
+    NaturalResourceComponent_InertVtable[3] = reinterpret_cast<void*>(&NaturalResourceComponent_SerVSlot);
+}
+
 extern "C" void* NaturalResourceComponent_Factory(void) {
     void* mem = ::ComponentFactory::MakeInertTyped(
         0x30, 0x80, NaturalResourceComponent_InertVtable,
         reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
     NaturalResourceComponent_InitCtorDefaults(mem);
+    NaturalResourceComponent_FinishVtableSer();
     return mem;
 }
 extern "C" void* NaturalResourceComponent_CreateInPlace(void* mem) {
@@ -274,6 +287,7 @@ extern "C" void* NaturalResourceComponent_CreateInPlace(void* mem) {
             mem, 0x30, 0x80, NaturalResourceComponent_InertVtable,
             reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
         NaturalResourceComponent_InitCtorDefaults(mem);
+        NaturalResourceComponent_FinishVtableSer();
     }
     return mem;
 }

@@ -244,7 +244,11 @@ static void EnsureSubHelpers() {
     // owner entity. That is a separate, untested question from the address — flagging rather
     // than silently changing it.
     s_fn_SceneAddMesh    = reinterpret_cast<fn_SceneAddMesh_t>(ResolveAddr(Module::Runtime, 0x1801252e0));
-    s_fn_SceneRemoveMesh = reinterpret_cast<fn_SceneRemoveMesh_t>(ResolveAddr(Module::Runtime, 0x1800f8f50));
+    // 0x180125290 = Picking::Scene::RemoveMesh (Ghidra-verified function START).
+    // The previous 0x1800f8f50 was MID-FUNCTION inside Frustum::Contains — every
+    // floor removal jumped into its middle with garbage registers (found in the
+    // save/load-wave mid-function address sweep, 2026-08-28).
+    s_fn_SceneRemoveMesh = reinterpret_cast<fn_SceneRemoveMesh_t>(ResolveAddr(Module::Runtime, 0x180125290));
     s_subResolved = true;
 }
 

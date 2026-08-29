@@ -1208,9 +1208,20 @@ static void* WorkPlaceComponent_InertVtable[::ComponentFactory::kInertVtableSlot
 static void WorkPlaceComponent_DetachVSlot(void* s) {
     if (s) WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(s));
 }
+// Slot 3 = Shutdown/Serialize (0x14012f120). The body has been ported in this file
+// since the original wave (WorkPlaceComponent_Shutdown, above) but nothing ever wrote
+// it into the vtable, so a loaded save's WorkPlaceComponent kept the FillTypedVtable
+// base-Component serialize only — the worker roster (+0x58/+0x60), isAccepting
+// (+0x50) and profession-key IBP (+0x48) never round-tripped. Wired unconditionally,
+// same as slot 7 above (save/load wave 2026-08-27).
+static void WorkPlaceComponent_ShutdownVSlot(void* self, void* stream) {
+    WorkPlaceComponent_Shutdown(reinterpret_cast<WorkPlaceComponent*>(self), stream);
+}
 static void WorkPlaceComponent_FinishVtable() {
     WorkPlaceComponent_InertVtable[7] =
         reinterpret_cast<void*>(&WorkPlaceComponent_DetachVSlot);
+    WorkPlaceComponent_InertVtable[3] =
+        reinterpret_cast<void*>(&WorkPlaceComponent_ShutdownVSlot);
 }
 
 // ── LIVE controller (BANISHED_LIVE_WPC_CONTROLLER, opt-in until soak-verified) ──

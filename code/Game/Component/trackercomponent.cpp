@@ -48,6 +48,10 @@ static bool s_initialized = false;
 // at +0x28/+0x30 and +0x38/+0x40, plus trackerId at +0x48.
 
 void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
+    // but never called anywhere, so every s_fn_* below stayed null and load silently
+    // skipped this component's fields.
+    TrackerComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)
@@ -159,11 +163,20 @@ static void TrackerComponent_ApplyCtorDefaults(void* p) {
     if (p) *reinterpret_cast<int32_t*>(static_cast<char*>(p) + 0x48) = -1;
 }
 
+static void TrackerComponent_SerVSlot(void* s, void* stream) {
+    TrackerComponent_Shutdown(reinterpret_cast<TrackerComponent*>(s), stream);
+}
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+static void TrackerComponent_FinishVtableSer() {
+    TrackerComponent_InertVtable[3] = reinterpret_cast<void*>(&TrackerComponent_SerVSlot);
+}
+
 extern "C" void* TrackerComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x80,
         TrackerComponent_InertVtable,
         reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
     TrackerComponent_ApplyCtorDefaults(p);
+    TrackerComponent_FinishVtableSer();
     return p;
 }
 static void* TrackerComponent_CreateInPlace(void* mem) {
@@ -172,6 +185,7 @@ static void* TrackerComponent_CreateInPlace(void* mem) {
             TrackerComponent_InertVtable,
             reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
         TrackerComponent_ApplyCtorDefaults(mem);
+        TrackerComponent_FinishVtableSer();
     }
     return mem;
 }

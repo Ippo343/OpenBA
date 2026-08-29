@@ -87,8 +87,12 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
+    // Shared mangled-name resolve — 0x1800c0210 (previously used here) is
+    // MID-FUNCTION (real InternalBasePtr::Serialize starts at 0x1800c0180);
+    // calling it silently mis-read the stream and desynced everything after
+    // this component on load (save/load wave 2026-08-28).
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        ResolveAddr(Module::Runtime, 0x1800c0210));
+        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
 
     s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         ResolveAddr(Module::Runtime, 0x1800c0290));
@@ -371,7 +375,18 @@ static void* InteractComponent_InertVtable[::ComponentFactory::kInertVtableSlots
 static void InteractComponent_OnAddedVSlot(void* self) {
     InteractComponent_Draw(reinterpret_cast<InteractComponent*>(self));
 }
+// Slot 3 = Shutdown/Serialize (0x140123340). The body has been ported in this file
+// since the original wave (InteractComponent_Shutdown, above) but nothing ever wrote
+// it into the live vtable, so a loaded save's InteractComponent kept the
+// FillTypedVtable base-Component serialize only — the use-location IBP array (+0x28/
+// +0x30) never round-tripped. Wired UNCONDITIONALLY (save/load wave 2026-08-27),
+// unlike the OnAdded slot below which stays on its own kill-switch.
+static void InteractComponent_ShutdownVSlot(void* self, void* stream) {
+    InteractComponent_Shutdown(reinterpret_cast<InteractComponent*>(self), stream);
+}
 static void InteractComponent_FinishVtable() {
+    InteractComponent_InertVtable[3] =
+        reinterpret_cast<void*>(&InteractComponent_ShutdownVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_INTERACT_ONADD")) {
         InteractComponent_InertVtable[6] =
             reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);

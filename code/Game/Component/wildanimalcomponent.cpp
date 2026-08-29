@@ -89,9 +89,14 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
-    // InternalBasePtr::Serialize -- Runtime export
+    // InternalBasePtr::Serialize — via the shared mangled-name resolve
+    // (engine_funcs fn_InternalBasePtr_Serialize). The raw address previously
+    // used here, 0x1800c0210, is MID-FUNCTION (the real Serialize starts at
+    // 0x1800c0180) — calling it executed from halfway through the body with
+    // garbage registers: sometimes an EXEC-of-heap crash (save/load wave
+    // 2026-08-28), otherwise a silent mis-read that desynced the stream.
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        ResolveAddr(Module::Runtime, 0x1800c0210));
+        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
 
     // CheckPtr -- Runtime
     s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
@@ -262,9 +267,18 @@ static void* WildAnimalComponent_LiveVtable[::ComponentFactory::kInertVtableSlot
 static void WildAnimalComponent_OnRemoveVSlot(void* self) {
     WildAnimalComponent_OnRemove(reinterpret_cast<WildAnimalComponent*>(self));
 }
+static void WildAnimalComponent_SerializeVSlot(void* self, void* stream) {
+    WildAnimalComponent_Serialize(reinterpret_cast<WildAnimalComponent*>(self), stream);
+}
 
 // Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
 static void WildAnimalComponent_InstallLive() {
+    // Slot 3 (Serialize, retail 0x14012e300, body above in this file) wired
+    // UNCONDITIONALLY (save/load wave 2026-08-28): a loaded save's
+    // WildAnimalComponent otherwise kept the base-Component serialize, so the
+    // herd back-ref at +0x28 reset to null on load.
+    WildAnimalComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&WildAnimalComponent_SerializeVSlot);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD") &&
         !::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION") &&
         !::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE") &&

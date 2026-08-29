@@ -26,8 +26,13 @@ struct UIComponent {
     uint32_t flags;        // +0x20
     uint8_t  _pad24[4];    // +0x24
 
-    void*    uiData0;      // +0x28: zeroed
-    void*    uiData1;      // +0x30: zeroed
+    // +0x28..+0x37: a growable uint8_t array header (verified against retail
+    // slot-3 Serialize, 0x14012dd00, and its resize helper FUN_14000a590):
+    // ptr@+0x28, count@+0x30, cap@+0x34. Ctor zeroes all of it, but it is a
+    // real per-instance buffer, not two scratch pointers — see
+    // uicomponent_serialize.cpp for the port.
+    void*    uiData0;      // +0x28: byte-array pointer (zeroed at ctor)
+    void*    uiData1;      // +0x30: {int32 count; int32 cap;} (zeroed at ctor)
 };
 
 static_assert(sizeof(UIComponent) == 0x38, "UIComponent size mismatch");

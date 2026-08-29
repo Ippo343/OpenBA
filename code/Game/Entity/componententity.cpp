@@ -305,6 +305,17 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     // On load: resize component array to match serialized count
     if (encodingMode == 0) {
         fn_ExeArrayResize((void*)(s + 0x30), (int)compCount);
+        // Save/load wave diagnostics: a garbage count (stream misalignment) or
+        // a failed resize (data still null with count>0) crashes the IBP loop
+        // below — log the state on the way in so the crash log has context.
+        static int s_dbgN = 0;
+        if (s_dbgN < 8 || *(void**)(s + 0x30) == nullptr || compCount > 64) {
+            s_dbgN++;
+            fprintf(stderr, "[CompEnt::Serialize] LOAD ent=%p desc=%p compCount=%u "
+                    "arr=%p cap=%d\n", (void*)self, self->description, compCount,
+                    *(void**)(s + 0x30), *(int*)(s + 0x3c));
+            fflush(stderr);
+        }
     }
 
     // Serialize each component IBP
@@ -313,9 +324,49 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     if (cnt > 0) {
         for (int64_t i = 0; i < cnt; i++) {
             uintptr_t ibpAddr = ibpArr + (uintptr_t)i * 8;
+            // Save/load wave debug (BANISHED_SERIALIZE_TRACE): per-component
+            // progress marker so a stream desync pinpoints the last-good
+            // component instead of a wild crash address.
+            static int s_trace = -1;
+            if (s_trace < 0) { const char* e = std::getenv("BANISHED_SERIALIZE_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (s_trace == 1) {
+                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin\n",
+                        (void*)self, (long long)i, compCount);
+                fflush(stderr);
+            }
             // Serialize the InternalBasePtr
             if (fn_InternalBasePtr_Serialize) {
                 fn_InternalBasePtr_Serialize((void*)ibpAddr, serializer);
+            }
+            void* rawAfterSer = *(void**)ibpAddr;   // before our IsDerivedFrom filter
+            if (s_trace == 1 && !rawAfterSer) {
+                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld RAW NULL from "
+                        "IBP::Serialize (create failed -> stream desync!)\n",
+                        (void*)self, (long long)i);
+                fflush(stderr);
+            }
+            if (s_trace == 1) {
+                void* c = *(void**)ibpAddr;
+                uint32_t tid = 0;
+                if (c) {
+                    typedef uint32_t (*fn_gtid_t)(void*);
+                    tid = (*(fn_gtid_t*)(*(uintptr_t*)c + 0x10))(c);
+                }
+                // Stream cursor (CompressedMemoryStream + 0x8C — see
+                // engine/types/io_serializer.h). Logged on BOTH save and load:
+                // diffing the two traces per component finds an ASYMMETRIC
+                // serializer (read size != write size — a silent desync that
+                // corrupts every later component without crashing).
+                uint32_t pos = 0;
+                {
+                    void* strm = serializer ? *(void**)serializer : nullptr;
+                    if (strm) pos = *(uint32_t*)((uint8_t*)strm + 0x8C);
+                }
+                fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld -> %p tid=%08x (%s) pos=%u\n",
+                        (void*)self, (long long)i, c, tid,
+                        c ? (::Object::GetTypeNameById(tid) ? ::Object::GetTypeNameById(tid) : "?") : "null",
+                        pos);
+                fflush(stderr);
             }
             // Verify component is derived from Component base; null out if not
             void* comp = *(void**)ibpAddr;
@@ -534,7 +585,12 @@ ComponentEntity* ComponentEntity_CtorDefault(ComponentEntity* self) {
     self->externals = nullptr;                      // +0x20
     self->description = nullptr;                    // +0x28
     self->components = nullptr;                     // +0x30
-    self->componentCount = 0;                       // +0x38
+    // Retail zeroes the FULL qword at +0x38 — count AND capacity. Zeroing only
+    // the int32 count left +0x3C (cap) holding recycled heap bytes; on the
+    // load-from-save path the persist-created entity's resize then saw
+    // cap > count, skipped the alloc, and the IBP loop deref'd a null array
+    // ("a 4-byte port of an 8-byte zero strands an array at NULL").
+    *(uint64_t*)(s + 0x38) = 0;                     // +0x38 count / +0x3C cap
     self->entityFlags = 0;                          // +0x40
 
     return self;

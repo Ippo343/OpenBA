@@ -609,7 +609,18 @@ static void TradeComponent_InstallController(void* mem) {
     *reinterpret_cast<void**>(p + 0xa0) = mem;   // node+0x18 = owning component
 }
 
+extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);
+static void TradeComponent_SerializeVSlot(void* s, void* stream) {
+    TradeComponent_Serialize(reinterpret_cast<TradeComponent*>(s), stream);
+}
 static void TradeComponent_FinishLiveVtable() {
+    // Slot 3 (stream Serialize, retail 0x14005bd50, tradecomponent_serialize.cpp)
+    // wired UNCONDITIONALLY — save/load wave 2026-08-28. Slot-3 wiring is
+    // symmetric (the same vtable serves save and load), so wiring cannot desync
+    // the stream; leaving it base-only silently reset the trading post's
+    // merchant table / item lists on every load.
+    TradeComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&TradeComponent_SerializeVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT")) {
         TradeComponent_LiveVtable[6] =
             reinterpret_cast<void*>(&TradeComponent_OnAddedVSlot);

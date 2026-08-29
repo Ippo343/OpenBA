@@ -50,6 +50,10 @@ static bool s_initialized = false;
 // PickingComponent::Shutdown (0x140128bb0)
 // ============================================================
 void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
+    // its own helpers (only DetachVSlot/RegisterMesh did), so on a load-from-save path
+    // where Shutdown fires first every s_fn_* below could still be null.
+    PickingComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)
@@ -391,11 +395,17 @@ static void PickingComponent_OnAddedVSlot(void* s) {
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PICK_ONADDED")) return;
     PickingComponent_RegisterMesh(s);
 }
+static void PickingComponent_SerVSlot(void* s, void* stream) {
+    PickingComponent_Shutdown(reinterpret_cast<PickingComponent*>(s), stream);
+}
 static void PickingComponent_FinishVtable() {
     PickingComponent_InertVtable[6] =
         reinterpret_cast<void*>(&PickingComponent_OnAddedVSlot);
     PickingComponent_InertVtable[7] =
         reinterpret_cast<void*>(&PickingComponent_DetachVSlot);
+    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+    PickingComponent_InertVtable[3] =
+        reinterpret_cast<void*>(&PickingComponent_SerVSlot);
 }
 // Retail Startup (0x140128c30) stamps pickingId(+0x28) = -1 so OnCreate's
 // `pickingId >= 0` guard skips the RemoveMesh for a component that never registered a

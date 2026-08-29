@@ -43,6 +43,20 @@ static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthD
 typedef void (*fn_ArrayResize8_t)(void* arrayDesc, int newCount);
 static fn_ArrayResize8_t s_fn_ArrayResize8 = nullptr;
 
+// ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
+typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
+typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
+typedef void (*fn_SerDtor_t)(void* ser);
+typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
+typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
+typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
+static fn_ComponentSerialize_t s_fn_ComponentSerialize = nullptr;  // 0x1401189b0
+static fn_SerCtor_t            s_fn_SerCtor            = nullptr;  // slot 0x140152ad8
+static fn_SerDtor_t            s_fn_SerDtor            = nullptr;  // slot 0x140152ad0
+static fn_SerInt_t             s_fn_SerInt              = nullptr;  // slot 0x140152ac8
+static fn_TimeSerialize_t      s_fn_TimeSerialize       = nullptr;  // slot 0x140152aa8
+static fn_IsDerived_t          s_fn_IsDerived           = nullptr;  // slot 0x140152a98
+
 static bool s_initialized = false;
 
 // Step-2 body-init (vtable slot [4], +0x20, original SpawnComponent_Serialize/OnCreate
@@ -394,6 +408,22 @@ void SpawnComponent_InitFuncs() {
     s_fn_ArrayResize8 = reinterpret_cast<fn_ArrayResize8_t>(
         ResolveAddr(Module::Exe, 0x140001bb0));
 
+    s_fn_ComponentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
+        ResolveAddr(Module::Exe, 0x1401189b0));
+    {
+        uintptr_t slot;
+        slot = ResolveAddr(Module::Exe, 0x140152ad8);
+        if (slot) s_fn_SerCtor = *reinterpret_cast<fn_SerCtor_t*>(slot);
+        slot = ResolveAddr(Module::Exe, 0x140152ad0);
+        if (slot) s_fn_SerDtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
+        slot = ResolveAddr(Module::Exe, 0x140152ac8);
+        if (slot) s_fn_SerInt = *reinterpret_cast<fn_SerInt_t*>(slot);
+        slot = ResolveAddr(Module::Exe, 0x140152aa8);
+        if (slot) s_fn_TimeSerialize = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
+        slot = ResolveAddr(Module::Exe, 0x140152a98);
+        if (slot) s_fn_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
+    }
+
     s_initialized = true;
 }
 
@@ -423,6 +453,65 @@ void SpawnComponent_Startup(SpawnComponent* self) {
     // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
     if (s_fn_ArrayResize8)
         s_fn_ArrayResize8(reinterpret_cast<void*>(comp + 0x28), entryCount);
+}
+
+// ============================================================
+// SpawnComponent::Serialize (vtable slot [3], +0x18, original 0x140055ee0 —
+// Ghidra mislabels it SpawnComponent_Shutdown; the body is a stream
+// serializer, not a dtor).
+// ============================================================
+// Fields (verified against retail decompile/disassembly at 0x140055ee0):
+//   +0x30  int             per-entry timer count (also written BACK by the
+//                           resize helper itself, not by an explicit store).
+//   +0x28  Time[count]     per-entry accumulation timers, stride 8 (see
+//                           SpawnComponent_Startup / SpawnComponent_Update),
+//                           load-side resized via the same stride-8 resizer
+//                           (0x140001bb0, already resolved as s_fn_ArrayResize8)
+//                           used by Startup's body-init.
+//   On load only, retail then reconciles the restored count against the LIVE
+//   SpawnDescription's entry count (desc+0x28, desc validated by
+//   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918, already
+//   resolved as s_pSpawnResourceTypeId): if they differ, resize again to
+//   match the description currently in effect.
+extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
+    SpawnComponent_InitFuncs();
+    if (!self || !stream || !s_fn_SerCtor || !s_fn_SerDtor || !s_fn_SerInt) return;
+    if (s_fn_ComponentSerialize) s_fn_ComponentSerialize(self, stream);
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+    uint8_t ser[24];
+    s_fn_SerCtor(ser, stream, 0);
+
+    // True when the serializer is READING (retail reads the stream's own +8
+    // field for this component, equivalent to the serializer's first field).
+    auto Loading = [](void* s) {
+        return *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(s) + 8) == 0;
+    };
+
+    int count = *reinterpret_cast<int*>(comp + 0x30);
+    s_fn_SerInt(ser, &count, nullptr);
+    if (Loading(ser) && s_fn_ArrayResize8)
+        s_fn_ArrayResize8(comp + 0x28, count);  // also writes comp+0x30 = count
+
+    uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
+    int n = *reinterpret_cast<int*>(comp + 0x30);
+    for (int i = 0; i < n && timer && s_fn_TimeSerialize; ++i, timer += 8)
+        s_fn_TimeSerialize(timer, ser);
+
+    if (Loading(stream)) {
+        void* desc = *reinterpret_cast<void**>(comp + 0x18);
+        void* validated = nullptr;
+        if (desc && s_fn_IsDerived && s_pSpawnResourceTypeId && *s_pSpawnResourceTypeId &&
+            s_fn_IsDerived(desc, *s_pSpawnResourceTypeId))
+            validated = desc;
+        int descCount = validated
+            ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
+            : 0;
+        if (*reinterpret_cast<int*>(comp + 0x30) != descCount && s_fn_ArrayResize8)
+            s_fn_ArrayResize8(comp + 0x28, descCount);
+    }
+
+    if (s_fn_SerDtor) s_fn_SerDtor(ser);
 }
 
 // ============================================================
@@ -689,7 +778,51 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 // GrowthDescription) are registered + filled by reg_component_spawn.cpp. The full
 // DoSpawn closure is already registered, so real spawning is available behind
 // BANISHED_SPAWN_DOSPAWN=1 (default OFF — see the CONSERVATIVE GATE in Update).
-COMPONENT_LIVE_FACTORY_S(SpawnComponent, 0x38, 0x88,
-                         "BANISHED_LIVE_SPAWN", SpawnComponent_Update, SpawnComponent_Startup)
+// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to
+// ALSO wire slot 3 (Shutdown/Serialize, 0x140055ee0 — Ghidra mislabel; see
+// SpawnComponent_Serialize above). Wired UNCONDITIONALLY, same rationale as
+// ResidenceComponent/StorageComponent/GrowthComponent: serialize round-trip
+// is not an opt-in feature. Without this, a loaded save's SpawnComponent kept
+// the base-Component serialize and its per-entry timer array (+0x28/+0x30)
+// came back null, silently disabling wild-food/tree spawn timers post-load.
+static uint32_t SpawnComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("SpawnComponent");
+    return cached;
+}
+static void* SpawnComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void SpawnComponent_UpdateVSlot(void* s, void* t) {
+    SpawnComponent_Update(reinterpret_cast<SpawnComponent*>(s), reinterpret_cast<int64_t*>(t));
+}
+static void SpawnComponent_StartupVSlot(void* s) {
+    SpawnComponent_Startup(reinterpret_cast<SpawnComponent*>(s));
+}
+static void SpawnComponent_SerializeVSlot(void* self, void* stream) {
+    SpawnComponent_Serialize(self, stream);
+}
+static void SpawnComponent_FinishLiveVtable() {
+    SpawnComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&SpawnComponent_SerializeVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SPAWN")) {
+        SpawnComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&SpawnComponent_StartupVSlot);
+        SpawnComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&SpawnComponent_UpdateVSlot);
+    }
+}
+extern "C" void* SpawnComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,
+        SpawnComponent_LiveVtable,
+        reinterpret_cast<void*>(&SpawnComponent_LiveGetTypeId));
+    SpawnComponent_FinishLiveVtable();
+    return p;
+}
+static void* SpawnComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x88,
+        SpawnComponent_LiveVtable,
+        reinterpret_cast<void*>(&SpawnComponent_LiveGetTypeId));
+    SpawnComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(SpawnComponent, "Component",
               &SpawnComponent_Factory, &SpawnComponent_CreateInPlace);

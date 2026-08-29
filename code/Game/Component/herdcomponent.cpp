@@ -1138,15 +1138,19 @@ void HerdComponent_InitFuncs() {
 //   slot 6 OnAdd    -> world herd-list registration (0x140121f40)
 //   slot 9 Update   -> the real grazing/migration tick (0x140121bf0)
 // Slot 3 Serialize (0x140121f90) is ported (animalwave_serialize.cpp) and
-// registered (reg_animal_serialize.cpp) but NOT wired here: slot-3 wiring for
-// ALL live components lands together in the save/load wave (a partial fill
-// would desync the save stream).
+// registered (reg_animal_serialize.cpp). hand-expanded (save/load wave
+// 2026-08-28) from COMPONENT_LIVE_FACTORY_SOA to wire it UNCONDITIONALLY: a
+// loaded save's HerdComponent otherwise kept the base-Component serialize and
+// its member list (+0x38/+0x40), grazing/spawn Time, and PopulationComponent
+// backref (+0x28) all reset to 0 on load.
 //
 // A live herd does nothing on its own — PopulationComponent's Startup is what
 // creates herd entities and calls Populate, so the useful recipe is
 // BANISHED_LIVE_HERD=1 BANISHED_LIVE_POPULATION=1.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+
+extern "C" void HerdComponent_Serialize(void* self, void* stream);
 
 static void HerdComponent_UpdateSlot(HerdComponent* self, int64_t* dt) {
     HerdComponent_Update(self, dt);
@@ -1158,9 +1162,51 @@ static void HerdComponent_OnAddSlot(HerdComponent* self) {
     HerdComponent_OnAdd(self);
 }
 
-COMPONENT_LIVE_FACTORY_SOA(HerdComponent, 0x60, 0x8b,
-                           "BANISHED_LIVE_HERD",
-                           HerdComponent_UpdateSlot, HerdComponent_StartupSlot,
-                           "BANISHED_LIVE_HERD", HerdComponent_OnAddSlot)
+static uint32_t HerdComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("HerdComponent");
+    return cached;
+}
+static void* HerdComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void HerdComponent_UpdateVSlot(void* s, void* t) {
+    HerdComponent_UpdateSlot(reinterpret_cast<HerdComponent*>(s),
+                              reinterpret_cast<int64_t*>(t));
+}
+static void HerdComponent_StartupVSlot(void* s) {
+    HerdComponent_StartupSlot(reinterpret_cast<HerdComponent*>(s));
+}
+static void HerdComponent_OnAddedVSlot(void* s) {
+    HerdComponent_OnAddSlot(reinterpret_cast<HerdComponent*>(s));
+}
+static void HerdComponent_SerializeVSlot(void* self, void* stream) {
+    HerdComponent_Serialize(self, stream);
+}
+static void HerdComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD")) {
+        HerdComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&HerdComponent_StartupVSlot);
+        HerdComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&HerdComponent_UpdateVSlot);
+    }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD"))
+        HerdComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&HerdComponent_OnAddedVSlot);
+    HerdComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&HerdComponent_SerializeVSlot);
+}
+extern "C" void* HerdComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x8b,
+        HerdComponent_LiveVtable,
+        reinterpret_cast<void*>(&HerdComponent_LiveGetTypeId));
+    HerdComponent_FinishLiveVtable();
+    return p;
+}
+static void* HerdComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x8b,
+        HerdComponent_LiveVtable,
+        reinterpret_cast<void*>(&HerdComponent_LiveGetTypeId));
+    HerdComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(HerdComponent, "Component",
               &HerdComponent_Factory, &HerdComponent_CreateInPlace);

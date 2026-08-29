@@ -1199,3 +1199,104 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
         }
     }
 }
+
+// ============================================================
+// SaveLoadDialog vtable + ctor (save/load wave 2026-08-27)
+// ============================================================
+// Retail vtable @ 0x14015f900 (10 slots — verified via read_memory):
+//   +0x00 Dtor            0x1400211b0
+//   +0x08 TypeName        0x140021150
+//   +0x10 TypeId          0x140021140
+//   +0x18 Persist         0x14003a948 (runtime thunk)
+//   +0x20 Startup         0x1400b7d00 → SaveLoadDialog_Startup (REIMPL'd)
+//   +0x28 Shutdown        0x14003a94e (runtime thunk)
+//   +0x30 OnUpdateLayout  0x1400b6880 → SaveLoadDialog_Update (REIMPL'd)
+//   +0x38 OnUpdate        0x1400b79b0 → SaveLoadDialog_Load (REIMPL'd; the
+//                         per-frame op tracker + loadFlag game transition)
+//   +0x40 OnEvent         0x1400b67e0 → SaveLoadDialog_OnEvent (REIMPL'd)
+//   +0x48 OnSerialize     0x14003a954 (runtime thunk)
+// The ctor is 0x1400b8270 (fn_SaveLoadDialog_Ctor resolves it; it was
+// unregistered, so the menu Load/Save buttons silently did nothing).
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+namespace {
+
+void* GetSaveLoadDialogVtable();
+
+void* SLDStub_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = GetSaveLoadDialogVtable();
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+const char* SLDStub_TypeName(void* /*self*/) { return "SaveLoadDialog"; }
+uint32_t SLDStub_TypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("SaveLoadDialog");
+    return cached;
+}
+template <int SlotIdx>
+void SLDStub_RuntimeThunk(void* self, ...) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[SaveLoadDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+               SlotIdx, self);
+    }
+}
+
+void* g_SaveLoadDialog_Vtable_Standalone[10] = {
+    reinterpret_cast<void*>(&SLDStub_Dtor),                 // +0x00
+    reinterpret_cast<void*>(&SLDStub_TypeName),             // +0x08
+    reinterpret_cast<void*>(&SLDStub_TypeId),               // +0x10
+    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<3>),      // +0x18 Persist
+    reinterpret_cast<void*>(&SaveLoadDialog_Startup),       // +0x20
+    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<5>),      // +0x28 Shutdown
+    reinterpret_cast<void*>(&SaveLoadDialog_Update),        // +0x30
+    reinterpret_cast<void*>(&SaveLoadDialog_Load),          // +0x38
+    reinterpret_cast<void*>(&SaveLoadDialog_OnEvent),       // +0x40
+    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<9>),      // +0x48
+};
+
+void* GetSaveLoadDialogVtable() {
+    return reinterpret_cast<void*>(g_SaveLoadDialog_Vtable_Standalone);
+}
+
+} // namespace
+
+// In-place ctor — clean reimpl of exe 0x1400b8270. Mirrors the disassembly:
+// DialogInstance base ctor (parent IBP copied to a local, tail args 0,0,0),
+// vtable patch, mode byte at +0xB8, flags/selection/rotation zeroed, Sprite
+// default-ctor at +0xD0, loader/engine ptrs at +0xE0/+0xE8, +0xF0..+0x158 zero.
+extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes,
+                                          void* parentIBP, uint8_t mode,
+                                          void* enginePtr, void* gameWorldPtr) {
+    uintptr_t s = (uintptr_t)self;
+
+    uint64_t ibpCopy = parentIBP ? *(uint64_t*)parentIBP : 0;
+    fn_DialogInstance_Ctor(self, ui, extRes, &ibpCopy, 0, 0, 0);
+    *(void**)self = GetSaveLoadDialogVtable();
+
+    *(uint8_t*)(s + 0xB8) = mode;
+    *(uint32_t*)(s + 0xB9) = 0;          // saveFlag/loadFlag/refreshFlag/deleteFlag
+    *(uint32_t*)(s + 0xC0) = 0;          // selectedIndex
+    *(uint32_t*)(s + 0xC8) = 0;          // spinner rotation
+    if (fn_Sprite_DefaultCtor) fn_Sprite_DefaultCtor((void*)(s + 0xD0));
+    *(void**)(s + 0xE0) = enginePtr;
+    *(void**)(s + 0xE8) = gameWorldPtr;
+    for (uintptr_t off = 0xF0; off <= 0x158; off += 8)
+        *(uint64_t*)(s + off) = 0;
+
+    // Retail's ctor caller path lands in SaveLoadDialog_Startup via the UI
+    // dialog-open machinery (vtable +0x20); the +0xBB refreshFlag=1 kick that
+    // triggers the initial file-list scan happens there.
+    return self;
+}
+
+void RegisterSaveLoadDialog() {
+    RegisterExeAddr(0x1400b8270, reinterpret_cast<uintptr_t>(&SaveLoadDialog_Ctor_8270));
+    RegisterExeAddr(0x14015f900, reinterpret_cast<uintptr_t>(g_SaveLoadDialog_Vtable_Standalone));
+}

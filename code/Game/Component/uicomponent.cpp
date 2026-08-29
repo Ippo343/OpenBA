@@ -121,6 +121,13 @@ void UIComponent_Slot15(UIComponent* self) {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(UIComponent, 0x38, 0x80)
+
+// Slot 3 (stream Serialize, retail 0x14012dd00) wired UNCONDITIONALLY via
+// COMPONENT_INERT_FACTORY_SER — serialize round-trip is not an opt-in
+// feature (save/load wave 2026-08-28). UIComponent's +0x28..+0x37 is a real
+// growable byte-array header (see uicomponent_serialize.cpp); leaving slot 3
+// at the base-only Component_Serialize would silently drop it on save/load.
+extern "C" void UIComponent_Serialize(void* self, void* stream);
+COMPONENT_INERT_FACTORY_SER(UIComponent, 0x38, 0x80, UIComponent_Serialize)
 REGISTER_TYPE(UIComponent, "Component",
               &UIComponent_Factory, &UIComponent_CreateInPlace);

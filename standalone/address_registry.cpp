@@ -390,6 +390,11 @@ extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
 extern void RegisterAnimalSerialize();
+extern void RegisterTradeSerialize();
+extern void RegisterAmbientEnvAndUISerialize();
+extern void RegisterGrowthSpawnSerialize();
+extern void RegisterCemeteryHealerSerialize();
+extern void RegisterFruitHappinessSerialize();
 // Terraform wave (2026-08-22) — the tunnel-mouth terrain deformation. reg file:
 // reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
 extern void RegisterTerraformLive();
@@ -531,6 +536,11 @@ extern void RegisterPfRootsMiscBatch();    // Wave 3: bd40 spiral + 92260 spatia
 extern void RegisterEntityBatch();         // Entity gap: 6 EntityList reimpl bodies (entitylist.cpp)
 extern void RegisterGoalBatch();           // Goal gap: ExternalPtr resolver + StatValueDispatch
 extern void RegisterDialogBatch();         // Dialog gap: FindComponent variant + autosave handler
+extern void RegisterCitizenListSerialize(); // save/load wave: CitizenBehavior serialize (8f760) + post-pass (8f580)
+extern void RegisterGoalsSerialize();       // save/load wave: goal/tutorial-mgr serialize (f9240)
+extern void RegisterGameGridSerialize();    // save/load wave: game map-grid serialize (9f100)
+extern void RegisterGulSerialize();         // save/load wave: SaveRestore keystone (959c0/95a90) + small subs
+extern void RegisterSaveLoadDialog();       // save/load wave: SaveLoadDialog ctor (b8270) + vtable (14015f900)
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
@@ -576,6 +586,11 @@ static void RegisterCodeFunctions() {
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
     RegisterAnimalSerialize();
+    RegisterTradeSerialize();
+    RegisterAmbientEnvAndUISerialize();
+    RegisterGrowthSpawnSerialize();
+    RegisterCemeteryHealerSerialize();
+    RegisterFruitHappinessSerialize();
     RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
     RegisterMultiObjectForwarder();  // msg relay to multi-part child entities
     RegisterQuarryLive();          // QuarryComponent pit carve (terrain heightmap)
@@ -694,6 +709,11 @@ static void RegisterCodeFunctions() {
     RegisterEntityBatch();         // EntityList PreUpdate/PostUpdate/RemoveEntity/Serialize/etc.
     RegisterGoalBatch();           // StatGoal ExternalPtr resolver (265b0) + StatValueDispatch (da4e0)
     RegisterDialogBatch();         // WorkplaceUI FindComponent (d6c0) + AutoSaveDialog handler (5dec0)
+    RegisterCitizenListSerialize(); // save/load wave (code/Game/Game/citizenlist_serialize.cpp)
+    RegisterGoalsSerialize();       // save/load wave (code/Game/Game/goals_serialize.cpp)
+    RegisterGameGridSerialize();    // save/load wave (code/Game/Game/gamegrid_serialize.cpp)
+    RegisterGulSerialize();         // save/load wave (code/Game/Game/gameupdateloop_serialize.cpp)
+    RegisterSaveLoadDialog();       // save/load wave (code/Game/Dialog/saveloaddialog.cpp)
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
     RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)

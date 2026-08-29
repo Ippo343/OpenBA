@@ -2386,6 +2386,14 @@ bool EngineFuncsInit() {
         if (exref && *exref) {
             g_pSaveLoadSingleton = *exref;
         }
+        // Standalone: the 0x140151610 dispatch slot is not registered — resolve
+        // Save::SaveLoad::_singleton straight from the Runtime export. The cell is
+        // written by the SaveLoad ctor (GameUpdateLoop::Load step 25), so the
+        // pointer-to-cell is valid from DLL load even while the cell is still null.
+        if (!g_pSaveLoadSingleton) {
+            g_pSaveLoadSingleton = reinterpret_cast<void**>(
+                ResolveExport("?_singleton@SaveLoad@Save@@0PEAV12@EA"));
+        }
     }
 
     fn_SaveLoad_SetSaveSprite = reinterpret_cast<fn_SaveLoad_SetSaveSprite_t>(

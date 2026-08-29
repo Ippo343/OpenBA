@@ -913,9 +913,55 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     CitizenAIComponent_Update(self, time);
 }
 
-COMPONENT_LIVE_FACTORY_S(CitizenAIComponent, 0xd0, 0x89,
-                         "BANISHED_LIVE_CITIZENAI",
-                         CitizenAIComponent_UpdateAdapter,
-                         CitizenAIComponent_BodyInit)
+// COMPONENT_LIVE_FACTORY_S(CitizenAIComponent, 0xd0, 0x89, ...) hand-expanded
+// (save/load wave 2026-08-28) to wire slot 3 (+0x18, stream Serialize)
+// UNCONDITIONALLY at FACTORY time. The previous attempt used a namespace-scope
+// static initializer writing LiveVtable[3] — the exact trap in the memory
+// lesson "Live vtable slot must be wired in InstallLive": the first factory
+// call runs FillTypedVtable, which RESETS every slot (including [3] back to
+// the base-only serialize) and erased the static-init write. The runtime
+// slot-3 inventory dump (BANISHED_DUMP_SLOT3) caught it reporting BASE-ONLY.
+extern "C" void CitizenAIComponent_Serialize(void* self, void* stream);
+static uint32_t CitizenAIComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenAIComponent");
+    return cached;
+}
+static void* CitizenAIComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void CitizenAIComponent_UpdateVSlot(void* s, void* t) {
+    CitizenAIComponent_UpdateAdapter(reinterpret_cast<CitizenAIComponent*>(s),
+                                     reinterpret_cast<int64_t*>(t));
+}
+static void CitizenAIComponent_StartupVSlot(void* s) {
+    CitizenAIComponent_BodyInit(reinterpret_cast<CitizenAIComponent*>(s));
+}
+static void CitizenAIComponent_SerializeVSlot(void* s, void* stream) {
+    CitizenAIComponent_Serialize(s, stream);
+}
+static void CitizenAIComponent_FinishLiveVtable() {
+    // Serialize round-trip is not an opt-in feature: wired before the env gate.
+    CitizenAIComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&CitizenAIComponent_SerializeVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI")) {
+        CitizenAIComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&CitizenAIComponent_StartupVSlot);
+        CitizenAIComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&CitizenAIComponent_UpdateVSlot);
+    }
+}
+extern "C" void* CitizenAIComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0xd0, 0x89,
+        CitizenAIComponent_LiveVtable,
+        reinterpret_cast<void*>(&CitizenAIComponent_LiveGetTypeId));
+    CitizenAIComponent_FinishLiveVtable();
+    return p;
+}
+static void* CitizenAIComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0xd0, 0x89,
+        CitizenAIComponent_LiveVtable,
+        reinterpret_cast<void*>(&CitizenAIComponent_LiveGetTypeId));
+    CitizenAIComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(CitizenAIComponent, "Component",
               &CitizenAIComponent_Factory, &CitizenAIComponent_CreateInPlace);

@@ -69,6 +69,7 @@ static bool s_initialized = false;
 //   After loading, remove null entries from array (compact).
 
 void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
+    MultiObjectComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -272,8 +273,18 @@ static uint32_t MultiObjectComponent_LiveGetTypeId(void*) {
 }
 static void* MultiObjectComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
+static void MultiObjectComponent_ShutdownVSlot(void* self, void* stream) {
+    MultiObjectComponent_Shutdown(reinterpret_cast<MultiObjectComponent*>(self), stream);
+}
+
 // Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn.
 static void MultiObjectComponent_InstallLive() {
+    // Slot 3 (stream Shutdown/Serialize, retail 0x140125880) wired UNCONDITIONALLY,
+    // save/load wave 2026-08-28 — previously the class fell through to base-only
+    // Component_SerializeReimpl and the child-entity array (+0x48/+0x50/+0x58)
+    // silently reset on load.
+    MultiObjectComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&MultiObjectComponent_ShutdownVSlot);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MULTIOBJECT")) return;
     MultiObjectComponent_LiveVtable[12] = reinterpret_cast<void*>(&MultiObjectComponent_Slot12);
 }

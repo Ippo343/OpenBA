@@ -398,7 +398,16 @@ static void CharacterComponent_OnRemoveVSlot(void* s) {
     *reinterpret_cast<int32_t*>(p + 0x40) = -1;
 }
 
+extern "C" void CharacterComponent_Serialize(void* self, void* stream);
+static void CharacterComponent_SerializeVSlot(void* s, void* stream) {
+    CharacterComponent_Serialize(s, stream);
+}
 static void CharacterComponent_FinishLiveVtable() {
+    // Save/load wave (2026-08-27): slot 3 is the stream Serialize — wired
+    // unconditionally (not behind a feature env) so save/load round-trips this
+    // component's real state regardless of which other CHARACTER live flags are set.
+    CharacterComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&CharacterComponent_SerializeVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER")) {
         CharacterComponent_LiveVtable[4] =
             reinterpret_cast<void*>(&CharacterComponent_StartupVSlot);

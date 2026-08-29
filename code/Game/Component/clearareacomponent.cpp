@@ -41,6 +41,7 @@ static bool s_initialized = false;
 //   1. Empty serializer block (version 0) -- format compat stub
 //   2. Serializer block with clearState at +0x48
 void ClearAreaComponent_Shutdown(ClearAreaComponent* self, void* stream) {
+    ClearAreaComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -266,9 +267,18 @@ static void* ClearAreaComponent_CreateState(void* self) {                   // s
     return reinterpret_cast<uint8_t*>(self) + 0x28;                         // node @ +0x28
 }
 
+static void ClearAreaComponent_ShutdownVSlot(void* self, void* stream) {
+    ClearAreaComponent_Shutdown(reinterpret_cast<ClearAreaComponent*>(self), stream);
+}
+
 // Install the live vtable slots (re-run every instance: InitInertTyped re-stubs the
 // shared vtable). SM path takes precedence over the instant path when both are set.
 static void ClearAreaComponent_FinishLiveVtable(void* mem) {
+    // Slot 3 (stream Shutdown/Serialize, retail 0x140117ec0) wired UNCONDITIONALLY,
+    // save/load wave 2026-08-28 — previously the class fell through to base-only
+    // Component_SerializeReimpl and clearState silently reset on load.
+    ClearAreaComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&ClearAreaComponent_ShutdownVSlot);
     if (ClearAreaComponent_SMOn()) {
         ClearAreaComponent_LiveVtable[16] = reinterpret_cast<void*>(&ClearAreaComponent_GetDefaultState);
         ClearAreaComponent_LiveVtable[17] = reinterpret_cast<void*>(&ClearAreaComponent_CreateState);

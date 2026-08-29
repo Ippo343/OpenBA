@@ -39,6 +39,7 @@ namespace ComponentFactory {
 // The address every inert vtable slot carries. A component slot equal to this has NOT
 // been reimplemented, whatever the source tree suggests — see food_placement_harness.
 void* InertStubSlot();
+void* BaseSerializeSlot();   // slot-[3] base-only Serialize (inventory dump probe)
 
 // Slot count for an inert component vtable. 48 slots is comfortable headroom over
 // the largest real component vtable, so any in-range virtual call lands on a stub
@@ -96,6 +97,40 @@ bool LiveEnabled(const char* envVar);
             Name##_InertVtable,                                                \
             reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
         return mem;                                                           \
+    }
+
+// COMPONENT_INERT_FACTORY_SER — COMPONENT_INERT_FACTORY plus UNCONDITIONAL
+// stream-serializer wiring (vtable slot [3], +0x18). Serialize round-trip is
+// not an opt-in feature (save/load wave 2026-08-28): without this, the class
+// falls through to the base-only Component_SerializeReimpl and its per-instance
+// fields silently reset on save/load. SerFn signature:
+// `void SerFn(Name* self, void* stream)` (the Ghidra-misnamed *_Shutdown body).
+#define COMPONENT_INERT_FACTORY_SER(Name, Size, Flags, SerFn)                  \
+    static uint32_t Name##_InertGetTypeId(void*) {                             \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_InertVtable[::ComponentFactory::kInertVtableSlots];    \
+    static void Name##_SerVSlot(void* s, void* stream) {                       \
+        SerFn(reinterpret_cast<Name*>(s), stream);                             \
+    }                                                                          \
+    static void Name##_FinishInertVtableSer() {                                \
+        Name##_InertVtable[3] = reinterpret_cast<void*>(&Name##_SerVSlot);     \
+    }                                                                          \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),          \
+            Name##_InertVtable,                                                \
+            reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
+        Name##_FinishInertVtableSer();                                         \
+        return p;                                                              \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                             \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),      \
+            Name##_InertVtable,                                                \
+            reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
+        Name##_FinishInertVtableSer();                                         \
+        return mem;                                                            \
     }
 
 // COMPONENT_LIVE_FACTORY — the GrowthComponent bring-up pattern, generalized

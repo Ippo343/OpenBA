@@ -289,6 +289,7 @@ void WorkComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(WorkComponent, 0x38, 0x83)
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+COMPONENT_INERT_FACTORY_SER(WorkComponent, 0x38, 0x83, WorkComponent_Shutdown)
 REGISTER_TYPE(WorkComponent, "Component",
               &WorkComponent_Factory, &WorkComponent_CreateInPlace);

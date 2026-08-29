@@ -60,6 +60,13 @@ typedef void* (*fn_SaveLoad_Ctor_t)(void* self);
 static fn_SaveLoad_Ctor_t s_fn_SaveLoad_Ctor = nullptr;             // ??0SaveLoad@Save@@QEAA@XZ
 typedef uint32_t (*fn_Random_RandFull_t)(void* self);
 static fn_Random_RandFull_t s_fn_Random_RandFull = nullptr;         // ?Rand@Random@System@@QEAAIXZ (no-arg)
+typedef void (*fn_SavedState_Dtor_t)(void* self);
+static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedState@Save@@QEAA@XZ
+
+// code/Game/Game/gameupdateloop_serialize.cpp — the ported vtable +0x38 slot
+// (SaveRestore); the LOAD-FROM-SAVE branch below calls it directly.
+extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
+                                           void* savedState, int* outParam);
 
 // ============================================================
 // Step 2 — ProfessionList load (WaveH2; env BANISHED_LIVE_PROFESSIONLIST)
@@ -173,6 +180,41 @@ static void LoadProfessionList_Step2(uint8_t* p) {
 // resource list at +0x08, for the same reason as ProfessionList above: the global
 // factory load is the primitive that is proven to work in standalone. The
 // IsDerivedFrom(ExternalList) check is retail's (it stores null on a type mismatch).
+// ============================================================
+// Step 3 — UI material (+0xB8): "Material/UI/UIMaterialNoBlend.rsc"
+// ============================================================
+// Retail step 3 FindOrLoads the no-blend UI material and stores the
+// ExternalPtr<Material> at gw+0xB8. It was the last deferred step 1-4 Find.
+// Sole consumer today is GUL::Draw step 8 — SaveLoad::Draw(ctx, material) —
+// which only runs while a save/load operation is active; with the slot null,
+// SaveLoad::Draw crashed in SpriteContext::Flush -> MaterialInstance::Setup
+// (read of 0+0x28) the frame after an autosave started (2026-08-27).
+static void LoadUIMaterial_Step3(uint8_t* p) {
+    *(void**)(p + 0xB8) = nullptr;
+
+    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+        return;
+
+    uint8_t fname[16] = {0};
+    fn_Filename_CtorCStr(fname, "Material/UI/UIMaterialNoBlend.rsc");
+    void* mat = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
+    fn_Filename_Dtor(fname);
+
+    // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
+    // resolve Graphics::Material's BaseTypeInfo from the Runtime export).
+    static const uint32_t* s_matTypeInfo = reinterpret_cast<const uint32_t*>(
+        ResolveExport("?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A"));
+    bool isMat = false;
+    if (mat && s_matTypeInfo && fn_IsDerivedFrom)
+        isMat = fn_IsDerivedFrom(mat, *s_matTypeInfo);
+    if (isMat) *(void**)(p + 0xB8) = mat;
+
+    fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
+            *(void**)(p + 0xB8), mat, (int)isMat);
+    fflush(stderr);
+}
+
 static void LoadHelpTopics_Step4(uint8_t* p) {
     *(void**)(p + 0xA0) = nullptr;
 
@@ -308,6 +350,7 @@ static void LoadEnsureInit() {
     s_fn_UI_Ctor            = (fn_UI_Ctor_t)ResolveExport("??0UserInterface@UI@@QEAA@XZ");
     s_fn_AnimMgr_Ctor       = (fn_AnimMgr_Ctor_t)ResolveExport("??0AnimationManager@Graphics@@QEAA@XZ");
     s_fn_SaveLoad_Ctor      = (fn_SaveLoad_Ctor_t)ResolveExport("??0SaveLoad@Save@@QEAA@XZ");
+    s_fn_SavedState_Dtor    = (fn_SavedState_Dtor_t)ResolveExport("??1SavedState@Save@@QEAA@XZ");
     s_fn_Random_RandFull    = (fn_Random_RandFull_t)ResolveExport("?Rand@Random@System@@QEAAIXZ");
     fprintf(stderr, "[GUL::Load] resolves: RandSeed=%p Picking=%p UI=%p Anim=%p SaveLoad=%p RandFull=%p\n",
             (void*)s_fn_Random_Seeded_Ctor, (void*)s_fn_Picking_Scene_Ctor, (void*)s_fn_UI_Ctor,
@@ -918,7 +961,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     //   step 4 HelpTopics   → +0xA0, consumed only by the help dialog
     LoadDiseaseList_Step1(p);       // step 1 → +0xA8 (diseases); env-gated, else null
     LoadProfessionList_Step2(p);    // step 2 → +0xB0 (professions); env-gated, else null
-    *(void**)(p + 0xB8) = nullptr;  // ui material
+    LoadUIMaterial_Step3(p);        // step 3 → +0xB8 (UI material — SaveLoad::Draw overlay)
     LoadHelpTopics_Step4(p);        // step 4 → +0xA0 (help topics)
 
     // Step 5 — the gameplay Random (+0xD8, 0x9c4) seeded from gameLoop+0x30.
@@ -1407,6 +1450,50 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                     }
                 }
                 fflush(stderr);
+            }
+        }
+    }
+
+    // Step 31-LOAD — restore-from-save branch (save/load wave 2026-08-27).
+    // Retail Load's tail: `if (m_savedState) { this->vtbl[+0x38](this, 0,
+    // savedState, &out); ~SavedState(); MemFree; m_savedState = 0; }` (vcall at
+    // 0x14009754c) — the ENTIRE world state deserializes here instead of the
+    // worldgen/StartTown branch above. We call the ported SaveRestore directly
+    // (it IS our vtable +0x38 slot).
+    if (*(void**)(p + 0x58) != nullptr) {
+        void* savedState = *(void**)(p + 0x58);
+        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
+                savedState);
+        fflush(stderr);
+        // Char spatial-hash manager must exist BEFORE deserialize: citizen
+        // CharacterComponents are persist-created during SaveRestore and their
+        // OnAdd/enrolment allocates a char-index out of it (worldgen path seeds
+        // it before the citizen spawn for the same reason).
+        CharManager_Seed();
+        int loadOut = 0;
+        GameUpdateLoop_SaveRestore(loopVoid, 0, savedState, &loadOut);
+        if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
+        if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
+        *(void**)(p + 0x58) = nullptr;
+        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
+        fflush(stderr);
+
+        // Post-deserialize world-derived rebuilds. Retail runs the equivalent
+        // (CreateNaturalResource_impl_sub_e8c0 + region flush) from the GRID
+        // serializer's load tail (0x14009f100 -> 0x14009e8c0) — deferred there
+        // as a documented deviation, done here instead, after ALL subsystems
+        // (terrain heightmap, grid cells, entities) are restored. Same builders
+        // + same order as the worldgen branch above; dim comes from the
+        // deserialized map object itself (+0x00, what e8c0's *param_1 reads).
+        {
+            void* game = *(void**)(p + 0xf8);
+            int dim = game ? *(int32_t*)game : 0;
+            fprintf(stderr, "[GUL::Load] post-load rebuild: game=%p dim=%d\n", game, dim);
+            fflush(stderr);
+            if (game && dim > 0) {
+                MapTileGrid_Build(game, dim);   // tile classification (Game+0x80)
+                Pathfinder_Seed(game, dim);     // A* worker object (game+0x68)
+                Region_Seed(game, dim);         // region graph + pair cache (+0x70/+0x78)
             }
         }
     }

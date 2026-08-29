@@ -961,8 +961,59 @@ void GrowthComponent_InitFuncs() {
 #include <cstdlib>
 #include <cstring>
 
-COMPONENT_LIVE_FACTORY_SP(GrowthComponent, 0x50, 0xcb, "BANISHED_LIVE_GROWTH",
-                          GrowthComponent_Update, GrowthComponent_Startup,
-                          GrowthComponent_ApplyVisualScale)
+// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_SP to
+// ALSO wire slot 3 (Shutdown/Serialize, 0x1401207c0 — Ghidra mislabel, see
+// growthcomponent_serialize.cpp). Wired UNCONDITIONALLY, same rationale as
+// ResidenceComponent/StorageComponent: serialize round-trip is not an
+// opt-in feature the way the live growth simulation is. Without this, a
+// loaded save's GrowthComponent kept the base-Component serialize, its
+// resource/model sibling IBPs (+0x28/+0x30) and growthScale (+0x4c) came
+// back zeroed, and the next live tick re-derived the model's visual scale
+// from that zeroed state — trees visibly vanish and regrow from zero.
+extern "C" void GrowthComponent_Serialize2(void* self, void* stream);
+static uint32_t GrowthComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("GrowthComponent");
+    return cached;
+}
+static void* GrowthComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void GrowthComponent_UpdateVSlot(void* s, void* t) {
+    GrowthComponent_Update(reinterpret_cast<GrowthComponent*>(s), reinterpret_cast<int64_t*>(t));
+}
+static void GrowthComponent_StartupVSlot(void* s) {
+    GrowthComponent_Startup(reinterpret_cast<GrowthComponent*>(s));
+}
+static void GrowthComponent_PostUpdateVSlot(void* s) {
+    GrowthComponent_ApplyVisualScale(reinterpret_cast<GrowthComponent*>(s));
+}
+static void GrowthComponent_SerializeVSlot(void* self, void* stream) {
+    GrowthComponent_Serialize2(self, stream);
+}
+static void GrowthComponent_FinishLiveVtable() {
+    GrowthComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&GrowthComponent_SerializeVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_GROWTH")) {
+        GrowthComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&GrowthComponent_StartupVSlot);
+        GrowthComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
+        GrowthComponent_LiveVtable[10] =
+            reinterpret_cast<void*>(&GrowthComponent_PostUpdateVSlot);
+    }
+}
+extern "C" void* GrowthComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0xcb,
+        GrowthComponent_LiveVtable,
+        reinterpret_cast<void*>(&GrowthComponent_LiveGetTypeId));
+    GrowthComponent_FinishLiveVtable();
+    return p;
+}
+static void* GrowthComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, 0xcb,
+        GrowthComponent_LiveVtable,
+        reinterpret_cast<void*>(&GrowthComponent_LiveGetTypeId));
+    GrowthComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(GrowthComponent, "Component",
               &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);

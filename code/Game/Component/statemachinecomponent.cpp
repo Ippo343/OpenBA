@@ -156,6 +156,13 @@ uint32_t StateMachineComponent_Startup(StateMachineComponent* /*self*/) {
 // Shutdown (vtable slot [3], 0x14012b940)
 // ============================================================
 void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
+    // Resolve BEFORE the null-guards below. On the load-from-save path this is
+    // the FIRST StateMachineComponent call in the process — without this, every
+    // s_fn_* was still null, the guards skipped all reads, and the stream
+    // desynced right after the SM payload (the save side had resolved long
+    // before via the tick path and wrote base+4 bytes). Save/load wave 2026-08-28.
+    StateMachineComponent_ResolveHelpers();
+
     // Call Component base serialize first
     if (s_fn_Component_Serialize) {
         s_fn_Component_Serialize(self, stream);
@@ -1192,12 +1199,66 @@ static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
     StateMachineComponent_Draw(self);   // Tick(sm, Time(0.0f), 0, 0)
 }
 
-COMPONENT_LIVE_FACTORY_SOA(StateMachineComponent, 0x58, 0xcd,
-                           "BANISHED_LIVE_STATEMACHINE",
-                           StateMachineComponent_UpdateAdapter,
-                           StateMachineComponent_StartupSlot,
-                           "BANISHED_LIVE_SM_ONADDED",
-                           StateMachineComponent_OnAddedSlot)
+// COMPONENT_LIVE_FACTORY_SOA(StateMachineComponent, 0x58, 0xcd,
+//                            "BANISHED_LIVE_STATEMACHINE",
+//                            StateMachineComponent_UpdateAdapter,
+//                            StateMachineComponent_StartupSlot,
+//                            "BANISHED_LIVE_SM_ONADDED",
+//                            StateMachineComponent_OnAddedSlot)
+// hand-expanded (save/load wave 2026-08-27) to ALSO wire slot 3 (Shutdown/Serialize,
+// 0x14012b940) UNCONDITIONALLY — StateMachineComponent_Shutdown has been ported in this
+// file since the state-machine wave but nothing ever wrote it into the live vtable, so a
+// loaded save's building state machine kept the FillTypedVtable base-Component serialize
+// only: the 4 stateFlags bytes at +0x50..+0x53 never round-tripped and every building's
+// state machine reset to its ctor default on the first post-load tick. Unlike the
+// Startup/Update/OnAdded slots above (each still gated on its own env var, unchanged),
+// serialize round-trip is not an opt-in feature.
+static uint32_t StateMachineComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("StateMachineComponent");
+    return cached;
+}
+static void* StateMachineComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void StateMachineComponent_UpdateVSlot(void* s, void* t) {
+    StateMachineComponent_UpdateAdapter(reinterpret_cast<StateMachineComponent*>(s),
+                                        reinterpret_cast<int64_t*>(t));
+}
+static void StateMachineComponent_StartupVSlot(void* s) {
+    StateMachineComponent_StartupSlot(reinterpret_cast<StateMachineComponent*>(s));
+}
+static void StateMachineComponent_OnAddedVSlotImpl(void* s) {
+    StateMachineComponent_OnAddedSlot(reinterpret_cast<StateMachineComponent*>(s));
+}
+static void StateMachineComponent_ShutdownVSlot(void* self, void* stream) {
+    StateMachineComponent_Shutdown(reinterpret_cast<StateMachineComponent*>(self), stream);
+}
+static void StateMachineComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATEMACHINE")) {
+        StateMachineComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&StateMachineComponent_StartupVSlot);
+        StateMachineComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&StateMachineComponent_UpdateVSlot);
+    }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED"))
+        StateMachineComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&StateMachineComponent_OnAddedVSlotImpl);
+    StateMachineComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&StateMachineComponent_ShutdownVSlot);
+}
+extern "C" void* StateMachineComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0xcd,
+        StateMachineComponent_LiveVtable,
+        reinterpret_cast<void*>(&StateMachineComponent_LiveGetTypeId));
+    StateMachineComponent_FinishLiveVtable();
+    return p;
+}
+static void* StateMachineComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0xcd,
+        StateMachineComponent_LiveVtable,
+        reinterpret_cast<void*>(&StateMachineComponent_LiveGetTypeId));
+    StateMachineComponent_FinishLiveVtable();
+    return mem;
+}
 
 // ------------------------------------------------------------------
 // Slot 8 (+0x40) — retail 0x14012b640: StateMachine::Tick(sm, time, 0, 1).

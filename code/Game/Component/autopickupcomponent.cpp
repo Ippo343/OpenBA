@@ -63,6 +63,10 @@ static bool s_initialized = false;
 //   4. If loading: resize array at +0x30 via FUN_1400021d0
 //   5. Bulk-serialize int array elements
 void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
+    // but never called anywhere, so every s_fn_* below stayed null and load silently
+    // skipped this component's fields.
+    AutoPickupComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)
@@ -172,6 +176,7 @@ void AutoPickupComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(AutoPickupComponent, 0x40, 0x80)
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+COMPONENT_INERT_FACTORY_SER(AutoPickupComponent, 0x40, 0x80, AutoPickupComponent_Shutdown)
 REGISTER_TYPE(AutoPickupComponent, "Component",
               &AutoPickupComponent_Factory, &AutoPickupComponent_CreateInPlace);

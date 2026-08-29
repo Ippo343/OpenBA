@@ -846,10 +846,45 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
 // is already initialised to 1 at settings creation (game_main.cpp: settings[3]=1), so no
 // per-frame poke is needed.
 
-// COMPONENT_LIVE_FACTORY_STARTUP routes ONLY the Startup slot (index 4 / +0x20) to
-// StatusIconComponent_StartupInit when BANISHED_LIVE_STATUSICON (or the global
-// BANISHED_LIVE_COMPONENTS) is set; default-off => identical to the inert factory.
-COMPONENT_LIVE_FACTORY_STARTUP(StatusIconComponent, 0x108, 0xC2,
-                               "BANISHED_LIVE_STATUSICON", StatusIconComponent_StartupInit)
+// COMPONENT_LIVE_FACTORY_STARTUP(StatusIconComponent, 0x108, 0xC2,
+//                                "BANISHED_LIVE_STATUSICON", StatusIconComponent_StartupInit)
+// hand-expanded (save/load wave 2026-08-28) to ALSO wire slot 3 (Shutdown/Serialize,
+// see StatusIconComponent_Shutdown above) UNCONDITIONALLY — not behind the STARTUP env
+// var, since serialize round-trip is not an opt-in feature the way the startup init is.
+// Previously the class fell through to base-only Component_SerializeReimpl and the
+// icon value (+0x30-ish, serialized via Serialize_UInt above) silently reset on load.
+static uint32_t StatusIconComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("StatusIconComponent");
+    return cached;
+}
+static void* StatusIconComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void StatusIconComponent_StartupVSlot(void* s) {
+    StatusIconComponent_StartupInit(reinterpret_cast<StatusIconComponent*>(s));
+}
+static void StatusIconComponent_ShutdownVSlot(void* self, void* stream) {
+    StatusIconComponent_Shutdown(reinterpret_cast<StatusIconComponent*>(self), stream);
+}
+static void StatusIconComponent_FinishLiveVtable() {
+    StatusIconComponent_LiveVtable[3] =
+        reinterpret_cast<void*>(&StatusIconComponent_ShutdownVSlot);
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATUSICON"))
+        StatusIconComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&StatusIconComponent_StartupVSlot);
+}
+extern "C" void* StatusIconComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x108, 0xC2,
+        StatusIconComponent_LiveVtable,
+        reinterpret_cast<void*>(&StatusIconComponent_LiveGetTypeId));
+    StatusIconComponent_FinishLiveVtable();
+    return p;
+}
+static void* StatusIconComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x108, 0xC2,
+        StatusIconComponent_LiveVtable,
+        reinterpret_cast<void*>(&StatusIconComponent_LiveGetTypeId));
+    StatusIconComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(StatusIconComponent, "Component",
               &StatusIconComponent_Factory, &StatusIconComponent_CreateInPlace);

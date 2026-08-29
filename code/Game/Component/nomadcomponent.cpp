@@ -63,6 +63,10 @@ static bool s_initialized = false;
 //   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
 
 void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
+    // but never called anywhere, so every s_fn_* below stayed null and load silently
+    // skipped this component's fields.
+    NomadComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)
@@ -504,6 +508,7 @@ void NomadComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(NomadComponent, 0x78, 0x82)
+// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
+COMPONENT_INERT_FACTORY_SER(NomadComponent, 0x78, 0x82, NomadComponent_Shutdown)
 REGISTER_TYPE(NomadComponent, "ControllerComponent",
               &NomadComponent_Factory, &NomadComponent_CreateInPlace);

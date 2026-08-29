@@ -523,7 +523,47 @@ void StorageComponent_InitFuncs() {
 // Buildings are unaffected: Draw's own `desc+0x21 (_available) == 0` gate short-circuits
 // for a barn, whose capacity instead comes from the build-complete init
 // (TownStorage_BuildCompleteInit_7ff0), which deliberately does NOT test that byte.
-COMPONENT_LIVE_FACTORY_ONADDED(StorageComponent, 0x40, 0x81,
-                               "BANISHED_LIVE_STORAGE_ONADDED", StorageComponent_Draw)
+// COMPONENT_LIVE_FACTORY_ONADDED(StorageComponent, 0x40, 0x81,
+//                                "BANISHED_LIVE_STORAGE_ONADDED", StorageComponent_Draw)
+// hand-expanded (save/load wave 2026-08-27) to ALSO wire slot 3 (Shutdown/Serialize,
+// 0x14012c730). The body has been ported in this file since the original storage wave
+// but nothing ever wrote it into the live vtable, so a loaded save's StorageComponent
+// kept the FillTypedVtable base-Component serialize (owner IBP + capability flags
+// only) and never restored the +0x28 slot array / +0x38 capacity / +0x3c default type
+// — the row array (+0x50 per readers, i.e. slot-array header) stayed null, and the
+// first post-load QueryCount/PickupStoredRawMaterial call on that workplace crashed.
+// Wired UNCONDITIONALLY (not behind the ONADDED env var): serialize round-trip is not
+// an opt-in feature the way the Draw rebuild is.
+static uint32_t StorageComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageComponent");
+    return cached;
+}
+static void* StorageComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void StorageComponent_OnAddedVSlot(void* s) {
+    StorageComponent_Draw(reinterpret_cast<StorageComponent*>(s));
+}
+static void StorageComponent_ShutdownVSlot(void* self, void* stream) {
+    StorageComponent_Shutdown(reinterpret_cast<StorageComponent*>(self), stream);
+}
+static void StorageComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE_ONADDED"))
+        StorageComponent_LiveVtable[6] = reinterpret_cast<void*>(&StorageComponent_OnAddedVSlot);
+    StorageComponent_LiveVtable[3] = reinterpret_cast<void*>(&StorageComponent_ShutdownVSlot);
+}
+extern "C" void* StorageComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x81,
+        StorageComponent_LiveVtable,
+        reinterpret_cast<void*>(&StorageComponent_LiveGetTypeId));
+    StorageComponent_FinishLiveVtable();
+    return p;
+}
+static void* StorageComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x40, 0x81,
+        StorageComponent_LiveVtable,
+        reinterpret_cast<void*>(&StorageComponent_LiveGetTypeId));
+    StorageComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(StorageComponent, "Component",
               &StorageComponent_Factory, &StorageComponent_CreateInPlace);
