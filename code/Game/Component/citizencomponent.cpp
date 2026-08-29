@@ -3511,11 +3511,21 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream);
 static void CitizenComponent_SerializeVSlot(void* s, void* stream) {
     CitizenComponent_Serialize(s, stream);
 }
+extern "C" void CitizenComponent_PostLoadApply(void* self);  // citizencomponent_lifecycle.cpp
+static void CitizenComponent_PostLoadVSlot(void* s) { CitizenComponent_PostLoadApply(s); }
+
 static void CitizenComponent_FinishLiveVtable() {
     // Save/load wave (2026-08-27): slot 3 is the stream Serialize — wired
     // unconditionally so save/load round-trips this component's real state.
     CitizenComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&CitizenComponent_SerializeVSlot);
+    // Slot 11 (+0x58) is the LOAD-TIME visual re-apply (retail 0x1401140f0),
+    // dispatched by the load-only EntityList pass. Unconditional for the same reason
+    // slot 3 is: without it a loaded citizen's clothing colour, age scale and carried
+    // tool are never restored, and the per-tick CheckAge path only reaches
+    // SetupAgeMesh for citizens whose action stack is EMPTY, so busy ones never heal.
+    CitizenComponent_LiveVtable[11] =
+        reinterpret_cast<void*>(&CitizenComponent_PostLoadVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONADD"))
         CitizenComponent_LiveVtable[6] =
             reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);

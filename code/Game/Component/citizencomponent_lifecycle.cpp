@@ -30,6 +30,7 @@
 // 0x140110330 / 0x140030b90 are therefore reimplemented (their shared priority
 // predicate is ProfessionPriorityOf below), not registered.
 
+#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <algorithm>
@@ -60,6 +61,9 @@ static fn_SetVariant_t      s_fn_SetVariant      = nullptr;
 static fn_SetTransform_t    s_fn_SetTransform    = nullptr;
 static fn_LinkFamily_t      s_fn_sub_1fa0        = nullptr;
 static fn_SetupAge_t        s_fn_SetupYoung      = nullptr;
+static fn_SetupAge_t s_fn_SetupAdult = nullptr;      // 0x1401151a0
+typedef void (*fn_ShowTool_t)(void* citizenComp, int toolId);
+static fn_ShowTool_t s_fn_ShowToolOnEntity = nullptr;  // 0x1401173b0
 static fn_SetupAge_t        s_fn_SetupElder      = nullptr;
 static fn_AssignHousing_t   s_fn_AssignHousing   = nullptr;
 static fn_AnimInit_t        s_fn_AnimA1f0        = nullptr;
@@ -77,6 +81,8 @@ static void EnsureLifecycleFuncs() {
     s_fn_sub_1fa0        = reinterpret_cast<fn_LinkFamily_t>(ResolveAddr(Module::Exe, 0x140111fa0));
     s_fn_SetupYoung      = reinterpret_cast<fn_SetupAge_t>(ResolveAddr(Module::Exe, 0x140115110));
     s_fn_SetupElder      = reinterpret_cast<fn_SetupAge_t>(ResolveAddr(Module::Exe, 0x140115230));
+    s_fn_SetupAdult      = reinterpret_cast<fn_SetupAge_t>(ResolveAddr(Module::Exe, 0x1401151a0));
+    s_fn_ShowToolOnEntity= reinterpret_cast<fn_ShowTool_t>(ResolveAddr(Module::Exe, 0x1401173b0));
     s_fn_AssignHousing   = reinterpret_cast<fn_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
     s_fn_AnimA1f0        = reinterpret_cast<fn_AnimInit_t>(ResolveAddr(Module::Exe, 0x14010a1f0));
     s_pTid_WorkComp      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
@@ -344,4 +350,64 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     if (s_fn_AnimA1f0)
         s_fn_AnimA1f0(*reinterpret_cast<void**>(p + 0x278), 0,
                       g_fUVScale ? *g_fUVScale : 1.0f, 0.0f);
+}
+
+// ============================================================
+// CitizenComponent vtable slot 11 (+0x58) — retail 0x1401140f0
+// ============================================================
+// ⚠ NOT an update hook, despite this project's "OnUpdate2" naming for slot 11.
+// It is the LOAD-TIME RE-APPLY, dispatched once per component by the load-only
+// EntityList pass FUN_1400c4730 (ported as EntityList_PostLoad_c4730), which
+// GameUpdateLoop::Serialize (0x140095a90) calls at 0x140095d3f on the LOAD leg.
+//
+// It is the ONLY thing that restores a citizen's age scale and CLOTHING COLOUR:
+// SetupYoung/Adult/Elder write MeshInstance +0x10c..+0x114 (scale) and +0x118 =
+// (float)citizen+0x34 (the colour index, itself `(Rand()+Rand()) & 7` at spawn).
+// Graphics::MeshInstance::Serialize (Runtime 0x1800ff680) serializes ONLY the
+// AnimationState at +0xd8 and the +0xc8/+0xd0 array — it does NOT round-trip the
+// visual-scale Vector4 — and ModelComponent::Shutdown (0x140124b70) does not
+// either. So after a load the colour MUST be re-applied, and this is what does it.
+// It also re-shows the carried-tool mesh when the restored toolId (+0x1d8) != -1.
+//
+// Symptom while unwired: citizens come back with the WRONG clothes colours after a
+// load, and only some of them. The mix is the giveaway: CitizenAIComponent::Update
+// (0x14010f6a0) reaches CheckAge -> SetupAgeMesh only for an IDLE citizen — its tail
+// is `if (charComp+0x60 >= 0) return;` where +0x60 is the action-stack top — so the
+// few idle-on-that-tick citizens self-heal and the busy majority keep the
+// MeshInstance ctor default, drifting back one at a time as they go idle.
+//
+// Byte-faithful to retail, including the unguarded +0x288 description deref.
+extern "C" void CitizenComponent_PostLoadApply(void* selfV) {
+    EnsureLifecycleFuncs();
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    if (!p) return;
+
+    const int64_t desc   = *reinterpret_cast<int64_t*>(p + 0x288);
+    const float   thresh = desc ? *reinterpret_cast<float*>(desc + 0x44) : 0.0f;
+    const float   age    = *reinterpret_cast<float*>(p + 0x3c);
+    const bool    adult  = (*reinterpret_cast<int64_t*>(p + 0x208) != 0);
+
+    if (!adult) {
+        if (age < thresh) { if (s_fn_SetupElder) s_fn_SetupElder(p); }
+        else              { if (s_fn_SetupYoung) s_fn_SetupYoung(p); }
+    } else {
+        if (s_fn_SetupAdult) s_fn_SetupAdult(p);
+    }
+
+    // ⚠ KNOWN DEVIATION, opt-in via BANISHED_LIVE_CITIZEN_POSTLOAD_TOOL.
+    // Retail's 0x1401140f0 unconditionally re-shows the carried tool here
+    // (Entity_impl_73b0 0x1401173b0) when the restored toolId != -1. Our port of
+    // 73b0 CRASHES on that path at post-load time: it walks the tool description
+    // chain (MeshInstance+0x28 -> deref -> deref) and faults on a READ of
+    // 0x100000001, i.e. that link is not yet valid when the load-only slot-11 pass
+    // runs. 73b0's own header already notes this is "the crash-prone path the
+    // ShowTool call site deliberately guards off", so the gap is in 73b0, not here.
+    // The colour/scale re-apply above is the part that fixes the reported bug and is
+    // safe; leaving the tool re-show on by default would trade a cosmetic bug for a
+    // crash. Turn this on once 73b0's description lookup is fixed, then delete the
+    // flag and this comment.
+    const int32_t toolId = *reinterpret_cast<int32_t*>(p + 0x1d8);
+    if (toolId != -1 && s_fn_ShowToolOnEntity &&
+        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_POSTLOAD_TOOL"))
+        s_fn_ShowToolOnEntity(p, toolId);
 }
