@@ -6,10 +6,12 @@
 //         +0xE0 = scenario count
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // ============================================================
@@ -72,6 +74,11 @@ static void ScenarioDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* e
 // Source: Dialog\ScenarioDialog.cpp, line 0x3B
 
 void ScenarioDialog_Slot4(ScenarioDialog* self) {
+    // The Game container slot this function reads (+0x08 scenario ExternalList) is
+    // NULL until something loads it - standalone never runs retail GameContainer_Init.
+    // Fill it upstream rather than guarding the GetResourceCount deref below, which is
+    // byte-faithful and load-bearing.
+    GameContainer_EnsureLists();
     uintptr_t s = (uintptr_t)self;
     uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
     printf("[ScenarioDialog::Slot4] Setup called, self=%p, difficulty=%d\n", self, selfDifficulty);
@@ -134,10 +141,21 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         void* resource = *(void**)(*(uintptr_t*)((uintptr_t)scenarioList + 0x20) + (uintptr_t)i * 8);
 
         // Check IsDerivedFrom(Scenario)
-        if (!g_TypeId_Scenario) continue;
+        // These two rejections used to be silent, which made an empty scenario table
+        // indistinguishable from "no scenarios installed". Report them once.
+        if (!g_TypeId_Scenario) {
+            static bool warned = false;
+            if (!warned) { warned = true;
+                fprintf(stderr, "[ScenarioDialog] g_TypeId_Scenario is NULL (exe slot 0x1401c5b08 unregistered) - every scenario will be skipped\n"); fflush(stderr); }
+            continue;
+        }
         bool isScenario = fn_IsDerivedFrom(resource, *g_TypeId_Scenario);
         void* scenario = isScenario ? resource : nullptr;
-        if (!scenario) continue;
+        if (!scenario) {
+            fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n", i, resource, *g_TypeId_Scenario);
+            fflush(stderr);
+            continue;
+        }
 
         // Filter by difficulty: scenario+0x69 must match self+0xB8
         uint8_t scenDifficulty = *(uint8_t*)((uintptr_t)scenario + 0x69);
@@ -414,6 +432,40 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {
         // Saved scenario: load the save file first, then start from saved state
+        // This branch had never been exercised before 2026-08-30 (the dialog was
+        // unreachable). It crashed with EXEC-of-0, so report every pointer it needs
+        if (std::getenv("BANISHED_SCENARIO_TRACE"))
+        // and name the null instead of dying on it.
+        fprintf(stderr, "[ScenarioDialog] SAVED branch pointers: saveLoadSgl=%p persistSgl=%p fsSgl=%p SetOperation=%p SetSaveName=%p GetSavePath=%p GetDataDirectory=%p StringAssign=%p GetOperation=%p Update=%p TimeCtor=%p FilenameDtor=%p\n",
+                (void*)g_pSaveLoadSingleton, (void*)g_pPersistenceSingleton,
+                (void*)g_pFileSystemSingleton2,
+                (void*)fn_SaveLoad_SetOperation, (void*)fn_SaveLoad_SetSaveName,
+                (void*)fn_Persistence_GetSavePath, (void*)fn_FileSystem_GetDataDirectory,
+                (void*)fn_String_Assign, (void*)fn_SaveLoad_GetOperation,
+                (void*)fn_SaveLoad_Update, (void*)fn_Time_Ctor_Float, (void*)fn_Filename_Dtor);
+        fflush(stderr);
+        {
+            const char* missing = nullptr;
+            if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) missing = "SaveLoad singleton";
+            else if (!g_pPersistenceSingleton || !*g_pPersistenceSingleton) missing = "Persistence singleton";
+            else if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) missing = "FileSystem singleton";
+            else if (!fn_SaveLoad_SetOperation) missing = "SaveLoad::SetOperation";
+            else if (!fn_SaveLoad_SetSaveName) missing = "SaveLoad::SetSaveName";
+            else if (!fn_Persistence_GetSavePath) missing = "Persistence::GetSavePath";
+            else if (!fn_FileSystem_GetDataDirectory) missing = "FileSystem::GetDataDirectory";
+            else if (!fn_String_Assign) missing = "String::operator=";
+            else if (!fn_SaveLoad_GetOperation) missing = "SaveLoad::GetOperation";
+            else if (!fn_SaveLoad_Update) missing = "SaveLoad::Update";
+            else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";
+            else if (!fn_Filename_Dtor) missing = "Filename::~Filename";
+            if (missing) {
+                fprintf(stderr, "[ScenarioDialog] SAVED branch ABORTED - %s is NULL\n", missing);
+                fflush(stderr);
+                fn_String_Dtor(saveNameStr);
+                fn_String_Dtor(displayNameStr);
+                return;
+            }
+        }
         void* saveLoad = *g_pSaveLoadSingleton;
         fn_SaveLoad_SetOperation(saveLoad, 3, 0);
         fn_SaveLoad_SetSaveName(saveLoad, saveNameStr, 2);
@@ -453,7 +505,12 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Restore persistence path from GetSavePath result (matches original at 0x140077df0)
         fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), savePathBuf);
-        fn_Filename_Dtor(savePathBuf);  // destroy GetSavePath Filename after use
+        // NOT Filename::~Filename, and NOT here. Persistence::GetSavePath returns a
+        // System::String (verified in the DLL export table), so destroying its 8-byte
+        // result with the Filename dtor read the uninitialised tail of this 16-byte
+        // stack buffer and faulted on the garbage pointer it found. Retail destroys
+        // it as a String, and only after WorldSetup_LoadFromSave has run - see the
+        // String::~String(local_res10) at the tail of 0x140077cb0. Moved below.
 
         // Get parent controller and load from saved state
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
@@ -468,6 +525,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         // Use fn_LoadScenarioFromSave for the complex loop construction
         fn_LoadScenarioFromSave(parentCtrl, savedState,
                                  (void*)(uintptr_t)scenarioResIdx, nullIBP);
+        fn_String_Dtor(savePathBuf);   // retail: String::~String(local_res10)
     }
 
     fn_String_Dtor(displayNameStr);

@@ -551,6 +551,15 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
     void* buttonTutorial    = FindElement(self, "buttonTutorial");
     void* buttonMod         = FindElement(self, "buttonMod");
 
+    // Which buttons does this .rsc actually contain? A null here means the click can
+    // never dispatch, because no element ever receives the id.
+    fprintf(stderr, "[MainMenu] buttons: new=%p resume=%p load=%p save=%p options=%p menu=%p "
+                    "quit=%p achv=%p scenario=%p goal=%p map=%p tutorial=%p mod=%p\n",
+            buttonNew, buttonResume, buttonLoad, buttonSave, buttonOptions, buttonMenu,
+            buttonQuit, buttonAchievement, buttonScenario, buttonGoal, buttonMap,
+            buttonTutorial, buttonMod);
+    fflush(stderr);
+
     // --- Assign element IDs (with CheckPtr safety) ---
     if (buttonNew) {
         fn_InternalBasePtr_CheckPtr(&buttonNew);
@@ -684,6 +693,11 @@ void MainMenuDialog_Slot5(MainMenuDialog* self) {
 //
 // Private handler functions are now reimplemented above as clean C++.
 
+// NOTE (2026-08-30): this retail-shaped handler is NOT the one that runs. The
+// standalone MainMenuDialog vtable installs StandaloneStub_Slot8_OnCommand at +0x40
+// (see g_MainMenuDialog_Vtable_Standalone below), so THIS switch is dead code. Keep
+// the two switches in sync, or better, delete this one - a button wired only here
+// looks correct in review and does nothing in the game.
 void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int param4) {
     uintptr_t s = (uintptr_t)self;
 
@@ -996,6 +1010,20 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     case kButton_Map:
         printf("[MainMenuDialog::OnCommand] -> OpenMap (MapParamsDialog)\n");
         StandaloneOpenMapParams(self);
+        break;
+    case kButton_Tutorial:
+        // The main menu .rsc has NO buttonScenario - the [Setup] log prints it
+        // "NOT FOUND". Scenarios live behind the Tutorial button, which opens the same
+        // ScenarioDialog with difficulty=1. Neither id was in this switch, so a click
+        // logged "not yet wired" and did nothing (the retail-shaped MainMenuDialog_Slot8
+        // above HAS both cases, but it is not the handler the vtable installs).
+        // Wired 2026-08-30 so LANE1 row 42 is reachable by hand.
+        printf("[MainMenuDialog::OnCommand] -> OpenTutorial (ScenarioDialog, difficulty=1)\n");
+        MainMenuDialog_OpenTutorial(reinterpret_cast<MainMenuDialog*>(self));
+        break;
+    case kButton_Scenario:
+        printf("[MainMenuDialog::OnCommand] -> OpenScenario (ScenarioDialog, difficulty=0)\n");
+        MainMenuDialog_OpenScenario(reinterpret_cast<MainMenuDialog*>(self));
         break;
     case kButton_Mod:
         // Lane 4: ModDialog/ModDetailsDialog promoted out of the no-op stub

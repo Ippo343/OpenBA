@@ -2554,23 +2554,43 @@ bool EngineFuncsInit() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d20));
         if (d && *d) fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(*d);
     }
+    // NOTE (2026-08-30): the two mangled names below were both wrong, and wrong in the
+    // same way - their RETURN TYPES were swapped. Persistence::GetSavePath returns a
+    // System::String; FileSystem::GetDataDirectory returns a System::Filename. Verified
+    // against the DLL export table (objdump -p Runtime-x64.dll). Both ResolveExports
+    // therefore failed, and both exe dispatch-slot fallbacks (0x140151d38 / 0x140151d30)
+    // are unregistered, so both pointers stayed NULL - which made
+    // ScenarioDialog::LoadSelected's saved-scenario branch an EXEC-of-0. That branch is
+    // the one every tutorial takes.
     fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
-        ResolveExport("?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ"));
+        ResolveExport("?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ"));
     if (!fn_Persistence_GetSavePath) {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d38));
         if (d && *d) fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(*d);
     }
+    if (!fn_Persistence_GetSavePath)   // verified entry, Runtime-x64.dll
+        fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
+            ResolveAddr(Module::Runtime, 0x180007ad0));
     fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
-        ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ"));
+        ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
     if (!fn_FileSystem_GetDataDirectory) {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d30));
         if (d && *d) fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(*d);
     }
+    if (!fn_FileSystem_GetDataDirectory)   // verified entry, Runtime-x64.dll
+        fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
+            ResolveAddr(Module::Runtime, 0x180007bd0));
     // FileSystem singleton: exe dispatch at 0x140151d18 → pointer to Runtime singleton.
     // Original: MOV RAX,[0x140151d18]; MOV RCX,[RAX] (at 0x140077d5a)
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d18));
         g_pFileSystemSingleton2 = exref ? reinterpret_cast<void**>(*exref) : nullptr;
+        // 0x140151d18 is unregistered in standalone, so the line above yields NULL.
+        // The Runtime exports the singleton POINTER itself as data; ResolveExport gives
+        // the address of that pointer variable, which is exactly what this is.
+        if (!g_pFileSystemSingleton2)
+            g_pFileSystemSingleton2 = reinterpret_cast<void**>(
+                ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
     }
     fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
         ResolveAddr(Module::Exe, 0x1400b49f0));

@@ -933,6 +933,10 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
 
     // Iterate all open dialogs and update autosave timer on each
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d getFirst=%p isA=%p isDerived=%p restartFn=%p tidSlot=%p\n",
+            gs[1], (void*)fn_UI_GetFirstDialog, (void*)fn_IsA, (void*)fn_IsDerivedFrom,
+            (void*)fn_UpdateAutoSaveTimer, (void*)g_TypeId_AutoSaveDialogType);
+    fflush(stderr);
     if (fn_UI_GetFirstDialog && fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
         g_TypeId_AutoSaveDialogType) {
         uint32_t typeId = *g_TypeId_AutoSaveDialogType;
@@ -942,11 +946,17 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
             // iter is an InternalBasePtr node: deref +0x0 for object, +0x10 for next
             fn_InternalBasePtr_CheckPtr(iter);
             void* dialog = *(void**)iter;
+            if (std::getenv("BANISHED_AUTOSAVE_TRACE"))
+                fprintf(stderr, "[AutoSave]   walk dialog=%p isA(%u)=%d\n",
+                        dialog, typeId, (int)fn_IsA(dialog, typeId));
             if (fn_IsA(dialog, typeId)) {
                 fn_InternalBasePtr_CheckPtr(iter);
                 void* obj = *(void**)iter;
                 bool isDerived = fn_IsDerivedFrom(obj, typeId);
                 void* target = isDerived ? obj : nullptr;
+                fprintf(stderr, "[AutoSave]   MATCH obj=%p derived=%d -> restart %s\n",
+                        obj, (int)isDerived, target ? "YES" : "NO(null target)");
+                fflush(stderr);
                 if (target) fn_UpdateAutoSaveTimer(target);
             }
             iter = *(void**)((uintptr_t)iter + 0x10);

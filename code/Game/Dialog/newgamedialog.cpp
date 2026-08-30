@@ -13,6 +13,7 @@
 //                  Dialog\NewGameDialog.cpp
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include <cctype>
 #include <cstdint>
@@ -91,32 +92,11 @@ static inline bool ResourceIsType(void* resource, uint32_t* typeIdPtr) {
 // trust the result (the IsDerivedFrom type-check crashes against the incomplete
 // standalone factory tree — see feedback_factory_cascade_strategy). Idempotent.
 static void EnsureGeneratorListsLoaded() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad || !fn_String_Ctor_CStr ||
-        !fn_String_Dtor || !fn_Filename_AdjustDelimiters) return;
-
-    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
-
-    auto loadInto = [&](size_t off, const char* path) {
-        if (*reinterpret_cast<void**>(container + off)) return;  // already loaded
-        printf("[NewGameDialog] generator list LOADING '%s' (container+0x%zx)...\n",
-               path, off);
-        fflush(stdout);
-        uint8_t fnameBuf[8];
-        fn_String_Ctor_CStr(fnameBuf, path);
-        fn_Filename_AdjustDelimiters(fnameBuf);
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
-        fn_String_Dtor(fnameBuf);
-        *reinterpret_cast<void**>(container + off) = ext;  // trust FindOrLoad
-        printf("[NewGameDialog] generator list '%s' -> %p (container+0x%zx)\n",
-               path, ext, off);
-        fflush(stdout);
-    };
-
-    loadInto(0x10, "Game/Climate/ClimateList.rsc");
-    loadInto(0x18, "Game/StartCondition/StartConditions.rsc");
-    loadInto(0x20, "Game/Terrain/TerrainList.rsc");
+    // Now shared: GameContainer_EnsureLists (dialog_exe_helpers.cpp) fills the same
+    // three slots plus +0x00 achievements and +0x08 scenarios. ScenarioDialog::Slot4
+    // reads +0x08 and derefs it unguarded, so filling only these three left opening
+    // the Tutorial/Scenario dialog as a null-deref crash.
+    GameContainer_EnsureLists();
 }
 
 // ============================================================

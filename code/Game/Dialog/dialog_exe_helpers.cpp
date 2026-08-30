@@ -13,6 +13,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -93,7 +95,17 @@ typedef bool (*fn_UI_PausesGame_t)(void* ui);
 static fn_UI_PausesGame_t s_fn_PausesGame = nullptr;
 static bool s_asInit = false;
 
+static void AsBail(const char* why, long v) {
+    if (!std::getenv("BANISHED_AUTOSAVE_TRACE")) return;
+    fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
+    fflush(stderr);
+}
+
 void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
+    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
+        fprintf(stderr, "[AutoSave] timer FIRED (handler entered)\n");
+        fflush(stderr);
+    }
     if (!s_asInit) {
         s_fn_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
             ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
@@ -102,17 +114,19 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 
     // Not while the UI pauses the game.
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10);
-    if (s_fn_PausesGame && s_fn_PausesGame(ui)) return;
+    if (s_fn_PausesGame && s_fn_PausesGame(ui)) { AsBail("UI PausesGame", 1); return; }
 
     // Not while GameWorld flag bit 10 is set.
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { AsBail("no gameWorld", 0); return; }
     uint32_t gwFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd0);
-    if ((gwFlags >> 10) & 1) return;
+    if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).
-    if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) return;
+    if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) { AsBail("no SaveLoad singleton", 0); return; }
     void* saveLoad = *g_pSaveLoadSingleton;
-    if (!fn_SaveLoad_GetOperation || fn_SaveLoad_GetOperation(saveLoad) != 0) return;
+    if (!fn_SaveLoad_GetOperation) { AsBail("GetOperation fn null", 0); return; }
+    { int op = fn_SaveLoad_GetOperation(saveLoad);
+      if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
 
     // Min operation-display time = 1.0s.
     uint8_t timeBuf[8];
@@ -135,6 +149,70 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, sysStrBuf, 2);
     if (fn_String_Dtor) fn_String_Dtor(sysStrBuf);
 
+    // BANISHED_AUTOSAVE_TRACE=1: fires once per actual autosave.
+    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
+        fprintf(stderr, "[AutoSave] *** TRIGGERED - writing Auto.sav\n");
+        fflush(stderr);
+    }
+
     // Kick off the save operation (Operation 4, param -4).
     if (fn_SaveLoad_SetOperation) fn_SaveLoad_SetOperation(saveLoad, 4, -4);
+}
+
+// ============================================================
+// GameContainer_EnsureLists — standalone stand-in for GameContainer_Init (0x140099db0)
+// ============================================================
+// Retail populates the Game container (the object *g_pKeyMapSingleton points at) in
+// GameContainer_Init, called from FUN_140001120 with the menu loop's master
+// ExternalList. Standalone has no master list and never runs that init, so every slot
+// stays as the ctor left it: NULL.
+//
+// Container index -> byte offset -> resource (from the retail decompile):
+//   [0] +0x00  Game/Achievement/AchievementList.rsc
+//   [1] +0x08  Game/Scenario/ScenarioList.rsc      <- ScenarioDialog::Slot4 reads this
+//   [2] +0x10  Game/Climate/ClimateList.rsc
+//   [3] +0x18  Game/StartCondition/StartConditions.rsc
+//   [4] +0x20  Game/Terrain/TerrainList.rsc
+// (retail also fills [0x19]/[0x1a]/[0x1b] StringTables and [0xb]..[0x11] UI audio
+// effects; those are filled elsewhere in standalone and are not needed here.)
+//
+// This was previously an ad-hoc lambda inside newgamedialog.cpp that filled ONLY the
+// three slots the New Game combos needed (+0x10/+0x18/+0x20). ScenarioDialog::Slot4
+// reads +0x08 and calls ExternalList::GetResourceCount on it with no null check -
+// faithfully, since retail always has it - so opening the Tutorial/Scenario dialog was
+// an ACCESS_VIOLATION reading null+0x28. The fix is to fill the slot upstream, not to
+// guard the deref. Shared here so every dialog gets the same container.
+//
+// Uses ExternalFactory::FindOrLoad and trusts the result rather than IsDerivedFrom-
+// checking it (the type-check trips over the incomplete standalone factory tree - see
+// newgamedialog.cpp's original note). Idempotent: each slot is loaded at most once.
+void GameContainer_EnsureLists() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_ExternalFactory_FindOrLoad || !fn_String_Ctor_CStr ||
+        !fn_String_Dtor || !fn_Filename_AdjustDelimiters) return;
+
+    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
+
+    struct Entry { size_t off; const char* path; };
+    static const Entry kEntries[] = {
+        { 0x00, "Game/Achievement/AchievementList.rsc" },
+        { 0x08, "Game/Scenario/ScenarioList.rsc" },
+        { 0x10, "Game/Climate/ClimateList.rsc" },
+        { 0x18, "Game/StartCondition/StartConditions.rsc" },
+        { 0x20, "Game/Terrain/TerrainList.rsc" },
+    };
+
+    for (const Entry& e : kEntries) {
+        void** slot = reinterpret_cast<void**>(container + e.off);
+        if (*slot) continue;                       // already loaded
+        uint8_t fnameBuf[8];
+        fn_String_Ctor_CStr(fnameBuf, e.path);
+        fn_Filename_AdjustDelimiters(fnameBuf);
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+        fn_String_Dtor(fnameBuf);
+        *slot = ext;
+        fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, ext);
+    }
+    fflush(stderr);
 }

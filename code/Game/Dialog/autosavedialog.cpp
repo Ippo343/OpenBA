@@ -5,6 +5,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // AutoSaveDialog::Slot4 (0x14005E110) — vtable +0x20
@@ -98,6 +100,16 @@ void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
     uint64_t timeVal = *(uint64_t*)timeResult;
 
     s_StartTimer(self, 0, timeVal);
+
+    // BANISHED_AUTOSAVE_TRACE=1: one line every time the timer is (re-)armed. This is
+    // how an Options interval change is observed - OptionsDialog::ApplySettings calls
+    // back into here after writing gs[1], so a second line with a new interval is the
+    // proof that the restart loop found this dialog.
+    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
+        fprintf(stderr, "[AutoSave] timer armed: settingIdx=%d -> %.0f min (%.0f s)\n",
+                speedSetting, kIntervalMinutes[speedSetting], interval);
+        fflush(stderr);
+    }
 }
 
 // ============================================================
@@ -113,6 +125,13 @@ void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
 // Original: 0x14005E0F0.
 
 void AutoSaveDialog_Slot8(AutoSaveDialog* self, void* param2, int param3, int param4) {
+    // Report EVERY event the dialog receives, so "the timer never fired" can be told
+    // apart from "the timer fired and the handler bailed".
+    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
+        fprintf(stderr, "[AutoSave] Slot8 event msg=0x%x data=%d%s\n",
+                param3, param4, param3 == 0x13 ? "  <== TIMER" : "");
+        fflush(stderr);
+    }
     if (param3 != 0x13)
         return;
 
