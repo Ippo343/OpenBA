@@ -1568,6 +1568,96 @@ void DebugUI_Slot4(DebugUI* self) {
 // g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
 // with `if (!g_pEngineSingleton) return;`, so the perf counters simply stay
 // blank there — no crash, no gating needed.
+
+// ============================================================
+// Address-registry entry points (Lane 3 wave — see
+// notes/wave_remaining/lane3_debug.txt / LANE3_DEBUGMENU_REPORT.md).
+//
+// The *_Impl bodies above are byte-faithful ports of 11 exe addresses that
+// were never registered with ResolveAddr(Module::Exe, ...) — they existed
+// only as internal-linkage helpers called from DebugUI_Slot9's own switch,
+// not from the address table. These non-static wrappers give each retail
+// address a real, addressable function so standalone/reg_debugmenu.cpp can
+// RegisterExeAddr() them (defensive: nothing in the current call graph
+// resolves these fn_* pointers today, but any future/queued .rdata caller
+// of the raw address gets our reimplementation instead of EXEC-of-0).
+//
+// Signatures mirror the Ghidra decompiles exactly, including the unused
+// first parameter on the four Game_* helpers below (Ghidra shows
+// `longlong param_1` / `undefined8 param_1` that is read into a local and
+// then immediately overwritten before use — dead in retail too).
+// ============================================================
+
+// 0x14005fc60 — DebugUI::OnDiseaseComboChanged(self)
+void DebugUI_OnDiseaseComboChanged(DebugUI* self) {
+    DebugUI_OnDiseaseComboChanged_Impl(self);
+}
+
+// 0x14005fd20 — Game::SpawnTornado(unused) — loads Template/Tornado.rsc,
+// clones it, and adds the entity to the game world.
+void Game_SpawnTornado(void* /*unused*/) {
+    Game_SpawnTornado_Impl();
+}
+
+// 0x14005fe10 — Game::InfectRandomCitizen(unused) — picks a random citizen
+// and calls DiseaseComponent::Infect on it.
+void Game_InfectRandomCitizen(void* /*unused*/) {
+    Game_InfectRandomCitizen_Impl();
+}
+
+// 0x14005feb0 — Game::StartRandomFire(unused) — picks a random building with
+// a FireComponent and ignites it.
+void Game_StartRandomFire(void* /*unused*/) {
+    Game_StartRandomFire_Impl();
+}
+
+// 0x14005ff30 — DebugUI::TriggerDisasterOnBuilding(self) — infects a random
+// building with the disease selected in the DebugUI disease combo.
+void DebugUI_TriggerDisasterOnBuilding(DebugUI* self) {
+    DebugUI_TriggerDisasterOnBuilding_Impl(self);
+}
+
+// 0x140060000 — retail name recovered by Ghidra as "Game_KillAllCitizens",
+// but the body (iterates ComponentDescription entities, matches a
+// RawMaterialDescription sub-component, then Game::DestroyEntity) destroys
+// every loose raw-material entity, not citizens — see LANE3_DEBUGMENU_REPORT.md.
+// Kept under the Impl's original name; exposed here under the (likely
+// mislabeled) Ghidra name so the address registration is easy to audit.
+void Game_KillAllCitizens() {
+    Game_DestroyAllRawMaterials_Impl();
+}
+
+// 0x140060110 — Game::TriggerDisasterByType(unused, disasterType) — removes
+// the first queued disaster entity whose SelectDescription type matches.
+void Game_TriggerDisasterByType(void* /*unused*/, int disasterType) {
+    Game_TriggerDisasterByType_Impl(disasterType);
+}
+
+// 0x140060380 — Game::SpawnCitizens(void) — spawns up to 4 new citizens at
+// residences that have room, biased toward buildings with the most capacity.
+void Game_SpawnCitizens() {
+    Game_SpawnCitizens_Impl();
+}
+
+// 0x1400607e0 — DebugUI::OnDaySliderChanged(self) — re-derives game time from
+// the day slider and resets the weather clock to match.
+void DebugUI_OnDaySliderChanged(DebugUI* self) {
+    DebugUI_OnDaySliderChanged_Impl(self);
+}
+
+// 0x140061530 — DebugUI::WriteLightingColors(self, month) — writes the RGB
+// slider values (sun/ambient/fog + haze params) back into the weather table.
+void DebugUI_WriteLightingColors(DebugUI* self, int month) {
+    DebugUI_WriteLightingColors_Impl(self, month);
+}
+
+// 0x140061780 — DebugUI::SetDayLighting (Ghidra: DebugUI_sub_1780)(self, month)
+// — the inverse of WriteLightingColors: loads the weather table's per-month
+// lighting into the RGB sliders.
+void DebugUI_SetDayLighting(DebugUI* self, int month) {
+    DebugUI_SetDayLighting_Impl(self, month);
+}
+
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
