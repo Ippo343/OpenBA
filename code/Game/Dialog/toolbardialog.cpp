@@ -781,6 +781,28 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     *(void**)retBuf = (void*)(uintptr_t)dialogRef;
 }
 
+// Retail entry point for FUN_140101a80, so callers that reach it BY ADDRESS resolve
+// to this same body instead of a null pointer.
+//
+// The address was resolved into two differently-named variables and the sweep filed
+// them as separate rows: fn_Toolbar_Utility (dead — this file calls the impl
+// directly) and fn_SetFollowBuilding (engine_funcs.h, described as "set player
+// follow-building"). That second name is a MISNOMER. The decompile is unambiguous:
+// it finds-or-creates the ToolUI child DialogInstance for a Description, tracks its
+// position in the BST at arg1+0x50, and AddDialog/CloseDialog's it — the utility
+// panel toggler, nothing to do with follow mode.
+//
+// The two call shapes are identical, which is why one body serves both:
+//   arg1 = EntityUI/ToolController at gameWorld+0x120
+//   arg2 = InternalBasePtr* retval (non-trivial return)
+//   arg3 = ComponentDescription*
+// tutorialsetupdialog.cpp:369 passes exactly that and called it UNGUARDED, so with
+// the address unregistered a tutorial step that targets a building was an EXEC-of-0.
+extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param) {
+    Toolbar_Utility_Impl(gameSubsys, retBuf, param);
+    return retBuf;   // retail returns the retval pointer it was handed
+}
+
 // Captures the last DialogInstance created by Toolbar_Utility_Impl so the harness
 // can reach its controllers (e.g. drive MapUI::SetupImage after open).
 void* g_HarnessLastUtilityDialog = nullptr;

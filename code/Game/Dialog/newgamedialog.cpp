@@ -663,6 +663,11 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 //
 // Original: 0x140070110.
 
+// Forward decl: the FUN_1400b4540 chain builder, defined just below.
+void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t terrainSize,
+                        bool disastersOff, void* climateGen, void* terrainGen, void* mapGen,
+                        uint32_t scenarioResIdx, void* savedStateIBP);
+
 static void NewGameDialog_StartGame(NewGameDialog* self) {
     // Read combo indices from elements
     // comboCondition at +0xD0, comboTerrain at +0xB8, comboClimate at +0xC8
@@ -790,11 +795,42 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // StartNewGame — reimplementation of FUN_1400b4540
     // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain,
     // then sets next loop on the appropriate engine or dialog loader target.
+    StartNewGame_Impl(self->worldSetup, nameStr, (uint32_t)(uintptr_t)seed, terrainSize,
+                      /*disastersOff=*/disasterIdx != 0, climateGen, terrainGen, mapGen,
+                      /*scenarioResIdx=*/(uint32_t)-1, /*savedStateIBP=*/nullptr);
+}
+
+// ============================================================
+// StartNewGame (exe 0x1400b4540)
+// ============================================================
+// Builds the GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and hands it
+// to the engine (or to the owning dialog loader) as the next loop. This body was
+// NewGameDialog_StartGame's inline "reimplementation of FUN_1400b4540"; it is lifted
+// out here with retail's own 10-argument ABI so the address can be registered.
+//
+// Two callers, and only one of them worked:
+//   NewGameDialog "Start"        -> called the inline copy directly (this is the
+//                                   path BANISHED_AUTOSTART drives, so it is proven)
+//   ScenarioDialog::LoadSelected -> called fn_StartNewGame (scenariodialog.cpp:404)
+//                                   UNGUARDED. 0x1400b4540 was never registered, so
+//                                   picking a scenario and clicking Load was an
+//                                   EXEC-of-0. ScenarioDialog became reachable when
+//                                   its ctor+vtable were wired for the Tutorial
+//                                   button, which is why the sweep's "latent, not
+//                                   active today" note had gone stale.
+//
+// The two extra parameters are exactly what NewGameDialog hardcoded: a new sandbox
+// game passes scenarioResIdx = -1 and a null saved-state IBP, while a scenario passes
+// its resource index and (for a saved scenario) the restored state.
+void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t terrainSize,
+                        bool disastersOff, void* climateGen, void* terrainGen, void* mapGen,
+                        uint32_t scenarioResIdx, void* savedStateIBP) {
     {
-        uintptr_t ws = (uintptr_t)self->worldSetup;
-        fprintf(stderr, "[NewGameDialog::StartGame] ENTER self=%p worldSetup=%p "
-                "GameUpdateLoop_Vtable=%p\n", (void*)self, (void*)ws,
-                (void*)g_GameUpdateLoop_Vtable);
+        uintptr_t ws = (uintptr_t)worldSetup;
+        fprintf(stderr, "[StartNewGame] ENTER worldSetup=%p seed=%u size=%u disastersOff=%d "
+                "scenarioIdx=%d saved=%p GameUpdateLoop_Vtable=%p\n",
+                (void*)ws, seed, terrainSize, (int)disastersOff, (int)scenarioResIdx,
+                savedStateIBP, (void*)g_GameUpdateLoop_Vtable);
         fflush(stderr);
 
         // Step 1: Allocate and construct GameUpdateLoop (0x160 bytes)
@@ -808,7 +844,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
             // Copy name string to +0x28
             fn_String_Ctor_CStr((void*)((uintptr_t)gameLoop + 0x28), "");
             fn_String_Assign((void*)((uintptr_t)gameLoop + 0x28), nameStr);
-            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = (uint32_t)(uintptr_t)seed;
+            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = seed;
             *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSize;
             *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
             *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)mapGen;
@@ -821,18 +857,20 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
             }
             *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
             *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
-            // disaster flag: combo idx 0 = disasters ON -> +0xD0 = 0
-            //                combo idx != 0 = disasters OFF -> +0xD0 = 0xF0
-            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = (disasterIdx == 0) ? 0 : 0xF0;
+            // disaster flag: +0xD0 = 0 means disasters ON, 0xF0 means OFF.
+            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = disastersOff ? 0xF0 : 0;
             for (uintptr_t off = 0xD8; off <= 0x148; off += 8) {
                 *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
             }
             // Store retval ptr at +0x150
             uint8_t nullIBP[8];
             fn_InternalBasePtr_Ctor(nullIBP, nullptr);
-            *(uint64_t*)((uintptr_t)gameLoop + 0x150) = *(uint64_t*)nullIBP;
+            // +0x150 = saved-state IBP (retail *param_10; null for a new sandbox game).
+            *(uint64_t*)((uintptr_t)gameLoop + 0x150) =
+                savedStateIBP ? *(uint64_t*)savedStateIBP : *(uint64_t*)nullIBP;
             *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
-            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = (uint32_t)-1;  // param_9 = -1
+            // +0x15C = scenario resource index (retail param_9; -1 = plain new game).
+            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = scenarioResIdx;
             pGameLoop = gameLoop;
         }
 
@@ -871,7 +909,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         // In StartNewGame, the check is: +0xC0 (loaderLoop1) == 0 -> use engine at +0xB8
         uintptr_t loaderLoop1 = *(uintptr_t*)(ws + 0xC0);
         uintptr_t engPtr0 = *(uintptr_t*)(ws + 0xB8);
-        fprintf(stderr, "[NewGameDialog::StartGame] loops built game=%p dl=%p outer=%p; "
+        fprintf(stderr, "[StartNewGame] loops built game=%p dl=%p outer=%p; "
                 "ws+0xC0(loop)=%p ws+0xB8(engine)=%p -> %s\n",
                 pGameLoop, pDlLoop, pOuterLoop, (void*)loaderLoop1, (void*)engPtr0,
                 loaderLoop1 ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
@@ -881,10 +919,22 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         } else {
             SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
         }
-        fprintf(stderr, "[NewGameDialog::StartGame] EXIT — next loop set, "
-                "transition pending\n");
+        fprintf(stderr, "[StartNewGame] EXIT — next loop set, transition pending\n");
         fflush(stderr);
+        return pOuterLoop;
     }
+}
+
+// Retail-ABI entry for 0x1400b4540, registered so ScenarioDialog's by-address call
+// lands in the same body the (autostart-proven) NewGameDialog path uses. Retail's
+// param_3 / param_4 arrive as pointer-width slots carrying ints.
+extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed,
+                                 void* terrainSize, char disastersOff, void* climateGen,
+                                 void* terrainGen, void* mapGen, unsigned scenarioResIdx,
+                                 void* savedStateIBP) {
+    StartNewGame_Impl(worldSetup, nameStr, (uint32_t)(uintptr_t)seed,
+                      (uint32_t)(uintptr_t)terrainSize, disastersOff != 0,
+                      climateGen, terrainGen, mapGen, scenarioResIdx, savedStateIBP);
 }
 
 void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {

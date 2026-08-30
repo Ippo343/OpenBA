@@ -3962,8 +3962,13 @@ extern fn_TSD_FindInstance_t fn_TSD_FindInstance;
 typedef void (*fn_TSD_FindByString_t)(void* retval, void* string_ptr);
 extern fn_TSD_FindByString_t fn_TSD_FindByString;
 
-// FUN_140101a80(playerController, retval, entityAsUlong) — set player follow-building
-// Selects a building entity for the player's follow/inspection mode.
+// FUN_140101a80(entityUI, retval, description) — toolbar UTILITY PANEL toggler.
+// ⚠ The old name/description here ("set player follow-building") was a MISNOMER.
+// The decompile find-or-creates the ToolUI child DialogInstance for a Description,
+// tracks its position in the BST at arg1+0x50, and AddDialog/CloseDialog's it.
+// Same function as toolbardialog.cpp's Toolbar_Utility_Impl; registered at the
+// address via Toolbar_Utility_Reg so both names resolve to the one body.
+// arg1 is the EntityUI at gameWorld+0x120, NOT the PlayerController.
 typedef void (*fn_SetFollowBuilding_t)(void* playerController, void* retval, uint64_t entityPtr);
 extern fn_SetFollowBuilding_t fn_SetFollowBuilding;
 

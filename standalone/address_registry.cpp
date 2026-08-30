@@ -514,6 +514,9 @@ extern void RegisterGameSettingsPersist();    // GameSettings <-> IO::Persistenc
 extern void RegisterNameDb();                 // NameDatabase::GenerateName (0x1400a4b30) — town/citizen name generator
 extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface);  // 0x140099260 (optionsdialog.cpp)
 extern "C" float CalcWindFactor_Reg(void* time);                          // 0x1401027c0 (gameupdateloop.cpp)
+extern "C" void* Toolbar_Utility_Reg(void*, void*, uint64_t);             // 0x140101a80 (toolbardialog.cpp)
+extern "C" void StartNewGame_Reg(void*, void*, void*, void*, char, void*, void*, void*,
+                                 unsigned, void*);                        // 0x1400b4540 (newgamedialog.cpp)
 namespace Game { void RegisterDefaultInputBindings(); }                   // 0x1400992f0 (inputbindings.cpp)
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
 extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
@@ -708,6 +711,15 @@ static void RegisterCodeFunctions() {
     // the only null leg of the 3-way guard around Audio::Scene::Update, so the entire
     // per-frame audio scene update was being skipped every frame.
     RegisterExeAddr(0x1401027c0, reinterpret_cast<uintptr_t>(&CalcWindFactor_Reg));
+    // 0x140101a80 toolbar utility panel toggler. tutorialsetupdialog.cpp:369 calls it
+    // UNGUARDED via the misnamed fn_SetFollowBuilding, so a tutorial step targeting a
+    // building was a latent EXEC-of-0 (LANE1 sweep row 53, the LIVE-UNGUARDED half).
+    RegisterExeAddr(0x140101a80, reinterpret_cast<uintptr_t>(&Toolbar_Utility_Reg));
+    // 0x1400b4540 StartNewGame: the GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop
+    // chain. NewGameDialog had it inlined (the autostart-proven path); ScenarioDialog
+    // called it BY ADDRESS and unguarded, so picking a scenario and clicking Load was an
+    // EXEC-of-0 (LANE1 sweep row 42). One shared body now serves both.
+    RegisterExeAddr(0x1400b4540, reinterpret_cast<uintptr_t>(&StartNewGame_Reg));
     RegisterCitizen25();             // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030
