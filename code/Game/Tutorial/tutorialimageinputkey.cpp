@@ -20,6 +20,9 @@
 #include <cstdint>
 #include <cstdio>
 
+// hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
+namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
+
 // ============================================================
 // Vtable pointer (resolved once)
 // ============================================================
@@ -249,8 +252,12 @@ void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
 
     // 9. Get key name as UI::String
     uint8_t uiStr[16] = {};
-    if (fn_GetInputKeyName && g_pKeyMapSingleton && *g_pKeyMapSingleton)
-        fn_GetInputKeyName(*g_pKeyMapSingleton, uiStr, deviceType, inputIndex);
+    // LANE1 row 36: 0x140099c20 is unregistered, so fn_GetInputKeyName was
+    // permanently null and every tutorial key name rendered blank. The function is
+    // already ported byte-for-byte as Hotkey_BuildKeyName (hotkeytooltipui.cpp);
+    // retail's param_1 is the KeyMap container and that port looks up the same
+    // *g_pKeyMapSingleton, so this is the identical call, not a fourth copy.
+    Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
 
     // 10. Set text on the TextElement
     if (fn_InternalBasePtr_CheckPtr)

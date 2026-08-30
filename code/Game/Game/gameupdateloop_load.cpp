@@ -719,7 +719,10 @@ static void* Reimpl_FUN_140093e30(void* weatherObj, void* envRes, void* climateG
     return weatherObj;
 }
 
-// FUN_1400182b0 — SkyMesh transform / quadtree-LOD init (+0x88, 0x60).
+// FUN_1400182b0 - CharacterGrid ctor (+0x88, 0x60). A loose Morton (Z-order)
+// quadtree over characters, NOT a SkyMesh transform (that older name came from a
+// wrong plate comment on retail Load; corrected 2026-08-30 - see
+// engine/types/GameUpdateLoop.h +0x88).
 static void* Reimpl_FUN_1400182b0(void* selfMem, float param2) {
     uint8_t* p = (uint8_t*)selfMem;
     memset(p, 0, 0x60);
@@ -1137,7 +1140,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         *(void**)(p + 0x70) = mem;
     }
 
-    // Step 21 — SkyMesh transform / LOD (+0x88, 0x60).
+    // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
         if (mem) Reimpl_FUN_1400182b0(mem, 2048.0f);
@@ -1201,7 +1204,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         if (mem) {
             uint8_t* d = (uint8_t*)mem;
             *(int32_t*)(d + 0x00) = -1;
-            *(void**)(d + 0x08) = nullptr;     // music list resource — DEFERRED
+            *(void**)(d + 0x08) = nullptr;     // MusicTrackList - DEFERRED.
+            // BLOCKER for porting MusicPlayer::Update (0x1400a40e0): that
+            // function reads *(int*)(musicPlayer[+0x08] + 0x28) as the track
+            // count with no null check, so it MUST NOT be wired until this
+            // Find("Game/MusicTracks.rsc") is done. See LANE1 report row 39.
             *(uint64_t*)(d + 0x10) = 0;
         }
         *(void**)(p + 0x80) = mem;

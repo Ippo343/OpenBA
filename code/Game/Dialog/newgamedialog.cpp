@@ -665,7 +665,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
 // Forward decl: the FUN_1400b4540 chain builder, defined just below.
 void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t terrainSize,
-                        bool disastersOff, void* climateGen, void* terrainGen, void* mapGen,
+                        bool disastersOff, void* mapGen, void* terrainGen, void* climateGen,
                         uint32_t scenarioResIdx, void* savedStateIBP);
 
 static void NewGameDialog_StartGame(NewGameDialog* self) {
@@ -795,8 +795,10 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // StartNewGame — reimplementation of FUN_1400b4540
     // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain,
     // then sets next loop on the appropriate engine or dialog loader target.
+    // Retail's argument order at 0x1400b4540 is (mapGen, terrainGen, climateGen):
+    // args 6/7/8 land in GameUpdateLoop +0x40/+0x48/+0x50 in that order.
     StartNewGame_Impl(self->worldSetup, nameStr, (uint32_t)(uintptr_t)seed, terrainSize,
-                      /*disastersOff=*/disasterIdx != 0, climateGen, terrainGen, mapGen,
+                      /*disastersOff=*/disasterIdx != 0, mapGen, terrainGen, climateGen,
                       /*scenarioResIdx=*/(uint32_t)-1, /*savedStateIBP=*/nullptr);
 }
 
@@ -823,7 +825,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
 // game passes scenarioResIdx = -1 and a null saved-state IBP, while a scenario passes
 // its resource index and (for a saved scenario) the restored state.
 void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t terrainSize,
-                        bool disastersOff, void* climateGen, void* terrainGen, void* mapGen,
+                        bool disastersOff, void* mapGen, void* terrainGen, void* climateGen,
                         uint32_t scenarioResIdx, void* savedStateIBP) {
     {
         uintptr_t ws = (uintptr_t)worldSetup;
@@ -929,12 +931,12 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
 // lands in the same body the (autostart-proven) NewGameDialog path uses. Retail's
 // param_3 / param_4 arrive as pointer-width slots carrying ints.
 extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed,
-                                 void* terrainSize, char disastersOff, void* climateGen,
-                                 void* terrainGen, void* mapGen, unsigned scenarioResIdx,
+                                 void* terrainSize, char disastersOff, void* mapGen,
+                                 void* terrainGen, void* climateGen, unsigned scenarioResIdx,
                                  void* savedStateIBP) {
     StartNewGame_Impl(worldSetup, nameStr, (uint32_t)(uintptr_t)seed,
                       (uint32_t)(uintptr_t)terrainSize, disastersOff != 0,
-                      climateGen, terrainGen, mapGen, scenarioResIdx, savedStateIBP);
+                      mapGen, terrainGen, climateGen, scenarioResIdx, savedStateIBP);
 }
 
 void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {

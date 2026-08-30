@@ -380,9 +380,15 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         uint32_t seedVal = *(uint32_t*)(scenario + 0x60);
         uint32_t terrainSizeVal = *(uint32_t*)(scenario + 0x64);
         char disasterOff = *(char*)(scenario + 0x68);
-        void* climateGen = *(void**)(scenario + 0x70);
+        // Scenario generator triple. These offsets were labelled climate/terrain/map;
+        // retail's own LoadSelected (0x140077cb0, the call at +0x243) proves the outer
+        // two are the other way round: it passes +0x70 as arg6 and +0x80 as arg8, and
+        // 0x1400b4540 stores args 6/7/8 into GameUpdateLoop +0x40/+0x48/+0x50, which
+        // Load reads as mapGen / terrainGen / climateGen. The positional order passed
+        // below is unchanged and already matched retail - only the names were wrong.
+        void* mapGen = *(void**)(scenario + 0x70);
         void* terrainGen = *(void**)(scenario + 0x78);
-        void* mapGen = *(void**)(scenario + 0x80);
+        void* climateGen = *(void**)(scenario + 0x80);
 
         // Get scenario index from entry array: +0x30 in the entry
         uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
@@ -397,13 +403,13 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
                seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
-        printf("[ScenarioDialog::LoadSelected] climateGen=%p, terrainGen=%p, mapGen=%p, parentCtrl=%p\n",
-               climateGen, terrainGen, mapGen, parentCtrl);
+        printf("[ScenarioDialog::LoadSelected] mapGen=%p, terrainGen=%p, climateGen=%p, parentCtrl=%p\n",
+               mapGen, terrainGen, climateGen, parentCtrl);
 
         // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
         // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
         fn_StartNewGame(parentCtrl, displayNameStr, seedVal, terrainSizeVal,
-                        disasterOff, climateGen, terrainGen, mapGen,
+                        disasterOff, mapGen, terrainGen, climateGen,
                         scenarioResIdx, nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {

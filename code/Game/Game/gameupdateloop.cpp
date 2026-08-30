@@ -95,10 +95,13 @@ static int32_t** g_pp_frameIndex = nullptr;
 // Exe function pointers (not yet in engine_funcs.h)
 // ============================================================
 
-// Game::UpdateTimedEvents (FUN_1400a5d10) — processes timed event queue
-// RCX=timedEventQueue (game+0x78), RDX=time
-typedef void (*fn_Game_UpdateTimedEvents_t)(void* timedEventQueue, void* time);
-static fn_Game_UpdateTimedEvents_t fn_Game_UpdateTimedEvents = nullptr;
+// RegionPairCache::Tick (0x1400a5d10) - per-sim-tick staleness sweep of the
+// pathfinder REGION-PAIR DISTANCE CACHE at Game+0x78. Named "UpdateTimedEvents"
+// here historically; there is no timed-event queue. Ported + registered
+// 2026-08-30 (reg_pf_region.cpp) - see code/Game/Action/region_paircache.cpp.
+// RCX=regionPairCache (game+0x78), RDX=time
+typedef void (*fn_RegionPairCacheTick_t)(void* regionPairCache, void* time);
+static fn_RegionPairCacheTick_t fn_RegionPairCacheTick = nullptr;
 
 // Graphics::AnimationManager::Update(this, Time const&, bool rootOnly)
 // Runtime DLL export
@@ -122,8 +125,8 @@ static fn_EntityList_PostUpdate_t fn_EntityList_PostUpdate = nullptr;
 
 // AmbientSound::Update (FUN_1400a40e0) — ambient sound state update
 // RCX=ambientSoundData
-typedef void (*fn_AmbientSound_Update_t)(void* ambientSoundData);
-static fn_AmbientSound_Update_t fn_AmbientSound_Update = nullptr;
+typedef void (*fn_MusicPlayer_Update_t)(void* musicPlayer);
+static fn_MusicPlayer_Update_t fn_MusicPlayer_Update = nullptr;
 
 // EntityUI::Update / PlayerToolUpdate (FUN_1401026a0)
 // RCX=entityUI, RDX=time(int64), R8=inputFlag(bool)
@@ -308,9 +311,11 @@ static fn_Weather_Dtor_t fn_Weather_Dtor = nullptr;
 typedef void (*fn_EventNotifier_Cleanup_t)(void* stringTable);
 static fn_EventNotifier_Cleanup_t fn_EventNotifier_Cleanup = nullptr;
 
-// MusicPlayer::Dtor (FUN_140018220)
-typedef void (*fn_MusicPlayer_Dtor_t)(void* musicPlayer);
-static fn_MusicPlayer_Dtor_t fn_MusicPlayer_Dtor = nullptr;
+// CharacterGrid::Dtor (FUN_140018220) - frees the five arrays at +0x10/+0x20/
+// +0x30/+0x40/+0x50 of the 0x60-byte Morton quadtree at gameWorld+0x88.
+// NOT a music dtor: the MusicPlayer at +0x80 is a POD retail simply MemFrees.
+typedef void (*fn_CharacterGrid_Dtor_t)(void* characterGrid);
+static fn_CharacterGrid_Dtor_t fn_CharacterGrid_Dtor = nullptr;
 
 // ImageCapture::Dtor (FUN_1400a4fc0)
 typedef void (*fn_ImageCapture_Dtor_t)(void* capture, void* p2, void* p3, void* p4);
@@ -465,7 +470,7 @@ static void EnsureInit() {
     g_fCamParam3 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172240));
 
     // Exe functions
-    fn_Game_UpdateTimedEvents = reinterpret_cast<fn_Game_UpdateTimedEvents_t>(
+    fn_RegionPairCacheTick = reinterpret_cast<fn_RegionPairCacheTick_t>(
         ResolveAddr(Module::Exe, 0x1400a5d10));
     fn_EntityList_Update = reinterpret_cast<fn_EntityList_Update_t>(
         ResolveAddr(Module::Exe, 0x1400c4090));
@@ -473,7 +478,7 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x14008c2b0));
     fn_EntityList_PostUpdate = reinterpret_cast<fn_EntityList_PostUpdate_t>(
         ResolveAddr(Module::Exe, 0x1400c43d0));
-    fn_AmbientSound_Update = reinterpret_cast<fn_AmbientSound_Update_t>(
+    fn_MusicPlayer_Update = reinterpret_cast<fn_MusicPlayer_Update_t>(
         ResolveAddr(Module::Exe, 0x1400a40e0));
     fn_EntityUI_Update = reinterpret_cast<fn_EntityUI_Update_t>(
         ResolveAddr(Module::Exe, 0x1401026a0));
@@ -535,7 +540,7 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x140093eb0));
     fn_EventNotifier_Cleanup = reinterpret_cast<fn_EventNotifier_Cleanup_t>(
         ResolveAddr(Module::Exe, 0x14000a8a0));
-    fn_MusicPlayer_Dtor = reinterpret_cast<fn_MusicPlayer_Dtor_t>(
+    fn_CharacterGrid_Dtor = reinterpret_cast<fn_CharacterGrid_Dtor_t>(
         ResolveAddr(Module::Exe, 0x140018220));
     fn_ImageCapture_Dtor = reinterpret_cast<fn_ImageCapture_Dtor_t>(
         ResolveAddr(Module::Exe, 0x1400a4fc0));
@@ -647,11 +652,11 @@ static void EnsureInit() {
 
     // Bulk null-check all ResolveExport pointers
     #define CHECK_FN(fn) if (!(fn)) TRACE("[GameUpdateLoop] WARNING: " #fn " is NULL!\n")
-    CHECK_FN(fn_Game_UpdateTimedEvents);
+    CHECK_FN(fn_RegionPairCacheTick);
     CHECK_FN(fn_EntityList_Update);
     CHECK_FN(fn_CitizenList_Update);
     CHECK_FN(fn_EntityList_PostUpdate);
-    CHECK_FN(fn_AmbientSound_Update);
+    CHECK_FN(fn_MusicPlayer_Update);
     CHECK_FN(fn_EntityUI_Update);
     CHECK_FN(fn_PlayerController_CalcTransform);
     CHECK_FN(fn_AchievementInstance_Update);
@@ -744,11 +749,11 @@ extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps
 namespace {
 
 enum SimPhase {
-    kPhTimedEvents = 0, kPhAnimation, kPhEntityList, kPhWeather,
+    kPhPairCache = 0, kPhAnimation, kPhEntityList, kPhWeather,
     kPhCitizenList, kPhPostSim, kPhWholeUpdate, kPhCount
 };
 const char* const kPhaseName[kPhCount] = {
-    "TimedEvents", "Animation", "EntityList", "Weather",
+    "PairCache", "Animation", "EntityList", "Weather",
     "CitizenList", "PostSim(UI/cam/audio)", "TOTAL Update"
 };
 
@@ -1158,14 +1163,14 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             do {
                 TRACE("[GameUpdateLoop::Update] === sim iteration %d/%d ===\n", iteration + 1, speedMultiplier);
 
-                // 3a. Timed event queue
+                // 3a. Region-pair distance cache staleness sweep
                 void* game = self->m_game;
-                void* timedEventQueue = *(void**)((uint8_t*)game + 0x78);
-                TRACE("[GameUpdateLoop::Update] calling Game::UpdateTimedEvents (queue=%p)...\n", timedEventQueue);
-                { PhaseTimer pt(kPhTimedEvents);
-                if (fn_Game_UpdateTimedEvents) fn_Game_UpdateTimedEvents(timedEventQueue, time); // [GUARD-M5]
+                void* regionPairCache = *(void**)((uint8_t*)game + 0x78);
+                TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", regionPairCache);
+                { PhaseTimer pt(kPhPairCache);
+                if (fn_RegionPairCacheTick) fn_RegionPairCacheTick(regionPairCache, time);
                 }
-                TRACE("[GameUpdateLoop::Update] Game::UpdateTimedEvents done\n");
+                TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 
                 // 3b. AnimationManager::Update
                 bool rootOnly = (iteration < speedMultiplier - 1);
@@ -1304,11 +1309,13 @@ post_simulation:
     // (ambient/terrain/UI/tools/camera/audio) — NOT multiplied by game speed.
     { PhaseTimer ptPost(kPhPostSim);
 
-    // Step 7: Ambient sound update — fn_AmbientSound_Update (exe FUN_1400a40e0)
-    // not yet wired in standalone. [GUARD-M5]
-    TRACE("[GameUpdateLoop::Update] calling AmbientSound::Update...\n");
-    if (fn_AmbientSound_Update) fn_AmbientSound_Update(self->m_ambientSoundData);
-    TRACE("[GameUpdateLoop::Update] AmbientSound::Update done\n");
+    // Step 7: MusicPlayer::Update - exe 0x1400a40e0, not yet ported. [GUARD-M5]
+    // NOT an ambient-sound update despite the fn_ name: it picks the next music
+    // track by month + town mood, so while this stays null background music
+    // never plays. See engine/types/GameUpdateLoop.h +0x80.
+    TRACE("[GameUpdateLoop::Update] calling MusicPlayer::Update...\n");
+    if (fn_MusicPlayer_Update) fn_MusicPlayer_Update(self->m_musicPlayer);
+    TRACE("[GameUpdateLoop::Update] MusicPlayer::Update done\n");
 
     // Step 8: World geometry vtable call (terrain update)
     TRACE("[GameUpdateLoop::Update] calling WorldGeometry::Update...\n");
@@ -2553,11 +2560,11 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
         fn_MemFreeStatic(self->m_animationManager);
     }
 
-    // MusicPlayer
-    if (self->m_musicPlayer != nullptr) {
-        TRACE("[GameUpdateLoop::Shutdown]   destroying MusicPlayer...\n");
-        fn_MusicPlayer_Dtor(self->m_musicPlayer);
-        fn_MemFreeStatic(self->m_musicPlayer);
+    // CharacterGrid (Morton quadtree at +0x88)
+    if (self->m_characterGrid != nullptr) {
+        TRACE("[GameUpdateLoop::Shutdown]   destroying CharacterGrid...\n");
+        fn_CharacterGrid_Dtor(self->m_characterGrid);
+        fn_MemFreeStatic(self->m_characterGrid);
     }
 
     // SaveLoad
@@ -2574,10 +2581,10 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
         fn_MemFreeStatic(self->m_imageCapture);
     }
 
-    // AmbientSoundData
-    if (self->m_ambientSoundData != nullptr) {
-        TRACE("[GameUpdateLoop::Shutdown]   freeing AmbientSoundData...\n");
-        fn_MemFreeStatic(self->m_ambientSoundData);
+    // MusicPlayer (0x18-byte POD; retail frees it with no dtor)
+    if (self->m_musicPlayer != nullptr) {
+        TRACE("[GameUpdateLoop::Shutdown]   freeing MusicPlayer...\n");
+        fn_MemFreeStatic(self->m_musicPlayer);
     }
 
     TRACE("[GameUpdateLoop::Shutdown] EXIT\n");

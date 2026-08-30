@@ -2138,10 +2138,12 @@ extern fn_String_Append_t fn_String_Append;
 
 // Start game handler: FUN_1400b4540
 // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
-// Params: worldSetup, displayName, seed, terrainSize, disasterOff, climateGen, terrainGen, mapGen, scenarioIdx, nullIBP
+// Params: worldSetup, displayName, seed, terrainSize, disasterOff, mapGen, terrainGen, climateGen, scenarioIdx, nullIBP
+// NOTE the generator order: args 6/7/8 land in GameUpdateLoop +0x40/+0x48/+0x50,
+// which retail Load reads as mapGen / terrainGen / climateGen respectively.
 typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint32_t seed,
-                                   uint32_t terrainSize, char disasterOff, void* climate,
-                                   void* terrain, void* mapGen, uint32_t scenarioIdx, void* retvalIBP);
+                                   uint32_t terrainSize, char disasterOff, void* mapGen,
+                                   void* terrain, void* climate, uint32_t scenarioIdx, void* retvalIBP);
 extern fn_StartNewGame_t fn_StartNewGame;
 
 // TypeInfo IDs for generator IsDerivedFrom checks

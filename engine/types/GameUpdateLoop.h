@@ -62,8 +62,33 @@ struct GameUpdateLoop {
     void*    m_animationManager;    // +0x68: Graphics::AnimationManager*
     void*    m_pickingScene;        // +0x70: Picking::Scene*
     void*    m_audioScene;          // +0x78: Audio::Scene*
-    void*    m_ambientSoundData;    // +0x80: ambient sound state (passed to FUN_1400a40e0)
-    void*    m_musicPlayer;         // +0x88: MusicPlayer* (0x18 bytes: {trackIdx, trackList, 0})
+    // +0x80 / +0x88 were SWAPPED-AND-MISNAMED until 2026-08-30. Verified against
+    // retail GameUpdateLoop::Load (0x140096B00) instruction-by-instruction; the
+    // plate comment on that function is ALSO wrong about +0x88 ("SkyMesh Transform").
+    void*    m_musicPlayer;         // +0x80: MusicPlayer* — MemAlloc(0x18,4), seeded
+                                    //   {+0x00 int32 currentTrackId = -1,
+                                    //    +0x08 MusicTrackList* = Find("Game/MusicTracks.rsc"),
+                                    //    +0x10 int64 0}.
+                                    //   Ticked by 0x1400a40e0 (MusicPlayer::Update — NOT an
+                                    //   "ambient sound" update): early-outs on
+                                    //   Audio::Scene::IsEffectPlaying(+0x78, currentTrackId),
+                                    //   then picks a track whose [monthLo..monthHi] and
+                                    //   [moodLo..moodHi] ranges contain the current month
+                                    //   (from m_dayCounter +0x128) and the town mood averaged
+                                    //   over m_citizenList (+0xF0) +0xA0/+0xA8.
+    void*    m_characterGrid;       // +0x88: loose Morton (Z-order) quadtree over characters.
+                                    //   MemAlloc(0x60,8); ctor 0x1400182b0(self, DAT_140172258)
+                                    //   (0x140092880 is the default-arg wrapper). 8 levels;
+                                    //   level base offsets {0,1,5,0x15,0x55,0x155,0x555,0x1555}
+                                    //   in the 8-int array at +0x40; 0x5555 (21845) cells in the
+                                    //   int32 array at +0x30 (seeded -1 = empty cell head) and a
+                                    //   parallel count array at +0x50 (seeded 0). Entity records
+                                    //   live at +0x10, stride 0x18, with the owning cell index at
+                                    //   record +0x10. 0x140018660 re-buckets one entity by its
+                                    //   bounds (level from size, Morton code from position).
+                                    //   NOT a MusicPlayer and NOT a Transform. Raw-offset users
+                                    //   in the tree call it charMgr / gridPtr / bridgeMgr:
+                                    //   charactercomponent.cpp is the accurate one.
     void*    m_renderer;            // +0x90: Graphics::Renderer*
     void*    m_userInterface;       // +0x98: UI::UserInterface*
 
@@ -120,6 +145,8 @@ static_assert(offsetof(GameUpdateLoop, m_gameTime) == 0x38, "m_gameTime at +0x38
 static_assert(offsetof(GameUpdateLoop, m_savedState) == 0x58, "m_savedState at +0x58");
 static_assert(offsetof(GameUpdateLoop, m_graphicsScene) == 0x60, "m_graphicsScene at +0x60");
 static_assert(offsetof(GameUpdateLoop, m_audioScene) == 0x78, "m_audioScene at +0x78");
+static_assert(offsetof(GameUpdateLoop, m_musicPlayer) == 0x80, "m_musicPlayer at +0x80");
+static_assert(offsetof(GameUpdateLoop, m_characterGrid) == 0x88, "m_characterGrid at +0x88");
 static_assert(offsetof(GameUpdateLoop, m_renderer) == 0x90, "m_renderer at +0x90");
 static_assert(offsetof(GameUpdateLoop, m_userInterface) == 0x98, "m_userInterface at +0x98");
 static_assert(offsetof(GameUpdateLoop, m_quickSavePressed) == 0xC0, "m_quickSavePressed at +0xC0");

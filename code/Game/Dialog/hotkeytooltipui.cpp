@@ -63,7 +63,15 @@ static void* GetKeyMapContainer() {
 // Port of FUN_140099c20: build a UI::String for the (device,key) pair by
 // formatting "<deviceName><keyIndex>" and resolving it against the keyNames
 // StringTable. retval must be 16 bytes (UI::String). device < 0 => "Unbound".
-static void BuildKeyName(void* retval, int device, int keyIndex) {
+//
+// Exported (2026-08-30, LANE1 row 36) so the two Tutorial call sites can share it
+// instead of resolving the raw address 0x140099c20, which is unregistered and so
+// left tutorial key names blank. Retail's param_1 is the KeyMap container whose
+// +0xD0 is the keyNames StringTable; both tutorial callers pass
+// *g_pKeyMapSingleton, which is exactly the container this function looks up, so
+// the substitution is exact.
+void Hotkey_BuildKeyName(void* retval, int device, int keyIndex);
+void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
     void* container = GetKeyMapContainer();
     if (!container) return;
 
@@ -100,7 +108,7 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     int device = fn_KeyMap_GetDeviceForId(keyMap, shortcutId, 0);
 
     uint8_t uiStr[16];
-    BuildKeyName(uiStr, device, input);
+    Hotkey_BuildKeyName(uiStr, device, input);
 
     // UI::String -> System::String (member, hidden retval). TextElement params
     // take a System::String; the converted string owns a ref we release below.

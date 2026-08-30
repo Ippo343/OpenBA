@@ -150,3 +150,141 @@ Recurring causes, in order of frequency:
 - **Effectively dead/unreachable today** but would EXEC-of-0 if a currently-unwired caller (`MainMenuDialog_Slot8`) is ever wired live: #17, #19
 - **Deliberately-unregistered by design** (documented, correct as-is): #52
 - **Duplicate-registration traps** flagged for whoever ports them: #44 (0x1400b49f0), #53/(Toolbar_Utility+SetFollowBuilding share 0x140101a80)
+
+## 2026-08-30 follow-up — the six named "still open" rows
+
+Re-checked every row the previous pass left open. **Four of the six premises were wrong
+again**, in the same four ways the section above catalogues.
+
+| # | Addr | Prior note | Outcome |
+|---|---|---|---|
+| 39 | 0x1400a40e0 | NEEDS-PORT-LARGE; "+0x88's true identity is UNVERIFIED" | **Header settled + a second blocker found.** Still unported, but no longer mislabelled. |
+| 41 | 0x1400a5d10 | "NEEDS-PORT-LARGE + crash on wire; Game+0x78 always null, no seed exists" | **FALSE PREMISE — now PORTED, REGISTERED and RUNTIME-VERIFIED.** |
+| 42 | 0x1400b4540 | ScenarioDialog leg unproven, "needs one manual click" | **REAL BUG FOUND AND FIXED** without a click — settled against retail's own caller. |
+| 36 | 0x140099c20 | NEEDS-PORT-SMALL, "dedupe rather than add a fourth copy" | **FALSE PREMISE — no port needed at all. WIRED.** |
+| 13/14 | 0x14005e120 / 0x14005e230 | AutoSaveDialog | Premise **holds**. Confirmed blocked; exact shape of the work now known. |
+| 49 | 0x1400e1870 | NEEDS-PORT-LARGE, unverifiable | Not attempted this pass. |
+
+### 39 — GameUpdateLoop +0x80 / +0x88 (the header question)
+
+Settled **instruction-by-instruction** against retail Load (0x140096B00), not from the
+plate comment — which is itself wrong here.
+
+- **+0x80 IS the MusicPlayer** (`param_1[0x10]`): `MemAlloc(0x18,4)` seeded
+  `{currentTrackId=-1, Find("Game/MusicTracks.rsc"), 0}`. Was named `m_ambientSoundData`.
+- **+0x88 is NOT a MusicPlayer and NOT the "SkyMesh Transform"** the plate comment claims
+  (`param_1[0x11]`): `MemAlloc(0x60,8)` + ctor 0x1400182b0. It is a **loose Morton
+  (Z-order) quadtree over characters** — 8 levels, level-base table
+  {0,1,5,0x15,0x55,0x155,0x555,0x1555} at +0x40, 21845 cells at +0x30 (seeded -1) with a
+  parallel count array at +0x50. 0x140018660 re-buckets one entity (level from its bounds,
+  Morton code from its position — the 0x33333333/0x55555555 bit-spread). Our own tree
+  already agreed under three different names (`charMgr`, `gridPtr`, `bridgeMgr`) and
+  already has `CharManager_Seed()` for it.
+
+The rename **exposed a latent collision**: `fn_MusicPlayer_Dtor` (0x140018220) was not a
+music dtor at all — it frees exactly the five arrays at +0x10/+0x20/+0x30/+0x40/+0x50 of
+the quadtree. It is now `fn_CharacterGrid_Dtor`. (Shutdown's behaviour is unchanged: the
+old code already passed +0x88 to it, just under the wrong name.)
+
+`0x1400a40e0` itself is confirmed `MusicPlayer::Update`: it early-outs on
+`Audio::Scene::IsEffectPlaying(gw+0x78, currentTrackId)`, then selects a track whose
+[monthLo..monthHi] and [moodLo..moodHi] ranges bracket the current month (DayCounter at
++0x128) and the town mood averaged over the citizen list (+0xF0).
+
+**Second blocker, previously unrecorded:** our Load port leaves the MusicTrackList at
+musicPlayer+0x08 **null** ("Find deferred"). 0x1400a40e0 reads
+`*(int*)(musicPlayer[+0x08] + 0x28)` as the track count with no null check, so wiring the
+port before doing that `Find` would be an immediate null deref. Recorded at the deferral
+site in `gameupdateloop_load.cpp`.
+
+### 41 — 0x1400a5d10 is the REGION-PAIR CACHE EVICTOR (CLOSED)
+
+Every part of the prior note was wrong. It is not a timed-event queue, `Game+0x78` is not
+null, and there is no crash on wiring.
+
+- **What it is:** the staleness sweep for the pathfinder's **region-pair distance cache**.
+  The 0x38-byte object at Game+0x78 is built by `Region_Seed` → `Pf_RegionPairCache_Build`
+  (our port of the tail of 0x14009e8c0), which is **`BANISHED_LIVE_REGIONMAP`, default-ON**.
+  Proven at runtime: `[RegionSeed] … pairCache=0x…` is non-null on every boot.
+- **Why #37 and #41 are the same function.** The prior pass ruled #37 (0x14009e8c0) "DO NOT
+  implement — superseded by Region_Seed + Pathfinder_Seed". That is right about its *head*
+  (region graph +0x70, pathfinder thread +0x68) but **misses its tail**, which is the only
+  thing that allocates Game+0x78.
+- **The bite:** `cache[0]` is the cache's clock, and *nothing else in the binary advances
+  it*. `Pf_RegionPairCacheInsert_5b30` (already ported and registered) stamps each new entry
+  with the then-current `cache[0]`. With this function unported the clock sat at 0 forever,
+  every entry was stamped 0, and **no entry could ever age out** — cached region-to-region
+  distances survived until 131072 further inserts pushed them out, i.e. effectively forever,
+  across bridges/roads/terrain edits that re-split regions.
+- **A second, independent defect fixed alongside it:** `Pf_RegionPairCache_Build` seeded the
+  retention window at cache+0x08 to 0 as a documented "safe" deviation. It is not inert — it
+  is the value this evictor compares against, so 0 would evict every entry on the first
+  tick. Retail seeds `Time::Time(DAT_140172210)`, and DAT_140172210 = **120.0f**.
+- **Verified at runtime** (`BANISHED_DIAG_PAIRCACHE=1`): clock advances 16666µs/tick,
+  `window=120000000`µs = exactly 120 s, and at call 7202 (clock 120028532) 3 of 5 entries
+  aged out while the 2 newest were retained — so the window is compared per-entry, not as a
+  blanket flush. No crash.
+
+Ported as `Pf_RegionPairCacheTick_5d10` (region_paircache.cpp), registered in
+reg_pf_region.cpp. Its one dependency (the AVL delete 0x14001ca60) was already registered.
+
+### 42 — the ScenarioDialog leg had a REAL argument-marshalling bug
+
+Settled statically against retail's own `ScenarioDialog::LoadSelected` (0x140077cb0), which
+is stronger than the manual click for this question — the click would have shown a broken
+world rather than the cause.
+
+`StartNewGame_Impl` was lifted out "with retail's own 10-argument ABI", but its parameters
+6 and 8 were **swapped versus retail**:
+
+- Retail 0x1400b4540 passes args 6/7/8 straight into the GameUpdateLoop ctor's params
+  9/10/11, which store them at **+0x40 / +0x48 / +0x50 = mapGen / terrainGen / climateGen**.
+- Both retail callers pass the generators in that order (NewGameDialog at 0x14007050d;
+  ScenarioDialog reads scenario +0x70/+0x78/+0x80 into args 6/7/8).
+- Our impl declared them `(climateGen, terrainGen, mapGen)` and assigned +0x40 = arg8.
+
+NewGameDialog was **unaffected** — it passed our order, so +0x40 still received the real
+MapGenerator, which is why the autostart-proven leg looked healthy. But ScenarioDialog was
+written from retail's assembly and passes retail's order, so through the newly-registered
+address it would have put the **ClimateGenerator into +0x40** (camera placement / town spawn
+pools) and the **MapGenerator into +0x50** (Environment/Weather).
+
+Fixed by moving `StartNewGame_Impl` to retail's ABI and flipping NewGameDialog's call to
+match; ScenarioDialog needed no change to its call, only to three misleading local names
+(its +0x70 is mapGen and its +0x80 is climateGen, not the reverse). Regression-checked:
+`mapGen(loop+0x40)` still resolves and `mapGen+0x3c(townSize)=13` is unchanged.
+
+**Still needs the manual click** to exercise the rest of ScenarioDialog::LoadSelected
+(dialog construction, the saved-scenario branch). The argument marshalling itself no longer
+depends on that.
+
+### 36 — 0x140099c20 needed NO port (CLOSED, WIRED)
+
+The note said "already ported TWICE elsewhere — dedupe rather than add a fourth copy".
+Stronger than that: `BuildKeyName` in `hotkeytooltipui.cpp` is labelled, in the source,
+**"Port of FUN_140099c20"** — the exact address. And retail's `param_1` is the KeyMap
+container whose +0xD0 is the keyNames StringTable, which is precisely the
+`*g_pKeyMapSingleton` both tutorial call sites were already passing. So the substitution is
+exact, not approximate.
+
+Exported it as `Game::Hotkey_BuildKeyName` and pointed both tutorial sites at it. Tutorial
+key names were rendering blank purely because the raw address was unregistered. Builds and
+links; the tutorial still cannot be *reached* by autostart, so the visual result is
+unverified — but the call is provably the same one retail makes.
+
+### 13 / 14 — AutoSaveDialog: premise CONFIRMED, work now specified
+
+The one open whose prior note survived scrutiny.
+
+- **#14 (0x14005e230)** is `AutoSaveDialog::Ctor(self, ui, dialogRes, parentIBP)`: base
+  DialogInstance ctor, stamp `&vtable_AutoSaveDialog`, then `FindElement("savingImage")` →
+  +0xB8 and `FindElement("animatedImage")` → +0xC0, +0xC8 = 0. Small. The blocker is real:
+  it stamps a retail vtable with no standalone counterpart, so it needs the
+  `EventNotifyDialog_Ctor_Standalone` hand-built-vtable treatment.
+- **#13 (0x14005e120)** is `AutoSaveDialog::RestartAutoSaveTimer(dialog)`: `StopTimer(0)`,
+  index `g_pGameSettingsPtr[1]` (the Options autosave combo, 0..7) into a table of 8 float
+  constants, then `StartTimer(0, interval * DAT_1401721f0)`.
+- **#13 is confirmed blocked on #14**, and the reason is exact: `optionsdialog.cpp:936`
+  walks the open dialogs looking for one of type AutoSaveDialog and only then calls e120.
+  With `kCreateGameDialogs = false` (gameupdateloop.cpp:2041) no such dialog is ever
+  constructed, so the loop matches nothing. **Porting e120 first would be a null test.**
