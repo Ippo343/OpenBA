@@ -379,16 +379,21 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Retail FUN_140098DA0 drives this off the self+0xB58 timer against
     // DAT_140172174, which is exactly 2.0f. Measured here at 2015ms -- match.
     //
-    // KNOWN DEVIATION: retail wraps the whole block in
-    //     if (nextLoop->m_loadProgress != 0)      // UpdateLoop+0x24
-    // so the timer does not even accumulate until the next loop reports load
-    // progress. We cannot honour that yet: standalone replaces the Runtime
-    // Loader::Load path (which is what calls SetLoadProgress) with our own
-    // AsyncLoader, so m_loadProgress is 0 for the whole splash -- measured 0 at
-    // every single tip. Gating on it faithfully would mean the text NEVER
-    // appears. Cycling ungated reproduces what retail actually shows (blank,
-    // then a tip every 2s); revisit if AsyncLoader ever publishes progress.
-    if (g_loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
+    // The block is gated on nextLoop->m_loadProgress != 0 (UpdateLoop+0x24),
+    // exactly as retail. An earlier note here claimed the gate could not be
+    // honoured because "the Runtime Loader::Load path calls SetLoadProgress and
+    // our AsyncLoader replaced it" -- that was wrong on both counts. The
+    // exported SetLoadProgress has ZERO callers in the whole 2017 build (no
+    // '?SetLoadProgress' resolve string exists in the exe); the real publisher
+    // is the exe worldgen pipeline (retail 0x1400cf390), which writes stages
+    // 1..5 straight into g_pGameWorldSingleton+0x24. Our port of that pipeline
+    // omitted the writes as "progress hints with no consumer" -- THIS is the
+    // consumer. Restored in code/Game/Game/worldgen.cpp (wg_PublishLoadProgress).
+    // Net faithful behaviour: tips cycle only while a NEW-GAME worldgen is
+    // running; the boot splash chain (nextLoop=MenuDLT) and save-loads never
+    // write +0x24, so those screens keep the .rsc default (a single space).
+    if (g_loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0 &&
+        ll->m_nextLoop && *(int*)((uintptr_t)ll->m_nextLoop + 0x24) != 0) {
         int64_t* tipTimer =
             reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
         *tipTimer += dt->ticks;

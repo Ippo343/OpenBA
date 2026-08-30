@@ -276,23 +276,41 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
 // f390 — heightmap pipeline. First-light = e5d0 only.
 // Verified order (blueprint §0): hf[0]=sizeRow[0]*2; e5d0; [feature stages...]
 // ============================================================
+
+// Retail f390 publishes worldgen stage progress by writing 1..5 straight into
+// GameUpdateLoop+0x24 (m_loadProgress) through g_pGameWorldSingleton — it never
+// goes through the exported SetLoadProgress (0 callers in the whole 2017 build).
+// The consumer is the loading screen: GameLoadDialogLoopT::Update (0x140098DA0)
+// gates its 2.0s random-tip cycle on nextLoop->m_loadProgress != 0, so these
+// writes are what makes the "(Uplifting mountains)" flavor text start cycling.
+// Null-checked only because our standalone can run worldgen from harnesses
+// before Load sets the singleton; retail's write is unguarded.
+static void wg_PublishLoadProgress(int stage) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        *(int32_t*)((uintptr_t)*g_pGameWorldSingleton + 0x24) = stage;
+}
+
 static void wg_HeightmapPipeline_f390(int32_t* hf) {
     uint8_t* p = (uint8_t*)hf;
     int32_t* sizeRow = *(int32_t**)(p + HF_SIZEROW);
     *(int32_t*)(p + HF_GRIDSIZE) = (sizeRow ? sizeRow[0] : 0) * 2;   // gridSize = mapDim*2
 
+    wg_PublishLoadProgress(1);
     wg_BaseHeightmap_e5d0(hf);
 
     if (kFullPipeline) {
-        // Verified f390 order (blueprint §0). g_pGameWorldSingleton+0x24 stage
-        // counters (1..5) are progress hints only; omitted (no consumer in standalone).
-        wg_f390_coastline(hf);   // cd090  (gworld+0x24 = 2)
+        // Verified f390 order (blueprint §0), incl. the stage-progress writes.
+        wg_PublishLoadProgress(2);
+        wg_f390_coastline(hf);   // cd090
         wg_f390_ranges(hf);      // cd150
         wg_f390_paths(hf);       // ccf60
-        wg_f390_rivers(hf);      // cd460  (gworld+0x24 = 3)
+        wg_PublishLoadProgress(3);
+        wg_f390_rivers(hf);      // cd460
         wg_f390_stamp(hf);       // e910   — first carve pass
-        wg_f390_erosion(hf);     // cc080  (gworld+0x24 = 4)
-        wg_f390_carve(hf);       // ec50   (gworld+0x24 = 5) — finalize carve
+        wg_PublishLoadProgress(4);
+        wg_f390_erosion(hf);     // cc080
+        wg_PublishLoadProgress(5);
+        wg_f390_carve(hf);       // ec50   — finalize carve
         wg_f390_smooth(hf);      // c350
         wg_f390_smooth(hf);      // c350 (second pass)
     }
