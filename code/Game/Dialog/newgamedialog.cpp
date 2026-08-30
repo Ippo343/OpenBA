@@ -177,13 +177,43 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 // NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
 // Original: 0x140099ac0.
 static void* GenerateTownName(void* retStr, void* random, int maxLen) {
-    // Standalone: ExternalFactory::FindOrLoad("Game/Names/Cities.ndb") NULL-derefs
-    // inside its OWN internal IsDerivedFrom (the NameDatabase factory subtree is
-    // incomplete), and NameDatabase::GenerateName (exe 0x1400a4b30) isn't
-    // reimplemented anyway. Skip the load entirely and use a placeholder so the
-    // OK button stays enabled. (The original does real name generation below.)
-    (void)random; (void)maxLen;
-    fn_String_Ctor_CStr(retStr, "New Town");
+    // Load the city-name database. The IsDerivedFrom type-check retail runs on
+    // the result is skipped: the standalone factory tree is incomplete and the
+    // walk NULL-faults, while FindOrLoad by exact filename is authoritative
+    // (same call shape as citizen_names.cpp's Male.ndb/Female.ndb load).
+    void* nameDB = nullptr;
+    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
+        fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad && fn_Filename_Dtor) {
+        uint8_t fnBuf[8] = {0};
+        fn_Filename_CtorCStr(fnBuf, "Game/Names/Cities.ndb");
+        nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
+        fn_Filename_Dtor(fnBuf);
+    }
+
+    // minLen 5 is retail's constant; maxLen is derived from the edit box's
+    // _maxLength by the caller. NameDB_GenerateName (0x1400a4b30, registered by
+    // standalone/reg_namedb.cpp) constructs the String in retStr even when the
+    // database is missing, so retStr is always live for the suffix fix-up below.
+    fn_NameDB_GenerateName(retStr, nameDB, random, 5, maxLen);
+
+    // Retail: a name longer than 4 chars ending in "vill" gets an "e" appended,
+    // so the generator's "-vill" stems read as "-ville".
+    uint64_t sp = *(uint64_t*)retStr;
+    bool endsVill = false;
+    if (sp != 0 && fn_String_SubString && fn_String_Equals && fn_String_Append) {
+        int slen = *(int*)(sp - 8);          // System::String length lives at ptr-8
+        if (slen > 4) {
+            uint8_t sfx[8] = {0};
+            fn_String_SubString(retStr, sfx, slen - 4, slen - 1);
+            endsVill = fn_String_Equals(sfx, "vill");
+            fn_String_Dtor(sfx);
+        }
+    }
+    if (endsVill) {
+        uint8_t tmpRet[8] = {0};
+        fn_String_Append(retStr, tmpRet, "e");
+        fn_String_Dtor(tmpRet);
+    }
     return retStr;
 }
 
@@ -204,6 +234,16 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
 
     uint8_t nameStr[8];
     GenerateTownName(nameStr, random, nameLen);
+
+    // Mirrors the seed logging below: both halves of the "randomise" row report
+    // what they produced, so a dead generator is visible in the log instead of
+    // only on screen.
+    {
+        uint64_t sp = *(uint64_t*)nameStr;
+        fprintf(stderr, "[NewGameDialog] town name generated: \"%s\" (maxLen=%d)\n",
+                sp ? (const char*)sp : "(empty)", nameLen);
+        fflush(stderr);
+    }
 
     fn_InternalBasePtr_CheckPtr(editNamePtr);
     fn_EditElement_SetText_SysStr(*(void**)editNamePtr, nameStr);
@@ -576,6 +616,29 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // --- Standalone: env/autostart start-condition override (wins over the
     //     saved-selection restore above; see SelectStartConditionOverride) ---
     SelectStartConditionOverride(self);
+
+    // --- Combo inventory (standalone verification) ---
+    // Retail contents, for comparison: condition 3 (Hard/Medium/Easy),
+    // terrain 2 (Valleys/Mountains), terrainSize 3 (Small/Medium/Large),
+    // climate 3 (Mild/Fair/Harsh), disaster 2 (On/Off). The first three come
+    // from the generator ExternalLists, the last two from the .rsc combo's
+    // _initialData StringTable, so a 0 count tells you which half is missing.
+    {
+        struct { const char* name; void* combo; } combos[] = {
+            { "comboCondition",   self->comboCondition   },
+            { "comboTerrain",     self->comboTerrain     },
+            { "comboTerrainSize", self->comboTerrainSize },
+            { "comboClimate",     self->comboClimate     },
+            { "comboDisaster",    self->comboDisaster    },
+        };
+        for (auto& c : combos) {
+            if (!c.combo) { fprintf(stderr, "[NewGameDialog] %s MISSING\n", c.name); continue; }
+            fprintf(stderr, "[NewGameDialog] %s items=%d selected=%d\n", c.name,
+                    fn_ComboElement_GetItemCount(c.combo),
+                    *(int*)((uintptr_t)c.combo + 0x118));
+        }
+        fflush(stderr);
+    }
 
     // --- Update description text from selected map generator ---
     UpdateDescription(self);

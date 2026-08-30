@@ -303,10 +303,13 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
             {
                 uint8_t fnBuf[8];
                 fn_Filename_CtorCStr(fnBuf, "Game/Names/Cities.ndb");
-                void* ndbRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
-                void* nameDB = nullptr;
-                if (ndbRes && fn_IsDerivedFrom(ndbRes, *g_TypeId_NameDatabase)) nameDB = ndbRes;
+                void* nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
                 fn_Filename_Dtor(fnBuf);
+                // The IsDerivedFrom type-check retail runs here is skipped, as in
+                // NewGameDialog::GenerateTownName and citizen_names.cpp: the
+                // standalone factory tree is incomplete so the walk NULL-faults,
+                // and *g_TypeId_NameDatabase is itself NULL until something
+                // lazy-resolves it. FindOrLoad by exact filename is authoritative.
 
                 fn_NameDB_GenerateName(nameBuf, nameDB, random, 5, nameLen);
 

@@ -3123,8 +3123,14 @@ bool EngineFuncsInit() {
     // fn_String_SubString already resolved above
     fn_String_Equals = reinterpret_cast<fn_String_Equals_t>(
         ResolveExport("??8String@System@@QEBA_NPEBD@Z"));
-    // operator+= with non-trivial return — resolve from exe dispatch table 0x140151a18
-    {
+    // operator+= with non-trivial return. This used to read the exe dispatch slot
+    // 0x140151a18, which nothing registers in standalone — so *dispatch was 0 and
+    // every caller EXEC'd address 0 (hit by NewGameDialog's "-vill" -> "-ville"
+    // suffix fix-up, which only fires on ~1 name in 20). Resolve the Runtime
+    // export by name instead; the dispatch slot stays a fallback.
+    fn_String_Append = reinterpret_cast<fn_String_Append_t>(
+        ResolveExport("??YString@System@@QEAA?AV01@PEBD@Z"));
+    if (!fn_String_Append) {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a18));
         if (dispatch) fn_String_Append = reinterpret_cast<fn_String_Append_t>(*dispatch);
     }

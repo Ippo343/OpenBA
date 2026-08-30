@@ -186,13 +186,13 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 // The IsDerivedFrom check retail does on the result is still skipped: its type-id
 // .rdata (DWORD_1401c5a60) is NULL in standalone, and FindOrLoad by exact
 // filename is authoritative.
-static uintptr_t LoadNameDb(bool female) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+static uintptr_t LoadNameDb(const char* path) {
+    if (!path || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
         !fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
         return 0;
 
     uint8_t fname[8] = {0};
-    fn_Filename_CtorCStr(fname, female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
+    fn_Filename_CtorCStr(fname, path);
     void* obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
     fn_Filename_Dtor(fname);
     return (uintptr_t)obj;
@@ -203,8 +203,31 @@ static uintptr_t LoadNameDb(bool female) {
 // minLen=3 / maxLen=10 (retail FUN_1400a4c60 passes 3, 10).
 extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap) {
     if (!out || cap < 0x100 || !rng || !fn_Random_Rand) return false;
-    uintptr_t db = LoadNameDb(female);
+    uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (!db) { out[0] = 0; return false; }
     GenerateName(db, rng, 3, 10, out);
     return std::strlen(out) >= 3;
+}
+
+
+// ---- NameDatabase::GenerateName (exe 0x1400a4b30) ---------------------------
+// The retail entry point, registered at its exe address so every caller reaches
+// this port through ResolveAddr instead of a NULL function pointer. Retail
+// signature: String* GenerateName(String* retStr, NameDatabase* db, Random*,
+// int minLen, int maxLen) -- constructs the result String in `retStr` (caller
+// owns and destructs it).
+//
+// Callers: NewGameDialog's town-name button (via FUN_140099ac0) and
+// MapParamsDialog's in-game rename button. `db` may be NULL when the caller's
+// FindOrLoad missed; retail would walk the NULL table, so return an empty String
+// rather than faulting -- an empty name is visible in the edit box and keeps the
+// OK button's enable check honest.
+extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
+                                     int minLen, int maxLen) {
+    char buf[0x100];
+    buf[0] = 0;
+    if (db && rng && fn_Random_Rand)
+        GenerateName((uintptr_t)db, rng, minLen, maxLen, buf);
+    fn_String_Ctor_CStr(retStr, buf);
+    return retStr;
 }
