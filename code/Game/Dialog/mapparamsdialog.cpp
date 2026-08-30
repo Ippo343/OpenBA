@@ -161,31 +161,38 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         if (numberSeed) fn_NumberElement_SetValueInt(numberSeed, seed);
     }
 
-    // Set text fields using UI::String (12-byte struct: {ExternalPtr<StringTable>, int})
-    // Pattern: read StringTable ptr and string index from description objects,
-    // construct a UI::String on the stack, call TextElement::SetText
+    // Set the text fields. Retail uses TWO different UI::String constructors here
+    // and they are not interchangeable:
+    //   - condition / terrain / climate take the NAME-LOOKUP ctor
+    //     UI::String(ExternalPtr<StringTable>, const System::String& name) — the
+    //     generator resource carries its own table at +0x20 and its name KEY (a
+    //     System::String) at +0x28, and the ctor resolves the key to an index.
+    //   - terrainSize / disaster take the INDEX ctor UI::String(table, int), with
+    //     the table on the element itself (+0xd8) and a plain integer.
+    // These three used to be built by memcpy'ing desc+0x28 into the struct's int
+    // field, which copied the low 32 bits of the name String's CHAR POINTER as if
+    // it were a string-table index. Always out of range, so all three rendered
+    // blank while name/seed/size/disaster (which take other paths) looked fine.
 
     // textCondition — from description at gameWorld+0x40, text at desc+0x20/0x28
     {
         uintptr_t desc = *(uintptr_t*)(gw + 0x40);
-        if (desc) {
+        void* textElem = *(void**)(s + 0xE0);
+        if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            memcpy(uiStr, (void*)(desc + 0x20), 8);      // ExternalPtr<StringTable>
-            memcpy(uiStr + 8, (void*)(desc + 0x28), 4);   // int index
-            void* textElem = *(void**)(s + 0xE0);
-            if (textElem) fn_TextElement_SetText(textElem, uiStr);
+            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
+            fn_TextElement_SetText(textElem, uiStr);
         }
     }
 
     // textTerrain — from description at gameWorld+0x48, text at desc+0x20/0x28
     {
         uintptr_t desc = *(uintptr_t*)(gw + 0x48);
-        if (desc) {
+        void* textElem = *(void**)(s + 0xC8);
+        if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            memcpy(uiStr, (void*)(desc + 0x20), 8);
-            memcpy(uiStr + 8, (void*)(desc + 0x28), 4);
-            void* textElem = *(void**)(s + 0xC8);
-            if (textElem) fn_TextElement_SetText(textElem, uiStr);
+            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
+            fn_TextElement_SetText(textElem, uiStr);
         }
     }
 
@@ -206,12 +213,11 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     // textClimate — from description at gameWorld+0x50, text at desc+0x20/0x28
     {
         uintptr_t desc = *(uintptr_t*)(gw + 0x50);
-        if (desc) {
+        void* textElem = *(void**)(s + 0xD8);
+        if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            memcpy(uiStr, (void*)(desc + 0x20), 8);
-            memcpy(uiStr + 8, (void*)(desc + 0x28), 4);
-            void* textElem = *(void**)(s + 0xD8);
-            if (textElem) fn_TextElement_SetText(textElem, uiStr);
+            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
+            fn_TextElement_SetText(textElem, uiStr);
         }
     }
 

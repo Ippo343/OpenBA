@@ -509,6 +509,7 @@ extern void RegisterTownWorkplaceRegistry();  // Phase 3 economy: profession-BST
 extern "C" void RegisterBuildActions();       // Construction 2c: SetupBuildActions (0x1400c0690) build-labor action chain
 extern "C" void RegisterTownStorageSeed();    // Economy M-D world half: d230/7ff0/91660/a1f00 (storage registry + start-resource seeder)
 extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: NeedsUpdate 112260 + helper_21e0 (+ rdata floats)
+extern void RegisterGameSettingsPersist();    // GameSettings <-> IO::Persistence (0x140098970 Save / 0x140098b60 Load)
 extern void RegisterNameDb();                 // NameDatabase::GenerateName (0x1400a4b30) — town/citizen name generator
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
 extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
@@ -684,6 +685,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain
     RegisterTownStorageSeed();       // Economy M-D — storage-location registry + start-resource seeder
     RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)
+    RegisterGameSettingsPersist();   // GameSettings <-> Persistence — remembers the New Game picks
     RegisterNameDb();                // NameDatabase::GenerateName (0x1400a4b30) — town-name buttons
     RegisterCitizen25();             // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)

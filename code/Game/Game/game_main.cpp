@@ -128,6 +128,10 @@ typedef void     (*fn_Engine_Ctor_t)(void* self, void* hInstance);
 typedef void     (*fn_Engine_Dtor_t)(void* self);
 // Engine::Engine::Startup(this, const char* cmdLine, uint, uint, bool) -> uint (0 = fail)
 typedef unsigned (*fn_Engine_Startup_t)(void* self, const char* cmdLine, unsigned p1, unsigned p2, bool p3);
+// GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
+extern "C" void GameSettings_Load(int32_t* settings);   // 0x140098b60
+extern "C" void GameSettings_Save(int32_t* settings);   // 0x140098970
+
 typedef void     (*fn_Engine_Shutdown_t)(void* self);
 
 // Engine::MainLoop::MainLoop(this, Engine*)
@@ -647,6 +651,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     if (g_pGameSettingsPtr) {
                         *g_pGameSettingsPtr = settings;
                     }
+                    // Retail GameMain calls this immediately after the defaults
+                    // (0x14004203d -> 0x140098b60): every field above is only a
+                    // fallback for a key IO::Persistence does not have yet. Without
+                    // it the game always came up on defaults, which is why the New
+                    // Game combo picks never survived a restart.
+                    GameSettings_Load(settings);
                 }
 
                 // Stage 5b: build a MenuDialogLoopT (exe-internal subclass of
@@ -852,6 +862,14 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 }
 
                 if (settings) {
+                    // Retail GameMain pushes the whole struct back into
+                    // IO::Persistence here (0x1400422a3 -> 0x140098970), before
+                    // the frees and before Engine::Shutdown's WriteSettings
+                    // flushes Persistence to disk. NewGameDialog's OK only writes
+                    // the settings STRUCT, so this call is what makes the player's
+                    // terrain / size / climate / start / disaster picks outlive
+                    // the process.
+                    GameSettings_Save(settings);
                     if (g_pGameSettingsPtr) *g_pGameSettingsPtr = nullptr;
                     fn_MemFreeStatic(settings);
                     printf("[GameMain] Settings freed.\n");

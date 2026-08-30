@@ -751,6 +751,29 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     int32_t disasterIdx = *(int32_t*)((uintptr_t)self->comboDisaster + 0x118);
     int disasterOff = (disasterIdx == 0) ? 0 : 1;
 
+    // --- What the player actually chose (standalone verification) ---
+    // Every row of the dialog lands in the GameUpdateLoop below, so log the
+    // resolved pick for each one. The three generator rows are named from the
+    // resource's StringTable key at +0x28; terrainSize and disaster have no
+    // resource behind them, so they log as raw combo indices. worldFlags is the
+    // word copied to GameWorld+0xD0, whose bits 4-7 are noSick / noCropDisease /
+    // noFire / noTornado — 0x00 means all four disasters are live.
+    {
+        auto nameOf = [](void* res) -> const char* {
+            if (!res) return "(null)";
+            const char* n = *(char**)((uintptr_t)res + 0x28);
+            return n ? n : "(unnamed)";
+        };
+        fprintf(stderr, "[NewGameDialog::StartGame] picks: condition[%d]=\"%s\" "
+                "terrain[%d]=\"%s\" size=%u climate[%d]=\"%s\" disaster[%d]=%s "
+                "seed=%u -> worldFlags=0x%02X\n",
+                condIdx, nameOf(mapGen), terrainIdx, nameOf(terrainGen), terrainSize,
+                climateIdx, nameOf(climateGen), disasterIdx,
+                disasterOff ? "OFF" : "ON", seed,
+                (disasterIdx == 0) ? 0 : 0xF0);
+        fflush(stderr);
+    }
+
     // Get map name from editName element — String at editName+0xC8
     fn_InternalBasePtr_CheckPtr(&self->editName);
     void* nameStr = (void*)((uintptr_t)self->editName + 0xC8);
