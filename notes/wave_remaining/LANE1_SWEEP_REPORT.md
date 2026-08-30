@@ -10,12 +10,13 @@ Legend: **DEAD** = never called (or superseded by an existing direct port) · **
 = called behind `if (fn)` · **LIVE-UNGUARDED** = called with no null check (latent
 EXEC-of-0) · **NEEDS-PORT** = no reimplementation exists anywhere.
 
-## Fixed this lane (3)
+## Fixed this lane (4)
 
 | # | Address | Name | Was | Fix |
 |---|---------|------|-----|-----|
 | 3 | 0x14000a170 | FindComponent\<ClearAreaComponent\> | LIVE-GUARDED, permanently null | `buildcomponent_state1.cpp` now calls the already-ported `fn_FindComponent_SM` (engine_funcs.h) instead of resolving the raw address |
 | 4 | 0x140012a60 | ModDialog array push (stride 0x58) | **LIVE-UNGUARDED** — `moddialog.cpp:479` called it with no null check; adding an installed mod's thumbnail EXEC'd 0 | Wrote a byte-faithful C++ port (`fn_ModDialog_ArrayPush58_CppImpl`, engine_funcs.cpp) modeled on the decompile and the codebase's existing `fn_ExeArrayPush` pattern; wired `fn_ModDialog_ArrayPush` to it |
+| 32 | 0x140095750 | EventLog AddEvent-with-name | **LIVE-UNGUARDED**, and the report's own "blocked on four unported string helpers" note was FALSE — every helper was already in `eventlog.cpp` | Ported as `EventLog_AddEventWithName`. Retail ships THREE byte-identical writers (0x140095580 / 0x140095750 / 0x140094e00) differing only in FormatIndexed arg count, so all three now share one core. That refactor exposed a second defect: the existing `EventLog_AddEvent` port was **missing retail's "drop to 1x speed on a critical event" tail** (types 0xb/0xc/0x1e/0x1f + settings byte +0x17) — it had only ever been ported into the AddCitizenEvent copy. Also fixed a leak of the achievement-title String in `GameUpdateLoop::OnScenarioComplete`. |
 | 58 | 0x140118270 | ClearAreaComponent finalize (Ghidra: `ModelComponent_impl_8270`) | LIVE-GUARDED, permanently null | `buildcomponent_state1.cpp` now calls the already-ported `ClearArea_Finalize8270` (exported from `clearareacomponent_states.cpp` via `clearareacomponent_funcs.h`) instead of resolving the raw address |
 
 All three compile clean (`mingw32-make standalone-debug`). No new `RegisterExeAddr` calls
@@ -56,7 +57,7 @@ were added — both wiring fixes route to existing C++ ports instead, so `standa
 | 29 | 0x14008a730 | FUN_14008a730 | DEAD | fn_CitizenBehavior_CollectStats: call site is even commented OUT (citizenbehavior.cpp:1749-1750) | citizenbehavior.cpp:1480 | None needed |
 | 30 | 0x14008c100 | Entity_helper_c100 | DEAD | fn_CitizenBehavior_CheckThresholds: zero callers | citizenbehavior.cpp:1366 | None needed |
 | 31 | 0x1400932A0 | Game_GetMonthFromTime | DEAD | fn_Game_GetMonthFromTime: zero callers | debugui.cpp:26 `DebugUI_GetMonthFromTime_Impl` | None needed |
-| 32 | 0x140095750 | FUN_140095750 | **LIVE-UNGUARDED** | gameupdateloop.cpp:2568, `fn_EventNotifier_FireWithName(...)` — fires on scenario win/loss, no null check | none | **NEEDS-PORT, highest-priority remaining gap.** Nontrivial: builds a localized `String` via `EventLog_YearString`/`EventLog_SeasonString`/`UI::StringTable::GetText`/`String::FormatIndexed`, pushes into an EventArray, and can set a notification-chime flag. None of those `EventLog_*` helpers are ported yet — this needs its own small wave, not a quick fix. |
+| 32 | 0x140095750 | FUN_140095750 | **FIXED** (was LIVE-UNGUARDED) | gameupdateloop.cpp:2568, `fn_EventNotifier_FireWithName(...)` — fires on scenario win/loss, no null check | `EventLog_AddEventWithName` (eventlog.cpp) | Ported + registered (reg_citizen_25_tick.cpp). **The blocker in the original entry was a false premise**: it claimed the `EventLog_*` string helpers were unported, but `YearString`/`SeasonString`/`IconIndex`/`TileIndex`/`EventArray_Grow` have all been in `code/Game/Game/eventlog.cpp` since the tornado lane. Retail 0x140095750 is 0x140095580 `AddEvent` with ONE extra `FormatIndexed` arg — nothing else differs. |
 | 33 | 0x140097fb0 | SaveLoadDialog_helper_7fb0 | N/A | No resolve call for this address exists anywhere | engine_funcs.h: "REPLACED: was fn_SetEngineNextLoop... Now inline C++" | Already fixed by an earlier lane |
 | 34 | 0x140099260 | OptionsDialog_helper_9260 | LIVE-GUARDED | optionsdialog.cpp:919-920, 1187-1188 (`fn_ApplyKeyMapToUI`) | none | NEEDS-PORT |
 | 35 | 0x1400992f0 | FUN_1400992f0 | LIVE-GUARDED | optionsdialog.cpp:1239-1240 (`fn_RegisterDefaultInputBindings`) | none | NEEDS-PORT (1983 bytes — large) |

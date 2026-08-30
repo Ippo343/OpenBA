@@ -38,6 +38,8 @@ extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* e
 // Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
 // gameWorld+0x138 event log (formatted from the events/seasons StringTables).
 extern "C" void EventLog_AddSimple(int eventType, int severity);
+extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
+                                          void* entityIBP, void* nameStr);  // 0x140095750
 // NOTE: EventLog_CheckResourceShortages (code/Game/Game/eventlog.cpp, port of
 // FUN_14008c100) is intentionally NOT called from here anymore — see the retirement
 // note at its former call site below. The scan now runs once per tick from
@@ -882,6 +884,31 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // EventLog_CheckResourceShortages stays defined (faithful port) but uncalled.
     // The scenario/achievement popup (0x1a-0x1d) source op_6830 (0x140096830) and the
     // ribbon / EventPopupDialog paths are unaffected and stay live for any real event.
+
+    // [EVENT PROBE] env BANISHED_EVENT_PROBE_NAME: fire ONE scenario-style named
+    // event (0x1b "scenario won", sev 4) at frame 300. The real caller is
+    // GameUpdateLoop::OnScenarioComplete, which only runs when a scenario's
+    // Achievement is met/failed — that never happens in a sandbox autostart run, so
+    // this is the only way to exercise EventLog_AddEventWithName (0x140095750) and
+    // see its {2}=name substitution land in the ribbon. Diagnostic only, off by default.
+    {
+        static int s_probe = -1;
+        if (s_probe < 0) { const char* e = std::getenv("BANISHED_EVENT_PROBE_NAME"); s_probe = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_probe == 1 && s_frameNum == 300) {
+            s_probe = 0;  // one shot
+            void* eventLog = self ? self->m_eventNotifier : nullptr;
+            if (eventLog) {
+                uint8_t nameStr[8] = {0};
+                fn_String_Ctor_CStr(nameStr, "PROBE Achievement Title");
+                int64_t nullEntity[1] = {0};
+                fn_InternalBasePtr_Ctor(nullEntity, nullptr);
+                EventLog_AddEventWithName(eventLog, 0x1b, 4, nullEntity, nameStr);
+                fn_String_Dtor(nameStr);
+                fprintf(stderr, "[EventProbe] fired AddEventWithName type=0x1b sev=4\n");
+                fflush(stderr);
+            }
+        }
+    }
 
     // [FPS TRACE] env BANISHED_FPS_TRACE: wall-clock fps over 120-frame windows (entry-to-
     // entry period). Also reports the entity count so we can correlate fps with world size.
@@ -2537,7 +2564,9 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
 
-        // 0x1d = scenario won (29), 0x1c = scenario failed (28)
+        // 0x1c = scenario won (28), 0x1d = scenario failed (29). IsMet=1 -> 0x1c.
+        // (The IDs were documented inverted here; the live string table settles it —
+        // the named sibling 0x1b reads "You've failed to meet a goal in the scenario".)
         int eventType = 0x1d - (int)isMet;
         fn_EventNotifier_Fire(self->m_eventNotifier, eventType, 4, nullEntity);
     } else {
@@ -2553,6 +2582,11 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         uint8_t uiStr[24]; // UI::String scratch (non-trivial return in first param)
         fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)achievement + 0x20), titleStr);
 
+        // Retail destructs the title String here — it reuses that same stack slot
+        // for the UI::String -> System::String conversion below. We use separate
+        // buffers, so the dtor has to be explicit or the title's heap block leaks.
+        fn_String_Dtor(titleStr);
+
         // Convert to System::String (member, non-trivial return: self, retval)
         uint8_t sysStr[8] = {0}; // System::String
         fn_UIString_ToSystemString(uiStr, sysStr);
@@ -2563,7 +2597,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
 
-        // 0x1b = scenario won with name (27), 0x1a = scenario failed with name (26)
+        // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
         fn_EventNotifier_FireWithName(self->m_eventNotifier, eventType, 4, nullEntity, sysStr);
 

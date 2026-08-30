@@ -179,13 +179,30 @@ static int EventLog_IconIndex(int eventType) {
 }
 
 // ============================================================
-// AddEvent (0x140095580)
+// AddEvent family core (0x140095580 / 0x140095750 / 0x140094e00)
 // ============================================================
-// eventLog = *(gameWorld+0x138). Builds "FormatIndexed(events[eventType], season,
-// year)" text, colours by severity, computes icon + popup flag, and appends the
-// 0x28-byte entry. entityIBP is an optional InternalBasePtr* for the map-jump tile
-// (null => tileIdx -1, no location). Faithful to the 4-arg exe overload.
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP) {
+// Retail ships THREE event-log writers that are byte-identical apart from how
+// many extra args they hand System::String::FormatIndexed:
+//
+//   0x140095580 AddEvent          {0}=season {1}=year
+//   0x140095750 AddEventWithName  ... {2}=name          (scenario win/loss)
+//   0x140094e00 AddCitizenEvent   ... {2}=name {3}=title {4}=extra
+//
+// Everything else — the severity->colour table, the popup/icon switches, the
+// entity->tile lookup, the 0x28-byte entry append, and the "drop to 1x speed on
+// a critical event" tail — is the same instruction sequence in all three, so
+// they share one core here. Porting the same body three times is how the copies
+// drift apart (see reference_one_retail_fn_ported_twice_diverges); that already
+// happened here — the previous AddEvent port was missing the speed tail that
+// retail 0x140095580 does have.
+//
+// eventLog = *(gameWorld+0x138). entityIBP is an optional InternalBasePtr* for
+// the map-jump tile (null => tileIdx -1, no location). `extra` holds the String
+// DATA pointers (char*) for the {2}.. args, exactly as the original passes them.
+static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
+                                  void* entityIBP,
+                                  const char* const* extra, int nExtra,
+                                  const char* traceTag) {
     if (!eventLog) return;
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
@@ -202,19 +219,34 @@ extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, v
         fn_String_Ctor_CStr(templateStr, "Event");
     }
 
-    // FormatIndexed(fmt=template, %0=season, %1=year). Args are the String DATA
-    // pointers (char*). Fall back to the raw template if the export is unresolved.
+    // FormatIndexed(fmt=template, %0=season, %1=year, %2..=extra). Args are the
+    // String DATA pointers (char*). Fall back to the raw template if the export
+    // is unresolved.
+    const char* tmplData = *(const char**)templateStr;
+    const char* seaData  = *(const char**)seasonStr;
+    const char* yrData   = *(const char**)yearStr;
     if (fn_String_FormatIndexed) {
-        fn_String_FormatIndexed(formatted, *(const char**)templateStr,
-                                *(const char**)seasonStr, *(const char**)yearStr);
+        switch (nExtra) {
+            case 0:
+                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData);
+                break;
+            case 1:
+                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData,
+                                        extra[0]);
+                break;
+            default:  // 3 — the citizen variant
+                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData,
+                                        extra[0], extra[1], extra[2]);
+                break;
+        }
     } else {
         fn_String_Ctor_Copy(formatted, templateStr);
     }
 
-    uint32_t color   = EventLog_SeverityColor(severity);
-    int popup        = EventLog_PopupIndex(eventType);
-    int iconIndex    = EventLog_IconIndex(eventType);
-    int tileIdx      = EventLog_TileIndex(entityIBP);  // null entity -> -1
+    uint32_t color = EventLog_SeverityColor(severity);
+    int popup      = EventLog_PopupIndex(eventType);
+    int iconIndex  = EventLog_IconIndex(eventType);
+    int tileIdx    = EventLog_TileIndex(entityIBP);  // null entity -> -1
 
     // --- Build the 0x28-byte entry and append ---
     uint8_t entry[0x28];
@@ -228,16 +260,17 @@ extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, v
 
     // Trace BEFORE destructing the temporaries (reading them after dtor shows null).
     if (std::getenv("BANISHED_EVENT_TRACE")) {
-        const char* fmtData  = *(const char**)formatted;
-        const char* tmplData = *(const char**)templateStr;
-        const char* seaData  = *(const char**)seasonStr;
-        const char* yrData   = *(const char**)yearStr;
+        const char* fmtData = *(const char**)formatted;
         int existing = *(int*)((uintptr_t)eventLog + 0x20);
-        fprintf(stderr, "[EventLog] AddEvent type=%d sev=%d icon=%d popup=%d (count now %d)\n"
-                        "           text=\"%s\" template=\"%s\" season=\"%s\" year=\"%s\"\n",
-                eventType, severity, iconIndex, popup, existing,
+        fprintf(stderr, "[EventLog] %s type=%d sev=%d icon=%d popup=%d tile=%d "
+                        "(count now %d)\n           text=\"%s\" template=\"%s\" "
+                        "season=\"%s\" year=\"%s\"\n",
+                traceTag, eventType, severity, iconIndex, popup, tileIdx, existing,
                 fmtData ? fmtData : "(null)", tmplData ? tmplData : "(null)",
                 seaData ? seaData : "(null)", yrData ? yrData : "(null)");
+        for (int i = 0; i < nExtra; i++)
+            fprintf(stderr, "           arg{%d}=\"%s\"\n", i + 2,
+                    extra[i] ? extra[i] : "(null)");
         fflush(stderr);
     }
 
@@ -250,87 +283,10 @@ extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, v
     fn_String_Dtor(templateStr);
     fn_String_Dtor(seasonStr);
     fn_String_Dtor(yearStr);
-}
 
-// ============================================================
-// AddCitizenEvent (0x140094e00)
-// ============================================================
-// Citizen life-event variant (only exe caller: CitizenComponent_PostLifeEvent
-// 0x140113af0, the former "AssignState" misnomer). Same shape as AddEvent but the
-// format string gets three extra args — {0}=season {1}=year {2}=citizen name
-// {3}=title (Child/Student/profession) {4}=extra param string — and a tail that
-// drops the game to 1x speed on critical events (types 0xb/0xc/0x1e/0x1f) when
-// the "pause on events" settings byte (+0x17) is set.
-// nameStr/titleStr/extraStr are System::String* (data ptr at +0x00).
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
-                                         void* entityIBP, void* nameStr, void* titleStr,
-                                         void* extraStr) {
-    if (!eventLog) return;
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gameWorld) return;
-
-    // --- Build the display text ---
-    uint8_t yearStr[8], seasonStr[8], templateStr[8], formatted[8];
-    EventLog_YearString(gameWorld, yearStr);
-    EventLog_SeasonString(gameWorld, eventLog, seasonStr);
-
-    void* eventsTable = *(void**)eventLog;  // +0x00
-    if (eventsTable && fn_StringTable_GetText) {
-        fn_StringTable_GetText(eventsTable, templateStr, eventType);
-    } else {
-        fn_String_Ctor_CStr(templateStr, "Event");
-    }
-
-    // Args are the String DATA pointers, exactly as the original passes them.
-    const char* nameData  = nameStr  ? *(const char**)nameStr  : "";
-    const char* titleData = titleStr ? *(const char**)titleStr : "";
-    const char* extraData = extraStr ? *(const char**)extraStr : "";
-    if (fn_String_FormatIndexed) {
-        fn_String_FormatIndexed(formatted, *(const char**)templateStr,
-                                *(const char**)seasonStr, *(const char**)yearStr,
-                                nameData, titleData, extraData);
-    } else {
-        fn_String_Ctor_Copy(formatted, templateStr);
-    }
-
-    uint32_t color = EventLog_SeverityColor(severity);
-    int popup      = EventLog_PopupIndex(eventType);
-    int iconIndex  = EventLog_IconIndex(eventType);
-    int tileIdx    = EventLog_TileIndex(entityIBP);  // PostLifeEvent passes a null IBP -> -1
-
-    // --- Build the 0x28-byte entry and append ---
-    uint8_t entry[0x28];
-    *(uint32_t*)(entry + 0x00) = color;
-    fn_String_Ctor_Copy(entry + 0x08, formatted);
-    *(int32_t*)(entry + 0x10) = eventType;
-    *(int32_t*)(entry + 0x14) = severity;
-    *(int32_t*)(entry + 0x18) = tileIdx;
-    *(int32_t*)(entry + 0x1c) = iconIndex;
-    *(int32_t*)(entry + 0x20) = popup;
-
-    if (std::getenv("BANISHED_EVENT_TRACE")) {
-        const char* fmtData = *(const char**)formatted;
-        int existing = *(int*)((uintptr_t)eventLog + 0x20);
-        fprintf(stderr, "[EventLog] AddCitizenEvent type=%d sev=%d icon=%d popup=%d "
-                        "(count now %d)\n           text=\"%s\" name=\"%s\" title=\"%s\" "
-                        "extra=\"%s\"\n",
-                eventType, severity, iconIndex, popup, existing,
-                fmtData ? fmtData : "(null)", nameData ? nameData : "(null)",
-                titleData ? titleData : "(null)", extraData ? extraData : "(null)");
-        fflush(stderr);
-    }
-
-    int count = *(int*)((uintptr_t)eventLog + 0x20);
-    EventArray_Grow((void*)((uintptr_t)eventLog + 0x18), count + 1, entry);
-
-    fn_String_Dtor(entry + 0x08);
-    fn_String_Dtor(formatted);
-    fn_String_Dtor(templateStr);
-    fn_String_Dtor(seasonStr);
-    fn_String_Dtor(yearStr);
-
-    // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed when
-    // the settings byte +0x17 is set. Speed lives in the EntityUI obj (gw+0x120)+0x34.
+    // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed
+    // when the settings byte +0x17 ("pause on events") is set. Speed lives in
+    // the EntityUI obj (gw+0x120)+0x34. Present in ALL THREE retail writers.
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
         if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
             *((const char*)*g_pGameSettingsPtr + 0x17) != 0) {
@@ -338,6 +294,47 @@ extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int seve
             if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
         }
     }
+}
+
+// ============================================================
+// AddEvent (0x140095580)
+// ============================================================
+// The plain overload: "{0}=season {1}=year".
+extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP) {
+    EventLog_AddEventCore(eventLog, eventType, severity, entityIBP,
+                          nullptr, 0, "AddEvent");
+}
+
+// ============================================================
+// AddEventWithName (0x140095750)
+// ============================================================
+// The named overload. Sole retail caller is GameUpdateLoop::OnScenarioComplete
+// (0x140096830) — event types 0x1a/0x1b (scenario failed/won) with the parent
+// Achievement's title as {2}. nameStr is a System::String* (data ptr at +0x00).
+extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
+                                          void* entityIBP, void* nameStr) {
+    const char* extra[1] = { nameStr ? *(const char**)nameStr : "" };
+    EventLog_AddEventCore(eventLog, eventType, severity, entityIBP,
+                          extra, 1, "AddEventWithName");
+}
+
+// ============================================================
+// AddCitizenEvent (0x140094e00)
+// ============================================================
+// Citizen life-event variant (only exe caller: CitizenComponent_PostLifeEvent
+// 0x140113af0, the former "AssignState" misnomer). Three extra format args —
+// {2}=citizen name {3}=title (Child/Student/profession) {4}=extra param string.
+// nameStr/titleStr/extraStr are System::String* (data ptr at +0x00).
+extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
+                                         void* entityIBP, void* nameStr, void* titleStr,
+                                         void* extraStr) {
+    const char* extra[3] = {
+        nameStr  ? *(const char**)nameStr  : "",
+        titleStr ? *(const char**)titleStr : "",
+        extraStr ? *(const char**)extraStr : "",
+    };
+    EventLog_AddEventCore(eventLog, eventType, severity, entityIBP,
+                          extra, 3, "AddCitizenEvent");
 }
 
 // Convenience: add a location-less event to the live game's event log.

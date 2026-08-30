@@ -12,6 +12,7 @@
 //   0x1400d6c60 Entity_ReassignCost_6c60     code/Game/Component/citizen_reassign_workers.cpp
 //   0x1400d62a0 PathGraph_ReassignWorkers    code/Game/Component/citizen_reassign_workers.cpp
 //   0x140095580 EventLog_AddEvent            code/Game/Game/eventlog.cpp   (existing port)
+//   0x140095750 EventLog_AddEventWithName    code/Game/Game/eventlog.cpp   (added later)
 //
 // 0x140095580 is the shortage/notification event writer reached via
 // fn_NotificationEvent (CitizenBehavior_CheckThresholds) and fn_EventNotifier_Fire
@@ -32,6 +33,9 @@ extern "C" uint64_t  Entity_ReassignCost_6c60(int64_t, void**, void**);      // 
 extern "C" void      PathGraph_ReassignWorkers(void*);                       // 0x1400d62a0
 // eventlog.cpp (existing port; signature-exact with fn_NotificationEvent)
 extern "C" void      EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580
+// eventlog.cpp — named overload, sole caller GameUpdateLoop::OnScenarioComplete
+extern "C" void      EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
+                                               void* entityIBP, void* nameStr);                       // 0x140095750
 
 extern "C" void RegisterCitizen25Tick() {
     RegisterExeAddr(0x140025a10, reinterpret_cast<uintptr_t>(&PathBST_Insert_25a10));
@@ -39,4 +43,5 @@ extern "C" void RegisterCitizen25Tick() {
     RegisterExeAddr(0x1400d6c60, reinterpret_cast<uintptr_t>(&Entity_ReassignCost_6c60));
     RegisterExeAddr(0x1400d62a0, reinterpret_cast<uintptr_t>(&PathGraph_ReassignWorkers));
     RegisterExeAddr(0x140095580, reinterpret_cast<uintptr_t>(&EventLog_AddEvent));
+    RegisterExeAddr(0x140095750, reinterpret_cast<uintptr_t>(&EventLog_AddEventWithName));
 }
