@@ -354,3 +354,59 @@ call for the project owner rather than a default.
 **Still needs a manual click:** #13's actual path — opening Options in-game, changing the
 autosave interval and pressing OK, to confirm the restart loop finds the dialog and
 re-arms the timer at the new interval. Everything it depends on is now in place.
+
+### 13 / 14 — VERIFIED IN A HAND-DRIVEN GAME 2026-08-30
+
+The earlier entry recorded autosave working under `BANISHED_AUTOSTART`. Hand-testing then
+found it did NOT fire in a manually-driven session, and two more defects behind that.
+
+**Row 13's real cause (found without the run).** `OptionsDialog::ApplySettings` guards its
+entire "walk the open dialogs and restart the autosave timer" loop on
+`fn_UpdateAutoSaveTimer`, which `engine_funcs.cpp` resolves from **`0x14005e120`** — an
+address that was never registered. The pointer was null, the guard failed, and changing
+the autosave interval in Options never re-armed anything. Registered `0x14005e120` (the
+body) and `0x14005e110` (its 5-byte JMP thunk, vtable slot 4), both already ported as
+`AutoSaveDialog_Slot4`.
+
+**Confirmed at runtime.** With the fix in, the loop runs and reports itself:
+
+```
+[AutoSave] Options ApplySettings: newIntervalIdx=0 getFirst=... isA=... isDerived=...
+           restartFn=00007ff63a2d2314 tidSlot=00007ff63a72d0f0
+[AutoSave]   walk dialog=... isA(1390209035)=0     (x3)
+```
+
+`restartFn` and `tidSlot` are the two that used to be null. The three `isA=0` results are
+CORRECT there — that sample was taken at the main menu, where no AutoSaveDialog exists
+(it is created by `GameUpdateLoop::Startup`). The in-game Options path is the remaining
+hand-test.
+
+**Autosave itself, verified in a hand-driven game:**
+
+```
+[AutoSave] timer armed: settingIdx=0 -> 1 min (60 s)
+[AutoSave] dialog res=000002d75509b770 instance=000002d756c29d98
+[AutoSave] Slot8 event msg=0x13 data=0  <== TIMER
+[AutoSave] *** TRIGGERED - writing Auto.sav
+```
+
+→ `Documents/Banished/Save/Auto.sav` rewritten at 18:11:40, 3,387,640 bytes, replacing a
+file from the previous day. The `timer armed` line also shows the interval-table fix
+directly: `settingIdx=0 -> 1 min (60 s)`, where the old table would have asked for 60 x
+3600 s.
+
+**On the earlier "never fired" observation.** In the failing session the timer was armed
+at 5 minutes and had not fired after ~373 s of wall clock. The most likely explanation is
+that a `UI::DialogInstance` timer runs on GAME time, and that session was spent largely
+in the Load and Options dialogs, which pause the simulation — so game time lagged wall
+clock. That is a hypothesis, not a measured result: it was never reproduced after the
+`0x14005e120` fix, and the working run used a 1-minute interval with the game actually
+running. If it recurs, instrument the timer's time base before assuming a defect.
+
+**Diagnostics left in place** (all env-gated on `BANISHED_AUTOSAVE_TRACE`): every event
+the dialog receives, the interval each time the timer is armed, the Options restart loop
+with per-dialog `isA` results, and — importantly — a named reason for every early return
+inside `Dialog_AutoSaveHandler` (`PausesGame`, the gameWorld `+0xD0` bit-10 flag, or
+`SaveLoad` already busy). Before those existed, "the timer never fired" and "the timer
+fired and the handler bailed" produced identical logs, which is what made the first
+diagnosis wrong.
