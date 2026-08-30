@@ -288,3 +288,69 @@ The one open whose prior note survived scrutiny.
   walks the open dialogs looking for one of type AutoSaveDialog and only then calls e120.
   With `kCreateGameDialogs = false` (gameupdateloop.cpp:2041) no such dialog is ever
   constructed, so the loop matches nothing. **Porting e120 first would be a null test.**
+
+### 13 / 14 — AUTOSAVE CLOSED 2026-08-30 (opt-in `BANISHED_LIVE_AUTOSAVE`)
+
+The section above said "#13 is blocked on #14, both NEEDS-PORT". Both halves were wrong
+about the *bodies* — all four AutoSaveDialog slots and the autosave body itself were
+already ported. What was missing was the wiring, and there were **four separate defects**
+stacked behind it, each of which alone was enough to keep autosave dead.
+
+**This is not a cosmetic spinner.** The whole autosave feature hangs off this dialog: its
+timer (started by `AutoSaveDialog::Slot4` from the Options interval) is the only clock,
+and its timer-event handler is the only caller of `SaveLoad::SetOperation(4 = SAVE)`
+anywhere in the binary. While the dialog was never constructed the game **never autosaved
+at all** — the Options "Autosave" setting was inert.
+
+The four defects, in the order they would have bitten:
+
+1. **The interval table was wrong twice over** (`autosavedialog.cpp` Slot4). It held
+   `{60,120,300,480,600,900,1800,3600}` and multiplied by `3600.0f`. Retail's eight
+   constants are **minutes** — `{1,5,10,15,20,30,45,60}` (read off .rdata: g_fUVScale=1.0,
+   g_pAgeMultiplier=5.0, DAT_1401721b0=10.0, DAT_1401721bc=15.0, DAT_1401721c4=20.0,
+   g_pNotifyTimerDuration=30.0, DAT_1401721e0=45.0, DAT_1401721f0=60.0) — and the
+   multiplier is `DAT_1401721f0` = **60.0**, not 3600. Four of the eight entries did not
+   match retail *and* the scale was 60x out. At the default "5 minutes" it asked for
+   `120 * 3600` s = **5 days** of game time.
+2. **Slot4 null-dereferenced on entry.** It read `UI::DialogInstance::StopTimer` /
+   `StartTimer` through the exe dispatch slots 0x140151618 / 0x140151620 as
+   `*(void**)ResolveAddr(...)`. Neither slot is registered, so `ResolveAddr` returned 0 and
+   the deref crashed. (This — not the vtable — is what would actually have crashed on
+   naive wiring.) Now resolved from the Runtime DLL: `?StopTimer@DialogInstance@UI@@QEAAXH@Z`
+   / `?StartTimer@...`, entries verified at 0x180113730 / 0x1801137c0, with a null guard.
+3. **Slot8 called an unregistered raw address.** It forwarded the timer event to
+   `ResolveAddr(Module::Exe, 0x14005DEC0)`, which is not registered → null → the guard
+   above it swallowed every tick. The body has been ported all along as
+   `Dialog_AutoSaveHandler` (`dialog_exe_helpers.cpp`); it was simply never wired to its
+   only caller. Now called directly.
+4. **No dialog was ever constructed** — the real #14. `kCreateGameDialogs = false` was
+   hardcoded in `GameUpdateLoop::Startup`. Retail's ctor stamps `vtable_AutoSaveDialog`
+   (exe 0x14015b120), which has no standalone counterpart, so it needed the
+   `eventnotify_sa` hand-built-vtable treatment. Added `autosave_sa` in
+   `autosavedialog.cpp`: 10-entry vtable ([4] Startup→Slot4, [6] Draw→Slot6,
+   [7] Update→Slot7, [8] OnEvent→Slot8, [0] dtor = DialogInstance base dtor since the
+   dialog owns no heap), plus a ctor mirroring 0x14005e230 (base ctor, install vtable,
+   `FindElement("savingImage")`→+0xB8, `FindElement("animatedImage")`→+0xC0, +0xC8=0) and
+   a `REGISTER_TYPE(AutoSaveDialog, "UI::DialogInstance", …)`.
+
+**And one more for #13 specifically.** `OptionsDialog::ApplySettings` (optionsdialog.cpp:936)
+only restarts the timer after finding a dialog of type AutoSaveDialog among the open
+dialogs, guarded on `g_TypeId_AutoSaveDialogType` — which reads exe type-id slot
+**0x1401c4d08, never registered**. Added `standalone/reg_autosave.cpp` (storage +
+`FillTypeIdGlobals_autosave()` staged after `Object::Factory::Startup`, matching the
+`reg_citizenai_typeids.cpp` pattern), so the id there and the id our vtable's `GetTypeId`
+returns are the same value.
+
+**Verified end to end.** With `BANISHED_LIVE_AUTOSAVE=1` and the registry interval set to
+index 0 (1 minute): `[AutoSave] typeid slot c4d08 reg=0x… val=1390209035`, then
+`[AutoSave] dialog res=0x… instance=0x…`, then `Documents/Banished/Save/Auto.sav` written
+at 12:15:22 (3524309 bytes) and rewritten at 12:16:27 (3527437 bytes) — 65 s apart, file
+growing, so each is a fresh save of a progressing world. No crash.
+
+Left **opt-in** rather than added to `kDefaultOnFlags`: unlike the other live flags this
+one writes to the user's save directory (it overwrites `Auto.sav`), so graduating it is a
+call for the project owner rather than a default.
+
+**Still needs a manual click:** #13's actual path — opening Options in-game, changing the
+autosave interval and pressing OK, to confirm the restart loop finds the dialog and
+re-arms the timer at the new interval. Everything it depends on is now in place.

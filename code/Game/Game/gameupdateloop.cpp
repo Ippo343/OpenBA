@@ -35,6 +35,7 @@ extern "C" void ToolbarStandalone_Init();
 // EventNotify ribbon standalone ctor (code/Game/Dialog/eventnotifydialog.cpp) —
 // builds the ribbon dialog (DialogInstance base + our SA vtable + field init).
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
+extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
 // Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
 // gameWorld+0x138 event log (formatted from the events/seasons StringTables).
 extern "C" void EventLog_AddSimple(int eventType, int severity);
@@ -2261,28 +2262,39 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 
     // Create and add AutoSave dialog
     TRACE("[GameUpdateLoop::Startup] creating AutoSave dialog...\n");
-    if (kCreateGameDialogs) {
+    // BANISHED_LIVE_AUTOSAVE. The whole autosave FEATURE hangs off this dialog:
+    // its timer (started by AutoSaveDialog::Slot4 from the Options interval) is the
+    // only clock, and its timer-event handler (Slot8 -> Dialog_AutoSaveHandler) is the
+    // only caller of SaveLoad::SetOperation(SAVE). While this block was hardcoded off
+    // the game never autosaved at all - the Options 'Autosave' setting was inert.
+    // Uses the ExternalFactory::FindOrLoad fallback like the toolbar/EventNotify,
+    // since m_resourceList is empty in standalone. Parented to nothing (retail
+    // passes a null parent IBP here too).
+    static int s_autosaveGate = -1;
+    if (s_autosaveGate < 0)
+        s_autosaveGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_AUTOSAVE") ? 1 : 0;
+    if (s_autosaveGate) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
-        fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
-
-        void* dialogRes = nullptr;
-        if (foundBase != nullptr && g_pDialogTypeId) {
-            if (fn_IsDerivedFrom(foundBase, *g_pDialogTypeId)) {
-                dialogRes = foundBase;
-            }
+        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
+        if (self->m_resourceList && fn_ExternalList_Find)
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
         }
+        void* dialogRes = nullptr;
+        if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
+            dialogRes = foundBase;
         fn_Filename_Dtor(filename);
 
-        // Allocate AutoSave dialog (0xD0 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
         void* autoSave = nullptr;
-        if (mem != nullptr && fn_AutoSaveDialog_Ctor) {
+        if (mem != nullptr && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
             fn_InternalBasePtr_Ctor(nullParent, nullptr);
-            autoSave = fn_AutoSaveDialog_Ctor(mem, self->m_userInterface, dialogRes, nullParent);
+            autoSave = AutoSaveDialog_Ctor_Standalone(mem, self->m_userInterface, dialogRes, nullParent);
         }
 
         if (autoSave) {
@@ -2292,6 +2304,9 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         } else if (mem) {
             fn_MemFreeStatic(mem);
         }
+        fprintf(stderr, "[AutoSave] dialog res=%p instance=%p (null instance = no autosave)\n",
+                dialogRes, autoSave);
+        fflush(stderr);
     }
     TRACE("[GameUpdateLoop::Startup] AutoSave dialog added\n");
 

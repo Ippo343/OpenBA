@@ -467,6 +467,7 @@ extern void RegisterActionChildCtorsBatch(); // Phase 2 Keystone B: 5 missing ac
 extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work action-ctors
 extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
 extern void RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3: CitizenAI candidate-selection
+extern void RegisterAutoSaveTypeIds();       // LANE1 13/14: AutoSaveDialog type-id slot 0x1401c4d08
 extern void RegisterCitizenAITypeIds();      // openfuncs step 2: c70e8/c7158/c42c0 type-id fill (BANISHED_LIVE_CITIZENAI_TIDS)
 extern void RegisterTradeUITypeIds();        // c4b80 TradeComponent type-id fill (BANISHED_LIVE_TRADE_TIDS)
 extern void RegisterElementTypeIds();        // 13 UI-element type-id dispatch slots, one batch (BANISHED_LIVE_ELEMENT_TIDS)
@@ -651,6 +652,7 @@ static void RegisterCodeFunctions() {
     RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2 — 4 Work action-ctors
     RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
     RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3 — CitizenAI candidate-selection
+    RegisterAutoSaveTypeIds();       // LANE1 13/14 - AutoSaveDialog type-id slot (0x1401c4d08)
     RegisterCitizenAITypeIds();      // openfuncs step 2 — c70e8/c7158/c42c0 fill (gated BANISHED_LIVE_CITIZENAI_TIDS)
     RegisterTradeUITypeIds();        // c4b80 TradeComponent — unblocks fn_FindComponent_Building (gated BANISHED_LIVE_TRADE_TIDS)
     RegisterElementTypeIds();        // whole UI-element type-id table — unblocks every FindTypedElement (gated BANISHED_LIVE_ELEMENT_TIDS)

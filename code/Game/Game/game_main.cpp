@@ -81,6 +81,7 @@ extern "C" void FillTypeIdGlobals_worktail_trade();
 // openfuncs step 2 — CitizenAI/Citizen/Happiness type-id globals (c70e8/c7158/c42c0;
 // storage gated on BANISHED_LIVE_CITIZENAI_TIDS, fill is a harmless no-op when off).
 extern "C" void FillTypeIdGlobals_citizenai();
+extern "C" void FillTypeIdGlobals_autosave();
 extern "C" void FillTypeIdGlobals_tradeui();
 extern "C" void ReportTypeIdGlobals_elements();
 extern "C" void FillTypeIdGlobals_worktail_fire();
@@ -520,6 +521,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
+    FillTypeIdGlobals_autosave();          // LANE1 13/14 - AutoSaveDialog id (c4d08)
     FillTypeIdGlobals_citizenai();         // openfuncs step 2 — CitizenAI/Citizen/Happiness ids (c70e8/c7158/c42c0, gated)
     FillTypeIdGlobals_tradeui();           // c4b80 TradeComponent id — MUST be post-Startup (see reg_tradeui_typeids.cpp)
     ReportTypeIdGlobals_elements();        // UI-element type-id table — nothing to fill (Runtime owns the ids); proves they are non-zero
