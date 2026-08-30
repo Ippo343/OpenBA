@@ -41,5 +41,6 @@ void RegisterWorkTailFireBatch() {
     // type-id global storage (value filled later by FillTypeIdGlobals_worktail_fire)
     RegisterExeAddr(0x1401c7900, reinterpret_cast<uintptr_t>(&g_tid_InteractComponent));
     // 0.5f half-cell const (read-only; safe to register unconditionally)
-    RegisterExeAddr(0x140172114, reinterpret_cast<uintptr_t>(&g_DAT_140172114));
+    // 0x140172114 (0.5f) is registered by reg_citizen_needsupdate.cpp, which runs later.
+    // Both copies hold the same verified value; duplicate removed 2026-08-30.
 }

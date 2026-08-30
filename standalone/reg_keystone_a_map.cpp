@@ -32,6 +32,14 @@ void RegisterKeystoneAMapBatch() {
     RegisterExeAddr(0x14009dc20, reinterpret_cast<uintptr_t>(&MapComponent_overlay_dc20));
     RegisterExeAddr(0x14009dee0, reinterpret_cast<uintptr_t>(&CreateNaturalResource_impl_dee0));
     RegisterExeAddr(0x1401241b0, reinterpret_cast<uintptr_t>(&MapComponent_sub_41b0));
-    RegisterExeAddr(0x140124750, reinterpret_cast<uintptr_t>(&CreateNaturalResource_impl_4750));
+    // 0x140124750 is ported twice and the two bodies DIVERGE: this file's
+    // CreateNaturalResource_impl_4750 is the strict transcription (IsDerivedFrom guard +
+    // the registered dee0), while mapcomponent.cpp's MapComponent_DetachOccupancy_4750
+    // deliberately drops the IsDerivedFrom guard (it rejects valid descriptions in
+    // standalone's partial factory tree) and routes the grid write through
+    // StartTown_UnmarkResourceCellGrid, which is kept in lockstep with the spawn-side
+    // mark. address_registry.cpp registers that one later, so it is what every soak run
+    // has actually exercised — it stays the owner. Duplicate registration removed here
+    // 2026-08-30; the body above is retained as the reference transcription.
 }
 

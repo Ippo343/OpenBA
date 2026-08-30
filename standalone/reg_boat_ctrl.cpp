@@ -62,7 +62,8 @@ static const float k_rdata_1720fc = 0.2f;    // 0x3E4CCCCD  state 1->2 dock rang
 static const float k_rdata_17210c = 0.33f;   // 0x3EA8F5C3  state-1 speed clamp, low
 
 void RegisterBoatCtrlAddrs() {
-    RegisterExeAddr(0x14017219c, reinterpret_cast<uintptr_t>(&k_rdata_17219c));
+    // 0x14017219c (6.0f) is registered by gameupdateloop_load.cpp (s_fAudioTimeScale),
+    // which runs later. Same value; duplicate removed 2026-08-30.
     RegisterExeAddr(0x1401721f4, reinterpret_cast<uintptr_t>(&k_rdata_1721f4));
     RegisterExeAddr(0x1401720fc, reinterpret_cast<uintptr_t>(&k_rdata_1720fc));
     RegisterExeAddr(0x14017210c, reinterpret_cast<uintptr_t>(&k_rdata_17210c));

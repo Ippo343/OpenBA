@@ -66,8 +66,10 @@ void RegisterCitizenAIActionCtors() {
     RegisterExeAddr(0x1400ba6b0, reinterpret_cast<uintptr_t>(&CitizenAI_PlayAnimationCtor4_ba6b0));
     // rdata float consts (real exe values; not registered elsewhere).
     RegisterExeAddr(0x140172124, reinterpret_cast<uintptr_t>(&k_rdata_172124));
-    RegisterExeAddr(0x140172174, reinterpret_cast<uintptr_t>(&k_rdata_172174));
+    // 0x140172174 (2.0f) is registered by gameupdateloop_load.cpp (s_fCamParam2), which
+    // runs later. Same value; duplicate removed 2026-08-30.
     RegisterExeAddr(0x140172194, reinterpret_cast<uintptr_t>(&k_rdata_172194));
     RegisterExeAddr(0x140172198, reinterpret_cast<uintptr_t>(&k_rdata_172198));
-    RegisterExeAddr(0x14017214c, reinterpret_cast<uintptr_t>(&k_rdata_17214c));
+    // 0x14017214c (1.0f) is registered by gameupdateloop_load.cpp (s_fConst_1_0), which
+    // runs later. Same value; duplicate removed 2026-08-30.
 }

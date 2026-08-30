@@ -1937,7 +1937,9 @@ static void RegisterVtablesAndTypeIds() {
     // registered). The single-ExternalPtr variants are stream-identical to the
     // StringTable serialize; the array resizers map to the proven stride helpers.
     RegisterExeAddr(0x14000b7b0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable)); // ref-mode ExtPtr (Floor/Terraform)
-    RegisterExeAddr(0x140007140, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Typed_7140));   // typed ExtPtr (Nomad)
+    // 0x140007140 (typed ExtPtr, Nomad) is registered once in RegisterCodeFunctions
+    // above — the second registration here pointed at the SAME symbol and only made
+    // the owner ambiguous. Duplicate-registration sweep 2026-08-30.
     RegisterExeAddr(0x14000bd30, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable)); // ExtPtr variant
 
     // Foundation C helper — single ExternalPtr field serialize (FUN_140002340 =

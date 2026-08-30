@@ -61,7 +61,12 @@ void RegisterComponentGap_D() {
     RegisterExeAddr(0x140026a30, reinterpret_cast<uintptr_t>(&BuildComponent_FindStorage26a30));
 
     // terraformcomponent.cpp — region-dirty recalc (corrected from typo 0x1400a4b50).
-    RegisterExeAddr(0x1400ab150, reinterpret_cast<uintptr_t>(&TerraformComponent_RegionRecalc));
+    // 0x1400ab150 is ported twice: TerraformComponent_RegionRecalc (terraformcomponent.cpp)
+    // and Pf_RegionDirty4_b150 (action_pf_road.cpp). The bodies are equivalent — the PF one
+    // is the strict transcription (no cell-size!=0 guard), and reg_pf_road.cpp registers
+    // later, so it has always been the live one. Registry owner: reg_pf_road.cpp.
+    // TerraformComponent_RegionRecalc stays — quarrycomponent_deform.cpp calls it directly.
+    // Duplicate registration removed 2026-08-30.
 
     // workplacecomponent.cpp — worker detach/attach (closure-safe after this wave).
     RegisterExeAddr(0x14012f7e0, reinterpret_cast<uintptr_t>(&WorkplaceComponent_Detach));

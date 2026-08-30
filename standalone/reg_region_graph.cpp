@@ -21,5 +21,6 @@ void RegisterRegionGraphBuildBatch() {
     RegisterExeAddr(0x1400a8670, reinterpret_cast<uintptr_t>(&Pf_RegionGraphCtor_8670));
     RegisterExeAddr(0x14001e060, reinterpret_cast<uintptr_t>(&Pf_CoarseCellResize_e060));
     RegisterExeAddr(0x14001e420, reinterpret_cast<uintptr_t>(&Pf_CoarseCellFreeTail_e420));
-    RegisterExeAddr(0x14000f9e0, reinterpret_cast<uintptr_t>(&Pf_IntArrayClone_f9e0));
+    // 0x14000f9e0 (Pf_IntArrayClone_f9e0) is owned by reg_pf_pools.cpp — same symbol,
+    // registered there first. Duplicate registration removed 2026-08-30.
 }

@@ -50,7 +50,12 @@ void RegisterWorkLeafBatch() {
     RegisterExeAddr(0x14011b390, reinterpret_cast<uintptr_t>(&WorkLeaf_PlantArea_b390));
     // market
     RegisterExeAddr(0x14002af40, reinterpret_cast<uintptr_t>(&WorkLeaf_MarketTreeCleanup_2af40));
-    RegisterExeAddr(0x140014b00, reinterpret_cast<uintptr_t>(&WorkLeaf_TradeTreeCleanup_14b00));
+    // 0x140014b00 (recursive BST node free) is ported TWICE — here as
+    // WorkLeaf_TradeTreeCleanup_14b00 and in tool_base_highlight.cpp as
+    // TradeWork_helper_14b00. The two bodies are identical; reg_player_highlight.cpp
+    // registers later in AddressRegistryInit and therefore always won. The registry
+    // owner is now stated instead of decided by call order (sweep 2026-08-30); the
+    // body above stays because this file's own leaves call it directly.
     // gather
     RegisterExeAddr(0x140116540, reinterpret_cast<uintptr_t>(&WorkLeaf_FreeStorageCapacity_116540));
     RegisterExeAddr(0x14000c3c0, reinterpret_cast<uintptr_t>(&WorkLeaf_FindGrowthDescription_c3c0));

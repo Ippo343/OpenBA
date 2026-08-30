@@ -39,7 +39,8 @@ extern "C" void TradeWork_impl_4b40(int64_t* p1, int64_t* p2);                  
 
 void RegisterKeystoneARestreeBatch() {
     // Bottom-up: retrace + array-copy + node-alloc, then insert, then the wrapper.
-    RegisterExeAddr(0x140014b40, reinterpret_cast<uintptr_t>(&TradeWork_impl_4b40));
+    // 0x140014b40 (TradeWork_impl_4b40, AVL retrace) — same symbol, registered by
+    // reg_player_highlight.cpp, which runs later. Duplicate removed 2026-08-30.
     RegisterExeAddr(0x140015ec0, reinterpret_cast<uintptr_t>(&ResidenceComponent_helper_5ec0));
     RegisterExeAddr(0x140017460, reinterpret_cast<uintptr_t>(&ResidenceComponent_impl_7460));
     RegisterExeAddr(0x1400172f0, reinterpret_cast<uintptr_t>(&ResidenceComponent_helper_72f0));

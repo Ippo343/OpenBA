@@ -153,7 +153,8 @@ void RegisterComponentBatch_nature() {
     RegisterExeAddr(0x140172140, reinterpret_cast<uintptr_t>(&k_rdata_172140));  // 0.98   UV/spawn scale
     RegisterExeAddr(0x1401721d0, reinterpret_cast<uintptr_t>(&k_rdata_1721d0));  // 32.0   freeze temperature
     RegisterExeAddr(0x14017222c, reinterpret_cast<uintptr_t>(&k_rdata_17222c));  // 255.0  byte<->float scale
-    RegisterExeAddr(0x140172234, reinterpret_cast<uintptr_t>(&k_rdata_172234));  // 300.0  growth-time scale
+    // 0x140172234 (300.0f growth-time scale) is registered by reg_citizen_needsupdate.cpp,
+    // which runs later. Same bit pattern; duplicate removed 2026-08-30.
     RegisterExeAddr(0x140172248, reinterpret_cast<uintptr_t>(&k_rdata_172248));  // 1000.0 spawn-distance scale
     RegisterExeAddr(0x140172288, reinterpret_cast<uintptr_t>(&k_rdata_172288));  // -10.0  growth rate at freeze
     RegisterExeAddr(0x1401722b0, reinterpret_cast<uintptr_t>(&k_rdata_1722b0));  // double fabs bitmask
