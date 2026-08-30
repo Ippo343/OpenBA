@@ -512,6 +512,8 @@ extern "C" void RegisterTownStorageSeed();    // Economy M-D world half: d230/7f
 extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: NeedsUpdate 112260 + helper_21e0 (+ rdata floats)
 extern void RegisterGameSettingsPersist();    // GameSettings <-> IO::Persistence (0x140098970 Save / 0x140098b60 Load)
 extern void RegisterNameDb();                 // NameDatabase::GenerateName (0x1400a4b30) — town/citizen name generator
+extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface);  // 0x140099260 (optionsdialog.cpp)
+namespace Game { void RegisterDefaultInputBindings(); }                   // 0x1400992f0 (inputbindings.cpp)
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
 extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
 extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain (cemetery/tombstone/mourning, 7 fns)
@@ -691,6 +693,16 @@ static void RegisterCodeFunctions() {
     RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)
     RegisterGameSettingsPersist();   // GameSettings <-> Persistence — remembers the New Game picks
     RegisterNameDb();                // NameDatabase::GenerateName (0x1400a4b30) — town-name buttons
+    // --- LANE1 sweep rows 34 + 35 (2026-08-30 audit) ------------------------
+    // 0x140099260 ApplyKeyMapToUI: five UI sound-effect pointers + fullscreen fade
+    // sprite + UI-scale ratio (ui+0xDC). GameUpdateLoop::Startup reaches it through
+    // fn_SetupUIRefs on EVERY world boot and it was silently no-opping, so in-game UI
+    // sounds/fade/scale were never applied. OptionsDialog Cancel used it too.
+    RegisterExeAddr(0x140099260, reinterpret_cast<uintptr_t>(&ApplyKeyMapToUI_Impl));
+    // 0x1400992f0 RegisterDefaultInputBindings: already ported and already run every
+    // boot from RunGameMain, so the 50 bindings are fine — this only revives
+    // OptionsDialog::OnCancel's reset-to-defaults, which went through the null pointer.
+    RegisterExeAddr(0x1400992f0, reinterpret_cast<uintptr_t>(&Game::RegisterDefaultInputBindings));
     RegisterCitizen25();             // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030

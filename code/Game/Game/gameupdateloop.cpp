@@ -1934,7 +1934,17 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // standalone yet (M5 first slice) — guard until it lands. [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
     if (fn_SetupUIRefs) fn_SetupUIRefs(*g_pKeyMapSingleton, self->m_userInterface);
-    TRACE("[GameUpdateLoop::Startup] SetupUIRefs done\n");
+    // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
+    // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
+    // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
+    {
+        uintptr_t ui = (uintptr_t)self->m_userInterface;
+        std::fprintf(stderr, "[Startup] SetupUIRefs: fn=%p uiScale=%.3f sndButtonDown=%p sndAlert=%p\n",
+                     (void*)fn_SetupUIRefs, ui ? *(float*)(ui + 0xDC) : -1.0f,
+                     ui ? *(void**)(ui + 0xB8) : nullptr,
+                     ui ? *(void**)(ui + 0xC8) : nullptr);
+        std::fflush(stderr);
+    }
 
     // Set default cursor
     TRACE("[GameUpdateLoop::Startup] setting default cursor...\n");

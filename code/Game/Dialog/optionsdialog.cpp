@@ -110,6 +110,48 @@ static inline void* GetKeyMapContainer() {
     return *g_pKeyMapSingleton;
 }
 
+// ============================================================
+// ApplyKeyMapToUI (exe 0x140099260)
+// ============================================================
+// Ghidra calls it OptionsDialog_helper_9260, but it is not options-specific and it
+// is not "cursor speed / zoom" as an older comment here guessed. Retail body, in
+// order: copy five UI sound-effect pointers out of the KeyMap container into the
+// UserInterface's sound table, build a 16-byte sprite from km+0xA8/+0xB0 and hand
+// it to UI::UserInterface::SetFullscreenFadeSprite, then write the UI scale ratio
+// (settings[0] / 100.0f) to ui+0xDC — which edittool.cpp:674 reads back.
+//
+// Four retail callers; three matter to us:
+//   0x140098fa0  OptionsDialog OK/Apply       -> calls this directly (below)
+//   0x1400727d0  OptionsDialog Cancel/Restore -> via fn_ApplyKeyMapToUI
+//   0x140097c00  GameUpdateLoop::Startup      -> via fn_SetupUIRefs  [the live one]
+//
+// Both pointer-driven sites resolve 0x140099260, which was never registered, so
+// they silently no-opped. GameUpdateLoop::Startup runs on EVERY world boot, so
+// in-game UI click/hover sounds, the fullscreen fade sprite, and the UI scale
+// factor were never applied during actual gameplay — the menu only had sound
+// because menudialogloopt_stubs.cpp binds those five pointers by a separate path.
+//
+// Retail null-checks neither param; both call sites already guard, and the
+// guards below only cover our own optional resolves.
+extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
+    if (!keyMap || !userInterface) return;
+    uintptr_t ui = (uintptr_t)userInterface;
+    uintptr_t km = (uintptr_t)keyMap;
+    *(uint64_t*)(ui + 0xA8) = *(uint64_t*)(km + 0x70);   // BeginDrag
+    *(uint64_t*)(ui + 0xB0) = *(uint64_t*)(km + 0x78);   // EndDrag
+    *(uint64_t*)(ui + 0xB8) = *(uint64_t*)(km + 0x60);   // ButtonDown
+    *(uint64_t*)(ui + 0xC0) = *(uint64_t*)(km + 0x68);   // ButtonUp
+    *(uint64_t*)(ui + 0xC8) = *(uint64_t*)(km + 0x58);   // Alert
+    if (fn_UI_SetFullscreenFadeSprite) {
+        uint8_t sprite[16];
+        *(uint64_t*)&sprite[0] = *(uint64_t*)(km + 0xA8);
+        *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
+        fn_UI_SetFullscreenFadeSprite(userInterface, sprite);
+    }
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+        *(float*)(ui + 0xDC) = (float)(*g_pGameSettingsPtr)[0] / 100.0f;
+}
+
 // Helper: get actual KeyMap object via triple deref from exref at 0x140151738
 // [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
 // Used for method calls (GetDeviceForId, GetInputForId, etc.)
@@ -914,27 +956,11 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     // Persist game settings
     if (fn_SaveGameSettings) fn_SaveGameSettings(gs);
 
-    // Apply key map config to UI (cursor speed, zoom, etc.)
+    // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
+    // as a fallback; now just calls it, so the OK path and the two pointer-driven
+    // call sites (OnCancel below, GameUpdateLoop::Startup) can never diverge.
     void* keyMap = GetKeyMapContainer();
-    if (keyMap && fn_ApplyKeyMapToUI) {
-        fn_ApplyKeyMapToUI(keyMap, userInterface);
-    } else if (keyMap) {
-        // Manual fallback: copy keymap fields to UserInterface
-        uintptr_t ui = (uintptr_t)userInterface;
-        uintptr_t km = (uintptr_t)keyMap;
-        *(uint64_t*)(ui + 0xA8) = *(uint64_t*)(km + 0x70);
-        *(uint64_t*)(ui + 0xB0) = *(uint64_t*)(km + 0x78);
-        *(uint64_t*)(ui + 0xB8) = *(uint64_t*)(km + 0x60);
-        *(uint64_t*)(ui + 0xC0) = *(uint64_t*)(km + 0x68);
-        *(uint64_t*)(ui + 0xC8) = *(uint64_t*)(km + 0x58);
-        // SetFullscreenFadeSprite
-        if (fn_UI_SetFullscreenFadeSprite) {
-            uint8_t sprite[16];
-            *(uint64_t*)&sprite[0] = *(uint64_t*)(km + 0xA8);
-            *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
-            fn_UI_SetFullscreenFadeSprite(userInterface, sprite);
-        }
-    }
+    if (keyMap) ApplyKeyMapToUI_Impl(keyMap, userInterface);
 
     // Set UI scale: gs[0] is percentage (0-200), divide by 100.0f to get ratio
     *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs[0] / 100.0f;
