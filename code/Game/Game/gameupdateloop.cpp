@@ -139,13 +139,18 @@ static fn_PlayerController_CalcTransform_t fn_PlayerController_CalcTransform = n
 // Audio::Scene::Update (Runtime)
 // RCX=scene, RDX=time, R8=scaledTime, R9=random, stack=listenerPos, stack=windFactor
 // NB: engine_funcs.h declares a project-wide fn_Audio_Scene_Update (used by the
-// menu loop) with the verified signature (..., AEBVVector3, float). This local
-// copy is kept distinct (fn_GUL_*) to preserve GameUpdateLoop's existing
-// uint32_t-windFactor call shape unchanged; the two resolve the same Runtime
-// export (?Update@Scene@Audio@@...). Both are ABI-identical (6th arg is a 4-byte
-// stack slot either way).
+// menu loop) with the verified signature (..., AEBVVector3, float); the two resolve
+// the same Runtime export (?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@
+// AEBVVector3@Math@@M@Z — the trailing M IS a float).
+//
+// The 6th param used to be uint32_t here, with a comment claiming the two were
+// "ABI-identical (6th arg is a 4-byte stack slot either way)". That is only true
+// of the SLOT, not the VALUE: handing a float to a uint32_t parameter CONVERTS it
+// (40.5f -> 40), and the callee then reinterprets those 4 bytes as a float, which
+// is 5.6e-44. It stayed invisible only because fn_CalcWindFactor was unregistered
+// and this whole call was skipped.
 typedef void (*fn_GUL_AudioSceneUpdate_t)(void* scene, int64_t time, int64_t scaledTime,
-                                        void* random, void* listenerPos, uint32_t windFactor);
+                                        void* random, void* listenerPos, float windFactor);
 static fn_GUL_AudioSceneUpdate_t fn_GUL_AudioSceneUpdate = nullptr;
 
 // Audio::Scene::StopAll (Runtime)
@@ -364,7 +369,11 @@ static fn_EventNotifier_FireWithName_t fn_EventNotifier_FireWithName = nullptr;
 // fn_UIString_ToSystemString — available from engine_funcs.h (self, retval)
 
 // FUN_1401027c0 — CalcWindFactor (for audio scene update)
-typedef uint32_t (*fn_CalcWindFactor_t)(void* time);
+// FUN_1401027c0 — despite the name, a pure DISTANCE: |cameraPos - playerCtrl anchor|.
+// Returns a FLOAT in XMM0 (it tail-JMPs into the sqrtf at 0x140132010); this typedef
+// used to say uint32_t, which would have read garbage out of EAX. Its Time* param is
+// dead in retail — spilled at entry and never read.
+typedef float (*fn_CalcWindFactor_t)(void* time);
 static fn_CalcWindFactor_t fn_CalcWindFactor = nullptr;
 
 // System::Time::Time(this, float seconds) -> Time* (constructor from seconds)
@@ -1393,7 +1402,19 @@ post_simulation:
             float seconds = fn_Time_AsSeconds(time);
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMul * (*g_fAudioTimeScale));
-            uint32_t windFactor = fn_CalcWindFactor(scaledTime);
+            float windFactor = fn_CalcWindFactor(scaledTime);
+            // Sanity-check the camera-position sub-offset (playerCtrl+0x34+0x88) once:
+            // it was derived from stack arithmetic in the retail disasm, not from a
+            // struct definition. CLAUDE.md documents the default camera dist as 40, so
+            // a plausible reading is tens of units — not 0, not 1e38.
+            {
+                static int s_once = 0;
+                if (s_once < 3) {
+                    s_once++;
+                    std::fprintf(stderr, "[AudioScene] windFactor(camera dist)=%.3f\n", windFactor);
+                    std::fflush(stderr);
+                }
+            }
             fn_GUL_AudioSceneUpdate(self->m_audioScene, *(int64_t*)time, scaledTime[0],
                                   self->m_random, listenerPos, windFactor);
         } else {
@@ -2562,6 +2583,41 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Shutdown] EXIT\n");
 }
 
+
+// ============================================================
+// CalcWindFactor (0x1401027c0) — really "camera distance to focus"
+// ============================================================
+// Feeds Audio::Scene::Update's last parameter. Named fn_CalcWindFactor here, but
+// the disassembly is a plain distance:
+//
+//   RBX  = [g_pGameWorldSingleton + 0xE0]        playerController
+//   copy Camera (playerCtrl+0x34) to a stack temp via slot 0x140152940
+//   diff = camera.position (copy+0x88..0x90) - [RBX+0x1c/0x20/0x24]   focus/anchor
+//   Vector3::Dot(diff, diff) -> XMM0 ; JMP 0x140132010 (sqrtf)
+//
+// So: |cameraPos - focusPos|, returned as a FLOAT in XMM0. The Time* argument is
+// spilled at entry and never read — keep it unused; making it drive a real
+// oscillation would invent behaviour retail never had.
+//
+// DEVIATION: retail copy-constructs the whole Camera onto the stack and reads the
+// copy's +0x88. We read playerCtrl+0x34+0x88 directly. The position is a copied
+// field, not one the copy ctor could synthesise, so the values are identical — and
+// this avoids taking a dependency on dispatch slot 0x140152940, which nothing else
+// in the tree registers.
+static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) return 0.0f;
+    uintptr_t playerCtrl = *(uintptr_t*)((uintptr_t)gw + 0xE0);
+    if (!playerCtrl) return 0.0f;
+
+    const float* camPos = (const float*)(playerCtrl + 0x34 + 0x88);
+    float dx = camPos[0] - *(float*)(playerCtrl + 0x1c);
+    float dy = camPos[1] - *(float*)(playerCtrl + 0x20);
+    float dz = camPos[2] - *(float*)(playerCtrl + 0x24);
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+extern "C" float CalcWindFactor_Reg(void* time) { return CalcWindFactor_Impl(time); }
 
 // ============================================================
 // GameUpdateLoop::OnScenarioComplete (0x140096830)

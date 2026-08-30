@@ -513,6 +513,7 @@ extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: Needs
 extern void RegisterGameSettingsPersist();    // GameSettings <-> IO::Persistence (0x140098970 Save / 0x140098b60 Load)
 extern void RegisterNameDb();                 // NameDatabase::GenerateName (0x1400a4b30) — town/citizen name generator
 extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface);  // 0x140099260 (optionsdialog.cpp)
+extern "C" float CalcWindFactor_Reg(void* time);                          // 0x1401027c0 (gameupdateloop.cpp)
 namespace Game { void RegisterDefaultInputBindings(); }                   // 0x1400992f0 (inputbindings.cpp)
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
 extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
@@ -703,6 +704,10 @@ static void RegisterCodeFunctions() {
     // boot from RunGameMain, so the 50 bindings are fine — this only revives
     // OptionsDialog::OnCancel's reset-to-defaults, which went through the null pointer.
     RegisterExeAddr(0x1400992f0, reinterpret_cast<uintptr_t>(&Game::RegisterDefaultInputBindings));
+    // 0x1401027c0 CalcWindFactor: |cameraPos - focus|, returns FLOAT in XMM0. It was
+    // the only null leg of the 3-way guard around Audio::Scene::Update, so the entire
+    // per-frame audio scene update was being skipped every frame.
+    RegisterExeAddr(0x1401027c0, reinterpret_cast<uintptr_t>(&CalcWindFactor_Reg));
     RegisterCitizen25();             // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030
