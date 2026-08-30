@@ -286,7 +286,7 @@ void TornadoComponent_InitFuncs() {
         arm("citizen",  g_h.findCitizen && g_h.citizenLifeEvent,
             "findCitizen(9790)/citizenLifeEvent(116dd0)");
         arm("audio",    g_h.findAudio && g_h.audioMoveEmitters,
-            "findAudio(2280 - its type-id global 0x1401c3e60 is unregistered too)");
+            "findAudio(2280)/audioMoveEmitters");
         arm("path",     g_h.terrainClamp != nullptr,
             "terrainClamp(9f3e0) - endpoints are NOT terrain-clamped");
         std::fflush(stderr);

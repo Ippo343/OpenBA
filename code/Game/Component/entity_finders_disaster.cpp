@@ -34,9 +34,31 @@
 // Both globals are registered AND filled post-Startup already — the finders were
 // the only missing half.
 //
-// NOT ported here: 0x140002280 (FindComponent<AmbientEmitterComponent>, the
-// tornado's audio arm). Its type-id global DWORD_1401c3e60 is itself unregistered,
-// so porting the finder alone would leave the arm just as dead while looking fixed.
+//   0x140002280  -> DWORD_1401c3e60  "AmbientEmitterComponent"
+//
+// The third finder is PORTED BELOW BUT DELIBERATELY NOT REGISTERED. Its old
+// "NOT ported here" note blamed the unregistered type-id global DWORD_1401c3e60.
+// That reason is FALSE — ResolveTid() below falls back to GetTypeIdByName for
+// exactly this case (as the Fire/Citizen finders do), and
+// ambientenvironmentcomponent.cpp:68 already resolves "AmbientEmitterComponent"
+// by that same name.
+//
+// The note's CONCLUSION was right for a different reason, measured 2026-08-30 by
+// registering it and crashing on the first founding-housing assignment of a new
+// game (ACCESS_VIOLATION, READ of 0x10, in CitizenComponent_helper_a710+0x3be):
+//
+//   AmbientEmitterComponent is INERT in standalone — its OnAdded (FUN_140042e10)
+//   is a no-op stub, so the emitter array at component+0x38 is never allocated.
+//   ambientenvironmentcomponent.cpp:145-155 already documents this and works
+//   around it for its own path. Retail a710 derefs *(emData+0x38) and reads
+//   +0x10 with NO guard (verified in the 0x14012a710 decompile), so the moment
+//   the finder starts returning a component, that deref faults on 0x10.
+//
+// This is the "a feature's dependencies only surface once you turn it on" case.
+// Do NOT add a null check at the call sites: the deref is faithful and the
+// component is genuinely half-built. Register 0x140002280 only after
+// AmbientEmitterComponent::OnAdded (0x140042e10) is ported so +0x38 is real.
+// The finder itself is kept below, correct and ready, so that port is one line away.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -93,4 +115,15 @@ extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP) 
 extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP) {
     static uint32_t cache = 0;
     return FindByTypeId(entity, retIBP, ResolveTid(0x1401c7158, "CitizenComponent", &cache));
+}
+
+// FUN_140002280 — Entity::FindComponent<AmbientEmitterComponent>
+// Callers: the fire crackle start/stop (firecomponent_ignite.cpp), the tornado's
+// audio arm (tornadocomponent.cpp), and the occupied-building emitter upkeep on
+// worker assign/unassign (citizen_assignworkplace.cpp). All were guarded, so the
+// only symptom was silence.
+extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP) {
+    static uint32_t cache = 0;
+    return FindByTypeId(entity, retIBP,
+                        ResolveTid(0x1401c3e60, "AmbientEmitterComponent", &cache));
 }

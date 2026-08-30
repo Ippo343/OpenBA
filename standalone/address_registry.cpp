@@ -1195,6 +1195,16 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??1Filename@System@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    // System::String::operator= and ~String. TradeComponent::Setup writes every
+    // merchant name through these two slots (tradecomponent.cpp:299-302); with the
+    // assign slot null the copy into the name array never happened AT ALL, so the
+    // whole array stayed zeroed and every trader rendered blank — independent of,
+    // and behind, the missing 0x1400a4c60 name generator. A dispatch slot with no
+    // reader is unregistered; neighbouring slots being fine proves nothing.
+    RegisterDispatchSlot(0x1401514c0,
+        (uintptr_t)ResolveExport("??4String@System@@QEAAAEAV01@AEBV01@@Z"));
+    RegisterDispatchSlot(0x140152af0,
+        (uintptr_t)ResolveExport("??1String@System@@QEAA@XZ"));
     // Math::Vector3::Serialize — required by Weather::Serialize (velocityDir at
     // weather+0x2C). Without it, Weather_Serialize null-derefs s_fn_Vector3_Serialize
     // when MenuScene's +0x80 Weather extPtr loads (intermittent: only on scenes

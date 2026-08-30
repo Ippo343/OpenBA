@@ -51,6 +51,7 @@ extern "C" bool  FireComponent_BeginBurning_11e7b0(void* destroyComp, const int6
 extern "C" void  FireComponent_StopBurning_11ea10(void* destroyComp);           // 0x14011ea10
 extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP);    // 0x140005840
 extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP); // 0x140009790
+extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP); // 0x140002280
 
 // ---- type-id global storage (values filled by FillTypeIdGlobals_fire) ----
 extern uint32_t g_tid_FireDescription;   // 0x1401c4218
@@ -99,6 +100,9 @@ void RegisterFireBatch() {
     // owns the FireComponent half and one file should own both.
     RegisterExeAddr(0x140005840, reinterpret_cast<uintptr_t>(&Entity_FindComponent_Fire_5840));
     RegisterExeAddr(0x140009790, reinterpret_cast<uintptr_t>(&Entity_FindComponent_Citizen_9790));
+    // 0x140002280 (FindComponent<AmbientEmitterComponent>) is DELIBERATELY NOT
+    // registered. The port exists (entity_finders_disaster.cpp) and is correct, but
+    // arming it CRASHES: see the comment there for the measured evidence.
 
     // --- .rdata const ---
     RegisterExeAddr(0x1401722c0, reinterpret_cast<uintptr_t>(&g_DAT_1401722c0));

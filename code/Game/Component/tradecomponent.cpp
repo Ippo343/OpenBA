@@ -335,6 +335,17 @@ void TradeComponent_Setup(void* selfP) {
     // array NULL and read identically from a bare entry trace.
     fprintf(stderr, "[TradeComp] Setup: desc=%p names=%d array=%p\n",
             desc, nameCount, (void*)*(int64_t*)(self + 0x30));
+    // ...and the names themselves. A populated array is NOT evidence the names are
+    // real: while 0x1400a4c60 was unregistered, s_tc_GenName was null, strBuf stayed
+    // zeroed, and every slot got an EMPTY string — which reads identically to a
+    // healthy array from the line above.
+    {
+        int64_t arr = *(int64_t*)(self + 0x30);
+        for (int i = 0; arr && i < nameCount; i++) {
+            const char* nm = *(const char**)(arr + (int64_t)i * 0x20);
+            fprintf(stderr, "[TradeComp]   name[%d]=\"%s\"\n", i, nm ? nm : "(null)");
+        }
+    }
 
     // Resize the item table (+0x40) to desc+0x40
     if (s_tc_ResizeItems)

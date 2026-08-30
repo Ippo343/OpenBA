@@ -231,3 +231,26 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
     fn_String_Ctor_CStr(retStr, buf);
     return retStr;
 }
+
+// ---- NameDatabase gender picker (exe 0x1400a4c60) ---------------------------
+// Retail: String* fn(String* retStr, Random* rng, char female) -- picks
+// "Game/Names/Female.ndb" or "Game/Names/Male.ndb" by the flag, FindOrLoad's it,
+// then tail-calls 0x1400a4b30 (NameDB_GenerateName) with minLen=3 / maxLen=10.
+// Same body as GenerateCitizenName above, but with retail's String return so the
+// address can be registered and reached through ResolveAddr.
+//
+// Registering this matters: TradeComponent::Setup (tradecomponent.cpp:326)
+// resolves 0x1400a4c60 and, while it was null, left its 8-byte String scratch
+// zeroed and assigned an EMPTY name into every merchant slot -- so every trader
+// rendered blank in the trade UI. reg_namedb.cpp used to say this address needed
+// no registration because "nothing resolves them by address"; that stopped being
+// true when the trade lane added the resolve.
+extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female) {
+    char buf[0x100];
+    buf[0] = 0;
+    uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
+    if (db && rng && fn_Random_Rand)
+        GenerateName(db, rng, 3, 10, buf);
+    fn_String_Ctor_CStr(retStr, buf);
+    return retStr;
+}
