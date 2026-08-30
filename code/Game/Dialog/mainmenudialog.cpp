@@ -376,6 +376,13 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
                                          1);  // difficulty: 1 = tutorial mode
         printf("[MainMenuDialog] OpenTutorial: dlgObj=%p after ctor\n", dlgObj);
     }
+    {
+        // Expose the instance so the BANISHED_AUTOTUTORIAL driver in
+        // standalone/autostart.cpp can select an entry and inject the Load click,
+        // the same way OpenLoad exposes the SaveLoadDialog.
+        extern void* g_StandaloneScenarioDialog;
+        g_StandaloneScenarioDialog = dlgObj;
+    }
     AddDialogToUI(self, dlgObj);
     printf("[MainMenuDialog] OpenTutorial: dialog added to UI\n");
 }

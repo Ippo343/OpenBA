@@ -29,10 +29,56 @@
 #include "Goal/goal_exe_helpers.h"
 #include "Goal/statvaluedispatch.h"
 #include <cstdint>
+#include <map>
+
+// Backing storage for the .rdata dispatch slots below. RegisterExeAddr maps the
+// Ghidra address of the SLOT to the address of a word holding the function
+// pointer, which is what code/Game/Goal/timegoalinstance.cpp reads.
+static std::map<uintptr_t, uintptr_t>& GoalSlotStorage() {
+    static std::map<uintptr_t, uintptr_t> s;
+    return s;
+}
+static void RegisterGoalSlot(uintptr_t ghidra_addr, uintptr_t fn_ptr) {
+    auto& slots = GoalSlotStorage();
+    slots[ghidra_addr] = fn_ptr;
+    RegisterExeAddr(ghidra_addr, reinterpret_cast<uintptr_t>(&slots[ghidra_addr]));
+}
 
 void RegisterGoalBatch() {
     RegisterExeAddr(0x1400265b0, reinterpret_cast<uintptr_t>(&StatGoal_ResolveExternalPtr));
     RegisterExeAddr(0x1400da4e0, reinterpret_cast<uintptr_t>(&StatGoal_StatValueDispatch));
     RegisterExeAddr(0x14001b340, reinterpret_cast<uintptr_t>(&Goal_RefArray_Resize));
+
+    // --- GoalInstance dispatch slots (all three were UNREGISTERED) -----------
+    //
+    // 0x140152868 Achievement::GoalInstance::Persist is the one that bites, and
+    // it is a SERIALIZER. TimeGoalInstance::Slot3 (our port of 0x1400dad30) is
+    // byte-faithful to retail except that it calls the base through
+    // `if (s_fn_GoalInstancePersist)`. With the slot unregistered that pointer
+    // was null, so the base call was silently skipped -- while retail always
+    // makes it. GoalInstance::Persist (Runtime 0x18009ef70) reads an ExternalPtr
+    // (the parent Goal, +0x18) plus a uint goal-state (+0x10), so every goal
+    // instance consumed FEWER bytes on load than retail wrote, desynchronising
+    // the stream from that object onward.
+    //
+    // That is why loading the packaged TUTORIAL save died in
+    // InternalFactory::PersistObject: PersistObject constructs an object for an
+    // unseen id and calls obj->vt[0x18](stream) so it deserializes itself INLINE,
+    // and the object right after the first TimeGoalInstance was therefore read
+    // off misaligned bytes, yielding a garbage objId that indexed the id map out
+    // of bounds. Our own saves never caught it because our SAVE leg skipped the
+    // same bytes -- self-consistent, but not retail-compatible. A retail-authored
+    // save is the only test that could see it.
+    RegisterGoalSlot(0x140152868, reinterpret_cast<uintptr_t>(
+        ResolveExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z")));
+
+    // The other two are read by TimeGoalInstance::Slot5 (Update) behind the same
+    // kind of null guard, so with them unregistered a time goal never advanced
+    // and never consulted the other goals. Not stream-affecting, but the tutorial
+    // is goal-driven, so wire them in the same pass.
+    RegisterGoalSlot(0x140152878, reinterpret_cast<uintptr_t>(ResolveExport(
+        "?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z")));
+    RegisterGoalSlot(0x140152880, reinterpret_cast<uintptr_t>(ResolveExport(
+        "?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z")));
 }
 

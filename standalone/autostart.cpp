@@ -16,6 +16,9 @@ extern "C" {
 }
 // Captured by MainMenuDialog_OpenLoad (code/Game/Dialog/mainmenudialog.cpp).
 void* g_StandaloneSaveLoadDialog = nullptr;
+// Captured by MainMenuDialog_OpenTutorial (same file). ScenarioDialog and
+// TutorialDialog are ONE class -- the Tutorial button is the only way to reach it.
+void* g_StandaloneScenarioDialog = nullptr;
 
 #include "engine_funcs.h"
 
@@ -35,6 +38,10 @@ constexpr int kButtonId_Load   = 2;   // MainMenuDialog "buttonLoad" (kButton_Lo
 constexpr int kButtonId_Quit   = 6;   // MainMenuDialog "buttonQuit"
 constexpr int kEventId_Ok      = 2;   // NewGameDialog "buttonOk" (Start)
 constexpr int kSLD_LoadClick   = 2;   // SaveLoadDialog OnEvent 0x12/2 = buttonLoad
+constexpr int kButtonId_Tutorial = 12;    // MainMenuDialog "buttonTutorial" (kButton_Tutorial)
+constexpr int kSD_LoadClick      = 0x65;  // ScenarioDialog Slot8 0x12/101 = LoadSelected
+constexpr uintptr_t kSD_SelectedIndex = 0xC8;  // ScenarioDialog selectedIndex (i32, ctor seeds -1)
+constexpr uintptr_t kSD_EntryCount    = 0xE0;  // ScenarioDialog entry count (i32)
 
 // State of the driver.
 enum class Phase {
@@ -44,11 +51,16 @@ enum class Phase {
     WaitQuit,         // menu up; counting down before firing Quit
     WaitLoadMenu,     // menu up; counting down before firing Load (AUTOLOAD)
     WaitLoadDialog,   // SaveLoadDialog open; waiting for the file list, then click Load
+    WaitTutorialMenu, // menu up; counting down before firing Tutorial (AUTOTUTORIAL)
+    WaitTutorialDialog, // ScenarioDialog open; waiting for its entry list, then click Load
     Done,
 };
 
 // AUTOLOAD: name of the save to load (defaults to the autosave, "Auto").
 char s_loadName[64] = "Auto";
+
+// AUTOTUTORIAL: which tutorial entry to load (index into the ScenarioDialog list).
+int s_tutorialIndex = 0;
 
 bool   s_initialized   = false;
 bool   s_enabled       = false;
@@ -119,6 +131,24 @@ void Init() {
             s_phase   = Phase::WaitLoadMenu;
             fprintf(stderr, "[AutoStart] AUTOLOAD ENABLED — will click Load after %d "
                    "menu frames, then load save \"%s\"\n", s_settleFrames, s_loadName);
+            return;
+        }
+    }
+
+    // BANISHED_AUTOTUTORIAL drives menu -> Tutorial -> select entry -> Load click.
+    // That is the ONLY path to a retail-authored save: the tutorial .sav files live
+    // inside WinData/*.pkg, and ScenarioDialog::LoadSelected swaps persistence+0x90
+    // to the data directory so SaveLoad reads them. Value: the entry index to load
+    // ("1" or empty means index 0).
+    if (const char* t = std::getenv("BANISHED_AUTOTUTORIAL")) {
+        if (t[0] != '\0' && std::strcmp(t, "0") != 0 &&
+            std::strcmp(t, "false") != 0) {
+            if (std::strcmp(t, "1") != 0) s_tutorialIndex = std::atoi(t);
+            s_enabled = true;
+            s_phase   = Phase::WaitTutorialMenu;
+            fprintf(stderr, "[AutoStart] AUTOTUTORIAL ENABLED — will click Tutorial after "
+                   "%d menu frames, then load entry #%d\n",
+                   s_settleFrames, s_tutorialIndex);
             return;
         }
     }
@@ -292,6 +322,64 @@ void TickMenu(void* menuDLT) {
         s_phase = Phase::Done;
         fprintf(stderr, "[AutoStart] AUTOLOAD sequence fired — load operation queued; "
                "driver done\n");
+        break;
+    }
+
+    case Phase::WaitTutorialMenu: {
+        void* mainMenu = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        if (!mainMenu) {
+            s_phaseFrame = 0;
+            return;
+        }
+        if (++s_phaseFrame < s_settleFrames) return;
+
+        fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting Tutorial "
+                "click\n", mainMenu);
+        InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Tutorial);
+        s_phase        = Phase::WaitTutorialDialog;
+        s_newGameFrame = 0;
+        break;
+    }
+
+    case Phase::WaitTutorialDialog: {
+        ++s_newGameFrame;
+        void* dlg = g_StandaloneScenarioDialog;
+        if (!dlg) {
+            if (s_newGameFrame > kNewGameTimeoutFrames) {
+                fprintf(stderr, "[AutoStart] WARN: ScenarioDialog never appeared — "
+                       "aborting AUTOTUTORIAL\n");
+                s_phase = Phase::Done;
+            }
+            return;
+        }
+        uintptr_t d = reinterpret_cast<uintptr_t>(dlg);
+        // Slot4 fills the entry array (+0xD8) and its count (+0xE0) from the
+        // scenario resource list. Count > 0 is our proxy that setup finished.
+        int count = *reinterpret_cast<int*>(d + kSD_EntryCount);
+        if (count <= 0) {
+            if (s_newGameFrame > kNewGameTimeoutFrames) {
+                fprintf(stderr, "[AutoStart] WARN: tutorial list never populated "
+                       "(count=%d) — aborting AUTOTUTORIAL\n", count);
+                s_phase = Phase::Done;
+            }
+            return;
+        }
+
+        int pick = s_tutorialIndex;
+        if (pick < 0 || pick >= count) {
+            fprintf(stderr, "[AutoStart] AUTOTUTORIAL index %d out of range (count=%d) "
+                    "— clamping to 0\n", pick, count);
+            pick = 0;
+        }
+        // The ctor seeds selectedIndex = -1; LoadSelected indexes the entry array
+        // with it unguarded, so it MUST be set before the click.
+        *reinterpret_cast<int*>(d + kSD_SelectedIndex) = pick;
+        fprintf(stderr, "[AutoStart] tutorial list ready (%d entries) — selecting #%d "
+                "and injecting Load click\n", count, pick);
+        InjectClick(dlg, kMsg_ButtonClick, kSD_LoadClick);
+        s_phase = Phase::Done;
+        fprintf(stderr, "[AutoStart] AUTOTUTORIAL sequence fired — driver done\n");
         break;
     }
 

@@ -14,6 +14,7 @@
 #include "Goal/timegoalinstance_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include <cstdio>
 #include <cstdint>
 
 // ============================================================
@@ -95,9 +96,29 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
     EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
-    // Call base GoalInstance::Persist
+    // Call base GoalInstance::Persist.
+    //
+    // ⚠ This guard is not a safety net, it is a STREAM HAZARD. Retail calls the
+    // base unconditionally, and the base reads an ExternalPtr + a uint off the
+    // stream, so skipping it consumes fewer bytes than the save wrote and
+    // desyncs everything after this object. Slot 0x140152868 was unregistered
+    // for exactly this reason and the skip was silent: our own saves skipped the
+    // same bytes on the SAVE leg, so the round trip stayed self-consistent and
+    // only a RETAIL-authored save (the packaged tutorial) exposed it -- as a
+    // crash three objects later in InternalFactory::PersistObject. Say so loudly
+    // rather than quietly dropping a read.
     if (s_fn_GoalInstancePersist) {
         s_fn_GoalInstancePersist(self, stream);
+    } else {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            fprintf(stderr, "[TimeGoalInstance] *** GoalInstance::Persist is NULL "
+                            "(dispatch slot 0x140152868 unregistered) — the base "
+                            "fields are NOT being serialized and the stream is now "
+                            "DESYNCED. See standalone/reg_goal.cpp.\n");
+            fflush(stderr);
+        }
     }
 
     // Create serializer

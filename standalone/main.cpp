@@ -44,6 +44,7 @@ extern "C" {
 extern "C" void InstallFilenameDtorCheck();
 // Session-4 diagnostic installer (standalone/filename_runtime_hook.cpp).
 extern "C" void InstallFilenameRuntimeHook();
+extern "C" void InstallPersistObjectProbe();
 // Session-5 diagnostic installer (standalone/filename_runtime_hook.cpp).
 extern "C" void InstallFindOrLoadWatch();
 // Accelerator B (Phase 0): CompressedStream::Read zero-progress guard
@@ -183,7 +184,7 @@ static void HarnessGuardUnattendedBoot() {
         return v && v[0] && strcmp(v, "0") != 0 && strcmp(v, "false") != 0;
     };
     const bool unattended = envSet("BANISHED_AUTOSTART") || envSet("BANISHED_AUTOQUIT") ||
-                            envSet("BANISHED_AUTOLOAD");
+                            envSet("BANISHED_AUTOLOAD") || envSet("BANISHED_AUTOTUTORIAL");
     if (!unattended) {
         printf("[Standalone] Attended run — launcher dialog left to retail rules "
                "(it appears iff the last run did not finish Engine::Startup)\n");
@@ -1612,6 +1613,11 @@ static bool Init() {
     //     its other callers + the in-game world-build load path. Default ON; opt
     //     out with BANISHED_NO_FOL_LOCK=1. See filename_runtime_hook.cpp.
     InstallFindOrLoadWatch();
+
+    // 4f. Diagnostic: log every Object::InternalFactory::PersistObject call with
+    //     its objId against the id map's real bounds. Off unless
+    //     BANISHED_PERSIST_TRACE=1. See standalone/persistobject_probe.cpp.
+    InstallPersistObjectProbe();
 
     // 4f. Accelerator B (Phase 0): reimplement IO::CompressedStream::Read with an
     //     n<=0 progress guard so a serialize-misalignment over-read logs the
