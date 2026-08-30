@@ -1560,7 +1560,6 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 //      roster instead of staying empty. ----
 // ---- StorageUI: PROMOTED to real SA vtable (storageui.cpp) — Inventory/Storage
 //      tab now populates rows from the entity's StorageComponent instead of "0" ----
-UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);
 
 // ---- SelectResourceUI subclasses (parent is the abstract SelectResourceUI) --
 // ---- OrchardUI: PROMOTED to real SA vtable (orchardui.cpp) — the orchard panel's
@@ -1583,13 +1582,10 @@ UI_DIALOG_STUB(AutoSaveDialog,      "UI::DialogInstance",   0xD0);
 UI_DIALOG_STUB(FollowDialog,        "UI::DialogInstance",   0xD8);
 UI_DIALOG_STUB(GoalDialog,          "UI::DialogInstance",   0xC8);
 UI_DIALOG_STUB(MapParamsDialog,     "UI::DialogInstance",   0xF8);
-UI_DIALOG_STUB(ModDetailsDialog,    "UI::DialogInstance",   0xC8);
-UI_DIALOG_STUB(ModDialog,           "UI::DialogInstance",   0xD8);
 UI_DIALOG_STUB(ModUploadDialog,     "UI::DialogInstance",   0xB8);
 UI_DIALOG_STUB(ScenarioDialog,      "UI::DialogInstance",   0xE8);
 UI_DIALOG_STUB(SaveLoadDialog,      "UI::DialogInstance",   0x160);
 UI_DIALOG_STUB(ToolbarDialog,       "UI::DialogInstance",   0x108);
-UI_DIALOG_STUB(TutorialHighlightDialog, "UI::DialogInstance", 0xF0);
 
 // ---- DialogControllerConfig family (all 0x28) -------------------------------
 // ControlUIConfig: PROMOTED to the real config class in
@@ -1628,8 +1624,6 @@ UI_DIALOG_STUB(TutorialHighlightDialog, "UI::DialogInstance", 0xF0);
 // removed to avoid a duplicate REGISTER_TYPE(UpgradeUIConfig).
 
 // ---- External-based tutorial dialogs (parents are abstract External bases) --
-UI_DIALOG_STUB(TutorialGoalDialog,  "TutorialGoal",         0x40);
-UI_DIALOG_STUB(TutorialSetupDialog, "TutorialSetup",        0x78);
 
 #undef UI_DIALOG_STUB
 

@@ -68,6 +68,7 @@ extern "C" {
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
     void RegisterMenuDialogVtables();
+    void RegisterNullSweepBatch();
     void RegisterMenuSceneVtable();
     void RegisterGeometryVtable();
     void RegisterWeatherVtable();
@@ -517,6 +518,7 @@ extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — Handl
 extern "C" void RegisterCitizen25Tick();      // openfuncs step 2.5(b) — behavior-tick group + EventLog_AddEvent
 extern "C" void RegisterEventLogCitizen();    // citizen life-event chain: PostLifeEvent (ex-"AssignState") + AddCitizenEvent + TileIndex
 extern void RegisterCitizenEmployCascade();   // Economy M-C: townMgr+0xa0 registrar (CitizenComponent_OnAdd 0x140114000)
+extern void RegisterModsBatch();              // Lane 4: local mod list (ModDialog/ModDetailsDialog vtables + ctor + Modification singleton exref)
 extern void RegisterCitizenOnRemove();        // the matching de-registrar: CitizenComponent_OnRemove 0x140113ca0 (vtable slot 7)
 extern void RegisterDestroyWorkersBatch();    // Upgrade path: WorkPlaceComponent builder re-seat / worker release (reg_destroy_workers.cpp; 0x14012f520 + 0x14012f670 + 0x14012fb00). REGISTERED UNCONDITIONALLY — there is no env gate in the batch; the former "opt-in BANISHED_LIVE_DESTROY_WORKERS" note here was stale and caused a wrong risk assessment (2026-07-30).
 extern "C" void RegisterCitizenBehaviorTick(); // Town-manager tick: CitizenBehavior_Update 0x14008c2b0 (stock recompute for status/town-hall dialogs) + 0x1401721fc=75.0f
@@ -545,7 +547,9 @@ extern void RegisterGulSerialize();         // save/load wave: SaveRestore keyst
 extern "C" void RegisterGulTeardown();      // GameUpdateLoop::Shutdown chain (c3d30/c3e60/907b0/1024d0/f8ff0)
 extern void RegisterSaveLoadDialog();       // save/load wave: SaveLoadDialog ctor (b8270) + vtable (14015f900)
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
+extern void RegisterTutorialWaveBatch();   // Lane 2 Tutorial wave: 12 helper fns + 6 dialog vtables + 2 ctors
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
+extern void RegisterDebugMenuBatch();      // Lane 3: built-in DebugUI/Game debug-cheat cluster (11 addrs)
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
 extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/AvgTerrainHeight/FencedAnchorCalc (3)
@@ -691,6 +695,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030
     RegisterCitizenEmployCascade();  // Economy M-C — townMgr+0xa0 citizen-list registrar (CitizenComponent_OnAdd)
+    RegisterModsBatch();             // Lane 4 — local mod list (see standalone/reg_mods.cpp)
     RegisterCitizenOnRemove();       // the matching de-registrar — CitizenComponent_OnRemove (vtable slot 7)
     RegisterDestroyWorkersBatch();   // Upgrade path — WorkPlaceComponent 12f520/12f670 worker release
     RegisterCitizenBehaviorTick();   // Town-manager tick — CitizenBehavior_Update (townMgr+0x170 stock recompute + 75s stats recorder)
@@ -721,6 +726,7 @@ static void RegisterCodeFunctions() {
     RegisterGulTeardown();          // teardown chain (code/Game/Game/gameupdateloop_teardown.cpp)
     RegisterSaveLoadDialog();       // save/load wave (code/Game/Dialog/saveloaddialog.cpp)
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
+    RegisterTutorialWaveBatch();   // Tutorial wave: 262b0/28650/1001f0/e2250/e2330/e24f0/e2700/e29f0/1af90/1afe0/e1260/e1db0 + vtables 160f30/160870/1607a0/160d20/160c30/1609e0 + ctors e01d0/e2cc0
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
     RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
     RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
@@ -800,6 +806,10 @@ static void RegisterCodeFunctions() {
     RegisterGameLeafBatch();       // String-array dtors 1b030/1b0a0/a8a0, MusicPlayer 18220,
     //   ImageCapture 1024fc0-dtor a4fc0, Weather 93eb0, MenuScene array 1b860, terrain 206b0/20870.
     //   All shutdown/teardown-path (dormant on autostart) -> additive, no world-build regression.
+
+    // Lane 3 wave — built-in DebugUI / Game debug-cheat cluster. See
+    // notes/wave_remaining/LANE3_DEBUGMENU_REPORT.md.
+    RegisterDebugMenuBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
@@ -1676,6 +1686,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuDialogVtables();
+    RegisterNullSweepBatch();
     RegisterMenuSceneVtable();
 
     // Weather vtable + factory at exe 0x140160290 — needed for MenuScene

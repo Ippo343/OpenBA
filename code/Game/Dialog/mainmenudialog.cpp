@@ -927,6 +927,8 @@ void StandaloneImpl_Slot7_OnUpdate(void* self, const void* time) {
 // can see clicks register).
 void StandaloneOpenMapParams(void* self);  // defined below (map dialog bring-up)
 
+extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf);
+
 void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     if (msg != 0x12) return;
     printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", self, msg, id);
@@ -994,6 +996,13 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     case kButton_Map:
         printf("[MainMenuDialog::OnCommand] -> OpenMap (MapParamsDialog)\n");
         StandaloneOpenMapParams(self);
+        break;
+    case kButton_Mod:
+        // Lane 4: ModDialog/ModDetailsDialog promoted out of the no-op stub
+        // vtable (code/Game/Dialog/mod_dialog_vtables.cpp). Opener is opt-in
+        // behind BANISHED_LIVE_MODDIALOG until .pkm mounting is proven.
+        printf("[MainMenuDialog::OnCommand] -> OpenMods (ModDialog)\n");
+        ModDialog_OpenFromMainMenu(self);
         break;
     default:
         printf("[MainMenuDialog::OnCommand] button id=%d not yet wired in standalone\n", id);

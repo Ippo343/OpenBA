@@ -78,6 +78,16 @@ static bool Filename_Equals(const void* filenameA, const void* filenameB) {
 //
 // Entry struct (0x58 bytes) layout — see file header comment.
 // ============================================================
+static void ModDialog_RefreshDisplay_Impl(ModDialog* self);
+
+// Exported under the retail name so standalone/reg_mods.cpp can register the
+// retail address 0x14006eec0 to it. Seven exe call sites reach RefreshDisplay
+// (ModDialog_OnRemove / _Serialize / the two move helpers / helper_e930 / two
+// .rdata entries), and every one of them resolved to NULL before this.
+extern "C" void ModDialog_RefreshDisplay(void* self) {
+    ModDialog_RefreshDisplay_Impl(reinterpret_cast<ModDialog*>(self));
+}
+
 static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
     uintptr_t s = (uintptr_t)self;
     void* modSingleton = *(void**)g_ppModificationSingleton;
