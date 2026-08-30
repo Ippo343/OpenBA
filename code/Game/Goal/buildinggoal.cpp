@@ -10,9 +10,11 @@
 //   +0x40: int    buildingTypeCount      — number of entries
 //
 // Each entry in the array is 0x18 bytes:
-//   +0x00: System::String (8 bytes) — building type name
-//   +0x08: uint32 — unknown field
-//   +0x10: uint64 — building type hash/key for BST lookup
+//   +0x00: System::String (8 bytes) — building type name (an ExternalPtr triple)
+//   +0x08: uint32 — cached ExternalFactory generation (-1 = never resolved)
+//   +0x10: External* — RESOLVED ComponentDescription pointer, and the key the
+//                    world-building BST is searched on. Filled lazily by
+//                    ResolveExternalByName_Impl (0x14001b1d0); it is NOT a hash.
 //
 // The world building BST is at game+0xF0+0x160.
 // BST nodes: +0x00=key (uint64), +0x10=count (int), +0x20=left, +0x28=right
@@ -20,9 +22,12 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Goal/buildinggoal_funcs.h"
+#include "Goal/goal_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 // Vtable pointer for BuildingGoal (resolved at runtime)
 static void* s_vtable_BuildingGoal = nullptr;
@@ -112,10 +117,10 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     uintptr_t serPtr = *(uintptr_t*)serializer;
     int encodingMode = *(int*)(serPtr + 0x08);
     if (encodingMode == 0) {
-        // Loading: resize array
-        if (fn_BuildingTypeArray_Resize) {
-            fn_BuildingTypeArray_Resize((void*)(s + 0x38), countLocal);
-        }
+        // Loading: resize the entry array (0x14001b340, ported as Goal_RefArray_Resize).
+        // Was a guarded raw resolve of an unregistered address, i.e. a silent no-op:
+        // the array stayed empty and every entry below wrote through a null base.
+        Goal_RefArray_Resize((void*)(s + 0x38), countLocal);
     }
 
     // Serialize each entry
@@ -134,11 +139,14 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
                 g_fn_String_Serialize(entry, serializer);
             }
 
-            // On load: compute hash
+            // On load: resolve the entry's description reference (0x14001b1d0).
+            // NOT a string hash despite the old `fn_StringHash` name — it is the
+            // lazy ExternalPtr resolve already ported as ResolveExternalByName_Impl
+            // (engine_funcs.h), which every other caller in the tree calls inline
+            // rather than by address. Writes entry+0x10 (resolved Description*) and
+            // entry+0x08 (factory generation).
             if (encodingMode == 0) {
-                if (fn_StringHash) {
-                    fn_StringHash(entry);
-                }
+                ResolveExternalByName_Impl(entry);
             }
 
             // Filename dtor
@@ -219,20 +227,26 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
             // Get entry from array
             uintptr_t entry = *(uintptr_t*)(s + 0x38) + offset;
 
-            // Copy string, compute hash, extract key
-            uint8_t strBuf[8];
-            fn_String_Ctor_Copy(strBuf, (void*)entry);
-            // entry+0x10: uint64 hash key
-            uint64_t hashKey = *(uint64_t*)(entry + 0x10);
-
-            // Compute string hash (FUN_14001b1d0)
-            if (fn_StringHash) {
-                fn_StringHash(strBuf);
-            }
-
-            // Use the hash key from the entry
-            uint64_t lookupKey = hashKey;
-            fn_String_Dtor(strBuf);
+            // Retail copies the WHOLE 0x18 ExternalPtr triple to the stack, resolves
+            // into the COPY, and reads the pointer back out of it — the array entry
+            // is deliberately left untouched, so each evaluation re-resolves.
+            //
+            // The previous port passed an 8-byte `strBuf` here, which was wrong twice
+            // over: it read the "key" BEFORE resolving (so it always saw the stale
+            // value), and the resolver writes at +0x08 and +0x10, i.e. 0x18 bytes into
+            // an 8-byte stack buffer — a latent smash of whatever local followed it,
+            // armed the moment the resolve stopped being a no-op.
+            //
+            // The BST key is not a hash: it is the resolved ComponentDescription
+            // pointer. While the resolve never ran it stayed 0, so every goal looked
+            // up key 0, matched nothing, and could never be met.
+            uint8_t refCopy[0x18];
+            fn_String_Ctor_Copy(refCopy, (void*)entry);                    // +0x00 name
+            *(uint32_t*)(refCopy + 0x08) = *(uint32_t*)(entry + 0x08);     // +0x08 generation
+            *(uint64_t*)(refCopy + 0x10) = *(uint64_t*)(entry + 0x10);     // +0x10 cached ptr
+            ResolveExternalByName_Impl(refCopy);
+            uint64_t lookupKey = *(uint64_t*)(refCopy + 0x10);
+            fn_String_Dtor(refCopy);
 
             // BST lookup in world building tree at worldData+0x160
             uint64_t* node = *(uint64_t**)(worldData + 0x160);
@@ -333,3 +347,86 @@ extern "C" void* BuildingGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(BuildingGoal, "Achievement::Goal",
               &BuildingGoal_Factory, &BuildingGoal_CreateInPlace);
+
+// ============================================================
+// BuildingGoal_Probe — diagnostic, env-gated (BANISHED_GOAL_PROBE)
+// ============================================================
+// The base game ships NO scenarios: `Dialog\Goal.rsc` is the only goal resource
+// in data0/data1.pkg, and BuildingGoal only ever gets built by the tutorial or by
+// a mod. So nothing in a sandbox autostart run evaluates a BuildingGoal, and any
+// claim that this path "works" from a normal run would be a null test
+// (reference_null_test_measures_a_world_without_the_feature).
+//
+// This probe builds a real one-entry BuildingGoal on the stack against a live
+// world, runs the actual Slot8 evaluator, and reports every stage: the world
+// building BST contents, the resolved description pointer, and the verdict. Set
+// BANISHED_GOAL_PROBE to a template name (default "Template\StorageBarn.rsc" —
+// the starting town builds one).
+extern "C" void BuildingGoal_Probe(const char* templateName) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!fn_String_Ctor_CStr || !fn_String_Dtor) return;
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t worldData = *reinterpret_cast<uintptr_t*>(gameWorld + 0xF0);
+    if (!worldData) return;
+
+    // --- Dump the world building BST (keyed on resolved description pointer) ---
+    // Iterative in-order walk with an explicit stack; the tree is small (one node
+    // per distinct built building type).
+    uint64_t* stack[64];
+    int sp = 0, dumped = 0;
+    uint64_t* node = *reinterpret_cast<uint64_t**>(worldData + 0x160);
+    fprintf(stderr, "[GoalProbe] world building BST @ %p:\n",
+            reinterpret_cast<void*>(worldData + 0x160));
+    while ((node || sp) && dumped < 64) {
+        while (node && sp < 64) { stack[sp++] = node; node = reinterpret_cast<uint64_t*>(node[4]); }
+        if (!sp) break;
+        node = stack[--sp];
+        fprintf(stderr, "[GoalProbe]   key=%016llx count=%d\n",
+                static_cast<unsigned long long>(node[0]), static_cast<int>(node[2]));
+        dumped++;
+        node = reinterpret_cast<uint64_t*>(node[5]);
+    }
+    if (dumped == 0) fprintf(stderr, "[GoalProbe]   (empty)\n");
+
+    // --- Build a one-entry requireAll BuildingGoal and evaluate it ---
+    uint8_t goal[0x48];
+    memset(goal, 0, sizeof(goal));
+    goal[0x30] = 1;                                    // requireAll
+    Goal_RefArray_Resize(goal + 0x38, 1);              // seeds generation -1
+    uint8_t* entry = *reinterpret_cast<uint8_t**>(goal + 0x38);
+    if (!entry) { fprintf(stderr, "[GoalProbe] resize FAILED (null array)\n"); fflush(stderr); return; }
+
+    fprintf(stderr, "[GoalProbe] seeded entry gen=%d ptr=%p (gen must be -1, else the "
+                    "resolver would treat it as cached)\n",
+            *reinterpret_cast<int32_t*>(entry + 0x08),
+            *reinterpret_cast<void**>(entry + 0x10));
+
+    fn_String_Ctor_CStr(entry, templateName);          // +0x00 name
+
+    // Resolve a copy for reporting — Slot8 deliberately resolves into a throwaway
+    // triple and leaves the array entry alone, so read the pointer from our own copy.
+    uint8_t refCopy[0x18];
+    memset(refCopy, 0, sizeof(refCopy));
+    fn_String_Ctor_Copy(refCopy, entry);
+    *reinterpret_cast<uint32_t*>(refCopy + 0x08) = *reinterpret_cast<uint32_t*>(entry + 0x08);
+    *reinterpret_cast<uint64_t*>(refCopy + 0x10) = *reinterpret_cast<uint64_t*>(entry + 0x10);
+    ResolveExternalByName_Impl(refCopy);
+    void* resolved = *reinterpret_cast<void**>(refCopy + 0x10);
+    fn_String_Dtor(refCopy);
+
+    *reinterpret_cast<uint64_t*>(goal + 0x40) = 1;     // count = 1
+    int verdict = BuildingGoal_Slot8(reinterpret_cast<BuildingGoal*>(goal));
+
+    fprintf(stderr, "[GoalProbe] name=\"%s\" resolved=%p verdict=%d "
+                    "(requireAll: 1=met, 0=not met)\n",
+            templateName, resolved, verdict);
+    if (!resolved) {
+        fprintf(stderr, "[GoalProbe]   resolved=NULL — ResolveExternalByName uses find-ONLY "
+                        "Find, so the template must already be in the ExternalFactory "
+                        "(see StartTown_ResolveTemplate's FindOrLoad fallback).\n");
+    }
+    fflush(stderr);
+
+    fn_String_Dtor(entry);
+    if (fn_MemFreeStatic) fn_MemFreeStatic(entry);
+}

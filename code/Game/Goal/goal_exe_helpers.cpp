@@ -58,3 +58,69 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     *reinterpret_cast<void**>(s + 0x10) = result;
     *reinterpret_cast<int32_t*>(s + 0x08) = factoryGen;
 }
+
+// ============================================================
+// Reference-triple array resize (FUN_14001b340)
+// ============================================================
+// Callers: BuildingGoal::Serialize (0x1400d76a0) and MapGenerator::Serialize
+// (0x1400a2980), both on the LOAD leg only (serializer m_encoding == 0).
+// `arr` is the familiar {data* @+0x00, count @+0x08, capacity @+0x0c} header.
+//
+// Same primitive as EventArray_Grow in code/Game/Game/eventlog.cpp — including
+// the identical triple-capacity heuristic on a single-element grow — but with a
+// 0x18 stride, over the ExternalPtr triple that StatGoal_ResolveExternalPtr and
+// ResolveExternalByName_Impl operate on:
+//   +0x00 System::String (resource name)   +0x08 int32 cached generation
+//   +0x10 void* cached External*
+//
+// ⚠ The tail SEED VALUES are load-bearing: a newly added entry gets generation
+// **-1**, not 0. Zero is a legitimate ExternalFactory generation, so a 0 seed
+// would make the lazy resolver take its "cache still valid" early-out while the
+// pointer is still null — the entry would silently never resolve. Faithful to
+// retail, which stores 0xffffffff explicitly.
+void Goal_RefArray_Resize(void* arr, uint32_t newCount) {
+    if (!arr) return;
+    uintptr_t* base = reinterpret_cast<uintptr_t*>(arr);
+    uint8_t*   hdr  = reinterpret_cast<uint8_t*>(arr);
+    uint32_t oldCount = *reinterpret_cast<uint32_t*>(hdr + 8);
+    if (newCount == oldCount) return;
+
+    uintptr_t oldData = *base;
+    *reinterpret_cast<uint32_t*>(hdr + 8) = newCount;
+    int32_t* capPtr = reinterpret_cast<int32_t*>(hdr + 0xC);
+    if (*capPtr < static_cast<int32_t>(newCount)) {
+        *capPtr = static_cast<int32_t>(newCount);
+        if (newCount == oldCount + 1 && oldCount != 0)
+            *capPtr = static_cast<int32_t>(newCount) * 3;
+        *base = reinterpret_cast<uintptr_t>(
+            fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*capPtr) * 0x18, 8));
+    }
+    uintptr_t newData = *base;
+    if (!newData) return;
+
+    // On an in-place grow retail skips the preserved entries entirely and only
+    // initialises the tail; when the block moved it copy-constructs all of them.
+    uint32_t startIdx = (oldData == newData) ? oldCount : 0;
+    for (uint32_t i = startIdx; i < newCount; i++) {
+        uint8_t* dst = reinterpret_cast<uint8_t*>(newData) + static_cast<uintptr_t>(i) * 0x18;
+        if (i < oldCount) {
+            uint8_t* src = reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18;
+            fn_String_Ctor_Copy(dst, src);                                       // +0x00
+            *reinterpret_cast<uint32_t*>(dst + 0x08) = *reinterpret_cast<uint32_t*>(src + 0x08);
+            *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<uint64_t*>(src + 0x10);
+        } else {
+            *reinterpret_cast<uint64_t*>(dst + 0x00) = 0;
+            *reinterpret_cast<uint32_t*>(dst + 0x08) = 0xFFFFFFFFu;  // generation -1
+            *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
+        }
+    }
+
+    if (oldData == newData) {
+        for (uint32_t i = newCount; i < oldCount; i++)   // in-place shrink
+            fn_String_Dtor(reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18);
+    } else if (oldData) {
+        for (uint32_t i = 0; i < oldCount; i++)
+            fn_String_Dtor(reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18);
+        fn_MemFreeStatic(reinterpret_cast<void*>(oldData));
+    }
+}

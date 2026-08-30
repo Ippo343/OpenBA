@@ -10,13 +10,15 @@ Legend: **DEAD** = never called (or superseded by an existing direct port) · **
 = called behind `if (fn)` · **LIVE-UNGUARDED** = called with no null check (latent
 EXEC-of-0) · **NEEDS-PORT** = no reimplementation exists anywhere.
 
-## Fixed this lane (4)
+## Fixed this lane (6)
 
 | # | Address | Name | Was | Fix |
 |---|---------|------|-----|-----|
 | 3 | 0x14000a170 | FindComponent\<ClearAreaComponent\> | LIVE-GUARDED, permanently null | `buildcomponent_state1.cpp` now calls the already-ported `fn_FindComponent_SM` (engine_funcs.h) instead of resolving the raw address |
 | 4 | 0x140012a60 | ModDialog array push (stride 0x58) | **LIVE-UNGUARDED** — `moddialog.cpp:479` called it with no null check; adding an installed mod's thumbnail EXEC'd 0 | Wrote a byte-faithful C++ port (`fn_ModDialog_ArrayPush58_CppImpl`, engine_funcs.cpp) modeled on the decompile and the codebase's existing `fn_ExeArrayPush` pattern; wired `fn_ModDialog_ArrayPush` to it |
 | 32 | 0x140095750 | EventLog AddEvent-with-name | **LIVE-UNGUARDED**, and the report's own "blocked on four unported string helpers" note was FALSE — every helper was already in `eventlog.cpp` | Ported as `EventLog_AddEventWithName`. Retail ships THREE byte-identical writers (0x140095580 / 0x140095750 / 0x140094e00) differing only in FormatIndexed arg count, so all three now share one core. That refactor exposed a second defect: the existing `EventLog_AddEvent` port was **missing retail's "drop to 1x speed on a critical event" tail** (types 0xb/0xc/0x1e/0x1f + settings byte +0x17) — it had only ever been ported into the AddCitizenEvent copy. Also fixed a leak of the achievement-title String in `GameUpdateLoop::OnScenarioComplete`. |
+| 6 | 0x14001b1d0 | ExternalPtr lazy resolve (mis-named `fn_StringHash`) | LIVE-GUARDED, permanently null — and BOTH halves of the deferral were false: it is not a hash, and it was already ported | Wired `buildinggoal.cpp` to the existing `ResolveExternalByName_Impl`. This was the gate on the whole scenario-goal feature: `BuildingGoal`'s world-building BST is keyed on the RESOLVED description pointer at entry+0x10 (the source called it a "hash key"), so while the resolve no-op'd every goal looked up key 0, matched nothing, and could never be met. Fixing it also removed a latent stack smash — the evaluator passed an 8-byte buffer to a function that writes 0x18 bytes; retail copies the whole triple. |
+| 7 | 0x14001b340 | ExternalPtr-triple array resize | LIVE-GUARDED, permanently null | Ported as `Goal_RefArray_Resize` + registered. Without it the load-leg resize no-op'd, leaving the entry array empty and every subsequent entry write going through a null base. |
 | 58 | 0x140118270 | ClearAreaComponent finalize (Ghidra: `ModelComponent_impl_8270`) | LIVE-GUARDED, permanently null | `buildcomponent_state1.cpp` now calls the already-ported `ClearArea_Finalize8270` (exported from `clearareacomponent_states.cpp` via `clearareacomponent_funcs.h`) instead of resolving the raw address |
 
 All three compile clean (`mingw32-make standalone-debug`). No new `RegisterExeAddr` calls
@@ -31,8 +33,8 @@ were added — both wiring fixes route to existing C++ ports instead, so `standa
 | 3 | 0x14000a170 | FUN_14000a170 | **FIXED** | see above | fn_FindComponent_SM | Wired |
 | 4 | 0x140012a60 | FUN_140012a60 | **FIXED** (was LIVE-UNGUARDED) | moddialog.cpp:479 | new port | Ported + wired |
 | 5 | 0x140017050 | CitizenComponent_helper_09e0_sub_7050 | N/A | No `ResolveAddr(...,0x140017050)` call exists anywhere in the tree | already replaced by inline `fn_CitizenComponent_HasVacancy` (engine_funcs.h) | False positive in sweep list — already fixed by an earlier lane |
-| 6 | 0x14001b1d0 | FUN_14001b1d0 | LIVE-GUARDED | buildinggoal.cpp:139-140, 229-230 (`fn_StringHash`) | none | NEEDS-PORT — 49 xrefs in the exe (shared utility); didn't want to guess the hash algorithm (FNV/djb2/CRC) without disasm confirmation |
-| 7 | 0x14001b340 | FUN_14001b340 | LIVE-GUARDED | buildinggoal.cpp:116-117 (`fn_BuildingTypeArray_Resize`) | none | NEEDS-PORT |
+| 6 | 0x14001b1d0 | FUN_14001b1d0 | **FIXED** | buildinggoal.cpp:139-140, 229-230 (`fn_StringHash`) | `ResolveExternalByName_Impl` (engine_funcs.h) | Wired. **Two false premises in the original entry.** (a) It is NOT a string hash — it is a lazy `ExternalPtr<T>::Resolve` (generation check vs ExternalFactory+8, `Find` by Filename, `IsDerivedFrom`, cache ptr at +0x10 / generation at +0x08), so "didn't want to guess FNV/djb2/CRC" was chasing something that does not exist. (b) It was **already ported** and is called inline by starttown / founding_spawn / tutorial\_\* — buildinggoal.cpp was the only file still resolving the raw address. Wiring-only fix, same as #3 and #58. |
+| 7 | 0x14001b340 | FUN_14001b340 | **FIXED** | buildinggoal.cpp:116-117 (`fn_BuildingTypeArray_Resize`) | `Goal_RefArray_Resize` (goal_exe_helpers.cpp) | Ported + registered (reg_goal.cpp). ExternalPtr-triple array resize, stride 0x18 — the same primitive as `EventArray_Grow`. New entries MUST be seeded with generation **-1**: 0 is a valid factory generation, so a 0 seed makes the resolver above take its "cache still valid" early-out and the entry silently never resolves. |
 | 8 | 0x14001fdb0 | TradeWork_helper_fdb0 | LIVE-GUARDED | serialize_struct60b.cpp:131-132 | none | NEEDS-PORT |
 | 9 | 0x14001fe60 | TradeWork_helper_fe60 | LIVE-GUARDED | serialize_struct60b.cpp:140-141 | none | NEEDS-PORT |
 | 10 | 0x140021790 | ToolbarDialog_helper_1790 | DEAD | toolbardialog.cpp:1198 comment confirms the sort was ported directly (inline stable insertion sort); `fn_ToolbarSort` has zero callers | inline sort in toolbardialog.cpp | None needed |
@@ -91,11 +93,18 @@ were added — both wiring fixes route to existing C++ ports instead, so `standa
 
 ## Summary counts
 
-- **Fixed this lane:** 3 (#3, #4, #58) — one of which (#4) was a genuine LIVE-UNGUARDED crash
+- **Fixed:** 6 (#3, #4, #58 in the original lane; #6, #7, #32 in the 2026-08-30 follow-up)
 - **DEAD** (vestigial, real port already exists elsewhere or superseded): 33
 - **N/A / already fixed by an earlier lane** (no resolve call remains): 2 (#5, #33)
-- **LIVE-GUARDED, NEEDS-PORT** (silently-skipped retail behaviour): 17
-- **LIVE-UNGUARDED** (latent EXEC-of-0): 6 — #18, #32, #42, #43, #44, plus the SetFollowBuilding half of #53
+- **LIVE-GUARDED, NEEDS-PORT** (silently-skipped retail behaviour): 15 (was 17; #6 and #7 closed)
+- **LIVE-UNGUARDED** (latent EXEC-of-0): 5 — #18, #42, #43, #44, plus the SetFollowBuilding half of #53 (#32 closed)
+
+> ⚠ **Three of the four deferrals audited on 2026-08-30 rested on false premises**
+> (#32's "blocked on four unported string helpers"; #6's "it's a hash of unknown
+> algorithm" AND "needs porting" — it was neither). Before honouring any NEEDS-PORT
+> note in this table, re-check its premise against retail and against the tree: grep
+> the retail ADDRESS, not the `fn_*` name our source gave it, since two of the three
+> were misnamed. See [[reference_stub_comment_outlived_the_port_that_replaced_it]].
 - **Effectively dead/unreachable today** but would EXEC-of-0 if a currently-unwired caller (`MainMenuDialog_Slot8`) is ever wired live: #17, #19
 - **Deliberately-unregistered by design** (documented, correct as-is): #52
 - **Duplicate-registration traps** flagged for whoever ports them: #44 (0x1400b49f0), #53/(Toolbar_Utility+SetFollowBuilding share 0x140101a80)

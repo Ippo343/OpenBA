@@ -38,6 +38,7 @@ extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* e
 // Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
 // gameWorld+0x138 event log (formatted from the events/seasons StringTables).
 extern "C" void EventLog_AddSimple(int eventType, int severity);
+extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal/buildinggoal.cpp
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
                                           void* entityIBP, void* nameStr);  // 0x140095750
 // NOTE: EventLog_CheckResourceShortages (code/Game/Game/eventlog.cpp, port of
@@ -907,6 +908,24 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 fprintf(stderr, "[EventProbe] fired AddEventWithName type=0x1b sev=4\n");
                 fflush(stderr);
             }
+        }
+    }
+
+    // [GOAL PROBE] env BANISHED_GOAL_PROBE: evaluate one synthetic BuildingGoal at
+    // frame 400 (see BuildingGoal_Probe). The base game ships no scenarios, so this
+    // is the only way to exercise the goal path without a mod. Value = template name
+    // (or "1" for the default). Diagnostic only, off by default.
+    {
+        static int s_goalProbe = -1;
+        static const char* s_goalName = nullptr;
+        if (s_goalProbe < 0) {
+            const char* e = std::getenv("BANISHED_GOAL_PROBE");
+            s_goalProbe = (e && e[0] && e[0] != '0') ? 1 : 0;
+            s_goalName = (e && e[0] && e[1]) ? e : "Template\\StorageBarn.rsc";
+        }
+        if (s_goalProbe == 1 && s_frameNum == 400) {
+            s_goalProbe = 0;  // one shot
+            BuildingGoal_Probe(s_goalName);
         }
     }
 

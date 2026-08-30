@@ -16,7 +16,15 @@
 //                reads are out-of-gap-range data, null-guarded (conservative
 //                no-match) — read-only, never corrupts.
 //
-// SAFETY: both addresses verified as true function ENTRYs in Ghidra.
+//   0x14001b340  ExternalPtr-triple array resize (stride 0x18), the LOAD-leg
+//                resize for BuildingGoal::Serialize (0x1400d76a0) and
+//                MapGenerator::Serialize (0x1400a2980). Closure = MemAlloc /
+//                MemFree / String copy-ctor / String dtor — all engine_funcs.
+//                Same primitive as EventArray_Grow (eventlog.cpp) at a 0x18
+//                stride. Seeds new entries with generation -1, which is what
+//                keeps the lazy resolver from mistaking them for cached.
+//
+// SAFETY: all three addresses verified as true function ENTRYs in Ghidra.
 #include "resolve.h"
 #include "Goal/goal_exe_helpers.h"
 #include "Goal/statvaluedispatch.h"
@@ -25,5 +33,6 @@
 void RegisterGoalBatch() {
     RegisterExeAddr(0x1400265b0, reinterpret_cast<uintptr_t>(&StatGoal_ResolveExternalPtr));
     RegisterExeAddr(0x1400da4e0, reinterpret_cast<uintptr_t>(&StatGoal_StatValueDispatch));
+    RegisterExeAddr(0x14001b340, reinterpret_cast<uintptr_t>(&Goal_RefArray_Resize));
 }
 
