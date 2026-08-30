@@ -91,6 +91,48 @@ were added — both wiring fixes route to existing C++ ports instead, so `standa
 | 61 | 0x14012bbd0 | StatusIconComponent_OnRemove | DEAD (already ported) | statusiconcomponent.cpp full reimplementation wired directly | statusiconcomponent.cpp | None needed |
 | 62 | 0x14012db70 | ToolbarDescription_Ctor | DEAD | fn_ToolbarDescription_cleanup: decl+assign only, zero callers | none found (not required — dtor cleanup for a rarely-destroyed description) | None needed |
 
+## 2026-08-30 full audit — one agent per remaining LIVE-GUARDED row
+
+All 16 remaining LIVE-GUARDED rows plus both reachable LIVE-UNGUARDED rows were
+re-audited against retail. **The table's verdicts were wrong more often than right.**
+
+| # | Addr | Audited verdict | Outcome |
+|---|---|---|---|
+| 1 | 0x140002280 | Blocker false, BUT blocked anyway | Ported, **deliberately unregistered**. Registering it CRASHED (READ of 0x10 in a710): AmbientEmitterComponent::OnAdded (0x140042e10) is a no-op stub so component+0x38 is never allocated. Register only after that is ported. |
+| 8, 9 | 0x14001fdb0/fe60 | **False positive** | Dispatch-or-fallback: the inline `else` branch IS the port. Nothing broken, no action. |
+| 13 | 0x14005e120 | Already ported, blocked on #14 | Ghidra's "thunk" name is wrong; the CALLER is the thunk. Needs 2 dispatch slots too. |
+| 14 | 0x14005e230 | **DEAD; real fix is LARGE** | Behind hardcoded `kCreateGameDialogs=false`. Naive registration would crash — the ctor stamps retail vtable 0x14015b120, never mapped in standalone. Needs the eventnotify_sa hand-built-vtable pattern. |
+| 34 | 0x140099260 | **FIXED** | ApplyKeyMapToUI. GameUpdateLoop::Startup reached it via a null pointer on every world boot: in-game UI sounds, fade sprite and UI scale never applied. |
+| 35 | 0x1400992f0 | **FIXED** (1 line) | "1983 bytes, large" = 50 mechanical calls, already ported and running every boot. Only Options>Cancel was dead. |
+| 36 | 0x140099c20 | NEEDS-PORT-SMALL, unverifiable | Tutorial key names render blank. Logic already ported TWICE elsewhere — dedupe rather than add a fourth copy. Autostart cannot reach the tutorial. |
+| 37 | 0x14009e8c0 | **False premise — DO NOT implement** | Superseded by Region_Seed + Pathfinder_Seed (both default-on). Wiring it would double-build the region graph and spawn a second pathfinder thread over restored state. |
+| 39 | 0x1400a40e0 | NEEDS-PORT-LARGE | Actually `MusicPlayer::Update`; background music never plays. ⚠ Also: GameUpdateLoop.h+0x80 is mislabelled `m_ambientSoundData` — retail stores the MusicPlayer struct there (verified in Load at 0x14009732e). +0x88's true identity is UNVERIFIED. |
+| 40 | 0x1400a4c60 | **FIXED** | Merchant names were blank. Took TWO fixes: this address AND the unregistered String::operator= slot 0x1401514c0 behind it — the copy into the name array never happened at all. |
+| 41 | 0x1400a5d10 | NEEDS-PORT-LARGE + **crash on wire** | Game+0x78 is always null (ctor zeroes it, no seed exists) and the body starts `*param_1 += *param_2`. Needs the queue's allocation and push side first. |
+| 49 | 0x1400e1870 | NEEDS-PORT-LARGE | 4 callers, not 2. Kills the tutorial's "grey out everything but the target" effect. Needs 2 unported helpers + 1 new Runtime resolve. Unverifiable via autostart. |
+| 55 | 0x140101ee0 | **False premise** | EntityUI::Startup's only boot-time effect (the 8-entry tool-mode tree) is already fully replicated by tool_activation_standalone.cpp. |
+| 56 | 0x1401026a0 | **False premise — DO NOT implement** | EntityUI::Update already ported dispersed; registering it would double-drive camera/hotkeys/tool-tick every frame. |
+| 57 | 0x1401027c0 | **FIXED** | Not a wind factor — camera-to-focus distance, returning a FLOAT in XMM0 that our typedef declared uint32_t. It was the only null leg of the guard, so Audio::Scene::Update never ran at all. |
+| 42 | 0x1400b4540 | **FIXED** (was EXEC-of-0) | Already ported inline in NewGameDialog; extracted with retail's 10-arg ABI so ScenarioDialog shares it. |
+| 53b | 0x140101a80 | **FIXED** (was EXEC-of-0) | Same address described two ways in our tree; it is the toolbar utility toggler, `fn_SetFollowBuilding` is a misnomer. |
+| 18, 43, 44 | — | Already closed by e18fa16 | The report was stale; reg_mods.cpp registered all three. |
+
+### What this says about the table
+
+Of 18 rows audited, only **6** were straightforward gaps. Three would have caused
+**active harm** if implemented as written (#1 crash, #37 double-build over restored
+state, #56 double-drive) and two more (#14, #41) would have crashed on wiring.
+Two (#8, #9) were not defects at all.
+
+Recurring causes, in order of frequency:
+1. **Our own `fn_*` name is a misnomer** — #37, #39, #53b, #57, #13, #14, #56, #8.
+   Always grep the retail ADDRESS, never the name.
+2. **Already ported under another name**, needing only wiring — #35, #40, #42, #53b.
+3. **Dispatch-or-fallback**: an unregistered address is sometimes DELIBERATE
+   because an inline `else` branch is the real port — #8, #9.
+4. **Arming a function reveals its unmet dependencies** — #1, #14, #41.
+   A build is not evidence; only a run is.
+
 ## Summary counts
 
 - **Fixed:** 6 (#3, #4, #58 in the original lane; #6, #7, #32 in the 2026-08-30 follow-up)
