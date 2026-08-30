@@ -907,7 +907,18 @@ static void StorageDisplayComponent_OnRemovedVSlot(void* s) {
     }
     StorageDisplayComponent_OnCreate(reinterpret_cast<StorageDisplayComponent*>(s));
 }
+static void StorageDisplayComponent_SerSlot3(void* s, void* stream) {
+    StorageDisplayComponent_Shutdown(reinterpret_cast<StorageDisplayComponent*>(s),
+                                     stream);
+}
 static void StorageDisplayComponent_FinishLiveVtable() {
+    // Slot 3 (+0x18), UNCONDITIONAL — serializer wiring is not a feature flag.
+    // Retail 0x140056970 is Component::Serialize plus one empty Serializer scope,
+    // and an empty scope is still 16 real bytes in the save encoding. Without this
+    // the ported body below was dead code and every record was 16 bytes short,
+    // desyncing the stream for every object deserialized after it.
+    StorageDisplayComponent_LiveVtable[3]  =
+        reinterpret_cast<void*>(&StorageDisplayComponent_SerSlot3);
     StorageDisplayComponent_LiveVtable[7]  =
         reinterpret_cast<void*>(&StorageDisplayComponent_OnRemovedVSlot);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGEDISPLAY")) {

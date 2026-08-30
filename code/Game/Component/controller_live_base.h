@@ -173,3 +173,41 @@ void** NodeVtable();
         Name##_InstallLive(mem);                                               \
         return mem;                                                           \
     }
+
+// ---------------------------------------------------------------------------
+// CONTROLLER_INSTALL_SERIALIZE — wire a controller's OWN stream Serialize into
+// vtable slot 3 (+0x18).
+//
+// Neither CONTROLLER_LIVE_FACTORY nor CONTROLLER_LIVE_FACTORY_STATES touches
+// slot 3, so a controller that has a ported Serialize body in its own file still
+// gets the generic BASE-ONLY Component::Serialize from the inert fill. That is
+// not a missing feature, it is a stream desync: retail's body reads the base
+// record PLUS its own Serializer scopes, and an "empty" scope still occupies 16
+// bytes in the save encoding. Reading fewer bytes than the file holds corrupts
+// every object deserialized after it, and our own saves cannot catch it because
+// the save leg skips exactly the same bytes — only a retail-authored save does.
+// (Found via the packaged tutorial save: StorageLocationComponent's record is 82
+// bytes and the base-only fill consumed 50.)
+//
+// Serializer wiring is deliberately NOT behind a live/env gate — see the same
+// note on WorkComponent's slot 3.
+//
+// Use directly after the factory macro, and register the _Ser entry points:
+//   CONTROLLER_INSTALL_SERIALIZE(FooComponent, FooComponent_Shutdown)
+//   REGISTER_TYPE(FooComponent, "ControllerComponent",
+//                 &FooComponent_Factory_Ser, &FooComponent_CreateInPlace_Ser);
+// ---------------------------------------------------------------------------
+#define CONTROLLER_INSTALL_SERIALIZE(Name, SerBody)                              \
+    static void Name##_SerSlot3(void* s, void* stream) {                        \
+        SerBody(reinterpret_cast<Name*>(s), stream);                            \
+    }                                                                           \
+    extern "C" void* Name##_Factory_Ser(void) {                                 \
+        void* p = Name##_Factory();                                             \
+        Name##_LiveVtable[3] = reinterpret_cast<void*>(&Name##_SerSlot3);       \
+        return p;                                                               \
+    }                                                                           \
+    static void* Name##_CreateInPlace_Ser(void* mem) {                          \
+        void* p = Name##_CreateInPlace(mem);                                    \
+        Name##_LiveVtable[3] = reinterpret_cast<void*>(&Name##_SerSlot3);       \
+        return p;                                                               \
+    }

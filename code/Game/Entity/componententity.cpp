@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/componententity_funcs.h"
+#include <windows.h>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -335,6 +336,36 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     if (cnt > 0) {
         for (int64_t i = 0; i < cnt; i++) {
             uintptr_t ibpAddr = ibpArr + (uintptr_t)i * 8;
+            // BANISHED_SER_DUMPCOMP=<n> -- destructive one-shot: before component n
+            // is read, pull the next 130 dwords straight off the stream and print
+            // them, then stop. The stream's +0x1C cursor is a LOGICAL decompressed
+            // position, not an index into any buffer in the header (all five
+            // candidate bases were checked and none holds the record), so the only
+            // way to see the actual bytes is to read them through the serializer.
+            // With the objIds running in sequence, finding the next one in this dump
+            // gives the record's true length -- i.e. exactly how many bytes our
+            // reader is short by -- instead of inferring it from where things crash.
+            {
+                static int s_dumpAt = -2;
+                if (s_dumpAt == -2) {
+                    const char* e = std::getenv("BANISHED_SER_DUMPCOMP");
+                    s_dumpAt = (e && e[0]) ? atoi(e) : -1;
+                }
+                if (s_dumpAt >= 0 && (int)i == s_dumpAt && g_fn_Serialize_Int) {
+                    void* strm2 = *(void**)serializer;
+                    fprintf(stderr, "[SerDump] comp %d cursor=%u — next 130 dwords:\n",
+                            s_dumpAt, strm2 ? *(uint32_t*)((uint8_t*)strm2 + 0x1C) : 0);
+                    for (int k = 0; k < 130; ++k) {
+                        uint32_t v = 0;
+                        g_fn_Serialize_Int(serializer, (void*)&v, nullptr);
+                        fprintf(stderr, "[SerDump]   [%2d] %08X (%u)\n", k, v, v);
+                    }
+                    fflush(stderr);
+                    fprintf(stderr, "[SerDump] done — exiting (stream is now consumed)\n");
+                    fflush(stderr);
+                    _exit(0);
+                }
+            }
             // Save/load wave debug (BANISHED_SERIALIZE_TRACE): per-component
             // progress marker so a stream desync pinpoints the last-good
             // component instead of a wild crash address.
@@ -397,6 +428,50 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                                                   " +0x%02X:%u->%u", k * 4, prev[k], cur[k]);
                             fprintf(stderr, "[CompEnt::Ser]   streamDelta%s\n",
                                     n ? buf : " (none)");
+                        }
+                        // One-shot full header dump. The 0xAA/0xBB values that
+                        // reach PersistObject look like allocator debug fill, which
+                        // would mean the reads have run off the END of the
+                        // decompressed data rather than merely landing on a wrong
+                        // field. Telling those two apart needs the buffer EXTENT,
+                        // not another delta -- so print the raw header once and let
+                        // the size field settle it against the +0x1C cursor.
+                        static bool dumped = false;
+                        if (!dumped) {
+                            dumped = true;
+                            fprintf(stderr, "[CompEnt::Ser]   streamHdr");
+                            for (int k = 0; k < 40; ++k)
+                                fprintf(stderr, " +0x%02X:%08X", k * 4, cur[k]);
+                            fprintf(stderr, "\n");
+                        }
+                        // Which qword in the stream header is the DECOMPRESSED
+                        // buffer? Settle it by evidence rather than by guessing an
+                        // offset: at this point the previous component's record
+                        // began at the previous cursor and its first dword is that
+                        // component's objId, which the [Persist] trace already
+                        // printed. So for each candidate base, print the dword the
+                        // cursor is pointing at. The candidate that yields the
+                        // NEXT objId in sequence is the buffer, and it lets the
+                        // bytes at a desync be read directly instead of inferred.
+                        {
+                            static const int cand[5] = { 0x10, 0x28, 0x30, 0x40, 0x80 };
+                            uint8_t* sb = (uint8_t*)strm;
+                            uint32_t cursor = cur[0x1C / 4];
+                            fprintf(stderr, "[CompEnt::Ser]   cur=%u", cursor);
+                            for (int c2 = 0; c2 < 5; ++c2) {
+                                uint8_t* base = *(uint8_t**)(sb + cand[c2]);
+                                uint32_t v = 0; bool ok = false;
+                                if (base) {
+                                    MEMORY_BASIC_INFORMATION mbi;
+                                    if (VirtualQuery(base + cursor, &mbi, sizeof(mbi)) &&
+                                        mbi.State == MEM_COMMIT &&
+                                        !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
+                                        v = *(uint32_t*)(base + cursor); ok = true;
+                                    }
+                                }
+                                fprintf(stderr, "  +0x%02X:%s%08X", cand[c2], ok ? "" : "!", v);
+                            }
+                            fprintf(stderr, "\n");
                         }
                         for (int k = 0; k < 64; ++k) prev[k] = cur[k];
                         haveprev = true;

@@ -182,18 +182,51 @@ extern "C" void RegisterGeometryVtable() {
 // Wraps a Stream in a Serializer, then delegates to Math::Transform::Serialize
 // + Math::Vector3::Serialize at +0x1c + 3 IO::Serializer::Serialize(float)
 // calls at +0x28/+0x2c/+0x30.
+//
+// ⚠ THIS IS A STREAM CALL, NOT A SETTER. It was a warn-and-return stub for a
+// long time, and the "unresolved — Transform fields remain at default values"
+// wording made that read as a cosmetic loss (a camera left at the origin). It is
+// not: GameUpdateLoop::Serialize calls this for the PlayerController at +0xE0
+// immediately BEFORE EntityList::Serialize, so a body that consumes zero bytes
+// leaves the whole camera record sitting in the stream, and the entity list then
+// reads a camera float as its master count (observed 0x3EB7B5ED = 1051929709,
+// which is ~0.358f). Our own saves skipped the same bytes on the SAVE leg, so the
+// round trip stayed self-consistent — only the RETAIL-authored packaged tutorial
+// save could expose it.
+//
+// All four callees are Runtime exports, so a null here means engine_funcs never
+// resolved — report that loudly rather than silently dropping the read.
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
     if (!transform || !stream) return;
 
-
-    static bool s_warned = false;
-    if (!s_warned) {
-        printf("[Transform::SerializeWrapper] unresolved — Transform fields "
-               "remain at default values (transform=%p stream=%p)\n",
-               transform, stream);
-        fflush(stdout);
-        s_warned = true;
+    if (!g_fn_Serializer_Ctor || !fn_Math_Transform_Serialize ||
+        !fn_Math_Vector3_Serialize || !fn_Serializer_Serialize_Float ||
+        !g_fn_Serializer_Dtor) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            fprintf(stderr,
+                    "[Transform::SerializeWrapper] *** a callee is NULL "
+                    "(ctor=%p transform=%p vec3=%p float=%p dtor=%p) — the "
+                    "transform record is NOT being read and the stream is now "
+                    "DESYNCED for everything after it.\n",
+                    (void*)g_fn_Serializer_Ctor, (void*)fn_Math_Transform_Serialize,
+                    (void*)fn_Math_Vector3_Serialize,
+                    (void*)fn_Serializer_Serialize_Float, (void*)g_fn_Serializer_Dtor);
+            fflush(stderr);
+        }
+        return;
     }
+
+    const uintptr_t t = (uintptr_t)transform;
+    uint8_t ser[24];
+    g_fn_Serializer_Ctor(ser, stream, 0);
+    fn_Math_Transform_Serialize(transform, ser);            // +0x00 Math::Transform
+    fn_Math_Vector3_Serialize((void*)(t + 0x1c), ser);      // +0x1c Math::Vector3
+    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x28), nullptr);
+    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x2c), nullptr);
+    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x30), nullptr);
+    g_fn_Serializer_Dtor(ser);
 }
 
 // ============================================================

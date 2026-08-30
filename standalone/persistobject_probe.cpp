@@ -88,7 +88,17 @@ long IdMapCapacity(const void* map) {
 
 long  g_calls   = 0;
 long  g_logged  = 0;
-long  g_maxLog  = 40;
+long  g_maxLog  = 40;   // BANISHED_PERSIST_TRACE=<n> raises the cap to n
+
+// A cap that silently stops logging looks exactly like a section that ended --
+// which is how the first read of this trace mistook call #40 for the last
+// object. Make the cap visible and settable: the value of the env var, when it
+// parses as a number > 1, IS the cap.
+void InitMaxLog() {
+    const char* e = std::getenv("BANISHED_PERSIST_TRACE");
+    long n = (e && e[0]) ? strtol(e, nullptr, 10) : 0;
+    if (n > 1) g_maxLog = n;
+}
 
 void* WrapPersistObject(void* self, void* stream, uint32_t gen,
                         int32_t objId, uint32_t typeId) {
@@ -131,6 +141,7 @@ void* WrapPersistObject(void* self, void* stream, uint32_t gen,
 
 extern "C" void InstallPersistObjectProbe() {
     if (!TraceOn()) return;
+    InitMaxLog();
     uintptr_t addr = ResolveAddr(Module::Runtime, kPersistObject);
     if (!addr) {
         fprintf(stderr, "[Persist] could not resolve InternalFactory::PersistObject\n");

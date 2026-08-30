@@ -385,3 +385,35 @@ bool LiveEnabled(const char* envVar);
         Name##_FinishLiveVtable();                                             \
         return mem;                                                            \
     }
+
+// ---------------------------------------------------------------------------
+// COMPONENT_INSTALL_SERIALIZE — wire a component's OWN stream Serialize into
+// vtable slot 3 (+0x18) for any factory macro that does not do it itself.
+//
+// Of the factory macros in this header only COMPONENT_INERT_FACTORY_SER fills
+// slot 3; every other one leaves the generic BASE-ONLY Component::Serialize
+// there. For a component whose retail slot 3 reads more than the base, that is a
+// stream desync, not a missing feature: the record in the save is longer than we
+// read, so every object deserialized after it comes off misaligned bytes. Our own
+// saves cannot catch it (the save leg skips the same bytes); only a retail
+// authored save can. Serializer wiring is therefore never behind a live/env gate.
+//
+// Use after the factory macro and register the _Ser entry points:
+//   COMPONENT_INSTALL_SERIALIZE(FooComponent, FooComponent_Shutdown)
+//   REGISTER_TYPE(FooComponent, "Component",
+//                 &FooComponent_Factory_Ser, &FooComponent_CreateInPlace_Ser);
+// ---------------------------------------------------------------------------
+#define COMPONENT_INSTALL_SERIALIZE(Name, SerBody)                              \
+    static void Name##_SerSlot3(void* s, void* stream) {                        \
+        SerBody(reinterpret_cast<Name*>(s), stream);                            \
+    }                                                                           \
+    extern "C" void* Name##_Factory_Ser(void) {                                 \
+        void* p = Name##_Factory();                                             \
+        Name##_LiveVtable[3] = reinterpret_cast<void*>(&Name##_SerSlot3);       \
+        return p;                                                               \
+    }                                                                           \
+    static void* Name##_CreateInPlace_Ser(void* mem) {                          \
+        void* p = Name##_CreateInPlace(mem);                                    \
+        Name##_LiveVtable[3] = reinterpret_cast<void*>(&Name##_SerSlot3);       \
+        return p;                                                               \
+    }

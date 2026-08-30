@@ -29,10 +29,12 @@ static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // IO::Serializer::Serializer(stream, version) -- dispatch slot at 0x140152ad8
 typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+typedef fn_Serializer_Ctor_t fn_SerCtor_t;
 static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
 
 // IO::Serializer::~Serializer() -- dispatch slot at 0x140152ad0
 typedef void (*fn_Serializer_Dtor_t)(void* self);
+typedef fn_Serializer_Dtor_t fn_SerDtor_t;
 static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 
 // Graphics::Scene::RemoveObject(scene, objectId) -- dispatch slot at 0x140151360
@@ -77,10 +79,33 @@ void HighlightComponent_Shutdown(HighlightComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
     }
 
+    // ⚠ This ctor/dtor pair is NOT decoration -- it is a STREAM SCOPE.
+    // The save encoding brackets every Serializer scope with sentinels, so an
+    // "empty" scope still occupies 16 bytes (AAAAAAAA open, two dwords,
+    // BBBBBBBB close). Measured on the packaged tutorial save: retail's
+    // HighlightComponent record is 66 bytes, of which Component::Serialize is
+    // 50 and this scope is the remaining 16. Guarding the pair behind a null
+    // test therefore does not 'skip a no-op' -- it silently desyncs the stream
+    // for every object after this one. Use the globals engine_funcs resolves
+    // (the same ones ComponentEntity::Serialize uses) and say so loudly if
+    // they are missing. See reference_null_guard_on_a_serializer_call_is_a_desync.
     uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
-        s_fn_Serializer_Dtor(serializer);
+    fn_SerCtor_t  ctor = s_fn_Serializer_Ctor ? s_fn_Serializer_Ctor
+                                              : (fn_SerCtor_t)g_fn_Serializer_Ctor;
+    fn_SerDtor_t  dtor = s_fn_Serializer_Dtor ? s_fn_Serializer_Dtor
+                                              : (fn_SerDtor_t)g_fn_Serializer_Dtor;
+    if (ctor && dtor) {
+        ctor(serializer, stream, 0);
+        dtor(serializer);
+    } else {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            fprintf(stderr, "[HighlightComp::Ser] *** Serializer ctor/dtor NULL -- "
+                            "the 16-byte scope is NOT being read and the stream is "
+                            "now DESYNCED.\n");
+            fflush(stderr);
+        }
     }
 }
 
@@ -157,6 +182,17 @@ static uint32_t HighlightComponent_InertGetTypeId(void*) {
 }
 static void* HighlightComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
 static void HighlightComponent_InstallSlots() {
+    // Slot 3 (+0x18) is the stream Serialize. The inert vtable fills it with the
+    // BASE-ONLY Component::Serialize, which is 16 bytes short of what retail
+    // writes for this component: retail's slot 3 (0x14004c880) is
+    // Component::Serialize PLUS its own Serializer scope, and an "empty" scope
+    // still occupies 16 bytes in the save encoding (sentinel-bracketed). Leaving
+    // the base-only fill here silently truncated every HighlightComponent record
+    // and desynced the stream for every object after it -- measured on the
+    // packaged tutorial save, the record is 66 bytes and the base-only read took
+    // 50. The ported body is right there in this file; it was never installed.
+    HighlightComponent_InertVtable[3] =
+        reinterpret_cast<void*>(&HighlightComponent_Shutdown);
     HighlightComponent_InertVtable[7] =
         reinterpret_cast<void*>(&HighlightComponent_OnRemovedFromWorld);
 }

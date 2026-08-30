@@ -1018,7 +1018,16 @@ static void PC_EventVSlot(void* s, int eventCode) {
     ParticleComponent_Event(reinterpret_cast<ParticleComponent*>(s), eventCode);
 }
 
+static void PC_SerSlot3(void* s, void* stream) {
+    ParticleComponent_Shutdown(reinterpret_cast<ParticleComponent*>(s), stream);
+}
 static void ParticleComponent_FinishLiveVtable() {
+    // Slot 3 (+0x18), OUTSIDE the live gate — serializer wiring is not a feature
+    // flag. Retail 0x140053270 reads an emitter count and then that many bools;
+    // the base-only fill read none of it, so every ParticleComponent record came
+    // up short and desynced the stream for every object after it. The count makes
+    // the shortfall VARIABLE, which is why it did not look like a fixed offset.
+    ParticleComponent_LiveVtable[3]  = reinterpret_cast<void*>(&PC_SerSlot3);
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_PARTICLE")) {
         ParticleComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PC_StartupVSlot);
         ParticleComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PC_OnAddedVSlot);

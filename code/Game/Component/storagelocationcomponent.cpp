@@ -224,5 +224,8 @@ CONTROLLER_LIVE_FACTORY_STATES(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
                                "BANISHED_LIVE_STORAGECTRL",
                                StorageLocationComponent_NodeVtable,
                                StorageLocationComponent_PopulateStateTable)
+CONTROLLER_INSTALL_SERIALIZE(StorageLocationComponent,
+                             StorageLocationComponent_Shutdown)
 REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
-              &StorageLocationComponent_Factory, &StorageLocationComponent_CreateInPlace);
+              &StorageLocationComponent_Factory_Ser,
+              &StorageLocationComponent_CreateInPlace_Ser);

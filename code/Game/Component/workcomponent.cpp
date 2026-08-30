@@ -109,12 +109,31 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
         s_fn_Serializer_Serialize(serializerBuf, &self->workId, nullptr);
     }
 
-    // Legacy: version < 3 had a bool field (no longer used)
+    // Legacy: version < 3 had a bool field (no longer used).
+    // ⚠ It is a BOOL, so it must go through the bool overload
+    // (?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z), which moves ONE byte.
+    // Casting a bool* to int* and using the int overload reads FOUR, and the
+    // extra 3 bytes desync every object serialized after this component.
+    // Measured on the packaged tutorial save (which is version < 3, so this
+    // branch is live there): our reader ended 3 bytes PAST the start of the
+    // next record. Our own saves hid it because the save leg wrote the same 4
+    // bytes it read back -- only a retail-authored save can catch this.
     if (s_fn_Serializer_GetVersion) {
         int version = s_fn_Serializer_GetVersion(serializerBuf);
         if (version < 3) {
             bool legacyBool = false;
-            s_fn_Serializer_Serialize(serializerBuf, (int*)&legacyBool, nullptr);
+            if (g_fn_Serialize_Bool) {
+                g_fn_Serialize_Bool(serializerBuf, &legacyBool, nullptr);
+            } else {
+                static bool s_warned = false;
+                if (!s_warned) {
+                    s_warned = true;
+                    fprintf(stderr, "[WorkComponent::Ser] *** Serialize(bool) is NULL "
+                                    "-- the legacy version<3 byte is NOT being read "
+                                    "and the stream is now DESYNCED.\n");
+                    fflush(stderr);
+                }
+            }
         }
     }
 

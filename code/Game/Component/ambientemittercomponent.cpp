@@ -151,6 +151,12 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
 //      - If version==0: resize from building data +0x30
 //   3. ~Serializer
 void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* stream) {
+    // InitFuncs had NO callers anywhere in the tree, so every pointer below was
+    // null for the whole process lifetime and this entire body was a silent
+    // no-op — it read ZERO bytes of a record the save does contain. That is a
+    // stream desync, and it stayed invisible because the save leg wrote nothing
+    // either. Resolve on entry, the way every other component's serialize does.
+    AmbientEmitterComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -268,6 +274,7 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
 // Resizes emitter list from building[0x30].
 // If building[0x20] != 0, calls audio setup FUN_140042e10(self).
 void AmbientEmitterComponent_Draw(AmbientEmitterComponent* self) {
+    AmbientEmitterComponent_InitFuncs();
     void* building = GetBuildingData(self);
     if (!building) return;
 
@@ -316,8 +323,13 @@ void AmbientEmitterComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152ac8);
     if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
 
-    // Serialize float -- uses same overload pattern as int, at 0x140152470
-    slot = ResolveAddr(Module::Exe, 0x140152470);
+    // Serialize(float&) is dispatch slot 0x140152a60. It was 0x140152470 here —
+    // an address that is not a dispatch slot at all, so the pointer stayed NULL
+    // and the guarded per-entry loop below silently read NOTHING. Confirmed
+    // against the retail CALL sites in 0x140042f30: ctor ad8, Vector3 a68,
+    // count ac8, ExternalPtr 0x1400019a0, entry uint a50, entry float a60,
+    // GetVersion a48, dtor ad0. (Third garbled address found in this one file.)
+    slot = ResolveAddr(Module::Exe, 0x140152a60);
     if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
 
     // Math::Vector3::Serialize -- Runtime export.
@@ -365,5 +377,13 @@ void AmbientEmitterComponent_InitFuncs() {
 // check; =0 restores the inert no-op for A/B).
 COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
                                "BANISHED_AMBIENT_AUDIO", AmbientEmitterComponent_Draw)
+// Slot 3 (+0x18): COMPONENT_LIVE_FACTORY_ONADDED does not fill it, so the ported
+// body above was dead code and every AmbientEmitterComponent record was read as
+// the bare Component base. Retail 0x140042f30 reads a Vector3, an emitter count
+// and then that many 16-byte entries, so the shortfall is VARIABLE -- which is
+// why it surfaced as an all-zero PersistObject record thousands of entities into
+// the tutorial load rather than as a fixed offset.
+COMPONENT_INSTALL_SERIALIZE(AmbientEmitterComponent, AmbientEmitterComponent_Shutdown)
 REGISTER_TYPE(AmbientEmitterComponent, "Component",
-              &AmbientEmitterComponent_Factory, &AmbientEmitterComponent_CreateInPlace);
+              &AmbientEmitterComponent_Factory_Ser,
+              &AmbientEmitterComponent_CreateInPlace_Ser);

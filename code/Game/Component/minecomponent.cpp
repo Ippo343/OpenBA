@@ -65,6 +65,8 @@ void MineComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(MineComponent, 0x28, 0x80)
+// Slot 3 must be wired: retail's body is Component::Serialize plus one empty
+// Serializer scope, which is 16 real bytes in the save encoding.
+COMPONENT_INERT_FACTORY_SER(MineComponent, 0x28, 0x80, MineComponent_Shutdown)
 REGISTER_TYPE(MineComponent, "Component",
               &MineComponent_Factory, &MineComponent_CreateInPlace);

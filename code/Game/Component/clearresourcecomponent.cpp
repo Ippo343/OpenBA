@@ -112,5 +112,10 @@ CONTROLLER_LIVE_FACTORY_STATES(ClearResourceComponent, 0x48, 0x80, 0x28, 2,
                                "BANISHED_LIVE_CLEARCTRL",
                                ClearResourceCtrl_NodeVtable,
                                ClearResourceCtrl_PopulateTable)
+// Retail 0x1401185E0 is Component::Serialize plus TWO empty Serializer scopes;
+// the controller factory macro never fills slot 3, so the base-only fill read 32
+// bytes too few and desynced everything after this component.
+CONTROLLER_INSTALL_SERIALIZE(ClearResourceComponent, ClearResourceComponent_Shutdown)
 REGISTER_TYPE(ClearResourceComponent, "ControllerComponent",
-              &ClearResourceComponent_Factory, &ClearResourceComponent_CreateInPlace);
+              &ClearResourceComponent_Factory_Ser,
+              &ClearResourceComponent_CreateInPlace_Ser);

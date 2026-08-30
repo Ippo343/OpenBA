@@ -180,6 +180,11 @@ void AbsorbResourceComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(AbsorbResourceComponent, 0x48, 0x80)
+// Slot 3 must be wired: retail 0x140105c00 is Component::Serialize plus TWO
+// empty Serializer scopes, and an empty scope still occupies 16 bytes in the
+// save encoding — the base-only fill read 32 bytes too few and desynced the
+// stream for every object after it.
+COMPONENT_INERT_FACTORY_SER(AbsorbResourceComponent, 0x48, 0x80,
+                            AbsorbResourceComponent_Shutdown)
 REGISTER_TYPE(AbsorbResourceComponent, "ControllerComponent",
               &AbsorbResourceComponent_Factory, &AbsorbResourceComponent_CreateInPlace);

@@ -1211,10 +1211,25 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // Serialize each entity IBP in master array
     void* ibpIter = self->masterArray.data;
     int64_t ibpCount = (int64_t)serializedCount;
+    // The master loop is a plausible suspect whenever a PersistObject call made
+    // DIRECTLY from here reads an all-zero record: that is either a component
+    // under-read leaving the stream short, or this loop simply running past the
+    // last entity. Printing the count and the index the loop reaches separates
+    // the two without any byte forensics.
+    if (elTime) {
+        fprintf(stderr, "[ElLoop] masterCount(before)=%d serializedCount=%d data=%p\n",
+            masterCount, serializedCount, ibpIter);
+    fflush(stderr);
+    }
     if (ibpCount > 0) {
         long long elBucketT0 = elTime ? ElQpc() : 0;
         for (int64_t j = 0; j < ibpCount; j++) {
             void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
+            if (elTime && j + 8 >= ibpCount) {
+                fprintf(stderr, "[ElLoop] entity j=%lld of %lld\n",
+                        (long long)j, (long long)ibpCount);
+                fflush(stderr);
+            }
             fn_InternalBasePtr_Serialize(currentIBP, serializer);
             // [diag] per-1000 slice: a FLAT cost means each entity is simply
             // expensive; a RISING cost means something behind
