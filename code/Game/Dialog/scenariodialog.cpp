@@ -7,6 +7,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -496,4 +497,108 @@ void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
             ScenarioDialog_LoadSelected(self);
         }
     }
+}
+
+// ============================================================
+// ScenarioDialog vtable + ctor (was ResolveAddr(Module::Exe, 0x1400786b0) /
+// unregistered vtable_ScenarioDialog @ 0x14015d2d0)
+// ============================================================
+// ScenarioDialog_CopyCtor (0x1400786b0) resolved to null in standalone, so both
+// MainMenuDialog_OpenScenario and MainMenuDialog_OpenTutorial called it UNGUARDED
+// (EXEC-of-0). It also hardcodes `self->vtable = &vtable_ScenarioDialog` inline —
+// that raw .rdata address (0x14015d2d0) was itself never registered, so even a
+// null-safe ctor would have handed the dialog a null vtable. Both are ported here.
+//
+// vtable_ScenarioDialog layout, dumped straight from .rdata (tools/dump_vtable.py
+// 0x14015d2d0) — same 10-slot shape as AchievementDialog/GoalDialog
+// (menu_dialog_standalone_vtables.cpp):
+//   [0] 0x140013af0 ScalarDtor   (frees +0xD8 array, NOT a bare base thunk)
+//   [1] 0x140013960 static getter (returns DAT_1401c5560 — use GetTypeIdByName instead)
+//   [2] 0x140013950 GetTypeId     (returns DAT_1401c5558 — ditto)
+//   [3] 0x14003a948 Persist       (base thunk)
+//   [4] 0x140078010 Setup         -> ScenarioDialog_Slot4 (ported)
+//   [5] 0x14003a94e Shutdown      (base thunk)
+//   [6] 0x140077be0 OnUpdate      -> ScenarioDialog_Slot6 (ported)
+//   [7] 0x140078000 OnUpdateLayout-> ScenarioDialog_Slot7 (ported)
+//   [8] 0x140077f80 OnCommand     -> ScenarioDialog_Slot8 (ported)
+//   [9] 0x14003a954 OnSerialize   (base thunk)
+namespace {
+
+void SD_Nop(void*, ...) {}
+
+void* GetScenarioVtable();
+
+// ScenarioDialog_ScalarDtor (0x140013af0): unlike the Achievement/Goal base-thunk
+// dtors, this one frees the +0xD8 scenario entry array before tearing down the
+// DialogInstance base (entries are plain-copy 7xu64, no per-entry String dtor —
+// see ScenarioDialog_ArrayPush_Impl above).
+void* SD_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = GetScenarioVtable();
+    uintptr_t s = (uintptr_t)self;
+    if (fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(s + 0xD8));
+    *(uint64_t*)(s + 0xD8) = 0;
+    *(uint64_t*)(s + 0xE0) = 0;
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+uint32_t SD_TypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ScenarioDialog");
+    return c;
+}
+void SD_Slot4(void* self) { ScenarioDialog_Slot4(reinterpret_cast<ScenarioDialog*>(self)); }
+void SD_Slot6(void* self) { ScenarioDialog_Slot6(reinterpret_cast<ScenarioDialog*>(self)); }
+int  SD_Slot7(void* self) { return ScenarioDialog_Slot7(reinterpret_cast<ScenarioDialog*>(self)); }
+void SD_Slot8(void* self, uint64_t p2, int p3, int p4) {
+    ScenarioDialog_Slot8(reinterpret_cast<ScenarioDialog*>(self), p2, p3, p4);
+}
+
+void* g_ScenarioDialog_Vtable_Standalone[10] = {
+    reinterpret_cast<void*>(&SD_Dtor),      // +0x00 idx0 ScalarDtor
+    reinterpret_cast<void*>(&SD_Nop),       // +0x08 idx1 static getter (base thunk)
+    reinterpret_cast<void*>(&SD_TypeId),    // +0x10 idx2 GetTypeId
+    reinterpret_cast<void*>(&SD_Nop),       // +0x18 idx3 Persist (base thunk)
+    reinterpret_cast<void*>(&SD_Slot4),     // +0x20 idx4 Setup
+    reinterpret_cast<void*>(&SD_Nop),       // +0x28 idx5 Shutdown (base thunk)
+    reinterpret_cast<void*>(&SD_Slot6),     // +0x30 idx6 OnUpdate
+    reinterpret_cast<void*>(&SD_Slot7),     // +0x38 idx7 OnUpdateLayout
+    reinterpret_cast<void*>(&SD_Slot8),     // +0x40 idx8 OnCommand
+    reinterpret_cast<void*>(&SD_Nop),       // +0x48 idx9 OnSerializeSettings (base thunk)
+};
+void* GetScenarioVtable() { return reinterpret_cast<void*>(g_ScenarioDialog_Vtable_Standalone); }
+
+}  // namespace
+
+void* ScenarioDialog_GetStandaloneVtable() { return GetScenarioVtable(); }
+
+// ScenarioDialog_CopyCtor (0x1400786b0): shared ctor for both ScenarioDialog and
+// TutorialDialog (same class; difficulty byte at +0xB8 differentiates the two —
+// MainMenuDialog_OpenScenario passes 0, MainMenuDialog_OpenTutorial passes 1).
+//
+// Byte-faithful to the disasm:
+//   base ctor: fn_DialogInstance_Ctor(self, ui, extRes, &(*parentIBP), 0, 0, 0)
+//   self->vtable = vtable_ScenarioDialog
+//   +0xB8 (u8)  = difficulty
+//   +0xC0 (u64) = *parentMenuIBP   (selection's parent-controller InternalBasePtr)
+//   +0xC8 (i32) = -1               (selectedIndex, matches Slot8's read of +0xC8)
+//   +0xD0 (u64) = 0
+//   +0xD8 (u64) = 0                (scenario entry array, matches ArrayPush_Impl)
+//   +0xE0 (u64) = 0                (scenario count, matches Slot4's read of +0xE0)
+void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
+                          void* parentMenuIBP, uint8_t difficulty) {
+    if (!self) return nullptr;
+    uint64_t parentBuf = parentIBP ? *(uint64_t*)parentIBP : 0;
+    fn_DialogInstance_Ctor(self, ui, extRes, &parentBuf, nullptr, nullptr, 0);
+
+    uintptr_t s = (uintptr_t)self;
+    *reinterpret_cast<void**>(self) = GetScenarioVtable();
+    *(uint8_t*)(s + 0xB8) = difficulty;
+    *(uint64_t*)(s + 0xC0) = parentMenuIBP ? *(uint64_t*)parentMenuIBP : 0;
+    *(int32_t*)(s + 0xC8) = -1;
+    *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0;
+    *(uint64_t*)(s + 0xE0) = 0;
+    return self;
 }

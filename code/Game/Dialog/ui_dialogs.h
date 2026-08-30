@@ -154,6 +154,13 @@ int ScenarioDialog_Slot7(ScenarioDialog* self);
 void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
                           int param3, int param4);
 
+// Ctor (0x1400786b0): shared with TutorialDialog (difficulty byte differentiates).
+void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
+                          void* parentMenuIBP, uint8_t difficulty);
+
+// Returns the standalone-built vtable_ScenarioDialog (0x14015d2d0) array.
+void* ScenarioDialog_GetStandaloneVtable();
+
 // ============================================================
 // ModDetailsDialog
 // ============================================================

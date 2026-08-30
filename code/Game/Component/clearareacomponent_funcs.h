@@ -11,3 +11,7 @@ void ClearAreaComponent_Shutdown(ClearAreaComponent* self, void* stream);
 
 // Init: resolve all internal function pointers (called once at startup)
 void ClearAreaComponent_InitFuncs();
+
+// ModelComponent_impl_8270 (0x140118270) port — state-1 finalize body shared with
+// BuildComponent_State1Enter's construction-site model reset (see clearareacomponent_states.cpp).
+void ClearArea_Finalize8270(void* comp);

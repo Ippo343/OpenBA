@@ -12,6 +12,12 @@
 // null-pointer check cannot see.
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
 
+// ScenarioDialog_Ctor (code/Game/Dialog/scenariodialog.cpp) — ported replacement
+// for the unregistered ScenarioDialog_CopyCtor (0x1400786b0). Declared here rather
+// than including ui_dialogs.h to avoid pulling the dialog header tree into this file.
+void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
+                          void* parentMenuIBP, uint8_t difficulty);
+
 uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
     if (cache && *cache) return *cache;
     uint32_t tid = 0;
@@ -1341,6 +1347,43 @@ void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
         ((uint32_t*)*pData)[newCount - 1] = *(uint32_t*)elementPtr;
     }
     *pCount = newCount;
+}
+
+// ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
+// {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
+// Byte-faithful: grows (3x over-allocation on a plain +1 append), copies surviving old
+// elements, and fills every newly-uncovered slot [oldCount, newCount) from elementPtr —
+// in the common case that is just the appended slot at index oldCount.
+void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr) {
+    uint8_t* base   = (uint8_t*)arrayHeader;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+    static constexpr uint64_t kStride = 0x58;
+    static constexpr int kWords = kStride / 8;
+
+    if (newCount == *pCount) return;
+    void* oldData  = *pData;
+    int   oldCount = *pCount;
+    *pCount = newCount;
+
+    if (*pCap < newCount) {
+        *pCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        *pData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*pCap * kStride, 8);
+    }
+
+    int startIdx = (oldData == *pData) ? oldCount : 0;
+    for (int i = startIdx; i < newCount; ++i) {
+        uint64_t* dst = (uint64_t*)((uint8_t*)*pData + (uint64_t)i * kStride);
+        const uint64_t* src = (i < oldCount)
+            ? (const uint64_t*)((uint8_t*)oldData + (uint64_t)i * kStride)
+            : (const uint64_t*)elementPtr;
+        for (int f = 0; f < kWords; ++f) dst[f] = src[f];
+    }
+
+    if (oldData != *pData) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
 }
 
 // ExeArrayResizeFill_CppImpl: 8-byte elements. Grows/shrinks an array; on growth,
@@ -3090,8 +3133,12 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400b8270));
     fn_OptionsDialog_Ctor = reinterpret_cast<fn_OptionsDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x140075150));
-    fn_ScenarioDialog_Ctor = reinterpret_cast<fn_ScenarioDialog_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400786b0));
+    // ScenarioDialog_CopyCtor (0x1400786b0) was unregistered and called UNGUARDED
+    // from both MainMenuDialog_OpenScenario and MainMenuDialog_OpenTutorial; the
+    // ctor also hardcoded a store of vtable_ScenarioDialog (0x14015d2d0), itself
+    // never registered. Both are now ported in scenariodialog.cpp — wire directly
+    // instead of resolving the dead raw address.
+    fn_ScenarioDialog_Ctor = &ScenarioDialog_Ctor;
     fn_MapParamsDialog_Ctor = reinterpret_cast<fn_MapParamsDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006bd80));
     fn_ModDialog_Ctor = reinterpret_cast<fn_ModDialog_Ctor_t>(
@@ -3659,9 +3706,10 @@ bool EngineFuncsInit() {
     // Custom vtables for mod thumbnail objects
     g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
     g_ModDialog_SpriteSheetVtable      = ResolveAddr(Module::Exe, 0x14015c3b0);
-    // ModDialog array push: FUN_140012a60
-    fn_ModDialog_ArrayPush = reinterpret_cast<fn_ModDialog_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140012a60));
+    // ModDialog array push: FUN_140012a60 is unregistered in standalone; it was called
+    // UNGUARDED from ModDialog_RefreshDisplay_Impl (moddialog.cpp), so adding an
+    // installed mod's thumbnail entry EXEC'd 0. Byte-faithful C++ port instead.
+    fn_ModDialog_ArrayPush = &fn_ModDialog_ArrayPush58_CppImpl;
     // BrowserController type ID: DAT_1401c5210
     g_TypeId_BrowserController = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5210));

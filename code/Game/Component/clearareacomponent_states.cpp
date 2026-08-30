@@ -39,6 +39,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "clearareacomponent_funcs.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -593,7 +594,7 @@ typedef void (*fn_e0e0_t)(void* map, int x1, int y1, int x2, int y2);   // Citiz
 static fn_e0e0_t s_e0e0 = nullptr;
 static bool s_e0e0_res = false;
 
-static void ClearArea_Finalize8270(void* comp) {
+void ClearArea_Finalize8270(void* comp) {
     if (!comp) return;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     void* descObj = *reinterpret_cast<void**>(c + 0x18);

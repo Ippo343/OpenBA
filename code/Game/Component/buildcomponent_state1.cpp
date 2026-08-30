@@ -33,6 +33,7 @@
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
+#include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
@@ -231,8 +232,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
     // resolve helpers once
     static BCS1_FindComp_t     s_find4740 = nullptr;
-    static BCS1_FindComp2_t    s_findA170 = nullptr;
-    static BCS1_ModelReset_t   s_model8270 = nullptr;
     static BCS1_FindInQueue_t  s_findInQueue = nullptr;
     static BCS1_ArrayAdd_t     s_arrayAdd = nullptr;
     static BCS1_FindWorkComp_t s_find3050 = nullptr;
@@ -245,8 +244,11 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     static bool s_res = false;
     if (!s_res) {
         s_find4740    = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-        s_findA170    = reinterpret_cast<BCS1_FindComp2_t>(ResolveAddr(Module::Exe, 0x14000a170));
-        s_model8270   = reinterpret_cast<BCS1_ModelReset_t>(ResolveAddr(Module::Exe, 0x140118270));
+        // 0x14000a170 (FindComponent<ClearAreaComponent>) and 0x140118270
+        // (ModelComponent_impl_8270) are unregistered in standalone; both already have
+        // clean C++ ports (fn_FindComponent_SM / ClearArea_Finalize8270) used elsewhere
+        // in this file's own state machine — call those directly instead of resolving
+        // the raw exe addresses (which would stay permanently null).
         s_findInQueue = reinterpret_cast<BCS1_FindInQueue_t>(ResolveAddr(Module::Exe, 0x140017550));
         s_arrayAdd    = reinterpret_cast<BCS1_ArrayAdd_t>(ResolveAddr(Module::Exe, 0x140003110));
         s_find3050    = reinterpret_cast<BCS1_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
@@ -290,13 +292,13 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             *reinterpret_cast<uint32_t*>(self + 0x4c) = wpMult;
     }
 
-    // reset the site ModelComponent build variant (a170 -> 8270); guarded
+    // reset the site ClearAreaComponent build variant (a170 -> 8270)
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t mcIbp = 0;
-    if (s_findA170) s_findA170(*reinterpret_cast<uintptr_t*>(self + 0x10), &mcIbp);
-    if (mcIbp != 0 && s_model8270) {
+    fn_FindComponent_SM(reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(self + 0x10)), &mcIbp);
+    if (mcIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mcIbp);
-        s_model8270(mcIbp);
+        ClearArea_Finalize8270(reinterpret_cast<void*>(mcIbp));
     }
 
     // register the site into the construction registry (townMgr+0xd0 / count +0xd8)
