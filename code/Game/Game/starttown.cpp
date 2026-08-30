@@ -429,6 +429,8 @@ static uint64_t StartTown_ActivateWorkplace(void* entity, bool registerNow,
 // occupied visual was deferred to gameplay time. Drained once by
 // StartTown_ApplyPendingOccupiedVisuals on an early GameUpdateLoop tick (scene live).
 static std::vector<int64_t> g_pendingOccupiedVisuals;
+// One-shot guard for the deferred occupied-visual pass, reset per town spawn.
+static bool g_occupiedVisualsApplied = false;
 
 // FUN_1400a2880 — is the townSize-radius disk around (tileX, tileY) fully
 // buildable (in-bounds + type 2)?
@@ -3679,10 +3681,13 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 // through EntityList::RegisterEntity registers itself. Since OnAdd is a plain append
 // with no dedup, this pass would double-count anyone the broadcast already added — so
 // it now checks the list first. 24 entries, once per run; the scan is free.
-static bool s_townCitizensRegistered = false;
+// File-scope (not a function static) so StartTown_SpawnEntities can rearm it for a
+// second town in the same process. As a one-shot-per-process flag, game two's
+// founding citizens were never rostered into the town manager at all.
+static bool g_townCitizensRegistered = false;
 static void StartTown_RegisterTownCitizens() {
-    if (s_townCitizensRegistered) return;
-    s_townCitizensRegistered = true;
+    if (g_townCitizensRegistered) return;
+    g_townCitizensRegistered = true;
     int64_t townMgr = 0;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<int64_t*>(
@@ -4535,8 +4540,11 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
 // removable state — the visual touches Graphics::Scene::Add/RemoveObject). After it
 // runs, the pending list is cleared so it never repeats. No-op when nothing is queued.
 extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
-    static bool s_applied = false;
-    if (s_applied || g_pendingOccupiedVisuals.empty()) return;
+    // g_occupiedVisualsApplied is file-scope, not a function-local static, so
+    // StartTown_SpawnEntities can rearm it for a second town in the same process
+    // (quit-to-menu then New Game). As a function static it stayed true forever
+    // and game two silently lost its occupied-house visuals.
+    if (g_occupiedVisualsApplied || g_pendingOccupiedVisuals.empty()) return;
     const int kDeferFrame = 3;
     if (frameNum < kDeferFrame) return;
     fprintf(stderr, "[startTown::housing] applying %zu deferred occupied visuals at frame %d\n",
@@ -4546,7 +4554,7 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
         if (wp) WorkplaceComponent_ApplyOccupiedVisual(wp);
     }
     g_pendingOccupiedVisuals.clear();
-    s_applied = true;
+    g_occupiedVisualsApplied = true;
     fprintf(stderr, "[startTown::housing] deferred occupied visuals applied (crash-free)\n");
     fflush(stderr);
 }
@@ -6074,6 +6082,38 @@ static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
 // (impl_a12b0) + environment (impl_02f0) + simple pool (impl_09e0).
 extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     if (!startConfig || !world) return;
+
+    // Reset the founding-town captures. These are file-scope vectors of ENTITY
+    // pointers belonging to the world being built, and a process can now build
+    // more than one world: quit-to-main-menu (MainMenuDialog kButton_Menu) tears
+    // the game down and frees every entity in it, then a second New Game lands
+    // right here. Without this the second town paired its families against game
+    // one's freed houses -- StartTown_AssignFoundingHousing indexes
+    // g_foundingHouseIBPs[f] directly -- and FindComponentOnEntity faulted on
+    // reused heap. The header comment above g_foundingHouseIBPs always CLAIMED
+    // "Cleared at the start of each spawn"; nothing actually did it until now.
+    g_foundingHouseIBPs.clear();
+    g_foundingCitizens.clear();
+    g_pendingOccupiedVisuals.clear();
+    g_occupiedVisualsApplied = false;
+
+    // Same reasoning for the rest of this module's per-town state: every one of
+    // these latches an object or key that belongs to the world being replaced, and
+    // each is guarded by "set it only if unset" or "run once", so without an
+    // explicit reset game two either dereferences game one's freed object or
+    // silently skips the pass entirely.
+    g_pForceWorkBuilding      = nullptr;   // a building ENTITY (citizenaicomponent stores an IBP to it)
+    g_pSampleResourceTemplate = nullptr;   // a resource template External*
+    g_foresterProfKey         = 0;         // profession key from the previous town
+    g_townCitizensRegistered  = false;     // else game two's citizens are never rostered
+    g_demoHouseAssigned       = false;
+    g_deferredLodge.wanted    = false;     // .done stays a one-shot WITHIN a town
+    g_deferredLodge.done      = false;
+    g_deferredLodge.tmpl      = nullptr;
+    g_demoGatherer.valid      = false;     // guards a heap acceptList from the old town
+    g_demoGatherer.acceptList = nullptr;
+    g_demoGatherer.acceptN    = 0;
+
     uint8_t* sc = (uint8_t*)startConfig;
     void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
     if (!entityList) { fprintf(stderr, "[startTown::spawn] entityList NULL — abort\n"); fflush(stderr); return; }

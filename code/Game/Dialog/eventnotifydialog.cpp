@@ -45,13 +45,18 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
     void* ui = *(void**)(s + 0x10);
     if (!ui) return nullptr;
 
-    // Load Dialog/EventPopup.rsc once and cache it. The exe pulls this same resource
-    // from the ribbon's own referenced-resource slot (self+0x18); loading by path is
-    // equivalent and sidesteps the member-return Dialog::GetReference ABI.
-    static void* s_popupRes = nullptr;
-    static bool  s_triedRes = false;
-    if (!s_popupRes && !s_triedRes) {
-        s_triedRes = true;
+    // Load Dialog/EventPopup.rsc. The exe pulls this same resource from the ribbon's
+    // own referenced-resource slot (self+0x18); loading by path is equivalent and
+    // sidesteps the member-return Dialog::GetReference ABI.
+    //
+    // NOT cached across calls. It used to be, behind a one-shot s_triedRes flag --
+    // the same shape as the Male.ndb/Female.ndb cache in citizen_names.cpp that
+    // crashed the second new game of a session (2026-08-29). Quit-to-main-menu frees
+    // the resource, and a one-shot flag means it is never reloaded, so the first
+    // event popup of game two would build a dialog on a freed External. FindOrLoad is
+    // a lookup-or-load; the repeat cost is a hash lookup, and popups are rare.
+    void* s_popupRes = nullptr;
+    {
         if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
             uint8_t filename[8];

@@ -892,10 +892,20 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 }
 
 // ============================================================
-// Toolbar_ToggleAll_Impl (was fn_Toolbar_ToggleAll, FUN_140101ce0)
+// EntityUI_OpenPauseMenu (FUN_140101ce0)
 //
-// "Toggle All" button handler: closes all open tool groups, creates
-// the pause/overview dialog.
+// The IN-GAME pause menu opener. Previously misnamed "Toolbar_ToggleAll_Impl":
+// there is no toggle-all here. Retail has exactly two callers, and both mean
+// "bring up the in-game menu":
+//   - ToolbarDialog_OnRemove case 3 (0x1400b96ae) -- the toolbar's menu button
+//   - EntityUI::Update (0x1401026a0) -- Application::IsPaused() && the
+//     pause-on-focus-loss setting, i.e. the game lost focus
+//
+// It builds the same MainMenuDialog class the front-end menu uses, but from
+// Dialog/Pause.rsc and with +0xB8 = gameWorld (instead of +0xC0 = menu loop).
+// That +0xB8 is what makes MainMenuDialog::Setup (slot 4) light up the in-game
+// buttons -- buttonResume / buttonSave / buttonMenu / buttonQuit -- and what
+// makes OnCommand's Quit reach Application::Quit.
 //
 // Flow:
 //   1. If tool controller at +0x28 is active, call its Close (vtable[9])
@@ -915,7 +925,11 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 //   +0xB8: gameWorld pointer (DAT_1401c3dd8)
 //   +0xC0: 0 (unused/flags)
 // ============================================================
-static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
+// Returns the dialog it created. Retail is void -- nothing there needs the
+// pointer, because a real click arrives with the dialog as `this`. Handing it
+// back costs nothing and is the only way an unattended driver can address the
+// menu it just opened (standalone/pausemenu_harness.cpp).
+extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     uintptr_t gs = (uintptr_t)gameSubsys;
     // Get UserInterface from gameWorld+0x98
     void* gameWorld = *g_pGameWorldSingleton;
@@ -1008,6 +1022,7 @@ static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
     fn_InternalBasePtr_Ctor(&dialogRef, finalDialog);
     uint64_t addRef = dialogRef;
     fn_UI_AddDialog(userInterface, &addRef);
+    return finalDialog;
 }
 
 // ============================================================
@@ -1243,6 +1258,15 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Determine template index based on action type
         int32_t actionType = *(int32_t*)(item + 0x48);
+        // BANISHED_TOOLBAR_ITEMS=1 lists what the bar was actually built from.
+        // Worth having: "the button does nothing" and "there is no such button"
+        // look identical from outside, and action type 3 (open the in-game pause
+        // menu, the only in-game route to Quit) is a single item on the top bar.
+        if (const char* dumpEnv = std::getenv("BANISHED_TOOLBAR_ITEMS")) {
+            if (dumpEnv[0] && dumpEnv[0] != '0')
+                printf("[Toolbar] item[%d] actionType=%d%s\n", i, actionType,
+                       actionType == 3 ? "  <- opens the in-game pause menu" : "");
+        }
         int templateIndex;
         if (actionType == 10) {
             templateIndex = 0;  // SpeedDisplay: plain text template
@@ -1797,8 +1821,10 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             break;
         }
         case 3: {
-            // Toggle all groups
-            Toolbar_ToggleAll_Impl((void*)gameSys);
+            // Open the in-game pause menu (Resume / Save / Load / Options /
+            // Quit to Menu / Quit Game). gameSys is gameWorld+0x120 (EntityUI),
+            // exactly what retail passes at 0x1400b96ae.
+            EntityUI_OpenPauseMenu((void*)gameSys);
             break;
         }
         case 4: {

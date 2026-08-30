@@ -681,6 +681,7 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
+extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum);  // standalone/pausemenu_harness.cpp
 extern "C" void FoodPanel_Tick(void* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
 extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/food_placement_harness.cpp
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
@@ -901,6 +902,14 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // Open the IN-GAME pause menu (the toolbar menu button's action, retail
+    // ToolbarDialog_OnRemove case 3) and click one of its buttons -- by default
+    // Quit Game. The front-end Quit is already drivable via BANISHED_AUTOQUIT;
+    // this is the only unattended way to reach the in-game one, which needs a
+    // live world underneath it. No-op unless BANISHED_PAUSEMENU is set
+    // (standalone/pausemenu_harness.cpp).
+    PauseMenuHarness_Tick(self->m_entityUI, s_frameNum);
 
     // Dialog harness for the six food-production panels: opens each building's info
     // panel and reports the controllers on it plus the component's CanCommand verdicts

@@ -963,6 +963,19 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
             PostQuitMessage(0);
         }
         break;
+    case kButton_Menu:
+        // "Quit to Main Menu" -- in-game only (buttonMenu is not in MainMenu.rsc,
+        // only in Pause.rsc, so this case is unreachable from the front end).
+        // ReturnToMenu takes the +0xB8 != 0 branch: destroy the GameUpdateLoop's
+        // SaveLoad (+0x140), build MenuDialogLoopT -> GameLoadDialogLoopT ->
+        // LoaderLoop, fade to black, and park the chain in m_nextLoop (+0xC8).
+        // GameUpdateLoop::Update step 17 picks that up once the fade completes
+        // (UI+0xF0 == 0) and calls MainLoop::SetNextLoop, which runs the ported
+        // teardown (gameupdateloop_teardown.cpp) on the way out.
+        printf("[MainMenuDialog::OnCommand] -> ReturnToMenu (gameUpdateLoop=%p)\n",
+               *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0xB8));
+        MainMenuDialog_ReturnToMenu(reinterpret_cast<MainMenuDialog*>(self));
+        break;
     case kButton_Options:
         printf("[MainMenuDialog::OnCommand] -> OpenOptions\n");
         MainMenuDialog_OpenOptions(reinterpret_cast<MainMenuDialog*>(self));

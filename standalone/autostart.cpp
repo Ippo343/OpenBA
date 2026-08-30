@@ -57,6 +57,16 @@ int    s_settleFrames  = 60;     // frames to let the menu render before firing
 int    s_phaseFrame    = 0;      // frames spent in the current phase
 int    s_newGameFrame  = 0;      // frames since New Game opened (Slot4 grace)
 
+// BANISHED_AUTOSTART_GAMES=<n>: start n games in one process, not one. After the
+// Start click the driver rearms instead of finishing, so a quit-to-main-menu (see
+// standalone/pausemenu_harness.cpp, BANISHED_PAUSEMENU_BUTTON=5) is followed by a
+// second New Game. That sequence is what catches teardown bugs a single-game run
+// cannot see -- anything the world teardown frees while a process-lifetime cache
+// still points at it faults on game 2, not game 1.
+int    s_gamesLeft     = 1;      // New Games still to start
+void*  s_lastMenu      = nullptr;// the MainMenuDialog we last clicked New Game on
+
+
 // Safety timeout: if the NewGameDialog never finishes setup, give up rather
 // than firing Start against half-built combos (which would crash).
 constexpr int kNewGameTimeoutFrames = 600;   // ~10s at 60fps
@@ -127,6 +137,15 @@ void Init() {
     int parsed = std::atoi(env);
     if (parsed > 1) s_settleFrames = parsed;
 
+    if (const char* g = std::getenv("BANISHED_AUTOSTART_GAMES")) {
+        int n = std::atoi(g);
+        if (n > 1) {
+            s_gamesLeft = n;
+            fprintf(stderr, "[AutoStart] will start %d games this run "
+                   "(BANISHED_AUTOSTART_GAMES)\n", n);
+        }
+    }
+
     s_enabled = true;
     s_phase   = Phase::WaitMenuSettle;
     fprintf(stderr, "[AutoStart] ENABLED (BANISHED_AUTOSTART=\"%s\") — will auto-open "
@@ -152,10 +171,19 @@ void TickMenu(void* menuDLT) {
             s_phaseFrame = 0;   // not ready yet — keep waiting
             return;
         }
+        // On a rearm (BANISHED_AUTOSTART_GAMES > 1) the old menu keeps ticking for
+        // a few frames after the Start click, before the loop transition takes
+        // hold. Refuse to fire on that same dialog — wait for the fresh one a
+        // quit-to-menu builds, or we would re-enter New Game on a dying menu.
+        if (mainMenu == s_lastMenu) {
+            s_phaseFrame = 0;
+            return;
+        }
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting New Game "
                "click\n", mainMenu);
+        s_lastMenu = mainMenu;
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_New);
         s_phase        = Phase::WaitNewGame;
         s_newGameFrame = 0;
@@ -176,6 +204,18 @@ void TickMenu(void* menuDLT) {
             fprintf(stderr, "[AutoStart] NewGameDialog ready (self=%p) — injecting "
                    "Start click (buttonOk)\n", newGame);
             InjectClick(newGame, kMsg_ButtonClick, kEventId_Ok);
+            if (--s_gamesLeft > 0) {
+                // Rearm for the next game. WaitMenuSettle refuses to fire on the
+                // menu we just clicked (s_lastMenu), so the few frames the old menu
+                // still ticks before the transition cannot re-trigger New Game; it
+                // waits for the fresh MainMenuDialog a quit-to-menu rebuilds.
+                s_phase        = Phase::WaitMenuSettle;
+                s_phaseFrame   = 0;
+                s_newGameFrame = 0;
+                fprintf(stderr, "[AutoStart] sequence fired — new-game transition queued; "
+                       "%d more game(s) to start, rearmed\n", s_gamesLeft);
+                return;
+            }
             s_phase = Phase::Done;
             fprintf(stderr, "[AutoStart] sequence fired — new-game transition queued; "
                    "driver done\n");

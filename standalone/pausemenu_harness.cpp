@@ -1,0 +1,197 @@
+// standalone/pausemenu_harness.cpp
+// Unattended driver for the IN-GAME pause menu, and specifically for its Quit
+// Game button.
+//
+// The front-end menu's Quit is already reachable unattended (BANISHED_AUTOQUIT
+// injects the click on MainMenuDialog before a game exists). The in-game one is
+// not: it needs a running world, the toolbar's menu button (ToolbarDialog action
+// type 3 -> EntityUI_OpenPauseMenu), and then a click on the Pause.rsc dialog
+// that appears. This harness drives that whole chain from GameUpdateLoop::Update
+// so a run can prove it end to end with no human at the mouse.
+//
+//   BANISHED_PAUSEMENU=<frame>     open the in-game pause menu on this frame
+//                                  (unset / 0 = disabled). Clamped to >= 600 so
+//                                  the toolbar and the world have settled.
+//   BANISHED_PAUSEMENU_QUIT=<n>    n frames after the menu opens, click a button
+//                                  on it. Default 120. 0 = open only, and then
+//                                  report every 120 frames whether it is still up.
+//   BANISHED_PAUSEMENU_BUTTON=<id> which button to click. Default 6 = Quit Game.
+//                                  1 = Resume, 3 = Save, 5 = Quit to Main Menu.
+//
+// The dialog it drives is a MainMenuDialog (the same class as the front end),
+// built from Dialog/Pause.rsc with +0xB8 = gameWorld. We dispatch vtable slot 8
+// (OnCommand) with msg=0x12 and the button's element id -- the same two values
+// UI::UserInterface sends on a real click, which is how autostart.cpp already
+// drives the front-end menu.
+#include "resolve.h"
+#include "engine_funcs.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
+
+namespace {
+
+int   s_openFrame  = -1;   // -1 = env not read yet, 0 = disabled
+int   s_quitDelay  = 120;
+int   s_buttonId   = 6;    // kButton_Quit
+bool  s_opened     = false;
+bool  s_clicked    = false;
+int   s_openedAt   = 0;
+int   s_clickedAt  = 0;
+void* s_forWorld   = nullptr;  // the GameUpdateLoop this arming belongs to
+int   s_worldSeenAt = 0;       // frame we first saw that GameUpdateLoop
+void* s_dialog     = nullptr;  // the pause menu the opener handed back
+void* s_vtable     = nullptr;  // its vtable at open time (liveness check before we click)
+
+void Init() {
+    if (s_openFrame >= 0) return;
+    const char* f = std::getenv("BANISHED_PAUSEMENU");
+    s_openFrame = (f && f[0]) ? std::atoi(f) : 0;
+    if (s_openFrame > 0 && s_openFrame < 600) s_openFrame = 600;
+    if (const char* d = std::getenv("BANISHED_PAUSEMENU_QUIT")) s_quitDelay = std::atoi(d);
+    if (const char* b = std::getenv("BANISHED_PAUSEMENU_BUTTON")) s_buttonId = std::atoi(b);
+    if (s_openFrame > 0) {
+        std::fprintf(stderr, "[PauseMenu] ENABLED - open at frame %d, click id=%d %d frames later\n",
+                     s_openFrame, s_buttonId, s_quitDelay);
+    }
+}
+
+// UI::UserInterface::PausesGame -- true while a dialog that stops the simulation
+// is up. This is the honest "is the pause menu really on screen" check: the raw
+// +0x28 dialog array does NOT hold the menu for its whole life (it read 0 entries
+// a hundred frames after the menu opened), but the engine's own answer cannot be
+// fooled -- GameUpdateLoop::Update reads exactly this to decide whether to tick
+// the world.
+typedef bool (*PausesGame_t)(void* ui);
+PausesGame_t PausesGame() {
+    static PausesGame_t fn = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        fn = reinterpret_cast<PausesGame_t>(ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
+    }
+    return fn;
+}
+
+// Where `dlg` sits in UserInterface's dialog array (data +0x28, count +0x30) --
+// the array ToolbarUtility_HarnessDriveController walks. Diagnostic only; the
+// harness addresses the dialog by the pointer the opener returned.
+int DialogListIndex(void* ui, void* dlg, int* outCount) {
+    *outCount = 0;
+    if (!ui) return -1;
+    uintptr_t uiAddr = reinterpret_cast<uintptr_t>(ui);
+    uintptr_t* data  = *reinterpret_cast<uintptr_t**>(uiAddr + 0x28);
+    int count        = *reinterpret_cast<int*>(uiAddr + 0x30);
+    *outCount = count;
+    for (int i = 0; data && i < count && i < 64; ++i) {
+        uintptr_t ip = data[i];
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ip);
+        if (reinterpret_cast<void*>(ip) == dlg) return i;
+    }
+    return -1;
+}
+
+int Paused(void* ui) { PausesGame_t pg = PausesGame(); return pg ? (int)pg(ui) : -1; }
+
+}  // namespace
+
+extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
+    Init();
+    if (s_openFrame <= 0) return;
+
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) return;
+    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+
+    // Rearm for each new game. A quit-to-menu followed by another New Game builds a
+    // fresh GameUpdateLoop, and BANISHED_AUTOSTART_GAMES=n drives n of them, so the
+    // one-shot state has to be per-WORLD rather than per-process. Frames are counted
+    // from when this world first appeared: GameUpdateLoop's s_frameNum is a process
+    // counter that never resets, so an absolute "open at frame 800" would fire
+    // instantly on game two.
+    if (gameWorld != s_forWorld) {
+        s_forWorld    = gameWorld;
+        s_worldSeenAt = frameNum;
+        s_opened      = false;
+        s_clicked     = false;
+        s_dialog      = nullptr;
+        s_vtable      = nullptr;
+        s_clickedAt   = 0;
+        std::fprintf(stderr, "[PauseMenu] new world %p at frame %d - rearmed\n",
+                     gameWorld, frameNum);
+    }
+
+    if (s_clicked) {
+        // Aftermath, once. For a non-Quit button this is the real proof the menu
+        // is live rather than merely present: Resume (id 1) must take PausesGame
+        // back to 0, i.e. the simulation starts ticking again.
+        if (s_clickedAt && frameNum == s_clickedAt + 120) {
+            std::fprintf(stderr, "[PauseMenu] frame %d - 120 frames after the id=%d click: "
+                                 "pausesGame=%d\n", frameNum, s_buttonId, Paused(ui));
+        }
+        return;
+    }
+
+    if (!s_opened) {
+        if (frameNum - s_worldSeenAt < s_openFrame) return;
+        // Retail passes gameWorld+0x120 (the EntityUI). GameUpdateLoop hands us the
+        // same pointer as m_entityUI; fall back to the world field if it is null.
+        void* eui = entityUI ? entityUI
+                             : *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
+        std::fprintf(stderr, "[PauseMenu] frame %d - opening (entityUI=%p ui=%p pausesGame=%d)\n",
+                     frameNum, eui, ui, Paused(ui));
+        s_dialog   = EntityUI_OpenPauseMenu(eui);
+        s_opened   = true;
+        s_openedAt = frameNum;
+        if (!s_dialog) {
+            std::fprintf(stderr, "[PauseMenu] OPEN FAILED - no dialog was built "
+                                 "(Pause.rsc load or MemAlloc failed)\n");
+            s_clicked = true;
+            return;
+        }
+        s_vtable = *reinterpret_cast<void**>(s_dialog);
+        int cnt = 0;
+        int idx = DialogListIndex(ui, s_dialog, &cnt);
+        std::fprintf(stderr, "[PauseMenu] pause dialog=%p vtable=%p (UI array index=%d of %d) "
+                             "pausesGame=%d\n",
+                     s_dialog, s_vtable, idx, cnt, Paused(ui));
+        return;
+    }
+
+    if (s_quitDelay <= 0) {
+        // Open-only mode: report periodically so a run left on screen shows whether
+        // the menu holds and keeps the simulation paused.
+        if ((frameNum - s_openedAt) % 120 == 0) {
+            int c = 0;
+            int i = DialogListIndex(ui, s_dialog, &c);
+            std::fprintf(stderr, "[PauseMenu] frame %d - still up? UI array index=%d of %d "
+                                 "vtableIntact=%d pausesGame=%d\n",
+                         frameNum, i, c,
+                         (int)(*reinterpret_cast<void**>(s_dialog) == s_vtable), Paused(ui));
+        }
+        return;
+    }
+    if (frameNum < s_openedAt + s_quitDelay) return;
+
+    int cnt = 0;
+    int idx = DialogListIndex(ui, s_dialog, &cnt);
+    void* nowVtable = *reinterpret_cast<void**>(s_dialog);
+    std::fprintf(stderr, "[PauseMenu] frame %d - dialog=%p vtable=%p (was %p) "
+                         "UI array index=%d of %d pausesGame=%d\n",
+                 frameNum, s_dialog, nowVtable, s_vtable, idx, cnt, Paused(ui));
+    s_clicked = true;
+    if (nowVtable != s_vtable) {
+        std::fprintf(stderr, "[PauseMenu] click aborted - the dialog's vtable changed, "
+                             "so the object was destroyed under us\n");
+        return;
+    }
+    void** vt = reinterpret_cast<void**>(nowVtable);
+    typedef void (*OnCommand_t)(void* self, void* elem, int msg, int id);
+    OnCommand_t onCommand = reinterpret_cast<OnCommand_t>(vt[8]);   // +0x40
+    std::fprintf(stderr, "[PauseMenu] dispatching OnCommand(msg=0x12, id=%d)\n", s_buttonId);
+    onCommand(s_dialog, nullptr, 0x12, s_buttonId);
+    s_clickedAt = frameNum;
+    std::fprintf(stderr, "[PauseMenu] OnCommand returned\n");
+}

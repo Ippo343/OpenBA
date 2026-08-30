@@ -173,17 +173,20 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 }
 
 // ---- .ndb load + gender selection (FUN_1400a4c60) ---------------------------
-// Loaded name databases are cached (one Male, one Female) so we don't FindOrLoad
-// per colonist. FindOrLoad by exact filename is authoritative, so we skip the
-// IsDerivedFrom type check (its type-id .rdata is NULL in standalone anyway).
+// FindOrLoad on EVERY call, exactly as retail does. This used to cache the two
+// Externals in process-lifetime statics behind a one-shot "tried" flag, to avoid
+// a FindOrLoad per colonist. That deviation crashed the SECOND new game of a
+// session once quit-to-main-menu became reachable (2026-08-29): the teardown
+// frees the .ndb Externals, the cache kept the dangling pointers, and the
+// one-shot flag meant they were never reloaded -- so StartTown's first colonist
+// walked a freed, poison-filled table and faulted reading 0xFFFFFFFFFFFFFFFF
+// inside MarkovGenerate. FindOrLoad is a lookup-or-load, so the repeat cost is
+// the hash lookup retail already pays.
+//
+// The IsDerivedFrom check retail does on the result is still skipped: its type-id
+// .rdata (DWORD_1401c5a60) is NULL in standalone, and FindOrLoad by exact
+// filename is authoritative.
 static uintptr_t LoadNameDb(bool female) {
-    static uintptr_t s_male = 0, s_female = 0;
-    static bool s_maleTried = false, s_femaleTried = false;
-    uintptr_t* slot   = female ? &s_female : &s_male;
-    bool*      tried  = female ? &s_femaleTried : &s_maleTried;
-    if (*tried) return *slot;
-    *tried = true;
-
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
         !fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
         return 0;
@@ -192,8 +195,7 @@ static uintptr_t LoadNameDb(bool female) {
     fn_Filename_CtorCStr(fname, female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     void* obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
     fn_Filename_Dtor(fname);
-    *slot = (uintptr_t)obj;
-    return *slot;
+    return (uintptr_t)obj;
 }
 
 // Public entry: generate a citizen name for `female` into `out` (>=0x100 bytes,

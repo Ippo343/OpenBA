@@ -117,8 +117,21 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
     }
 }
 
+// Per-loop latches for the deferred load kick and the fade-out kick. They used to
+// be function-local statics compared as `latch != self`, on the stated assumption
+// that "splash loops run one at a time, each with a unique self". Quit-to-main-menu
+// broke that: a SECOND new game builds a second splash loop, the allocator can hand
+// back the freed first one's address, and `latch == self` is then true on frame 0 --
+// so the load kick never fires and the second New Game hangs on the loading screen
+// with an unbuilt world. Clearing them in Stub_Startup (which runs exactly once per
+// loop) makes the latch depend on the loop's LIFETIME rather than its address.
+UpdateLoop* g_loadKickedFor       = nullptr;
+UpdateLoop* g_fadeOutInitiatedFor = nullptr;
+
 void Stub_Startup(UpdateLoop* self) {
     StallDebug::Phase startupPhase("SplashDLT::Stub_Startup");
+    g_loadKickedFor       = nullptr;   // fresh loop -- see the note above
+    g_fadeOutInitiatedFor = nullptr;
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     UpdateLoop* next = ll->m_nextLoop;
     printf("[SplashDLT::Startup] self=%p next=%p m_dialogExternal(before)=%p\n",
@@ -305,8 +318,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // still blocking) load. The one frozen frame now shows a real loading screen
     // + tip instead of a black hang. Single-slot static like fadeOutInitiatedFor
     // below — splash loops run one at a time, each with a unique `self`.
-    static UpdateLoop* loadKickedFor = nullptr;
-    if (loadKickedFor != self && ll->m_nextLoop) {
+    if (g_loadKickedFor != self && ll->m_nextLoop) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
         float revealAlpha = UIFade::GetCurrentAlpha(ui);   // 1=black -> 0=revealed
         int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
@@ -314,7 +326,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         bool revealed = (revealAlpha < 0.5f);
         bool timedOut = (revealCap && ll->m_elapsedTicks >= revealCap);
         if (revealed || timedOut) {
-            loadKickedFor = self;
+            g_loadKickedFor = self;
             // The new-game world build (GameUpdateLoop::Load) is multi-second.
             // Run it on a WORKER thread so the main thread keeps animating the
             // loading screen + cycling tips (the worldReady gate below holds the
@@ -346,7 +358,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Retail FUN_140098DA0 drives this off the self+0xB58 timer at DAT_140172174
     // (= 2.0s). Visible today only during the post-load hold; becomes continuous
     // once the world build is chunked across frames (Fix 3).
-    if (loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
+    if (g_loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
         int64_t* tipTimer =
             reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
         *tipTimer += dt->ticks;
@@ -377,9 +389,8 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     if (ll->m_elapsedTicks >= ll->m_delayTicks && worldReady) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
 
-        static UpdateLoop* fadeOutInitiatedFor = nullptr;
-        if (fadeOutInitiatedFor != self) {
-            fadeOutInitiatedFor = self;
+        if (g_fadeOutInitiatedFor != self) {
+            g_fadeOutInitiatedFor = self;
             UIFade::EnsureFadeSprite(ui);
             UIFade::TriggerFadeIn(ui);
             printf("[SplashDLT::Update] self=%p kicked fade-out-to-black, "
