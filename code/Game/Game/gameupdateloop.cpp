@@ -759,6 +759,14 @@ inline bool SimProfOn() {
 }
 inline long long QpcNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
 
+// Milliseconds between two QpcNow() samples. Self-contained: g_qpcFreq is only
+// filled when the sim profiler is armed, so query the frequency here instead.
+inline double QpcMs(long long ticks) {
+    static long long freq = 0;
+    if (!freq) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); freq = f.QuadPart; }
+    return freq ? 1000.0 * (double)ticks / (double)freq : 0.0;
+}
+
 struct PhaseTimer {
     int ph; long long t0; bool on;
     explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) { if (on) t0 = QpcNow(); }
@@ -1367,7 +1375,31 @@ post_simulation:
     // Step 14: SaveLoad::Update if active
     if (self->m_saveLoad != nullptr && fn_SaveLoad_Update) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
-        fn_SaveLoad_Update(self->m_saveLoad, time);
+        // [diag] BANISHED_SAVE_TIMING - a save that freezes the spinner and one
+        // that animates look identical in a text log unless we time the call and
+        // count the frames the operation spans.
+        static int s_saveTiming = -1;
+        if (s_saveTiming < 0) {
+            const char* e = std::getenv("BANISHED_SAVE_TIMING");
+            s_saveTiming = (e && e[0] && e[0] != 0x30) ? 1 : 0;
+        }
+        if (s_saveTiming && fn_SaveLoad_GetOperation) {
+            static int s_opFrames = 0;
+            int opBefore = fn_SaveLoad_GetOperation(self->m_saveLoad);
+            long long t0 = QpcNow();
+            fn_SaveLoad_Update(self->m_saveLoad, time);
+            long long t1 = QpcNow();
+            int opAfter = fn_SaveLoad_GetOperation(self->m_saveLoad);
+            if (opBefore != 0 || opAfter != 0) {
+                s_opFrames++;
+                fprintf(stderr, "[SaveTiming] frame=%d opFrame=%d op %d -> %d  SaveLoad::Update=%.2fms\n",
+                        s_frameNum, s_opFrames, opBefore, opAfter, QpcMs(t1 - t0));
+                fflush(stderr);
+                if (opAfter == 0) s_opFrames = 0;
+            }
+        } else {
+            fn_SaveLoad_Update(self->m_saveLoad, time);
+        }
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 

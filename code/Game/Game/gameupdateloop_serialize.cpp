@@ -51,6 +51,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -748,6 +749,45 @@ static void SerTrace(void* stream, const char* stage) {
     fflush(stderr);
 }
 
+// ---------------------------------------------------------------------------
+// BANISHED_SAVE_TIMING - per-section wall clock for the save/load snapshot.
+//
+// The whole snapshot runs SYNCHRONOUSLY on the main thread inside
+// Save::SaveLoad::UpdateSave (Runtime 0x1800c2a80 calls the loop vtable +0x38
+// before it queues the async file write), exactly as retail does - so however
+// long this takes is a hard freeze with the spinner stopped. Retail is fast
+// enough that nobody notices; when ours is not, this says which section owns
+// the time.
+// ---------------------------------------------------------------------------
+static bool SaveTimingOn() {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_SAVE_TIMING");
+        s_on = (e && *e && e[0] != 0x30) ? 1 : 0;
+    }
+    return s_on != 0;
+}
+
+static long long SerQpc() {
+    LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart;
+}
+static double SerQpcMs(long long ticks) {
+    static long long f = 0;
+    if (!f) { LARGE_INTEGER q; QueryPerformanceFrequency(&q); f = q.QuadPart; }
+    return f ? 1000.0 * (double)ticks / (double)f : 0.0;
+}
+
+namespace { long long g_serMark = 0; }
+
+static void SerMark(const char* stage) {
+    if (!SaveTimingOn()) return;
+    long long now = SerQpc();
+    if (g_serMark) {
+        fprintf(stderr, "[SerTiming] %-22s %8.2fms\n", stage, SerQpcMs(now - g_serMark));
+        fflush(stderr);
+    }
+    g_serMark = now;
+}
 extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
                                                void* p3, int* outParam) {
     (void)p3;
@@ -760,6 +800,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
             IsSaving(stream) ? "SAVE" : "LOAD", selfVoid, stream);
     fflush(stderr);
 
+    g_serMark = 0;
+    SerMark("enter");
     s_fn_EnableRefMode(extFactory, true);
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 3);
@@ -798,20 +840,28 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
+    SerMark("pre-camera");
     SerTrace(stream, "pre-camera");
     s_fn_Camera_988c0(*(void**)(self + 0xe0), stream);
+    SerMark("pre-entlist");
     SerTrace(stream, "pre-entlist");
     s_fn_EntList_c44a0(*(void**)(self + 0xe8), stream);
+    SerMark("pre-geom");
     SerTrace(stream, "pre-geom");
     s_fn_Geom_b04d0(*(void**)(self + 0x110), stream);
+    SerMark("pre-citlist");
     SerTrace(stream, "pre-citlist");
     s_fn_CitList_8f760(*(void**)(self + 0xf0), stream, nullptr, outParam);
+    SerMark("pre-grid");
     SerTrace(stream, "pre-grid");
     s_fn_Grid_9f100(*(void**)(self + 0xf8), stream);
+    SerMark("pre-goals");
     SerTrace(stream, "pre-goals");
     s_fn_Goals_f9240(*(void**)(self + 0x118), stream, nullptr, outParam);
+    SerMark("post-goals");
     SerTrace(stream, "post-goals");
     EntityUI_Serialize_102920(*(void**)(self + 0x120), stream);
+    SerMark("reached-entityui");
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
@@ -825,10 +875,15 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 
     if (g_fn_Serializer_GetVersion(ser) > 1)
         EventLog_Serialize_952c0(*(void**)(self + 0x138), stream);
+    SerMark("reached-eventlog");
     WeatherSim_Serialize_93c90(*(void**)(self + 0x130), stream);
+    SerMark("reached-weather");
     Minimap_Serialize_a57f0(*(void**)(self + 0x148), stream);
+    SerMark("reached-minimap");
     EntityList_PostLoad_c4730(*(void**)(self + 0xe8), stream);
+    SerMark("reached-postload");
     s_fn_CitPost_8f580(*(void**)(self + 0xf0));
+    SerMark("reached-citpost");
 
     if (intFactory) s_fn_ClearPersist(intFactory);
     s_fn_EnableRefMode(extFactory, false);
@@ -864,8 +919,11 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
     } else {
         s_fn_CMS_Create(cms);
         GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
+        SerMark("reached-serialize-end");
         s_fn_CMS_Close(cms);
+        SerMark("reached-compress-close");
         s_fn_SavedState_Store(savedState, s_fn_CMS_GetMemStream(cms));
+        SerMark("reached-savedstate-store");
     }
     s_fn_CMS_Dtor(cms);
 }

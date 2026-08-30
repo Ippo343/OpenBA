@@ -56,13 +56,23 @@ namespace {
 // silently no-ops if the dialog/element/table or any engine fn is missing (e.g.
 // ShiningRock.rsc has no descText — FindElement then returns the missing-element
 // sentinel, which we normalise to null and skip).
+// Diagnostic: name the gate that stopped us. A silent no-op here is
+// indistinguishable from "the tip rendered but is blank".
+static void TipBail(const char* why, const void* p) {
+    static int n = 0;
+    if (n++ < 12) printf("[SplashDLT] loading tip SKIPPED: %s (%p)\n", why, p);
+}
+
 void SetRandomLoadingTip(DialogLoaderLoopT* self) {
-    if (!self || !self->m_dialogInstance) return;
-    if (!fn_String_Ctor_CStr || !fn_String_Dtor || !fn_DialogInstance_FindElement ||
-        !fn_StringTable_GetCount || !fn_Random_Rand || !fn_UIString_Ctor_Index ||
-        !fn_TextElement_SetText) {
-        return;
-    }
+    if (!self) { TipBail("self==null", nullptr); return; }
+    if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
+    if (!fn_String_Ctor_CStr)            { TipBail("fn_String_Ctor_CStr", nullptr); return; }
+    if (!fn_String_Dtor)                 { TipBail("fn_String_Dtor", nullptr); return; }
+    if (!fn_DialogInstance_FindElement)  { TipBail("fn_DialogInstance_FindElement", nullptr); return; }
+    if (!fn_StringTable_GetCount)        { TipBail("fn_StringTable_GetCount", nullptr); return; }
+    if (!fn_Random_Rand)                 { TipBail("fn_Random_Rand", nullptr); return; }
+    if (!fn_UIString_Ctor_Index)         { TipBail("fn_UIString_Ctor_Index", nullptr); return; }
+    if (!fn_TextElement_SetText)         { TipBail("fn_TextElement_SetText", nullptr); return; }
 
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
@@ -74,21 +84,28 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
 
     // Normalise the missing-element sentinel (0xffffffff........) to null.
     uintptr_t raw = static_cast<uintptr_t>(elemBuf);
-    if (raw < 0x10000 || raw > 0x00007FFFFFFFFFFFULL) return;
+    if (raw < 0x10000 || raw > 0x00007FFFFFFFFFFFULL) {
+        TipBail("descText not found (FindElement sentinel)", (void*)raw);
+        return;
+    }
     void* elem = reinterpret_cast<void*>(raw);
 
-    // Verify LabelElement lineage (TextElement derives from LabelElement),
-    // mirroring retail's IsDerivedFrom(obj, LabelElement typeId) gate.
-    if (fn_IsDerivedFrom && g_TypeId_LabelElement &&
-        !fn_IsDerivedFrom(elem, *g_TypeId_LabelElement)) {
+    // Retail gates on the TEXTELEMENT type id, read from exref 0x140151508
+    // (Ghidra labels that global `fn_LabelElement_SetSprite` -- a misnamed
+    // dispatch slot, which is what sent the first port to LabelElement).
+    // descText is a TextDescription, so IsDerivedFrom(elem, LabelElement)
+    // was FALSE and the tip was skipped on every game-load splash.
+    if (fn_IsDerivedFrom && g_TypeId_TextElement &&
+        !fn_IsDerivedFrom(elem, *g_TypeId_TextElement)) {
+        TipBail("descText is not a TextElement", elem);
         return;
     }
 
     // StringTable at element+0xD8; pick a random 1-based index in [1, count].
     void* table = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
-    if (!table) return;
+    if (!table) { TipBail("elem+0xD8 StringTable==null", elem); return; }
     int count = fn_StringTable_GetCount(table);
-    if (count <= 0) return;
+    if (count <= 0) { TipBail("StringTable count<=0", table); return; }
     void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x194);
     uint32_t idx = fn_Random_Rand(rng, static_cast<uint32_t>(count - 1));
 
@@ -339,8 +356,12 @@ bool Stub_Update(UpdateLoop* self, void* time) {
                 (g_GameUpdateLoop_Vtable &&
                  *reinterpret_cast<void**>(ll->m_nextLoop) ==
                      reinterpret_cast<void*>(g_GameUpdateLoop_Vtable));
-            // Fix 2: show an initial random tip immediately.
-            SetRandomLoadingTip(ll);
+            // Retail does NOT seed a tip here: FUN_140098DA0 only ever sets
+            // descText from inside the 2.0s timer branch, so the loading screen
+            // opens showing the .rsc default and the first tip lands 2.0s later.
+            // Seeding one here was a deviation -- it made the text appear at once
+            // and added an extra change, which reads as "cycling faster".
+            // Only the timer is reset, which retail does implicitly (ctor zeroes it).
             *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58) = 0;
             printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f -> kicking "
                    "deferred load of next=%p (gameLoop=%d, threaded=%d)\n",
@@ -354,16 +375,35 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         }
     }
 
-    // ---- Fix 2: cycle the loading tip every ~2s while the screen animates ----
-    // Retail FUN_140098DA0 drives this off the self+0xB58 timer at DAT_140172174
-    // (= 2.0s). Visible today only during the post-load hold; becomes continuous
-    // once the world build is chunked across frames (Fix 3).
+    // ---- Fix 2: cycle the loading tip every 2.0s, as retail does ----
+    // Retail FUN_140098DA0 drives this off the self+0xB58 timer against
+    // DAT_140172174, which is exactly 2.0f. Measured here at 2015ms -- match.
+    //
+    // KNOWN DEVIATION: retail wraps the whole block in
+    //     if (nextLoop->m_loadProgress != 0)      // UpdateLoop+0x24
+    // so the timer does not even accumulate until the next loop reports load
+    // progress. We cannot honour that yet: standalone replaces the Runtime
+    // Loader::Load path (which is what calls SetLoadProgress) with our own
+    // AsyncLoader, so m_loadProgress is 0 for the whole splash -- measured 0 at
+    // every single tip. Gating on it faithfully would mean the text NEVER
+    // appears. Cycling ungated reproduces what retail actually shows (blank,
+    // then a tip every 2s); revisit if AsyncLoader ever publishes progress.
     if (g_loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
         int64_t* tipTimer =
             reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
         *tipTimer += dt->ticks;
         if (*tipTimer >= *g_Timer_ticksPerSecond * 2) {   // 2.0s
             *tipTimer = 0;
+            // [diag] measure the ACTUAL interval and the retail gate value.
+            // Retail cycles only while nextLoop->m_loadProgress (UpdateLoop+0x24)
+            // is non-zero, and its period is DAT_140172174 = 2.0s exactly.
+            static long long s_prevTip = 0;
+            LARGE_INTEGER qf, qn; QueryPerformanceFrequency(&qf); QueryPerformanceCounter(&qn);
+            double sinceMs = s_prevTip ? 1000.0 * (double)(qn.QuadPart - s_prevTip) / (double)qf.QuadPart : -1.0;
+            s_prevTip = qn.QuadPart;
+            printf("[SplashDLT] tip cycle: wall=%.0fms tps=%lld loadProgress=%d\n",
+                   sinceMs, (long long)*g_Timer_ticksPerSecond,
+                   ll->m_nextLoop ? *(int*)((uintptr_t)ll->m_nextLoop + 0x24) : -1);
             SetRandomLoadingTip(ll);
         }
     }

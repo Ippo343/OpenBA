@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 
 // ============================================================
 // Resolved function pointers (exe-internal, resolved lazily)
@@ -1149,11 +1150,30 @@ void EntityList_FlagAggregation(void* entity) {
 //   9. Per-entity metadata: master index, bucket index, bucket ID, time
 //
 // Decompiled from 0x1400c44a0.
+// [diag] BANISHED_SAVE_TIMING - EntityList::Serialize owns ~99% of the save
+// snapshot freeze, so break its phases apart: removal drain, the per-entity
+// InternalBasePtr::Serialize loop, the bucket trees, and the metadata loop.
+static bool ElSaveTimingOn() {
+    static int on = -1;
+    if (on < 0) { const char* e = std::getenv("BANISHED_SAVE_TIMING");
+                  on = (e && *e && e[0] != 0x30) ? 1 : 0; }
+    return on != 0;
+}
+static long long ElQpc() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+static double ElQpcMs(long long d) {
+    static long long f = 0;
+    if (!f) { LARGE_INTEGER q; QueryPerformanceFrequency(&q); f = q.QuadPart; }
+    return f ? 1000.0 * (double)d / (double)f : 0.0;
+}
+
 void EntityList_Serialize(EntityList* self, void* stream) {
     // Step 1: Construct Serializer (local buffer, 0x18 bytes)
     uint8_t serializerBuf[0x18];
     void* serializer = serializerBuf;
     g_fn_Serializer_Ctor(serializer, stream, 0);
+    const bool elTime = ElSaveTimingOn();
+    long long elT0 = elTime ? ElQpc() : 0;
+    long long elMark = elT0;
 
     // Step 2: Flush staging arrays
     EntityList_PreUpdate(self);
@@ -1173,6 +1193,8 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 4: Serialize time
+    if (elTime) { fprintf(stderr, "[ElTiming] removal-drain %8.2fms\n",
+                          ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
     g_fn_Time_Serialize(self, serializer);
 
     // Step 5: Serialize master array count
@@ -1190,9 +1212,21 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     void* ibpIter = self->masterArray.data;
     int64_t ibpCount = (int64_t)serializedCount;
     if (ibpCount > 0) {
+        long long elBucketT0 = elTime ? ElQpc() : 0;
         for (int64_t j = 0; j < ibpCount; j++) {
             void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
             fn_InternalBasePtr_Serialize(currentIBP, serializer);
+            // [diag] per-1000 slice: a FLAT cost means each entity is simply
+            // expensive; a RISING cost means something behind
+            // InternalBasePtr::Serialize scans a table that grows with every
+            // object already written (O(n^2)).
+            if (elTime && ((j + 1) % 1000 == 0 || j + 1 == ibpCount)) {
+                long long now = ElQpc();
+                fprintf(stderr, "[ElTiming]   ibp[%5d..%5d] %8.2fms\n",
+                        (int)(j / 1000) * 1000, (int)j, ElQpcMs(now - elBucketT0));
+                fflush(stderr);
+                elBucketT0 = now;
+            }
 
             // After loading, verify it's a ComponentEntity
             if (*(void**)currentIBP != nullptr) {
@@ -1205,9 +1239,14 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
+    if (elTime) { fprintf(stderr, "[ElTiming] ibp-loop      %8.2fms  entities=%d\n",
+                          ElQpcMs(ElQpc() - elMark), (int)serializedCount);
+                  fflush(stderr); elMark = ElQpc(); }
     fn_BucketTreeSerialize(serializer, nullptr, &self->buckets[0]);
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
+    if (elTime) { fprintf(stderr, "[ElTiming] bucket-trees  %8.2fms\n",
+                          ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
     fn_Serializer_SerializeBulk(serializer, 5, self->processCount, nullptr);
     fn_Serializer_SerializeBulk(serializer, 5, self->cursor, nullptr);
 
@@ -1263,5 +1302,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 9: Destroy Serializer
+    if (elTime) { fprintf(stderr, "[ElTiming] metadata-loop %8.2fms  TOTAL %8.2fms\n",
+                          ElQpcMs(ElQpc() - elMark), ElQpcMs(ElQpc() - elT0)); fflush(stderr); }
     g_fn_Serializer_Dtor(serializer);
 }
