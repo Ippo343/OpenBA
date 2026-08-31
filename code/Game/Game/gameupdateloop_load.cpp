@@ -48,6 +48,41 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
 // ============================================================
+
+// --- Step 32 (AchievementInstance) -----------------------------------------
+// ??0AchievementInstance@Achievement@@QEAA@XZ            (Runtime 0x18009e3b0)
+// ?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z
+//                                                        (Runtime 0x18009e440)
+// ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A      (BaseTypeInfo; +0 is the type id)
+typedef void* (*fn_AchievementInstance_Ctor_t)(void* self);
+typedef void  (*fn_AchievementInstance_SetAchievement_t)(void* self, void* achievement);
+static fn_AchievementInstance_Ctor_t           s_fn_AchievementInstance_Ctor = nullptr;
+static fn_AchievementInstance_SetAchievement_t s_fn_AchievementInstance_SetAchievement = nullptr;
+static const uint32_t*                         s_AchievementTypeId = nullptr;
+
+static void EnsureAchievementFuncs() {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    s_fn_AchievementInstance_Ctor = (fn_AchievementInstance_Ctor_t)
+        ResolveExport("??0AchievementInstance@Achievement@@QEAA@XZ");
+    s_fn_AchievementInstance_SetAchievement = (fn_AchievementInstance_SetAchievement_t)
+        ResolveExport("?SetAchievement@AchievementInstance@Achievement@@QEAAX"
+                      "V?$ExternalPtr@VAchievement@1@@Object@@@Z");
+    s_AchievementTypeId = (const uint32_t*)
+        ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
+}
+
+// Kill switch for an A/B run; the step-32 block is already inert on a new game.
+static bool ScenarioGoalsEnabled() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_SCENARIO_GOALS");
+        s = (e && e[0] == '0') ? 0 : 1;
+    }
+    return s != 0;
+}
+
 typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
 static fn_Random_Seeded_Ctor_t s_fn_Random_Seeded_Ctor = nullptr;   // ??0Random@System@@QEAA@I@Z
 typedef void* (*fn_Picking_Scene_Ctor_t)(void* self);
@@ -1272,6 +1307,13 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // Step 30 — AchievementManager::SetEventHandler — GUARDED (slot 0x1401514f0 not yet
     // registered in standalone, so g_ppAchievementManager is null → skip cleanly).
 
+    // Retail reads +0x15C into a register HERE, before either branch, and writes it
+    // back after step 32 (0x1400976d7). That ordering is load-bearing on the
+    // restore-from-save path: GameUpdateLoop's own serializer round-trips +0x15C
+    // (gameupdateloop_serialize.cpp), so the SaveRestore below overwrites the field
+    // with whatever the .sav held — the id the SCENARIO DIALOG chose has to survive.
+    const int achievementId = *(int32_t*)(p + 0x15C);
+
     // Step 31 — worldgen (new-game branch, savedState==0). M5 5b first-light:
     // build the terrain mesh (base perlin island) + the gameplay tile-grid map
     // arrays + the TownManager coarse cell index (0x1400975c7). DEFERRED to later 5b slices:
@@ -1534,8 +1576,84 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         }
     }
 
-    // Step 32 — AchievementInstance — SKIPPED on new game (achievementId == -1).
+    // Step 32 — AchievementInstance (retail 0x140097645-0x1400976dd).
+    //
+    // THIS IS WHAT STARTS A SCENARIO OR TUTORIAL. +0x15C is the index of the chosen
+    // Scenario in the global resource ExternalList; ScenarioDialog::LoadSelected puts
+    // it there (via WorldSetup_LoadFromSave) and passes a NULL instance IBP, so the
+    // instance is built here and nowhere else. Scenario derives from
+    // Achievement::Achievement, and SetAchievement -> Achievement::GoalList::Initialize
+    // (Runtime 0x18009f0e0) walks the achievement's goal array, asks each goal for its
+    // instance type id (Goal vtable +0x48) and constructs one through Object::Factory.
+    // For a tutorial that goal is FinishTutorialGoal, whose FinishTutorialInstance
+    // allocates the TutorialInstance in its own vtable +0x20 (exe 0x1400d7a90) and is
+    // then stepped every tick through vtable +0x28 (-> 0x1400e1db0).
+    //
+    // Until this ran the port loaded the tutorial WORLD and played it as a sandbox:
+    // no goal list, no popup, no steps. The old one-line `*(p+0x150) = nullptr` carried
+    // the comment "SKIPPED on new game (achievementId == -1)" — true of a new game, but
+    // it skipped unconditionally, so the scenario/tutorial path got no instance either.
+    //
+    // The block is inert on a new game (id == -1), which is why it is default-on;
+    // BANISHED_LIVE_SCENARIO_GOALS=0 is the kill switch for an A/B run.
     *(void**)(p + 0x150) = nullptr;
+    if (achievementId >= 0 && ScenarioGoalsEnabled()) {
+        EnsureAchievementFuncs();
+        if (!s_fn_AchievementInstance_Ctor || !s_fn_AchievementInstance_SetAchievement ||
+            !fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
+            !g_pKeyMapSingleton) {
+            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (ctor=%p set=%p "
+                            "alloc=%p ibp=%p reslist=%p)\n",
+                    (void*)s_fn_AchievementInstance_Ctor,
+                    (void*)s_fn_AchievementInstance_SetAchievement,
+                    (void*)fn_MemAlloc, (void*)fn_InternalBasePtr_Ctor,
+                    (void*)g_pKeyMapSingleton);
+            fflush(stderr);
+        } else {
+            void* instance = nullptr;
+            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            if (mem) {
+                s_fn_AchievementInstance_Ctor(mem);
+                // Retail installs the EXE's AchievementInstance vtable (0x14015e350)
+                // over the one the Runtime ctor just wrote. Slot 0 is the exe's scalar
+                // dtor (0x140019d90); slots 1-3 are JMP thunks straight back into the
+                // Runtime base. If that address is unregistered we keep the Runtime
+                // vtable, which differs only in the dtor — deliberately better than
+                // installing a null.
+                uintptr_t exeVt = ResolveAddr(Module::Exe, 0x14015e350);
+                if (exeVt) *(void**)mem = (void*)exeVt;
+                instance = mem;
+            }
+            uint64_t ibp = 0;
+            fn_InternalBasePtr_Ctor(&ibp, instance);
+            *(uint64_t*)(p + 0x150) = ibp;
+
+            // scenario = resourceList->data[achievementId]
+            //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
+            void* scenario  = nullptr;
+            void* container = *g_pKeyMapSingleton;
+            void* resList   = container ? *(void**)((uintptr_t)container + 0x08) : nullptr;
+            void** data     = resList ? *(void***)((uintptr_t)resList + 0x20) : nullptr;
+            if (data) scenario = data[achievementId];
+
+            // IsDerivedFrom(scenario, Achievement::_typeInfo.typeId). Retail reads the id
+            // through the .rdata slot at 0x140151f68, which points at the Runtime's
+            // exported BaseTypeInfo for Achievement; its first dword IS the type id.
+            void* checked = scenario;
+            if (scenario && fn_IsDerivedFrom && s_AchievementTypeId)
+                checked = fn_IsDerivedFrom(scenario, *s_AchievementTypeId) ? scenario : nullptr;
+
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(p + 0x150));
+            void* inst = *(void**)(p + 0x150);
+            fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
+                            "derived=%p achTid=%u\n",
+                    achievementId, inst, scenario, checked,
+                    s_AchievementTypeId ? *s_AchievementTypeId : 0u);
+            fflush(stderr);
+            if (inst) s_fn_AchievementInstance_SetAchievement(inst, checked);
+            *(int32_t*)(p + 0x15C) = achievementId;
+        }
+    }
 
     // Step 33 — finalize camera + add scene globals + unpause audio channels.
     if (*(void**)(p + 0xE0))

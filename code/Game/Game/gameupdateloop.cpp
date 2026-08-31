@@ -52,6 +52,7 @@ extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int sev
 // so the default build stays byte-identical: build the tool-mode tree at EntityUI
 // startup, tick the active tool each frame (OnKey/Serialize/cursor), draw its footprint.
 extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI);
+extern "C" void EntityUI_OpenRegisteredDialogs_SA(void* entityUI);  // EntityUI::Startup 2nd half
 extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time);
 extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
 // Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
@@ -485,23 +486,39 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x1401026a0));
     fn_PlayerController_CalcTransform = reinterpret_cast<fn_PlayerController_CalcTransform_t>(
         ResolveAddr(Module::Exe, 0x1400983f0));
-    // AchievementInstance methods — indirect via .rdata dispatch tables in exe.
-    // In standalone these dispatch slots are unregistered, so ResolveAddr returns
-    // 0; guard the deref (a NULL slot crashed EnsureInit on the New Game path,
-    // since EnsureInit runs from every GameUpdateLoop vtable method). A NULL fn
-    // pointer is fine here — CHECK_FN only warns, and every call site is gated by
-    // the m_game==null world guards (and the new-game path skips AchievementInstance
-    // entirely). Registering these slots properly is M5 work.
+    // AchievementInstance methods — retail reaches them through .rdata dispatch
+    // slots (0x140152058 / 0x140152048 / 0x140152060). Those slots are unregistered
+    // in standalone, so ResolveAddr returns 0 and the old code left all three NULL.
+    //
+    // That WAS harmless only while nothing ever built an AchievementInstance. Step 32
+    // of GameUpdateLoop::Load now does (that is what starts a scenario/tutorial), so
+    // the +0x150 guard in Update stopped being the thing that kept these unreached —
+    // the first tick of a tutorial called Update through a null pointer and died with
+    // EXEC-of-0. They are plain Runtime exports; resolve them by name and fall back to
+    // the dispatch slot only if an export ever goes missing.
     {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152058);
-        fn_AchievementInstance_Update = slot
-            ? *reinterpret_cast<fn_AchievementInstance_Update_t*>(slot) : nullptr;
-        slot = ResolveAddr(Module::Exe, 0x140152048);
-        fn_AchievementInstance_IsMet = slot
-            ? *reinterpret_cast<fn_AchievementInstance_IsMet_t*>(slot) : nullptr;
-        slot = ResolveAddr(Module::Exe, 0x140152060);
-        fn_AchievementInstance_HasFailed = slot
-            ? *reinterpret_cast<fn_AchievementInstance_HasFailed_t*>(slot) : nullptr;
+        fn_AchievementInstance_Update = reinterpret_cast<fn_AchievementInstance_Update_t>(
+            ResolveExport("?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z"));
+        fn_AchievementInstance_IsMet = reinterpret_cast<fn_AchievementInstance_IsMet_t>(
+            ResolveExport("?IsMet@AchievementInstance@Achievement@@QEBA_NXZ"));
+        fn_AchievementInstance_HasFailed = reinterpret_cast<fn_AchievementInstance_HasFailed_t>(
+            ResolveExport("?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ"));
+
+        if (!fn_AchievementInstance_Update) {
+            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152058);
+            if (slot) fn_AchievementInstance_Update =
+                *reinterpret_cast<fn_AchievementInstance_Update_t*>(slot);
+        }
+        if (!fn_AchievementInstance_IsMet) {
+            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152048);
+            if (slot) fn_AchievementInstance_IsMet =
+                *reinterpret_cast<fn_AchievementInstance_IsMet_t*>(slot);
+        }
+        if (!fn_AchievementInstance_HasFailed) {
+            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152060);
+            if (slot) fn_AchievementInstance_HasFailed =
+                *reinterpret_cast<fn_AchievementInstance_HasFailed_t*>(slot);
+        }
     }
     fn_QuickSave = reinterpret_cast<fn_QuickSave_t>(
         ResolveAddr(Module::Exe, 0x140095da0));
@@ -2464,6 +2481,11 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // Standalone: fn_EntityUI_Startup (0x140101ee0) is NULL, so build the tool-mode
     // tree ourselves (Phase 3) so a build-button click resolves the PlacementTool.
     if (LiveToolsEnabled()) EntityUI_BuildToolModeTree_SA(self->m_entityUI);
+    // ...and its second half: open every dialog registered in the EntityUI+0x50 tree.
+    // That tree is how a tutorial asks for its panel (FinishTutorialInstance::Slot4 ->
+    // 0x1401001f0 only RECORDS the request); nothing else opens it. Empty on a plain
+    // new game, so this is a no-op there — hence no live gate.
+    if (!fn_EntityUI_Startup) EntityUI_OpenRegisteredDialogs_SA(self->m_entityUI);
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");

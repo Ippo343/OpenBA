@@ -108,6 +108,11 @@ uint32_t HighlightTypeId() {
 // TutorialUI type id (retail DAT_1401C67F0).
 uint32_t TutorialUITypeId() {
     static uint32_t c = 0;
+    // TutorialUI is an EXE-side REGISTER_TYPE (tutorial_dialog_vtables.cpp:534), so the
+    // exe registration table is the authority; ResolveTypeIdByNameLazy walks the live
+    // Factory tree and is the fallback, not the primary. Order matters: a 0 here makes
+    // StepExecute's controller narrow fail and the step panel is never bound.
+    if (!c) c = ::Object::GetTypeIdByName("TutorialUI");
     if (!c) c = ::Object::ResolveTypeIdByNameLazy("TutorialUI");
     return c;
 }
@@ -656,14 +661,34 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     uintptr_t tutorial = *reinterpret_cast<uintptr_t*>(s + 0x30);
-    if (!tutorial) return;
+    if (!tutorial) {
+        // Both of retail's early returns are silent, which is fine in retail and
+        // useless here: "the tutorial never appears" looks identical whether the
+        // Tutorial definition never reached +0x30 or the dialog lookup missed.
+        // One line each, once.
+        static bool once = false;
+        if (!once) { once = true;
+            fprintf(stderr, "[Tutorial] StepExecute BAILED: tutInst+0x30 (Tutorial def) is NULL "
+                            "- FinishTutorialInstance::Slot4 never copied it from the goal\n");
+            fflush(stderr); }
+        return;
+    }
 
     if (*reinterpret_cast<uint64_t*>(s + 0x18) == 0) {
         if (!fn_FindDialogByControllerType) { DarkOnce("FindDialogByControllerType 0x140100270"); return; }
         uint64_t dlg = 0;
         fn_FindDialogByControllerType(self, &dlg, *reinterpret_cast<uint64_t*>(tutorial + 0x20));
         *reinterpret_cast<uint64_t*>(s + 0x18) = dlg;
-        if (dlg == 0) return;
+        if (dlg == 0) {
+            static bool once = false;
+            if (!once) { once = true;
+                fprintf(stderr, "[Tutorial] StepExecute BAILED: FindDialogByControllerType found no "
+                                "dialog for tutorial=%p dialogExt=%p\n",
+                        reinterpret_cast<void*>(tutorial),
+                        *reinterpret_cast<void**>(tutorial + 0x20));
+                fflush(stderr); }
+            return;
+        }
 
         uint32_t uiTid = TutorialUITypeId();
         void* controller = nullptr;

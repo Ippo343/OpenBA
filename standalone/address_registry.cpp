@@ -491,6 +491,7 @@ extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (
 extern void RegisterOrchardTypeIds();        // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard)
 extern void RegisterMarketTypeIds();         // MarketComponent c44f0 + MarketDescription c4528 storage (filled by FillTypeIdGlobals_market)
 extern void RegisterFoodTypeIds();           // Fishing/Hunt/Herbalist/CropField component+description type-id storage (filled by FillTypeIdGlobals_food)
+extern void RegisterTutorialTypeIds();       // FinishTutorialGoal c6240 + FinishTutorialInstance c6278 + TutorialInstance c6668 (filled by FillTypeIdGlobals_tutorial)
 extern void RegisterRdataFloatConsts();     // 25 .rdata float constants resolved by code/ but registered nowhere; a null one is SILENT (cost the crop harvest)
 extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth)
 extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + ClearAreaDescription c7200 storage (filled by FillTypeIdGlobals_cleararea)
@@ -764,6 +765,7 @@ static void RegisterCodeFunctions() {
     RegisterOrchardTypeIds();      // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard) — orchard panel type/yield + plant/tend work
     RegisterMarketTypeIds();       // MarketComponent c44f0 + MarketDescription c4528 storage — MarketWork slot 4 component scan + description narrowing
     RegisterFoodTypeIds();         // food-production component/description type ids — without these the fishing rate mask reads 0 on perfect water
+    RegisterTutorialTypeIds();     // tutorial type ids — a null FinishTutorialGoal id makes Slot4's goal narrow fail, so the tutorial never gets its Tutorial definition
     RegisterRdataFloatConsts();    // unregistered .rdata floats: hard guards go inert, soft `p ? *p : 0.0f` fallbacks silently use the WRONG value
     RegisterGrowthTypeIds();       // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth) — every natural resource spawned at runtime
     RegisterClearAreaTypeIds();    // ClearAreaComponent c71c8 (backs fn_FindComponent_SM, null until now) + ClearAreaDescription c7200 — orchard state 20 "cut"

@@ -117,6 +117,63 @@ void Tree_Insert(int64_t* tree, uint32_t key, uint32_t toolTypeId) {
 }  // namespace
 
 // ============================================================
+// Piece 1b — EntityUI::Startup's SECOND half: open the dialogs registered in the
+// BST at EntityUI+0x50 (retail 0x140101ee0, the loop right after the eight
+// Tree_Insert calls Piece 1 stands in for).
+// ============================================================
+// This is the ONLY thing that opens the tutorial panel. FinishTutorialInstance::Slot4
+// (0x1400d7a90) does not open a dialog — it calls 0x1401001f0, which merely records
+// {key = the tutorial's Dialog External, x, y, wanted = 1} in this tree. Retail's
+// EntityUI::Startup then walks the tree and calls the toggle (0x140101a80, ported as
+// Toolbar_Utility_Reg) for every node whose `wanted` byte is set, and THAT constructs
+// the DialogInstance and hands it to UserInterface::AddDialog.
+//
+// With only Piece 1 standing in, the tutorial's request sat in the tree forever: the
+// step driver's FindDialogByControllerType (0x140100270) walked a dialog list the panel
+// was never added to, returned null every tick, and took its silent early return — the
+// tutorial world played as a sandbox with no panel, no goals and no steps.
+//
+// Node layout (from 0x1401001f0 + 0x140101a80):
+//   +0x00 key (Dialog External*)   +0x08 int x   +0x0C int y   +0x10 byte wanted
+//   +0x18 parent   +0x20 left   +0x28 right
+// Retail walks it in order (leftmost, then successor). Not gated by BANISHED_LIVE_TOOLS:
+// an empty tree — every non-scenario game — makes this a no-op.
+extern "C" void* Toolbar_Utility_Reg(void* entityUI, void* outIbp, uint64_t key);
+
+extern "C" void EntityUI_OpenRegisteredDialogs_SA(void* entityUI) {
+    if (!entityUI) return;
+    uint64_t* node = *reinterpret_cast<uint64_t**>((uintptr_t)entityUI + 0x50);
+    if (!node) return;
+
+    while (node[4]) node = reinterpret_cast<uint64_t*>(node[4]);   // leftmost
+
+    int opened = 0;
+    while (node) {
+        if (*reinterpret_cast<const uint8_t*>(&node[2]) != 0) {
+            uint64_t outIbp = 0;
+            Toolbar_Utility_Reg(entityUI, &outIbp, node[0]);
+            ++opened;
+        }
+        // successor: leftmost of the right subtree, else up until we come from a left child
+        if (node[5]) {
+            node = reinterpret_cast<uint64_t*>(node[5]);
+            while (node[4]) node = reinterpret_cast<uint64_t*>(node[4]);
+        } else {
+            uint64_t* parent = reinterpret_cast<uint64_t*>(node[3]);
+            while (parent && reinterpret_cast<uint64_t*>(parent[5]) == node) {
+                node = parent;
+                parent = reinterpret_cast<uint64_t*>(node[3]);
+            }
+            node = parent;
+        }
+    }
+    if (opened) {
+        fprintf(stderr, "[EntityUI] opened %d registered dialog(s) from the +0x50 tree\n", opened);
+        fflush(stderr);
+    }
+}
+
+// ============================================================
 // Piece 1 — build the tool-mode tree on the EntityUI (== GameWorld+0x120).
 // ============================================================
 // Idempotent (no-op if a tree already exists). We register PlacementTool, which covers

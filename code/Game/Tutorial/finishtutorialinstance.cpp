@@ -186,6 +186,15 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
         *(int32_t*)(tutInst + 0x10) = 0;
     }
 
+    { static bool once = false; if (!once) { once = true;
+        std::fprintf(stderr, "[FinTutInst] Slot4 INIT self=%p tutInst=%p goalObj=%p ftGoal=%p "
+                             "tutDef=%p (goalTid=%u) treeInsert=%p\n",
+                (void*)self, (void*)tutInst, goalObj, ftGoal,
+                tutInst ? *(void**)(tutInst + 0x30) : nullptr,
+                g_TypeId_FinishTutorialGoal ? *g_TypeId_FinishTutorialGoal : 0u,
+                (void*)fn_TutorialTreeInsert);
+        std::fflush(stderr); } }
+
     // Step 7: Call FinishTutorialGoal_helper_01f0 (tutorial tree insert)
     if (fn_TutorialTreeInsert && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;

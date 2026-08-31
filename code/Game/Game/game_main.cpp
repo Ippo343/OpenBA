@@ -95,6 +95,7 @@ extern "C" void FillTypeIdGlobals_tracker();
 extern "C" void FillTypeIdGlobals_orchard();
 extern "C" void FillTypeIdGlobals_market();
 extern "C" void FillTypeIdGlobals_food();
+extern "C" void FillTypeIdGlobals_tutorial();
 extern "C" void FillTypeIdGlobals_growth();
 extern "C" void FillTypeIdGlobals_cleararea();
 extern "C" void FillEconomyTypeIdGlobals();
@@ -532,6 +533,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_orchard();           // orchard panel type/yield — OrchardComponent id (c46b0)
     FillTypeIdGlobals_market();            // MarketWork slot 4 — MarketComponent (c44f0) + MarketDescription (c4528) ids
     FillTypeIdGlobals_food();              // fishing/hunt/gatherer/cropfield component + description ids
+    FillTypeIdGlobals_tutorial();          // FinishTutorialGoal (c6240) / FinishTutorialInstance (c6278) / TutorialInstance (c6668)
     FillTypeIdGlobals_growth();            // GrowthComponent id (c77b0) — the finder every runtime-spawned natural resource goes through
     FillTypeIdGlobals_cleararea();         // ClearAreaComponent (c71c8) + ClearAreaDescription (c7200) — fn_FindComponent_SM was a null-typeid miss game-wide
 
