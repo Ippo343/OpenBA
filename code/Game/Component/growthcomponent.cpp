@@ -206,6 +206,48 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
 
+    // BANISHED_GROWTH_TRACE — ENROLMENT census. ApplyVisualScale only runs for a
+    // component the post-update pass actually reaches, and EntityList's dispatcher
+    // (0x1400c2c70) needs BOTH gates open: the ENTITY's flag 0x10 at entity+0x40 and
+    // the COMPONENT's flag 0x10 at comp+0x20. The [GrowthGate] trace lives inside
+    // ApplyVisualScale, so it only sees components that already passed both — it cannot
+    // count the ones that never arrive. Update runs for everything, so count them here.
+    //
+    // This is the whole "trees pop" question in two numbers: until a plant is enrolled
+    // its MeshInstance visualScale keeps the ctor default (1,1,1,1) = FULLY GROWN, and
+    // the frame it finally enrols it snaps to its real size in ONE frame.
+    {
+        static int s_te = -1;
+        if (s_te < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
+                        s_te = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
+        if (s_te) {
+            static void* s_firstE = nullptr;
+            static int s_passE = 0, nE = 0, nComp = 0, nEnt = 0, nBoth = 0, nScaled = 0;
+            if (!s_firstE) s_firstE = self;
+            if (self == s_firstE && nE > 0) {
+                if ((s_passE % 30) == 0) {
+                    std::fprintf(stderr,
+                        "[GrowthEnrol] pass=%d growthComps=%d compFlag0x10=%d "
+                        "entFlag0x10=%d BOTH(dispatched)=%d modelScaleWritten=%d\n",
+                        s_passE, nE, nComp, nEnt, nBoth, nScaled);
+                    std::fflush(stderr);
+                }
+                ++s_passE; nE = nComp = nEnt = nBoth = nScaled = 0;
+            }
+            ++nE;
+            const bool cf = (*reinterpret_cast<uint32_t*>(comp + 0x20) & 0x10) != 0;
+            void* ownerE = *reinterpret_cast<void**>(comp + 0x10);
+            const bool ef = ownerE &&
+                (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ownerE) + 0x40) & 0x10) != 0;
+            if (cf) ++nComp;
+            if (ef) ++nEnt;
+            if (cf && ef) ++nBoth;
+            void* mdl = *reinterpret_cast<void**>(comp + 0x30);
+            if (mdl && *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(mdl) + 0x134) != 1.0f)
+                ++nScaled;
+        }
+    }
+
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. config(+0x38) and the resource
     // sub-component(+0x28) are populated by GrowthComponent_Startup (step 2 of the

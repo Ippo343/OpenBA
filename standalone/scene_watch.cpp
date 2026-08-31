@@ -390,18 +390,30 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
     const float camY = *reinterpret_cast<const float*>(c + 0x8c);
     const float camZ = *reinterpret_cast<const float*>(c + 0x90);
 
+    static std::unordered_map<void*, float> s_scale;   // geometry -> last visualScale.x
+    struct MeshVariants { int n; int16_t vi[12]; int16_t mv[12]; int count[12]; };
+    static std::unordered_map<void*, MeshVariants> s_variants;
+    struct MeshRef { void* mesh; void* mats; };
+    static std::unordered_map<void*, MeshRef> s_mesh;   // geometry -> mesh/material it drew with
     static std::unordered_map<void*, int>      s_lod;    // geometry -> last chosen level
     static std::unordered_map<void*, MeshInfo> s_meshes; // GraphicsMesh -> its table
 
     int instances = 0, multiLevel = 0, flips = 0, fellBack = 0, prevBoxEmpty = 0;
     int variantHist[9] = {0};
     int variantMiss = 0, variantNotReady = 0;
+    int meshSwaps = 0, matSwaps = 0;
+    int faded = 0, fadedOut = 0, tinted = 0, oddDetailId = 0;
+    int variantOutOfBand = 0;
+    int scaleMoved = 0, scaleJumped = 0;
+    void* scaleExample = nullptr; float scaleFrom = 0.0f, scaleTo = 0.0f;
+    void* swapExample = nullptr; void* swapFrom = nullptr; void* swapTo = nullptr;
     int lodHist[8] = {0};
     void* flipExample = nullptr;
     int   flipFrom = 0, flipTo = 0;
     float flipDist = 0.0f;
 
     for (auto& kv : s_meshes) kv.second.instances = 0;
+    for (auto& kv : s_variants) kv.second.n = 0;
 
     for (int i = 0; i < count; ++i) {
         uint8_t* node = nodes + static_cast<size_t>(i) * 0x18;
@@ -414,6 +426,72 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
         if (!Readable(mesh)) continue;
         ++instances;
 
+        // With the detail pick frozen (BANISHED_FORCE_LOD0), the only remaining way a
+        // model's APPEARANCE can change is for something to swap the resource under it:
+        // Graphics::MeshInstance::SetMesh rewrites MeshInstance+0xc0 (and the material
+        // array at +0xc8). A tree that visibly goes from leaves to no leaves is exactly
+        // that swap, so count it and name a culprit. ModelComponent picks its mesh from
+        // the description with (variantIdx +0x164, modelVariant +0x166), so a mesh that
+        // changes mid-run means one of those two moved after the load.
+        {
+            // Per-object FADE. Graphics::MeshInstance::AddDrawItems hands AddDrawItem
+            // `alpha_prev * geo+0x80 + alpha_cur * geo+0x7c` (both 1.0 from the Geometry
+            // ctor) as its param_6, and AddDrawItem sets bit 0x8000 on the sort key
+            // whenever that value is not exactly 1.0 — i.e. it moves the item into the
+            // transparent bucket. So this pair is a real per-object dissolve, and it is
+            // the last thing left that can change a model's appearance while its mesh,
+            // material and detail level all stay fixed.
+            const float a0 = *reinterpret_cast<float*>(g + 0x7c);
+            const float a1 = *reinterpret_cast<float*>(g + 0x80);
+            if (a0 != 1.0f || a1 != 1.0f) ++faded;
+            if (a0 < 0.999f) ++fadedOut;
+            // +0x10c..+0x118 is the MeshInstance's own RGBA tint (1,1,1,1 from its ctor).
+            // +0x10c..+0x118 is the growth VISUAL SCALE (GrowthComponent writes it as
+            // ModelComponent+0x134, and the MeshInstance sits at ModelComponent+0x28, so
+            // the two are the same four floats). The Geometry ctor seeds it to
+            // (1,1,1,1), i.e. UNWRITTEN READS AS FULLY GROWN — so a plant that has not
+            // been ticked yet draws mature and then SNAPS to its real size the moment
+            // the growth pass first reaches it. That snap is a tree changing size in one
+            // frame, which is what "popping" looks like. Measure the step, not just the
+            // count: an ease is content, a jump is the defect.
+            const float* vs = reinterpret_cast<const float*>(g + 0x10c);
+            if (vs[0] != 1.0f || vs[1] != 1.0f || vs[2] != 1.0f || vs[3] != 1.0f)
+                ++tinted;
+            {
+                auto sit = s_scale.find(obj);
+                if (sit == s_scale.end()) {
+                    s_scale.emplace(obj, vs[0]);
+                } else if (sit->second != vs[0]) {
+                    const float d = vs[0] > sit->second ? vs[0] - sit->second
+                                                        : sit->second - vs[0];
+                    ++scaleMoved;
+                    if (d > 0.05f) {
+                        ++scaleJumped;
+                        if (!scaleExample) {
+                            scaleExample = obj; scaleFrom = sit->second; scaleTo = vs[0];
+                        }
+                    }
+                    sit->second = vs[0];
+                }
+            }
+            if (*reinterpret_cast<int32_t*>(g + 0x28) != 2) ++oddDetailId;
+
+            void* matArr = *reinterpret_cast<void**>(g + 0xc8);
+            auto it2 = s_mesh.find(obj);
+            if (it2 == s_mesh.end()) {
+                s_mesh.emplace(obj, MeshRef{mesh, matArr});
+            } else {
+                if (it2->second.mesh != mesh) {
+                    ++meshSwaps;
+                    if (!swapExample) {
+                        swapExample = obj; swapFrom = it2->second.mesh; swapTo = mesh;
+                    }
+                    it2->second.mesh = mesh;
+                }
+                if (it2->second.mats != matArr) { ++matSwaps; it2->second.mats = matArr; }
+            }
+        }
+
         const uintptr_t m = reinterpret_cast<uintptr_t>(mesh);
         // BANISHED_FORCE_LOD0=1 — pin every mesh to its highest detail level.
         // Graphics::MeshInstance::AddDrawItems only runs the distance pick when
@@ -425,6 +503,28 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             *reinterpret_cast<int*>(m + 0x58) = 1;
         const int n = *reinterpret_cast<int*>(m + 0x58);
         uint8_t* levels = *reinterpret_cast<uint8_t**>(m + 0x50);
+
+        // Which (variantIdx, modelVariant) pair produced this mesh. ModelComponent embeds
+        // its MeshInstance at +0x28 (FUN_1401253d0 addresses it as param_1+5), and keeps
+        // variantIdx at +0x164 / modelVariant at +0x166 — so from the MeshInstance they
+        // are at +0x13c and +0x13e. ModelComponent::SetVariant derives the mesh from the
+        // description with exactly that pair, so a mesh reached by more than one pair, or
+        // by a pair outside the description's range, is a mis-pick.
+        {
+            const int16_t vi = *reinterpret_cast<int16_t*>(g + 0x13c);
+            const int16_t mv = *reinterpret_cast<int16_t*>(g + 0x13e);
+            if (vi >= -1 && vi < 64 && mv >= -1 && mv < 64) {
+                MeshVariants& mvs = s_variants[mesh];
+                bool seen = false;
+                for (int k = 0; k < mvs.n; ++k)
+                    if (mvs.vi[k] == vi && mvs.mv[k] == mv) { ++mvs.count[k]; seen = true; break; }
+                if (!seen && mvs.n < 12) {
+                    mvs.vi[mvs.n] = vi; mvs.mv[mvs.n] = mv; mvs.count[mvs.n] = 1; ++mvs.n;
+                }
+            } else {
+                ++variantOutOfBand;
+            }
+        }
 
         MeshInfo& info = s_meshes[mesh];
         if (info.levels == 0) {
@@ -558,11 +658,37 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             bool empty = false;
             for (int k = 0; k < info.levels && k < 8; ++k)
                 if (info.tris[k] <= 0 || !info.vb[k] || !info.ib[k]) empty = true;
+            char vb2[320]; int vo = 0; vb2[0] = 0;
+            auto vit = s_variants.find(kv.first);
+            if (vit != s_variants.end())
+                for (int k = 0; k < vit->second.n; ++k)
+                    vo += std::snprintf(vb2 + vo, sizeof(vb2) - vo, "%s(%d,%d)x%d",
+                                        k ? "," : "", vit->second.vi[k], vit->second.mv[k],
+                                        vit->second.count[k]);
+            std::fprintf(stderr, "[LodCensus]   mesh=%p variants(vi,mv)=[%s]\n", kv.first, vb2);
             std::fprintf(stderr, "[LodCensus] mesh=%p levels=%d instances=%d %s%s%s\n",
                          kv.first, info.levels, info.instances, buf,
                          sane  ? "" : "   <== TABLE NOT MONOTONIC/POSITIVE",
                          empty ? "   <== A LEVEL DRAWS NOTHING" : "");
         }
+        std::fflush(stderr);
+    }
+
+    static int s_scaleReports = 0;
+    if (scaleJumped > 0 && s_scaleReports < 40) {
+        ++s_scaleReports;
+        std::fprintf(stderr, "[LodCensus] frame=%ld SCALE JUMPS=%d (moved=%d) e.g. geo=%p "
+                             "%.3f -> %.3f in ONE frame\n",
+                     s_frame, scaleJumped, scaleMoved, scaleExample, scaleFrom, scaleTo);
+        std::fflush(stderr);
+    }
+
+    static int s_swapReports = 0;
+    if (meshSwaps > 0 && s_swapReports < 30) {
+        ++s_swapReports;
+        std::fprintf(stderr, "[LodCensus] frame=%ld MESH SWAPS=%d matSwaps=%d e.g. geo=%p "
+                             "mesh %p -> %p\n",
+                     s_frame, meshSwaps, matSwaps, swapExample, swapFrom, swapTo);
         std::fflush(stderr);
     }
 
@@ -578,11 +704,14 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             "[LodCensus] frame=%ld meshInstances=%d multiLevel=%d meshes=%zu flips=%d "
             "fellBackToL0=%d prevBoxEmpty=%d | lod0=%d lod1=%d lod2=%d lod3=%d "
             "| variantIdx=%d MISS=%d notReady=%d variants[1..4]=%d/%d/%d/%d "
+            "| meshSwaps=%d matSwaps=%d faded=%d fadedOut=%d scaled=%d oddDetail=%d scaleMoved=%d scaleJumped=%d "
             "cam=(%.1f,%.1f,%.1f)\n",
             s_frame, instances, multiLevel, s_meshes.size(), flips, fellBack, prevBoxEmpty,
             lodHist[0], lodHist[1], lodHist[2], lodHist[3],
             variantIdx, variantMiss, variantNotReady,
             variantHist[1], variantHist[2], variantHist[3], variantHist[4],
+            meshSwaps, matSwaps, faded, fadedOut, tinted, oddDetailId,
+            scaleMoved, scaleJumped,
             camX, camY, camZ);
         std::fflush(stderr);
     }
