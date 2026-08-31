@@ -1966,6 +1966,20 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) = shadowMode;
     }
 
+    // [diag] BANISHED_LOD_CENSUS — replicate MeshInstance's distance-based detail
+    // pick with the very camera this frame is about to draw with, and count the
+    // flips. The scene census cleared every CULL input; the LOD pick reads a
+    // different set (the union with the PREVIOUS world box, and the mesh's own
+    // distance table), so it needs its own measurement.
+    SceneWatch_LodCensus(self->m_graphicsScene,
+                         (const void*)((uintptr_t)self->m_playerController + 0x34),
+                         // The MAIN scene pass's variant index, measured not guessed:
+                         // Renderer::Draw hands BeginDrawGroup the scene entry's +0xec,
+                         // which is AddScene's param_6 and is a literal 0 there. (The
+                         // obvious guess, renderer+0x3c, is the shader-DETAIL level that
+                         // rides to Context+0xc; the shadow cascades use 1 and 2.)
+                         0);
+
     // Step 7: Graphics::Renderer::Draw
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
@@ -1976,6 +1990,10 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
                                   (void*)((uintptr_t)self->m_playerController + 0x34));
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
+
+    // [diag] BANISHED_LOD_CENSUS — count what the frame actually DREW. The lists
+    // survive until the next Renderer::Reset, so read them here, right after Draw.
+    SceneWatch_DrawItemCensus(self->m_renderer);
 
     // Step 8: SaveLoad::Draw if active
     if (self->m_saveLoad != nullptr) {

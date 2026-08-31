@@ -284,6 +284,40 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
         *(float*)(ui + 0x3c) = s_pinDist;   // zoom target, so smoothing doesn't fight it
     }
 
+    // Harness (env BANISHED_CAMERA_SWEEP=cx,cy,radius[,dist[,periodFrames]]): orbit the
+    // camera focus around (cx,cy) once every periodFrames (default 600). A pinned or
+    // idle camera makes any "does it pop as I move?" probe a NULL TEST — with the eye
+    // frozen, a distance-based detail pick can never change and reports zero flips no
+    // matter how broken it is. This drives the one input the symptom depends on, and
+    // does it deterministically so two runs are comparable.
+    static int   s_sweep = -1;
+    static float s_swX = 0, s_swY = 0, s_swR = 0, s_swDist = 40.0f;
+    static float s_swPeriod = 600.0f;
+    if (s_sweep < 0) {
+        const char* e = std::getenv("BANISHED_CAMERA_SWEEP");
+        s_sweep = 0;
+        if (e && e[0]) {
+            float cx, cy, r, d, per;
+            int got = std::sscanf(e, "%f,%f,%f,%f,%f", &cx, &cy, &r, &d, &per);
+            if (got >= 3) {
+                s_swX = cx; s_swY = cy; s_swR = r;
+                if (got >= 4) s_swDist = d;
+                if (got >= 5 && per > 1.0f) s_swPeriod = per;
+                s_sweep = 1;
+            }
+        }
+    }
+    if (s_sweep) {
+        static long s_swFrame = 0;
+        const float a = 6.2831853f * (float)(s_swFrame++) / s_swPeriod;
+        *(float*)(pc + 0x1c) = s_swX + s_swR * cosf(a);
+        *(float*)(pc + 0x20) = s_swY + s_swR * sinf(a);
+        *(float*)(pc + 0x24) = 0.0f;
+        *(float*)(pc + 0x30) = s_swDist;
+        *(float*)(ui + 0x3c) = s_swDist;
+    }
+
+
     // ── decrement the controller's input timer (+0x48) ──
     int64_t* tmr = (int64_t*)(ui + 0x48);
     *tmr -= timeTicks;
