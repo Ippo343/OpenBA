@@ -940,6 +940,80 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     HdrTrace(stream, ser, "after-ctor");
     s_fn_SerializeRefTable(extFactory, stream);
     HdrTrace(stream, ser, "after-reftable");
+    // --- Preload every external the save references, with reference mode OFF ---
+    //
+    // Object::ExternalPtr's serializer (Runtime 0x180052a50) branches on
+    // ExternalFactory+0x40: with reference mode ON it reads a 4-byte reference id,
+    // with it OFF it reads a bool + a filename String. A compiled .rsc stores the
+    // bool+string form, so a resource whose FIRST parse happens inside this window
+    // is read with the wrong shape: its nested ExternalPtrs come out NULL and every
+    // field after them is shifted. The tutorial save hit this on
+    // Audio/Effects/RiverEffect.rsc and WindEffect.rsc, whose SoundEffect roots are
+    // referenced only by the save; Audio/Effects/Environment.rsc was already loaded
+    // by the ambient components and was therefore fine. The null SoundBuffer then
+    // faulted inside XAudio2, because Audio::Device::PlayPlatform derefs it as a
+    // WAVEFORMATEX with no null check.
+    //
+    // Retail never hits this because it preloads its resources up front; our
+    // standalone loads them lazily (m_resourceList is empty). SerializeReferenceTable
+    // has just filled the id -> path map without loading anything, so walking that
+    // map here and forcing each resource to parse BEFORE any reference is resolved
+    // restores the same invariant. It is not extra work: every one of these is about
+    // to be loaded anyway as the stream resolves its references.
+    //
+    // Kill-switch for A/B: BANISHED_PRELOAD_REFS=0.
+    {
+        bool preloadOn = true;
+        if (const char* pr = std::getenv("BANISHED_PRELOAD_REFS"))
+            preloadOn = !(pr[0] == '0' && pr[1] == 0);
+        if (preloadOn && !IsSaving(stream) && extFactory) {
+            typedef void* (*FnPathForId_t)(void* self, void* outFilename, unsigned int id);
+            typedef void* (*FnFindOrLoad_t)(void* self, void* filename);
+            static FnPathForId_t s_pathForId = reinterpret_cast<FnPathForId_t>(
+                ResolveExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z"));
+            static FnFindOrLoad_t s_findOrLoad = reinterpret_cast<FnFindOrLoad_t>(
+                ResolveExport("?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
+            // +0x28 is the reference map's entry count (SerializeReferenceTable zeroes
+            // it at entry and the insert helper bumps it per row).
+            const int refCount = *reinterpret_cast<int*>(
+                reinterpret_cast<uint8_t*>(extFactory) + 0x28);
+            if (!s_pathForId || !s_findOrLoad) {
+                fprintf(stderr, "[PreloadRefs] SKIPPED — GetPathForReferenceId=%p "
+                        "FindOrLoad=%p unresolved; resources first parsed inside the "
+                        "reference-mode window will deserialize corrupt\n",
+                        (void*)s_pathForId, (void*)s_findOrLoad);
+                fflush(stderr);
+            } else if (refCount > 0 && refCount < (1 << 20)) {
+                s_fn_EnableRefMode(extFactory, false);
+                int loaded = 0, missing = 0;
+                for (int id = 0; id < refCount; ++id) {
+                    void* fname[1] = { nullptr };
+                    s_pathForId(extFactory, fname, (unsigned int)id);
+                    if (!fname[0]) continue;
+                    if (s_findOrLoad(extFactory, fname)) { ++loaded; }
+                    else {
+                        // Report them: these fail on the lazy path too, so the
+                        // preload does not create the miss - but an unnamed miss
+                        // is the kind of thing that turns into a null deref later.
+                        if (++missing <= 20)
+                            fprintf(stderr, "[PreloadRefs] MISS id=%d \"%s\"\n", id,
+                                    reinterpret_cast<const char*>(fname[0]));
+                    }
+                    // System::Filename is one refcounted char* (count at str-4,
+                    // block at str-8); drop our reference so this does not leak one
+                    // string per entry on every load.
+                    char* str = reinterpret_cast<char*>(fname[0]);
+                    int* rc = reinterpret_cast<int*>(str - 4);
+                    if (--*rc == 0 && fn_MemFreeStatic) fn_MemFreeStatic(str - 8);
+                }
+                s_fn_EnableRefMode(extFactory, true);
+                fprintf(stderr, "[PreloadRefs] preloaded %d/%d referenced externals "
+                        "(%d not found) with reference mode off\n",
+                        loaded, refCount, missing);
+                fflush(stderr);
+            }
+        }
+    }
     s_fn_ResetPersist(intFactory, stream);
     HdrTrace(stream, ser, "after-resetpersist");
 

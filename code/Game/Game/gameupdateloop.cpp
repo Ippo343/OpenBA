@@ -1381,6 +1381,63 @@ post_simulation:
     }
     TRACE("[GameUpdateLoop::Update] cursor set\n");
 
+            // [diag] BANISHED_AUDIO_PROBE — load the ambient sound resources DIRECTLY,
+            // with no save/load anywhere near, and report each one's SoundBuffer. The
+            // tutorial load showed RiverEffect.rsc and WindEffect.rsc with a null buffer
+            // while Environment.rsc's five effects were fine; running the same check in
+            // a fresh game separates "this .rsc never loads right" from "the save-load
+            // window broke it".
+            {
+                static int s_probed = ::ComponentFactory::LiveEnabled("BANISHED_AUDIO_PROBE") ? 0 : 1;
+                if (!s_probed) {
+                    s_probed = 1;
+                    typedef void* (*FnGetPath2_t)(void*, void*);
+                    FnGetPath2_t getPath = reinterpret_cast<FnGetPath2_t>(
+                        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
+                    static const char* kFiles[] = {
+                        "Audio/Effects/RiverEffect.rsc",
+                        "Audio/Effects/WindEffect.rsc",
+                        "Audio/Effects/Environment.rsc",
+                    };
+                    for (int f = 0; f < 3; ++f) {
+                        if (!fn_Filename_CtorCStr_Local || !fn_ExternalFactory_FindOrLoad ||
+                            !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+                            std::fprintf(stderr, "[AudioProbe] deps unresolved\n");
+                            break;
+                        }
+                        uint8_t fname[8];
+                        fn_Filename_CtorCStr_Local(fname, kFiles[f]);
+                        uint8_t* se = (uint8_t*)fn_ExternalFactory_FindOrLoad(
+                            *g_pExternalFactorySingleton, fname);
+                        if (!se) { std::fprintf(stderr, "[AudioProbe] %s -> NOT FOUND\n", kFiles[f]); continue; }
+                        const uint64_t* q = (const uint64_t*)se;
+                        uint8_t* arr = *(uint8_t**)(se + 0x30);
+                        int n = *(int32_t*)(se + 0x38);
+                        std::fprintf(stderr, "[AudioProbe] %s -> %p vt=%p elems=%d "
+                                "f20=%08x f24=%08x s28=%016llx\n",
+                                kFiles[f], (void*)se, (void*)q[0], n,
+                                *(uint32_t*)(se + 0x20), *(uint32_t*)(se + 0x24),
+                                (unsigned long long)q[5]);
+                        for (int k = 0; arr && k < n && k < 4; ++k) {
+                            uint8_t* el = arr + (size_t)k * 0x18;
+                            uint8_t* vars = *(uint8_t**)(el + 0x08);
+                            int vn = *(int32_t*)(el + 0x10);
+                            for (int v = 0; vars && v < vn && v < 4; ++v) {
+                                void* buf = *(void**)(vars + (size_t)v * 0x18);
+                                const char* bp = "";
+                                if (buf && getPath) {
+                                    void* bf[2] = { nullptr, nullptr };
+                                    getPath(buf, bf);
+                                    if (bf[0]) bp = (const char*)bf[0];
+                                }
+                                std::fprintf(stderr, "[AudioProbe]    elem %d var %d buf=%p %s%s\n",
+                                        k, v, buf, bp, buf ? "" : "  <-- NULL");
+                            }
+                        }
+                        std::fflush(stderr);
+                    }
+                }
+            }
     // Step 12: Audio::Scene::Update
     TRACE("[GameUpdateLoop::Update] calling Audio::Scene::Update...\n");
     {
@@ -1420,6 +1477,90 @@ post_simulation:
                 if (s_once < 3) {
                     s_once++;
                     std::fprintf(stderr, "[AudioScene] windFactor(camera dist)=%.3f\n", windFactor);
+                    std::fflush(stderr);
+                }
+            }
+            // [diag] Audio::Scene::Update walks a 4096-entry x 0x40 table at
+            // scene+0x20; an entry is live when +0x24 != 0, and +0x10 is the
+            // SoundBuffer it hands to Device::PlayPlatform WITHOUT a null check
+            // (Runtime 0x1800de7a0 derefs buffer+0x54 as the WAVEFORMATEX). A
+            // load-restored scene faulted there, so report live entries whose
+            // sound pointer did not survive the restore.
+            {
+                // Runs EVERY frame until it catches a null: the 2D table is empty
+                // on frame 1 and only fills when something queues a sound, so a
+                // one-shot snapshot measures a world with no sound in it.
+                // Gated: the scan walks 4096 entries and, in a healthy world,
+                // never finds a null to stop on, so it must not run by default.
+                static int s_audited = ::ComponentFactory::LiveEnabled("BANISHED_AUDIO_AUDIT") ? 0 : 1;
+                if (!s_audited && self->m_audioScene) {
+                    uint8_t* tbl = *(uint8_t**)((uintptr_t)self->m_audioScene + 0x20);
+                    // Name the resource. Object::External::GetPath returns a
+                    // System::Filename BY VALUE (sret in RDX); Filename is a single
+                    // refcounted char* (refcount at str-4), so *(&out) is the path.
+                    // Leaked deliberately - this runs once, and taking the refcount
+                    // apart here would be more code than the diagnostic is worth.
+                    typedef void* (*FnGetPath_t)(void* self, void* out);
+                    static FnGetPath_t s_getPath = reinterpret_cast<FnGetPath_t>(
+                        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
+                    uint8_t* snd2d = tbl;
+                    int live2 = 0, badVar = 0;
+                    if (snd2d) for (int i = 0; i < 4096; ++i) {
+                        uint8_t* e = snd2d + (size_t)i * 0x40;
+                        if (*(int32_t*)(e + 0x24) == 0) continue;
+                        ++live2;
+                        uint8_t* desc = *(uint8_t**)(e + 0x10);
+                        if (!desc) {
+                            std::fprintf(stderr, "[AudioScene] effect[%d] live but SoundEffect NULL\n", i);
+                            ++badVar; continue;
+                        }
+                        const char* path = "(no GetPath)";
+                        if (s_getPath) {
+                            void* fn[2] = { nullptr, nullptr };
+                            s_getPath(desc, fn);
+                            if (fn[0]) path = reinterpret_cast<const char*>(fn[0]);
+                        }
+                        uint8_t* arr = *(uint8_t**)(desc + 0x30);
+                        int n = *(int32_t*)(desc + 0x38);
+                        std::fprintf(stderr, "[AudioScene] effect[%d] SoundEffect=%p elems=%d \"%s\"\n",
+                                i, (void*)desc, n, path);
+                        const uint64_t* dq = reinterpret_cast<const uint64_t*>(desc);
+                        std::fprintf(stderr, "[AudioScene]   SE hdr: %016llx %016llx %016llx %016llx "
+                                "%016llx %016llx %016llx %016llx %016llx\n",
+                                (unsigned long long)dq[0], (unsigned long long)dq[1],
+                                (unsigned long long)dq[2], (unsigned long long)dq[3],
+                                (unsigned long long)dq[4], (unsigned long long)dq[5],
+                                (unsigned long long)dq[6], (unsigned long long)dq[7],
+                                (unsigned long long)dq[8]);
+                        for (int k = 0; arr && k < n; ++k) {
+                            uint8_t* el = arr + (size_t)k * 0x18;
+                            uint8_t* vars = *(uint8_t**)(el + 0x08);
+                            int vn = *(int32_t*)(el + 0x10);
+                            for (int v = 0; vars && v < vn; ++v) {
+                                void* buf = *(void**)(vars + (size_t)v * 0x18);
+                                const char* bp = "";
+                                if (buf && s_getPath) {
+                                    void* bf[2] = { nullptr, nullptr };
+                                    s_getPath(buf, bf);
+                                    if (bf[0]) bp = reinterpret_cast<const char*>(bf[0]);
+                                }
+                                if (!buf) ++badVar;
+                                std::fprintf(stderr, "[AudioScene]     elem %d/%d var %d/%d "
+                                        "SoundBuffer=%p %s%s\n", k, n, v, vn, buf, bp,
+                                        buf ? "" : "  <-- NULL");
+                                const uint64_t* eq = reinterpret_cast<const uint64_t*>(el);
+                                const uint64_t* vq = reinterpret_cast<const uint64_t*>(vars + (size_t)v * 0x18);
+                                std::fprintf(stderr, "[AudioScene]       elem raw: %016llx %016llx %016llx  "
+                                        "var raw: %016llx %016llx %016llx\n",
+                                        (unsigned long long)eq[0], (unsigned long long)eq[1],
+                                        (unsigned long long)eq[2], (unsigned long long)vq[0],
+                                        (unsigned long long)vq[1], (unsigned long long)vq[2]);
+                            }
+                        }
+                    }
+                    if (live2 > 0) std::fprintf(stderr, "[AudioScene] effect table: live=%d nullBuffers=%d\n",
+                            live2, badVar);
+                    if (badVar > 0 || live2 > 0) s_audited = 1;   // one snapshot with content
                     std::fflush(stderr);
                 }
             }

@@ -1166,6 +1166,21 @@ static double ElQpcMs(long long d) {
     return f ? 1000.0 * (double)d / (double)f : 0.0;
 }
 
+// [diag] BANISHED_SAVE_TIMING also prints the stream cursor (CompressedMemoryStream
+// +0x1C) at each sub-stage boundary. Bytes-per-stage is the only way to tell a
+// stage that ran from one that was skipped: a skipped stage costs 0 bytes and
+// desyncs everything after it, while still logging a plausible sub-millisecond
+// timing.
+static void ElCur(void* stream, const char* stage, int count) {
+    if (!ElSaveTimingOn() || !stream) return;
+    static uint32_t s_prev = 0;
+    uint32_t cur = *(uint32_t*)((uintptr_t)stream + 0x1C);
+    fprintf(stderr, "[ElCur] %-16s cur=%u (+%d)  masterCount=%d\n",
+            stage, cur, (int)(cur - s_prev), count);
+    fflush(stderr);
+    s_prev = cur;
+}
+
 void EntityList_Serialize(EntityList* self, void* stream) {
     // Step 1: Construct Serializer (local buffer, 0x18 bytes)
     uint8_t serializerBuf[0x18];
@@ -1196,6 +1211,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     if (elTime) { fprintf(stderr, "[ElTiming] removal-drain %8.2fms\n",
                           ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
     g_fn_Time_Serialize(self, serializer);
+    ElCur(stream, "after-time", self->masterArray.count);
 
     // Step 5: Serialize master array count
     int32_t masterCount = self->masterArray.count;
@@ -1257,17 +1273,44 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     if (elTime) { fprintf(stderr, "[ElTiming] ibp-loop      %8.2fms  entities=%d\n",
                           ElQpcMs(ElQpc() - elMark), (int)serializedCount);
                   fflush(stderr); elMark = ElQpc(); }
+    ElCur(stream, "after-ibploop", self->masterArray.count);
     fn_BucketTreeSerialize(serializer, nullptr, &self->buckets[0]);
+    ElCur(stream, "after-buckets", self->masterArray.count);
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
     if (elTime) { fprintf(stderr, "[ElTiming] bucket-trees  %8.2fms\n",
                           ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
-    fn_Serializer_SerializeBulk(serializer, 5, self->processCount, nullptr);
-    fn_Serializer_SerializeBulk(serializer, 5, self->cursor, nullptr);
+    // Retail (0x1400c45d0 / 0x1400c45e8) calls dispatch slot 0x140151278 =
+    // IO::Serializer::Serialize(int count, int* data, name) — the INT-array
+    // overload, 20 bytes per call. We were calling slot 0x140152400
+    // (fn_Serializer_SerializeBulk), the BYTE overload, which read only 5 bytes
+    // each and left the stream 30 bytes short for every load — silently
+    // desyncing Geometry and everything after it. The offsets prove the width:
+    // processCount is at +0xA8 and cursor at +0xBC, exactly 5 ints apart.
+    typedef void (*FnSerIntArr_t)(void* ser, int count, void* data, const char* name);
+    static FnSerIntArr_t s_serIntArr = nullptr;
+    static bool s_triedIntArr = false;
+    if (!s_serIntArr && !s_triedIntArr) {
+        s_triedIntArr = true;
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
+        if (slot && *slot) s_serIntArr = reinterpret_cast<FnSerIntArr_t>(*slot);
+        else {
+            fprintf(stderr, "[EntityList::Serialize] dispatch slot 0x140151278 "
+                    "(Serialize int-array) unresolved — the 5-int arrays will "
+                    "desync the rest of the stream\n");
+            fflush(stderr);
+        }
+    }
+    if (s_serIntArr) {
+        s_serIntArr(serializer, 5, self->processCount, nullptr);
+        s_serIntArr(serializer, 5, self->cursor, nullptr);
+    }
+    ElCur(stream, "after-bulk5", self->masterArray.count);
 
     // Step 8: Per-entity metadata serialization
     int32_t entityIdx = 0;
     int64_t ibpOffset = 0;
+    ElCur(stream, "pre-metadata", self->masterArray.count);
     if (self->masterArray.count > 0) {
         do {
             uintptr_t masterData = (uintptr_t)self->masterArray.data;
@@ -1315,6 +1358,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
             ibpOffset += 8;
         } while (entityIdx < self->masterArray.count);
     }
+    ElCur(stream, "after-metadata", self->masterArray.count);
 
     // Step 9: Destroy Serializer
     if (elTime) { fprintf(stderr, "[ElTiming] metadata-loop %8.2fms  TOTAL %8.2fms\n",

@@ -226,6 +226,21 @@ static const char* const kDefaultOnFlags[] = {
     // factory was leaving zeroed -- load-bearing, since 0 is a VALID work id and an
     // unseeded component would cancel work 0 instead of no-oping.
     "BANISHED_LIVE_WORKCOMP_ONREMOVE",
+    // GRADUATED 2026-08-30 — ambient environment/emitter audio (the river, wind,
+    // forest, wetland, field and winter beds). Without it a new game registers ZERO
+    // 3D sound effects, which is not a quiet town but a silent one: Audio::Scene's
+    // effect table stays empty for the whole session. That also made every A/B
+    // against "does ambient audio work" a null test, since both arms measured a
+    // world with no ambient emitter in it.
+    // A/B, standalone:
+    //   OFF: new game, 90 s -> Scene effect table live=0 for the entire run.
+    //   ON : new game, 90 s -> live=3 (Environment.rsc mountain/wetland/winter),
+    //        nullBuffers=0, crash log empty; tutorial load -> live=7, nullBuffers=0,
+    //        stable past frame 5400.
+    // Depends on the reference-mode preload in GameUpdateLoop_Serialize_95a90: with
+    // ambient audio on but that preload off, a tutorial load leaves RiverEffect.rsc
+    // and WindEffect.rsc with null SoundBuffers and faults inside XAudio2.
+    "BANISHED_AMBIENT_AUDIO",
     "BANISHED_LIVE_STATEMACHINE",
     "BANISHED_LIVE_RESIDENCE",
     "BANISHED_LIVE_HOUSING",

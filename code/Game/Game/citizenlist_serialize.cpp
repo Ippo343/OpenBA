@@ -355,6 +355,27 @@ void ResizeStride08Pair(void* hdr, int newCount) {
 // bulk-serialized via fn_Serializer_SerializeBulk). Used at +0x140 (v>4)
 // and +0x150 ("stats").
 // ------------------------------------------------------------
+// IO::Serializer::Serialize(int count, int* data, name) — exe dispatch slot
+// 0x140151278. Distinct from fn_Serializer_SerializeBulk (slot 0x140152400),
+// which is the BYTE-width overload.
+void SerializeIntArray(void* serializer, int32_t count, void* data) {
+    typedef void (*FnSerIntArr_t)(void*, int, void*, const char*);
+    static FnSerIntArr_t s_fn = nullptr;
+    static bool s_tried = false;
+    if (!s_fn && !s_tried) {
+        s_tried = true;
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
+        if (slot && *slot) s_fn = reinterpret_cast<FnSerIntArr_t>(*slot);
+        else {
+            std::fprintf(stderr, "[CitizenList::Serialize] dispatch slot 0x140151278 "
+                    "(Serialize int-array) unresolved — int-assoc arrays will "
+                    "desync the rest of the stream\n");
+            std::fflush(stderr);
+        }
+    }
+    if (s_fn) s_fn(serializer, count, data, nullptr);
+}
+
 void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
     g_fn_Serialize_Int(serializer, &count, nullptr);
@@ -367,7 +388,14 @@ void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
         g_fn_Serialize_Int(serializer, &innerCount, nullptr);
         if (loading) fn_ExeArrayResize2(slot, innerCount);
         void* innerPtr = *reinterpret_cast<void**>(slot + 0);
-        fn_Serializer_SerializeBulk(serializer, innerCount, innerPtr, nullptr);
+        // Retail (0x1400900e7 for +0x150, 0x1400903b8 for +0x140) dispatches
+        // through slot 0x140151278 = IO::Serializer::Serialize(int count,
+        // int* data, name) — the INT-array overload, 4 bytes per element. The
+        // elements really are int32 (the inner array is resized stride-4), and
+        // 0x140152400 (fn_Serializer_SerializeBulk) is the BYTE overload, which
+        // read a quarter of the bytes and desynced everything after it. Retail
+        // never calls 0x140152400 anywhere in this function.
+        SerializeIntArray(serializer, innerCount, innerPtr);
         slot += 0x10;
     }
 }
@@ -745,14 +773,38 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
     int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
     int side = *mapGrid >> 3;
     ResizeStride0x10(base + 0x140, side * side);
+    std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "
+            "cellMap=%p residence{ptr=%p count=%d} ent{ptr=%p count=%d}\n",
+            (void*)mapGrid, *mapGrid, side, side * side,
+            *reinterpret_cast<void**>(base + 0x140),
+            *reinterpret_cast<void**>(base + 0x130),
+            *reinterpret_cast<int32_t*>(base + 0x138),
+            *reinterpret_cast<void**>(base + 0xe0),
+            *reinterpret_cast<int32_t*>(base + 0xe8));
+    std::fflush(stderr);
 
     int idx = 0;
     int32_t residenceCount = *reinterpret_cast<int32_t*>(base + 0x138);
     if (residenceCount > 0 && s_fn_AddCellEntry) {
+        // +0x130 is the STRIDE-8 int-pair array (ResizeStride08Pair in Serialize
+        // above); retail walks it with `lVar11 += 8` and reads only the low int
+        // of each pair (0x14008f5c8). Indexing it as int32[] read every second
+        // element from the pair's HIGH half, which is not a cell index at all —
+        // the resulting x/y ran off the 32x32 cell map and AddCellEntry wrote
+        // through a wild record pointer.
         int32_t* residenceCells = *reinterpret_cast<int32_t**>(base + 0x130);
         int mapWidth = *mapGrid;
         for (; idx < residenceCount; ++idx) {
-            int cell = residenceCells[idx];
+            int cell = residenceCells[idx * 2];
+            if (cell < 0 || cell >= mapWidth * mapWidth) {
+                std::fprintf(stderr, "[CitPostLoad] residence[%d] cell=%d pairHi=%d "
+                        "x=%d y=%d cellIdx=%d (max %d)\n",
+                        idx, cell, residenceCells[idx * 2 + 1],
+                        cell % mapWidth, cell / mapWidth,
+                        (mapWidth >> 3) * ((cell / mapWidth) >> 3) + ((cell % mapWidth) >> 3),
+                        side * side);
+                std::fflush(stderr);
+            }
             s_fn_AddCellEntry(base, cell % mapWidth, cell / mapWidth, idx);
         }
     }

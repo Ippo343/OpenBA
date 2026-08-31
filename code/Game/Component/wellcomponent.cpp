@@ -286,6 +286,14 @@ void WellComponent_InitFuncs() {
 // the town has.
 // ============================================================
 void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
+    // This helper is shared: CitizenList_PostLoad_8f580 (0x14008f580) calls it for
+    // every residence cell on a LOAD, long before any well reaches its state-2
+    // enter — the only other place that used to run WellComponent_InitFuncs. With
+    // the allocator pointer still null the growth branch bailed after having
+    // already written the new capacity, leaving a record with cap>0 and a NULL
+    // data pointer; the next insert into that same cell then saw cap >= newCount,
+    // skipped the alloc entirely and wrote through the null. Resolve our own deps.
+    WellComponent_InitFuncs();
     void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
     if (!world) return;
     const int mapW = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
