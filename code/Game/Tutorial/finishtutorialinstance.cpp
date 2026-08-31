@@ -14,6 +14,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include <cstdio>
 #include "Tutorial/finishtutorialinstance_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -237,6 +238,9 @@ void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* 
 
     // Read the TutorialInstance pointer
     void* tutInst = *(void**)(s + 0x20);
+    { static int once = 0; if (once < 3) { ++once;
+        std::fprintf(stderr, "[FinTutInst] Slot5 TICK self=%p tutInst=%p exec=%p\n",
+                (void*)self, tutInst, (void*)fn_TutorialStepExecute); std::fflush(stderr); } }
 
     // Delegate to the tutorial step execution helper
     if (fn_TutorialStepExecute && tutInst) {
@@ -360,6 +364,8 @@ extern "C" void* FinishTutorialInstance_Factory(void) {
 }
 
 extern "C" void* FinishTutorialInstance_CreateInPlace(void* memory) {
+    { static int once = 0; if (once < 3) { ++once;
+        std::fprintf(stderr, "[FinTutInst] CREATED (in place) mem=%p\n", memory); std::fflush(stderr); } }
     if (!memory) return nullptr;
     return FinishTutorialInstance_Ctor_Impl(memory);
 }

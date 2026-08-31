@@ -990,7 +990,13 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
                     void* fname[1] = { nullptr };
                     s_pathForId(extFactory, fname, (unsigned int)id);
                     if (!fname[0]) continue;
-                    if (s_findOrLoad(extFactory, fname)) { ++loaded; }
+                    void* pl = s_findOrLoad(extFactory, fname);
+                    if (const char* dbg = std::getenv("BANISHED_PRELOAD_DUMP"))
+                        if (dbg[0] && strstr(reinterpret_cast<const char*>(fname[0]), dbg))
+                            fprintf(stderr, "[PreloadRefs] %s id=%d %s\n",
+                                    pl ? "HIT " : "MISS", id,
+                                    reinterpret_cast<const char*>(fname[0]));
+                    if (pl) { ++loaded; }
                     else {
                         // Report them: these fail on the lazy path too, so the
                         // preload does not create the miss - but an unnamed miss
