@@ -1660,6 +1660,10 @@ post_simulation:
     // so a recycled node is reported the frame it appears rather than whenever
     // Clean's vtable+0x40 dispatch happens to reach it ("EXEC of <heap address>").
     SceneWatch_Check(self->m_graphicsScene);
+    // [diag] BANISHED_SCENE_CENSUS — membership + position churn (the "models keep
+    // popping in and out" report). Same place as the integrity check: before Clean,
+    // after every component has had its per-frame say.
+    SceneWatch_Census(self->m_graphicsScene);
     if (g_pGameWorldSingleton) CitizenVitals_Tick(*g_pGameWorldSingleton);
 
     // Step 15: Graphics::Scene::Clean
