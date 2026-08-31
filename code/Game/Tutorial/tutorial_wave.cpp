@@ -692,18 +692,41 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
 
         uint32_t uiTid = TutorialUITypeId();
         void* controller = nullptr;
+        void* ctrlRaw = nullptr;   // whatever GetController handed back, before narrowing
         if (fn_DialogInstance_GetController) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x18));
             uint64_t ctrl = 0;
-            fn_DialogInstance_GetController(reinterpret_cast<void*>(dlg), &ctrl, 0);
+            // Third arg is a TYPE FILTER, not padding: retail is
+            //   MOV R8D,[0x1401c67f0]   ; TutorialUI type id
+            //   CALL [0x140151768]      ; DialogInstance::GetController
+            // (0x1400e1e08). Ghidra renders the call as two arguments and hides it.
+            // Passing 0 made GetController return NOTHING, so the controller was null,
+            // the TutorialUI narrow below could not run, and RefreshStepUI had no panel
+            // to write into — the tutorial panel rendered as a bare title and two "Ok"
+            // rows. Measured as `ctrl=0 tid=0 (?) wantTutorialUI=857087488`.
+            fn_DialogInstance_GetController(reinterpret_cast<void*>(dlg), &ctrl, uiTid);
+            ctrlRaw = reinterpret_cast<void*>(ctrl);
             if (ctrl && fn_IsDerivedFrom && uiTid && fn_IsDerivedFrom(reinterpret_cast<void*>(ctrl), uiTid)) {
                 controller = reinterpret_cast<void*>(ctrl);
             }
         }
         *reinterpret_cast<uint64_t*>(s + 0x20) = reinterpret_cast<uint64_t>(controller);
         if (TutTrace()) {
-            fprintf(stderr, "[Tutorial] StepExecute bound dialog=%p tutorialUI=%p\n",
-                    reinterpret_cast<void*>(dlg), controller);
+            // `tutorialUI=0` on its own cannot distinguish "we bound the wrong dialog"
+            // from "the id lookup returned 0" from "GetController gave nothing" — three
+            // very different bugs. Name what we actually got: the controller's own
+            // GetTypeId (vtable +0x10) run back through the registration table.
+            uint32_t ctrlTid = 0;
+            if (ctrlRaw) {
+                void** vt = *reinterpret_cast<void***>(ctrlRaw);
+                if (vt && vt[2])
+                    ctrlTid = reinterpret_cast<uint32_t (*)(void*)>(vt[2])(ctrlRaw);
+            }
+            const char* ctrlName = ctrlTid ? ::Object::GetTypeNameById(ctrlTid) : nullptr;
+            fprintf(stderr, "[Tutorial] StepExecute bound dialog=%p ctrl=%p tid=%u (%s) "
+                            "wantTutorialUI=%u -> tutorialUI=%p\n",
+                    reinterpret_cast<void*>(dlg), ctrlRaw, ctrlTid,
+                    ctrlName ? ctrlName : "?", uiTid, controller);
             fflush(stderr);
         }
         TutWave_RefreshStepUI(self);

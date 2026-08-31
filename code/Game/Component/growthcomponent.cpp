@@ -215,9 +215,25 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     // (idempotent). If it is still incomplete afterward, bail safely — everything
     // below derefs config/resource (and .rdata float constants) unconditionally.
     // See notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
+    //
+    // ⚠ A STREAM-RESTORED component must NOT take the full Startup path. Retail's
+    // GrowthComponent::Serialize (0x1401207c0) persists exactly +0x28 (resource IBP),
+    // +0x30 (model IBP), +0x48 (displayed scale), +0x4c (growthScale) and +0x40 (timer)
+    // — everything Startup computes EXCEPT +0x38, which is just a copy of the
+    // description already sitting at +0x18. So after a load the one genuinely missing
+    // field is +0x38, and running the whole body-init to get it RE-ROLLS +0x4c from the
+    // RNG (see GrowthComponent_Startup), throwing away the per-instance harvest
+    // threshold the save restored. That is a silent load-fidelity bug: the plant keeps
+    // its growth but changes when it becomes harvestable, differently on every load.
+    //
+    // A non-null +0x28 is the tell: only the stream puts a resource IBP there before
+    // Startup has ever run. Fill +0x38 and leave every restored field alone.
     if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x18) != 0)
+        if (*(uintptr_t*)(comp + 0x38) == 0 && *(uintptr_t*)(comp + 0x28) != 0) {
+            *(uintptr_t*)(comp + 0x38) = *(uintptr_t*)(comp + 0x18);
+        } else if (*(uintptr_t*)(comp + 0x18) != 0) {
             GrowthComponent_Startup(self);
+        }
         if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
             return;
     }
@@ -430,11 +446,37 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
     // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
     // GrowthComponent::Startup, which runs on every spawned resource before the first
     // post-update pass. A null here means Startup did not run, which is the bug to fix.
-    if (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
-        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
-        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0) {
-        return;
+    const bool gated = (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
+                        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
+                        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
+    // BANISHED_GROWTH_TRACE: count the GATED ones too. The census further down only
+    // sees components that got past this guard, so a world where most trees never
+    // reach it looks identical to a world with few trees. A gated component NEVER has
+    // its model visualScale written, so it draws at the mesh default (1,1,1,1) — and
+    // the moment something lazily runs its Startup it snaps to its real scale. That
+    // snap is exactly what "models popping" looks like, so the gated count is the
+    // number that can still pop.
+    {
+        static int s_t = -1;
+        if (s_t < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
+                       s_t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
+        if (s_t) {
+            static void* s_first = nullptr;
+            static int s_pass = 0, seen = 0, nGated = 0;
+            if (!s_first) s_first = self;
+            if (self == s_first && seen > 0) {
+                if ((s_pass % 30) == 0) {
+                    std::fprintf(stderr, "[GrowthGate] pass=%d seen=%d gated=%d live=%d\n",
+                                 s_pass, seen, nGated, seen - nGated);
+                    std::fflush(stderr);
+                }
+                ++s_pass; seen = 0; nGated = 0;
+            }
+            ++seen;
+            if (gated) ++nGated;
+        }
     }
+    if (gated) return;
 
     const float kOne          = s_fOne ? *s_fOne : 1.0f;
     const float kEpsilon      = s_fScaleEps ? *s_fScaleEps : 0.001f;
@@ -537,6 +579,43 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
             ++s_rampPrinted;
         }
         if (s_t && !converged) ++s_rampSeen;
+
+        // POPULATION CENSUS. The two traces above follow individual components, which
+        // cannot answer the only question a "the trees are regenerating after a load"
+        // report actually asks: how many of them are ramping AT ONCE, and from what.
+        // A healthy loaded world is ~entirely CONVERGED within a frame or two — retail
+        // saves the growth value, so a restored mature tree should come back at
+        // displayed==target==1. A wave of `ramping` with target≈1 and a low mean
+        // displayed IS the regeneration: the models were restored at scale ~0 and are
+        // easing back up at 1%/frame (kSmoothNew), which reads on screen as trees
+        // popping in over several seconds.
+        //
+        // Accumulated across one full pass (one line per kCensusEvery passes). The
+        // pass boundary is "self == the first component we ever saw", which is stable
+        // because EntityList iterates in a fixed order.
+        if (s_t) {
+            static void* s_first = nullptr;
+            static int   s_pass = 0;
+            static int   n = 0, nRamp = 0;
+            static float sumDisp = 0.0f, sumTarget = 0.0f, minDisp = 1e9f;
+            if (!s_first) s_first = self;
+            if (self == s_first && n > 0) {
+                constexpr int kCensusEvery = 30;
+                if ((s_pass % kCensusEvery) == 0) {
+                    std::fprintf(stderr,
+                        "[GrowthCensus] pass=%d comps=%d ramping=%d meanDisplayed=%.3f "
+                        "meanTarget=%.3f minDisplayed=%.3f\n",
+                        s_pass, n, nRamp, sumDisp / (float)n, sumTarget / (float)n, minDisp);
+                    std::fflush(stderr);
+                }
+                ++s_pass;
+                n = nRamp = 0; sumDisp = sumTarget = 0.0f; minDisp = 1e9f;
+            }
+            ++n;
+            if (!converged) ++nRamp;
+            sumDisp += scale; sumTarget += target;
+            if (scale < minDisp) minDisp = scale;
+        }
     }
 
     if (!converged) return;   // stay registered until the ease-in finishes

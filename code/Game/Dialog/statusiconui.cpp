@@ -142,7 +142,14 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         if (cfgPtr && *(uint8_t*)((uintptr_t)cfgPtr + 0x20) == 0) {
             void* dialogInst = *(void**)((uintptr_t)self + 0x18);
             uint64_t ctrlResult = 0;
-            fn_DialogInstance_GetController(dialogInst, &ctrlResult, 0);
+            // Third arg is a TYPE FILTER. Retail (0x14007b14b) is
+            //   MOV R8D,[0x1401c4f00]   ; EntityUI type id
+            //   CALL [0x140151768]      ; DialogInstance::GetController
+            // Ghidra renders this call with two arguments and hides the filter, which
+            // is how a 0 got here. With 0 the call returns nothing, the EntityUI narrow
+            // below can never fire, and the page gate silently falls through to its
+            // default — the same shape as the tutorial-panel bug in tutorial_wave.cpp.
+            fn_DialogInstance_GetController(dialogInst, &ctrlResult, s_tidEntityUI);
 
             void* entityUI = nullptr;
             if (ctrlResult != 0) {

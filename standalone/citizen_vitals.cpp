@@ -94,6 +94,25 @@ void CitizenVitals_Tick(void* gameWorld) {
     }
     if (live == 0) return;
 
+    // ENTITY COUNT. "Models are popping back in after a load" has two entirely
+    // different causes and only this number separates them: if the EntityList count
+    // climbs over the first seconds, entities are genuinely being created/attached
+    // late and the world is rebuilding itself; if it is flat at the number the save
+    // reported, every entity is already there and whatever is popping is on the
+    // RENDER side (a mesh, a scene registration, a scale) — a completely different
+    // hunt. EntityList lives at gameWorld+0xE8 with {+0x08 data, +0x10 count}, the
+    // pair retail reads at 0x1400f96xx.
+    int entities = -1;
+    {
+        const uintptr_t el = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(gameWorld) + 0xE8);
+        if (Readable(reinterpret_cast<void*>(el))) {
+            const int n2 = *reinterpret_cast<int*>(el + 0x10);
+            if (n2 >= 0 && n2 < 10000000) entities = n2;
+        }
+    }
+    std::fprintf(stderr, "[EntityCensus] frame=%ld entities=%d\n", frame, entities);
+
     std::fprintf(stderr,
         "[Vitals] frame=%ld citizens=%d  age mean=%.2f max=%.2f (maxAge[0]=%.2f)  "
         "hunger mean=%.1f max=%.1f  thirst mean=%.1f max=%.1f  "
