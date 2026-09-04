@@ -108,6 +108,9 @@ static HO_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;
 static HO_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
 static HO_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 static HO_MemAlloc_t s_fn_MemAlloc = nullptr;
+static void* HO_MemAllocViaSingleton(int64_t size, int align) {
+    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
+}
 
 // Type IDs
 static uint32_t* s_typeId_OrchardDesc = nullptr;  // DAT_1401c46e8
@@ -200,9 +203,13 @@ bool HarvestOrchard_ResolveFuncs() {
     s_fn_Serializer_SerializeBoolArray = reinterpret_cast<HO_Serializer_SerializeBoolArray_t>(
         s_fn_Serializer_SerializeInt);
 
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140152780);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<HO_MemAlloc_t*>(iatMemAlloc);
+    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
+    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
+    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
+    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
+    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
+    // allocator singleton instead; fn_MemFreeStatic pairs with it.
+    s_fn_MemAlloc = &HO_MemAllocViaSingleton;
 
     // Type IDs
     s_typeId_OrchardDesc = reinterpret_cast<uint32_t*>(

@@ -119,6 +119,9 @@ static PAW_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;  // 0x14000a590
 // MemAlloc / MemFree
 typedef void* (*PAW_MemAlloc_t)(int64_t size, int align);
 static PAW_MemAlloc_t s_fn_MemAlloc = nullptr;
+static void* PAW_MemAllocViaSingleton(int64_t size, int align) {
+    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
+}
 
 // CropDesc completion helper (called when count == 0 and all planted)
 typedef void (*PAW_CropDescComplete_t)(uintptr_t cropDescComp);
@@ -202,9 +205,13 @@ bool PlantArea_ResolveFuncs() {
     s_fn_Serializer_SerializeBoolArray = reinterpret_cast<PAW_Serializer_SerializeBoolArray_t>(
         s_fn_Serializer_SerializeInt);
 
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140152780);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<PAW_MemAlloc_t*>(iatMemAlloc);
+    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
+    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
+    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
+    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
+    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
+    // allocator singleton instead; fn_MemFreeStatic pairs with it.
+    s_fn_MemAlloc = &PAW_MemAllocViaSingleton;
 
     // Float constant
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));

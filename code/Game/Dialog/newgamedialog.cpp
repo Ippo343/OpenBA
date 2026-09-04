@@ -660,6 +660,27 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     int climateIdx = *(int*)((uintptr_t)self->comboClimate + 0x118);
 
+    // --- Climate override (standalone autostart + testing) ---
+    // ClimateList.rsc order: 0 = Mild, 1 = Fair, 2 = Harsh. BANISHED_CLIMATE =
+    // mild|fair|harsh (or 0|1|2). Autostart otherwise takes the combo default, which is
+    // whatever the saved settings or index 0 give — the stress harness pins "fair" so the
+    // seasonal temperature curve (and with it snow cover, fuel burn and field idling) is
+    // the same town-to-town.
+    if (const char* envClimate = getenv("BANISHED_CLIMATE")) {
+        int want = -1;
+        if (!strcmp(envClimate, "0") || !_stricmp(envClimate, "mild"))       want = 0;
+        else if (!strcmp(envClimate, "1") || !_stricmp(envClimate, "fair"))  want = 1;
+        else if (!strcmp(envClimate, "2") || !_stricmp(envClimate, "harsh")) want = 2;
+        if (want >= 0) {
+            fprintf(stderr, "[NewGameDialog] BANISHED_CLIMATE=%s -> climateIdx %d -> %d\n",
+                    envClimate, climateIdx, want);
+            climateIdx = want;
+        } else {
+            fprintf(stderr, "[NewGameDialog] BANISHED_CLIMATE=%s not understood "
+                    "(mild|fair|harsh|0|1|2); combo value %d kept\n", envClimate, climateIdx);
+        }
+    }
+
     fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
     int terrainIdx = *(int*)((uintptr_t)self->comboTerrain + 0x118);
 
@@ -726,6 +747,26 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // Get terrain size index
     fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
     uint32_t terrainSize = *(uint32_t*)((uintptr_t)self->comboTerrainSize + 0x118);
+
+    // --- Map size override (standalone autostart + testing) ---
+    // terrainSize is a row index into the TerrainGenerator's size table
+    // (Valleys.rsc / Mountains.rsc: 0 = 256 small, 1 = 384 medium, 2 = 512 large).
+    // BANISHED_MAP_SIZE = small|medium|large (or 0|1|2). The stress harness sets
+    // "medium" by default; unset leaves the combo's value alone.
+    if (const char* envSize = getenv("BANISHED_MAP_SIZE")) {
+        int want = -1;
+        if (!strcmp(envSize, "0") || !_stricmp(envSize, "small"))       want = 0;
+        else if (!strcmp(envSize, "1") || !_stricmp(envSize, "medium")) want = 1;
+        else if (!strcmp(envSize, "2") || !_stricmp(envSize, "large"))  want = 2;
+        if (want >= 0) {
+            fprintf(stderr, "[NewGameDialog] BANISHED_MAP_SIZE=%s -> terrainSize %u -> %d\n",
+                    envSize, terrainSize, want);
+            terrainSize = (uint32_t)want;
+        } else {
+            fprintf(stderr, "[NewGameDialog] BANISHED_MAP_SIZE=%s not understood "
+                    "(small|medium|large|0|1|2); combo value %u kept\n", envSize, terrainSize);
+        }
+    }
 
     // Get seed value
     fn_InternalBasePtr_CheckPtr(&self->editSeed);

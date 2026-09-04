@@ -170,10 +170,10 @@ uint32_t ModDetails_VTypeId(void*) {
 // --- ModDialog +0x20 / +0x40 ---------------------------------------------
 void ModDialog_VOnOpened(void* self) {
     if (!self || !ModDialogLive()) return;
-    std::printf("[ModDialog::OnOpened] self=%p building mod list\n", self);
+    printf("[ModDialog::OnOpened] self=%p building mod list\n", self);
     ::ModDialog_Slot4(reinterpret_cast<ModDialog*>(self));
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    std::printf("[ModDialog::OnOpened] rows=%d entries=%p table=%p\n",
+    printf("[ModDialog::OnOpened] rows=%d entries=%p table=%p\n",
                 *reinterpret_cast<int*>(s + 0xC0),
                 *reinterpret_cast<void**>(s + 0xB8),
                 *reinterpret_cast<void**>(s + 0xC8));
@@ -184,7 +184,7 @@ void ModDialog_VOnElementEvent(void* self, void* elemEvt, int msg, int id,
     if (!self) return;
     if (!ModDialogLive()) return;
     if (msg == 0x12)
-        std::printf("[ModDialog::OnEvent] click id=%d\n", id);
+        printf("[ModDialog::OnEvent] click id=%d\n", id);
     ::ModDialog_Slot8(reinterpret_cast<ModDialog*>(self), elemEvt, msg, id, p5, p6, p7, p8);
 }
 
@@ -202,7 +202,7 @@ void* ModDetails_VDtor(void* self, uint32_t flags) {
 
 void ModDetails_VOnOpened(void* self) {
     if (!self || !ModDialogLive()) return;
-    std::printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", self,
+    printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", self,
                 *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0xC0));
     ::ModDetailsDialog_Slot4(reinterpret_cast<ModDetailsDialog*>(self));
 }
@@ -210,7 +210,7 @@ void ModDetails_VOnOpened(void* self) {
 void ModDetails_VOnElementEvent(void* self, uint64_t elemEvt, int msg, int id) {
     if (!self || !ModDialogLive()) return;
     if (msg == 0x12)
-        std::printf("[ModDetailsDialog::OnEvent] click id=%d\n", id);
+        printf("[ModDetailsDialog::OnEvent] click id=%d\n", id);
     ::ModDetailsDialog_Slot8(reinterpret_cast<ModDetailsDialog*>(self), elemEvt, msg, id);
 }
 
@@ -273,7 +273,7 @@ void EnsureBaseSlots() {
 void* ModDlg_LoadDialogResource(const char* rscPath) {
     if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        std::printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
+        printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
         return nullptr;
     }
     uint8_t filenameBuf[16];
@@ -294,7 +294,7 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
         if (typeId && fn_IsDerivedFrom && fn_IsDerivedFrom(resource, typeId))
             extRes = resource;
     }
-    std::printf("[ModDialog] LoadDialogResource('%s') -> %p (raw %p)\n",
+    printf("[ModDialog] LoadDialogResource('%s') -> %p (raw %p)\n",
                 rscPath, extRes, resource);
     fn_Filename_Dtor(filenameBuf);
     return extRes;
@@ -346,7 +346,7 @@ extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
 extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     if (!mainMenuSelf) return;
     if (!ModDialogLive()) {
-        std::printf("[ModDialog] open requested but BANISHED_LIVE_MODDIALOG is not set "
+        printf("[ModDialog] open requested but BANISHED_LIVE_MODDIALOG is not set "
                     "— set it to 1 to enable the local mod list\n");
         return;
     }
@@ -354,7 +354,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
 
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
         !fn_InternalBasePtr_Ctor || !fn_UI_AddDialog) {
-        std::printf("[ModDialog] open: core engine fns unresolved\n");
+        printf("[ModDialog] open: core engine fns unresolved\n");
         return;
     }
     // The whole dialog reads the IO::Modification singleton unguarded (retail
@@ -362,7 +362,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     // it never got registered the very first read is a null deref, so say so
     // here rather than faulting inside a byte-faithful body.
     if (!g_ppModificationSingleton || !*g_ppModificationSingleton) {
-        std::printf("[ModDialog] open: IO::Modification singleton unavailable "
+        printf("[ModDialog] open: IO::Modification singleton unavailable "
                     "(g_pp=%p) — mod list cannot be built\n",
                     (void*)g_ppModificationSingleton);
         return;
@@ -371,10 +371,10 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     ModProbe_DumpModList("dialog-open");
 
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainMenuSelf) + 0x10);
-    if (!ui) { std::printf("[ModDialog] open: UserInterface null\n"); return; }
+    if (!ui) { printf("[ModDialog] open: UserInterface null\n"); return; }
 
     void* extRes = ModDlg_LoadDialogResource("Dialog/Mod.rsc");
-    if (!extRes) { std::printf("[ModDialog] open: Dialog/Mod.rsc not loaded\n"); return; }
+    if (!extRes) { printf("[ModDialog] open: Dialog/Mod.rsc not loaded\n"); return; }
 
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
     if (!dlgMem) return;
@@ -391,7 +391,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     uint8_t ibp[8] = {};
     fn_InternalBasePtr_Ctor(ibp, dlg);
     fn_UI_AddDialog(ui, ibp);
-    std::printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg,
+    printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg,
                 fn_Modification_GetCount ?
                     fn_Modification_GetCount(*g_ppModificationSingleton) : -1);
 }
@@ -497,20 +497,20 @@ static void ModProbe_DumpFileSystem(const char* tag) {
         ResolveAddr(Module::Runtime, kRVA_FileSystem_Singleton));
     void* fs = fsVar ? *fsVar : nullptr;
     if (!fs) {
-        std::printf("[ModProbe:%s] IO::FileSystem::_singleton NULL\n", tag);
+        printf("[ModProbe:%s] IO::FileSystem::_singleton NULL\n", tag);
         return;
     }
     uintptr_t f = reinterpret_cast<uintptr_t>(fs);
     const char* dataDir = *reinterpret_cast<const char**>(f + 0x08);
     int pkgCount = *reinterpret_cast<int*>(f + 0x38);
-    std::printf("[ModProbe:%s] FileSystem=%p dataDir='%s' existsGate=%u looseGate=%u "
+    printf("[ModProbe:%s] FileSystem=%p dataDir='%s' existsGate=%u looseGate=%u "
                 "packages=%d\n", tag, fs, dataDir ? dataDir : "(null)",
                 *reinterpret_cast<uint8_t*>(f + 0x18),
                 *reinterpret_cast<uint8_t*>(f + 0x19), pkgCount);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(f + 0x30);
     for (int i = 0; arr && i < pkgCount && i < 64; ++i) {
         const char* p = *reinterpret_cast<const char**>(arr + static_cast<uintptr_t>(i) * 8);
-        std::printf("[ModProbe:%s]   pkg[%d] '%s'\n", tag, i, p ? p : "(null)");
+        printf("[ModProbe:%s]   pkg[%d] '%s'\n", tag, i, p ? p : "(null)");
     }
 }
 
@@ -550,7 +550,7 @@ static void ModProbe_DumpPackageIndex(const char* tag) {
     int packCount = *reinterpret_cast<int*>(f + 0x28);
     uintptr_t packArr = *reinterpret_cast<uintptr_t*>(f + 0x20);
     if (packCount < 0 || packCount > 256 || !packArr) {
-        std::printf("[ModProbe:%s] packfile array unusable (count=%d arr=%p)\n",
+        printf("[ModProbe:%s] packfile array unusable (count=%d arr=%p)\n",
                     tag, packCount, (void*)packArr);
         return;
     }
@@ -561,7 +561,7 @@ static void ModProbe_DumpPackageIndex(const char* tag) {
         if (!ModProbe_LooksLikePtr(pkg)) { fileCount[i] = -1; continue; }
         uintptr_t k = reinterpret_cast<uintptr_t>(pkg);
         fileCount[i] = *reinterpret_cast<int*>(k + 0xB8);
-        std::printf("[ModProbe:%s] packfile[%d] id=%u override=%u files=%d\n",
+        printf("[ModProbe:%s] packfile[%d] id=%u override=%u files=%d\n",
                     tag, i, *reinterpret_cast<uint32_t*>(k + 0xA8),
                     *reinterpret_cast<uint8_t*>(k + 0xAC), fileCount[i]);
     }
@@ -588,7 +588,7 @@ static void ModProbe_DumpPackageIndex(const char* tag) {
             // List the small packages' contents in full (mods), cap the output.
             if (fileCount[packIdx] >= 0 && fileCount[packIdx] <= 256 &&
                 listed < 400 && key) {
-                std::printf("[ModProbe:%s]   file pack=%u idx=%u '%s'\n",
+                printf("[ModProbe:%s]   file pack=%u idx=%u '%s'\n",
                             tag, packIdx, fileIdx, key);
                 ++listed;
             }
@@ -600,10 +600,10 @@ static void ModProbe_DumpPackageIndex(const char* tag) {
             if (ModProbe_LooksLikePtr(b)) stack[sp++] = b;
         }
     }
-    std::printf("[ModProbe:%s] package index: %d entries walked, listed %d\n",
+    printf("[ModProbe:%s] package index: %d entries walked, listed %d\n",
                 tag, visited, listed);
     for (int i = 0; i < packCount; ++i)
-        std::printf("[ModProbe:%s]   packfile[%d] owns %d mapped paths\n",
+        printf("[ModProbe:%s]   packfile[%d] owns %d mapped paths\n",
                     tag, i, perPack[i]);
 }
 
@@ -620,7 +620,7 @@ static void ModProbe_TestPaths(const char* tag) {
         s_getId = reinterpret_cast<fn_GetPackfileId_t>(
             ResolveExport("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z"));
     if (!s_getId || !fn_Filename_CtorCStr || !fn_Filename_Dtor) {
-        std::printf("[ModProbe:%s] GetPackfileId unavailable (fn=%p)\n",
+        printf("[ModProbe:%s] GetPackfileId unavailable (fn=%p)\n",
                     tag, (void*)s_getId);
         return;
     }
@@ -648,7 +648,7 @@ static void ModProbe_TestPaths(const char* tag) {
         fn_Filename_CtorCStr(fn, full);
         unsigned int id = s_getId(fs, fn);
         fn_Filename_Dtor(fn);
-        std::printf("[ModProbe:%s] GetPackfileId('%s') = %u%s\n", tag, rel, id,
+        printf("[ModProbe:%s] GetPackfileId('%s') = %u%s\n", tag, rel, id,
                     id ? "" : "   (in NO package)");
     }
 }
@@ -661,7 +661,7 @@ extern "C" void ModProbe_DumpModList(const char* tag) {
         ResolveAddr(Module::Runtime, kRVA_Modification_Singleton));
     void* mod = modVar ? *modVar : nullptr;
     if (!mod) {
-        std::printf("[ModProbe:%s] IO::Modification::_singleton NULL — "
+        printf("[ModProbe:%s] IO::Modification::_singleton NULL — "
                     "Engine::Startup has not run yet\n", tag);
         return;
     }
@@ -671,7 +671,7 @@ extern "C" void ModProbe_DumpModList(const char* tag) {
     // `CMP byte ptr [RCX],0x0 / JZ <end>` (0x1800aebd8), and it clears the flag on
     // the way out. m_savingEnabled (+0x01) is what Engine::Loader::Load flips 0->1
     // to force the RefreshList that reads the ModEnabled_* registry values.
-    std::printf("[ModProbe:%s] Modification=%p dirty=%u savingEnabled=%u count=%d "
+    printf("[ModProbe:%s] Modification=%p dirty=%u savingEnabled=%u count=%d "
                 "(exeExref g_pp=%p)\n", tag, mod,
                 *reinterpret_cast<uint8_t*>(m + 0x00),
                 *reinterpret_cast<uint8_t*>(m + 0x01), count,
@@ -681,7 +681,7 @@ extern "C" void ModProbe_DumpModList(const char* tag) {
         uintptr_t p = mods + static_cast<uintptr_t>(i) * 0x80;   // sizeof(Mod)
         const char* name = *reinterpret_cast<const char**>(p + 0x00);  // System::String COW ptr
         const char* file = *reinterpret_cast<const char**>(p + 0x58);  // System::Filename
-        std::printf("[ModProbe:%s]   [%d] enabled=%u index=%d name='%s' file='%s'\n",
+        printf("[ModProbe:%s]   [%d] enabled=%u index=%d name='%s' file='%s'\n",
                     tag, i, *reinterpret_cast<uint8_t*>(p + 0x50),
                     *reinterpret_cast<int32_t*>(p + 0x20),
                     name ? name : "(null)", file ? file : "(null)");
@@ -708,7 +708,7 @@ static DWORD WINAPI ModProbe_ThreadMain(LPVOID) {
         Sleep(100);
     }
     if (!modVar || !*modVar) {
-        std::printf("[ModProbe] singleton never appeared within 120s — "
+        printf("[ModProbe] singleton never appeared within 120s — "
                     "Engine::Startup did not run\n");
         std::fflush(stdout);
         return 0;
@@ -750,11 +750,11 @@ extern "C" void ModProbe_StartWatcher() {
     HANDLE h = CreateThread(nullptr, 0, &ModProbe_ThreadMain, nullptr, 0, nullptr);
     if (h) {
         CloseHandle(h);
-        std::printf("[ModProbe] watcher armed (BANISHED_MOD_PROBE) -- will dump the "
+        printf("[ModProbe] watcher armed (BANISHED_MOD_PROBE) -- will dump the "
                     "IO::Modification + IO::FileSystem state at startup and at "
                     "t+10s/t+20s/t+30s, no click required\n");
     } else {
-        std::printf("[ModProbe] CreateThread failed (%lu)\n", GetLastError());
+        printf("[ModProbe] CreateThread failed (%lu)\n", GetLastError());
     }
     std::fflush(stdout);
 }

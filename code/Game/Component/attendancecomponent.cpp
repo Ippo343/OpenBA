@@ -16,6 +16,7 @@
 #include "Component/attendancecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
 #include <cstdint>
 #include <cstdio>
 
@@ -37,10 +38,20 @@ static fn_ProcessAttendanceQueue_t s_fn_ProcessAttendanceQueue = nullptr;
 
 static bool s_initialized = false;
 
+static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self, void* entity,
+                                                       int32_t queueCount);
+
 // ============================================================
 // AttendanceComponent::Update (vtable slot [9], 0x140044370)
 // ============================================================
 void AttendanceComponent_Update(AttendanceComponent* self) {
+    // Resolve the helpers on first use. AttendanceComponent_InitFuncs had NO caller
+    // anywhere (found 2026-09-03 by the BANISHED_STRESS town): every Update ran with
+    // s_fn_GetBuildingComponent == null, so buildingPtr stayed 0 and the +0x60 read
+    // below faulted the first time any attendance queue was non-empty. It never showed
+    // before because no run had ever STAFFED a chapel/school/hospital, and an unstaffed
+    // one never gets a queue, so the early-out above hid it. Idempotent after the first call.
+    AttendanceComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     // Check if queue count at +0x30 (as int32) is nonzero
@@ -64,6 +75,14 @@ void AttendanceComponent_Update(AttendanceComponent* self) {
     if (s_fn_CheckPtr)
         s_fn_CheckPtr(&buildingPtr);
 
+    // DIAGNOSTIC ONLY (the deref below stays faithful): retail relies on every attendance
+    // building carrying a WorkPlaceComponent, so a null here means something upstream
+    // handed this component an entity without one. Say WHICH entity before faulting,
+    // because the crash log alone cannot (first seen in the BANISHED_STRESS town).
+    if (buildingPtr == 0) {
+        AttendanceComponent_ReportMissingWorkplace(self, entity, queueCount);
+    }
+
     // Check if building is idle (building+0x60 == 0)
     int32_t busyState = *(int32_t*)(buildingPtr + 0x60);
     if (busyState == 0) {
@@ -78,6 +97,37 @@ void AttendanceComponent_Update(AttendanceComponent* self) {
 // ============================================================
 // DWORD_1401c80e0 — job-host component type ID
 static uint32_t* s_pTId_JobHost = nullptr;
+
+// Pre-fault report for AttendanceComponent_Update (see the call site).
+static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self, void* entity,
+                                                       int32_t queueCount) {
+    uint8_t* e = reinterpret_cast<uint8_t*>(entity);
+    fprintf(stderr, "[AttendanceComponent::Update] self=%p queue(+0x30)=%d owner entity=%p has NO "
+            "WorkPlaceComponent (0x140002e10 returned null) -- about to fault faithfully\n",
+            (void*)self, queueCount, entity);
+    if (e) {
+        const uint32_t flags = *reinterpret_cast<uint32_t*>(e + 0x40);
+        const int32_t  n     = *reinterpret_cast<int32_t*>(e + 0x38);
+        int64_t* comps       = *reinterpret_cast<int64_t**>(e + 0x30);
+        fprintf(stderr, "[AttendanceComponent::Update]   entity flags=0x%x components=%d:", flags, n);
+        for (int i = 0; comps && i < n && i < 32; ++i) {
+            int64_t c = comps[i];
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&c);
+            if (!c) { fprintf(stderr, " <null>"); continue; }
+            void** vt = *reinterpret_cast<void***>(c);
+            const uint32_t tid = (vt && vt[2]) ? reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(c)) : 0;
+            const char* nm = ::Object::GetTypeNameById(tid);
+            const bool isHost = s_pTId_JobHost && tid == *s_pTId_JobHost;
+            fprintf(stderr, " %s(%u%s)", (nm && nm[0]) ? nm : "?", tid,
+                    isHost ? (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(c), tid)
+                              ? ",HOST,derived" : ",HOST,NOT-derived") : "");
+        }
+        fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u finder=%p\n",
+                s_pTId_JobHost ? *s_pTId_JobHost : 0, (void*)s_fn_GetBuildingComponent);
+    }
+    fflush(stderr);
+}
+
 // Queue-drain dispatch helpers
 typedef void (*fn_AC_115a50_t)(void* worker, char p2);   // 0x140115a50
 typedef void (*fn_AC_59b0_t)(void* worker);              // 0x1401159b0

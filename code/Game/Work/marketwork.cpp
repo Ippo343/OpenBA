@@ -887,6 +887,37 @@ static uint8_t* MW_TreeFind(uint8_t* root, uintptr_t key) {
     return nullptr;
 }
 
+// DIAGNOSTIC ONLY, printed right before the faithful null deref described above fires:
+// WHICH storage entity holds WHICH material type that the town resource registry
+// (townMgr+0x110) never learned about. Retail's invariant is "every type in any storage
+// list was registered"; when it breaks here the culprit is whatever deposited the
+// material without RawMaterialComponent_RegisterRawMaterial, not this walk. First seen
+// in the BANISHED_STRESS town (2026-09-03) at loop C, frame ~8400.
+static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityIBP,
+                              uintptr_t resType, void* rawMat, uintptr_t town) {
+    char path[160] = "?";
+    if (fn_External_GetPath && resType) {
+        uintptr_t fnStorage = 0;
+        fn_External_GetPath(reinterpret_cast<void*>(resType), &fnStorage);
+        const char* s = reinterpret_cast<const char*>(fnStorage);
+        if (s) {
+            size_t i = 0;
+            for (; i + 1 < sizeof(path) && s[i] >= 0x20 && s[i] < 0x7f; i++) path[i] = s[i];
+            path[i] = '\0';
+        }
+        if (fn_Filename_Dtor) fn_Filename_Dtor(&fnStorage);
+    }
+    const int regCount = *reinterpret_cast<int32_t*>(town + 0x118);
+    fprintf(stderr, "[MarketWork::Execute] TREE MISS at %s: storage entity[%d]=%p holds resType=%p "
+            "(%s) rawMatDesc=%p flags=0x%x -- not among the %d types in townMgr+0x110; "
+            "about to fault faithfully\n",
+            site, entityIdx, reinterpret_cast<void*>(entityIBP), reinterpret_cast<void*>(resType),
+            path, rawMat,
+            rawMat ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x5c) : 0,
+            regCount);
+    fflush(stderr);
+}
+
 // The other inlined scan shape in this function: a Description's CHILD array,
 // which is a raw pointer array at obj+0x28 with an int32 count at obj+0x30 --
 // no InternalBasePtr, hence no CheckPtr (verified at 0x1400f0450).
@@ -1247,6 +1278,7 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x48) * available;
 
         uint8_t* node = MW_TreeFind(treeRoot, resType);
+        if (!node) MW_ReportTreeMiss("loopA(market)", -1, marketStorageIBP[0], resType, rawMat, town);
         *reinterpret_cast<int32_t*>(node + kNodeAccumA) += available * mass;
 
         const uint32_t mask = *reinterpret_cast<uint32_t*>(
@@ -1281,6 +1313,7 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
                     *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x48) * qty;
 
                 uint8_t* tn = MW_TreeFind(treeRoot, resType);
+                if (!tn) MW_ReportTreeMiss("loopB(haulers)", -1, 0, resType, rawMat, town);
                 *reinterpret_cast<int32_t*>(tn + kNodeAccumB) += qty;
 
                 const uint32_t mask = *reinterpret_cast<uint32_t*>(
@@ -1351,6 +1384,7 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
                     reinterpret_cast<uintptr_t>(rawMat) + 0x48);
 
                 uint8_t* tn = MW_TreeFind(treeRoot, resType);
+                if (!tn) MW_ReportTreeMiss("loopC(town)", e, entityIBP, resType, rawMat, town);
                 *reinterpret_cast<int32_t*>(tn + kNodeAccumC) += mass;
 
                 const uint32_t mask = *reinterpret_cast<uint32_t*>(

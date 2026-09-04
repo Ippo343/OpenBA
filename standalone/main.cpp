@@ -20,6 +20,7 @@
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
 #include "autostart.h"
+#include "stress_harness.h"
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
 #include "Game/game_main.h"
@@ -1694,6 +1695,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Open dedicated crash log (FILE_FLAG_WRITE_THROUGH) — survives the OS
     // tearing the crashing thread down before stderr buffers commit.
     OpenCrashLog();
+
+    // BANISHED_STRESS=1 expands into its env bundle (autostart, medium map, uncapped,
+    // pinned camera, demo buildings, in-game quit). Must run before ANY env reader —
+    // HarnessGuardUnattendedBoot below keys off BANISHED_AUTOSTART, which this sets.
+    StressHarness_Init();
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);

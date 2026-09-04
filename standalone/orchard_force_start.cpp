@@ -34,6 +34,8 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+struct EditTool;
+void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr);   // code/Game/Player/edittool.cpp
 
 namespace {
 
@@ -233,6 +235,19 @@ void FireForceStart(void* entityUI, int frameNum) {
             fprintf(stderr, "[OrchardForceStart] frame=%d: %d orchard(s) STILL UNTYPED after the "
                             "attempt — see the per-entity lines above for why\n",
                     frameNum, found - typed);
+        }
+        // Every TryAssignRealTreeType above selected an orchard through the EditTool,
+        // which opens its info panel; the LAST one stays on screen. An open panel costs
+        // ~0.9 ms of UI update per frame (measured in the BANISHED_STRESS PostSim phase:
+        // 0.95 ms vs 0.06 ms once it closed on its own thousands of frames later), which
+        // is harness noise in a perf baseline. Close it the way a right-click does.
+        if (void* tool = EditTool_HarnessAcquire(entityUI)) {
+            uintptr_t dlg = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(tool) + 0x28);
+            if (dlg) {
+                EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool), dlg);
+                fprintf(stderr, "[OrchardForceStart] frame=%d: closed the last orchard panel (%p)\n",
+                        frameNum, reinterpret_cast<void*>(dlg));
+            }
         }
     }
     std::fflush(stderr);

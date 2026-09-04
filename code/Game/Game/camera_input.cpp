@@ -33,9 +33,12 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+
+extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
 namespace Game {
 
@@ -274,6 +277,26 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
             float px, py, pd;
             int got = std::sscanf(e, "%f,%f,%f", &px, &py, &pd);
             if (got >= 2) { s_pinX = px; s_pinY = py; if (got >= 3) s_pinDist = pd; s_pin = 1; }
+            // "town[,dist]": pin on the start-town spawn tile, whatever seed/map size
+            // produced it (the stress harness uses this — the spawn tile differs per map).
+            // Resolved lazily: the tile only exists once StartTown_SpawnEntities has run,
+            // which is before the first camera tick of the world.
+            else if (std::strncmp(e, "town", 4) == 0) {
+                int tx = 0, ty = 0;
+                if (StartTown_GetSpawnTile(&tx, &ty) && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                    void* game = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf8);
+                    const int dim = game ? *(int32_t*)game : 0;
+                    if (dim > 0) {
+                        s_pinX = (float)tx - ((float)(dim >> 1) - 0.5f);
+                        s_pinY = (float)ty - ((float)(dim >> 1) - 0.5f);
+                        if (std::sscanf(e + 4, ",%f", &pd) == 1) s_pinDist = pd;
+                        s_pin = 1;
+                        std::fprintf(stderr, "[CameraPin] town tile=(%d,%d) dim=%d -> world (%.1f,%.1f) dist=%.0f\n",
+                                     tx, ty, dim, s_pinX, s_pinY, s_pinDist);
+                    }
+                }
+                if (!s_pin) s_pin = -1;   // not ready yet — retry next tick
+            }
         }
     }
     if (s_pin) {

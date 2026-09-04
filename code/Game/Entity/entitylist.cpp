@@ -26,6 +26,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (dying-entity dialog close)
+#include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -556,7 +557,18 @@ void EntityList_Update(EntityList* self, void* time) {
                                     void** vtbl = *(void***)(uintptr_t)compIBP;
                                     typedef void (*CompUpdate_t)(void* self, void* time);
                                     CompUpdate_t compUpdate = (CompUpdate_t)vtbl[9];
-                                    compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                    if (g_compProfOn) {
+                                        // [STRESS] per-component-type Update cost. Keyed by
+                                        // vtable, so the only per-call cost is two QPC reads.
+                                        const int slot = CompProf_Begin((void*)(uintptr_t)compIBP);
+                                        LARGE_INTEGER q0, q1;
+                                        QueryPerformanceCounter(&q0);
+                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                        QueryPerformanceCounter(&q1);
+                                        CompProf_End(slot, q1.QuadPart - q0.QuadPart);
+                                    } else {
+                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                    }
                                 }
 
                                 // Reload self pointer (matches original: param_1 = local_res8)

@@ -138,6 +138,9 @@ static HA_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 // MemAlloc / MemFree
 typedef void* (*HA_MemAlloc_t)(int64_t size, int align);
 static HA_MemAlloc_t s_fn_MemAlloc = nullptr;
+static void* HA_MemAllocViaSingleton(int64_t size, int align) {
+    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
+}
 
 // Type IDs
 static uint32_t* s_typeId_CropDesc = nullptr;    // DAT_1401c7548 (FindComp_CropDesc type)
@@ -221,9 +224,13 @@ bool HarvestArea_ResolveFuncs() {
     s_fn_Serializer_SerializeBoolArray = reinterpret_cast<HA_Serializer_SerializeBoolArray_t>(
         s_fn_Serializer_SerializeInt); // same fn, different usage (count, buf, name)
 
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x140152780);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<HA_MemAlloc_t*>(iatMemAlloc);
+    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
+    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
+    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
+    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
+    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
+    // allocator singleton instead; fn_MemFreeStatic pairs with it.
+    s_fn_MemAlloc = &HA_MemAllocViaSingleton;
 
     // Type IDs
     s_typeId_CropDesc = reinterpret_cast<uint32_t*>(

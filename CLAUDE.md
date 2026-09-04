@@ -142,6 +142,22 @@ is the path to use for verifying any rendering / gameplay / world-build change.
   sets the env var for the debuggee; "Launch Standalone (debug)" stops at the menu.
 - To exercise the menu itself (not auto-advance), use `make sa-run-menu`.
 
+### Stress Test / Performance Baseline
+
+`mingw32-make sa-stress` (details: **[perf/README.md](perf/README.md)**) builds the perf exe
+(`standalone-perf`: `-O2 -g`, logs stripped, own object dir `standalone/build-perf/`), then runs
+`BANISHED_STRESS=1`: a medium map with 3 sets of every placeable building, 800 citizens in
+their own houses, game speed 10x, every workplace staffed through the real seat cascade, camera pinned on the
+town, FPS cap off, and a clean self-quit after 6000 sim frames (60k ticks at 10x). Output per run in
+`perf/results/<stamp>_<label>/`: `standalone_stress.csv` (one row per 600 frames: update/draw
+ms, SIMPROF phase split, population/employment/entities, memory), the per-component-type Update
+profile, and `report.txt` from `tools/stress_report.py`, auto-diffed against
+`perf/baselines/current.csv`. Knobs: `STRESS_ARGS="--label x --speed 5 --citizens 600 --sets 3
+--frames 6000"`. `make sa-stress-debug` = same town on the -O0 exe (functional check only).
+Headline metric is `sim ms / iteration` (speed- and GPU-independent). Also added by this
+harness: `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|harsh`,
+`BANISHED_CAMERA_PIN=town[,dist]`.
+
 ### Camera Pinning (deterministic screenshots)
 
 `BANISHED_CAMERA_PIN=x,y[,dist]` (`code/Game/Game/camera_input.cpp`) pins the camera

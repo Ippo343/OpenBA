@@ -23,6 +23,7 @@
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
@@ -779,6 +780,9 @@ int      g_simProfOn   = -1;      // -1 = unresolved, 0 = off, else report inter
 long long g_qpcFreq    = 0;
 double   g_phSec[kPhCount] = {0};
 int      g_phCalls[kPhCount] = {0};
+// Second accumulator with its OWN reset, drained by the BANISHED_STRESS harness
+// (GameUpdateLoop_SimProfTake) so its CSV rows are not tied to the stderr report interval.
+double   g_phSecStress[kPhCount] = {0};
 int      g_profFrames  = 0;
 long long g_profSimIters = 0;
 
@@ -807,7 +811,9 @@ struct PhaseTimer {
     explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) { if (on) t0 = QpcNow(); }
     ~PhaseTimer() {
         if (!on || !g_qpcFreq) return;
-        g_phSec[ph] += (double)(QpcNow() - t0) / (double)g_qpcFreq;
+        const double s = (double)(QpcNow() - t0) / (double)g_qpcFreq;
+        g_phSec[ph] += s;
+        g_phSecStress[ph] += s;
         g_phCalls[ph]++;
     }
 };
@@ -856,6 +862,18 @@ inline void ApplyForceSpeed(void* entityUIv) {
 
 }  // namespace
 
+// [STRESS] drain the harness copy of the phase accumulators: outMs[i] = total ms of
+// phase i since the previous Take (i in SimPhase order; kPhWholeUpdate is the last).
+extern "C" int GameUpdateLoop_SimProfTake(double* outMs, int maxN) {
+    const int n = maxN < kPhCount ? maxN : kPhCount;
+    for (int i = 0; i < n; i++) { outMs[i] = g_phSecStress[i] * 1000.0; }
+    for (int i = 0; i < kPhCount; i++) g_phSecStress[i] = 0;
+    return n;
+}
+extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
+    return (phase >= 0 && phase < kPhCount) ? kPhaseName[phase] : "?";
+}
+
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
@@ -886,6 +904,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     const bool simProf = SimProfOn();
     const long long frameT0 = simProf ? QpcNow() : 0;
     ApplyForceSpeed(self->m_entityUI);
+    StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
 
     // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
     // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
@@ -1717,6 +1736,9 @@ post_simulation:
             spd = *(int32_t*)((uint8_t*)self->m_entityUI + 0x34);
         SimProfReport(spd, entCount);
     }
+    // [STRESS] close the Update bracket; the harness's own periodic work (CSV row,
+    // staffing pass) runs inside this call, AFTER its timer has stopped.
+    StressHarness_UpdateEnd(self, s_frameNum);
 
     TRACE("[GameUpdateLoop::Update] EXIT\n");
     return true;
@@ -1745,6 +1767,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     }
 
     EnsureInit();
+    StressHarness_DrawBegin();   // [STRESS] render-frame period + Draw bracket
 
     // Tick the RenderDoc capture state machine once per rendered frame. The
     // engine's Present happens after this Draw returns (MainLoop::Draw EndFrame),
@@ -2086,6 +2109,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         TRACE("[GameUpdateLoop::Draw] quickload screenshot done\n");
     }
 
+    StressHarness_DrawEnd();   // [STRESS]
     TRACE("[GameUpdateLoop::Draw] EXIT\n");
 }
 

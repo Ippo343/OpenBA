@@ -571,10 +571,23 @@ static void RawMaterialComponent_OnAddedVSlot(void* s) {
 static void RawMaterialComponent_SerVSlot(void* s, void* stream) {
     RawMaterialComponent_Shutdown(reinterpret_cast<RawMaterialComponent*>(s), stream);
 }
+static void RawMaterialComponent_StartupVSlot(void* s) {
+    RawMaterialComponent_Serialize(reinterpret_cast<RawMaterialComponent*>(s));
+}
 static void RawMaterialComponent_FinishVtable() {
     RawMaterialComponent_InertVtable[6] = reinterpret_cast<void*>(&RawMaterialComponent_OnAddedVSlot);
     // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
     RawMaterialComponent_InertVtable[3] = reinterpret_cast<void*>(&RawMaterialComponent_SerVSlot);
+    // slot 4 (Startup, retail 0x1401292c0 — Ghidra calls it "Serialize"): copies the
+    // material type out of the description AND registers the pile's template into the
+    // town resource registry (townMgr+0x110, via 0x140091e60). Dispatched by
+    // ComponentEntity_StartupComponents for flag-bit-7 components (ours are 0x89) at
+    // RegisterEntity time, i.e. for every pile CreateRawMaterial spawns. It was PORTED
+    // but never installed, so the registry only ever held the start-condition pool and
+    // MarketWork's per-type tree (built from that registry) faulted on the first gathered
+    // mushroom (BANISHED_STRESS town, 2026-09-03). Wired unconditionally: without it no
+    // produced material type is known to the market/trade code at all.
+    RawMaterialComponent_InertVtable[4] = reinterpret_cast<void*>(&RawMaterialComponent_StartupVSlot);
 }
 extern "C" void* RawMaterialComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x89,

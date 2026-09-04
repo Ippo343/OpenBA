@@ -26,6 +26,8 @@
 #include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)
+#include "stress_harness.h"                     // BANISHED_STRESS targets (standalone/)
+#include <chrono>
 extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_a_map.cpp
 #include <cstdint>
 #include <cstdio>
@@ -114,6 +116,25 @@ static std::vector<int64_t> g_foundingHouseIBPs;
 // Phase 4: founding-family CitizenComponents captured during AssignFoundingHousing;
 // the deferred employ pass seats idle adults from this list at the lodge.
 static std::vector<void*> g_foundingCitizens;
+
+// The start-town spawn tile of the CURRENT world (set by StartTown_SpawnEntities), for
+// harnesses that need "where the town is" without re-deriving it: BANISHED_CAMERA_PIN=town.
+static int g_stSpawnX = -1, g_stSpawnY = -1;
+extern "C" bool StartTown_GetSpawnTile(int* x, int* y) {
+    if (g_stSpawnX < 0) return false;
+    if (x) *x = g_stSpawnX;
+    if (y) *y = g_stSpawnY;
+    return true;
+}
+
+// BANISHED_STRESS: footprints of the houses the stress town placed, in placement order,
+// and the g_foundingHouseIBPs index the first of them landed at. StartTown_SpawnCitizens
+// spawns one family per stress house at the house's own position, and
+// StartTown_AssignFoundingHousing pairs family f with house f — so the stress families
+// start at index g_stressHouseFirstIdx to keep that pairing exact.
+struct STRectFwd { int x, y, w, h; };
+static std::vector<STRectFwd> g_stressHouseTiles;
+static size_t g_stressHouseFirstIdx = 0;
 
 // GUI select harness: expose a captured founding-house building ENTITY (the value is the
 // ComponentEntity ptr stored at ResidenceComponent+0x10) so the EditTool select harness can
@@ -1297,6 +1318,205 @@ static struct {
     int   workRadius = 0;      // RadiusDescription+0x28, in TILES
     void* tmpl = nullptr;
 } g_deferredLodge;
+
+// ============================================================================
+// BANISHED_STRESS — the stress town (see standalone/stress_harness.h).
+//
+// Places `sets` copies of every ordinary placeable building plus enough houses for the
+// requested population, in a compact spiral around the founding cluster, every one of
+// them COMPLETED (placeStructure's instant-build bracket) and, for workplaces, activated
+// and registered exactly as the demo buildings are. Siting rules are the demo ring
+// scan's, made cheap enough for a few hundred buildings:
+//   * a per-cell occupancy bitmap seeded from everything StartTown already placed
+//     (g_stOccupied), with the same 1-tile walk-lane margin the demo scans keep;
+//   * every footprint cell WORKABLE by the exact predicate the work classes use
+//     (Map_FindNearestPassable, mask 0xe0f), memoised per cell;
+//   * the footprint centre PATH-REACHABLE from the town cell (0x1400a00f0), so no
+//     building lands in a pocket a citizen can never walk to.
+// Buildings that need their own siting (river for the dock/trading post, drag areas,
+// animal density for the hunter lodge) are NOT here — the harness turns their existing
+// BANISHED_BUILD_DEMO_* blocks on instead, one of each.
+// ============================================================================
+struct StressBuilding { const char* path; const char* tag; int fw, fh; };
+static const StressBuilding kStressSet[] = {
+    { "Template\\StorageBarn.rsc",     "storagebarn",     6,  5 },
+    { "Template\\StorageYard.rsc",     "storageyard",     8,  8 },
+    { "Template\\Market.rsc",          "market",         10, 10 },
+    { "Template\\Well.rsc",            "well",            3,  3 },
+    { "Template\\SchoolHouse.rsc",     "schoolhouse",     6,  6 },
+    { "Template\\DoctorHouse.rsc",     "hospital",        7,  7 },
+    { "Template\\Chapel.rsc",          "chapel",          8,  8 },
+    { "Template\\Cemetery.rsc",        "cemetery",        8,  8 },
+    { "Template\\CutterYard.rsc",      "cutteryard",      4,  4 },
+    { "Template\\ForesterLodge.rsc",   "foresterlodge",   6,  6 },
+    { "Template\\Herbalist.rsc",       "herbalist",       4,  4 },
+    { "Template\\ToolMaker.rsc",       "toolmaker",       4,  4 },
+    { "Template\\Tailor.rsc",          "tailor",          4,  4 },
+    { "Template\\Tavern.rsc",          "tavern",          6,  6 },
+    { "Template\\IronMine.rsc",        "ironmine",        8,  8 },
+    { "Template\\Quarry.rsc",          "quarry",         21, 17 },
+    { "Template\\HunterLodge.rsc",     "hunterlodge",     8,  8 },
+    { "Template\\GathererShelter.rsc", "gathererhut",     8,  8 },
+    { "Template\\Hostel.rsc",          "hostel",          6,  6 },
+    // Drag-created areas: no CreatePlacedDescription, so the fallback footprint is the
+    // one used. Placement alone leaves them switched off; the stress bundle turns on
+    // BANISHED_CROPFIELD_FORCE_START / BANISHED_ORCHARD_FORCE_START, which pick a crop
+    // and a tree type for every field/orchard in the world so they open for workers.
+    { "Template\\CropField.rsc",       "cropfield",       8,  8 },
+    { "Template\\Orchard.rsc",         "orchard",         8,  8 },
+};
+static const StressBuilding kStressTownHall = { "Template\\TownHall.rsc", "townhall", 10, 10 };
+static const StressBuilding kStressHouses[] = {
+    { "Template\\WoodHouse.rsc",  "woodhouse",  4, 5 },
+    { "Template\\StoneHouse.rsc", "stonehouse", 4, 5 },
+};
+
+static double StressNowMs() {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
+    const int target = StressHarness_TargetCitizens();
+    const int sets   = StressHarness_Sets();
+    if (target <= 0 && sets <= 0) return 0;
+    if (!game || !g_stPlaceStructure) {
+        fprintf(stderr, "[Stress::place] no map/placeStructure — nothing placed\n");
+        return 0;
+    }
+    const double t0 = StressNowMs();
+
+    int* grid = reinterpret_cast<int*>(game);
+    const int mapW = *grid;
+    if (mapW <= 0) return 0;
+    const size_t cells = (size_t)mapW * (size_t)mapW;
+
+    std::vector<uint8_t> occ(cells, 0);
+    auto mark = [&](int x, int y, int w, int h) {
+        for (int yy = y; yy < y + h; ++yy)
+            for (int xx = x; xx < x + w; ++xx)
+                if (xx >= 0 && yy >= 0 && xx < mapW && yy < mapW) occ[(size_t)yy * mapW + xx] = 1;
+    };
+    for (const STRect& r : g_stOccupied) mark(r.x, r.y, r.w, r.h);
+
+    typedef int (*FNP_t)(int*, int, int, uint32_t);
+    FNP_t nearestPassable = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
+    typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
+    CanPathTo_t canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+    std::vector<int8_t> workable(cells, -1);
+    auto cellWorkable = [&](int cell) -> bool {
+        if (cell < 0 || (size_t)cell >= cells) return false;
+        if (workable[cell] < 0) {
+            workable[cell] = (!nearestPassable || nearestPassable(grid, cell, cell, 0xe0f) >= 0) ? 1 : 0;
+        }
+        return workable[cell] == 1;
+    };
+    const int townCell = cy * mapW + cx;
+    int reachRejects = 0;
+    auto fits = [&](int tx, int ty, int w, int h) -> bool {
+        if (tx < 2 || ty < 2 || tx + w > mapW - 2 || ty + h > mapW - 2) return false;
+        for (int yy = ty - 1; yy <= ty + h; ++yy)
+            for (int xx = tx - 1; xx <= tx + w; ++xx)
+                if (occ[(size_t)yy * mapW + xx]) return false;
+        for (int yy = 0; yy < h; ++yy)
+            for (int xx = 0; xx < w; ++xx)
+                if (!cellWorkable((ty + yy) * mapW + (tx + xx))) return false;
+        if (canPath && !canPath(grid, 0xe1f, (uint32_t)((ty + h / 2) * mapW + (tx + w / 2)), townCell)) {
+            ++reachRejects; return false;
+        }
+        return true;
+    };
+
+    const int maxR = mapW / 2 - 4;
+    int maxUsedR = 0;
+    const uint32_t tidCPD = TypeId("CreatePlacedDescription");
+    const uint32_t tidRes = TypeId("ResidenceComponent");
+    struct Tally { const char* tag; int n; };
+    std::vector<Tally> tally;
+    int placed = 0, failed = 0, houses = 0;
+
+    auto place = [&](const StressBuilding& b) -> bool {
+        void* tmpl = ResolveTemplateByPath(b.path);
+        if (!tmpl) {
+            fprintf(stderr, "[Stress::place] %s did not resolve\n", b.path);
+            ++failed; return false;
+        }
+        int w = 0, h = 0;
+        if (void* cpd = FindDescriptionOnTemplate(tmpl, tidCPD)) {
+            w = *(int32_t*)((uint8_t*)cpd + 0x44);
+            h = *(int32_t*)((uint8_t*)cpd + 0x48);
+        }
+        if (w <= 0 || h <= 0) { w = b.fw; h = b.fh; }
+
+        int bestX = 0, bestY = 0; bool found = false;
+        for (int r = 1; r <= maxR && !found; ++r) {
+            for (int dy = -r; dy <= r && !found; ++dy) {
+                for (int dx = -r; dx <= r && !found; ++dx) {
+                    if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                    const int tx = cx + dx, ty = cy + dy;
+                    if (!fits(tx, ty, w, h)) continue;
+                    bestX = tx; bestY = ty; found = true;
+                    if (r > maxUsedR) maxUsedR = r;
+                }
+            }
+        }
+        if (!found) {
+            fprintf(stderr, "[Stress::place] %s: no free workable reachable %dx%d footprint within r=%d\n",
+                    b.tag, w, h, maxR);
+            ++failed; return false;
+        }
+        void* ent = g_stPlaceStructure(tmpl, bestX, bestY, 0, w, h, /*isDemoFoundation=*/false, -1);
+        g_stOccupied.push_back({ bestX, bestY, w, h });
+        mark(bestX, bestY, w, h);
+        if (!ent) { ++failed; return false; }
+        ++placed;
+        bool isTallied = false;
+        for (Tally& t : tally) if (std::strcmp(t.tag, b.tag) == 0) { ++t.n; isTallied = true; break; }
+        if (!isTallied) tally.push_back({ b.tag, 1 });
+        if (FindComponentOnEntity(ent, tidRes)) {
+            g_stressHouseTiles.push_back({ bestX, bestY, w, h });
+            ++houses;
+        }
+        return true;
+    };
+
+    // Houses: a family is 2 adults + Rand(0..3) children, ~3.5 people, and every house
+    // (WoodHouse/StoneHouse/Hostel) holds 5 — so target/3 houses with a little slack.
+    const int wantHouses = target > 0 ? (target + 2) / 3 + 2 : 0;
+    const int perSet = (sets > 0) ? (wantHouses + sets - 1) / sets : wantHouses;
+    const size_t houseIdx0 = g_foundingHouseIBPs.size();   // stress houses start here
+    g_stressHouseFirstIdx = houseIdx0;
+
+    fprintf(stderr, "[Stress::place] BEGIN map=%d town=(%d,%d) sets=%d targetCitizens=%d "
+            "wantHouses=%d (founding houses so far %zu)\n",
+            mapW, cx, cy, sets, target, wantHouses, houseIdx0);
+    fflush(stderr);
+
+    int housesQueued = 0, houseKind = 0;
+    auto placeHouses = [&](int n) {
+        for (int i = 0; i < n && housesQueued < wantHouses; ++i, ++housesQueued) {
+            place(kStressHouses[houseKind]);
+            houseKind = (houseKind + 1) % (int)(sizeof(kStressHouses) / sizeof(kStressHouses[0]));
+        }
+    };
+
+    if (sets > 0) place(kStressTownHall);
+    for (int s = 0; s < sets; ++s) {
+        for (const StressBuilding& b : kStressSet) place(b);
+        placeHouses(perSet);
+    }
+    placeHouses(wantHouses - housesQueued);
+
+    // Hostels in the set also carry a ResidenceComponent and therefore also count as
+    // houses for the family pairing — g_stressHouseTiles is filled from the component
+    // test above, not from the house list, so the pairing stays index-exact.
+    fprintf(stderr, "[Stress::place] DONE placed=%d failed=%d houses(residences)=%d maxRing=%d "
+            "reachRejects=%d in %.0f ms\n", placed, failed, houses, maxUsedR, reachRejects,
+            StressNowMs() - t0);
+    for (const Tally& t : tally) fprintf(stderr, "[Stress::place]   %-14s x%d\n", t.tag, t.n);
+    fflush(stderr);
+    return placed;
+}
 
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -3140,6 +3360,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         }
     }
 
+    // -- BANISHED_STRESS -- the stress town, LAST so it fills around everything above --
+    if (StressHarness_Enabled()) {
+        const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+        spawned += StartTown_StressSpawnStructures(game, cx, cy);
+    }
+
     return spawned;
 }
 
@@ -4960,9 +5186,9 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
     // this tile once and reused it for both camera and the spawn passes.
-    float base[3] = { 0.0f, 0.0f, 0.0f };
+    float townBase[3] = { 0.0f, 0.0f, 0.0f };
     if (game && fn_MapGetTerrainPos)
-        StartTown_TileToWorld(game, spawnX, spawnY, base);
+        StartTown_TileToWorld(game, spawnX, spawnY, townBase);
     const float jitter = *(float*)(startConfig + 0x40);
 
     // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
@@ -5007,13 +5233,45 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
             (int)doLinks);
     fflush(stderr);
 
-    int spawned = 0;
+    // One spec per family. The founding families come from the start condition and spawn
+    // at the town centre. Under BANISHED_STRESS one extra family is added per stress house
+    // (StartTown_StressSpawnStructures), spawning AT that house, until the requested
+    // population is reached; placeholders keep family index == house index for
+    // StartTown_AssignFoundingHousing.
+    struct FamSpec { int educated; int maxChildren; float base[3]; bool placeholder; };
+    std::vector<FamSpec> specs;
     for (int f = 0; f < famCount; ++f) {
         uint8_t* fam = families + (size_t)f * FAMILY_STRIDE;
-        const int educated    = *(int8_t*)fam;
-        const int maxChildren = *(int32_t*)(fam + 4);
+        FamSpec sp = { *(int8_t*)fam, *(int32_t*)(fam + 4), { townBase[0], townBase[1], townBase[2] }, false };
+        specs.push_back(sp);
+    }
+    const int stressTarget = StressHarness_TargetCitizens();
+    if (stressTarget > 0 && !g_stressHouseTiles.empty()) {
+        while (specs.size() < g_stressHouseFirstIdx) specs.push_back({ 0, 0, { 0, 0, 0 }, true });
+        for (size_t i = 0; i < g_stressHouseTiles.size(); ++i) {
+            const STRectFwd& hr = g_stressHouseTiles[i];
+            FamSpec sp = { (i % 3 == 0) ? 1 : 0, 3, { townBase[0], townBase[1], townBase[2] }, false };
+            if (game && fn_MapGetTerrainPos)
+                StartTown_TileToWorld(game, hr.x + hr.w / 2, hr.y + hr.h / 2, sp.base);
+            specs.push_back(sp);
+        }
+        fprintf(stderr, "[Stress::citizens] founding families=%d, stress houses=%zu (first house idx %zu), "
+                "target population=%d\n", famCount, g_stressHouseTiles.size(),
+                g_stressHouseFirstIdx, stressTarget);
+        fflush(stderr);
+    }
+
+    int spawned = 0;
+    for (size_t fs = 0; fs < specs.size(); ++fs) {
+        const int f = (int)fs;
         famEntities.emplace_back();
         std::vector<void*>& fe = famEntities.back();
+        const FamSpec& sp = specs[fs];
+        if (sp.placeholder) continue;
+        if (stressTarget > 0 && f >= famCount && spawned >= stressTarget) continue;   // enough people
+        const int educated    = sp.educated;
+        const int maxChildren = sp.maxChildren;
+        const float* base     = sp.base;
 
         // Two adults — a couple: opposite gender models (variant groups 0 and 1),
         // random adult age, full-size. Matches CitizenComponent_impl_0dd0.
@@ -6113,6 +6371,9 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     g_demoGatherer.valid      = false;     // guards a heap acceptList from the old town
     g_demoGatherer.acceptList = nullptr;
     g_demoGatherer.acceptN    = 0;
+    g_stressHouseTiles.clear();            // BANISHED_STRESS per-town state
+    g_stressHouseFirstIdx     = 0;
+    g_stSpawnX = g_stSpawnY   = -1;
 
     uint8_t* sc = (uint8_t*)startConfig;
     void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
@@ -6164,6 +6425,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         if (size <= 0) size = 1;
         StartTown_FindSpawnTile(game, size, &spawnX, &spawnY);
     }
+    g_stSpawnX = spawnX; g_stSpawnY = spawnY;
 
     // EntityList main-array count lives at entityList+0x10 (Foundation B); log it
     // before/after to confirm registration actually adds entities to the world.
@@ -6290,7 +6552,24 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
 
         // Game_impl_1f00 — the seven-mask seeding driver (counts at
         // startConfig+0xfc..+0x114).
+        // BANISHED_STRESS: a 400-person town cannot live on a 6-family larder. Scale the
+        // seven start-stock counts (startConfig+0xfc..+0x114) for the seeding call only,
+        // then put the resource back the way it was loaded.
+        const int foodMult = StressHarness_FoodMult();
+        int savedStock[7];
+        if (foodMult > 1) {
+            for (int k = 0; k < 7; ++k) {
+                int* slot = reinterpret_cast<int*>(sc + 0xfc + 4 * k);
+                savedStock[k] = *slot;
+                *slot = savedStock[k] * foodMult;
+            }
+            fprintf(stderr, "[Stress::food] start stock x%d for seeding (food %d -> %d, firewood %d -> %d)\n",
+                    foodMult, savedStock[4], savedStock[4] * foodMult, savedStock[5], savedStock[5] * foodMult);
+            fflush(stderr);
+        }
         StartTown_SeedStartingResources(sc);
+        if (foodMult > 1)
+            for (int k = 0; k < 7; ++k) *reinterpret_cast<int*>(sc + 0xfc + 4 * k) = savedStock[k];
 
         // Founding-house household inventory (BANISHED_LIVE_HOUSING): now that the town
         // raw-material TEMPLATE pool (townMgr+0x110) is populated, seed a small edible-food

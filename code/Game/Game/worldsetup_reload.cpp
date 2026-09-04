@@ -54,7 +54,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         !fn_DialogLoaderLoopT_Ctor || !fn_LoaderLoop_Ctor || !fn_Time_Ctor_Float ||
         !g_GameUpdateLoop_Vtable || !g_GameLoadDialogLoopT_Vtable ||
         !g_GameLoaderLoop_Vtable) {
-        std::printf("[WorldSetup::LoadFromSave] loop-chain ctors unresolved - aborting "
+        printf("[WorldSetup::LoadFromSave] loop-chain ctors unresolved - aborting "
                     "(alloc=%p updateLoop=%p dlt=%p loader=%p vt=%p/%p/%p)\n",
                     (void*)fn_MemAlloc, (void*)fn_UpdateLoop_Ctor,
                     (void*)fn_DialogLoaderLoopT_Ctor, (void*)fn_LoaderLoop_Ctor,
@@ -145,7 +145,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     } else {
         SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);
     }
-    std::printf("[WorldSetup::LoadFromSave] chain built: game=%p dlt=%p loader=%p "
+    printf("[WorldSetup::LoadFromSave] chain built: game=%p dlt=%p loader=%p "
                 "scenarioIdx=%d via %s\n",
                 pGameLoop, pDlLoop, pOuterLoop,
                 (int)(int32_t)(uintptr_t)scenarioIdx,

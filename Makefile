@@ -67,7 +67,7 @@ SA_RC = standalone/icon.rc
 SA_RC_OBJ = $(SA_OBJ_DIR)/standalone__icon__rc.o
 WINDRES = windres
 
-.PHONY: all clean standalone standalone-debug sa-deploy sa-run sa-run-menu
+.PHONY: all clean standalone standalone-debug standalone-perf sa-deploy sa-run sa-run-menu sa-stress sa-stress-debug
 
 all: standalone-debug
 
@@ -81,6 +81,16 @@ standalone: $(SA_TARGET)
 
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
 standalone-debug: $(SA_TARGET)
+
+# Perf build: optimised WITH symbols, logs stripped, in its OWN object dir so a
+# debug<->perf switch never reuses objects compiled with the other flags (the
+# standalone/standalone-debug pair share build/ and rely on `make clean`).
+# This is what the stress/perf baseline (make sa-stress) measures.
+SA_PERF_DIR = standalone/build-perf
+standalone-perf:
+	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
+	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG $(STRIP_LOGS_FLAGS)" \
+	        $(SA_PERF_DIR)/reimpl-x64.exe
 
 # ============================================================
 # Standalone EXE link + compile rules
@@ -189,8 +199,21 @@ sa-run-menu: sa-deploy
 	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
 	@echo "Launched standalone reimpl (menu only; live features default-on)"
 
+# Stress test / performance baseline (standalone/stress_harness.cpp, perf/README.md).
+# Builds the perf exe, deploys it, runs the BANISHED_STRESS town to completion, and
+# writes the metrics CSV + a summary under perf/results/. Knobs are passed through:
+#   make sa-stress STRESS_ARGS="--label mychange --speed 5 --citizens 600"
+# `make sa-stress-debug` does the same with the -O0 debug exe (functional check only —
+# never record a baseline from it).
+sa-stress: standalone-perf
+	cp "$(SA_PERF_DIR)/reimpl-x64.exe" "$(BANISHED_DIR)/reimpl-x64.exe"
+	tools/stress_run.sh --no-build $(STRESS_ARGS)
+
+sa-stress-debug: sa-deploy
+	tools/stress_run.sh --no-build --debug $(STRESS_ARGS)
+
 # Include auto-generated header dependency files
 -include $(SA_OBJECTS:.o=.d)
 
 clean:
-	rm -rf $(SA_BUILD_DIR)
+	rm -rf $(SA_BUILD_DIR) $(SA_PERF_DIR)
