@@ -19,6 +19,7 @@
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
 #include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
+#include <climits>                           // INT_MIN (reject-trace dedupe)
 
 // ============================================================
 // 0x140003870 — SetTransformFromYaw
@@ -205,8 +206,23 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         //   (b) cell occupied and its description != param_15 (filter)
                         //   (c) cell+0x28 != 0 while the '.' road flag is 0
                         //   (d) height/slope: f3e0 depth < p9, or |height - p11| > p10
-                        if (const char* e = std::getenv("BANISHED_TOOL_DIAG")) {
-                          if (e[0] && e[0] != '0') {
+                        // This is the placement HOT PATH: the tool re-validates every
+                        // footprint cell every frame while the ghost is on screen, so an
+                        // unconditional getenv + fprintf here costs frames (measured: the
+                        // game dropped to ~5fps with BANISHED_TOOL_DIAG set). Cache the
+                        // flag once, and print only when the (cell, code) pair CHANGES —
+                        // repeats carry no information.
+                        static int s_diag = -1;
+                        if (s_diag < 0) {
+                            const char* e = std::getenv("BANISHED_TOOL_DIAG");
+                            s_diag = (e && e[0] && e[0] != '0') ? 1 : 0;
+                        }
+                        static int s_lastCol = INT_MIN, s_lastRow = INT_MIN;
+                        static unsigned int s_lastCode = 0xFFFFFFFFu;
+                        if (s_diag == 1 &&
+                            (iVar10 != s_lastCol || iVar14 != s_lastRow || param_6 != s_lastCode)) {
+                          s_lastCol = iVar10; s_lastRow = iVar14; s_lastCode = param_6;
+                          {
                             int width = param_1 ? *param_1 : 0;
                             uintptr_t tiles = param_1
                                 ? *reinterpret_cast<uintptr_t*>(
