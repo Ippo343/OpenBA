@@ -15,6 +15,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Exe-internal helpers resolved at runtime
@@ -49,6 +51,9 @@ static uint32_t* s_TypeId_BuildingDesc = nullptr;      // 0x1401c7318 (cases 0, 
 static uint32_t* s_TypeId_ProfessionDesc = nullptr;     // 0x1401c5a98 (cases 1, 3, 6)
 
 static bool s_helpersResolved = false;
+
+// Rate-limiter storage for the trace below, bucketed by goal address.
+static uint64_t s_lastStamp[64] = {};
 
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
@@ -662,6 +667,30 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     }
 
 compare:
+    // Diagnostic (BANISHED_TUTORIAL_TRACE): a goal that can never be met is
+    // otherwise completely silent — the tutorial just sits on the step. Print
+    // the resolved description pointer alongside the count, because a null
+    // there (an unresolved ExternalPtr) and a genuinely-absent entity look
+    // identical from the outside. Rate-limited to state changes per goal.
+    {
+        static int s_trace = -1;
+        if (s_trace < 0) {
+            const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
+            s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_trace) {
+            uintptr_t typePtr = *(uintptr_t*)(s + 0x40);
+            uint64_t stamp = ((uint64_t)count << 32) ^ (uint64_t)typePtr;
+            if (stamp != s_lastStamp[s & 0x3F]) {
+                s_lastStamp[s & 0x3F] = stamp;
+                fprintf(stderr, "[GoalCount] mode=%u name=\"%s\" desc=%p count=%d target=%d ge=%d\n",
+                        mode, *(const char* const*)(s + 0x30) ? *(const char* const*)(s + 0x30) : "(null)",
+                        (void*)typePtr, count, *(int32_t*)(s + 0x24), (int)*(uint8_t*)(s + 0x28));
+                fflush(stderr);
+            }
+        }
+    }
+
     // Final comparison: greaterOrEqual ? (count >= target) : (count == target)
     if (*(uint8_t*)(s + 0x28) != 0) {
         return (count >= *(int32_t*)(s + 0x24)) ? 1 : 0;

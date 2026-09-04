@@ -228,11 +228,29 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     }
 
     *out = found;
+    // Print only when the answer changes. Every tutorial tick re-applies the
+    // step's setups, which re-resolves the same paths, so an unconditional line
+    // here costs a flushed write per path per frame — enough on its own to make
+    // a traced run stutter. A changed resolution is the only interesting event.
     if (PathTrace()) {
-        fprintf(stderr, "[Tutorial] FindUIElementByPath \"%s\" parts=%d dlgTid=%u ctrlTid=%u -> elem=%p\n",
-                StrData(pathStr) ? StrData(pathStr) : "(null)", partCount,
-                dialogTypeId, controllerTypeId, reinterpret_cast<void*>(found));
-        fflush(stderr);
+        // A set, not one slot: a step's setup resolves several paths per tick in
+        // rotation, and a single-slot cache is missed by every one of them.
+        static const void* s_path[8] = {};
+        static uint64_t    s_found[8] = {};
+        static int         s_next = 0;
+        const void* p = StrData(pathStr);
+        bool seen = false;
+        for (int i = 0; i < 8 && !seen; ++i)
+            seen = (s_path[i] == p && s_found[i] == found);
+        if (!seen) {
+            s_path[s_next]  = p;
+            s_found[s_next] = found;
+            s_next = (s_next + 1) & 7;
+            fprintf(stderr, "[Tutorial] FindUIElementByPath \"%s\" parts=%d dlgTid=%u ctrlTid=%u -> elem=%p\n",
+                    StrData(pathStr) ? StrData(pathStr) : "(null)", partCount,
+                    dialogTypeId, controllerTypeId, reinterpret_cast<void*>(found));
+            fflush(stderr);
+        }
     }
     FreeParts(parts, partCount);
     return outElementIBP;

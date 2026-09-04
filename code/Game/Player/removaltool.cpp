@@ -651,6 +651,7 @@ static uint32_t* RemovalTool_GetSettingType(void*, uint32_t* ret) {
     return ret;
 }
 extern "C" int DragTool_CancelDrag_Impl(void* self);   // 0x1400fc640 (dragtool.cpp)
+static int RemovalTool_GetCursor(void*) { return 5; }  // retail 0x1400fc9d0
 static void* g_RemovalTool_Vtable[15] = {
     (void*)&RemovalTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,            // +0x08
@@ -672,7 +673,11 @@ static void* g_RemovalTool_Vtable[15] = {
     (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag (retail 0x1400fc640)
     (void*)&Tool_Ret0,             // +0x50
     (void*)&RemovalTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
-    (void*)&Tool_Ret0,             // +0x60
+    // +0x60 (Slot12) cursor id. Retail is 0x1400fc9d0 — the shared DragTool body
+    // that returns 5, the same one Road/Bridge/Fenced/DragPlacement all use.
+    // This was Tool_Ret0, i.e. cursor 0, so the removal tool was the only drag
+    // tool in the game showing the wrong cursor.
+    (void*)&RemovalTool_GetCursor, // +0x60 cursor id (retail 0x1400fc9d0 = 5)
     (void*)&RemovalTool_CalcPath,  // +0x68 CalcPath
     (void*)&RemovalTool_CalcCost,  // +0x70 CalcCost
 };

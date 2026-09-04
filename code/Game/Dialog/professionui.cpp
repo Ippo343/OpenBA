@@ -821,6 +821,13 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     int* counts = *(int**)(s + 0x30);
     int current = counts[profIndex];
 
+    const bool profTrace = std::getenv("BANISHED_PROFESSION_TRACE") != nullptr;
+    if (profTrace) {
+        fprintf(stderr, "[ProfUI] HandleSpinner idx=%d desired=%d current=%d\n",
+                profIndex, desired, current);
+        fflush(stderr);
+    }
+
     // Add citizens if desired > current
     if (current < desired) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
@@ -861,6 +868,11 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
                 }
             }
 next_iter:
+            if (profTrace) {
+                fprintf(stderr, "[ProfUI]   add attempt: profId=%p slot=%p found=%lld\n",
+                        (void*)profId, (void*)slot, (long long)found);
+                fflush(stderr);
+            }
             toAdd--;
         } while (toAdd != 0);
     }
@@ -1015,6 +1027,18 @@ void ProfessionUI_Slot9(ProfessionUI* self, void* param2,
     void* worldSingleton = *g_pGameWorldSingleton;
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
+
+    // The two failure shapes here are indistinguishable from outside: the click
+    // never reaches this slot (wrong element id, or the tutorial's exclusions
+    // swallowed it), versus it reaches HandleSpinner and converts nobody. Say
+    // which. (BANISHED_PROFESSION_TRACE)
+    if (std::getenv("BANISHED_PROFESSION_TRACE")) {
+        fprintf(stderr, "[ProfUI] Slot9 msg=0x%x elemId=%d profCount=%d%s\n",
+                param3, param4, profCount,
+                (param3 == 0x15 && param4 >= 300 && param4 <= profCount + 300)
+                    ? "  -> HandleSpinner" : "");
+        fflush(stderr);
+    }
 
     // Original logic: msg 0x15 handles BOTH spinner (300-range) and button (500-range).
     // msg 0x12 also handles button (500-range).

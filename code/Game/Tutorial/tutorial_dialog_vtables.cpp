@@ -322,7 +322,15 @@ void Slot8(void* self) {
 }
 void Slot9(void* self) {
     if (!self || !fn_TSD_Slot9Helper || !fn_TSD_OpenDialog) return;
-    if (TutTrace()) { fprintf(stderr, "[TutorialSetupDialog] Slot9 activate self=%p\n", self); fflush(stderr); }
+    // Once per dialog, not once per frame: Slot9 is the per-tick setup re-apply.
+    if (TutTrace()) {
+        static void* s_last = nullptr;
+        if (self != s_last) {
+            s_last = self;
+            fprintf(stderr, "[TutorialSetupDialog] Slot9 activate self=%p\n", self);
+            fflush(stderr);
+        }
+    }
     TutorialSetupDialog_Slot9(self);
 }
 void Slot10(void* self) {

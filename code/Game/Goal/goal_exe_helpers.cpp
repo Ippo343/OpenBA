@@ -9,6 +9,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // StatGoal ExternalPtr resolver (FUN_1400265b0)
@@ -41,6 +43,51 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, filename) : nullptr;
     if (fn_Filename_Dtor) fn_Filename_Dtor(filename);
 
+    // STANDALONE DEVIATION, deliberate — identical to the one documented at
+    // length in TutRestrict_ResolveRefOrLoad (tutorialsetuprestrictplayer.cpp)
+    // and TutBase_ResolveToolbarRef (tutorial_base.cpp).
+    //
+    // Retail's Find() alone is enough because UpdateLoop::LoadResources has
+    // already preloaded the Game/GameResources.rsc dependency tree INTO the
+    // ExternalFactory; ours leaves those entries in the loop's m_resourceList,
+    // so Find() misses for anything nothing else happened to load.
+    //
+    // This resolver feeds TutorialGoalCount::Check, whose "Zone" mode counts
+    // entities in the EntityList's per-description BST keyed by the resolved
+    // description POINTER. A miss writes null, the BST is then searched for key
+    // 0, the count comes back 0, and the goal can never be met — the tutorial
+    // stalls forever with no error anywhere. Measured on stepFirstClear2, whose
+    // goal counts "Template\Clear.rsc": the WoodHouse goal one step earlier only
+    // worked because the step's own restriction had FindOrLoad'ed that exact
+    // name into the factory first. Nothing ever loads Clear.rsc by name.
+    //
+    // Retail would fault on neither leg (it never has the null), so this is not
+    // a guard over a faithful crash — it is the standalone resource-environment
+    // gap. The real fix remains making the preload populate the factory.
+    bool loaded = false;
+    if (!found && fn_ExternalFactory_FindOrLoad && fn_String_Ctor_CStr && fn_String_Dtor &&
+        fn_Filename_CtorString && fn_Filename_Dtor) {
+        const char* name = *reinterpret_cast<const char* const*>(s);
+        if (name && name[0]) {
+            // Only the LOADER rejects backslashes; the factory's key comparison
+            // normalizes separators (measured — see tutorial_base.cpp).
+            char normalized[260];
+            size_t k = 0;
+            for (; name[k] && k < sizeof(normalized) - 1; ++k)
+                normalized[k] = (name[k] == '\\') ? '/' : name[k];
+            normalized[k] = 0;
+
+            uint8_t normStr[8] = {};
+            fn_String_Ctor_CStr(normStr, normalized);
+            uint8_t normFile[8] = {};
+            fn_Filename_CtorString(normFile, normStr);
+            found = fn_ExternalFactory_FindOrLoad(factory, normFile);
+            fn_Filename_Dtor(normFile);
+            fn_String_Dtor(normStr);
+            loaded = true;
+        }
+    }
+
     void* result = nullptr;
     if (found) {
         // TypeInfo lives at *(*(0x140152870)); type id is its first dword.
@@ -56,7 +103,21 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     }
 
     *reinterpret_cast<void**>(s + 0x10) = result;
-    *reinterpret_cast<int32_t*>(s + 0x08) = factoryGen;
+    // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
+    // stamping the pre-load value would make the next call redo the whole
+    // lookup for nothing.
+    *reinterpret_cast<int32_t*>(s + 0x08) =
+        *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
+
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            const char* name = *reinterpret_cast<const char* const*>(s);
+            fprintf(stderr, "[GoalRef] \"%s\" %s -> %p\n",
+                    name ? name : "(null)",
+                    loaded ? "Find=miss FindOrLoad" : "Find=hit", result);
+            fflush(stderr);
+        }
+    }
 }
 
 // ============================================================

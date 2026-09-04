@@ -602,8 +602,23 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     uint64_t calcResult = calcCostFn(self, startCell, endCell,
         &outValid, &outCostA, &outCostB, &outLength);
 
+    // A refused drag is completely silent — the player releases the mouse and
+    // nothing happens, which looks identical whether the terrain rejected the
+    // area, the tutorial's exact-rect restriction rejected it, or the entity
+    // creation itself failed. Name the gate. (BANISHED_TOOL_TRACE)
+    static int s_trace = -1;
+    if (s_trace < 0) {
+        const char* e = std::getenv("BANISHED_TOOL_TRACE");
+        s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    #define DPT_REJECT(reasonFmt, ...)                                            \
+        do { if (s_trace) { fprintf(stderr, "[DragPlace] REJECT " reasonFmt "\n",  \
+                                    ##__VA_ARGS__); fflush(stderr); }             \
+             return false; } while (0)
+
     if ((int)calcResult != 0) {
-        return false;
+        DPT_REJECT("CalcCost=%d (terrain/size) start=%d end=%d w=%d h=%d valid=%u",
+                   (int)calcResult, startCell, endCell, outCostA, outCostB, outValid);
     }
 
     // Get map grid size
@@ -638,7 +653,13 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 
         if (minCol != cStartCol || minRow != cStartRow ||
             cEndCol != maxCol || cEndRow != maxRow) {
-            return false;
+            // Faithful to retail (0x1400fb900): a restricted step demands the
+            // EXACT rectangle, not one inside it. Worth saying out loud —
+            // "close enough" drags are rejected with no feedback at all.
+            DPT_REJECT("restricted rect mismatch: dragged (%d,%d)..(%d,%d) "
+                       "required (%d,%d)..(%d,%d)",
+                       minCol, minRow, maxCol, maxRow,
+                       cStartCol, cStartRow, cEndCol, cEndRow);
         }
     }
 
@@ -698,8 +719,16 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
         fn_EntityList_RegisterEntity(entityList, &entityIBP, categoryId);
     }
 
+    if (s_trace) {
+        fprintf(stderr, "[DragPlace] PLACED rect=(%d,%d)..(%d,%d) w=%d h=%d rot=%d "
+                        "entity=%p build=%p category=%d\n",
+                minCol, minRow, maxCol, maxRow, outCostA, outCostB, rotation,
+                newEntity, (void*)buildComp, categoryId);
+        fflush(stderr);
+    }
     return true;
 }
+#undef DPT_REJECT
 
 // ============================================================
 // Standalone factory + vtable (factory cascade).

@@ -35,11 +35,34 @@ static uint32_t g_tid_FinishTutorialGoal     = 0;  // 0x1401c6240
 static uint32_t g_tid_FinishTutorialInstance = 0;  // 0x1401c6278
 static uint32_t g_tid_TutorialInstance       = 0;  // 0x1401c6668
 
+// ── Profession (0x1401c5a98) — was registered NOWHERE ────────────────────────
+// Written by Profession_RegisterType (0x14014ccb5) in retail, and read four times
+// by TutorialGoalCount::Check (0x1400df39e/3fd/54b/590), where it is the type
+// FILTER on the ExternalPtr->type resolve that every profession-flavoured count
+// mode runs before it compares anything. Our ResolveTypePtr returns 0 when the id
+// storage is unregistered, so the target profession came out NULL, no citizen's
+// +0x1f0 could match it, and the count was a hard 0 — with the panel, the spinner
+// and the citizen conversion all working perfectly.
+//
+// Measured on stepBuilders2 ("assign 2 builders"): two spinner clicks converted
+// two citizens ([ProfUI] HandleSpinner desired=2 current=1, found != 0) while
+// [GoalCount] mode=1 count=0 never moved once.
+//
+// Not tutorial-only — ProfessionList::Slot12 (0x14001e510) and
+// FinishTutorialInstance_helper_9cd0 (0x1400d9cf7) read the same slot. Across the
+// shipped scenario files 23 goals go through this filter (the Profession,
+// Workplace, WorkplaceCleared and AvailableJobs count modes); every one of them
+// was answering 0. The Zone-mode goals worked only because their sibling filter
+// id, ComponentDescription (0x1401c7318), IS registered
+// (reg_tradeui_typeids.cpp).
+static uint32_t g_tid_Profession            = 0;  // 0x1401c5a98
+
 extern "C" void FillTypeIdGlobals_tutorial() {
     struct { const char* name; uint32_t* slot; uintptr_t addr; } kIds[] = {
         { "FinishTutorialGoal",     &g_tid_FinishTutorialGoal,     0x1401c6240 },
         { "FinishTutorialInstance", &g_tid_FinishTutorialInstance, 0x1401c6278 },
         { "TutorialInstance",       &g_tid_TutorialInstance,       0x1401c6668 },
+        { "Profession",             &g_tid_Profession,             0x1401c5a98 },
     };
     for (auto& e : kIds) {
         *e.slot = ::Object::GetTypeIdByName(e.name);
@@ -58,4 +81,5 @@ void RegisterTutorialTypeIds() {
     RegisterExeAddr(0x1401c6240, reinterpret_cast<uintptr_t>(&g_tid_FinishTutorialGoal));
     RegisterExeAddr(0x1401c6278, reinterpret_cast<uintptr_t>(&g_tid_FinishTutorialInstance));
     RegisterExeAddr(0x1401c6668, reinterpret_cast<uintptr_t>(&g_tid_TutorialInstance));
+    RegisterExeAddr(0x1401c5a98, reinterpret_cast<uintptr_t>(&g_tid_Profession));
 }

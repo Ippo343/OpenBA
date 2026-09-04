@@ -295,9 +295,19 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
         ++dialogs;
         node = reinterpret_cast<uint64_t*>(node[2]);   // iterator +0x10 = next
     }
+    // Print only on change: the tutorial re-applies every setup on EVERY tick
+    // (retail does the same — see the slot-9 loop in TutWave_StepExecute), so an
+    // unconditional line here is three flushed writes per frame and drags a
+    // traced run down to a few fps, which is slow enough to change what the
+    // thing under test does.
     if (TutTrace()) {
-        fprintf(stderr, "[Tutorial] SetAllDialogFlags show=%d dialogs=%d\n", (int)show, dialogs);
-        fflush(stderr);
+        static int s_lastShow = -1, s_lastDialogs = -1;
+        if ((int)show != s_lastShow || dialogs != s_lastDialogs) {
+            s_lastShow = (int)show;
+            s_lastDialogs = dialogs;
+            fprintf(stderr, "[Tutorial] SetAllDialogFlags show=%d dialogs=%d\n", (int)show, dialogs);
+            fflush(stderr);
+        }
     }
 }
 
@@ -763,6 +773,31 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
 
     int stepIndex = *reinterpret_cast<int32_t*>(s + 0x10);
     int stepCount = *reinterpret_cast<int32_t*>(tutorial + 0x30);
+
+    // TEST HARNESS (BANISHED_TUTORIAL_STEP=<n>): jump straight to step n on the
+    // first tick. Every step past the first dozen costs a full manual play-through
+    // to reach, which makes a single-line change a twenty-click verification.
+    // Only the index moves: the skipped steps' setups are never applied and never
+    // undone, and the world state they would have built (a house, a road) is not
+    // there — so this is a probe for steps whose goal does not depend on earlier
+    // ones, not a way to "start the tutorial in the middle".
+    if (stepIndex == 0 && stepCount > 0) {
+        static int s_startStep = -2;
+        if (s_startStep == -2) {
+            const char* e = std::getenv("BANISHED_TUTORIAL_STEP");
+            s_startStep = (e && e[0]) ? std::atoi(e) : -1;
+        }
+        if (s_startStep > 0 && s_startStep < stepCount) {
+            stepIndex = s_startStep;
+            *reinterpret_cast<int32_t*>(s + 0x10) = stepIndex;
+            fprintf(stderr, "[Tutorial] HARNESS: BANISHED_TUTORIAL_STEP=%d — skipping "
+                            "straight to step %d/%d (earlier setups NOT applied)\n",
+                    s_startStep, stepIndex, stepCount);
+            fflush(stderr);
+            TutWave_RefreshStepUI(self);
+        }
+    }
+
     if (stepIndex >= stepCount) return;
 
     uintptr_t steps = *reinterpret_cast<uintptr_t*>(tutorial + 0x28);
