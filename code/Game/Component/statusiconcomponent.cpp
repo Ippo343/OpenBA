@@ -257,6 +257,33 @@ void StatusIconComponent_OnRemove(StatusIconComponent* self) {
 }
 
 // ============================================================
+// StatusIcon_EnsureSprite — retail's lazy sprite setup (component vtable slot 4)
+// ============================================================
+// Slot 4 (0x14012bed0, StatusIconComponent_Serialize below) is the ONLY thing that
+// ever writes the embedded Geometry's sprite/material from the StatusIconDescription
+// — `StatusIconComponent_helper_a440` has exactly one caller in the whole exe.
+//
+// Retail dispatches slot 4 from TWO places:
+//   * ComponentEntity creation (FUN_1400c30a0, called only from CreateEntity), and
+//   * slot 11 (0x14012bf40), on EVERY call, immediately before it adds the geometry
+//     to the Scene.
+// The second one is what makes icons work after a LOAD: a stream-restored component
+// never goes through CreateEntity, so it never runs slot 4 at construction (see
+// [[reference_ctor_scalars_in_startup_are_unset_after_load]]). Without the slot-11
+// leg its geometry is added to the Scene with NO sprite and draws nothing — which is
+// exactly what a loaded world (the tutorial, any .sav) showed: zero icons, no error.
+//
+// Retail brackets the call with a save/restore of +0xF0 because slot 4 clobbers it.
+static void StatusIcon_EnsureSprite(uintptr_t c) {
+    int32_t saved = *(int32_t*)(c + 0xF0);
+    void** vt = *(void***)c;
+    if (vt && vt[4]) {
+        reinterpret_cast<void (*)(void*)>(vt[4])((void*)c);
+    }
+    *(int32_t*)(c + 0xF0) = saved;
+}
+
+// ============================================================
 // StatusIconComponent::OnUpdate2 (vtable slot [11], 0x14012bf40)
 // ============================================================
 // Updates icon visibility. Calls Geometry vtable +0x20, saves/restores
@@ -271,12 +298,14 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
     // Save fieldF0 (fieldE8 in longlong* terms = offset 0xF0)
     int32_t savedFieldF0 = *(int32_t*)(s + 0xF0);
 
-    // Call Geometry vtable +0x20 (Draw/Update)
-    typedef void (*fn_GeomVtable20_t)(void*);
-    fn_GeomVtable20_t drawFn = *(fn_GeomVtable20_t*)(*(uintptr_t*)(s + 0x28) + 0x20);
-    if (drawFn) {
-        drawFn((void*)(s + 0x28));
-    }
+    // Retail is
+    //     lVar2 = param_1[0x1e];                    // +0xF0
+    //     (**(code **)(*param_1 + 0x20))();         // THIS component's vtable, slot 4
+    //     *(int *)(param_1 + 0x1e) = (int)lVar2;    // slot 4 clobbers +0xF0 -> restore
+    // `*param_1` is the COMPONENT's own vtable pointer (offset 0), not the embedded
+    // Geometry's at +0x28 — this copy read +0x28 and called the geometry's slot 4
+    // instead, which is why nothing ever re-ran the sprite setup.
+    StatusIcon_EnsureSprite(s);
 
     // Restore fieldF0 to saved value (original: *(int*)(param_1 + 0x1e) cast)
     *(int32_t*)(s + 0xF0) = savedFieldF0;
@@ -831,6 +860,13 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         // and position it via component vtable+0x40 (OnRemove).
         void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
         uint8_t vis = settings ? reinterpret_cast<uint8_t*>(settings)[0xc] : 0;
+        // Retail guarantees the geometry has its sprite before it can be added to the
+        // Scene, because slot 11 (0x14012bf40) re-runs slot 4 on every call and slot 11
+        // is retail's only scene-add path. Standalone drives show/hide from THIS function
+        // instead (slot 11 has no dispatcher here), so the guarantee has to be restored
+        // at the same point: a stream-restored component has never run slot 4, and adding
+        // its sprite-less geometry is a silent no-draw. See StatusIcon_EnsureSprite.
+        if (inited) StatusIcon_EnsureSprite(c);
         if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;

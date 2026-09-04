@@ -516,8 +516,49 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
                                             &endCol, &endRow, pos, yaw);
                 { const char* e = std::getenv("BANISHED_TOOL_DIAG");
                   if (e && e[0] && e[0] != '0') {
-                    fprintf(stderr, "[OnKey] confirm: sub_da00 valid=%d cell=(%d,%d)-(%d,%d) helper_d650=%p\n",
-                            valid, startCol, startRow, endCol, endRow, (void*)s_fn_helper_d650); fflush(stderr); } }
+                    // The tutorial's TutorialSetupRestrictPlayer rect lives on the
+                    // PlayerController (tool+0x10): +0x98/+0x9c are LINEAR cell indices
+                    // (row*mapSize+col) and +0xa0 the required rotation. helper_d650
+                    // (0x1400FD650) rejects the placement unless all five match exactly,
+                    // so print both sides — "it won't place" is otherwise indistinguishable
+                    // from a terrain rejection inside helper_d580.
+                    uintptr_t pcTrace = *(uintptr_t*)((uintptr_t)self + 0x10);
+                    int mapSzTrace = **(int**)(GetGameWorld() + 0xf8);
+                    fprintf(stderr, "[OnKey] confirm: sub_da00 valid=%d cell=(%d,%d)-(%d,%d) yaw=%.2f "
+                            "helper_d650=%p | restrict=%d want=(%d,%d)-(%d,%d) wantRot=%d mapSz=%d\n",
+                            valid, startCol, startRow, endCol, endRow, yaw[0], (void*)s_fn_helper_d650,
+                            pcTrace ? *(unsigned char*)(pcTrace + 0x80) : 0,
+                            pcTrace ? *(int*)(pcTrace + 0x98) % mapSzTrace : -1,
+                            pcTrace ? *(int*)(pcTrace + 0x98) / mapSzTrace : -1,
+                            pcTrace ? *(int*)(pcTrace + 0x9c) % mapSzTrace : -1,
+                            pcTrace ? *(int*)(pcTrace + 0x9c) / mapSzTrace : -1,
+                            pcTrace ? *(int*)(pcTrace + 0xa0) : -1, mapSzTrace);
+                    // Which cells are OCCUPIED, and what the description's clearable
+                    // filter (desc+0x50) is. f5d0 (0x14009F5D0) accepts an occupied cell
+                    // only when `*(occupant+0x28) == desc+0x50`; a null filter rejects
+                    // EVERY occupied cell, so a footprint over trees can never be placed.
+                    {
+                        uintptr_t dc = (uintptr_t)self->descComponent;
+                        uintptr_t grid = (uintptr_t)*(int**)(GetGameWorld() + 0xf8);
+                        int width = grid ? *(int*)grid : 0;
+                        uintptr_t tiles = grid ? *(uintptr_t*)(grid + 0x80) : 0;
+                        fprintf(stderr, "[OnKey]   descComp=%p filter(+0x50)=%p mask(+0x20)=0x%x\n",
+                                (void*)dc, dc ? *(void**)(dc + 0x50) : nullptr,
+                                dc ? *(uint32_t*)(dc + 0x20) : 0);
+                        for (int r = startRow; r <= endRow && tiles && width; ++r) {
+                            char line[256]; int o = 0;
+                            o += snprintf(line + o, sizeof(line) - o, "[OnKey]   row %d:", r);
+                            for (int c = startCol; c <= endCol; ++c) {
+                                uintptr_t cellSlot = tiles + (uintptr_t)(width * r + c) * 0x30;
+                                void* occ = *(void**)cellSlot;
+                                void* occDesc = occ ? *(void**)((uintptr_t)occ + 0x28) : nullptr;
+                                o += snprintf(line + o, sizeof(line) - o, " (%d,%d)occ=%p desc=%p",
+                                              c, r, occ, occDesc);
+                            }
+                            fprintf(stderr, "%s\n", line);
+                        }
+                    }
+                    fflush(stderr); } }
                 if (valid) {
                     // Try to place via helper_d650
                     if (s_fn_helper_d650) {

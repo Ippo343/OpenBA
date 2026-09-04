@@ -197,6 +197,60 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         ok = true;
                     }
                     if (!ok) {
+                        // BANISHED_TOOL_DIAG: name the FIRST cell f5d0 (0x14009F5D0)
+                        // rejected and the three inputs its three conditions read, so
+                        // "the building won't place" points at a condition instead of a
+                        // function. f5d0 rejects when:
+                        //   (a) bit (cell+0x29 & 0x1f) is clear in `code`  — terrain mask
+                        //   (b) cell occupied and its description != param_15 (filter)
+                        //   (c) cell+0x28 != 0 while the '.' road flag is 0
+                        //   (d) height/slope: f3e0 depth < p9, or |height - p11| > p10
+                        if (const char* e = std::getenv("BANISHED_TOOL_DIAG")) {
+                          if (e[0] && e[0] != '0') {
+                            int width = param_1 ? *param_1 : 0;
+                            uintptr_t tiles = param_1
+                                ? *reinterpret_cast<uintptr_t*>(
+                                      reinterpret_cast<uintptr_t>(param_1) + 0x20 * 4)
+                                : 0;
+                            uintptr_t cell = tiles
+                                ? tiles + (uintptr_t)(width * iVar14 + iVar10) * 0x30 : 0;
+                            unsigned char t29 = cell ? *reinterpret_cast<unsigned char*>(cell + 0x29) : 0;
+                            unsigned char t28 = cell ? *reinterpret_cast<unsigned char*>(cell + 0x28) : 0;
+                            void* occ = cell ? *reinterpret_cast<void**>(cell) : nullptr;
+                            fprintf(stderr,
+                                "[TileValid] REJECT cell=(%d,%d) code=0x%x terrainType(+0x29)=%u "
+                                "maskBitSet=%d flag(+0x28)=%u roadDot=%d occ=%p filter=%p "
+                                "p9=%.3f p10=%.3f p11=%.3f rot=%d\n",
+                                iVar10, iVar14, param_6, t29,
+                                (int)((param_6 >> (t29 & 0x1f)) & 1), t28, (int)bVar13,
+                                occ, (void*)param_15, param_9, param_10, param_11, param_14);
+                            // The per-cell mask override: `_placeBitmap` (param_8) holds
+                            // ASCII digits indexing `_placeBitArray` (param_7). The -0xc0
+                            // in the index math is just -'0'*4. Dump both sides: a code of
+                            // 0 means either the bitmap char or the array element is wrong.
+                            {
+                                long long bmp = param_8 ? *param_8 : 0;
+                                long long arr = param_7 ? *param_7 : 0;
+                                int cnt = param_7 ? (int)param_7[1] : -1;
+                                int bmpLen = bmp ? *reinterpret_cast<int*>(bmp - 8) : -1;
+                                int ch = (bmp && iVar8 >= 0 && iVar8 < bmpLen)
+                                             ? *reinterpret_cast<char*>(bmp + iVar8) : -1;
+                                fprintf(stderr,
+                                    "[TileValid]   idx=%d bitmapLen=%d bitmapChar='%c'(%d) "
+                                    "arrCount=%d arr=[", iVar8, bmpLen, ch > 31 ? ch : '?', ch, cnt);
+                                for (int k = 0; k < cnt && k < 8 && arr; ++k)
+                                    fprintf(stderr, "%s0x%x", k ? "," : "",
+                                            *reinterpret_cast<unsigned int*>(arr + k * 4));
+                                fprintf(stderr, "] bitmap=\"");
+                                for (int k = 0; k < bmpLen && k < 40; ++k) {
+                                    char bc = *reinterpret_cast<char*>(bmp + k);
+                                    fputc(bc == '\n' ? '/' : bc, stderr);
+                                }
+                                fprintf(stderr, "\"\n");
+                            }
+                            fflush(stderr);
+                          }
+                        }
                         return 0;
                     }
                     iVar10 = iVar10 + 1;

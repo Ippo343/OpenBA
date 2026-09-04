@@ -370,8 +370,16 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     uintptr_t pc = (uintptr_t)gameSubsys;
     // Step 1: If lockToggle is set and groupId is non-zero, override with locked group
+    // (this is the tutorial's TutorialSetupRestrictPlayer restriction — +0x80/+0x88 are
+    // written by TutorialSetupRestrictPlayer_Slot8. A step whose setup list contains
+    // `disableSelect` (an all-default instance) locks +0x88 to NULL, which turns EVERY
+    // toolbar selection into "no group". Trace both legs: during a tutorial this is the
+    // difference between "the build tool does nothing" and a real tool failure.)
     if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
-        groupId = *(int64_t*)(pc + 0x88);
+        int64_t forced = *(int64_t*)(pc + 0x88);
+        TOOLTRACE("RESTRICT override pc=%p groupId=%p -> %p (tutorial restriction active)\n",
+                  (void*)pc, (void*)groupId, (void*)forced);
+        groupId = forced;
     }
 
     // Step 2: Early return if same group is already active with a live controller
@@ -1700,6 +1708,12 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 //
 // Original: 0x1400b92a0.
 
+// Diagnostic only: set while TutWave_StepExecute is running a step's Undo (slot 10)
+// loop. A toolbar command dispatched with this non-zero is being handled in the middle
+// of a tutorial step transition, before the next step's Apply has armed.
+extern "C" int g_TutUndoDepth;
+extern "C" int g_TutUndoIndex;
+
 void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventData,
                            uint64_t /*p5*/, uint64_t /*p6*/, int p7) {
     uintptr_t s = (uintptr_t)self;
@@ -1729,6 +1743,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         int32_t actionType = *(int32_t*)(item + 0x48);
 
         char pathBuf_trace[128];
+        TOOLTRACE("OnEvent CLICK tutUndoDepth=%d tutUndoIdx=%d ret=%p\n",
+                  g_TutUndoDepth, g_TutUndoIndex, __builtin_return_address(0));
         TOOLTRACE("OnEvent CLICK self=%p btn=%d item=%p path=%s actionType=%d "
                   "item+0x4C=%d item+0x58=%p elem=%p checked(+0xD8)=%d\n",
                   self, buttonIndex, (void*)item,

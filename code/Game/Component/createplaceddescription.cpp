@@ -39,6 +39,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
@@ -52,7 +54,13 @@ static void CreatePlacedDescription_Init(void* self) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     *(int32_t*) (s + 0x20) = 0;   // enum
     *(uint64_t*)(s + 0x28) = 0;   // String (empty)
-    *(uint64_t*)(s + 0x30) = 0;   // int[] base + count@+0x38 cleared
+    *(uint64_t*)(s + 0x30) = 0;   // int[] base
+    // ...and its count/capacity. The comment here used to claim +0x38 was "cleared" by
+    // the write above, but that write only covers 0x30..0x37. A recycled allocation
+    // therefore kept a STALE count (and cap) alongside a null data pointer — the state
+    // that made Serialize's resize copy `oldCount` elements from a null oldData and
+    // crash in GenericArrayResize.
+    *(uint64_t*)(s + 0x38) = 0;   // count @ +0x38, capacity @ +0x3c
     *(int32_t*) (s + 0x40) = 0;   // int
     *(int32_t*) (s + 0x44) = 1;   // int
     *(int32_t*) (s + 0x48) = 1;   // int
@@ -74,24 +82,87 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // enum @ +0x20
     SerializerEncodingVCall(serializer, 0x98, s + 0x20);
 
-    // int[] count @ +0x38, base @ +0x30 (stride 4)
+    // int[] count @ +0x38, base @ +0x30 (stride 4).
+    //
+    // Retail (0x1401198D0) serializes a LOCAL COPY of the count, resizes the array
+    // ONLY on the load leg, and then walks the existing elements:
+    //     local = *(uint*)(this+0x38);
+    //     Serializer::Serialize(&ser, &local, 0);
+    //     if (*(int*)(ser+8) == 0) FUN_1400021D0(this+0x30, local);   // load only
+    //     p = *(longlong*)(this+0x30);
+    //     for (n = local; n; --n) { enc->vt[0x98](enc, p); p += 4; }
+    //
+    // This copy used to (a) MemAlloc a brand-new array on EVERY pass, discarding the
+    // one already parsed, and (b) zero each element immediately before the encoding
+    // call. Both are additions, and together they are destructive: an already-loaded
+    // resource gets its Serialize re-invoked on every ExternalFactory::FindOrLoad (see
+    // builddescription.cpp), and on any pass where the encoding does not write the
+    // element back, the zero we just stored is what survives.
+    //
+    // Measured on Template/WoodHouse.rsc: the first parse produced the correct
+    // `_placeBitArray` [0x14, 0x17] (Normal|Obstacle, Normal|Obstacle|Fast|Faster),
+    // but by placement time the same description read [0x0, 0x0]. Those values are the
+    // per-cell terrain-mask override in ToolTile_FootprintValidity_d580 (0x14009D580):
+    // with them zero, `code` is 0 for every footprint cell, no terrain type is ever
+    // allowed, and the building can never be placed anywhere.
     int count = *(int32_t*)(s + 0x38);
-    g_fn_Serialize_Int(serializer, s + 0x38, nullptr);
-    count = *(int32_t*)(s + 0x38);
+    g_fn_Serialize_Int(serializer, &count, nullptr);
 
-    uint8_t* arr = nullptr;
-    if (count > 0) {
+    // Retail gates the resize on its load flag: `if (*(int*)(local_20 + 8) == 0)`, where
+    // local_20 is the Serializer's first qword = the Stream, so the test is stream+8
+    // ([[reference_serializer_plus8_is_encoding_not_loading_flag]]).
+    //
+    // [STANDALONE DEVIATION] We resize on the INVARIANT that gate exists to guarantee —
+    // "the array is big enough before the element loop" — instead of on the flag itself.
+    // Measured: our resource pipeline reaches this function with passes where stream+8 is
+    // non-zero on an instance whose array is still null (the re-parse / reference-mode
+    // behaviour documented in [[reference_reference_mode_corrupts_first_parse]] and
+    // builddescription.cpp). Trusting the flag there left arr == null with count == 2, so
+    // the element loop was skipped, the stream desynced, and the process crashed.
+    // Resizing only when the array cannot already hold `count` keeps an already-parsed
+    // array — values intact — which is the whole point of the fix above.
+    typedef void (*fn_ArrayResize4_t)(void* vec, int newCount);
+    static fn_ArrayResize4_t s_resize4 = nullptr;
+    if (!s_resize4)
+        s_resize4 = reinterpret_cast<fn_ArrayResize4_t>(ResolveAddr(Module::Exe, 0x1400021d0));
+
+    uint8_t* arr = *(uint8_t**)(s + 0x30);
+    if (count > 0 && !arr) {
+        // No buffer yet: allocate directly instead of going through the shared resize.
+        // Reimpl_Array_Resize_Stride04 (our 0x1400021D0) reads the RECORDED count as
+        // `oldCount` and copies that many elements from the old pointer, so handing it a
+        // null data pointer with a non-zero count makes it read from address 0. Retail
+        // never sees that state; ours could, so keep the shared helper off this path.
         arr = reinterpret_cast<uint8_t*>(
             fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
+        *(void**)(s + 0x30)   = arr;
+        *(int32_t*)(s + 0x38) = count;
+        *(int32_t*)(s + 0x3c) = count;
+        // Zeroing a FRESH buffer is right — its elements are about to be read from the
+        // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
+        if (arr) for (int i = 0; i < count; ++i) *(int32_t*)(arr + i * 4) = 0;
+    } else if (count > 0 && *(int32_t*)(s + 0x3c) < count) {
+        if (s_resize4) s_resize4(s + 0x30, count);
+        arr = *(uint8_t**)(s + 0x30);
     }
-    *(void**)(s + 0x30)   = arr;
-    *(int32_t*)(s + 0x38) = count;
-    *(int32_t*)(s + 0x3c) = count;
-
     uint8_t* e = arr;
-    for (int i = 0; i < count; ++i, e += 4) {
-        *(int32_t*)e = 0;
+    for (int i = 0; i < count && arr; ++i, e += 4) {
         SerializerEncodingVCall(serializer, 0x98, e);   // enum element
+    }
+
+    // Diagnostic: the per-element enum reads below feed the placement tile-validity
+    // mask override in ToolTile_FootprintValidity_d580 (0x14009D580). All-zero elements
+    // there mean no terrain type is ever allowed and nothing can be placed.
+    if (const char* dbg = std::getenv("BANISHED_TOOL_DIAG")) {
+        if (dbg[0] && dbg[0] != '0') {
+            std::fprintf(stderr, "[CreatePlaced] Serialize self=%p enc=%p placeBits(+0x20)=0x%x "
+                         "count=%d arr=%p [", self, *(void**)((uintptr_t)serializer + 8),
+                         *(uint32_t*)(s + 0x20), count, (void*)arr);
+            for (int i = 0; i < count && i < 8 && arr; ++i)
+                std::fprintf(stderr, "%s0x%x", i ? "," : "", *(uint32_t*)(arr + i * 4));
+            std::fprintf(stderr, "]\n");
+            std::fflush(stderr);
+        }
     }
 
     g_fn_String_Serialize(s + 0x28, serializer);                   // String +0x28

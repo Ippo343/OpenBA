@@ -683,6 +683,8 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
 //       if more steps: RefreshStepUI(self)
 //       else:          <tutorial complete>  (NOT PORTED — see DarkOnce below)
 // ===========================================================================
+extern "C" { int g_TutUndoDepth = 0; int g_TutUndoIndex = -1; }
+
 extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint64_t param4) {
     if (!self) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
@@ -822,15 +824,52 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
 
     if (goalCount == 0 || passed != goalCount) return;
 
-    // step complete: slot 10 on every setup, then advance
+    // step complete: slot 10 on every setup, then advance.
+    //
+    // [STANDALONE DEVIATION — ordering] Retail walks this array strictly forward
+    // (0x1400E1DB0: `pvVar6 + 8` per iteration). We undo every
+    // TutorialSetupRestrictPlayer FIRST, then the rest in the original forward order.
+    // Measured reason:
+    //   TutorialSetupDialog::Slot10 (0x1400E2460) ends in UI::UserInterface::CloseDialog,
+    //   and CloseDialog calls UI::UserInterface::UpdateEvents (Runtime 0x18011FC60),
+    //   which DRAINS the queued toolbar command re-entrantly, in the middle of this
+    //   loop. Captured on stepFirstHouse2 -> stepFirstHouse3:
+    //     GoalButton bit22=1                     goal met (button pressed)
+    //     [ToolTrace] OnEvent CLICK tutUndoDepth=1 tutUndoIdx=0 ret=<UpdateEvents>
+    //     [ToolTrace] RESTRICT override groupId=<WoodHouse> -> NULL
+    //     [ToolTrace] ShowGroup CREATE toolTypeId=...(EditTool)
+    //   Setup[0] is the dialog setup; setup[1] is `disableSelect`, an all-default
+    //   TutorialSetupRestrictPlayer that holds PlayerController+0x80=1 with +0x88=NULL.
+    //   So the Wooden House command was dispatched while the OUTGOING step's "no tool"
+    //   restriction was still armed: SetEditMode (0x140102B60) forced the group to NULL
+    //   and installed an EditTool, and the placement tool — and with it the yellow target
+    //   footprint, which PlacementTool::Draw (0x1400FDCC0) section 2 only renders while a
+    //   placement tool is live — never came up.
+    //   Undoing the restriction first means that drain sees no restriction at all, which
+    //   is the same state retail's drain sees.
     {
         int n = *reinterpret_cast<int32_t*>(step + 0x58);
         uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x50);
-        for (int i = 0; i < n && data; ++i) {
-            void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
-            if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (vt && vt[10]) reinterpret_cast<void (*)(void*)>(vt[10])(obj);
+        static uint32_t s_restrictTid = 0;
+        if (!s_restrictTid)
+            s_restrictTid = ::Object::GetTypeIdByName("TutorialSetupRestrictPlayer");
+
+        for (int pass = 0; pass < 2; ++pass) {
+            for (int i = 0; i < n && data; ++i) {
+                void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+                if (!obj) continue;
+                void** vt = *reinterpret_cast<void***>(obj);
+                if (!vt) continue;
+                uint32_t tid = vt[2] ? reinterpret_cast<uint32_t (*)(void*)>(vt[2])(obj) : 0;
+                const bool isRestrict = (s_restrictTid && tid == s_restrictTid);
+                if ((pass == 0) != isRestrict) continue;
+                // g_TutUndoDepth lets the toolbar trace say out loud when a UI command
+                // is dispatched from inside this loop (see above).
+                ++g_TutUndoDepth;
+                g_TutUndoIndex = i;
+                if (vt[10]) reinterpret_cast<void (*)(void*)>(vt[10])(obj);
+                --g_TutUndoDepth;
+            }
         }
     }
 

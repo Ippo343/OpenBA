@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 // ============================================================
 // Local function pointers resolved once
@@ -47,6 +48,85 @@ typedef void (*fn_FilenameDtor_t)(void* self);
 static fn_FilenameDtor_t s_fn_FilenameDtor = nullptr;
 
 static bool s_funcsResolved = false;
+
+// ============================================================
+// TutRestrict_ResolveRefOrLoad — ExternalRef resolve with a load-on-miss tail
+// ============================================================
+// STANDALONE DEVIATION, deliberate. Retail resolves both of this class's
+// ExternalRefs with ResolveExternalByName_Impl (0x14001b1d0), which is
+// ExternalFactory::Find alone — find-only, no load. Retail can afford that
+// because by the time a tutorial step applies, UpdateLoop::LoadResources has
+// already preloaded the Game/GameResources.rsc dependency tree (which pulls in
+// Template\*.rsc) INTO the factory. Our preload leaves those entries in the
+// loop's m_resourceList instead, so Find() misses — see the same, already
+// documented gap in TutBase_ResolveToolbarRef (tutorial_base.cpp) and in
+// StartTown_ResolveTemplate (starttown.cpp).
+//
+// A miss here is not cosmetic: the resolved pointer is written to
+// PlayerController+0x88, and Toolbar_ShowGroup_Impl / SetEditMode (0x140102b60)
+// does
+//     if (pc[0x80] && groupId) groupId = pc[0x88];
+// so with a null there EVERY toolbar selection during a restricted tutorial step
+// resolves to "no tool" — the build tool silently does nothing. The same null
+// also skips the +0xa4/+0xa8/+0xac block below, and PlacementTool::Draw
+// (0x1400fdcc0) section 2 — the yellow "place it here" footprint the tutorial
+// text refers to — only draws while a placement tool is live. One null, both
+// symptoms.
+//
+// Retail would fault on neither (it never has the null), so this is not a guard
+// over a faithful crash: it is the standalone resource-environment gap. The real
+// fix is to make the preload populate the ExternalFactory the way retail's does.
+static void TutRestrict_ResolveRefOrLoad(void* ref) {
+    if (!ref) return;
+    ResolveExternalByName_Impl(ref);            // faithful find-only path first
+    uintptr_t r = (uintptr_t)ref;
+    if (*(void**)(r + 0x10)) return;            // hit — nothing to do
+
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!fn_ExternalFactory_FindOrLoad || !fn_Filename_CtorString || !fn_Filename_Dtor) return;
+    void* factory = *g_pExternalFactorySingleton;
+
+    const char* name = *(const char* const*)r;
+    if (!name || !name[0]) return;
+
+    // Only the LOADER rejects backslashes; the factory's key comparison
+    // normalizes separators (measured — see tutorial_base.cpp).
+    char normalized[260];
+    size_t k = 0;
+    for (; name[k] && k < sizeof(normalized) - 1; ++k)
+        normalized[k] = (name[k] == '\\') ? '/' : name[k];
+    normalized[k] = 0;
+
+    void* found = nullptr;
+    if (fn_String_Ctor_CStr && fn_String_Dtor) {
+        uint8_t normStr[8] = {};
+        fn_String_Ctor_CStr(normStr, normalized);
+        uint8_t normFile[8] = {};
+        fn_Filename_CtorString(normFile, normStr);
+        found = fn_ExternalFactory_FindOrLoad(factory, normFile);
+        fn_Filename_Dtor(normFile);
+        fn_String_Dtor(normStr);
+    }
+
+    void* result = nullptr;
+    if (found) {
+        if (!g_TypeId_ComponentDescription_FC ||
+            !fn_IsDerivedFrom ||
+            fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC)) {
+            result = found;
+        }
+    }
+    *(void**)(r + 0x10) = result;
+
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            fprintf(stderr, "[TutRestrict] ref \"%s\" Find=miss FindOrLoad=%p (typed=%p)\n",
+                    name, found, result);
+            fflush(stderr);
+        }
+    }
+}
+
 
 static void EnsureFuncsResolved() {
     if (s_funcsResolved) return;
@@ -139,7 +219,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
         if (serializerBase && *(int32_t*)((uintptr_t)serializerBase + 0x8) == 0) {
-            ResolveExternalByName_Impl((void*)(s + 0x38));
+            TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
         }
 
         if (s_fn_FilenameDtor) s_fn_FilenameDtor(tempFilename);
@@ -155,7 +235,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
         if (serializerBase && *(int32_t*)((uintptr_t)serializerBase + 0x8) == 0) {
-            ResolveExternalByName_Impl((void*)(s + 0x50));
+            TutRestrict_ResolveRefOrLoad((void*)(s + 0x50));
         }
 
         if (s_fn_FilenameDtor) s_fn_FilenameDtor(tempFilename);
@@ -215,7 +295,7 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
     if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(localRef2, (void*)(s + 0x50));
     *(int32_t*)(localRef2 + 8) = *(int32_t*)(s + 0x58);
     *(uint64_t*)(localRef2 + 16) = *(uint64_t*)(s + 0x60);
-    ResolveExternalByName_Impl(localRef2);
+    TutRestrict_ResolveRefOrLoad(localRef2);
     uint64_t cameraRefPtr = *(uint64_t*)(localRef2 + 16);
     if (fn_String_Dtor) fn_String_Dtor(localRef2);
 
@@ -225,7 +305,7 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
     if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(localRef1, (void*)(s + 0x38));
     *(int32_t*)(localRef1 + 8) = *(int32_t*)(s + 0x40);
     *(uint64_t*)(localRef1 + 16) = *(uint64_t*)(s + 0x48);
-    ResolveExternalByName_Impl(localRef1);
+    TutRestrict_ResolveRefOrLoad(localRef1);
     uint64_t toolRefPtr = *(uint64_t*)(localRef1 + 16);
     if (fn_String_Dtor) fn_String_Dtor(localRef1);
 
@@ -244,12 +324,29 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External ptr,
     // also set camera restriction bounds
-    ResolveExternalByName_Impl((void*)(s + 0x38));
+    TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
     if (*(uint64_t*)(s + 0x48) != 0) {
         uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
         *(int32_t*)(playerCtrl2 + 0xA8) = absMin;
         *(int32_t*)(playerCtrl2 + 0xAC) = absMax;
         *(uint8_t*)(playerCtrl2 + 0xA4) = 1;
+    }
+
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            int32_t cs = **(int32_t**)(gameWorld + 0xF8);
+            fprintf(stderr,
+                    "[TutRestrict] Apply pc=%p rect=(%d,%d)..(%d,%d) cellSize=%d "
+                    "min=%d max=%d rot=%d object=\"%s\"->%p camera=%p armed=%d\n",
+                    (void*)playerCtrl,
+                    *(int32_t*)(s + 0x20), *(int32_t*)(s + 0x24),
+                    *(int32_t*)(s + 0x28), *(int32_t*)(s + 0x2C), cs,
+                    absMin, absMax, toolFlags,
+                    *(const char* const*)(s + 0x38) ? *(const char* const*)(s + 0x38) : "",
+                    (void*)toolRefPtr, (void*)cameraRefPtr,
+                    (int)*(uint8_t*)(playerCtrl + 0xA4));
+            fflush(stderr);
+        }
     }
 }
 
@@ -277,7 +374,7 @@ void TutorialSetupRestrictPlayer_Slot10(void* self) {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External,
     // call SetEditMode(playerController, 0) to clear tool selection
-    ResolveExternalByName_Impl((void*)(s + 0x38));
+    TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
     if (*(uint64_t*)(s + 0x48) != 0) {
         if (fn_SetEditMode) {
             uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
