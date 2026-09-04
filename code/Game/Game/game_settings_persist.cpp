@@ -19,11 +19,12 @@
 // Settings struct is 0x34 bytes. Field map, as int32 indices (retail passes an
 // int* and indexes it, mixing in three bools at raw byte offsets 0x15/0x16/0x17):
 //   [0] UIScale            [1] AutosaveInterval   [2] StatusIconOpacity
-//   [3] StatusIconEnable   [4] StatusIconScale    [5] EdgeScroll
-//   [6] AutoPause          [7] LastOption         [8] LastTerrain
+//   [4] StatusIconScale    [7] LastOption         [8] LastTerrain
 //   [9] LastMapSize        [10] LastClimate       [11] LastStart
 //   [12] LastDisaster
-//   byte 0x15 ShowCelcius  byte 0x16 ShowWeather  byte 0x17 AutoSlow
+// and SIX bools at raw byte offsets, NOT ints (retail casts the int* slot to bool*):
+//   byte 0x0C StatusIconEnable   byte 0x14 EdgeScroll   byte 0x18 AutoPause
+//   byte 0x15 ShowCelcius        byte 0x16 ShowWeather  byte 0x17 AutoSlow
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -70,12 +71,22 @@ struct BoolKey { const char* key; int byteOffset; };
 
 const IntKey  kIntKeys[] = {
     { "UIScale", 0 }, { "AutosaveInterval", 1 }, { "StatusIconOpacity", 2 },
-    { "StatusIconEnable", 3 }, { "StatusIconScale", 4 }, { "EdgeScroll", 5 },
-    { "AutoPause", 6 }, { "LastOption", 7 }, { "LastTerrain", 8 },
+    { "StatusIconScale", 4 }, { "LastOption", 7 }, { "LastTerrain", 8 },
     { "LastMapSize", 9 }, { "LastClimate", 10 }, { "LastStart", 11 },
     { "LastDisaster", 12 },
 };
+// THREE of these were in kIntKeys until 2026-09-04 and are NOT ints. Retail
+// (0x140098b60 / 0x140098970) passes `(bool*)(param_1 + 3)`, `(bool*)(param_1 + 5)`
+// and `(bool*)(param_1 + 6)` — the bool& overload of Persistence::Get/Set, one byte
+// at settings+0xC / +0x14 / +0x18. Reading them through the int& overload is a
+// different Persistence key type, and the Set side wrote the key back as an INT,
+// changing its stored type out from under retail and the Options dialog. The one
+// that matters most is StatusIconEnable: settings byte +0xC is exactly what
+// StatusIcon_Toggle checks before it will Graphics::Scene::AddObject an icon, so a
+// wrong read there silently hides EVERY status icon in the game, citizen and
+// building alike, with nothing logged anywhere.
 const BoolKey kBoolKeys[] = {
+    { "StatusIconEnable", 0x0C }, { "EdgeScroll", 0x14 }, { "AutoPause", 0x18 },
     { "ShowCelcius", 0x15 }, { "ShowWeather", 0x16 }, { "AutoSlow", 0x17 },
 };
 
@@ -101,6 +112,11 @@ extern "C" void GameSettings_Load(int32_t* settings) {
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
             settings[8], settings[9], settings[10], settings[11], settings[12],
             settings[0], settings[1]);
+    fprintf(stderr, "[GameSettings] Load: StatusIconEnable=%d (settings+0xC) -- 0 hides "
+            "EVERY status icon (citizen health, building warnings); it is the Options "
+            "checkbox, persisted as GameStatusIconEnable under "
+            "HKCU/Software/Shining Rock Software LLC/Banished\n",
+            (int)*(reinterpret_cast<uint8_t*>(settings) + 0x0C));
     fflush(stderr);
 }
 

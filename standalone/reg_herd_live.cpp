@@ -61,6 +61,8 @@ static void Herd_OnRemove_Thunk(void* self) { HerdComponent_OnRemove(self); }
 static void Pop_Startup_Thunk(void* self) {
     PopulationComponent_Startup(reinterpret_cast<PopulationComponent*>(self));
 }
+static void Pop_OnAdd_Thunk(void* self)    { PopulationComponent_OnAdd(self); }
+static void Pop_OnRemove_Thunk(void* self) { PopulationComponent_OnRemove(self); }
 
 static bool HerdWaveEnabled() {
     return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD")
@@ -87,4 +89,11 @@ void RegisterHerdLive() {
 
     // PopulationComponent vtable slot 4 — the herd-creation entry point.
     RegisterExeAddr(0x140054220, reinterpret_cast<uintptr_t>(&Pop_Startup_Thunk));
+
+    // PopulationComponent vtable slots 6 / 7 — the TownManager population-registry
+    // append/erase at (GameWorld+0xF0)+0xC0. That array is what DebugUI::Slot4 walks
+    // to build the debug panel's "deer population" combo; with slot 6 never installed
+    // it stayed empty and the combo had no rows.
+    RegisterExeAddr(0x1400541c0, reinterpret_cast<uintptr_t>(&Pop_OnAdd_Thunk));
+    RegisterExeAddr(0x140054180, reinterpret_cast<uintptr_t>(&Pop_OnRemove_Thunk));
 }

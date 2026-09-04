@@ -46,6 +46,14 @@ static fn_Rand_t s_fn_Rand = nullptr;
 typedef void (*fn_RegisterEntity_t)(void* list, void* entityIbp, int categoryId);
 static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
 
+// Town-registry helpers used by the OnAdd/OnRemove pair below.
+// DynArray8_ResizeFill(arrayField, newCount, valueIbp) — 0x140003110 (append when
+// called with count+1); DynArray8_EraseByValue(arrayField, valueIbp) — 0x140002cc0.
+typedef void (*fn_ArrResizeFill_t)(int64_t* arrayField, int newCount, void* valueIbp);
+typedef void (*fn_ArrErase_t)(int64_t* arrayField, void* valueIbp);
+static fn_ArrResizeFill_t s_fn_ArrResizeFill = nullptr;
+static fn_ArrErase_t      s_fn_ArrErase      = nullptr;
+
 // Component find-loop over a freshly-instantiated entity (IBP array at +0x30,
 // count at +0x38); match on the component's vtable+0x10 GetTypeId.
 static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
@@ -511,6 +519,55 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
 }
 
 // ============================================================
+// PopulationComponent::OnAdd (vtable slot 6) — retail 0x1400541c0
+// ============================================================
+// Ghidra names this one "PopulationComponent_Draw"; it draws nothing. It is the
+// town-registry APPEND: the component is pushed (as an InternalBasePtr) onto the
+// TownManager's population array at (GameWorld+0xF0)+0xC0, whose count lives at
+// +0xC8. That array is the ONLY enumeration of the world's populations — it is
+// what DebugUI::Slot4 (0x1400619E0) walks to fill the "deer population" combo on
+// the debug panel's Game tab, reading each element's +0x18 PopulationDescription
+// for the row text. With slot 6 never installed the array stayed empty and the
+// combo had zero rows.
+void PopulationComponent_OnAdd(void* selfV) {
+    PopulationComponent_InitFuncs();
+    if (!selfV || !s_pGameWorld || !*s_pGameWorld) return;
+    uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
+        reinterpret_cast<uint8_t*>(*s_pGameWorld) + 0xf0);
+    if (!townMgr || !s_fn_ArrResizeFill) return;
+
+    uint64_t selfRef = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
+    s_fn_ArrResizeFill(reinterpret_cast<int64_t*>(townMgr + 0xc0),
+                       *reinterpret_cast<int*>(townMgr + 0xc8) + 1, &selfRef);
+
+    if (std::getenv("BANISHED_DEBUG_PANEL")) {
+        fprintf(stderr, "[PopReg] OnAdd self=%p -> town population count=%d\n",
+                selfV, *reinterpret_cast<int*>(townMgr + 0xc8));
+        fflush(stderr);
+    }
+}
+
+// ============================================================
+// PopulationComponent::OnRemove (vtable slot 7) — retail 0x140054180
+// ============================================================
+// Ghidra names it "PopulationComponent_OnCreate"; 0x140002cc0 is the ERASE. Pairs
+// with OnAdd above — without it a destroyed population entity would leave a stale
+// InternalBasePtr in the town array for the combo (and anything else walking it)
+// to dereference.
+void PopulationComponent_OnRemove(void* selfV) {
+    PopulationComponent_InitFuncs();
+    if (!selfV || !s_pGameWorld || !*s_pGameWorld) return;
+    uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
+        reinterpret_cast<uint8_t*>(*s_pGameWorld) + 0xf0);
+    if (!townMgr || !s_fn_ArrErase) return;
+
+    uint64_t selfRef = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
+    s_fn_ArrErase(reinterpret_cast<int64_t*>(townMgr + 0xc0), &selfRef);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void PopulationComponent_InitFuncs() {
@@ -529,6 +586,10 @@ void PopulationComponent_InitFuncs() {
     if (randSlot) s_fn_Rand = *reinterpret_cast<fn_Rand_t*>(randSlot);
     s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_fn_ArrResizeFill = reinterpret_cast<fn_ArrResizeFill_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_ArrErase = reinterpret_cast<fn_ArrErase_t>(
+        ResolveAddr(Module::Exe, 0x140002cc0));
 
     s_initialized = true;
 }
@@ -581,6 +642,8 @@ static void PopulationComponent_UpdateVSlot(void* s, void* t) {
 static void PopulationComponent_StartupVSlot(void* s) {
     PopulationComponent_Startup(reinterpret_cast<PopulationComponent*>(s));
 }
+static void PopulationComponent_OnAddVSlot(void* s) { PopulationComponent_OnAdd(s); }
+static void PopulationComponent_OnRemoveVSlot(void* s) { PopulationComponent_OnRemove(s); }
 static void PopulationComponent_SerializeVSlot(void* self, void* stream) {
     PopulationComponent_Serialize_Real(self, stream);
 }
@@ -590,6 +653,12 @@ static void PopulationComponent_FinishLiveVtable() {
             reinterpret_cast<void*>(&PopulationComponent_StartupVSlot);
         PopulationComponent_LiveVtable[9] =
             reinterpret_cast<void*>(&PopulationComponent_UpdateVSlot);
+        // Town-registry membership (retail slots 6/7). Installed as a pair: slot 7
+        // is the only remover of what slot 6 appends.
+        PopulationComponent_LiveVtable[6] =
+            reinterpret_cast<void*>(&PopulationComponent_OnAddVSlot);
+        PopulationComponent_LiveVtable[7] =
+            reinterpret_cast<void*>(&PopulationComponent_OnRemoveVSlot);
     }
     PopulationComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&PopulationComponent_SerializeVSlot);

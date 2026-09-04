@@ -964,6 +964,18 @@ static const char* const kDefaultOnFlags[] = {
     // The value-vs-pointer guards in residence/workplace/attendance were tightened in the
     // same commit so a registered-but-not-yet-filled slot cannot clear live refs.
     "BANISHED_LIVE_CITIZENAI_CITID",
+    // GRADUATED 2026-09-04 — GameUpdateLoop::Load step 1, the ExternalList::Find of
+    // "Game/Disease/Diseases.rsc" stored at GameWorld+0xA8. Retail always does this
+    // Find; our port hard-nulled the slot behind an opt-in, and a null there is not
+    // "no diseases yet" but "the disease system does not exist": CitizenComponent::
+    // CatchDisease (0x140112620) returns on the null before it rolls anything, and
+    // DebugUI::Slot4's diseaseCombo populate loop is bounded by
+    // ExternalList::GetResourceCount over that same slot — so the debug panel's
+    // Disaster tab rendered its disease dropdown with ZERO rows and no diagnostic.
+    // Every consumer downstream (Infect -> SpreadDisease -> FindCareBuilding ->
+    // RecoverOrDie, plus the hospital/herbalist care path) was already ported and
+    // registered; the list was the one missing input. Set the var to 0 to A/B it.
+    "BANISHED_LIVE_DISEASELIST",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

@@ -24,6 +24,7 @@
 #include "GameUpdateLoop.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -303,15 +304,17 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 // ExternalList::GetResourceCount on it), exactly like gw+0xA0 — whereas gw+0xB0 is a
 // ProfessionList External. Same FindOrLoad primitive, same retail type gate.
 //
-// OPT-IN (BANISHED_LIVE_DISEASELIST) — unproven; NOT in kDefaultOnFlags. Graduating it
-// needs a positive measured run (a citizen actually catching, spreading and recovering
-// from a disease). Default OFF keeps the run byte-identical to before this change.
+// DEFAULT-ON (BANISHED_LIVE_DISEASELIST is now in kDefaultOnFlags; set it to 0 as a
+// kill-switch for an A/B). Retail always performs this Find — leaving gw+0xA8 null is
+// a deviation, and it silently deletes every reader of the list: CatchDisease returns
+// immediately, and DebugUI::Slot4's diseaseCombo loop is bounded by
+// ExternalList::GetResourceCount(null-guarded to 0), so the debug panel's Disaster tab
+// showed an EMPTY disease dropdown with no error anywhere. Routed through
+// ComponentFactory::LiveEnabled so the flag obeys the same explicit-setting-wins rule
+// as every other graduated gate.
 static bool DiseaseListEnvOn() {
     static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_DISEASELIST");
-        en = (e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0) ? 1 : 0;
-    }
+    if (en < 0) en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_DISEASELIST") ? 1 : 0;
     return en == 1;
 }
 

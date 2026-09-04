@@ -13,8 +13,10 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -1163,6 +1165,25 @@ void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
 //
 // Original: 0x1400619E0
 
+// UI::StringTable::GetText(table, retStr, nameStr) — the exe .rdata dispatch slot
+// 0x140151718 retail's diseaseCombo populate calls (export fallback for the case
+// where the slot is unregistered in standalone). Non-trivial return: RDX is the
+// hidden System::String out-param, R8 the name to look up.
+typedef void* (*fn_StringTableGetText_t)(void* table, void* retStr, const void* nameStr);
+static void DebugUI_StringTableGetText(void* table, void* retStr, const void* nameStr) {
+    static fn_StringTableGetText_t s_fn = nullptr;
+    static bool s_tried = false;
+    if (!s_tried) {
+        s_tried = true;
+        if (uintptr_t slot = ResolveAddr(Module::Exe, 0x140151718))
+            s_fn = *reinterpret_cast<fn_StringTableGetText_t*>(slot);
+        if (!s_fn)
+            s_fn = reinterpret_cast<fn_StringTableGetText_t>(ResolveExport(
+                "?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z"));
+    }
+    if (s_fn) s_fn(table, retStr, nameStr);
+}
+
 // Helper: Find element by name, return raw pointer.
 static void* DebugUI_FindElem(void* parentElem, const char* name) {
     uint8_t nameBuf[8];
@@ -1256,22 +1277,40 @@ void DebugUI_Slot4(DebugUI* self) {
             for (int i = 0; i < resourceCount; i++) {
                 void* resource = *(void**)((uintptr_t)i * 8 +
                     *(uintptr_t*)((uintptr_t)externalList + 0x20));
+                // Retail's checked cast. Every entry of the Diseases.rsc ExternalList
+                // IS a Disease, so this never narrows to null in practice — retail
+                // relies on that and derefs the result unguarded two lines later
+                // (0x140062560..0x140062578). Kept faithful: one combo row per list
+                // entry, so the row index stays a direct index into the list, which is
+                // exactly how DebugUI::TriggerDisasterOnBuilding (0x14005ff30) reads
+                // the selection back.
                 bool isDisease = fn_IsDerivedFrom(resource, *g_TypeId_DiseaseDescription);
-                if (isDisease) {
-                    // Build UIString from disease's StringTable (+0x20) and StringName (+0x28)
-                    uint8_t uiStr[16];
-                    fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)resource + 0x20),
-                                     (void*)((uintptr_t)resource + 0x28));
-                    // Convert UIString to System::String
-                    uint8_t textBuf[8] = {};
-                    fn_UIString_ToSystemString(uiStr, textBuf);
-                    uint8_t spriteBuf[16];
-                    fn_Sprite_Default_Ctor(spriteBuf);
-                    fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
-                    fn_String_Dtor(textBuf);
+                void* disease = isDisease ? resource : nullptr;
+                if (!disease) continue;
+
+                // Row text = StringTable::GetText(disease->stringTable(+0x20),
+                //                                 &out, disease->stringName(+0x28))
+                // — retail's 0x14006257c call, whose third argument Ghidra hides.
+                uint8_t textBuf[8] = {};
+                DebugUI_StringTableGetText(*(void**)((uintptr_t)disease + 0x20),
+                                           textBuf,
+                                           (void*)((uintptr_t)disease + 0x28));
+                uint8_t spriteBuf[16];
+                fn_Sprite_Default_Ctor(spriteBuf);
+                fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
+                if (std::getenv("BANISHED_DEBUG_PANEL")) {
+                    const char* t = *(const char**)textBuf;
+                    fprintf(stderr, "[DebugUI]   disease[%d] %p text='%s'\n",
+                            i, disease, t ? t : "(null)");
                 }
+                fn_String_Dtor(textBuf);
             }
             fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
+            if (std::getenv("BANISHED_DEBUG_PANEL")) {
+                fprintf(stderr, "[DebugUI] diseaseCombo: externalList=%p rows=%d\n",
+                        externalList, resourceCount);
+                fflush(stderr);
+            }
         }
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
@@ -1353,6 +1392,12 @@ void DebugUI_Slot4(DebugUI* self) {
                 }
             }
             fn_ComboElement_SetCurrentItem(self->drawCombo, selectedIndex);
+            if (std::getenv("BANISHED_DEBUG_PANEL")) {
+                fprintf(stderr, "[DebugUI] drawCombo (populations): townMgr+0xC0=%p "
+                        "rows=%d selected=%d\n",
+                        (void*)drawableList, drawCount, selectedIndex);
+                fflush(stderr);
+            }
         }
     }
 
@@ -1699,9 +1744,16 @@ void EnsureGlobals() {
         { &g_TypeId_ObjectInternal,         &s_internal,  "Internal"               },
     };
     for (const Heal& h : heals) {
-        if (*h.g) continue;
+        // A non-null global is not necessarily a USABLE one: some of these .rdata
+        // cells now resolve to real standalone storage (e.g. 0x1401c47c8 is backed by
+        // reg_herd_live.cpp) that is only filled lazily by whichever port gets there
+        // first. Heal a registered-but-still-zero id too, or IsDerivedFrom(x, 0) fails
+        // for every candidate and the combo it gates comes up empty.
+        if (*h.g && **h.g) continue;
         if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
-        if (*h.s) *h.g = h.s;
+        if (!*h.s) continue;
+        if (*h.g) **h.g = *h.s;   // fill the real .rdata cell in place
+        else      *h.g = h.s;
     }
     // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
     if (!g_TypeId_CitizenComponent_FC) {
@@ -1717,8 +1769,9 @@ void W_Slot4(void* self) {
     // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
     // populate). Skip the whole setup rather than fault if any failed to
     // resolve; all three reliably resolve post-Engine::Startup.
-    if (!self || !g_TypeId_ObjectInternal || !g_TypeId_DiseaseDescription
-        || !g_TypeId_DrawableType) {
+    if (!self || !g_TypeId_ObjectInternal || !*g_TypeId_ObjectInternal
+        || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
+        || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
         if (std::getenv("BANISHED_DEBUG_PANEL"))
             fprintf(stderr, "[DebugUI] Slot4 SKIPPED self=%p ObjInternal=%p Disease=%p Drawable=%p\n",
                     self, (void*)g_TypeId_ObjectInternal,

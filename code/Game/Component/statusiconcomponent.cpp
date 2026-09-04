@@ -835,6 +835,15 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;
             SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
+        } else if (*(int32_t*)(c + 0x100) < 0 && getenv("BANISHED_ICON_TRACE")) {
+            static int budget = 6;
+            if (budget-- > 0) {
+                fprintf(stderr, "[IconTrace] SHOW-SKIPPED comp=%p bit=%d inited=%d vis=%d "
+                        "sceneId=%d AddObject=%p scene=%p settings=%p\n",
+                        (void*)selfC, bit, (int)inited, (int)vis,
+                        *(int32_t*)(c + 0x100), (void*)s_fn_Scene_AddObject, scene, settings);
+                fflush(stderr);
+            }
         }
         if (s_fn_Time_Ctor) {
             uint8_t timeObj[8];

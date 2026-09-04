@@ -126,6 +126,18 @@ void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
     if (icon)
         StatusIcon_Toggle(reinterpret_cast<StatusIconComponent*>(icon), flagIndex, value != 0);
+    // BANISHED_ICON_TRACE prints one line per icon that stays out of the scene — see
+    // StatusIcon_Toggle's SHOW-SKIPPED branch, which names the reason (vis=0 is the
+    // StatusIconEnable setting; everything else is a standalone wiring gap).
+    if (std::getenv("BANISHED_ICON_TRACE") && flagIndex == 5 && value) {
+        static int budget = 6;
+        if (budget-- > 0) {
+            uintptr_t c = reinterpret_cast<uintptr_t>(icon);
+            fprintf(stderr, "[IconTrace] SICK icon=%p mask(+0xF0)=0x%08x sceneId(+0x100)=%d\n",
+                    icon, c ? *(uint32_t*)(c + 0xF0) : 0, c ? *(int32_t*)(c + 0x100) : -1);
+            fflush(stderr);
+        }
+    }
 }
 
 namespace ComponentFactory { bool LiveEnabled(const char* envVar); }  // fwd (full include is further down)
