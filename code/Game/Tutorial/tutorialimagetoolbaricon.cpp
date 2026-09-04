@@ -21,6 +21,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Vtable pointers (resolved once)
@@ -225,7 +226,12 @@ void* TutorialImageToolbarIcon_Ctor(void* self) {
 // (spriteSheet) and field40->+0x38 (spriteName) directly.
 // If non-null, iterates the component list to find a matching
 // ToolbarDescription and uses its +0x20/+0x28.
-void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
+// Returns retIBP, exactly as retail does (every TutorialImage*::Slot9 ends
+// `return param_2`). This is NOT cosmetic: TutWave_RefreshStepUI feeds the
+// return value straight to TableElement::SetChild as the child pointer, so a
+// void return leaves whatever the last call left in RAX and the table gets a
+// garbage child, which faults later inside UI::UserInterface::Update.
+void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     EnsureFuncs();
     auto p = reinterpret_cast<uint8_t*>(self);
 
@@ -329,11 +335,23 @@ void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     if (fn_Sprite_Sprite && spriteName)
         fn_Sprite_Sprite(spriteBuf, spriteSheet, spriteName);
 
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            const uint64_t* sp = reinterpret_cast<const uint64_t*>(spriteBuf);
+            fprintf(stderr, "[Tutorial] ToolbarIcon sprite: fnSpriteCtor=%p toolbar=%p "
+                            "sheet=%p name=%p -> {sheet=%p idx=%d}\n",
+                    (void*)fn_Sprite_Sprite, (void*)toolbar, (void*)spriteSheet,
+                    (const void*)spriteName, (void*)sp[0], (int)(uint32_t)sp[1]);
+            fflush(stderr);
+        }
+    }
+
     // 10. Set sprite on the ImageElement
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&imageRef);
     if (fn_ImageElement_SetSprite && imageRef)
         fn_ImageElement_SetSprite(imageRef, spriteBuf);
+    return retIBP;
 }
 
 // ============================================================
@@ -351,7 +369,7 @@ static uint32_t TutorialImageToolbarIcon_GetTypeId(void*) {
 }
 static int TutorialImageToolbarIcon_GetFileVersion(void*) { return 0x1001; }
 
-static void* g_TutorialImageToolbarIcon_Vtable[9] = {
+static void* g_TutorialImageToolbarIcon_Vtable[10] = {
     (void*)&TutorialImageToolbarIcon_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialImageToolbarIcon_GetTypeId,       // +0x10 GetTypeId
@@ -360,7 +378,8 @@ static void* g_TutorialImageToolbarIcon_Vtable[9] = {
     (void*)&TutorialImageToolbarIcon_Serialize,       // +0x28 Serialize
     (void*)&TutorialImageToolbarIcon_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImageToolbarIcon_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialImageToolbarIcon_Ctor,   // +0x40 Ctor/CreateInPlace (0x140028060)
+    (void*)&TutorialImageToolbarIcon_Slot9,   // +0x48 BuildElement (0x1400e0940)
 };
 
 extern "C" void RegisterTutorialImageToolbarIconVtable() {

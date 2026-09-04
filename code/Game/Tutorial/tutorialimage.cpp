@@ -179,7 +179,12 @@ void* TutorialImage_Ctor(void* self) {
 // Calls Dialog::CreateElement(dialog, retval, self->imageRef).
 // Parameters: self=RCX, retval=RDX, dialog=R8
 // Returns retval (RDX).
-void TutorialImage_Slot9(void* self, void* param1, void* param2) {
+// Returns retIBP, exactly as retail does (every TutorialImage*::Slot9 ends
+// `return param_2`). This is NOT cosmetic: TutWave_RefreshStepUI feeds the
+// return value straight to TableElement::SetChild as the child pointer, so a
+// void return leaves whatever the last call left in RAX and the table gets a
+// garbage child, which faults later inside UI::UserInterface::Update.
+void* TutorialImage_Slot9(void* self, void* param1, void* param2) {
     uintptr_t s = (uintptr_t)self;
     EnsureResolved();
 
@@ -190,6 +195,7 @@ void TutorialImage_Slot9(void* self, void* param1, void* param2) {
     if (s_fn_Dialog_CreateElement) {
         s_fn_Dialog_CreateElement(param2, param1, imageRef);
     }
+    return param1;   // retail returns the RETBUF (its param_2), which is our param1
 }
 
 // ============================================================
@@ -207,7 +213,7 @@ static uint32_t TutorialImage_GetTypeId(void*) {
 }
 static int TutorialImage_GetFileVersion(void*) { return 0x1000; }
 
-static void* g_TutorialImage_Vtable[9] = {
+static void* g_TutorialImage_Vtable[10] = {
     (void*)&TutorialImage_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialImage_GetTypeId,       // +0x10 GetTypeId
@@ -216,7 +222,8 @@ static void* g_TutorialImage_Vtable[9] = {
     (void*)&TutorialImage_Serialize,       // +0x28 Serialize
     (void*)&TutorialImage_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImage_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialImage_Ctor,   // +0x40 Ctor/CreateInPlace (0x1400279e0)
+    (void*)&TutorialImage_Slot9,   // +0x48 BuildElement (0x1400e0300)
 };
 
 extern "C" void RegisterTutorialImageVtable() {

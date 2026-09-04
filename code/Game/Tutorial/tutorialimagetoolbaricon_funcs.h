@@ -49,4 +49,4 @@ void* TutorialImageToolbarIcon_Ctor(void* self);
 // Slot9: Slot9/Update (0x1400e0940)
 // Creates UI element, finds ImageElement child, resolves toolbar icon,
 // creates sprite from toolbar data, sets sprite on ImageElement.
-void TutorialImageToolbarIcon_Slot9(void* self, void* param1, void* param2);
+void* TutorialImageToolbarIcon_Slot9(void* self, void* param1, void* param2);

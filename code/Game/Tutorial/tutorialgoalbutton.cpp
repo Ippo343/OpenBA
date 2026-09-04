@@ -22,6 +22,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // ============================================================
@@ -143,6 +145,25 @@ void TutorialGoalButton_Cleanup(void* self) {
 int TutorialGoalButton_Check(void* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // One line per distinct goal object: which element is this step waiting for,
+    // and is it the plain "shown" test or the inverted one. A step that never
+    // completes is otherwise indistinguishable from a step with no goal at all.
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            static const void* s_seen[16] = {};
+            static int s_n = 0;
+            bool known = false;
+            for (int i = 0; i < s_n; ++i) if (s_seen[i] == self) known = true;
+            if (!known) {
+                if (s_n < 16) s_seen[s_n++] = self;
+                const char* path = *(const char**)(s + 0x20);
+                fprintf(stderr, "[Tutorial] GoalButton waits on \"%s\" invert=%d\n",
+                        path ? path : "(empty)", (int)*(uint8_t*)(s + 0x28));
+                fflush(stderr);
+            }
+        }
+    }
+
     // Find UI element by elementPath (+0x20)
     uintptr_t elementIBP = 0;
     if (fn_FindUIElementByPath) {
@@ -185,6 +206,22 @@ int TutorialGoalButton_Check(void* self) {
 
     uintptr_t elem = wrappedIBP;
     uint32_t flags = *(uint32_t*)(elem + 0x34);
+
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            static uint32_t s_last = 0xFFFFFFFFu;
+            if (flags != s_last) {
+                s_last = flags;
+                fprintf(stderr, "[Tutorial] GoalButton element flags=0x%08X "
+                                "bit22=%d bit23=%d bit24=%d rect=(%d,%d)-(%d,%d)\n",
+                        flags, (int)((flags >> 22) & 1), (int)((flags >> 23) & 1),
+                        (int)((flags >> 24) & 1),
+                        *(int*)(elem + 0x68), *(int*)(elem + 0x6C),
+                        *(int*)(elem + 0x70), *(int*)(elem + 0x74));
+                fflush(stderr);
+            }
+        }
+    }
 
     if (invertCheck) {
         // Bit 23 NOT set = success
@@ -239,7 +276,7 @@ static uint32_t TutorialGoalButton_GetTypeId(void*) {
 }
 static int TutorialGoalButton_GetFileVersion(void*) { return 2; }
 
-static void* g_TutorialGoalButton_Vtable[9] = {
+static void* g_TutorialGoalButton_Vtable[10] = {
     (void*)&TutorialGoalButton_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialGoalButton_GetTypeId,       // +0x10 GetTypeId
@@ -248,7 +285,8 @@ static void* g_TutorialGoalButton_Vtable[9] = {
     (void*)&TutorialGoalButton_Serialize,       // +0x28 Serialize
     (void*)&TutorialGoalButton_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialGoalButton_Init,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialGoalButton_Check,   // +0x40 Check (0x1400dece0)
+    (void*)&TutorialGoalButton_Init,   // +0x48 Ctor/CreateInPlace (0x140027300)
 };
 
 extern "C" void RegisterTutorialGoalButtonVtable() {

@@ -198,7 +198,12 @@ void* TutorialImageInputKey_Ctor(void* self) {
 //   self = TutorialImageInputKey*
 //   retIBP = InternalBasePtr* (return buffer, also output)
 //   dialog = Dialog* (parent dialog)
-void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
+// Returns retIBP, exactly as retail does (every TutorialImage*::Slot9 ends
+// `return param_2`). This is NOT cosmetic: TutWave_RefreshStepUI feeds the
+// return value straight to TableElement::SetChild as the child pointer, so a
+// void return leaves whatever the last call left in RAX and the table gets a
+// garbage child, which faults later inside UI::UserInterface::Update.
+void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
     EnsureFuncs();
     auto p = reinterpret_cast<uint8_t*>(self);
 
@@ -264,6 +269,7 @@ void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
         fn_InternalBasePtr_CheckPtr(&textRef);
     if (fn_TextElement_SetText && textRef)
         fn_TextElement_SetText(textRef, uiStr);
+    return retIBP;
 }
 
 // ============================================================
@@ -281,7 +287,7 @@ static uint32_t TutorialImageInputKey_GetTypeId(void*) {
 }
 static int TutorialImageInputKey_GetFileVersion(void*) { return 0x1001; }
 
-static void* g_TutorialImageInputKey_Vtable[9] = {
+static void* g_TutorialImageInputKey_Vtable[10] = {
     (void*)&TutorialImageInputKey_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialImageInputKey_GetTypeId,       // +0x10 GetTypeId
@@ -290,7 +296,8 @@ static void* g_TutorialImageInputKey_Vtable[9] = {
     (void*)&TutorialImageInputKey_Serialize,       // +0x28 Serialize
     (void*)&TutorialImageInputKey_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImageInputKey_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialImageInputKey_Ctor,   // +0x40 Ctor/CreateInPlace (0x140027f00)
+    (void*)&TutorialImageInputKey_Slot9,   // +0x48 BuildElement (0x1400e06e0)
 };
 
 extern "C" void RegisterTutorialImageInputKeyVtable() {

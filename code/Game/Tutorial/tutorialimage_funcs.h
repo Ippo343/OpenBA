@@ -49,4 +49,4 @@ void* TutorialImage_Ctor(void* self);
 // Slot9 (vtable +0x48, 0x1400e0300): CreateElement.
 // Calls Dialog::CreateElement(dialog, param_retval, self->imageRef).
 // param1=retval, param2=dialog. Returns param1.
-void TutorialImage_Slot9(void* self, void* param1, void* param2);
+void* TutorialImage_Slot9(void* self, void* param1, void* param2);

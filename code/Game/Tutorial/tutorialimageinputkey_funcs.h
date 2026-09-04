@@ -46,4 +46,4 @@ void* TutorialImageInputKey_Ctor(void* self);
 // Slot9: Slot9/Update (0x1400e06e0)
 // Creates UI element from imageRef, finds TextElement child, looks up input
 // key name from KeyMap using inputId at +0x30, sets text on the TextElement.
-void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog);
+void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog);

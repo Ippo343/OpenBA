@@ -31,9 +31,9 @@
 //                (0x140013A60 / 0x140013AA0 / 0x140098060 GameUpdateLoop ctor /
 //                0x140099130). TutWave_StepExecute logs and returns instead of
 //                calling a null pointer, and says so.
-//   0x1400E1870  FindUIElementByPath — on LANE 1's list, not mine. Two call
-//                sites here (ShowListed and OpenHighlight's by-path branch)
-//                guard on it and log.
+// (0x1400E1870 FindUIElementByPath is now ported — see
+//  code/Game/Tutorial/find_ui_element_by_path.cpp. Both call sites here,
+//  ShowListed and OpenHighlight's by-path branch, are live.)
 //
 // Decompiled from Application-x64.exe; control flow checked against the
 // disassembly, not just the Ghidra pseudo-C, for 0x1400E01D0 / 0x1400E1260 /
@@ -618,6 +618,11 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ui + 0x18));
             uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
             void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
+            if (TutTrace()) {
+                fprintf(stderr, "[Tutorial] RefreshStepUI images: ui=%p dlgIBP=%p dialog=%p n=%d\n",
+                        reinterpret_cast<void*>(ui), reinterpret_cast<void*>(dlgIBP), dialog, n);
+                fflush(stderr);
+            }
             for (int i = 0; i < n; ++i) {
                 void* img = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
                 if (!img) continue;
@@ -625,6 +630,15 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 int32_t row = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x2C);
                 void** vt = *reinterpret_cast<void***>(img);
                 if (!vt || !vt[9]) continue;
+                if (TutTrace()) {
+                    uint32_t tid = vt[2] ? reinterpret_cast<uint32_t (*)(void*)>(vt[2])(img) : 0;
+                    const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
+                    fprintf(stderr, "[Tutorial]   image %d %s imageRef=%p row=%d col=%d\n",
+                            i, nm ? nm : "?",
+                            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(img) + 0x20),
+                            row, col);
+                    fflush(stderr);
+                }
                 uint8_t retbuf[16] = {};
                 void* elemPtr = reinterpret_cast<void* (*)(void*, void*, void*)>(vt[9])(img, retbuf, dialog);
                 fn_TableElement_SetChild3(table, elemPtr ? elemPtr : retbuf, row, col);
@@ -632,6 +646,19 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
         }
         if (TutTrace()) {
             fprintf(stderr, "[Tutorial] RefreshStepUI step=%d images=%d table=%p\n", idx, n, table);
+            // Census the table after the SetChild pass: a null or garbage child here
+            // is what the UI::UserInterface::Update walk dereferences next frame.
+            if (table && fn_Element_ChildCount && fn_Element_Child) {
+                int cc = fn_Element_ChildCount(table);
+                fprintf(stderr, "[Tutorial]   table childCount=%d\n", cc);
+                for (int c = 0; c < cc && c < 16; ++c) {
+                    uint64_t ch = 0;
+                    fn_Element_Child(table, &ch, c);
+                    void* vt0 = ch ? *reinterpret_cast<void**>(ch) : nullptr;
+                    fprintf(stderr, "[Tutorial]     child %d = %p vtable=%p\n",
+                            c, reinterpret_cast<void*>(ch), vt0);
+                }
+            }
             fflush(stderr);
         }
     }
@@ -768,6 +795,28 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             else selfIBP = reinterpret_cast<uint64_t>(self);
             char ok = reinterpret_cast<char (*)(void*, void*, void*)>(vt[8])(obj, param2, &selfIBP);
             if (ok) ++passed;
+            if (TutTrace()) {
+                // Once per (step, goal, verdict) change. Without this, "the tutorial
+                // is stuck" and "the tutorial has no goals" look identical.
+                static int s_lastStep = -1, s_lastPassed = -1;
+                if (stepIndex != s_lastStep || passed != s_lastPassed) {
+                    uint32_t tid = 0;
+                    if (vt[2]) tid = reinterpret_cast<uint32_t (*)(void*)>(vt[2])(obj);
+                    const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
+                    fprintf(stderr, "[Tutorial] step %d goal %d/%d %s -> %d\n",
+                            stepIndex, i, goalCount, nm ? nm : "?", (int)ok);
+                    fflush(stderr);
+                    s_lastStep = stepIndex; s_lastPassed = passed;
+                }
+            }
+        }
+        if (TutTrace()) {
+            static int s_seenStep = -1;
+            if (stepIndex != s_seenStep) {
+                s_seenStep = stepIndex;
+                fprintf(stderr, "[Tutorial] step %d has %d goal(s)\n", stepIndex, goalCount);
+                fflush(stderr);
+            }
         }
     }
 

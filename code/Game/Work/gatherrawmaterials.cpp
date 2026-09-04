@@ -253,7 +253,12 @@ bool GatherRawMaterials_ResolveFuncs() {
     if (iatSerInt)
         s_fn_SerializeInt = *reinterpret_cast<GRM_SerializeInt_t*>(iatSerInt);
 
-    uintptr_t iatSerIntBulk = ResolveAddr(Module::Exe, 0x1401528c0);
+    // 0x1401528c0 is UI::Dialog::CreateElement, not a serializer — the old address
+    // here was a misnomer that happened to be harmless only while the slot was
+    // unregistered. Retail's GatherRawMaterials::Serialize (0x1400EC560) calls
+    // CALL [0x140151278] twice: the IO::Serializer INT-ARRAY overload.
+    // See [[reference-serializer-byte-vs-int-array-overload]].
+    uintptr_t iatSerIntBulk = ResolveAddr(Module::Exe, 0x140151278);
     if (iatSerIntBulk)
         s_fn_SerializeIntBulk = *reinterpret_cast<GRM_SerializeIntBulk_t*>(iatSerIntBulk);
 
@@ -1279,8 +1284,8 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
 // Execute-readiness gate for the force harness. GatherRawMaterials_ResolveFuncs() also
 // requires the SERIALIZE-only fns (Work_Serialize / Serializer_* / SerializeInt /
 // SerializeIntBulk / TreeSerialize) and the dtor-only parent vtable — none of which
-// Execute or its pushed action chain touch, and SerializeIntBulk's IAT dispatch slot
-// (0x1401528c0) is unpopulated in standalone, which would falsely block the driver. So we
+// Execute or its pushed action chain touch. (The dispatch slot for SerializeIntBulk was
+// recorded here as 0x1401528c0, which is CreateElement; it is 0x140151278.) So we
 // resolve everything, then gate on only the Execute-critical subset (mirrors
 // ForesterWork_ExecuteReady). Serialize never runs during standalone gameplay.
 extern "C" bool GatherRawMaterials_DepsReady() {

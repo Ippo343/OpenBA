@@ -718,7 +718,7 @@ static uint32_t TutorialGoalCount_GetTypeId(void*) {
 }
 static int TutorialGoalCount_GetFileVersion(void*) { return 5; }
 
-static void* g_TutorialGoalCount_Vtable[9] = {
+static void* g_TutorialGoalCount_Vtable[10] = {
     (void*)&TutorialGoalCount_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialGoalCount_GetTypeId,       // +0x10 GetTypeId
@@ -727,7 +727,8 @@ static void* g_TutorialGoalCount_Vtable[9] = {
     (void*)&TutorialGoalCount_Serialize,       // +0x28 Serialize
     (void*)&TutorialGoalCount_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialGoalCount_Init,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialGoalCount_Check,   // +0x40 Check (0x1400df290)
+    (void*)&TutorialGoalCount_Init,   // +0x48 Ctor/CreateInPlace (0x1400277f0 -> 0x1400dfa60)
 };
 
 extern "C" void RegisterTutorialGoalCountVtable() {

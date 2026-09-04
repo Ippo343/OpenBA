@@ -377,12 +377,10 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 // [[project-menu-dialog-vtables-unregistered]] shape — promoting a factory
 // changes nothing; what it needs is a real table registered at 0x1401609E0.
 //
-// STILL DARK: slot 6 (Update, retail 0x1400DFFE0). Our
-// TutorialHighlightDialog_Update body is EMPTY — its two positioning helpers
-// (0x1400DFDA0 / 0x1400DFAC0) were never decompiled. Wiring it would look like
-// progress and do nothing, so slot 6 stays a nop and is reported as dark: the
-// highlight dialog constructs and accumulates time, but the glow/arrow will not
-// track their target.
+// Slot 6 (Draw, retail 0x1400DFFE0) and both of its positioning helpers
+// (0x1400DFDA0 world-entity / 0x1400DFAC0 UI-element) are now ported in
+// tutorialhighlightdialog.cpp, so the glow ring and the arrow track their
+// target and bob with sinf(t*pi)*8 the way retail does.
 // ===========================================================================
 namespace tut_highlight {
 
@@ -415,6 +413,11 @@ void Slot4_Startup(void* self) {
     }
 }
 
+void Slot6_Draw(void* self) {
+    if (!self) return;
+    TutorialHighlightDialog_Draw(reinterpret_cast<TutorialHighlightDialog*>(self));
+}
+
 void Slot7_Load(void* self, void* param2) {
     if (!self || !param2) return;
     TutorialHighlightDialog_Load(reinterpret_cast<TutorialHighlightDialog*>(self), param2);
@@ -432,6 +435,7 @@ struct Init {
         g_vt[1] = reinterpret_cast<void*>(&TypeName);
         g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
         g_vt[4] = reinterpret_cast<void*>(&Slot4_Startup);
+        g_vt[6] = reinterpret_cast<void*>(&Slot6_Draw);
         g_vt[7] = reinterpret_cast<void*>(&Slot7_Load);
     }
 } g_init;

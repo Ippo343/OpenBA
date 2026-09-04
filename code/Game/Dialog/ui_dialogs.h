@@ -96,7 +96,7 @@ void TutorialHighlightDialog_Startup(TutorialHighlightDialog* self);
 //   If dataE8 != 0: positions arrow based on world-space rect stored in dataE8.
 //   If dataE8 == 0: positions glow+arrow based on the target UI element in dataE0.
 // Unhookable via trampoline (rel branch at byte 8); installed via vtable patch.
-void TutorialHighlightDialog_Update(TutorialHighlightDialog* self);
+void TutorialHighlightDialog_Draw(TutorialHighlightDialog* self);
 
 // Load (vtable +0x38): Accumulates delta-time ticks into dataB8 (System::Time).
 // param2 is a pointer to the tick count to add. Original is only 11 bytes —

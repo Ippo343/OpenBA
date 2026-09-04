@@ -26,6 +26,8 @@
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
 #include <cstdint>
+#include <cstdlib>
+#include <cstdio>
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers
@@ -92,6 +94,48 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     uint8_t filename[8] = {};
     fn_Filename_CtorString(filename, reinterpret_cast<const void*>(s));
     void* found = fn_ExternalFactory_Find(factory, filename);
+
+    // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
+    // on the null below, so this is not papering over a faithful fault: it is the
+    // documented standalone resource-environment gap.
+    //
+    // Retail reaches here with "Game\\Toolbar.rsc:<item>" already in the
+    // ExternalFactory, because UpdateLoop::LoadResources has preloaded the
+    // "Game/GameResources.rsc" dependency tree into it. In standalone that preload
+    // populates the loop's m_resourceList but does NOT leave these entries in the
+    // factory (see standalone/gameupdateloop_stubs.cpp on the non-terminating
+    // recursive load), so Find() misses and TutorialImageToolbarIcon::Slot9 built a
+    // Sprite of {sheet = null, index = 0} — which reads as VALID to
+    // UI::ImageElement::ComputeSize and faults it on *(sheet + 0x20).
+    //
+    // Measured: Find("Game\\Toolbar.rsc:options") -> null,
+    //           Find("Game/Toolbar.rsc:options")  -> null,
+    //           FindOrLoad("Game/Toolbar.rsc:options") -> object.
+    // The separator matters only to the LOADER: once loaded, Find() hits with the
+    // backslash spelling too, so the factory's key comparison normalizes and only
+    // the file-open path does not. Hence the fallback normalizes to '/'.
+    //
+    // The real fix is to make the preload leave these in the factory as retail's
+    // does; until then this loads on demand, which is what retail's environment
+    // has already done by this point.
+    if (!found && fn_ExternalFactory_FindOrLoad && fn_String_Ctor_CStr && fn_String_Dtor) {
+        const char* name = *reinterpret_cast<const char* const*>(s);
+        if (name) {
+            char normalized[260];
+            size_t k = 0;
+            for (; name[k] && k < sizeof(normalized) - 1; ++k)
+                normalized[k] = (name[k] == '\\') ? '/' : name[k];
+            normalized[k] = 0;
+
+            uint8_t normStr[8] = {};
+            fn_String_Ctor_CStr(normStr, normalized);
+            uint8_t normFile[8] = {};
+            fn_Filename_CtorString(normFile, normStr);
+            found = fn_ExternalFactory_FindOrLoad(factory, normFile);
+            fn_Filename_Dtor(normFile);
+            fn_String_Dtor(normStr);
+        }
+    }
     fn_Filename_Dtor(filename);
 
     // Validate Toolbar type; trust if the type-id global is unresolved (cascade-safe).
@@ -107,6 +151,19 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
 
     *reinterpret_cast<void**>(s + 0x10)  = result;
     *reinterpret_cast<int32_t*>(s + 0x08) = factoryGen;
+
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            static int n = 0;
+            if (n < 8) {
+                ++n;
+                const char* nm = *reinterpret_cast<const char* const*>(s);
+                fprintf(stderr, "[Tutorial] ResolveToolbarRef \"%s\" -> %p\n",
+                        nm ? nm : "(empty)", result);
+                fflush(stderr);
+            }
+        }
+    }
 }
 
 // ============================================================

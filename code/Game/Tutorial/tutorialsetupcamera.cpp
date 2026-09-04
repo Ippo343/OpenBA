@@ -226,7 +226,10 @@ static uint32_t TutorialSetupCamera_GetTypeId(void*) {
 }
 static int TutorialSetupCamera_GetFileVersion(void*) { return 1; }
 
-static void* g_TutorialSetupCamera_Vtable[9] = {
+// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
+static void TutorialSetup_SlotEmpty(void*) {}
+
+static void* g_TutorialSetupCamera_Vtable[12] = {
     (void*)&TutorialSetupCamera_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialSetupCamera_GetTypeId,       // +0x10 GetTypeId
@@ -235,7 +238,10 @@ static void* g_TutorialSetupCamera_Vtable[9] = {
     (void*)&TutorialSetupCamera_Serialize,       // +0x28 Serialize
     (void*)&TutorialSetupCamera_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupCamera_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialSetupCamera_Slot8,   // +0x40 Apply (0x1400e20d0)
+    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e20c0 - empty in retail)
+    (void*)&TutorialSetup_SlotEmpty,   // +0x50 Undo (0x1400e20b0 - empty in retail)
+    (void*)&TutorialSetupCamera_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028470)
 };
 
 extern "C" void RegisterTutorialSetupCameraVtable() {

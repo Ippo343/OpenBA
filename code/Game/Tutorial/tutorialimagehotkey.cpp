@@ -314,7 +314,7 @@ static uint32_t TutorialImageHotKey_GetTypeId(void*) {
 }
 static int TutorialImageHotKey_GetFileVersion(void*) { return 0x1001; }
 
-static void* g_TutorialImageHotKey_Vtable[9] = {
+static void* g_TutorialImageHotKey_Vtable[10] = {
     (void*)&TutorialImageHotKey_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialImageHotKey_GetTypeId,       // +0x10 GetTypeId
@@ -323,7 +323,8 @@ static void* g_TutorialImageHotKey_Vtable[9] = {
     (void*)&TutorialImageHotKey_Serialize,       // +0x28 Serialize
     (void*)&TutorialImageHotKey_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImageHotKey_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialImageHotKey_Ctor,   // +0x40 Ctor/CreateInPlace (0x140027d40)
+    (void*)&TutorialImageHotKey_Slot9,   // +0x48 BuildElement (0x1400e0420)
 };
 
 extern "C" void RegisterTutorialImageHotKeyVtable() {

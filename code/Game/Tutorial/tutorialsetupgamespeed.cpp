@@ -191,7 +191,10 @@ static uint32_t TutorialSetupGameSpeed_GetTypeId(void*) {
 }
 static int TutorialSetupGameSpeed_GetFileVersion(void*) { return 1; }
 
-static void* g_TutorialSetupGameSpeed_Vtable[9] = {
+// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
+static void TutorialSetup_SlotEmpty(void*) {}
+
+static void* g_TutorialSetupGameSpeed_Vtable[12] = {
     (void*)&TutorialSetupGameSpeed_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialSetupGameSpeed_GetTypeId,       // +0x10 GetTypeId
@@ -200,7 +203,10 @@ static void* g_TutorialSetupGameSpeed_Vtable[9] = {
     (void*)&TutorialSetupGameSpeed_Serialize,       // +0x28 Serialize
     (void*)&TutorialSetupGameSpeed_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupGameSpeed_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialSetupGameSpeed_Slot8,   // +0x40 Apply (0x1400e2d60)
+    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e2d50 - empty in retail)
+    (void*)&TutorialSetup_SlotEmpty,   // +0x50 Undo (0x1400e2d40 - empty in retail)
+    (void*)&TutorialSetupGameSpeed_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028a20)
 };
 
 extern "C" void RegisterTutorialSetupGameSpeedVtable() {

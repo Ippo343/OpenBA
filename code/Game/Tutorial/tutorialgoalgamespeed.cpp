@@ -175,7 +175,7 @@ static uint32_t TutorialGoalGameSpeed_GetTypeId(void*) {
 }
 static int TutorialGoalGameSpeed_GetFileVersion(void*) { return 1; }
 
-static void* g_TutorialGoalGameSpeed_Vtable[9] = {
+static void* g_TutorialGoalGameSpeed_Vtable[10] = {
     (void*)&TutorialGoalGameSpeed_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialGoalGameSpeed_GetTypeId,       // +0x10 GetTypeId
@@ -184,7 +184,8 @@ static void* g_TutorialGoalGameSpeed_Vtable[9] = {
     (void*)&TutorialGoalGameSpeed_Serialize,       // +0x28 Serialize
     (void*)&TutorialGoalGameSpeed_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialGoalGameSpeed_Init,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialGoalGameSpeed_Check,   // +0x40 Check (0x1400df150)
+    (void*)&TutorialGoalGameSpeed_Init,   // +0x48 Ctor/CreateInPlace (0x140027690)
 };
 
 extern "C" void RegisterTutorialGoalGameSpeedVtable() {

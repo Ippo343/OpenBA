@@ -184,6 +184,8 @@ fn_Element_AddChild_t fn_Element_AddChild = nullptr;
 
 // DialogInstance
 fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement = nullptr;
+fn_Element_FindElement_t fn_Element_FindElement = nullptr;
+fn_DialogController_GetContainer_t fn_DialogController_GetContainer = nullptr;
 fn_DialogInstance_GetController_t fn_DialogInstance_GetController = nullptr;
 fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType = nullptr;
 fn_DialogInstance_SetFlagsOnOff_t fn_DialogInstance_SetFlagsOnOff = nullptr;
@@ -382,6 +384,8 @@ fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount = nullptr;
 fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo = nullptr;
 fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState = nullptr;
 fn_Sprite_IsValid_t fn_Sprite_IsValid = nullptr;
+fn_Sprite_Width_t fn_Sprite_Width = nullptr;
+fn_Sprite_Height_t fn_Sprite_Height = nullptr;
 fn_UI_Play_t fn_UI_Play = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 // fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
@@ -2178,6 +2182,13 @@ bool EngineFuncsInit() {
     {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528c0));
         if (d && *d) fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(*d);
+        // Direct-export fallback: the slot read above only works if the dispatch slot
+        // was registered BEFORE engine-func resolution. Resolving the export as well
+        // makes this independent of that ordering.
+        if (!fn_Dialog_CreateElement)
+            fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(
+                ResolveExport("?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@"
+                              "Object@@V?$ExternalPtr@VElementDescription@UI@@@4@@Z"));
     }
 
     // --- GetInputKeyName (exe 0x140099c20) ---
@@ -2467,6 +2478,16 @@ bool EngineFuncsInit() {
 
     fn_Sprite_IsValid = reinterpret_cast<fn_Sprite_IsValid_t>(
         ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ"));
+
+    fn_Sprite_Width = reinterpret_cast<fn_Sprite_Width_t>(
+        ResolveExport("?Width@Sprite@UI@@QEBAHXZ"));
+
+    fn_Element_FindElement = reinterpret_cast<fn_Element_FindElement_t>(
+        ResolveExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
+    fn_DialogController_GetContainer = reinterpret_cast<fn_DialogController_GetContainer_t>(
+        ResolveExport("?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ"));
+    fn_Sprite_Height = reinterpret_cast<fn_Sprite_Height_t>(
+        ResolveExport("?Height@Sprite@UI@@QEBAHXZ"));
 
     fn_UI_Play = reinterpret_cast<fn_UI_Play_t>(
         ResolveExport("?Play@UserInterface@UI@@QEAAXH@Z"));

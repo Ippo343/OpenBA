@@ -428,6 +428,18 @@ extern fn_Element_AddChild_t fn_Element_AddChild;
 typedef void* (*fn_DialogInstance_FindElement_t)(void* self, void* retval, const void* name);
 extern fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement;
 
+// Element::FindElement(this, retIBP, String const& name) — the Element-level twin of
+// DialogInstance::FindElement. Exe dispatch slot 0x140151538.
+// ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
+typedef void* (*fn_Element_FindElement_t)(void* self, void* retval, const void* name);
+extern fn_Element_FindElement_t fn_Element_FindElement;
+
+// DialogController::GetContainer(this, retIBP) — the controller's root Element.
+// Exe dispatch slot 0x1401528d0.
+// ?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+typedef void* (*fn_DialogController_GetContainer_t)(void* self, void* retval);
+extern fn_DialogController_GetContainer_t fn_DialogController_GetContainer;
+
 // DialogInstance::GetController(this, retval, index) -> InternalPtr<DialogController> (member, non-trivial return)
 // RCX=this, RDX=retval, R8=index
 typedef void* (*fn_DialogInstance_GetController_t)(const void* self, void* retval, uint32_t index);
@@ -1095,6 +1107,15 @@ extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
 // sprite check.
 typedef bool (*fn_Sprite_IsValid_t)(void* sprite);
 extern fn_Sprite_IsValid_t fn_Sprite_IsValid;
+
+// Sprite::Width(this) / Sprite::Height(this) -> int (pixel size of the sprite cell)
+// ?Width@Sprite@UI@@QEBAHXZ / ?Height@Sprite@UI@@QEBAHXZ
+// Used by TutorialHighlightDialog's two arrow-positioning helpers (exe dispatch
+// slots 0x1401528b8 / 0x1401528b0).
+typedef int (*fn_Sprite_Width_t)(const void* sprite);
+extern fn_Sprite_Width_t fn_Sprite_Width;
+typedef int (*fn_Sprite_Height_t)(const void* sprite);
+extern fn_Sprite_Height_t fn_Sprite_Height;
 
 // UserInterface::Play(this, soundId) — play a UI sound effect
 // ?Play@UserInterface@UI@@QEAAXH@Z

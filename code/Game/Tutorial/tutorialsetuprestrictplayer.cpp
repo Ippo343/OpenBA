@@ -339,7 +339,10 @@ static uint32_t TutorialSetupRestrictPlayer_GetTypeId(void*) {
 }
 static int TutorialSetupRestrictPlayer_GetFileVersion(void*) { return 4; }
 
-static void* g_TutorialSetupRestrictPlayer_Vtable[9] = {
+// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
+static void TutorialSetup_SlotEmpty(void*) {}
+
+static void* g_TutorialSetupRestrictPlayer_Vtable[12] = {
     (void*)&TutorialSetupRestrictPlayer_Dtor,            // +0x00 Dtor
     nullptr,                      // +0x08 (base thunk)
     (void*)&TutorialSetupRestrictPlayer_GetTypeId,       // +0x10 GetTypeId
@@ -348,7 +351,10 @@ static void* g_TutorialSetupRestrictPlayer_Vtable[9] = {
     (void*)&TutorialSetupRestrictPlayer_Serialize,       // +0x28 Serialize
     (void*)&TutorialSetupRestrictPlayer_Cleanup,         // +0x30 Cleanup
     nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupRestrictPlayer_Ctor,              // +0x40 Ctor/CreateInPlace
+    (void*)&TutorialSetupRestrictPlayer_Slot8,   // +0x40 Apply (0x1400e2f20)
+    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e2f10 - empty in retail)
+    (void*)&TutorialSetupRestrictPlayer_Slot10,   // +0x50 Undo (0x1400e2e90)
+    (void*)&TutorialSetupRestrictPlayer_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028b80)
 };
 
 extern "C" void RegisterTutorialSetupRestrictPlayerVtable() {

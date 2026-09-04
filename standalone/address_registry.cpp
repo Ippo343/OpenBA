@@ -555,6 +555,7 @@ extern void RegisterGulSerialize();         // save/load wave: SaveRestore keyst
 extern "C" void RegisterGulTeardown();      // GameUpdateLoop::Shutdown chain (c3d30/c3e60/907b0/1024d0/f8ff0)
 extern void RegisterSaveLoadDialog();       // save/load wave: SaveLoadDialog ctor (b8270) + vtable (14015f900)
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
+extern "C" void RegisterFindUIElementByPath();  // 0x1400e1870 — the tutorial highlight/arrow path resolver
 extern void RegisterTutorialWaveBatch();   // Lane 2 Tutorial wave: 12 helper fns + 6 dialog vtables + 2 ctors
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
 extern void RegisterDebugMenuBatch();      // Lane 3: built-in DebugUI/Game debug-cheat cluster (11 addrs)
@@ -758,6 +759,7 @@ static void RegisterCodeFunctions() {
     RegisterGulTeardown();          // teardown chain (code/Game/Game/gameupdateloop_teardown.cpp)
     RegisterSaveLoadDialog();       // save/load wave (code/Game/Dialog/saveloaddialog.cpp)
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
+    RegisterFindUIElementByPath();  // e1870: without it every highlight + "unhide only this" step is a no-op
     RegisterTutorialWaveBatch();   // Tutorial wave: 262b0/28650/1001f0/e2250/e2330/e24f0/e2700/e29f0/1af90/1afe0/e1260/e1db0 + vtables 160f30/160870/1607a0/160d20/160c30/1609e0 + ctors e01d0/e2cc0
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
     RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
@@ -1362,6 +1364,29 @@ static void RegisterDispatchSlots() {
     // indirect CALL in Update @0x140112eb4 = CALL [0x140151318] -> Time::AsSeconds.
     RegisterDispatchSlot(0x140151318,                       // System::Time::AsSeconds() const
         (uintptr_t)ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
+
+    // Video::Device singleton POINTER VARIABLE, not a function: retail reads it as
+    //   MOV RAX,[0x140151a80]   ; RAX = &Video::Device::_singleton
+    //   MOV RCX,[RAX]           ; RCX = the Device
+    // so the slot holds the ADDRESS of the exported variable and every reader does a
+    // double deref. Unregistered, g_pSingletonExref_151a80 was null and EVERY screen
+    // -dimension read in the port silently produced 0x0: camera_input.cpp ScreenSize,
+    // tool_base_screenrect.cpp (entity screen rects), gameupdateloop_load.cpp, and
+    // the tutorial highlight ring, which is where it was finally caught.
+    RegisterDispatchSlot(0x140151a80,                       // Video::Device::_singleton
+        (uintptr_t)ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
+
+    // UI::Dialog::CreateElement — builds an Element from an ElementDescription
+    // ExternalPtr. Every TutorialImage* slot 9 opens with it, and those slots only
+    // became reachable once the Tutorial vtables were corrected to their real slot
+    // counts; with the slot unregistered fn_Dialog_CreateElement was null, the
+    // element came back 0, and Element::FindElementType(0, ...) faulted in Runtime.
+    // (code/Game/Work/gatherrawmaterials.cpp calls this same slot "iatSerIntBulk" —
+    // a misnomer; the retail call site at 0x1400E095A is CreateElement.)
+    RegisterDispatchSlot(0x1401528c0,                       // UI::Dialog::CreateElement
+        (uintptr_t)ResolveExport(
+            "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
+            "V?$ExternalPtr@VElementDescription@UI@@@4@@Z"));
 
     RegisterDispatchSlot(0x140152738,
         (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
