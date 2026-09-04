@@ -55,6 +55,9 @@ static bool s_helpersResolved = false;
 // Rate-limiter storage for the trace below, bucketed by goal address.
 static uint64_t s_lastStamp[64] = {};
 
+// Armed by DragPlacementTool on a successful placement — see the probe below.
+volatile int g_GoalBstProbeTicks = 0;
+
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
     s_fn_ResolveExternalRef = (fn_ResolveExternalRef_t)ResolveAddr(Module::Exe, 0x1400265b0);
@@ -298,6 +301,50 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
         if (s_fn_CountBuildingsByType && worldData) {
             count = (int)s_fn_CountBuildingsByType(worldData, typePtr);
+        }
+        // Probe the per-description BST itself (BANISHED_TUTORIAL_TRACE). With the
+        // key and the placement's descriptionPtr already proven identical, the only
+        // remaining questions are whether a node for that key exists at all, and if
+        // so what its count word holds. Registration goes into the EntityList at
+        // gw+0xe8 while this count is read from gw+0xf0 +0x160 — retail uses both
+        // too, so an entity that is placed and visible can still be missing here if
+        // whatever propagates between them did not run.
+        {
+            static int s_probe = -1;
+            if (s_probe < 0) {
+                const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
+                s_probe = (e && e[0] && e[0] != '0') ? 1 : 0;
+            }
+            static uintptr_t s_lastKey = 1;
+            static int s_lastCount = -1;
+            bool windowed = false;
+            if (g_GoalBstProbeTicks > 0) { --g_GoalBstProbeTicks; windowed = true; }
+            if (s_probe && (windowed || typePtr != s_lastKey || count != s_lastCount)) {
+                s_lastKey = typePtr; s_lastCount = count;
+                uintptr_t root = worldData ? *(uintptr_t*)(worldData + 0x160) : 0;
+                int nodes = 0;
+                uintptr_t* found = nullptr;
+                // Full walk, not the ordered search: if the ordered search and a
+                // brute-force walk disagree, the tree is unsorted w.r.t. our key.
+                uintptr_t stack[64]; int sp = 0;
+                if (root) stack[sp++] = root;
+                while (sp > 0 && nodes < 4096) {
+                    uintptr_t* n = (uintptr_t*)stack[--sp];
+                    if (!n) continue;
+                    ++nodes;
+                    if (n[0] == typePtr) found = n;
+                    if (n[4] && sp < 62) stack[sp++] = n[4];
+                    if (n[5] && sp < 62) stack[sp++] = n[5];
+                }
+                fprintf(stderr, "[GoalBST] key=%p root=%p nodes=%d walkFound=%p "
+                                "walkCount=%d searchCount=%d entityList(0xe8)=%p "
+                                "counted(0xf0)=%p\n",
+                        (void*)typePtr, (void*)root, nodes, (void*)found,
+                        found ? (int)found[2] : -1, count,
+                        *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe8),
+                        (void*)worldData);
+                fflush(stderr);
+            }
         }
         break;
     }

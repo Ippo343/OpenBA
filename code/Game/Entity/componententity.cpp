@@ -1035,6 +1035,22 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
 
     ent = entity();
     ComponentEntity_OnAddedPass((ComponentEntity*)ent);
+
+    // BANISHED_REGENTITY_TRACE — the per-description registry (townMgr+0x160) is
+    // populated downstream of the OnAdded pass, and a drag-placed StorageYard has
+    // been observed placed-and-solid (later drags over it are rejected as occupied)
+    // while its description key never appears in that tree at all, over a 240-tick
+    // window. Log what actually reaches the registrar: whether it is called for
+    // that entity, under which category, and with which description pointer — the
+    // key the tree is keyed by.
+    if (std::getenv("BANISHED_REGENTITY_TRACE")) {
+        ent = entity();
+        fprintf(stderr, "[RegEntity] entity=%p category=%d desc(+0x28)=%p "
+                        "externals(+0x20)=%p flags(+0x1c)=0x%08X\n",
+                (void*)ent, category, *(void**)(ent + 0x28), *(void**)(ent + 0x20),
+                *(uint32_t*)(ent + 0x1C));
+        fflush(stderr);
+    }
 }
 
 // ============================================================

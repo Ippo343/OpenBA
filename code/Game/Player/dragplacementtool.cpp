@@ -719,6 +719,15 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
         fn_EntityList_RegisterEntity(entityList, &entityIBP, categoryId);
     }
 
+    // Arm the goal-side BST probe for a window of ticks. "Never registered" and
+    // "registered, then removed again" both read as count=0 from outside, and the
+    // drag preview is genuinely transient — every CalcPath clears the previous one
+    // — so the two are only separable by watching the tree over several ticks.
+    {
+        extern volatile int g_GoalBstProbeTicks;
+        g_GoalBstProbeTicks = 240;
+    }
+
     if (s_trace) {
         // descriptionPtr is the key the EntityList's per-description BST is keyed
         // by, and it is what TutorialGoalCount's Zone mode looks the count up
