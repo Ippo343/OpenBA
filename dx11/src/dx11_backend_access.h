@@ -249,6 +249,24 @@ static_assert(offsetof(VertexLayoutElement, format)     == 0x18, "Element::forma
 //     MOV RDX, qword ptr [RCX + 0x8]   ; this->renderBuffer
 //     MOV RAX, qword ptr [RDX]         ; +0x00 -> color ImageBuffer*
 //     MOV RAX, qword ptr [RDX + 0x8]   ; +0x08 -> depth ImageBuffer*
+// ============================================================
+// Constant-buffer binding registry (device-reset bookkeeping)
+//
+// DeviceData::Resize calls ID3D11DeviceContext::ClearState(), which unbinds
+// every constant buffer from its VS/PS slot. ConstantBufferData::Bind only
+// issues VS/PSSetConstantBuffers when its cached rung index changes, so after a
+// ClearState nothing ever re-binds them: every shader then reads a null
+// constant buffer, all transforms come back zero, no geometry rasterises, and
+// the window is black for the rest of the run. See the note on
+// Dx11InvalidateConstantBufferBindings in buffers.cpp.
+//
+// The registry is only touched on create/destroy and once per device reset,
+// never per draw.
+// ============================================================
+void Dx11TrackConstantBuffer(ConstantBufferData* p);
+void Dx11UntrackConstantBuffer(ConstantBufferData* p);
+void Dx11InvalidateConstantBufferBindings();
+
 struct RenderBufferOwner {
     void* color;   // +0x00  Video::ImageBuffer* (may be null)
     void* depth;   // +0x08  Video::ImageBuffer* (may be null)

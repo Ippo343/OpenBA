@@ -76,6 +76,7 @@
 
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
+#include "dx11_backend_access.h"
 
 #include "resolve.h"
 
@@ -83,6 +84,8 @@
 #include <d3d11.h>
 
 #include <cstdio>
+#include <mutex>
+#include <vector>
 
 namespace VideoDX11 {
 namespace {
@@ -760,6 +763,7 @@ void BufferData_Unlock_Entry(IndexBufferData* self) {
 
 // 0x180001270 — ~ConstantBufferData. Not a vtable slot; tail-called by slot 0.
 void ConstantBufferData_Destruct(ConstantBufferData* self) {
+    Dx11UntrackConstantBuffer(self);
     self->vptr = g_deps.vtConstantBufferData;
     for (int i = 0; i < self->bufferCount; ++i) {
         ID3D11Buffer* b = reinterpret_cast<ID3D11Buffer**>(self->buffers)[i];
@@ -924,6 +928,54 @@ int32_t ConstantBufferData_SlotIndexPlusOne(ConstantBufferData* self) {
 }
 
 }  // namespace
+
+// ============================================================
+// Constant-buffer binding registry — see dx11_backend_access.h.
+//
+// DELIBERATE DEVIATION from the shipped DLL. ConstantBufferData::Bind's
+// `activeIndex != index` guard (0x180001460) caches "this rung is already bound
+// to my shader slot". DeviceData::Resize (0x180004340) calls
+// ID3D11DeviceContext::ClearState(), which drops every constant-buffer binding
+// on the floor while leaving `activeIndex` alone — so the guard skips the
+// rebind on every subsequent frame and the shaders read a NULL constant buffer
+// from then on. Zeroed transform matrices collapse every vertex, nothing
+// rasterises, and the window stays black until the process exits. Measured:
+// after a resize the same ConstantBufferData objects come back with
+// activeIndex == index == 0 and VS/PSSetConstantBuffers is never called again.
+//
+// The shipped DLL has the same hole; it only stays hidden while something keeps
+// changing the rung (a differently sized update) and re-binding as a side
+// effect. Resetting the cache where the bindings are actually dropped is the
+// narrowest correct fix, and it costs one rebind per buffer per device reset
+// rather than a rebind per update, so the guard keeps doing its job.
+//
+// Touched on create, on destroy, and once per device reset — never per draw.
+namespace {
+std::mutex&                       CbRegistryLock() { static std::mutex m; return m; }
+std::vector<ConstantBufferData*>& CbRegistry()     { static std::vector<ConstantBufferData*> v; return v; }
+}  // namespace
+
+void Dx11TrackConstantBuffer(ConstantBufferData* p) {
+    if (!p) return;
+    std::lock_guard<std::mutex> lock(CbRegistryLock());
+    CbRegistry().push_back(p);
+}
+
+void Dx11UntrackConstantBuffer(ConstantBufferData* p) {
+    if (!p) return;
+    std::lock_guard<std::mutex> lock(CbRegistryLock());
+    std::vector<ConstantBufferData*>& v = CbRegistry();
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (v[i] == p) { v[i] = v.back(); v.pop_back(); return; }
+    }
+}
+
+void Dx11InvalidateConstantBufferBindings() {
+    std::lock_guard<std::mutex> lock(CbRegistryLock());
+    for (ConstantBufferData* p : CbRegistry())
+        p->activeIndex = -1;   // the factory's "no rung bound yet" sentinel
+}
+
 }  // namespace VideoDX11
 
 // ============================================================

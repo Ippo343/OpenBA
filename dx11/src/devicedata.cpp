@@ -909,6 +909,14 @@ int DeviceData_Resize(DeviceData* self) {
     ctx->OMSetRenderTargets(0, nullptr, nullptr);
     ctx->ClearState();
 
+    // ClearState() has just unbound every constant buffer. ConstantBufferData
+    // caches which rung it has bound and would otherwise never re-bind, leaving
+    // every shader reading a null constant buffer — a permanently black window
+    // after any resize. Drop those caches here, where the bindings actually
+    // died. Deliberate deviation from the shipped DLL; see the note above
+    // Dx11InvalidateConstantBufferBindings in buffers.cpp.
+    Dx11InvalidateConstantBufferBindings();
+
     im->DeviceReleaseDynamic(dev);
 
     Dx11Release(self->depthBuffer);
@@ -1979,6 +1987,10 @@ void* Factory_ConstantBufferData(DeviceData* self, void* owner) {
     p->buffers        = nullptr;
     p->bufferCount    = 0;
     p->bufferCapacity = 0;
+    // Join the reset registry so DeviceData_Resize can drop this object's
+    // "already bound" cache when it calls ClearState(). See the note above
+    // Dx11InvalidateConstantBufferBindings in buffers.cpp.
+    Dx11TrackConstantBuffer(p);
     return p;
 }
 
