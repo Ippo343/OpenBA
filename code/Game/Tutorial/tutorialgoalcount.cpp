@@ -680,12 +680,21 @@ compare:
         }
         if (s_trace) {
             uintptr_t typePtr = *(uintptr_t*)(s + 0x40);
+            // The RAW ExternalPtr and the value the compare actually uses are two
+            // different things: ResolveTypePtr returns 0 whenever its type-id
+            // filter is unregistered, so a healthy-looking `desc` here sat next to
+            // a hard 0 count for the whole life of the Profession bug. Print both.
+            uintptr_t filtered = (mode == 0 || mode == 7 || mode == 10)
+                ? ResolveTypePtr(s, s_TypeId_BuildingDesc)
+                : ResolveTypePtr(s, s_TypeId_ProfessionDesc);
             uint64_t stamp = ((uint64_t)count << 32) ^ (uint64_t)typePtr;
             if (stamp != s_lastStamp[s & 0x3F]) {
                 s_lastStamp[s & 0x3F] = stamp;
-                fprintf(stderr, "[GoalCount] mode=%u name=\"%s\" desc=%p count=%d target=%d ge=%d\n",
+                fprintf(stderr, "[GoalCount] mode=%u name=\"%s\" desc=%p filtered=%p "
+                                "count=%d target=%d ge=%d\n",
                         mode, *(const char* const*)(s + 0x30) ? *(const char* const*)(s + 0x30) : "(null)",
-                        (void*)typePtr, count, *(int32_t*)(s + 0x24), (int)*(uint8_t*)(s + 0x28));
+                        (void*)typePtr, (void*)filtered,
+                        count, *(int32_t*)(s + 0x24), (int)*(uint8_t*)(s + 0x28));
                 fflush(stderr);
             }
         }

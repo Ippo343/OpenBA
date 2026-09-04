@@ -720,10 +720,17 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     }
 
     if (s_trace) {
+        // descriptionPtr is the key the EntityList's per-description BST is keyed
+        // by, and it is what TutorialGoalCount's Zone mode looks the count up
+        // under. If the goal resolved a DIFFERENT instance of the same .rsc (our
+        // preload leaves resources in the loop's m_resourceList rather than the
+        // ExternalFactory, so the two can diverge), the entity is real, visible
+        // and placed — and the goal still counts 0. Print the key.
         fprintf(stderr, "[DragPlace] PLACED rect=(%d,%d)..(%d,%d) w=%d h=%d rot=%d "
-                        "entity=%p build=%p category=%d\n",
+                        "entity=%p build=%p category=%d desc=%p placementDesc=%p\n",
                 minCol, minRow, maxCol, maxRow, outCostA, outCostB, rotation,
-                newEntity, (void*)buildComp, categoryId);
+                newEntity, (void*)buildComp, categoryId,
+                (void*)self->descriptionPtr, (void*)self->placementDesc);
         fflush(stderr);
     }
     return true;
