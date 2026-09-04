@@ -103,8 +103,10 @@ static void* (*s_fn_Vector3_Normalize)(void* vec3, void* retbuf) = nullptr;
 // Math::Vector3::Heading(this) via IAT at 0x1401512d8
 static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
 
-// Math::Vector3::Dot(this, other) via IAT at 0x140151298
-static float* (*s_fn_Vector3_Dot)(void* a, void* b) = nullptr;
+// Math::Vector3::Dot(this, retbuf, other) via IAT at 0x140151298
+// Value-return ABI: the Scalar result is written to the caller-supplied retbuf
+// (RDX) and returned in RAX; `other` is the THIRD arg (R8).
+static float* (*s_fn_Vector3_Dot)(const void* a, void* retbuf, const void* b) = nullptr;
 
 // FUN_140132010 -- sqrtf implementation
 static float (*s_fn_Sqrtf)(float val) = nullptr;
@@ -231,7 +233,7 @@ bool MoveTo_ResolveFuncs() {
     iat = ResolveAddr(Module::Exe, 0x1401512d8);
     if (iat) s_fn_Vector3_Heading = *reinterpret_cast<float(**)(void*)>(iat);
     iat = ResolveAddr(Module::Exe, 0x140151298);
-    if (iat) s_fn_Vector3_Dot = *reinterpret_cast<float*(**)(void*, void*)>(iat);
+    if (iat) s_fn_Vector3_Dot = *reinterpret_cast<float*(**)(const void*, void*, const void*)>(iat);
 
     // sqrtf (FUN_140132010)
     s_fn_Sqrtf = reinterpret_cast<float(*)(float)>(
@@ -858,7 +860,8 @@ void MoveTo_Enter_Impl(void* self) {
             bridgeFacing[1] = *(float*)(bridgeResult + 0x30);
             bridgeFacing[2] = *(float*)(bridgeResult + 0x34);
 
-            float* dotResult = s_fn_Vector3_Dot(bridgeFacing, myFacing);
+            float dotOut = 0.0f;
+            float* dotResult = s_fn_Vector3_Dot(bridgeFacing, &dotOut, myFacing);
             if (*dotResult > 0.0f) {
                 // Facing same direction as bridge -- set road flag
                 *(uint8_t*)(s + 0x474) = 1;
