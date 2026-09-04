@@ -121,6 +121,13 @@ void EntityList_InitFuncs() {
 //       if (comp+0x20 >> 2 & 1)  // component flag bit 2
 //         call comp->vtable[+0x40](comp, time)
 //       break if entity deleted (entity+0x40 & 0x400)
+// [STRESS] EntityList_Update sub-phase accumulators (QPC ticks), read + reset by the
+// stress harness's COMPPROF report. Only touched when g_compProfOn.
+long long g_elProfDrainTicks = 0, g_elProfPreTicks = 0, g_elProfTreeTicks = 0, g_elProfBucketTicks = 0;
+long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked = 0;
+extern "C" int  CompProf_BeginKind(void* comp, int kind);
+extern "C" void CompProf_End(int slot, long long qpcTicks);
+
 void EntityList_TreeNodeHandler(int64_t entity, void* time) {
     uint32_t entityFlags = *(uint32_t*)(entity + 0x40);
 
@@ -152,7 +159,17 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
             // Call component vtable slot +0x40 (slot index 8)
             void** vtbl = *(void***)(uintptr_t)comp;
             typedef void (*CompSlot8_t)(void*, void*);
-            ((CompSlot8_t)vtbl[8])((void*)(uintptr_t)comp, time);
+            if (g_compProfOn >= 2) {
+                // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
+                // per component type, separately from the slot-9 bucket Update (kind 1 =
+                // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
+                const int slot = CompProf_BeginKind((void*)(uintptr_t)comp, 1);
+                const long long q0 = CompProf_Now();
+                ((CompSlot8_t)vtbl[8])((void*)(uintptr_t)comp, time);
+                CompProf_End(slot, CompProf_Now() - q0);
+            } else {
+                ((CompSlot8_t)vtbl[8])((void*)(uintptr_t)comp, time);
+            }
         }
 
         ci++;
@@ -328,7 +345,14 @@ extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
 // A non-null 64-bit value that cannot be a live heap pointer: misaligned, or
 // a half-written pointer (valid high dword, tiny low dword — the freelist-link
 // pattern left in a freed block, e.g. 0x000001AC_0000D661).
+// PERF A/B (2026-09-04): BANISHED_TREE_GUARDS=0 turns the corruption guards into no-ops
+// so their walk cost can be measured against the faithful (unguarded) retail walk.
+static const bool g_treeGuards = [] {
+    const char* e = std::getenv("BANISHED_TREE_GUARDS");
+    return !(e && e[0] == '0');
+}();
 static inline bool PtrCorrupt(uintptr_t p) {
+    if (!g_treeGuards) return false;
     if (p == 0) return false;                 // null = legitimate terminator / cleared slot
     if (p & 0x7) return true;                 // heap objects are 8-byte aligned
     if ((uint32_t)(p >> 32) != 0 && (uint32_t)p < 0x10000) return true; // half-written
@@ -342,6 +366,13 @@ static inline bool NodeCorrupt(const EntityTreeNode* n) {
 
 // Set when a walk refuses a corrupt pointer; caller logs + continues.
 static bool             g_treeCorrupt = false;
+// PERF A/B: successor prefetch in the update-tree walk. OFF by default — measured
+// 2026-09-04 at 800x10: no prefetch 0.25 ms/iter, one level 0.26, two levels 0.27; the
+// extra TreeSuccessor walk costs more than the hidden miss. BANISHED_TREE_PREFETCH=1 enables.
+static const bool       g_treePrefetch = [] {
+    const char* e = std::getenv("BANISHED_TREE_PREFETCH");
+    return e && e[0] == '1';
+}();
 static const char*      g_treeCorruptSite = nullptr;   // which deref tripped
 static EntityTreeNode*  g_treeCorruptFrom = nullptr;   // node holding the bad field
 static uintptr_t        g_treeCorruptBad  = 0;         // the refused pointer value
@@ -458,13 +489,18 @@ void EntityList_Update(EntityList* self, void* time) {
     // guards bail and the tool closes the panel; frame N+1 drains + frees with no
     // dialog left pointing at it. Marked entities are inert meanwhile — every update
     // loop above already skips bit-10 (0x400) entities.
+    LARGE_INTEGER pq0, pq1;
+    const bool prof = g_compProfOn != 0;
+    if (prof) QueryPerformanceCounter(&pq0);
     EntityList_DrainRemovals(self);
+    if (prof) { QueryPerformanceCounter(&pq1); g_elProfDrainTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 1: Accumulate time
     self->accumulatedTime += *(int64_t*)time;
 
     // Step 2: PreUpdate — process staging arrays into update tree
     EntityList_PreUpdate(self);
+    if (prof) { QueryPerformanceCounter(&pq1); g_elProfPreTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = self->updateTreeRoot;
@@ -486,6 +522,22 @@ void EntityList_Update(EntityList* self, void* time) {
                 break;
             }
 
+            // Prefetch the in-order successor's entity header + component array before
+            // ticking this one (PERF 2026-09-04: the walk is a pointer chase — node ->
+            // entity -> component IBP array -> component -> vtable — and the entity
+            // miss showed as the hottest self-time line). The real successor is still
+            // computed AFTER the handler, exactly as retail does, so a node the handler
+            // inserts as our successor is not skipped; this is a hint only.
+            if (g_treePrefetch) {
+                EntityTreeNode* pf = TreeSuccessor(node);
+                if (pf && !PtrCorrupt((uintptr_t)pf->entityIBP)) {
+                    const char* pe = (const char*)pf->entityIBP;
+                    __builtin_prefetch(pe + 0x30);
+                    const char* comps = *(const char* const*)(pe + 0x30);
+                    if (comps) __builtin_prefetch(comps);
+                }
+            }
+
             // Check entity not deleted (bit 10 of flags at entity+0x40)
             if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
                 fn_InternalBasePtr_CheckPtr((void*)node);
@@ -496,10 +548,12 @@ void EntityList_Update(EntityList* self, void* time) {
             // Move to in-order successor
             prev = node;
             node = TreeSuccessor(node);
+            if (prof) ++g_elProfTreeNodes;
         }
 
         if (g_treeCorrupt) ReportTreeCorrupt("Update", self, prev);
     }
+    if (prof) { QueryPerformanceCounter(&pq1); g_elProfTreeTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 4: 5-bucket round-robin
     int64_t currentTime = self->accumulatedTime;
@@ -525,6 +579,7 @@ void EntityList_Update(EntityList* self, void* time) {
                 // Read entity IBP and CheckPtr
                 int64_t entIBP = arrBase[idx];
                 fn_InternalBasePtr_CheckPtr(&entIBP);
+                if (prof) ++g_elProfBucketVisits;
 
                 // Check not deleted (bit 10)
                 if (!((*(uint32_t*)(entIBP + 0x40) >> 10) & 1)) {
@@ -532,6 +587,7 @@ void EntityList_Update(EntityList* self, void* time) {
                     int64_t delta = currentTime - *(int64_t*)(entIBP + 0x20);
 
                     if (delta > 0) {
+                        if (prof) ++g_elProfBucketTicked;
                         fn_InternalBasePtr_CheckPtr(&entIBP);
                         int64_t ent = entIBP;
 
@@ -561,11 +617,9 @@ void EntityList_Update(EntityList* self, void* time) {
                                         // [STRESS] per-component-type Update cost. Keyed by
                                         // vtable, so the only per-call cost is two QPC reads.
                                         const int slot = CompProf_Begin((void*)(uintptr_t)compIBP);
-                                        LARGE_INTEGER q0, q1;
-                                        QueryPerformanceCounter(&q0);
+                                        const long long q0 = CompProf_Now();
                                         compUpdate((void*)(uintptr_t)compIBP, deltaTime);
-                                        QueryPerformanceCounter(&q1);
-                                        CompProf_End(slot, q1.QuadPart - q0.QuadPart);
+                                        CompProf_End(slot, CompProf_Now() - q0);
                                     } else {
                                         compUpdate((void*)(uintptr_t)compIBP, deltaTime);
                                     }
@@ -604,6 +658,7 @@ void EntityList_Update(EntityList* self, void* time) {
         // Save cursor position
         self->cursor[bucket] = cursorVal;
     }
+    if (prof) { QueryPerformanceCounter(&pq1); g_elProfBucketTicks += pq1.QuadPart - pq0.QuadPart; }
 
     // Step 5: removal drain DEFERRED to the TOP of the NEXT EntityList_Update (see
     // EntityList_DrainRemovals call + rationale at the head of this function). What

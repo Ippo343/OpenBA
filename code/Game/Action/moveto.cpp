@@ -529,6 +529,44 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
 //   - If path exhausted: reset to idle animation.
 // Returns: 0=arrived, 1=moving, 2=no path
 // ============================================================
+
+// PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
+// the hot paths called through dispatch slots (a DLL call per 3-float store). Bodies
+// transcribed from the Runtime decompiles — note Dot's operand ORDER (y, x, z), kept
+// so the float result is the same to the bit. Non-trivial helpers (Normalize, Heading,
+// RootAnimationOffset) still go through the Runtime.
+//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)          -> InlV3(out,x,y,z)
+//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> InlV3Splat(out,&s)
+//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> InlV3Dot(a,&ret,b)
+//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> InlV2Dot(a,&ret,b)
+//   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
+//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> InlScalarMax(&a,&ret,&b)
+static inline void InlV3(void* out, float x, float y, float z) {
+    float* o = static_cast<float*>(out); o[0] = x; o[1] = y; o[2] = z;
+}
+static inline void InlV3Splat(void* out, const float* s) {
+    float* o = static_cast<float*>(out); o[0] = *s; o[1] = *s; o[2] = *s;
+}
+static inline void* InlV3Dot(const void* a, void* ret, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
+    return ret;
+}
+static inline void* InlV2Dot(const void* a, void* ret, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0];
+    return ret;
+}
+static inline bool InlBoxIsect(const void* a, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
+}
+static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
+    const float x = *static_cast<const float*>(a), y = *static_cast<const float*>(b);
+    *static_cast<float*>(ret) = (y < x) ? x : y;
+    return ret;
+}
+
 int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     MoveTo_ResolveFuncs();
     (void)time;
@@ -640,11 +678,11 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float dy2 = curY - destY;
         float dx2 = curX - destX;
         float diffVec[3];
-        s_fn_Vector3_Ctor_Floats(diffVec, dx2, dy2, dz);
+        InlV3(diffVec, dx2, dy2, dz);
 
         float dotVec[2] = { diffVec[0], diffVec[1] };
         float dotOut = 0.0f;
-        s_fn_Vector2_Dot(dotVec, &dotOut, dotVec);  // R8=other=self → dx²+dy²
+        InlV2Dot(dotVec, &dotOut, dotVec);  // R8=other=self → dx²+dy²
         float distToGoal = s_fn_Sqrtf(dotOut);
 
         if (distToGoal < *s_fMinDistSq) {
@@ -657,7 +695,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float revDy = destY - curY;
         float revDz = *(float*)(s + 0x40) - curZ;
         float revVec[3];
-        s_fn_Vector3_Ctor_Floats(revVec, revDx, revDy, revDz);
+        InlV3(revVec, revDx, revDy, revDz);
 
         // Normalize 2D direction (value-return ABI: result written to retbuf, not in place)
         float dir2d[2] = { revVec[0], revVec[1] };
@@ -675,7 +713,8 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float scalarY = facing3d[1];
         float scalarZ = 0.0f;
         float tempVec[3];
-        void* normResult = s_fn_Vector3_Ctor_Scalars(tempVec, &scalarX, &scalarY, &scalarZ);
+        InlV3(tempVec, scalarX, scalarY, scalarZ);   // Vector3(Scalar,Scalar,Scalar) = 3 stores
+        void* normResult = tempVec;
         float normalized[4] = {0,0,0,0};
         s_fn_Vector3_Normalize(normResult, normalized);
 

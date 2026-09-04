@@ -1953,6 +1953,25 @@ extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
 // ?CheckPtr@InternalBasePtr@Object@@QEAAXXZ
 typedef void (*fn_InternalBasePtr_CheckPtr_t)(void* self);
 extern fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr;
+// PERF (2026-09-04): the shipped Runtime's CheckPtr body is a bare RET (a debug-build
+// leftover) and the port calls it ~60k times per frame through this pointer at 800x10.
+// The resolver verifies the body byte (0xC3) and sets g_checkPtrIsNop; every direct
+// call site then skips the indirect call. Non-call uses (`if (fn_InternalBasePtr_CheckPtr)`)
+// still see the variable because a function-like macro only expands before '('.
+// BANISHED_CHECKPTR_NOP=0 forces the real call (A/B).
+extern bool g_checkPtrIsNop;
+#ifdef BANISHED_CHECKPTR_STATIC_NOP
+// Perf build: the call is compiled out entirely (the resolver still verifies the
+// shipped body is RET 0 and prints a loud warning if it ever is not). The ~60k
+// `load g_checkPtrIsNop + branch` per frame of the runtime form were ~3% of the
+// EntityList phase in the sampler.
+#define fn_InternalBasePtr_CheckPtr(p) ((void)(p))
+#else
+static inline void InternalBasePtr_CheckPtr_Inline(void* p) {
+    if (!g_checkPtrIsNop) fn_InternalBasePtr_CheckPtr(p);
+}
+#define fn_InternalBasePtr_CheckPtr(p) InternalBasePtr_CheckPtr_Inline(p)
+#endif
 
 // UI::DialogInstance::DialogInstance(this, ui, dialog, parentInternalPtr, dataSource, extraPtr, flags)
 // Full constructor for creating child dialog instances.

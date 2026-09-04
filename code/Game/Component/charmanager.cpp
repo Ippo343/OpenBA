@@ -184,20 +184,39 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     cy += *reinterpret_cast<float*>(mgr + 0x08);
 
     float worldSize = *reinterpret_cast<float*>(mgr + 0x00);
-    float eps = s_pRadiusEps ? *s_pRadiusEps : 0.0f;
-    float lr = worldSize / (radius + eps);
-
-    // level = floor(log2(lr)) via float-exponent extraction, clamped to [0, levels-1]
-    uint32_t lrBits;
-    std::memcpy(&lrBits, &lr, 4);
-    int level = static_cast<int>((lrBits >> 0x17) - 0x7f);
     int levels = *reinterpret_cast<int*>(mgr + 0x0c);
-    if (levels <= level) level = levels - 1;
-    if (level < 0) level = 0;
 
-    int cellsPerSide = 1 << level;
-    float uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
-    float cellsPerUnit = uvScale / (worldSize / static_cast<float>(cellsPerSide));
+    // PERF (2026-09-04): level / cellsPerSide / cellsPerUnit are a pure function of
+    // (radius, worldSize, levels) — three float divides that every one of the ~1000
+    // characters recomputes every tick with the SAME inputs (one description radius, one
+    // world). Memoise the last inputs; the cached values are the identical float results,
+    // so cell assignment is bit-for-bit what the divides produce.
+    static uint32_t s_mRadiusBits = 0xffffffffu, s_mWorldBits = 0xffffffffu;
+    static int s_mLevels = -1, s_mLevel = 0, s_mCellsPerSide = 1;
+    static float s_mCellsPerUnit = 0.0f;
+    uint32_t radiusBits, worldBits;
+    std::memcpy(&radiusBits, &radius, 4);
+    std::memcpy(&worldBits, &worldSize, 4);
+    if (radiusBits != s_mRadiusBits || worldBits != s_mWorldBits || levels != s_mLevels) {
+        float eps = s_pRadiusEps ? *s_pRadiusEps : 0.0f;
+        float lr = worldSize / (radius + eps);
+
+        // level = floor(log2(lr)) via float-exponent extraction, clamped to [0, levels-1]
+        uint32_t lrBits;
+        std::memcpy(&lrBits, &lr, 4);
+        int level = static_cast<int>((lrBits >> 0x17) - 0x7f);
+        if (levels <= level) level = levels - 1;
+        if (level < 0) level = 0;
+
+        int cellsPerSide = 1 << level;
+        float uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
+        s_mCellsPerUnit = uvScale / (worldSize / static_cast<float>(cellsPerSide));
+        s_mLevel = level; s_mCellsPerSide = cellsPerSide;
+        s_mRadiusBits = radiusBits; s_mWorldBits = worldBits; s_mLevels = levels;
+    }
+    const int level = s_mLevel;
+    const int cellsPerSide = s_mCellsPerSide;
+    const float cellsPerUnit = s_mCellsPerUnit;
     cx *= cellsPerUnit;
     cy *= cellsPerUnit;
 

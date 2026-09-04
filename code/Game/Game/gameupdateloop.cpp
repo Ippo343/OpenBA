@@ -17,6 +17,7 @@
 // HEAVILY INSTRUMENTED with printf() for tracing a hang during first Update tick
 // after loading a tutorial scenario.
 
+#include "sampler.h"
 #include "GameUpdateLoop.h"
 #include "Entity/entitylist_funcs.h"
 #include "Component/component_factory_base.h"
@@ -808,8 +809,12 @@ inline double QpcMs(long long ticks) {
 
 struct PhaseTimer {
     int ph; long long t0; bool on;
-    explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) { if (on) t0 = QpcNow(); }
+    explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) {
+        g_samplerTag = 2 + p;   // [Sampler] phase tag (standalone/sampler.h)
+        if (on) t0 = QpcNow();
+    }
     ~PhaseTimer() {
+        g_samplerTag = 1;
         if (!on || !g_qpcFreq) return;
         const double s = (double)(QpcNow() - t0) / (double)g_qpcFreq;
         g_phSec[ph] += s;
@@ -903,6 +908,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // [SIMPROF] whole-Update stamp + deterministic speed override (both diagnostic-only)
     const bool simProf = SimProfOn();
     const long long frameT0 = simProf ? QpcNow() : 0;
+    g_samplerTag = 1;   // [Sampler] inside Update
+    struct SamplerTagReset { ~SamplerTagReset() { g_samplerTag = 0; } } samplerTagReset;
     ApplyForceSpeed(self->m_entityUI);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
 
@@ -2542,8 +2549,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 // GameUpdateLoop::Shutdown (0x1400977C0) — Teardown all subsystems
 // ============================================================
 
+extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.cpp
 extern "C"
 void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
+    RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
     EnsureInit();
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)self);

@@ -15,6 +15,16 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <tlhelp32.h>
+
+// The perf build strips every unqualified printf (log_strip.h) — which silenced ALL of
+// this file's reports in the 800x10 teardown hunt (empty standalone_debug.log while the
+// process died in the allocator). Diagnostics here must survive the strip: route them to
+// stderr, which the harness captures per run.
+#ifdef printf
+#undef printf
+#endif
+#define printf(...) std::fprintf(stderr, __VA_ARGS__)
 
 namespace {
 
@@ -260,11 +270,32 @@ void ShimFree(void* ptr) {
 } // namespace
 
 static DWORD WINAPI RedzoneWatchdog(LPVOID);
+static DWORD  g_mainTid    = 0;      // thread that ran Install (= the sim thread)
+static HANDLE g_mainThread = nullptr;
 
 void RedzoneAlloc_Install() {
     const char* env = getenv("BANISHED_REDZONE");
     if (!env || env[0] == '0' || env[0] == 'f' || env[0] == 'F') {
         return;  // disabled — leave the real allocator pointers in place
+    }
+    // BANISHED_REDZONE=watch — WATCH-ONLY mode: no alloc/free shim at all (the shim's
+    // per-op bookkeeping changes timing enough to hide a cross-thread race; the 800x10
+    // teardown corruption reproduces plain and vanished under the shim). Only the
+    // heap-walking watchdog thread runs, so the corrupt tag is reported within
+    // ~BANISHED_REDZONE_WATCH ms of the write together with EVERY thread's stack.
+    if (env[0] == 'w' || env[0] == 'W') {
+        g_live = new std::unordered_map<void*, Entry>();
+        g_exeBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        g_mainTid = GetCurrentThreadId();
+        g_mainThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
+                                  FALSE, g_mainTid);
+        if (const char* w = getenv("BANISHED_REDZONE_WATCH")) g_watchIntervalMs = atoi(w);
+        if (g_watchIntervalMs < 0) g_watchIntervalMs = 1;
+        g_enabled = true;
+        printf("[REDZONE] WATCH-ONLY mode: no shim, watchdog=%dms\n", g_watchIntervalMs);
+        fflush(stdout);
+        CreateThread(nullptr, 0, &RedzoneWatchdog, nullptr, 0, nullptr);
+        return;
     }
     if (!fn_MemAlloc || !fn_MemFreeStatic) {
         printf("[REDZONE] cannot install — fn_MemAlloc=%p fn_MemFreeStatic=%p\n",
@@ -304,6 +335,9 @@ void RedzoneAlloc_Install() {
         printf("[REDZONE] static MemAlloc/MemFree slots rewired: b60=%p b68=%p\n",
                (void*)sa, (void*)sf);
     }
+    g_mainTid = GetCurrentThreadId();
+    g_mainThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
+                              FALSE, g_mainTid);
     g_enabled = true;
     printf("[REDZONE] installed: tailPad=%zu bytes (0=native layout), zeroOnAlloc=%d, "
            "autoScanEvery=%u, watchdog=%dms, real alloc=%p free=%p exeBase=%p\n",
@@ -459,8 +493,106 @@ void PrintModOff(const char* label, uint64_t addr) {
 // before trusting it (Allocate runs WITHOUT the allocator lock, so a single
 // walk can momentarily observe a mid-flight tag = false positive).
 static uint8_t* g_lastBadBlock = nullptr;
+extern "C" int AllocStats_Lookup(void*, uint64_t*, void**, void**);   // allocator_lock.cpp
+static bool   g_reportedOnce = false;
+extern "C" void StressHarness_Context(char* buf, int n);
+
+// Print the MAIN thread's stack (from another thread: suspend, read context,
+// unwind) so a watchdog detection names what the sim was executing when the
+// corrupt tag was first seen. Same unwind walk as the crash handler.
+static void DumpOneThreadStack(HANDLE th, DWORD tid, const char* label) {
+    if (SuspendThread(th) == (DWORD)-1) {
+        printf("[REDZONE-HEAP] SuspendThread(%s tid=%lu) failed err=%lu\n", label, tid, GetLastError());
+        return;
+    }
+    CONTEXT ctx; memset(&ctx, 0, sizeof(ctx));
+    ctx.ContextFlags = CONTEXT_FULL;
+    if (GetThreadContext(th, &ctx)) {
+        printf("[REDZONE-HEAP] %s thread tid=%lu stack at detection:\n", label, tid);
+        for (int frame = 0; frame < 40; frame++) {
+            HMODULE mod = nullptr;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {
+                char path[MAX_PATH] = {0};
+                GetModuleFileNameA(mod, path, MAX_PATH);
+                const char* nm = strrchr(path, '\\');
+                printf("[REDZONE-HEAP]   #%-2d %-18s + 0x%-8llX\n", frame, nm ? nm + 1 : path,
+                       (unsigned long long)((uintptr_t)ctx.Rip - (uintptr_t)mod));
+            } else {
+                printf("[REDZONE-HEAP]   #%-2d ??? @ %p\n", frame, (void*)ctx.Rip);
+            }
+            DWORD64 imageBase = 0;
+            PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
+            if (!fn) {
+                uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);
+                if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
+                ctx.Rip = *sp; ctx.Rsp += 8;
+                if (!ctx.Rip) break;
+                continue;
+            }
+            PVOID handlerData = nullptr; ULONG64 est = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn, &ctx, &handlerData, &est, nullptr);
+            if (!ctx.Rip) break;
+        }
+    } else {
+        printf("[REDZONE-HEAP] GetThreadContext(%s) failed err=%lu\n", label, GetLastError());
+    }
+    ResumeThread(th);
+}
+
+// Every thread of the process except the caller: the corrupter may be the pathfinder
+// worker, not the sim thread, so one stack is not enough to name it.
+static void DumpMainThreadStack() {
+    const DWORD self = GetCurrentThreadId();
+    if (g_mainThread && self != g_mainTid) DumpOneThreadStack(g_mainThread, g_mainTid, "MAIN");
+    else {
+        printf("[REDZONE-HEAP] detected on the main thread itself — caller backtrace:\n");
+        void* bt[32];
+        USHORT n = CaptureStackBackTrace(0, 32, bt, nullptr);
+        for (USHORT i = 0; i < n; ++i) {
+            HMODULE mod = nullptr;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)bt[i], &mod) && mod) {
+                char path[MAX_PATH] = {0};
+                GetModuleFileNameA(mod, path, MAX_PATH);
+                const char* nm = strrchr(path, '\\');
+                printf("[REDZONE-HEAP]   #%-2d %-18s + 0x%llX\n", i, nm ? nm + 1 : path,
+                       (unsigned long long)((uintptr_t)bt[i] - (uintptr_t)mod));
+            } else printf("[REDZONE-HEAP]   #%-2d ??? @ %p\n", i, bt[i]);
+        }
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        THREADENTRY32 te; te.dwSize = sizeof(te);
+        const DWORD pid = GetCurrentProcessId();
+        if (Thread32First(snap, &te)) {
+            do {
+                if (te.th32OwnerProcessID != pid || te.th32ThreadID == self || te.th32ThreadID == g_mainTid)
+                    continue;
+                HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
+                                       FALSE, te.th32ThreadID);
+                if (!th) continue;
+                DumpOneThreadStack(th, te.th32ThreadID, "OTHER");
+                CloseHandle(th);
+            } while (Thread32Next(snap, &te));
+        }
+        CloseHandle(snap);
+    }
+    char sim[256] = {0};
+    StressHarness_Context(sim, sizeof(sim));
+    printf("[REDZONE-HEAP] sim context: %s\n", sim);
+    fflush(stdout);
+}
+
 static int HeapCheckLocked(const char* tag, bool report) {
     if (!g_enabled || !g_pMemAllocSingleton) return 0;
+    // BANISHED_REDZONE_ABORT=0: after a report, keep quiet about THAT block (it stays
+    // corrupt) but still report a different first-bad block (up to 8 reports).
+    static int s_reports = 0;
+    static uint8_t* s_lastReported = nullptr;
+    if (g_reportedOnce && s_reports >= 8) return 0;
     uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
 
     // Serialize against concurrent alloc/free via the allocator's own lock.
@@ -510,8 +642,10 @@ static int HeapCheckLocked(const char* tag, bool report) {
     if (bad && !report) {
         return bad;  // detect-only (watchdog confirmation pass) — no print/abort
     }
+    if (bad && g_reportedOnce && badBlock == s_lastReported) return bad;   // already reported
 
     if (bad) {
+        ++s_reports; s_lastReported = badBlock;
         printf("[REDZONE-HEAP] ==== corruption at checkpoint '%s' (seq=%u) ====\n",
                tag ? tag : "?", g_seq);
         printf("[REDZONE-HEAP] range %d: bad block @%p tag=0x%016llx size=%zu (0x%zx)\n",
@@ -541,6 +675,30 @@ static int HeapCheckLocked(const char* tag, bool report) {
             } else {
                 printf("[REDZONE-HEAP] preceding block NOT in our table "
                        "(Runtime-allocated, or freed-stale)\n");
+            }
+        }
+
+        // (1b) ALLOCSTATS owner lookup (BANISHED_ALLOC_STATS=1 records size + alloc
+        // caller for every Allocate, including Runtime-internal ones): who owns the
+        // preceding block and the bad block?
+        {
+            uint64_t sz = 0; void* caller = nullptr; void* actx = nullptr;
+            if (badPrev && AllocStats_Lookup(badPrev + 8, &sz, &caller, &actx)) {
+                printf("[REDZONE-HEAP] preceding block ALLOCSTATS: size=%llu ctx(array header)=%p caller=",
+                       (unsigned long long)sz, actx);
+                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);
+                if (actx && ReadablePtr((uint8_t*)actx - 0x40, 0x60)) {
+                    const uint64_t* q = reinterpret_cast<const uint64_t*>((uint8_t*)actx - 0x40);
+                    printf("[REDZONE-HEAP]   owner struct around header (header at +0x40):\n");
+                    for (int i = 0; i < 12; i += 2)
+                        printf("[REDZONE-HEAP]     %p: %016llx %016llx\n", (void*)((uint8_t*)actx - 0x40 + i * 8),
+                               (unsigned long long)q[i], (unsigned long long)q[i + 1]);
+                    PrintModOff("owner candidate vtable (header-0x40)", q[0]);
+                }
+            }
+            if (AllocStats_Lookup(badBlock + 8, &sz, &caller, &actx)) {
+                printf("[REDZONE-HEAP] bad block ALLOCSTATS: size=%llu ctx=%p caller=", (unsigned long long)sz, actx);
+                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);
             }
         }
 
@@ -578,14 +736,48 @@ static int HeapCheckLocked(const char* tag, bool report) {
         }
 
         fflush(stdout);
+        DumpMainThreadStack();
+        // Dump the 64 bytes around the bad tag: the clobber VALUE identifies the writer
+        // (a refcount bump, a state int, a pointer) better than any backtrace of the victim.
+        if (ReadablePtr(badBlock - 0x20, 0x60)) {
+            const uint64_t* q = reinterpret_cast<const uint64_t*>(badBlock - 0x20);
+            for (int i = 0; i < 12; i += 2)
+                printf("[REDZONE-HEAP]   %p: %016llx %016llx\n", (void*)(badBlock - 0x20 + i * 8),
+                       (unsigned long long)q[i], (unsigned long long)q[i + 1]);
+        }
+        fflush(stdout);
         const char* noAbort = getenv("BANISHED_REDZONE_ABORT");
         if (!(noAbort && noAbort[0] == '0')) {
             printf("[REDZONE-HEAP] aborting cleanly at heap corruption\n");
             fflush(stdout);
             ExitProcess(0x123);  // distinctive code for "heap walker tripped"
         }
+        g_reportedOnce = true;
     }
     return bad;
+}
+
+// BANISHED_TEARDOWN_HEAPCHECK=1 (with BANISHED_REDZONE=watch): once GameUpdateLoop_Shutdown
+// begins, walk the whole heap on EVERY Allocate/Free (allocator_lock.cpp calls in). The
+// 800x10 teardown corruption never shows up during the run (watchdog silent for 9000
+// frames) but the process dies in EntityList_Shutdown, so the bad write happens between
+// two teardown heap ops — this names the op right after it, with a backtrace.
+int g_teardownHeapCheck = 0;
+extern "C" void RedzoneAlloc_ArmTeardownCheck() {
+    const char* e = getenv("BANISHED_TEARDOWN_HEAPCHECK");
+    if (!g_enabled || !e || e[0] == '0') return;
+    g_teardownHeapCheck = 1;
+    printf("[REDZONE-HEAP] teardown per-op heap check ARMED\n");
+    fflush(stdout);
+    RedzoneAlloc_HeapCheck("teardown-arm");
+}
+extern "C" void RedzoneAlloc_TeardownOp(const char* what) {
+    if (!g_teardownHeapCheck) return;
+    static int depth = 0;
+    if (depth) return;          // the walk itself must not re-enter
+    ++depth;
+    RedzoneAlloc_HeapCheck(what);
+    --depth;
 }
 
 int RedzoneAlloc_HeapCheck(const char* tag) {

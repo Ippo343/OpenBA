@@ -65,7 +65,7 @@ uint32_t GetTypeIdByName(const char* name) {
 // 16 audited classes; a text audit keeps missing satellite-file serializers, so
 // this reports the OUTCOME (what the vtable actually holds at runtime).
 void DumpSlot3Inventory() {
-    const char* e = getenv("BANISHED_DUMP_SLOT3");
+    static const char* e = getenv("BANISHED_DUMP_SLOT3");   // read once (hot caller)
     if (!e || !*e || *e == '0') return;
     void* baseSlot = ::ComponentFactory::BaseSerializeSlot();
     void* stubSlot = ::ComponentFactory::InertStubSlot();

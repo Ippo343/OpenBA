@@ -31,6 +31,8 @@
 #include <cstring>
 #include <cstdlib>
 
+extern "C" void RedzoneAlloc_TeardownOp(const char* what);   // redzone_alloc.cpp
+
 namespace {
 
 typedef void* (*AllocFn)(void* self, uintptr_t size, uintptr_t align);
@@ -64,7 +66,12 @@ uint64_t g_lastReportMs = 0;
 // Open-addressing table: ptr -> (size, caller). Sized for ~1M live blocks and
 // carved out of its own VirtualAlloc reservation, independent of both the engine
 // heap and the CRT heap.
-struct BlockRec { void* ptr; uint64_t size; void* caller; };
+struct BlockRec { void* ptr; uint64_t size; void* caller; void* ctx; };
+}  // namespace
+// Set by callers (GenericArrayResize) right before fn_MemAlloc so the block table can
+// remember WHICH array header owns a buffer; cleared after the call.
+extern "C" { thread_local void* g_allocStatsCtx = nullptr; }
+namespace {
 const size_t kBlkSlots = 1u << 21;           // 2M slots, ~48 MB
 BlockRec* g_blocks = nullptr;
 uint64_t  g_blkInserts = 0, g_blkEvicted = 0;
@@ -108,7 +115,7 @@ void StatsRecordAlloc(void* p, uint64_t size, void* caller) {
     size_t i = HashPtr(p) & (kBlkSlots - 1);
     for (size_t probe = 0; probe < 32; probe++) {
         BlockRec& b = g_blocks[(i + probe) & (kBlkSlots - 1)];
-        if (!b.ptr) { b.ptr = p; b.size = size; b.caller = caller; g_blkInserts++; return; }
+        if (!b.ptr) { b.ptr = p; b.size = size; b.caller = caller; b.ctx = g_allocStatsCtx; g_blkInserts++; return; }
     }
     g_blkEvicted++;   // table full at this bucket — this block won't be matched on free
 }
@@ -125,7 +132,7 @@ void StatsRecordFree(void* p) {
                 cr->liveBytes -= (b.size <= cr->liveBytes ? b.size : cr->liveBytes);
                 if (cr->liveCount) cr->liveCount--;
             }
-            b.ptr = nullptr; b.size = 0; b.caller = nullptr;
+            b.ptr = nullptr; b.size = 0; b.caller = nullptr; b.ctx = nullptr;
             return;
         }
         if (!b.ptr) break;      // not tracked (allocated before stats armed)
@@ -168,6 +175,25 @@ void StatsMaybeReport() {
     fflush(stderr);
 }
 
+}  // namespace (reopened below)
+
+// Look a user pointer up in the ALLOCSTATS block table (BANISHED_ALLOC_STATS=1): size +
+// allocation caller. For the redzone heap report — names the owner of a corrupt or
+// overflowing block when the redzone shim is not installed (watch-only mode).
+extern "C" int AllocStats_Lookup(void* userPtr, uint64_t* outSize, void** outCaller, void** outCtx) {
+    if (!g_blocks || !userPtr) return 0;
+    size_t i = HashPtr(userPtr) & (kBlkSlots - 1);
+    for (size_t probe = 0; probe < 32; probe++) {
+        BlockRec& b = g_blocks[(i + probe) & (kBlkSlots - 1)];
+        if (b.ptr == userPtr) { if (outSize) *outSize = b.size; if (outCaller) *outCaller = b.caller;
+                                if (outCtx) *outCtx = b.ctx; return 1; }
+        if (!b.ptr) break;
+    }
+    return 0;
+}
+
+namespace {
+
 bool StatsOn() {
     if (g_statsOn < 0) {
         const char* e = getenv("BANISHED_ALLOC_STATS");
@@ -201,6 +227,7 @@ void* AllocateLocked(void* self, uintptr_t size, uintptr_t align) {
     LPCRITICAL_SECTION cs =
         reinterpret_cast<LPCRITICAL_SECTION>(reinterpret_cast<uint8_t*>(self) + 0x640);
     EnterCriticalSection(cs);
+    RedzoneAlloc_TeardownOp("teardown-alloc");
     void* r = g_origAllocate(self, size, align);
     if (StatsOn()) {
         void* caller = __builtin_return_address(0);
@@ -247,6 +274,7 @@ void FreeLocked(void* self, void* ptr) {
     LPCRITICAL_SECTION cs =
         reinterpret_cast<LPCRITICAL_SECTION>(reinterpret_cast<uint8_t*>(self) + 0x640);
     EnterCriticalSection(cs);
+    RedzoneAlloc_TeardownOp("teardown-free");
     if (StatsOn()) StatsRecordFree(ptr);
     g_origFreeBody(self, ptr);
     LeaveCriticalSection(cs);

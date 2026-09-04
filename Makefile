@@ -44,7 +44,7 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # load: at -O2+ it proved CitizenAI_ActionExecutor_c4c50's pop loop could never exit and
 # emitted a literal `jmp .` self-loop, which froze the game in-world with the citizens
 # T-posing (the sim tick never returned). Do not remove.
-SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP
+SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP -include standalone/env_cache.h
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp
 SA_INCLUDES = -I. -Iengine/types -Iengine/funcs -Icode/Game \
@@ -87,9 +87,13 @@ standalone-debug: $(SA_TARGET)
 # standalone/standalone-debug pair share build/ and rely on `make clean`).
 # This is what the stress/perf baseline (make sa-stress) measures.
 SA_PERF_DIR = standalone/build-perf
+# PERF_EXTRA: extra compile+link flags for A/B builds (e.g. PERF_EXTRA="-O3 -flto").
+# SA_CXXFLAGS is also on the link line, so -flto reaches the linker. make does not
+# track flags: `rm -rf standalone/build-perf` between flag sets.
+PERF_EXTRA ?=
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
-	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG $(STRIP_LOGS_FLAGS)" \
+	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_CHECKPTR_STATIC_NOP $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
 	        $(SA_PERF_DIR)/reimpl-x64.exe
 
 # ============================================================

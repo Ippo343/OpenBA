@@ -689,6 +689,90 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         char valid = fn_CitizenComponent_CheckWorkplaceValid ?
             fn_CitizenComponent_CheckWorkplaceValid(self, &localRes8) : 1;
         if (valid == 0) {
+            // [DIAG] This is the ONLY writer that clears a citizen's home (+0x238) in
+            // normal play, and in the stress town it fired for ~8% of the housed
+            // population per meal cycle; the homeless then never eat and starve. Print
+            // both cells' kind (+0x29) and region id (+0x26) so a stale region grid, a
+            // wrong footprint cell and a citizen standing off-map stop looking alike.
+            static int s_hiN = 0;
+            if (s_hiN < 80) { ++s_hiN;
+                int* mapInfo = *reinterpret_cast<int**>(gameWorld + 0xf8);
+                const uint8_t* tiles = mapInfo ? *reinterpret_cast<uint8_t* const*>(
+                    reinterpret_cast<const uint8_t*>(mapInfo) + 0x80) : nullptr;
+                int mapW = mapInfo ? *mapInfo : 0, half = mapW >> 1;
+                int64_t ch = *reinterpret_cast<int64_t*>(p + 0x278);
+                int64_t model = ch ? *reinterpret_cast<int64_t*>(ch + 0x68) : 0;
+                float cx = model ? *reinterpret_cast<float*>(model + 0x158) : -9999.f;
+                float cy = model ? *reinterpret_cast<float*>(model + 0x15c) : -9999.f;
+                int tx = (int)(cx + (float)half), ty = (int)(cy + (float)half);
+                if (tx < 0) tx = 0; if (tx >= mapW) tx = mapW - 1;
+                if (ty < 0) ty = 0; if (ty >= mapW) ty = mapW - 1;
+                uint32_t czCell = (uint32_t)(mapW * ty + tx);
+                int64_t homeIBP = workplaceRef;
+                typedef int (*fn7fb0_t)(int64_t*, void*);
+                static fn7fb0_t s_hi7fb0 = reinterpret_cast<fn7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
+                int homeCell = s_hi7fb0 ? s_hi7fb0(&homeIBP, nullptr) : -1;
+                unsigned sk = 0, sr = 0, dk = 0, dr = 0;
+                if (tiles && mapW > 0) {
+                    const uint8_t* ts = tiles + (size_t)czCell * 0x30;
+                    sk = ts[0x29]; sr = *reinterpret_cast<const uint16_t*>(ts + 0x26);
+                    if (homeCell >= 0 && homeCell < mapW * mapW) {
+                        const uint8_t* td = tiles + (size_t)homeCell * 0x30;
+                        dk = td[0x29]; dr = *reinterpret_cast<const uint16_t*>(td + 0x26);
+                    }
+                }
+                const char* nm = *reinterpret_cast<const char**>(p + 0x28);
+                fprintf(stderr, "[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
+                                " | home=%p cell=%d(%d,%d) kind=%u region=%u | age=%.2f hunger=%.1f\n",
+                        (void*)self, nm ? nm : "?", cx, cy, czCell, tx, ty, sk, sr,
+                        (void*)workplaceRef, homeCell, homeCell >= 0 && mapW ? homeCell % mapW : -1,
+                        homeCell >= 0 && mapW ? homeCell / mapW : -1, dk, dr,
+                        *reinterpret_cast<float*>(p + 0x3C), *reinterpret_cast<float*>(p + 0x44));
+                // First three hits: ASCII window of the tile grid around the citizen so a
+                // fragmented flood shows itself. Row = y, col = x; 'C' citizen, 'H' home cell;
+                // kinds outside the walk mask print as '#' (5-8) or '~' (12+); walkable cells
+                // print their region id in base-36 (mod 36).
+                if (s_hiN <= 3 && tiles && mapW > 0) {
+                    const int R = 24;
+                    fprintf(stderr, "[HomeInvalid] region window x=%d..%d y=%d..%d (kind/region)\n",
+                            tx - R, tx + R, ty - 12, ty + 12);
+                    for (int yy = ty - 12; yy <= ty + 12; ++yy) {
+                        char line[2 * R + 2]; int li = 0;
+                        for (int xx = tx - R; xx <= tx + R; ++xx) {
+                            char c = ' ';
+                            if (xx >= 0 && xx < mapW && yy >= 0 && yy < mapW) {
+                                const uint8_t* t = tiles + (size_t)(yy * mapW + xx) * 0x30;
+                                unsigned k = t[0x29], r = *reinterpret_cast<const uint16_t*>(t + 0x26);
+                                if (xx == tx && yy == ty) c = 'C';
+                                else if (homeCell >= 0 && xx == homeCell % mapW && yy == homeCell / mapW) c = 'H';
+                                else if (((1u << (k & 0x1f)) & 0xe1fu) == 0) c = (k >= 5 && k <= 8) ? '#' : '~';
+                                else if (r == 0) c = '.';
+                                else { unsigned d = r % 36; c = d < 10 ? (char)('0' + d) : (char)('a' + d - 10); }
+                            }
+                            line[li++] = c;
+                        }
+                        line[li] = 0;
+                        fprintf(stderr, "[HomeInvalid] y=%3d |%s|\n", yy, line);
+                    }
+                    // Kind map of the same window.
+                    for (int yy = ty - 12; yy <= ty + 12; ++yy) {
+                        char line[2 * R + 2]; int li = 0;
+                        for (int xx = tx - R; xx <= tx + R; ++xx) {
+                            char c = ' ';
+                            if (xx >= 0 && xx < mapW && yy >= 0 && yy < mapW) {
+                                const uint8_t* t = tiles + (size_t)(yy * mapW + xx) * 0x30;
+                                unsigned k = t[0x29];
+                                c = k < 10 ? (char)('0' + k) : (char)('a' + k - 10);
+                                if (xx == tx && yy == ty) c = 'C';
+                            }
+                            line[li++] = c;
+                        }
+                        line[li] = 0;
+                        fprintf(stderr, "[HomeInvalid] kind y=%3d |%s|\n", yy, line);
+                    }
+                }
+                fflush(stderr);
+            }
             int64_t nullIBP = 0;
             fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
             if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(self, &nullIBP, -1);
@@ -775,7 +859,8 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 s_fn_FindHousingAssigned(reinterpret_cast<int64_t>(self), &housingResult);
         }
         int64_t localRes8 = housingResult;
-        if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+        static const bool s_hnTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was per call
+        if (s_hnTrace) {
             static int s_hn = 0;
             if (s_hn < 8) { ++s_hn;
                 uint8_t* gwB = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
@@ -2663,7 +2748,8 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     int regionId = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&ibpVal, nullptr) : 0;
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
     char res = s_fn_FUN_140a00f0 ? (char)s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
-    if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+    static const bool s_cwTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was per call (every idle citizen, every tick)
+    if (s_cwTrace) {
         static int s_cwn = 0;
         if (s_cwn < 8) { ++s_cwn;
             // The last gate in FUN_1400a00f0 is the per-cell region id (tile+0x26)
@@ -2949,7 +3035,8 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
     // re-identified AssignHousing itself; the interesting frame is one level up, and
     // guessing which of its call sites it was has been wrong three times. Fires only
     // when a job is actually being dropped (*slot != 0 -> Detach).
-    if (*slot != 0 && std::getenv("BANISHED_SEAT_TRACE")) {
+    static const bool s_seatTrace = std::getenv("BANISHED_SEAT_TRACE") != nullptr;
+    if (*slot != 0 && s_seatTrace) {
         fprintf(stderr, "[SeatWho] AssignHousing citizen=%p oldJob=0x%llx newJob=0x%llx "
                         "prof(+0x1f0)=0x%llx ret=%p\n",
                 (void*)param_1, (unsigned long long)*slot,

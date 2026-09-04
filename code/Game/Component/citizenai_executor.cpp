@@ -299,6 +299,44 @@ typedef void  (*fn_geomSetXform_t)(void* geom, void* xform);          // [0x1401
 typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
 typedef void  (*fn_pickSetXform_t)(void* scene, uint32_t id, void* xform); // [0x1401529a8]
 typedef void* (*fn_scalarMax_t)(void* thisScalar, void* retScalar, void* other); // [0x140151e78]
+
+// PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
+// the hot paths called through dispatch slots (a DLL call per 3-float store). Bodies
+// transcribed from the Runtime decompiles — note Dot's operand ORDER (y, x, z), kept
+// so the float result is the same to the bit. Non-trivial helpers (Normalize, Heading,
+// RootAnimationOffset) still go through the Runtime.
+//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)          -> InlV3(out,x,y,z)
+//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> InlV3Splat(out,&s)
+//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> InlV3Dot(a,&ret,b)
+//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> InlV2Dot(a,&ret,b)
+//   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
+//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> InlScalarMax(&a,&ret,&b)
+static inline void InlV3(void* out, float x, float y, float z) {
+    float* o = static_cast<float*>(out); o[0] = x; o[1] = y; o[2] = z;
+}
+static inline void InlV3Splat(void* out, const float* s) {
+    float* o = static_cast<float*>(out); o[0] = *s; o[1] = *s; o[2] = *s;
+}
+static inline void* InlV3Dot(const void* a, void* ret, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
+    return ret;
+}
+static inline void* InlV2Dot(const void* a, void* ret, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0];
+    return ret;
+}
+static inline bool InlBoxIsect(const void* a, const void* b) {
+    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
+    return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
+}
+static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
+    const float x = *static_cast<const float*>(a), y = *static_cast<const float*>(b);
+    *static_cast<float*>(ret) = (y < x) ? x : y;
+    return ret;
+}
+
 static fn_rootAnimOff_t     s_slot_rootAnim = nullptr;
 static fn_vec3Dot_t         s_slot_dot      = nullptr;
 static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
@@ -330,7 +368,15 @@ static void* ResolveSlot(uintptr_t slotAddr) {
 static bool s_tailInit = false;
 static void EnsureTailInit() {
     if (s_tailInit) return;
-    s_pRootOnlyUpdates = reinterpret_cast<const uint8_t*>(ResolveAddr(Module::Exe, 0x1401bc2e8));
+    // Retail reads the dispatch slot 0x140151f30 (-> Runtime MeshInstance::_rootOnlyUpdates);
+    // 0x1401bc2e8 was a mis-read data address with no xrefs, so this was always null (=0).
+    {
+        const uint8_t** slot = reinterpret_cast<const uint8_t**>(ResolveAddr(Module::Exe, 0x140151f30));
+        s_pRootOnlyUpdates = slot ? *slot : nullptr;
+        if (!s_pRootOnlyUpdates)
+            s_pRootOnlyUpdates = reinterpret_cast<const uint8_t*>(
+                ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
+    }
     s_pDAT_172220 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
     s_pDAT_172238 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172238));
     s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
@@ -422,6 +468,8 @@ static inline float fabs_f(float v) {
 
 } // namespace
 
+extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
+
 extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     EnsureInit();
     // ---- HEAD (exercised) -------------------------------------------------
@@ -495,7 +543,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         s_slot_rootAnim(reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x28),
                         rootAnimVec);
     float dotOut = 0.0f;
-    if (s_slot_dot) s_slot_dot(rootAnimVec, &dotOut, rootAnimVec);
+    InlV3Dot(rootAnimVec, &dotOut, rootAnimVec);   // was s_slot_dot (Runtime call)
     float speed = s_fn_132010 ? s_fn_132010(dotOut) : 0.0f;
     speed = speed * *reinterpret_cast<float*>(self + 0x38);
     if (0.0f < speed) {
@@ -537,7 +585,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
                 float maxOther = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x44);
                 float maxRet   = maxThis;
                 if (pf) { fx = pf[0]; fy = pf[1]; }
-                if (s_slot_max) s_slot_max(&maxThis, &maxRet, &maxOther);
+                InlScalarMax(&maxThis, &maxRet, &maxOther);   // was s_slot_max (Runtime call)
                 pos[2] = maxRet;
                 pos[0] = fx; pos[1] = fy;
             }
@@ -554,9 +602,12 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float c1720cc = s_pDAT_1720cc ? *s_pDAT_1720cc : 0.017453292f;
     float c172114 = s_pDAT_172114 ? *s_pDAT_172114 : 0.5f;
     float ang = fVar14 * c1720cc * c172114;
-    float s_ang = s_fn_131c90 ? s_fn_131c90(ang) : 0.0f;
+    // Retail calls sinf (0x140131c90) then cosf (0x140131090) on the same angle; both
+    // are ours (character_trig.cpp), so take the pair from one reduction. The registry
+    // slots stay resolved for any other caller.
+    float s_ang = 0.0f, c_ang = 0.0f;
+    CharacterComponent_SinCosf(ang, &s_ang, &c_ang);
     float negSin = -s_ang;
-    float c_ang = s_fn_131090 ? s_fn_131090(ang) : 0.0f;
 
     // Build the source Transform (0x1C bytes). Layout VERIFIED vs disasm at
     // 0x140109856-0x14010987c (source built at RSP+0x68, copied into model+0x148):

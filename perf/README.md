@@ -32,7 +32,8 @@ a clean `Engine::Shutdown`. A crash leaves `standalone_crash.log` and the script
 ## What the town is
 
 Built by `StartTown_StressSpawnStructures` (`code/Game/Game/starttown.cpp`) on top of the
-normal Easy founding town, on a **medium (384) map**, seed 12345:
+normal Easy founding town, on a **medium (384) map**, seed 31337 (12345's town area is a
+~11k-cell pocket between river and mountains; 31337 has ~27k connected cells):
 
 - **3 sets** (`BANISHED_STRESS_SETS`) of every ordinary placed building: storage barn +
   yard, market, well, school, hospital, chapel, cemetery, cutter, forester, herbalist,
@@ -52,8 +53,21 @@ normal Easy founding town, on a **medium (384) map**, seed 12345:
 - **Food**: the seven start-stock counts are multiplied by citizens/10 for the seeding
   call, so the town does not starve inside the measurement window.
 
-Every building is COMPLETED (instant-build bracket), sited 1 tile apart on workable,
-path-reachable ground around the founding cluster. Placement is deterministic per seed.
+Every building is COMPLETED (instant-build bracket), sited 1 tile apart on workable
+ground around the founding cluster. Placement is deterministic per seed. Siting rules
+(2026-09-04, after the 10x population collapse was traced to walled-in house doors):
+
+- **Door (access) cell**: learned per template from the first placed instance via retail's
+  `Entity_impl_7fb0` (0x140087fb0). It is a walkable notch INSIDE the footprint rectangle,
+  and `CitizenComponent::Update` re-validates every idle citizen's home by comparing the
+  citizen's tile region against the door's region — a door facing water or another
+  footprint evicts every resident, and a homeless citizen never eats.
+- **Pocket test**: a whole-map flood from the town cell over free cells is kept up to date;
+  a candidate is rejected if its footprint (door excepted) would cut any reachable cell
+  off, or leave its own door unreachable (interior doors — yards, markets, fields — skip
+  the door test). `BANISHED_STRESS_ALLOW_POCKETS=1` restores the old layout.
+- The `[Stress::place] DONE` line reports `pocketRejects`, `doorWalled` and per-reason
+  reject counts; `BANISHED_STRESS_KINDMAP=1` dumps the terrain kind map.
 
 Env bundle applied by `StressHarness_Init` (only for variables you did NOT set):
 `BANISHED_AUTOSTART=1 BANISHED_MAP_SIZE=medium BANISHED_SEED=12345 BANISHED_DIFFICULTY=easy BANISHED_CLIMATE=fair
@@ -75,18 +89,23 @@ Measured 2026-09-03 (perf build, 6000-frame runs, steady state):
 | 400 citizens, 10x | 3.18 | 0.32 | per-iteration cost FALLS: animation and other per-frame work amortise over 10 ticks |
 | 800 citizens, 1x | 0.66 | 0.66 | |
 | 1200 citizens, 1x | 0.82 | 0.82 | ~+0.18 ms per extra 400 citizens |
-| **800 citizens, 10x** | **5.10** | 0.51 | most work per frame; population 802 -> 702 over 6000 frames |
+| **800 citizens, 10x** (2026-09-03) | **5.10** | 0.51 | seed 12345, pre-fix town; population 802 -> 702 over 6000 frames |
+| 800 citizens, 10x (2026-09-04 baseline) | 3.94 | 0.39 | seed 31337, door/pocket siting: population 802 -> 794 |
+| 800 citizens, 10x (after the perf wave, 20 iterations) | 2.42 | 0.24 | see "Optimisation log" below; now `perf/baselines/current.csv` (the 0.39 run is `2026-09-04_pre-perf-wave.csv`) |
 
 Speed multiplies the same work; citizens change its shape (AI, pathing, hauling). The
 default takes both. `BANISHED_STRESS_SPEED=1 BANISHED_STRESS_CITIZENS=400` reproduces the
-gentler town when a 1x number is wanted. Two things the heavy default exposed and that are
-still OPEN: **the population collapses at 10x** — 802 -> 702 by frame 6000, 338 by 12000,
-96 by 18000, with mean hunger climbing past 14 (402 -> 359 in 6000 frames at 400 citizens;
-no deaths at 1x within 18000 frames, so it is a game-time effect past ~30k ticks). That is
-why the default run is 6000 frames: a 10x run longer than that measures a dying town. The
-teardown fault first seen at 800x10 was the area-work null-allocator bug (fixed); the run
-script still reports a post-quit crash as "crashed during teardown" (exit 6) with the
-numbers intact.
+gentler town when a 1x number is wanted. Two things the heavy default exposed, both CLOSED
+2026-09-04: **the population collapse at 10x** (802 -> 702 by frame 6000, 96 by 18000) was
+the stress siting walling in house access cells — see the siting rules above; it now holds
+802 -> ~794 over 6000 frames with the remaining deaths being ordinary starvation of the
+~1% whose door region still differs from their tile region. **The heap corruption during
+teardown** was two out-of-bounds writers in the sim: `CF_MakeAreaWork` zeroing 8 bytes past
+the 0x60-byte TendArea, and `ConsumeProduce` bounding its produce-position loops by the
+citizen-slot count instead of the status-array count. Both were caught live with
+`BANISHED_REDZONE=watch` (allocator watchdog thread, no shim) and a hardware write
+watchpoint (`standalone/hw_watch.cpp`). The run script still reports a post-quit crash as
+"crashed during teardown" (exit 6) with the numbers intact.
 
 ## CSV columns
 
@@ -154,13 +173,38 @@ on top.
 - **No construction traffic.** Everything is instant-built; builders/haulers to sites are
   not exercised. `BANISHED_BUILD_DEMO_INDEX` can leave one founding building unbuilt.
 
-## First optimisation lead
+## Sampling profiler
 
-In the committed 800x10 baseline the EntityList phase is 4.9 of the 5.2 ms update, but
-the per-component Update dispatch inside it (the `[COMPPROF]` total) is only 2.0 ms. The
-other ~3 ms per frame is EntityList_Update's own bookkeeping around the dispatch: the
-BST in-order walk, the removal/add passes and the 5-bucket cursor handling, run 10 times
-per frame. Of the component time, CitizenAIComponent is 65 % (8.6 us per call).
+`BANISHED_SAMPLE=<hz>` (default 1000; `standalone/sampler.cpp`) runs a thread that suspends
+the sim thread on a timer, unwinds its stack and tags the sample with the SIMPROF phase.
+Samples go to `standalone_samples.txt`; `tools/sample_report.py <file> --tag 4` (4 =
+EntityList) prints self/inclusive time per function, `--callers X` / `--callees Y` the
+edges. Exe frames are symbolised with addr2line, Runtime frames with the nearest DLL export
+(verify a hot Runtime offset in Ghidra before trusting the name). Use it whenever the
+`[COMPPROF]` table does not add up: COMPPROF only sees vtable dispatch, the sampler sees
+libm, the Runtime and the walk itself. Sampling costs ~5% of update time; do not compare a
+sampled run's numbers against the baseline.
+
+## Optimisation log (2026-09-04, 800x10, sim ms / iteration)
+
+| step | ms/iter | note |
+|---|---|---|
+| baseline after the population + heap fixes | 0.39 | `perf/baselines/2026-09-04_pre-perf-wave.csv` |
+| skip `InternalBasePtr::CheckPtr` (Runtime body is `RET 0`; `g_checkPtrIsNop`, kill-switch `BANISHED_CHECKPTR_NOP=0`) | 0.39 | no measurable change |
+| paired double-polynomial sin/cos in the character move tick (`character_trig.cpp`, `BANISHED_FAST_TRIG=0` restores libm) | 0.36 | MinGW sinf/cosf go through x87 long double: 16.7% of the phase |
+| no `nearbyint`/`floorf` libcalls in per-tick code | 0.31 | nearbyint alone was 12% of the phase |
+| particle un-stamp seen-set: hash table + once-per-frame per component (the 64-entry array also silently CAPPED at 64 emits) | 0.30 | |
+| **register dispatch slot 0x140151f30 -> Runtime `MeshInstance::_rootOnlyUpdates`** | **0.25** | retail sets it on every intermediate speed iteration; the move tick then skips terrain + picking and MeshInstance::Update goes root-only. Unregistered, so 10x did 10 full updates |
+| RDTSC instead of QPC in COMPPROF, `[HomeLoss]` watch opt-in (`BANISHED_STRESS_HOMEWATCH=1`) | 0.24-0.25 | profiling overhead is now within noise (`BANISHED_STRESS_COMPPROF=0` measures the same); run-to-run noise is about ±0.01 |
+| tried, no gain: `-O3`, `-flto`, `-march=x86-64-v2` (`make standalone-perf PERF_EXTRA=...`, all 0.24 vs 0.25 at -O2, within run noise); successor prefetch in the tree walk (`BANISHED_TREE_PREFETCH=1`, 0.26; two levels 0.27); tree-walk corruption guards off (`BANISHED_TREE_GUARDS=0`, 0.24) | 0.25 | |
+| iterations 16-20, each within noise (0.24): compile-time no-op CheckPtr in the perf build (`-DBANISHED_CHECKPTR_STATIC_NOP`, exe 1.3 MB smaller); memoised CharMgr cell-level divides; bit-identical inline copies of the trivial Runtime math exports (Vector3 ctor/Dot, Box::Intersect, Scalar::Max) in the move tick, proximity query and MoveTo; process-wide getenv cache (`standalone/env_cache.h`, force-included — ~370 getenv sites, 20% of the CitizenList phase was getenv); cached per-tick ResolveAddr of two .rdata floats | 0.24 | **final: 0.24 ms/iter = 38% below the 0.39 baseline after 20 iterations; the 50% target was not reached** |
+
+What is left is faithful work: the update-tree pointer chase (~12%), the character move
+tick (~25%: CharMgr cell registration, action executor, Runtime transform/animation calls),
+MoveTo enter's spatial proximity query (~7%), residence heat ticks, ambient environment
+scans, and the 300 s storage path-graph rebuild (7 A* pair costs per tick, the CitizenList
+phase's 1800-frame spikes). Each was checked against its retail decompile before being
+left alone. Reaching 50% would mean doing less than retail does per tick.
 
 ## Reading a regression
 

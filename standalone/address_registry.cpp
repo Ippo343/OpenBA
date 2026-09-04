@@ -1039,6 +1039,13 @@ static void RegisterDispatchSlots() {
     // Each entry maps an exe .rdata dispatch slot to a Runtime DLL function.
     // EngineFuncsInit and Description reimpls read these via:
     //   fn = *(fn_t*)ResolveAddr(Module::Exe, 0x14015XXXX);
+    // Graphics::MeshInstance::_rootOnlyUpdates (a Runtime static BOOL, not a function).
+    // Retail GameUpdateLoop::Update (0x140096380) writes `*slot = (iter < N-1)` every
+    // speed iteration and the character move-tick (0x1401094c0) reads it; with the slot
+    // unregistered the flag stayed false, so at speed 10 every iteration did the full
+    // skeleton/terrain/picking update retail only does on the LAST one (2026-09-04, stress).
+    RegisterDispatchSlot(0x140151f30,
+        (uintptr_t)ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
     RegisterDispatchSlot(0x1401518c0,
         (uintptr_t)ResolveExport("?GetFileVersion@ElementDescription@UI@@UEBAHXZ"));
     RegisterDispatchSlot(0x1401518f8,

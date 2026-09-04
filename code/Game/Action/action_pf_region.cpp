@@ -49,7 +49,10 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "hw_watch.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
 
@@ -104,6 +107,21 @@ static inline void MemFree(void* p) { fn_MemFreeStatic(p); }
 // exe grow-and-copy. Leaf except 0x1400021d0 (registered).
 void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
     EnsureFns();
+    // [DIAG] BANISHED_REGION_TRACE=1: the region-id free-list (+0xa8) was found holding
+    // "2" eighteen times with the next heap block's tag clobbered (2026-09-04). Log every
+    // push and arm a hardware write watch just past each new free-list buffer.
+    static int s_rt = -1;
+    if (s_rt < 0) { const char* e = std::getenv("BANISHED_REGION_TRACE"); s_rt = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (s_rt) {
+        static int n = 0;
+        if (n < 400) { ++n;
+            std::fprintf(stderr, "[RegionFree] graph=%p push id=%d  list count=%d cap=%d data=%p  node id field=%d\n",
+                         (void*)param_1, param_2, *(int*)(param_1 + 0xb0), *(int*)(param_1 + 0xb4),
+                         *(void**)(param_1 + 0xa8),
+                         *(int*)(*(int64_t*)(param_1 + 0x68) + 8 + (int64_t)param_2 * 0x30));
+            std::fflush(stderr);
+        }
+    }
     int64_t lVar7 = (int64_t)param_2 * 0x30;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 8 + lVar7) = 0xffffffff;
     s_ArrResize4((int64_t*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7), 0);
@@ -122,6 +140,11 @@ void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
             }
             void* pvVar5 = MemAlloc((int64_t)*(int*)(param_1 + 0xb4) << 2, 4);
             *(void**)(param_1 + 0xa8) = pvVar5;
+            if (s_rt && pvVar5) {
+                char why[80];
+                std::snprintf(why, sizeof(why), "region free-list buf cap=%d", *(int*)(param_1 + 0xb4));
+                HwWatch_Arm((uint8_t*)pvVar5 + ((int64_t)*(int*)(param_1 + 0xb4) << 2) + 4, 4, why);
+            }
         }
         int iVar4 = 0;
         if (pvVar3 == *(void**)(param_1 + 0xa8)) {

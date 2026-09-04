@@ -35,6 +35,7 @@ extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_
 #include <cstring>
 #include <cmath>
 #include <vector>
+#include <algorithm>
 #include <functional>
 
 // ============================================================================
@@ -1412,8 +1413,159 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         return workable[cell] == 1;
     };
     const int townCell = cy * mapW + cx;
-    int reachRejects = 0;
-    auto fits = [&](int tx, int ty, int w, int h) -> bool {
+    int reachRejects = 0, pocketRejects = 0;
+
+    // POCKET TEST. Footprints sited 1 tile apart can wall a gap cell in on all four
+    // sides. That gap cell is where a neighbour's ACCESS cell (Entity_impl_7fb0, the cell
+    // CheckWorkplaceValid compares regions against) lives, and the zone flood then gives
+    // it a one-cell region of its own. Every idle resident of that house fails the
+    // faithful home re-validation in CitizenComponent::Update, is unhoused, never eats
+    // again and starves ~3 game-months later (802 -> 96 citizens over 18000 frames at 10x;
+    // the whole "population collapse at 10x" was this). So before accepting a site,
+    // flood the free cells of a window around it from the window's boundary, once
+    // without and once with the new footprint blocked, and reject the site if any free
+    // cell that was reachable before is cut off after (a pocket has to touch the new
+    // footprint, so it always intersects the window).
+    // Door (access) cell per template, learned from the first placed instance: retail's
+    // Entity_impl_7fb0 (0x140087fb0) returns the entity's PositionComponent position 0 —
+    // the cell CheckWorkplaceValid compares regions against. It lies INSIDE the footprint
+    // rectangle (a walkable notch), so a footprint that "fits" can still have its door
+    // opening onto water or another footprint; every resident then fails the faithful
+    // home re-validation and starves (seen 2026-09-04: door at (215,188) between a house
+    // and the river). Offsets are per template at rotation 0, which is all we place.
+    // BANISHED_STRESS_ALLOW_POCKETS=1 reproduces the old walled-in layout (the
+    // population-collapse / teardown-corruption repro town).
+    static const bool allowPockets = [] { const char* e = std::getenv("BANISHED_STRESS_ALLOW_POCKETS");
+                                          return e && e[0] && e[0] != '0'; }();
+    struct DoorOff { const char* path; int dx, dy; };
+    std::vector<DoorOff> doorOffs;
+    auto doorFor = [&](const char* path, int* dx, int* dy) -> bool {
+        for (const DoorOff& d : doorOffs) if (std::strcmp(d.path, path) == 0) { *dx = d.dx; *dy = d.dy; return true; }
+        return false;
+    };
+    typedef int (*fn_AccessCell_t)(void* entityIBP, float* outPos);
+    static fn_AccessCell_t s_accessCell =
+        reinterpret_cast<fn_AccessCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
+
+    // doorDx/doorDy >= 0: the footprint cell that must stay reachable (blocked cells of the
+    // new footprint exclude it). w == 0: verify an ALREADY-placed footprint (marked in occ):
+    // only the door reachability test runs.
+    // WHOLE-MAP reachability from the town cell over free cells (not occupied by a
+    // footprint, terrain workable). The earlier version flooded an 8-cell window from its
+    // own boundary and treated every cell on that boundary as connected to the world —
+    // a strip along the river that ran out of the window was "reachable" even though it
+    // was sealed further along, so houses kept getting sited with their doors in dead
+    // strips (2026-09-04, doorfix-verify: 797 -> 604 housed). A full flood is ~0.5 ms and
+    // only runs for candidates that passed every cheaper test.
+    // Walkability for the flood = the cell's OWN stamped kind against the citizen walk
+    // mask (0xe1f), NOT cellWorkable: that one asks nearestPassable(), which answers with
+    // the nearest passable cell, so shoreline water counted as ground and houses were
+    // sited with their door on the river bank (reachfix2-verify: 49 residual losses).
+    const uint8_t* const kindTiles =
+        *reinterpret_cast<uint8_t* const*>(reinterpret_cast<const uint8_t*>(game) + 0x80);
+    auto cellWalkable = [&](int cell) -> bool {
+        if (!kindTiles) return cellWorkable(cell);
+        const unsigned k = kindTiles[(size_t)cell * 0x30 + 0x29];
+        return ((1u << (k & 0x1f)) & 0xe1fu) != 0;
+    };
+    std::vector<uint8_t> reach(cells, 0);
+    int reachCount = 0;
+    auto floodTown = [&](std::vector<uint8_t>& out, int ftx, int fty, int fw, int fh, int doorDx, int doorDy) -> int {
+        std::fill(out.begin(), out.end(), 0);
+        if (townCell < 0 || (size_t)townCell >= cells) return 0;
+        std::vector<int> stack; stack.reserve(4096);
+        int n = 0;
+        auto push = [&](int xx, int yy) {
+            if (xx < 0 || yy < 0 || xx >= mapW || yy >= mapW) return;
+            const int cell = yy * mapW + xx;
+            if (out[cell]) return;
+            if (fw > 0 && xx >= ftx && xx < ftx + fw && yy >= fty && yy < fty + fh &&
+                !(doorDx >= 0 && xx == ftx + doorDx && yy == fty + doorDy)) return;
+            if (occ[cell] || !cellWalkable(cell)) return;
+            out[cell] = 1; ++n; stack.push_back(cell);
+        };
+        // The town centre cell itself is usually inside a founding footprint: seed from
+        // every free cell in the smallest ring around it that has one.
+        for (int r = 0; r < 24 && stack.empty(); ++r)
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx)
+                    if (dx == -r || dx == r || dy == -r || dy == r) push(cx + dx, cy + dy);
+        while (!stack.empty()) {
+            const int c = stack.back(); stack.pop_back();
+            const int xx = c % mapW, yy = c / mapW;
+            push(xx + 1, yy); push(xx - 1, yy); push(xx, yy + 1); push(xx, yy - 1);
+        }
+        return n;
+    };
+    reachCount = floodTown(reach, 0, 0, 0, 0, -1, -1);
+    std::vector<uint8_t> reachB(cells, 0);
+    // One-time kind-grid dump for offline layout analysis (standalone_kindmap.txt: one
+    // row per y, one base-36 kind digit per cell; '#' = occupied by a footprint).
+    static const bool dumpKinds = [] { const char* e = std::getenv("BANISHED_STRESS_KINDMAP");
+                                       return e && e[0] && e[0] != '0'; }();
+    if (kindTiles && dumpKinds) {
+        if (FILE* km = std::fopen("standalone_kindmap.txt", "w")) {
+            std::fprintf(km, "# map=%d town=(%d,%d) reachCount=%d\n", mapW, cx, cy, reachCount);
+            for (int yy = 0; yy < mapW; ++yy) {
+                for (int xx = 0; xx < mapW; ++xx) {
+                    const size_t c = (size_t)yy * mapW + xx;
+                    const unsigned k = kindTiles[c * 0x30 + 0x29];
+                    char ch = occ[c] ? '#' : (k < 10 ? (char)('0' + k) : (char)('a' + k - 10));
+                    if (reach[c]) ch = (k < 10 ? (char)('0' + k) : (char)('a' + k - 10));
+                    std::fputc(ch, km);
+                }
+                std::fputc('\n', km);
+            }
+            std::fclose(km);
+        }
+    }
+
+    // true = placing this footprint (its door cell excepted) would cut some currently
+    // reachable cell off from the town, or leave its own door unreachable. w == 0 =
+    // verify-only (footprint already in occ): just the door test.
+    int rejDoor = 0, rejPocket = 0, diagN = 0;
+    auto createsPocket = [&](int tx, int ty, int w, int h, int doorDx, int doorDy) -> bool {
+        // A door strictly inside the rectangle (yard, market, cemetery, field, orchard,
+        // quarry: open ground the citizens walk over) has no outside neighbour in this
+        // solid-rectangle model and can never test reachable; only test edge doors.
+        if (doorDx >= 0 && w > 0 && doorDx > 0 && doorDx < w - 1 && doorDy > 0 && doorDy < h - 1)
+            doorDx = doorDy = -1;
+        if (doorDx >= 0 && w > 0) {
+            // Cheap necessary condition before the full flood: the door's outside
+            // neighbour(s) must be reachable ground right now.
+            bool anyOut = false;
+            const int dxs[4] = {1, -1, 0, 0}, dys[4] = {0, 0, 1, -1};
+            for (int i = 0; i < 4 && !anyOut; ++i) {
+                const int nx = tx + doorDx + dxs[i], ny = ty + doorDy + dys[i];
+                if (nx >= tx && nx < tx + w && ny >= ty && ny < ty + h) continue;   // inside footprint
+                if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapW) continue;
+                if (reach[(size_t)ny * mapW + nx]) anyOut = true;
+            }
+            if (!anyOut) { ++rejDoor; return true; }
+        }
+        const int after = floodTown(reachB, tx, ty, w, h, doorDx, doorDy);
+        if (doorDx >= 0) {
+            const int d = (ty + doorDy) * mapW + (tx + doorDx);
+            if (d < 0 || (size_t)d >= cells || !reachB[d]) { ++rejDoor; return true; }
+        }
+        if (w == 0) return false;
+        int lost = 0;   // reachable-before cells inside the footprint (door excluded) — expected losses
+        for (int yy = ty; yy < ty + h; ++yy)
+            for (int xx = tx; xx < tx + w; ++xx) {
+                if (doorDx >= 0 && xx == tx + doorDx && yy == ty + doorDy) continue;
+                if (reach[(size_t)yy * mapW + xx]) ++lost;
+            }
+        if (after != reachCount - lost) {
+            ++rejPocket;
+            if (diagN < 12) { ++diagN;
+                fprintf(stderr, "[Stress::place] pocket reject at (%d,%d) %dx%d door(%d,%d): reachBefore=%d lost=%d after=%d\n",
+                        tx, ty, w, h, doorDx, doorDy, reachCount, lost, after);
+            }
+            return true;
+        }
+        return false;
+    };
+    auto fits = [&](int tx, int ty, int w, int h, int doorDx, int doorDy) -> bool {
         if (tx < 2 || ty < 2 || tx + w > mapW - 2 || ty + h > mapW - 2) return false;
         for (int yy = ty - 1; yy <= ty + h; ++yy)
             for (int xx = tx - 1; xx <= tx + w; ++xx)
@@ -1424,8 +1576,10 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         if (canPath && !canPath(grid, 0xe1f, (uint32_t)((ty + h / 2) * mapW + (tx + w / 2)), townCell)) {
             ++reachRejects; return false;
         }
+        if (!allowPockets && createsPocket(tx, ty, w, h, doorDx, doorDy)) { ++pocketRejects; return false; }
         return true;
     };
+    int doorWalled = 0;
 
     const int maxR = mapW / 2 - 4;
     int maxUsedR = 0;
@@ -1448,13 +1602,15 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         }
         if (w <= 0 || h <= 0) { w = b.fw; h = b.fh; }
 
+        int doorDx = -1, doorDy = -1;
+        doorFor(b.path, &doorDx, &doorDy);
         int bestX = 0, bestY = 0; bool found = false;
         for (int r = 1; r <= maxR && !found; ++r) {
             for (int dy = -r; dy <= r && !found; ++dy) {
                 for (int dx = -r; dx <= r && !found; ++dx) {
                     if (dx != -r && dx != r && dy != -r && dy != r) continue;
                     const int tx = cx + dx, ty = cy + dy;
-                    if (!fits(tx, ty, w, h)) continue;
+                    if (!fits(tx, ty, w, h, doorDx, doorDy)) continue;
                     bestX = tx; bestY = ty; found = true;
                     if (r > maxUsedR) maxUsedR = r;
                 }
@@ -1470,6 +1626,33 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         mark(bestX, bestY, w, h);
         if (!ent) { ++failed; return false; }
         ++placed;
+        reachCount = floodTown(reach, 0, 0, 0, 0, -1, -1);
+        // Learn (first instance) or verify (later ones) the template's door cell, and keep
+        // the door notch walkable in occ so every later pocket test sees it as ground.
+        if (s_accessCell) {
+            void* entIBP = ent;
+            const int cell = s_accessCell(&entIBP, nullptr);
+            if (cell >= 0) {
+                const int ddx = cell % mapW - bestX, ddy = cell / mapW - bestY;
+                occ[(size_t)cell] = 0;
+                reachCount = floodTown(reach, 0, 0, 0, 0, -1, -1);
+                if (doorDx < 0) {
+                    doorOffs.push_back({ b.path, ddx, ddy });
+                    fprintf(stderr, "[Stress::place] %s door offset learned: (%d,%d) in %dx%d\n",
+                            b.tag, ddx, ddy, w, h);
+                    // The first instance was sited before its door offset was known.
+                    const bool edgeDoor = ddx == 0 || ddx == w - 1 || ddy == 0 || ddy == h - 1;
+                    if (!allowPockets && edgeDoor && createsPocket(bestX, bestY, 0, 0, ddx, ddy)) {
+                        ++doorWalled;
+                        fprintf(stderr, "[Stress::place] WARNING %s at (%d,%d): door (%d,%d) is walled in\n",
+                                b.tag, bestX, bestY, bestX + ddx, bestY + ddy);
+                    }
+                } else if (ddx != doorDx || ddy != doorDy) {
+                    fprintf(stderr, "[Stress::place] %s door offset CHANGED (%d,%d) -> (%d,%d)\n",
+                            b.tag, doorDx, doorDy, ddx, ddy);
+                }
+            }
+        }
         bool isTallied = false;
         for (Tally& t : tally) if (std::strcmp(t.tag, b.tag) == 0) { ++t.n; isTallied = true; break; }
         if (!isTallied) tally.push_back({ b.tag, 1 });
@@ -1511,8 +1694,9 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
     // houses for the family pairing — g_stressHouseTiles is filled from the component
     // test above, not from the house list, so the pairing stays index-exact.
     fprintf(stderr, "[Stress::place] DONE placed=%d failed=%d houses(residences)=%d maxRing=%d "
-            "reachRejects=%d in %.0f ms\n", placed, failed, houses, maxUsedR, reachRejects,
-            StressNowMs() - t0);
+            "reachRejects=%d pocketRejects=%d doorWalled=%d in %.0f ms\n", placed, failed, houses, maxUsedR,
+            reachRejects, pocketRejects, doorWalled, StressNowMs() - t0);
+    fprintf(stderr, "[Stress::place] reject reasons: door=%d pocket=%d\n", rejDoor, rejPocket);
     for (const Tally& t : tally) fprintf(stderr, "[Stress::place]   %-14s x%d\n", t.tag, t.n);
     fflush(stderr);
     return placed;

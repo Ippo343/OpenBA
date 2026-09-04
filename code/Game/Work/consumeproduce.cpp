@@ -934,7 +934,14 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         }
 
         // --- Third pass: check assigned positions for validity ---
-        int totalPositions = (int)self->field_60;  // number of output positions
+        // Retail 0x1400e7840 bounds BOTH position loops below by *(int*)(self+0x70) — the
+        // status INT ARRAY's own count (param_1[0xe]) — not by the citizen-slot count at
+        // +0x60 (param_1[0xc]). The port used field_60: a workplace with more worker slots
+        // than produce positions (e.g. 20 vs 18) then read and WROTE statusArray[18..19],
+        // which is the next heap block's boundary tag (+1 then +2 in its high dword, the
+        // "free-list link with wrong high bits" teardown crash in the 800x10 stress run,
+        // caught 2026-09-04 by a hardware watchpoint: Execute wrote 1, OnComplete wrote 2).
+        int totalPositions = (int)self->field_70;  // number of output positions (= int array count)
         uint32_t firstFreePos = 0xffffffff;
         int firstFreeIndex = -1;
         uint32_t freeCount = 0;

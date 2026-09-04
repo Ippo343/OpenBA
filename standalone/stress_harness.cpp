@@ -36,6 +36,7 @@
 #include <vector>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <intrin.h>
 #define PSAPI_VERSION 2
 #include <psapi.h>
 
@@ -45,6 +46,9 @@ extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);
 extern "C" const char* GameUpdateLoop_SimProfName(int phase);
 
 int g_compProfOn = 0;
+// entitylist.cpp — EntityList_Update sub-phase accumulators (QPC ticks / counts).
+extern long long g_elProfDrainTicks, g_elProfPreTicks, g_elProfTreeTicks, g_elProfBucketTicks;
+extern long long g_elProfTreeNodes, g_elProfBucketVisits, g_elProfBucketTicked;
 
 namespace {
 
@@ -84,7 +88,9 @@ void Resolve() {
     s_speed    = EnvInt("BANISHED_STRESS_SPEED", s_speed);
     s_foodMult = EnvInt("BANISHED_STRESS_FOOD_MULT", 0);
     s_staff    = EnvInt("BANISHED_STRESS_STAFF", 1);
-    g_compProfOn = EnvInt("BANISHED_STRESS_COMPPROF", 1) ? 1 : 0;
+    g_compProfOn = EnvInt("BANISHED_STRESS_COMPPROF", 1);   // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks
+    if (g_compProfOn < 0) g_compProfOn = 0;
+    if (g_compProfOn > 2) g_compProfOn = 2;
     if (const char* p = std::getenv("BANISHED_STRESS_CSV")) if (p[0]) {
         std::strncpy(s_csvPath, p, sizeof(s_csvPath) - 1);
         s_csvPath[sizeof(s_csvPath) - 1] = 0;
@@ -102,6 +108,17 @@ double QpcMs(long long ticks) {
     static long long freq = 0;
     if (!freq) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); freq = f.QuadPart; }
     return freq ? 1000.0 * (double)ticks / (double)freq : 0.0;
+}
+// Per-component ticks are RDTSC (CompProf_Now in stress_harness.h): QueryPerformanceCounter
+// goes through KERNELBASE/ntdll and its ~600 calls per iteration were ~4% of the sim at
+// 800x10. Convert with a TSC/QPC ratio measured over the process lifetime (first call = t0).
+double TscMs(long long tsc) {
+    static long long tsc0 = 0, qpc0 = 0;
+    if (!tsc0) { LARGE_INTEGER q; QueryPerformanceCounter(&q); qpc0 = q.QuadPart; tsc0 = (long long)__rdtsc(); return 0.0; }
+    LARGE_INTEGER q; QueryPerformanceCounter(&q);
+    const long long dt = (long long)__rdtsc() - tsc0, dq = q.QuadPart - qpc0;
+    if (dt <= 0 || dq <= 0) return 0.0;
+    return QpcMs((long long)((double)tsc * ((double)dq / (double)dt)));
 }
 
 long long s_runT0        = 0;     // first Update of the first stress world
@@ -184,9 +201,76 @@ void MemoryMB(double* ws, double* priv) {
 }
 
 // ── per-component-type profile ───────────────────────────────────────────────
-struct CompSlot { void* vtbl; uint32_t typeId; long long ticks; long long calls; };
+struct CompSlot { void* vtbl; uint32_t typeId; long long ticks; long long calls; int kind; };
 constexpr int kCompSlots = 1024;          // power of two; ~200 component types exist
 CompSlot s_comp[kCompSlots];
+
+// ── home-loss watch ──────────────────────────────────────────────────────────
+// The 10x town loses ~8% of its housed citizens per meal wave and the homeless
+// then never eat and starve (hunger climbs linearly to the cap). Nothing in the
+// port writes citizen+0x238 by name, so this catches the writer in the act: the
+// component Update that ran when the home went null, plus the citizen's state.
+uint32_t s_tidCitizen = 0, s_tidCitizenAI = 0;
+bool     s_tidResolved = false;
+void*    s_curComp = nullptr;        // component whose Update is running (hot loop)
+uint32_t s_curTid  = 0;
+uintptr_t s_curCitizen = 0;          // citizen watched during that Update
+uintptr_t s_curHome = 0;
+// [HomeLoss] watch is opt-in since 2026-09-04 (BANISHED_STRESS_HOMEWATCH=1): the population
+// collapse it was built for is closed, and its per-Update bookkeeping sat on every bucket tick.
+bool s_homeWatch = false;
+double TscMs(long long tsc);
+void HomeWatchInit() {
+    s_homeWatch = EnvInt("BANISHED_STRESS_HOMEWATCH", 0) != 0;
+    TscMs(0);   // stamp the TSC/QPC calibration origin
+}
+int      s_homeLossLogged = 0;
+std::vector<std::pair<uintptr_t, uintptr_t>> s_homeShadow;   // (citizen, home) last frame
+
+void LogHomeLoss(uintptr_t cz, const char* where) {
+    if (++s_homeLossLogged > 400) return;
+    const uintptr_t ch = *reinterpret_cast<uintptr_t*>(cz + 0x278);
+    const int depth = Readable(reinterpret_cast<void*>(ch)) ? *reinterpret_cast<int32_t*>(ch + 0x60) : -99;
+    const uintptr_t desc = *reinterpret_cast<uintptr_t*>(cz + 0x288);
+    const float adultAge = Readable(reinterpret_cast<void*>(desc)) ? *reinterpret_cast<float*>(desc + 0x44) : 0.f;
+    const char* name = *reinterpret_cast<const char**>(cz + 0x28);
+    std::fprintf(stderr, "[HomeLoss] frame=%d %s citizen=%p name=%s age=%.2f(adult>=%.1f) hunger=%.1f "
+                         "state+0xb0=%d flags+0x54=0x%x +0x88=0x%x prof=0x%llx work248=%p parent250=%p "
+                         "partner258=%p ring260=%p elder208=%p target228=%p depth=%d\n",
+                 s_worldFrame, where, (void*)cz, Readable(name) ? name : "?",
+                 *reinterpret_cast<float*>(cz + 0x3C), adultAge, *reinterpret_cast<float*>(cz + 0x44),
+                 *reinterpret_cast<int32_t*>(cz + 0xb0), *reinterpret_cast<uint32_t*>(cz + 0x54),
+                 *reinterpret_cast<uint32_t*>(cz + 0x88),
+                 (unsigned long long)*reinterpret_cast<uint64_t*>(cz + 0x1f0),
+                 *reinterpret_cast<void**>(cz + 0x248), *reinterpret_cast<void**>(cz + 0x250),
+                 *reinterpret_cast<void**>(cz + 0x258), *reinterpret_cast<void**>(cz + 0x260),
+                 *reinterpret_cast<void**>(cz + 0x208), *reinterpret_cast<void**>(cz + 0x228), depth);
+    std::fflush(stderr);
+}
+
+// Per-frame shadow compare of every registered citizen's home slot. Catches a clear
+// that happened OUTSIDE a Citizen/CitizenAI Update (message handler, residence tick,
+// entity removal) — the component hook cannot see those.
+void HomeShadowScan(void* gw) {
+    if (!Readable(gw)) return;
+    const uintptr_t town = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xF0);
+    if (!Readable(reinterpret_cast<void*>(town))) return;
+    uint8_t* arr = *reinterpret_cast<uint8_t**>(town + 0xA0);
+    const int n = *reinterpret_cast<int*>(town + 0xA8);
+    if (!arr || n <= 0 || n > 100000) return;
+    std::vector<std::pair<uintptr_t, uintptr_t>> now;
+    now.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        uintptr_t cz = *reinterpret_cast<uintptr_t*>(arr + (size_t)i * 8);
+        if (!Readable(reinterpret_cast<void*>(cz))) continue;
+        const uintptr_t home = *reinterpret_cast<uintptr_t*>(cz + 0x238);
+        now.emplace_back(cz, home);
+        if (home) continue;
+        for (const auto& pr : s_homeShadow)
+            if (pr.first == cz) { if (pr.second) LogHomeLoss(cz, "OUTSIDE-UPDATE(or unattributed)"); break; }
+    }
+    s_homeShadow.swap(now);
+}
 
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
@@ -203,20 +287,30 @@ void CompProfReport(int frame) {
     for (FILE* o : outs) {
         if (!o) continue;
         std::fprintf(o, "[COMPPROF] world#%d frame=%d window=%d frames  component Update total %.2f ms/frame\n",
-                     s_worldNo, frame, s_interval, QpcMs(total) / s_interval);
+                     s_worldNo, frame, s_interval, TscMs(total) / s_interval);
+        std::fprintf(o, "[COMPPROF]   EntityList_Update phases ms/frame: drain %.3f  preUpdate %.3f  "
+                        "treeWalk %.3f (%.0f nodes/frame)  buckets %.3f (%.0f visits, %.0f ticked /frame)\n",
+                     QpcMs(g_elProfDrainTicks) / s_interval, QpcMs(g_elProfPreTicks) / s_interval,
+                     QpcMs(g_elProfTreeTicks) / s_interval, (double)g_elProfTreeNodes / s_interval,
+                     QpcMs(g_elProfBucketTicks) / s_interval, (double)g_elProfBucketVisits / s_interval,
+                     (double)g_elProfBucketTicked / s_interval);
         int shown = 0;
         for (const CompSlot* s : rows) {
             if (++shown > 30) break;
             const char* name = ::Object::GetTypeNameById(s->typeId);
+            char nm[64];
+            std::snprintf(nm, sizeof(nm), "%s%s", name && name[0] ? name : "?", s->kind ? "/tree" : "");
             std::fprintf(o, "[COMPPROF]   %-34s %8.3f ms/frame %6.2f%%  calls/frame=%8.1f  %.4f us/call\n",
-                         name && name[0] ? name : "?", QpcMs(s->ticks) / s_interval,
+                         nm, TscMs(s->ticks) / s_interval,
                          total ? 100.0 * (double)s->ticks / (double)total : 0.0,
                          (double)s->calls / s_interval,
-                         1000.0 * QpcMs(s->ticks) / (double)s->calls);
+                         1000.0 * TscMs(s->ticks) / (double)s->calls);
         }
         std::fflush(o);
     }
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
+    g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
+    g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
 }
 
 // ── staffing pass ────────────────────────────────────────────────────────────
@@ -394,12 +488,15 @@ void EmitRow(void* gul, int frame) {
 
 // ═════════════════════════════════════════════════════════════════════════════
 extern "C" void StressHarness_Init() {
+    HomeWatchInit();
     Resolve();
     if (!s_enabled) return;
     char buf[64];
     SetIfUnset("BANISHED_AUTOSTART", "1");
     SetIfUnset("BANISHED_MAP_SIZE", "medium");
-    SetIfUnset("BANISHED_SEED", "12345");
+    // 31337: the town sits on a 27k-cell connected flat area (seed 12345: 11k, cut up by
+    // low mountains and rivers, too small for 333 door-reachable footprints — 2026-09-04).
+    SetIfUnset("BANISHED_SEED", "31337");
     SetIfUnset("BANISHED_DIFFICULTY", "easy");
     SetIfUnset("BANISHED_CLIMATE", "fair");
     SetIfUnset("BANISHED_FPS_CAP", "off");
@@ -472,6 +569,7 @@ extern "C" void StressHarness_UpdateEnd(void* gul, int frameNum) {
     }
     s_worldFrame = frameNum - s_worldSeenAt + 1;
 
+    if (gw && s_homeWatch) HomeShadowScan(gw);
     if (s_worldFrame % s_interval == 0) EmitRow(gul, frameNum);
 
     if (s_staff && gw && s_worldFrame >= kStaffFirst) {
@@ -497,27 +595,65 @@ extern "C" void StressHarness_DrawEnd() {
     s_drawMsSum += QpcMs(QpcNow() - s_drawT0); ++s_drawN;
 }
 
-extern "C" int CompProf_Begin(void* comp) {
+static void CompProf_WatchBegin(void* comp, uint32_t tid) {
+    if (!s_tidResolved) {
+        s_tidResolved = true;
+        s_tidCitizen   = ::Object::GetTypeIdByName("CitizenComponent");
+        s_tidCitizenAI = ::Object::GetTypeIdByName("CitizenAIComponent");
+    }
+    s_curComp = comp; s_curTid = tid; s_curCitizen = 0; s_curHome = 0;
+    uintptr_t cz = 0;
+    if (tid == s_tidCitizen) cz = reinterpret_cast<uintptr_t>(comp);
+    else if (tid == s_tidCitizenAI) cz = *reinterpret_cast<uintptr_t*>((uint8_t*)comp + 0x38);
+    if (cz && Readable(reinterpret_cast<void*>(cz))) {
+        s_curCitizen = cz;
+        s_curHome = *reinterpret_cast<uintptr_t*>(cz + 0x238);
+    }
+}
+
+extern "C" int CompProf_BeginKind(void* comp, int kind) {
     void* vtbl = *reinterpret_cast<void**>(comp);
-    uintptr_t h = (reinterpret_cast<uintptr_t>(vtbl) >> 4) & (kCompSlots - 1);
+    uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));
         CompSlot& s = s_comp[idx];
-        if (s.vtbl == vtbl) return idx;
+        if (s.vtbl == vtbl && s.kind == kind) { if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId); return idx; }
         if (!s.vtbl) {
-            s.vtbl = vtbl;
+            s.vtbl = vtbl; s.kind = kind;
             typedef uint32_t (*GetTypeId_t)(void*);
             void** vt = reinterpret_cast<void**>(vtbl);
             s.typeId = vt[2] ? reinterpret_cast<GetTypeId_t>(vt[2])(comp) : 0;
             s.ticks = 0; s.calls = 0;
+            if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId);
             return idx;
         }
     }
     return -1;
 }
 
+extern "C" int CompProf_Begin(void* comp) { return CompProf_BeginKind(comp, 0); }
+
 extern "C" void CompProf_End(int slot, long long qpcTicks) {
+    if (s_homeWatch && s_curCitizen && s_curHome && Readable(reinterpret_cast<void*>(s_curCitizen)) &&
+        *reinterpret_cast<uintptr_t*>(s_curCitizen + 0x238) == 0) {
+        const char* tn = ::Object::GetTypeNameById(s_curTid);
+        char where[96];
+        std::snprintf(where, sizeof(where), "IN-UPDATE(%s comp=%p)", tn ? tn : "?", s_curComp);
+        LogHomeLoss(s_curCitizen, where);
+        // Mark the shadow so the per-frame scan does not report it a second time.
+        for (auto& pr : s_homeShadow) if (pr.first == s_curCitizen) { pr.second = 0; break; }
+    }
+    s_curComp = nullptr; s_curCitizen = 0; s_curHome = 0;
     if (slot < 0) return;
     s_comp[slot].ticks += qpcTicks;
     ++s_comp[slot].calls;
+}
+
+// For the heap watchdog's report: what the sim was doing when corruption was seen.
+extern "C" void StressHarness_Context(char* buf, int n) {
+    if (!buf || n <= 0) return;
+    const char* tn = s_curComp ? ::Object::GetTypeNameById(s_curTid) : nullptr;
+    std::snprintf(buf, (size_t)n, "world#%d frame=%d inUpdate=%s comp=%p citizen=%p",
+                  s_worldNo, s_worldFrame, tn ? tn : (s_curComp ? "?" : "-"), s_curComp,
+                  (void*)s_curCitizen);
 }

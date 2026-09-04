@@ -156,7 +156,13 @@ profile, and `report.txt` from `tools/stress_report.py`, auto-diffed against
 --frames 6000"`. `make sa-stress-debug` = same town on the -O0 exe (functional check only).
 Headline metric is `sim ms / iteration` (speed- and GPU-independent). Also added by this
 harness: `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|harsh`,
-`BANISHED_CAMERA_PIN=town[,dist]`.
+`BANISHED_CAMERA_PIN=town[,dist]`. Profiling: `BANISHED_SAMPLE=1000` = sampling profiler
+(`standalone/sampler.cpp`, report with `tools/sample_report.py`) — use it before the
+per-component table, which cannot see libm/Runtime/walk time. Heap: `BANISHED_REDZONE=watch`
+(allocator watchdog, no shim) + `standalone/hw_watch.cpp` hardware write watchpoints.
+`getenv`/`std::getenv` are cached process-wide (`standalone/env_cache.h`, force-included), so a
+per-call `if (std::getenv("BANISHED_X_TRACE"))` in tick code is cheap; env changes must go
+through `_putenv_s` (wrapped, invalidates the cache).
 
 ### Camera Pinning (deterministic screenshots)
 

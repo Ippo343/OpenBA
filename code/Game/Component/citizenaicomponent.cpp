@@ -482,7 +482,8 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
             break;
         }
     }
-    if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+    static const bool s_fsTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was a getenv PER CALL (hot: every CitizenComponent_Update)
+    if (s_fsTrace) {
         static int s_fs = 0;
         if (s_fs < 6) { ++s_fs;
             fprintf(stderr, "[FindStorage] entity=%p compCount=%d want(Residence)=%u found=%p\n",

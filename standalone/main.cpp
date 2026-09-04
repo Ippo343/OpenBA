@@ -21,6 +21,8 @@
 #include "boot_state_watchdog.h"
 #include "autostart.h"
 #include "stress_harness.h"
+#include "sampler.h"
+#include "hw_watch.h"
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
 #include "Game/game_main.h"
@@ -1445,8 +1447,45 @@ static void InstallWndMsgHook() {
 // __fastfail failure bypasses SetUnhandledExceptionFilter entirely, so nothing
 // reaches standalone_crash.log. Everything else (the game's normal first-chance
 // SEH-absorbed AVs) passes straight through untouched.
+static void HwWatch_LogStack(void* ctx) {
+    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
+    CrashLogRaw("\n=== HWWATCH HIT (data breakpoint) ===\n");
+    PrintStackTrace(reinterpret_cast<CONTEXT*>(ctx));
+    CrashLogf("=== END HWWATCH ===\n");
+    FlushLogsToDisk();
+    // Mirror the frames to stderr too (the run harness keeps stderr per run).
+    CONTEXT c = *reinterpret_cast<CONTEXT*>(ctx);
+    for (int frame = 0; frame < 24; frame++) {
+        HMODULE mod = nullptr;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)(uintptr_t)c.Rip, &mod) && mod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(mod, path, MAX_PATH);
+            const char* nm = strrchr(path, '\\');
+            fprintf(stderr, "[HWWATCH]   #%-2d %-18s + 0x%llX\n", frame, nm ? nm + 1 : path,
+                    (unsigned long long)((uintptr_t)c.Rip - (uintptr_t)mod));
+        } else fprintf(stderr, "[HWWATCH]   #%-2d ??? @ %p\n", frame, (void*)c.Rip);
+        DWORD64 imageBase = 0;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(c.Rip, &imageBase, nullptr);
+        if (!fn) {
+            uintptr_t* sp = reinterpret_cast<uintptr_t*>(c.Rsp);
+            if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
+            c.Rip = *sp; c.Rsp += 8;
+            if (!c.Rip) break;
+            continue;
+        }
+        PVOID hd = nullptr; ULONG64 est = 0;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, c.Rip, fn, &c, &hd, &est, nullptr);
+        if (!c.Rip) break;
+    }
+    fflush(stderr);
+}
+
 static LONG WINAPI FirstChanceFailFast(EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code == EXCEPTION_SINGLE_STEP && HwWatch_Armed()) {
+        if (HwWatch_OnSingleStep(ep, &HwWatch_LogStack)) return EXCEPTION_CONTINUE_EXECUTION;
+    }
     if (code == 0xC0000409 /*STATUS_STACK_BUFFER_OVERRUN*/ ||
         code == 0xC0000602 /*STATUS_FAIL_FAST_EXCEPTION*/) {
         if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
@@ -1476,6 +1515,8 @@ static bool Init() {
     //    so first-chance AVs absorbed by Banished's SEH chains stay quiet.
     SetUnhandledExceptionFilter(CrashHandler);
     AddVectoredExceptionHandler(1, FirstChanceFailFast);
+    HwWatch_Init();
+    Sampler_Init();   // BANISHED_SAMPLE=<hz>: sim-thread sampling profiler
 
     // 1a. Open the dedicated crash log NOW (before any pure-virtual /
     //     terminate handler can be hit). Re-opens are no-ops because

@@ -34,8 +34,11 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "hw_watch.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cpp
 
 // ============================================================
 // Generic dynamic-array resize implementation (shared)
@@ -97,8 +100,27 @@ void GenericArrayResize(void* arrayHeader, int newCount,
             *capSlot = newCount * 3;
         }
         size_t bytes = static_cast<size_t>(*capSlot) * stride;
+        g_allocStatsCtx = arrayHeader;                         // ALLOCSTATS owner tag
         void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, bytes, alignment);
+        g_allocStatsCtx = nullptr;
         *dataSlot = newBuf;
+        // [DIAG] BANISHED_ARR_WATCH="stride,bytes": arm a hardware WRITE watchpoint on the
+        // dword just past the end of every matching buffer (= the next heap block's tag
+        // high dword). Names the code that writes one element past an array.
+        static int s_wStride = -1, s_wBytes = 0;
+        if (s_wStride < 0) {
+            s_wStride = 0;
+            if (const char* e = std::getenv("BANISHED_ARR_WATCH")) {
+                int a = 0, b = 0;
+                if (std::sscanf(e, "%d,%d", &a, &b) == 2) { s_wStride = a; s_wBytes = b; }
+            }
+        }
+        if (s_wStride > 0 && newBuf && (int)stride == s_wStride && (int)bytes == s_wBytes) {
+            char why[96];
+            std::snprintf(why, sizeof(why), "array hdr=%p stride=%zu cap=%d newCount=%d",
+                          arrayHeader, stride, *capSlot, newCount);
+            HwWatch_Arm(reinterpret_cast<uint8_t*>(newBuf) + bytes + 4, 4, why);
+        }
     }
 
     int copyStart = (oldData == *dataSlot) ? oldCount : 0;

@@ -968,11 +968,41 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     // first house's tick then simulates it and the rest dedup (emit+0x2c == fi). This
     // reproduces retail's once-per-render-frame advance without the deleted two-phase
     // driver. The seen-set resets when the GameUpdateLoop frame token changes.
-    static int s_gen = -1;
-    static uintptr_t s_seen[64];
-    static int s_seenCount = 0;
-    int frame = GameUpdateLoop_CurrentFrame();
-    if (frame != s_gen) { s_gen = frame; s_seenCount = 0; }
+    // Seen-set = a generation-stamped open-addressing table (2026-09-04). The old 64-entry
+    // linear array was both a CAP (a town with more than 64 distinct emits per frame —
+    // the 800-house stress town — silently stopped un-stamping the rest, freezing their
+    // smoke) and a hot spot (2.2% of the EntityList phase at 800x10: ~400 calls per
+    // iteration, each scanning up to 64 pointers per geo entry).
+    struct SeenSlot { uintptr_t key; int gen; };
+    constexpr int kSeenCap = 4096;   // power of two; ~5 emits per component worst case
+    static SeenSlot s_seenTbl[kSeenCap];
+    const int frame = GameUpdateLoop_CurrentFrame();
+    // At game speed N the tree walk ticks this component N times per RENDER frame, and
+    // every iteration after the first is a no-op here by construction (each emit is
+    // un-stamped at most once per frame, and the first tick re-stamps it). Skip the
+    // geo-entry walk for a component that already ran this frame — the same table
+    // keyed by the component pointer (~400 particle components tick per iteration at
+    // the 800-citizen stress town; this was 2.6% of the EntityList phase at 10x).
+    constexpr int kCompCap = 8192;
+    static SeenSlot s_compTbl[kCompCap];
+    {
+        const uintptr_t k = (uintptr_t)self;
+        uint32_t h = (uint32_t)((k >> 4) * 2654435761u) & (kCompCap - 1);
+        for (int probe = 0; probe < kCompCap; ++probe) {
+            SeenSlot& sl = s_compTbl[(h + probe) & (kCompCap - 1)];
+            if (sl.gen != frame) { sl.gen = frame; sl.key = k; break; }
+            if (sl.key == k) return;   // already un-stamped this frame
+        }
+    }
+    auto seenInsert = [&](uintptr_t k) -> bool {   // true = already un-stamped this frame
+        uint32_t h = (uint32_t)((k >> 4) * 2654435761u) & (kSeenCap - 1);
+        for (int probe = 0; probe < kSeenCap; ++probe) {
+            SeenSlot& sl = s_seenTbl[(h + probe) & (kSeenCap - 1)];
+            if (sl.gen != frame) { sl.gen = frame; sl.key = k; return false; }
+            if (sl.key == k) return true;
+        }
+        return false;   // table full (cannot happen below kSeenCap distinct emits)
+    };
 
     uintptr_t s = (uintptr_t)self;
     PCGeoEntry* arr = *(PCGeoEntry**)(s + 0x38);
@@ -983,10 +1013,7 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
         uintptr_t res  = *(uintptr_t*)(g + 0xc0);
         uintptr_t emit = *(uintptr_t*)(g + 0xc8);
         if (!res || !emit || *(uint8_t*)(res + 0x20) == 0) continue;
-        bool seen = false;
-        for (int k = 0; k < s_seenCount; ++k) if (s_seen[k] == emit) { seen = true; break; }
-        if (seen) continue;                          // already un-stamped this frame
-        if (s_seenCount < 64) s_seen[s_seenCount++] = emit;
+        if (seenInsert(emit)) continue;              // already un-stamped this frame
         if (*(int32_t*)(emit + 0x2c) == fi)
             *(int32_t*)(emit + 0x2c) = fi - 1;
     }

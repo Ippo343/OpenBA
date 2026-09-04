@@ -660,6 +660,7 @@ fn_App_Quit_t fn_App_Quit = nullptr;
 fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion = nullptr;
 fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
 fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr = nullptr;
+bool g_checkPtrIsNop = false;
 fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
 void** g_MainMenuDialog_BuildIdVtable = nullptr;
 // fn_MainMenu_* handlers — REMOVED, now reimplemented in mainmenudialog.cpp
@@ -3138,6 +3139,25 @@ bool EngineFuncsInit() {
     if (!fn_InternalBasePtr_CheckPtr) {
         fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
             ResolveAddr(Module::Runtime, 0x1800c0290));
+    }
+    {
+        // See the g_checkPtrIsNop note in engine_funcs.h: only skip the call when the
+        // resolved body really is a bare RET.
+        // Shipped body is `C2 00 00` = RET 0 (MSVC's form); accept a bare C3 too.
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(fn_InternalBasePtr_CheckPtr);
+        const uint8_t b0 = b ? b[0] : 0;
+        const bool isRet = b && (b0 == 0xC3 || (b0 == 0xC2 && b[1] == 0 && b[2] == 0));
+        const char* env = std::getenv("BANISHED_CHECKPTR_NOP");
+        const bool forceOff = env && env[0] == '0';
+        g_checkPtrIsNop = isRet && !forceOff;
+#ifdef BANISHED_CHECKPTR_STATIC_NOP
+        if (!isRet)
+            std::fprintf(stderr, "[CheckPtr] WARNING: built with BANISHED_CHECKPTR_STATIC_NOP but the "
+                                 "Runtime CheckPtr body is NOT a bare RET — calls are compiled out!\n");
+#endif
+        std::fprintf(stderr, "[CheckPtr] export=%p body[0]=0x%02x -> %s\n",
+                     (void*)fn_InternalBasePtr_CheckPtr, b0,
+                     g_checkPtrIsNop ? "NOP (calls skipped)" : "real call");
     }
 
     fn_DialogInstance_Ctor = reinterpret_cast<fn_DialogInstance_Ctor_t>(

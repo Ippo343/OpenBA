@@ -214,8 +214,23 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);
     *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
     *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
+    // The three retail ctors differ in their tails and the object SIZES differ with them:
+    //   PlantArea   0x1400f46a0 (0x70): +0x58 q = 0, +0x60 q = 0, +0x68 q = descList
+    //   HarvestArea 0x1400ed4c0 (0x68): +0x58 q = 0, +0x60 q = 0
+    //   TendArea    0x14011a100 (0x60): +0x58 DWORD = 0   -- nothing at +0x60
+    // The shared tail used to zero +0x60 as a qword for all three: for TendArea that is
+    // 8 bytes PAST the 0x60-byte allocation, i.e. the boundary tag of the next heap block.
+    // Every crop field entering state 10 zeroed a neighbour's tag; the engine allocator's
+    // coalescing then produced the "free-list link with wrong high bits" faults in
+    // EntityList_Shutdown at the end of every long 800x10 stress run (2026-09-04, caught
+    // in the act by the REDZONE watchdog: preceding block = g_TendArea_Vtable object,
+    // frame 3146, right after "[CropXition] STATE 10 ENTER - posting TendArea").
+    if (size >= 0x68) {
+        *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
+        *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
+    } else {
+        *reinterpret_cast<uint32_t*>(w + 0x58) = 0;
+    }
     if (hasDescField) *reinterpret_cast<uint64_t*>(w + 0x68) = descListField;
 
     if (perSlotArray && s_findCropComp && s_byteResize) {

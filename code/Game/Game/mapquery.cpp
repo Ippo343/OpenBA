@@ -59,8 +59,10 @@ float MapQuery_SampleHeight(void* worldGeomVoid, float worldX, float worldZ) {
     const float fx = worldX + center;
     const float fz = worldZ + center;
 
-    int ix = (int)floorf(fx);
-    int iz = (int)floorf(fz);
+    // Inline floor: MinGW's floorf is a libcall (2 per sample, ~1000 samples per tick at
+    // 800 citizens — the move tick calls this every tick). Truncate-then-fix is exact.
+    int ix = (int)fx; if ((float)ix > fx) --ix;
+    int iz = (int)fz; if ((float)iz > fz) --iz;
     const float tx = fx - (float)ix;
     const float tz = fz - (float)iz;
 
@@ -98,8 +100,9 @@ void MapQuery_SampleNormal(void* worldGeomVoid, float worldX, float worldZ, floa
     if (!hm || N <= 0) return;
 
     const float center = (float)(*(int32_t*)(wg + WG_DIMX2) >> 1);
-    const int ix = (int)floorf(worldX + center);
-    const int iz = (int)floorf(worldZ + center);
+    const float fx = worldX + center, fz = worldZ + center;
+    int ix = (int)fx; if ((float)ix > fx) --ix;
+    int iz = (int)fz; if ((float)iz > fz) --iz;
 
     auto clampN = [N](int v) -> int { return v < 0 ? 0 : (v >= N ? N - 1 : v); };
     const int x0 = clampN(ix),     z0 = clampN(iz);

@@ -14,6 +14,15 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+
+// PERF (2026-09-04): this action runs every tick for every tool-carrying citizen and
+// used to call getenv (a linear environ scan + strcmp per entry) four times per call —
+// the sampler showed getenv/strcmp from here inside the EntityList phase.
+static bool CarryTraceOn() {
+    static int on = -1;
+    if (on < 0) on = std::getenv("BANISHED_CARRY_TRACE") ? 1 : 0;
+    return on == 1;
+}
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 
 // ============================================================
@@ -220,7 +229,7 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
 static void ShowTool_ShowCarried(void* entityV) {
     uint8_t* e = reinterpret_cast<uint8_t*>(entityV);
 
-    const bool trc = std::getenv("BANISHED_CARRY_TRACE") != nullptr;
+    const bool trc = CarryTraceOn();
     static int s_trcN = 0;
     if (trc && s_trcN < 60) { ++s_trcN;
         fprintf(stderr, "[ShowTool] ShowCarried ENTER entity=%p\n", entityV); fflush(stderr); }
@@ -295,7 +304,7 @@ static void ShowTool_ShowCarried(void* entityV) {
         *(uint32_t*)(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1 (not yet in scene)
     }
 
-    if (std::getenv("BANISHED_CARRY_TRACE")) {
+    if (CarryTraceOn()) {
         static int n = 0;
         if (n++ < 40) {
             fprintf(stderr, "[ShowTool] carried: item=%p mesh=%llx scale=%.3f nodeReady=%d heldVt=%p defCtor=%p\n",
@@ -350,7 +359,7 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     (void)actionStack;
     // Trace the requested toolId up front (a plain field read, no deps) so a run
     // shows which ShowTool variants reach the executor even when a dep is missing.
-    if (std::getenv("BANISHED_CARRY_TRACE")) {
+    if (CarryTraceOn()) {
         static int n0 = 0;
         if (n0++ < 80) {
             fprintf(stderr, "[ShowTool] AbstractImpl ENTER toolId=%d resolved=%d\n",
@@ -366,7 +375,7 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
-    if (std::getenv("BANISHED_CARRY_TRACE")) {
+    if (CarryTraceOn()) {
         static int n = 0;
         if (n++ < 40) { fprintf(stderr, "[ShowTool] AbstractImpl toolId=%d\n", (int)toolId); fflush(stderr); }
     }

@@ -329,7 +329,8 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
         // pathInterval at 0 makes the path branch fire EVERY frame AND makes the accumulator
         // clamp loop below non-terminating (`acc -= 0`). Fall back to the known 300s gate value.
         float intervalSec = 300.0f;
-        float* intervalFloat = reinterpret_cast<float*>(
+        // PERF: resolved once — this runs every sim tick and ResolveAddr is a hash lookup.
+        static float* intervalFloat = reinterpret_cast<float*>(
             ResolveAddr(Module::Exe, 0x140172234));
         if (intervalFloat) intervalSec = *intervalFloat;
         s_fn_Time_Ctor(&pathInterval, intervalSec);
@@ -382,7 +383,7 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
         }
         // Reset timer from DAT_1401721fc (float seconds)
         if (s_fn_Time_Ctor) {
-            float* statsInterval = reinterpret_cast<float*>(
+            static float* statsInterval = reinterpret_cast<float*>(
                 ResolveAddr(Module::Exe, 0x1401721fc));
             if (statsInterval) {
                 int64_t newTime = 0;
