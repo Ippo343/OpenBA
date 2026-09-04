@@ -121,15 +121,35 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
     uint64_t key = *reinterpret_cast<uint64_t*>(
         *reinterpret_cast<uintptr_t*>(entityPtr) + 0x28);
 
+    // Retail (0x140088e20) is `while (puVar3 = 0, puVar1 != 0)` — the reset is part
+    // of the loop CONDITION, so it runs before every test including the one that
+    // ends the walk. `found` is therefore non-null ONLY on the break path, i.e.
+    // only on an exact key match.
+    //
+    // This was written as a `while (node)` with `found = nullptr` as the first
+    // statement of the BODY, which is not the same program: the body does not run
+    // on the iteration that exits, so `found` kept the last node the walk descended
+    // RIGHT from — a lower bound, not a match. A non-null `found` then skips the
+    // insert below and appends the entity to that other node's list, so the zone
+    // was filed under a different description entirely and its own key never
+    // appeared in the tree.
+    //
+    // Symptom: TutorialGoalCount's Zone mode counts this registry, so a drag-placed
+    // StorageYard was placed and solid while stepFirstPile2's goal counted 0
+    // forever. Intermittent, because whether the final descent goes left or right
+    // depends on the ordering of heap description pointers — which differs run to
+    // run. Reached step 18 by a jump and the tree was small enough to work; reached
+    // it organically, with WoodHouse and Clear already registered, and it did not.
     uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);
     uint64_t* found = nullptr;
-    while (node != nullptr) {
+    for (;;) {
         found = nullptr;
+        if (node == nullptr) break;
         if (key < *node) {
             node = reinterpret_cast<uint64_t*>(node[4]);
         } else {
             found = node;
-            if (key <= *node) break;   // equal key => keep found, stop
+            if (key <= *node) break;   // equal key => exact match, stop
             node = reinterpret_cast<uint64_t*>(node[5]);
         }
     }
@@ -171,7 +191,13 @@ void ZoneComponent_Draw(ZoneComponent* self) {
         s_fn_FindMapComponent(*ownerSlot, &mapIBP);
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
-    if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
+    if (!mapIBP) {
+        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
+            fprintf(stderr, "[ZoneAdd] self=%p ABORT: no MapComponent\n", (void*)self);
+            fflush(stderr);
+        }
+        return;   // standalone-defensive: retail data guarantees the map comp
+    }
 
     int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
     int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
@@ -187,9 +213,21 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     // MapComponent_PaintMinimapRect) and d360 would then deref (null+0x28).
     // Trust the linked description — it comes straight from the entity template.
     void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
-    if (!desc) return;
+    if (!desc) {
+        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
+            fprintf(stderr, "[ZoneAdd] self=%p ABORT: map+0x18 description is NULL\n", (void*)self);
+            fflush(stderr);
+        }
+        return;
+    }
 
-    if (!s_pGameState || !*s_pGameState) return;
+    if (!s_pGameState || !*s_pGameState) {
+        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
+            fprintf(stderr, "[ZoneAdd] self=%p ABORT: no game state\n", (void*)self);
+            fflush(stderr);
+        }
+        return;
+    }
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
 
     int64_t entityRef = *ownerSlot;
@@ -201,6 +239,22 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     entityRef = *ownerSlot;
     if (s_fn_ZoneMapAdd)
         s_fn_ZoneMapAdd(*reinterpret_cast<void**>(world + 0xf0), &entityRef);
+
+    // BANISHED_REGENTITY_TRACE — this call is the ONLY writer of the
+    // per-description zone registry at (world+0xf0)+0x160, which is what
+    // TutorialGoalCount's Zone mode counts. A drag-placed StorageYard reaches
+    // OnAdded with the same armed component set as a Clear zone (Map, Zone,
+    // Decal, Work, StateMachine) and the correct description, yet never gains a
+    // node — so either one of the two early returns above fires for it, or this
+    // add runs and does not insert. Say which.
+    if (std::getenv("BANISHED_REGENTITY_TRACE")) {
+        fprintf(stderr, "[ZoneAdd] self=%p owner=%p map=%p desc=%p rect=(%d,%d) %dx%d "
+                        "kind=%d townMgr=%p fnZoneMapAdd=%p\n",
+                (void*)self, (void*)*ownerSlot, (void*)mapIBP, desc,
+                (int)x, (int)y, (int)w, (int)h, kind,
+                *reinterpret_cast<void**>(world + 0xf0), (void*)s_fn_ZoneMapAdd);
+        fflush(stderr);
+    }
 }
 
 // ============================================================

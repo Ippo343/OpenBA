@@ -956,6 +956,22 @@ static void ComponentEntity_RegisterUpdateDraw(ComponentEntity* self, uint32_t o
 // each component's vtable+0x30 (register-with-systems) for components whose
 // Component+0x20 bit 0 is set.
 static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
+    // BANISHED_REGENTITY_TRACE — this pass is the only thing between "the entity
+    // was registered with the right description" (proven) and "a node for that
+    // description exists in townMgr+0x160" (does not happen for a drag-placed
+    // StorageYard, while the Clear zones in the same run register fine). Whichever
+    // component does that insert lives behind slot 6 here, and it only runs for
+    // components whose +0x20 bit 0 is set — so name every component and say
+    // whether the bit was set and the slot actually dispatched.
+    static int s_regTrace = -1;
+    if (s_regTrace < 0) s_regTrace = std::getenv("BANISHED_REGENTITY_TRACE") ? 1 : 0;
+    if (s_regTrace) {
+        fprintf(stderr, "[OnAdded] entity=%p flags=0x%08X components=%d%s\n",
+                (void*)self, self->entityFlags, self->componentCount,
+                (self->entityFlags & 1) == 0 ? "  SKIPPED (bit0 clear)" : "");
+        fflush(stderr);
+    }
+
     if ((self->entityFlags & 1) == 0) return;
     int count = self->componentCount;
     uintptr_t arr = (uintptr_t)self->components;
@@ -964,7 +980,19 @@ static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
-        if ((*(uint8_t*)(compPtr + 0x20) & 1) != 0) {
+        const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) != 0;
+        if (s_regTrace) {
+            uintptr_t vt0 = *(uintptr_t*)compPtr;
+            uint32_t tid = 0;
+            if (vt0 && *(void**)(vt0 + 0x10))
+                tid = reinterpret_cast<uint32_t (*)(void*)>(*(void**)(vt0 + 0x10))((void*)compPtr);
+            const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
+            fprintf(stderr, "[OnAdded]   [%d] %s (tid=%u) bit0=%d slot6=%p\n",
+                    i, nm ? nm : "?", tid, armed ? 1 : 0,
+                    vt0 ? *(void**)(vt0 + 0x30) : nullptr);
+            fflush(stderr);
+        }
+        if (armed) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             compPtr = *(uintptr_t*)ibpAddr;
             uintptr_t vt = *(uintptr_t*)compPtr;
