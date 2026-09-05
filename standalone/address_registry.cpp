@@ -585,6 +585,9 @@ extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPat
 extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers + UpgradeUIConfig vtable (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
 // .rdata/.data census wave 2026-09-04.
 extern void RegisterW2Lane1();             // purecall placeholder vtable 0x14015f070
+extern "C" void RegisterW2Lane2();         // TutorialInstance vtable — installs our ported slot 3 (Serialize)
+extern void RegisterW2Lane3TypeIds();      // ParticleDescription BaseTypeInfo 0x1401c4758
+extern "C" void RegisterW2Screenshot();    // GameUpdateLoop::TakeScreenshot 0x140095da0
 
 // Code-fn wave 2026-09-04 (unported exe .text functions), six lanes.
 extern "C" void RegisterCodeLane1Batch();  // MapGenerator dtor body 0x14001aea0
@@ -605,6 +608,9 @@ static void RegisterCodeFunctions() {
 
     // .rdata/.data wave — see docs/waves/rdata_data_wave.md.
     RegisterW2Lane1();
+    RegisterW2Lane2();
+    RegisterW2Lane3TypeIds();
+    RegisterW2Screenshot();
 
     // Code-fn wave 2026-09-04 — see docs/waves/code_fns_wave.md.
     RegisterCodeLane1Batch();

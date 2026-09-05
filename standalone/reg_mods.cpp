@@ -34,7 +34,11 @@
 //                                                 :2060/:2135 via fn_QuickSave, so with this
 //                                                 unregistered, pressing quicksave (key 0x21)
 //                                                 or quickload (0x22) was an EXEC-of-0.
-//                                                 Registered by reg_code_lane4.cpp.
+//                                                 Registered by reg_w2_screenshot.cpp
+//                                                 (NOT reg_code_lane4.cpp -- an earlier
+//                                                 revision of this comment said so and was
+//                                                 wrong; lane 4 identified it but did not
+//                                                 register it).
 //   0x1400a5140 "ModDialog_impl_5140"          = ImageCapture::DrawCheck / minimap
 //                                                 paint (code/Game/Game/minimap_paint.cpp)
 // All three are consumed by code/Game/Game/gameupdateloop.cpp, which already owns

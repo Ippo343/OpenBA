@@ -2087,9 +2087,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             // fire a screenshot the instant the real port lands, for a keypress
             // made minutes earlier.
             //
-            // DELETE THIS GUARD when 0x140095da0 is ported; the full port spec
-            // (all seven dependencies are named PE imports) is in
-            // docs/waves/code_fns_wave.md.
+            // STATUS 2026-09-04: 0x140095da0 IS now ported and registered
+            // (code/Game/Game/w2_takescreenshot.cpp, standalone/reg_w2_screenshot.cpp),
+            // so fn_QuickSave is non-null and this else-branch is unreachable --
+            // dead code, not a live fallback. Retained deliberately: the port has
+            // been verified by build, census and a clean load, but NOT by an
+            // actual keypress (driving KeyMap::Pressed(0x21) needs input injection
+            // the harness lacks). Delete it once a real quicksave keypress is
+            // confirmed to write a Screenshot<N>.bmp.
             self->m_quickSavePressed = 0;
             self->m_quickLoadPressed = 0;
         }
@@ -2197,9 +2202,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             // fire a screenshot the instant the real port lands, for a keypress
             // made minutes earlier.
             //
-            // DELETE THIS GUARD when 0x140095da0 is ported; the full port spec
-            // (all seven dependencies are named PE imports) is in
-            // docs/waves/code_fns_wave.md.
+            // STATUS 2026-09-04: 0x140095da0 IS now ported and registered
+            // (code/Game/Game/w2_takescreenshot.cpp, standalone/reg_w2_screenshot.cpp),
+            // so fn_QuickSave is non-null and this else-branch is unreachable --
+            // dead code, not a live fallback. Retained deliberately: the port has
+            // been verified by build, census and a clean load, but NOT by an
+            // actual keypress (driving KeyMap::Pressed(0x21) needs input injection
+            // the harness lacks). Delete it once a real quicksave keypress is
+            // confirmed to write a Screenshot<N>.bmp.
             self->m_quickSavePressed = 0;
             self->m_quickLoadPressed = 0;
         }
