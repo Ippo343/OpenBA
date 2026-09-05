@@ -334,13 +334,34 @@ static void PrintStackTrace(CONTEXT* origCtx) {
 static HANDLE g_crashLog = INVALID_HANDLE_VALUE;
 
 static void OpenCrashLog() {
-    if (g_crashLog != INVALID_HANDLE_VALUE) return;  // idempotent — early init may have opened already
+    if (g_crashLog != INVALID_HANDLE_VALUE) return;  // idempotent
     g_crashLog = CreateFileA(
         "standalone_crash.log",
         GENERIC_WRITE, FILE_SHARE_READ, nullptr,
         CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
         nullptr);
+    if (g_crashLog != INVALID_HANDLE_VALUE) return;
+
+    // A previous crashed run can linger as a zombie that never releases its
+    // handles (taskkill reports "no running instance" while tasklist still
+    // lists it). It holds standalone_crash.log with FILE_SHARE_READ only, so
+    // this GENERIC_WRITE open is denied -- and then EVERY CrashLogf silently
+    // drops, which loses the fault address and stack for the run that matters.
+    // Fall back to a pid-suffixed name so a dump is always written somewhere.
+    char alt[64];
+    wsprintfA(alt, "standalone_crash_%lu.log", GetCurrentProcessId());
+    g_crashLog = CreateFileA(
+        alt,
+        GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
+        nullptr);
+    if (g_crashLog != INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "[CrashLog] standalone_crash.log is locked (stale zombie "
+                        "process?) -- this run's dump goes to %s\n", alt);
+        fflush(stderr);
+    }
 }
 
 // Raw WriteFile of a literal string — CRT-free, used as a progress marker so

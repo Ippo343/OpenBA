@@ -691,9 +691,18 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     void* gameWorld = *g_pGameWorldSingleton;
     void* worldGrid = *(void**)((uintptr_t)gameWorld + 0xF8);
 
-    // Get citizen entity and read clearTrees flag
+    // Get citizen entity and read the tile-query filter flag.
+    //
+    // Retail 0x1400e5ee0 reads `cVar2 = *(char *)((longlong)param_1 + 0x71)`
+    // here -- clearGround, NOT clearTrees (+0x70). The flag is the last
+    // argument to GetTilesInArea and decides whether EMPTY tiles (entityPtr
+    // == 0) are included in the result. Phase 3 below derefs
+    // `tileEntity + 0x38` unguarded, exactly as retail does, which is only
+    // safe because a clearGround=false query returns occupied tiles only.
+    // Passing +0x70 instead let empty tiles into the array and phase 3
+    // faulted on READ of 0x38.
     uint64_t citizenIBP = reinterpret_cast<uint64_t>(self->field_10);
-    char clearTrees = self->field_70;  // +0x70 = clearTrees flag
+    char includeEmptyTiles = self->field_71;  // +0x71 = clearGround flag
 
     // Find BuildComponent on citizen entity
     fn_InternalBasePtr_CheckPtr(&citizenIBP);
@@ -710,12 +719,15 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
     // Get tiles in the area
     fn_WorldGrid_GetTilesInArea(worldGrid, (int)x1, (int)y1, (int)x2, (int)y2,
-                                 &tileArray, clearTrees);
+                                 &tileArray, includeEmptyTiles);
 
     int tileCount = tileArray.count;
     if (CA_ExecTrace() && s_execCount <= 20)
-        std::fprintf(stderr, "[ClearExec]   area=(%d,%d)-(%d,%d) totalSlots=%d tileCount=%d clearTrees=%d filter=%p\n",
-                     (int)x1, (int)y1, (int)x2, (int)y2, totalSlots, tileCount, (int)clearTrees, self->field_68);
+        std::fprintf(stderr, "[ClearExec]   area=(%d,%d)-(%d,%d) totalSlots=%d tileCount=%d "
+                     "includeEmpty=%d trees=%d ground=%d buildings=%d filter=%p\n",
+                     (int)x1, (int)y1, (int)x2, (int)y2, totalSlots, tileCount,
+                     (int)includeEmptyTiles, (int)self->field_70, (int)self->field_71,
+                     (int)self->field_72, self->field_68);
     if (tileCount == 0) {
         goto done_nothing;
     }
