@@ -2561,390 +2561,415 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // dry land: too far inland only costs dock adjacency, whereas too near
                     // puts the post under water and fails for a misleading reason.
                     static const int kBankFallback = 6;
-                    int bestX = 0, bestY = 0, bestSetback = -1, bestPath = -1, bestPt = -1;
-                    // The chosen ORIENTATION, and the footprint extents that go with it.
-                    // Every other demo building in this file is placed at rotation 0; the
-                    // trading post is the one that cannot be, because its dock is a fixed
-                    // offset in the building's LOCAL frame — see the rotation note below.
-                    int bestRot = 0, bestFpW = tw, bestFpH = th;
-                    bool found = false;
-                    int pointsSeen = 0;
-
-                    // ⚠ SELECTION IS NEAREST-TO-TOWN, NOT FIRST-FIT.
-                    // This used to take the first fit in path order, "path 0 first,
-                    // because that is the one the retail route builder walks". Measured
-                    // result: the post landed on the far side of the water, most of the
-                    // map from the town — unusable for testing the panel, because no
-                    // citizen will ever walk to it. Two reasons the old rule was wrong:
-                    //   * path 0 is the COASTLINE RING, not a river (confirmed by its
-                    //     halfWidth of 4.00 vs 1.50 for the others), so "first point on
-                    //     path 0" is a point on the map edge.
-                    //   * even on a real river, the first in-bounds point is an artifact
-                    //     of polyline winding order, not of proximity to anything.
-                    // So scan every candidate and keep the one closest to the town
-                    // cluster centre. Path 0 is still preferred on ties only.
-                    const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
-                    long long bestDist = -1;       // ranking score (may carry penalties)
-                    long long bestTrueDist = -1;   // the honest distance, for the log
-                    bool bestPierOk = false;
-                    int  bestPierCell = -1;
-                    // TEST HARNESS, opt-in: BANISHED_TRADINGPOST_PATH=<n> considers only
-                    // polyline n. The retail route builder A*s from polyline 0 to the dock,
-                    // so "nearest to town" siting can (and by default does) put the post on
-                    // a channel the boat never enters — which reads as a broken route
-                    // builder when it is really a broken test fixture. =0 is the setup that
-                    // actually exercises the arrival path. Unset = unchanged behaviour.
-                    int onlyPath = -1;
-                    if (const char* pe = std::getenv("BANISHED_TRADINGPOST_PATH")) {
-                        if (pe[0]) onlyPath = std::atoi(pe);
+                    // ── HOW MANY POSTS ──────────────────────────────────────────
+                    // BANISHED_DEMO_TRADINGPOST_COUNT=<n> (default 1) repeats the whole
+                    // selection below n times. Each successful placement calls Occupy,
+                    // and the clash test reads occN live, so pass 2 cannot pick pass 1's
+                    // footprint and lands on a different river point on its own.
+                    //
+                    // Needed because the MasterBuilder achievement wants TWO trading
+                    // posts, and this block is the only thing in the harness that can
+                    // site one: the stress set (kStressSet) deliberately excludes every
+                    // river-sited building, so --sets N scales all the others and leaves
+                    // the post at exactly 1 however high N goes.
+                    //
+                    // The reachability flood and the pier-offset lookup are inside the
+                    // repeat and so are redone per pass. That is a few hundred thousand
+                    // cell visits at world-build time only, and keeping them here means
+                    // each pass reports its own acceptance test rather than inheriting
+                    // pass 1's verdict.
+                    int wantPosts = 1;
+                    if (const char* cn = std::getenv("BANISHED_DEMO_TRADINGPOST_COUNT")) {
+                        const int v = std::atoi(cn);
+                        if (v > 0) wantPosts = v;
                     }
+                    for (int rep = 0; rep < wantPosts; ++rep) {
+                        int bestX = 0, bestY = 0, bestSetback = -1, bestPath = -1, bestPt = -1;
+                        // The chosen ORIENTATION, and the footprint extents that go with it.
+                        // Every other demo building in this file is placed at rotation 0; the
+                        // trading post is the one that cannot be, because its dock is a fixed
+                        // offset in the building's LOCAL frame — see the rotation note below.
+                        int bestRot = 0, bestFpW = tw, bestFpH = th;
+                        bool found = false;
+                        int pointsSeen = 0;
 
-                    // ── THE ACCEPTANCE TEST: can a boat actually REACH this dock? ──
-                    // Measured 2026-08-22: siting by setback alone produced a post whose
-                    // pier landed in an 867-cell POND — water, navigable, and in a
-                    // different connected component from the river the boat arrives on.
-                    // Both A* legs correctly returned 0 and the route builder took the
-                    // blame for a fixture that never checked where the pier ended up.
-                    //
-                    // Retail does NOT protect against this: its placement comparator
-                    // (0x14009f5d0) is a per-cell bit test on cell+0x29 plus bounds and
-                    // occupancy, with no connectivity check anywhere — a player can put a
-                    // trading post on a pond in retail too and its boat will never come.
-                    // So this is not a missing retail rule being reimplemented; it is a
-                    // TEST FIXTURE choosing a site that exercises the arrival path.
-                    //
-                    // Method: flood the water from the cell where polyline 0 enters the
-                    // map (exactly where the route builder starts its first A* leg), then
-                    // require a candidate's PIER CELL to be in that flood. One flood, then
-                    // an O(1) test per candidate — running an A* per candidate would be
-                    // thousands of searches.
-                    //
-                    // Nav data: map+0x80 = fine-cell array, stride 0x30, cell+0x29 low 5
-                    // bits = terrain class; boat-passable classes are mask 0x380,
-                    // 8-neighbour (0x1400a5ec0's admissibility test). The searcher keeps
-                    // its own copy of these bytes and it is a verified byte-exact mirror.
-                    int* navMap = (gw && *(void**)((uint8_t*)gw + 0xf8))
-                                ? *(int**)((uint8_t*)gw + 0xf8) : nullptr;
-                    uintptr_t cellBase = navMap
-                                       ? *(uintptr_t*)((uint8_t*)navMap + 0x80) : 0;
-                    std::vector<uint8_t> reach;          // empty = test unavailable
-                    int entryCell = -1;
-                    if (cellBase && mapSize > 0) {
-                        // Where polyline 0 enters the map — the route builder's own start.
-                        uint8_t* p0 = pathArr;
-                        const float* p0pts = *(const float**)p0;
-                        const int p0n = *(int32_t*)(p0 + 8);
-                        for (int i = 0; i < p0n && p0pts; ++i) {
-                            const int ex = (int)(p0pts[2 * i]     + (float)half);
-                            const int ey = (int)(p0pts[2 * i + 1] + (float)half);
-                            if (ex >= 0 && ex < mapSize && ey >= 0 && ey < mapSize) {
-                                entryCell = ey * mapSize + ex;
+                        // ⚠ SELECTION IS NEAREST-TO-TOWN, NOT FIRST-FIT.
+                        // This used to take the first fit in path order, "path 0 first,
+                        // because that is the one the retail route builder walks". Measured
+                        // result: the post landed on the far side of the water, most of the
+                        // map from the town — unusable for testing the panel, because no
+                        // citizen will ever walk to it. Two reasons the old rule was wrong:
+                        //   * path 0 is the COASTLINE RING, not a river (confirmed by its
+                        //     halfWidth of 4.00 vs 1.50 for the others), so "first point on
+                        //     path 0" is a point on the map edge.
+                        //   * even on a real river, the first in-bounds point is an artifact
+                        //     of polyline winding order, not of proximity to anything.
+                        // So scan every candidate and keep the one closest to the town
+                        // cluster centre. Path 0 is still preferred on ties only.
+                        const int townCx = (bbX0 + bbX1) / 2, townCy = (bbY0 + bbY1) / 2;
+                        long long bestDist = -1;       // ranking score (may carry penalties)
+                        long long bestTrueDist = -1;   // the honest distance, for the log
+                        bool bestPierOk = false;
+                        int  bestPierCell = -1;
+                        // TEST HARNESS, opt-in: BANISHED_TRADINGPOST_PATH=<n> considers only
+                        // polyline n. The retail route builder A*s from polyline 0 to the dock,
+                        // so "nearest to town" siting can (and by default does) put the post on
+                        // a channel the boat never enters — which reads as a broken route
+                        // builder when it is really a broken test fixture. =0 is the setup that
+                        // actually exercises the arrival path. Unset = unchanged behaviour.
+                        int onlyPath = -1;
+                        if (const char* pe = std::getenv("BANISHED_TRADINGPOST_PATH")) {
+                            if (pe[0]) onlyPath = std::atoi(pe);
+                        }
+
+                        // ── THE ACCEPTANCE TEST: can a boat actually REACH this dock? ──
+                        // Measured 2026-08-22: siting by setback alone produced a post whose
+                        // pier landed in an 867-cell POND — water, navigable, and in a
+                        // different connected component from the river the boat arrives on.
+                        // Both A* legs correctly returned 0 and the route builder took the
+                        // blame for a fixture that never checked where the pier ended up.
+                        //
+                        // Retail does NOT protect against this: its placement comparator
+                        // (0x14009f5d0) is a per-cell bit test on cell+0x29 plus bounds and
+                        // occupancy, with no connectivity check anywhere — a player can put a
+                        // trading post on a pond in retail too and its boat will never come.
+                        // So this is not a missing retail rule being reimplemented; it is a
+                        // TEST FIXTURE choosing a site that exercises the arrival path.
+                        //
+                        // Method: flood the water from the cell where polyline 0 enters the
+                        // map (exactly where the route builder starts its first A* leg), then
+                        // require a candidate's PIER CELL to be in that flood. One flood, then
+                        // an O(1) test per candidate — running an A* per candidate would be
+                        // thousands of searches.
+                        //
+                        // Nav data: map+0x80 = fine-cell array, stride 0x30, cell+0x29 low 5
+                        // bits = terrain class; boat-passable classes are mask 0x380,
+                        // 8-neighbour (0x1400a5ec0's admissibility test). The searcher keeps
+                        // its own copy of these bytes and it is a verified byte-exact mirror.
+                        int* navMap = (gw && *(void**)((uint8_t*)gw + 0xf8))
+                                    ? *(int**)((uint8_t*)gw + 0xf8) : nullptr;
+                        uintptr_t cellBase = navMap
+                                           ? *(uintptr_t*)((uint8_t*)navMap + 0x80) : 0;
+                        std::vector<uint8_t> reach;          // empty = test unavailable
+                        int entryCell = -1;
+                        if (cellBase && mapSize > 0) {
+                            // Where polyline 0 enters the map — the route builder's own start.
+                            uint8_t* p0 = pathArr;
+                            const float* p0pts = *(const float**)p0;
+                            const int p0n = *(int32_t*)(p0 + 8);
+                            for (int i = 0; i < p0n && p0pts; ++i) {
+                                const int ex = (int)(p0pts[2 * i]     + (float)half);
+                                const int ey = (int)(p0pts[2 * i + 1] + (float)half);
+                                if (ex >= 0 && ex < mapSize && ey >= 0 && ey < mapSize) {
+                                    entryCell = ey * mapSize + ex;
+                                    break;
+                                }
+                            }
+                        }
+                        if (entryCell >= 0) {
+                            const uint32_t kBoatMask = 0x380u;
+                            auto navigable = [&](int c) {
+                                const unsigned cls =
+                                    *(uint8_t*)(cellBase + (uintptr_t)c * 0x30 + 0x29) & 0x1fu;
+                                return ((1u << cls) & kBoatMask) != 0;
+                            };
+                            if (navigable(entryCell)) {
+                                reach.assign((size_t)mapSize * mapSize, 0);
+                                std::vector<int> stack;
+                                stack.push_back(entryCell);
+                                reach[entryCell] = 1;
+                                while (!stack.empty()) {
+                                    const int c = stack.back(); stack.pop_back();
+                                    const int cx2 = c % mapSize, cy2 = c / mapSize;
+                                    for (int dy = -1; dy <= 1; ++dy)
+                                        for (int dx = -1; dx <= 1; ++dx) {
+                                            if (!dx && !dy) continue;
+                                            const int nx = cx2 + dx, ny = cy2 + dy;
+                                            if (nx < 0 || ny < 0 || nx >= mapSize || ny >= mapSize)
+                                                continue;
+                                            const int nc = ny * mapSize + nx;
+                                            if (reach[nc] || !navigable(nc)) continue;
+                                            reach[nc] = 1;
+                                            stack.push_back(nc);
+                                        }
+                                }
+                            }
+                        }
+
+                        // The pier's offset, read from the TEMPLATE rather than hardcoded:
+                        // InteractDescription -> +0x20 -> { +0x30 entries, +0x38 count },
+                        // stride 0x18 = { String name @+0x00, Vector3 localPos @+0x08,
+                        // float localYaw @+0x14 } — the same table retail's 0x140123880 walks.
+                        // Every demo post is placed with rotation 0, so the offset needs no
+                        // rotation; the entity origin is the footprint CENTRE, which is what
+                        // makes the prediction below reproduce the measured attach point
+                        // exactly (post tile (112,107) fp 12x11 + localPos (1.66,-6.53) ->
+                        // world (-8.34,-22.03) -> tile (119,105), the value the route builder
+                        // independently resolved).
+                        bool havePier = false;
+                        float pierX = 0.0f, pierY = 0.0f;
+                        {
+                            void* idesc = FindDescriptionOnTemplate(ttmpl, TypeId("InteractDescription"));
+                            const uintptr_t tbl = idesc ? *(uintptr_t*)((uint8_t*)idesc + 0x20) : 0;
+                            const int aCount = tbl ? *(int32_t*)(tbl + 0x38) : 0;
+                            for (int i = 0; i < aCount; ++i) {
+                                const uintptr_t e = *(uintptr_t*)(tbl + 0x30) + (uintptr_t)i * 0x18;
+                                uint8_t nameBuf[8] = {};
+                                if (!fn_String_Ctor_CStr || !fn_String_Equal) break;
+                                fn_String_Ctor_CStr(nameBuf, "boat");
+                                const bool hit = fn_String_Equal((const void*)e, nameBuf);
+                                if (fn_String_Dtor) fn_String_Dtor(nameBuf);
+                                if (!hit) continue;
+                                pierX = *(const float*)(e + 0x08);
+                                pierY = *(const float*)(e + 0x0c);
+                                havePier = true;
                                 break;
                             }
                         }
-                    }
-                    if (entryCell >= 0) {
-                        const uint32_t kBoatMask = 0x380u;
-                        auto navigable = [&](int c) {
-                            const unsigned cls =
-                                *(uint8_t*)(cellBase + (uintptr_t)c * 0x30 + 0x29) & 0x1fu;
-                            return ((1u << cls) & kBoatMask) != 0;
-                        };
-                        if (navigable(entryCell)) {
-                            reach.assign((size_t)mapSize * mapSize, 0);
-                            std::vector<int> stack;
-                            stack.push_back(entryCell);
-                            reach[entryCell] = 1;
-                            while (!stack.empty()) {
-                                const int c = stack.back(); stack.pop_back();
-                                const int cx2 = c % mapSize, cy2 = c / mapSize;
-                                for (int dy = -1; dy <= 1; ++dy)
-                                    for (int dx = -1; dx <= 1; ++dx) {
-                                        if (!dx && !dy) continue;
-                                        const int nx = cx2 + dx, ny = cy2 + dy;
-                                        if (nx < 0 || ny < 0 || nx >= mapSize || ny >= mapSize)
+                        // Always print, including the failure arms: with no flood and no pier
+                        // offset this block silently degrades to the old setback ranking, and
+                        // that must never look like it ran the acceptance test.
+                        fprintf(stderr, "[startTown::tradingpost] dock reachability: entryCell=%d"
+                                " floodCells=%d pierOffset=%s(%.2f,%.2f)%s\n",
+                                entryCell, (int)std::count(reach.begin(), reach.end(), (uint8_t)1),
+                                havePier ? "" : "NONE ", pierX, pierY,
+                                (reach.empty() || !havePier)
+                                  ? "   <-- ACCEPTANCE TEST OFF: siting falls back to setback/"
+                                    "distance only, and the chosen dock may be unreachable"
+                                  : "");
+
+                        for (int p = 0; p < pathCount; ++p) {
+                            if (onlyPath >= 0 && p != onlyPath) continue;
+                            uint8_t* entry = pathArr + (size_t)p * 0x10;
+                            const float* pts = *(const float**)entry;
+                            const int ptCount = *(int32_t*)(entry + 8);
+                            if (!pts || ptCount < 2) continue;
+
+                            // First DRY tile off this path's centerline. -1 = no data.
+                            const float bankF = WorldGen_GetPathBankDistance(p);
+                            const int sMin = (bankF < 0.0f)
+                                           ? kBankFallback
+                                           : (int)std::ceil(bankF) + 1;   // +1 = clear of the band
+                            fprintf(stderr, "[startTown::tradingpost]   path[%d] halfWidth=%.2f "
+                                    "bank=%.2f -> setback starts at s=%d%s\n",
+                                    p, WorldGen_GetPathHalfWidth(p), bankF, sMin,
+                                    bankF < 0.0f ? "  (NO halfWidth DATA — using fallback)" : "");
+
+                            for (int j = 0; j < ptCount; ++j) {
+                                const int rx = (int)(pts[2 * j]     + (float)half);
+                                const int ry = (int)(pts[2 * j + 1] + (float)half);
+                                if (rx < 0 || ry < 0 || rx >= mapSize || ry >= mapSize) continue;
+                                ++pointsSeen;
+
+                                for (int s = sMin; s <= sMin + kSetbackRange; ++s) {
+                                  // ── ROTATION ─────────────────────────────────────────────
+                                  // Rotation 0 alone cannot site this post on the main channel.
+                                  // The pier offset is fixed in the building's LOCAL frame
+                                  // (~(1.66,-6.53), pointing one way), so at a fixed rotation
+                                  // the setback search can only step the footprint N/S/E/W —
+                                  // it can never TURN the building to face the water. Measured
+                                  // 2026-08-22 with BANISHED_TRADINGPOST_PATH=0: no candidate on
+                                  // polyline 0 passed the reachability test at all, because the
+                                  // fixed pier direction points inland off the coastline ring.
+                                  //
+                                  // So try all four orientations per candidate and rotate the
+                                  // pier offset with them. placeStructure already takes the
+                                  // orientation (in DEGREES, raw — it is handed straight to
+                                  // Transform::FromYawPitchOffset as the yaw) and swaps the
+                                  // footprint axes for 90/270; nothing in the demo block used it
+                                  // until now.
+                                  //
+                                  // The rotation sense of the offset is NOT read off retail — the
+                                  // pier's world position comes from `modelTransform * localPos`
+                                  // (boatcomponent_route.cpp, 0x140123880) and we do not
+                                  // replicate that matrix here, we apply the CCW-about-+Z
+                                  // rotation below. It is MEASURED instead, and the measurement
+                                  // is the log pair this block already prints:
+                                  //   2026-08-22, seed 12345, chosen rot=90 -> predicted pier
+                                  //   world (49.00,-1.00); the route builder independently
+                                  //   resolved the dock at (49.03,-0.34).
+                                  // Sub-tile agreement on a 90 placement is what pins the sense —
+                                  // a wrong sign would put 90 where 270 belongs, tiles away and
+                                  // usually on dry land. If that pair ever disagrees on a 90/270
+                                  // placement, negate the sine terms in kPierRot.
+                                  static const int   kRotDeg[4]    = { 0, 90, 180, 270 };
+                                  static const float kPierRot[4][4] = {   // {xx,xy,yx,yy}
+                                      {  1.0f,  0.0f,  0.0f,  1.0f },     //   0
+                                      {  0.0f, -1.0f,  1.0f,  0.0f },     //  90 CCW
+                                      { -1.0f,  0.0f,  0.0f, -1.0f },     // 180
+                                      {  0.0f,  1.0f, -1.0f,  0.0f },     // 270
+                                  };
+                                  for (int ri = 0; ri < 4; ++ri) {
+                                    const int rotDeg = kRotDeg[ri];
+                                    // placeStructure swaps the axes for 90/270 (and only those);
+                                    // mirror that here so the footprint we test is the footprint
+                                    // it stamps.
+                                    const int fpW = (rotDeg == 90 || rotDeg == 270) ? th : tw;
+                                    const int fpH = (rotDeg == 90 || rotDeg == 270) ? tw : th;
+                                    const float prX = kPierRot[ri][0] * pierX + kPierRot[ri][1] * pierY;
+                                    const float prY = kPierRot[ri][2] * pierX + kPierRot[ri][3] * pierY;
+                                    // 4 cardinals: post footprint placed s tiles off the water.
+                                    const int cand[4][2] = {
+                                        { rx + s,      ry - fpH / 2 },   // east of the river
+                                        { rx - s - fpW, ry - fpH / 2 },  // west
+                                        { rx - fpW / 2, ry + s      },   // south
+                                        { rx - fpW / 2, ry - s - fpH },  // north
+                                    };
+                                    for (int d = 0; d < 4; ++d) {
+                                        const int tx = cand[d][0], ty = cand[d][1];
+                                        if (tx < 1 || ty < 1 ||
+                                            tx + fpW >= mapSize - 1 || ty + fpH >= mapSize - 1)
                                             continue;
-                                        const int nc = ny * mapSize + nx;
-                                        if (reach[nc] || !navigable(nc)) continue;
-                                        reach[nc] = 1;
-                                        stack.push_back(nc);
-                                    }
-                            }
-                        }
-                    }
-
-                    // The pier's offset, read from the TEMPLATE rather than hardcoded:
-                    // InteractDescription -> +0x20 -> { +0x30 entries, +0x38 count },
-                    // stride 0x18 = { String name @+0x00, Vector3 localPos @+0x08,
-                    // float localYaw @+0x14 } — the same table retail's 0x140123880 walks.
-                    // Every demo post is placed with rotation 0, so the offset needs no
-                    // rotation; the entity origin is the footprint CENTRE, which is what
-                    // makes the prediction below reproduce the measured attach point
-                    // exactly (post tile (112,107) fp 12x11 + localPos (1.66,-6.53) ->
-                    // world (-8.34,-22.03) -> tile (119,105), the value the route builder
-                    // independently resolved).
-                    bool havePier = false;
-                    float pierX = 0.0f, pierY = 0.0f;
-                    {
-                        void* idesc = FindDescriptionOnTemplate(ttmpl, TypeId("InteractDescription"));
-                        const uintptr_t tbl = idesc ? *(uintptr_t*)((uint8_t*)idesc + 0x20) : 0;
-                        const int aCount = tbl ? *(int32_t*)(tbl + 0x38) : 0;
-                        for (int i = 0; i < aCount; ++i) {
-                            const uintptr_t e = *(uintptr_t*)(tbl + 0x30) + (uintptr_t)i * 0x18;
-                            uint8_t nameBuf[8] = {};
-                            if (!fn_String_Ctor_CStr || !fn_String_Equal) break;
-                            fn_String_Ctor_CStr(nameBuf, "boat");
-                            const bool hit = fn_String_Equal((const void*)e, nameBuf);
-                            if (fn_String_Dtor) fn_String_Dtor(nameBuf);
-                            if (!hit) continue;
-                            pierX = *(const float*)(e + 0x08);
-                            pierY = *(const float*)(e + 0x0c);
-                            havePier = true;
-                            break;
-                        }
-                    }
-                    // Always print, including the failure arms: with no flood and no pier
-                    // offset this block silently degrades to the old setback ranking, and
-                    // that must never look like it ran the acceptance test.
-                    fprintf(stderr, "[startTown::tradingpost] dock reachability: entryCell=%d"
-                            " floodCells=%d pierOffset=%s(%.2f,%.2f)%s\n",
-                            entryCell, (int)std::count(reach.begin(), reach.end(), (uint8_t)1),
-                            havePier ? "" : "NONE ", pierX, pierY,
-                            (reach.empty() || !havePier)
-                              ? "   <-- ACCEPTANCE TEST OFF: siting falls back to setback/"
-                                "distance only, and the chosen dock may be unreachable"
-                              : "");
-
-                    for (int p = 0; p < pathCount; ++p) {
-                        if (onlyPath >= 0 && p != onlyPath) continue;
-                        uint8_t* entry = pathArr + (size_t)p * 0x10;
-                        const float* pts = *(const float**)entry;
-                        const int ptCount = *(int32_t*)(entry + 8);
-                        if (!pts || ptCount < 2) continue;
-
-                        // First DRY tile off this path's centerline. -1 = no data.
-                        const float bankF = WorldGen_GetPathBankDistance(p);
-                        const int sMin = (bankF < 0.0f)
-                                       ? kBankFallback
-                                       : (int)std::ceil(bankF) + 1;   // +1 = clear of the band
-                        fprintf(stderr, "[startTown::tradingpost]   path[%d] halfWidth=%.2f "
-                                "bank=%.2f -> setback starts at s=%d%s\n",
-                                p, WorldGen_GetPathHalfWidth(p), bankF, sMin,
-                                bankF < 0.0f ? "  (NO halfWidth DATA — using fallback)" : "");
-
-                        for (int j = 0; j < ptCount; ++j) {
-                            const int rx = (int)(pts[2 * j]     + (float)half);
-                            const int ry = (int)(pts[2 * j + 1] + (float)half);
-                            if (rx < 0 || ry < 0 || rx >= mapSize || ry >= mapSize) continue;
-                            ++pointsSeen;
-
-                            for (int s = sMin; s <= sMin + kSetbackRange; ++s) {
-                              // ── ROTATION ─────────────────────────────────────────────
-                              // Rotation 0 alone cannot site this post on the main channel.
-                              // The pier offset is fixed in the building's LOCAL frame
-                              // (~(1.66,-6.53), pointing one way), so at a fixed rotation
-                              // the setback search can only step the footprint N/S/E/W —
-                              // it can never TURN the building to face the water. Measured
-                              // 2026-08-22 with BANISHED_TRADINGPOST_PATH=0: no candidate on
-                              // polyline 0 passed the reachability test at all, because the
-                              // fixed pier direction points inland off the coastline ring.
-                              //
-                              // So try all four orientations per candidate and rotate the
-                              // pier offset with them. placeStructure already takes the
-                              // orientation (in DEGREES, raw — it is handed straight to
-                              // Transform::FromYawPitchOffset as the yaw) and swaps the
-                              // footprint axes for 90/270; nothing in the demo block used it
-                              // until now.
-                              //
-                              // The rotation sense of the offset is NOT read off retail — the
-                              // pier's world position comes from `modelTransform * localPos`
-                              // (boatcomponent_route.cpp, 0x140123880) and we do not
-                              // replicate that matrix here, we apply the CCW-about-+Z
-                              // rotation below. It is MEASURED instead, and the measurement
-                              // is the log pair this block already prints:
-                              //   2026-08-22, seed 12345, chosen rot=90 -> predicted pier
-                              //   world (49.00,-1.00); the route builder independently
-                              //   resolved the dock at (49.03,-0.34).
-                              // Sub-tile agreement on a 90 placement is what pins the sense —
-                              // a wrong sign would put 90 where 270 belongs, tiles away and
-                              // usually on dry land. If that pair ever disagrees on a 90/270
-                              // placement, negate the sine terms in kPierRot.
-                              static const int   kRotDeg[4]    = { 0, 90, 180, 270 };
-                              static const float kPierRot[4][4] = {   // {xx,xy,yx,yy}
-                                  {  1.0f,  0.0f,  0.0f,  1.0f },     //   0
-                                  {  0.0f, -1.0f,  1.0f,  0.0f },     //  90 CCW
-                                  { -1.0f,  0.0f,  0.0f, -1.0f },     // 180
-                                  {  0.0f,  1.0f, -1.0f,  0.0f },     // 270
-                              };
-                              for (int ri = 0; ri < 4; ++ri) {
-                                const int rotDeg = kRotDeg[ri];
-                                // placeStructure swaps the axes for 90/270 (and only those);
-                                // mirror that here so the footprint we test is the footprint
-                                // it stamps.
-                                const int fpW = (rotDeg == 90 || rotDeg == 270) ? th : tw;
-                                const int fpH = (rotDeg == 90 || rotDeg == 270) ? tw : th;
-                                const float prX = kPierRot[ri][0] * pierX + kPierRot[ri][1] * pierY;
-                                const float prY = kPierRot[ri][2] * pierX + kPierRot[ri][3] * pierY;
-                                // 4 cardinals: post footprint placed s tiles off the water.
-                                const int cand[4][2] = {
-                                    { rx + s,      ry - fpH / 2 },   // east of the river
-                                    { rx - s - fpW, ry - fpH / 2 },  // west
-                                    { rx - fpW / 2, ry + s      },   // south
-                                    { rx - fpW / 2, ry - s - fpH },  // north
-                                };
-                                for (int d = 0; d < 4; ++d) {
-                                    const int tx = cand[d][0], ty = cand[d][1];
-                                    if (tx < 1 || ty < 1 ||
-                                        tx + fpW >= mapSize - 1 || ty + fpH >= mapSize - 1)
-                                        continue;
-                                    bool clash = false;
-                                    for (int o = 0; o < occN; ++o) {
-                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + fpW + 1 &&
-                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + fpH + 1) {
-                                            clash = true; break;
+                                        bool clash = false;
+                                        for (int o = 0; o < occN; ++o) {
+                                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + fpW + 1 &&
+                                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + fpH + 1) {
+                                                clash = true; break;
+                                            }
                                         }
-                                    }
-                                    if (clash) continue;
-                                    // Distance from the footprint centre to the town
-                                    // centre. Strictly-less keeps the earliest path on a
-                                    // tie, preserving the old path-0 preference where it
-                                    // costs nothing — and, now, the earliest ROTATION, so a
-                                    // run that never needed to turn the building still
-                                    // places it at 0 exactly as before.
-                                    const long long ddx = (long long)(tx + fpW / 2) - townCx;
-                                    const long long ddy = (long long)(ty + fpH / 2) - townCy;
-                                    const long long trueDist = ddx * ddx + ddy * ddy;
-                                    long long dist = trueDist;
-                                    // Where this candidate's pier would land, and whether a
-                                    // boat can get there from the map entry.
-                                    bool pierOk = false;
-                                    int pierCell = -1;
-                                    if (!reach.empty() && havePier) {
-                                        const int px = (int)((float)tx + (float)fpW * 0.5f + prX);
-                                        const int py = (int)((float)ty + (float)fpH * 0.5f + prY);
-                                        if (px >= 0 && py >= 0 && px < mapSize && py < mapSize) {
-                                            pierCell = py * mapSize + px;
-                                            pierOk = reach[pierCell] != 0;
+                                        if (clash) continue;
+                                        // Distance from the footprint centre to the town
+                                        // centre. Strictly-less keeps the earliest path on a
+                                        // tie, preserving the old path-0 preference where it
+                                        // costs nothing — and, now, the earliest ROTATION, so a
+                                        // run that never needed to turn the building still
+                                        // places it at 0 exactly as before.
+                                        const long long ddx = (long long)(tx + fpW / 2) - townCx;
+                                        const long long ddy = (long long)(ty + fpH / 2) - townCy;
+                                        const long long trueDist = ddx * ddx + ddy * ddy;
+                                        long long dist = trueDist;
+                                        // Where this candidate's pier would land, and whether a
+                                        // boat can get there from the map entry.
+                                        bool pierOk = false;
+                                        int pierCell = -1;
+                                        if (!reach.empty() && havePier) {
+                                            const int px = (int)((float)tx + (float)fpW * 0.5f + prX);
+                                            const int py = (int)((float)ty + (float)fpH * 0.5f + prY);
+                                            if (px >= 0 && py >= 0 && px < mapSize && py < mapSize) {
+                                                pierCell = py * mapSize + px;
+                                                pierOk = reach[pierCell] != 0;
+                                            }
                                         }
+                                        // Reachable beats near. Any unreachable candidate is
+                                        // still eligible — a fixture that spawns nothing is
+                                        // worse than one that spawns a post and says it is not
+                                        // dockable — but it always loses to a reachable one.
+                                        if (!reach.empty() && havePier && !pierOk)
+                                            dist += 1000000000000LL;
+                                        // With BANISHED_TRADINGPOST_PATH set, rank by SETBACK
+                                        // first and distance only as a tie-break. Nearest-to-
+                                        // town on its own picks the most INLAND fit, because
+                                        // stepping away from the water is stepping toward the
+                                        // town — measured 2026-08-22: setback 17, dock 10 tiles
+                                        // from the nearest water, and both A* legs correctly
+                                        // returned 0. A dock the boat cannot reach makes the
+                                        // route builder look broken when it is doing exactly
+                                        // what it should.
+                                        if (onlyPath >= 0)
+                                            dist = (long long)s * 1000000LL + (ddx * ddx + ddy * ddy);
+                                        if (bestDist >= 0 && dist >= bestDist) continue;
+                                        bestDist = dist;
+                                        bestTrueDist = trueDist;
+                                        bestPierOk = pierOk;
+                                        bestPierCell = pierCell;
+                                        bestX = tx; bestY = ty; bestSetback = s;
+                                        bestRot = rotDeg; bestFpW = fpW; bestFpH = fpH;
+                                        bestPath = p; bestPt = j; found = true;
                                     }
-                                    // Reachable beats near. Any unreachable candidate is
-                                    // still eligible — a fixture that spawns nothing is
-                                    // worse than one that spawns a post and says it is not
-                                    // dockable — but it always loses to a reachable one.
-                                    if (!reach.empty() && havePier && !pierOk)
-                                        dist += 1000000000000LL;
-                                    // With BANISHED_TRADINGPOST_PATH set, rank by SETBACK
-                                    // first and distance only as a tie-break. Nearest-to-
-                                    // town on its own picks the most INLAND fit, because
-                                    // stepping away from the water is stepping toward the
-                                    // town — measured 2026-08-22: setback 17, dock 10 tiles
-                                    // from the nearest water, and both A* legs correctly
-                                    // returned 0. A dock the boat cannot reach makes the
-                                    // route builder look broken when it is doing exactly
-                                    // what it should.
-                                    if (onlyPath >= 0)
-                                        dist = (long long)s * 1000000LL + (ddx * ddx + ddy * ddy);
-                                    if (bestDist >= 0 && dist >= bestDist) continue;
-                                    bestDist = dist;
-                                    bestTrueDist = trueDist;
-                                    bestPierOk = pierOk;
-                                    bestPierCell = pierCell;
-                                    bestX = tx; bestY = ty; bestSetback = s;
-                                    bestRot = rotDeg; bestFpW = fpW; bestFpH = fpH;
-                                    bestPath = p; bestPt = j; found = true;
-                                }
-                              }
-                            }
-                        }
-                    }
-
-                    // FALLBACK — no usable river geometry. Measured 2026-07-30: the
-                    // worldGeom+0x1e0 array has 4 entries but every one is {pts=NULL, n=0},
-                    // at world-build time AND at frame 900. That is not a timing problem;
-                    // worldgen.cpp:598 only RESIZES detail-group-C (its own comment: "no-op
-                    // for first-light: hf detailCountA == 0 ... feature-record append loop
-                    // (empty -> skipped)"), so standalone never generates the polylines.
-                    //
-                    // Consequence well beyond this harness: retail's boat-route builder
-                    // (0x1400456e0) walks this same array, so until worldgen fills it a
-                    // merchant boat has no river to follow. Placing the post inland is
-                    // therefore no worse than placing it on a "river" that does not exist,
-                    // and it unblocks everything that does not need the boat: the TradeUI
-                    // panel and the post's WorkPlaceComponent accepting state.
-                    // Ring-scan from the cluster centre exactly as BUILD_DEMO_PASTURE does,
-                    // and say loudly that this post is NOT dockable.
-                    if (!found) {
-                        const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
-                        for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
-                            for (int dy = -r; dy <= r && !found; ++dy) {
-                                for (int dx = -r; dx <= r && !found; ++dx) {
-                                    if (dx != -r && dx != r && dy != -r && dy != r) continue;
-                                    const int tx = cx + dx, ty = cy + dy;
-                                    if (tx < 1 || ty < 1 ||
-                                        tx + tw >= mapSize - 1 || ty + th >= mapSize - 1) continue;
-                                    bool clash = false;
-                                    for (int o = 0; o < occN; ++o) {
-                                        if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + tw + 1 &&
-                                            ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + th + 1) {
-                                            clash = true; break;
-                                        }
-                                    }
-                                    if (!clash) { bestX = tx; bestY = ty; found = true; }
+                                  }
                                 }
                             }
                         }
-                        if (found)
-                            fprintf(stderr, "[startTown::tradingpost] NO RIVER GEOMETRY "
-                                    "(%d path(s), all empty) — fell back to a cluster-centre "
-                                    "placement. The post will NOT be dockable: the retail boat "
-                                    "route builder needs worldGeom+0x1e0 populated, which "
-                                    "standalone worldgen never does. Fine for TradeUI / "
-                                    "accepting tests, NOT for the merchant-arrival wave.\n",
-                                    pathCount);
-                    }
 
-                    if (!found) {
-                        fprintf(stderr, "[startTown::tradingpost] no free %dx%d footprint near "
-                                "any river point (%d path(s), %d in-bounds point(s)) NOR within "
-                                "r=%d of the cluster centre; nothing spawned\n",
-                                tw, th, pathCount, pointsSeen, kExtraHouseSearchRadius);
-                    } else {
-                        // placeStructure takes the pre-rotation footprint (w0,h0) and swaps
-                        // the axes itself; Occupy needs the POST-rotation extents.
-                        void* tent = placeStructure(ttmpl, bestX, bestY, bestRot, tw, th,
-                                                    /*isDemoFoundation=*/false, -1);
-                        Occupy(bestX, bestY, bestFpW, bestFpH);
-                        if (tent) ++spawned;
-                        if (bestPath >= 0)
-                            fprintf(stderr, "[startTown::tradingpost] demo trading post "
-                                    "tile=(%d,%d) fp=%dx%d rot=%d setback=%d from river path[%d] "
-                                    "point[%d] townCentre=(%d,%d) dist=%.1f ent=%p%s\n",
-                                    bestX, bestY, bestFpW, bestFpH, bestRot, bestSetback,
-                                    bestPath, bestPt,
-                                    townCx, townCy,
-                                    bestTrueDist >= 0 ? std::sqrt((double)bestTrueDist) : -1.0,
-                                    tent,
-                                    bestPierOk
-                                      ? "  DOCK REACHABLE (pier is in the polyline-0 water body)"
-                                      : (reach.empty() || !havePier)
-                                        ? "  dock reachability UNTESTED"
-                                        : "  <-- DOCK NOT REACHABLE: the pier is not in the "
-                                          "water body the boat arrives on, so both A* legs "
-                                          "will return 0 and the route will be polyline-only");
-                        if (bestPierCell >= 0)
-                            fprintf(stderr, "[startTown::tradingpost]   predicted pier cell "
-                                    "(%d,%d) world(%.2f,%.2f) reachable=%s — compare against "
-                                    "the route builder's own [BoatRoute] dock= line\n",
-                                    bestPierCell % mapSize, bestPierCell / mapSize,
-                                    (float)(bestPierCell % mapSize) - (float)half,
-                                    (float)(bestPierCell / mapSize) - (float)half,
-                                    bestPierOk ? "yes" : "NO");
-                        else
-                            fprintf(stderr, "[startTown::tradingpost] demo trading post "
-                                    "tile=(%d,%d) fp=%dx%d rot=%d ent=%p  (cluster-centre "
-                                    "fallback, NOT river-adjacent)\n",
-                                    bestX, bestY, bestFpW, bestFpH, bestRot, tent);
-                    }
+                        // FALLBACK — no usable river geometry. Measured 2026-07-30: the
+                        // worldGeom+0x1e0 array has 4 entries but every one is {pts=NULL, n=0},
+                        // at world-build time AND at frame 900. That is not a timing problem;
+                        // worldgen.cpp:598 only RESIZES detail-group-C (its own comment: "no-op
+                        // for first-light: hf detailCountA == 0 ... feature-record append loop
+                        // (empty -> skipped)"), so standalone never generates the polylines.
+                        //
+                        // Consequence well beyond this harness: retail's boat-route builder
+                        // (0x1400456e0) walks this same array, so until worldgen fills it a
+                        // merchant boat has no river to follow. Placing the post inland is
+                        // therefore no worse than placing it on a "river" that does not exist,
+                        // and it unblocks everything that does not need the boat: the TradeUI
+                        // panel and the post's WorkPlaceComponent accepting state.
+                        // Ring-scan from the cluster centre exactly as BUILD_DEMO_PASTURE does,
+                        // and say loudly that this post is NOT dockable.
+                        if (!found) {
+                            const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
+                            for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
+                                for (int dy = -r; dy <= r && !found; ++dy) {
+                                    for (int dx = -r; dx <= r && !found; ++dx) {
+                                        if (dx != -r && dx != r && dy != -r && dy != r) continue;
+                                        const int tx = cx + dx, ty = cy + dy;
+                                        if (tx < 1 || ty < 1 ||
+                                            tx + tw >= mapSize - 1 || ty + th >= mapSize - 1) continue;
+                                        bool clash = false;
+                                        for (int o = 0; o < occN; ++o) {
+                                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + tw + 1 &&
+                                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + th + 1) {
+                                                clash = true; break;
+                                            }
+                                        }
+                                        if (!clash) { bestX = tx; bestY = ty; found = true; }
+                                    }
+                                }
+                            }
+                            if (found)
+                                fprintf(stderr, "[startTown::tradingpost] NO RIVER GEOMETRY "
+                                        "(%d path(s), all empty) — fell back to a cluster-centre "
+                                        "placement. The post will NOT be dockable: the retail boat "
+                                        "route builder needs worldGeom+0x1e0 populated, which "
+                                        "standalone worldgen never does. Fine for TradeUI / "
+                                        "accepting tests, NOT for the merchant-arrival wave.\n",
+                                        pathCount);
+                        }
+
+                        if (!found) {
+                            fprintf(stderr, "[startTown::tradingpost] no free %dx%d footprint near "
+                                    "any river point (%d path(s), %d in-bounds point(s)) NOR within "
+                                    "r=%d of the cluster centre; nothing spawned\n",
+                                    tw, th, pathCount, pointsSeen, kExtraHouseSearchRadius);
+                        } else {
+                            // placeStructure takes the pre-rotation footprint (w0,h0) and swaps
+                            // the axes itself; Occupy needs the POST-rotation extents.
+                            void* tent = placeStructure(ttmpl, bestX, bestY, bestRot, tw, th,
+                                                        /*isDemoFoundation=*/false, -1);
+                            Occupy(bestX, bestY, bestFpW, bestFpH);
+                            if (tent) ++spawned;
+                            if (bestPath >= 0)
+                                fprintf(stderr, "[startTown::tradingpost] demo trading post "
+                                        "tile=(%d,%d) fp=%dx%d rot=%d setback=%d from river path[%d] "
+                                        "point[%d] townCentre=(%d,%d) dist=%.1f ent=%p%s\n",
+                                        bestX, bestY, bestFpW, bestFpH, bestRot, bestSetback,
+                                        bestPath, bestPt,
+                                        townCx, townCy,
+                                        bestTrueDist >= 0 ? std::sqrt((double)bestTrueDist) : -1.0,
+                                        tent,
+                                        bestPierOk
+                                          ? "  DOCK REACHABLE (pier is in the polyline-0 water body)"
+                                          : (reach.empty() || !havePier)
+                                            ? "  dock reachability UNTESTED"
+                                            : "  <-- DOCK NOT REACHABLE: the pier is not in the "
+                                              "water body the boat arrives on, so both A* legs "
+                                              "will return 0 and the route will be polyline-only");
+                            if (bestPierCell >= 0)
+                                fprintf(stderr, "[startTown::tradingpost]   predicted pier cell "
+                                        "(%d,%d) world(%.2f,%.2f) reachable=%s — compare against "
+                                        "the route builder's own [BoatRoute] dock= line\n",
+                                        bestPierCell % mapSize, bestPierCell / mapSize,
+                                        (float)(bestPierCell % mapSize) - (float)half,
+                                        (float)(bestPierCell / mapSize) - (float)half,
+                                        bestPierOk ? "yes" : "NO");
+                            else
+                                fprintf(stderr, "[startTown::tradingpost] demo trading post "
+                                        "tile=(%d,%d) fp=%dx%d rot=%d ent=%p  (cluster-centre "
+                                        "fallback, NOT river-adjacent)\n",
+                                        bestX, bestY, bestFpW, bestFpH, bestRot, tent);
+                        }
+                        if (!found) break;   // no room left; stop rather than re-log
+                    }   // rep
                 }
             }
             fflush(stderr);
