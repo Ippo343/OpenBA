@@ -1,8 +1,9 @@
 # Achievements wave — state, method, and what is left
 
 **Branch** `wave/upgrade-path-complete` · commits `be610ee`..`f6d3d98` (13)
-**Status** 23 of 36 achievements unlock and persist. 13 remain, each with a named
-blocker below. Highwaymen closed 2026-09-05 (`Ach25 : true`).
+**Status** 24 of 36 achievements unlock and persist. 12 remain, each with a named
+blocker below. Highwaymen and Jack of all Trades both closed 2026-09-05
+(`Ach25 : true`, `Ach5 : true`).
 
 Before this wave the achievement system was **structurally dead**: no achievement had
 ever been evaluated, in any run, ever. It is now live end to end — retail's
@@ -82,13 +83,13 @@ production by building type · 22 workers at building type · 23 paved road tile
 
 ---
 
-## 4. Unlocked (23)
+## 4. Unlocked (24)
 
-`Ach{0,1,2,4,6,10,11,12,13,15,17,19,20,25,26,28,29,30,31,32,33,34,35}` — Settlement,
+`Ach{0,1,2,4,5,6,10,11,12,13,15,17,19,20,25,26,28,29,30,31,32,33,34,35}` — Settlement,
 Village, Town, Uneducated, Mountain Men, Isolationist, One with Nature, Trader,
 MasterTrader, Firefighter, Livestock, Miner, Mason, Highwaymen, Golden Gate, Smiles all Around,
 Healthy, Built from Stone, Ready for Anything, Builder, MasterBuilder, Established,
-Tenure.
+Tenure, Jack of all Trades.
 
 Recipes worth keeping:
 
@@ -106,7 +107,7 @@ Recipes worth keeping:
 
 ---
 
-## 5. The 14 that remain, and what each needs
+## 5. The 12 that remain, and what each needs
 
 ### 5.1 Tombstone — 400 graves *(closest to done)*
 
@@ -223,13 +224,50 @@ growing up through a school; the achievement clock deliberately does not age cit
 Blacksmith and Stylish need every adult *carrying* a steel tool / warm coat (stat 1/2),
 which is distribution, not stock.
 
-### 5.6 Jack of all Trades
+### 5.6 Jack of all Trades — **CLOSED 2026-09-05**
 
-Two goals short: a citizen with the **builder** profession (`stat 9`), and a **worker at a
-pasture** (`stat 22`). Pastures are now in the stress set, so the second should follow
-from staffing; the first is **solved** — `BANISHED_BUILDERS=<n>` (§5.3) seats real
-builders through retail's own `CitizenList::AddWorker`, and the profession count was
-measured going 0 -> 40. Re-run the census with it set.
+`Ach5 : true`, awarded natively with the mod gate at 0 (no `BANISHED_ACH_IGNORE_MODS`).
+Met between f=600 and f=1200 of a 50x stress run; all 21 goals green:
+
+    BANISHED_BUILDERS=40 BANISHED_ACH_TRACE=600 BANISHED_ACH_TIME_SCALE=50 \
+    BANISHED_PASTURE_AUTOTYPE=Cow,Sheep,Chicken \
+    tools/stress_run.sh --label jack1 --speed 50 --frames 3000
+
+Twenty of the 21 goals pass on **real measured values** — one worker at each of 18
+building types plus a laborer (`have=190`) and a builder (`have=40`). Only `goal20`
+(a 5-year TimeGoal) is carried by `BANISHED_ACH_TIME_SCALE`, the declared clock
+deviation in §7. The pasture goal needed nothing special: `stat=22 Pasture have=4`
+came straight from the stress town's own seat cascade.
+
+Both blockers the earlier draft named were already fixed, and neither needed further
+work — the wave had simply never re-run the census with `BANISHED_BUILDERS` set. The
+control run confirms the causality rather than assuming it: with the flag removed and
+everything else identical, `stat=9 builder have=0` and the achievement reports `met=0`.
+
+> **A "should follow from" is not a measurement.** This achievement sat on the open
+> list carrying two blockers, one marked *solved* and one marked *should follow from
+> staffing*. Both were true. The cost of confirming it was a single run — cheaper than
+> the paragraph that deferred it.
+
+**Found while closing it — a live crash the builder seat triggers.** The 40-builder run
+died at ~f=2500 (the control at the same settings ran 3000 frames clean, 0-byte crash
+log), in the citizen idle work search:
+
+    Helper_7830 (idle work search, 0x1400f7830)
+      -> HarvestArea_Slot9_Impl        harvestarea.cpp:855
+      -> WorkBase_ValidateTask_f7100   work_base_reimpl.cpp:336  (the fn_IsA(obj, ciTid) gate)
+      -> Runtime +0x491CB              READ of 0000079700000562
+
+`RAX=0000079700000552` — a correct-looking low dword with a garbage high dword, i.e. a
+`{u32,u32}` handle dereferenced as a pointer. Same shape as the load-path wild write in
+§8.1 and the stale handle-table family in
+`reference_internalfactory_swapremove_wild_write`. The likely mechanism: the seat
+harness converts *existing* workers to builders through `CitizenList::AddWorker`, and a
+citizen converted while it held a HarvestArea task leaves a stale entry behind that the
+next idle search validates. Retail's Professions spinner performs the same conversion,
+so either our `AddWorker` port skips a de-registration retail does, or the area's roster
+needs the detach. Not achievement-specific, and it does not affect the award above
+(which lands ~1300 frames earlier).
 
 ### 5.7 Immigrants — 200 nomads
 
