@@ -734,6 +734,8 @@ extern "C" void TavernStockProbe_Tick(int frameNum);
 extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
 extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
+extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
+extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
@@ -1124,6 +1126,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // long one: prints awarded + instance state + every goal's live Check(). No-op
     // unless BANISHED_ACH_TRACE is set (standalone/achievement_probe.cpp).
     AchievementProbe_Tick(s_frameNum);
+    // Non-retail clock knobs for the time-gated achievements: advance the year
+    // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
+    // (standalone/ach_clock.cpp).
+    AchClock_Tick(s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
@@ -1348,7 +1354,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         {
             float seconds = fn_Time_AsSeconds(time);
             int64_t scaledTime[1];
-            fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMultiplier);
+            // AchClock_TimeScale() is 1.0 unless BANISHED_ACH_TIME_SCALE is set, so
+            // this is retail's `seconds * speedMultiplier` unchanged by default. This
+            // one Time is what every TimeGoalInstance accumulates, so scaling it here
+            // advances all of them at once (standalone/ach_clock.cpp).
+            fn_Time_Ctor_Seconds(scaledTime,
+                                 seconds * (float)speedMultiplier * AchClock_TimeScale());
             // g_ppAchievementManager (exe slot 0x1401514f0) is unregistered in
             // standalone (M5 first slice) — guard the triple-deref. Re-enable the
             // AchievementManager tick once that singleton/slot is wired.
