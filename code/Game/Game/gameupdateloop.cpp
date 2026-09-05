@@ -2057,7 +2057,34 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 9: Quicksave screenshot
     if (self->m_quickSavePressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quicksave screenshot...\n");
-        fn_QuickSave((void*)self);
+        if (fn_QuickSave) {
+            fn_QuickSave((void*)self);
+        } else {
+            // STANDALONE-ONLY DEVIATION (2026-09-04). This is NOT the "don't
+            // paper over a faithful crash with a null check" case in CLAUDE.md:
+            // retail dereferences nothing here. Retail's .rdata slot is filled by
+            // the loader, so its fn_QuickSave is non-null and the unguarded call
+            // is correct. Ours is null ONLY because 0x140095da0
+            // (GameUpdateLoop::TakeScreenshot -- NOT the "QuickSave handler" it
+            // was named, see reg_mods.cpp) is not yet registered in standalone.
+            // That is our build genuinely differing from retail, which is the
+            // documented exception. Without this, pressing quicksave (key 0x21)
+            // or quickload (0x22) is an EXEC-of-0 in the default build.
+            //
+            // Clearing BOTH flags is part of the deviation, not incidental:
+            // retail's TakeScreenshot is their only clearer (a 2-byte store to
+            // self+0xC0 ending its body), and nothing else in the tree writes
+            // them -- verified, the only writers are the two `= 1` in Update.
+            // Left set, this branch re-enters every frame forever, and would
+            // fire a screenshot the instant the real port lands, for a keypress
+            // made minutes earlier.
+            //
+            // DELETE THIS GUARD when 0x140095da0 is ported; the full port spec
+            // (all seven dependencies are named PE imports) is in
+            // docs/waves/code_fns_wave.md.
+            self->m_quickSavePressed = 0;
+            self->m_quickLoadPressed = 0;
+        }
         TRACE("[GameUpdateLoop::Draw] quicksave screenshot done\n");
     }
 
@@ -2132,7 +2159,34 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 13: Quickload screenshot (after UI draw)
     if (self->m_quickLoadPressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quickload screenshot...\n");
-        fn_QuickSave((void*)self);
+        if (fn_QuickSave) {
+            fn_QuickSave((void*)self);
+        } else {
+            // STANDALONE-ONLY DEVIATION (2026-09-04). This is NOT the "don't
+            // paper over a faithful crash with a null check" case in CLAUDE.md:
+            // retail dereferences nothing here. Retail's .rdata slot is filled by
+            // the loader, so its fn_QuickSave is non-null and the unguarded call
+            // is correct. Ours is null ONLY because 0x140095da0
+            // (GameUpdateLoop::TakeScreenshot -- NOT the "QuickSave handler" it
+            // was named, see reg_mods.cpp) is not yet registered in standalone.
+            // That is our build genuinely differing from retail, which is the
+            // documented exception. Without this, pressing quickload (key 0x22)
+            // or quicksave (0x21) is an EXEC-of-0 in the default build.
+            //
+            // Clearing BOTH flags is part of the deviation, not incidental:
+            // retail's TakeScreenshot is their only clearer (a 2-byte store to
+            // self+0xC0 ending its body), and nothing else in the tree writes
+            // them -- verified, the only writers are the two `= 1` in Update.
+            // Left set, this branch re-enters every frame forever, and would
+            // fire a screenshot the instant the real port lands, for a keypress
+            // made minutes earlier.
+            //
+            // DELETE THIS GUARD when 0x140095da0 is ported; the full port spec
+            // (all seven dependencies are named PE imports) is in
+            // docs/waves/code_fns_wave.md.
+            self->m_quickSavePressed = 0;
+            self->m_quickLoadPressed = 0;
+        }
         TRACE("[GameUpdateLoop::Draw] quickload screenshot done\n");
     }
 

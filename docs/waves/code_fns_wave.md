@@ -167,16 +167,63 @@ the player's selection every frame, and double-inserted 8 tool-mode AVL nodes.
   but the feature is UNPROVEN and off by default. Needs an opt-in run.
 - 10 register-only ports (lanes 4 and 6) that make existing reimpls reachable.
 
-## ⚠ IDENTIFIED BUT NOT FIXED: `0x140095da0` — a live crash
+## `0x140095da0` — live crash GUARDED (not yet ported)
 `GameUpdateLoop::TakeScreenshot`, **not** the "QuickSave handler" that
 `reg_mods.cpp:30` named it (name now corrected). Integrator-verified chain:
 `fn_QuickSave` resolves it and gets null; both call sites
 (`gameupdateloop.cpp:2060`, `:2135`) are **UNGUARDED**; flags come from
 `KeyMap::Pressed(0x21)`/`(0x22)`; `CHECK_FN` only traces.
 
-**Pressing quicksave or quickload in-game is an EXEC-of-0 in the default build.**
-Lane 4 identified it but `RegisterCodeLane4()` does not register it, and the
-report was truncated before its reasoning. Still open — awaiting lane 4.
+**Pressing quicksave or quickload in-game was an EXEC-of-0 in the default build.**
+
+**Interim guard applied** at both call sites (`gameupdateloop.cpp`). This is the
+documented CLAUDE.md exception, not a papered-over faithful crash: retail
+dereferences nothing here — its `.rdata` slot is loader-filled, so retail's
+pointer is non-null and its unguarded call is correct. Ours is null solely
+because the address is unregistered, i.e. our build genuinely differs from retail.
+The guard also **clears both flags**, because retail's `TakeScreenshot` is their
+only clearer (the 2-byte store to `self+0xC0`) and nothing else in the tree writes
+them — verified: the only writers are the two `= 1` in `Update`. Left set, the
+branch re-enters every frame forever and would fire a screenshot the instant the
+real port lands, for a keypress made minutes earlier.
+
+**Lane 4 deliberately declined to port it, and was right to.** `TakeScreenshot`
+constructs a live GPU object, dispatches two virtuals through an exe vtable, walks
+the filesystem and calls four unverified Runtime methods. Under the lane rules
+(no build, no run) it could not compile or exercise a line of it, and binding an
+unverified body there would replace a null-pointer crash with a wrong-ABI crash
+inside D3D — strictly worse and harder to diagnose.
+
+### Full port spec (lane 4) — every dependency is a named PE import
+| piece | slot | symbol |
+|---|---|---|
+| ctor | `0x140151f40` | `??0FrameCopyImageBuffer@Graphics@@QEAA@XZ` |
+| dtor | `0x140151f48` | `??1FrameCopyImageBuffer@Graphics@@UEAA@XZ` |
+| vtable +0x48 | `0x1401520b0` | `Create@FrameCopyImageBuffer` |
+| vtable +0x50 | `0x1401520b8` | `Generate@FrameCopyImageBuffer` |
+| save dir | `0x1401520c0` | `GetSaveDirectory@FileSystem@IO` |
+| exists | `0x1401520d0` | `Exists@FileSystem@IO` |
+| write | `0x1401520e0` | `SaveImageToFile@ImageBuffer@Video` |
+
+Object size `0x88` (`MemAlloc(0x88, 8)`). `Create` args from the call site:
+`(0, 4, 5, 0x100, screenW @ singleton+4, screenH @ +8, 1,1,1,1, 0)`;
+`Generate(videoCtx, 1)`; pixel buffer `MemAlloc(w*h*4, 4)` →
+`ImageBuffer::CopyFromTexture` → `SaveImageToFile` → `MemFree`. Path is
+`<GetSaveDirectory()>\Screenshots\Screenshot<N>.bmp` — **bmp, not png**
+(`DAT_14015e518` = `62 6d 70 00`); N increments from 0 until `Exists` is false.
+The exe vtable `0x14015e370` is 12 slots: slot 0 is exe code (deleting dtor),
+slots 1-11 are import thunks to the Runtime's own virtuals, so the vptr overwrite
+is cosmetic — `Create`/`Generate` can go through the Runtime-installed vptr or
+`ResolveExport`. `minimap_paint.cpp:149-154` is the working precedent for the
+whole alloc/ctor/vptr/`*(vt+0x48)` dance. **Delete the interim guard when this
+lands.**
+
+### Verification status of the guard
+Compiles clean; the load path reruns to gameplay with no crash and the census is
+unchanged at 55. The keypress path itself was **not** exercised — driving
+`KeyMap::Pressed(0x21)` needs input injection the harness does not have. The
+guard is correct by inspection (both call sites null-tested, flags cleared), but
+"quicksave no longer crashes" is reasoned, not observed.
 
 ## Housekeeping applied
 - Deleted **10 vestigial `fn_*` pointers** (8 lane 3 + 2 lane 1), each verified
