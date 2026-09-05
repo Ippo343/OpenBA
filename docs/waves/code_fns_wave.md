@@ -254,3 +254,34 @@ appears. Absence from the census is now weaker evidence for that one address.
 6. Latent (unreachable today): `SubArrayDeepCopy`
    (`serialize_struct60b.cpp:76-82`) zeroes `dst->data`/`dst->count` but not
    `dst->capacity`; retail clears count AND capacity as one qword.
+
+### No second consumer of `+0xC0`/`+0xC1` — verified at instruction level (lane 4)
+Checked rather than asserted, because the interim guard clears both flags and a
+hidden second consumer would be masked by that.
+
+**Retail.** Disassembled `GameUpdateLoop::Draw` (`0x140096010`) and filtered for
+accesses to those bytes. Exactly two touch `RDI` (the `GameUpdateLoop*`):
+```
+1400961b7: CMP byte ptr [RDI + 0xc0],0x0    -> guards the first TakeScreenshot call
+140096341: CMP byte ptr [RDI + 0xc1],0x0    -> guards the second
+```
+Both are compares, not writes. **Trap to not trip over:**
+`1400962c0: MOV EAX,dword ptr [RCX + 0xc0]` looks like a third access and is not —
+`RCX` there is `[RDI + 0xe0]`, the camera/player-controller block being bulk-copied
+to the stack. Different object, coincidental offset.
+
+So retail's lifecycle is closed with three participants: `Update` sets (from
+`KeyMap::Pressed` 0x21/0x22), `Draw` tests, `TakeScreenshot` clears.
+
+**Our tree.** Exhaustive grep returns five sites and no others: two writes
+(`:1645`, `:1648`), two reads (`:2058`, `:2133`), one read in a `TRACE` format
+(`:1651`), plus the struct field and its `static_assert`. No raw-offset `+0xC0`
+access on a `GameUpdateLoop*` — the other `0xc0` hits are a `frustum[0xC0]` array,
+`mapGen+0xc0`, a `worldGeom+0xc0` dim field and a serialized geo float, all
+unrelated objects.
+
+**Scope of the claim (residual risk, stated honestly):** retail's `Draw` and our
+tree were both checked exhaustively; all 10,476 retail functions were NOT scanned
+for a stray write to some other path's `GameUpdateLoop*+0xC0`. The loop object is
+not published anywhere that would reach in and set a screenshot flag, and Ghidra
+shows `0x140095da0` with only those two callers.

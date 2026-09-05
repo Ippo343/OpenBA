@@ -2071,6 +2071,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             // documented exception. Without this, pressing quicksave (key 0x21)
             // or quickload (0x22) is an EXEC-of-0 in the default build.
             //
+            // The clear is not a SUBSTITUTE for retail's behaviour -- it is the
+            // half of retail we can still do exactly. Retail consumes the request
+            // and takes a picture; we consume the request and take no picture.
+            // That also makes this guard self-retiring: once 0x140095da0 is
+            // registered, fn_QuickSave runs and clears the flags itself, and this
+            // else-branch never executes again. Nothing to unwind at port time,
+            // and no window where two clear paths fight.
+            //
             // Clearing BOTH flags is part of the deviation, not incidental:
             // retail's TakeScreenshot is their only clearer (a 2-byte store to
             // self+0xC0 ending its body), and nothing else in the tree writes
@@ -2172,6 +2180,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             // That is our build genuinely differing from retail, which is the
             // documented exception. Without this, pressing quickload (key 0x22)
             // or quicksave (0x21) is an EXEC-of-0 in the default build.
+            //
+            // The clear is not a SUBSTITUTE for retail's behaviour -- it is the
+            // half of retail we can still do exactly. Retail consumes the request
+            // and takes a picture; we consume the request and take no picture.
+            // That also makes this guard self-retiring: once 0x140095da0 is
+            // registered, fn_QuickSave runs and clears the flags itself, and this
+            // else-branch never executes again. Nothing to unwind at port time,
+            // and no window where two clear paths fight.
             //
             // Clearing BOTH flags is part of the deviation, not incidental:
             // retail's TakeScreenshot is their only clearer (a 2-byte store to
