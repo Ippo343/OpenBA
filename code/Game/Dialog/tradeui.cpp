@@ -423,7 +423,13 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             bool found = false;
             while (bstNode != nullptr) {
                 if (resEntity < *bstNode) {
-                    bstNode = (uintptr_t*)bstNode[3];  // left at +0x18? No...
+                    // left at +0x18. Confirmed byte-exact: the node is
+                    // { key +0x00, value +0x08, parent +0x10, left +0x18,
+                    //   right +0x20, balance +0x28 } -- see the layout block in
+                    // tradecomponent_serialize.cpp (disassembled from this field's
+                    // own insert/rotate bodies) and retail's descent in
+                    // TutorialGoalCount::Check case 7 (0x1400df290).
+                    bstNode = (uintptr_t*)bstNode[3];  // left
                 } else if (resEntity <= *bstNode) {
                     // Found — check if count (at node+0x08) > 0
                     if (bstNode != nullptr && (int)bstNode[1] != 0) {

@@ -47,6 +47,31 @@ typedef void* (*fn_CastToSliderElement_t)(void* element);
 static fn_CastToSliderElement_t s_fn_CastToSliderElement = nullptr;
 
 // Type IDs
+// [diag] Case-9 bail reporter. The spinner goal ("set Iron Tools to 120") has FOUR
+// distinct ways to leave with count==0, and they are indistinguishable from the
+// outside: the element path did not resolve, the element is not a SpinnerElement,
+// the spinner is still ACTIVE (being edited -- retail deliberately refuses to read
+// a value mid-edit), or the value accessor is unresolved. Name which one.
+static void Goal9Trace(const char* what, long long v) {
+    static int t = -1;
+    if (t < 0) { const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
+                 t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (!t) return;
+    static const char* s_last = nullptr;
+    static long long   s_lastV = -1;
+    if (s_last == what && s_lastV == v) return;   // only on change
+    s_last = what; s_lastV = v;
+    fprintf(stderr, "[Goal9] %s (%lld)\n", what, v);
+    fflush(stderr);
+}
+
+static bool Goal7Dump() {
+    static int t = -1;
+    if (t < 0) { const char* e = std::getenv("BANISHED_GOAL7_DUMP");
+                 t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return t != 0;
+}
+
 static uint32_t* s_TypeId_BuildingDesc = nullptr;      // 0x1401c7318 (cases 0, 7, 10)
 static uint32_t* s_TypeId_ProfessionDesc = nullptr;     // 0x1401c5a98 (cases 1, 3, 6)
 
@@ -90,6 +115,32 @@ static uintptr_t* BSTFind(uintptr_t root, uintptr_t key) {
             node = (uintptr_t*)node[4];  // left
         } else if (key > nodeKey) {
             node = (uintptr_t*)node[5];  // right
+        } else {
+            return node;  // found
+        }
+    }
+    return nullptr;
+}
+
+// The per-building trade-order tree (BuildingComponent+0x60) is a DIFFERENT node
+// layout from the world-manager trees above. tradeui.cpp:2907 documents it as
+//   { key +0x00, value +0x08, colour +0x10, left +0x18, right +0x20 }
+// and retail's own case-7 descent (0x1400df290) confirms it:
+//   if (key < *node) node = node[3];        // left  = +0x18
+//   else { if (key <= *node) { v = node[1]; break; } node = node[4]; }   // right = +0x20
+//
+// Walking it with the +0x20/+0x28 offsets above reads the RIGHT child as LEFT and
+// runs off the end of the node as RIGHT. That still "works" for a key sitting at
+// the ROOT, which is why the tutorial's leather-coat goal passed while the iron-tool
+// goal — a non-root node — read 0 forever and stalled the trade tutorial.
+static uintptr_t* TradeOrderBSTFind(uintptr_t root, uintptr_t key) {
+    uintptr_t* node = (uintptr_t*)root;
+    while (node != nullptr) {
+        uintptr_t nodeKey = node[0];
+        if (key < nodeKey) {
+            node = (uintptr_t*)node[3];  // left  (+0x18)
+        } else if (key > nodeKey) {
+            node = (uintptr_t*)node[4];  // right (+0x20)
         } else {
             return node;  // found
         }
@@ -574,11 +625,63 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
 
             // Search the building's storage BST at +0x60 for matching type
             uintptr_t storageBST = *(uintptr_t*)(building + 0x60);
-            uintptr_t* storageNode = BSTFind(storageBST, typePtr);
+            uintptr_t* storageNode = TradeOrderBSTFind(storageBST, typePtr);
 
             int storageCount = 0;
             if (storageNode != nullptr) {
                 storageCount = (int)storageNode[1];
+            }
+            // [diag] BANISHED_GOAL7_DUMP — a mode-7 goal that reads 0 forever means
+            // the key we search for is not the key the building filed the resource
+            // under. Print the searched key next to the keys actually present, for
+            // the first few buildings that have a non-empty map.
+            // [diag] BANISHED_GOAL7_DUMP — a mode-7 goal that reads 0 forever means
+            // the key we search for is not the key the building filed the resource
+            // under. `want` is the resolved description; `found` null means this
+            // building's map has no entry under that key at all.
+            // (Deliberately does NOT walk the tree: an earlier version of this probe
+            // traversed it and faulted on a leaf's child pointers, killing the run.)
+            if (Goal7Dump() && storageBST) {
+                // Print on CHANGE, not on a fixed budget. The first version used
+                // `budget = 60`, which the previous goal's polling exhausted before
+                // the interesting transition ever happened -- the log then went
+                // silent and looked like "nothing changed".
+                static uintptr_t s_lastB = 0, s_lastWant = 0, s_lastFound = 0;
+                static int       s_lastN = -1;
+                bool changed = (building != s_lastB) || (typePtr != s_lastWant) ||
+                               (reinterpret_cast<uintptr_t>(storageNode) != s_lastFound) ||
+                               (storageCount != s_lastN);
+                if (changed) {
+                    s_lastB = building; s_lastWant = typePtr;
+                    s_lastFound = reinterpret_cast<uintptr_t>(storageNode);
+                    s_lastN = storageCount;
+                    fprintf(stderr, "[Goal7] bld=%p bst=%p want=%p found=%p n=%d",
+                            (void*)building, (void*)storageBST, (void*)typePtr,
+                            (void*)storageNode, storageCount);
+                    // Only when the lookup MISSED: list the keys that ARE present, so
+                    // a key-convention mismatch is visible directly. Children are
+                    // node[4]/node[5] -- the offsets BSTFind descends. An earlier
+                    // version of this probe used [3]/[4] and faulted on a leaf.
+                    // Hard-bounded so a malformed tree cannot hang or run away.
+                    if (!storageNode) {
+                        uintptr_t* stack[64]; int sp = 0, visited = 0;
+                        uintptr_t* node = reinterpret_cast<uintptr_t*>(storageBST);
+                        fprintf(stderr, " | present:");
+                        while ((node || sp > 0) && visited < 24) {
+                            while (node && sp < 64) {
+                                stack[sp++] = node;
+                                node = reinterpret_cast<uintptr_t*>(node[3]);
+                            }
+                            if (sp == 0) break;
+                            node = stack[--sp];
+                            fprintf(stderr, " %p=%d", (void*)node[0], (int)node[1]);
+                            ++visited;
+                            node = reinterpret_cast<uintptr_t*>(node[4]);
+                        }
+                    }
+                    fprintf(stderr, "\n");
+                    fflush(stderr);
+                }
             }
             total += storageCount;
 
@@ -659,20 +762,23 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         fn_FindUIElementByPath(foundIBP, (void*)(s + 0x48), nullptr);
 
         uintptr_t element = foundIBP[0];
-        if (!element) break;
+        if (!element) { Goal9Trace("element path did NOT resolve", 0); break; }
 
         // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
-        if (!s_fn_CastToSliderElement) break;
+        if (!s_fn_CastToSliderElement) { Goal9Trace("CastToSliderElement UNRESOLVED", 0); break; }
         void* slider = s_fn_CastToSliderElement((void*)element);
         uintptr_t sliderIBP = (uintptr_t)slider;
-        if (!sliderIBP) break;
+        if (!sliderIBP) { Goal9Trace("element is NOT a SpinnerElement", (long long)element); break; }
 
         // Create IBP and check if active
         if (fn_InternalBasePtr_CheckPtr) {
             fn_InternalBasePtr_CheckPtr(&sliderIBP);
         }
         if (fn_SpinnerElement_IsActive && fn_SpinnerElement_IsActive((void*)sliderIBP)) {
-            break;  // Active (being edited) — don't read value yet
+            // Retail refuses to read a spinner mid-edit. If this never clears, the
+            // goal stalls forever with the right number visible on screen.
+            Goal9Trace("spinner is ACTIVE (mid-edit) - value not read", (long long)sliderIBP);
+            break;
         }
 
         // Read current value
@@ -681,6 +787,9 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         }
         if (fn_SpinnerElement_GetValue) {
             count = fn_SpinnerElement_GetValue((void*)sliderIBP);
+            Goal9Trace("read spinner value", (long long)count);
+        } else {
+            Goal9Trace("GetValue UNRESOLVED", 0);
         }
         break;
     }
