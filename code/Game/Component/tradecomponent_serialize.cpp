@@ -296,6 +296,25 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_Ser_Slot_SerInt_AC8) return;
 
+    // Retail 0x14005bd50 opens TWO Serializer scopes: an EMPTY one that is
+    // constructed and immediately destroyed (the controller-section stub), and
+    // only then the scope that carries the body.
+    //
+    //     Component_Serialize(param_1, param_2);
+    //     IO::Serializer::Serializer(local_30, param_2, 0);   <- this one
+    //     IO::Serializer::~Serializer(local_30);
+    //     IO::Serializer::Serializer(&local_40, param_2, 0);  <- the body
+    //
+    // An empty scope is NOT free: it is 16 real bytes in the save encoding. This
+    // port opened only the second, so it read 16 bytes too few at the very start
+    // of the body -- every field below then came from the wrong offset, refCount
+    // and nameCount decoded as poison, and TradeComponent_ResizeNames walked a
+    // garbage array. Same trap as the two empty scopes in AbsorbResourceComponent
+    // and HealerComponent.
+    uint8_t serStub[24] = {0};
+    g_fn_Serializer_Ctor(serStub, stream, 0);
+    g_fn_Serializer_Dtor(serStub);
+
     uint8_t ser[24] = {0};
     g_fn_Serializer_Ctor(ser, stream, 0);
 
