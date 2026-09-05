@@ -53,3 +53,4 @@ captures/
 # stress/perf run outputs (keep baselines, not results)
 perf/results/
 standalone/build-perf/
+standalone/build-og/

@@ -119,16 +119,26 @@ void* GetTypeInfoByName(const char* name) {
     return nullptr;
 }
 
-// Tiny per-name cache. Names are static string literals from the call sites,
-// so we compare pointers (after a strcmp on first miss). 16 entries is
-// plenty for the External-serialize helper set (Mesh, Particle, MaterialInst,
-// Weather, ...) and avoids any heap allocation.
+// Per-name cache. Names are static string literals from the call sites, so we
+// compare pointers (with a strcmp fallback for safety), and the scan stops at
+// the first empty slot — so it costs one compare per DISTINCT name resolved so
+// far, not kTypeIdCacheSize.
+//
+// This was 16 entries, sized when only the External-serialize helper set (Mesh,
+// Particle, MaterialInst, Weather, ...) used it. The call-site set has since
+// grown well past that — a single tutorial run resolves 48+ distinct names —
+// and a FULL cache is silently catastrophic: every call for a name that did not
+// make the first 16 misses, re-queries the Runtime Factory by name, and then
+// prints an unbuffered line. That was 21,901 of the 24,719 lines in a one-minute
+// standalone_debug.log (88%), and it is what actually held the tutorial at
+// ~1 fps — the -O0 codegen was blamed for it. Sized with headroom; still a
+// plain array, still no heap allocation.
 namespace {
 struct TypeIdCacheEntry {
     const char* name;
     uint32_t    typeId;
 };
-constexpr int kTypeIdCacheSize = 16;
+constexpr int kTypeIdCacheSize = 256;
 static TypeIdCacheEntry s_typeIdCache[kTypeIdCacheSize] = {};
 }  // namespace
 
@@ -164,17 +174,33 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
 
     // 4. Cache the result (even 0, to avoid re-querying every call) at the
     // first empty slot. If the cache is full, we just pay the lookup cost.
+    bool cached = false;
     for (int i = 0; i < kTypeIdCacheSize; ++i) {
         if (s_typeIdCache[i].name == nullptr) {
             s_typeIdCache[i].name   = simpleName;
             s_typeIdCache[i].typeId = typeId;
+            cached = true;
             break;
         }
     }
 
-    if (typeId != 0) {
-        printf("[FactoryReg] ResolveTypeIdByNameLazy(\"%s\") = 0x%08x\n",
-                    simpleName, typeId);
+    // Print only on a genuine FIRST resolve. Reaching here at all means the cache
+    // missed, so an uncacheable name (cache full) would otherwise print on every
+    // single call from per-tick code — which is exactly the flood this trace
+    // caused before the cache was resized. Say so once instead.
+    if (cached) {
+        if (typeId != 0) {
+            printf("[FactoryReg] ResolveTypeIdByNameLazy(\"%s\") = 0x%08x\n",
+                        simpleName, typeId);
+        }
+    } else {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            printf("[FactoryReg] WARNING: type-id cache FULL at %d entries — every "
+                   "further miss re-queries the Runtime Factory by name on EVERY "
+                   "call. Raise kTypeIdCacheSize.\n", kTypeIdCacheSize);
+        }
     }
     return typeId;
 }

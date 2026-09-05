@@ -589,7 +589,46 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
     *reinterpret_cast<uint64_t*>(base + 0x38) = 0;
     *reinterpret_cast<void**>(base + 0x40) = self;
     *reinterpret_cast<void**>(base + 0x48) = base + 0x28;
-    *reinterpret_cast<uint32_t*>(base + 0x50) = 0xff00ffff;
+
+    // The four state bytes at +0x50 (currentInput / activeState / pendingState /
+    // transitionState) are stamped ONLY for a genuinely fresh component.
+    //
+    // BodyInit does two jobs: rebuild the runtime sub-object pointers (+0x28..+0x48),
+    // and seed the state. Retail's ctor (0x14012ba30) can do both because it only ever
+    // runs at construction. Ours is called lazily, guarded on `+0x48 == nullptr` —
+    // "have the runtime pointers been built yet?" — and a STREAM-RESTORED component
+    // satisfies that guard too: slot 3 (Shutdown/Serialize) round-trips the four state
+    // bytes, but the sub-object pointers are runtime-only and are NOT serialized. So on
+    // a loaded world BodyInit rebuilt the pointers (correct) and then threw the restored
+    // state away (wrong), handing the machine back to the linker as if it were new.
+    //
+    // Measured on the tutorial save, the starting stockpile:
+    //   [SMTrace] BodyInit CLOBBERS state +0x50..53 was ffff0002 (active=0 pending=0xff)
+    //             ret=StateMachineComponent_TreeTickVSlot
+    // then the linker saw the re-stamped pending=0x00, wrote a controller default, and
+    // the next Tick fired the state ENTER a second time — re-running every state-2
+    // registrar (storage, cemetery, healer, happiness, attendance, workplace) for an
+    // entity that was already registered by the save stream.
+    //
+    // The factory zero-fill (MakeInertTyped) leaves all four bytes 0, and no SAVED
+    // machine can look like that: a settled machine always stores pendingState 0xff
+    // ("nothing pending"), never 0x00, which is the ctor placeholder the linker is
+    // supposed to overwrite. So an all-zero quad means "fresh", and anything else means
+    // the bytes already carry meaning — either the stream's, or a previous BodyInit's.
+    const uint32_t stateBefore = *reinterpret_cast<uint32_t*>(base + 0x50);
+    if (stateBefore == 0x00000000u) {
+        *reinterpret_cast<uint32_t*>(base + 0x50) = 0xff00ffff;
+    } else if (stateBefore != 0xff00ffffu) {
+        if (const char* e = std::getenv("BANISHED_SM_TRACE")) {
+            if (e[0] && e[0] != '0') {
+                fprintf(stderr, "[SMTrace] BodyInit KEEPS restored state sm=%p "
+                        "+0x50..53=%08x (active=%u pending=0x%02x)\n",
+                        (void*)self, stateBefore,
+                        (unsigned)*(base + 0x51), (unsigned)*(base + 0x52));
+                fflush(stderr);
+            }
+        }
+    }
 }
 
 // Standalone variant of the controller-linker (real linker =
@@ -690,6 +729,56 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     //   never ticks an unlinked SM — so ignoring it is always correct.
     uint8_t pending52 = *(base + 0x52);
     bool gotDefault = (pending52 != 0x00 && pending52 != 0xff);
+
+    // THIRD case (2026-09-04): a STREAM-RESTORED state machine is already in its
+    // state and must not be given a default at all.
+    //
+    // BodyInit stamps +0x50..+0x53 = 0xff00ffff, so a NEVER-RUN machine has
+    // activeState(+0x51) == 0xff. Shutdown/Serialize round-trips all four bytes, so a
+    // component restored from a save comes back with a REAL activeState there and
+    // pendingState(+0x52) == 0xff ("nothing pending") because it had already settled
+    // when the save was written.
+    //
+    // 0xff is exactly the value the rule above does NOT count as intent, so the linker
+    // wrote the controller's default into +0x52 — and the next StateMachine::Tick read
+    // that as a pending transition and fired the state ENTER handler a second time, on
+    // a machine that was already in that state.
+    //
+    // Retail cannot hit this: its linker runs at component CREATION, when the machine
+    // has never had a state. Ours links LAZILY on the first Update, which for a loaded
+    // world is after the stream has restored the state — so only standalone re-enters.
+    //
+    // Measured on the tutorial save: the one starting stockpile came back registered
+    // TWICE in the town storage list (townMgr+0x00), because StorageLocationComponent's
+    // state-2 enter (TownRegistry_RegisterStorageLocation, retail 0x14012d230, which has
+    // no dedup because retail never double-calls it) ran again on load:
+    //     [TownCensus] LOAD exit : entA=1          <- restored by the stream
+    //     [StoreLoc] APPEND entity=...c9d0 count=2 ret=StorageLoc_State2Enter
+    //     [StoreLoc] [0] entity=...c9d0   [1] entity=...c9d0
+    // That made TutorialGoalCount's StorageLocation read 4 where retail reads 3, and
+    // since goalstoragebarnfinished sets no `_greaterEqual` the compare is EQUALITY —
+    // so stepCutter7 could never complete.
+    //
+    // The blast radius is every state-2 registrar, not just storage: cemetery, healer,
+    // happiness, attendance and workplace all register from a state enter, so any loaded
+    // world was double-registering each of them.
+    //
+    // Deliberately NOT keyed on +0x52 alone: the existing 0xff rule above must stay, for
+    // the empty-chain Tick paths it documents (those write 0xffff into +0x52/+0x53 and
+    // leave +0x51 alone, so they cannot trip this new test).
+    const uint8_t active51 = *(base + 0x51);
+    const bool streamRestored = (active51 != 0xff);
+    if (streamRestored && !gotDefault) {
+        gotDefault = true;
+        if (const char* e = std::getenv("BANISHED_SM_TRACE")) {
+            if (e[0] && e[0] != '0') {
+                fprintf(stderr, "[SMTrace] LINK sm=%p RESTORED (activeState=%u, "
+                        "pending=0x%02x) — keeping stream state, no default written\n",
+                        (void*)self, (unsigned)active51, (unsigned)pending52);
+                fflush(stderr);
+            }
+        }
+    }
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
     uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;

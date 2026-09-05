@@ -422,12 +422,48 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     }
 
     // --------------------------------------------------------
-    // Case 4: Total population including children (worldData+0x08)
+    // Case 4: StorageLocation count — the DynArray at townMgr+0x00/+0x08
     // --------------------------------------------------------
+    // Retail is just `*(uint*)(townMgr + 8)`. That is NOT "total population" as this
+    // case was previously labelled: townMgr+0x00 is the DATA pointer and +0x08 the
+    // COUNT of a DynArray of storage-location entity IBPs — the array
+    // StorageLocationComponent's remove path (0x14012d270) erases from with
+    // DynArray8_EraseByValue(townMgr, entityIBP). The .rsc name for this CountType is
+    // `StorageLocation` (goalstoragebarnfinished).
+    //
+    // This matters because TutorialGoalCount compares with EQUALITY unless the goal
+    // sets `bool _greaterEqual = true` — only two goals in the whole tutorial do. So
+    // `goalstoragebarnfinished { _count = 3 }` passes ONLY at exactly 3, and an
+    // off-by-one here is a permanent stall, not a delay. Observed 2026-09-04 at
+    // stepCutter7 (step 60): count=4 target=3 ge=0, forever.
+    //
+    // BANISHED_TUTORIAL_TRACE also dumps the array so the extra entry can be
+    // identified by its description pointer (correlate with the [TutRestrict]/[GoalRef]
+    // lines, which print the resolved description for each Template/*.rsc).
     case 4: {
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
         if (worldData) {
             count = *(int*)(worldData + 0x08);
+
+            static int s_lastDumped = -1;
+            if (count != s_lastDumped) {
+                const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
+                if (e && e[0] && e[0] != '0') {
+                    s_lastDumped = count;
+                    uintptr_t data = *(uintptr_t*)(worldData + 0x00);
+                    fprintf(stderr, "[StoreLoc] townMgr=%p data=%p count=%d\n",
+                            (void*)worldData, (void*)data, count);
+                    for (int i = 0; i < count && i < 32 && data; ++i) {
+                        uintptr_t ent = *(uintptr_t*)(data + (uintptr_t)i * 8);
+                        uintptr_t desc = 0;
+                        if (ent >= 0x10000 && (ent & 7) == 0)
+                            desc = *(uintptr_t*)(ent + 0x28);
+                        fprintf(stderr, "[StoreLoc]   [%d] entity=%p desc(+0x28)=%p\n",
+                                i, (void*)ent, (void*)desc);
+                    }
+                    fflush(stderr);
+                }
+            }
         }
         break;
     }

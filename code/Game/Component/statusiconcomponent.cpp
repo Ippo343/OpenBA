@@ -274,12 +274,30 @@ void StatusIconComponent_OnRemove(StatusIconComponent* self) {
 // exactly what a loaded world (the tutorial, any .sav) showed: zero icons, no error.
 //
 // Retail brackets the call with a save/restore of +0xF0 because slot 4 clobbers it.
+//
+// ⚠ CALL THE PORT DIRECTLY, NEVER DISPATCH VTABLE SLOT 4 HERE.
+// Retail's slot 4 is exactly StatusIconComponent_Serialize (0x14012bed0) — the sprite
+// setup and nothing else. OUR slot 4 is StatusIconComponent_StartupVSlot, which runs
+// StatusIconComponent_StartupInit = CtorScalars (CONSTRUCTION) + Serialize; the extra
+// half exists because standalone has to get the construction work done during
+// ComponentEntity::StartupComponents. Dispatching that slot mid-life re-runs the
+// constructor on a live component: it re-runs Geometry_BaseCtor on the embedded
+// geometry at +0x28 and, fatally, resets the scene-object id at +0x100 to -1.
+//
+// This function is called from StatusIcon_Toggle — itself a standalone deviation,
+// since retail's 0x14012c3f0 never touches slot 4 — immediately before Toggle's
+// "not in the scene yet?" test. With +0x100 reset to -1 that test passed EVERY time,
+// so Toggle re-Scene::AddObject'd the same geometry on every call and never removed
+// the previous node. Measured 2026-09-04 on the tutorial: 16 icon geometries added
+// 119,143 times, the Graphics::Scene growing a steady ~75 nodes/frame to 121,856
+// nodes in a 5,355-entity world, StatusIconGeom_Draw called ~96,000 times per frame
+// (1.9M draw calls/sec, climbing) and taking 67% of process time — the frame rate
+// decayed from 60 fps to 8 over about two minutes.
+//   [SceneAdd] StatusIconComponent::Show  calls=119143  distinct-geoms=16
+//   [IconTrace] slot4 CLOBBERED sceneId comp=...  4849 -> -1
 static void StatusIcon_EnsureSprite(uintptr_t c) {
     int32_t saved = *(int32_t*)(c + 0xF0);
-    void** vt = *(void***)c;
-    if (vt && vt[4]) {
-        reinterpret_cast<void (*)(void*)>(vt[4])((void*)c);
-    }
+    StatusIconComponent_Serialize(reinterpret_cast<StatusIconComponent*>(c));
     *(int32_t*)(c + 0xF0) = saved;
 }
 

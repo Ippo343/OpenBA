@@ -1127,6 +1127,17 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
     RegisterDispatchSlot(0x140152618,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+    // Serialize(int count, bool* array, name) — the bool ARRAY overload, distinct
+    // from the single-bool slot 0x140152a58 above (AEA_N vs HPEA_N). Seven retail
+    // functions call it: ParticleComponent_Shutdown (0x140053270),
+    // BuildStructure/HarvestArea/HarvestOrchard/PlantArea/PlantOrchard_Shutdown and
+    // FUN_1400952c0 — all save-path serializers. It was registered NOWHERE, and
+    // particlecomponent.cpp compounded that by binding the single-bool slot's
+    // ADDRESS as a raw callee, so every save jumped into .rdata and died with
+    // "EXEC of <data address>". A world with a particle emitter — i.e. any world —
+    // could not be saved at all.
+    RegisterDispatchSlot(0x140151458,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z"));
     // NameDatabase::Serialize (0x1400a45e0) dispatch slots — distinct .rdata
     // slots that resolve to the same IO::Serializer overloads as above.
     RegisterDispatchSlot(0x140152478,   // SerializeBytes(count, void*, name) — array1 field0

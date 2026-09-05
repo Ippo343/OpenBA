@@ -246,6 +246,20 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
         reinterpret_cast<uintptr_t>(storageLocationComp) + 0x10);
     int newCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8) + 1;
     s_fnGrowAppend8(townMgr, newCount, &entityRef);
+    // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
+    // tutorial's single starting stockpile came back registered TWICE (count=2, same
+    // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
+    // reach — that goal has no `_greaterEqual`, so it needs EXACTLY 3 and saw 4.
+    // Print the RETURN ADDRESS so both appenders are named rather than guessed at.
+    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
+        if (e[0] && e[0] != '0') {
+            fprintf(stderr, "[StoreLoc] APPEND entity=%p count=%d  ret=%p\n",
+                    reinterpret_cast<void*>(entityRef),
+                    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8),
+                    __builtin_return_address(0));
+            fflush(stderr);
+        }
+    }
     STG_TRACE("RegisterStorageLocation entity=%p -> townMgr+0x00 count=%d",
               reinterpret_cast<void*>(entityRef),
               *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8));

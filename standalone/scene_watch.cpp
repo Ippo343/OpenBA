@@ -15,6 +15,9 @@
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
+#include <set>
+#include <string>
 #include "resolve.h"
 #include <windows.h>
 
@@ -63,7 +66,47 @@ bool Readable(void* p) {
 
 } // namespace
 
+// BANISHED_SCENE_ADDTALLY=1 — running count of Scene::AddObject calls per call
+// site, plus how many DISTINCT geometries each site has ever added.
+//
+// Added 2026-09-04 chasing an unbounded Graphics::Scene growth (nodes climbing a
+// steady 75/frame — 63,357 scene objects in a 5,355-entity tutorial world by frame
+// 780), which showed up as StatusIconGeom_Draw eating 67% of frame time and the
+// frame rate decaying from 60 to 8 fps over a couple of minutes.
+//
+// calls >> distinct at one site means that site re-adds the SAME geometry every
+// frame without removing the previous registration — i.e. its "already in the
+// scene" guard is not holding. That is the signature to look for.
+void SceneWatch_AddTally(const char* who, void* geometry) {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_SCENE_ADDTALLY");
+        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (!on) return;
+
+    struct Site { long long calls; std::set<void*> distinct; };
+    static std::map<std::string, Site>* sites = new std::map<std::string, Site>();
+    static long long total = 0;
+
+    Site& st = (*sites)[who ? who : "?"];
+    ++st.calls;
+    if (st.distinct.size() < 100000) st.distinct.insert(geometry);
+
+    if (++total % 2000 == 0) {
+        std::fprintf(stderr, "[SceneAdd] %lld AddObject calls so far:\n", total);
+        for (auto& kv : *sites) {
+            std::fprintf(stderr, "[SceneAdd]   %-46s calls=%-10lld distinct-geoms=%zu%s\n",
+                         kv.first.c_str(), kv.second.calls, kv.second.distinct.size(),
+                         (kv.second.calls > (long long)kv.second.distinct.size() * 2)
+                             ? "   <-- RE-ADDING the same geometry" : "");
+        }
+        std::fflush(stderr);
+    }
+}
+
 void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who) {
+    SceneWatch_AddTally(who, geometry);
     if (!Enabled()) return;
     Notes()[sceneId] = Note{geometry, who, 0};
 }

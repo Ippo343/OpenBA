@@ -6,6 +6,10 @@
 #   make sa-deploy        - build debug + copy to Banished directory
 #   make sa-run           - build + copy + launch (auto-starts a new game)
 #   make sa-run-menu      - build + copy + launch, stop at main menu
+#   make standalone-og    - build FAST debug exe (-Og, same logs) -- use this
+#                           for play-throughs; -O0 runs the tutorial at ~1 fps
+#   make sa-run-og        - -Og build + copy + launch (auto-starts a new game)
+#   make sa-run-og-menu   - -Og build + copy + launch, stop at main menu
 #   make clean            - remove build artifacts
 
 # Enable parallel builds by default (override with make -j1 for sequential)
@@ -67,7 +71,7 @@ SA_RC = standalone/icon.rc
 SA_RC_OBJ = $(SA_OBJ_DIR)/standalone__icon__rc.o
 WINDRES = windres
 
-.PHONY: all clean standalone standalone-debug standalone-perf sa-deploy sa-run sa-run-menu sa-stress sa-stress-debug
+.PHONY: all clean standalone standalone-debug standalone-og standalone-perf sa-deploy sa-run sa-run-menu sa-deploy-og sa-run-og sa-run-og-menu sa-stress sa-stress-debug
 
 all: standalone-debug
 
@@ -81,6 +85,28 @@ standalone: $(SA_TARGET)
 
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
 standalone-debug: $(SA_TARGET)
+
+# Fast-debug build: -Og with EVERYTHING else identical to standalone-debug —
+# logs kept (no STRIP_LOGS), _DEBUG on, CheckPtr left real. Own object dir so a
+# debug<->og switch never reuses objects built with the other -O level.
+#
+# Why it exists: at -O0 an entity-heavy world (the tutorial save is 5,354
+# entities) runs at ~1 fps, which is slow enough to change what you are testing
+# — animation, pathing and any per-tick timing behave differently at that frame
+# rate, and a play-through to a late tutorial step takes longer than the bug
+# does to reproduce. -Og keeps the code debuggable (no inlining of the big
+# ported functions, frame pointers intact, most locals still live) while giving
+# back an order of magnitude of speed.
+#
+# Use standalone-debug only when you need EVERY local to survive for a
+# breakpoint session; use this for interactive play-throughs and log reading.
+# -fno-strict-aliasing is already unconditional in SA_CXXFLAGS and is what makes
+# any -O level above 0 safe here (see the note on that variable).
+SA_OG_DIR = standalone/build-og
+standalone-og:
+	$(MAKE) SA_BUILD_DIR=$(SA_OG_DIR) \
+	        SA_CXXFLAGS="$(SA_CXXFLAGS) -Og -g -D_DEBUG" \
+	        $(SA_OG_DIR)/reimpl-x64.exe
 
 # Perf build: optimised WITH symbols, logs stripped, in its OWN object dir so a
 # debug<->perf switch never reuses objects compiled with the other flags (the
@@ -203,6 +229,20 @@ sa-run-menu: sa-deploy
 	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
 	@echo "Launched standalone reimpl (menu only; live features default-on)"
 
+# -Og variants of the three above. Same logs, same env vars, ~10x the frame rate.
+sa-deploy-og: standalone-og
+	cp "$(SA_OG_DIR)/reimpl-x64.exe" "$(BANISHED_DIR)/reimpl-x64.exe"
+	rm -f "$(BANISHED_DIR)/standalone_debug.log"
+	@echo "Deployed -Og build to $(BANISHED_DIR)/reimpl-x64.exe"
+
+sa-run-og: sa-deploy-og
+	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
+	@echo "Launched -Og standalone reimpl (autostart)"
+
+sa-run-og-menu: sa-deploy-og
+	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
+	@echo "Launched -Og standalone reimpl (menu only)"
+
 # Stress test / performance baseline (standalone/stress_harness.cpp, perf/README.md).
 # Builds the perf exe, deploys it, runs the BANISHED_STRESS town to completion, and
 # writes the metrics CSV + a summary under perf/results/. Knobs are passed through:
@@ -220,4 +260,4 @@ sa-stress-debug: sa-deploy
 -include $(SA_OBJECTS:.o=.d)
 
 clean:
-	rm -rf $(SA_BUILD_DIR) $(SA_PERF_DIR)
+	rm -rf $(SA_BUILD_DIR) $(SA_OG_DIR) $(SA_PERF_DIR)

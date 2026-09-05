@@ -27,6 +27,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (dying-entity dialog close)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
+#include "hw_watch.h"                     // HwWatch_Arm � BANISHED_TREE_CATCH writer hunt
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -387,6 +388,59 @@ static void FlagTreeCorrupt(const char* site, EntityTreeNode* from, const void* 
 // Dump the captured corruption context. `from` is a live node whose child/parent
 // field held the bad pointer — its full contents reveal whether the whole node
 // was trashed (freed+reused) or just one field (partial write).
+// Guard for the STAGING search/remove path (PreUpdate/PostUpdate staging loops).
+//
+// The always-on [TreeGuard] above covers the in-order WALK (TreeMinimum /
+// TreeSuccessor / the walk body's entityIBP key). It does NOT cover the staging
+// loops' own key-search, nor the AVL delete they call
+// (fn_IBPTreeRemove -> WorkBST_BSTRemove_a6e0 -> SimpleBST_Retrace, in
+// code/Game/Work/work_base_bst.cpp — a faithful 1:1 port of 0x14001a6e0 that
+// dereferences node->parent unguarded, exactly as retail does).
+//
+// So the SAME corruption the walk guard was built for still crashed here
+// (2026-09-04, tutorial run): ACCESS_VIOLATION reading 0x00000235_00006D1C — the
+// documented half-written signature, high dword a live heap segment, low dword a
+// small cell-index-like value, landing on a node's +0x08 parent field. Stack was
+// SimpleBST_Retrace <- WorkBST_BSTRemove_a6e0 <- EntityList_PostUpdateStaging.
+// See memory project_entitylist_postupdate_treesuccessor_crash: that writer was
+// root-caused (async pathfinder result commit, fixed 17g) and this is either a
+// second writer or an uncovered path for the same class.
+//
+// Refusing the remove here is NOT masking a faithful retail crash: retail never
+// has the corrupt pointer. It converts a run-ending AV into a logged event that
+// carries the forensics needed to name the writer, and it is the same
+// defense-in-depth policy already applied to the walk. BANISHED_TREE_GUARDS=0
+// still turns it off for a faithful A/B.
+//
+// Returns true when the node is safe to hand to the AVL delete.
+static bool StagingNodeRemovable(EntityTreeNode* node) {
+    if (NodeCorrupt(node)) return false;
+    if (PtrCorrupt((uintptr_t)node->parent)) return false;
+    if (PtrCorrupt((uintptr_t)node->left))   return false;
+    if (PtrCorrupt((uintptr_t)node->right))  return false;
+    if (PtrCorrupt((uintptr_t)node->entityIBP)) return false;
+    return true;
+}
+
+static void ReportStagingCorrupt(const char* which, EntityList* self, EntityTreeNode* node) {
+    // Rate-limited on the node identity: an isolated corrupt node re-trips every
+    // frame until something unlinks it, and an unbuffered flood is its own bug.
+    static EntityTreeNode* lastNode = nullptr;
+    if (node == lastNode) return;
+    lastNode = node;
+
+    printf("[TreeGuard] CORRUPT node refused during %s staging REMOVE: node=%p\n", which, (void*)node);
+    if (node && !NodeCorrupt(node)) {
+        printf("[TreeGuard]   node entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
+               (void*)node->entityIBP, (void*)node->parent, (void*)node->left,
+               (void*)node->right, (int)node->balance, (int)node->height);
+    }
+    printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
+           (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
+           (void*)self->updateTreeRoot, (long long)self->updateTreeCount);
+    fflush(stdout);
+}
+
 static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode* prev) {
     // Rate-limit: the same isolated corruption re-trips every frame. Log the
     // full context only when the (site, from-node, bad-ptr) tuple changes.
@@ -416,6 +470,37 @@ static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode
            (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
            (void*)self->updateTreeRoot, (long long)self->updateTreeCount);
     fflush(stdout);
+
+    // BANISHED_TREE_CATCH=1 — name the WRITER with a hardware write watchpoint.
+    //
+    // The corruption is always the same shape: a fully live node (valid entityIBP,
+    // valid children, sane balance/height, real parent linking down to it) whose
+    // parent field at +0x08 has had only its LOW 32 BITS overwritten with a small
+    // value (0x096d, 0x3ccb, 0x41f8, 0x6d63, 0x6d7f, 0x6d86 …) while the high dword
+    // keeps the live heap segment. So it is an EXTERNAL 32-bit store landing on
+    // node+0x08, not anything entitylist.cpp does — our tree code only ever writes
+    // that field as a full 64-bit pointer.
+    //
+    // One writer of this class was root-caused and fixed in July (async pathfinder
+    // result commit, see memory project_entitylist_postupdate_treesuccessor_crash).
+    // This is a second one, and it is not confined to tree nodes: the 2026-09-04
+    // tutorial crash was UI::Element::Enable walking a child whose vtable had been
+    // zeroed, with RCX=0x00000171_000045F6 — the identical half-written signature on
+    // a UI object.
+    //
+    // The same victim gets re-corrupted on later frames (observed three times on one
+    // node, 0x6d86 -> 0x6d7f -> 0x6d63), so arming a debug register on the victim's
+    // low dword after the FIRST detection catches the next store red-handed with its
+    // RIP and register state. Only four debug registers exist, so arm once.
+    {
+        static bool armed = false;
+        static const char* env = std::getenv("BANISHED_TREE_CATCH");
+        if (!armed && env && env[0] && env[0] != '0' && f) {
+            armed = true;
+            HwWatch_Arm(reinterpret_cast<uint8_t*>(f) + 8, 4,
+                        "EntityTreeNode.parent low dword (TreeGuard victim)");
+        }
+    }
 }
 
 // ============================================================
@@ -950,6 +1035,12 @@ void EntityList_PreUpdate(EntityList* self) {
                     fn_InternalBasePtr_CheckPtr(ibpSrc);
                     if (ibpVal <= node->entityIBP) {
                         // Found — remove from tree
+                        // Validate first: the AVL delete derefs node->parent
+                        // unguarded (faithful to retail 0x14001a6e0).
+                        if (!StagingNodeRemovable(node)) {
+                            ReportStagingCorrupt("PreUpdate", self, node);
+                            break;
+                        }
                         fn_IBPTreeRemove(&self->updateTreeRoot, node);
                         break;
                     }
@@ -1007,6 +1098,12 @@ void EntityList_PostUpdateStaging(EntityList* self) {
                     fn_InternalBasePtr_CheckPtr(ibpSrc);
                     if (ibpVal <= node->entityIBP) {
                         // Found — remove from tree
+                        // Same guard as PreUpdate. This is the path that actually
+                        // crashed on the 2026-09-04 tutorial run.
+                        if (!StagingNodeRemovable(node)) {
+                            ReportStagingCorrupt("PostUpdate", self, node);
+                            break;
+                        }
                         fn_IBPTreeRemove(&self->postUpdateTreeRoot, node);
                         break;
                     }

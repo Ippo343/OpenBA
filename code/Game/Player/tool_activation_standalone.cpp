@@ -319,6 +319,48 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
         if (*(void**)toolSlot == nullptr) return -1;  // still none (EditTool node missing)
     }
 
+    // (0b) Tutorial restricted-tool RE-ARM — retail EntityUI::Update (0x1401026a0),
+    // the branch immediately after the "no tool -> SetEditMode(pc,0)" above:
+    //
+    //     if (pc[0x80] != 0 && pc[0x88] != 0) {
+    //         if (pc[0x28] == 0 || Object::Base::IsA(pc[0x28], TypeInfo_EditTool))
+    //             SetEditMode(pc, pc[0x88]);
+    //     }
+    //
+    // This is the ONLY thing that gives a tutorial step its placement tool when the
+    // step did not come after a toolbar click. TutorialSetupRestrictPlayer::Undo
+    // (0x1400e2e90) ends in SetEditMode(pc, 0) whenever the step named an _object,
+    // so EVERY restricted placement step hands the next step a bare EditTool. The
+    // next step's Apply only writes pc+0x80/+0x88 — it never creates a tool. Retail
+    // closes that gap here, on the following frame.
+    //
+    // Symptom without it: TutorialGettingStarted stepMoreHouses3/4 (place houses 3
+    // and 4) show no building ghost and no yellow target rect, and the tutorial
+    // stalls at "count=2 target=3" forever — the whole toolbar is disabled by
+    // setupExitOnly's exclusion list, so the player cannot re-pick the tool either.
+    //
+    // IsA is an EXACT type match (not IsDerivedFrom): a live PlacementTool/RemovalTool
+    // must not be torn down and rebuilt every frame, only the idle EditTool is replaced.
+    if (*(char*)(pc + 0x80) != 0 && *(void**)(pc + 0x88) != nullptr) {
+        static uint32_t s_tid_EditTool = 0;
+        if (!s_tid_EditTool) s_tid_EditTool = ::Object::ResolveTypeIdByNameLazy("EditTool");
+
+        void* cur = *(void**)toolSlot;
+        bool replaceable = (cur == nullptr) ||
+                           (fn_IsA && s_tid_EditTool && fn_IsA(cur, s_tid_EditTool));
+        if (replaceable) {
+            if (const char* e = std::getenv("BANISHED_TOOL_TRACE")) {
+                if (e[0] && e[0] != '0') {
+                    fprintf(stderr, "[ToolTrace] RESTRICT re-arm pc=%p tool=%p -> group=%p\n",
+                            (void*)pc, cur, *(void**)(pc + 0x88));
+                    fflush(stderr);
+                }
+            }
+            EntityUI_SetEditMode_Impl(entityUI, *(uint64_t*)(pc + 0x88));
+            if (*(void**)toolSlot == nullptr) return -1;
+        }
+    }
+
     // (1) OnKey (+0x30): open/close CreateBar dialog, rotate/flip, left-click confirm.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     void* tool = *(void**)toolSlot;

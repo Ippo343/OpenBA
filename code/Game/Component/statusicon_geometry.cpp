@@ -281,6 +281,38 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
 
     if (s_EndIV) s_EndIV(ctx, 0);
 
+    // BANISHED_SI_CENSUS=1 — how many billboards this draw path actually emits.
+    // Each StatusIconGeom_Draw is its OWN Begin/AddVertices/End batch (faithful to
+    // 0x1400a9c10), i.e. one GPU draw call per ICON-BEARING ENTITY per frame, so the
+    // cost is linear in "how many entities currently show an icon". The sampling
+    // profiler put this function on the stack for 67% of process time in a tutorial
+    // world (~24 ms/frame), which is only sane if that count is small — retail shows
+    // a handful on screen. Print the per-frame totals so the count is measured
+    // instead of inferred.
+    {
+        static const char* e = std::getenv("BANISHED_SI_CENSUS");
+        if (e && e[0] && e[0] != '0') {
+            static int   frames = 0;
+            static long long draws = 0, quads = 0;
+            static void* firstGeomThisFrame = nullptr;
+            // A frame boundary is the geometry repeating: the scene walks the same
+            // set in the same order each frame.
+            if (geometry == firstGeomThisFrame) {
+                if (++frames % 60 == 0) {
+                    printf("[SIcensus] over %d frames: %lld draws (%.1f/frame), "
+                           "%lld quads (%.1f/frame)\n",
+                           frames, draws, (double)draws / frames,
+                           quads, (double)quads / frames);
+                    fflush(stdout);
+                }
+            } else if (firstGeomThisFrame == nullptr) {
+                firstGeomThisFrame = geometry;
+            }
+            ++draws;
+            quads += emitted;
+        }
+    }
+
     if (DrawTrace()) {
         static int once = 0;
         if (once++ < 3)

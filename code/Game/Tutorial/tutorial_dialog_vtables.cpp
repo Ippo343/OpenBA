@@ -59,6 +59,7 @@
 #include "Dialog/ui_panels.h"
 #include "Tutorial/tutorialgoaldialog_funcs.h"
 #include "Object/factory_registration.h"
+#include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (see TutDlg_UnregisterInternal)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -78,6 +79,54 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream);
 void TutorialSetupDialog_OnEvent(void* self);
 
 namespace {
+
+// ============================================================
+// TutDlg_UnregisterInternal — the missing ~Internal on the dialog Dtors below
+// ============================================================
+// Every dialog here is a UI::DialogInstance, and DialogInstance derives from
+// Object::Internal: its ctor runs Object::Internal::Internal (Runtime 0x1800bfd10),
+// which ENTERS the object into the engine-wide InternalFactory handle table
+// (obj+0x08 = index, obj+0x0c = generation, table[count++] = obj).
+//
+// All four Dtors below used to MemFree without ever running the matching
+// Object::Internal::~Internal, so every destroyed dialog left a dangling entry in
+// that table. That is failure mode (A) in Object/internal_factory_audit.h, and it
+// is a live heap-corruption source, not a tidiness issue:
+//
+//   ~Internal (0x1800bfdb0) unregisters by SWAP-REMOVE —
+//       last = count-1;
+//       if (this->idx != last) { table[this->idx] = table[last];
+//                                *(int*)(table[this->idx] + 8) = this->idx; }
+//   — so the next unrelated ~Internal that moves a stale entry executes a 4-BYTE
+//   store of a table index at freedPtr+0x08, into memory the allocator has long
+//   since handed to something else.
+//
+// That is exactly the corruption this project has been chasing: a fully live
+// object with only the LOW 32 BITS of a pointer field at +0x08 replaced by a small
+// integer, high dword still the live heap segment (0x00000171_00006d86,
+// ..._000045F6, ..._00006d95 …). Caught red-handed 2026-09-04 with a hardware
+// write watchpoint (BANISHED_TREE_CATCH=1):
+//   [HWWATCH] HIT DR0 addr=...30d0 value now=0x6d95 writer RIP=Runtime-x64.dll+0xBFE0D
+//   #0 ~Internal  #1 Inert_ScalarDtor  #3 ComponentEntity_Dtor  #5 EntityList_RemoveEntity
+// and the victims were whatever reused the block — EntityTreeNode::parent (the
+// long-standing [TreeGuard] hits) and a UI::Element child vtable (the
+// ToolbarDialog_Update -> UI::Element::Enable crash).
+// ObjAudit named this type: table entries going stale with the ORIGINAL vtable
+// 0x1403E1A60 == tut_highlight::g_vt. TutorialHighlightDialog churns hardest
+// (TutorialSetupDialog's highlight is torn down and rebuilt as steps advance), so
+// it dominates, but all four dialogs leak the same way.
+//
+// Guarded with ObjAudit::IsRegistered exactly as Inert_ScalarDtor is: only objects
+// genuinely present in the table are unregistered, so an instance built without the
+// real Internal ctor (obj+0x08 = heap garbage) can never swap-remove through a
+// garbage index — that is failure mode (B), and it is worse than the leak.
+static void TutDlg_UnregisterInternal(void* self) {
+    if (!self) return;
+    if (fn_ObjectInternal_Dtor && ::ObjAudit::IsRegistered(self)) {
+        fn_ObjectInternal_Dtor(self);
+    }
+}
+
 
 // Every table is over-sized to 48 entries so an out-of-range dispatch from the
 // framework lands on a nop rather than off the end. Retail's real slot count is
@@ -115,6 +164,7 @@ const char* TypeName(void*) { return "TutorialUI"; }
 void* Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = g_vt;
+    TutDlg_UnregisterInternal(self);   // see the note above — MUST run before the free
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }
@@ -215,6 +265,7 @@ const char* TypeName(void*) { return "TutorialGoalDialog"; }
 void* Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = g_vt;
+    TutDlg_UnregisterInternal(self);   // see the note above — MUST run before the free
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }
@@ -300,6 +351,7 @@ const char* TypeName(void*) { return "TutorialSetupDialog"; }
 void* Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = g_vt;
+    TutDlg_UnregisterInternal(self);   // see the note above — MUST run before the free
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }
@@ -404,6 +456,7 @@ const char* TypeName(void*) { return "TutorialHighlightDialog"; }
 void* Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = g_vt;
+    TutDlg_UnregisterInternal(self);   // see the note above — MUST run before the free
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }

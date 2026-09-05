@@ -878,10 +878,37 @@ void ParticleComponent_InitFuncs() {
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
     s_fn_TimeAsSeconds = reinterpret_cast<fn_TimeAsSeconds_t>(
         ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
-    s_fn_SerializeBoolArray = reinterpret_cast<fn_SerializeBoolArray_t>(
-        ResolveAddr(Module::Exe, 0x140152a58));
-    // Note: the bool array serialize is different from single bool serialize
-    // The original uses IO::Serializer::Serialize(serializer, count, boolArray, name)
+    // IO::Serializer::Serialize(serializer, count, boolArray, name) — the ARRAY
+    // overload, distinct from the single-bool one.
+    //
+    // Two bugs lived on this line and they compounded (fixed 2026-09-04):
+    //   1. WRONG SLOT. Retail's call site is `CALL qword ptr [0x140151458]`
+    //      (disassembly of ParticleComponent::Shutdown 0x140053270). This read
+    //      0x140152a58 — a digit transposition of a completely different slot.
+    //   2. ONE DEREF SHORT. 0x14015xxxx addresses are .rdata DISPATCH SLOTS, and
+    //      ResolveAddr returns the address OF the slot, not the function pointer
+    //      inside it. Every other serializer binding here derefs (see the `slot =
+    //      ResolveAddr(...); *reinterpret_cast<T*>(slot)` pairs above); this one
+    //      used the raw result as the callee, so the CALL jumped into .rdata
+    //      storage. See [[reference_one_deref_short_vcall]].
+    //
+    // Symptom: every SAVE crashed with `EXEC of <data address>` in
+    // ParticleComponent_Shutdown, via ComponentEntity_Serialize <- EntityList_Serialize
+    // <- GameUpdateLoop_SaveRestore. Any world containing a particle emitter — i.e.
+    // every world — could not be saved. Proven independent of that session's other
+    // work by an A/B (identical crash with the state-machine fix reverted).
+    slot = ResolveAddr(Module::Exe, 0x140151458);
+    if (slot) s_fn_SerializeBoolArray = *reinterpret_cast<fn_SerializeBoolArray_t*>(slot);
+    if (!s_fn_SerializeBoolArray) {
+        // Skipping this call is NOT a safe fallback: it is a stream DESYNC that our
+        // own round trip can never detect, because both legs would skip the same
+        // bytes. Say so loudly rather than write a short record.
+        // See [[reference_null_guard_on_a_serializer_call_is_a_desync]].
+        fprintf(stderr, "[ParticleComp] FATAL-ISH: bool-array Serialize slot 0x140151458 "
+                        "is unregistered — every particle record will be short by "
+                        "count bytes and the save stream will desync.\n");
+        fflush(stderr);
+    }
 
     // --- deps for the full helper-closure ports ---
     slot = ResolveAddr(Module::Exe, 0x140152970);   // GraphicsMesh::GetNodeIndexFromName
