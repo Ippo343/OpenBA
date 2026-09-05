@@ -116,11 +116,14 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
                         "(combo=%p items=%d) — refusing to synthesize a pointer\n", combo, items);
         return false;
     }
-
-    // Reuse item 0 (first entry in the combo the panel itself populated) — this is
-    // a REAL registered tree template resolved by the same path a player click
-    // would use, not a hand-made value.
-    const int wantItem = 0;
+    // VARIETY, not just "a tree": walk the combo instead of taking item 0 for every
+    // orchard. Food Variety wants 8 different orchard trees harvested in one year and
+    // Farmer wants 8 orchard seed types owned; item 0 for all of them makes both
+    // unreachable however many orchards are built. Still a REAL registered template
+    // resolved through the same combo path a player click uses -- only the index moves.
+    static int s_treeTurn = 0;
+    const int wantItem = s_treeTurn % items;
+    ++s_treeTurn;
     fn_ComboElement_SetCurrentItem(combo, wantItem);
     void** vt = *reinterpret_cast<void***>(oui);
     typedef void (*Slot9_t)(void*, void*, int, int);

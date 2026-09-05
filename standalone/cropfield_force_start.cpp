@@ -135,16 +135,36 @@ void Fire(int frame) {
                 reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
             void** types = town ? *reinterpret_cast<void***>(town + 0x120) : nullptr;
             const int typeN = town ? *reinterpret_cast<int32_t*>(town + 0x128) : 0;
+            // VARIETY, not just "a crop": collect every planable type and hand each
+            // field the NEXT one, rather than the first match for all of them.
+            //
+            // Food Variety wants 8 different crops and 8 different orchard trees
+            // harvested in a single year, and Farmer wants 8 crop seed types owned.
+            // Taking types[0] for every field in the world makes both permanently
+            // unreachable no matter how many fields are built -- the town grows one
+            // crop, eight times over. The turn is static and advances per ASSIGNED
+            // field, so the spread stays even.
+            static int s_cropTurn = 0;
             void* chosen = nullptr;
-            for (int t = 0; t < typeN && types && !chosen; ++t) {
-                void* entry = types[t];
-                if (!entry) continue;
-                uintptr_t e = reinterpret_cast<uintptr_t>(entry);
-                void** subs = *reinterpret_cast<void***>(e + 0x28);
-                const int subN = *reinterpret_cast<int32_t*>(e + 0x30);
-                for (int k = 0; k < subN && subs; ++k)
-                    if (subs[k] && tidNatRes && fn_IsDerivedFrom &&
-                        fn_IsDerivedFrom(subs[k], tidNatRes)) { chosen = entry; break; }
+            {
+                void* planable[64];
+                int planableN = 0;
+                for (int t = 0; t < typeN && types && planableN < 64; ++t) {
+                    void* entry = types[t];
+                    if (!entry) continue;
+                    uintptr_t e = reinterpret_cast<uintptr_t>(entry);
+                    void** subs = *reinterpret_cast<void***>(e + 0x28);
+                    const int subN = *reinterpret_cast<int32_t*>(e + 0x30);
+                    for (int k = 0; k < subN && subs; ++k)
+                        if (subs[k] && tidNatRes && fn_IsDerivedFrom &&
+                            fn_IsDerivedFrom(subs[k], tidNatRes)) {
+                            planable[planableN++] = entry; break;
+                        }
+                }
+                if (planableN > 0) {
+                    chosen = planable[s_cropTurn % planableN];
+                    ++s_cropTurn;
+                }
             }
             if (chosen) {
                 *reinterpret_cast<void**>(c + 0x50) = chosen;
