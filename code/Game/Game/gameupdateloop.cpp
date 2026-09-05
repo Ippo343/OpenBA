@@ -733,6 +733,7 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);
 extern "C" void TavernStockProbe_Tick(int frameNum);
 extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
+extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
@@ -1118,6 +1119,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // has crossed the adult edge yet". No-op unless BANISHED_SCHOOL_SOAK is set
     // (standalone/school_soak_probe.cpp).
     SchoolSoakProbe_Tick(s_frameNum);
+
+    // Per-achievement / per-goal census, so a stuck achievement can be told from a
+    // long one: prints awarded + instance state + every goal's live Check(). No-op
+    // unless BANISHED_ACH_TRACE is set (standalone/achievement_probe.cpp).
+    AchievementProbe_Tick(s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).

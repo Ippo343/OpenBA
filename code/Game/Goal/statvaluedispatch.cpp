@@ -1033,7 +1033,14 @@ static uint32_t Helper_9650(uintptr_t self, void* extPtr) {
     void* owner = nullptr;
     if (extPtr != nullptr) owner = DerivedOr0(extPtr, s_tidCitizenAI);
 
-    uintptr_t* world2 = reinterpret_cast<uintptr_t*>(World() + 0xf0);
+    // Retail (0x1400d96ba): RAX = [g_pGameWorld]; RDX = [RAX+0xf0] — the sub-world
+    // object POINTER stored at +0xf0, not the address of that field. This line used
+    // `World() + 0xf0` and so treated the GameWorld itself as the list header: the
+    // "data pointer" it read was the correct sub-world pointer by luck (that IS what
+    // +0xf0 holds), but the "count" came from GameWorld+0xf8, an unrelated field, and
+    // the gather loop walked off the end of the heap. Every other helper in this file
+    // already uses WorldPtr(0xf0); this was the one that did not.
+    uintptr_t* world2 = reinterpret_cast<uintptr_t*>(WorldPtr(0xf0));
     // Build a flat array of the three sub-lists' entity refs:
     //   world2[0]/[1]  (count world2[1])
     //   world2[2]/[3]

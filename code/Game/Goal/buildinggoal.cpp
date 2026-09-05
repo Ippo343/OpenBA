@@ -330,6 +330,7 @@ static void* g_BuildingGoal_Vtable[11] = {
 };
 
 extern "C" void RegisterBuildingGoalVtable() {
+    Goal_FillInheritedVtableSlots(g_BuildingGoal_Vtable, "BuildingGoal");
     RegisterExeAddr(0x140160300, reinterpret_cast<uintptr_t>(g_BuildingGoal_Vtable));
 }
 

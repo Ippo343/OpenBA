@@ -16,6 +16,7 @@
 
 #include "Goal/populationgoal_funcs.h"
 #include "engine_funcs.h"
+#include "Goal/goal_exe_helpers.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -190,6 +191,7 @@ static void* g_PopulationGoal_Vtable[11] = {
 };
 
 extern "C" void RegisterPopulationGoalVtable() {
+    Goal_FillInheritedVtableSlots(g_PopulationGoal_Vtable, "PopulationGoal");
     RegisterExeAddr(0x140160370, reinterpret_cast<uintptr_t>(g_PopulationGoal_Vtable));
 }
 

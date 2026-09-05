@@ -12,6 +12,7 @@
 
 #include "Goal/timegoal_funcs.h"
 #include "engine_funcs.h"
+#include "Goal/goal_exe_helpers.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -214,6 +215,8 @@ static void* g_TimeGoal_Vtable[12] = {
 };
 
 extern "C" void RegisterTimeGoalVtable() {
+    // TimeGoal overrides slot 9 itself; 4 and 7 are inherited like the others.
+    Goal_FillInheritedVtableSlots(g_TimeGoal_Vtable, "TimeGoal");
     RegisterExeAddr(0x140160540, reinterpret_cast<uintptr_t>(g_TimeGoal_Vtable));
 }
 

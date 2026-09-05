@@ -1307,8 +1307,16 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         }
     }
 
-    // Step 30 — AchievementManager::SetEventHandler — GUARDED (slot 0x1401514f0 not yet
-    // registered in standalone, so g_ppAchievementManager is null → skip cleanly).
+    // Step 30 — AchievementManager::SetEventHandler (retail 0x14009752e).
+    //
+    // The old note here said the singleton slot 0x1401514f0 was "not yet registered in
+    // standalone, so g_ppAchievementManager is null → skip cleanly". That has not been
+    // true since the slot was wired (engine_funcs.cpp) — the Achievements dialog reads
+    // the same manager through it. The handler retail installs is exe 0x140096960, the
+    // award TOAST (it formats the achievement title into an event-log entry, type 0x19);
+    // that function is not ported yet, so we leave the handler null. A null handler only
+    // costs the on-screen announcement: Runtime's SetAchievementMet still records the
+    // award and still writes the "Ach" registry value.
 
     // Retail reads +0x15C into a register HERE, before either branch, and writes it
     // back after step 32 (0x1400976d7). That ordering is load-bearing on the
@@ -1324,6 +1332,38 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // FUN_1400a3300 start-town + initial-citizen spawn (which also sets the
     // camera position — until then the camera stays at the ctor default, framing
     // the map centre at the origin). See code/Game/Game/worldgen.cpp.
+    // Step 30b — AchievementManager::Reset (retail 0x14009757d), the ELSE arm of the
+    // same `if (self+0x58)` branch worldgen sits in: a NEW GAME resets the manager, a
+    // load-from-save restores it through AchievementManager::Persist instead
+    // (gameupdateloop_serialize.cpp, already ported).
+    //
+    // Reset is not a "clear the awards" call — it is the INSTANCE BUILDER. Runtime
+    // 0x18009e5c0 resizes the array at mgr+0x18 to the achievement count and fills it
+    // with Achievement::CreateInstance for every entry. Nothing else ever writes that
+    // array. Without it mgr+0x18 stayed NULL and mgr+0x20 zero, and AchievementManager::
+    // Update -- which we do call every tick -- returned immediately on its `count <= 0`
+    // guard. Result: every goal evaluation, every award and every "Ach" registry write
+    // was unreachable, and all 36 achievements sat at 0% forever with nothing in the log
+    // to say why. The dialog looked healthy the whole time because it reads the
+    // ACHIEVEMENT list (mgr+0x00), not the instance list.
+    if (*(void**)(p + 0x58) == nullptr /*new game*/) {
+        typedef void (*AchMgrReset_t)(void* self);
+        static AchMgrReset_t s_fn_AchMgr_Reset = reinterpret_cast<AchMgrReset_t>(
+            ResolveExport("?Reset@AchievementManager@Achievement@@QEAAXXZ"));
+        void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
+                        ? **g_ppAchievementManager : nullptr;
+        if (s_fn_AchMgr_Reset && mgr) {
+            s_fn_AchMgr_Reset(mgr);
+            fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
+                            "instances=%d\n", mgr, *(int32_t*)((uintptr_t)mgr + 0x20));
+        } else {
+            fprintf(stderr, "[GUL::Load] step30b Reset SKIPPED (fn=%p mgr=%p) — "
+                            "no achievement can ever be awarded\n",
+                    reinterpret_cast<void*>(s_fn_AchMgr_Reset), mgr);
+        }
+        fflush(stderr);
+    }
+
     static const bool kEnableWorldgen = true;
     if (kEnableWorldgen && *(void**)(p + 0x58) == nullptr /*new game*/) {
         void* worldGeom  = *(void**)(p + 0x110);

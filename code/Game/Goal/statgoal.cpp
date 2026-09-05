@@ -23,6 +23,7 @@
 
 #include "Goal/statgoal_funcs.h"
 #include "engine_funcs.h"
+#include "Goal/goal_exe_helpers.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -458,6 +459,7 @@ static void* g_StatGoal_Vtable[11] = {
 // Called from address_registry.cpp's RegisterVtablesAndTypeIds() so the
 // exe address 0x1401604c0 resolves to our synthesized vtable.
 extern "C" void RegisterStatGoalVtable() {
+    Goal_FillInheritedVtableSlots(g_StatGoal_Vtable, "StatGoal");
     RegisterExeAddr(0x1401604c0, reinterpret_cast<uintptr_t>(g_StatGoal_Vtable));
 }
 
