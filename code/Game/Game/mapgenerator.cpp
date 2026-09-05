@@ -36,7 +36,6 @@ static fn_DestroyRefArray30_t s_fn_DestroyRefArray30 = nullptr;
 // The original Serialize function — called directly since it has complex
 // array resize/ExternalRef resolution helpers that are internal to the exe.
 typedef void (*fn_MapGenerator_Serialize_t)(void* self, void* stream);
-static fn_MapGenerator_Serialize_t s_fn_OrigSerialize = nullptr;
 
 static bool s_funcsResolved = false;
 
@@ -48,8 +47,6 @@ static void EnsureFuncsResolved() {
         ResolveAddr(Module::Exe, 0x14001b030));
     s_fn_DestroyRefArray30 = reinterpret_cast<fn_DestroyRefArray30_t>(
         ResolveAddr(Module::Exe, 0x14001b0a0));
-    s_fn_OrigSerialize = reinterpret_cast<fn_MapGenerator_Serialize_t>(
-        ResolveAddr(Module::Exe, MapGeneratorAddr::Serialize));
     s_funcsResolved = true;
 }
 

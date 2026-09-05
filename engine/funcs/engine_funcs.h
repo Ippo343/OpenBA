@@ -3947,17 +3947,14 @@ extern fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup;
 // FUN_1400328c0(self) — CreateBridgeDescription::CreateInPlace (exe, unhookable, 12 bytes)
 // Called from CreateBridgeDescription::Cleanup to re-construct in place.
 typedef void (*fn_CreateBridgeDescription_Ctor_t)(void* self);
-extern fn_CreateBridgeDescription_Ctor_t fn_CreateBridgeDescription_Ctor;
 
 // FUN_1400329b0(self) — CreateDragDescription::CreateInPlace (exe, unhookable, 12 bytes)
 // Called from CreateDragDescription::Cleanup to re-construct in place.
 typedef void (*fn_CreateDragDescription_Ctor_t)(void* self);
-extern fn_CreateDragDescription_Ctor_t fn_CreateDragDescription_Ctor;
 
 // FUN_140004920(self) — CreateFencedDescription::CreateInPlace (exe, unhookable, 12 bytes)
 // Called from CreateFencedDescription::Cleanup to re-construct in place.
 typedef void (*fn_CreateFencedDescription_Ctor_t)(void* self);
-extern fn_CreateFencedDescription_Ctor_t fn_CreateFencedDescription_Ctor;
 
 // Object::Base::IsDerivedFrom(this, typeId) — already declared above but redeclared for clarity
 // extern fn_IsDerivedFrom_t fn_IsDerivedFrom;  // already at line 177
@@ -5277,11 +5274,9 @@ extern fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats;
 
 // CitizenBehavior::ProcessPaths (0x1400d6f00) — process pending path calculations.
 typedef uint64_t (*fn_CitizenBehavior_ProcessPaths_t)(void* pathGraph);
-extern fn_CitizenBehavior_ProcessPaths_t fn_CitizenBehavior_ProcessPaths;
 
 // CitizenBehavior::BuildPathGraph (0x1400d70c0) — build/rebuild path distance graph.
 typedef void (*fn_CitizenBehavior_BuildPathGraph_t)(void* pathGraph);
-extern fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph;
 
 // CitizenBehavior::ShuffleSchools (0x1400896a0) — Fisher-Yates shuffle on schools.
 typedef void (*fn_CitizenBehavior_ShuffleSchools_t)(void* self);

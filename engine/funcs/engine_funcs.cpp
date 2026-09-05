@@ -1005,9 +1005,6 @@ fn_ExternalPtr_BuildSerialize_t fn_ExternalPtr_BuildSerialize = nullptr;
 fn_WeatherResize_t fn_WeatherResize = nullptr;
 fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize = nullptr;
 fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup = nullptr;
-fn_CreateBridgeDescription_Ctor_t fn_CreateBridgeDescription_Ctor = nullptr;
-fn_CreateDragDescription_Ctor_t fn_CreateDragDescription_Ctor = nullptr;
-fn_CreateFencedDescription_Ctor_t fn_CreateFencedDescription_Ctor = nullptr;
 
 // TutorialSetupDialog helpers
 fn_SerializeExternalPtr_t fn_SerializeExternalPtr = nullptr;
@@ -1108,8 +1105,6 @@ fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill = nullptr;
 fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources = nullptr;
 fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds = nullptr;
 fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats = nullptr;
-fn_CitizenBehavior_ProcessPaths_t fn_CitizenBehavior_ProcessPaths = nullptr;
-fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph = nullptr;
 fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
 fn_StatsArray_Init_t fn_StatsArray_Init = nullptr;
 fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
@@ -4481,12 +4476,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400196a0));
     fn_ToolbarDescription_cleanup = reinterpret_cast<fn_ToolbarDescription_cleanup_t>(
         ResolveAddr(Module::Exe, 0x14012db70));
-    fn_CreateBridgeDescription_Ctor = reinterpret_cast<fn_CreateBridgeDescription_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400328c0));
-    fn_CreateDragDescription_Ctor = reinterpret_cast<fn_CreateDragDescription_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400329b0));
-    fn_CreateFencedDescription_Ctor = reinterpret_cast<fn_CreateFencedDescription_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x140004920));
 
     // TutorialSetupDialog helpers (exe-internal)
     fn_SerializeExternalPtr = reinterpret_cast<fn_SerializeExternalPtr_t>(
@@ -4812,10 +4801,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14008c100));
     fn_CitizenBehavior_CollectStats = reinterpret_cast<fn_CitizenBehavior_CollectStats_t>(
         ResolveAddr(Module::Exe, 0x14008a730));
-    fn_CitizenBehavior_ProcessPaths = reinterpret_cast<fn_CitizenBehavior_ProcessPaths_t>(
-        ResolveAddr(Module::Exe, 0x1400d6f00));
-    fn_CitizenBehavior_BuildPathGraph = reinterpret_cast<fn_CitizenBehavior_BuildPathGraph_t>(
-        ResolveAddr(Module::Exe, 0x1400d70c0));
     fn_ProfResArray_Init = reinterpret_cast<fn_ProfResArray_Init_t>(
         ResolveAddr(Module::Exe, 0x1400177c0));
     fn_StatsArray_Init = reinterpret_cast<fn_StatsArray_Init_t>(
@@ -4826,7 +4811,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase L2: CitizenBehavior deps resolved\n");
     printf("  CountResources = %p\n", (void*)fn_CitizenBehavior_CountResources);
     printf("  CollectStats   = %p\n", (void*)fn_CitizenBehavior_CollectStats);
-    printf("  ProcessPaths   = %p\n", (void*)fn_CitizenBehavior_ProcessPaths);
 #endif
 
     // === EntityList dependencies (Agent A) ===

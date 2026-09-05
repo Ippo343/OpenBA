@@ -49,7 +49,6 @@ static fn_TreeCleanup_t s_fn_TreeCleanup = nullptr;
 // Original Slot5/Serialize function -- 0x1400a3630
 // Delegated to directly (201 instructions, too many sub-dependencies).
 typedef void (*fn_MenuScene_Serialize_Orig_t)(void* self, void* stream);
-static fn_MenuScene_Serialize_Orig_t s_fn_Serialize_Orig = nullptr;
 
 // M3.5 Path B session 8 — top-level Geometry serializers used by the
 // standalone Slot5 branch.
@@ -85,8 +84,6 @@ static void EnsureResolved() {
     s_fn_TreeCleanup = reinterpret_cast<fn_TreeCleanup_t>(
         ResolveAddr(Module::Exe, 0x14001b860));
 
-    s_fn_Serialize_Orig = reinterpret_cast<fn_MenuScene_Serialize_Orig_t>(
-        ResolveAddr(Module::Exe, 0x1400a3630));
 }
 
 // ============================================================
