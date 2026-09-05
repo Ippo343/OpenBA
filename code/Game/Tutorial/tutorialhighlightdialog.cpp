@@ -54,9 +54,11 @@ void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2) {
 // ===========================================================================
 
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -217,6 +219,152 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
 // the entity has no projectable rect (off screen / no model) the arrow hides
 // too — that is the tutorial's "the thing I am pointing at is not visible".
 // ---------------------------------------------------------------------------
+namespace {
+
+// Member-ABI FindComponent helpers the screen-rect path uses:
+//   0x140003f60 -> ModelComponent, 0x140004680 -> MapComponent. Both are
+//   (entity, &outIBP) -> &outIBP.
+typedef void* (*fn_FindComp_t)(uintptr_t entity, void* outIBP);
+// 0x14009f3e0 — grid cell -> world position (fills a real terrain z).
+typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
+
+void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* e = std::getenv("BANISHED_TUTHL_DIAG");
+        enabled = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (!enabled || !entity) return;
+
+    static fn_FindComp_t    findModel = nullptr;
+    static fn_FindComp_t    findMap   = nullptr;
+    static fn_GridToWorld_t gridToWorld = nullptr;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        findModel   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
+        findMap     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+        gridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    }
+    if (!findModel || !findMap) return;
+
+    uint64_t modelIBP = 0, mapIBP = 0;
+    findModel(entity, &modelIBP);
+    findMap(entity, &mapIBP);
+
+    int16_t placed = -1;
+    float xf[7] = {0,0,0,0,0,0,0};
+    float box[6] = {0,0,0,0,0,0};
+    if (modelIBP) {
+        placed = *reinterpret_cast<int16_t*>(modelIBP + 0x166);
+        for (int i = 0; i < 7; ++i) xf[i]  = *reinterpret_cast<float*>(modelIBP + 0x148 + i * 4);
+        for (int i = 0; i < 6; ++i) box[i] = *reinterpret_cast<float*>(modelIBP + 0x5c + i * 4);
+    }
+
+    int rx = 0, ry = 0, rw = 0, rh = 0;
+    if (mapIBP) {
+        rx = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
+        ry = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
+        rw = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
+        rh = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
+    }
+
+    // Footprint centre through the same grid->world conversion the outline uses.
+    int   g = 0;
+    float centreWorld[3] = {0,0,0};
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton && gridToWorld) {
+        int* grid = *reinterpret_cast<int**>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        if (grid) {
+            g = grid[0];
+            float bias = static_cast<float>(g >> 1) - 0.5f;
+            float in[3] = { static_cast<float>(rx + (rw >> 1)) - bias,
+                            static_cast<float>(ry + (rh >> 1)) - bias, 0.0f };
+            gridToWorld(grid, centreWorld, in, '\0', nullptr);
+        }
+    }
+
+    // Only reprint when something actually changes.
+    static uint64_t lastEntity = 0;
+    static int lastRect[4] = { -12345, 0, 0, 0 };
+    if (entity == lastEntity && rx == lastRect[0] && ry == lastRect[1] &&
+        rw == lastRect[2] && rh == lastRect[3]) return;
+    lastEntity = entity;
+    lastRect[0] = rx; lastRect[1] = ry; lastRect[2] = rw; lastRect[3] = rh;
+
+    // Type names (vtable+0x08) so we know we are looking at the components we
+    // think we are, and the MeshInstance's OWN transform (model+0x28, +0x84) —
+    // that is what the renderer actually draws from, so it is the oracle for
+    // what +0x148 should have held.
+    // Type identity via the registry (vtable slot 1 returns null on our inert
+    // component vtables, so the NAME slot is not a usable oracle here).
+    auto typeName = [](uint64_t obj) -> const char* {
+        if (!obj) return "(null)";
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
+        if (!vt) return "(no vtable)";
+        typedef uint32_t (*fn_t)(void*);
+        fn_t f = *reinterpret_cast<fn_t*>(vt + 0x10);
+        if (!f) return "(no GetTypeId)";
+        const char* n = ::Object::GetTypeNameById(f(reinterpret_cast<void*>(obj)));
+        return n ? n : "(unknown id)";
+    };
+    // The entity's whole component roster (+0x30 array / +0x38 count). Print
+    // EVERY entry with its identifying payload: FindComponent-by-type returns
+    // the FIRST match, so if a type appears twice the lookups and the renderer
+    // can be looking at different objects.
+    {
+        int n = *reinterpret_cast<int32_t*>(entity + 0x38);
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+        std::fprintf(stderr, "[TutHLDiag] entity=%016llX roster count=%d\n",
+                     (unsigned long long)entity, n);
+        for (int i = 0; i < n && arr; ++i) {
+            uint64_t c = *reinterpret_cast<uint64_t*>(arr + (uintptr_t)i * 8);
+            const char* nm = typeName(c);
+            char extra[128]; extra[0] = 0;
+            if (c && std::strcmp(nm, "MapComponent") == 0)
+                std::snprintf(extra, sizeof(extra), " cell=(%u,%u)..(%u,%u)",
+                    *reinterpret_cast<uint16_t*>(c + 0x28), *reinterpret_cast<uint16_t*>(c + 0x2a),
+                    *reinterpret_cast<uint16_t*>(c + 0x2c), *reinterpret_cast<uint16_t*>(c + 0x2e));
+            else if (c && std::strcmp(nm, "ModelComponent") == 0)
+                std::snprintf(extra, sizeof(extra), " pos=(%.2f,%.2f,%.2f) variant=%d modelId=%d",
+                    *reinterpret_cast<float*>(c + 0x158), *reinterpret_cast<float*>(c + 0x15c),
+                    *reinterpret_cast<float*>(c + 0x160),
+                    (int)*reinterpret_cast<int16_t*>(c + 0x166),
+                    *reinterpret_cast<int32_t*>(c + 0x16C));
+            std::fprintf(stderr, "[TutHLDiag]   [%2d] %016llX %s%s\n",
+                         i, (unsigned long long)c, nm, extra);
+        }
+        std::fflush(stderr);
+    }
+    float mi[7] = {0,0,0,0,0,0,0};
+    if (modelIBP)
+        for (int i = 0; i < 7; ++i)
+            mi[i] = *reinterpret_cast<float*>(modelIBP + 0x28 + 0x84 + i * 4);
+    std::fprintf(stderr,
+        "[TutHLDiag] names: entity=%s model=%s map=%s  meshInstXform pos=(%.2f,%.2f,%.2f)"
+        " quat=(%.3f,%.3f,%.3f,%.3f)\n",
+        typeName(entity), typeName(modelIBP), typeName(mapIBP),
+        mi[4], mi[5], mi[6], mi[0], mi[1], mi[2], mi[3]);
+
+
+    std::fprintf(stderr,
+        "[TutHLDiag] entity=%016llX model=%016llX placed(+0x166)=%d map=%016llX\n"
+        "            modelXform pos=(%.2f,%.2f,%.2f) quat=(%.3f,%.3f,%.3f,%.3f)\n"
+        "            modelBox min=(%.2f,%.2f,%.2f) max=(%.2f,%.2f,%.2f)\n"
+        "            footprint cell=(%d,%d) %dx%d  grid=%d  centreWorld=(%.2f,%.2f,%.2f)\n"
+        "            branch=%s screenRect ok=%d (%.1f,%.1f)-(%.1f,%.1f)\n",
+        (unsigned long long)entity, (unsigned long long)modelIBP, (int)placed,
+        (unsigned long long)mapIBP,
+        xf[4], xf[5], xf[6], xf[0], xf[1], xf[2], xf[3],
+        box[0], box[1], box[2], box[3], box[4], box[5],
+        rx, ry, rw, rh, g, centreWorld[0], centreWorld[1], centreWorld[2],
+        (placed >= 0) ? "MODEL-BOX" : "FOOTPRINT-FALLBACK",
+        (int)ok, rect[0], rect[1], rect[2], rect[3]);
+    std::fflush(stderr);
+}
+
+}  // namespace
+
 void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     EnsureHighlightFuncs();
@@ -232,6 +380,18 @@ void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     uint64_t entityIBP = *reinterpret_cast<uint64_t*>(s + 0xE8);
     bool ok = s_EntityScreenRect &&
               s_EntityScreenRect(reinterpret_cast<uintptr_t>(rect), &entityIBP, rect);
+
+    // [diag] BANISHED_TUTHL_DIAG — where the arrow thinks the target is.
+    //
+    // EntityScreenRect (0x140100380) has TWO sources: the ModelComponent's own
+    // world Transform + Box (taken when modelComp+0x166 >= 0), else a FALLBACK
+    // that rebuilds four corners from the MapComponent footprint rect. The
+    // ground outline (Impl_b930) is built from that same footprint rect, so a
+    // wrong rect misplaces BOTH markers identically while the model itself
+    // still draws from its Transform — exactly the symptom. Print both sources
+    // side by side; whichever disagrees with the drawn building is the culprit.
+    // Rate-limited by CHANGE (the entity + rect tuple), never by a fixed budget.
+    TutHLDiag(s, entityIBP, ok, reinterpret_cast<const float*>(rect));
 
     void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
     fn_InternalBasePtr_CheckPtr(arrowIBP);

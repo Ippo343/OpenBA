@@ -309,7 +309,22 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // On load: resize component array to match serialized count
     if (encodingMode == 0) {
+        // [diag] BANISHED_COMPENT_LOAD_TRACE — the pre-resize roster count. A
+        // stream-restored entity that ALREADY has components was built from its
+        // description before the load, and whatever the resize does next decides
+        // whether the two sets merge or stack.
+        if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
+            fprintf(stderr, "[CompEnt::Load] ent=%p desc=%p preCount=%d preCap=%d "
+                    "streamCount=%u\n", (void*)self, self->description,
+                    *(int*)(s + 0x38), *(int*)(s + 0x3c), compCount);
+            fflush(stderr);
+        }
         fn_ExeArrayResize((void*)(s + 0x30), (int)compCount);
+        if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
+            fprintf(stderr, "[CompEnt::Load] ent=%p postResize count=%d cap=%d\n",
+                    (void*)self, *(int*)(s + 0x38), *(int*)(s + 0x3c));
+            fflush(stderr);
+        }
         // Save/load wave diagnostics: a garbage count (stream misalignment) or
         // a failed resize (data still null with count>0) crashes the IBP loop
         // below — log the state on the way in so the crash log has context.
@@ -521,7 +536,24 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 uint32_t typeId = 0;
                 getTypeId((void*)compTemplate, &typeId);
 
-                if (typeId == 0) continue;
+                if (typeId == 0) {
+                    // A description sub-block whose GetComponentTypeId (vtable+0x40)
+                    // yields 0 is invisible to this match loop. If the save's roster
+                    // DOES contain that component, every later description entry is
+                    // compared against the wrong survivor and the whole roster gets
+                    // duplicated — so name the culprit rather than silently skipping.
+                    if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
+                        typedef uint32_t (*fn_SelfTid_t)(void*);
+                        uint32_t selfTid =
+                            (*(fn_SelfTid_t*)(compVtable + 0x10))((void*)compTemplate);
+                        const char* selfName = ::Object::GetTypeNameById(selfTid);
+                        fprintf(stderr, "[CompEnt::Fill] ent=%p desc[%lld] typeId=0 "
+                                "SKIPPED (descType=%u %s)\n", (void*)self,
+                                (long long)descIdx, selfTid, selfName ? selfName : "?");
+                        fflush(stderr);
+                    }
+                    continue;
+                }
 
                 // Check if existing component at insertPos already matches
                 if (insertIdx < self->componentCount) {
@@ -535,6 +567,16 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                     typedef uint32_t (*fn_GetId_t)(void*);
                     fn_GetId_t getId = *(fn_GetId_t*)(existVtable + 0x10);
                     uint32_t existTypeId = getId((void*)existComp);
+                    if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
+                        const char* wantName = ::Object::GetTypeNameById(typeId);
+                        const char* haveName = ::Object::GetTypeNameById(existTypeId);
+                        fprintf(stderr, "[CompEnt::Fill] ent=%p desc[%lld] want=%u(%s) "
+                                "at[%lld]=%u(%s) -> %s\n", (void*)self, (long long)descIdx,
+                                typeId, wantName ? wantName : "?", (long long)insertPos,
+                                existTypeId, haveName ? haveName : "?",
+                                existTypeId == typeId ? "MATCH" : "INSERT");
+                        fflush(stderr);
+                    }
                     if (existTypeId == typeId) {
                         // Already have this component -- skip
                         insertIdx++;

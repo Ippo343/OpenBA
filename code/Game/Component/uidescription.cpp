@@ -176,6 +176,43 @@ static int   Vtbl_GetVersion(void*) { return kVersion; }
 static int   Vtbl_Return0(void*) { return 0; }
 static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
+// ---------------------------------------------------------------------------
+// UIDescription::GetComponentTypeId (vtable +0x40, exe 0x1400396e0)
+//
+//   83 79 20 00     CMP  dword [RCX+0x20], 0
+//   7E 0C           JLE  zero
+//   8B 05 dc e8 18  MOV  EAX, [0x1401c7fc8]      ; g_typeId_UIComponent
+//   89 02           MOV  [RDX], EAX
+//   48 8B C2 C3     MOV  RAX, RDX ; RET
+//   zero: C7 02 0 / MOV dword [RDX], 0 ; MOV RAX,RDX ; RET
+//
+// This slot is how ComponentEntity's post-load "create missing components from
+// description" pass (0x1400c3140) recognises a component the save already
+// restored. It was a ReturnNull stub, so the caller's out-param kept its 0 seed
+// and the pass treated the entity's UIComponent as absent. That does not merely
+// lose one component: the pass walks the description and the restored roster in
+// LOCKSTEP, so once the first entry fails to match, every following description
+// entry is compared against the same survivor and ALL of them are inserted. The
+// trading post came out of the tutorial-4 save with 43 components — 21 freshly
+// built empty ones in front of the 22 real restored ones — and every
+// FindComponent-by-type on that entity (the finders at 0x140003f60 /
+// 0x140004680) then returned the EMPTY duplicate: a ModelComponent with an
+// identity transform and a MapComponent with a zeroed footprint. The building
+// still drew (its real ModelComponent is the one in the Scene), but the tutorial
+// arrow and the selection outline both placed themselves at the world origin.
+//
+// 0x1401c7fc8 is written by UIComponent_RegisterType (0x14014fd75) and is
+// unregistered in standalone, so resolve by VALUE with a name fallback.
+static void* UIDescription_GetComponentTypeId(void* self, uint32_t* outTypeId) {
+    if (!outTypeId) return outTypeId;
+    static uint32_t s_tid_UIComponent = 0;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    *outTypeId = (*reinterpret_cast<int32_t*>(s + 0x20) > 0)
+                     ? ResolveExeTypeId(0x1401c7fc8, "UIComponent", &s_tid_UIComponent)
+                     : 0u;
+    return outTypeId;
+}
+
 static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&UIDescription_Dtor),      // +0x00
     reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x08 GetTypeInfo
@@ -185,7 +222,7 @@ static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&UIDescription_Serialize), // +0x28
     reinterpret_cast<void*>(&Vtbl_Return0),            // +0x30 Cleanup
     reinterpret_cast<void*>(&Vtbl_Return0),            // +0x38 GetDesc
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x40 Slot8
+    reinterpret_cast<void*>(&UIDescription_GetComponentTypeId), // +0x40 GetComponentTypeId
     reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x48 guard
     reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x50 guard
 };
