@@ -359,61 +359,81 @@ void FireRoadTool(void* entityUI) {
         return (flag & 0x5e0) == 0;                                          // legal terrain
     };
 
-    const int kRun = 5;   // road length in tiles
-    int startCell = -1, endCell = -1, foundRow = -1, foundCol = -1;
-    for (int dr = 0; dr < 40 && startCell < 0; ++dr) {
-        for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
-            int row = 124 + (sign ? -dr : dr);
-            for (int col = 100; col + kRun < 160; ++col) {
-                bool allClear = true;
-                for (int k = 0; k <= kRun; ++k)
-                    if (!cellClear(row, col + k)) { allClear = false; break; }
-                if (allClear) {
-                    foundRow = row; foundCol = col;
-                    startCell = gridSize * row + col;
-                    endCell   = gridSize * row + col + kRun;
-                    break;
+    // BANISHED_ROAD_RUNS=<n> / BANISHED_ROAD_LEN=<tiles> — lay n spans instead of one.
+    //
+    // Highwaymen wants 2,000 stone-paved road tiles. One 6-tile demo span proves the
+    // RoadTool works and can never approach that, and the scan below is already
+    // self-advancing: a committed span occupies its cells, so the next pass finds a
+    // different clear run on its own. Defaults keep the single short span the tool
+    // test expects.
+    int wantRuns = 1;
+    if (const char* rr = std::getenv("BANISHED_ROAD_RUNS")) { int v = std::atoi(rr); if (v > 0) wantRuns = v; }
+    int runLen = 5;
+    if (const char* rl = std::getenv("BANISHED_ROAD_LEN")) { int v = std::atoi(rl); if (v > 0) runLen = v; }
+    int laid = 0, tiles = 0;
+    for (int run = 0; run < wantRuns; ++run) {
+        const int kRun = runLen;
+        int startCell = -1, endCell = -1, foundRow = -1, foundCol = -1;
+        // A committed road does NOT set the cell occupancy field this scan tests, so
+        // scanning from the same centre every run re-picked the identical span 120
+        // times. Start each run further out; the sweep still covers the map.
+        for (int dr = run; dr < run + 120 && startCell < 0; ++dr) {
+            for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
+                int row = 124 + (sign ? -dr : dr);
+                for (int col = 8; col + kRun < gridSize - 8; ++col) {
+                    bool allClear = true;
+                    for (int k = 0; k <= kRun; ++k)
+                        if (!cellClear(row, col + k)) { allClear = false; break; }
+                    if (allClear) {
+                        foundRow = row; foundCol = col;
+                        startCell = gridSize * row + col;
+                        endCell   = gridSize * row + col + kRun;
+                        break;
+                    }
                 }
             }
         }
-    }
-    if (startCell < 0) {
-        fprintf(stderr, "[ToolHarness][road] ERROR: found no clear %d-tile run to test\n", kRun + 1);
-        return;
-    }
-    *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
-    *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
-    fprintf(stderr, "[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
-           foundRow, foundCol, foundCol + kRun, startCell, endCell);
+        if (startCell < 0) {
+            fprintf(stderr, "[ToolHarness][road] ERROR: found no clear %d-tile run to test\n", kRun + 1);
+            break;
+        }
+        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
+        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+        if (run < 3) fprintf(stderr, "[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
+               foundRow, foundCol, foundCol + kRun, startCell, endCell);
 
-    void** vt = *reinterpret_cast<void***>(tool);
+        void** vt = *reinterpret_cast<void***>(tool);
 
-    // Slot 14 (+0x70) CalcCost — the per-frame preview call DragTool_OnKey makes while
-    // dragging. Signature: (self, start, end, &pathType, &tileH, &tileW, &extra) -> int
-    {
-        typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
-        int pathType = 0; uint32_t tileH = 0, tileW = 0; uint64_t extra = 0;
-        int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell,
-                                      &pathType, &tileH, &tileW, &extra);
-        // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
-        // that differs from RemovalTool). The path length comes back in the out-params,
-        // and param_4 is the validity: 1 = valid, 2 = invalid.
-        fprintf(stderr, "[ToolHarness][road] CalcCost -> rc=%d (0=ok,3=reject) valid=%d "
-               "(1=valid,2=invalid) pathLen=%u/%u\n", rc, pathType, tileH, tileW);
-    }
+        // Slot 14 (+0x70) CalcCost — the per-frame preview call DragTool_OnKey makes while
+        // dragging. Signature: (self, start, end, &pathType, &tileH, &tileW, &extra) -> int
+        {
+            typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
+            int pathType = 0; uint32_t tileH = 0, tileW = 0; uint64_t extra = 0;
+            int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell,
+                                          &pathType, &tileH, &tileW, &extra);
+            // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
+            // that differs from RemovalTool). The path length comes back in the out-params,
+            // and param_4 is the validity: 1 = valid, 2 = invalid.
+            if (run < 3) fprintf(stderr, "[ToolHarness][road] CalcCost -> rc=%d (0=ok,3=reject) valid=%d "
+                   "(1=valid,2=invalid) pathLen=%u/%u\n", rc, pathType, tileH, tileW);
+        }
 
-    // Slot 13 (+0x68) CalcPath — the COMMIT the drag-release makes. Returns true when
-    // the road was placed.
-    {
-        typedef bool (*CalcPath_t)(void*, int, int);
-        bool placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
-        fprintf(stderr, "[ToolHarness][road] CalcPath (commit) -> %d (1=road placed)\n", placed ? 1 : 0);
-        if (!placed) {
-            fprintf(stderr, "[ToolHarness][road] NOTE: slot13 is still the Tool_Ret0 stub unless "
-                   "RoadTool_CalcPath_Impl has been wired — a 0 here is expected in that case.\n");
+        // Slot 13 (+0x68) CalcPath — the COMMIT the drag-release makes. Returns true when
+        // the road was placed.
+        {
+            typedef bool (*CalcPath_t)(void*, int, int);
+            bool placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
+            if (placed) { ++laid; tiles += kRun + 1; }
+            if (run < 3 || !placed)
+                fprintf(stderr, "[ToolHarness][road] CalcPath (commit) -> %d (1=road placed)\n", placed ? 1 : 0);
+            if (!placed) {
+                fprintf(stderr, "[ToolHarness][road] NOTE: slot13 is still the Tool_Ret0 stub unless "
+                       "RoadTool_CalcPath_Impl has been wired — a 0 here is expected in that case.\n");
+            }
         }
     }
-    fprintf(stderr, "[ToolHarness][road] sequence complete.\n");
+    fprintf(stderr, "[ToolHarness][road] sequence complete: %d/%d span(s) placed, ~%d tiles"
+                    " (BANISHED_ROAD_RUNS=%d len=%d)\n", laid, wantRuns, tiles, wantRuns, runLen);
 }
 
 // ---------------------------------------------------------------------------
