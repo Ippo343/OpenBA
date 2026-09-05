@@ -505,54 +505,72 @@ void FirePastureTool(void* entityUI) {
         return *reinterpret_cast<uint64_t*>(c + 8) != 0;
     };
 
-    const int kSide = 8;
-    int startCell = -1, endCell = -1;
-    for (int r = 0; r < 60 && startCell < 0; ++r) {
-        for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
-            int row = 124 + (sign ? -r : r);
-            for (int col = 90; col + kSide < 170; ++col) {
-                bool clear = true;
-                int naturals = 0;
-                for (int dy = 0; dy < kSide && clear; ++dy)
-                    for (int dx = 0; dx < kSide && clear; ++dx) {
-                        if (!cellClear(row + dy, col + dx)) clear = false;
-                        else if (cellHasNatural(row + dy, col + dx)) ++naturals;
+    // BANISHED_FENCED_RUNS=<n> / BANISHED_FENCED_SIDE=<tiles> — lay n fenced areas.
+    //
+    // Cemetery.rsc declares "createfenced", so a cemetery is a FENCED AREA like a
+    // pasture: the FencedTool is what creates its gate as a MultiObject child, and
+    // CemeteryComponent::BuildPlotGrid needs that child to lay out its plots. A
+    // cemetery dropped by the stress placer (a plain placeStructure) has no child
+    // array, bails, has no plots, and buries nobody -- which is why every death in
+    // this port reported NO GRAVE. One 8x8 fenced cemetery already yields graves;
+    // Tombstone wants 400 of them, so the area has to be repeatable and bigger.
+    int fencedRuns = 1;
+    if (const char* fr = std::getenv("BANISHED_FENCED_RUNS")) { int v = std::atoi(fr); if (v > 0) fencedRuns = v; }
+    int fencedSide = 8;
+    if (const char* fs = std::getenv("BANISHED_FENCED_SIDE")) { int v = std::atoi(fs); if (v > 0) fencedSide = v; }
+    int fencedPlaced = 0;
+    for (int frun = 0; frun < fencedRuns; ++frun) {
+        const int kSide = fencedSide;
+        int startCell = -1, endCell = -1;
+        for (int r = frun; r < frun + 60 && startCell < 0; ++r) {
+            for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
+                int row = 124 + (sign ? -r : r);
+                for (int col = 8; col + kSide < gridSize - 8; ++col) {
+                    bool clear = true;
+                    int naturals = 0;
+                    for (int dy = 0; dy < kSide && clear; ++dy)
+                        for (int dx = 0; dx < kSide && clear; ++dx) {
+                            if (!cellClear(row + dy, col + dx)) clear = false;
+                            else if (cellHasNatural(row + dy, col + dx)) ++naturals;
+                        }
+                    // cellClear only tests cell+0x00/+0x28/terrain — trees and rocks sit in the
+                    // cell+8 occupant slot, so without this the "clear block" scan happily picks
+                    // a rect with 20+ naturals in it and the two investigations get conflated.
+                    if (clear && (wantNaturals ? naturals >= 3 : naturals == 0)) {
+                        startCell = gridSize * row + col;
+                        endCell   = gridSize * (row + kSide - 1) + col + kSide - 1;
+                        if (frun < 3) fprintf(stderr, "[ToolHarness][pasture] rect: (%d,%d)-(%d,%d) naturals=%d\n",
+                               col, row, col + kSide - 1, row + kSide - 1, naturals);
+                        break;
                     }
-                // cellClear only tests cell+0x00/+0x28/terrain — trees and rocks sit in the
-                // cell+8 occupant slot, so without this the "clear block" scan happily picks
-                // a rect with 20+ naturals in it and the two investigations get conflated.
-                if (clear && (wantNaturals ? naturals >= 3 : naturals == 0)) {
-                    startCell = gridSize * row + col;
-                    endCell   = gridSize * (row + kSide - 1) + col + kSide - 1;
-                    fprintf(stderr, "[ToolHarness][pasture] rect: (%d,%d)-(%d,%d) naturals=%d\n",
-                           col, row, col + kSide - 1, row + kSide - 1, naturals);
-                    break;
                 }
             }
         }
-    }
-    if (startCell < 0) {
-        fprintf(stderr, "[ToolHarness][pasture] ERROR: no clear %dx%d block found\n", kSide, kSide);
-        return;
-    }
-    *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
-    *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+        if (startCell < 0) {
+            if (frun < 3) fprintf(stderr, "[ToolHarness][pasture] ERROR: no clear %dx%d block found\n", kSide, kSide);
+            continue;   // this run found no room; the next starts further out
+        }
+        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
+        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
 
-    void** vt = *reinterpret_cast<void***>(tool);
-    {
-        typedef int (*CalcCost_t)(void*, int, int, uint32_t*, int*, int*, int*);
-        uint32_t outW = 0; int rectW = 0, rectH = 0, segs = 0;
-        int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell, &outW, &rectW, &rectH, &segs);
-        fprintf(stderr, "[ToolHarness][pasture] CalcCost -> rc=%d (0=ok,1=small,2=big,3=blocked) "
-               "w=%d h=%d perimeter=%d\n", rc, rectW, rectH, segs);
+        void** vt = *reinterpret_cast<void***>(tool);
+        {
+            typedef int (*CalcCost_t)(void*, int, int, uint32_t*, int*, int*, int*);
+            uint32_t outW = 0; int rectW = 0, rectH = 0, segs = 0;
+            int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell, &outW, &rectW, &rectH, &segs);
+            fprintf(stderr, "[ToolHarness][pasture] CalcCost -> rc=%d (0=ok,1=small,2=big,3=blocked) "
+                   "w=%d h=%d perimeter=%d\n", rc, rectW, rectH, segs);
+        }
+        {
+            typedef uint64_t (*CalcPath_t)(void*, int64_t, int64_t);
+            uint64_t placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
+            if (placed & 0xff) ++fencedPlaced;
+            if (frun < 3) fprintf(stderr, "[ToolHarness][pasture] CalcPath (commit) -> %d (1=pasture placed)\n",
+                   (int)(placed & 0xff));
+        }
     }
-    {
-        typedef uint64_t (*CalcPath_t)(void*, int64_t, int64_t);
-        uint64_t placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
-        fprintf(stderr, "[ToolHarness][pasture] CalcPath (commit) -> %d (1=pasture placed)\n",
-               (int)(placed & 0xff));
-    }
-    fprintf(stderr, "[ToolHarness][pasture] sequence complete.\n");
+    fprintf(stderr, "[ToolHarness][pasture] sequence complete: %d/%d area(s) placed, side %d\n",
+            fencedPlaced, fencedRuns, fencedSide);
 }
 
 // GUI_PLAN Keystone F, Phase 3B: activate the PlacementTool via the real
