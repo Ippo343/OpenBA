@@ -90,6 +90,12 @@ static bool s_pickup_funcs_resolved = false;
 // ============================================================
 bool Pickup_ResolveFuncs() {
     if (s_pickup_funcs_resolved) return true;
+    // PERF (2026-09-05): one dependency stays unresolved in standalone, so `ok` below is
+    // false and this table was re-resolved on EVERY Pickup tick (1% of the bucket phase).
+    // Resolve once; the result (false) is what every caller already saw.
+    static bool s_attempted = false;
+    if (s_attempted) return false;
+    s_attempted = true;
 
     // Direct exe function addresses
     s_fn_Work_Serialize = reinterpret_cast<PiW_Work_Serialize_t>(

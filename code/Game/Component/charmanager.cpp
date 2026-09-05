@@ -45,6 +45,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <vector>
 #include <cstring>
 
 namespace {
@@ -170,6 +171,28 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
 
     float rect[4];
     CharMgr_helper_28c0(slot, rect);                       // {min.xy, max.xy}
+
+    // PERF (2026-09-05): the cell is a pure function of (rect, manager constants). Every
+    // character re-derives it every tick, but an idle one's rect is bit-identical to the
+    // last tick's, and the only effect of the body below is "move the slot to the cell it
+    // is already in". Remember the last rect per slot (keyed with the slot's character so
+    // a reused index never matches; CharMgr_impl_8560 also resets +0x10 to -1 on free)
+    // and return early while it is unchanged AND the slot is still registered (+0x10 >= 0).
+    // Identical registration, no divides/Morton/relink for a standing citizen.
+    {
+        struct RectMemo { uint64_t who; uint32_t b0, b1, b2, b3; };
+        static std::vector<RectMemo> s_memo;
+        if (static_cast<size_t>(idx) >= s_memo.size()) s_memo.resize(static_cast<size_t>(idx) + 256, RectMemo{0, 0, 0, 0, 0});
+        RectMemo& m = s_memo[static_cast<size_t>(idx)];
+        uint32_t b0, b1, b2, b3;
+        std::memcpy(&b0, &rect[0], 4); std::memcpy(&b1, &rect[1], 4);
+        std::memcpy(&b2, &rect[2], 4); std::memcpy(&b3, &rect[3], 4);
+        const uint64_t who = *reinterpret_cast<const uint64_t*>(slot);
+        if (m.who == who && m.b0 == b0 && m.b1 == b1 && m.b2 == b2 && m.b3 == b3 &&
+            *reinterpret_cast<int*>(slot + 0x10) >= 0)
+            return;
+        m.who = who; m.b0 = b0; m.b1 = b1; m.b2 = b2; m.b3 = b3;
+    }
 
     // Rectangle::Center / Size (inlined) ; radius = max(half-extent.x, half-extent.y)
     float half = s_pHalf ? *s_pHalf : 0.5f;

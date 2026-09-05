@@ -17,7 +17,7 @@ import pe_exports  # noqa: E402
 RUNTIME_DLL = r"C:/GOG Games/Banished/Runtime-x64.dll"
 
 TAGS = {0: "outside-Update", 1: "Update/other", 2: "PairCache", 3: "Animation",
-        4: "EntityList", 5: "Weather", 6: "CitizenList", 7: "PostSim"}
+        4: "EntityList", 5: "Weather", 6: "CitizenList", 7: "PostSim", 8: "EntityList/buckets"}
 
 
 def symbolize_exe(addrs, exe):

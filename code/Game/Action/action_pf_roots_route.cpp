@@ -444,7 +444,7 @@ LAB_14012d8ce:;
                         int iVar4d = *piVar3;
                         int iVar5b = (int)param_2 / iVar4d - (int)uVar16 / iVar4d;
                         int iVar13b = (int)param_2 % iVar4d - (int)uVar16 % iVar4d;
-                        float fVar19 = s_Sqrtf((float)(iVar5b * iVar5b + iVar13b * iVar13b));
+                        float fVar19 = __builtin_sqrtf((float)(iVar5b * iVar5b + iVar13b * iVar13b));   // PERF: inline, bit-identical
                         iVar4c = (int)fVar19 + iVar4d;
                         if (iVar4c < 0) goto LAB_14012d744;
                     }
@@ -746,7 +746,7 @@ AFTER_HEADROOM:
                             iVar17d = *piVar6;
                             int iVar11 = (int)uVar10 % iVar17d - (int)param_3 % iVar17d;
                             int iVar9 = (int)uVar10 / iVar17d - (int)param_3 / iVar17d;
-                            float fVar24 = s_Sqrtf((float)(iVar9 * iVar9 + iVar11 * iVar11));
+                            float fVar24 = __builtin_sqrtf((float)(iVar9 * iVar9 + iVar11 * iVar11));   // PERF: inline, bit-identical
                             iVar17d = (int)fVar24 + iVar17d;
                         }
                         if (iVar17d < iVar21) {

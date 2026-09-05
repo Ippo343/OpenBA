@@ -44,6 +44,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "perf_experimental.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "component_factory_base.h"        // ::ComponentFactory::LiveEnabled
 #include <cstdint>
@@ -544,7 +545,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
                         rootAnimVec);
     float dotOut = 0.0f;
     InlV3Dot(rootAnimVec, &dotOut, rootAnimVec);   // was s_slot_dot (Runtime call)
-    float speed = s_fn_132010 ? s_fn_132010(dotOut) : 0.0f;
+    // PERF (2026-09-05): 0x140132010 is our own WorkImpl_Sqrtf_132010 (= sqrtf); the
+    // builtin compiles to SQRTSS, which is correctly rounded, so this is bit-identical
+    // and saves an indirect call per character per tick (1.4% of the phase).
+    float speed = __builtin_sqrtf(dotOut);
     speed = speed * *reinterpret_cast<float*>(self + 0x38);
     if (0.0f < speed) {
         float ax = speed * *reinterpret_cast<float*>(self + 0x2c);
@@ -628,7 +632,24 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), xform);
     *reinterpret_cast<float*>(model + 0x168) = fVar14;
     if (s_fn_132010) { /* unused result guard symmetry */ }
-    if (s_slot_geomXf)
+    // [PerfX GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
+    // Geometry (bounds, attached children, scene quadtree) on EVERY speed iteration; only
+    // the last one is ever drawn, and the render-side interpolation is snapped from that
+    // same last update. Intermediate iterations skip the push. model+0x148 (the gameplay
+    // position, read by StatusIcon/Particle/pick code) is still written every tick above.
+    // [PerfX GEOM_CULL -- NON-RETAIL] on the last iteration an OFF-SCREEN citizen also
+    // skips the push: nothing draws it, the frustum margin (6 units, ~12 frames of pan)
+    // updates it before it can enter the view, and PerfX pushes model+0x148 for every
+    // culled model when the sim pauses.
+    bool pushGeom = s_slot_geomXf != nullptr;
+    if (pushGeom) {
+        if (rootOnly != 0) {
+            if (PerfX::GeomXfLastOnly()) { pushGeom = false; PerfX::Count(PerfX::kCntGeomXfSkipped); }
+        } else if (PerfX::GeomCull() && PerfX::ModelCulled(reinterpret_cast<void*>(model))) {
+            pushGeom = false; PerfX::Count(PerfX::kCntGeomCulled);
+        }
+    }
+    if (pushGeom)
         s_slot_geomXf(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(model + 0x148));
 
     // ---- movement trace (proves the transform write moves the mesh) --------
@@ -698,7 +719,13 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         if (-1 < static_cast<int>(pickId)) {
             void* pickScene = *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
-            if (s_slot_pickXf) s_slot_pickXf(pickScene, pickId, localXform);
+            // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
+            // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
+            if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
+                                     reinterpret_cast<PerfX::PickXfCtor_t>(s_slot_xfCtor),
+                                     reinterpret_cast<PerfX::PickSetXf_t>(s_slot_pickXf))) {
+                if (s_slot_pickXf) s_slot_pickXf(pickScene, pickId, localXform);
+            }
         }
     }
 

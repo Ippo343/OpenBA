@@ -22,6 +22,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/entitylist_funcs.h"
+#include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
+#include "sampler.h"
+#include <vector>
 #include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -551,6 +554,84 @@ static EntityTreeNode* TreeSuccessor(EntityTreeNode* node) {
 //   3. Tree walk: in-order traversal of update tree, call TreeNodeHandler per entity
 //   4. 5-bucket round-robin: for each bucket, tick processCount entities with vtable[+0x48]
 //   5. If removal list non-empty: PreUpdate again, PostUpdateStaging, then process removals
+// ============================================================
+// [PerfX TREE_SNAPSHOT -- NON-RETAIL data structure, IDENTICAL visit order]
+// ============================================================
+// The update tree is walked in order once per speed iteration (10x per frame at 10x)
+// and is a plain BST of heap-pointer keys -- a pointer chase whose only product is the
+// in-order entity sequence. That sequence changes only when a node is inserted or
+// removed (PreUpdate / DrainRemovals, both OUTSIDE the walk: entities created during
+// a tick land in the staging arrays, never directly in the tree), so it is cached as a
+// flat array and rebuilt when either mutation site marks it dirty or the tree's node
+// count no longer matches. The flat walk also prefetches the next entities' headers
+// and component arrays. Kill-switch: BANISHED_PERF_TREE_SNAPSHOT=0.
+static std::vector<int64_t> s_walkSnap;
+static bool    s_walkDirty = true;
+static int64_t s_walkCountAtBuild = -1;
+static const EntityList* s_walkOwner = nullptr;
+extern "C" void EntityList_MarkUpdateTreeDirty() { s_walkDirty = true; }
+
+static bool RebuildWalkSnapshot(EntityList* self) {
+    s_walkSnap.clear();
+    s_walkOwner = self;
+    s_walkCountAtBuild = self->updateTreeCount;
+    EntityTreeNode* treeRoot = self->updateTreeRoot;
+    if (!treeRoot) { s_walkDirty = false; return true; }
+    g_treeCorrupt = false;
+    EntityTreeNode* node = TreeMinimum(treeRoot);
+    EntityTreeNode* prev = nullptr;
+    s_walkSnap.reserve((size_t)(self->updateTreeCount > 0 ? self->updateTreeCount : 16));
+    while (node && !g_treeCorrupt) {
+        int64_t entity = (int64_t)node->entityIBP;
+        if (PtrCorrupt((uintptr_t)entity)) { FlagTreeCorrupt("snap.entityIBP", node, (void*)entity); break; }
+        s_walkSnap.push_back(entity);
+        prev = node;
+        node = TreeSuccessor(node);
+    }
+    if (g_treeCorrupt) { ReportTreeCorrupt("Snapshot", self, prev); s_walkSnap.clear(); return false; }
+    s_walkDirty = false;
+    return true;
+}
+
+// Returns true when the snapshot walk ran (so the tree walk is skipped).
+static bool WalkUpdateTreeSnapshot(EntityList* self, void* time, bool prof) {
+    if (!PerfX::TreeSnapshot()) return false;
+    if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTreeCount) {
+        if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
+    }
+    const size_t n = s_walkSnap.size();
+    const int64_t* arr = s_walkSnap.data();
+    for (size_t i = 0; i < n; ++i) {
+        // Three-deep prefetch pipeline: entity header (i+3) -> its component IBP array
+        // (i+2, header already resident) -> the component objects' flag words (i+1,
+        // array already resident). Each level only touches memory the previous level
+        // pulled in, so no prefetch ever waits on a miss.
+        if (i + 3 < n) __builtin_prefetch((const char*)arr[i + 3] + 0x30);
+        if (i + 2 < n) {
+            const char* comps = *(const char* const*)((const char*)arr[i + 2] + 0x30);
+            if (comps) __builtin_prefetch(comps);
+        }
+        if (i + 1 < n) {
+            const char* pe1 = (const char*)arr[i + 1];
+            const int64_t* comps = *(const int64_t* const*)(pe1 + 0x30);
+            int cc = *(const int32_t*)(pe1 + 0x38);
+            if (comps && cc > 0) {
+                if (cc > 6) cc = 6;
+                for (int k = 0; k < cc; ++k) {
+                    const char* c = (const char*)comps[k];
+                    if (c) __builtin_prefetch(c + 0x20);
+                }
+            }
+        }
+        int64_t entity = arr[i];
+        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+            EntityList_TreeNodeHandler(entity, time);
+        }
+        if (prof) ++g_elProfTreeNodes;
+    }
+    return true;
+}
+
 void EntityList_Update(EntityList* self, void* time) {
     // Step 0 (SA DEVIATION — one-frame removal deferral): drain the removal list
     // that was BUILT LAST FRAME, at the TOP of this frame's update, instead of at
@@ -589,6 +670,9 @@ void EntityList_Update(EntityList* self, void* time) {
 
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = self->updateTreeRoot;
+    if (treeRoot && WalkUpdateTreeSnapshot(self, time, prof)) {
+        treeRoot = nullptr;   // [PerfX] flat snapshot walk ran -- identical order, no tree chase
+    }
     if (treeRoot) {
         g_treeCorrupt = false;
 
@@ -641,6 +725,8 @@ void EntityList_Update(EntityList* self, void* time) {
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfTreeTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 4: 5-bucket round-robin
+    g_samplerTag = 8;   // [Sampler] sub-tag: bucket (slot-9) ticks; restored to 4 at the end
+    struct BucketTagReset { ~BucketTagReset() { g_samplerTag = 4; } } bucketTagReset;
     int64_t currentTime = self->accumulatedTime;
 
     for (int bucket = 0; bucket < 5; bucket++) {
@@ -1020,6 +1106,7 @@ void EntityList_PreUpdate(EntityList* self) {
             uint64_t outBuf = 0;
             void* srcIBP = (void*)((uintptr_t)self->stagingUpdate.data + offset);
             fn_IBPTreeInsert(&self->updateTreeRoot, &outBuf, srcIBP);
+            EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
             EntityTreeNode* node = self->updateTreeRoot;
@@ -1042,6 +1129,7 @@ void EntityList_PreUpdate(EntityList* self) {
                             break;
                         }
                         fn_IBPTreeRemove(&self->updateTreeRoot, node);
+                        EntityList_MarkUpdateTreeDirty();
                         break;
                     }
                     node = node->right;
@@ -1279,6 +1367,7 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     // Remove found nodes from trees
     if (updateNode != nullptr) {
         fn_IBPTreeRemove(&self->updateTreeRoot, updateNode);
+        EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
         fn_IBPTreeRemove(&self->postUpdateTreeRoot, postUpdateNode);

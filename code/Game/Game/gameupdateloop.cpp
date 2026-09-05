@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
+#include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -932,6 +933,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     struct SamplerTagReset { ~SamplerTagReset() { g_samplerTag = 0; } } samplerTagReset;
     ApplyForceSpeed(self->m_entityUI);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
+    PerfX::BeginFrame(self->m_renderer);      // [PerfX] per-frame frustum + pause flush (no-op unless enabled)
 
     // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
     // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
@@ -1238,6 +1240,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
                 // 3b. AnimationManager::Update
                 bool rootOnly = (iteration < speedMultiplier - 1);
+                PerfX::SetIteration(iteration, speedMultiplier);   // [PerfX] ANIM_BATCH needs the iteration index
                 if (g_pp_rootOnlyUpdates && *g_pp_rootOnlyUpdates) {
                     **g_pp_rootOnlyUpdates = rootOnly;
                 }
@@ -2652,6 +2655,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.cpp
 extern "C"
 void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
+    PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
     EnsureInit();
 

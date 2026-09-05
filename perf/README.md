@@ -91,7 +91,8 @@ Measured 2026-09-03 (perf build, 6000-frame runs, steady state):
 | 1200 citizens, 1x | 0.82 | 0.82 | ~+0.18 ms per extra 400 citizens |
 | **800 citizens, 10x** (2026-09-03) | **5.10** | 0.51 | seed 12345, pre-fix town; population 802 -> 702 over 6000 frames |
 | 800 citizens, 10x (2026-09-04 baseline) | 3.94 | 0.39 | seed 31337, door/pocket siting: population 802 -> 794 |
-| 800 citizens, 10x (after the perf wave, 20 iterations) | 2.42 | 0.24 | see "Optimisation log" below; now `perf/baselines/current.csv` (the 0.39 run is `2026-09-04_pre-perf-wave.csv`) |
+| 800 citizens, 10x (after the perf wave, 20 iterations) | 2.42 | 0.24 | see "Optimisation log" below; `perf/baselines/2026-09-04_post-perf-wave.csv` (the 0.39 run is `2026-09-04_pre-perf-wave.csv`); icons OFF |
+| 800 citizens, 10x (PerfX knobs, 2026-09-05) | 1.92 | 0.19 | see "Non-retail experimental knobs" below; now `perf/baselines/current.csv` (= `2026-09-05_perfx.csv`); icons ON |
 
 Speed multiplies the same work; citizens change its shape (AI, pathing, hauling). The
 default takes both. `BANISHED_STRESS_SPEED=1 BANISHED_STRESS_CITIZENS=400` reproduces the
@@ -205,6 +206,73 @@ MoveTo enter's spatial proximity query (~7%), residence heat ticks, ambient envi
 scans, and the 300 s storage path-graph rebuild (7 A* pair costs per tick, the CitizenList
 phase's 1800-frame spikes). Each was checked against its retail decompile before being
 left alone. Reaching 50% would mean doing less than retail does per tick.
+
+## Non-retail experimental knobs ("PerfX", 2026-09-05)
+
+`standalone/perf_experimental.{h,cpp}` does LESS than retail per sim tick where the
+difference cannot be seen: presentation work is deferred to the last speed iteration of a
+frame, skipped for entities outside the camera frustum (6 world-unit margin, ~12 frames of
+pan), or run at a lower rate. Gameplay state is never touched; everything skipped is
+replayed when the sim goes idle (pause) so a paused camera pan shows the real pose,
+position, icon and pick transform.
+
+Build flag: `-DBANISHED_PERF_EXPERIMENTAL=1` makes the knobs default-on — `make
+standalone-perf` sets it (`PERF_EXPERIMENTAL=0` to build them default-off; the stress
+run's `opt=` line and the `[PerfX] master=...` stderr line say which). The release exe
+gets `PERF_EXPERIMENTAL_RELEASE` (default 0); debug builds leave it undefined (off).
+Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per knob:
+
+| env | what is skipped | why it is invisible |
+|---|---|---|
+| `BANISHED_PERF_ANIM_CULL` | off-screen `MeshInstance::Update` stays root-only on the last iteration | the animation clock and root-motion offset still advance (retail's intermediate-iteration path); the pose is recomputed from the clock on the first visible tick, or by a zero-time update on pause |
+| `BANISHED_PERF_GEOMXF_LASTONLY` | move-tick `Geometry::SetTransform` on intermediate iterations | only the last iteration is drawn; the render-side interpolation snaps from that same update; `model+0x148` (gameplay position) is still written every tick |
+| `BANISHED_PERF_GEOM_CULL` | the last-iteration `Geometry::SetTransform` for off-screen citizens | nothing draws it; the margin updates it before it can enter the view; pushed on pause |
+| `BANISHED_PERF_ICON_LASTONLY` / `_ICON_CULL` | status-icon repositioning on intermediate iterations / for off-screen owners | pure sprite placement; replayed on pause |
+| `BANISHED_PERF_PICK_CULL` | `Picking::Scene::SetTransform` for off-screen citizens | cannot be clicked; replayed on pause |
+| `BANISHED_PERF_PARTICLE_CULL` | ticking off-screen particle systems (frozen, not simulated) | the plume simply continues when the camera reaches it (margin +10 for rising smoke) |
+| `BANISHED_PERF_AMBIENT_THROTTLE=n` | the biome histogram rescan of ambient-audio emitters, every n-th tick (8) | the region only changes when the map does; the temperature crossfade is still per tick |
+| `BANISHED_PERF_TREE_SNAPSHOT` | the AVL pointer chase of the update-tree walk (flat in-order snapshot, rebuilt when the tree changes) | identical visit order — a data-structure change, not a behaviour change |
+| `BANISHED_PERF_ANIM_BATCH_ALL` | at speed N, the N−1 intermediate root-only `MeshInstance::Update` calls per model whose per-tick root-motion offset cannot differ; the last iteration advances the animation by the ticks it skipped in one call | the move tick reads walk speed from `MeshInstance::RootAnimationOffset()`. For an instanced animation (`AnimationState` count 1, layer pool id ≥ 0, instanced byte set) that reads the `AnimationManager` pool pose, which `AnimationManager::Update` still refreshes with the real tick on every iteration; for an animation with no root motion (no non-zero node-0 keyframe position, cached per `Animation`) the offset is 0 for any dt. Those models are batched. A model mid-blend (count > 1), on a non-instanced root-motion animation, or with its instanced byte not yet set keeps the plain per-tick update (`PerfX::NeedsPerTickRootUpdate`, ~1.3% of the intermediate updates in the 800x10 town), because there the offset is the instance's own `+0x100`, `Animation::GetRootPoseAtTime` scales it by the dt it is given, and the blend weight changes per tick. Verified with `BANISHED_MOVETICK_TRACE=1` (4 citizens, 1500 frames, 10x): the per-tick root offset — `delta` divided by the citizen's own speed factor `vel38` — has mean 0.01482 / p50 0.014999 / max 0.01501 with batching on, 0.01484 / 0.014999 / 0.01501 off, and the blend-ramp samples (0.002–0.007) reappear (229 vs 228; the first ANIM_BATCH version had 0 and held values instead). The earlier "−2% mean step" (0.01418 vs 0.01447) was the run-to-run mix of `vel38` (0.69–1.06 per citizen and path), which two batching-OFF runs also show (0.01447 vs 0.01393). What still moves to the last iteration: animation events and the "animation finished" notification of a batched non-looping animation (up to N−1 ticks late). Bit-identical drawn pose. `_ANIM_BATCH_CULLED` is the off-screen-only variant (no measurable gain on its own) |
+
+`BANISHED_PERF_TRACE=1` prints a census every 600 frames (`[PerfX] frame ... modelCulled=
+... geomCulled= ... particleSkipped= ...`) and the pause-time flush counts.
+
+### Optimisation log (2026-09-05, 800x10, sim ms / iteration, icons ON — see below)
+
+| step | ms/iter | note |
+|---|---|---|
+| HEAD `aa71278` measured today (3 runs) | 0.266 | the recorded 0.24 was an icons-OFF run; see the caveat below |
+| retail-faithful fixes only (`BANISHED_PERF_EXPERIMENTAL=0`) | 0.245 | `GetTypeIdByName` pointer cache (StatusIcon's per-tick name lookup was 9% of the phase), the per-burn `[HeatTick]` stderr line gated (1.7%), inline `sqrtf` in the move tick |
+| + anim cull, geomXf last-only, icon last-only, ambient throttle | 0.231 | |
+| + tree snapshot walk | 0.211 | |
+| + particle freeze, pick cull, geom cull, icon cull, per-frame visibility cache, CharMgr cell memo | 0.209–0.214 | each within run noise (±0.005); kept because they remove work that grows with town size and zoom-in |
+| iteration 11: Pickup resolver re-ran its whole ResolveAddr table every tick (one dependency stays missing so its "resolved" flag never set), `CitizenStatusIcon_SetFlag` called getenv per call, A* heuristic sqrt inlined (bit-identical) | 0.2095 | bucket-phase profile via the new sampler sub-tag 8 (`EntityList/buckets`) |
+| **iteration 12: ANIM_BATCH_ALL** — one root-only animation update per model per frame instead of N | **0.192 / 0.196** (two runs) | treeWalk 1.36 → 1.11 ms/frame; culled-only variant 0.211 (no gain) |
+| iteration 13: ANIM_BATCH_ALL made exact for walk speed — per-model decision (instanced / no root motion → batch; blend or non-instanced root motion → per tick), last iteration advances by the ticks actually skipped | **0.197 / 0.194** (two runs) | per-tick root offset now matches batching-off (see the knob table); ~1.3% of intermediate updates stay per-tick |
+| tried, reverted: heading sincos memo table, `always_inline` node handler, 3-deep prefetch | — | neutral or worse |
+
+**Result: 0.194 ms/iter (mean of two runs) = −27% same-day vs HEAD (0.266), −50% vs the recorded
+0.39 pre-wave baseline, reached at iteration 12 with ANIM_BATCH_ALL and kept at iteration 13 (0.194–0.197) once it was made exact for walk speed; without it the plateau is 0.21.** What remains is
+retail gameplay work per tick: the action executor + MoveTo (~13% of the phase), the
+root-only animation update that root motion needs (~8%), CharMgr cell registration (3%),
+MoveTo enter's proximity query (3%), the region A* in the CitizenList phase (7% of the
+update), and the entity/component pointer chase of the walk itself. In the bucket phase specifically
+(`--tag 8`): the CharMgr proximity query MoveTo::Enter runs (16% of the phase, builds a 9 KB
+quadtree walker per query exactly like retail), the region A* behind FindBestTarget (15%), and
+the standalone allocator critical section around every Allocate/Free (~13%, needed for the
+async pathfinder threads). Candidates that would need a decision because they change
+behaviour or safety: a heap open set for the region A* (order of expansion), dropping the
+allocator lock, or skipping child mesh-instance updates for culled models (their animation
+clocks would drift).
+
+**Measurement caveat — the status-icon setting.** `GameStatusIconEnable` (registry,
+`HKCU\Software\Shining Rock Software LLC\Banished`) changes the HEAD number by 10%
+(0.240 off vs 0.266 on: every icon runs a per-tick name lookup + `Geometry::SetTransform`).
+Only compare runs whose `standalone_error.log` shows the same `[GameSettings] Load:
+StatusIconEnable=` value. Two more traps hit this session: a failed perf build leaves the
+previous exe in the game dir (check the `build=` stamp in `report.txt` against
+`standalone/build-perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
+together make the run ~15x slower — use one or the other.
 
 ## Reading a regression
 

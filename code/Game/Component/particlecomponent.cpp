@@ -17,6 +17,7 @@
 #include "scene_watch.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "perf_experimental.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -1067,8 +1068,24 @@ static void PC_OnRemovedVSlot(void* s) {
     ParticleComponent_InitFuncs();
     ParticleComponent_OnCreate(reinterpret_cast<ParticleComponent*>(s));
 }
+// [PerfX PARTICLE_CULL -- NON-RETAIL] a particle system nobody can see is FROZEN (not
+// ticked) rather than simulated; when the camera reaches it the plume it had simply
+// continues. Position = the first live emitter geometry's transform (+0x94).
+static bool PC_Culled(ParticleComponent* self) {
+    if (!PerfX::ParticleCull()) return false;
+    uintptr_t s = (uintptr_t)self;
+    int total = *(int32_t*)(s + 0x40);
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (total <= 0 || !geoArr) return false;
+    for (int i = 0; i < total; i++) {
+        if (geoArr[i].geo && geoArr[i].sceneId >= 0)
+            return PerfX::ParticleCullSkip(reinterpret_cast<const float*>((uintptr_t)geoArr[i].geo + 0x94));
+    }
+    return false;
+}
 static void PC_TickVSlot(void* s, void* time) {
     ParticleComponent* self = reinterpret_cast<ParticleComponent*>(s);
+    if (PC_Culled(self)) return;   // frozen off-screen: neither the unstamp nor the tick
     PC_UnstampOwnEmitters(self);   // SA per-frame frame-index advance (see helper) before the tick
     ParticleComponent_UpdateTick(self, time);
 }

@@ -51,9 +51,19 @@ int InvokeAllRegistrations() {
 
 uint32_t GetTypeIdByName(const char* name) {
     if (!name) return 0;
+    // PERF (2026-09-05): callers in per-tick code pass string literals; a small
+    // direct-mapped cache keyed on the pointer (validated by strcmp, so a reused stack
+    // buffer at the same address can never return the wrong id) turns the list walk into
+    // one compare. Ids are stable once FactoryReg has run; a 0 result is never cached.
+    struct Slot { const char* key; uint32_t id; };
+    static Slot cache[64] = {};
+    const size_t h = (reinterpret_cast<uintptr_t>(name) >> 3) & 63;
+    if (cache[h].key == name && std::strcmp(cache[h].key, name) == 0) return cache[h].id;
     for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
         if (r->typeName && std::strcmp(r->typeName, name) == 0) {
-            return *reinterpret_cast<uint32_t*>(&r->storage);
+            uint32_t id = *reinterpret_cast<uint32_t*>(&r->storage);
+            if (id != 0) { cache[h].key = name; cache[h].id = id; }
+            return id;
         }
     }
     return 0;

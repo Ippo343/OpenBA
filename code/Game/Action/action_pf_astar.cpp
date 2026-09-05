@@ -611,7 +611,7 @@ uint64_t Pf_RegionAstarCore_dcd0(int* param_1, int param_2, uint param_3) {
     lVar17 = uVar18 * 0x30;
     iVar8 = *reinterpret_cast<int*>(lVar14 + 4 + static_cast<int64_t>(param_2) * 0x30) - *reinterpret_cast<int*>(lVar17 + 4 + lVar14);
     iVar12 = *reinterpret_cast<int*>(lVar14 + static_cast<int64_t>(param_2) * 0x30) - *reinterpret_cast<int*>(lVar17 + lVar14);
-    fVar20 = s_fn_Sqrtf ? s_fn_Sqrtf(static_cast<float>(iVar8 * iVar8 + iVar12 * iVar12)) : 0.0f;
+    fVar20 = __builtin_sqrtf(static_cast<float>(iVar8 * iVar8 + iVar12 * iVar12));   // PERF: 0x140132010 is our sqrtf; bit-identical inline
     Pf_AstarRelax_d320(param_1, param_2, 0xffffffff, 0, static_cast<int>(fVar20));
     uVar10 = 0;  // d320's RAX-on-exit only ever flows to the masked (&...ff00) return below
     iVar8 = param_1[8];
@@ -650,7 +650,7 @@ uint64_t Pf_RegionAstarCore_dcd0(int* param_1, int param_2, uint param_3) {
                     lVar5 = *reinterpret_cast<int64_t*>(param_1 + 2);
                     iVar9 = *reinterpret_cast<int*>(lVar4 + 4 + lVar14 * 0x30) - *reinterpret_cast<int*>(lVar4 + 4 + lVar19 * 0x30);
                     iVar13 = *reinterpret_cast<int*>(lVar4 + lVar14 * 0x30) - *reinterpret_cast<int*>(lVar4 + lVar19 * 0x30);
-                    fVar20 = s_fn_Sqrtf ? s_fn_Sqrtf(static_cast<float>(iVar9 * iVar9 + iVar13 * iVar13)) : 0.0f;
+                    fVar20 = __builtin_sqrtf(static_cast<float>(iVar9 * iVar9 + iVar13 * iVar13));   // PERF: inline, bit-identical
                     iVar9 = static_cast<int>(fVar20) + *reinterpret_cast<int*>(lVar5 + 0x14 + lVar14 * 0x18);
                     uVar10 = static_cast<uint64_t>(static_cast<uint>(*param_1));
                     if (*reinterpret_cast<uint*>(lVar5 + 0x10 + lVar19 * 0x18) == static_cast<uint>(*param_1)) {

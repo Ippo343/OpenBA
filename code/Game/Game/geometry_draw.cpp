@@ -18,6 +18,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "perf_experimental.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -149,6 +150,7 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     }
     // worldFrustum = cameraFrustum * cameraTransform3
     fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, cameraTransform3);
+    PerfX::SetWorldFrustum(worldFrustumBuf);   // [PerfX] the sim-side off-screen test uses this frame's planes
     // localFrustum = worldFrustum * geometryInverseTransform3
     fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, selfInvTransform3);
 

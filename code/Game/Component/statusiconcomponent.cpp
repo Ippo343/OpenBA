@@ -17,6 +17,7 @@
 #include "scene_watch.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "perf_experimental.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -682,7 +683,20 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
 // fault. Retail would have had a fully-consistent array here.
 static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
     if (!entity || !fn_IsDerivedFrom) return nullptr;
-    uint32_t want = ::Object::GetTypeIdByName(typeName);
+    // PERF (2026-09-05): this ran per icon per sim iteration (~10k/frame at 800x10) and
+    // GetTypeIdByName is a strcmp walk of the whole factory list -- 9% of the EntityList
+    // phase in the sampler. Type ids never change after startup; cache the two names.
+    static const char* s_cName[4] = {};
+    static uint32_t    s_cId[4]   = {};
+    uint32_t want = 0;
+    {
+        int slot = -1;
+        for (int i = 0; i < 4; ++i) {
+            if (s_cName[i] == typeName) { slot = i; break; }
+            if (s_cName[i] == nullptr) { slot = i; s_cName[i] = typeName; s_cId[i] = ::Object::GetTypeIdByName(typeName); break; }
+        }
+        want = (slot >= 0) ? s_cId[slot] : ::Object::GetTypeIdByName(typeName);
+    }
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
 
     int count = 0;
@@ -790,9 +804,25 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
     // ModelComponent, +0x158 = live move-tick position) AND faithfully preserves the original's
     // branch for buildings that carry a MultiObjectComponent (→ map-cell). Map fallback below
     // still uses the exe finder (its c79e0 global IS filled, so it works).
+    // [PerfX ICON_LASTONLY -- NON-RETAIL] the positioning below is pure presentation
+    // (Geometry::SetTransform on the icon sprite); on intermediate speed iterations the
+    // result is overwritten before anything draws it, so only the last iteration runs it.
+    if (PerfX::IconLastOnly() && PerfX::RootOnlyNow()) {
+        PerfX::Count(PerfX::kCntIconSkipped);
+        return;
+    }
     void* modelIBP[2] = { nullptr, nullptr };
     void* multiIBP[2] = { nullptr, nullptr };
     modelIBP[0] = StatusIcon_FindCompByName(entity, "ModelComponent");
+    // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
+    // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
+    if (modelIBP[0] && PerfX::IconCull() && PerfX::ModelCulled(modelIBP[0])) {
+        PerfX::Count(PerfX::kCntIconCulled);
+        PerfX::NoteDeferred(self, [](void* o) {
+            StatusIconComponent_OnRemove_Standalone(reinterpret_cast<StatusIconComponent*>(o));
+        });
+        return;
+    }
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     multiIBP[0] = StatusIcon_FindCompByName(entity, "MultiObjectComponent");
 

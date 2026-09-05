@@ -19,6 +19,7 @@
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "perf_experimental.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -541,7 +542,31 @@ void ModelComponent_OnRemove(ModelComponent* self, void* time) {
     typedef void (*fn_MeshVtable8_t)(void*, void*);
     fn_MeshVtable8_t updateFn = *(fn_MeshVtable8_t*)(*(uintptr_t*)(s + 0x28) + 0x8);
     if (updateFn) {
-        updateFn((void*)(s + 0x28), time);
+        // [PerfX ANIM_CULL -- NON-RETAIL] On the last speed-iteration retail poses every
+        // animated mesh (AnimationState::UpdateNodes). A mesh outside the camera frustum
+        // is never drawn, so its pose is left root-only (the animation clock and the
+        // root-motion offset still advance exactly as retail's intermediate iterations
+        // do); PerfX flushes the pose with a zero-time update if the sim pauses, and the
+        // first visible tick recomputes it from the animation time. Off by default
+        // outside the perf build (BANISHED_PERF_ANIM_CULL=0 kills it).
+        // [PerfX ANIM_BATCH -- NON-RETAIL] at speed N retail runs N root-only updates per
+        // frame per model only to sample the root-motion offset every tick. For a model
+        // whose offset comes from the AnimationManager pool (instanced animation, ticked
+        // every iteration anyway) or is zero (no root motion) the intermediate ones are
+        // skipped and the last iteration advances the animation by the skipped ticks in
+        // one call: the clock, the drawn pose and the walk speed are exact. A blending or
+        // non-instanced root-motion model is ticked normally (PerfX::AnimBatchDecide).
+        int64_t batchedTime = 0;
+        if (PerfX::AnimBatchDecide(self, time, &batchedTime)) return;
+        void* timeArg = &batchedTime;
+        if (PerfX::AnimCullSkip(self)) {
+            uint8_t* flag = PerfX::RootOnlyFlag();
+            *flag = 1;
+            updateFn((void*)(s + 0x28), timeArg);
+            *flag = 0;
+        } else {
+            updateFn((void*)(s + 0x28), timeArg);
+        }
     }
 
     // Check if still animating

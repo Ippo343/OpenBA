@@ -80,7 +80,10 @@ all: standalone-debug
 # path so it resolves the same on MSYS2 bash and from VS Code task shells.
 STRIP_LOGS_FLAGS = -DBANISHED_STRIP_LOGS -include standalone/log_strip.h
 
-standalone: SA_CXXFLAGS += -O3 -DNDEBUG $(STRIP_LOGS_FLAGS)
+# PERF_EXPERIMENTAL_RELEASE=1 compiles the NON-RETAIL PerfX knobs default-on in the
+# release exe too (default 0 = off; see standalone/perf_experimental.h).
+PERF_EXPERIMENTAL_RELEASE ?= 0
+standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
 standalone: $(SA_TARGET)
 
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
@@ -117,9 +120,13 @@ SA_PERF_DIR = standalone/build-perf
 # SA_CXXFLAGS is also on the link line, so -flto reaches the linker. make does not
 # track flags: `rm -rf standalone/build-perf` between flag sets.
 PERF_EXTRA ?=
+# PERF_EXPERIMENTAL=1 (default for this target) compiles the NON-RETAIL PerfX knobs
+# default-on (standalone/perf_experimental.h); =0 leaves them compiled but default-off.
+# Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
+PERF_EXPERIMENTAL ?= 1
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
-	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_CHECKPTR_STATIC_NOP $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
+	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_CHECKPTR_STATIC_NOP -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL) $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
 	        $(SA_PERF_DIR)/reimpl-x64.exe
 
 # ============================================================

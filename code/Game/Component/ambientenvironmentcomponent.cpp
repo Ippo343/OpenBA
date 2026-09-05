@@ -39,6 +39,8 @@
 //
 
 #include "Component/ambientenvironmentcomponent_funcs.h"
+#include "perf_experimental.h"
+#include <unordered_map>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -258,14 +260,34 @@ void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int6
     uint8_t* table = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     if (count <= 0 || !table) return;
 
-    int* hist = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
-    if (!hist) return;
-    for (int i = 0; i < count; ++i) hist[i] = 0;
+    // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile
+    // region only changes when the map does (trees cut, buildings placed) and the audio
+    // crossfade it feeds is inaudible at tick granularity, so the scan is re-run every
+    // n-th tick per emitter and the last dominant biome is reused in between. The
+    // temperature crossfade factor is still recomputed every tick.
+    struct ThrottleState { int dominant; int countdown; };
+    static std::unordered_map<void*, ThrottleState> s_throttle;
+    const int throttleN = PerfX::AmbientThrottle();
+    int cachedDominant = -1;
+    if (throttleN > 1) {
+        auto it = s_throttle.find(selfC);
+        if (it != s_throttle.end() && it->second.countdown > 0) {
+            --it->second.countdown;
+            cachedDominant = it->second.dominant;
+            PerfX::Count(PerfX::kCntAmbientSkipped);
+        }
+    }
 
     int gridX = *reinterpret_cast<int*>(self + 0x28);
     int gridY = *reinterpret_cast<int*>(self + 0x2c);
     int rw    = *reinterpret_cast<int*>(self + 0x30);
     int rh    = *reinterpret_cast<int*>(self + 0x34);
+
+    int* hist = nullptr;
+    if (cachedDominant < 0) {
+    hist = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
+    if (!hist) return;
+    for (int i = 0; i < count; ++i) hist[i] = 0;
 
     if (cells) {
         for (int y = 0; y < rh; ++y) {
@@ -298,10 +320,18 @@ void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int6
         }
     }
 
+    } // cachedDominant < 0
+
     // Dominant biome = argmax(hist).
-    int dominant = 0, best = hist[0];
-    for (int k = 1; k < count; ++k) {
-        if (hist[k] > best) { best = hist[k]; dominant = k; }
+    int dominant = 0;
+    if (cachedDominant >= 0 && cachedDominant < count) {
+        dominant = cachedDominant;
+    } else {
+        int best = hist[0];
+        for (int k = 1; k < count; ++k) {
+            if (hist[k] > best) { best = hist[k]; dominant = k; }
+        }
+        if (throttleN > 1) s_throttle[selfC] = ThrottleState{ dominant, throttleN - 1 };
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
@@ -340,7 +370,7 @@ void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int6
         }
     }
 
-    if (fn_MemFreeStatic) fn_MemFreeStatic(hist);
+    if (hist && fn_MemFreeStatic) fn_MemFreeStatic(hist);
 }
 
 // ============================================================

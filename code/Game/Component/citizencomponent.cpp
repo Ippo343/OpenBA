@@ -129,7 +129,8 @@ static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
     // BANISHED_ICON_TRACE prints one line per icon that stays out of the scene — see
     // StatusIcon_Toggle's SHOW-SKIPPED branch, which names the reason (vis=0 is the
     // StatusIconEnable setting; everything else is a standalone wiring gap).
-    if (std::getenv("BANISHED_ICON_TRACE") && flagIndex == 5 && value) {
+    static const bool s_iconTrace = std::getenv("BANISHED_ICON_TRACE") != nullptr;   // PERF: was per call
+    if (s_iconTrace && flagIndex == 5 && value) {
         static int budget = 6;
         if (budget-- > 0) {
             uintptr_t c = reinterpret_cast<uintptr_t>(icon);

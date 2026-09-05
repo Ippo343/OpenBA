@@ -175,7 +175,7 @@ bool ResolveFuncs() {
            fn_ImageBuffer_CopyFromTexture && g_pVideoDeviceSingleton && g_pEngineSingleton;
 
     if (!s_ok) {
-        std::printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
+        printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
                     "  alloc=%p free=%p ctor=%p dtor=%p create=%p gen=%p savedir=%p exists=%p\n"
                     "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p save=%p fs=%p\n"
                     "  copyFromTex=%p device=%p mainloop=%p\n",
@@ -271,7 +271,7 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     s_MemFree(pixels);
 
     if (s_trace)
-        std::printf("[TakeScreenshot] %dx%d -> Screenshot%d.bmp\n", width, height, index - 1);
+        printf("[TakeScreenshot] %dx%d -> Screenshot%d.bmp\n", width, height, index - 1);
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
     s_FCIB_Dtor(frameCopy);

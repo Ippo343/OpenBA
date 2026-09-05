@@ -211,11 +211,15 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
 
             // One line per burn (one per house per burn-duration — low volume);
             // uncapped so long soak runs show the full consumption sawtooth.
-            fprintf(stderr, "[HeatTick] house=%p BURN 1 fuel (temp=%.2f < %.2f) "
-                    "slotLeft=%d refill=%.2fs\n", selfV, worldTemp, heatThreshold,
-                    *reinterpret_cast<int*>(slot + 8),
-                    *reinterpret_cast<float*>(desc + 0x2c));
-            fflush(stderr);
+            // (PERF 2026-09-05: gated -- 800 houses in winter made this unbuffered stderr
+            // line 1.7% of the EntityList phase in the perf build.)
+            if (HeatTraceOn()) {
+                fprintf(stderr, "[HeatTick] house=%p BURN 1 fuel (temp=%.2f < %.2f) "
+                        "slotLeft=%d refill=%.2fs\n", selfV, worldTemp, heatThreshold,
+                        *reinterpret_cast<int*>(slot + 8),
+                        *reinterpret_cast<float*>(desc + 0x2c));
+                fflush(stderr);
+            }
             burned = true;
             break;
         }
