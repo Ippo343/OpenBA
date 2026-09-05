@@ -1,5 +1,6 @@
 // standalone/perf_experimental.cpp — see perf_experimental.h.
 #include "perf_experimental.h"
+#include "perf_terrain.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
@@ -48,6 +49,7 @@ struct Config {
     bool  iconCull;
     bool  animBatchCulled;
     bool  animBatchAll;
+    bool  terrainSidecar;
     float cullMargin;
     bool  trace;
 };
@@ -67,6 +69,7 @@ const Config& Cfg() {
         k.iconCull        = k.animCull && EnvBool("BANISHED_PERF_ICON_CULL", 1) != 0;
         k.animBatchCulled = k.animCull && EnvBool("BANISHED_PERF_ANIM_BATCH_CULLED", 1) != 0;
         k.animBatchAll    = k.master && EnvBool("BANISHED_PERF_ANIM_BATCH_ALL", 1) != 0;
+        k.terrainSidecar  = k.master && EnvBool("BANISHED_PERF_TERRAIN_SIDECAR", 1) != 0;
         k.cullMargin      = EnvFloat("BANISHED_PERF_ANIM_CULL_MARGIN", 6.0f);
         k.trace           = EnvBool("BANISHED_PERF_TRACE", 0) != 0;
         g_flags.master = k.master; g_flags.animCull = k.animCull;
@@ -75,12 +78,13 @@ const Config& Cfg() {
         g_flags.pickCull = k.pickCull; g_flags.geomCull = k.geomCull; g_flags.iconCull = k.iconCull;
         g_flags.ambientThrottle = k.ambientThrottle;
         g_flags.animBatchCulled = k.animBatchCulled; g_flags.animBatchAll = k.animBatchAll;
+        g_flags.terrainSidecar = k.terrainSidecar;
         std::fprintf(stderr, "[PerfX] master=%d animCull=%d geomXfLastOnly=%d iconLastOnly=%d "
-                     "ambientThrottle=%d treeSnapshot=%d particleCull=%d pickCull=%d geomCull=%d iconCull=%d animBatchCulled=%d animBatchAll=%d margin=%.1f (build default %d)\n",
+                     "ambientThrottle=%d treeSnapshot=%d particleCull=%d pickCull=%d geomCull=%d iconCull=%d animBatchCulled=%d animBatchAll=%d terrainSidecar=%d margin=%.1f (build default %d)\n",
                      (int)k.master, (int)k.animCull, (int)k.geomXfLastOnly, (int)k.iconLastOnly,
                      k.ambientThrottle, (int)k.treeSnapshot, (int)k.particleCull, (int)k.pickCull,
                      (int)k.geomCull, (int)k.iconCull, (int)k.animBatchCulled, (int)k.animBatchAll,
-                     k.cullMargin, def);
+                     (int)k.terrainSidecar, k.cullMargin, def);
         return k;
     }();
     return c;
@@ -325,6 +329,8 @@ void SetWorldFrustum(const void* frustum) {
 }
 
 void Reset() {
+    TerrainReport();
+    TerrainInvalidate();   // the grid is about to be freed
     s_culledModels.clear();
     s_deferredPicks.clear();
     s_deferredReplays.clear();

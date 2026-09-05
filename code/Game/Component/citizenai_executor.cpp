@@ -43,6 +43,7 @@
 
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -570,8 +571,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         if (iy < 0) iy = 0;
         if (dim <= iy) iy = dim - 1;
         int64_t cellBase = *reinterpret_cast<int64_t*>(gameWorld + 0x20);
-        if (*reinterpret_cast<char*>(cellBase + 0x29 +
-                (static_cast<int64_t>(dim) * iy + ix) * 0x30) == '\x0b') {
+        // [PerfX] TERRAIN_SIDECAR: cells[dim*iy+ix].type via the mirror (perf_terrain.h).
+        if (PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(cellBase), gameWorld[0x22],
+                              static_cast<int>(static_cast<int64_t>(dim) * iy + ix)) == 0x0b) {
             pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
             blockedHandled = true;     // goto LAB_14010981e
         }

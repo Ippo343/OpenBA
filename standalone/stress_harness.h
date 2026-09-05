@@ -16,7 +16,7 @@
 //                                  (= 60000 sim ticks at the default 10x; see perf/README.md)
 //                                  (0 = run forever, quit by hand)
 //   BANISHED_STRESS_INTERVAL=N     frames per CSV row, default 600
-//   BANISHED_STRESS_SPEED=N        game speed 1/2/5/10, default 10
+//   BANISHED_STRESS_SPEED=N        game speed 1/2/5/10/20/50, default 10
 //   BANISHED_STRESS_FOOD_MULT=N    starting-stock multiplier, default citizens/10
 //   BANISHED_STRESS_STAFF=0        skip the staffing pass (everyone stays a laborer)
 //   BANISHED_STRESS_COMPPROF=0     skip the per-component-type Update profile

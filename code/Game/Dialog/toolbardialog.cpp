@@ -1140,7 +1140,7 @@ static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, in
 //   6. For each toolbar item, clones a UI template element, sets up
 //      name, tooltip, sprite, keyboard shortcut, and adds to table
 //   7. Calls RadioElement::FindCheckBoxes to wire up radio behavior
-//   8. Populates the speed values array {1, 2, 5, 10}
+//   8. Populates the speed values array {1, 2, 5, 10, 20, 50} (retail: {1, 2, 5, 10})
 //   9. Finds current game speed index in the array
 //
 // Parameters:
@@ -1516,7 +1516,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
     fn_RadioElement_FindCheckBoxes(*(void**)(s + 0xB8));
 
-    // --- Step 9: Populate speed values array {1, 2, 5, 10} ---
+    // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
     *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
 
     DynArray4_Push(
@@ -1527,6 +1527,13 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 5);
     DynArray4_Push(
         (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 10);
+    // [NON-RETAIL] retail stops at 10x. 20x and 50x extend the sequence so the perf
+    // harness (BANISHED_STRESS_SPEED) and the in-game speed-up button can push the
+    // sim harder than retail allows; the speed cascade below is table-driven.
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 20);
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 50);
 
     // --- Step 10: Find current game speed in speed array ---
     int32_t speedIndex = 0;

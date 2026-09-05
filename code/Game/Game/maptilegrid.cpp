@@ -23,6 +23,7 @@
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -90,4 +91,5 @@ extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
     // Classify pass — write the type byte (+0x29) for every cell.
     for (int i = 0; i < count; ++i)
         cells[(size_t)i * kCellStride + CELL_TYPE] = (uint8_t)MapTileGrid_Classify(gameVoid, dim, i);
+    PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
 }

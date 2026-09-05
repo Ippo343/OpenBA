@@ -21,6 +21,7 @@
 // g_pGameWorldSingleton + X  ==  (uintptr_t)*g_pGameWorldSingleton + X.
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -154,6 +155,7 @@ void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3) {
     *reinterpret_cast<uint8_t*>(reinterpret_cast<char*>(param_1) + 0xa2) =
         *reinterpret_cast<uint8_t*>(reinterpret_cast<char*>(param_1) + 0xa2) | bVar2;
     *reinterpret_cast<uint8_t*>(lVar3 + 0x29) = bVar4;
+    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(lVar3));   // [PerfX] mirror
     uVar5 = 1u << (bVar1 & 0x1f);
     if ((((uVar5 & 0xe1f) != 0) && ((1u << (bVar4 & 0x1f) & 0x1e0U) != 0)) ||
         (((uVar5 & 0x1e0) != 0) &&

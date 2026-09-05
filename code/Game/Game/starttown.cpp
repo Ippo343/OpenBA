@@ -19,6 +19,7 @@
 // the a3300 call site, 0x14009761d).
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
@@ -5750,6 +5751,7 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
         dirty = 1;
     game[0xa2] |= dirty;
     cell[0x29] = newType;
+    PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
     const int dim = *(int32_t*)game;
     int64_t regionObj = *(int64_t*)(game + 0x70);
     if (dirty && regionObj && dim > 0)

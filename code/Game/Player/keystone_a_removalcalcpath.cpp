@@ -39,6 +39,7 @@
 // NOT autostart-exercised (player RemovalTool path) — Ghidra-verified only.
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -584,6 +585,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
         uint8_t setBit = ((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0 ? 1 : 0;
         *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(param_1) + 0xa2) |= setBit;
         *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
             int div = (int)*param_1;
             if (s_dirtyMark)

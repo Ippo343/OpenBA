@@ -50,6 +50,7 @@
 // call until 0x14009e8c0 is ported (other callers may still build it).
 
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -343,6 +344,7 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
             }
         }
 
+        PerfX::TerrainInvalidate();   // [PerfX] the whole array was just streamed in
         if (fn_Map_Invalidate) {
             fn_Map_Invalidate(reinterpret_cast<int*>(selfPtr));
         }

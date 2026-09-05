@@ -207,6 +207,41 @@ scans, and the 300 s storage path-graph rebuild (7 A* pair costs per tick, the C
 phase's 1800-frame spikes). Each was checked against its retail decompile before being
 left alone. Reaching 50% would mean doing less than retail does per tick.
 
+## 50x game speed (2026-09-05)
+
+The speed table in `ToolbarDialog` (`code/Game/Dialog/toolbardialog.cpp`, step 9 of the
+ctor) is `{1, 2, 5, 10, 20, 50}` -- retail stops at 10. 20x and 50x are NON-RETAIL; the
+speed-up/down buttons and `BANISHED_STRESS_SPEED` / `BANISHED_FORCE_SPEED` are table-driven
+so nothing else changed. Results, 800x50, PerfX on, same build as the 10x numbers:
+
+| | 10x | 50x |
+|---|---|---|
+| sim ms / iteration (healthy window, frames 600-1800) | 0.17-0.19 | 0.14-0.18 |
+| update ms / frame | 1.7-1.9 | 7.1-9.2 |
+| fps (cap off) | 139 | 110-131 |
+
+50x holds 60 Hz with margin. The sampled profile (`--tag 4,8,6,1,3`) has the SAME shape at
+both speeds -- the top 20 self-time entries are the same functions within a point: the
+executor's action-node walk, `EntityList_TreeNodeHandler`, `MoveTo_Execute_Impl`,
+`CharacterComponent_MoveTick`, then region A*/AVL, the spatial proximity query and the PerfX
+helpers (`CachedVisible` + `BatchEntry` + `NeedsPerTickRootUpdate` ~6%). Inclusive: the
+per-citizen move-tick chain 33%, `CitizenAIComponent_TransitionState` 12-15% (of which
+`Pf_IsDstReachable` -> region A* 11%), the per-model `ModelComponent` slot-8 tick
+(mis-named `ModelComponent_OnRemove` in the port) 6-7%. So there is no NEW bottleneck at
+50x; the per-iteration cost is flat because every intermediate iteration still walks every
+citizen and every model. The hottest single addresses are all the instruction after a
+dependent load -- action node `+0x18`, component flags `+0x20`, the terrain cell byte
+`cells[cur*0x30+0x29]`, the visibility-cache probe -- i.e. cache misses from pointer chasing
+across ~800 citizens x 15k entities 50 times a frame. The next step-change is data layout
+(hot fields of the per-citizen chain contiguous), not more batching.
+
+**The stress town starves at ~100k ticks regardless of speed.** At 50x that is frame 2400
+(citizens 802 -> 333 -> 4 by frame 6000); the 10x control over 30000 frames collapses at
+the same tick count (frame ~10000). Hunger mean climbs 3 -> 20 and every burial line is
+`cause=0(starvation)`: only 215 of 800 are employed and the starting stock runs out. This is
+the town, not a speed defect, and it means a 50x run's "steady state" past frame ~2000 is a
+dead town -- use `--frames 1800` at 50x, or the first three CSV rows.
+
 ## Non-retail experimental knobs ("PerfX", 2026-09-05)
 
 `standalone/perf_experimental.{h,cpp}` does LESS than retail per sim tick where the
@@ -233,6 +268,7 @@ Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per 
 | `BANISHED_PERF_AMBIENT_THROTTLE=n` | the biome histogram rescan of ambient-audio emitters, every n-th tick (8) | the region only changes when the map does; the temperature crossfade is still per tick |
 | `BANISHED_PERF_TREE_SNAPSHOT` | the AVL pointer chase of the update-tree walk (flat in-order snapshot, rebuilt when the tree changes) | identical visit order — a data-structure change, not a behaviour change |
 | `BANISHED_PERF_ANIM_BATCH_ALL` | at speed N, the N−1 intermediate root-only `MeshInstance::Update` calls per model whose per-tick root-motion offset cannot differ; the last iteration advances the animation by the ticks it skipped in one call | the move tick reads walk speed from `MeshInstance::RootAnimationOffset()`. For an instanced animation (`AnimationState` count 1, layer pool id ≥ 0, instanced byte set) that reads the `AnimationManager` pool pose, which `AnimationManager::Update` still refreshes with the real tick on every iteration; for an animation with no root motion (no non-zero node-0 keyframe position, cached per `Animation`) the offset is 0 for any dt. Those models are batched. A model mid-blend (count > 1), on a non-instanced root-motion animation, or with its instanced byte not yet set keeps the plain per-tick update (`PerfX::NeedsPerTickRootUpdate`, ~1.3% of the intermediate updates in the 800x10 town), because there the offset is the instance's own `+0x100`, `Animation::GetRootPoseAtTime` scales it by the dt it is given, and the blend weight changes per tick. Verified with `BANISHED_MOVETICK_TRACE=1` (4 citizens, 1500 frames, 10x): the per-tick root offset — `delta` divided by the citizen's own speed factor `vel38` — has mean 0.01482 / p50 0.014999 / max 0.01501 with batching on, 0.01484 / 0.014999 / 0.01501 off, and the blend-ramp samples (0.002–0.007) reappear (229 vs 228; the first ANIM_BATCH version had 0 and held values instead). The earlier "−2% mean step" (0.01418 vs 0.01447) was the run-to-run mix of `vel38` (0.69–1.06 per citizen and path), which two batching-OFF runs also show (0.01447 vs 0.01393). What still moves to the last iteration: animation events and the "animation finished" notification of a batched non-looping animation (up to N−1 ticks late). Bit-identical drawn pose. `_ANIM_BATCH_CULLED` is the off-screen-only variant (no measurable gain on its own) |
+| `BANISHED_PERF_TERRAIN_SIDECAR` | the move tick's per-citizen read of the terrain-type byte (`cells[cur*0x30+0x29]`, the two sites in `moveto.cpp` and `citizenai_executor.cpp`) goes through a 1-byte-per-cell mirror (`standalone/perf_terrain.{h,cpp}`) instead of the 7 MB 0x30-stride cell array | same byte, same value. The mirror is keyed on the cell-array base pointer + count (new game / load resize rebuild it), the 7 `+0x29` stores call `TerrainNoteWrite`, worldgen classify and the stream load call `TerrainInvalidate`. `BANISHED_PERF_TERRAIN_VERIFY=1` compares every hot read against the real byte: 800x10, 3000 frames = 17.0M reads, 55k writes, 0 mismatches. **Measured gain ~1%** at 800x50 (update 8.16/8.20 vs 8.27/8.29 ms/frame, two runs each): on an X3D part the whole cell array already sits in L3, so the miss this removes is an L3 hit, not a DRAM miss. Kept on because it is proven exact and free; do not expect it to move the number |
 
 `BANISHED_PERF_TRACE=1` prints a census every 600 frames (`[PerfX] frame ... modelCulled=
 ... geomCulled= ... particleSkipped= ...`) and the pause-time flush counts.
@@ -249,6 +285,7 @@ Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per 
 | iteration 11: Pickup resolver re-ran its whole ResolveAddr table every tick (one dependency stays missing so its "resolved" flag never set), `CitizenStatusIcon_SetFlag` called getenv per call, A* heuristic sqrt inlined (bit-identical) | 0.2095 | bucket-phase profile via the new sampler sub-tag 8 (`EntityList/buckets`) |
 | **iteration 12: ANIM_BATCH_ALL** — one root-only animation update per model per frame instead of N | **0.192 / 0.196** (two runs) | treeWalk 1.36 → 1.11 ms/frame; culled-only variant 0.211 (no gain) |
 | iteration 13: ANIM_BATCH_ALL made exact for walk speed — per-model decision (instanced / no root motion → batch; blend or non-instanced root motion → per tick), last iteration advances by the ticks actually skipped | **0.197 / 0.194** (two runs) | per-tick root offset now matches batching-off (see the knob table); ~1.3% of intermediate updates stay per-tick |
+| iteration 14 (2026-09-05): TERRAIN_SIDECAR — 1-byte mirror of the terrain type for the move tick | **0.164 vs 0.165** (800x50, two runs each; ~1%) | the cell array is L3-resident on an X3D CPU, so the removed miss was cheap. Verified exact (17M reads, 0 mismatches). The remaining per-citizen misses (action node, component flags) are on heap objects, which a mirror cannot fix — that needs pooled allocation |
 | tried, reverted: heading sincos memo table, `always_inline` node handler, 3-deep prefetch | — | neutral or worse |
 
 **Result: 0.194 ms/iter (mean of two runs) = −27% same-day vs HEAD (0.266), −50% vs the recorded

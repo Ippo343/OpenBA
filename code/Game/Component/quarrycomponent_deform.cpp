@@ -39,6 +39,7 @@
 
 #include "Component/quarrycomponent_funcs.h"
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -436,6 +437,7 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
                 const uint8_t dirty = ((oldMask & 0xe1f) != 0) ? 1u : 0u;
                 *reinterpret_cast<uint8_t*>(tileGridA + 0xa2) |= dirty;
                 cell[0x29] = 5;
+                PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
 
                 if (dirty) {
                     const int64_t regionObj = *reinterpret_cast<int64_t*>(tileGridA + 0x70);

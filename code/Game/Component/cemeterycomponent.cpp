@@ -13,6 +13,7 @@
 
 #include "Component/cemeterycomponent_funcs.h"
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -454,6 +455,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
         *reinterpret_cast<uint8_t*>(world + 0xA2) |= walkableZone ? 1 : 0;
         *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror
 
         if (walkableZone && s_fn_FineCellDirty) {
             const int mapWidth = *reinterpret_cast<int*>(world);

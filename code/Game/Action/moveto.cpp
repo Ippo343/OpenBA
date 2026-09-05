@@ -29,6 +29,7 @@
 
 #include "MoveTo.h"
 #include "engine_funcs.h"
+#include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
@@ -754,8 +755,11 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     // Verified vs the real MoveTo::Execute (0x1400c8570): the terrain byte is read at
     // iVar11 = curCell (the cell the citizen currently occupies), NOT destCell. Using
     // destCell here samples the wrong tile's movement cost.
+    // [PerfX] TERRAIN_SIDECAR: same byte, read through the 1-byte-per-cell mirror
+    // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
     uintptr_t cellArrayBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-    uint8_t terrainType = *(uint8_t*)(cellArrayBase + (int64_t)curCell * 0x30 + 0x29);
+    uint8_t terrainType = PerfX::TerrainGet((const uint8_t*)cellArrayBase,
+                                            *(int32_t*)((uintptr_t)mapGrid + 0x88), curCell);
 
     float speed;
     bool onRoad = *(uint8_t*)(s + 0x474) != 0;
