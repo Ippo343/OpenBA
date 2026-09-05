@@ -519,13 +519,57 @@ void FirePastureTool(void* entityUI) {
     int fencedSide = 8;
     if (const char* fs = std::getenv("BANISHED_FENCED_SIDE")) { int v = std::atoi(fs); if (v > 0) fencedSide = v; }
     int fencedPlaced = 0;
+    // Site the areas around the TOWN, not the map centre. Two things depend on it:
+    // Cemetery_FindNearestWithSlot needs ValidateCell(0xe1f) region reachability from
+    // the death cell, and the death cells are in the town. Scanning the whole map
+    // placed 25 cemeteries and produced 53 graves -- about four cemeteries' worth,
+    // the rest in regions the town cannot reach -- while a band on the MAP centre
+    // placed 2, because the start town is nowhere near it. Average the founding
+    // houses' MapComponent cells, exactly as the bridge harness does.
+    int fencedTownCol = gridSize / 2, fencedTownRow = gridSize / 2;
+    {
+        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        long sumCol = 0, sumRow = 0; int nh = 0;
+        const int houses = StartTown_GetFoundingHouseCount();
+        for (int i = 0; i < houses && tidMap; ++i) {
+            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            if (!e) continue;
+            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
+            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            for (int k = 0; k < cc && ca; ++k) {
+                void** hs = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(hs);
+                void* comp = *hs;
+                if (!comp) continue;
+                typedef uint32_t (*gt_t)(void*);
+                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                        != tidMap) continue;
+                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
+                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                ++nh;
+                break;
+            }
+        }
+        if (nh > 0) { fencedTownCol = static_cast<int>(sumCol / nh);
+                      fencedTownRow = static_cast<int>(sumRow / nh); }
+        fprintf(stderr, "[ToolHarness][pasture] town centre = (col %d, row %d) from %d "
+                        "founding house(s)%s\n", fencedTownCol, fencedTownRow, nh,
+                nh ? "" : " — falling back to map centre");
+    }
     for (int frun = 0; frun < fencedRuns; ++frun) {
         const int kSide = fencedSide;
         int startCell = -1, endCell = -1;
         for (int r = frun; r < frun + 60 && startCell < 0; ++r) {
             for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
-                int row = 124 + (sign ? -r : r);
-                for (int col = 8; col + kSide < gridSize - 8; ++col) {
+                int row = fencedTownRow + (sign ? -r : r);
+                // Keep the areas NEAR TOWN. Cemetery_FindNearestWithSlot requires
+            // ValidateCell(0xe1f) region reachability from the DEATH cell, so an
+            // area dropped anywhere clear on the map is usually in a region the
+            // town cannot reach and is silently never used: scanning the whole
+            // map placed 25 cemeteries and produced 53 graves, about four
+            // cemeteries' worth, with the rest unreachable.
+            const int colLo = fencedTownCol - 90, colHi = fencedTownCol + 90;
+            for (int col = colLo; col + kSide < colHi; ++col) {
                     bool clear = true;
                     int naturals = 0;
                     for (int dy = 0; dy < kSide && clear; ++dy)
