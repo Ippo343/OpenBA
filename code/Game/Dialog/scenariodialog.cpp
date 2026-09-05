@@ -305,6 +305,21 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         ScenarioDialog_ArrayPush_Impl((void*)(s + 0xD8), newCount, entry);
 
         printf("[ScenarioDialog::Slot4] Added entry[%d] for scenario[%d]\n", entryIndex, i);
+        // Identity dump: which scenario record backs each list row, and which .sav
+        // it starts from. A tutorial opening on an already-developed town is
+        // expected -- the series is progressive -- so this is the only way to tell
+        // "tutorial N legitimately continues N-1's town" from a real off-by-one.
+        {
+            void* nameData = *(void**)(scenario + 0x58);
+            void* saveData = *(void**)(scenario + 0x88);
+            int nameLen = nameData ? *(int*)((uint8_t*)nameData - 8) : 0;
+            int saveLen = saveData ? *(int*)((uint8_t*)saveData - 8) : 0;
+            printf("[ScenarioID] entry[%d] scenario[%d] name=\"%.*s\" (len=%d) "
+                   "save=\"%.*s\" (len=%d)\n",
+                   entryIndex, i,
+                   nameLen, (const char*)nameData, nameLen,
+                   saveLen, (const char*)saveData, saveLen);
+        }
         entryIndex++;
     }
     printf("[ScenarioDialog::Slot4] Done. Total entries: %d\n", entryIndex);

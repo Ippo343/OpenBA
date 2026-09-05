@@ -122,5 +122,32 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     }
     if (s_TimeSer) s_TimeSer(At(self, 0x40), ser);
 
+    // Everything above is retail 0x1401207c0 field-for-field. What follows is a
+    // deliberate, load-only repair -- see below for why it cannot be avoided.
+    const bool loading =
+        (*reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(ser) + 8) == 0);
+
     s_Dtor(ser);
+
+    // config@+0x38 is NOT in the stream: retail's serialize (above) persists only
+    // +0x28, +0x30, +0x48, +0x4c and +0x40. Its one writer is GrowthComponent's
+    // Startup (retail 0x1401206f0), which is never dispatched for a stream-restored
+    // component -- and which cannot simply be re-run here, because it also RE-ROLLS
+    // growthScale@+0x4c from the RNG and would throw away the per-instance harvest
+    // threshold this stream just restored (a silent load-fidelity bug: the plant
+    // keeps its growth but changes when it becomes harvestable, differently on
+    // every load).
+    //
+    // In Startup, +0x38 is only ever a copy of the description at +0x18 -- which
+    // the base Component_Serialize above has just restored -- so fill it directly.
+    //
+    // This repair previously lived lazily inside GrowthComponent_Update, which left
+    // an ordering hole: CropFieldComponent slot 15 (OnMessage, retail 0x14011ab50)
+    // reads `*(float*)(growth[7] + 0x28)` unguarded, exactly as retail does, and a
+    // crop field can message a restored plant BEFORE that plant's first Update tick.
+    // That was a null deref a few hundred frames into a loaded tutorial 4. Doing it
+    // here means no reader can ever observe +0x38 null on a loaded plant.
+    if (loading && *reinterpret_cast<uintptr_t*>(At(self, 0x38)) == 0)
+        *reinterpret_cast<uintptr_t*>(At(self, 0x38)) =
+            *reinterpret_cast<uintptr_t*>(At(self, 0x18));
 }
