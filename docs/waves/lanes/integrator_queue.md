@@ -42,3 +42,54 @@ silently.
 7 rows disappear. **0x140089470 will REMAIN** in the census whenever
 `BANISHED_LIVE_SEAT_SHUFFLE` is off, because `s_optimize89470` still resolves it.
 That is correct — it is a genuine deliberate-leave and should stay visible.
+
+---
+
+## Lane 1 — 1 port, 1 already-done, 3 dead, 4 deliberate-leave
+
+### Apply: one line pair in `standalone/address_registry.cpp`
+Next to the other batch decls/calls:
+```
+extern "C" void RegisterCodeLane1Batch();
+RegisterCodeLane1Batch();
+```
+New files (lane-owned, no integrator edit needed):
+- `code/Game/Game/unreg_lane1_mapgenerator_dtorbody.cpp`
+- `standalone/reg_code_lane1.cpp`
+
+### The one real gap: `0x14001aea0` `MapGenerator::~MapGenerator` (dtor body)
+VERIFIED by integrator: `code/Game/Game/mapgenerator.cpp:74` is
+`if (s_fn_DtorBody) s_fn_DtorBody(self);` — a null-guard-and-SKIP, so registering
+RESTORES retail. Consequence is worse than a leak: `MapGenerator_Cleanup`
+(`0x14001ae30`) calls `Dtor(self, 0)` and then re-runs Init, so with the body
+skipped it **overwrites live array headers instead of releasing them**.
+Lane reports closure verified — all five callees already registered.
+
+### Pending question sent back to the lane
+`0x140002280` `Entity::FindComponent<AmbientEmitterComponent>` is filed
+`deliberate — leave`, but the lane's own "if registered" column says it would make
+ambient/fire/tornado audio start working AND could fault on an unallocated
+`+0x38`. That is a `needs a run to decide`, not a `leave`. Awaiting the lane's
+answer on which run settles it.
+
+### Lane also recommends deleting two more dead pointers
+`fn_StringHash` (0x14001b1d0 — unused AND misnamed) and `fn_ToolbarSort`
+(0x140021790). Not yet independently verified by the integrator; verify with the
+same 3-mentions/no-deref + single-ResolveAddr test used for lane 3 before applying.
+
+---
+
+## CORRECTION TO THE WAVE'S OWN ADDRESS LIST (integrator error)
+
+`0x1400192a0` is **already registered** — `standalone/reg_unreg_lane1.cpp:220`,
+committed in `a8a24ba`, which `git merge-base --is-ancestor` confirms predates
+`f119f3b`. It was already fixed on the tree when the lane split was built.
+
+Cause: the split was the **union** of `held_back_code_fns.txt` (49) and the
+AUTOLOAD census (48). The census correctly omitted this address *because it is
+registered*; the union resurrected it from the stale held-back file, and it was
+then hand-tagged LOAD-WINDOW on the strength of an older tutorial census.
+
+**The census is authoritative; `held_back_code_fns.txt` is a pre-`a8a24ba`
+artifact.** The real total for this wave is **48**, not 49. Do not re-derive the
+union — regenerate from the census alone.
