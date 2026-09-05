@@ -381,11 +381,41 @@ extern "C" bool Pasture_AutoAssignType(void* pasture) {
 
     void* tmpl = nullptr;
     if (std::strcmp(want, "1") != 0) {
+        // Round-robin across a comma list; a bare name is the single-element case and
+        // behaves exactly as before. The turn advances per ASSIGNED pasture, so the
+        // split stays even however many pastures exist. The Livestock achievement
+        // wants cattle AND sheep AND chickens in one town, which a single type name
+        // can never produce however many pastures are built.
+        static int s_autoTypeTurn = 0;
+        char name[64];
+        {
+            int listLen = 0;
+            for (const char* c = want; *c; ) {
+                const char* e = std::strchr(c, ',');
+                ++listLen;
+                if (!e) break;
+                c = e + 1;
+            }
+            const int pick = listLen > 0 ? (s_autoTypeTurn % listLen) : 0;
+            const char* c = want;
+            for (int k = 0; k < pick && c; ++k) {
+                const char* e = std::strchr(c, ',');
+                c = e ? e + 1 : nullptr;
+            }
+            if (!c) c = want;
+            const char* e = std::strchr(c, ',');
+            size_t len = e ? (size_t)(e - c) : std::strlen(c);
+            if (len >= sizeof(name)) len = sizeof(name) - 1;
+            std::memcpy(name, c, len);
+            name[len] = 0;
+        }
         char path[128];
-        std::snprintf(path, sizeof(path), "Template\\Livestock%s.rsc", want);
+        std::snprintf(path, sizeof(path), "Template\\Livestock%s.rsc", name);
         tmpl = StartTown_ResolveTemplateByPath(path);
         if (!tmpl)
             std::fprintf(stderr, "[Pasture] AUTOTYPE: could not resolve %s\n", path);
+        else
+            ++s_autoTypeTurn;
     }
     if (!tmpl) {
         // Fall back to whatever is already wandering the map.

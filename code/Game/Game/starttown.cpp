@@ -1366,6 +1366,14 @@ static const StressBuilding kStressSet[] = {
     // and a tree type for every field/orchard in the world so they open for workers.
     { "Template\\CropField.rsc",       "cropfield",       8,  8 },
     { "Template\\Orchard.rsc",         "orchard",         8,  8 },
+    // Pasture used to be demo-block-only (one per world, sited by
+    // BANISHED_BUILD_DEMO_PASTURE). The Livestock achievement wants 60 cattle, 75
+    // sheep and 180 chickens AT ONCE, which one pasture cannot hold whatever its
+    // type -- and Jack of all Trades wants a WORKER at a pasture, which needs one
+    // near enough to town to be staffed. It is a drag area exactly like the crop
+    // field and orchard above, so it belongs in the set with them.
+    // Pasture.rsc _minWidth/_minHeight = 7; 12x12 leaves room for a real herd.
+    { "Template\\Pasture.rsc",         "pasture",        12, 12 },
 };
 static const StressBuilding kStressTownHall = { "Template\\TownHall.rsc", "townhall", 10, 10 };
 static const StressBuilding kStressHouses[] = {
