@@ -2103,7 +2103,25 @@ void FireBridgeTool(void* entityUI) {
     const int kMaxCand = 512;
     Cand cands[kMaxCand];
     int nCand = 0, nSeen = 0;
-    const int kMaxAttempts = 400, kMaxBody = 24;
+    // BANISHED_BRIDGE_LONGEST=<minLen> — rank candidates by SPAN LENGTH (longest
+    // first) instead of by distance to town, and raise the body cap to match.
+    //
+    // The Golden Gate achievement wants a bridge at least 50 units long (stat 29).
+    // The default ranking is nearest-town-first with a 24-cell body cap, which is
+    // right for "prove the bridge tool works" -- it picks the little crossing beside
+    // the settlement -- and makes a 50-cell span doubly unreachable: too long to be
+    // collected at all, and outranked by every short one if it were. Length ranking is
+    // opt-in so the ordinary bridge test keeps choosing the convenient crossing.
+    const int kMaxAttempts = 400;
+    int  wantLongest = 0;
+    if (const char* e = std::getenv("BANISHED_BRIDGE_LONGEST")) {
+        const int v = std::atoi(e);
+        if (v > 0) wantLongest = v;
+    }
+    const int kMaxBody = wantLongest ? 200 : 24;
+    if (wantLongest)
+        fprintf(stderr, "[ToolHarness][bridge] LONGEST-SPAN mode: want >= %d cells, "
+                        "body cap %d, ranking by length""\n", wantLongest, kMaxBody);
     for (int axis = 0; axis < 2; ++axis) {
         for (int line = 1; line < W - 1; ++line) {
             int runStart = -1;
@@ -2137,9 +2155,15 @@ void FireBridgeTool(void* entityUI) {
                             // than dropping everything past the cap, which would silently
                             // bias the pick towards whatever the scan happened to reach first.
                             int worst = 0;
-                            for (int q = 1; q < kMaxCand; ++q)
-                                if (cands[q].dist > cands[worst].dist) worst = q;
-                            if (cand.dist < cands[worst].dist) cands[worst] = cand;
+                            if (wantLongest) {
+                                for (int q = 1; q < kMaxCand; ++q)
+                                    if (cands[q].len < cands[worst].len) worst = q;
+                                if (cand.len > cands[worst].len) cands[worst] = cand;
+                            } else {
+                                for (int q = 1; q < kMaxCand; ++q)
+                                    if (cands[q].dist > cands[worst].dist) worst = q;
+                                if (cand.dist < cands[worst].dist) cands[worst] = cand;
+                            }
                         }
                     }
                     runStart = -1;
@@ -2151,10 +2175,15 @@ void FireBridgeTool(void* entityUI) {
     for (int i = 1; i < nCand; ++i) {
         Cand key = cands[i];
         int j = i - 1;
-        while (j >= 0 && cands[j].dist > key.dist) { cands[j + 1] = cands[j]; --j; }
+        if (wantLongest)
+            while (j >= 0 && cands[j].len < key.len) { cands[j + 1] = cands[j]; --j; }
+        else
+            while (j >= 0 && cands[j].dist > key.dist) { cands[j + 1] = cands[j]; --j; }
         cands[j + 1] = key;
     }
-
+    if (wantLongest && nCand > 0)
+        fprintf(stderr, "[ToolHarness][bridge] best qualifying span = %d cells at "
+                        "dist^2=%d (%d candidates)\n", cands[0].len, cands[0].dist, nCand);
     int startCell = -1, endCell = -1, attempts = 0;
     for (int i = 0; i < nCand && attempts < kMaxAttempts && startCell < 0; ++i) {
         const Cand& c = cands[i];

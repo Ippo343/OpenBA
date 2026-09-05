@@ -6820,18 +6820,47 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         // then put the resource back the way it was loaded.
         const int foodMult = StressHarness_FoodMult();
         int savedStock[7];
-        if (foodMult > 1) {
+        // BANISHED_STRESS_STOCK=<a,b,c,d,e,f,g> — set the seven start-stock counts to
+        // ABSOLUTE values instead of scaling them.
+        //
+        // The Ready for Anything achievement wants seven simultaneous stock levels
+        // (2000 fuel, 2000 wood, 500 stone, 500 iron, 200 tools, 200 coats, 30000 food)
+        // and the multiplier cannot produce them: several of the seven start counts are
+        // ZERO in the start condition, and any multiple of zero is zero. That is why
+        // four of its seven goals sat at have=0 in a town holding 4,646 of one resource
+        // and 1,263 of another. A blank entry keeps the loaded value (still x foodMult).
+        const char* stockEnv = std::getenv("BANISHED_STRESS_STOCK");
+        int stockOverride[7];
+        for (int k = 0; k < 7; ++k) stockOverride[k] = -1;
+        if (stockEnv && stockEnv[0]) {
+            const char* c = stockEnv;
+            for (int k = 0; k < 7 && c && *c; ++k) {
+                if (*c != ',') stockOverride[k] = std::atoi(c);
+                const char* e = std::strchr(c, ',');
+                c = e ? e + 1 : nullptr;
+            }
+        }
+        if (foodMult > 1 || stockEnv) {
             for (int k = 0; k < 7; ++k) {
                 int* slot = reinterpret_cast<int*>(sc + 0xfc + 4 * k);
                 savedStock[k] = *slot;
-                *slot = savedStock[k] * foodMult;
+                *slot = (stockOverride[k] >= 0) ? stockOverride[k]
+                                                : savedStock[k] * (foodMult > 1 ? foodMult : 1);
             }
-            fprintf(stderr, "[Stress::food] start stock x%d for seeding (food %d -> %d, firewood %d -> %d)\n",
-                    foodMult, savedStock[4], savedStock[4] * foodMult, savedStock[5], savedStock[5] * foodMult);
+            fprintf(stderr, "[Stress::food] start stock x%d%s: [0]%d->%d [1]%d->%d [2]%d->%d "
+                            "[3]%d->%d [4]%d->%d [5]%d->%d [6]%d->%d\n",
+                    foodMult, stockEnv ? " (+STOCK override)" : "",
+                    savedStock[0], *reinterpret_cast<int*>(sc + 0xfc + 0),
+                    savedStock[1], *reinterpret_cast<int*>(sc + 0xfc + 4),
+                    savedStock[2], *reinterpret_cast<int*>(sc + 0xfc + 8),
+                    savedStock[3], *reinterpret_cast<int*>(sc + 0xfc + 12),
+                    savedStock[4], *reinterpret_cast<int*>(sc + 0xfc + 16),
+                    savedStock[5], *reinterpret_cast<int*>(sc + 0xfc + 20),
+                    savedStock[6], *reinterpret_cast<int*>(sc + 0xfc + 24));
             fflush(stderr);
         }
         StartTown_SeedStartingResources(sc);
-        if (foodMult > 1)
+        if (foodMult > 1 || stockEnv)
             for (int k = 0; k < 7; ++k) *reinterpret_cast<int*>(sc + 0xfc + 4 * k) = savedStock[k];
 
         // Founding-house household inventory (BANISHED_LIVE_HOUSING): now that the town
