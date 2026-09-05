@@ -129,6 +129,13 @@ static void EnsureHelpers() {
 //       element = 0
 //   ~Serializer()
 
+// Engine-wide "am I loading?" test: 0 = loading, non-zero = saving. Reached by
+// dereferencing the Serializer to its stream first. Same idiom as
+// marketwork_bst_b290.cpp's SerIsLoading and pasturecomponent.cpp et al.
+static inline bool SerializerIsLoading(void* serializer) {
+    return *reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0;
+}
+
 void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
     EnsureHelpers();
 
@@ -150,10 +157,15 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
         s_fn_Serialize_Int(serializer, &count, nullptr);
     }
 
-    // On load (serializer mode check: serializer+0x8 == 0 means loading)
-    int serMode = *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(serializer) + 8);
-    if (serMode == 0) {
+    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
+    // Serializer to reach its STREAM, then read the stream's +8. This read was
+    // missing that dereference and tested the Serializer's own +8, which is
+    // m_encoding, not a loading flag (see
+    // reference_serializer_plus8_is_encoding_not_loading_flag -- the same trap,
+    // found here a second time). With the wrong field the resize below never ran
+    // on a real load, so the array at +0x28 stayed NULL while `count` came back
+    // non-zero from the stream, and the element loop dereferenced null.
+    if (SerializerIsLoading(serializer)) {
         // Resize array for loading
         if (s_fn_IBPArray_Resize) {
             s_fn_IBPArray_Resize(

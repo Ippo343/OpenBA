@@ -49,6 +49,9 @@
 #include <cstdlib>
 
 extern "C" void* GetTutorialHighlightDialogVtable();
+// Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
+// Defined in tutorial_next_scenario.cpp.
+extern "C" void TutWave_LoadNextScenario(void* self);
 extern "C" void* TutWave_HighlightDialogCtor(void* self, void* ui, void* dialogExternal,
                                              void* parentIBP, void* ibpE0,
                                              int32_t valD8, void* ibpE8);
@@ -920,12 +923,17 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         return;
     }
 
-    // Tutorial finished. Retail here calls FUN_140101A80 (Lane 1's list) and
-    // then FinishTutorialInstance_helper_0D70 (0x1400E0D70) which tears the
-    // tutorial down and boots the real scenario through a GameUpdateLoop.
-    // 0D70's own closure needs four more unported exe functions
-    // (0x140013A60 / 0x140013AA0 / 0x140098060 / 0x140099130), so it is out of
-    // scope for this wave. Calling the unregistered pointer would be EXEC-of-0.
+    // Tutorial finished: boot the next scenario through a fresh GameUpdateLoop.
+    //
+    // This used to be a DarkOnce stub whose comment named four unported exe
+    // functions as blockers. That comment was stale -- 0x140013A60 and
+    // 0x140013AA0 are one-line String accessors, 0x140099130 was already inline
+    // in engine_funcs.h, and 0x140098060 is a flat field-init. The port lives in
+    // tutorial_next_scenario.cpp; see its header for the full retail body.
+    //
+    // Retail also calls FUN_140101A80 first (lane 1's tutorial child-dialog
+    // opener). That one is still unported and is NOT on this path's critical
+    // line -- 0D70 replaces the whole loop, dialogs included -- so it stays out.
     (void)param3; (void)param4;
-    DarkOnce("tutorial-complete transition 0x1400E0D70 (+ 0x140101A80, lane 1)");
+    TutWave_LoadNextScenario(self);
 }

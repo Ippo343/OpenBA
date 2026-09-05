@@ -141,8 +141,13 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
         s_fn_Serializer_SerializeInt(serializer2, &arrayCount, nullptr);
     }
 
-    // If loading (serializer mode == 0 at serializer+8), resize the array
-    if (*(int*)(serializer2 + 8) == 0) {
+    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
+    // Serializer to reach its STREAM first, then read the stream's +8. This
+    // tested the Serializer's OWN +8 (m_encoding), so on a real load the resize
+    // below never ran and the element loop walked a NULL array with a non-zero
+    // count straight off the stream. Same trap as interactcomponent.cpp and
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    if (*(int32_t*)(*(uintptr_t*)serializer2 + 8) == 0) {
         if (s_fn_DynArray_Resize) {
             s_fn_DynArray_Resize((void*)&self->field58, arrayCount);
         }

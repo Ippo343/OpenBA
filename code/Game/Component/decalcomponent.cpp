@@ -730,10 +730,35 @@ static void DecalComponent_FinishLiveVtable() {
         DecalComponent_LiveVtable[8] = reinterpret_cast<void*>(&DecalComponent_TickVSlot);
     }
 }
+// Retail ctor-body scalar defaults (DecalComponent_Ctor, exe 0x14011b8f0):
+//     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
+//     c7 43 2c ffffffff   mov [rbx+0x2c], -1       decalId    = -1
+//     c7 43 30 0000803f   mov [rbx+0x30], 1.0f     decalScale = 1.0
+// MakeInertTyped hands back a ZEROED body, so without this decalId is 0 --
+// i.e. "I own terrain decal slot 0" -- on every component the real ctor did not
+// build. decalId is NOT in the save stream (slot 3 serializes only decalScale
+// and decalState), so a stream-restored decal keeps that bogus 0 forever and
+// DecalComponent::OnCreate then calls TerrainDecalRemove(sys, 0) during world
+// teardown, faulting on a decal system whose slot array (+0x1F0) was never
+// allocated because nothing was ever placed. See
+// reference_ctor_scalars_in_startup_are_unset_after_load.
+//
+// decalScale is restored from the stream on a load, but a NEW decal built by the
+// factory needs the 1.0 default or it draws at zero size -- seed both, as retail
+// does, rather than only the one that crashed.
+static void DecalComponent_ApplyCtorDefaults(void* mem) {
+    if (!mem) return;
+    uint8_t* b = reinterpret_cast<uint8_t*>(mem);
+    *reinterpret_cast<uint32_t*>(b + 0x28) = 0;            // decalState
+    *reinterpret_cast<int32_t*>(b + 0x2c)  = -1;           // decalId
+    *reinterpret_cast<float*>(b + 0x30)    = 1.0f;         // decalScale
+}
+
 extern "C" void* DecalComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xc3,
         DecalComponent_LiveVtable,
         reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
+    DecalComponent_ApplyCtorDefaults(p);
     DecalComponent_FinishLiveVtable();
     return p;
 }
@@ -741,6 +766,7 @@ static void* DecalComponent_CreateInPlace(void* mem) {
     if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xc3,
         DecalComponent_LiveVtable,
         reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
+    DecalComponent_ApplyCtorDefaults(mem);
     DecalComponent_FinishLiveVtable();
     return mem;
 }
