@@ -1,0 +1,6 @@
+0x14015bd80  # rdata, first=boot, total=1
+0x14015be00  # rdata, first=boot, total=1
+0x14015c3b0  # rdata, first=boot, total=1
+0x14015c400  # rdata, first=boot, total=1
+0x14015c6c0  # rdata, first=boot, total=1
+0x14015f070  # rdata, first=load, total=1  <<LOAD

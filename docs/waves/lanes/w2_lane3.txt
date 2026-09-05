@@ -1,0 +1,5 @@
+0x1401c4138  # data, first=postload, total=1  <<LOAD
+0x1401c42c0  # data, first=boot, total=3  <<LOAD
+0x1401c4758  # data, first=load, total=1  <<LOAD
+0x1401c70e8  # data, first=boot, total=4
+0x1401c72e8  # data, first=load, total=1  <<LOAD
