@@ -226,6 +226,23 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
                     ++seeded;
                 }
             }
+            // ALSO stock the post's StorageComponent. Exports reads stat 14 filtered to
+            // Template\TradingPost.rsc, and stat 14 (dispatcher case 0xe) sums STORAGE
+            // quantities, not the trade tree -- so the two seeds serve two different
+            // achievements and both are needed. AddItem is retail 0x14012d000, the same
+            // faithful storage-add the founding-house food seed uses.
+            {
+                typedef void (*AddItem_t)(int64_t storage, int64_t material, int n);
+                static AddItem_t addItem = reinterpret_cast<AddItem_t>(
+                    ResolveAddr(Module::Exe, 0x14012d000));
+                void* storage = FindCompOnEntity(postEnt, Tid("StorageComponent"));
+                if (addItem && storage && tmpls) {
+                    for (int i = 0; i < tmplN; ++i)
+                        if (tmpls[i])
+                            addItem(reinterpret_cast<int64_t>(storage),
+                                    reinterpret_cast<int64_t>(tmpls[i]), seedQty);
+                }
+            }
             const uintptr_t hdr = reinterpret_cast<uintptr_t>(tradeComp) + 0x60;
             std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d resource(s) x%d into the "
                                  "TRADE stock (tradeComp=%p tree root=%p count=%d)\n",
