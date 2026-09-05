@@ -113,7 +113,14 @@ static fn_Base_IsA_t s_fn_Base_IsA = nullptr;
 
 // IO::Serializer::Serialize(int*) dispatch slot at 0x140152ac8 (already loaded as
 // s_fn_Serializer_SerializeInt) and Serialize(bool*) at 0x140152a58 (SerializeBool).
-// Object::InternalBasePtr::Serialize at dispatch slot 0x140152a90.
+// Object::InternalBasePtr::Serialize at dispatch slot 0x140152aa0.
+// NOT 0x140152a90 -- that is the InternalBasePtr CTOR. Retail
+// CropFieldComponent_helper_36c0 (0x1400336c0) disassembles to ac8, ac8,
+// aa0, a98, aa0, a98, a58; 0x140152a90 appears nowhere in it. Reading the
+// ctor slot here left s_fn_IBP_Serialize2 NULL (that slot is unregistered
+// and has no fallback), so BOTH InternalBasePtr::Serialize calls per
+// entity-ref entry were skipped on BOTH legs -- 13 bytes plus a nested
+// PersistObject payload dropped per entry.
 typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize2 = nullptr;
 
@@ -142,7 +149,7 @@ static void EnsureCropExtras() {
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
     if (slot) s_fn_Base_IsA = *reinterpret_cast<fn_Base_IsA_t*>(slot);
     if (!s_fn_Base_IsA) s_fn_Base_IsA = reinterpret_cast<fn_Base_IsA_t>(fn_IsA);
-    slot = ResolveAddr(Module::Exe, 0x140152a90);
+    slot = ResolveAddr(Module::Exe, 0x140152aa0);
     if (slot) s_fn_IBP_Serialize2 = *reinterpret_cast<fn_IBP_Serialize_t*>(slot);
     s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d70));
