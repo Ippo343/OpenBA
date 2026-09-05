@@ -360,7 +360,14 @@ typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c6
 // slot 0x140151ca0 — by-value struct return: hidden retbuf pointer in RDX (see the call
 // site). The second parameter is NOT optional; omitting it corrupts memory.
 typedef void* (*fn_GetFirstDialog_t)(void* ui, void* retbuf);
-typedef void* (*fn_GetController_t)(void* dialog, void* retbuf); // slot 0x140151768 (member, non-trivial ret)
+// slot 0x140151768 -- member, non-trivial return AND a THIRD argument Ghidra hides.
+// Retail 0x140103480 at 0x140103517: `MOV R8D,[0x1401c4f00]` (EntityUI) immediately
+// before `CALL [0x140151768]`. The mangled name confirms it: ...@Object@@I@Z -- the
+// trailing `I` is that uint32 type-id FILTER. Declared with two parameters, the call
+// passes whatever the previous call left in R8 as the filter, and GetController
+// returns nothing for a garbage id -- silently, with no crash and no log.
+// See reference_getcontroller_third_arg_is_a_type_filter.
+typedef void* (*fn_GetController_t)(void* dialog, void* retbuf, uint32_t typeIdFilter);
 typedef void  (*fn_CloseDialog_slot_t)(void* ui, void* dlgPtr);// slot 0x140151550
 typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
 
@@ -394,6 +401,27 @@ static void Ensure3480() {
     if (slot) s_fn_CloseDialog_slot = *reinterpret_cast<fn_CloseDialog_slot_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBP_CtorFrom = *reinterpret_cast<fn_IBP_CtorFrom_t*>(slot);
+
+    // By-name fallbacks. This function used to read ONLY the raw exe dispatch slots
+    // with no fallback of any kind, which is why it behaved differently from every
+    // other consumer of the same four functions: edittool.cpp:265 and
+    // placementtool.cpp:192 both fall back to the engine_funcs pointers and have
+    // therefore always worked. 0x140151ca0 (GetFirstDialog) is unregistered, so
+    // `if (!s_fn_GetFirstDialog) return;` below killed the whole walk -- meaning a
+    // prior wave's registration of 0x140151768 for exactly this path (see
+    // standalone/reg_unreg_lane2.cpp) never actually revived it; it stayed gated
+    // behind the slot in front of it.
+    //
+    // Every one of these resolves to the same Runtime export the slot names, so a
+    // fallback cannot change WHICH function runs -- only whether one runs at all.
+    if (!s_fn_GetFirstDialog && fn_UI_GetFirstDialog)
+        s_fn_GetFirstDialog = reinterpret_cast<fn_GetFirstDialog_t>(fn_UI_GetFirstDialog);
+    if (!s_fn_GetController && fn_DialogInstance_GetController)
+        s_fn_GetController = reinterpret_cast<fn_GetController_t>(fn_DialogInstance_GetController);
+    if (!s_fn_CloseDialog_slot && fn_UI_CloseDialog)
+        s_fn_CloseDialog_slot = reinterpret_cast<fn_CloseDialog_slot_t>(fn_UI_CloseDialog);
+    if (!s_fn_IBP_CtorFrom && fn_InternalBasePtr_Ctor)
+        s_fn_IBP_CtorFrom = reinterpret_cast<fn_IBP_CtorFrom_t>(fn_InternalBasePtr_Ctor);
     s_fn3480Resolved = true;
 }
 
@@ -458,17 +486,38 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     // ADDRESS) as the iterator, one dereference too few. Both are fixed here: pass a real
     // buffer, then read the head-node pointer out of it, matching retail's use of the RDX
     // home slot (`local_res10`) as the iterator it then walks via [2].
-    // Currently dormant — slot 0x140151ca0 is unregistered, so the guard above returns
-    // first; this fix is what makes registering that slot safe.
+    // LIVE as of 2026-09-04: slot 0x140151ca0 is still unregistered, but Ensure3480
+    // now falls back to fn_UI_GetFirstDialog by name, so the guard above no longer
+    // returns first and this walk actually runs. The GetController call below was
+    // fixed to pass its type-id filter in the same change — that had to land FIRST,
+    // because reviving the walk with a two-argument typedef would have called
+    // GetController with a stale R8 as the filter.
     int64_t iter = 0;
     s_fn_GetFirstDialog(ui, &iter);
+    // Bounded proof-of-life: this walk was dead for the whole life of the project, so
+    // "it runs at all" is the thing to confirm first. Reports the dialog count it sees
+    // and whether it closed one.
+    // Verified live 2026-09-04 on a Remove of a starting building:
+    //   [NomadDlgWalk] #1 visited=3 CLOSED the removed entity's panel
+    // with 0x140151ca0 and 0x140151550 both still logging NOT IMPLEMENTED, i.e. the
+    // by-name fallbacks are what carry it. Kept bounded so a future regression is one
+    // grep away, but it is not free: leave the cap small.
+    static int s_walks = 0;
+    const bool traceWalk = (++s_walks <= 8);
+    int visited = 0, closed = 0;
     int64_t* dlg = reinterpret_cast<int64_t*>(iter);
     while (dlg != nullptr) {
         int64_t* cur = dlg;
+        ++visited;
         if (*dlg != 0) {
             fn_InternalBasePtr_CheckPtr(dlg);
             void* ctrlBuf[2] = {nullptr, nullptr};
-            if (s_fn_GetController) s_fn_GetController(reinterpret_cast<void*>(*cur), ctrlBuf);
+            // R8 = EntityUI (retail `MOV R8D,[0x1401c4f00]` at 0x140103517). The
+            // IsDerivedFrom(EntityUI) narrow just below is retail's own second check,
+            // NOT a substitute for this filter -- without it the call returns nothing
+            // and the narrow never gets anything to reject.
+            if (s_fn_GetController)
+                s_fn_GetController(reinterpret_cast<void*>(*cur), ctrlBuf, s_TypeId_EntityUI);
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
                 fn_InternalBasePtr_CheckPtr(ctrlBuf);
@@ -484,11 +533,22 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                 if (bound == *reinterpret_cast<int64_t*>(param_2)) {
                     void* dlgPtr = reinterpret_cast<void*>(*dlg);
                     if (s_fn_CloseDialog_slot) s_fn_CloseDialog_slot(ui, &dlgPtr);
+                    closed = 1;
+                    if (traceWalk) {
+                        fprintf(stderr, "[NomadDlgWalk] #%d visited=%d CLOSED the removed "
+                                        "entity's panel (dlg=%p)\n", s_walks, visited, dlgPtr);
+                        fflush(stderr);
+                    }
                     return;
                 }
             }
         }
         dlg = reinterpret_cast<int64_t*>(dlg[2]);
+    }
+    if (traceWalk) {
+        fprintf(stderr, "[NomadDlgWalk] #%d visited=%d closed=%d (no open panel bound to "
+                        "the removed entity)\n", s_walks, visited, closed);
+        fflush(stderr);
     }
 }
 
