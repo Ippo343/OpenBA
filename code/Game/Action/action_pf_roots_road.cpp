@@ -242,7 +242,10 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
 //     right @+0x18) and if param_2 is present, delete it (1a6e0).
 //   Finally rebuild the road mesh (af370).
 // ============================================================
+extern "C" { extern long long g_roadFinalizeRuns; }   // standalone/road_probe.cpp
+
 void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint param_4) {
+    ++g_roadFinalizeRuns;
     EnsureFns();
     int* piVar1;
     int iVar2;

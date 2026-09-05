@@ -138,6 +138,16 @@ static inline void* NodeAlloc() {
     return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
 }
 
+// Idle work-search counters, read by standalone/road_probe.cpp. The road wave needs to
+// tell "no builder ever searched" from "a builder searched and its bucket had nothing it
+// would take" -- those look identical from the map.
+extern "C" {
+long long g_idleSearchCalls = 0;
+long long g_idleSearchByBuilder = 0;
+long long g_idleBuilderBucketHit = 0;
+long long g_idleBuilderTookWork = 0;
+}
+
 static inline bool TraceOn() {
     static int s_ts = -1;
     if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
@@ -754,6 +764,7 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
 // ============================================================
 void Helper_7830(int64_t param_1, void** param_2) {
     if (*reinterpret_cast<int*>(param_1 + 0x38) == 0) return;  // tree-array not populated
+    ++g_idleSearchCalls;
 
     int64_t homeRoot = *reinterpret_cast<int64_t*>(GW() + 0xb0);
     uint64_t homeKey = *reinterpret_cast<uint64_t*>(homeRoot + 0x30);
@@ -762,6 +773,7 @@ void Helper_7830(int64_t param_1, void** param_2) {
     uint64_t ownerKey = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x1f0);
 
     // (1) probe the param_1+0x120 BST for ownerKey
+    if (ownerKey == *reinterpret_cast<uint64_t*>(homeRoot + 0x38)) ++g_idleSearchByBuilder;
     if (ownerKey != *reinterpret_cast<uint64_t*>(homeRoot + 0x30)) {
         uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x120);
         while (node != nullptr) {
@@ -778,6 +790,10 @@ void Helper_7830(int64_t param_1, void** param_2) {
                 uint64_t hit = Helper_sub_79b0(param_1, reinterpret_cast<void**>(&citHolder),
                                                reinterpret_cast<void**>(&walkedHolder),
                                                static_cast<int64_t>(ownerKey), '\0', '\0');
+                if (ownerKey == *reinterpret_cast<uint64_t*>(homeRoot + 0x38)) {
+                    ++g_idleBuilderBucketHit;
+                    if (static_cast<char>(hit) != '\0') ++g_idleBuilderTookWork;
+                }
                 if (static_cast<char>(hit) != '\0') return;
                 break;
             } else {

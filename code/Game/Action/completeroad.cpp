@@ -86,7 +86,10 @@ void CompleteRoad_Serialize_Impl(void* self, void* stream) {
 // Calls road tile completion on terrain system.
 // Returns 0 (action complete).
 // ============================================================
+extern "C" { extern long long g_crCompleteRoadRuns; }   // standalone/road_probe.cpp
+
 int CompleteRoad_AbstractImpl_Impl(void* self, void* actionStack) {
+    ++g_crCompleteRoadRuns;
     CompleteRoad_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;

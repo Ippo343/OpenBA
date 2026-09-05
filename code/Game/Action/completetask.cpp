@@ -202,7 +202,10 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
 // Resolves task index from work entity if needed, calls task completion.
 // Returns 0 (action complete).
 // ============================================================
+extern "C" { extern long long g_actCompleteTaskRuns; }   // standalone/road_probe.cpp
+
 int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
+    ++g_actCompleteTaskRuns;
     (void)actionStack;
     // Lazy resolve (action built via exe ctor path -> ResolveFuncs never ran -> s_fn_* null).
     if (!CompleteTask_ResolveFuncs()) return 0;

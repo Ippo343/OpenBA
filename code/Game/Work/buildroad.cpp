@@ -423,8 +423,24 @@ static int FinalizeAction(BuildRoad* self, void* entityIBP, void* actionIBP, int
     return 2;
 }
 
+// Road-wave counters (standalone/road_probe.cpp).
+extern "C" {
+extern long long g_brExecCalls;
+extern long long g_brExecBusy;
+extern long long g_brExecNotPassable;
+extern long long g_brExecPushedAction;
+}
+extern "C" {
+long long g_brExecStructOnCell = 0;   // cell+0x08 holds an entity (pile / resource)
+long long g_brExecRawMatWait   = 0;   // blocked by a raw-material pile it asked to be cleared
+long long g_brExecNatResWait   = 0;   // blocked by a natural resource (tree/stone)
+long long g_brExecClearPath    = 0;   // the plain "walk there and build it" branch
+}
+
 int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
+    ++g_brExecCalls;
     if (self->field_48 != nullptr) {
+        ++g_brExecBusy;
         return 1;
     }
 
@@ -440,6 +456,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
     uint64_t passResult = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
+        ++g_brExecNotPassable;
         return 1;
     }
 
@@ -447,6 +464,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
     int64_t structEntity = *(int64_t*)(structArrayBase + 8 + (int64_t)targetCell * 0x30);
 
     if (structEntity != 0) {
+        ++g_brExecStructOnCell;
         fn_InternalBasePtr_CheckPtr((void*)&structEntity);
         uint64_t rawMatComp = 0;
         fn_FindComponent_RawMaterialC(structEntity, &rawMatComp);
@@ -476,6 +494,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         if (natResComp == 0) {
             return 1;
         }
+        ++g_brExecNatResWait;
 
         fn_InternalBasePtr_CheckPtr((void*)&structEntity);
         fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
@@ -519,6 +538,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
     }
 
     if ((int64_t)self->field_50 == 0) {
+        ++g_brExecClearPath;
         uint64_t actionRef = 0;
         fn_InternalBasePtr_Ctor(&actionRef, nullptr);
 

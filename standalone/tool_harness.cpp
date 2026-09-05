@@ -366,6 +366,46 @@ void FireRoadTool(void* entityUI) {
     // self-advancing: a committed span occupies its cells, so the next pass finds a
     // different clear run on its own. Defaults keep the single short span the tool
     // test expects.
+    // Site the spans AROUND THE TOWN, not on a fixed row.
+    //
+    // The scan used to start at row 124 regardless of where the town is. Every span it
+    // found was legal ground and committed fine, so the harness reported "20/20 placed"
+    // — but BuildRoad::Execute's first act is
+    //     Map::CheckPassable(0xe1f, citizenCell, targetCell)
+    // and a builder standing in town cannot reach a road drawn across a river or a ridge.
+    // Measured with BANISHED_ROAD_CENSUS on the old scan: 262,832 of 263,649 Execute calls
+    // bailed on that guard, and not one tile was ever paved. Same trap the cemetery siting
+    // hit (docs/waves/achievements_wave.md §5.1): "the tool accepted it" is not "a citizen
+    // can walk there".
+    int roadTownCol = gridSize / 2, roadTownRow = gridSize / 2;
+    {
+        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        long sumCol = 0, sumRow = 0; int n = 0;
+        const int houses = StartTown_GetFoundingHouseCount();
+        for (int i = 0; i < houses && tidMap; ++i) {
+            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            if (!e) continue;
+            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
+            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            for (int k = 0; k < cc && ca; ++k) {
+                void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+                void* comp = *slot;
+                if (!comp) continue;
+                typedef uint32_t (*gt_t)(void*);
+                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                        != tidMap) continue;
+                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
+                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                ++n;
+                break;
+            }
+        }
+        if (n > 0) { roadTownCol = static_cast<int>(sumCol / n); roadTownRow = static_cast<int>(sumRow / n); }
+        fprintf(stderr, "[ToolHarness][road] town centre = (col %d, row %d) from %d founding "
+               "house(s)%s\n", roadTownCol, roadTownRow, n, n ? "" : " -- falling back to map centre");
+    }
+
     int wantRuns = 1;
     if (const char* rr = std::getenv("BANISHED_ROAD_RUNS")) { int v = std::atoi(rr); if (v > 0) wantRuns = v; }
     int runLen = 5;
@@ -379,8 +419,10 @@ void FireRoadTool(void* entityUI) {
         // times. Start each run further out; the sweep still covers the map.
         for (int dr = run; dr < run + 120 && startCell < 0; ++dr) {
             for (int sign = 0; sign < 2 && startCell < 0; ++sign) {
-                int row = 124 + (sign ? -dr : dr);
-                for (int col = 8; col + kRun < gridSize - 8; ++col) {
+                int row = roadTownRow + (sign ? -dr : dr);
+                int colLo = roadTownCol - 90; if (colLo < 8) colLo = 8;
+                int colHi = roadTownCol + 90; if (colHi > gridSize - 8) colHi = gridSize - 8;
+                for (int col = colLo; col + kRun < colHi; ++col) {
                     bool allClear = true;
                     for (int k = 0; k <= kRun; ++k)
                         if (!cellClear(row, col + k)) { allClear = false; break; }

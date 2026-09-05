@@ -156,11 +156,70 @@ owns exactly **2** crop seed types and 2 orchard types, and more come only from 
 
 ### 5.3 Highwaymen — 2,000 paved road tiles
 
-3,000 tiles of StoneRoad placed successfully (`120/120` spans), `stat 23` still 0. Road
-tiles carry **no `BuildComponent`**, so they are invisible to the completion harness
-(structure count stayed at 153 across the run) and, evidently, to whatever marks a road
-paved. Roads finish through a road **work item**, not the BuildComponent state machine
-that finishes a bridge. **Next step: find and drive that path.**
+**Road tiles now get paved.** `stat 23` moved off 0 for the first time in this port
+(measured: 8). The whole chain — RoadTool commit -> BuildRoad work item -> builder picks
+it up -> PerformWork -> CompleteRoad action -> `Pf_FinalizeRoadTile_9c640` -> road-mesh
+rebuild recount — runs end to end. The port was not missing a road function; two things
+upstream of it were missing, and both are now measured rather than inferred.
+
+> Correction to the earlier diagnosis: "road tiles carry no BuildComponent so they are
+> invisible to whatever marks a road paved" was the wrong model. Nothing "marks" a road.
+> `stat 23` (StatValueDispatch case 0x17) reads one int out of the road manager's
+> per-road-type counter array at `gw+0x110` `+0x220`, and that array is recomputed from
+> the map by the road-mesh rebuild (`Pf_RoadMeshRebuild_f370`, 0x1400af370):
+>
+>     batchId = cell+0x2a; blendId = cell+0x2b;
+>     if (batchId != 0xff && blendId == 0xff) counter[batchId]++;
+>
+> RoadTool's commit writes `+0x2a = roadType` and `+0x2b = 0x80` (queued); only
+> `CompleteRoad` overwrites `+0x2b` with 0xff. So a drawn road is *by design* not
+> counted, and 3,000 tiles with stat 23 at 0 meant 3,000 tiles nobody had built.
+
+**Defect 1 — nobody in town could do the work.** The scheduler files every work item into
+a per-PROFESSION bucket chosen by the work's vtable slot +0x50, and a citizen's idle
+search (`0x1400f7830`) only ever looks in the bucket keyed by its own profession
+(`citizen+0x1f0`). BuildRoad's slot 10 returns the **Builder** key, and the stress town
+has no builder: the Professions panel shows Builder `0 of 0` because its capacity is
+summed over registered construction sites and a finished town has none. Measured: 620
+tiles queued, 620 items in the (BUILDER) bucket, 0 taken, ever.
+
+Retail seats builders from the town-hall Professions spinner, which loops
+`CitizenList::AddWorker` (0x140091130). That call tolerates a NULL "available building"
+on purpose — `c5f0`/`c4b0` only STORE the pointer, so the citizen's profession flips with
+no roster attach (see the Strat_c5f0 note in `citizen_employ_cascade.cpp`). That is what
+makes a builder possible in a town whose only pending work is a road. Nothing in the
+project called it. New harness: **`BANISHED_BUILDERS=<n>[,<settleFrame>]`**
+(`standalone/builder_seat_harness.cpp`) — the same class of player stand-in as
+`panel_staffing_driver.cpp`; the seat is retail's, only the pressing is ours.
+
+**Defect 2 — the roads were sited where no builder could walk.** The span scan started at
+a fixed row 124 regardless of the town. Every span was legal ground and committed fine
+("20/20 placed"), but `BuildRoad::Execute`'s first act is
+`Map::CheckPassable(0xe1f, citizenCell, targetCell)`. Measured on the old scan: **262,832
+of 263,649** Execute calls bailed on that guard and not one tile was paved. The scan now
+averages the founding houses' MapComponent cells and sweeps outward from the town, the
+way the bridge harness does — same trap §5.1's cemetery siting hit. After the change,
+`unreachable` fell to 0 on a 20-span run.
+
+Harness: **`BANISHED_ROAD_CENSUS=<frames>`** (`standalone/road_probe.cpp`) prints the
+counter array stat 23 reads, a `(+0x2a,+0x2b)` histogram of every road cell, the pending
+work BST, the scheduler's profession buckets (Laborer/Builder labelled), the idle
+work-search counters, and where in `BuildRoad::Execute` the calls are going. That census
+is what turned every step above from a guess into a number.
+
+**What is left — throughput, not correctness.** Best run so far: 150 builders, 40 requested
+spans, 8,000 frames at 10x -> only 155 tiles placed and 8 paved. Three named blockers:
+
+1. **Only one decal batch is registered.** The counter array is length 1
+   (`mgr+0x218 = 1`), so only road type 0 (stone) has a slot; dirt is type 1 and its
+   increment writes past the array. Find the per-road-type callers of
+   `RoadTool_DecalStore_acd90` (0x1400acd90) — retail must register one slot per road type.
+2. **`structOnCell` dominates.** 59,034 of 635k Execute calls found an entity at
+   `cell+0x08` that is neither a RawMaterial nor a NaturalResource, so the branch returns
+   1 forever. Those tiles can never be built. Identify what that entity is.
+3. **Siting runs out of ground.** The town-centred scan found room for 155 of ~1,240
+   requested tiles. 2,000 tiles needs a ring sweep outward from the town (the same fix
+   §5.1 still wants), not a denser band through it.
 
 ### 5.4 Lumberjack, Stonework, Smelter — cumulative production
 
@@ -180,7 +239,9 @@ which is distribution, not stock.
 
 Two goals short: a citizen with the **builder** profession (`stat 9`), and a **worker at a
 pasture** (`stat 22`). Pastures are now in the stress set, so the second should follow
-from staffing; the first needs the builder profession actually assigned.
+from staffing; the first is **solved** — `BANISHED_BUILDERS=<n>` (§5.3) seats real
+builders through retail's own `CitizenList::AddWorker`, and the profession count was
+measured going 0 -> 40. Re-run the census with it set.
 
 ### 5.7 Immigrants — 200 nomads
 

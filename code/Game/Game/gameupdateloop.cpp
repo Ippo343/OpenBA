@@ -734,6 +734,8 @@ extern "C" void TavernStockProbe_Tick(int frameNum);
 extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
 extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
+extern "C" void RoadProbe_Tick(int frameNum);          // standalone/road_probe.cpp
+extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
 extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
@@ -1128,6 +1130,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // long one: prints awarded + instance state + every goal's live Check(). No-op
     // unless BANISHED_ACH_TRACE is set (standalone/achievement_probe.cpp).
     AchievementProbe_Tick(s_frameNum);
+    // Road-paving census for Highwaymen (stat 23). No-op unless BANISHED_ROAD_CENSUS.
+    RoadProbe_Tick(s_frameNum);
+    // Player stand-in for the town-hall Builder spinner. No-op unless BANISHED_BUILDERS.
+    BuilderSeat_Tick(s_frameNum);
     // Non-retail clock knobs for the time-gated achievements: advance the year
     // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
     // (standalone/ach_clock.cpp).

@@ -355,7 +355,10 @@ static void ShowTool_ShowCarried(void* entityV) {
 // If toolId > 10 and != 0xFFFFFFFE, hide tool. Otherwise show tool.
 // Always returns 1.
 // ============================================================
+extern "C" { extern long long g_actShowToolRuns; }   // standalone/road_probe.cpp
+
 int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
+    ++g_actShowToolRuns;
     (void)actionStack;
     // Trace the requested toolId up front (a plain field read, no deps) so a run
     // shows which ShowTool variants reach the executor even when a dep is missing.
