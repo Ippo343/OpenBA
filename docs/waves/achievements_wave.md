@@ -1,8 +1,8 @@
 # Achievements wave — state, method, and what is left
 
 **Branch** `wave/upgrade-path-complete` · commits `be610ee`..`f6d3d98` (13)
-**Status** 22 of 36 achievements unlock organically and persist. 14 remain, each with a
-named blocker below.
+**Status** 23 of 36 achievements unlock and persist. 13 remain, each with a named
+blocker below. Highwaymen closed 2026-09-05 (`Ach25 : true`).
 
 Before this wave the achievement system was **structurally dead**: no achievement had
 ever been evaluated, in any run, ever. It is now live end to end — retail's
@@ -82,11 +82,11 @@ production by building type · 22 workers at building type · 23 paved road tile
 
 ---
 
-## 4. Unlocked (22)
+## 4. Unlocked (23)
 
-`Ach{0,1,2,4,6,10,11,12,13,15,17,19,20,26,28,29,30,31,32,33,34,35}` — Settlement,
+`Ach{0,1,2,4,6,10,11,12,13,15,17,19,20,25,26,28,29,30,31,32,33,34,35}` — Settlement,
 Village, Town, Uneducated, Mountain Men, Isolationist, One with Nature, Trader,
-MasterTrader, Firefighter, Livestock, Miner, Mason, Golden Gate, Smiles all Around,
+MasterTrader, Firefighter, Livestock, Miner, Mason, Highwaymen, Golden Gate, Smiles all Around,
 Healthy, Built from Stone, Ready for Anything, Builder, MasterBuilder, Established,
 Tenure.
 
@@ -154,72 +154,60 @@ owns exactly **2** crop seed types and 2 orchard types, and more come only from 
 **Next step:** get the tavern/tailor production chains running end to end, or drive the
 **buy** side of the trade panel (the sell side is proven — see §6).
 
-### 5.3 Highwaymen — 2,000 paved road tiles
+### 5.3 Highwaymen — 2,000 paved road tiles — **CLOSED 2026-09-05**
 
-**Road tiles now get paved.** `stat 23` moved off 0 for the first time in this port
-(measured: 8). The whole chain — RoadTool commit -> BuildRoad work item -> builder picks
-it up -> PerformWork -> CompleteRoad action -> `Pf_FinalizeRoadTile_9c640` -> road-mesh
-rebuild recount — runs end to end. The port was not missing a road function; two things
-upstream of it were missing, and both are now measured rather than inferred.
+`Ach25 : true`. Measured at the award: `stat=23 have=3521 >= 2000`, from 3,521 paved
+tiles laid by hand in roughly eight minutes of play.
 
 > Correction to the earlier diagnosis: "road tiles carry no BuildComponent so they are
 > invisible to whatever marks a road paved" was the wrong model. Nothing "marks" a road.
 > `stat 23` (StatValueDispatch case 0x17) reads one int out of the road manager's
-> per-road-type counter array at `gw+0x110` `+0x220`, and that array is recomputed from
-> the map by the road-mesh rebuild (`Pf_RoadMeshRebuild_f370`, 0x1400af370):
+> per-road-type counter array at `gw+0x110` `+0x220`, recomputed from the map by the
+> road-mesh rebuild (`Pf_RoadMeshRebuild_f370`, 0x1400af370):
 >
 >     batchId = cell+0x2a; blendId = cell+0x2b;
 >     if (batchId != 0xff && blendId == 0xff) counter[batchId]++;
 >
 > RoadTool's commit writes `+0x2a = roadType` and `+0x2b = 0x80` (queued); only
-> `CompleteRoad` overwrites `+0x2b` with 0xff. So a drawn road is *by design* not
-> counted, and 3,000 tiles with stat 23 at 0 meant 3,000 tiles nobody had built.
+> `CompleteRoad` overwrites `+0x2b`. A drawn road is *by design* not counted, so 3,000
+> tiles with stat 23 at 0 meant 3,000 tiles nobody had built.
 
-**Defect 1 — nobody in town could do the work.** The scheduler files every work item into
+**Defect 1 — nobody in town could do the work.** The scheduler files each work item into
 a per-PROFESSION bucket chosen by the work's vtable slot +0x50, and a citizen's idle
-search (`0x1400f7830`) only ever looks in the bucket keyed by its own profession
-(`citizen+0x1f0`). BuildRoad's slot 10 returns the **Builder** key, and the stress town
-has no builder: the Professions panel shows Builder `0 of 0` because its capacity is
-summed over registered construction sites and a finished town has none. Measured: 620
-tiles queued, 620 items in the (BUILDER) bucket, 0 taken, ever.
-
-Retail seats builders from the town-hall Professions spinner, which loops
-`CitizenList::AddWorker` (0x140091130). That call tolerates a NULL "available building"
-on purpose — `c5f0`/`c4b0` only STORE the pointer, so the citizen's profession flips with
-no roster attach (see the Strat_c5f0 note in `citizen_employ_cascade.cpp`). That is what
-makes a builder possible in a town whose only pending work is a road. Nothing in the
-project called it. New harness: **`BANISHED_BUILDERS=<n>[,<settleFrame>]`**
-(`standalone/builder_seat_harness.cpp`) — the same class of player stand-in as
-`panel_staffing_driver.cpp`; the seat is retail's, only the pressing is ours.
+search (`0x1400f7830`) only reads the bucket keyed by its own profession
+(`citizen+0x1f0`). BuildRoad's slot 10 returns the **Builder** key, and a finished town
+has no construction site, so Builder reads `0 of 0`. Measured: 620 tiles queued, 620
+items in the (BUILDER) bucket, 0 taken, ever. Retail seats builders from the town-hall
+Professions spinner, which loops `CitizenList::AddWorker` (0x140091130) — and that call
+deliberately tolerates a NULL "available building": `c5f0`/`c4b0` only STORE the pointer,
+so the profession flips with no roster attach. That is what makes a builder possible in a
+town whose only pending work is a road. Nothing called it. New harness
+**`BANISHED_BUILDERS=<n>[,<settleFrame>]`** (`standalone/builder_seat_harness.cpp`).
+Also closes §5.6's builder-profession goal.
 
 **Defect 2 — the roads were sited where no builder could walk.** The span scan started at
-a fixed row 124 regardless of the town. Every span was legal ground and committed fine
-("20/20 placed"), but `BuildRoad::Execute`'s first act is
-`Map::CheckPassable(0xe1f, citizenCell, targetCell)`. Measured on the old scan: **262,832
-of 263,649** Execute calls bailed on that guard and not one tile was paved. The scan now
-averages the founding houses' MapComponent cells and sweeps outward from the town, the
-way the bridge harness does — same trap §5.1's cemetery siting hit. After the change,
-`unreachable` fell to 0 on a 20-span run.
+a fixed row 124 regardless of the town. Every span committed fine ("20/20 placed"), but
+`BuildRoad::Execute` opens with `Map::CheckPassable(0xe1f, citizenCell, targetCell)` and
+**262,832 of 263,649** calls bailed there. It now sweeps outward from the founding-house
+centroid like the bridge harness. Same trap §5.1's cemetery siting hit.
 
-Harness: **`BANISHED_ROAD_CENSUS=<frames>`** (`standalone/road_probe.cpp`) prints the
-counter array stat 23 reads, a `(+0x2a,+0x2b)` histogram of every road cell, the pending
-work BST, the scheduler's profession buckets (Laborer/Builder labelled), the idle
-work-search counters, and where in `BuildRoad::Execute` the calls are going. That census
-is what turned every step above from a guess into a number.
+**Defect 3 — the save crashed once roads existed** (fixed in `09fa91c`, see that commit).
+`CompleteRoad::Serialize` never lazy-resolved (its action is built by the copy ctor, which
+bypasses the factory), and its `Serialize(unsigned char&)` export name was misspelled
+`AEAuchar` instead of `AEAE` so the pointer was permanently null. Four sibling
+exe-ctor-built actions had the same missing lazy-resolve. Behind them, a pre-existing and
+road-independent one: `MarketWork` read `Serializer::GetVersion` from slot `0x140151510`,
+which is `UI::TableElement::_typeInfo`, a data export.
 
-**What is left — throughput, not correctness.** Best run so far: 150 builders, 40 requested
-spans, 8,000 frames at 10x -> only 155 tiles placed and 8 paved. Three named blockers:
-
-1. **Only one decal batch is registered.** The counter array is length 1
-   (`mgr+0x218 = 1`), so only road type 0 (stone) has a slot; dirt is type 1 and its
-   increment writes past the array. Find the per-road-type callers of
-   `RoadTool_DecalStore_acd90` (0x1400acd90) — retail must register one slot per road type.
-2. **`structOnCell` dominates.** 59,034 of 635k Execute calls found an entity at
-   `cell+0x08` that is neither a RawMaterial nor a NaturalResource, so the branch returns
-   1 forever. Those tiles can never be built. Identify what that entity is.
-3. **Siting runs out of ground.** The town-centred scan found room for 155 of ~1,240
-   requested tiles. 2,000 tiles needs a ring sweep outward from the town (the same fix
-   §5.1 still wants), not a denser band through it.
+**Correction to the earlier "throughput" verdict.** This wave previously recorded road
+building as throughput-blocked (150 builders, 8,000 frames, 8 tiles). That was the
+harness's siting, not the game: hand-played, with roads drawn where people already walk,
+3,500 tiles get built in minutes. Two of the three blockers listed there were artefacts
+of the measurement. The one that is real: only ONE decal batch is registered
+(`mgr+0x218 = 1`), so road type 0 (stone) has a slot and dirt (type 1) increments past
+the end of a length-1 counter array — find the per-type callers of
+`RoadTool_DecalStore_acd90` (0x1400acd90). Stone = type 0, dirt = type 1; only stone
+counts toward this achievement.
 
 ### 5.4 Lumberjack, Stonework, Smelter — cumulative production
 
@@ -284,7 +272,48 @@ measured going 0 -> 40. Re-run the census with it set.
   that the build path works; the short bridge finishing on its own is that.
 * `TradeStock_SeedForTest` / `BANISHED_TRADE_SELL_SEED` — stands in for haulers stocking
   the post.
+* `BANISHED_ACH_IGNORE_MODS` — masks retail's user-pack gate (§1) for the duration of
+  the `AchievementManager::Update` call only, then restores it. It lets the goal wiring be
+  exercised in a modded session. It does **not** show that a retail player could earn the
+  achievement: retail would have evaluated nothing at all. The award it produces writes a
+  real `Ach<N>` registry value indistinguishable from a legitimate unlock, so record which
+  runs used it. Highwaymen's `Ach25` was awarded under this flag; the same town without the
+  mod would award it natively.
 * The trade harness calls `TradeUI_OnTradeButton` **directly**, bypassing retail's button
   gate (`displayBuyTotal > 0 && !bStorageFull && !bOverBought`). A player could not commit
   a pure sell with no buy. The checkout body and the credit arithmetic are retail's;
   pressing the button is not.
+
+---
+
+## 8. Open, found while closing Highwaymen (both on the LOAD path)
+
+Neither is achievement-specific; both block loading a large hand-built town.
+`Save9.sav` (+ `Save8.sav.roads3500_0905`) reproduce them on demand.
+
+1. **Wild write / heap corruption on load.** The allocator dies walking a corrupted free
+   list. The redzone's "OVERFLOWER" block differs in size run to run (1056 bytes once,
+   40 twice), so it names the neighbour by address and is **not** evidence of a specific
+   overrunning buffer — this is a wild write, not an overflow. The signature is sharp:
+   the faulting address is a VALID heap pointer whose high dword is the true value plus
+   exactly **0x7FC**, three times over, across two different saves and different heap
+   bases:
+
+   | run | real block | fault address | delta |
+   |---|---|---|---|
+   | Save8 #1 | `0000022b_d613d078` | `00000a27_d613d308` | +0x7FC |
+   | Save8 #2 | `000001bd_12f40250` | `000009b9_12f40908` | +0x7FC |
+   | Save9    | `000001b1_23fd4e78` | `000009ad_23fd5530` | +0x7FC |
+
+   A correct low half with a systematically wrong high half is what a `{u32,u32}` handle
+   dereferenced as a pointer looks like — close to the stale handle-table family in
+   `reference_internalfactory_swapremove_wild_write`. Next step: `BANISHED_REDZONE=watch`
+   plus `standalone/hw_watch.cpp` to catch the writer live.
+
+2. **Achievement instances are not restored on load.** After loading a save, the manager
+   is a valid pointer with `mgr+0x18` null. `GetAchievementCount` faults `READ of 0x28`
+   on it and `AchievementManager::Update` faults `READ of 0` just past the mod gate — the
+   gate had been hiding the second one. `Reset()` builds the list at new-game and
+   `Persist` is meant to restore it on load; on these saves neither has. Independent of
+   #1 and likely the cheaper fix. No achievement can be evaluated in a loaded game until
+   this is fixed.

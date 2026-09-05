@@ -1386,7 +1386,80 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             // AchievementManager tick once that singleton/slot is wired.
             if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
                 void* achievementMgr = **g_ppAchievementManager;
-                fn_AchievementManager_Update(achievementMgr, scaledTime);
+
+                // BANISHED_ACH_IGNORE_MODS=1 -- NON-RETAIL TEST FIXTURE.
+                //
+                // AchievementManager::Update's first act (Runtime 0x18009e6c6) is
+                //     if (*(int*)(IO::FileSystem::_singleton + 0x38) > 0) return;
+                // i.e. AreUserPackFilesEnabled(). Retail disables achievements outright
+                // whenever any .pkm is mounted, silently. That gate lives inside the
+                // Runtime DLL, so it cannot be flagged off at its source -- instead we
+                // zero the mod count for the duration of THIS ONE CALL and put it back
+                // immediately, so no other reader ever observes the lie.
+                //
+                // What this buys: the goal wiring can be exercised in a modded session
+                // (e.g. with DebugMenu.pkm mounted). What it does NOT buy: evidence that
+                // a retail player could earn the achievement -- retail would have
+                // refused to evaluate at all. An award obtained under this flag is a
+                // test result, not a legitimate unlock, and it still writes a real
+                // HKCU/.../Ach<N> value. Belongs with the other declared deviations in
+                // docs/waves/achievements_wave.md section 7.
+                int32_t* modGate = nullptr;
+                int32_t  savedGate = 0;
+                static int s_ignoreMods = -1;
+                if (s_ignoreMods < 0) {
+                    const char* e = getenv("BANISHED_ACH_IGNORE_MODS");
+                    s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
+                }
+                if (s_ignoreMods == 1) {
+                    static void** s_ppFileSystem = reinterpret_cast<void**>(
+                        ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
+                    if (s_ppFileSystem && *s_ppFileSystem) {
+                        modGate = reinterpret_cast<int32_t*>(
+                            static_cast<uint8_t*>(*s_ppFileSystem) + 0x38);
+                        savedGate = *modGate;
+                        if (savedGate > 0) {
+                            *modGate = 0;
+                            static bool s_said = false;
+                            if (!s_said) {
+                                s_said = true;
+                                fprintf(stderr, "[Ach] BANISHED_ACH_IGNORE_MODS: masking the "
+                                        "user-pack gate (FileSystem+0x38 was %d) for the "
+                                        "AchievementManager::Update call ONLY. Retail would "
+                                        "evaluate NOTHING here -- any award this run is a test "
+                                        "result, not a legitimate unlock.\n", savedGate);
+                                fflush(stderr);
+                            }
+                        }
+                    }
+                }
+
+                // With the gate masked, Update runs on to its instance list at mgr+0x18
+                // and derefs it unguarded -- faithful, because retail always has one by
+                // then (Reset() builds it at new-game, Persist restores it on load).
+                // Measured 2026-09-05: a LOADED town can reach here with mgr+0x18 null,
+                // and Update then faults READ of 0 at Runtime+0x9E6F4. The gate had been
+                // hiding that. This fixture must not be the thing that kills the run, so
+                // report the empty list rather than entering it. A real fix restores the
+                // instances on the load path -- do NOT paper over that here.
+                void* instList = *reinterpret_cast<void**>(
+                    static_cast<uint8_t*>(achievementMgr) + 0x18);
+                if (modGate && !instList) {
+                    static bool s_warned = false;
+                    if (!s_warned) {
+                        s_warned = true;
+                        fprintf(stderr, "[Ach] BANISHED_ACH_IGNORE_MODS: manager has NO "
+                                "INSTANCE LIST (mgr+0x18 null) -- nothing can be evaluated "
+                                "or awarded this run. Reset()/Persist has not populated it; "
+                                "on a LOADED game that is a load-path defect, not the mod "
+                                "gate. Skipping the Update call.\n");
+                        fflush(stderr);
+                    }
+                } else {
+                    fn_AchievementManager_Update(achievementMgr, scaledTime);
+                }
+
+                if (modGate) *modGate = savedGate;   // restore before anything else reads it
             }
         }
         TRACE("[GameUpdateLoop::Update] AchievementManager::Update done\n");

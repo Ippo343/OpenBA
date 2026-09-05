@@ -221,6 +221,21 @@ extern "C" void AchievementProbe_Tick(int frameNum) {
         return;
     }
 
+    // GetAchievementCount derefs the manager's achievement LIST (mgr+0x00) without a
+    // null check -- faithful, because retail always has one by the time anything asks.
+    // The manager itself exists from Engine::Startup, but the list is only filled by
+    // GameContainer_Init's SetAchievements, so there IS a window (notably early in a
+    // LOAD) where mgr is a fine pointer and mgr+0x00 is null; calling through it faults
+    // as READ of 0x28. This probe is diagnostic code that must never be the thing that
+    // kills a run, so it checks first and reports the window instead of entering it.
+    void* const achList = *reinterpret_cast<void**>(static_cast<uint8_t*>(mgr) + 0x00);
+    if (!achList) {
+        std::fprintf(stderr, "[Ach] f=%d manager=%p has NO ACHIEVEMENT LIST yet "
+                             "(mgr+0x00 null) -- SetAchievements has not run; skipping "
+                             "this census tick\n", frameNum, mgr);
+        std::fflush(stderr);
+        return;
+    }
     const int count = fn_AchievementManager_GetAchievementCount
                         ? fn_AchievementManager_GetAchievementCount(mgr) : -1;
 
@@ -238,9 +253,23 @@ extern "C" void AchievementProbe_Tick(int frameNum) {
             fsGate = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*s_ppFileSystem) + 0x38);
     }
 
+    // The gate value here is the LIVE field. BANISHED_ACH_IGNORE_MODS masks it around
+    // the AchievementManager::Update call only and restores it immediately, so with that
+    // flag set this probe still reads non-zero while evaluation IS happening -- printing
+    // a bare "ACHIEVEMENTS DISABLED" there would be exactly the kind of confidently wrong
+    // diagnostic this census exists to replace.
+    static int s_ignoreMods = -1;
+    if (s_ignoreMods < 0) {
+        const char* e = std::getenv("BANISHED_ACH_IGNORE_MODS");
+        s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    const char* gateNote = (fsGate <= 0)      ? ""
+                         : (s_ignoreMods == 1) ? " (masked by BANISHED_ACH_IGNORE_MODS -- "
+                                                 "evaluation IS running; awards this run are "
+                                                 "test results, not legitimate unlocks)"
+                                               : " *** ACHIEVEMENTS DISABLED ***";
     std::fprintf(stderr, "[Ach] ===== f=%d mgr=%p achievements=%d updateGate(FileSystem+0x38)=%d%s =====\n",
-                 frameNum, mgr, count, fsGate,
-                 fsGate > 0 ? " *** ACHIEVEMENTS DISABLED ***" : "");
+                 frameNum, mgr, count, fsGate, gateNote);
 
     const bool dumpNow = s_dump;
     s_dump = false;                       // discovery dump is one-shot
