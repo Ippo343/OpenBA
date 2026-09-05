@@ -101,8 +101,28 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
         const int cur  = *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x50);
         const int pend = *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x52);
         if (cur == 2 || pend == 2) { ++alreadyBuilt; continue; }
-        *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x52) = 2;
-        ++stamped;
+
+        // Drive the BuildComponent's OWN completion rather than poking the state.
+        // Stamping pending = 2 works for a start-town structure the placer spawns
+        // already-finished, but a tool-created entity (bridge segment, road tile) is
+        // mid-construction and its state machine has no 8->2 edge to take on demand:
+        // the stamp was re-applied to the same 25 segments every pass and none of them
+        // ever moved. The real sequence is state 1 (awaiting materials) -> state 8
+        // (building, progress bc+0x48 ramping toward target) -> state 2, so give each
+        // stage what it is waiting for and let State8Update finish it:
+        //   state 1  -> request 8 (materials treated as delivered)
+        //   state 8  -> stamp progress at the target, which is what State8Update's own
+        //               completion test reads before it requests 8->2
+        if (cur == 8) {
+            // bc+0x48 is progress, bc+0x4c the build multiplier. State8Update completes
+            // on progress >= target; a saturated progress satisfies that whatever the
+            // target works out to, and the transition is still made by retail code.
+            *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(bc) + 0x48) = 0x40000000;
+            ++stamped;
+        } else {
+            *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x52) = 8;
+            ++stamped;
+        }
     }
     s_finished += stamped;
 

@@ -87,10 +87,20 @@ void* FindCompOnEntity(void* ent, uint32_t tid) {
 
 }  // namespace
 
+// The panel's row arrays are not filled by the select itself: TradeUI builds them in
+// its own per-frame update, so reading self+0x30/+0x38 in the same tick that opened
+// the dialog always finds sellCount = 0 however well stocked the post is. Open on
+// one tick, act a few ticks later with the dialog still up.
+static int s_openedAtFrame = -1;
+static const int kSettleFrames = 30;
+
 extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     Init();
-    if (s_interval <= 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
+    if (s_interval <= 0 || frameNum == 0) return;
     if (!entityUI) return;
+    const bool openTick = (frameNum % s_interval) == 0;
+    const bool actTick  = (s_openedAtFrame >= 0 && frameNum - s_openedAtFrame >= kSettleFrames);
+    if (!openTick && !actTick) return;
 
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
@@ -125,8 +135,12 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     void* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) { std::fprintf(stderr, "[TradeSell] f=%d EditTool activation FAILED\n", frameNum);
                  std::fflush(stderr); return; }
-    const int opened = EditTool_HarnessSelectEntity(tool, postEnt);
-    (void)opened;
+    if (openTick) {
+        EditTool_HarnessSelectEntity(tool, postEnt);
+        s_openedAtFrame = frameNum;
+        return;                     // let the panel populate its rows first
+    }
+    s_openedAtFrame = -1;
     void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
     if (!dialog) { std::fprintf(stderr, "[TradeSell] f=%d post opened no dialog\n", frameNum);
                    std::fflush(stderr); return; }
