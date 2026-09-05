@@ -1684,9 +1684,61 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         }
     };
 
+    // ── BANISHED_STRESS_EXCLUDE / BANISHED_STRESS_EXTRA ──────────────────────────
+    // EXCLUDE=<tag,tag,...> drops those entries from the set entirely; EXTRA=<tag>:<n>
+    // places n MORE of that tag per set. Both match the `tag` column of kStressSet.
+    //
+    // Three achievements are ABSTINENCE goals -- Uneducated (300 people, no school),
+    // Isolationist (300, no trading post) and One with Nature (400, no crop field,
+    // orchard or pasture). Their goals do not merely sit unmet in the standard stress
+    // town, they report failed=1 and are unreachable for the life of that world, so no
+    // amount of running the normal town can ever unlock them. EXCLUDE is what makes a
+    // town that can.
+    //
+    // EXTRA exists for the opposite shape: Firefighter wants 40 wells, and reaching it
+    // through --sets 40 would also build 40 quarries and 40 town squares' worth of
+    // everything else, which does not fit on any map.
+    const char* const excl = std::getenv("BANISHED_STRESS_EXCLUDE");
+    auto excluded = [&](const char* tag) -> bool {
+        if (!excl || !excl[0] || !tag) return false;
+        const size_t n = std::strlen(tag);
+        for (const char* c = excl; *c; ) {
+            const char* e = std::strchr(c, ',');
+            const size_t len = e ? (size_t)(e - c) : std::strlen(c);
+            if (len == n && std::strncmp(c, tag, n) == 0) return true;
+            if (!e) break;
+            c = e + 1;
+        }
+        return false;
+    };
+    // EXTRA=<tag>:<n>
+    const char* const extraEnv = std::getenv("BANISHED_STRESS_EXTRA");
+    auto extraFor = [&](const char* tag) -> int {
+        if (!extraEnv || !extraEnv[0] || !tag) return 0;
+        const size_t n = std::strlen(tag);
+        for (const char* c = extraEnv; *c; ) {
+            const char* e = std::strchr(c, ',');
+            const char* colon = std::strchr(c, ':');
+            if (colon && (!e || colon < e) && (size_t)(colon - c) == n &&
+                std::strncmp(c, tag, n) == 0)
+                return std::atoi(colon + 1);
+            if (!e) break;
+            c = e + 1;
+        }
+        return 0;
+    };
+    if (excl && excl[0])
+        fprintf(stderr, "[Stress::place] EXCLUDE='%s'""\n", excl);
+    if (extraEnv && extraEnv[0])
+        fprintf(stderr, "[Stress::place] EXTRA='%s'""\n", extraEnv);
+
     if (sets > 0) place(kStressTownHall);
     for (int s = 0; s < sets; ++s) {
-        for (const StressBuilding& b : kStressSet) place(b);
+        for (const StressBuilding& b : kStressSet) {
+            if (excluded(b.tag)) continue;
+            place(b);
+            for (int k = 0, extra = extraFor(b.tag); k < extra; ++k) place(b);
+        }
         placeHouses(perSet);
     }
     placeHouses(wantHouses - housesQueued);
