@@ -2,23 +2,36 @@
 // BANISHED_COMP_VALIDATE=1 — save-side component-slot validator.
 //
 // WHY: an in-game Load crashed inside Object::InternalFactory::PersistObject
-// executing `idMap[objId]` with objId=0xAAA12C08 / typeId=0xF6AAAAAA — an
-// out-of-bounds index built from 0xAA-pattern uninitialised memory. Measured
-// facts that place the blame on the SAVE leg:
-//   * per-component byte counts on load match the save leg exactly, so the
-//     stream is NOT desynced and the cursor is where it should be;
-//   * the destination IBP slot reads raw=0 before the call, so the garbage did
-//     not come from our load-side array — IBP::Serialize read it OUT of the
-//     stream.
-// So the save wrote a component record from a slot holding uninitialised
-// memory: Object::InternalBasePtr::Serialize takes the id from `garbage[1]` and
-// the type from `garbage[0xC]` and writes those numbers out. The real defect is
-// upstream in entity construction — an entity whose componentCount includes a
-// slot nothing ever populated.
+// executing `idMap[objId]` with objId=0xAAA12C08 / typeId=0xF6AAAAAA -- an
+// out-of-bounds index built from 0xAA-pattern uninitialised memory.
 //
-// This probe catches it at the moment of writing, naming the entity, its
-// description type and the offending index, plus the type of every sibling slot
-// so the building can be identified by its component signature.
+// CORRECTION (2026-09-04). This header used to blame the SAVE leg, on the
+// stated ground that "per-component byte counts on load match the save leg
+// exactly, so the stream is NOT desynced". **That measurement was wrong and the
+// conclusion with it.** A proper +0x1C cursor diff over a MATCHED build pair
+// (BANISHED_SERIALIZE_TRACE=1 on both legs, correlated in ONE log) showed the
+// offending component writing 71 bytes on save and consuming 13 on load. The
+// stream WAS desynced, on the LOAD leg, and the 0xAA ids were allocator fill
+// read past the end of a short record.
+//
+// Root cause, fixed in 63a0f76: a vtable slot-3 (Serialize) wrapper that never
+// called its *_InitFuncs resolver. PersistObject dispatches slot 3 as the very
+// first call into the class on a load, so every lazily-resolved s_fn_* was
+// still null and the body null-guarded away every stream call -- consuming zero
+// bytes beyond the 13-byte InternalBasePtr header. Symmetric code, asymmetric
+// state. See reference_slot3_wrapper_must_resolve_first and keep
+// tools/slot3_resolver_audit.py clean.
+//
+// Do not resurrect the save-leg theory from this file. The probe below is still
+// worth keeping -- an entity whose componentCount includes a slot nothing
+// populated would produce a similar-looking crash -- but it never fired for the
+// bug it was written for, so treat a clean run from it as no evidence either
+// way about the stream.
+//
+// What it does: catches a save-side write from a slot that does not look like a
+// live object, naming the entity, its description type and the offending index,
+// plus the type of every sibling slot so the building can be identified by its
+// component signature.
 //
 // Diagnostic only: it never modifies the slot, so the faithful save path is
 // unchanged whether the probe is on or off.

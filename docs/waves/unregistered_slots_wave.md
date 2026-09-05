@@ -122,59 +122,65 @@ function.** One consumer wanting it is not enough.
 
 ---
 
-## The save/load desync (separate bug, narrowed but OPEN)
+## The save/load desync -- CLOSED 2026-09-04 (`63a0f76`)
 
-Reproduce in ~3 minutes on a matched build pair:
+**Cause: a vtable slot-3 (Serialize) wrapper that never called its
+`*_InitFuncs` resolver.** `InternalFactory::PersistObject` dispatches slot 3
+immediately on create, so on a load it is the FIRST call into that class in the
+process. Every `s_fn_*` the body null-guards is still null, every stream call is
+skipped, and the record consumes ZERO bytes past its 13-byte `InternalBasePtr`
+header -- while the save leg, hundreds of frames old with the resolver long
+since run, wrote the full record. Symmetric code, asymmetric STATE, which is why
+grepping for an asymmetric branch found nothing for days.
+
+Measured on `ParticleComponent`: **save 71 bytes, load 13.** Four occurrences
+found in total (`StateMachineComponent` 2026-08-28, `ParticleComponent`,
+`CemeteryComponent`, `WellComponent`); the last two were latent. Audit with
+`tools/ghidra_mcp/.venv/Scripts/python.exe tools/slot3_resolver_audit.py`
+(exit 1 on a hit) and keep it clean.
+
+The method that found it: `+0x1C` cursor diff per component on BOTH legs of a
+MATCHED build pair, `BANISHED_SERIALIZE_TRACE=1`, correlated in ONE log. Two
+runs against two different saves mis-index and send you after the wrong
+component.
+
+### Reproduction (still valid for regressions)
 
 ```bash
 BANISHED_AUTOSTART=1 BANISHED_SAVE_TEST=1200      # writes ~/Documents/Banished/Save/Auto.sav
-BANISHED_AUTOLOAD=Auto BANISHED_PERSIST_TRACE=1   # crashes
+BANISHED_AUTOLOAD=Auto BANISHED_PERSIST_TRACE=1
 ```
 
-Note `BANISHED_AUTOTUTORIAL=1` REFUSES the autosave trigger (`GetOperation()=0`
-on every retry) - autosave appears disabled in a scenario world, so use a new
-game to produce the save. `BANISHED_SAVE_TEST` OVERWRITES `Auto.sav`; back it up
-first.
+`BANISHED_AUTOTUTORIAL=1` is NOT a repro: it loads the retail-authored tutorial
+`.sav`, which loads cleanly, and it also refuses the autosave trigger
+(`GetOperation()=0`). A whole census was collected against that working path
+before this was noticed. `BANISHED_SAVE_TEST` OVERWRITES `Auto.sav`.
 
-**Two false starts, both worth remembering:**
+### Hypotheses eliminated on the way (keep this; it is the expensive part)
 
-1. *Measuring the wrong load.* `BANISHED_AUTOTUTORIAL=1` loads the TUTORIAL .sav,
-   which is retail-authored and **loads cleanly**. The bug needs
-   `BANISHED_AUTOLOAD=Auto`. A whole census was collected against the working
-   path before this was noticed.
-2. *Suspecting a stale save.* `Auto.sav` was written by an older build, so a
-   cross-build length mismatch was a live hypothesis. Killed by regenerating the
-   save with the current binary and loading it with the same binary: **identical
-   failure**, in a different world.
-
-**What the failure looks like** (identical across two unrelated worlds):
-
-```
-#27 objId=300 typeId=0xF42F66FC (ParticleComponent)   <- LAST GOOD
-#28 objId=430615210    (= 0x19AAAAAA)  typeId=0x01000000  OUT OF RANGE
-#29 objId=-956301311   typeId=0xC341E59F               OUT OF RANGE
-#30 objId=-1157627884  typeId=0x09AAAAAA gen=0xAABBBBBB OUT OF RANGE
-```
-
-**Ruled out:**
-- *ParticleComponent slot-3 asymmetry.* Slot 3 is installed UNCONDITIONALLY,
-  outside the live gate (`ParticleComponent_FinishLiveVtable`), into one shared
-  static array reached by both factory entry points; the body is symmetric and
-  the load-only resize target is registered. Installed in `a11d083`, five days
-  before the save. `reference_vtable_slot3_serialize_never_installed` does NOT
-  apply to this class.
-- *P3 / the crop-field slot.* Real defect, but symmetric (skipped on both legs),
-  and tutorial 1 contains no crop fields at all.
-
-**Current best lead:** `0x19AAAAAA` and `0xAABBBBBB` are ALLOCATOR FILL, and they
-repeat byte-for-byte across two unrelated worlds. Stream content would not; fill
-would. So the reader is not misaligned inside valid data - it has run off the end
-of the buffer it is reading, or is reading a buffer that was never filled. The
-save stream is a `CompressedFileStream` with a window table (`0xdd` windows, then
-`(offset, 0x80000000|compressedSize)` pairs). The open question is whether the
-decompressed window is refilled at a boundary, and whether ParticleComponent is
-merely the last record that fits in the first window - i.e. a coincidence of
-POSITION rather than of type.
+1. **A skipped serializer call because slot 3 was not INSTALLED.** Dead for
+   `ParticleComponent` -- slot 3 is installed unconditionally outside the live
+   gate, into one shared static array reached by both factory entry points,
+   since `a11d083`. The defect was one level down: installed, but reaching a
+   body whose resolver never ran.
+2. **The two swapped Serializer slots (`0x140152400` / `0x140152618`).** Dead.
+   Both forward to the same Encoding object; `+0x60` is an N-iteration one-byte
+   loop and `+0xC8` is one N-byte call. Wire-identical under the binary encoding.
+   (Still worth un-swapping for clarity.)
+3. **The crop-field slot (P3).** Real defect, but symmetric -- skipped on BOTH
+   legs -- so invisible to a same-build round trip. Tutorial 1 has no crop fields.
+4. **A stale save / cross-build mismatch.** Dead. Regenerating the save with the
+   current binary and loading it with that same binary reproduced the failure
+   BYTE-IDENTICALLY, in a different world of a different size.
+5. **A CompressedStream window that is never refilled.** Dead. The load stream is
+   an `IO::CompressedMemoryStream`, and `CompressedStream::Read` (Runtime
+   `0x1800aa780`) calls `SetWindow` on EVERY loop iteration, so a boundary
+   crossing refills by construction.
+6. **The save leg writing from an uninitialised component slot.** Dead, and it
+   cost the most: the claim rested on a bad measurement ("per-component byte
+   counts on load match the save leg exactly"). The header of
+   `standalone/entity_comp_validator.cpp` asserted this as established fact and
+   was believed by two independent lanes. It has been corrected in place.
 
 ## A principle this wave established
 
@@ -183,31 +189,79 @@ reconstructible. "It gets rebuilt during startup anyway" justifies DISCARDING a
 value after reading it; it never justifies SKIPPING the read. A stale comment in
 `particlecomponent.cpp` made exactly that error and was removed.
 
-### Desync: hypotheses eliminated (keep this list; it is the expensive part)
+## Related open item
 
-1. **A skipped serializer call in ParticleComponent (slot-3 not installed).**
-   Dead. Slot 3 is installed UNCONDITIONALLY outside the live gate in
-   `ParticleComponent_FinishLiveVtable`, into one shared static array reached by
-   both factory entry points, since `a11d083` (2026-08-30). Body is symmetric;
-   the load-only resize target `0x14000a590` IS registered.
-2. **The two swapped Serializer slots (0x140152400 / 0x140152618).** Dead.
-   Both forward to the same Encoding object; `+0x60` is an N-iteration one-byte
-   loop and `+0xC8` is one N-byte call. Wire-identical under the binary encoding.
-3. **The crop-field slot (P3).** Real defect, but symmetric - skipped on BOTH
-   legs - so invisible to a same-build round trip. And tutorial 1 has no crop
-   fields at all (0 `CropFieldComponent` records in a PERSIST_TRACE run).
-4. **A stale save / cross-build mismatch.** Dead. Regenerating the save with the
-   current binary and loading it with that same binary reproduces the failure
-   BYTE-IDENTICALLY, in a different world of a different size.
-5. **A CompressedStream window that is never refilled.** Dead. The load stream is
-   an `IO::CompressedMemoryStream`, and `CompressedStream::Read` (Runtime
-   `0x1800aa780`, decompile in `standalone/filename_runtime_hook.cpp:606-618`)
-   calls `SetWindow` on EVERY loop iteration, so a boundary crossing refills by
-   construction. That is retail Runtime code we do not reimplement.
+8 components install slot 3 INSIDE a `LiveEnabled("BANISHED_LIVE_*")` gate.
+Serializer wiring is not a feature flag; see the hoist item in the wave opens.
 
-Still unexplained: the wild ids are ALLOCATOR FILL (`0x19AAAAAA`, `0xAABBBBBB`)
-and repeat byte-for-byte across two unrelated worlds, with `ParticleComponent`
-always the last good record. Fill means uninitialised or freed memory rather than
-misaligned stream data - but per (5) it is not the stream window. Next place to
-look is what `InternalFactory::PersistObject` reads THROUGH, and whether the
-object being constructed for the next record is allocated but never filled.
+---
+
+## Re-census 2026-09-04 on the AUTOLOAD path (85 addresses)
+
+The earlier 157/84 censuses were taken on `BANISHED_AUTOTUTORIAL`, which loads a
+retail-authored save. This one is `BANISHED_AUTOLOAD=Auto` + `BANISHED_UNREG_CENSUS=600`
+on a save this build wrote -- i.e. the path the desync lived on. It also served as
+the regression test for the slot-3 hoist below: save leg wrote, load leg reached
+gameplay clean.
+
+Raw dump: `docs/waves/unreg_census_20260904_load.txt`
+Annotated: `docs/waves/unreg_census_20260904_load_annotated.txt`
+(regenerate the annotated view with `tools/unreg_full.py <dump>`; `unreg_loadpath.py`
+prints ONLY the load-window rows, which is why it looks so much shorter)
+
+| category | count | in load window |
+|---|---|---|
+| exe `.text` functions | 48 | 13 |
+| PE import slots | 20 | 2 |
+| `.rdata` vtable/const | 12 | 3 |
+| `.data` globals | 5 | 4 |
+
+**The import-slot band is effectively CLOSED.** Of the 21 import slots the first
+run showed, 17 were already audited by lane 2 as no-op leaves (every consumer
+resolves the same function via a `ResolveExport` / Runtime-address fallback), 2
+are the documented read-under-the-WRONG-name leaves (`0x1401527f8`,
+`0x140152830`), and the remaining 2 were settled here:
+
+- **`0x1401514a0` `MeshInstance::MeshInstance(const&)` -- REGISTERED.** A real
+  gap, not a deliberate leave. Its default-ctor (`0x140151490`) and dtor
+  (`0x1401514a8`) siblings sit adjacent in `address_registry.cpp` and were both
+  registered; the copy-ctor was simply missed. Its only consumer,
+  `StorageDisplayComponent_MeshArrayResize`, null-guard-and-SKIPs: with the slot
+  null it reallocates the 0x128-byte MeshInstance array and copy-constructs
+  nothing into the entries below `oldCount`, hand-copying only `sceneId` at
+  `+0x120`, so every surviving entry is raw `MemAlloc` memory wearing a garbage
+  vtable. Census confirms it drops out (86 -> 85) and the load still reaches
+  gameplay.
+- **`0x140152970` `GraphicsMesh::GetNodeIndexFromName` -- LEAVE (verified no-op).**
+  Two consumers, and they do NOT conflict. `showtool.cpp` reads it under the
+  correct name and already falls back to Runtime `0x1800fee90`, which the export
+  table confirms IS `GetNodeIndexFromName` -- so registering changes nothing.
+  `action_base_complete.cpp` carries a `fn_Vector4Ctor_t` typedef against this
+  address and a "do NOT register" warning, but it hard-assigns
+  `s_Vector4Ctor = nullptr` and never reads the slot, so its stated danger is
+  stale; registering could not reach it. Left unregistered to honour the existing
+  decision, since the gain is zero either way.
+
+What remains is the expensive band: **48 exe `.text` functions** (each needs a
+Ghidra decompile; 13 are touched during load), 12 `.rdata` consts and 5 `.data`
+globals. Every row is `total=1` -- the census records where an address is
+RESOLVED, not where the resulting null is CALLED, so these counts are a floor.
+
+## Slot-3 hoist out of the LiveEnabled gate -- DONE 2026-09-04
+
+The standing note claimed 8 components gate slot 3 behind `LiveEnabled`. **Five
+of the eight did not**: `animal`, `herd`, `population`, `statemachine` and
+`storage` already install slot 3 below their gate, unconditionally (storage's
+even carries a comment saying why). Only the three that use the
+`if (!LiveEnabled(...)) return;` early-return shape actually gated it:
+
+| component | flag | was it inert? |
+|---|---|---|
+| `DiseaseComponent` | `BANISHED_LIVE_CROPDISEASE` | **YES** -- not in `kDefaultOnFlags`, so slot 3 was inert on every default run |
+| `FireComponent` | `BANISHED_LIVE_FIRE` | no (flag default-on) -- but any `=0` A/B changed the stream shape |
+| `TornadoComponent` | `BANISHED_LIVE_TORNADO` | no (same) |
+
+All three now wire slot 3 above the gate. `tools/slot3_resolver_audit.py` stays
+clean. This removes the A/B trap: a `BANISHED_LIVE_*=0` run no longer changes the
+save-stream shape, so such a run can no longer "prove" something that was really
+a desync.

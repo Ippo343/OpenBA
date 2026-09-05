@@ -196,8 +196,17 @@ static void FireComponent_WaterVSlot(void* self, int msg) {
 }
 
 static void FireComponent_FinishLiveVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FIRE")) return;
+    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
+    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
+    // on every load, and a component whose slot 3 is absent falls back to the
+    // base Component serialize and consumes FEWER bytes than the save leg wrote
+    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
+    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
+    // so such an A/B could "prove" something that was really a desync.
+    // See reference_slot3_wrapper_must_resolve_first.
     g_FireComponent_LiveVtable[3]  = reinterpret_cast<void*>(&FireComponent_SerializeVSlot);
+
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FIRE")) return;
     g_FireComponent_LiveVtable[9]  = reinterpret_cast<void*>(&FireComponent_UpdateVSlot);
     g_FireComponent_LiveVtable[15] = reinterpret_cast<void*>(&FireComponent_WaterVSlot);
     static bool announced = false;

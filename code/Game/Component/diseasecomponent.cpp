@@ -1055,8 +1055,19 @@ void DC_UpdateVSlot(void* s, void* t) {
                             reinterpret_cast<int64_t*>(t));
 }
 void DiseaseComponent_FinishLiveVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_CROPDISEASE")) return;
+    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
+    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
+    // on every load, and a component whose slot 3 is absent falls back to the
+    // base Component serialize and consumes FEWER bytes than the save leg wrote
+    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
+    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
+    // so such an A/B could "prove" something that was really a desync.
+    // BANISHED_LIVE_CROPDISEASE is NOT in kDefaultOnFlags, so before this hoist
+    // DiseaseComponent's slot 3 was inert on EVERY default run.
+    // See reference_slot3_wrapper_must_resolve_first.
     g_DiseaseComponent_LiveVtable[3] = reinterpret_cast<void*>(&DC_SerializeVSlot);
+
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_CROPDISEASE")) return;
     g_DiseaseComponent_LiveVtable[4] = reinterpret_cast<void*>(&DC_StartupVSlot);
     g_DiseaseComponent_LiveVtable[6] = reinterpret_cast<void*>(&DC_OnAddedVSlot);
     g_DiseaseComponent_LiveVtable[7] = reinterpret_cast<void*>(&DC_OnRemovedVSlot);

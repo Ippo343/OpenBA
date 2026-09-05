@@ -1348,6 +1348,17 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401514a8,                       // MeshInstance dtor
         (uintptr_t)ResolveExport("??1MeshInstance@Graphics@@UEAA@XZ"));
+    // Copy-ctor. Missed when its default-ctor and dtor siblings above were added
+    // (found by BANISHED_UNREG_CENSUS on the AUTOLOAD path, 2026-09-04, where it
+    // is resolved inside the load window). Its only consumer,
+    // StorageDisplayComponent_MeshArrayResize (storagedisplaycomponent.cpp), is a
+    // null-guard-and-SKIP, not a fallback: with the slot null it reallocates the
+    // 0x128-byte MeshInstance array and then copy-constructs NOTHING into the
+    // entries below oldCount, hand-copying only sceneId at +0x120. Every surviving
+    // entry is therefore raw MemAlloc memory wearing a garbage vtable. Registering
+    // restores retail.
+    RegisterDispatchSlot(0x1401514a0,                       // MeshInstance copy-ctor
+        (uintptr_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@AEBV01@@Z"));
     RegisterDispatchSlot(0x140151498,                       // MeshInstance::SetMesh
         (uintptr_t)ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
     // Material swap — read by ModelComp_SetMaterialSet_125020 (the DestroyComponent

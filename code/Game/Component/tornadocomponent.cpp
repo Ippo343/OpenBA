@@ -1144,8 +1144,17 @@ void TC_UpdateVSlot(void* s, void* t) {
 }
 
 void TornadoComponent_FinishLiveVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TORNADO")) return;
+    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
+    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
+    // on every load, and a component whose slot 3 is absent falls back to the
+    // base Component serialize and consumes FEWER bytes than the save leg wrote
+    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
+    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
+    // so such an A/B could "prove" something that was really a desync.
+    // See reference_slot3_wrapper_must_resolve_first.
     g_TornadoComponent_LiveVtable[3] = reinterpret_cast<void*>(&TC_SerializeVSlot);
+
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TORNADO")) return;
     g_TornadoComponent_LiveVtable[4] = reinterpret_cast<void*>(&TC_StartupVSlot);
     g_TornadoComponent_LiveVtable[8] = reinterpret_cast<void*>(&TC_UpdateVSlot);
 }

@@ -1,0 +1,95 @@
+85 distinct unregistered addresses
+
+== EXE .text FUNCTIONS (need a Ghidra decompile + reimpl): 48 (13 hit in the load window)
+  0x140002280 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140004920 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14001aea0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14001b1d0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14001c3c0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14001fdb0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14001fe60 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140021790 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140022480 first=load      total=1      load=1                                   <exe code fn> <<LOAD
+  0x1400328c0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400329b0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14005e230 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x14005f3d0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140068ab0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x14006bd80 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140078830 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140078a40 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14007ebf0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14007f660 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14007fc30 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140080160 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400846b0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140089470 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400896a0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140089ed0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14008a730 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14008c100 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400932a0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400938d0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x140095da0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x140099c20 first=boot      total=1      boot=1                                   <exe code fn>
+  0x14009e8c0 first=load      total=1      load=1                                   <exe code fn> <<LOAD
+  0x1400a2980 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400a3630 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400a40e0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x1400a5140 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x1400c4090 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x1400d6f00 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400d70c0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400e1600 first=boot      total=2      boot=2                                   <exe code fn>
+  0x1400fc6b0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x1400fcc90 first=gameplay  total=1      gameplay=1                               <exe code fn>
+  0x140101ce0 first=boot      total=1      boot=1                                   <exe code fn>
+  0x140101ee0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x1401026a0 first=postload  total=1      postload=1                               <exe code fn> <<LOAD
+  0x14011b560 first=load      total=1      load=1                                   <exe code fn> <<LOAD
+  0x14012bbd0 first=load      total=1      load=1                                   <exe code fn> <<LOAD
+  0x14012db70 first=boot      total=1      boot=1                                   <exe code fn>
+
+== PE IMPORT SLOTS (name is known from the import table): 20 (2 hit in the load window)
+  0x140151488 first=boot      total=1      boot=1                                   ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A
+  0x140151718 first=gameplay  total=1      gameplay=1                               ?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z
+  0x140151758 first=gameplay  total=1      gameplay=1                               ?Pressed@KeyMap@Input@@QEBA_NHH@Z
+  0x1401517a8 first=gameplay  total=1      gameplay=1                               ?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+  0x140151a30 first=boot      total=1      boot=1                                   ?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+  0x140151a60 first=boot      total=1      boot=1                                   ?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+  0x140151a90 first=boot      total=1      boot=1                                   ?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@V?$ExternalPtr@VDialogControllerConfig@UI@@@4@V?$ExternalPtr@VElementDescription@UI@@@4@AEBVString@System@@@Z
+  0x140151b70 first=boot      total=1      boot=1                                   ?_singleton@Configuration@Video@@0PEAV12@EA
+  0x140151b78 first=boot      total=1      boot=1                                   ?_singleton@Configuration@Audio@@0PEAV12@EA
+  0x140151b80 first=boot      total=1      boot=1                                   ?_singleton@Device@Input@@0PEAV12@EA
+  0x140151ca8 first=boot      total=1      boot=1                                   ??0String@UI@@QEAA@XZ
+  0x140151dd0 first=gameplay  total=1      gameplay=1                               ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z
+  0x140152750 first=gameplay  total=1      gameplay=1                               ?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z
+  0x1401527f8 first=boot      total=1      boot=1                                   ?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+  0x140152830 first=boot      total=1      boot=1                                   ??0Goal@Achievement@@QEAA@XZ
+  0x1401528f0 first=boot      total=1      boot=1                                   ?Released@KeyMap@Input@@QEBA_NHH@Z
+  0x140152970 first=load      total=1      load=1                                   ?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z <<LOAD
+  0x1401529b0 first=load      total=1      load=1                                   ?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ <<LOAD
+  0x1401529c8 first=boot      total=1      boot=1                                   ?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@V?$ExternalPtr@VElementDescription@UI@@@4@0@Z
+  0x1401529d0 first=boot      total=1      boot=1                                   ?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@V?$ExternalPtr@VDialogControllerConfig@UI@@@4@V?$InternalPtr@VElement@UI@@@4@@Z
+
+== .rdata VTABLE / CONST: 12 (3 hit in the load window)
+  0x14015bd80 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015be00 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015c3b0 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015c400 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015c6c0 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015f070 first=load      total=1      load=1                                   <.rdata vtable/const> <<LOAD
+  0x14015f5a0 first=boot      total=2      boot=2                                   <.rdata vtable/const>
+  0x14015f980 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x14015fa00 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x140160bf8 first=boot      total=1      boot=1                                   <.rdata vtable/const>
+  0x140162920 first=load      total=1      load=1                                   <.rdata vtable/const> <<LOAD
+  0x140164520 first=load      total=1      load=1                                   <.rdata vtable/const> <<LOAD
+
+== .data GLOBALS: 5 (4 hit in the load window)
+  0x1401c4138 first=postload  total=1      postload=1                               <.data global> <<LOAD
+  0x1401c42c0 first=boot      total=3      boot=1 gameplay=1 load=1                 <.data global> <<LOAD
+  0x1401c4758 first=load      total=1      load=1                                   <.data global> <<LOAD
+  0x1401c70e8 first=boot      total=4      boot=2 gameplay=2                        <.data global>
+  0x1401c72e8 first=load      total=1      load=1                                   <.data global> <<LOAD
+
