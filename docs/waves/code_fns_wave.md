@@ -116,3 +116,94 @@ guessed port is worth less than nothing.
 A table: address, what the function IS (name it), verdict, the call site you
 read, and what changes if it is registered. Then the diff summary of your own
 file. **Flag anything you could not settle rather than guessing.**
+
+---
+
+# RESULTS — integrated and verified 2026-09-04
+
+All six lanes reported. Integrated, built clean, and verified with
+`BANISHED_AUTOLOAD=Auto BANISHED_UNREG_CENSUS=600`.
+
+**Census: 85 -> 55 unregistered addresses. Load reached gameplay, no crash.**
+(`docs/waves/unreg_census_20260904_postwave.txt`)
+Exe `.text` band specifically: 48 -> 18.
+
+## The premise was wrong, and that is the finding
+
+This wave was framed as "49 unported functions to port". Of 48 real addresses
+(see the list correction above), only **4 were genuine gaps**. The rest were
+already ported and statically wired, or are deliberate leaves where registering
+would cause ACTIVE HARM.
+
+| verdict | count |
+|---|---|
+| real gap, fixed | 4 |
+| dead / vestigial `fn_*` resolve | ~23 |
+| deliberate leave (7+ would cause active harm) | ~18 |
+| already registered before the wave | 1 |
+| needs a run to decide | 1 |
+| **identified but NOT fixed (see below)** | **1** |
+
+Registering blind would have double-driven the camera every frame, double-built
+the pathfinder and leaked it, double-written fog against the driver, deselected
+the player's selection every frame, and double-inserted 8 tool-mode AVL nodes.
+
+## Real gaps fixed
+- **`0x14006bd80` `MapParamsDialog::MapParamsDialog`** (lane 2) — the in-game
+  **Map button was dead**. `mainmenudialog.cpp:351` calls it UNGUARDED; the stub
+  returned 0, so `AddDialogToUI` wrapped a null IBP and the button did nothing.
+  The dialog was fully ported and had a correct open path with ZERO callers —
+  only the headless harness reached it. An inverted null test: *the harness* was
+  the null test while the real button constructed nothing.
+- **`0x14001aea0` `MapGenerator::~MapGenerator`** (lane 1) — null-guard-and-SKIP.
+  `MapGenerator_Cleanup` calls `Dtor(self,0)` then re-runs Init, so with the body
+  skipped it **overwrote live array headers instead of releasing them**.
+- **`0x1400a40e0` `MusicPlayer::Update`** (lane 5) — the only writer of music
+  state and the only music-channel `PlayEffect` caller, so background music never
+  played. Lane 5 did NOT dismiss the "MusicTrackList deferred" blocker comment at
+  `gameupdateloop_load.cpp:1249` as stale; it performs the deferred
+  `Find("Game/MusicTracks.rsc")` itself in `EnsureTrackList` and caches into
+  `+0x08`. **Gated opt-in on `BANISHED_LIVE_MUSIC`** — registration is verified,
+  but the feature is UNPROVEN and off by default. Needs an opt-in run.
+- 10 register-only ports (lanes 4 and 6) that make existing reimpls reachable.
+
+## ⚠ IDENTIFIED BUT NOT FIXED: `0x140095da0` — a live crash
+`GameUpdateLoop::TakeScreenshot`, **not** the "QuickSave handler" that
+`reg_mods.cpp:30` named it (name now corrected). Integrator-verified chain:
+`fn_QuickSave` resolves it and gets null; both call sites
+(`gameupdateloop.cpp:2060`, `:2135`) are **UNGUARDED**; flags come from
+`KeyMap::Pressed(0x21)`/`(0x22)`; `CHECK_FN` only traces.
+
+**Pressing quicksave or quickload in-game is an EXEC-of-0 in the default build.**
+Lane 4 identified it but `RegisterCodeLane4()` does not register it, and the
+report was truncated before its reasoning. Still open — awaiting lane 4.
+
+## Housekeeping applied
+- Deleted **10 vestigial `fn_*` pointers** (8 lane 3 + 2 lane 1), each verified
+  first: exactly 3 source mentions, no dereference, single `ResolveAddr` site.
+- Integrator ruling for the tree: **zero consumers -> DELETE; any real consumer,
+  including `_DEBUG`-only or feature-gated -> REGISTER.** Lanes 3 and 4 had
+  recommended opposite treatments of the same shape.
+- Added `MapParamsDialog_GetStandaloneVtable()` to `mainmenudialog.cpp` — the
+  vtable is in an anonymous namespace, so it cannot be `extern`'d across TUs.
+
+### Measurement note
+Deleting `fn_CitizenList_ShuffleEntities` removed the only GUARANTEED census
+signal for `0x140089470`. It is still (correctly) unregistered — the seat shuffle
+is opt-in — but its other resolver (`town_workplace_registry.cpp:64`, `EnsureFns`)
+is lazy and did not run in the verification window, so the address no longer
+appears. Absence from the census is now weaker evidence for that one address.
+
+## Still open
+1. `0x140095da0` — the live quicksave/quickload crash above. **Highest priority.**
+2. `0x140002280` `Entity::FindComponent<AmbientEmitterComponent>` — needs a run.
+   The unguarded retail deref requires the description to declare **>= 2**
+   emitters. Run `BANISHED_AMBIENT_TRACE=1` after raising the 16-line cap at
+   `ambientemittercomponent.cpp:283`.
+3. `BANISHED_LIVE_MUSIC=1` run to prove music actually plays.
+4. 18 exe `.text` addresses remain, 6 in the load window.
+5. Stale comment: `entity_finders_disaster.cpp:50` blames an
+   `AmbientEmitterComponent::OnAdded` that has been live since `1b7a50b`.
+6. Latent (unreachable today): `SubArrayDeepCopy`
+   (`serialize_struct60b.cpp:76-82`) zeroes `dst->data`/`dst->count` but not
+   `dst->capacity`; retail clears count AND capacity as one qword.

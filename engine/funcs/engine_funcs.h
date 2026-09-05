@@ -1231,7 +1231,6 @@ extern uintptr_t g_ModUpdateDialog_Vtable;
 // SelectResourceUI::GetResourceCount(self) -> int
 // FUN_140078a40 — counts expected resources for combo (shared by Orchard/Pasture)
 typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
-extern fn_SelectResourceUI_GetResourceCount_t fn_SelectResourceUI_GetResourceCount;
 
 // SelectResourceUI::PopulateCombo(self)
 // FUN_140078830 — repopulates combo element with current resources
@@ -1573,7 +1572,6 @@ extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
-extern fn_ToolbarSort_t fn_ToolbarSort;
 
 // TypeInfo for Toolbar external — used by ExternalFactory::FindNext
 extern uint32_t* g_TypeId_ToolbarExternal;
@@ -2548,10 +2546,6 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index); // was FUN_140
 
 // --- Still exe-resolved TownHallUI helpers (thin wrappers in townhallui.cpp) ---
 typedef void (*fn_TownHallUI_SubFunc_t)(void* self);
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions; // FUN_140080160
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction;  // FUN_14007fc30
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory;   // FUN_14007f660
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture; // FUN_14007ebf0
 // fn_TownHallUI_UpdateProduction — reimplemented in townhallui.cpp (FUN_14007c7f0)
 // fn_TownHallUI_UpdateAgriculture — reimplemented in townhallui.cpp (FUN_14007c220)
 // fn_TownHallUI_UpdateInventory — reimplemented in townhallui.cpp (FUN_14007def0)
@@ -2613,7 +2607,6 @@ extern fn_CitizenList_FindAny_t fn_CitizenList_FindAny;  // FUN_14008c4b0
 // FUN_140089470: Shuffle entity list for a profession (randomizes assignment order)
 // citizenList = CitizenList (gameWorld+0xF0), profId = profession ExternalPtr value
 typedef void (*fn_CitizenList_ShuffleEntities_t)(void* citizenList, uint64_t profId);
-extern fn_CitizenList_ShuffleEntities_t fn_CitizenList_ShuffleEntities;  // FUN_140089470
 
 // --- Profession array push helpers (exe) ---
 // FUN_140015800: Push 0x40-byte profession entry into dynamic array at (ptr, count|cap).
@@ -2679,7 +2672,6 @@ extern fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc;
 // TradeUI::RefreshSortedDisplay (FUN_1400846b0) — REPLACED with TradeUI_RefreshDisplay in tradeui.cpp
 // fn_TradeUI_RefreshDisplay pointer kept for reference / fallback only.
 typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
-extern fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay;
 
 // ValueDescription type ID — DAT_1401c4bf0 (sprite + name on trade entity descriptions)
 extern uint32_t* g_TypeInfo_ValueDescription;
@@ -5203,7 +5195,6 @@ extern fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize;
 
 // FUN_14001b1d0 — compute string hash for building type entry
 typedef void (*fn_StringHash_t)(void* str);
-extern fn_StringHash_t fn_StringHash;
 
 // System::String::Serialize — already declared as g_fn_String_Serialize
 
@@ -5294,7 +5285,6 @@ extern fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph;
 
 // CitizenBehavior::ShuffleSchools (0x1400896a0) — Fisher-Yates shuffle on schools.
 typedef void (*fn_CitizenBehavior_ShuffleSchools_t)(void* self);
-extern fn_CitizenBehavior_ShuffleSchools_t fn_CitizenBehavior_ShuffleSchools;
 
 // ProfessionResourceArray::Init (0x1400177c0) — allocate profession resource array.
 typedef void (*fn_ProfResArray_Init_t)(void* arrayPtr, int count);

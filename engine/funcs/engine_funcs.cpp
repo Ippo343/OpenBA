@@ -406,7 +406,6 @@ fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory = nullptr;
 void** g_pFileSystemSingleton2 = nullptr;
 fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
 uintptr_t g_ModUpdateDialog_Vtable = 0;  // PTR_FUN_14015c6c0
-fn_SelectResourceUI_GetResourceCount_t fn_SelectResourceUI_GetResourceCount = nullptr;
 fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo = nullptr;
 fn_GoalList_GetGoal_t fn_GoalList_GetGoal = nullptr;
 fn_GoalInstance_IsMet_t fn_GoalInstance_IsMet = nullptr;
@@ -485,7 +484,6 @@ uintptr_t g_ToolbarDialog_Vtable = 0;   // PTR_FUN_14015fa00
 uintptr_t g_PauseDialog_Vtable = 0;     // PTR_FUN_14015f550
 uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
-fn_ToolbarSort_t fn_ToolbarSort = nullptr;
 uint32_t* g_TypeId_ToolbarExternal = nullptr;
 uint32_t* g_TypeId_ToolbarItem = nullptr;
 fn_RadioElement_FindCheckBoxes_t fn_RadioElement_FindCheckBoxes = nullptr;
@@ -713,10 +711,6 @@ g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion = nullptr;
 // TownHallUI support
 uint32_t* g_TypeId_TabElement = nullptr;
 // fn_TownHallUI_InitGeneral — reimplemented as TownHallUI_InitGeneral() in townhallui.cpp
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture = nullptr;
 // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
@@ -742,7 +736,6 @@ fn_CitizenList_FindIdle_t fn_CitizenList_FindIdle = nullptr;
 fn_CitizenList_FindWorking_t fn_CitizenList_FindWorking = nullptr;
 fn_CitizenList_FindStudent_t fn_CitizenList_FindStudent = nullptr;
 fn_CitizenList_FindAny_t fn_CitizenList_FindAny = nullptr;
-fn_CitizenList_ShuffleEntities_t fn_CitizenList_ShuffleEntities = nullptr;
 // Array push helpers
 fn_ProfArrayPush_t fn_ProfArrayPush = nullptr;
 fn_ProdArrayPush_t fn_ProdArrayPush = nullptr;
@@ -762,7 +755,6 @@ uint32_t* g_TypeId_CaptureBoxElement = nullptr;
 
 // TradeUI support
 fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc = nullptr;
-fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay = nullptr;
 uint32_t* g_TypeInfo_ValueDescription = nullptr;
 uint32_t* g_TypeInfo_TradeDescription = nullptr;
 fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18 = nullptr;
@@ -1100,7 +1092,6 @@ fn_IsRunning_t fn_IsRunning = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize = nullptr;
-fn_StringHash_t fn_StringHash = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
 fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
@@ -1119,7 +1110,6 @@ fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds = nullpt
 fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats = nullptr;
 fn_CitizenBehavior_ProcessPaths_t fn_CitizenBehavior_ProcessPaths = nullptr;
 fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph = nullptr;
-fn_CitizenBehavior_ShuffleSchools_t fn_CitizenBehavior_ShuffleSchools = nullptr;
 fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
 fn_StatsArray_Init_t fn_StatsArray_Init = nullptr;
 fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
@@ -2621,8 +2611,6 @@ bool EngineFuncsInit() {
     g_ModUpdateDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c6c0);
 
     // SelectResourceUI helpers — exe functions (shared by Orchard/Pasture)
-    fn_SelectResourceUI_GetResourceCount = reinterpret_cast<fn_SelectResourceUI_GetResourceCount_t>(
-        ResolveAddr(Module::Exe, 0x140078a40));
     fn_SelectResourceUI_PopulateCombo = reinterpret_cast<fn_SelectResourceUI_PopulateCombo_t>(
         ResolveAddr(Module::Exe, 0x140078830));
 
@@ -2827,8 +2815,6 @@ bool EngineFuncsInit() {
         g_ToolUI_ChildDialog_Vtable = toolUIChildVt;
     // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — resolved above (entityui section)
     // Toolbar item sort function
-    fn_ToolbarSort = reinterpret_cast<fn_ToolbarSort_t>(
-        ResolveAddr(Module::Exe, 0x140021790));
     // TypeInfo for Toolbar external (used by ExternalFactory::FindNext)
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f980));
@@ -3551,15 +3537,7 @@ bool EngineFuncsInit() {
         }
     }
     // fn_TownHallUI_InitGeneral — reimplemented in townhallui.cpp
-    fn_TownHallUI_InitProfessions = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140080160));
-    fn_TownHallUI_InitProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007fc30));
-    fn_TownHallUI_InitInventory = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007f660));
     // fn_TownHallUI_InitGraph — reimplemented in townhallui.cpp
-    fn_TownHallUI_InitAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007ebf0));
     // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
@@ -3603,8 +3581,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14008c5f0));
     fn_CitizenList_FindAny = reinterpret_cast<fn_CitizenList_FindAny_t>(
         ResolveAddr(Module::Exe, 0x14008c4b0));
-    fn_CitizenList_ShuffleEntities = reinterpret_cast<fn_CitizenList_ShuffleEntities_t>(
-        ResolveAddr(Module::Exe, 0x140089470));
 
     // --- Array push helpers ---
     fn_ProfArrayPush = reinterpret_cast<fn_ProfArrayPush_t>(
@@ -3648,8 +3624,6 @@ bool EngineFuncsInit() {
     // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_TradeComponent_FC)
     fn_Element_SetNeedsSizeCalc = reinterpret_cast<fn_Element_SetNeedsSizeCalc_t>(
         ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
-    fn_TradeUI_RefreshDisplay = reinterpret_cast<fn_TradeUI_RefreshDisplay_t>(
-        ResolveAddr(Module::Exe, 0x1400846b0));
     g_TypeInfo_ValueDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4bf0));
     g_TypeInfo_TradeDescription = reinterpret_cast<uint32_t*>(
@@ -4747,8 +4721,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14001b030));
     fn_BuildingTypeArray_Resize = reinterpret_cast<fn_BuildingTypeArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001b340));
-    fn_StringHash = reinterpret_cast<fn_StringHash_t>(
-        ResolveAddr(Module::Exe, 0x14001b1d0));
 
     // Filename ctor/dtor — already resolved from dispatch slots earlier in init
     // fn_Filename_Ctor at 0x140151d40, fn_Filename_Dtor at 0x1401529e8
@@ -4844,8 +4816,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400d6f00));
     fn_CitizenBehavior_BuildPathGraph = reinterpret_cast<fn_CitizenBehavior_BuildPathGraph_t>(
         ResolveAddr(Module::Exe, 0x1400d70c0));
-    fn_CitizenBehavior_ShuffleSchools = reinterpret_cast<fn_CitizenBehavior_ShuffleSchools_t>(
-        ResolveAddr(Module::Exe, 0x1400896a0));
     fn_ProfResArray_Init = reinterpret_cast<fn_ProfResArray_Init_t>(
         ResolveAddr(Module::Exe, 0x1400177c0));
     fn_StatsArray_Init = reinterpret_cast<fn_StatsArray_Init_t>(

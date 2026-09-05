@@ -27,7 +27,14 @@
 // notes/wave_remaining/lane4_mods.txt are Ghidra MIS-LABELS, not ModDialog code:
 //   0x1400938d0 "ModDialog_helper_38d0"        = Weather::DrawUpdate
 //                                                 (code/Game/Game/weather_sun.cpp)
-//   0x140095da0 "ModDialog_impl_6010_sub_5da0" = GameUpdateLoop QuickSave handler
+//   0x140095da0 "ModDialog_impl_6010_sub_5da0" = GameUpdateLoop::TakeScreenshot
+//                                                 NOT a "QuickSave handler" -- that name
+//                                                 was a misnomer and it hid a live crash:
+//                                                 gameupdateloop.cpp calls it UNGUARDED at
+//                                                 :2060/:2135 via fn_QuickSave, so with this
+//                                                 unregistered, pressing quicksave (key 0x21)
+//                                                 or quickload (0x22) was an EXEC-of-0.
+//                                                 Registered by reg_code_lane4.cpp.
 //   0x1400a5140 "ModDialog_impl_5140"          = ImageCapture::DrawCheck / minimap
 //                                                 paint (code/Game/Game/minimap_paint.cpp)
 // All three are consumed by code/Game/Game/gameupdateloop.cpp, which already owns

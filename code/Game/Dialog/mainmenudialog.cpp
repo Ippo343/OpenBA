@@ -1269,6 +1269,15 @@ void* MainMenuDialog_CreateInPlace_Bare(void* mem) {
 
 }  // namespace
 
+// Exposed for the MapParamsDialog ctor registered at exe 0x14006bd80
+// (code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp). The vtable array lives
+// in the anonymous namespace above, so it has internal linkage and cannot be
+// extern'd from another TU; a function defined out here still sees it. Same trick
+// RegisterMainMenuDialogVtable below already uses.
+extern "C" void* MapParamsDialog_GetStandaloneVtable() {
+    return reinterpret_cast<void*>(g_MapParamsDialog_Vtable_Standalone);
+}
+
 extern "C" void RegisterMainMenuDialogVtable() {
     RegisterExeAddr(0x14015f550, reinterpret_cast<uintptr_t>(g_MainMenuDialog_Vtable_Standalone));
 }

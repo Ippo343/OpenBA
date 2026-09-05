@@ -54,8 +54,22 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
-// Defined at namespace scope in code/Game/Dialog/mainmenudialog.cpp.
-extern void* g_MapParamsDialog_Vtable_Standalone[20];
+// g_MapParamsDialog_Vtable_Standalone lives in mainmenudialog.cpp's ANONYMOUS
+// namespace (opened line 804, closed line 1270), so it has internal linkage and
+// cannot be extern'd from here. REQUIRED INTEGRATOR EDIT — append to
+// code/Game/Dialog/mainmenudialog.cpp, after the `}  // namespace` on line 1270
+// (a function defined there still sees anonymous-namespace names; this is exactly
+// how RegisterMainMenuDialogVtable at line 1271 reaches its own vtable):
+//
+//     // Exposed for the MapParamsDialog ctor registered at exe 0x14006bd80
+//     // (code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp).
+//     extern "C" void* MapParamsDialog_GetStandaloneVtable() {
+//         return reinterpret_cast<void*>(g_MapParamsDialog_Vtable_Standalone);
+//     }
+//
+// It mirrors the existing GetMainMenuDialogVtable / EventNotifyDialog_GetStandaloneVtable
+// accessors and cannot change behaviour on its own.
+extern "C" void* MapParamsDialog_GetStandaloneVtable();
 
 // Registered at exe 0x14006bd80 by RegisterCodeLane2() (standalone/reg_code_lane2.cpp).
 // Signature must match fn_MapParamsDialog_Ctor_t in engine/funcs/engine_funcs.h:
@@ -71,7 +85,7 @@ extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* ext
         fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
 
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    *reinterpret_cast<void**>(self) = g_MapParamsDialog_Vtable_Standalone;
+    *reinterpret_cast<void**>(self) = MapParamsDialog_GetStandaloneVtable();
 
     // +0xB8 editName · +0xC0 numberSeed · +0xC8 textTerrain · +0xD0 textTerrainSize
     // +0xD8 textClimate · +0xE0 textCondition · +0xE8 textDisaster · +0xF0 buttonOk
