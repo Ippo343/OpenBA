@@ -633,14 +633,11 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             }
             // [diag] BANISHED_GOAL7_DUMP — a mode-7 goal that reads 0 forever means
             // the key we search for is not the key the building filed the resource
-            // under. Print the searched key next to the keys actually present, for
-            // the first few buildings that have a non-empty map.
-            // [diag] BANISHED_GOAL7_DUMP — a mode-7 goal that reads 0 forever means
-            // the key we search for is not the key the building filed the resource
-            // under. `want` is the resolved description; `found` null means this
-            // building's map has no entry under that key at all.
-            // (Deliberately does NOT walk the tree: an earlier version of this probe
-            // traversed it and faulted on a leaf's child pointers, killing the run.)
+            // [diag] BANISHED_GOAL7_DUMP (off by default) — a mode-7 goal that reads
+            // 0 forever means the key we search for is not the key the building filed
+            // the resource under. `want` is the resolved description; `found` null
+            // means the lookup missed, and the key list below then shows what IS
+            // there. This is what caught the wrong-child-offset bug above.
             if (Goal7Dump() && storageBST) {
                 // Print on CHANGE, not on a fixed budget. The first version used
                 // `budget = 60`, which the previous goal's polling exhausted before
@@ -660,9 +657,16 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
                             (void*)storageNode, storageCount);
                     // Only when the lookup MISSED: list the keys that ARE present, so
                     // a key-convention mismatch is visible directly. Children are
-                    // node[4]/node[5] -- the offsets BSTFind descends. An earlier
-                    // version of this probe used [3]/[4] and faulted on a leaf.
-                    // Hard-bounded so a malformed tree cannot hang or run away.
+                    // node[3]/node[4], matching TradeOrderBSTFind and retail.
+                    //
+                    // ⚠ An early revision of this probe DID fault while traversing,
+                    // and the cause was never established -- it was a debug probe and
+                    // the offsets were being changed in the same edit, so "which
+                    // version crashed" is not trustworthy evidence about the layout.
+                    // The layout itself is settled independently (see
+                    // TradeOrderBSTFind). Treat this walk as unproven: it is bounded
+                    // and off by default, but if it ever kills a run again, delete it
+                    // rather than reasoning from the crash.
                     if (!storageNode) {
                         uintptr_t* stack[64]; int sp = 0, visited = 0;
                         uintptr_t* node = reinterpret_cast<uintptr_t*>(storageBST);

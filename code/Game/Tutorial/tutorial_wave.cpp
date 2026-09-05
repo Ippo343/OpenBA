@@ -460,6 +460,19 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
             if (found2 && found2->payload) {
                 targetElem = reinterpret_cast<uint64_t*>(found2->payload)[index];
             }
+            // [diag] BANISHED_TUTORIAL_TRACE — which entity the world-arrow will
+            // point at. `key` is the resolved building Description; count is how
+            // many instances of it the town registry holds. A count that does not
+            // match the town, or an index past the intended one, means the arrow
+            // is aimed at the wrong building rather than mis-projected.
+            if (TutTrace()) {
+                fprintf(stderr, "[TutHL] branchA key=%016llX key2=%016llX count=%d index=%d "
+                                "-> entity=%016llX (payload=%p)\n",
+                        (unsigned long long)key, (unsigned long long)key2, count, index,
+                        (unsigned long long)targetElem,
+                        found2 ? found2->payload : nullptr);
+                fflush(stderr);
+            }
             branchA = true;
         }
     }
