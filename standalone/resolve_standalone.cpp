@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
+#include <vector>
+#include <algorithm>
 
 // ============================================================
 // Module info — Exe slot unused
@@ -52,6 +54,65 @@ void TraceExeEnd(const char* label) {
     fflush(stderr);
 }
 
+// ============================================================
+// Unregistered-address census (BANISHED_UNREG_CENSUS=1)
+// ============================================================
+// The NOT IMPLEMENTED warning below is once-per-address for the life of the
+// process. That is fine as a nag but useless for "which unregistered slots does
+// the LOAD path touch": a slot hit at boot and again mid-load is only ever
+// attributed to boot. The census keeps a per-address, per-phase hit count so
+// the load path can be read off directly.
+static const char* g_unregPhase = "boot";
+
+struct UnregEntry {
+    const char* firstPhase = nullptr;              // phase of the very first hit
+    std::unordered_map<const char*, size_t> hits;  // phase label -> count
+};
+static std::unordered_map<uintptr_t, UnregEntry>& GetUnregCensus() {
+    static std::unordered_map<uintptr_t, UnregEntry> c;
+    return c;
+}
+static bool CensusEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_UNREG_CENSUS");
+        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on != 0;
+}
+
+void SetUnregPhase(const char* phase) {
+    if (!phase) return;
+    g_unregPhase = phase;
+    if (CensusEnabled()) {
+        fprintf(stderr, "[UnregCensus] phase -> %s\n", phase);
+        fflush(stderr);
+    }
+}
+const char* UnregPhase() { return g_unregPhase; }
+
+void DumpUnregCensus() {
+    if (!CensusEnabled()) return;
+    auto& c = GetUnregCensus();
+    // Sorted by address so two runs diff cleanly against each other.
+    std::vector<uintptr_t> addrs;
+    addrs.reserve(c.size());
+    for (auto& kv : c) addrs.push_back(kv.first);
+    std::sort(addrs.begin(), addrs.end());
+    fprintf(stderr, "[UnregCensus] ==== %zu distinct unregistered addresses ====\n",
+            addrs.size());
+    for (uintptr_t a : addrs) {
+        const UnregEntry& e = c[a];
+        size_t total = 0;
+        for (auto& h : e.hits) total += h.second;
+        fprintf(stderr, "[UnregCensus] 0x%llx first=%s total=%zu",
+                (unsigned long long)a, e.firstPhase ? e.firstPhase : "?", total);
+        for (auto& h : e.hits) fprintf(stderr, " %s=%zu", h.first, h.second);
+        fprintf(stderr, "\n");
+    }
+    fflush(stderr);
+}
+
 // NotImplemented stub — logs and returns 0
 // Safe for most calling conventions (returns 0/nullptr/false)
 static uintptr_t NotImplementedStub_impl(uintptr_t ghidra_addr) {
@@ -62,6 +123,11 @@ static uintptr_t NotImplementedStub_impl(uintptr_t ghidra_addr) {
                 (unsigned long long)ghidra_addr);
         warned[ghidra_addr] = true;
         g_uniqueStubs++;
+    }
+    if (CensusEnabled()) {
+        UnregEntry& e = GetUnregCensus()[ghidra_addr];
+        if (!e.firstPhase) e.firstPhase = g_unregPhase;
+        e.hits[g_unregPhase]++;
     }
     g_stubHits++;
     return 0;

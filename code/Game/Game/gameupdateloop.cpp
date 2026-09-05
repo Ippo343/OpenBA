@@ -26,6 +26,7 @@
 #include "resolve.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include <cstdio>
+#include <cstring>
 #include <cstdint>
 #include <cmath>
 #include <cstdlib>
@@ -881,6 +882,25 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
 
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
+    // Unregistered-address census phase. Update also runs BEFORE the world is
+    // loaded (the Stage-C hold below no-op ticks until Load has run), so this
+    // must not simply fire on the first call or it would swallow the load. Only
+    // promote once the load itself has finished, i.e. out of "postload".
+    if (strcmp(UnregPhase(), "postload") == 0) SetUnregPhase("gameplay");
+    // ...and dump the census a fixed number of gameplay frames later, so an
+    // unattended run yields the table without needing a clean process exit
+    // (the crash handler ExitProcess()es, and quit-to-menu does not return
+    // from GameMain either). BANISHED_UNREG_CENSUS=<n> sets the frame count.
+    if (strcmp(UnregPhase(), "gameplay") == 0) {
+        static int s_unregFrames = 0;
+        static int s_unregDumpAt = -1;
+        if (s_unregDumpAt < 0) {
+            const char* v = std::getenv("BANISHED_UNREG_CENSUS");
+            int n = (v && v[0]) ? std::atoi(v) : 0;
+            s_unregDumpAt = (n > 1) ? n : 600;
+        }
+        if (++s_unregFrames == s_unregDumpAt) DumpUnregCensus();
+    }
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every

@@ -1514,6 +1514,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // (it IS our vtable +0x38 slot).
     if (*(void**)(p + 0x58) != nullptr) {
         void* savedState = *(void**)(p + 0x58);
+        SetUnregPhase("load");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
                 savedState);
         fflush(stderr);
@@ -1527,6 +1528,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
         if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
         *(void**)(p + 0x58) = nullptr;
+        SetUnregPhase("postload");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
         fflush(stderr);
 

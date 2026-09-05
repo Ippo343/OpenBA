@@ -110,6 +110,27 @@ void* WrapPersistObject(void* self, void* stream, uint32_t gen,
                          *(int*)((uintptr_t)stream + 8) == 0;
     const bool wild = (objId < 0) || (cap >= 0 && objId >= cap);
 
+    // [PersistDecide] -- read the value PersistObject actually branches on.
+    // Its load-leg decision is exactly `idMap[objId] < 0`: negative means "not
+    // seen", so it CONSTRUCTS the object and dispatches slot 3, and the body
+    // deserializes inline. Non-negative means "already seen", so it returns the
+    // existing object WITHOUT dispatching slot 3 -- which produces a header-only
+    // 13-byte record where the save leg wrote header+body (measured 71 vs 13).
+    // ResetPersistState seeds every entry to -1 on BOTH legs, so a >= 0 here
+    // means something claimed that slot earlier in this same load.
+    if (loading && idMap) {
+        const int32_t mapSize =
+            Readable((const uint8_t*)self + 0x18, 4)
+                ? *(int32_t*)((uintptr_t)self + 0x18) : -1;
+        const bool inRange = (objId >= 0 && mapSize > 0 && objId < mapSize);
+        const int32_t slot = inRange ? ((int32_t*)idMap)[objId] : -999;
+        fprintf(stderr,
+                "[PersistDecide] objId=%d mapSize=%d idMap[objId]=%d -> %s\n",
+                objId, mapSize, slot,
+                (inRange && slot >= 0) ? "SKIP-BODY" : "read-body");
+        fflush(stderr);
+    }
+
     // Log the first N unconditionally (so the healthy shape is on record, which
     // is what makes an anomaly legible) and then every wild one.
     if (g_logged < g_maxLog || wild) {

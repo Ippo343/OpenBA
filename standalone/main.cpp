@@ -1777,6 +1777,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
 
+    // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
+    // not from atexit: the crash handler ends in ExitProcess, which skips it.
+    DumpUnregCensus();
+
     return rc;
 }
 

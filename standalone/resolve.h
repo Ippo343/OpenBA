@@ -67,6 +67,20 @@ struct ExeAddrEntry {
 };
 void RegisterExeAddrs(const ExeAddrEntry* entries, size_t count);
 
+// ---- Unregistered-address census (BANISHED_UNREG_CENSUS=1) ----------------
+// ResolveAddr's NOT IMPLEMENTED warning fires ONCE per address for the whole
+// process, so an address hit at boot AND again during a save load is only ever
+// attributed to boot. That makes the log useless for asking "which unregistered
+// slots does the LOAD path actually touch". The census records, per address,
+// the phase of the first hit and a per-phase hit count, and dumps the table
+// sorted at exit.
+//
+// Phase is a plain label pushed by the code that knows it has entered one;
+// UnregPhase() is the current label ("boot" until someone sets it).
+void SetUnregPhase(const char* phase);
+const char* UnregPhase();
+void DumpUnregCensus();
+
 // Query how many exe addresses are registered vs referenced (for progress tracking)
 struct RegistryStats {
     size_t registered;  // addresses with real implementations

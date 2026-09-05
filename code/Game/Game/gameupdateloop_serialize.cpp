@@ -1023,6 +1023,23 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     s_fn_ResetPersist(intFactory, stream);
     HdrTrace(stream, ser, "after-resetpersist");
 
+    // [PersistMap] BANISHED_PERSIST_TRACE — InternalFactory id-space density.
+    // ResetPersistState sizes the id map to the factory OBJECT COUNT (+8) but
+    // PersistObject indexes it by the object ID. Those are only interchangeable
+    // while the handle table is DENSE (ids in [0,count)). If any live object
+    // carries id >= count, idMap[id] reads out of bounds on BOTH legs -- same
+    // index, different adjacent heap -- so the save leg can see a negative word
+    // ("unseen", write the body) while the load leg sees a non-negative one
+    // ("already seen", return without dispatching slot 3). That is the 71-vs-13
+    // byte asymmetry, produced by identical code over different heap.
+    if (std::getenv("BANISHED_PERSIST_TRACE")) {
+        fprintf(stderr, "[PersistMap] %s count(+8)=%d mapSize(+0x18)=%d\n",
+                IsSaving(stream) ? "SAVE" : "LOAD",
+                *(int*)((uint8_t*)intFactory + 8),
+                *(int*)((uint8_t*)intFactory + 0x18));
+        fflush(stderr);
+    }
+
     if (IsSaving(stream)) {
         s_fn_SaveAllSettings(*(void**)(self + 0x98));
     }
