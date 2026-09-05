@@ -93,3 +93,91 @@ then hand-tagged LOAD-WINDOW on the strength of an older tutorial census.
 **The census is authoritative; `held_back_code_fns.txt` is a pre-`a8a24ba`
 artifact.** The real total for this wave is **48**, not 49. Do not re-derive the
 union — regenerate from the census alone.
+
+---
+
+## Lane 4 — 1 LIVE CRASH, 5 free ports, 2 leaves (harm)
+
+### ⚠ `0x140095da0` — `GameUpdateLoop::TakeScreenshot`. VERIFIED LIVE CRASH.
+**Not a QuickSave handler.** `standalone/reg_mods.cpp:30` names it
+"ModDialog_impl_6010_sub_5da0 = GameUpdateLoop QuickSave handler" — a misnomer;
+lane 4's decompile says `TakeScreenshot` (allocs a `FrameCopyImageBuffer`, grabs
+the backbuffer, walks `<saveDir>\Screenshots\Screenshot%i.<ext>`, then clears
+both flags with a 2-byte store to `self+0xC0`).
+
+Integrator-verified chain, end to end:
+- `fn_QuickSave` resolves `0x140095da0` (`gameupdateloop.cpp:526-527`) → null.
+- Called **UNGUARDED** at `gameupdateloop.cpp:2060` and `:2135`.
+- Flags set from `KeyMap::Pressed(0x21)` / `(0x22)` at `:1645-1648`.
+- `CHECK_FN` is only `TRACE("... is NULL!")` (`:675`) — non-fatal.
+
+**Pressing quicksave or quickload in-game is an EXEC-of-0 crash in the default
+build.** Highest-priority item in the wave. Also fix the name in `reg_mods.cpp:30`.
+
+### Other lane 4 rows
+| addr | what | verdict |
+|---|---|---|
+| `0x140089ed0` | `CitizenBehavior::CountResources` | port (free — zero live consumers) |
+| `0x14008a730` | `CitizenBehavior::CollectStats` | port (free) |
+| `0x14008c100` | `CitizenBehavior::CheckThresholds` | port (free) |
+| `0x1400932a0` | `Game::GetMonthFromTime` | port (free) |
+| `0x140099c20` | `KeyMap::BuildKeyName` | port (free) — **needs an ABI shim**: port is `(retval, device, key)`, retail is `(container, retval, device, key)` returning RDX |
+| `0x1400938d0` | `Weather::DrawUpdate` | **leave — HARM**: would double-write fog/sun/cbuffer; lane re-verified the "Environment.rsc not loaded" claim is NOT stale |
+| `0x14009e8c0` | `Game::BuildPathfindingSystems` | **leave — HARM**: `gameupdateloop_load.cpp:1562-3` already does the `+0x68/+0x70/+0x78` subset; registering builds all three twice and leaks the seeded objects |
+
+---
+
+## Lane 6 — 5 register-only ports, 3 leaves (all active harm)
+
+New file `standalone/reg_code_lane6.cpp` (registration only; all five ports exist).
+
+| addr | what | verdict |
+|---|---|---|
+| `0x1400fc6b0` | `DragTool::OnKey` | port (register-only; `fn_DragTool_OnKey` has zero callers) |
+| `0x140101ce0` | `EntityUI::OpenPauseMenu` | port (register-only; `fn_Toolbar_ToggleAll` is a misnomer, zero callers) |
+| `0x14011b560` | `DecalComponent::Draw` | port, gated `BANISHED_LIVE_DECAL` to match the vtable gate |
+| `0x14012bbd0` | `StatusIconComponent` icon positioning | port, gated `BANISHED_LIVE_STATUSICON_DRAW` to match the slot-8 install |
+| `0x14012db70` | `ToolbarDescription::~ToolbarDescription` | port (register-only, **via adapter**) |
+| `0x1400fcc90` | `EditTool` deselect + close info dialog | **leave**: a live cc90 would deselect + wipe the outline EVERY frame, because our `0x140100380` screen-rect helper fails for citizens. The guard IS the feature. |
+| `0x140101ee0` | `EntityUI::Startup` | **leave — HARM**: would double-insert the 8 tool-mode AVL nodes |
+| `0x1401026a0` | `EntityUI::Update` | **leave — HARM**: would double-drive camera and tool every frame |
+
+---
+
+## INTEGRATOR DECISION NEEDED: delete vs register a zero-consumer pointer
+
+Lanes 3 and 4 reached opposite recommendations on the same situation — a `fn_*`
+that resolves an address and is **never dereferenced**:
+- **Lane 3** → DELETE the pointer (removes dead code and the census row).
+- **Lane 4** → REGISTER it ("port (free)", makes the dead pointer truthful).
+
+Both silence the census. Ruling for this wave, to keep the tree consistent:
+
+- **Zero consumers anywhere → DELETE.** Registering a function nothing calls adds
+  registry weight and preserves a misleading "we support this" signal.
+- **Any real consumer — including a `_DEBUG`-only or feature-gated one → REGISTER**
+  per the lane's argument (this is lane 6's decal/statusicon shape, which is NOT
+  the same situation).
+
+Apply the same 3-mentions/no-deref + single-`ResolveAddr` verification used for
+lane 3 before deleting anything.
+
+## Still to verify before applying
+- `fn_StringHash` (0x14001b1d0) and `fn_ToolbarSort` (0x140021790) — lane 1's
+  extra deletion candidates, not yet integrator-verified.
+- Lane 1 flag: `entity_finders_disaster.cpp:50`'s stub comment is STALE — it
+  blames an `AmbientEmitterComponent::OnAdded` that has been live and default-on
+  since `1b7a50b` (2026-06-30). Rewrite with the measured cause.
+- Lane 1 nit (latent, unreachable today): `SubArrayDeepCopy`
+  (`serialize_struct60b.cpp:76-82`) zeroes `dst->data` and `dst->count` but not
+  `dst->capacity`; retail's `param_1[1] = 0` clears count AND capacity as one qword.
+
+## Queued run (no risky registration; cannot crash)
+`0x140002280` `Entity::FindComponent<AmbientEmitterComponent>` — lane 1 upgraded
+this from `leave` to **needs a run to decide** on challenge. The unguarded retail
+deref needs `+0x38` non-null AND the description to declare **at least 2**
+emitters (a710 asks for emitter index 1, reads `entry[1].handle` at stride 0x10).
+Run: `mingw32-make sa-run` with `BANISHED_AMBIENT_TRACE=1`, after raising the
+16-line cap at `ambientemittercomponent.cpp:283`. If every workplace line shows
+`count>=2`, register it and ambient/fire/tornado audio comes alive. If any shows
+0 or 1, keep it unregistered and rewrite the note with the measured count.

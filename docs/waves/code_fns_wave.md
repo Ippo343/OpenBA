@@ -11,11 +11,31 @@ still misses, so every call to them lands on `NotImplementedStub_impl` and
 **returns 0**. Unlike the dispatch-slot band we just closed, these have no PE
 import name — each one needs a Ghidra decompile to identify.
 
-The list is the union of `docs/waves/lanes/held_back_code_fns.txt` (49) and the
-`BANISHED_AUTOLOAD=Auto` census (48, a clean subset). Addresses tagged
-`LOAD-WINDOW` are resolved during load/postload and are the highest-value ones:
-a null returned there can silently shorten the save stream. `not-hit-on-the-autoload-run`
-means the older tutorial census saw it but this run did not.
+The list came from the union of `docs/waves/lanes/held_back_code_fns.txt` (49)
+and the `BANISHED_AUTOLOAD=Auto` census (48).
+
+**CORRECTION 1 (integrator error, found by lane 1).** The held-back file is a
+stale pre-`a8a24ba` artifact and the census is authoritative. `0x1400192a0` is
+ALREADY REGISTERED (`standalone/reg_unreg_lane1.cpp:220`, in `a8a24ba`, an
+ancestor of `f119f3b`); the census correctly omitted it and the union wrongly
+resurrected it. **The real total is 48.** Regenerate from the census alone.
+
+**CORRECTION 2 (integrator error, found independently by lanes 1 and 6).** This
+brief originally said LOAD-WINDOW rows "are the highest-value ones: a null
+returned there can silently shorten the save stream." **That over-claims and is
+withdrawn.** `NotImplementedStub_impl` is invoked from inside `ResolveAddr`
+itself (`standalone/resolve_standalone.cpp:176`), on a resolution MISS — not from
+a per-address thunk when the null is called. So:
+
+- `LOAD-WINDOW` / `first=load` means only "the one-time `*_InitFuncs()` that
+  resolves this address happened to run during load".
+- `total=N` is a RESOLVE count, not a call count. `total=1` is the normal shape
+  for a one-time init. A high `total` means the resolve sits in a loop.
+- It is **not** evidence the resulting null is ever invoked, and **not** evidence
+  the address is on a Serialize path. Check whether it actually is one.
+
+Weight a row by what its CALL SITE does (unguarded call > null-guard-and-skip >
+null-guard-and-fallback), never by its census tag.
 
 ## Your deliverable is a TRIAGE REPORT first, code second
 
