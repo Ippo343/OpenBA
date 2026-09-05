@@ -58,6 +58,11 @@ static bool s_initialized = false;
 //   validate refs, serialize orchardFlag, orchardId, entity ref array, resource array
 
 void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
+    // Slot-3 serializers are dispatched straight off the vtable by the entity
+    // stream, so nothing else ever reaches this file. Resolving here is what
+    // keeps the pointers below non-null -- when they were null the whole body
+    // read ZERO bytes and silently desynced every object after it.
+    OrchardComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (s_fn_Component_Serialize)

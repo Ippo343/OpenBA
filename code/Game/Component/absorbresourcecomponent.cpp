@@ -38,6 +38,11 @@ static bool s_initialized = false;
 // Pattern: Component_Serialize + two empty Serializer ctor/dtor pairs.
 // Same pattern as MarketLocationComponent and StorageLocationComponent.
 void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* stream) {
+    // Slot-3 serializers are dispatched straight off the vtable by the entity
+    // stream, so nothing else ever reaches this file. Resolving here is what
+    // keeps the pointers below non-null -- when they were null the whole body
+    // read ZERO bytes and silently desynced every object after it.
+    AbsorbResourceComponent_InitFuncs();
     // Call base Component_Serialize
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);

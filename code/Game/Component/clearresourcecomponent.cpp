@@ -35,6 +35,11 @@ static bool s_initialized = false;
 // ============================================================
 // Same pattern as AbsorbResourceComponent: Component_Serialize + two empty blocks.
 void ClearResourceComponent_Shutdown(ClearResourceComponent* self, void* stream) {
+    // Slot-3 serializers are dispatched straight off the vtable by the entity
+    // stream, so nothing else ever reaches this file. Resolving here is what
+    // keeps the pointers below non-null -- when they were null the whole body
+    // read ZERO bytes and silently desynced every object after it.
+    ClearResourceComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 

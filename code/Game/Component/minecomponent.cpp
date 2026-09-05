@@ -33,6 +33,11 @@ static bool s_initialized = false;
 // Base component serialization + empty serializer block.
 
 void MineComponent_Shutdown(MineComponent* self, void* stream) {
+    // Slot-3 serializers are dispatched straight off the vtable by the entity
+    // stream, so nothing else ever reaches this file. Resolving here is what
+    // keeps the pointers below non-null -- when they were null the whole body
+    // read ZERO bytes and silently desynced every object after it.
+    MineComponent_InitFuncs();
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
