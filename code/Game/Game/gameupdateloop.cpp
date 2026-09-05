@@ -736,6 +736,7 @@ extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_s
 extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
+extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
@@ -1130,6 +1131,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
     // (standalone/ach_clock.cpp).
     AchClock_Tick(s_frameNum);
+
+    // THE VIRTUAL MERCHANT CUSTOMER: with a merchant docked, fill the sell rows and
+    // press Trade through the ported checkout. No-op unless BANISHED_TRADE_SELL is
+    // set (standalone/trade_buy_harness.cpp).
+    TradeSellHarness_Tick(self->m_entityUI, s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
