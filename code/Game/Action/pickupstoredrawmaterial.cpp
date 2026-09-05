@@ -151,6 +151,11 @@ static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
 //             material count(+0x38), material list(+0x30), partial flag(+0x40)
 // ============================================================
 void PickupStoredRawMaterial_Serialize_Impl(PickupStoredRawMaterial* self, void* stream) {
+    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
+    // was the one that never got it, so a save taken while one of these actions was
+    // in flight called a null serializer pointer (EXEC of 0). Found live on
+    // CompleteRoad once roads started being built; these four are the same shape.
+    PickupStoredRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

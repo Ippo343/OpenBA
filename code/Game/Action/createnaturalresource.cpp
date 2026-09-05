@@ -180,6 +180,11 @@ void* CreateNaturalResource_ScalarDtor_Impl(CreateNaturalResource* self, uint32_
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
 void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* stream) {
+    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
+    // was the one that never got it, so a save taken while one of these actions was
+    // in flight called a null serializer pointer (EXEC of 0). Found live on
+    // CompleteRoad once roads started being built; these four are the same shape.
+    CreateNaturalResource_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

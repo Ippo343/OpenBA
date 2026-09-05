@@ -42,7 +42,13 @@ bool CompleteRoad_ResolveFuncs() {
     s_fn_CompleteRoadTile = reinterpret_cast<void(*)(void*, int, uint8_t, uint32_t)>(
         ResolveAddr(Module::Exe, 0x14009c640));
     s_fn_Serialize_UChar = reinterpret_cast<fn_Serialize_UChar_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAuchar@PEBD@Z"));
+        // MSVC mangling for `unsigned char&` is AEAE (C=signed char, D=char, E=unsigned
+        // char). The old name here spelled the parameter "AEAuchar", which is not a
+        // valid mangled fragment at all, so ResolveExport returned null every time and
+        // this pointer was permanently 0. ResolveFuncs reported ok=false and Serialize
+        // called it anyway -- an EXEC of 0 the moment a save caught a CompleteRoad in
+        // flight. Verified against the Runtime export table (ordinal 3733).
+        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
 
     bool ok = s_pGameState && s_fn_CompleteRoadTile && s_fn_Serialize_UChar &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -64,6 +70,14 @@ bool CompleteRoad_ResolveFuncs() {
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
 void CompleteRoad_Serialize_Impl(void* self, void* stream) {
+    // Lazy-resolve, same reason AbstractImpl does it. Every in-flight CompleteRoad is
+    // built by the COPY CTOR (0x1400c59d0, from work_act_perform.cpp), which bypasses
+    // both the factory and CompleteRoad_ResolveFuncs -- so on the save path these
+    // pointers were all still null and the first call was an EXEC of 0. It never
+    // surfaced before because no CompleteRoad action had ever existed to be saved:
+    // until roads started actually being built, the work item never got that far.
+    // Same hole BuildRoad_ScalarDtor_Impl documents for the BuildRoad ctor path.
+    CompleteRoad_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

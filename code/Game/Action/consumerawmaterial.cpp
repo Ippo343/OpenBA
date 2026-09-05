@@ -100,6 +100,11 @@ bool ConsumeRawMaterial_ResolveFuncs() {
 //   v2+: consume mode flag(+0x38)
 // ============================================================
 void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
+    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
+    // was the one that never got it, so a save taken while one of these actions was
+    // in flight called a null serializer pointer (EXEC of 0). Found live on
+    // CompleteRoad once roads started being built; these four are the same shape.
+    ConsumeRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];

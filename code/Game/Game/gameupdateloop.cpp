@@ -736,6 +736,7 @@ extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_s
 extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
 extern "C" void RoadProbe_Tick(int frameNum);          // standalone/road_probe.cpp
 extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
+static void GameUpdateLoop_TryOpenDebugPanel(GameUpdateLoop* self);  // defined below
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
 extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
@@ -1134,6 +1135,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     RoadProbe_Tick(s_frameNum);
     // Player stand-in for the town-hall Builder spinner. No-op unless BANISHED_BUILDERS.
     BuilderSeat_Tick(s_frameNum);
+    // The debug panel resource lives in a .pkm mounted after Startup; keep trying.
+    GameUpdateLoop_TryOpenDebugPanel(self);
     // Non-retail clock knobs for the time-gated achievements: advance the year
     // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
     // (standalone/ach_clock.cpp).
@@ -2261,6 +2264,87 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
 // ============================================================
 // GameUpdateLoop::Startup (0x140097C00) — Initialize UI and game systems
+static void GameUpdateLoop_TryOpenDebugPanel(GameUpdateLoop* self) {
+
+    // RETRY, do not one-shot. The mod .pkm is mounted by
+    // IO::Modification::SetupFileSystem several SECONDS after Startup runs
+    // (measured with BANISHED_MOD_PROBE: packages=0 at startup, packages=1 holding
+    // 'DebugMenu.pkm' by t+10s). A single probe here therefore always looked for
+    // Debug.rsc before the package containing it existed, and reported the resource
+    // "not found / wrong type" as if the mod were missing. Retry on a budget.
+    static bool s_debugPanelOpened = false;
+    static int  s_debugPanelTries = 0;
+    const char* dbgEnv = getenv("BANISHED_DEBUG_PANEL");
+    const bool wantPanel = dbgEnv && dbgEnv[0] && !(dbgEnv[0] == '0' && dbgEnv[1] == '\0');
+    if (!s_debugPanelOpened && wantPanel && s_debugPanelTries < 240) {
+        ++s_debugPanelTries;
+        if (fn_Filename_CtorCStr_Local && fn_ExternalFactory_FindOrLoad &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
+            fn_MemAlloc && g_pMemAllocSingleton && fn_DialogInstance_Ctor &&
+            fn_InternalBasePtr_Ctor && fn_UI_AddDialog && self->m_userInterface) {
+            // The package stores the leaf name ("Debug.rsc"); the folder the
+            // resource system prepends is uncertain (Toolbar/MainMenu live under
+            // "Dialog/"). Probe candidate paths and use the first that resolves.
+            static const char* kCandidates[] = {
+                "Dialog/Debug.rsc", "Debug.rsc", "Menu/Debug.rsc",
+                "Dialog/DebugMenu.rsc", "DebugMenu.rsc", "Dialog/Cheat.rsc",
+            };
+            void* found = nullptr;
+            for (const char* cand : kCandidates) {
+                uint8_t fnbuf[8];
+                fn_Filename_CtorCStr_Local(fnbuf, cand);
+                void* r = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnbuf);
+                if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
+                if (s_debugPanelTries == 1 || r)
+                    fprintf(stderr, "[DebugUI] auto-open probe: '%s' -> %p (try %d)\n",
+                            cand, r, s_debugPanelTries);
+                if (r) { found = r; break; }
+            }
+            // Accept the loaded resource if it is a Dialog (or External) — the
+            // guard mirrors the toolbar/eventnotify open paths. Permissive when
+            // the type-id slot is unregistered in standalone.
+            void* dialogRes = nullptr;
+            if (found &&
+                (!g_pDialogTypeId || fn_IsDerivedFrom(found, *g_pDialogTypeId) ||
+                 (g_pExternalTypeId && fn_IsDerivedFrom(found, *g_pExternalTypeId))))
+                dialogRes = found;
+            if (s_debugPanelTries == 1 || found)
+                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc found=%p accepted=%p UI=%p\n",
+                        found, dialogRes, (void*)self->m_userInterface);
+            if (dialogRes) {
+                void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);  // DialogInstance base
+                if (mem) {
+                    int64_t nullParent[1] = {0};
+                    fn_InternalBasePtr_Ctor(nullParent, nullptr);
+                    // (self, ui, dialogRes, parent, dataSource, extraCtrlData, flags)
+                    void* dlg = fn_DialogInstance_Ctor(mem, self->m_userInterface,
+                                                       dialogRes, nullParent, nullptr, nullptr, 0);
+                    if (dlg) {
+                        int64_t dialogPtr[1];
+                        fn_InternalBasePtr_Ctor(dialogPtr, dlg);
+                        fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+                        s_debugPanelOpened = true;
+                        fprintf(stderr, "[DebugUI] auto-open: DialogInstance added dlg=%p "
+                                "(Slot4 fires on first layout/update)\n", dlg);
+                    } else if (fn_MemFreeStatic) {
+                        fn_MemFreeStatic(mem);
+                        fprintf(stderr, "[DebugUI] auto-open: DialogInstance_Ctor returned null\n");
+                    }
+                }
+            } else if (s_debugPanelTries >= 240) {
+                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc never resolved after %d "
+                        "tries -- is DebugMenu.pkm present AND enabled in WinData? "
+                        "(BANISHED_MOD_PROBE=1 prints the mounted package list)\n",
+                        s_debugPanelTries);
+            }
+            fflush(stderr);
+        } else {
+            fprintf(stderr, "[DebugUI] auto-open SKIPPED: a required engine fn/singleton is null\n");
+            fflush(stderr);
+        }
+    }
+}
+
 // ============================================================
 
 extern "C"
@@ -2492,72 +2576,11 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // The panel is otherwise opened in-game by the DebugMenu.pkm mod's trigger;
     // this env just pops it automatically for testing. Grep the log for
     // "[DebugUI]" to confirm the controller wired.
-    {
-        static bool s_debugPanelOpened = false;
-        const char* dbgEnv = getenv("BANISHED_DEBUG_PANEL");
-        const bool wantPanel = dbgEnv && dbgEnv[0] && !(dbgEnv[0] == '0' && dbgEnv[1] == '\0');
-        if (!s_debugPanelOpened && wantPanel) {
-            s_debugPanelOpened = true;
-            if (fn_Filename_CtorCStr_Local && fn_ExternalFactory_FindOrLoad &&
-                g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
-                fn_MemAlloc && g_pMemAllocSingleton && fn_DialogInstance_Ctor &&
-                fn_InternalBasePtr_Ctor && fn_UI_AddDialog && self->m_userInterface) {
-                // The package stores the leaf name ("Debug.rsc"); the folder the
-                // resource system prepends is uncertain (Toolbar/MainMenu live under
-                // "Dialog/"). Probe candidate paths and use the first that resolves.
-                static const char* kCandidates[] = {
-                    "Dialog/Debug.rsc", "Debug.rsc", "Menu/Debug.rsc",
-                    "Dialog/DebugMenu.rsc", "DebugMenu.rsc", "Dialog/Cheat.rsc",
-                };
-                void* found = nullptr;
-                for (const char* cand : kCandidates) {
-                    uint8_t fnbuf[8];
-                    fn_Filename_CtorCStr_Local(fnbuf, cand);
-                    void* r = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnbuf);
-                    if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
-                    fprintf(stderr, "[DebugUI] auto-open probe: '%s' -> %p\n", cand, r);
-                    if (r) { found = r; break; }
-                }
-                // Accept the loaded resource if it is a Dialog (or External) — the
-                // guard mirrors the toolbar/eventnotify open paths. Permissive when
-                // the type-id slot is unregistered in standalone.
-                void* dialogRes = nullptr;
-                if (found &&
-                    (!g_pDialogTypeId || fn_IsDerivedFrom(found, *g_pDialogTypeId) ||
-                     (g_pExternalTypeId && fn_IsDerivedFrom(found, *g_pExternalTypeId))))
-                    dialogRes = found;
-                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc found=%p accepted=%p UI=%p\n",
-                        found, dialogRes, (void*)self->m_userInterface);
-                if (dialogRes) {
-                    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);  // DialogInstance base
-                    if (mem) {
-                        int64_t nullParent[1] = {0};
-                        fn_InternalBasePtr_Ctor(nullParent, nullptr);
-                        // (self, ui, dialogRes, parent, dataSource, extraCtrlData, flags)
-                        void* dlg = fn_DialogInstance_Ctor(mem, self->m_userInterface,
-                                                           dialogRes, nullParent, nullptr, nullptr, 0);
-                        if (dlg) {
-                            int64_t dialogPtr[1];
-                            fn_InternalBasePtr_Ctor(dialogPtr, dlg);
-                            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
-                            fprintf(stderr, "[DebugUI] auto-open: DialogInstance added dlg=%p "
-                                    "(Slot4 fires on first layout/update)\n", dlg);
-                        } else if (fn_MemFreeStatic) {
-                            fn_MemFreeStatic(mem);
-                            fprintf(stderr, "[DebugUI] auto-open: DialogInstance_Ctor returned null\n");
-                        }
-                    }
-                } else {
-                    fprintf(stderr, "[DebugUI] auto-open: Debug.rsc not found / wrong type — is "
-                            "DebugMenu.pkm present in WinData?\n");
-                }
-                fflush(stderr);
-            } else {
-                fprintf(stderr, "[DebugUI] auto-open SKIPPED: a required engine fn/singleton is null\n");
-                fflush(stderr);
-            }
-        }
-    }
+    // Debug/cheat panel auto-open (BANISHED_DEBUG_PANEL) -- see
+    // GameUpdateLoop_TryOpenDebugPanel above. Called here AND from the per-frame
+    // Update, because the mod package it reads from is mounted seconds later.
+    GameUpdateLoop_TryOpenDebugPanel(self);
+
 
     // Create and add EventNotify ribbon (BANISHED_LIVE_EVENTS). Shows recent game
     // events as a strip below the toolbar. Uses the FindOrLoad fallback (empty

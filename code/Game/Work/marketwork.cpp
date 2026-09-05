@@ -201,8 +201,17 @@ bool MarketWork_ResolveFuncs() {
     if (iatSerDtorSlot)
         s_fn_Serializer_Dtor = *reinterpret_cast<MW_Serializer_Dtor_t*>(iatSerDtorSlot);
 
-    // IO::Serializer::GetVersion dispatch slot
-    uintptr_t iatSerGetVer = ResolveAddr(Module::Exe, 0x140151510);
+    // IO::Serializer::GetVersion dispatch slot.
+    //
+    // This read 0x140151510 until 2026-09-05. That slot is NOT GetVersion -- it is
+    // "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", a DATA export, and it is
+    // legitimately registered as such by reg_element_typeids.cpp. So the "function
+    // pointer" was a valid pointer to a BaseTypeInfo object and calling it was an EXEC
+    // of Runtime .data (fault address Runtime+0x1FAE78) the first time a save caught a
+    // MarketWork in the goals tree. Every other GetVersion user in the project already
+    // used 0x140152a48; confirm with tools/dispatch_slot_map.py 0x140152a48.
+    // Same shape as the note in ambientemittercomponent.cpp.
+    uintptr_t iatSerGetVer = ResolveAddr(Module::Exe, 0x140152a48);
     if (iatSerGetVer)
         s_fn_Serializer_GetVersion = *reinterpret_cast<MW_Serializer_GetVersion_t*>(iatSerGetVer);
 
