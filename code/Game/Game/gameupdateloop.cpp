@@ -737,6 +737,7 @@ extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
 extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
+extern "C" void FinishBuildsHarness_Tick(int frameNum);   // standalone/finish_builds_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
@@ -1136,6 +1137,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // press Trade through the ported checkout. No-op unless BANISHED_TRADE_SELL is
     // set (standalone/trade_buy_harness.cpp).
     TradeSellHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // Finish every structure still under construction, the way the stress placer
+    // finishes its own. No-op unless BANISHED_FINISH_BUILDS is set
+    // (standalone/finish_builds_harness.cpp).
+    FinishBuildsHarness_Tick(s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
     // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
