@@ -1797,7 +1797,6 @@ extern fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect;
 // Already available through fn_UI_AddDialog and MemAlloc.
 
 // EventPopupDialog vtable pointer (PTR_FUN_14015bd80)
-extern void** g_EventPopupDialog_Vtable;
 
 // ============================================================
 // HelpUI support functions

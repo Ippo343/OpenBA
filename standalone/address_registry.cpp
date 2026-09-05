@@ -583,6 +583,9 @@ extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 
 extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); GATED default-OFF on BANISHED_SELECTION_OUTLINE
 extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
 extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers + UpgradeUIConfig vtable (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
+// .rdata/.data census wave 2026-09-04.
+extern void RegisterW2Lane1();             // purecall placeholder vtable 0x14015f070
+
 // Code-fn wave 2026-09-04 (unported exe .text functions), six lanes.
 extern "C" void RegisterCodeLane1Batch();  // MapGenerator dtor body 0x14001aea0
 extern void RegisterCodeLane2();           // MapParamsDialog ctor 0x14006bd80 (the Map button) + hygiene
@@ -599,6 +602,9 @@ static void RegisterCodeFunctions() {
     // Component registration wave — 4 batches of exe helper reimpls (Component module).
     RegisterUnregLane2();
     RegisterUnregLane3();
+
+    // .rdata/.data wave — see docs/waves/rdata_data_wave.md.
+    RegisterW2Lane1();
 
     // Code-fn wave 2026-09-04 — see docs/waves/code_fns_wave.md.
     RegisterCodeLane1Batch();

@@ -520,7 +520,6 @@ fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor = nullptr;
 fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
 fn_Dialog_GetReference_t fn_Dialog_GetReference = nullptr;
 fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
-void** g_EventPopupDialog_Vtable = nullptr;
 fn_StringTable_GetText_t fn_StringTable_GetText = nullptr;
 fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink = nullptr;
 fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIString = nullptr;
@@ -2940,8 +2939,6 @@ bool EngineFuncsInit() {
         fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
             ResolveAddr(Module::Runtime, 0x1800def60));
     }
-    g_EventPopupDialog_Vtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015bd80));
 
     // --- HelpUI support functions ---
     fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
