@@ -214,5 +214,35 @@ void GameContainer_EnsureLists() {
         *slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, ext);
     }
+
+    // Retail's GameContainer_Init hands slot [0] straight to the AchievementManager
+    // (0x140099fe3), immediately after filling the five list slots:
+    //     AchievementManager::SetAchievements(_singleton, container[0]);
+    // That call is what gives the manager its achievement list; it also sizes the
+    // awarded/instance arrays to the resource count and reads the "Ach" registry keys.
+    // Without it the manager is the zeroed object Engine::Startup left behind, and
+    // GetAchievementCount -- `*(int*)(*(void**)this + 0x28)` -- derefs a null list.
+    // That is exactly how the Achievements dialog crashed: the manager was there, its
+    // list was not. Once per process, like retail.
+    static bool s_achievementsSet = false;
+    if (!s_achievementsSet) {
+        void* achievementList = *reinterpret_cast<void**>(container + 0x00);
+        void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
+                        ? **g_ppAchievementManager : nullptr;
+        typedef void (*SetAchievements_t)(void* self, void* externalList);
+        static SetAchievements_t fn = reinterpret_cast<SetAchievements_t>(ResolveExport(
+            "?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z"));
+        if (fn && mgr && achievementList) {
+            fn(mgr, achievementList);
+            s_achievementsSet = true;
+            fprintf(stderr, "[GameContainer] AchievementManager::SetAchievements(mgr=%p, list=%p) "
+                            "-> count=%d\n", mgr, achievementList,
+                    fn_AchievementManager_GetAchievementCount
+                        ? fn_AchievementManager_GetAchievementCount(mgr) : -1);
+        } else {
+            fprintf(stderr, "[GameContainer] SetAchievements SKIPPED (fn=%p mgr=%p list=%p)\n",
+                    reinterpret_cast<void*>(fn), mgr, achievementList);
+        }
+    }
     fflush(stderr);
 }

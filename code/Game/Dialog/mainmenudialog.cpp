@@ -13,6 +13,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Dialog/dialog_exe_helpers.h"
 #include <cstdint>
 #include <cstdio>
 #include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
@@ -277,6 +278,14 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
 // Uses DialogInstance_Ctor directly + vtable patch to PTR_FUN_14015b020.
 // Extra fields: +0xB8, +0xC0, +0xC8 = 0.
 void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
+    // Retail fills the Game container (and hands slot [0] to the AchievementManager)
+    // once at app init, in GameContainer_Init. Standalone has no master ExternalList,
+    // so that init is replaced by GameContainer_EnsureLists, which the New Game and
+    // Scenario dialogs already call on open. The Achievements dialog needs the same
+    // guarantee: opened straight from the front end it is the FIRST thing to touch the
+    // achievement list, and its Setup calls GetAchievementCount unguarded.
+    GameContainer_EnsureLists();
+
     void* extRes = LoadDialogResource("Dialog/Achievement.rsc");
     void* dlgObj = nullptr;
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
@@ -1031,6 +1040,23 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     case kButton_Scenario:
         printf("[MainMenuDialog::OnCommand] -> OpenScenario (ScenarioDialog, difficulty=0)\n");
         MainMenuDialog_OpenScenario(reinterpret_cast<MainMenuDialog*>(self));
+        break;
+    case kButton_Achievement:
+        // Wired 2026-09-05. The retail-shaped MainMenuDialog_Slot8 above has had this
+        // case all along, but that switch is NOT the handler the vtable installs --
+        // so the Achievements button (front end AND in-game pause menu, same dialog
+        // class) silently fell through to `default` and logged "not yet wired".
+        // AchievementDialog's vtable is registered at its retail .rdata address by
+        // RegisterMenuDialogVtables (menu_dialog_standalone_vtables.cpp) and all four
+        // of its slots are ported, so the opener works as-is.
+        printf("[MainMenuDialog::OnCommand] -> OpenAchievement (AchievementDialog)\n");
+        MainMenuDialog_OpenAchievement(reinterpret_cast<MainMenuDialog*>(self));
+        break;
+    case kButton_Goal:
+        // Same story as Achievement: present in the dead retail switch, missing here.
+        // GoalDialog's vtable comes from the same registration and its slots are ported.
+        printf("[MainMenuDialog::OnCommand] -> OpenGoal (GoalDialog)\n");
+        MainMenuDialog_OpenGoal(reinterpret_cast<MainMenuDialog*>(self));
         break;
     case kButton_Mod:
         // Lane 4: ModDialog/ModDetailsDialog promoted out of the no-op stub

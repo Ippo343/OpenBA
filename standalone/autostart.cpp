@@ -53,6 +53,7 @@ enum class Phase {
     WaitLoadDialog,   // SaveLoadDialog open; waiting for the file list, then click Load
     WaitTutorialMenu, // menu up; counting down before firing Tutorial (AUTOTUTORIAL)
     WaitTutorialDialog, // ScenarioDialog open; waiting for its entry list, then click Load
+    WaitMenuButton,   // menu up; counting down before firing an arbitrary button id
     Done,
 };
 
@@ -61,6 +62,13 @@ char s_loadName[64] = "Auto";
 
 // AUTOTUTORIAL: which tutorial entry to load (index into the ScenarioDialog list).
 int s_tutorialIndex = 0;
+
+// AUTOMENU_BUTTON: an arbitrary MainMenuDialog element id to click at the front end,
+// then leave the result on screen. The in-game half of every menu button already has a
+// driver (BANISHED_PAUSEMENU_BUTTON, standalone/pausemenu_harness.cpp); this is the
+// front-end half, so a menu-only dialog (Achievements id 8, Goals id 10, ...) can be
+// brought up and screenshotted with nobody at the mouse.
+int s_menuButtonId = -1;
 
 bool   s_initialized   = false;
 bool   s_enabled       = false;
@@ -153,6 +161,18 @@ void Init() {
         }
     }
 
+    // BANISHED_AUTOMENU_BUTTON=<id> clicks one front-end menu button and stops there,
+    // leaving whatever it opened up for a screenshot (tools/capture_window.ps1).
+    if (const char* m = std::getenv("BANISHED_AUTOMENU_BUTTON")) {
+        if (m[0] != '\0' && std::strcmp(m, "0") != 0) {
+            s_menuButtonId = std::atoi(m);
+            s_enabled = true;
+            s_phase   = Phase::WaitMenuButton;
+            fprintf(stderr, "[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=%d "
+                   "after %d menu frames and stop there\n", s_menuButtonId, s_settleFrames);
+            return;
+        }
+    }
     const char* env = std::getenv("BANISHED_AUTOSTART");
     if (!env || env[0] == '\0' ||
         std::strcmp(env, "0") == 0 ||
@@ -259,6 +279,22 @@ void TickMenu(void* menuDLT) {
                    kNewGameTimeoutFrames, newGame);
             s_phase = Phase::Done;
         }
+        break;
+    }
+
+    case Phase::WaitMenuButton: {
+        void* mainMenu = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        if (!mainMenu) {
+            s_phaseFrame = 0;
+            return;
+        }
+        if (++s_phaseFrame < s_settleFrames) return;
+
+        fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) - injecting click id=%d\n",
+                mainMenu, s_menuButtonId);
+        InjectClick(mainMenu, kMsg_ButtonClick, s_menuButtonId);
+        s_phase = Phase::Done;
         break;
     }
 
