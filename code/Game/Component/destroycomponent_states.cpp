@@ -644,7 +644,25 @@ extern "C" char Destroy_State3Enter_d7b0(void* data, void* sm) {
                          *reinterpret_cast<int64_t*>(comp + 0x60)), nextState);
         std::fflush(stderr);
     }
-    return 1;
+    // RETURN 0, NOT 1 — this is the state-machine ENTER WALK's stop bit, not a
+    // success flag. StateMachine::Tick walks tail->parent through EVERY controller
+    // node while handlers return 0 and STOPS at the first non-zero. Retail
+    // 0x14011d7b0 zeroes AL on both exits (`return uVar3 & 0xffffffffffffff00`, and
+    // a literal `return 0` on the +0x50 != 0 branch), so the walk continues past
+    // DestroyComponent to the entity's other controllers.
+    //
+    // Returning 1 here stopped that walk on the destroy node, so
+    // StorageLocationComponent's state-3 enter (StorageLoc_State3Enter ->
+    // CemeteryListErase_Reimpl on townMgr+0x00) never ran for a demolished storage
+    // building. Measured on tutorial 1 step 66 ("remove the starting cart"):
+    //   * the cart stayed in the town storage-location list forever, so
+    //     TutorialGoalCount mode=4 read count=3 against target=2 and the step could
+    //     never complete (the goal sets no _greaterEqual, so the compare is EQUALITY);
+    //   * and once the cart's StorageComponent was torn down, the stale list entry
+    //     made CitizenBehavior_CountResources deref a null storage IBP —
+    //     "READ of 0x0000000000000030", crashing the next sim tick.
+    // One cause, both symptoms.
+    return 0;
 }
 
 // ============================================================
@@ -686,7 +704,11 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     if (Destroy_StorageEmpty_da80(static_cast<int64_t>(comp)) ||
         (prod && Yard_Delivered(prod) < Yard_Required(prod))) {
         ::ControllerLive::RequestStateTransition(sm, 5);
-        return 1;
+        // Retail 0x14011cfd0 reaches its single `return uVar3 & 0xffffffffffffff00`
+        // from this branch too (LAB_14011d139 sets uVar3 = 0 first) — AL is zero, so
+        // the enter walk continues to the sibling controllers. Same stop-bit rule as
+        // state 3 above.
+        return 0;
     }
 
     // Queue a ClearStorage work (type 1) on the production yard. Faithful ctor
@@ -717,7 +739,9 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
             }
         }
     }
-    return 1;
+    // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
+    // continues. See the state-3 note above for what a stray 1 costs.
+    return 0;
 }
 
 // ============================================================
