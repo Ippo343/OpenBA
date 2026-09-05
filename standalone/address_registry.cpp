@@ -557,6 +557,11 @@ extern void RegisterSaveLoadDialog();       // save/load wave: SaveLoadDialog ct
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
 extern "C" void RegisterFindUIElementByPath();  // 0x1400e1870 — the tutorial highlight/arrow path resolver
 extern void RegisterTutorialWaveBatch();   // Lane 2 Tutorial wave: 12 helper fns + 6 dialog vtables + 2 ctors
+// Unregistered dispatch-slot wave (docs/waves/unregistered_slots_wave.md, 2026-09-04)
+extern void RegisterUnregLane2();          // Lane 2: UI/dialog gaps — GetController + 4 SpriteSheet/Sprite ctors
+extern void RegisterUnregLane3();
+extern "C" void RegisterUnregLane1Batch();     // Lane 1: save/load + object core
+extern void RegisterUnregLane4TypeIds();   // Lane 4: 30 exe type-id storage slots + 3 .rdata float consts          // Lane 3: graphics/math gaps — Vector3/Rectangle ctors, RandFloatTol, IsRunning, Material typeid, String/Filename ops
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
 extern void RegisterDebugMenuBatch();      // Lane 3: built-in DebugUI/Game debug-cheat cluster (11 addrs)
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
@@ -586,6 +591,10 @@ static void RegisterCodeFunctions() {
     // These are exe-internal functions called by code/Game/ via function pointers.
 
     // Component registration wave — 4 batches of exe helper reimpls (Component module).
+    RegisterUnregLane2();
+    RegisterUnregLane3();
+    RegisterUnregLane1Batch();
+    RegisterUnregLane4TypeIds();
     RegisterComponentBatch_people();
     RegisterComponentBatch_economy();
     RegisterComponentBatch_nature();
@@ -1084,9 +1093,19 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x1401518e8,
         (uintptr_t)ResolveExport("?ComputeLayout@Element@UI@@UEAAXHHHH@Z"));
     RegisterDispatchSlot(0x1401518f0,
-        (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z"));
+        // PE import table: this slot is the INSTANCE overload (6 ints + 4 int& + 2
+        // bools), which is what retail FrustumOutlineElement_Slot5 (0x14006c1c0)
+        // calls and what the typedef at engine_funcs.h:3870 declares. We had bound
+        // the 17-param STATIC overload, so `this` would land where Alignment goes
+        // and the callee would read six argument slots the caller never wrote.
+        // Latent, not live: zero callers today.
+        (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z"));
+    // NOTE: shadowed -- the live binding for this slot is the RtSerializer_*
+    // registration further down (see dispatch_slot_map.py --check, SHADOWED).
+    // Name corrected to match the PE import table so this dead line stops
+    // misreporting as a live defect.
     RegisterDispatchSlot(0x140152400,
-        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
     // System::Random RandTol / RandFloat — .rdata dispatch slots read by many Work/
     // Action reimpls (PastureWork Slot4, forester/herbalist, spawn/tombstone all
     // carry per-file fallbacks or MISSING traces for these). Previously UNREGISTERED:
@@ -1125,8 +1144,9 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z"));
     RegisterDispatchSlot(0x1401523f8,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
+    // NOTE: shadowed -- see the 0x140152400 note above.
     RegisterDispatchSlot(0x140152618,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
     // Serialize(int count, bool* array, name) — the bool ARRAY overload, distinct
     // from the single-bool slot 0x140152a58 above (AEA_N vs HPEA_N). Seven retail
     // functions call it: ParticleComponent_Shutdown (0x140053270),
@@ -1613,7 +1633,11 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140151278, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_IntArr));    // Serialize(cnt,int*)
     RegisterDispatchSlot(0x1401523f8, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_ShortArr));  // Serialize(cnt,short*)
     RegisterDispatchSlot(0x140152490, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UCharArr));  // Serialize(cnt,uchar*) (NameDB bulk)
-    RegisterDispatchSlot(0x140152400, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes(size,void*)
+    // PE import table: 0x140152400 is Serialize(int,uchar*,name) -> encoding vtbl
+    // +0x60 (an N-iteration one-byte loop), NOT SerializeBytes -> +0xC8 (one
+    // N-byte call). Wire-identical under the binary encoding, so this was never a
+    // desync, but it dispatched the wrong Encoding virtual.
+    RegisterDispatchSlot(0x140152400, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UCharArr));  // Serialize(cnt,uchar*) -- encoding vtbl +0x60
     RegisterDispatchSlot(0x140152618, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (alt slot)
     RegisterDispatchSlot(0x140152478, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (NameDB alias)
 }

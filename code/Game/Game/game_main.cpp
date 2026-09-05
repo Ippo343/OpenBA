@@ -86,6 +86,7 @@ extern "C" void FillTypeIdGlobals_tradeui();
 extern "C" void ReportTypeIdGlobals_elements();
 extern "C" void FillTypeIdGlobals_worktail_fire();
 extern "C" void FillTypeIdGlobals_fire();
+extern "C" void FillTypeIdGlobals_lane4();   // unreg wave lane 4: 30 exe type-id slots
 extern "C" void FillTypeIdGlobals_cropdisease();
 // step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
 extern "C" void FillTypeIdGlobals_citizen_lifeevent();
@@ -518,6 +519,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
     FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
     FillTypeIdGlobals_fire();              // Fire lane — FireDescription 0x1401c4218 + FireComponent 0x1401c41e0
+    FillTypeIdGlobals_lane4();             // unreg wave lane 4 — 30 type ids incl. Disease (0x1401c5948, most-resolved unregistered address in the load census)
     FillTypeIdGlobals_cropdisease();       // Crop infestation — Disease Component/Description ids
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
