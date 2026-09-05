@@ -215,7 +215,10 @@ void StatGoal_Slot6(StatGoal* self) {
 // 4. If requireOtherGoalsMet, result is: comparisonMet ? 2 : 1
 //    Otherwise: comparisonMet ? 1 : 0
 
-int StatGoal_Slot8(StatGoal* self) {
+// Operand computation, split out of Slot8 unchanged so a diagnostic can read the
+// two numbers the comparison is about to use. Retail has no such split; the
+// instruction order inside is untouched.
+static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& comparisonValue) {
     EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
@@ -276,13 +279,13 @@ int StatGoal_Slot8(StatGoal* self) {
     }
 
     // Look up stat value A
-    int statValueA = 0;
+    statValueA = 0;
     if (s_fn_StatValueDispatch) {
         statValueA = s_fn_StatValueDispatch(self, self->statTypeA, extA);
     }
 
     // --- Determine comparison value ---
-    int comparisonValue = 0;
+    comparisonValue = 0;
     if ((self->comparisonType & 1) != 0) {
         // Odd comparisonType: use statB
         uint8_t localB[0x30];
@@ -313,6 +316,13 @@ int StatGoal_Slot8(StatGoal* self) {
         comparisonValue = self->fixedValue;
     }
 
+}
+
+int StatGoal_Slot8(StatGoal* self) {
+    int statValueA = 0;
+    int comparisonValue = 0;
+    StatGoal_ComputeOperands(self, statValueA, comparisonValue);
+
     // --- Evaluate comparison ---
     bool comparisonMet = false;
     int cmpType = self->comparisonType;
@@ -335,6 +345,19 @@ int StatGoal_Slot8(StatGoal* self) {
 
     // Normal: 0 if not met, 1 if met
     return comparisonMet ? 1 : 0;
+}
+
+// ============================================================
+// StatGoal_ProbeOperands — diagnostic accessor (not retail)
+// ============================================================
+// Returns the two numbers Check() compares, so a census can print
+// "have N, need M" per goal instead of a bare met/not-met bit. Uses the same
+// helper Check does, so it can never disagree with the verdict.
+extern "C" void StatGoal_ProbeOperands(void* goal, int* outA, int* outB) {
+    int a = 0, b = 0;
+    if (goal) StatGoal_ComputeOperands(reinterpret_cast<StatGoal*>(goal), a, b);
+    if (outA) *outA = a;
+    if (outB) *outB = b;
 }
 
 // ============================================================

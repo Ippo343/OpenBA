@@ -33,6 +33,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+
+extern "C" void StatGoal_ProbeOperands(void* goal, int* outA, int* outB);
 
 namespace {
 
@@ -108,6 +111,76 @@ void Hex(const char* label, const void* p, int bytes) {
         std::fprintf(stderr, "[Ach]   %s +%02x:", label, i);
         for (int j = 0; j < 16 && i + j < bytes; ++j) std::fprintf(stderr, " %02x", b[i + j]);
         std::fprintf(stderr, "\n");
+    }
+}
+
+// Which Goal subclass is this? The four exe vtable addresses resolve to our own
+// synthesized arrays, so an identity compare on the object's vtable pointer names
+// the class exactly — no type-id lookup and no guessing from field shapes.
+const char* GoalClass(void* goal) {
+    if (!goal) return "?";
+    static uintptr_t vtStat = 0, vtPop = 0, vtBuild = 0, vtTime = 0;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        vtStat  = ResolveAddr(Module::Exe, 0x1401604c0);
+        vtPop   = ResolveAddr(Module::Exe, 0x140160370);
+        vtBuild = ResolveAddr(Module::Exe, 0x140160300);
+        vtTime  = ResolveAddr(Module::Exe, 0x140160540);
+    }
+    const uintptr_t vt = *reinterpret_cast<uintptr_t*>(goal);
+    if (vt == vtStat)  return "Stat";
+    if (vt == vtPop)   return "Pop";
+    if (vt == vtBuild) return "Build";
+    if (vt == vtTime)  return "Time";
+    return "Goal";
+}
+
+// Human-readable comparison, matching StatGoal::Check's switch. Even types compare
+// against the goal's fixed value, odd ones against a second stat.
+const char* CmpName(int t) {
+    switch (t) {
+        case 0: case 1:   return "==";
+        case 2: case 3:   return "!=";
+        case 4: case 5:   return "<";
+        case 6: case 7:   return "<=";
+        case 8: case 9:   return ">";
+        case 10: case 11: return ">=";
+        default:          return "??";
+    }
+}
+
+// Per-class requirement + live progress, written into buf.
+// For a StatGoal this is the whole point of the census: the two operands Check() is
+// about to compare, so a goal reads as "have 412, need >= 900" rather than "not met".
+void DescribeGoal(void* goal, char* buf, size_t n) {
+    buf[0] = 0;
+    if (!goal) return;
+    const char* cls = GoalClass(goal);
+    const uint8_t* g = static_cast<const uint8_t*>(goal);
+
+    if (cls[0] == 'S') {              // StatGoal
+        const int32_t statA = *reinterpret_cast<const int32_t*>(g + 0x30);
+        const int32_t statB = *reinterpret_cast<const int32_t*>(g + 0x34);
+        const int32_t cmp   = *reinterpret_cast<const int32_t*>(g + 0x38);
+        const int32_t fixed = *reinterpret_cast<const int32_t*>(g + 0x3c);
+        const uint8_t req   = *(g + 0x40);
+        int a = 0, b = 0;
+        StatGoal_ProbeOperands(goal, &a, &b);
+        std::snprintf(buf, n, "stat=%d have=%d %s %d%s (statB=%d fixed=%d res='%s'%s)",
+                      statA, a, CmpName(cmp), b,
+                      (cmp & 1) ? " [vs statB]" : "",
+                      statB, fixed, StrOf(g + 0x48),
+                      req ? " reqOthers" : "");
+    } else if (cls[0] == 'P') {       // PopulationGoal
+        std::snprintf(buf, n, "targetPop=%d", *reinterpret_cast<const int32_t*>(g + 0x30));
+    } else if (cls[0] == 'T') {       // TimeGoal
+        std::snprintf(buf, n, "years=%d%s", *reinterpret_cast<const int32_t*>(g + 0x30),
+                      *(g + 0x34) ? " reqOthers" : "");
+    } else if (cls[0] == 'B') {       // BuildingGoal
+        std::snprintf(buf, n, "active=%d f38=%p f40=%p", (int)*(g + 0x30),
+                      *reinterpret_cast<void* const*>(g + 0x38),
+                      *reinterpret_cast<void* const*>(g + 0x40));
     }
 }
 
@@ -250,8 +323,11 @@ extern "C" void AchievementProbe_Tick(int frameNum) {
             uint8_t textBuf[8] = {0};
             if (goal && fn_Goal_GetText) fn_Goal_GetText(goal, textBuf);
 
-            std::fprintf(stderr, "[Ach]      goal%d met=%d failed=%d check=%d goal=%p '%s'\n",
-                         g, gMet, gFailed, GoalCheck(goal), goal, StrOf(textBuf));
+            char desc[256];
+            DescribeGoal(goal, desc, sizeof(desc));
+            std::fprintf(stderr, "[Ach]      goal%-2d %-5s met=%d failed=%d check=%d  %s%s%s\n",
+                         g, GoalClass(goal), gMet, gFailed, GoalCheck(goal), desc,
+                         StrOf(textBuf)[0] ? " text=" : "", StrOf(textBuf));
 
             if (dumpNow && i == 0 && g == 0) {
                 Hex("goalInst", gi, 0x40);
