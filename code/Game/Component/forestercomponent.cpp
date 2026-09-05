@@ -220,9 +220,15 @@ static void* ForesterComponent_LiveVtable[::ComponentFactory::kInertVtableSlots]
 // Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init
 // writes, so every real slot is (re)installed from in here on every instance creation.
 static void ForesterComponent_InstallLive(void* mem) {
+    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
+    // does not care whether this component's live feature is enabled. Wired
+    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
+    // class falling through to base-only Component_Serialize, which skips this
+    // body's bytes and desyncs the stream for EVERY object after it.
+    // See reference_vtable_slot3_serialize_never_installed.
+    ForesterComponent_LiveVtable[3]  = reinterpret_cast<void*>(&ForesterComponent_Shutdown);
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FORESTER")) return;
     ForesterComponent_LiveVtable[1]  = reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeInfo);
-    ForesterComponent_LiveVtable[3]  = reinterpret_cast<void*>(&ForesterComponent_Shutdown);
     ForesterComponent_LiveVtable[13] = reinterpret_cast<void*>(&ForesterComponent_CommandMask);
     ForesterComponent_LiveVtable[14] = reinterpret_cast<void*>(&ForesterComponent_Command);
     ForesterComponent_LiveVtable[16] = reinterpret_cast<void*>(&ForesterComponent_GetDefaultState);

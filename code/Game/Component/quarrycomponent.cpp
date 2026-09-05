@@ -93,8 +93,14 @@ static void QuarryComponent_ShutdownVSlot(void* s, void* stream) {
 // Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn, so the
 // live slots must be (re)written here rather than at static-init time.
 static void QuarryComponent_InstallLive() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_QUARRY")) return;
+    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
+    // does not care whether this component's live feature is enabled. Wired
+    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
+    // class falling through to base-only Component_Serialize, which skips this
+    // body's bytes and desyncs the stream for EVERY object after it.
+    // See reference_vtable_slot3_serialize_never_installed.
     QuarryComponent_LiveVtable[3]  = reinterpret_cast<void*>(&QuarryComponent_ShutdownVSlot);
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_QUARRY")) return;
     QuarryComponent_LiveVtable[12] = reinterpret_cast<void*>(&QuarryComponent_Slot12);
     QuarryComponent_LiveVtable[15] = reinterpret_cast<void*>(&QuarryComponent_Slot15);
 }
