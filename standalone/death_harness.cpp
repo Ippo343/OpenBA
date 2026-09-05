@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void*, int, const char*); // 0x140116dd0
 // CitizenComponent_sub_1fa0 (0x140111fa0) — re-parent a citizen: detach from the current
@@ -655,10 +656,16 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                  frameNum, n);
 
     // Snapshot first: each kill tears the victim out of this very list.
+    //
+    // This used to snapshot into `int64_t victims[64]` and clamp `want` to 64, so
+    // BANISHED_KILL_CITIZENS=500 silently killed 64. That cap is invisible in the log
+    // except as the "N/64" in the per-kill line, and it makes any test that needs a
+    // LARGE death toll -- the Tombstone achievement wants 400 graves -- quietly
+    // unreachable. Heap-allocate instead; the snapshot is transient and one qword per
+    // citizen even for a whole town.
     int want = (s_count < n) ? s_count : n;
-    int64_t victims[64];
-    if (want > 64) want = 64;
-    for (int i = 0; i < want; i++) victims[i] = list[i];
+    std::vector<int64_t> victims((size_t)(want > 0 ? want : 0));
+    for (int i = 0; i < want; i++) victims[(size_t)i] = list[i];
 
     for (int i = 0; i < want; i++) {
         if (!victims[i]) continue;
