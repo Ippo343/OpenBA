@@ -39,6 +39,11 @@
 
 struct TradeUI;
 void TradeUI_UpdateBuyTotals(TradeUI* self);
+// The sell/buy tables are built ONCE when the panel opens. Seeding the trade
+// stock afterwards leaves the rows as they were, so the refresh has to be
+// re-run explicitly -- otherwise the tree fills and sellRows stays 0 forever.
+void TradeUI_RefreshSellTable(TradeUI* self);
+void TradeUI_RefreshBuyTable(TradeUI* self);
 void TradeUI_UpdateSellTotals(TradeUI* self);
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* p2, void* p3, int64_t p4);
 
@@ -47,6 +52,9 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* p2, void* p3, int64_t
 // InternalBasePtr the impl expects); calling EditTool_SelectEntity_Impl with a
 // bare entity pointer instead faults on a -1 read inside the tool.
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+// tradecomponent_serialize.cpp — insert/top-up one {resource, qty} pair in the
+// TradeComponent's +0x60 AVL tree, the tree the sell table is built from.
+extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty);
 extern "C" int   EditTool_HarnessSelectEntity(void* editTool, void* entity);
 
 namespace {
@@ -171,14 +179,18 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     int rowsFilled = 0, unitsQueued = 0;
     const int sellCount = *reinterpret_cast<int*>(s + 0x38);
     const uintptr_t sellBase = *reinterpret_cast<uintptr_t*>(s + 0x30);
+    // The row is {resEntity, valueDesc, resTypeComp, pendingQty} -- 0x20 bytes, the
+    // shape RefreshSellTable pushes. entry+0x10 is resTypeComp, a COMPONENT POINTER,
+    // not an available-stock count: reading it as one and skipping rows where it was 0
+    // skipped every row whose resource carries no RawMaterialDescription, which is why
+    // a table with 7 populated rows still queued nothing. The sellable amount lives in
+    // the trade stock tree, and the checkout clamps against the post's storage anyway,
+    // so queue a fixed per-row amount and let the ported checkout be the judge.
+    const int perRow = (s_perRow > 0) ? s_perRow : 100;
     for (int i = 0; i < sellCount && sellBase; ++i) {
         const uintptr_t entry = sellBase + static_cast<uintptr_t>(i) * 0x20;
-        const int have = *reinterpret_cast<int*>(entry + 0x10);
-        if (have <= 0) continue;
-        int qty = have;
-        if (s_perRow > 0 && qty > s_perRow) qty = s_perRow;
-        *reinterpret_cast<int*>(entry + 0x18) = qty;
-        unitsQueued += qty;
+        *reinterpret_cast<int*>(entry + 0x18) = perRow;
+        unitsQueued += perRow;
         ++rowsFilled;
     }
 
@@ -196,30 +208,44 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         if (const char* sq = std::getenv("BANISHED_TRADE_SELL_SEED")) seedQty = std::atoi(sq);
         int seeded = 0;
         if (seedQty > 0) {
-            typedef void (*AddItem_t)(int64_t storage, int64_t material, int n);
-            static AddItem_t addItem = reinterpret_cast<AddItem_t>(
-                ResolveAddr(Module::Exe, 0x14012d000));
-            void* storage = FindCompOnEntity(postEnt, Tid("StorageComponent"));
+            // Seed the TRADE stock, not the post's StorageComponent.
+            //
+            // TradeUI builds its sell rows from fn_FindComponent_Building(entity) +0x60 --
+            // and that finder is MISNAMED: DAT_1401c4b80 is the TradeComponent, so the
+            // tree is the post's TRADE stock, not its storage. Seeding the
+            // StorageComponent instead (and reading storage+0x60 as a tree) produced a
+            // successful-looking AddItem every tick, sellRows stuck at 0, and finally a
+            // fault walking a field that was never a tree.
+            void* tradeComp = FindCompOnEntity(postEnt, tidTrade);
             void** tmpls = *reinterpret_cast<void***>(townMgr + 0x110);
             const int tmplN = *reinterpret_cast<int*>(townMgr + 0x118);
-            if (addItem && storage && tmpls && tmplN > 0) {
+            if (tradeComp && tmpls && tmplN > 0) {
                 for (int i = 0; i < tmplN; ++i) {
                     if (!tmpls[i]) continue;
-                    addItem(reinterpret_cast<int64_t>(storage),
-                            reinterpret_cast<int64_t>(tmpls[i]), seedQty);
+                    TradeStock_SeedForTest(tradeComp, tmpls[i], seedQty);
                     ++seeded;
                 }
             }
-            std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d raw-material template(s) "
-                                 "x%d into the post (addItem=%p storage=%p)\n",
-                         frameNum, seeded, tmplN, seedQty,
-                         reinterpret_cast<void*>(addItem), storage);
+            const uintptr_t hdr = reinterpret_cast<uintptr_t>(tradeComp) + 0x60;
+            std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d resource(s) x%d into the "
+                                 "TRADE stock (tradeComp=%p tree root=%p count=%d)\n",
+                         frameNum, seeded, tmplN, seedQty, tradeComp,
+                         tradeComp ? *reinterpret_cast<void**>(hdr) : nullptr,
+                         tradeComp ? *reinterpret_cast<int32_t*>(hdr + 8) : -1);
+        }
+        if (seeded > 0) {
+            TradeUI_RefreshSellTable(reinterpret_cast<TradeUI*>(tui));
+            TradeUI_RefreshBuyTable(reinterpret_cast<TradeUI*>(tui));
+            const int after = *reinterpret_cast<int*>(s + 0x38);
+            std::fprintf(stderr, "[TradeSell] f=%d refreshed after seeding: sellRows %d -> %d\n",
+                         frameNum, sellCount, after);
+            std::fflush(stderr);
+            if (after > 0) return;   // next interval sells them
         }
         std::fprintf(stderr, "[TradeSell] f=%d TradeUI=%p sellRows=%d but every row has 0 "
                              "stock — nothing to sell%s\n",
                      frameNum, tui, sellCount,
-                     seeded ? " YET (seeded this tick; retry next interval)"
-                            : " (set BANISHED_TRADE_SELL_SEED=<n> to stock the post)");
+                     seeded ? " even after refresh" : " (set BANISHED_TRADE_SELL_SEED=<n>)");
         std::fflush(stderr);
         return;
     }

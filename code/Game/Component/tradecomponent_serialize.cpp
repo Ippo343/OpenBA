@@ -288,6 +288,58 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// TradeStock_SeedForTest — TEST FIXTURE, not retail. See standalone/trade_buy_harness.cpp.
+// ---------------------------------------------------------------------------
+// The trade panel builds its SELL rows by walking this same +0x60 AVL tree and
+// skipping any node whose value is 0, so a post whose tree is empty shows an empty
+// sell table however much the town is holding -- which is exactly what an unattended
+// run produces, because filling the tree is the player's job (they tick resources for
+// trade and haulers deliver). With no rows there is nothing to sell, units-traded
+// stays 0, and six achievements are unreachable.
+//
+// This inserts-or-updates one {resource, quantity} pair using the file's own AVL
+// helpers, i.e. the same insert retail's load leg performs -- with one deliberate
+// difference: retail's loader SKIPS a duplicate key (it is reading a stream it trusts
+// to be unique), whereas a fixture called every visit has to be able to top a resource
+// back up, so an existing key has its value overwritten.
+extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty) {
+    if (!tradeComp || !resourceEntity) return;
+    void* treeHdr = At(tradeComp, 0x60);
+    const uint64_t key = reinterpret_cast<uint64_t>(resourceEntity);
+
+    uint8_t* root = *reinterpret_cast<uint8_t**>(treeHdr);
+    if (!root) {
+        void* node = TradeBst_NewNode(key, qty, nullptr);
+        if (!node) return;
+        *reinterpret_cast<void**>(treeHdr) = node;
+        *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+        return;
+    }
+
+    uint8_t* cur = root;
+    for (;;) {
+        const uint64_t curKey = *reinterpret_cast<uint64_t*>(cur);
+        if (key == curKey) {
+            *reinterpret_cast<int64_t*>(cur + 0x08) = qty;   // top up, see note above
+            return;
+        }
+        uint8_t** childSlot = (key < curKey)
+            ? reinterpret_cast<uint8_t**>(cur + 0x18)
+            : reinterpret_cast<uint8_t**>(cur + 0x20);
+        if (!*childSlot) {
+            void* node = TradeBst_NewNode(key, qty, cur);
+            if (!node) return;
+            *childSlot = reinterpret_cast<uint8_t*>(node);
+            TradeBst_Retrace(treeHdr, cur);
+            *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+            return;
+        }
+        cur = *childSlot;
+    }
+}
+
+
 // ============================================================
 // TradeComponent::Serialize (vtable slot [3], 0x14005bd50)
 // ============================================================
