@@ -527,6 +527,16 @@ static uint32_t CemeteryComponent_LiveGetTypeId(void*) {
 static void* CemeteryComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
 static void CemeteryComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
+    // Slot 3 is the FIRST call into this class on a load-from-save:
+    // PersistObject creates the object and dispatches vt[0x18] before Startup
+    // or any tick. Until the resolver runs every s_fn_* is null and the fully
+    // null-guarded body consumes ZERO bytes, so the record is short by however
+    // much this component would have written, and the stream desyncs several
+    // records LATER with no crash at the defect itself.
+    // Same defect as ParticleComponent (2026-09-04) and StateMachineComponent
+    // (2026-08-28). Rule, from uicomponent_serialize.cpp: resolve
+    // unconditionally at the top of every call.
+    CemeteryComponent_InitFuncs();
     CemeteryComponent_Shutdown(reinterpret_cast<CemeteryComponent*>(s), stream);
 }
 static void CemeteryComponent_DrawVSlot(void* s) {                     // vtable index 6

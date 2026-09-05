@@ -951,8 +951,17 @@ void ParticleComponent_InitFuncs() {
 //   [8]  +0x40 per-frame (0x140052b30) — node-follow + fade + geometry Update
 //   [11] +0x58 OnUpdate2 (0x1400531b0) — setup + restart flagged emitters
 //   [12] +0x60 Event     (0x140053090) — event 2/3 fade-in/out (b2 emitters)
-// Slot [3] (+0x18 save/load serialize) stays inert — SA does not exercise
-// component saves, and the bool array is rebuilt by Startup anyway.
+// Slot [3] (+0x18 save/load serialize) IS installed -- see
+// ParticleComponent_FinishLiveVtable below, which sets it unconditionally,
+// outside the live gate, because serializer wiring is not a feature flag.
+// (This note previously claimed the slot stayed inert "because the bool array
+// is rebuilt by Startup anyway". That was stale -- it outlived the a11d083
+// fix 120 lines below -- and it was wrong in principle as well: a loader must
+// CONSUME the bytes the writer emitted regardless of whether the data can be
+// reconstructed. "Rebuilt by Startup" would justify DISCARDING a value after
+// reading it, never SKIPPING the read.
+// See [[reference_null_guard_on_a_serializer_call_is_a_desync]] and
+// [[reference_stub_comment_outlived_the_port_that_replaced_it]].)
 #include "Component/component_factory_base.h"
 #include "address_registry.h"
 
@@ -1073,6 +1082,18 @@ static void PC_EventVSlot(void* s, int eventCode) {
 }
 
 static void PC_SerSlot3(void* s, void* stream) {
+    // MUST resolve first, exactly like the five sibling wrappers below.
+    // Slot 3 is the FIRST call into this class on a load-from-save:
+    // PersistObject creates the object and dispatches vt[0x18] immediately,
+    // before Startup or any tick has run. Until InitFuncs() has been called
+    // every s_fn_* here is null, and the body null-guards EVERY stream call --
+    // so it consumed ZERO bytes and the record was just the 13-byte outer IBP
+    // header, against 71 bytes on the save leg (where 1200 frames of ticks had
+    // already resolved everything). Symmetric code, asymmetric state.
+    // The rule is already written down in uicomponent_serialize.cpp: resolve
+    // unconditionally at the top of every call, because this can be the very
+    // first call into the class on load-from-save.
+    ParticleComponent_InitFuncs();
     ParticleComponent_Shutdown(reinterpret_cast<ParticleComponent*>(s), stream);
 }
 static void ParticleComponent_FinishLiveVtable() {
