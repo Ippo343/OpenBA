@@ -36,7 +36,27 @@ The game is a multi-binary architecture. The exe contains game logic; the engine
 - **Exports**: ~4,800+ ordinals (full engine API surface, reflection-based with consistent TypeName/Factory/Lifecycle pattern per class)
 - **Role**: Complete custom game engine runtime. 18 namespaces, 100+ classes covering object model, math, rendering, UI (20+ widgets), file I/O with packages/mods, 2D collision, 3D picking, A* pathfinding, achievements, save/load, input (DirectInput), threading
 - **Imports**: KERNEL32, USER32, GDI32, ADVAPI32, SHELL32, OLE32, DINPUT8, DBGHELP
-- **Note**: NOT imported via PE import table. Exe uses a custom runtime dispatch mechanism (function pointer tables in .rdata filled by name resolution at startup).
+- **Imported via a NORMAL PE import table** (corrected 2026-09-04; this entry
+  previously claimed the opposite and that error was load-bearing for a long
+  time). `pefile` parses it directly: **833 imports from Runtime-x64.dll** in
+  slots `0x140151218`-`0x140152c18`, plus 66 from KERNEL32.dll in
+  `0x140151000`-`0x140151208`. The `.rdata` "dispatch slots" we register with
+  `RegisterDispatchSlot(addr, ResolveExport(name))` ARE that import table, so
+  **every one of them has a known name that can be read out of the binary** --
+  no Ghidra archaeology needed:
+  ```
+  tools/ghidra_mcp/.venv/Scripts/python.exe tools/dispatch_slot_map.py 0x140151458
+  tools/ghidra_mcp/.venv/Scripts/python.exe tools/dispatch_slot_map.py --check
+  ```
+  `--check` validates our registrations against the binary and must stay at
+  zero mismatches. It also reports SHADOWED addresses (a slot registered twice,
+  where the later binding wins and the checked line is dead code).
+  **Registering an unregistered slot is not automatically safe**: some are left
+  null on purpose so a dispatch-or-fallback path takes the fallback, and a few
+  are read under the WRONG name and work only while null. Grep the address
+  across `code/`, `engine/` and `standalone/` and confirm every consumer wants
+  the same function before registering. See
+  `docs/waves/unregistered_slots_wave.md`.
 
 ### VideoDX11-x64.dll (DX11 Renderer Plugin)
 - **Size**: 145 KB | **Functions**: 576 (~86 rendering, rest CRT/exception)
@@ -202,7 +222,10 @@ identical framing on every run of the same seed.
 **Address registry workflow:** As each exe function gets reimplemented in `code/Game/`, register it
 in `standalone/address_registry.cpp` so standalone mode can find it. Three categories:
 1. **Code functions** (0x140001xxx-0x14014Fxxx): `RegisterExeAddr(addr, (uintptr_t)&OurFunc)`
-2. **IAT dispatch slots** (0x14015xxxx): `RegisterDispatchSlot(addr, runtime_fn_ptr)` — provides .rdata slot storage
+2. **IAT dispatch slots** (0x14015xxxx): `RegisterDispatchSlot(addr, runtime_fn_ptr)` — provides .rdata slot storage.
+   These are real PE imports: `tools/dispatch_slot_map.py <addr>` tells you the exact
+   mangled name, and `--check` verifies every registration (keep it at zero mismatches).
+   Read the call sites before registering a null slot — some are null on purpose.
 3. **Vtables + type IDs** (0x14015Exxx-0x1401Cxxxx): static vtable arrays + uint32_t storage
 
 ### Code Organization
