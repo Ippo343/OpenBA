@@ -10,6 +10,7 @@
 
 
 #include "resolve.h"
+#include "rt_diff.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "dx11_funcs.h"
@@ -1591,6 +1592,19 @@ static bool Init() {
     // 2b. Window-geometry trace — see InstallWindowTrace.
     InstallWindowTrace();
 
+    // 2c. Runtime-x64.dll port registry (docs/runtime_port/PLAN.md §4.1).
+    //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
+    //     Runtime function pointers through ResolveExport/ResolveAddr, and a
+    //     port registered after they run would be resolved by nobody.
+    RuntimePortInit();
+    //     Wave 0 acceptance test for the seam itself (BANISHED_RT_SELFTEST=1;
+    //     no-op otherwise). Runs here because test 4 leaves a pass-through port
+    //     registered, which only reaches EngineFuncsInit if it is in place
+    //     before it caches.
+    extern void RtSelfTest();
+    RtSelfTest();
+    StallDebug::Mark("RuntimePortInit");
+
     // 3. Populate address registry (exe dispatch slots, code fns, vtables).
     //    Must happen BEFORE EngineFuncsInit, which reads from these slots.
     printf("[Standalone] Initializing address registry...\n");
@@ -1802,6 +1816,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
     // not from atexit: the crash handler ends in ExitProcess, which skips it.
     DumpUnregCensus();
+    // Runtime port: which ports were live this run (BANISHED_RT_CENSUS=1) and
+    // what the differential oracle saw (BANISHED_RT_DIFF=1). Same reason as
+    // above for not using atexit.
+    DumpRuntimeRegistry();
+    RtDiffSummary();
+    { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
 
     return rc;
 }

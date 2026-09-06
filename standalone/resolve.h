@@ -67,6 +67,48 @@ struct ExeAddrEntry {
 };
 void RegisterExeAddrs(const ExeAddrEntry* entries, size_t count);
 
+// --- Runtime-x64.dll port registry (the Wave 0 seam) -----------------------
+//
+// The runtime port uses the SAME progressive seam as the exe port: our ~1,180
+// call sites into Runtime-x64.dll all go through ResolveExport /
+// ResolveOrdinal / ResolveAddr(Module::Runtime, ...), so a port becomes live
+// for every one of them the moment it is registered here. Nothing else has to
+// change. Register during RuntimePortInit(), which runs after ResolveInit()
+// and BEFORE EngineFuncsInit/AddressRegistryInit cache their pointers.
+//
+// IMPORTANT: registering only redirects OUR callers. The DLL's own internal
+// calls never go through its export table, so they keep landing in the DLL.
+// To redirect those too, install a detour (standalone/runtime_detour.h).
+//
+// Anything that patches, detours, trampolines to, or diff-tests against the
+// ORIGINAL DLL code must resolve through the *Raw* variants below, or it will
+// happily patch our own reimplementation once the port registers.
+void RegisterRuntimeExport(const char* mangled_name, void* our_fn);
+void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
+void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn);
+
+// Original-DLL resolution, bypassing the port registry. Always the shipped code.
+void*     ResolveExportRaw(const char* mangled_name);
+void*     ResolveOrdinalRaw(uint16_t ordinal);
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
+
+// Populated by the reg_rt_*.cpp wave files; called from standalone/main.cpp
+// right after ResolveInit(). Safe to call when nothing is registered.
+void RuntimePortInit();
+
+// Progress reporting: how much of the DLL we have taken over.
+struct RuntimeRegistryStats {
+    size_t exports;   // RegisterRuntimeExport entries
+    size_t addrs;     // RegisterRuntimeAddr entries
+    size_t ordinals;  // RegisterRuntimeOrdinal entries
+    size_t hits;      // resolutions that returned OUR code
+};
+RuntimeRegistryStats GetRuntimeRegistryStats();
+
+// Machine-readable dump (one line per entry) for tools/runtime_census.py.
+// Written to stderr when BANISHED_RT_CENSUS is set.
+void DumpRuntimeRegistry();
+
 // ---- Unregistered-address census (BANISHED_UNREG_CENSUS=1) ----------------
 // ResolveAddr's NOT IMPLEMENTED warning fires ONCE per address for the whole
 // process, so an address hit at boot AND again during a save load is only ever

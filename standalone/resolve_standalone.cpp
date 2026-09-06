@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
@@ -149,6 +150,121 @@ RegistryStats GetRegistryStats() {
 }
 
 // ============================================================
+// Runtime-x64.dll port registry (Wave 0 seam)
+// ============================================================
+// See the comment on RegisterRuntimeExport in resolve.h. Three lookup tables,
+// consulted by ResolveExport / ResolveOrdinal / ResolveAddr(Module::Runtime)
+// BEFORE the DLL is asked. Empty until a runtime port registers, so the
+// default build resolves exactly what it always did.
+namespace {
+
+std::unordered_map<std::string, void*>& RtExportReg() {
+    static std::unordered_map<std::string, void*> m;
+    return m;
+}
+std::unordered_map<uintptr_t, void*>& RtAddrReg() {
+    static std::unordered_map<uintptr_t, void*> m;
+    return m;
+}
+std::unordered_map<uint16_t, void*>& RtOrdinalReg() {
+    static std::unordered_map<uint16_t, void*> m;
+    return m;
+}
+size_t g_rtHits = 0;
+
+// BANISHED_RT_PORT=0 disables every runtime port at once (the master
+// kill-switch for an A/B run). Individual ports keep their own
+// BANISHED_RT_<CLASS> switches; this one short-circuits the whole seam.
+bool RtPortEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_RT_PORT");
+        on = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
+        if (!on) {
+            fprintf(stderr, "[RtPort] BANISHED_RT_PORT=0 — every runtime port bypassed, "
+                            "all calls go to Runtime-x64.dll\n");
+            fflush(stderr);
+        }
+    }
+    return on != 0;
+}
+
+bool RtCensusEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_RT_CENSUS");
+        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on != 0;
+}
+
+} // namespace
+
+void RegisterRuntimeExport(const char* mangled_name, void* our_fn) {
+    if (!mangled_name || !our_fn) return;
+    RtExportReg()[mangled_name] = our_fn;
+}
+
+void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn) {
+    if (!ghidra_addr || !our_fn) return;
+    RtAddrReg()[ghidra_addr] = our_fn;
+}
+
+void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn) {
+    if (!our_fn) return;
+    RtOrdinalReg()[ordinal] = our_fn;
+}
+
+RuntimeRegistryStats GetRuntimeRegistryStats() {
+    return { RtExportReg().size(), RtAddrReg().size(), RtOrdinalReg().size(), g_rtHits };
+}
+
+void DumpRuntimeRegistry() {
+    if (!RtCensusEnabled()) return;
+    RuntimeRegistryStats st = GetRuntimeRegistryStats();
+    fprintf(stderr, "[RtCensus] ==== %zu exports, %zu addrs, %zu ordinals ported; %zu hits ====\n",
+            st.exports, st.addrs, st.ordinals, st.hits);
+    // Sorted so two runs diff cleanly.
+    {
+        std::vector<std::string> names;
+        names.reserve(RtExportReg().size());
+        for (auto& kv : RtExportReg()) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        for (auto& n : names)
+            fprintf(stderr, "[RtCensus] export %s\n", n.c_str());
+    }
+    {
+        std::vector<uintptr_t> addrs;
+        addrs.reserve(RtAddrReg().size());
+        for (auto& kv : RtAddrReg()) addrs.push_back(kv.first);
+        std::sort(addrs.begin(), addrs.end());
+        for (uintptr_t a : addrs)
+            fprintf(stderr, "[RtCensus] addr 0x%llx\n", (unsigned long long)a);
+    }
+    {
+        std::vector<uint16_t> ords;
+        ords.reserve(RtOrdinalReg().size());
+        for (auto& kv : RtOrdinalReg()) ords.push_back(kv.first);
+        std::sort(ords.begin(), ords.end());
+        for (uint16_t o : ords)
+            fprintf(stderr, "[RtCensus] ordinal %u\n", (unsigned)o);
+    }
+    fflush(stderr);
+}
+
+void RuntimePortInit() {
+    // Registrations themselves happen in runtime/src/**; the reg_rt_*.cpp wave
+    // files call RegisterRuntime* from static initializers or from an init
+    // function invoked here. Nothing to resolve at this point — the tables hold
+    // our own function pointers, not DLL addresses — so this only reports.
+    RuntimeRegistryStats st = GetRuntimeRegistryStats();
+    printf("[RtPort] runtime registry: %zu exports, %zu addrs, %zu ordinals%s\n",
+           st.exports, st.addrs, st.ordinals,
+           RtPortEnabled() ? "" : "  (DISABLED via BANISHED_RT_PORT=0)");
+    DumpRuntimeRegistry();
+}
+
+// ============================================================
 // ResolveAddr — standalone implementation
 // ============================================================
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
@@ -188,6 +304,18 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
     //
     // Guard on the handle, not the delta: a module CAN legitimately load at its
     // preferred base and have delta == 0.
+    // Runtime port seam: an address we have reimplemented resolves to OUR code.
+    // Checked before the module handle, so a port stays live even for a module
+    // that failed to load — that is the whole point of the endgame (§4.1).
+    if (mod == Module::Runtime && RtPortEnabled()) {
+        auto& reg = RtAddrReg();
+        auto it = reg.find(ghidra_addr);
+        if (it != reg.end()) {
+            g_rtHits++;
+            return reinterpret_cast<uintptr_t>(it->second);
+        }
+    }
+
     const ModuleInfo& mi = g_modules[static_cast<int>(mod)];
     if (!mi.handle) return 0;
     return static_cast<uintptr_t>(
@@ -255,17 +383,49 @@ const ModuleInfo* GetModuleInfo(Module mod) {
     return &g_modules[static_cast<int>(mod)];
 }
 
-void* ResolveExport(const char* mangled_name) {
-    if (!g_modules[1].handle) return nullptr;
+void* ResolveExportRaw(const char* mangled_name) {
+    if (!g_modules[1].handle || !mangled_name) return nullptr;
     return reinterpret_cast<void*>(
         GetProcAddress(g_modules[1].handle, mangled_name)
     );
 }
 
-void* ResolveOrdinal(uint16_t ordinal) {
+void* ResolveOrdinalRaw(uint16_t ordinal) {
     if (!g_modules[1].handle) return nullptr;
     return reinterpret_cast<void*>(
         GetProcAddress(g_modules[1].handle, MAKEINTRESOURCEA(ordinal))
     );
+}
+
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr) {
+    const ModuleInfo& mi = g_modules[static_cast<int>(Module::Runtime)];
+    if (!mi.handle) return 0;
+    return static_cast<uintptr_t>(
+        static_cast<intptr_t>(ghidra_addr) + mi.delta
+    );
+}
+
+void* ResolveExport(const char* mangled_name) {
+    if (mangled_name && RtPortEnabled()) {
+        auto& reg = RtExportReg();
+        auto it = reg.find(mangled_name);
+        if (it != reg.end()) {
+            g_rtHits++;
+            return it->second;
+        }
+    }
+    return ResolveExportRaw(mangled_name);
+}
+
+void* ResolveOrdinal(uint16_t ordinal) {
+    if (RtPortEnabled()) {
+        auto& reg = RtOrdinalReg();
+        auto it = reg.find(ordinal);
+        if (it != reg.end()) {
+            g_rtHits++;
+            return it->second;
+        }
+    }
+    return ResolveOrdinalRaw(ordinal);
 }
 

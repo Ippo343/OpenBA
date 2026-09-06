@@ -312,7 +312,11 @@ Runtime programs.
    never goes through exports, so registering a port redirects only us. To A/B a port against
    *all* callers, inline-patch the DLL function to `JMP ours` (the `allocator_lock.cpp` pattern;
    the full hde64-based installer with trampolines lives in git at `fcd3fb6^:patches/src/hooks.cpp`
-   and should be revived as `standalone/runtime_detour.{h,cpp}`). Env kill-switch per port,
+   and should be revived as `standalone/runtime_detour.{h,cpp}`). **Done in Wave 0** — note that
+   `standalone/runtime_detour.h` already existed, declaring the simpler byte-copy
+   `RuntimeDetourInstall` implemented in `filename_runtime_hook.cpp` and used by three files.
+   Both APIs now live in that header; use the HDE64 `InstallRuntimeDetour*` unless you have read
+   the prologue and want the strict expected-bytes guard. Env kill-switch per port,
    default-on once proven, exactly like `kDefaultOnFlags`.
 4. **Differential testing is the oracle.** The DLL stays loaded until cutover, so every pure port
    can run both implementations and compare (`BANISHED_RT_DIFF=1`: call ours, call theirs, compare
@@ -330,7 +334,7 @@ Runtime programs.
 
 | Wave | Scope | Size | Why here |
 |---|---|---|---|
-| **0 Tooling** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; string-anchor naming pass over the 2,467 `FUN_`s; `runtime/src/<Dir>/` skeleton from `rt_source_tree.txt`; `tools/runtime_census.py` (registered vs called vs total) | 1–2 sessions | Everything after depends on it |
+| **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **OPEN: the string-anchor naming pass over the 2,467 `FUN_`s** — the profile↔retail map does NOT do it (only 9 rows name a retail `FUN_`, none by hash: the profile build's internals are `FUN_` too, so matching unnamed to unnamed yields nothing). The lever is the profile build's source-path/assert strings, applied profile-side first. | 1–2 sessions | Everything after depends on it |
 | **1 Math + Volume** | 292 fns, 30 KB | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
 | **2 System + Collection** | String, MemoryAllocator, Filename, WideString, Time/Timer, Random, CRC, Color, CriticalSection, Thread, Compression, Configuration; Collection templates as headers | M | 4,100+ inbound edges; allocator is global state (already detoured for locking) and must be swapped atomically with its `.data` singleton |
 | **3 Object** | Base, Type, BaseTypeInfo, Internal, External, InternalPtr, Factory, InternalFactory, ExternalFactory, ExternalList | M | The reflection + handle table. Once ours, object construction flows through us and vtable ownership stops being a problem |
@@ -364,7 +368,9 @@ the diff harness have each caught at least one real divergence.
 
 ## 5. Definition of done for the runtime phase
 
-- [ ] Wave 0 tooling merged; `tools/runtime_census.py` reports registered / called / total per namespace.
+- [x] Wave 0 tooling merged; `tools/runtime_census.py` reports registered / called / total per namespace.
+      Baseline 2026-09-06: **869 functions called, 0 ported** (UI 137, Graphics 78, Math 60,
+      Video 60, System 57, IO 39, Object 38, Achievement 37, plus 245 non-namespaced internals).
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
 - [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.

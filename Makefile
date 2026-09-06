@@ -26,8 +26,16 @@ GAME_SRC_SRCS = $(wildcard code/Game/*/*.cpp)
 ENGINE_FUNC_SRCS = engine/funcs/engine_funcs.cpp
 
 # Runtime-x64.dll reimplementation sources
-RUNTIME_FUNC_SRCS = runtime/funcs/runtime_funcs.cpp
+RUNTIME_FUNC_SRCS = $(wildcard runtime/funcs/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
+# Directory names under runtime/src that hold sources (io, ui, math, ...). Used
+# to generate one compile rule each — see RUNTIME_SRC_RULE below.
+RUNTIME_SRC_DIRS = $(sort $(notdir $(patsubst %/,%,$(dir $(RUNTIME_SRC_SRCS)))))
+
+define RUNTIME_SRC_RULE
+$$(SA_OBJ_DIR)/runtime__src__$(1)__%.o: runtime/src/$(1)/%.cpp | $$(SA_OBJ_DIR)
+	$$(CXX) $$(SA_CXXFLAGS) $$(SA_INCLUDES) -c $$< -o $$@
+endef
 
 # VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
 DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)
@@ -64,7 +72,11 @@ SA_SRCS = $(GAME_SRC_SRCS) \
           $(DX11_SRC_SRCS) \
           $(wildcard standalone/*.cpp)
 
-SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
+# hde64: the x86-64 length disassembler used by standalone/runtime_detour.cpp to
+# relocate a displaced prologue. Upstream C, kept unmodified — compiled with $(CC).
+SA_C_SRCS = standalone/hde/hde64.c
+
+SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))              $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_C_SRCS:.c=.o)))
 
 # Windows resources (exe icon)
 SA_RC = standalone/icon.rc
@@ -183,20 +195,11 @@ $(SA_OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(SA_OBJ_DIR)
 $(SA_OBJ_DIR)/runtime__funcs__%.o: runtime/funcs/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
-$(SA_OBJ_DIR)/runtime__src__ui__%.o: runtime/src/ui/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/runtime__src__system__%.o: runtime/src/system/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/runtime__src__math__%.o: runtime/src/math/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/runtime__src__graphics__%.o: runtime/src/graphics/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/runtime__src__io__%.o: runtime/src/io/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+# One compile rule per runtime/src subdirectory, generated from RUNTIME_SRC_DIRS
+# (itself derived from what is on disk). The Runtime port adds directories as it
+# works down the wave order; without this a new directory silently produced "no
+# rule to make target" instead of building.
+$(foreach d,$(RUNTIME_SRC_DIRS),$(eval $(call RUNTIME_SRC_RULE,$(d))))
 
 $(SA_OBJ_DIR)/dx11__funcs__%.o: dx11/funcs/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
@@ -206,6 +209,9 @@ $(SA_OBJ_DIR)/dx11__src__%.o: dx11/src/%.cpp | $(SA_OBJ_DIR)
 
 $(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/standalone__hde__%.o: standalone/hde/%.c | $(SA_OBJ_DIR)
+	$(CC) -std=c99 -O2 -Wall -MMD -MP -c $< -o $@
 
 # Exe icon resource (windres compiles .rc -> COFF object)
 $(SA_RC_OBJ): $(SA_RC) ba_icon.ico | $(SA_OBJ_DIR)
