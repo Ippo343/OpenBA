@@ -1836,6 +1836,15 @@ bool EngineFuncsInit() {
         fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
             ResolveAddr(Module::Runtime, 0x1800c7ad0));
     }
+    // fn_MemFree (singleton, ptr) is the two-arg shape the exe's MemFree call sites
+    // were lifted with. It was declared but NEVER ASSIGNED, so it was null for the
+    // life of the project: four callers guard it (and leak), and the ModDialog
+    // 0x58-entry array push called it unguarded -- EXEC-of-0 on the first Mods click.
+    // Retail's free is the static MemoryAllocator::MemFree(void*) (null-safe; the
+    // singleton arg is dead), so the two-arg form is a thunk onto the static.
+    fn_MemFree = [](void* /*singleton*/, void* ptr) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(ptr);
+    };
 
     // UI::Element::FindElement — non-trivial return ABI
     fn_FindElement = reinterpret_cast<fn_FindElement_t>(
@@ -3449,8 +3458,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Runtime, 0x1800b05f0));
 
     // --- DialogInstance::OnElementEvent (exe dispatch table) ---
+    // TWO overloads exist. The exe's dispatch slot 0x140151a30 (tools/dispatch_slot_map.py)
+    // is the 8-arg one, (InternalPtr<Element>, int, int, int, int, int, void*), which is
+    // what every ported Slot8 tail-calls with 8 args. The 2-arg (const ElementEvent&)
+    // overload was resolved here FIRST for a long time: called with the 8-arg shape it
+    // reinterprets the args, and it ends in a virtual call at vtable+0x50 -- one slot
+    // past the end of ModDialog's 10-slot table, so the Mods dialog EXEC'd 0 on its
+    // first real UI event.
     fn_DialogInstance_OnElementEvent = reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(
-        ResolveExport("?OnElementEvent@DialogInstance@UI@@UEAAXAEBVElementEvent@2@@Z"));
+        ResolveExport("?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z"));
     if (!fn_DialogInstance_OnElementEvent) {
         // Fallback: resolve from exe dispatch table pointer
         void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a30));

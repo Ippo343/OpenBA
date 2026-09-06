@@ -161,6 +161,17 @@ is the path to use for verifying any rendering / gameplay / world-build change.
 - **VS Code**: launch config **"Launch Standalone (debug, autostart new game)"**
   sets the env var for the debuggee; "Launch Standalone (debug)" stops at the menu.
 - To exercise the menu itself (not auto-advance), use `make sa-run-menu`.
+- **Clicking menu buttons unattended**: `BANISHED_AUTOMENU_BUTTON=<id>` clicks one
+  front-end button (Mods=7, Achievements=8, Goals=10, Quit=6) and stops there.
+  `BANISHED_AUTOMENU_CLICKS=<tok>,<tok>,...` then delivers follow-up clicks one settle
+  interval apart: `<id>` → the last-opened ModDialog, `d<id>` → ModDetailsDialog,
+  `m<id>` → the MainMenuDialog again. The in-game half is `BANISHED_PAUSEMENU=600
+  BANISHED_PAUSEMENU_QUIT=120 BANISHED_PAUSEMENU_BUTTON=7 BANISHED_PAUSEMENU_CLICKS=...`
+  (extra tokens `w` wait, `p` dump the mod/package state; the feed survives the
+  world reload a mods Ok triggers). `BANISHED_MODAL_ANSWER=<n>` answers a modal
+  `UI::ShowDialog` (which pumps its own loop no driver can reach) with `n`.
+  Example, the Mods menu: `BANISHED_AUTOMENU_BUTTON=7
+  BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6 BANISHED_MODAL_ANSWER=1`.
 
 ### Stress Test / Performance Baseline
 

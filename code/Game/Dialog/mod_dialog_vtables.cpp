@@ -47,19 +47,15 @@
 //
 // Gating
 // ------
-// This is a new, unproven bring-up, so it is OPT-IN: set BANISHED_LIVE_MODDIALOG
-// to a value other than 0/false. With the gate off, the tables still install but
-// every ModDialog/ModDetailsDialog-specific slot is the same inert no-op the stub
-// factory used to supply, so the default build behaves exactly as before.
-//
-// ⚠ NOT LIVE UNTIL INTEGRATION: the two `UI_DIALOG_STUB(ModDialog…)` /
-// `UI_DIALOG_STUB(ModDetailsDialog…)` lines in ui_dialog_stub_factories.cpp
-// (Lane 2's file this wave) still register competing factories for the same two
-// names. They MUST be deleted for this file's REGISTER_TYPE entries to take
-// effect. See notes/wave_remaining/LANE4_MODS_REPORT.md.
+// DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in kDefaultOnFlags);
+// set BANISHED_LIVE_MODDIALOG=0 to fall back to the inert no-op slots. Verified
+// unattended with BANISHED_AUTOMENU_BUTTON=7 + BANISHED_AUTOMENU_CLICKS (see
+// standalone/autostart.cpp): build, toggle, reorder, details, cancel-revert,
+// ok-save-reload, and registry persistence across a clean quit.
 
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 
@@ -78,13 +74,12 @@ namespace {
 // ---------------------------------------------------------------------------
 // Opt-in gate
 // ---------------------------------------------------------------------------
+// DEFAULT-ON since 2026-09-05 (kDefaultOnFlags in component_factory_base.cpp);
+// BANISHED_LIVE_MODDIALOG=0 is the kill-switch.
 bool ModDialogLive() {
     static int s_state = -1;
-    if (s_state < 0) {
-        const char* v = std::getenv("BANISHED_LIVE_MODDIALOG");
-        s_state = (v && *v && std::strcmp(v, "0") != 0 &&
-                   std::strcmp(v, "false") != 0) ? 1 : 0;
-    }
+    if (s_state < 0)
+        s_state = ComponentFactory::LiveEnabled("BANISHED_LIVE_MODDIALOG") ? 1 : 0;
     return s_state == 1;
 }
 
@@ -109,6 +104,11 @@ void ModDlg_InertSlot(void*, ...) {}
 void* g_ModDialogVt[10];
 void* g_ModDetailsVt[10];
 
+// Most recently opened instances, for the unattended click driver
+// (BANISHED_AUTOMENU_CLICKS in standalone/autostart.cpp). Cleared by the dtors.
+void* s_lastModDialog  = nullptr;
+void* s_lastModDetails = nullptr;
+
 // --- ModDialog +0x00: scalar-deleting destructor -------------------------
 // Faithful port of exe 0x140012a30 -> ~ModDialog (0x14006ff00):
 //   vtable = &vtable_ModDialog
@@ -121,6 +121,7 @@ void* g_ModDetailsVt[10];
 //   if (flags & 1) MemFree(this)
 void* ModDialog_VDtor(void* self, uint32_t flags) {
     if (!self) return self;
+    if (self == s_lastModDialog) s_lastModDialog = nullptr;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     *reinterpret_cast<void**>(self) = g_ModDialogVt;
 
@@ -194,6 +195,7 @@ void ModDialog_VOnElementEvent(void* self, void* elemEvt, int msg, int id,
 // +0xC0 a plain int index), which is why retail's dtor has no cleanup loop.
 void* ModDetails_VDtor(void* self, uint32_t flags) {
     if (!self) return self;
+    if (self == s_lastModDetails) s_lastModDetails = nullptr;
     *reinterpret_cast<void**>(self) = g_ModDetailsVt;
     if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
@@ -202,6 +204,7 @@ void* ModDetails_VDtor(void* self, uint32_t flags) {
 
 void ModDetails_VOnOpened(void* self) {
     if (!self || !ModDialogLive()) return;
+    s_lastModDetails = self;
     printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", self,
                 *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0xC0));
     ::ModDetailsDialog_Slot4(reinterpret_cast<ModDetailsDialog*>(self));
@@ -387,6 +390,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     fn_InternalBasePtr_Ctor(parentIBP, mainMenuSelf);
 
     void* dlg = ModDialog_Ctor_Standalone(dlgMem, ui, extRes, nullIBP, parentIBP);
+    s_lastModDialog = dlg;
 
     uint8_t ibp[8] = {};
     fn_InternalBasePtr_Ctor(ibp, dlg);
@@ -762,6 +766,8 @@ extern "C" void ModProbe_StartWatcher() {
 // ===========================================================================
 // Address-registry entry (called from standalone/reg_mods.cpp)
 // ===========================================================================
+extern "C" void* ModDialog_LastOpened()        { return s_lastModDialog; }
+extern "C" void* ModDetailsDialog_LastOpened() { return s_lastModDetails; }
 extern "C" void* ModDialog_GetVtable()        { EnsureBaseSlots(); return g_ModDialogVt; }
 extern "C" void* ModDetailsDialog_GetVtable() { EnsureBaseSlots(); return g_ModDetailsVt; }
 

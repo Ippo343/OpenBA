@@ -16,6 +16,15 @@
 //                                  on it. Default 120. 0 = open only, and then
 //                                  report every 120 frames whether it is still up.
 //   BANISHED_PAUSEMENU_BUTTON=<id> which button to click. Default 6 = Quit Game.
+//   BANISHED_PAUSEMENU_CLICKS=<tok>[,<tok>...]  follow-up clicks, one every 60
+//                                  frames after the button click, delivered to the
+//                                  most recently opened ModDialog (<id>) or
+//                                  ModDetailsDialog (d<id>) -- the in-game half of
+//                                  autostart.cpp's BANISHED_AUTOMENU_CLICKS. The
+//                                  harness disarms itself after the last token so
+//                                  a world reload (mods Ok) does not re-run it.
+//                                  Extra tokens: w = wait one interval, p = dump the
+//                                  IO::Modification/FileSystem state ([ModProbe:clicks]).
 //                                  1 = Resume, 3 = Save, 5 = Quit to Main Menu.
 //
 // The dialog it drives is a MainMenuDialog (the same class as the front end),
@@ -28,6 +37,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+
+// code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
+extern "C" void* ModDialog_LastOpened();
+extern "C" void* ModDetailsDialog_LastOpened();
+extern "C" void  ModProbe_DumpModList(const char* tag);
 
 extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
 
@@ -44,6 +59,10 @@ void* s_forWorld   = nullptr;  // the GameUpdateLoop this arming belongs to
 int   s_worldSeenAt = 0;       // frame we first saw that GameUpdateLoop
 void* s_dialog     = nullptr;  // the pause menu the opener handed back
 void* s_vtable     = nullptr;  // its vtable at open time (liveness check before we click)
+char  s_clicks[256] = {0};     // BANISHED_PAUSEMENU_CLICKS, consumed in place
+char* s_clickCursor = nullptr;
+int   s_lastTokenAt = 0;
+bool  s_feeding     = false;   // token feed in progress: survives a world reload
 
 void Init() {
     if (s_openFrame >= 0) return;
@@ -52,6 +71,10 @@ void Init() {
     if (s_openFrame > 0 && s_openFrame < 600) s_openFrame = 600;
     if (const char* d = std::getenv("BANISHED_PAUSEMENU_QUIT")) s_quitDelay = std::atoi(d);
     if (const char* b = std::getenv("BANISHED_PAUSEMENU_BUTTON")) s_buttonId = std::atoi(b);
+    if (const char* c = std::getenv("BANISHED_PAUSEMENU_CLICKS")) {
+        std::strncpy(s_clicks, c, sizeof(s_clicks) - 1);
+        s_clickCursor = s_clicks[0] ? s_clicks : nullptr;
+    }
     if (s_openFrame > 0) {
         std::fprintf(stderr, "[PauseMenu] ENABLED - open at frame %d, click id=%d %d frames later\n",
                      s_openFrame, s_buttonId, s_quitDelay);
@@ -111,6 +134,46 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     // from when this world first appeared: GameUpdateLoop's s_frameNum is a process
     // counter that never resets, so an absolute "open at frame 800" would fire
     // instantly on game two.
+    if (s_feeding) {
+        if (s_clickCursor && frameNum >= s_lastTokenAt + 60) {
+            s_lastTokenAt = frameNum;
+            char* tok = s_clickCursor;
+            char* comma = std::strchr(tok, ',');
+            if (comma) { *comma = '\0'; s_clickCursor = comma + 1; }
+            else       { s_clickCursor = nullptr; }
+            if (tok[0] == 'w') {
+                std::fprintf(stderr, "[PauseMenu] CLICKS: wait (frame %d)\n", frameNum);
+            } else if (tok[0] == 'p') {
+                ModProbe_DumpModList("clicks");
+            } else if (tok[0] == 'd') {
+                void* dlg = ModDetailsDialog_LastOpened();
+                int id = std::atoi(tok + 1);
+                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
+                if (dlg) {
+                    void** vt = *reinterpret_cast<void***>(dlg);
+                    using H = void (*)(void*, uint64_t, int, int);
+                    reinterpret_cast<H>(vt[8])(dlg, 0, 0x12, id);
+                }
+            } else {
+                void* dlg = ModDialog_LastOpened();
+                int id = std::atoi(tok);
+                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDialog=%p id=%d\n", dlg, id);
+                if (dlg) {
+                    void* nullElem = nullptr;
+                    void** vt = *reinterpret_cast<void***>(dlg);
+                    using H = void (*)(void*, void*, int, int, uint32_t, uint32_t, uint32_t, uint64_t);
+                    reinterpret_cast<H>(vt[8])(dlg, &nullElem, 0x12, id, 0, 0, 0, 0);
+                }
+            }
+            if (!s_clickCursor) {
+                std::fprintf(stderr, "[PauseMenu] CLICKS: sequence done - harness disarmed\n");
+                s_feeding   = false;
+                s_openFrame = 0;   // never rearm, even if the click reloaded the world
+            }
+        }
+        return;
+    }
+
     if (gameWorld != s_forWorld) {
         s_forWorld    = gameWorld;
         s_worldSeenAt = frameNum;
@@ -130,6 +193,12 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
         if (s_clickedAt && frameNum == s_clickedAt + 120) {
             std::fprintf(stderr, "[PauseMenu] frame %d - 120 frames after the id=%d click: "
                                  "pausesGame=%d\n", frameNum, s_buttonId, Paused(ui));
+        }
+        // Hand the follow-up clicks to the feeder at the top of this function,
+        // which keeps running across the world reload an in-game mods Ok triggers.
+        if (s_clickCursor && s_clickedAt && !s_feeding) {
+            s_feeding     = true;
+            s_lastTokenAt = s_clickedAt;
         }
         return;
     }

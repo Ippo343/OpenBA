@@ -2366,7 +2366,10 @@ extern fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString;
 
 // System::String::operator+=(this, String const&) — appends string in-place
 // Non-exported, resolved from exe dispatch table at 0x140151a00
-typedef void (*fn_String_AppendStr_t)(void* self, const void* other);
+// ??YString@System@@QEAA?AV01@AEBV01@@Z -- String::operator+=(const String&) RETURNS
+// a String by value, so the hidden return buffer sits between `this` and `other`.
+// Declared as (self, other) for a long time; the Runtime then read `other` out of R8.
+typedef void* (*fn_String_AppendStr_t)(void* self, void* retval, const void* other);
 extern fn_String_AppendStr_t fn_String_AppendStr;
 
 // System::operator+(lhs, rhs) -> String — free function, hidden ret ptr

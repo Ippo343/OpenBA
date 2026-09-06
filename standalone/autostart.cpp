@@ -22,6 +22,10 @@ void* g_StandaloneScenarioDialog = nullptr;
 
 #include "engine_funcs.h"
 
+// code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
+extern "C" void* ModDialog_LastOpened();
+extern "C" void* ModDetailsDialog_LastOpened();
+
 namespace AutoStart {
 
 namespace {
@@ -54,8 +58,19 @@ enum class Phase {
     WaitTutorialMenu, // menu up; counting down before firing Tutorial (AUTOTUTORIAL)
     WaitTutorialDialog, // ScenarioDialog open; waiting for its entry list, then click Load
     WaitMenuButton,   // menu up; counting down before firing an arbitrary button id
+    MenuClicks,       // AUTOMENU_BUTTON fired; feeding BANISHED_AUTOMENU_CLICKS tokens
     Done,
 };
+
+// BANISHED_AUTOMENU_CLICKS=<tok>[,<tok>...]: follow-up clicks delivered one per
+// settle interval after the AUTOMENU_BUTTON click. Token forms:
+//   <id>   click element id <id> on the most recently opened ModDialog
+//   d<id>  click element id <id> on the most recently opened ModDetailsDialog
+//   m<id>  click element id <id> on the MainMenuDialog (e.g. m7 re-opens Mods)
+// Only the mod dialogs are addressable for now; add a *_LastOpened() per
+// dialog type to extend it.
+char  s_menuClicks[256] = {0};
+char* s_menuClickCursor = nullptr;
 
 // AUTOLOAD: name of the save to load (defaults to the autosave, "Auto").
 char s_loadName[64] = "Auto";
@@ -168,6 +183,12 @@ void Init() {
             s_menuButtonId = std::atoi(m);
             s_enabled = true;
             s_phase   = Phase::WaitMenuButton;
+            if (const char* c = std::getenv("BANISHED_AUTOMENU_CLICKS")) {
+                std::strncpy(s_menuClicks, c, sizeof(s_menuClicks) - 1);
+                s_menuClickCursor = s_menuClicks[0] ? s_menuClicks : nullptr;
+                if (s_menuClickCursor)
+                    fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS queued: %s\n", s_menuClicks);
+            }
             fprintf(stderr, "[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=%d "
                    "after %d menu frames and stop there\n", s_menuButtonId, s_settleFrames);
             return;
@@ -294,7 +315,50 @@ void TickMenu(void* menuDLT) {
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) - injecting click id=%d\n",
                 mainMenu, s_menuButtonId);
         InjectClick(mainMenu, kMsg_ButtonClick, s_menuButtonId);
-        s_phase = Phase::Done;
+        s_phase      = s_menuClickCursor ? Phase::MenuClicks : Phase::Done;
+        s_phaseFrame = 0;
+        break;
+    }
+
+    case Phase::MenuClicks: {
+        if (++s_phaseFrame < s_settleFrames) return;
+        s_phaseFrame = 0;
+        if (!s_menuClickCursor || !*s_menuClickCursor) { s_phase = Phase::Done; break; }
+        char* tok = s_menuClickCursor;
+        char* comma = std::strchr(tok, ',');
+        if (comma) { *comma = '\0'; s_menuClickCursor = comma + 1; }
+        else       { s_menuClickCursor = nullptr; }
+
+        if (tok[0] == 'm') {
+            void* mainMenu = *reinterpret_cast<void**>(
+                reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+            int id = std::atoi(tok + 1);
+            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=%p id=%d\n", mainMenu, id);
+            if (mainMenu) InjectClick(mainMenu, kMsg_ButtonClick, id);
+        } else if (tok[0] == 'd') {
+            void* dlg = ModDetailsDialog_LastOpened();
+            int id = std::atoi(tok + 1);
+            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
+            if (dlg) {
+                void** vt = *reinterpret_cast<void***>(dlg);
+                using H = void (*)(void*, uint64_t, int, int);
+                reinterpret_cast<H>(vt[kVtableSlot_OnCommand])(dlg, 0, kMsg_ButtonClick, id);
+            }
+        } else {
+            void* dlg = ModDialog_LastOpened();
+            int id = std::atoi(tok);
+            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDialog=%p id=%d\n", dlg, id);
+            if (dlg) {
+                // ModDialog::OnElementEvent is the 8-arg shape and reads *param2 as
+                // the element InternalPtr, so hand it a real (null) qword.
+                void* nullElem = nullptr;
+                void** vt = *reinterpret_cast<void***>(dlg);
+                using H = void (*)(void*, void*, int, int, uint32_t, uint32_t, uint32_t, uint64_t);
+                reinterpret_cast<H>(vt[kVtableSlot_OnCommand])(dlg, &nullElem, kMsg_ButtonClick,
+                                                               id, 0, 0, 0, 0);
+            }
+        }
+        if (!s_menuClickCursor) s_phase = Phase::Done;
         break;
     }
 

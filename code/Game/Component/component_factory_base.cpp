@@ -976,6 +976,16 @@ static const char* const kDefaultOnFlags[] = {
     // RecoverOrDie, plus the hospital/herbalist care path) was already ported and
     // registered; the list was the one missing input. Set the var to 0 to A/B it.
     "BANISHED_LIVE_DISEASELIST",
+    // GRADUATED 2026-09-05 -- the Mods menu (ModDialog + ModDetailsDialog,
+    // code/Game/Dialog/mod_dialog_vtables.cpp). Driven unattended with
+    // BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=...: list builds with
+    // thumbnails, Enable toggles, Up/Down/Top reorder, Details opens and closes,
+    // Cancel reverts (RefreshList), Ok saves (SaveList) + reloads the menu with the
+    // new package set mounted, and the registry ModEnabled_*/ModIndex_* keys
+    // persist across a clean Quit. Five defects fixed on the way (int-typed
+    // pointer arg to ImageBuffer::Create, fn_MemFree never assigned, wrong
+    // OnElementEvent overload, by-name Sprite ctor, String::operator+= ABI).
+    "BANISHED_LIVE_MODDIALOG",
 };
 bool LiveEnabled(const char* envVar) {
     if (envVar) {

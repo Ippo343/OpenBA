@@ -1059,9 +1059,8 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         MainMenuDialog_OpenGoal(reinterpret_cast<MainMenuDialog*>(self));
         break;
     case kButton_Mod:
-        // Lane 4: ModDialog/ModDetailsDialog promoted out of the no-op stub
-        // vtable (code/Game/Dialog/mod_dialog_vtables.cpp). Opener is opt-in
-        // behind BANISHED_LIVE_MODDIALOG until .pkm mounting is proven.
+        // ModDialog/ModDetailsDialog live in code/Game/Dialog/mod_dialog_vtables.cpp.
+        // Default-on since 2026-09-05 (BANISHED_LIVE_MODDIALOG=0 is the kill-switch).
         printf("[MainMenuDialog::OnCommand] -> OpenMods (ModDialog)\n");
         ModDialog_OpenFromMainMenu(self);
         break;

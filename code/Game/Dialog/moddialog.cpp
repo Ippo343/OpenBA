@@ -35,6 +35,8 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
+#include <cstdio>
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -48,11 +50,18 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 typedef void* (*fn_ElementVt_Child_t)(void* self, void* retbuf, int index);
 typedef void  (*fn_ElementVt_Hide_t)(void* self, int hide);
 
-// ImageBuffer Create: vtable+0x48 (via g_NoiseUI_ImageBufferVtable)
-// Args: self, ?, colorFmt, pixFmt, stride, w, h, mip, ?, ?, ?, ?
-typedef void (*fn_ImageBuffer_Create_t)(void* self, int a1, int a2, int a3,
-                                        int stride, int w, int h,
-                                        int a8, int a9, int a10, int a11, int a12);
+// ImageBuffer::Create: vtable+0x48 (via g_NoiseUI_ImageBufferVtable). Mangled:
+//   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@
+//   W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z
+// i.e. (ImageType, Usage, Format, uint mip, int w, int h, FilterMode, AddressMode x3,
+//        Array<Array<uchar>>* levels). The LAST parameter is a POINTER: it lives in a
+// stack slot, and passing it as `int 0` writes only the low dword, leaving the high
+// dword as whatever was there (0x00007ffc... on the first Mods click) -- which
+// ImageBufferData_Create then dereferenced as `levels->count`.
+typedef bool (*fn_ImageBuffer_Create_t)(void* self, int type, int usage, int format,
+                                        unsigned mip, int w, int h,
+                                        int filter, int addrU, int addrV, int addrW,
+                                        void* levels);
 
 // ============================================================
 // Filename equality check — compares two System::Filename/String objects
@@ -405,10 +414,9 @@ void ModDialog_Slot4(ModDialog* self) {
         if (imgBuf) {
             fn_ImageBuffer_Ctor(imgBuf);
             *(uintptr_t*)imgBuf = g_NoiseUI_ImageBufferVtable; // same vtable as NoiseUI
-            // Create: vtable[0x48/8]=vtable[9](self, 0, 2, 5, stride=0, w=48, h=48, 1,1,1,1, 0)
+            // Create: vtable[0x48/8]=vtable[9](self, 0, 2, 5, mip=0, w=48, h=48, 1,1,1,1, levels=null)
             void** ivt = *(void***)imgBuf;
-            typedef void (*fn_IB_Create_t)(void* self, int, int, int, int, int, int, int, int, int, int, int);
-            ((fn_IB_Create_t)ivt[9])(imgBuf, 0, 2, 5, 0, 0x30, 0x30, 1, 1, 1, 1, 0);
+            ((fn_ImageBuffer_Create_t)ivt[9])(imgBuf, 0, 2, 5, 0, 0x30, 0x30, 1, 1, 1, 1, nullptr);
             entry.imageBuffer = imgBuf;
         }
 
@@ -682,8 +690,20 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         // ShowDialog (modal) — blocks until user responds
         uint64_t dialogRef;
         fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
-        int result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dialogRef);
-        fn_InternalBasePtr_DeletePtr(&dialogRef);
+        // BANISHED_MODAL_ANSWER=<n>: unattended harness only. ShowDialog pumps its
+        // own message loop until a button is pressed, which no driver can reach, so
+        // the answer is injected here instead (1/2 = confirm, anything else = cancel).
+        int result;
+        const char* forced = std::getenv("BANISHED_MODAL_ANSWER");
+        if (forced && *forced) {
+            result = std::atoi(forced);
+            printf("[ModDialog::Apply] BANISHED_MODAL_ANSWER=%d (reload dialog skipped)\n", result);
+            fn_InternalBasePtr_DeletePtr(&dialogRef);
+        } else {
+            result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dialogRef);
+            fn_InternalBasePtr_DeletePtr(&dialogRef);
+        }
+        printf("[ModDialog::Apply] dirty=1 gameWorld=%p reload answer=%d\n", gameWorld, result);
 
         if ((unsigned)(result - 1) < 2) {
             // User confirmed: save and reload

@@ -290,17 +290,19 @@ void NoiseUI_Slot4(NoiseUI* self) {
     *(void**)(s + 0x30) = imageBuffer;
 
     // Call ImageBuffer::Create virtual (vtable +0x48)
-    // Signature: Create(format=0, type=2, usage=5, mipmap=0,
-    //                    width=256, height=256, depth=1, arraySize=1,
-    //                    sampleCount=1, sampleQuality=1, flags=0)
-    typedef void (*fn_ImageBuffer_Create_t)(void* self, int fmt, int type, int usage,
-                                             int mip, int w, int h, int depth,
-                                             int arrSize, int sampleCount,
-                                             int sampleQuality, int flags);
+    // Signature: Create(ImageType=0, Usage=2, Format=5, mip=0, width=256,
+    //                    height=256, FilterMode=1, AddressMode=1,1,1,
+    //                    Array<Array<uchar>>* levels=null)
+    // The last parameter is a POINTER in a stack slot -- passing it as an int
+    // leaves the high dword uninitialised (that exact bug crashed ModDialog).
+    typedef bool (*fn_ImageBuffer_Create_t)(void* self, int type, int usage, int format,
+                                             unsigned mip, int w, int h, int filter,
+                                             int addrU, int addrV, int addrW,
+                                             void* levels);
     uintptr_t vtable = *(uintptr_t*)imageBuffer;
     fn_ImageBuffer_Create_t fnCreate =
         *(fn_ImageBuffer_Create_t*)(vtable + 0x48);
-    fnCreate(imageBuffer, 0, 2, 5, 0, 0x100, 0x100, 1, 1, 1, 1, 0);
+    fnCreate(imageBuffer, 0, 2, 5, 0, 0x100, 0x100, 1, 1, 1, 1, nullptr);
 
     // Allocate 256*256 ARGB pixel buffer, fill with black (0xFF000000)
     uint32_t* pixels = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x40000, 4);

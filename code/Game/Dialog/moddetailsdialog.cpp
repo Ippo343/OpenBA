@@ -177,8 +177,12 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     fn_Element_Hide(buttonUpdate, true);
 
     // --- Set icon sprite from +0xB8 sprite handle ---
+    // Retail (0x14006dca6) calls dispatch slot 0x140151898 =
+    // ??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z -- the
+    // BY-INDEX ctor with index 0, same as ModDialog's row icon. The by-NAME
+    // overload that used to be here dereferences its String* (READ of 0).
     uint8_t sprite[16];
-    fn_Sprite_Ctor(sprite, *(uint64_t*)(s + 0xB8), 0);
+    fn_Sprite_Ctor_ByIndex(sprite, *(void**)(s + 0xB8), 0);
     fn_ImageElement_SetSprite(imageIcon, sprite);
 
     // --- Set text parameters ---
@@ -232,7 +236,9 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         fn_String_Format(entry, "%s%s ^n[%s]^n", (uint64_t)(uintptr_t)prefix,
                          (uint64_t)(uintptr_t)modName,
                          (uint64_t)(uintptr_t)modPath);
-        fn_String_AppendStr(conflictResult, entry);
+        uint8_t appendTmp[8] = {};
+        fn_String_AppendStr(conflictResult, appendTmp, entry);   // returns a String copy
+        fn_String_Dtor(appendTmp);
         fn_String_Dtor(entry);
     }
 
@@ -240,7 +246,9 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     {
         uint8_t closeTag[8];
         fn_String_Ctor_CStr(closeTag, "^le");
-        fn_String_AppendStr(conflictResult, closeTag);
+        uint8_t appendTmp[8] = {};
+        fn_String_AppendStr(conflictResult, appendTmp, closeTag);
+        fn_String_Dtor(appendTmp);
         fn_String_Dtor(closeTag);
     }
 
