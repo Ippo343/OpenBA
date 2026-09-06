@@ -791,6 +791,16 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
+    // DIAGNOSTIC (BANISHED_WORKAREA_STALL_TRACE=1, default off — unset behaviour is
+    // byte-identical to retail, including the spin). Retail's 0x1400ed270 is this exact
+    // loop and relies on the invariant "every BST entry's citizen still holds the matching
+    // task", so that cancelling it drops self+0x50. When the invariant is broken the loop
+    // re-picks the SAME leftmost node forever at 100% CPU with no output — measured, the
+    // counter sat at 1 and the node/citizen pointers were identical across 12s of samples.
+    // This reports the stalled entry (and breaks out) instead of wedging the process.
+    const bool stallTrace = std::getenv("BANISHED_WORKAREA_STALL_TRACE") != nullptr;
+    int stalls = 0;
+
     while (count > 0) {
         // Find rightmost node in BST
         uintptr_t node = *(uintptr_t*)(selfAddr + 0x48);
@@ -806,7 +816,28 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
         fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
+        const int before = count;
         count = *(int*)(selfAddr + 0x50);
+
+        if (stallTrace && count == before) {
+            if (++stalls == 1) {
+                uintptr_t ai = *(uintptr_t*)(citizenEntity + 0x278);
+                std::fprintf(stderr,
+                    "[WorkAreaStall] area=%p count=%d node=%p citizen=%p "
+                    "flags=0x%08x deleted=%d masterIdx=%d compCount=%d ai=%p "
+                    "actionSlots=%d actionArray=%p\n",
+                    (void*)selfAddr, count, (void*)rightmost, (void*)citizenEntity,
+                    *(unsigned*)(citizenEntity + 0x40),
+                    (int)((*(unsigned*)(citizenEntity + 0x40) >> 10) & 1),
+                    *(int*)(citizenEntity + 0x18), *(int*)(citizenEntity + 0x38),
+                    (void*)ai,
+                    ai ? *(int*)(ai + 0x48 + 8) : -1,
+                    ai ? *(void**)(ai + 0x48) : nullptr);
+                std::fflush(stderr);
+            }
+            // Cancelling made no progress: retail would spin here forever.
+            break;
+        }
     }
     return 0;
 }
@@ -850,6 +881,12 @@ int HarvestArea_Slot9_Impl(HarvestArea* self, void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2); // IBP at +0x8
 
+        // Diagnostic context for the BANISHED_WORKVALIDATE_TRACE probe: name the BST
+        // node an entry came from, so a bad object can be traced back to the node that
+        // stored it (is the node intact, or is the +0x8 pointer itself wrong?).
+        extern void* g_WorkValidateNode;
+        extern bool  g_WorkValidateTraceOn;
+        if (g_WorkValidateTraceOn) g_WorkValidateNode = (void*)node;
         uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
 
         if (valid == 0) {

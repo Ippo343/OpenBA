@@ -355,3 +355,126 @@ Neither is achievement-specific; both block loading a large hand-built town.
    `Persist` is meant to restore it on load; on these saves neither has. Independent of
    #1 and likely the cheaper fix. No achievement can be evaluated in a loaded game until
    this is fixed.
+
+---
+
+## 9. The work-area BST invariant — one broken invariant, two symptoms (2026-09-05)
+
+Chasing the `ValidateTask` crash from §5.6 turned up a second, louder symptom of what
+looks like the same defect. Neither is achievement-specific; both live in the
+harvest-area work registration.
+
+### 9.1 The shared invariant
+
+`HarvestArea` keeps a BST at `self+0x48` (count at `self+0x50`) whose nodes are
+`{key(int) +0x00, citizen IBP +0x08, parent +0x10, left +0x18, right +0x20}` — 40 bytes.
+Retail's node layout was read off `0x1400ec930` and matches our port exactly.
+
+Two retail functions assume **every entry's citizen still holds the matching task**:
+
+* `HarvestArea::Slot9` "Validate" (`0x1400ec930`) walks the tree calling
+  `FUN_1400f7100` (ValidateTask) per entry and removes the invalid ones.
+* `HarvestArea::Slot8` "Cleanup/CancelAll" (`0x1400ed270`) loops
+  `while (count > 0)`, takes the leftmost node, and cancels that citizen's action list —
+  relying on the cancel to reach `Slot7` (`0x1400ecb60`, keyed by CELL) and drop the entry.
+
+`ActCt_TaskCleanup` calls slot 9 and then slot 8 on the same area, back to back.
+
+### 9.2 Symptom A — the teardown hang (reproducible enough to root-cause)
+
+Quitting a stress town wedges the process at 100% CPU with no further log output, right
+after the `[Residence] ERASE via SLOT-7 removal hook` burst. Measured: **5.03 CPU-seconds
+in 5 wall seconds** — one core spinning, not a deadlock. `standalone_boot_state.txt` still
+says RUNNING; the tell is that the log stops growing.
+
+gdb on the spinning thread:
+
+    EntityList_Shutdown            gameupdateloop_teardown.cpp:249  (the mark loop)
+     -> MarkEntityRemoval          action_base_hunt.cpp:193
+     -> WorkComponent_RegisterWorkSlot   workcomponent.cpp:310
+     -> ActCt_TaskCleanup(taskIdx) action_base_complete.cpp:298     (owner vtable +0x40)
+     -> HarvestArea_Slot8_Impl     harvestarea.cpp:807
+     -> WorkBase_TaskListCleanup_c5400
+
+Sampling the same wedge four times over 12 s — **every value frozen**:
+
+| probe | value |
+|---|---|
+| HarvestArea `self` | `0x204419342d8` (same each sample) |
+| `self+0x50` (loop counter) | **1**, never drops |
+| BST root | `0x20441a30ed8` (same) |
+| root `+0x18` (left) | `0` — the root *is* the leftmost, so the same node is re-picked forever |
+| root `+0x08` (citizen) | `0x2043f68b250` (same) |
+| citizen action list count | 16, **all 16 slots NULL** |
+
+So slot 8 cancels an empty action list, nothing reaches slot 7, the count stays at 1, and
+the identical node is chosen again — forever. **Retail has this exact loop**, so the fault
+is the stale entry, not the loop.
+
+### 9.3 Symptom B — the `IsA` crash
+
+`Object::IsA` (Runtime `0x1800491c0`) is three instructions:
+
+    MOV RAX,qword ptr [RCX]      ; the object's VTABLE
+    MOV EBX,EDX
+    CALL qword ptr [RAX + 0x10]  ; vtable slot 2 — GetTypeId
+
+It **CALLs** through the object, so a bad entry is an EXEC-of-garbage, reported as
+`READ of <vtable+0x10>`. Seen twice, and the two are the same structure:
+
+| run | RAX ("vtable") |
+|---|---|
+| jack1 | `0000079700000552` |
+| stall run | `0000077B00000552` |
+
+The `BANISHED_WORKVALIDATE_TRACE` probe dumped the object behind the second one:
+
+    +0x00: 52 05 00 00  7b 07 00 00     0x552, 0x77b   <- read as the vtable
+    +0x08: 56 05 00 00  00 00 00 00     0x556, 0
+    +0x10: ff ff ff fe  00 00 00 00     0xFEFFFFFF sentinel
+    +0x18: 68 46 0e 00  24 01 00 00     a real heap pointer (0x124_000E4668)
+    +0x20: 6f 00 00 00  7b 07 00 00
+    +0x28: 52 05 00 00  97 07 00 00     0x552, 0x797   <- the pattern repeats, stride 0x28
+
+**A regular 40-byte record array with a sentinel — not freed garbage.** And `0x797`, the
+high dword of the *first* crash's vtable, sits at `+0x2c` of *this* dump: both crashes read
+the same array one element apart. The low dword is `0x00000552` in both.
+
+> Correction to the working hypothesis this section started from. "A citizen was freed and
+> the entry dangled" is **not** supported. A freed-and-recycled object would differ run to
+> run; this is a stable, live, regularly-strided structure, and 40 bytes is exactly the BST
+> node stride. The likelier reading is that some entries' `+0x08` never held a citizen —
+> a wrong pointer stored, not a lifetime bug.
+
+### 9.4 What was ruled out
+
+* **The builder seat is not the trigger.** It crashed once in the first run and then
+  survived five more with the same config; a later crash reproduced on a run whose only
+  changed variable was unrelated. The single clean control run quoted in §5.6 never
+  established causation and should not have been read that way.
+* **Mass death is not the trigger.** `BANISHED_KILL_CITIZENS=400` at frame 1200, no
+  builders: no crash, no stall.
+* **Our BST walk is not the bug.** Retail `0x1400ec930` and `0x1400ed270` were decompiled
+  and match our ports field for field, including the single-qword entry read.
+
+### 9.5 Harness added (all default-off, byte-unchanged when unset)
+
+| Knob | Effect |
+|---|---|
+| `BANISHED_WORKVALIDATE_TRACE=1` | In `ValidateTask`, before the `IsA` that would EXEC the object: report any entry whose vtable is not on a committed readable page, dumping the object, and the BST node it came from. Uses cached vtable/region checks (a bare `VirtualQuery` per call is a syscall on a hot path and perturbed the race enough to hide it). |
+| `BANISHED_WORKAREA_STALL_TRACE=1` | In `HarvestArea::Slot8`, detect "cancel made no progress", log the area/node/citizen/flags/action-list state, and **break instead of spinning**. Turns the teardown hang into one log line and a clean exit. |
+
+### 9.6 Next step
+
+Find what writes a non-citizen pointer into a work-area BST node's `+0x08`. The insert
+side is `HarvestArea::Slot4` (Execute, `0x1400eccd0`); identify the record array by its
+40-byte layout with the `0xFEFFFFFF` sentinel and the heap pointer at `+0x18` — that names
+the structure whose address is being stored. Both symptoms should close together.
+
+### 9.7 Method note
+
+`tools/stress_run.sh --no-build` skips the **deploy**, not just the build. A hand-run
+`make standalone-perf` followed by `--no-build` measures the *previous* exe: six probe runs
+reported "zero hits" because the probe was not in the running binary. Either drop
+`--no-build` or `cp standalone/build-perf/reimpl-x64.exe "$GAME_DIR/"` yourself, and check
+the deployed timestamp before believing a negative result.

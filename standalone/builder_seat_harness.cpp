@@ -96,6 +96,24 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
         CitizenList_AddWorker_91130(reinterpret_cast<int64_t>(townMgr), builderKey);
 
     const int after = CountProfession(townMgr, builderKey);
+
+    // Correlation for the ValidateTask crash (BANISHED_WORKVALIDATE_TRACE): list the
+    // citizens now holding the builder key, so a later [WorkValidate] BAD VTABLE obj=
+    // can be matched against the set this harness actually converted.
+    if (const char* t = std::getenv("BANISHED_WORKVALIDATE_TRACE")) if (t[0] && t[0] != '0') {
+        void** carr = *reinterpret_cast<void***>(townMgr + 0xa0);
+        int    cn   = *reinterpret_cast<int*>(townMgr + 0xa8);
+        std::fprintf(stderr, "[BuilderSeat] converted citizens (roster %d):", cn);
+        for (int i = 0; i < cn; ++i) {
+            void* c = carr[i];
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
+            if (!c) continue;
+            if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x1f0) == builderKey)
+                std::fprintf(stderr, " %p", c);
+        }
+        std::fprintf(stderr, "\n");
+        std::fflush(stderr);
+    }
     std::fprintf(stderr, "[BuilderSeat] f=%d requested %d builders (key=%016llx): "
                          "profession count %d -> %d\n",
                  frameNum, s_want, (unsigned long long)builderKey, before, after);
