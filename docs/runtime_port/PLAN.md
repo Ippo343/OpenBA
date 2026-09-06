@@ -161,8 +161,18 @@ address (`code/Game/Game/filesystem_setup.cpp:113,190`, `code/Game/Dialog/mod_di
 **C. Crash handler matches Runtime instruction offsets.** `standalone/main.cpp:518` (`+0xC0390…A0`,
 the `IsDerivedFrom` null-this fault) and `:533` (`+0xBC73E`, `External::Load`). Retire with Wave 3.
 
-**D. Vtables copied out of live Runtime objects.** No `??_7` vtable symbol is ever resolved; our
-subclasses let the Runtime ctor stamp the base vtable and then copy or patch slots:
+**D. Vtables copied out of live Runtime objects.** The claim that began this entry — "No `??_7`
+vtable symbol is ever resolved" — was read as "none CAN be". **That is false: the DLL exports 147
+`??_7` vtable symbols** (UI 68, Graphics 20, Video 19, IO 15, Object 7, Engine 5, Achievement 3,
+Audio 3, Collision2D 2, Pathfinding 2, Picking 1, System 1), verified with pefile against the
+shipped DLL. Wave 2 used one for real: `System::Thread`'s ctor/dtor stamp
+`??_7Thread@System@@6B@` (`0x180155f20`) resolved by name, instead of cloning slots. Two of the
+classes listed below — `Graphics::MaterialInstance` and `UI::SpriteSheet` — have exported vtables
+too, so their mirroring workaround was never necessary. **Caveat, do not over-read this:** an
+exported vtable makes the ADDRESS available; whether stamping it is SAFE is a per-class argument.
+Thread's was easy because it is an always-subclassed base whose slot 0 is `_purecall`. Re-make
+that argument per class; do not assume it transfers. Our subclasses currently let the Runtime ctor
+stamp the base vtable and then copy or patch slots:
 `code/Game/Dialog/thumb_vtables.cpp:66-82`, `code/Game/Component/statusicon_geometry.cpp:328`,
 `code/Game/Dialog/saveloaddialog.cpp:854`, `code/Game/Component/frustumoutlinedescription.cpp:89`.
 A ported class must expose its vtable as a real symbol or reproduce the stamping order.
@@ -336,7 +346,7 @@ Runtime programs.
 |---|---|---|---|
 | **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
 | **1 Math + Volume** — **LANDED 2026-09-06, see [WAVE1.md](WAVE1.md)** | 70 of the 71 functions our tree calls (Math 58/59, Volume 12/12); the one deferral is `Graphics::InterpolatedState<Transform>::Lerp`, whose layout nothing in this wave pins. **6,556,631 diffed calls, 0 divergences** against the DLL under `BANISHED_RT_LIBM=dll`; 90 residual 1-ULP divergences at 2 sin/cos sites under our own libm. Found 3 real defects — a **pre-existing wild write** (`fn_Math_Transform3_Identity` declared with no hidden return slot, scribbling 0x30 bytes through a stale RCX on every menu scene load), a reassociated float sum in `Transform::FromDirection`, and 4 exports resolved under manglings that do not exist in the DLL. | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
-| **2 System + Collection** | String, MemoryAllocator, Filename, WideString, Time/Timer, Random, CRC, Color, CriticalSection, Thread, Compression, Configuration; Collection templates as headers | M | 4,100+ inbound edges; allocator is global state (already detoured for locking) and must be swapped atomically with its `.data` singleton |
+| **2 System + Collection** — **LANDED 2026-09-06, see [WAVE2.md](WAVE2.md)** | 53 of the 60 System functions our tree calls (String 18, Filename 11, Random/Time/DateTime/Color/Configuration 17, CriticalSection/Thread 8), plus the Collection layouts as headers ([WAVE2_COLLECTION.md](WAVE2_COLLECTION.md)) and MemoryAllocator reversed, ported and left **OPT-IN with a NO-GO verdict** ([WAVE2_ALLOCATOR.md](WAVE2_ALLOCATOR.md)). **22,733,915 diffed calls, 0 new divergences** — including 16,035,064 `Random::Rand` calls bit-exact. WideString/CRC/Compression/Timer are not called by our tree and were not ported. | M | 4,100+ inbound edges; the allocator is global state and is the one piece NOT taken live |
 | **3 Object** | Base, Type, BaseTypeInfo, Internal, External, InternalPtr, Factory, InternalFactory, ExternalFactory, ExternalList | M | The reflection + handle table. Once ours, object construction flows through us and vtable ownership stops being a problem |
 | **4 IO** | Stream family, Serializer (started), BinaryReader/Writer, Encoding, Persistence/Registry, FileSystem, PackageFile, Modification | L | PackageFile is the densest class in the DLL (25 KB) |
 | **5 Algorithm packages** (parallel lanes) | Collision2D, Picking, Pathfinding, Achievement, Save | M each | Self-contained, each ~13–18 KB, only System/Object below them |
@@ -350,13 +360,39 @@ the diff harness have each caught at least one real divergence.
 
 ### 4.3 Risks, ranked
 
-1. **Collection template layouts** (inlined, no ABI). Recover from the profile build's asserts and
-   from consumer code; `Array<T>` is the `{data,count,cap}` 16-byte triple already known from the
-   exe port, `Map` is the AVL tree behind `Map_Insert`/`Map_Find`.
-2. **The allocator.** Bucketed free lists, refcount at `str-4`, user pointer at `str-8`
-   (`filename_runtime_hook.cpp` header documents it). Everything allocates through it, so a
-   half-ported allocator corrupts everything. Port it with the diff harness in "shadow" mode
-   (ours computes, theirs executes) before switching.
+1. **Collection template layouts** (inlined, no ABI). **MEASURED IN WAVE 2**, see
+   [WAVE2_COLLECTION.md](WAVE2_COLLECTION.md) and `runtime/types/collection/Collection.h`.
+   This entry used to say "`Map` is the AVL tree behind `Map_Insert`/`Map_Find`".
+   **There is no `Collection::Map`.** `Map_Insert`/`Map_Find` are names WE invented in
+   Ghidra. The mangled template ids across the 4,926 exports are `InternalPtr` 103,
+   `ExternalPtr` 94, `Array` 44, `InterpolatedState` 57, `HashGrid` 4, `Set` 2,
+   `LinkedList` 1, `Map` **0**; `PackageFile::BuildPackageFile`'s signature spells the
+   real shape, `Set<Filename, DefaultAllocator, Filename, AVLCompare>` — a four-parameter
+   `Set<T, Alloc, Key, Compare>`, which is exactly why a "map" here is `Set<Pair<K,V>>`
+   keyed on the pair's first. `Array<T>` IS the 16-byte `{_data, _size:i32, _capacity:i32}`
+   triple. Recovered with HIGH confidence: `Array` 0x10, `Set` 0x10, `Set::Node`
+   `align8(sizeof T)+0x20`, `LinkedList` 0x18, `LinkedList::Node` `align8(sizeof T)+0x10`.
+   `Set::Iterator` is NOT pinned and is labelled a guess in the header.
+   **Trap for every later wave:** node pointer offsets are a function of `sizeof(T)`, so
+   MSVC emits a separate insert/find/rebalance per instantiation — one ported `Set` body
+   cannot serve two element widths (`reference_one_bst_find_two_node_layouts.md`).
+2. **The allocator.** **REVERSED IN WAVE 2**, see [WAVE2_ALLOCATOR.md](WAVE2_ALLOCATOR.md).
+   This entry was wrong twice over. It is NOT bucketed free lists: it is a **single-arena
+   boundary-tag allocator with 192 segregated first-fit bins**, `sizeof == 0x670`, and it is
+   **embedded at offset 0 of `Engine::Engine`** (`Engine::GetMemoryAllocator` is a bare
+   `return this`). And the `str-4` / `str-8` pair is **`System::String`'s header, not the
+   allocator's** — `String::SetLength` (`0x1800c8220`) allocates `len+9` and sets
+   `data = user+8`, so `data-8` is the LENGTH, `data-4` is the refcount, and the allocator's
+   own boundary tag is a further 8 bytes back at `data-0x10`. The allocator header carries no
+   refcount. (`filename_runtime_hook.cpp`'s own comments were right; this paraphrase of them
+   was not.) The whole private API is exported — `GetBinForSize`, `GetFreeTagForSize`,
+   `LinkFreeTag`/`UnlinkFreeTag`, `AddNewMemoryRange`, `CommitToPage`/`ReleaseToPage`,
+   `PlatformAllocate`/`PlatformFree`, and `_singleton` as a data symbol — so the struct names
+   `MemoryRange`/`MemoryTag`/`FreeTag` and the Win32 seam are given, not guessed.
+   The risk is also MILDER than stated: the port manipulates the LIVE singleton's own tags,
+   bins and ranges, so "we allocate from our heap while the DLL frees into its own" cannot
+   happen — one heap, one metadata set. **Status: ported, opt-in, verdict NO-GO** — the
+   shadow proof has never executed, and an unmeasured port is not a port.
 3. **Vtable ownership.** Until Wave 3 lands, objects built by retail ctors carry DLL vtables and
    virtual calls land in the DLL regardless of what we registered. Port classes whole.
 4. **The `FUN_` pool.** 407 KB of un-named internals. **This entry was wrong and is now
@@ -389,11 +425,24 @@ the diff harness have each caught at least one real divergence.
       internals, 7 ordinals and 4 names the census cannot attribute).
 - [x] **Wave 1 (Math + Volume) merged.** Census after the wave: **868 called, 70 ported (8.1%)** —
       Math 58/59 (98.3%), Volume 12/12 (100%), everything else still 0.
+- [x] **Wave 2 (System + Collection) merged.** Census after the wave: **873 called, 139 ported
+      (15.9%)** — System 53/60 (88.3%), Math 58/59, Volume 12/12, plus 16 non-namespaced internal
+      addresses. The 7 System functions still unported are `MemoryAllocator::MemAlloc`/`MemFree`
+      (opt-in, NO-GO), `Thread`'s vtable and `ThreadFunc` (used from the DLL as-is, deliberately),
+      and `MemoryAllocator::_singleton`. 27 further registrations exist in `allocator.cpp` /
+      `allocator_win.cpp` and are **excluded from the count** because their Register function
+      returns 0 unless armed — `tools/runtime_census.py` reports them separately.
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
       Wave 1 on `sa-run`: **6,556,631 calls / 0 divergences** with `BANISHED_RT_LIBM=dll`;
       90 divergences in 2 sites with our own libm, all 1 ULP and all sin/cos-fed
       (`Vector3::FromYawPitch`, `Transform::FromYawPitchOffset`). Not yet run under `sa-stress`.
 - [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
+      **BREACHED at the Wave 2 boundary and open**: 0.19 baseline -> 0.21, **+6.7% / +7.2%** over
+      two agreeing runs, of which ~2.5 points are Wave 2's own (A/B: `BANISHED_RT_SYSTEM=0` gives
+      +4.5%) and ~4.5 points predate it. Note `tools/stress_report.py` says "0 regressions over
+      threshold" — its threshold is looser than this gate, so the harness passing is NOT the gate
+      passing. Also fixed here: the perf build had not compiled since Wave 1 (`std::printf` defeats
+      `log_strip.h`'s `#define printf`), so no `sa-stress` number existed for Wave 1 at all.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
@@ -416,6 +465,26 @@ the diff harness have each caught at least one real divergence.
 6. **Test**: `sa-run` with `BANISHED_RT_DIFF=1`; zero divergences; then `sa-stress` and the save
    load. Read `standalone_crash.log` first if it dies.
 7. **Record**: the export name, both addresses, the diff result and the run in the commit message.
+8. **Correct the comments the port just disproved.** A port is not finished until the stale claims
+   it invalidated are fixed AT THEIR SOURCE — in `engine/funcs/`, `engine/types/`, `code/Game/`,
+   `standalone/` and in this document. This is not tidying. Every wave of this project so far has
+   lost time to a comment that outlived the thing it described: five "player-visible gaps" that
+   were stale banners over ported code (§1.2), a stub whose "why this is stubbed" note named a
+   blocker that had already been removed, a `fn_*` name that had not matched its target for
+   months. A wrong comment is worse than no comment, because it is believed.
+   The rule, concretely:
+     * Fix the comment where it is WRITTEN, not only in the wave doc. A wave doc nobody opens
+       does not correct `engine_funcs.h`.
+     * When a `fn_*` typedef or its comment misnames or mistypes its target, fix BOTH — the
+       signature is load-bearing (a missing hidden return slot is a wild write) and the name is
+       what the next reader greps for.
+     * A comment that was right about the mechanism but wrong about the OWNER still has to
+       change: `str-4`/`str-8` is `System::String`'s header, not the allocator's, and PLAN.md
+       §4.3 risk 2 repeated that error for months because it paraphrased a correct comment.
+     * State what the thing IS now, and keep one line saying what it was believed to be, so the
+       next reader recognises the old claim if they meet it elsewhere.
+   Verify first, then correct: a comment "corrected" from an unverified port just moves the
+   error.
 
 Dispatch tiers: Wave 1–2 leaf functions are Sonnet work with a Fable/Opus verifier; anything
 touching the allocator, the factory, or a vtable is Opus with a Fable review pass.

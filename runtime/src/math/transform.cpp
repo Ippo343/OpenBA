@@ -1001,5 +1001,5 @@ void RtMathTransformRegister() {
     RegisterRuntimeExport("??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z", (void*)&RtMath_Quaternion_CtorBasis); ++count;
     RegisterRuntimeExport("?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z", (void*)&RtMath_Transform_FromDirection); ++count;
 
-    std::fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
+    fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
 }

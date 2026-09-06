@@ -139,9 +139,22 @@ def iter_sources():
                     yield os.path.join(dirpath, fn)
 
 
+# Files whose RegisterRuntime* calls are OPT-IN: their Register function only runs
+# when an env var arms it and returns 0 otherwise, so the registrations are
+# present in the source but NOT live. A census that counted them would say
+# "System 95% ported" for a wave in which the allocator has never executed a
+# single instruction -- the same overstatement as a diff site reporting
+# divergences=0 on calls=0 (WAVE1.md defect 4). They are reported separately.
+GATED_OFF_FILES = {
+    "runtime/src/system/allocator.cpp",       # BANISHED_RT_ALLOC, verdict NO-GO
+    "runtime/src/system/allocator_win.cpp",
+}
+
+
 def scan():
     called_exports, called_addrs, called_ordinals = {}, {}, {}
     ported_exports, ported_addrs, ported_ordinals = {}, {}, {}
+    gated_exports, gated_addrs = {}, {}
     detoured = {}
 
     for path in iter_sources():
@@ -160,12 +173,18 @@ def scan():
         for m in RE_ADDR_RAW.finditer(text):
             called_addrs.setdefault(int(m.group(1), 16), set()).add(rel)
 
+        # A registration inside an OPT-IN file is NOT a live port: its
+        # Register function is only called when an env var arms it, and it
+        # returns 0 otherwise. Counting it would repeat the exact overstatement
+        # this census exists to prevent -- see GATED_OFF_FILES.
+        gated = rel in GATED_OFF_FILES
+
         for m in RE_REG_EXPORT.finditer(text):
-            ported_exports.setdefault(m.group(1), set()).add(rel)
+            (gated_exports if gated else ported_exports).setdefault(m.group(1), set()).add(rel)
         for m in RE_REG_ORDINAL.finditer(text):
             ported_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_REG_ADDR.finditer(text):
-            ported_addrs.setdefault(int(m.group(1), 16), set()).add(rel)
+            (gated_addrs if gated else ported_addrs).setdefault(int(m.group(1), 16), set()).add(rel)
 
         for m in RE_DETOUR_ADDR.finditer(text):
             detoured.setdefault(int(m.group(2), 16), set()).add(rel)
@@ -173,6 +192,7 @@ def scan():
             detoured.setdefault(m.group(2), set()).add(rel)
 
     return dict(
+        gated_exports=gated_exports, gated_addrs=gated_addrs,
         called_exports=called_exports, called_addrs=called_addrs,
         called_ordinals=called_ordinals, ported_exports=ported_exports,
         ported_addrs=ported_addrs, ported_ordinals=ported_ordinals,
@@ -245,6 +265,16 @@ def main():
     print("total  = functions in the DLL (PLAN.md §3.1 Ghidra census; blank for "
           "non-namespaced internals)")
     print("called = distinct functions our tree resolves today")
+    ng = len(d["gated_exports"]) + len(d["gated_addrs"])
+    if ng:
+        print()
+        print("%d registration(s) are present in the source but NOT counted above:" % ng)
+        for f in sorted(GATED_OFF_FILES):
+            n = sum(1 for v in list(d["gated_exports"].values()) + list(d["gated_addrs"].values())
+                    if f in v)
+            if n:
+                print("  %-40s %d  (opt-in; its Register function returns 0 unless armed)" % (f, n))
+        print("  A gated registration is not a port. Arm it, measure it, then move it.")
     print("ported = of those, taken over by a RegisterRuntime* call")
     print("detour = of those, ALSO patched in the DLL so its own internal callers "
           "come to us")

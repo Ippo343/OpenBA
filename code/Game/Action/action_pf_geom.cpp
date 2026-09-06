@@ -46,7 +46,7 @@ static fn_V3Dot_t       s_v3dot       = nullptr;  // slot 0x140151298
 static fn_V3Normalize_t s_v3norm      = nullptr;  // slot 0x1401512c0
 
 // System::MemoryAllocator static MemAlloc/MemFree + System::Random::Rand.
-typedef void* (*fn_MemAllocStatic_t)(uint64_t size, uint32_t align);  // SAPEAXII
+typedef void* (*fn_MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 typedef void  (*fn_MemFreeStatic2_t)(void* ptr);                      // SAXPEAX
 typedef uint32_t (*fn_RandMax_t)(void* random, uint32_t max);         // QEAAII
 static fn_MemAllocStatic_t s_memAlloc = nullptr;  // slot 0x140152b60
@@ -79,7 +79,7 @@ static void EnsureFns() {
         ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
     s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(slot(0x140152b60));
     if (!s_memAlloc) s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(slot(0x140152b68));
     if (!s_memFree) s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));

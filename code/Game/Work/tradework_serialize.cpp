@@ -43,7 +43,7 @@ namespace {
 
 // ---- static System::MemoryAllocator MemAlloc (2-arg static form: slot 0x140152b60,
 // matching code/Game/Player/tool_base_trade.cpp). MemAlloc(size, align). ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // SAPEAXII
+typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 MemAllocStatic_t s_memAlloc = nullptr;
 bool s_memInit = false;
 void EnsureMem() {
@@ -52,7 +52,7 @@ void EnsureMem() {
     if (slot) s_memAlloc = *reinterpret_cast<MemAllocStatic_t*>(slot);
     if (!s_memAlloc)
         s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_memInit = true;
 }
 

@@ -43,7 +43,7 @@ Ace40_t s_ace40 = nullptr;
 
 // ---- static System::MemoryAllocator MemAlloc/MemFree (2-arg static form via slot
 // 0x140152b60 / 0x140152b68, ResolveExport fallback) — mirrors tool_base_trade.cpp. ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // SAPEAXII
+typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
 MemAllocStatic_t s_memAlloc = nullptr;
 MemFreeStatic_t  s_memFree  = nullptr;
@@ -56,7 +56,7 @@ void EnsureMem() {
     };
     s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
     if (!s_memAlloc) s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
     if (!s_memFree) s_memFree = reinterpret_cast<MemFreeStatic_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));

@@ -89,7 +89,7 @@ void EnsureMem() {
     };
     s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
     if (!s_memAlloc) s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
     if (!s_memFree) s_memFree = reinterpret_cast<MemFreeStatic_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));

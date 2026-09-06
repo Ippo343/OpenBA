@@ -380,7 +380,7 @@ static void Pickup_ResolveExecFuncs() {
 
     s_x_memAlloc = reinterpret_cast<PiX_MemAlloc_t>(slot(0x140152b60));
     if (!s_x_memAlloc) s_x_memAlloc = reinterpret_cast<PiX_MemAlloc_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_x_memFree = reinterpret_cast<PiX_MemFree_t>(slot(0x140152b68));
     if (!s_x_memFree) s_x_memFree = reinterpret_cast<PiX_MemFree_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));

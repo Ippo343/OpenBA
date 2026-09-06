@@ -54,7 +54,7 @@ typedef void (*Ee40_t)(int64_t* vb, int count);
 typedef void (*Pool8d0_t)(int64_t* pool, int newCount, void* rec);
 
 // ---- static MemAlloc/MemFree (slot 0x140152b60/0x140152b68) -----------------------
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // SAPEAXII
+typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
 MemAllocStatic_t s_memAlloc = nullptr;
 MemFreeStatic_t  s_memFree  = nullptr;

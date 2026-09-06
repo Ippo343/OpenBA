@@ -54,7 +54,7 @@ namespace {
 // ---- static System::MemoryAllocator MemAlloc/MemFree (2-arg / 1-arg static forms,
 // via IAT slots 0x140152b60 / 0x140152b68, ResolveExport fallback) — mirrors
 // code/Game/Work/tradework_serialize.cpp + code/Game/Player/tool_base_trade.cpp. ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // SAPEAXII
+typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
 MemAllocStatic_t s_memAlloc = nullptr;
 MemFreeStatic_t  s_memFree  = nullptr;
@@ -70,7 +70,7 @@ void EnsureMem() {
     s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
     if (!s_memAlloc)
         s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     if (!s_memAlloc)   // proven-working overload (size in RCX / align in RDX — ABI-compatible)
         s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
             ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));

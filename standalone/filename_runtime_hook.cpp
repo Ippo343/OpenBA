@@ -27,10 +27,14 @@
 //     inc DWORD PTR [rax-0x4]    ; <-- AddRef src; the +0x100000000 bit-32 flip
 //                                 ;     when src is a FREED String (refcount==0)
 //
-// String layout: a String* points at the char data; refcount = *(int*)(str-4);
-// the allocator user pointer = str-8, so str-4 == user+4 == the freed block's
-// free-list-link HIGH dword. A `dec`/`inc` on a freed String (whose link high
-// dword is 0) writes -1/+1 there -> wild free-list link -> the crash.
+// String layout (CONFIRMED against String::SetLength 0x1800c8220 in Wave 2, and
+// the dword this note did not name is now known): a String* points at the char
+// data; *(int*)(str-8) is the LENGTH, *(int*)(str-4) is the refcount, and
+// str-8 is also the allocator's USER pointer — the allocator's own boundary tag
+// is a further 8 bytes back at str-0x10, and carries no refcount of its own.
+// So str-4 == user+4 == the freed block's free-list-link HIGH dword. A `dec`/`inc`
+// on a freed String (whose link high dword is 0) writes -1/+1 there -> wild
+// free-list link -> the crash.
 //
 // So: refcount == 0 (or < 0, or absurdly large) immediately BEFORE the op = the
 // use-after-free. We log the operand String, its block, the path content, and a

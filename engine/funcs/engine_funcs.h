@@ -206,7 +206,10 @@ extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 // Type ID for External resource (used by dialog Load methods)
 extern uint32_t* g_pExternalTypeId;
 
-// System::Filename::AdjustDelimiters(this)
+// System::Filename::AdjustDelimiters(this) — retail 0x1800c6970.
+// The export is ?AdjustDelimiters@Filename@System@@AEAAXXZ: AEAA, a PRIVATE
+// member. We resolved it as QEAA (public) for months, a mangling the DLL does
+// not contain, and only the ResolveAddr fallback kept the pointer non-null.
 typedef void (*fn_Filename_AdjustDelimiters_t)(void* self);
 extern fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters;
 
