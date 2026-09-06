@@ -243,7 +243,111 @@ whose machine code differs most between the two builds. The lever that could sti
    attempted here (out of scope for a read-only data pass — it needs `get_function_callers`/
    `get_function_callees` on both programs plus the existing map, cross-referenced); worth a
    dedicated follow-up.
-2. **The profile PDB** (`Runtime-x64-profile.pdb`, referenced by the profile DLL's CodeView
-   record per PLAN.md §3.4) may carry full symbol names Ghidra's analysis didn't recover as
-   plain strings — worth checking whether it's on disk and importable, before spending more
-   effort on string/hash/fuzzy heuristics.
+2. ~~**The profile PDB**~~ **CHECKED 2026-09-06 — IT DOES NOT EXIST.** The profile DLL's
+   CodeView record names `C:\Projects\Buildy\bin\x64.Profile\Runtime-x64-profile.pdb`, but a
+   filesystem search finds no Banished PDB anywhere on this machine, and none ships with the
+   game or the ToolKit. A debug record naming a PDB is a build-time breadcrumb, not evidence
+   the file was distributed. This lever is closed, not unexplored.
+
+# Part 3 — call-graph propagation (structure, not bytes)
+
+**Question:** if hash matching (Part 1) and string anchoring (Part 2) both fail on the
+`FUN_`-named retail pool because they key off machine bytes / literal text, does propagating
+through the *call graph* — a structural signal — do any better?
+
+## Method
+
+1. Pulled the complete call graph for both `Runtime-x64.dll` (retail, 16,681 edges,
+   `get_full_call_graph(format="dot")`) and `Runtime-x64-profile.dll` (profile, 20,090 edges),
+   saved as `docs/runtime_port/callgraph/retail_edges.csv` and `.../profile_edges.csv`. Both
+   responses exceeded the MCP inline-token cap and were retrieved from the harness's on-disk
+   spill file, then parsed offline — no per-function round trips.
+2. Seeded the anchor set with the 1,181 `method=hash` rows from `profile_to_retail.csv`
+   (byte-provable, zero collisions on `retail_addr` -- checked directly, so the
+   `Unwind@`/thunk collision poison Part 1 flagged never entered the seed).
+3. For every anchored pair `(P, R)`, took `P`'s callee set (and separately its caller set) in
+   the profile graph and `R`'s in the retail graph. Named nodes are treated as already
+   corresponding by name; `FUN_<addr>` nodes are looked up against the current (growing) anchor
+   map; `Unwind@...` thunk nodes are ignored on both sides (exception-handling artifacts, not
+   real callees). If exactly one node on each side is left unresolved after that filtering, the
+   two unresolved `FUN_`s are proposed as the same function.
+4. Iterated to a fixed point, feeding each round's newly-resolved pairs back in as anchors for
+   the next round. A pair is accepted only when its target is a **unique** proposal -- if two
+   different anchor pairs proposed the same `p2` with two different `r2`s (or vice versa), it
+   is dropped as `conflicted_multi_target` rather than guessed.
+
+## Yield -- real, but small and it dies out fast
+
+| Round | Proposed | Accepted | Conflicted |
+|---|---|---|---|
+| 1 | 62 | 33 | 0 |
+| 2 | 13 | 8 | 0 |
+| 3 | 4 | 4 | 0 |
+| 4 | 1 | 1 | 0 |
+| 5 | 0 | 0 | 0 |
+
+**46 pairs resolved total**, all with zero target conflicts (every accepted proposal was
+unambiguous -- 1 profile `FUN_` mapping to exactly 1 retail `FUN_` and nothing else). It does
+compound (round 2-4 pairs exist only because round 1's output became new anchors) but the decay
+is steep and it is exhausted by round 5. **46 of 2,467 retail `FUN_`s (1.9%) get a proposal.**
+Full data: `docs/runtime_port/callgraph_propagation.csv`
+(`retail_addr,retail_name,profile_addr,profile_name,round,direction,arity,n_anchor_evidence,evidence,inferred_file,confidence,spot_checked`).
+
+Cross-referencing against Part 2's `profile_string_anchors.csv`: 25 of the 46 propagated
+profile addresses carry a file attribution. Of those, **17 are the `Collection/Array.h` /
+`Collection/Allocator.h` noise-template hits Part 1 and Part 2 both already flagged**
+(`confidence=none` there) -- i.e. this lever mostly re-discovers more `Array<T>::operator=`-style
+template siblings for element sizes/alignments not seen before, not new classes. The other 8
+are `Utility/STBImage.cpp` (high-confidence, real value -- extends the STB image-decoder family
+already partly known) plus 1 `Engine/Engine_win.cpp`. The remaining 21 of 46 have no string
+anchor at all: a confirmed cross-build equivalence with no name to transfer.
+
+## Spot-check: 8 pairs, spanning every round and both directions -- 8/8 confirmed, 0 false positives
+
+Decompiled both sides of pairs from round 1 (arity evidence 1 and evidence 6, `callee` and
+`caller` direction), round 2, round 3, and round 4:
+
+| Profile -> Retail | Round | Direction | Evidence | What it is |
+|---|---|---|---|---|
+| `0x1800242e0` -> `0x180005770` | 1 | callee | 1 | `Array<T>::operator=` (elem align 4) -- identical logic, retail factors the `MemFree` into a helper `FUN_180005800` where profile inlines it; same function |
+| `0x18002a120` -> `0x180009350` | 1 | callee | 4 | Same `operator=`, elem align 8 sibling instantiation |
+| `0x1800f0000` -> `0x1800e3010` | 1 | caller | 6 | Image-format-probe dispatcher: identical 7-way short-circuit chain over format testers, differing only in which numbered callees it chains to |
+| `0x1800e4810` -> `0x1800e9a20` | 1 | caller | 6 | STBImage bit-reader decoder loop, byte-for-byte identical control flow, `"Utility\STBImage.cpp"` MemAlloc tag present on the profile side |
+| `0x1800ea600` -> `0x1800eb170` | 1 | callee+caller | 3 | STBImage multi-component upsample/interleave loop, same structure, same locals layout |
+| `0x1800e6290` -> `0x1800e5cc0` | 2 | callee+caller | 4 | STBImage indexed/palette row decoder, same bit-unpacking structure end to end |
+| `0x180091140` -> `0x180032db0` | 3 | caller | 1 | `Array<T>` copy-constructor wrapper -- calls exactly the round-2 pair `0x1800920b0`->`0x180033b10` as its only body statement, so this spot-check independently re-confirms that round-2 pair too |
+| `0x1800297a0` -> `0x180008990` | 4 | caller | 1 | Same copy-constructor wrapper shape, calling round-1 pair `0x18002a120`->`0x180009350` -- re-confirms that pair a second way |
+
+**8/8 genuinely the same function** -- verified from decompiled logic, matching literal strings
+(the STBImage.cpp MemAlloc tag), and, for two of the eight, cross-confirmed by the fact that the
+"new" pair's entire body is a one-line call into a *different* pair this same pass had already
+resolved. **False-positive rate: 0/8.** The catch is what kind of "same function" these are: 6
+of 8 are template-instantiation siblings or thin wrapper shells around them, and the other 2 are
+siblings within one already-partially-known codec file (STBImage.cpp). Nothing in the spot-check
+or the full 46 is a previously-unknown *class* -- it's siblings of things Parts 1-2 had already
+partially named.
+
+## Verdict
+
+Call-graph propagation works exactly as designed -- 0% false positives in an 8-pair spot check
+spanning every round, both directions, and both single- and multi-evidence arities, and it does
+compound for a few rounds before dying out. But the yield is small (46 of 2,467 retail `FUN_`s,
+1.9%) and it decays to zero by round 5 because it depends on a `FUN_` sitting *adjacent* in the
+call graph to an already-anchored pair, and the anchor set (1,181 hash matches) is small relative
+to the graph and clusters around a handful of container/template/codec neighborhoods. Two-thirds
+of what it does find is more `Array<T>`/`Allocator<T>` template-instantiation noise -- the exact
+category Part 1 and Part 2 both already flagged as low-value -- rediscovered by a different route.
+The genuinely new-information slice is the 8 STBImage.cpp siblings plus 1 Engine_win.cpp hit: real,
+correct, worth applying, but not close to denting the pool.
+
+**This is the third lever in a row with the same shape of result: real, verified, small.** Combined
+coverage of the 2,467-function retail `FUN_` pool across all three levers (hash/fuzzy in Part 1,
+string-anchor in Part 2, call-graph in Part 3) is on the order of 50 functions -- about 2%. There
+isn't a fourth structural lever left to try from what's already on disk: hash needs matching
+bytes, string-anchoring needs a literal, call-graph propagation needs graph adjacency to a
+resolved node, and all three have now been run to their own fixed point. The one resource that would have been
+external -- the profile PDB -- was checked and DOES NOT EXIST on this machine or in the shipped
+ToolKit, so it is closed rather than unexplored. Everything in the current toolset is spent.
+**The remaining ~2,400 retail `FUN_`s are genuinely unnamed and will need
+to be closed by ordinary decompile-and-read work (or wait to surface individually as gaps during
+the runtime-port waves), not by a bulk automated pass.**

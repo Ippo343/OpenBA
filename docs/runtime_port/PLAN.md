@@ -367,9 +367,14 @@ the diff harness have each caught at least one real divergence.
    attributions of which **0** bridge to retail, and the two levers are anti-correlated: the
    substantive functions worth anchoring are the ones whose codegen differs most between builds,
    so they are the least likely to match. No PDB ships. The untried lever with a real mechanism
-   is **call-graph propagation** (an anchored function whose caller is mapped, whose retail call
-   site still targets a `FUN_`). Until that lands, treat the pool as unnamed and budget the
-   naming per wave — do not plan a wave on the assumption it is solved.
+   Call-graph propagation was then tried too, and it is the cleanest of the three — 46 pairs, all
+   at arity 1/1, 8/8 verified by decompiling both sides, 0% false positives — but it transfers
+   **zero names**, because both sides of every pair are `FUN_`; what it establishes is cross-build
+   address equivalence. No PDB ships (checked). **Tally across all three levers: ~50 of 2,467
+   touched (2%), 9 names proposed, none verified.** The pool will not close by a bulk automated
+   pass; it closes by ordinary decompile-and-read work on the functions a wave actually needs,
+   which is bounded per wave. Budget that cost; do not plan a wave as though the naming were
+   solved.
 5. **CRT/SEH inside the DLL.** The DLL has its own CRT and `__C_specific_handler`; a port that
    throws or unwinds across the DLL boundary is undefined. Keep exceptions out of ported code.
 

@@ -101,14 +101,50 @@ The PDB is not a way out. `Runtime-x64-profile.dll`'s debug record names
 `C:\Projects\Buildy\bin\x64.Profile\Runtime-x64-profile.pdb`, but no Banished PDB exists on
 this machine and none ships with the game or the ToolKit.
 
-### So what does work on the FUN_ pool
+### Third lever: call-graph propagation — works, and still does not close the pool
 
-Both levers PLAN.md assumed are now measured and spent. **Call-graph propagation is the one
-untried idea with a real mechanism**: where an anchored profile function's CALLER is matched by
-the Part 1 map, and that caller's retail call site still targets a `FUN_`, the callee is a strong
-same-slot candidate. It uses structure rather than bytes, which is precisely what sidesteps the
-codegen-difference problem that defeats hashing. Untried — it needs
-`get_function_callers`/`get_function_callees` cross-referenced against `profile_to_retail.csv`.
+The one idea with a mechanism the first two lacked: use structure instead of bytes. Seed with the
+1,181 byte-provable hash pairs, compare callee and caller sets across each mapped pair, and where
+filtering out already-anchored nodes leaves exactly one unresolved `FUN_` on each side, those two
+are the same function by elimination. Iterate, feeding each new pair back in as an anchor.
+
+It works, and it is clean: **46 pairs, every one at arity 1/1 (no guessing between candidates),
+zero target conflicts, and 8 of 8 spot-checked pairs confirmed by decompiling both sides — a 0%
+false-positive rate.** Two of the eight were wrapper shells whose whole body calls into another
+pair this same pass resolved, which is the pass cross-confirming itself. Yield by round:
+33 / 8 / 4 / 1 / 0 — it compounds for three rounds, then dies.
+
+**But it transfers zero names.** All 46 pairs are `FUN_`↔`FUN_`: what they establish is
+cross-build address equivalence, not a name, because the profile side of every pair is itself
+unnamed. Nine inherit a *file* attribution from the string-anchor pass (8 `Utility/STBImage.cpp`
+codec siblings, 1 `Engine_win.cpp`); 17 more are `Array<T>`/`Allocator<T>` template siblings, the
+same low-value noise category Parts 1–2 already flagged, reached by a third route; the remaining
+20 carry nothing but the equivalence itself.
+
+The reason it decays is structural: the rule only fires where a `FUN_` sits graph-adjacent to an
+already-anchored node, and the anchor set clusters in a few container/template/codec
+neighbourhoods. Once those are exhausted there is no frontier left to expand into.
+
+### The tally, across all three levers
+
+| Lever | Retail `FUN_`s touched | Actual NAMES transferred | Verified |
+|---|---|---|---|
+| Hash / fuzzy map | 9 | 9 (unverified) | no |
+| String anchors | ≤4 candidates | 0 | 1 checked → FALSE |
+| Call-graph propagation | 46 | 0 (9 file attributions) | 8/8 correct |
+| **Total** | **~50 of 2,467 (2%)** | **9, none verified** | |
+
+Three structural levers, run to their own fixed points, on a 2,467-function pool: **~2% touched
+and effectively zero functions actually named.** The PDB is not a way out either — the profile
+DLL's debug record names `C:\Projects\Buildy\bin\x64.Profile\Runtime-x64-profile.pdb`, but no Banished
+PDB exists on this machine and none ships with the game or the ToolKit. A debug record naming a
+PDB is a build-time breadcrumb, not evidence the file was distributed.
+
+**Conclusion: the `FUN_` pool will not close by a bulk automated pass.** It closes the same way
+the exe port closed — ordinary decompile-and-read work on the functions that actually surface as
+each wave needs them. That is a real cost to carry into the wave plan, and it is bounded: a wave
+only needs the internals its own classes call, not all 2,467. What must not happen is a wave
+planned as though the naming were solved.
 
 Until something lands, **budget `FUN_` naming per wave as PLAN.md §4.3 already says, and treat
 the pool as unnamed**. That is a cost the wave plan can absorb; what it cannot absorb is a wave

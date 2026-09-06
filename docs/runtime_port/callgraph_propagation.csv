@@ -1,0 +1,47 @@
+retail_addr,retail_name,profile_addr,profile_name,round,direction,arity,n_anchor_evidence,evidence,inferred_file,confidence,spot_checked
+0x180005770,FUN_180005770,0x1800242e0,FUN_1800242e0,1,callee,1/1,1,callee:1800239c0->180004130,Collection/Array.h (none),medium,VERIFIED
+0x180009350,FUN_180009350,0x18002a120,FUN_18002a120,1,callee,1/1,4,callee:180029610->1800087c0;callee:180029980->1800088a0;callee:180029d20->180008940;callee:18008d240->1800304c0,Collection/Array.h (none),high,VERIFIED
+0x1800803ec,FUN_1800803ec,0x18017bd7c,FUN_18017bd7c,1,caller,1/1,1,caller:18002e400->18009fbb0,,medium,
+0x18000aac0,FUN_18000aac0,0x18002e720,FUN_18002e720,1,callee,1/1,1,callee:18002e830->18000a9f0,Collection/Allocator.h (none),medium,
+0x18000b450,FUN_18000b450,0x180030000,FUN_180030000,1,callee,1/1,1,callee:18002f660->1800a0ca0,Collection/Array.h (none),medium,
+0x1800a1ae0,FUN_1800a1ae0,0x180031e50,FUN_180031e50,1,caller,1/1,1,caller:180031ac0->1800a2020,Engine/Engine_win.cpp (high),medium,
+0x18001cdf0,FUN_18001cdf0,0x18003fb40,FUN_18003fb40,1,callee,1/1,1,callee:18003f490->18001bdc0,Collection/Array.h (none),medium,
+0x180044050,FUN_180044050,0x18010ef20,FUN_18010ef20,1,callee,1/1,1,callee:180043d30->180043f10,,medium,
+0x180020e90,FUN_180020e90,0x1800549b0,FUN_1800549b0,1,callee,1/1,1,callee:180053600->1800a54c0,Collection/Array.h (none),medium,
+0x180030540,FUN_180030540,0x18008d8c0,FUN_18008d8c0,1,caller,1/1,2,caller:18008d9d0->1800307b0;caller:18008db00->1800308e0,,high,
+0x180050d30,FUN_180050d30,0x1800dd2d0,FUN_1800dd2d0,1,callee,1/1,2,callee:1800dcdd0->180051650;callee:1800dd580->180050b60,Collection/Array.h (none),high,
+0x180051390,FUN_180051390,0x1800dec50,FUN_1800dec50,1,caller,1/1,1,caller:1800dcdd0->180051650,Collection/Array.h (none),medium,
+0x1800eb170,FUN_1800eb170,0x1800ea600,FUN_1800ea600,1,callee;caller,1/1,3,callee:1800e4fb0->1800eb130;caller:1800e9fd0->1800eba30;caller:1800ea460->1800eb680,Utility/STBImage.cpp (high),high,VERIFIED
+0x1800e7a90,FUN_1800e7a90,0x1800ed8c0,FUN_1800ed8c0,1,callee,1/1,1,callee:1800e50b0->1800e7a60,,medium,
+0x1800e7b90,FUN_1800e7b90,0x1800ecfb0,FUN_1800ecfb0,1,callee;caller,1/1,3,callee:1800e50e0->1800e7910;caller:1800ecee0->1800e8490;callee:1800ed9d0->1800e79a0,,high,
+0x1800e3010,FUN_1800e3010,0x1800f0000,FUN_1800f0000,1,caller,1/1,6,caller:1800e50e0->1800e7910;caller:1800e69e0->1800e65a0;caller:1800eec80->1800e4450;caller:1800ef950->1800e35d0;caller:1800efb10->1800e34c0,,high,VERIFIED
+0x1800eeb90,FUN_1800eeb90,0x1800e4510,FUN_1800e4510,1,caller,1/1,1,caller:1800e7540->1800ee6e0,,medium,
+0x1800e5790,FUN_1800e5790,0x1800e6c50,FUN_1800e6c50,1,caller,1/1,1,caller:1800e7990->1800ee280,Utility/STBImage.cpp (high),medium,
+0x1800e67c0,FUN_1800e67c0,0x1800e51a0,FUN_1800e51a0,1,caller,1/1,3,caller:1800e7a90->1800ee180;caller:1800edb70->1800e7780;caller:1800edc10->1800e76f0,Utility/STBImage.cpp (high),high,
+0x1800ed480,FUN_1800ed480,0x1800e8400,FUN_1800e8400,1,callee;caller,1/1,2,caller:1800e80b0->1800ed9c0;callee:1800e8db0->1800eca20,,high,
+0x1800ec5f0,FUN_1800ec5f0,0x1800e91f0,FUN_1800e91f0,1,callee,1/1,1,callee:1800e9fd0->1800eba30,,medium,
+0x1800e9a20,FUN_1800e9a20,0x1800e4810,FUN_1800e4810,1,caller,1/1,6,caller:1800eaba0->1800eacc0;caller:1800eb090->1800ea5a0;caller:1800eb4d0->1800ea080;caller:1800eb9f0->1800e9f00;caller:1800ebb70->1800e9e50,Utility/STBImage.cpp (high),high,VERIFIED
+0x1800ee970,FUN_1800ee970,0x1800e7480,FUN_1800e7480,1,callee,1/1,1,callee:1800eafe0->1800ea9e0,Utility/STBImage.cpp (high),medium,
+0x1800e77d0,FUN_1800e77d0,0x1800e5170,FUN_1800e5170,1,caller,1/1,1,caller:1800eda60->1800e7800,,medium,
+0x1800e4b90,FUN_1800e4b90,0x1800e7150,FUN_1800e7150,1,caller,1/1,1,caller:1800edd40->1800e5610,,medium,
+0x1800e4bc0,FUN_1800e4bc0,0x1800e7180,FUN_1800e7180,1,caller,1/1,1,caller:1800edf10->1800e4de0,Utility/STBImage.cpp (high),medium,
+0x1800e49d0,FUN_1800e49d0,0x1800e7370,FUN_1800e7370,1,caller,1/1,1,caller:1800ee600->1800e4a00,,medium,
+0x1800e3840,FUN_1800e3840,0x1800ef350,FUN_1800ef350,1,caller,1/1,4,caller:1800ee790->1800e47d0;caller:1800ee990->1800e44e0;caller:1800eee10->1800e3e80;caller:1800ef2e0->1800e3e10,Utility/STBImage.cpp (high),high,
+0x180057630,FUN_180057630,0x1800ffed0,FUN_1800ffed0,1,caller,1/1,1,caller:180100250->180057fa0,,medium,
+0x180061bb0,FUN_180061bb0,0x18011d4e0,FUN_18011d4e0,1,callee,1/1,1,callee:18011d0d0->180103bf0,Collection/Array.h (none),medium,
+0x180062d60,FUN_180062d60,0x18011f950,FUN_18011f950,1,caller,1/1,1,caller:1801202b0->180063b90,,medium,
+0x180062ae0,FUN_180062ae0,0x180121060,FUN_180121060,1,caller,1/1,1,caller:180120680->180062860,Collection/Array.h (none),medium,
+0x18001b360,FUN_18001b360,0x1800405b0,FUN_1800405b0,1,callee,1/1,5,callee:180147440->1800735c0;callee:1801475b0->180073660;callee:180177ff0->18007b850;callee:180178140->18007b590;callee:1801781c0->18007b610,Collection/Array.h (none),high,
+0x180033b10,FUN_180033b10,0x1800920b0,FUN_1800920b0,2,callee,1/1,1,callee:1800914a0->180032280,Collection/Array.h (none),medium,
+0x1800e5cc0,FUN_1800e5cc0,0x1800e6290,FUN_1800e6290,2,callee;caller,1/1,4,callee:1800e7540->1800ee6e0;caller:1800e77b0->1800ee450;caller:1800e7800->1800ee380;caller:1800e79d0->1800ee1c0,Utility/STBImage.cpp (high),high,VERIFIED
+0x1800ebd60,FUN_1800ebd60,0x1800e9970,FUN_1800e9970,2,callee;caller,1/1,2,caller:1800e78d0->1800ee2c0;callee:1800e9ea0->1800ebc30,Utility/STBImage.cpp (high),high,
+0x1800e7a30,FUN_1800e7a30,0x1800e5080,FUN_1800e5080,2,caller,1/1,1,caller:1800ebed0->1800e94d0,,medium,
+0x18005f800,FUN_18005f800,0x180116090,FUN_180116090,2,callee,1/1,2,callee:180115930->18005e310;callee:180116220->18005e420,Collection/Array.h (none),high,
+0x180030380,FUN_180030380,0x18008d470,FUN_18008d470,2,caller,1/1,1,caller:18008d8c0->180030540,Collection/Allocator.h (none),medium,
+0x1800edb60,FUN_1800edb60,0x1800e7f20,FUN_1800e7f20,2,callee,1/1,1,callee:1800e91f0->1800ec5f0,,medium,
+0x18001ce90,FUN_18001ce90,0x180043e50,FUN_180043e50,2,callee,1/1,1,callee:180121060->180062ae0,,medium,
+0x180032db0,FUN_180032db0,0x180091140,FUN_180091140,3,caller,1/1,1,caller:1800920b0->180033b10,,medium,VERIFIED
+0x18005f7c0,FUN_18005f7c0,0x1801158a0,FUN_1801158a0,3,caller,1/1,1,caller:180116090->18005f800,,medium,
+0x180008440,FUN_180008440,0x18002b640,FUN_18002b640,3,callee,1/1,1,callee:18008d470->180030380,Collection/Allocator.h (none),medium,
+0x180030140,FUN_180030140,0x18008d580,FUN_18008d580,3,caller,1/1,1,caller:18008d470->180030380,,medium,
+0x180008990,FUN_180008990,0x1800297a0,FUN_1800297a0,4,caller,1/1,1,caller:18002a120->180009350,,medium,VERIFIED
