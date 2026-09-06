@@ -6871,6 +6871,40 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         if (foodMult > 1 || stockEnv)
             for (int k = 0; k < 7; ++k) *reinterpret_cast<int*>(sc + 0xfc + 4 * k) = savedStock[k];
 
+        // BANISHED_STRESS_LIMITS=<cat>:<n>,... — set town-hall resource LIMITS
+        // (townMgr+0x170 record <cat>, field +0x08; the number the Town Hall "limit"
+        // spinner edits, defaults 200/200/200/200/50/5000/...). Producers gate on
+        // stock < limit: ForesterWork's cut branch (the town-record capacity test) and
+        // ConsumeProduce's produce threshold (0x1401193a0) both stand down once the
+        // town holds the limit, so a stress town seeded with thousands of logs never
+        // cuts a tree and a quarry stops at 200 stone. A player raises the same number
+        // in the Town Hall; this sets it at founding so a production run measures
+        // production instead of the cap. Category order is the town-hall list:
+        // 0 logs, 1 stone, 2 iron, 3 firewood, 4 coal, 5 food, 6 tools, 7 clothing...
+        if (const char* limEnv = std::getenv("BANISHED_STRESS_LIMITS")) {
+            uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+            uintptr_t townMgr = gw ? *reinterpret_cast<uintptr_t*>(gw + 0xf0) : 0;
+            uintptr_t recs = townMgr ? *reinterpret_cast<uintptr_t*>(townMgr + 0x170) : 0;
+            const int nRecs = townMgr ? *reinterpret_cast<int32_t*>(townMgr + 0x178) : 0;
+            for (const char* c = limEnv; c && *c; ) {
+                const char* e = std::strchr(c, ',');
+                const char* colon = std::strchr(c, ':');
+                if (colon && (!e || colon < e) && recs) {
+                    const int cat = std::atoi(c);
+                    const int val = std::atoi(colon + 1);
+                    if (cat >= 0 && cat < nRecs) {
+                        int32_t* lim = reinterpret_cast<int32_t*>(recs + cat * 0x20 + 0x08);
+                        fprintf(stderr, "[Stress::limits] cat %d limit %d -> %d (stock %d)\n",
+                                cat, *lim, val, *reinterpret_cast<int32_t*>(recs + cat * 0x20));
+                        *lim = val;
+                    }
+                }
+                c = e ? e + 1 : nullptr;
+            }
+            if (!recs) fprintf(stderr, "[Stress::limits] town record table not built yet; ignored\n");
+            fflush(stderr);
+        }
+
         // Founding-house household inventory (BANISHED_LIVE_HOUSING): now that the town
         // raw-material TEMPLATE pool (townMgr+0x110) is populated, seed a small edible-food
         // stock into each founding WoodHouse's StorageComponent so a clicked house shows a

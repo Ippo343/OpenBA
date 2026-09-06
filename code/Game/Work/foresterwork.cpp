@@ -689,6 +689,8 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     int d_attempts = 0, d_precheck1e0 = 0, d_passable = 0, d_zone = 0, d_occ0 = 0,
         d_resFound = 0, d_dist = 0, d_cut = 0, d_plant = 0;
     int d_cutCap = 0, d_cutGrowth = 0, d_cutFlags20 = 0, d_cutPath = 0, d_cutDone = 0;
+    int d_plantPath = 0, d_plantTerrain = 0, d_plantDensity = 0;
+    int d_plantEnabled = -1, d_cutEnabled = -1;
     float d_maxGrowth = -1.0f;
 
     if (maxAttempts > 0) {
@@ -778,21 +780,25 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                 // matches the original's nested branches exactly for all four cases.
                 bool plantEnabled = (*(uint8_t*)(workplaceIBP + 0x50) != 0);  // plant-trees enabled
                 bool cutEnabled = (*(uint8_t*)(workplaceIBP + 0x51) != 0);    // cut-trees enabled
+                d_plantEnabled = plantEnabled ? 1 : 0; d_cutEnabled = cutEnabled ? 1 : 0;
 
                 if (plantEnabled && resourceEntity == 0) {
                     d_plant++;
                     // PLANT PATH: empty cell, check if we can plant here
                     bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, testCell, citizenGridCell);
                     if (canPath) {
+                        d_plantPath++;
                         // Check terrain suitability for planting
                         bool terrainOk = s_fn_CheckTerrainValid(
                             mapGrid, testCellX, testCellY, 4,
                             fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, 0);
                         if (terrainOk) {
+                            d_plantTerrain++;
                             // Check natural resource density limits
                             bool densityOk = s_fn_CheckResourceDensity(
                                 natResDesc, testCellX, testCellY);
                             if (densityOk) {
+                                d_plantDensity++;
                                 // Reset fail counter
                                 *(uint32_t*)(selfAddr + 0x58) = 0;
 
@@ -984,12 +990,14 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
         fprintf(stderr, "[ForesterScan] tick attempts=%d radius=%d wpCell=%d "
                 "pre1e0=%d passable=%d zone=%d occ0=%d "
                 "pass_dist=%d resFound=%d cutBranch=%d | cut: cap=%d growth>=thr=%d flags20=%d "
-                "path=%d DONE(PerformWork)=%d maxGrowthSeen=%.3f thr=%.3f czCell=%u entCell=%d\n",
+                "path=%d DONE(PerformWork)=%d maxGrowthSeen=%.3f thr=%.3f czCell=%u entCell=%d "
+                "| plant: branch=%d path=%d terrain=%d density=%d (plantEnabled=%d cutEnabled=%d)\n",
                 d_attempts, workplaceRadius, workplaceCell,
                 d_precheck1e0, d_passable, d_zone, d_occ0,
                 d_dist, d_resFound, d_cut,
                 d_cutCap, d_cutGrowth, d_cutFlags20, d_cutPath, d_cutDone,
-                d_maxGrowth, fGrowthThreshold, citizenGridCell, entityCellSigned);
+                d_maxGrowth, fGrowthThreshold, citizenGridCell, entityCellSigned,
+                d_plant, d_plantPath, d_plantTerrain, d_plantDensity, d_plantEnabled, d_cutEnabled);
         fflush(stderr);
     }
 

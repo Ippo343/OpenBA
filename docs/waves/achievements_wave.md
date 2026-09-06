@@ -72,6 +72,8 @@ meaningless as evidence.
 | `BANISHED_FINISH_BUILDS` | Drive unfinished structures through state 1 → 8 → 2. |
 | `BANISHED_BRIDGE_LONGEST`, `BANISHED_ROAD_RUNS`/`_LEN`, `BANISHED_FENCED_RUNS`/`_SIDE` | Longest-qualifying bridge span; N road spans; N fenced areas. |
 | `BANISHED_PASTURE_AUTOTYPE=Cow,Sheep,Chicken` | Round-robin livestock types (a single name gave every pasture the same animal). |
+| `BANISHED_STRESS_LIMITS=<cat>:<n>,...` | Town Hall resource limits at founding (record `+0x08`, category order = the Town Hall list: 0 logs, 1 stone, 2 iron, 3 firewood, 4 coal, 5 food...). Producers stand down at the limit, so a seeded stock above 200 silently disables every forester and caps quarries. |
+| `BANISHED_CPWORK_TRACE=1` | Uncapped ConsumeProduce produce-gate trace (workplace, product, cycles, PRODUCED). The census `[Ach] prod:` line prints all 21 categories' produced totals every tick. |
 
 **Stat id map** (read off live census data): 0 educated adults · 3/4 happiness/health ·
 5 population · 6 adults · 9 citizens in profession X · 12 graves · 13 units traded
@@ -210,11 +212,81 @@ the end of a length-1 counter array — find the per-type callers of
 `RoadTool_DecalStore_acd90` (0x1400acd90). Stone = type 0, dirt = type 1; only stone
 counts toward this achievement.
 
-### 5.4 Lumberjack, Stonework, Smelter — cumulative production
+### 5.4 Lumberjack, Stonework, Smelter — cumulative production (2026-09-06)
 
-`stat 20` sums a production **history table** over a 100-year window. The clock knobs
-move goals and the year counter; they do not fabricate production records. Needs either
-genuine sustained production or an understanding of where that table lives.
+**The table is found and the whole accounting path is faithful; the blocker was a
+retail production gate plus the stress town's own shape.** No port defect.
+
+*What stat 20 reads.* `0x1400d8c50` picks a stats-history series from the goal's
+resource-flag word (`goal+0x78`) and sums it over the last `goal+0x7c` (=100) years.
+The series live at `townMgr+0x150`: 0x47 rows of `{int* data, int count, int cap}`,
+48 samples per year, pushed by `CitizenBehavior_CollectStats` (0x14008a730). Rows
+8+3k / 9+3k / 10+3k mirror town record k's `+0x00` stock / `+0x0c` / `+0x10` produced
+counter (`townMgr+0x170`, stride 0x20, the Town Hall limit list). The goal reads series
+10+3k, i.e. **category k's per-period produced counter**, which `RegisterRawMaterial`
+(0x140088ef0) increments from every produce path. The census now prints this whole
+table each tick (`[Ach] prod: ... k:produced/stock/limit/f0c/f10`) and, on each stat-20
+goal, the flag word and the series it resolves to.
+
+*What the three goals are.* Flag words 0x400 / 0x800 / 0x1000 → categories 0 / 1 / 2 =
+**logs / stone / iron**: Lumberjack is 50,000 logs (not firewood), Stonework 10,000
+stone, Smelter 10,000 iron. Stone and iron were already creeping (quarries and mines
+are ConsumeProduce recipes: 10 cycles × 10 s per stone, 60 × 4 s per iron); logs sat at
+a hard 0.
+
+*Why logs were 0.* `ForesterWork::Execute` (0x1400eaec0, cut branch) requires the
+town record's `stock < limit` before it will cut — retail's "foresters stand down when
+the Town Hall log limit is reached". The stress town seeds ~4,700 logs against the
+default limit of 200, so **no forester ever cut a tree in any stress run**. The same
+gate (`0x1401193a0`, ConsumeProduce's produce threshold) stops a quarry at 200 stone.
+`BANISHED_FORESTER_SCAN_TRACE=1` shows it directly: every cut candidate dies at
+`cap=0`. With the limit raised the foresters cut, `RemoveNaturalResource` →
+`0x1401260f0` → `RegisterRawMaterial cat=0` fires, and category 0 fills.
+
+*Harness added.* `BANISHED_STRESS_LIMITS=<cat>:<n>,...` sets Town Hall limits at
+founding (the number the in-game limit spinner edits — a player setting, not a cheat).
+`BANISHED_CPWORK_TRACE=1` prints every ConsumeProduce produce-gate hit with the
+workplace, product and cycle count.
+
+*Rates measured (native gate 0, `EXTRA=foresterlodge:9,quarry:5,ironmine:5`, 50x).*
+30 lodges gave 516 logs in ~2,400 frames, then the town starved (800 → 2 citizens by
+frame 4,800 — the known ~100k-tick food collapse, which at 50x is frame 2,000). An
+uneducated worker takes 2 logs per tree (`desc+0x40`; educated `+0x44`), and the
+lodges sited in the built ring see few trees, so log yield is the long pole. Quarry
+and mine yields per frame also fall sharply at 50x — expected, since retail runs the
+work drivers on the per-frame root-only iteration, not per sim tick.
+
+*What the long runs showed (all 20x, native gate 0, limits raised).*
+
+| run | town | result |
+|---|---|---|
+| `prod_long` | 500 cit, 1 set, 30 lodges / 18 quarries / 9 mines | logs 732 → +180 → +44 per 6k frames (forest around the lodges exhausted; uneducated cutter = 2 logs/tree); **quarries seated 0/270** (mines took the adults first); iron 4 per mine per 6k frames (single-set layout puts every house outside the ring of extras) |
+| `stone_iron` | 900 cit, 3 sets, 30 mines + 18 quarries | quarries 0/270 again (603 adults, 512 already seated); iron 120 / 6k frames from 438 miners |
+| `cp_diag` | 400 cit, 3 sets, 6 + 6 | **outcome meter:** every quarry produces; **4 of 6 mines burn every call in `passFail`** — the produce point is the mine's own door cell (offset 4,6 inside the 12×12 footprint), passable but in a different zone from every worker, i.e. sealed in |
+| `stonework` | 700 cit, 3 sets, 30 quarries, 63 barns | 266 → 739 → 1275 → 1521 → 1743 stone per 6k-frame census, then the town **starved**: the 141k food the barns held ran out after ~1.8 years (≈110 food per citizen-year, farms produce nothing like 78k/yr), 636 starvation deaths, population 700 → 42 |
+
+*Where this leaves the three.* The accounting is faithful and every producer now
+produces; the goals are simply 100-year goals. Measured yields in a compact town are
+~66 stone per quarry-year (15 seats), ~76 iron per healthy mine-year (15 seats) and
+~35 logs per lodge-year once the nearby forest is gone; a quarry-year is 11,250 frames
+at 20x. 10,000 stone with 30 quarries is ~5 years of a town that has to FEED 700
+people for those years — and per-worker yield falls with town size (walk distance),
+so more quarries buy less than they cost. Reaching them needs a self-sustaining food
+economy at scale (farms, not a seed), which is a milestone in its own right, or a
+multi-hour unattended run with a much larger food reserve.
+
+*Harness facts for whoever tries.* Adults ≈ 2/3 of `--citizens`; quarry and mine
+want 15 seats each and the last profession in the staff pass gets nothing. Use
+`--sets 3` so houses interleave with workplaces. Barn capacity, not
+`BANISHED_STRESS_STOCK`, bounds the food reserve (~2–4k per barn). Mines: only ~1/3 of
+ring-placed mines work. The `mine_door` run's 15×15 terrain/zone dump shows why: the
+mine's bit array does leave a corridor from the door to its north edge, but a mine placed
+on a river bank seals the bank it faces — north of it is zone 3, the town is zone 5 — and
+retail's produce test (same non-zero zone, or a forest bit) then fails on every call.
+`createsPocket` in `StartTown` skips buildings whose door is strictly inside the
+rectangle, so the mine splits the map unchecked; residents on the far side starve with
+food in the barns. Fix belongs in the placer (flood test for interior doors, with the
+corridor exit as the door), not in the work loop.
 
 ### 5.5 Educated, Blacksmith, Stylish — ageing and carried goods
 

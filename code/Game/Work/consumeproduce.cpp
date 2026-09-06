@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -478,6 +479,42 @@ static int FinalizeAction(ConsumeProduceAction* self, void* entityIBP, void* act
     return 2;
 }
 
+
+// [CPWork] Execute OUTCOME METER (BANISHED_CPWORK_TRACE). One counter per exit point,
+// per workplace entity, dumped every 2000 Execute calls. A workplace whose workers
+// mostly leave through "no free position" / "pass fail" / "haul" instead of
+// "produce" is the throughput question a produced-total cannot answer.
+enum CpOut { CPO_PRODUCE = 0, CPO_HAUL, CPO_FETCH, CPO_NOFREEPOS, CPO_PASSFAIL, CPO_IDLE,
+             CPO_NORES_REPLAN, CPO_HAUL_NOPATH, CPO_SLOTS_FULL, CPO_ASSIGN_OTHER,
+             CPO_NOSLOT, CPO_N };
+static const char* const kCpOutName[CPO_N] = { "produce", "haul", "fetch", "noFreePos",
+    "passFail", "idle", "noResReplan", "haulNoPath", "slotsFull", "assignOther", "noSlot" };
+struct CpOutRow { uintptr_t ent; long long n[CPO_N]; };
+static int CpTraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_CPWORK_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s;
+}
+static int CpRet(ConsumeProduceAction* self, int ret, int code) {
+    if (!CpTraceOn()) return ret;
+    static CpOutRow rows[96]; static int nrows = 0; static long long calls = 0;
+    uintptr_t ent = *(uintptr_t*)((uintptr_t)self + 0x10);
+    CpOutRow* r = nullptr;
+    for (int i = 0; i < nrows; ++i) if (rows[i].ent == ent) { r = &rows[i]; break; }
+    if (!r && nrows < 96) { r = &rows[nrows++]; r->ent = ent; for (int k = 0; k < CPO_N; ++k) r->n[k] = 0; }
+    if (r) r->n[code]++;
+    if ((++calls % 2000) == 0) {
+        fprintf(stderr, "[CPOut] after %lld Execute calls, %d workplaces:\n", calls, nrows);
+        for (int i = 0; i < nrows; ++i) {
+            fprintf(stderr, "[CPOut]   ent=%p", (void*)rows[i].ent);
+            for (int k = 0; k < CPO_N; ++k) if (rows[i].n[k]) fprintf(stderr, " %s=%lld", kCpOutName[k], rows[i].n[k]);
+            fprintf(stderr, "\n");
+        }
+        fflush(stderr);
+    }
+    return ret;
+}
+
 // ============================================================
 // Execute (0x1400e7840) -- vtable slot 4
 //
@@ -599,7 +636,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         uint32_t slot = startSlot;
 
         if (totalSlots < 1) {
-            return 1;
+            return CpRet(self, 1, CPO_NOSLOT);
         }
 
         // Find an empty slot (field_58[slot] == 0)
@@ -611,12 +648,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
             }
             attempts++;
             if (attempts >= totalSlots) {
-                return 1;  // All slots occupied
+                return CpRet(self, 1, CPO_SLOTS_FULL);  // All slots occupied
             }
         }
 
         if (slot == 0xffffffff) {
-            return 1;
+            return CpRet(self, 1, CPO_NOSLOT);
         }
 
         // --- Find StorageComponent on work entity ---
@@ -747,7 +784,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     // No resources available -- replan citizen
                     fn_InternalBasePtr_CheckPtr(entityIBP);
                     fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
-                    return 2;
+                    return CpRet(self, 2, CPO_NORES_REPLAN);
                 }
 
                 // --- Search for storage with this resource ---
@@ -767,7 +804,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     uint64_t passable = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)citizenCell,
                                                              *(uint32_t*)((uintptr_t)self + 0x28));
                     if ((char)passable == '\0') {
-                        return 1;
+                        return CpRet(self, 1, CPO_HAUL_NOPATH);
                     }
 
                     // Get terrain position for storage
@@ -807,7 +844,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                             int priority = *(int*)((uintptr_t)self + 0x20);
                             fn_InternalBasePtr_CheckPtr(entityIBP);
-                            return FinalizeAction(self, entityIBP, &destEntityRef, priority, slot);
+                            return CpRet(self, FinalizeAction(self, entityIBP, &destEntityRef, priority, slot), CPO_HAUL);
                         }
                     }
                 }
@@ -922,7 +959,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                                         int priority2 = *(int*)((uintptr_t)self + 0x20);
                                         fn_InternalBasePtr_CheckPtr(entityIBP);
-                                        return FinalizeAction(self, entityIBP, &fetchDest, priority2, slot);
+                                        return CpRet(self, FinalizeAction(self, entityIBP, &fetchDest, priority2, slot), CPO_FETCH);
                                     }
                                 }
                                 break;
@@ -1024,14 +1061,14 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     uint64_t assigned = fn_TryAssignWorkplace(
                         assignMgr, &citizenRef3, *(int*)(locCompIBP + 0x28), '\x01');
                     if ((char)assigned != '\0') {
-                        return 2;
+                        return CpRet(self, 2, CPO_ASSIGN_OTHER);
                     }
                 }
             }
         }
 
         if ((int)firstFreePos < 0) {
-            return 1;
+            return CpRet(self, 1, CPO_NOFREEPOS);
         }
 
     setup_produce_action:
@@ -1105,10 +1142,22 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                 {
                     static int n = 0;
                     static int lastAcc = -1;
-                    if (n < 12 && (canFinish || self->field_4c != lastAcc)) {
+                    static int traceAll = -1;
+                    if (traceAll < 0) {
+                        const char* e = std::getenv("BANISHED_CPWORK_TRACE");
+                        traceAll = (e && e[0] && e[0] != '0') ? 1 : 0;
+                    }
+                    // Budgeted by default; BANISHED_CPWORK_TRACE=1 prints EVERY gate
+                    // hit with the workplace entity, product and output cell so the
+                    // per-building produce cadence can be read off the log.
+                    if ((traceAll || n < 12) && (canFinish || self->field_4c != lastAcc)) {
                         ++n; lastAcc = self->field_4c;
-                        fprintf(stderr, "[CPWork] produceGate acc(+0x4c)=%d need(desc+0x40)=%d -> %s\n",
+                        fprintf(stderr, "[CPWork] produceGate ent=%p product=%p acc(+0x4c)=%d "
+                                        "need(desc+0x40)=%d time(desc+0x44)=%.2f pos=%u -> %s\n",
+                                (void*)*(uintptr_t*)((uintptr_t)self + 0x10),
+                                (void*)*(uintptr_t*)(productData + 0x10 + productStride * 8),
                                 self->field_4c, *(int*)(cpDescAddr + 0x40),
+                                *(float*)(cpDescAddr + 0x44), firstFreePos,
                                 canFinish ? "PRODUCED" : "not yet");
                         fflush(stderr);
                     }
@@ -1140,10 +1189,43 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                 int priority3 = *(int*)((uintptr_t)self + 0x20);
                 fn_InternalBasePtr_CheckPtr(entityIBP);
-                return FinalizeAction(self, entityIBP, &actionPriority, priority3, slot);
+                return CpRet(self, FinalizeAction(self, entityIBP, &actionPriority, priority3, slot), CPO_PRODUCE);
+            }
+            // [CPWork] passFail detail: retail's test reduces to "the two cells share a
+            // non-zero zone (+0x26) or one carries a forest bit (0x1e0)". Print both
+            // cells' terrain byte and zone the first few times a workplace fails it.
+            if (CpTraceOn()) {
+                static int n = 0;
+                if (n < 24) { ++n;
+                    fprintf(stderr, "[CPWork] passFail ent=%p slot=%u firstFreePos=%u pos=(%.1f,%.1f) "
+                                    "citizenCell=%d t=0x%02x zone=%d | prodCell=%d t=0x%02x zone=%d\n",
+                            (void*)*(uintptr_t*)((uintptr_t)self + 0x10), slot, firstFreePos,
+                            producePos[0], producePos[1],
+                            citizenCell, *(uint8_t*)(srcCellStruct + 0x29), (int)*(int16_t*)(srcCellStruct + 0x26),
+                            prodCellX * mapSize + prodCellY, *(uint8_t*)(dstCellStruct + 0x29),
+                            (int)*(int16_t*)(dstCellStruct + 0x26));
+                    // 15x15 neighbourhood of the produce cell: terrain byte (+0x29) and zone
+                    // (+0x26), the produce cell marked with '*'. Shows whether the door sits
+                    // in a corridor that reaches open ground or in a sealed footprint.
+                    if (n <= 6) {
+                        for (int dy = -7; dy <= 7; ++dy) {
+                            fprintf(stderr, "[CPWork]   ");
+                            for (int dx = -7; dx <= 7; ++dx) {
+                                int cx2 = prodCellY + dx, cy2 = prodCellX + dy;
+                                if (cx2 < 0 || cy2 < 0 || cx2 >= mapSize || cy2 >= mapSize) { fprintf(stderr, "  ??.??  "); continue; }
+                                uintptr_t c = structBase3 + (int64_t)(cy2 * mapSize + cx2) * 0x30;
+                                fprintf(stderr, "%c%02x/%-3d%c", (dx == 0 && dy == 0) ? '*' : ' ',
+                                        *(uint8_t*)(c + 0x29), (int)*(int16_t*)(c + 0x26),
+                                        *(uintptr_t*)(c + 8) ? 'S' : ' ');
+                            }
+                            fprintf(stderr, "\n");
+                        }
+                        fflush(stderr);
+                    }
+                }
             }
         }
-        return 1;
+        return CpRet(self, 1, CPO_PASSFAIL);
     }
 
     // ============================================================
@@ -1185,7 +1267,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     fn_InternalBasePtr_CheckPtr(&meshCompIBP);
     s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 3, '\0');
 
-    return 1;
+    return CpRet(self, 1, CPO_IDLE);
 }
 
 // ============================================================

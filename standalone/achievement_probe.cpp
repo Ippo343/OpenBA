@@ -167,11 +167,33 @@ void DescribeGoal(void* goal, char* buf, size_t n) {
         const uint8_t req   = *(g + 0x40);
         int a = 0, b = 0;
         StatGoal_ProbeOperands(goal, &a, &b);
-        std::snprintf(buf, n, "stat=%d have=%d %s %d%s (statB=%d fixed=%d res='%s'%s)",
+        int len = std::snprintf(buf, n, "stat=%d have=%d %s %d%s (statB=%d fixed=%d res='%s'%s)",
                       statA, a, CmpName(cmp), b,
                       (cmp & 1) ? " [vs statB]" : "",
                       statB, fixed, StrOf(g + 0x48),
                       req ? " reqOthers" : "");
+        if (statA == 0x14 && len > 0 && (size_t)len < n) {
+            // Stat 20 (cumulative production, 0x1400d8c50) picks a stats-history
+            // series from the goal's resource-flag word at +0x78 and sums it over the
+            // last +0x7c years. Print the flag word and the series it resolves to, so a
+            // zero can be told apart as "wrong flag" vs "nothing produced in that
+            // category" (series 10+3k is category k's produced counter, see
+            // CitizenBehavior_CollectStats).
+            const uint32_t flags = *reinterpret_cast<const uint32_t*>(g + 0x78);
+            const int years = *reinterpret_cast<const int32_t*>(g + 0x7c);
+            int col = -1;
+            if ((flags >> 0x11) & 1)     col = 0x22;
+            else if ((flags >> 0xe) & 1) col = 0x1f;
+            else if (flags & 0x40)       col = 0x13;
+            else if (flags & 0x20)       col = 0x19;
+            else if ((flags >> 0xd) & 1) col = 0x1c;
+            else if ((flags >> 0xc) & 1) col = 0x10;
+            else if ((flags >> 0xb) & 1) col = 0xd;
+            else if ((flags >> 0xa) & 1) col = 0xa;
+            else if ((flags >> 0x9) & 1) col = 0x16;
+            std::snprintf(buf + len, n - (size_t)len, " flags=0x%x years=%d series=%d cat=%d",
+                          flags, years, col, col >= 0 ? (col - 10) / 3 : -1);
+        }
     } else if (cls[0] == 'P') {       // PopulationGoal
         std::snprintf(buf, n, "targetPop=%d", *reinterpret_cast<const int32_t*>(g + 0x30));
     } else if (cls[0] == 'T') {       // TimeGoal
@@ -182,6 +204,45 @@ void DescribeGoal(void* goal, char* buf, size_t n) {
                       *reinterpret_cast<void* const*>(g + 0x38),
                       *reinterpret_cast<void* const*>(g + 0x40));
     }
+}
+
+// Production census: the town manager (gw+0xf0) keeps 21 per-category records at
+// +0x170 (stride 0x20: +0x00 stock, +0x08 limit, +0x0c/+0x10 per-sample-period
+// accumulators) and the stats history at +0x150 (0x47 series of {int* data, int
+// count, int cap}); series 8+3k / 9+3k / 10+3k mirror record k's +0x00 / +0x0c /
+// +0x10, pushed by CitizenBehavior_CollectStats. Stat 20 sums series 10+3k, so a
+// production achievement's whole progress is visible here.
+void ProdSummary() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    if (!townMgr) return;
+    const uintptr_t hist = *reinterpret_cast<uintptr_t*>(townMgr + 0x150);
+    const uintptr_t recs = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
+    const int nSeries = *reinterpret_cast<int32_t*>(townMgr + 0x158);
+    const int nRecs   = *reinterpret_cast<int32_t*>(townMgr + 0x178);
+    if (!hist || !recs) {
+        std::fprintf(stderr, "[Ach] prod: hist=%p recs=%p (nothing to sum)\n",
+                     reinterpret_cast<void*>(hist), reinterpret_cast<void*>(recs));
+        return;
+    }
+    const int rows0 = (nSeries > 10) ? *reinterpret_cast<int32_t*>(hist + 10 * 0x10 + 8) : -1;
+    std::fprintf(stderr, "[Ach] prod: series=%d recs=%d samples(series10)=%d  "
+                         "[cat: produced-total/stock/limit/f0c/f10]", nSeries, nRecs, rows0);
+    for (int k = 0; k < nRecs && k < 21; ++k) {
+        const int s = 10 + 3 * k;
+        long long sum = 0;
+        if (s < nSeries) {
+            const int32_t* data = *reinterpret_cast<int32_t**>(hist + s * 0x10);
+            const int cnt = *reinterpret_cast<int32_t*>(hist + s * 0x10 + 8);
+            for (int i = 0; i < cnt && data; ++i) sum += data[i];
+        }
+        const uintptr_t r = recs + k * 0x20;
+        std::fprintf(stderr, " %d:%lld/%d/%d/%d/%d", k, sum,
+                     *reinterpret_cast<int32_t*>(r + 0x00), *reinterpret_cast<int32_t*>(r + 0x08),
+                     *reinterpret_cast<int32_t*>(r + 0x0c), *reinterpret_cast<int32_t*>(r + 0x10));
+    }
+    std::fprintf(stderr, "\n");
 }
 
 // Call the goal's own Check (vtable slot 8 = byte offset +0x40). Read-only in
@@ -274,6 +335,7 @@ extern "C" void AchievementProbe_Tick(int frameNum) {
     const bool dumpNow = s_dump;
     s_dump = false;                       // discovery dump is one-shot
     if (dumpNow) Hex("mgr", mgr, 0x60);
+    ProdSummary();
 
     // mgr+0x18 = the AchievementInstance array, mgr+0x20 its count. Both are filled
     // ONLY by AchievementManager::Reset (new game) or ::Persist (load). Retail's
