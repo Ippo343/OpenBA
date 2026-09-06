@@ -259,10 +259,18 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     fprintf(stderr, "[Tools]   bridge node: CreateBridge=%u -> BridgeTool=%u\n",
             tid_CreateBridge, tid_BridgeTool);
 
-    // FencedTool (pasture / crop-field fenced-area tool). Retail's EntityUI::Startup keys
-    // it on CreateFencedDescription (0x1401c4100). Pasture.rsc / CropField.rsc toolbar
-    // buttons carry that component, so without this node a pasture click dead-ended the
-    // same way road/bridge once did. FencedTool extends DragTool; slot 14 (CalcCost,
+    // FencedTool (the pasture / cemetery fenced-area tool). Retail's EntityUI::Startup
+    // keys it on CreateFencedDescription (0x1401c4100). Pasture.rsc declares
+    // `createfenced` and carries that component, so without this node a pasture click
+    // dead-ended the same way road/bridge once did.
+    //
+    // This comment used to name CropField.rsc here alongside Pasture.rsc. That was
+    // WRONG and it contradicted the DragPlacementTool block fourteen lines below, which
+    // has always had it right: CropField.rsc declares `createdrag`, so the crop field is
+    // keyed on CreateDragDescription and routes to DragPlacementTool, never to
+    // FencedTool. Corrected 2026-09-06. The error was inert (the fenced node is correct
+    // for Pasture either way) but it is exactly the kind of cross-reference that sends
+    // the next reader looking for a crop-field bug in the wrong tool. FencedTool extends DragTool; slot 14 (CalcCost,
     // ported) previews the rect, slot 13 (CalcPath, ported in fencedtool_calcpath.cpp)
     // commits the master entity + shelter + fence pieces on drag-release.
     uint32_t tid_CreateFenced = ::Object::ResolveTypeIdByNameLazy("CreateFencedDescription");

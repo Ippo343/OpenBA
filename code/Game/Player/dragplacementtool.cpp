@@ -4,14 +4,21 @@
 // DragPlacementTool (0x48 bytes) extends DragTool (0x38 bytes).
 // Handles rectangular area placement (e.g., stockpile, marketplace).
 //
-// Vtable at 0x140161b90 (15 slots). Three are reimplemented here:
+// Vtable at 0x140161b90 (15 slots). The whole vtable is reimplemented in this file:
 //   Slot0  Dtor    (0x14002d900) — scalar deleting destructor
 //   Slot4  Startup (0x1400fc3e0) — find description components on entity
+//   Slot13 CalcPath(0x1400fb5c0) — commits the dragged area on drag-release
 //   Slot14 CalcCost(0x1400fbae0) — validate area and calculate cost
+//   plus Draw and the remaining slots, all wired in the vtable at the foot of the file.
 //
-// Remaining slots (Draw, CalcPath) are too complex (terrain validation, entity
-// creation, scene rendering) and are not yet reimplemented, pending typed and
-// resolved helper functions.
+// This banner used to end with "Remaining slots (Draw, CalcPath) are too complex
+// (terrain validation, entity creation, scene rendering) and are not yet
+// reimplemented". That has been FALSE since Draw and CalcPath landed further down this
+// same file; the comment simply outlived the port that replaced it. Corrected
+// 2026-09-06 — this tool is the ONLY route to a player-placed crop field
+// (CropField.rsc declares `createdrag` -> CreateDragDescription -> DragPlacementTool),
+// so a stale "not reimplemented" here reads as "crop fields cannot be placed", which
+// is not true.
 //
 // Decompiled from Application-x64.exe.
 

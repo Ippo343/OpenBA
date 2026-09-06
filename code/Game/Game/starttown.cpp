@@ -3037,10 +3037,35 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     }
 
     // ── Food-production demo buildings — CROP FIELD / HUNTER LODGE / GATHERER HUT ──
-    // Same rationale as BUILD_DEMO_PASTURE/ORCHARD above: all three are acquired only
-    // through tools that are still unported (drag-area for the crop field, placement
-    // for the two lodges), so without this there is no way to exercise their
-    // components or panels at all.
+    // Same rationale as BUILD_DEMO_PASTURE/ORCHARD above: an instant, deterministic way
+    // to get one of each into the world so their components and panels can be exercised
+    // without waiting on builders.
+    //
+    // This block used to justify itself with "all three are acquired only through tools
+    // that are still unported (drag-area for the crop field, placement for the two
+    // lodges)". That is NO LONGER TRUE and was corrected 2026-09-06 (exe-closeout lane
+    // A). Both tools are fully ported and both are wired into the live tool-mode tree,
+    // which is default-on via BANISHED_LIVE_TOOLS:
+    //   CropField.rsc        declares `createdrag`  -> CreateDragDescription
+    //                          -> DragPlacementTool   (code/Game/Player/dragplacementtool.cpp)
+    //   HunterLodge.rsc      declares a CreatePlacedDescription
+    //   GathererShelter.rsc  declares a CreatePlacedDescription
+    //                          -> PlacementTool       (code/Game/Player/placementtool.cpp)
+    // The nodes are inserted by EntityUI_BuildToolModeTree_SA
+    // (code/Game/Player/tool_activation_standalone.cpp), which Toolbar_ShowGroup_Impl
+    // walks to pick the tool for a clicked template. So the player CAN place all three
+    // through the real tool path.
+    //
+    // These spawners are kept anyway, and are still the right thing to use for most
+    // tests: they are deterministic and instant, whereas a tool-placed building starts
+    // as a foundation and needs builders. But do not cite this comment as evidence that
+    // the tools are missing -- to drive the real path instead, use
+    //   crop field:      BANISHED_TOOL_HARNESS=pasture
+    //                    BANISHED_PLACEMENT_TEMPLATE="Template\\CropField.rsc"
+    //   the two lodges:  BANISHED_TOOL_HARNESS=placement
+    //                    BANISHED_PLACEMENT_TEMPLATE="Template\\HunterLodge.rsc"
+    //                                              (or Template\\GathererShelter.rsc)
+    // and pair either with BANISHED_FINISH_BUILDS to get past the foundation stage.
     //
     // Crop field is a ControllerComponent area like the orchard; hunter lodge and
     // gatherer shelter are ResourceProduceComponent buildings sharing the state

@@ -38,13 +38,27 @@
 // States 3 and 21 are transition TARGETS with no registered body — exactly as the
 // orchard table leaves its state 3 — so they are deliberately absent here too.
 //
-// ⚠ FIRST PASS: the handler BODIES are not ported yet, so every handler is registered
-// as nullptr. ControllerLive::Dispatcher treats a null handler as a graceful no-op, so
-// the state machine still runs the REAL structure — Step returns real indices and
-// transitions are validated against the real graph — it simply performs no per-state
-// work. This is the same staged approach the orchard table went through, and it makes
-// the component observable (BANISHED_FOOD_DIAG reports its state) before any behaviour
-// is added. Do NOT read "crop field does nothing" as a defect until the bodies land.
+// ── STATUS: ALL ELEVEN HANDLER BODIES ARE PORTED ───────────────────────────────
+// This block used to read "FIRST PASS: the handler BODIES are not ported yet, so every
+// handler is registered as nullptr". That has been FALSE since the crop-field wave
+// (81dc93c "reaches state 10", cbe5ab0 "HARVESTS", ce26616 "61 harvested"); the comment
+// simply outlived the port that replaced it — the same trap as
+// reference_stub_comment_outlived_the_port_that_replaced_it. Corrected 2026-09-06 after
+// re-measuring, so the next reader does not re-port work that is already done.
+//
+// Every address in the table above now has a body in this file, and each body carries
+// its retail address in its own banner comment:
+//   0x14011a920 State2Enter   0x14011a860 State2PerFrame   0x14011a7b0 Event3Plant
+//   0x14011a310 State9Enter   0x14011a1e0 State9PerFrame
+//   0x14011a100 State10Enter  0x140119fd0 State10PerFrame  0x140119f70 State10Update
+//                                                          0x140119f00 Event4Harvest
+//   0x140119e60 State11Enter  0x140119d80 State11PerFrame
+// The `nullptr` arguments that remain in the CropFieldCtrl_PopulateTable calls below are
+// the trans30 slot, which retail leaves genuinely empty for this controller (the
+// register helper at 0x1400330d0 hard-writes 0 into +0x10 for every entry) — they are
+// NOT unported handlers. Read TableRegisterState's signature before assuming otherwise:
+// it is (id, enter, TRANS30, TRANS38, UPDATE), so the per-frame body sits in the 4th
+// argument and the update body in the 5th.
 
 #include "Component/controller_state_table.h"
 #include "engine_funcs.h"

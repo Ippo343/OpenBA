@@ -200,7 +200,24 @@ void FireRemovalTool(void* entityUI) {
 // driver (skips the existing-placement constraint).
 void FirePlacementTool() {
     // A simple placeable building the Easy start-town already spawns.
+    //
+    // BANISHED_PLACEMENT_TEMPLATE overrides it, exactly as it already does for
+    // FireActivatePlacement below. Added 2026-09-06 for the exe-closeout lane-A
+    // verification. The two paths prove different halves and neither alone is enough:
+    // FireActivatePlacement drives the real CLICK -> tool-mode-tree -> PlacementTool
+    // ACTIVATION but stops at the armed tool (committing needs a real left-click),
+    // whereas this path also drives the faithful CREATE so a building actually
+    // materializes. Without the override the only template that could be driven to
+    // completion here was WoodHouse, so the two food lodges
+    // (Template\HunterLodge.rsc, Template\GathererShelter.rsc) had no way to be
+    // placed through the real tool at all -- which is what starttown.cpp's
+    // "placement for the two lodges is unported" comment actually described: not a
+    // missing TOOL (PlacementTool is fully ported and its CreatePlacedDescription
+    // node is in the tool-mode tree), but a missing way to point it at them.
     const char* kTemplate = "Template\\WoodHouse.rsc";
+    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+        if (e[0]) kTemplate = e;
+    }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
     void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
@@ -230,10 +247,47 @@ void FirePlacementTool() {
 
     // Phase 2: place the building at map centre (same valley cell the RemovalTool
     // harness targets). 256-wide grid; cell(124,124).
-    const int centerCell = Cell(124, 124);
-    fprintf(stderr, "[ToolHarness] PlacementTool CREATE at cell %d (124,124)...\n", centerCell);
-    int placed = PlacementTool_HarnessPlaceAtCell(tool, centerCell);
-    fprintf(stderr, "[ToolHarness] PlacementTool CREATE -> %d (1=building materialized)\n", placed);
+    //
+    // A WoodHouse is 3x3 and the valley centre is reliably clear enough for it, so the
+    // original code placed at exactly one cell and reported the result. The food
+    // lodges are larger and the valley centre is frequently already occupied by the
+    // start town itself, so a single fixed cell reports "0" for a tool that is working
+    // perfectly -- a false negative of exactly the kind this codebase keeps being
+    // burned by. Sweep an outward ring around the centre, stop at the first cell the
+    // tool ACCEPTS, and say which cell won. A run that exhausts the ring is a real
+    // failure; a run that succeeds at radius 9 is not.
+    int centerRow = 124, centerCol = 124;
+    if (const char* pc = std::getenv("BANISHED_PLACEMENT_CELL")) {
+        int r = 0, c = 0;
+        if (std::sscanf(pc, "%d,%d", &r, &c) == 2) { centerRow = r; centerCol = c; }
+    }
+    int maxR = 24;
+    if (const char* mr = std::getenv("BANISHED_PLACEMENT_RADIUS")) {
+        int v = std::atoi(mr); if (v > 0) maxR = v;
+    }
+    int placed = 0, usedRow = -1, usedCol = -1, tried = 0;
+    for (int r = 0; r <= maxR && !placed; ++r) {
+        for (int dr = -r; dr <= r && !placed; ++dr) {
+            for (int dc = -r; dc <= r && !placed; ++dc) {
+                // Ring only: skip the interior, which the earlier radii already covered.
+                if (r > 0 && dr > -r && dr < r && dc > -r && dc < r) continue;
+                const int row = centerRow + dr, col = centerCol + dc;
+                if (row < 1 || col < 1 || row > 254 || col > 254) continue;
+                ++tried;
+                if (PlacementTool_HarnessPlaceAtCell(tool, Cell(row, col))) {
+                    placed = 1; usedRow = row; usedCol = col;
+                }
+            }
+        }
+    }
+    fprintf(stderr, "[ToolHarness] PlacementTool CREATE -> %d (1=building materialized) "
+           "template=\"%s\" cell=(%d,%d) after %d candidate(s) around (%d,%d)\n",
+           placed, kTemplate, usedRow, usedCol, tried, centerRow, centerCol);
+    if (!placed)
+        fprintf(stderr, "[ToolHarness] PlacementTool CREATE FAILED: no cell within r=%d of "
+               "(%d,%d) was accepted -- widen with BANISHED_PLACEMENT_RADIUS or move the "
+               "centre with BANISHED_PLACEMENT_CELL=<row>,<col> before calling this a "
+               "tool defect.\n", maxR, centerRow, centerCol);
     fprintf(stderr, "[ToolHarness] PlacementTool sequence complete.\n");
 }
 
