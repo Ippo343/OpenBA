@@ -334,7 +334,7 @@ Runtime programs.
 
 | Wave | Scope | Size | Why here |
 |---|---|---|---|
-| **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **OPEN: the string-anchor naming pass over the 2,467 `FUN_`s** — the profile↔retail map does NOT do it (only 9 rows name a retail `FUN_`, none by hash: the profile build's internals are `FUN_` too, so matching unnamed to unnamed yields nothing). The lever is the profile build's source-path/assert strings, applied profile-side first. | 1–2 sessions | Everything after depends on it |
+| **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
 | **1 Math + Volume** | 292 fns, 30 KB | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
 | **2 System + Collection** | String, MemoryAllocator, Filename, WideString, Time/Timer, Random, CRC, Color, CriticalSection, Thread, Compression, Configuration; Collection templates as headers | M | 4,100+ inbound edges; allocator is global state (already detoured for locking) and must be swapped atomically with its `.data` singleton |
 | **3 Object** | Base, Type, BaseTypeInfo, Internal, External, InternalPtr, Factory, InternalFactory, ExternalFactory, ExternalList | M | The reflection + handle table. Once ours, object construction flows through us and vtable ownership stops being a problem |
@@ -359,8 +359,17 @@ the diff harness have each caught at least one real divergence.
    (ours computes, theirs executes) before switching.
 3. **Vtable ownership.** Until Wave 3 lands, objects built by retail ctors carry DLL vtables and
    virtual calls land in the DLL regardless of what we registered. Port classes whole.
-4. **The `FUN_` pool.** 407 KB of un-named internals; the profile build + hash matching is the
-   only scalable way through it. Budget the naming pass before, not during, each wave.
+4. **The `FUN_` pool.** 407 KB of un-named internals. **This entry was wrong and is now
+   measured** (Wave 0, `docs/runtime_port/WAVE0.md`): the profile build + hash matching is NOT a
+   way through it. Hash/fuzzy matching yields **9** rows that name a retail `FUN_` (none
+   byte-provable), because Ghidra names from the export table and the profile build's internals
+   are `FUN_` too — unnamed matched to unnamed. The string-anchor pass yields **66** real
+   attributions of which **0** bridge to retail, and the two levers are anti-correlated: the
+   substantive functions worth anchoring are the ones whose codegen differs most between builds,
+   so they are the least likely to match. No PDB ships. The untried lever with a real mechanism
+   is **call-graph propagation** (an anchored function whose caller is mapped, whose retail call
+   site still targets a `FUN_`). Until that lands, treat the pool as unnamed and budget the
+   naming per wave — do not plan a wave on the assumption it is solved.
 5. **CRT/SEH inside the DLL.** The DLL has its own CRT and `__C_specific_handler`; a port that
    throws or unwinds across the DLL boundary is undefined. Keep exceptions out of ported code.
 

@@ -4,17 +4,20 @@ Produced 2026-09-06 against the live Ghidra project (`Runtime-x64-profile.dll`, 
 and `Runtime-x64.dll`, retail). Read-only: no rename/set/create/delete calls were made against
 either program.
 
-## Tooling note (bridge bug, worked around)
+## Tooling note (bridge bug, now fixed)
 
-`bulk_fuzzy_match` and `find_similar_functions_fuzzy` are declared to return `str` but the
-bridge (`tools/ghidra_mcp/bridge_mcp_ghidra.py`) implements them with `safe_get()` (which returns
+`bulk_fuzzy_match` and `find_similar_functions_fuzzy` were declared to return `str` but the
+bridge (`tools/ghidra_mcp/bridge_mcp_ghidra.py`) implemented them with `safe_get()` (which returns
 a `list[str]`) instead of `safe_get_json()` (which returns `str`). Every call through the MCP
-tool interface fails Pydantic's output validation (`Input should be a valid string`), regardless
-of parameters — confirmed with several address/offset/limit combinations. The underlying Ghidra
-HTTP endpoint (`http://127.0.0.1:8089/bulk_fuzzy_match?...`) is unaffected and returns clean JSON;
-all bulk fuzzy matching below was done with direct HTTP calls (Python `urllib`) to that endpoint,
-paging with `limit=500`. This is a one-line bug in our own bridge script, not a Ghidra data
-problem; flagging it here rather than fixing it since the task was read-only/data-only.
+tool interface failed Pydantic's output validation (`Input should be a valid string`), regardless
+of parameters. The underlying Ghidra HTTP endpoint (`http://127.0.0.1:8089/bulk_fuzzy_match?...`)
+was unaffected and returned clean JSON; the bulk fuzzy matching in Part 1 (below) was done with
+direct HTTP calls (Python `urllib`) to that endpoint, paging with `limit=500`, before the fix
+landed. The team lead has since fixed and committed the one-line bridge bug as part of Wave 0;
+Part 2 (string-anchor pass, below) still uses the direct-HTTP path for the per-function
+`find_similar_functions_fuzzy` sweep and `batch_string_anchor_report` (which was never affected —
+it correctly used `safe_get_json` throughout) purely because that code was already written before
+the fix landed, not because it was still necessary.
 
 ## Deliverables
 
@@ -23,7 +26,13 @@ problem; flagging it here rather than fixing it since the task was read-only/dat
   unique_hashes=8357, duplicates_found=2626`.
 - `docs/runtime_port/profile_to_retail.csv` — 9,921 rows, columns
   `profile_addr,profile_name,retail_addr,retail_name,score,method`.
+- `docs/runtime_port/profile_string_anchors.csv` (Part 2) — 1,208 rows, columns
+  `profile_addr,current_name,anchor_string,anchor_kind,inferred_dir,inferred_file,confidence,evidence`.
+- `docs/runtime_port/fun_pool_candidates.csv` (Part 2) — 66 rows, the high/medium-confidence
+  anchored functions re-matched against retail.
 - This report.
+
+# Part 1 — profile↔retail address map (hash + fuzzy)
 
 ## Coverage
 
@@ -105,3 +114,136 @@ bare `Type`) before trusting a row for renaming.
 3. Re-run `bulk_fuzzy_match` at a lower threshold (e.g. 0.5) only after excluding known collision
    targets from the candidate pool, to recover more of the 1,981 unmatched named functions and
    the `FUN_` pool without re-adding the thunk noise.
+
+# Part 2 — string-anchor naming pass (profile side, source-path/log-string evidence)
+
+Cross-check confirmed Part 1's map barely touches the `FUN_` pool: named-profile↔named-retail
+matching cannot resolve an unnamed↔unnamed pair. This part answers "how far can source-string
+evidence alone get us on the *profile* side, and does that then bridge to retail?" The pass is
+strictly read-only: profile-side "naming" below means recording an inferred dir/file/confidence
+in a CSV row, never a Ghidra rename.
+
+## Method
+
+`batch_string_anchor_report(pattern, program="Runtime-x64-profile.dll")` scans every string
+matching `pattern` and returns, per matching string, the functions that reference it (split into
+already-documented vs `FUN_`-named). Six passes were run:
+
+| Pattern | Anchors found | Undocumented (`FUN_`) functions reached |
+|---|---|---|
+| `.cpp` (short `Dir\File.cpp` compile-unit literals) | 117 | 35 |
+| `code\Runtime` / `.h` / `Buildy` (all three converge on the same 92 full absolute-path strings) | 92 | 1,245 |
+| `Assert` | 3 | 0 |
+| `ERROR` | 49 | 12 |
+| `Failed` | 30 | 1 |
+| `Verify`, `WARN` | 0–1 | 0 |
+
+`docs/runtime_port/original_source_tree.txt` lists 18 top-level directories with recovered
+source paths (Achievement, Application, Audio, Collection, Collision2D, Engine, Graphics, Input,
+IO, Object, Pathfinding, Picking, Save, System, UI, Utility, Video, Volume). **Math and Debug
+have zero entries in that file and zero string anchors of any kind** — confirmed dark, exactly as
+expected going in (PLAN.md §3.1: Math is 228 pure functions with no debug strings; Debug is 8
+functions, presumably the assert/logging primitives themselves, which don't get their own
+`__FILE__` literal). All 18 recovered directories got at least one string anchor (documented or
+not), so directory-level coverage of the *recovered source tree* is complete; the question that
+matters is how much of that reaches an actual `FUN_`.
+
+### The `.h`/full-path pass is dominated by template-instantiation noise, same failure mode as Part 1
+
+Sorting the 92 full-path anchors by total hit count reproduces the Collection-template problem
+from Part 1, just via strings instead of hashes:
+
+| Header | Total refs | Undocumented | Why it's noise |
+|---|---|---|---|
+| `Collection/Array.h` | 1,199 | 879 | Header-only template (`Array<T>`), instantiated into hundreds of unrelated consumer classes — matches PLAN.md §3.3/§4.3 risk 1 exactly |
+| `Object/InternalPtr.h` | 142 | 105 | Header-only smart-pointer template, same story |
+| `Object/ExternalFactory.h` | 88 | 76 | Has its own `.cpp`, but this hit is from a generic templated helper method inside the header, reused broadly |
+| `Collection/Allocator.h` | 81 | 74 | Header-only allocator template |
+| `Utility/HashGrid.h` | 45 | 45 | Header-only spatial-hash template (no `.cpp` counterpart in the source tree — same signature as the four above) |
+| `Utility/LooseQuadTree.h` | 7 | 7 | Header-only, same signature |
+
+These six headers account for **1,186 of the 1,245 `FUN_` hits from the full-path pass (95%)**.
+A function that merely embeds one of these strings tells you "this touches a Collection/Object
+container," not which class it belongs to — it is not a usable per-file attribution and
+`profile_string_anchors.csv` marks all of it `confidence=none`.
+
+### What's actually usable: 66 functions with real dir+file attribution
+
+Excluding the six noise headers leaves two solid categories, both in `profile_string_anchors.csv`
+with `confidence=high` or `medium`:
+
+- **35 `high`-confidence rows** — the `.cpp` compile-unit pattern. The string is a short
+  `Dir\File.cpp` literal passed as the `MemoryAllocator::MemAlloc` allocation tag or as an
+  `Assert`/`Warn` file argument; this is compiled from that exact translation unit, so the
+  function is defined in that file. Spans Engine, Graphics, IO, Save, System, Utility, Video,
+  Picking (see table below).
+- **31 `medium`-confidence rows** — single-class header paths whose total reference count is
+  small (≤40) and whose header is not one of the six noise templates: `Video/VideoConfiguration.h`
+  (20), `Input/InputConfiguration.h`, `System/Memory.h` (10), `Graphics/AnimationManager.h`,
+  `Graphics/GraphicsScene.h`. These are inline snippets or small classes where a header path
+  narrowly identifies one class.
+
+Directories reached by the 66 real (`high`+`medium`) rows — **9 of the 18 recovered
+directories**: Video (20), Utility (16), IO (10), System (10), Graphics (4), Input (3), Engine
+(1), Save (1), Picking (1). The other 9 recovered directories (Achievement, Application, Audio,
+Collection, Collision2D, Object, Pathfinding, UI, Volume) have source-path evidence for their
+*documented* functions only — no `FUN_` in those directories happens to sit next to a
+compile-unit or single-class-header string.
+
+### Spot-check: 6 anchored functions, decompiled and checked against the inferred file
+
+| Profile addr | Anchor (dir/file, confidence) | What the code does | Plausible? |
+|---|---|---|---|
+| `0x18008e320` | Save/SaveLoad.cpp, high | `MemAlloc(0x70,8,"Save\SaveLoad.cpp",0x27)` then builds a `Video::ImageBuffer` and calls `CopyToTexture` under the video device lock | **Yes.** A save-thumbnail/screenshot capture helper — exactly what `SaveLoad.cpp` should contain. |
+| `0x18006d190` | IO/Persistence.cpp, high | Loops over save chunks matching a chunk-id array; hits `Assert("_saveInfo[j]._length == chunks[i]._dataLength", ..., "IO\Persistence.cpp")` and `Warn("Chunk not found!", "IO\Persistence.cpp")` inline, then calls `System::Thread::Start` | **Yes.** A background chunk-loader thread body for `Persistence` — matches the class exactly (also independently corroborated by two inline literals, not just the anchor). |
+| `0x180059b50` | IO/BinaryEncoding.cpp, high | `MemAlloc(0x30,4,"IO\BinaryEncoding.cpp",0x19)` then `IO::BinaryReader::BinaryReader(...)` | **Yes.** A `BinaryReader` factory — `BinaryEncoding.cpp` is the encoding class that would own this. |
+| `0x18009a2a0` | System/Memory.h, medium | Bounds-checks an index against `_tableSize` (assert literal is `System/Memory.h`) and returns `index*0x108 + base` | **Yes.** A page/bucket-table indexer — genuinely `MemoryAllocator` internals. |
+| `0x180034400` | Video/VideoConfiguration.h, medium | Touches **both** `Video::Device::_singleton` and `Video::Configuration::_singleton` (two different assert literals, one per header), writes a `Configuration` field, calls `Video::Device::ValidateConfiguration` | **Plausible but imprecise** — it's genuinely Video-namespace configuration-apply code, but the function straddles two sibling headers (`VideoDevice.h` and `VideoConfiguration.h`); "medium" is the right confidence, not "high". |
+| `0x1800ecdb0` | Utility/STBImage.cpp, high | `MemAlloc(...,"Utility\STBImage.cpp",0xc1)` then a pixel-format expansion loop (palette index → RGB/RGBA bytes) | **Yes.** Textbook STB image-decoder channel-expansion routine. |
+
+**6/6 dir/file inferences are plausible from the code**, including one (`0x18006d190`) that was
+independently corroborated by two more inline string literals beyond the anchor itself. The one
+imprecise case (`0x180034400`) is a real ambiguity between two sibling headers of the same class
+family, not a wrong inference.
+
+### Does any of this bridge to retail? Essentially no.
+
+For the 66 `high`/`medium` functions:
+
+- **Hash match against `profile_to_retail.csv`: 0/66.** None of the anchored addresses appear in
+  the 191-address unnamed-hash-match set from Part 1. This makes sense in hindsight: functions
+  worth string-anchoring are the non-trivial ones (codecs, parsers, thread bodies) — precisely
+  the functions whose codegen is *most* sensitive to compiler/optimization differences between
+  the profile and retail builds, so they're the least likely to hash-match byte-for-byte.
+- **Per-function fuzzy match (`find_similar_functions_fuzzy`, threshold 0.5) against all of
+  `Runtime-x64.dll`: 6/66**, and all six are weak (score 0.52–0.58). One of the six
+  (`0x1800ecdb0`, the STB pixel-expansion routine above) matched retail `0x1800e05c0`
+  = `Audio::SoundBuffer::PlatformSerialize` at score 0.52 — **confirmed a false match** by
+  decompiling both sides: `PlatformSerialize` reads/writes sound-buffer byte arrays through a
+  `Serializer`, nothing like the STB pixel loop. The other five scores are in the same weak band
+  and should be treated the same way (unconfirmed, likely spurious) until individually
+  decompiled — `fun_pool_candidates.csv` marks all six `WEAK, needs manual decompile
+  confirmation before any rename`.
+- Net: **at most 4 of retail's 2,467 `FUN_`-named internals (0.16%) get even a weak candidate
+  name from this pass**, and zero get a confirmed one.
+
+### Answering the question directly
+
+A string-anchor pass on the profile build gets you real, spot-checked-plausible **file-level**
+attribution for 66 profile-side functions (plus low-value template-noise "touches" for another
+1,140+), covering 9 of 18 recovered directories. It **does not** meaningfully close PLAN.md
+§4.3 risk 4 (the 2,467-function, 407 KB retail `FUN_` pool) — both hash and fuzzy matching fail
+on almost this whole set, because the functions worth anchoring by string are exactly the ones
+whose machine code differs most between the two builds. The lever that could still work:
+
+1. **Call-graph propagation from named callers.** Every anchored profile function has a known
+   caller set; if a caller is itself matched to retail (via Part 1's map) and that caller's
+   retail call site still targets a `FUN_`, the callee at that call target is a strong same-slot
+   candidate — this sidesteps hash/fuzzy entirely and uses structure instead of bytes. Not
+   attempted here (out of scope for a read-only data pass — it needs `get_function_callers`/
+   `get_function_callees` on both programs plus the existing map, cross-referenced); worth a
+   dedicated follow-up.
+2. **The profile PDB** (`Runtime-x64-profile.pdb`, referenced by the profile DLL's CodeView
+   record per PLAN.md §3.4) may carry full symbol names Ghidra's analysis didn't recover as
+   plain strings — worth checking whether it's on disk and importable, before spending more
+   effort on string/hash/fuzzy heuristics.

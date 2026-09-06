@@ -68,11 +68,49 @@ is not:
 
 The reason is structural, not a tooling failure: the profile build's internals are `FUN_` in
 Ghidra too, because Ghidra names from the export table and these functions are not exported.
-Matching an unnamed function to an unnamed function yields nothing. The naming lever is the
-profile build's **strings** — `code\Runtime\<Dir>\<File>.cpp` paths and assert text — which have
-to be applied on the profile side first, and only then carried across by the map. That pass is
-tracked separately (`profile_string_anchors.csv`, `fun_pool_candidates.csv`); until it lands,
-treat the `FUN_` pool as unnamed and budget the naming per wave, as PLAN.md §4.3 says.
+Matching an unnamed function to an unnamed function yields nothing. The remaining lever was the
+profile build's **strings** — `code\Runtime\<Dir>\<File>.cpp` paths and assert text — applied
+profile-side first and only then carried across by the map (`profile_string_anchors.csv`,
+`fun_pool_candidates.csv`). It was tried, and it does not work either.
+
+**The string-anchor pass is now measured too, and it does not close the gap either.**
+`batch_string_anchor_report` over six patterns touches 1,208 profile `FUN_`s, but only **66** are
+real attributions: 35 high (a short `Dir\File.cpp` compile-unit literal — the `__FILE__` argument
+to an assert, which genuinely means "defined in this .cpp") and 31 medium (single-class header
+paths). The other 1,140 are the *same* collision problem as the hash map, arriving through a
+different door: `Collection/Array.h` alone accounts for 879, because header-only templates are
+instantiated into hundreds of unrelated classes and a string hit on one says "touches a
+container", not which class.
+
+Bridging those 66 to retail is where it dies: **0 hash matches, 6 weak fuzzy candidates
+(0.52–0.58), and the one that was decompiled to check was a confirmed FALSE match** (an STB
+pixel-expansion routine paired with `Audio::SoundBuffer::PlatformSerialize`). Net: at most 4 of
+2,467 retail `FUN_`s get even a weak unconfirmed candidate; zero confirmed. The reason is
+structural and worth remembering — the functions worth string-anchoring are the substantive ones
+(codecs, parsers, thread bodies), which are exactly the ones whose codegen differs most between
+the two builds, so they are the *least* likely to match cleanly. The two levers are
+anti-correlated.
+
+Directories reached with real attribution: 9 of 18 — Video 20, Utility 16, IO 10, System 10,
+Graphics 4, Input 3, Engine 1, Save 1, Picking 1. **Math and Debug are confirmed dark**: zero
+source paths in the recovered tree, zero anchors of any kind.
+
+The PDB is not a way out. `Runtime-x64-profile.dll`'s debug record names
+`C:\Projects\Buildy\bin\x64.Profile\Runtime-x64-profile.pdb`, but no Banished PDB exists on
+this machine and none ships with the game or the ToolKit.
+
+### So what does work on the FUN_ pool
+
+Both levers PLAN.md assumed are now measured and spent. **Call-graph propagation is the one
+untried idea with a real mechanism**: where an anchored profile function's CALLER is matched by
+the Part 1 map, and that caller's retail call site still targets a `FUN_`, the callee is a strong
+same-slot candidate. It uses structure rather than bytes, which is precisely what sidesteps the
+codegen-difference problem that defeats hashing. Untried — it needs
+`get_function_callers`/`get_function_callees` cross-referenced against `profile_to_retail.csv`.
+
+Until something lands, **budget `FUN_` naming per wave as PLAN.md §4.3 already says, and treat
+the pool as unnamed**. That is a cost the wave plan can absorb; what it cannot absorb is a wave
+planned on the assumption that the naming was solved.
 
 The map's real value is what it *is* good at: 1,181 byte-provable profile↔retail pairs and 9,730
 fuzzy pairs among already-named functions, which is the address translation the per-function
@@ -95,4 +133,5 @@ interface failed output validation before the caller saw any data. Both now use
 - [x] `tools/runtime_census.py` reporting registered / called / total per namespace.
 - [x] `runtime/src/<dir>/` skeleton mirroring the recovered source tree.
 - [x] Profile↔retail hash index and map for both Runtime programs.
-- [ ] String-anchor naming pass over the `FUN_` pool — in progress; the map alone does not do it.
+- [x] String-anchor naming pass over the `FUN_` pool — DONE and MEASURED: 66 real anchors,
+      0 confirmed bridges to retail. Neither lever works; call-graph propagation is the next one.
