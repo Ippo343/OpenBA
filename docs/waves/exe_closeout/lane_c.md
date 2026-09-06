@@ -237,7 +237,82 @@ dispatch-slot registrations).
 
 ## Still open (out of lane)
 
-- `CitizenComponent+0x68` is 0 for every citizen in the `BANISHED_STRESS` town, so candidate
-  state 5 (Work) is never offered and the Work handler cannot be exercised there. Whoever owns
-  housing/attendance should re-check the census table above with a town where citizens are
-  actually housed.
+Nothing. The one item filed here has since been closed — see below.
+
+---
+
+## POST-LANE CLOSE-OUT (2026-09-06): the `+0x68` open was a FALSE PREMISE
+
+This lane filed one open: "`CitizenComponent+0x68` is 0 for every citizen, so state 5 (Work)
+is never offered; the gap is upstream in housing." **`+0x68` is not a housing link. It is the
+`Disease*`.** Three independent, already-ported functions settle it:
+
+| Function | What it does with `+0x68` |
+|---|---|
+| `Infect` `0x140116b90` | stores the `DiseaseDescription*` at `+0x68`, sets the `+0x70`/`+0x78` timers, then calls `FindCareBuilding` `0x140111590` (which fills `+0x228`) |
+| `RecoverOrDie` `0x1401123b0` | clears `+0x68` on survival and grants immunity |
+| `AnyCitizenSick` `0x1400893c0` | scans the town citizen array for `+0x68 != 0` |
+
+(`code/Game/Component/citizen_updatehealth.cpp` has carried this field map since 2026-07-19;
+the census label `housed(+0x68)` in `citizenai_candidatelist.cpp` was simply wrong, and that
+label is what produced the housing diagnosis. Both are corrected now. The neighbouring fields
+are `+0x228` care building, `+0x238` workplace, `+0x248` house.)
+
+So every `+0x68` test in `BuildCandidateStateList` reads "is this citizen SICK?", and state 5
+is the sick-citizen state: **a healthy town never offering it is correct retail behaviour, not
+a gap.** State 5's handler walks to the care building's entity (`+0x228 -> +0x10`) when one is
+linked, and otherwise navigates to `+0x238`.
+
+### A/B proof
+
+Same town both runs — `tools/stress_run.sh --debug --frames 1600 --citizens 200 --speed 5`,
+`BANISHED_CANDLIST_CENSUS=997 BANISHED_CITIZENAI_TRACE=1`. The only difference is the infection.
+
+Control (no infection) — matches this lane's original observation exactly:
+
+```
+[CandCensus] --- after 997 calls ---
+[CandCensus]   Education     ( 3) offered=997  top=885   by prio: p3=997
+[CandCensus]   Gather        ( 6) offered=8    top=4     by prio: p4=8
+[CandCensus]   SeekHappiness ( 8) offered=108  top=108   by prio: p5=108
+[CandCensus]   Idle          ( 9) offered=457  top=0     by prio: p2=457
+[CandCensus]   FindWork      (10) offered=1    top=0     by prio: p2=1
+[CandCensus]   Wander        (11) offered=539  top=0     by prio: p0=539
+[CandCensus]   Leisure       (12) offered=997  top=0     by prio: p0=997
+[CandCensus]   LongTermPlan  (13) offered=3    top=0     by prio: p1=3
+```
+`[Work]` trace lines: **0**.
+
+Experimental, `BANISHED_FORCE_SICK=25 BANISHED_FORCE_SICK_FRAME=400 BANISHED_FORCE_SICK_PERIOD=300`:
+
+```
+[CandCensus] --- after 997 calls ---
+[CandCensus]   Education     ( 3) offered=942  top=830   by prio: p3=942
+[CandCensus]   Work          ( 5) offered=55   top=55    by prio: p6=55
+[CandCensus]   Gather        ( 6) offered=8    top=4     by prio: p4=8
+[CandCensus]   SeekHappiness ( 8) offered=108  top=108   by prio: p5=108
+[CandCensus]   Idle          ( 9) offered=432  top=0     by prio: p2=432
+[CandCensus]   Wander        (11) offered=510  top=0     by prio: p0=510
+[CandCensus]   Leisure       (12) offered=971  top=0     by prio: p0=971
+[CandCensus]   LongTermPlan  (13) offered=7    top=0     by prio: p1=7
+```
+
+State 5 is offered at priority 6 and **wins every single time it is offered** (`top=55`), and
+the handler runs — both arms, every line after the frame-400 infection (the trace point caps at
+6 lines each, so 12 is the cap, not the true count):
+
+```
+[Sick]  frame 400: gameWorld+0xA8 list=present scanned=12 ... chosen=000001e62acec748
+[Work]  self=000001e62c01c810 NavigateTo workplace=000001e62bf12198
+[Work]  self=000001e62c01f470 WalkTowards (walkable=1)
+```
+
+**All three states this lane examined (Eat, Drink, state 5) are now observed entering in-game.**
+
+### Lesson
+
+A field label in our own diagnostic output is not evidence. `housed(+0x68)` was a guess written
+into an `fprintf` in this file; every later reader — including this lane — treated it as the
+field's identity and diagnosed a housing bug that did not exist. The authoritative map for the
+same offset had been in `citizen_updatehealth.cpp` since July. **Grep the offset across the whole
+tree before trusting a nearby label.**

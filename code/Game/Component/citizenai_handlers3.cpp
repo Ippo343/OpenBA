@@ -389,6 +389,16 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
 
 // ============================================================
 // 0x14010d790 — CitizenAI_State_Work  (state id 5)
+//
+// VERIFIED IN-GAME 2026-09-06.  Despite the name, this is the SICK-CITIZEN state:
+// BuildCandidateStateList only ever appends id 5 when CitizenComponent+0x68 (the
+// Disease*, set by Infect 0x140116b90) is non-null, so a healthy town never offers it.
+// A/B in the BANISHED_STRESS town, 200 citizens, 1600 frames:
+//   control            -> id 5 absent from the census, 0 [Work] entries
+//   BANISHED_FORCE_SICK=25 -> "Work (5) offered=55 top=55 by prio: p6=55", handler entered
+// +0x228 (care building, filled by FindCareBuilding 0x140111590) picks the arm:
+// set -> walk to that building's entity (+0x228 -> +0x10); clear -> NavigateTo +0x238.
+// This closes the lane-C open that read +0x68 as a "housing link".
 // ============================================================
 extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     EnsureInit();

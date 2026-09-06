@@ -169,7 +169,7 @@ static const char* CandStateName(int id) {
     switch (id) {
         case 0:  return "EatOther";      case 1:  return "DrinkOther";
         case 2:  return "FindHousing";   case 3:  return "Education";
-        case 4:  return "GrowUp";        case 5:  return "Work";
+        case 4:  return "GrowUp";        case 5:  return "Work";  // sick-only; see header
         case 6:  return "Gather";        case 7:  return "Gather2";
         case 8:  return "SeekHappiness"; case 9:  return "Idle";
         case 10: return "FindWork";      case 0xb: return "Wander";
@@ -378,9 +378,26 @@ int CitizenComp_GetHappiness(int64_t self) {
 // "self" arg is the CitizenAIComponent; self+0x38 = sibling-CitizenComponent IBP
 // (Ghidra "self" local = param_1+0x38). *self38 dereferences to the
 // CitizenComponent; its fields: +0x44 hunger, +0x48 thirst, +0x50/+0x54 work,
-// +0x68 housing-link, +0x80 leisure-accum, +0x208 elder-flag, +0x228, +0x238
-// workplace, +0x250 reservation, +0x288 CitizenDescription, +0x1e4 edu, +0xac,
+// +0x68 Disease* (NOT a housing link -- see below), +0x80 leisure-accum,
+// +0x208 elder-flag, +0x228 care-building link, +0x238
+// workplace, +0x248 house, +0x250 reservation, +0x288 CitizenDescription, +0x1e4 edu, +0xac,
 // +0x3c age, +0xb0 reservation-kind.  param_1+0xc0 = leisure Time accumulator.
+//
+// +0x68 IS THE DISEASE POINTER, NOT A HOUSING LINK (settled 2026-09-06).
+// CitizenComponent::Infect (0x140116b90, ported in citizen_updatehealth.cpp) stores the
+// DiseaseDescription* at +0x68 and then calls FindCareBuilding (0x140111590), which fills
+// +0x228; RecoverOrDie clears +0x68 again and AnyCitizenSick (0x1400893c0) scans it.
+// So every `+0x68` test in this function is "is this citizen SICK?":
+//   * early single-candidate branch  = sick AND a care building is linked -> nothing but
+//                                      state 5 (drops every other need)
+//   * main branch `+0x68 == 0`       = healthy -> FindHousing / Education / GrowUp
+//     else                            = sick    -> state 5 at prio 6
+//   * elder arm `+0x68 == 0`         = FindWork only while healthy
+// State 5's handler (0x14010d790) walks to the care building's entity (+0x228 -> +0x10)
+// when one is linked, and otherwise navigates to +0x238. We carry it under the exe-derived
+// name `CitizenAI_State_Work`, but its ONLY entry condition is illness; read it as the
+// sick-citizen state. No string in Application-x64-profile.exe names it, so the symbol
+// stays as-is rather than being renamed to a guess.
 // ============================================================
 
 // AppendCandidate: faithful reproduction of the per-state grow+append block.
@@ -447,14 +464,14 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     void* self = base + 0x38;                             // sibling CitizenComponent IBP
 
     // Census (open C): which exit the function took. Purely observational.
-    //   1 = early "already at work" single-candidate return
+    //   1 = early sick-with-care-building single-candidate return
     //   2 = age/elder block, not-elder arm  (appends 6/7 at prio 4)
     //   3 = age/elder block, elder arm      (never appends 6/7)
     //   4 = adult-with-home arm             (appends 6/7 at prio 4 or 6) + idle tail
     //   5 = param3 short-circuit
     int censBranch = 0;
 
-    // --- Special early branch: working at a workplace (link +0x68 != 0 and +0x228 != 0) ---
+    // --- Special early branch: SICK (+0x68 = Disease*) with a care building (+0x228) ---
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     int64_t cz = *reinterpret_cast<int64_t*>(self);
     if (cz != 0 && *reinterpret_cast<int64_t*>(cz + 0x68) != 0) {
@@ -505,7 +522,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         if (*pf <= fv && fv != *pf) AppendCandidate(outList, 1, 6);
     }
 
-    // --- main branch: NOT housed (+0x68 == 0) vs housed (+0x68 != 0) ---
+    // --- main branch: HEALTHY (+0x68 == 0) vs SICK (+0x68 != 0) ---
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
@@ -532,7 +549,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             }
         }
     } else {
-        // Housed: Work (id 5, prio 6)
+        // Sick: state 5 (id 5, prio 6) -- go to the care building
         AppendCandidate(outList, 5, 6);
     }
 
@@ -606,7 +623,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             if ((char)hsr2 == '\0') AppendCandidate(outList, 7, 4);
             // (if hsr2 != 0, original goes to the shuffle/sort tail = LAB_14010f144)
         } else {
-            // elder: FindWork (id 10, prio 2) if not housed/working (+0x68 == 0)
+            // elder: FindWork (id 10, prio 2) only while healthy (+0x68 == 0)
             censBranch = 3;
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self) + 0x68) == 0) {
@@ -798,7 +815,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             if (c) {
                 int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
                 fprintf(stderr,
-                    "[CandCensus] citizen=%p branch=%d home(+0x238)=%llx housed(+0x68)=%llx "
+                    "[CandCensus] citizen=%p branch=%d workplace(+0x238)=%llx sick(+0x68)=%llx "
                     "elder(+0x208)=%llx age=%.2f/%.2f happy(+0xac)=%d "
                     "hunger=%.2f/%.2f warmth=%.2f/%.2f | list:",
                     reinterpret_cast<void*>(c), censBranch,
@@ -907,7 +924,7 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
                              "hThr(desc+0xc8)=%.2f hThrUrg(desc+0xcc)=%.2f hsr2Thr(desc+0xd4)=%.2f age(+0x3c)=%.2f adultThr(desc+0x44)=%.2f\n",
                              bt_cit, hunger, thirst, hThrC8, hThrCC, hsr2Thr, age, thr);
                 std::fprintf(stderr, "[BuilderTrace] FIELDS2 citizen=%p "
-                             "elder(+0x208)=%p wp(+0x238)=%p house(+0x248)=%p houseGate(+0x68)=%p workTarget(+0x228)=%p prof(+0x1f0)=0x%llx\n",
+                             "elder(+0x208)=%p wp(+0x238)=%p house(+0x248)=%p disease(+0x68)=%p care(+0x228)=%p prof(+0x1f0)=0x%llx\n",
                              bt_cit,
                              reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x208)),
                              reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x238)),
