@@ -692,91 +692,83 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 }
 
 
-// ============================================================
-// HarvestArea::Slot6 -- Insert/remove work entry
-// ============================================================
-// Called when citizen completes/cancels work. Removes entry from BST,
-// marks cell validity, and handles paired cell removal.
-// param4 is packed: low 16 bits = primary cell index, high 16 bits = paired cell index.
-int HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
-
-    uint32_t primaryIdx = param4 & 0xFFFF;
-    uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
-
-    // Search BST for primary cell index and remove if found
-    int* node = (int*)selfQ[9]; // BST root at +0x48
+// Shared by slots 6 and 7: find `key` in the cell BST at +0x48 and remove it if present.
+static void HarvestArea_RemoveCellNode(uintptr_t selfAddr, int key) {
+    int* node = *(int**)(selfAddr + 0x48);
     while (node != nullptr) {
-        if ((int)primaryIdx < *node) {
-            node = *(int**)(node + 6);
-        } else if ((int)primaryIdx > *node) {
-            node = *(int**)(node + 8);
+        if (key < *node) {
+            node = *(int**)(node + 6);          // left  +0x18
+        } else if (key > *node) {
+            node = *(int**)(node + 8);          // right +0x20
         } else {
-            // Found -- remove from BST
             s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
-            break;
+            return;
         }
     }
+}
 
-    // Mark primary cell as valid (available for reassignment)
-    char* validityArray = (char*)selfQ[0xb];
-    validityArray[primaryIdx] = 1;
 
-    // Handle paired cell (if within bounds)
-    if ((int)pairedIdx < *(int*)(selfAddr + 0x60)) {
-        validityArray[pairedIdx] = 1;
+// ============================================================
+// HarvestArea::Slot6 -- task COMPLETED (retail 0x1400ecc20, vtable +0x30)
+// ============================================================
+// Removes the primary cell's node, then (if the paired index is in range) the paired
+// cell's node. param4 is packed: low 16 = primary cell, high 16 = paired cell.
+//
+// ⚠ Retail touches the validity array (+0x58) NOT AT ALL here: a harvested cell is
+// gone and must not be re-offered. Only the CANCEL slot below restores validity.
+// This port had the two slots' bodies mixed: slot 6 carried slot 7's validity writes
+// (harvested cells re-offered, Slot4 then found no entity and re-cleared them -- a
+// wasted scan per completion) and slot 7 LACKED the primary-node removal (see below).
+// Same Slot6/Slot7 mix-up HarvestOrchard and PlantArea each paid for once already.
+int HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+    uintptr_t selfAddr = (uintptr_t)self;
+    int primaryIdx = (int)(param4 & 0xFFFF);
+    int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
-        // Remove paired cell from BST too
-        int* node2 = (int*)selfQ[9];
-        while (node2 != nullptr) {
-            if ((int)pairedIdx < *node2) {
-                node2 = *(int**)(node2 + 6);
-            } else if ((int)pairedIdx > *node2) {
-                node2 = *(int**)(node2 + 8);
-            } else {
-                s_fn_BST_Remove((void*)(selfAddr + 0x48), node2);
-                break;
-            }
-        }
+    HarvestArea_RemoveCellNode(selfAddr, primaryIdx);
+    if (pairedIdx < *(int*)(selfAddr + 0x60)) {
+        HarvestArea_RemoveCellNode(selfAddr, pairedIdx);
     }
     return 0;
 }
 
 
 // ============================================================
-// HarvestArea::Slot7 -- Tree node lookup with validation
+// HarvestArea::Slot7 -- task CANCELLED (retail 0x1400ecb60, vtable +0x38)
 // ============================================================
-// Called to validate and clean up work entries. Sets validity flag
-// and removes stale paired entry.
+// Removes the primary cell's node, marks the primary cell valid again, and (if the
+// paired index is in range) marks the paired cell valid and removes its node too.
 // param4 is packed: low 16 = primary cell, high 16 = paired cell.
+//
+// ⚠ THE PRIMARY-NODE REMOVAL IS LOAD-BEARING. Retail 0x1400ecb60 walks the tree for
+// the primary key and calls ca60 on the hit BEFORE the validity writes. This port only
+// removed the PAIRED node, so every cancelled harvest task left its primary
+// {cell, citizen} node in the tree with the count at +0x50 still counting it:
+//   * Slot9 (Validate) later handed that citizen pointer to Object::IsA. Once the
+//     citizen had died and its block been recycled, IsA CALLed through recycled bytes
+//     (the "READ of vtable+0x10" crash with RAX = 0000079700000552 -- a 40-byte record
+//     array that reused the freed entity block; CheckPtr is a bare RET in the shipped
+//     Runtime, so nothing nulls a dangling entry).
+//   * Slot8 (CancelAll, teardown) picks the leftmost node, cancels that citizen's
+//     action list and expects the cancel to reach this slot and drop the count. With
+//     the node never removed the count never drops and it re-picks the same node
+//     forever: the 100%-CPU quit hang after the [Residence] ERASE burst.
+// Both symptoms are this one missing removal (2026-09-05).
 int HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
+    int primaryIdx = (int)(param4 & 0xFFFF);
+    int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
-    uint32_t primaryIdx = param4 & 0xFFFF;
-    uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
+    HarvestArea_RemoveCellNode(selfAddr, primaryIdx);
 
-    // Mark primary cell validity
+    // Cancelled: the cell goes back in the pool.
     char* validityArray = (char*)selfQ[0xb];
     validityArray[primaryIdx] = 1;
 
-    // Handle paired cell
-    if ((int)pairedIdx < *(int*)(selfAddr + 0x60)) {
+    if (pairedIdx < *(int*)(selfAddr + 0x60)) {
         validityArray[pairedIdx] = 1;
-
-        // Remove paired cell from BST
-        int* node = (int*)selfQ[9];
-        while (node != nullptr) {
-            if ((int)pairedIdx < *node) {
-                node = *(int**)(node + 6);
-            } else if ((int)pairedIdx > *node) {
-                node = *(int**)(node + 8);
-            } else {
-                s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
-                return 0;
-            }
-        }
+        HarvestArea_RemoveCellNode(selfAddr, pairedIdx);
     }
     return 0;
 }

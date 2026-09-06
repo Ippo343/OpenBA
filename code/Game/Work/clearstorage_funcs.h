@@ -21,6 +21,13 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time);
 // Calls BSTFindRemove(self+0x58, param2), then returns 0.
 int ClearStorage_Slot6_Impl(ClearStorage* self, void* param2);
 
+// Slot7/OnCancel (vtable +0x38, 0x1400e6c20): same BST find-and-remove as slot 6
+// (retail is the thunk `ADD RCX,0x58; JMP CitizenAI_impl_5520`).
+int ClearStorage_Slot7_Impl(ClearStorage* self, void* param2);
+
+// Slot11/HasActiveTasks (vtable +0x58, 0x14002a0f0): `*(int*)(self+0x60) > 0`.
+int ClearStorage_Slot11_Impl(ClearStorage* self);
+
 // Slot8/CancelAll (vtable +0x40, 0x1400e72a0): Iterates BST at +0x58,
 // finds each citizen entity and cancels pending work via TaskCancel.
 void ClearStorage_CancelAll_Impl(ClearStorage* self);

@@ -1228,6 +1228,12 @@ static uint32_t GatherRawMaterials_GetTypeId(void*) {
     return c;
 }
 
+// Slot11 (+0x58) — retail 0x14002a400 is `return 0 < *(int*)(self + 0x70)` (this class
+// keeps its tree count at +0x70). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
+static int GatherRawMaterials_Slot11_HasActiveTasks(void* self) {
+    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x70) > 0 ? 1 : 0;
+}
+
 static void* g_GatherRawMaterials_Vtable[13] = {
     (void*)&GatherRawMaterials_ScalarDtor_Impl, // +0x00 ScalarDtor
     (void*)&Work_Slot1,                         // +0x08 slot1 (null)
@@ -1240,7 +1246,7 @@ static void* g_GatherRawMaterials_Vtable[13] = {
     (void*)&GatherRawMaterials_Cleanup_Impl,    // +0x40 Cleanup
     (void*)&GatherRawMaterials_Validate_Impl,   // +0x48 Validate
     (void*)&GatherRawMaterials_GetTarget_Impl,  // +0x50 GetTarget
-    (void*)&Work_SlotRet0,                           // +0x58 GetPriority (NO _GetPriority_Impl)
+    (void*)&GatherRawMaterials_Slot11_HasActiveTasks, // +0x58 HasActiveTasks (0x14002a400: +0x70 > 0)
     (void*)&Work_Slot12,                        // +0x60 slot12 (void nop)
 };
 

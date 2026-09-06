@@ -1401,6 +1401,13 @@ static uint32_t ConsumeProduce_GetTypeId(void*) {
     return c;
 }
 
+// Slot11 (+0x58) — retail 0x14002a0f0 is `return 0 < *(int*)(self + 0x60)` (the shared
+// body ClearStorage also uses: tree count at +0x60, not the +0x50 the generic
+// Work_Slot11_HasActiveTasks reads). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
+static int ConsumeProduce_Slot11_HasActiveTasks(void* self) {
+    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x60) > 0 ? 1 : 0;
+}
+
 static void* g_ConsumeProduce_Vtable[13] = {
     (void*)&ConsumeProduce_ScalarDtor_Impl,  // +0x00 ScalarDtor
     (void*)&Work_Slot1,                      // +0x08 slot1 (null)
@@ -1413,7 +1420,7 @@ static void* g_ConsumeProduce_Vtable[13] = {
     (void*)&ConsumeProduce_Cleanup_Impl,     // +0x40 Cleanup
     (void*)&ConsumeProduce_Validate_Impl,    // +0x48 Validate
     (void*)&ConsumeProduce_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&Work_SlotRet0,                        // +0x58 GetPriority (NOT IMPLEMENTED)
+    (void*)&ConsumeProduce_Slot11_HasActiveTasks, // +0x58 HasActiveTasks (0x14002a0f0: +0x60 > 0)
     (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
 };
 

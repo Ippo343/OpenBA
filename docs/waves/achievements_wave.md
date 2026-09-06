@@ -478,3 +478,54 @@ the structure whose address is being stored. Both symptoms should close together
 reported "zero hits" because the probe was not in the running binary. Either drop
 `--no-build` or `cp standalone/build-perf/reimpl-x64.exe "$GAME_DIR/"` yourself, and check
 the deployed timestamp before believing a negative result.
+
+### 9.8 CLOSED — the writer was never a writer: `HarvestArea::Slot7` skipped the primary-node removal (2026-09-05)
+
+§9.6 asked "what writes a non-citizen pointer into a node's `+0x08`". Nothing does. The
+pointer was a real citizen when stored; the **node outlived the citizen**, and the reason
+is one missing BST erase in the port.
+
+Retail `HarvestArea` vtable `0x1401614a0`, read byte-wise:
+
+| slot | retail | Ghidra name (wrong) | what it does |
+|---|---|---|---|
+| 6 `+0x30` OnComplete | `0x1400ecc20` | `HarvestArea_Draw` | erase primary node; if paired in range, erase paired node. **No validity writes.** |
+| 7 `+0x38` OnCancel | `0x1400ecb60` | `HarvestArea_OnCreate` | **erase primary node**, `validity[primary]=1`; if paired in range, `validity[paired]=1` and erase paired node |
+
+Our port had the two bodies mixed: slot 6 carried slot 7's validity writes, and slot 7
+had **only the paired erase**. So every cancelled harvest task (reassignment, hunger,
+sleep, job change, death — anything that aborts the citizen's action list) left its
+primary `{cell, citizen}` node in the tree, still counted at `+0x50`. From there:
+
+* **Symptom A.** `CancelAll` (slot 8) cancels the leftmost node's citizen and expects
+  that cancel to reach slot 7 and drop the count. The action list was already emptied
+  by an earlier cancel that never erased the node; nothing drops the count; same node,
+  forever. That is why the stalled citizen's 16 action slots were all NULL.
+* **Symptom B.** Slot 9 hands the stale citizen pointer to `Object::IsA`, which CALLs
+  through `[obj]+0x10`. Once the citizen died and its block was recycled, the "vtable"
+  was whatever now lived there.
+
+**Correction to §9.3.** "A regular 40-byte record array, not freed garbage" was read as
+evidence *against* a lifetime bug. It is exactly what a use-after-free looks like here:
+`InternalBasePtr::CheckPtr` is a bare `RET` in the shipped Runtime, so a dangling entry
+is never nulled, and the freed entity block was simply reused by a strided array. "Live,
+stable and regular" describes the *new* owner of the memory, not the entry's provenance.
+The mistake was inferring the storing side from the shape of what was read back.
+
+The same audit, done for every Work class with a cell/citizen tree against its real
+vtable: HarvestOrchard, PlantArea, PlantOrchard, FireWork, ClearArea all match retail
+(HarvestOrchard and PlantArea had each paid for this identical Slot6/Slot7 mix-up once
+before). **ClearStorage** had slot 7 pinned to `Work_SlotRet0` ("NOT IMPLEMENTED") —
+retail `0x1400e6c20` is the same remove-by-citizen as its slot 6 — so it carried the same
+stale-entry hazard into its own `CancelAll` spin; ported. Three slot-11 `HasActiveTasks`
+stubs went with it (ClearStorage/ConsumeProduce read `+0x60`, GatherRawMaterials `+0x70`,
+retail `0x14002a0f0` / `0x14002a400` — one-line bodies pinned to "nobody is working
+this").
+
+Fix: `code/Game/Work/harvestarea.cpp` (slots 6 and 7 rewritten to retail),
+`code/Game/Work/clearstorage.cpp` (slot 7 + slot 11), `consumeproduce.cpp` and
+`gatherrawmaterials.cpp` (slot 11).
+
+Evidence: the §9.2 recipe (`--speed 50 --frames 3000`, 800 citizens, 3 sets, seed
+31337, medium) with `BANISHED_WORKAREA_STALL_TRACE=1 BANISHED_WORKVALIDATE_TRACE=1` armed
+so any surviving stale entry logs instead of hanging: **5 of 5 runs completed 3000 frames, quit and tore down cleanly (exit 0), with 0 `[WorkAreaStall]` lines, 0 `[WorkValidate] BAD VTABLE` lines and an empty crash log (`perf/results/20260905_20{3426,3559,3708,3816,3924}_bstfix*`). The previous session hit the crash in roughly 1 run in 7 and the hang on the stall recipe; the sim number was unchanged (0.17 ms/iteration at 50x).**.

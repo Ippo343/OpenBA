@@ -591,6 +591,35 @@ int ClearStorage_Slot6_Impl(ClearStorage* self, void* param2) {
 }
 
 // ============================================================
+// ClearStorage::Slot7 (vtable +0x38, 0x1400e6c20) -- task CANCELLED
+// ============================================================
+// Retail is the 6-byte thunk `ADD RCX,0x58; JMP CitizenAI_impl_5520`: the same
+// remove-by-citizen as slot 6, without the return-0 wrapper.
+//
+// ⚠ This slot was pinned to Work_SlotRet0 ("NOT IMPLEMENTED"), so a cancelled
+// clear-storage task left its citizen node in the +0x58 tree forever. That is the
+// exact stale-entry family HarvestArea::Slot7 had (harvestarea.cpp): CancelAll below
+// spins on the leftmost node until the count drops, and Validate hands the stale
+// citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
+int ClearStorage_Slot7_Impl(ClearStorage* self, void* param2) {
+    ClearStorage_InitFuncs();
+
+    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x58), param2);
+    return 0;
+}
+
+// ============================================================
+// ClearStorage::Slot11 (vtable +0x58, 0x14002a0f0) -- HasActiveTasks
+// ============================================================
+// Retail: `return 0 < *(int*)(self + 0x60)`. ClearStorage keeps its citizen tree at
+// +0x58 with the count at +0x60 (one qword later than the +0x48/+0x50 layout the
+// shared Work_Slot11_HasActiveTasks reads), so it needs its own body. Was pinned to
+// Work_SlotRet0, i.e. permanently "nobody is working this".
+int ClearStorage_Slot11_Impl(ClearStorage* self) {
+    return *(int*)((uintptr_t)self + 0x60) > 0 ? 1 : 0;
+}
+
+// ============================================================
 // ClearStorage::CancelAll (Slot8, vtable +0x40, 0x1400e72a0)
 // ============================================================
 // Iterates the BST at self+0x58 by finding the leftmost node
@@ -652,11 +681,11 @@ void* ClearStorage_GetTarget_Impl(ClearStorage* self, void* retbuf) {
 //   - No ClearStorage_Ctor / _Ctor_Impl exists -> object CANNOT be constructed.
 //     The factory below registers the vtable but returns nullptr (no ctor).
 //   - slot3  Serialize     : NOT IMPLEMENTED (no ClearStorage_Serialize)   -> nullptr
-//   - slot7  OnCancel       : NOT IMPLEMENTED (no ClearStorage_OnCancel)    -> nullptr
-//   - slot11 GetPriority    : NOT IMPLEMENTED (no ClearStorage_GetPriority) -> nullptr
-//   Slot mapping used (per this file's own doc comments):
-//     slot6 OnComplete -> ClearStorage_Slot6_Impl  (doc: "Slot6 +0x30")
-//     slot8 Cleanup    -> ClearStorage_CancelAll_Impl (doc: "Slot8/CancelAll +0x40")
+//   Slot mapping ground-truthed from the real exe vtable @ 0x1401611a0 (2026-09-05):
+//     slot6  OnComplete     -> ClearStorage_Slot6_Impl   (0x1400e6c30)
+//     slot7  OnCancel       -> ClearStorage_Slot7_Impl   (0x1400e6c20, same remove)
+//     slot8  Cleanup        -> ClearStorage_CancelAll_Impl (0x1400e72a0)
+//     slot11 HasActiveTasks -> ClearStorage_Slot11_Impl  (0x14002a0f0, count at +0x60)
 // ============================================================
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
@@ -676,11 +705,11 @@ static void* g_ClearStorage_Vtable[13] = {
     (void*)&ClearStorage_Execute,          // +0x20 Execute
     (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
     (void*)&ClearStorage_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&Work_SlotRet0,                      // +0x38 OnCancel   (NOT IMPLEMENTED)
+    (void*)&ClearStorage_Slot7_Impl,       // +0x38 OnCancel   (0x1400e6c20)
     (void*)&ClearStorage_CancelAll_Impl,   // +0x40 Cleanup
     (void*)&ClearStorage_Validate,         // +0x48 Validate
     (void*)&ClearStorage_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&Work_SlotRet0,                      // +0x58 GetPriority (NOT IMPLEMENTED)
+    (void*)&ClearStorage_Slot11_Impl,      // +0x58 HasActiveTasks (0x14002a0f0: +0x60 > 0)
     (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
 };
 
