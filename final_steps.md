@@ -1,5 +1,10 @@
 # Final Steps — The Push to a Playable Standalone `Application-x64.exe`
 
+> **HISTORICAL as of 2026-09-06.** The exe port is baseline-complete: the state snapshot in
+> §1/§2 below is from 2026-06-19 and is no longer true — the world renders, simulates, the HUD
+> works, and components are live. Current status and the next phase (Runtime-x64.dll) are
+> tracked in [`docs/runtime_port/PLAN.md`](docs/runtime_port/PLAN.md). Kept below as history only.
+
 > Living checklist. Check items off session-by-session. Recompute the gap and re-read the
 > blocker graph each session — registrations and bring-ups shift what's unblocked.
 > Last ground-truthed: 2026-06-19 on branch `wave/component-gap` (cumulative tip; `main` is an ancestor).
@@ -186,7 +191,7 @@ Depends on Phase 2 (A + B). Module priority #1 per CLAUDE.md.
 - [ ] **Registration gap = 0** (includes defers, should fall out of Phases 2–6; recompute and mop up stragglers).
 - [ ] **Consolidate branches:** merge the stacked `wave/*` chain forward to `main`; prune the ~20 `worktree-agent-*` and dead `wave/*` branches.
 - [ ] Full playthrough smoke test by user: New Game → play several minutes → save → load → quit cleanly.
-- [ ] Update CLAUDE.md (Goal #2 done; Goal #3 — Runtime DLL — becomes next phase).
+- [x] Update CLAUDE.md (Goal #2 done; Goal #3 — Runtime DLL — becomes next phase). (2026-09-06)
 
 ---
 

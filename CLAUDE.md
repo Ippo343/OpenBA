@@ -30,7 +30,7 @@ The game is a multi-binary architecture. The exe contains game logic; the engine
 - **Base Address**: `0x140000000`
 - **Entry Point**: `0x14003b1c0`
 - **Code Section**: `.text` `0x140001000` - `0x1401501ff` (~1.4 MB)
-- **Size**: 1.9 MB | **Functions**: 10,476 | **Symbols**: 50,420
+- **Size**: 1.9 MB | **Functions**: 11,473 (Ghidra today; 10,476 was the initial import count) | **Symbols**: 50,420
 - **Exports**: `NvOptimusEnablement`, `AmdPowerXpressRequestHighPerformance` (GPU preference flags)
 - **PE Timestamp**: `2017-09-10 16:34:27`
 
@@ -89,10 +89,18 @@ Loop types: `LoaderLoop`, `DialogLoaderLoopT`, `DialogLoopT` (menus/loading), pl
 
 ### Launcher Dialog
 `Engine::Engine::PlatformConfigure` (Runtime 0x1800a1670) opens a Win32 launcher
-dialog (Options/Video/Play). The standalone exe skips it: `SkipPlatformConfigure()`
-in `standalone/main.cpp` patches the `DialogBoxParamW` call site in the loaded
-Runtime DLL to `MOV EAX,1; NOP` — the popup never shows, but the rest of
-PlatformConfigure (importantly `ValidateConfiguration`) still runs.
+dialog (Options/Video/Play) whenever the registry's `VideoSettings` bit says the
+previous run never finished `Engine::Startup` — which in development means every
+time the process is killed. The standalone exe no longer patches this call site
+(the old `SkipPlatformConfigure()` is gone). Instead `HarnessGuardUnattendedBoot()`
+(`standalone/main.cpp:184`, called from `Init` at `standalone/main.cpp:1559`) clears
+that one `VideoSettings` registry bit through `HKCU\Software\Shining Rock Software
+LLC\Banished` — but only when a harness env var (`BANISHED_AUTOSTART`,
+`BANISHED_AUTOQUIT`, `BANISHED_AUTOLOAD`, `BANISHED_AUTOTUTORIAL`,
+`BANISHED_AUTOMENU_BUTTON`, or `BANISHED_PAUSEMENU_BUTTON`) says this run is
+unattended. An attended run is left to retail's own rules and can still hit the
+dialog. The same function also repairs a degenerate persisted window size
+(see the comment above `HarnessGuardUnattendedBoot` in `standalone/main.cpp`).
 
 ### Threading Model
 - `System::Thread` with `Start()`, `WaitForFinish()`, `OnCompleted()` virtual
@@ -104,7 +112,7 @@ PlatformConfigure (importantly `ValidateConfiguration`) still runs.
 
 Full decompilation status tracking is in the **[decomp/](decomp/README.md)** directory, split per-binary:
 
-- **[decomp/application.md](decomp/application.md)** — Application-x64.exe (10,476 functions: ECS components, UI controllers, game logic)
+- **[decomp/application.md](decomp/application.md)** — Application-x64.exe (11,473 functions: ECS components, UI controllers, game logic)
 - **[decomp/runtime.md](decomp/runtime.md)** — Runtime-x64.dll (15,290 functions: 18 namespaces, 100+ classes)
 - **[decomp/videodx11.md](decomp/videodx11.md)** — VideoDX11-x64.dll (576 functions: DX11 renderer plugin)
 
@@ -232,7 +240,7 @@ identical framing on every run of the same seed.
 - `standalone/resolve.h` — ResolveAddr/ResolveExport/ResolveOrdinal declarations
 - `standalone/resolve_standalone.cpp` — standalone ResolveAddr + ResolveInit (loads DLLs via LoadLibrary)
 - `standalone/address_registry.cpp` — maps Ghidra exe addresses to our reimplemented code
-- `standalone/main.cpp` — WinMain entry point (launcher-dialog skip, VEH crash handler, log redirection)
+- `standalone/main.cpp` — WinMain entry point (unattended-boot registry guard, VEH crash handler, log redirection)
 - `standalone/autostart.cpp` — menu→New Game auto-driver (see Standalone Test Driver above)
 
 **Address registry workflow:** As each exe function gets reimplemented in `code/Game/`, register it
@@ -341,6 +349,8 @@ Debug/attach configurations live in `.vscode/launch.json`.
 
 ## Ghidra Setup
 - **Ghidra 12.0.3** at `C:\tools\ghidra_12.0.3_PUBLIC`
+- Project holds 7 programs, including `Runtime-x64-profile.dll` (ToolKit build, debug strings
+  + 5,182 exports) — the primary source for naming unexported Runtime internals
 - **GhidraMCP** (bethington/ghidra-mcp v3.0.0): 179 MCP tools
 - Bridge: `tools/ghidra_mcp/bridge_mcp_ghidra.py`
 - Python 3.10 venv: `tools/ghidra_mcp/.venv/`

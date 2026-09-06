@@ -1,9 +1,13 @@
 # Application-x64.exe (Game Logic)
 
+> Per-class status marks below predate standalone mode and were written for the removed
+> proxy-DLL/hooking build. The authoritative registration census for standalone mode is
+> [`docs/runtime_port/survey_exe_census.md`](../docs/runtime_port/survey_exe_census.md).
+
 ## Status Legend
-- `R` = Fully reimplemented in `engine/src/` (clean C++, no trampoline dependency)
-- `~` = Passthrough hooks active (calls trampoline to original code)
-- `P` = Partially reimplemented (some methods in engine/src/, others passthrough)
+- `R` = Fully reimplemented in `engine/src/` or `code/Game/` (clean C++, registered in the standalone exe)
+- `~` = Partially decompiled / not yet reimplemented for standalone
+- `P` = Partially reimplemented (some methods ported, others not)
 - `-` = Not hooked (too small, abstract, or no need)
 
 ## Engine Core

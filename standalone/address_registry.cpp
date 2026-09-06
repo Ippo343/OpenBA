@@ -1127,12 +1127,6 @@ static void RegisterDispatchSlots() {
         // and the callee would read six argument slots the caller never wrote.
         // Latent, not live: zero callers today.
         (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z"));
-    // NOTE: shadowed -- the live binding for this slot is the RtSerializer_*
-    // registration further down (see dispatch_slot_map.py --check, SHADOWED).
-    // Name corrected to match the PE import table so this dead line stops
-    // misreporting as a live defect.
-    RegisterDispatchSlot(0x140152400,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
     // System::Random RandTol / RandFloat — .rdata dispatch slots read by many Work/
     // Action reimpls (PastureWork Slot4, forester/herbalist, spawn/tombstone all
     // carry per-file fallbacks or MISSING traces for these). Previously UNREGISTERED:
@@ -1157,23 +1151,6 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z"));
     RegisterDispatchSlot(0x140152ad0,
         (uintptr_t)ResolveExport("??1Serializer@IO@@QEAA@XZ"));
-    RegisterDispatchSlot(0x140152ac8,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z"));
-    RegisterDispatchSlot(0x140152410,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
-    RegisterDispatchSlot(0x140152a58,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z"));
-    RegisterDispatchSlot(0x140152a60,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z"));
-    RegisterDispatchSlot(0x140152a48,
-        (uintptr_t)ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ"));
-    RegisterDispatchSlot(0x140152488,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z"));
-    RegisterDispatchSlot(0x1401523f8,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
-    // NOTE: shadowed -- see the 0x140152400 note above.
-    RegisterDispatchSlot(0x140152618,
-        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
     // Serialize(int count, bool* array, name) — the bool ARRAY overload, distinct
     // from the single-bool slot 0x140152a58 above (AEA_N vs HPEA_N). Seven retail
     // functions call it: ParticleComponent_Shutdown (0x140053270),
@@ -1185,14 +1162,6 @@ static void RegisterDispatchSlots() {
     // could not be saved at all.
     RegisterDispatchSlot(0x140151458,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z"));
-    // NameDatabase::Serialize (0x1400a45e0) dispatch slots — distinct .rdata
-    // slots that resolve to the same IO::Serializer overloads as above.
-    RegisterDispatchSlot(0x140152478,   // SerializeBytes(count, void*, name) — array1 field0
-        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
-    RegisterDispatchSlot(0x140152418,   // Serialize(uchar&) — array1 field1
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
-    RegisterDispatchSlot(0x140152a50,   // Serialize(uint&) — array1 field2
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
     // Wave 3 (Action) — Math::Vector dispatch slots used by the MoveTo facing helpers
     // (action_base_move.cpp SetFacingDirection 0x14010a060 / UpdateFacing 0x1400c8d20).
     RegisterDispatchSlot(0x1401512c0,   // Math::Vector3::Normalize(this) -> Vector3
@@ -1210,8 +1179,6 @@ static void RegisterDispatchSlots() {
     // is the exe's import string at the slot RVA 0x1401b72xx (see tool_base_screenrect.cpp).
     RegisterDispatchSlot(0x140151470,
         (uintptr_t)ResolveExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
-    RegisterDispatchSlot(0x140152490,   // Serialize(count, uchar*, name) — array3 bulk
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
     // Phase 3 Keystone D Brick 4b-exec — MoveTo / PlayAnimation ACTION-METHOD dispatch slots.
     // In the original exe these .rdata IAT slots are pre-filled by the loader; moveto.cpp /
@@ -1276,13 +1243,6 @@ static void RegisterDispatchSlots() {
         RegisterDispatchSlot(0x140152840, goalSerialize);
     }
 
-    // Bulk int array: Serialize(int count, int* data, name).
-    // Used in many places (TradeWork, MoveTo, AutoPickup, etc.) and required
-    // for Geometry::Serialize step 11 (+0x220 vertex-int array, count=901
-    // observed; without this the cursor was advancing wrong → step 13 read
-    // garbage count).
-    RegisterDispatchSlot(0x140151278,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
     // Bulk FLOAT array: Serialize(int count, float* data, name) — HPEAM form.
     // Required by ClimateGenerator::Serialize for its 48-float (+0x44) block.
     RegisterDispatchSlot(0x140151ea8,
