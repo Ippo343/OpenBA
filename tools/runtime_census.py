@@ -66,44 +66,62 @@ TOTAL_FUNCTIONS = {
 def namespace_of(mangled):
     """Outermost namespace of an MSVC mangled name: ?Method@Class@Namespace@@...
 
-    Components run inner-to-outer, so the LAST one before the '@@' is the
-    namespace. Two wrinkles, both of which silently produced '?' buckets until
-    they were handled:
+    The qualified name is a list of components, inner-to-outer, and the LAST
+    one is the namespace. Parsing it needs the actual MSVC grammar, not a
+    split on "@@", because of two rules that interact:
 
-      * BACK-REFERENCES. A single digit is an index into the table of name
-        fragments already seen in this name: `?IsPaused@Application@1@…` is
-        Application::Application::IsPaused.
-      * NO `@@` TERMINATOR. The scope list ends at a single `@`, and the usual
-        `@@` is that terminator plus an empty scope. Names like
-        `?IsPaused@Application@1@QEAA_NXZ` have no `@@` at all, so splitting on
-        it drags the signature into the component list.
+      * A NAME FRAGMENT is terminated by '@'.
+      * A BACK-REFERENCE is a single digit indexing the fragments already seen
+        in this name, and it is NOT terminated by '@'.
+      * The component list itself is terminated by an empty component, i.e. a
+        bare '@'.
 
-    Rather than write a demangler for a census, the fallback is to scan the
-    components from the outside in for the first one that names a namespace we
-    know. That is a heuristic — it would misfile a method literally named after
-    a namespace — but it is confined to names the strict parse already failed,
-    and the alternative is an unattributed bucket. Anything that still does not
-    resolve is reported as '?', never bucketed somewhere merely plausible.
+    So the familiar "@@" is fragment-terminator plus list-terminator, and a
+    name whose innermost component is a back-reference ends its scope with a
+    SINGLE '@'. `?GetDescription@Achievement@1@QEBA?AVString@System@@XZ` is
+    Achievement::Achievement::GetDescription returning a System::String — and
+    splitting it on "@@" hands back "System", filing three Achievement methods
+    under System. This walks the grammar instead.
     """
     if not mangled.startswith("?"):
         return "?"
-    body = mangled.lstrip("?").split("@@", 1)[0]
-    parts = [p for p in body.split("@") if p]
-    if not parts:
+    i, n = 1, len(mangled)
+    if i < n and mangled[i] == "?":
+        # Operator name: "?X" (??0 = ctor, ??1 = dtor, ??Y = operator+ ...) or
+        # the extended "?_X" form. It is not a name fragment, so it must not
+        # enter the back-reference table — skip it and start the scope list at
+        # the next component.
+        i += 1
+        if i < n and mangled[i] == "_":
+            i += 1
+        i += 1
+        fragments, resolved = [], [""]   # placeholder for the "method name"
+    else:
+        fragments, resolved = [], []
+    while i < n:
+        c = mangled[i]
+        if c == "@":            # empty component: end of the qualified name
+            break
+        if c.isdigit():         # back-reference, one character, no terminator
+            idx = int(c)
+            resolved.append(fragments[idx] if idx < len(fragments) else c)
+            i += 1
+            continue
+        j = mangled.find("@", i)
+        if j < 0:
+            return "?"          # unterminated fragment: not a name we can read
+        frag = mangled[i:j]
+        fragments.append(frag)
+        resolved.append(frag)
+        i = j + 1
+
+    # resolved[0] is the method name; the rest are scopes, outermost last.
+    scopes = resolved[1:]
+    if not scopes:
         return "?"
-
-    resolved, fragments = [], []
-    for p in parts:
-        if len(p) == 1 and p.isdigit():
-            idx = int(p)
-            resolved.append(fragments[idx] if idx < len(fragments) else p)
-        else:
-            fragments.append(p)
-            resolved.append(p)
-
-    if resolved[-1] in TOTAL_FUNCTIONS:
-        return resolved[-1]
-    for comp in reversed(resolved):
+    if scopes[-1] in TOTAL_FUNCTIONS:
+        return scopes[-1]
+    for comp in reversed(scopes):
         if comp in TOTAL_FUNCTIONS:
             return comp
     return "?"
