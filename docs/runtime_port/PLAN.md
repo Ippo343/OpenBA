@@ -370,7 +370,9 @@ the diff harness have each caught at least one real divergence.
 
 - [x] Wave 0 tooling merged; `tools/runtime_census.py` reports registered / called / total per namespace.
       Baseline 2026-09-06: **869 functions called, 0 ported** (UI 137, Graphics 78, Math 60,
-      Video 60, System 57, IO 39, Object 38, Achievement 37, plus 245 non-namespaced internals).
+      Video 60, System 57, IO 39, Object 38, Achievement 37, Input 21, Audio 20, Save 20,
+      Engine 19, Volume 12, Picking 8, Application 5, Utility 2, plus 245 non-namespaced
+      internals, 7 ordinals and 4 names the census cannot attribute).
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
 - [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.

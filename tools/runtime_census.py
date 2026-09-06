@@ -64,20 +64,49 @@ TOTAL_FUNCTIONS = {
 
 
 def namespace_of(mangled):
-    """First namespace in an MSVC mangled name: ?Method@Class@Namespace@@...
+    """Outermost namespace of an MSVC mangled name: ?Method@Class@Namespace@@...
 
-    Names run inner-to-outer, so the LAST component before the '@@' is the
-    outermost namespace. Anything that does not parse is reported as '?' rather
-    than silently bucketed somewhere plausible.
+    Components run inner-to-outer, so the LAST one before the '@@' is the
+    namespace. Two wrinkles, both of which silently produced '?' buckets until
+    they were handled:
+
+      * BACK-REFERENCES. A single digit is an index into the table of name
+        fragments already seen in this name: `?IsPaused@Application@1@…` is
+        Application::Application::IsPaused.
+      * NO `@@` TERMINATOR. The scope list ends at a single `@`, and the usual
+        `@@` is that terminator plus an empty scope. Names like
+        `?IsPaused@Application@1@QEAA_NXZ` have no `@@` at all, so splitting on
+        it drags the signature into the component list.
+
+    Rather than write a demangler for a census, the fallback is to scan the
+    components from the outside in for the first one that names a namespace we
+    know. That is a heuristic — it would misfile a method literally named after
+    a namespace — but it is confined to names the strict parse already failed,
+    and the alternative is an unattributed bucket. Anything that still does not
+    resolve is reported as '?', never bucketed somewhere merely plausible.
     """
     if not mangled.startswith("?"):
         return "?"
-    body = mangled[1:].split("@@", 1)[0]
+    body = mangled.lstrip("?").split("@@", 1)[0]
     parts = [p for p in body.split("@") if p]
-    if len(parts) < 2:
+    if not parts:
         return "?"
-    outer = parts[-1]
-    return outer if outer in TOTAL_FUNCTIONS else "?"
+
+    resolved, fragments = [], []
+    for p in parts:
+        if len(p) == 1 and p.isdigit():
+            idx = int(p)
+            resolved.append(fragments[idx] if idx < len(fragments) else p)
+        else:
+            fragments.append(p)
+            resolved.append(p)
+
+    if resolved[-1] in TOTAL_FUNCTIONS:
+        return resolved[-1]
+    for comp in reversed(resolved):
+        if comp in TOTAL_FUNCTIONS:
+            return comp
+    return "?"
 
 
 def iter_sources():
@@ -152,7 +181,9 @@ def main():
         rows.append(("addr", "0x%x" % addr, "internal",
                      addr in d["ported_addrs"], addr in d["detoured"], sorted(files)))
     for ordn, files in d["called_ordinals"].items():
-        rows.append(("ordinal", str(ordn), "?",
+        # An ordinal carries no name, so no namespace can be inferred from it —
+        # its own bucket, not lumped in with names that failed to parse.
+        rows.append(("ordinal", str(ordn), "ordinal",
                      ordn in d["ported_ordinals"], False, sorted(files)))
 
     # Ports with no caller in our tree are worth surfacing: for the exe port a
@@ -215,7 +246,7 @@ def main():
         if args.namespace:
             sel = [r for r in sel if r[2] == args.namespace]
         print("Called but not ported (%d):" % len(sel))
-        for kind, key, ns, _p, _d, files in sorted(sel, key=lambda r: (r[2], r[1])):
+        for kind, key, ns, _ported, _detoured, files in sorted(sel, key=lambda r: (r[2], r[1])):
             print("  %-8s %-12s %s" % (kind, ns, key))
             print("           %s" % ", ".join(files[:4]) + (" …" if len(files) > 4 else ""))
 
