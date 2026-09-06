@@ -680,7 +680,7 @@ void* ClearStorage_GetTarget_Impl(ClearStorage* self, void* retbuf) {
 // *** FLAGS — this file is INCOMPLETE for a full factory ***
 //   - No ClearStorage_Ctor / _Ctor_Impl exists -> object CANNOT be constructed.
 //     The factory below registers the vtable but returns nullptr (no ctor).
-//   - slot3  Serialize     : NOT IMPLEMENTED (no ClearStorage_Serialize)   -> nullptr
+//   - slot3  Serialize     : PORTED (ClearStorage_Serialize_Impl, 0x1400e7350)
 //   Slot mapping ground-truthed from the real exe vtable @ 0x1401611a0 (2026-09-05):
 //     slot6  OnComplete     -> ClearStorage_Slot6_Impl   (0x1400e6c30)
 //     slot7  OnCancel       -> ClearStorage_Slot7_Impl   (0x1400e6c20, same remove)
@@ -697,11 +697,51 @@ static uint32_t ClearStorage_GetTypeId(void*) {
     return c;
 }
 
+// ============================================================
+// Slot3 Serialize (vtable +0x18, retail 0x1400e7350) — was Work_SerializeNop.
+// ============================================================
+// A no-op here consumes ZERO bytes on load while retail's body consumes the
+// ClearStorage task BST, so every save that contains a live ClearStorage work
+// object desynced the entity stream on the record AFTER it. Retail, read off the
+// 0x1400e7350 disassembly (22 instructions, no branches):
+//
+//   Work::Serialize(this, stream)                       CALL 0x1400f7400
+//   IO::Serializer ser(stream, 0)                       CALL [0x140152ad8]
+//   CitizenAI_impl_96b0(this + 0x58, &ser)              CALL 0x1400296b0   <- the BST
+//   ~IO::Serializer(ser)                                CALL [0x140152ad0]
+//
+// Identical in shape to FireWork::Serialize (0x1400e9a50, firework.cpp) minus the
+// trailing capacity int — FireWork's BST is at +0x50, ClearStorage's at +0x58
+// (LEA RCX,[RDI+0x58] at 0x1400e7381). Both sub-calls are already ported and
+// registered (reg_work_base.cpp / reg_work_bst.cpp), so this is a transcription.
+int ClearStorage_Serialize_Impl(ClearStorage* self, void* stream) {
+    if (!self || !stream) return 0;
+    const uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    typedef void (*CS_WorkSerialize_t)(void* self, void* stream);
+    typedef void (*CS_BSTSerialize_t)(void* bstRoot, void* serializer);
+    static CS_WorkSerialize_t s_workSer = nullptr;
+    static CS_BSTSerialize_t  s_bstSer  = nullptr;
+    if (!s_workSer)
+        s_workSer = reinterpret_cast<CS_WorkSerialize_t>(ResolveAddr(Module::Exe, 0x1400f7400));
+    if (!s_bstSer)
+        s_bstSer  = reinterpret_cast<CS_BSTSerialize_t>(ResolveAddr(Module::Exe, 0x1400296b0));
+
+    if (s_workSer) s_workSer(self, stream);
+    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return 0;
+
+    uint8_t ser[24];
+    g_fn_Serializer_Ctor(ser, stream, 0);
+    if (s_bstSer) s_bstSer(reinterpret_cast<void*>(s + 0x58), ser);
+    g_fn_Serializer_Dtor(ser);
+    return 0;
+}
+
 static void* g_ClearStorage_Vtable[13] = {
     (void*)&ClearStorage_ScalarDtor_Impl,  // +0x00 ScalarDtor
     (void*)&Work_Slot1,                    // +0x08 slot1 (null)
     (void*)&ClearStorage_GetTypeId,        // +0x10 GetTypeId
-    (void*)&Work_SerializeNop,                      // +0x18 Serialize  (NOT IMPLEMENTED)
+    (void*)&ClearStorage_Serialize_Impl,   // +0x18 Serialize  (0x1400e7350, PORTED)
     (void*)&ClearStorage_Execute,          // +0x20 Execute
     (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
     (void*)&ClearStorage_Slot6_Impl,       // +0x30 OnComplete

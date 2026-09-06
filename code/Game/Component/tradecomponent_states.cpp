@@ -440,6 +440,36 @@ extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
 }
 
 // ============================================================
+// state 0x13 event 0xa — 0x14005b240   PLAYER DISMISSED THE MERCHANT
+// ============================================================
+// Retail inlines the whole of StateMachine::Tick after the request, which is why
+// the body is ~90 decompiled lines for what is a two-step handler. Read against
+// our own StateMachine_TickReimpl (statemachinecomponent.cpp:455) the inlined
+// loop matches EXACTLY, with time = System::Time(0.0), param3 = 0 (it dispatches
+// node slot +0x30, not +0x38) and param4 = 1 (the `bVar2 = true` that is cleared
+// after one pass). So retail 0x14005b240 is, in full:
+//
+//   local = 2;                                   // the desired state
+//   if (sm[+9] < 0) StateMachine_Tick(sm, Time(0), 0, 0);   // drain a pending enter
+//   i = node->slot08(node, sm[+9], &local);
+//   if (i >= 0) { sm[+0xb] = i; sm[+0xa] = local; }         // == RequestStateTransition(sm, 2)
+//   StateMachine_Tick(sm, Time(0), 0, 1);                   // run it NOW, not next frame
+//   return 1;
+//
+// RequestStateTransition (controller_state_table.h:317) already replicates the
+// first four lines including the nested drain tick and the node re-read, so the
+// only thing this handler adds over its 0xb sibling is the immediate tick — which
+// is the point: dismissing a merchant has to take effect on the click, not on the
+// next simulation frame.
+extern "C" char TradeCtrl_Event0A_Dismissed(void* selfV, void* smV) {
+    (void)selfV;   // retail ignores param_1 entirely
+    if (!smV) return 1;
+    ::ControllerLive::RequestStateTransition(smV, 2);
+    ::StateMachine_TickReimpl(smV, /*time*/ 0, /*param3*/ 0, /*param4*/ 1);
+    return 1;
+}
+
+// ============================================================
 // state 2 trans38 (per frame) - 0x14005aa60   THE MERCHANT SPAWN
 // ============================================================
 // Counts the merchant timer at comp+0x78 down; when it reaches zero it CLONES the
@@ -617,7 +647,7 @@ extern "C" void TradeCtrl_PopulateTable() {
         reinterpret_cast<void*>(&TradeCtrl_State13_Update));// a6d0  (layer 3)
     TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 0xa, nullptr);                         // b240 — NOT PORTED
+    TableAddEvent(t, 0xa, reinterpret_cast<void*>(&TradeCtrl_Event0A_Dismissed));  // 0x14005b240
 
     std::fprintf(stderr, "[TradeCtrl] table built: %d states (2, 0x12, 0x13)\n", t.count);
     std::fflush(stderr);

@@ -327,7 +327,7 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
-                if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
+                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         // Brick 2c: alloc BuildStructure (0x70) + find the site WorkComponent (c8070)
@@ -468,7 +468,7 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
-                if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
+                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
@@ -567,7 +567,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
                 uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
                 if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
-                    if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
+                    if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
                 }
             }
         }
@@ -591,7 +591,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
-                if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
+                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);

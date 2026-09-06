@@ -13,6 +13,10 @@
 // Work::Serialize (0x1400f7400), ported in work_base_reimpl.cpp — slot 3 of the base vtable.
 extern void WorkBase_Serialize_f7400(void*, void*);
 
+// Stamps the Work BASE vtable into `self`, the first thing retail's Work scalar dtor
+// (0x14002ca60) does. Defined after g_Work_Vtable, below.
+static void Work_StampBaseVtable(void* self);
+
 // slot1 (+0x08) — exe returns DAT_xxxx (per-type, statically null).
 extern "C" void* Work_Slot1(void) { return nullptr; }
 
@@ -49,6 +53,16 @@ extern "C" void* Work_GenericCtor(void* mem, int size, void* vtable) {
 // Generic ScalarDtor for Work types lacking a dedicated *_ScalarDtor_Impl.
 extern "C" void* Work_GenericScalarDtor(void* self, unsigned int flags) {
     if (!self) return self;
+    // Retail 0x14002ca60, in full:
+    //     *(void**)this = &vtable_Work; Object::Internal::~Internal(this);
+    //     if (flags & 1) MemFree(this); return this;
+    // The vtable re-stamp was missing here: every Work leaf that has no ported
+    // *_ScalarDtor_Impl of its own reached ~Internal still carrying its LEAF vtable,
+    // where retail has already walked the chain down to Work's. The ported leaf dtors
+    // (ClearStorage/MarketWork/Pickup/...) all do the stamp, so this shim was the odd
+    // one out. Restored below; it is the same end state either way, and it is what
+    // makes a virtual dispatched from inside ~Internal land on the base.
+    Work_StampBaseVtable(self);
     if (fn_ObjectInternal_Dtor) fn_ObjectInternal_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
@@ -126,6 +140,10 @@ static void* g_Work_Vtable[13] = {
     (void*)&Work_PureCall,          // +0x58 _purecall
     (void*)&Work_Slot12,            // +0x60 void nop    (0x140006b10)
 };
+
+static void Work_StampBaseVtable(void* self) {
+    if (self) *reinterpret_cast<void**>(self) = g_Work_Vtable;
+}
 
 extern "C" void RegisterWorkBaseVtable() {
     RegisterExeAddr(WorkAddr::Vtable, (uintptr_t)g_Work_Vtable);   // 0x140161a80

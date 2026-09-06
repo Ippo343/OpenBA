@@ -48,11 +48,10 @@
 // EnsureTrackList() body into step 27 and delete it here; the rest of this file
 // is unchanged either way.**
 //
-// GATE: opt-in via BANISHED_LIVE_MUSIC=1. This lane may not build or run the
-// game, so the port is UNPROVEN — per CLAUDE.md new unproven features start
-// opt-in. With the gate off the function returns immediately, which is
-// byte-identical to today's "pointer is null, call skipped" behaviour, so
-// registering the address cannot regress the default build.
+// GATE: DEFAULT-ON as of the lane D close-out (2026-09-06); BANISHED_LIVE_MUSIC=0
+// is the kill-switch. It was opt-in because the authoring lane could not build or
+// run the game and the port was therefore UNPROVEN. It is proven now -- see the
+// measured PLAY line quoted above MusicEnabled().
 //
 // FAITHFULNESS NOTE (an unguarded deref left in on purpose)
 // ---------------------------------------------------------
@@ -93,6 +92,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -101,11 +101,19 @@ constexpr float kMoodAverageWeight = 0.5f;      // DAT_140172114
 constexpr float kSecondsPerYear    = 3600.0f;   // DAT_14017225c
 constexpr float kMonthsPerYear     = 12.0f;     // DAT_1401721b8
 
+// DEFAULT-ON since the lane D close-out run of 2026-09-06, which is the first run that
+// proved this function reaches the mixer:
+//     [MusicPlayer] MusicTracks.rsc -> 00000271db93d780 tracks=15
+//     [MusicPlayer] PLAY track=12/15 ext=271db912ee8 scene=00000271db7aa138 -> handle=1536
+// (autostart new game, BANISHED_LIVE_MUSIC=1, standalone_error.log:2565-2566). The lazy
+// EnsureTrackList Find resolved, all 15 tracks parsed, the month/mood filter selected one
+// and Audio::Scene::PlayEffect returned a live handle. Per CLAUDE.md a feature graduates
+// to default-on once it is proven, with the env var kept as a kill-switch (=0).
 bool MusicEnabled() {
     static int g = -1;
     if (g < 0) {
         const char* e = std::getenv("BANISHED_LIVE_MUSIC");
-        g = (e && e[0] && e[0] != '0') ? 1 : 0;
+        g = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
     }
     return g != 0;
 }
@@ -274,6 +282,13 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     uint64_t zeroTime = 0;
     uint32_t handle = fn_Audio_Scene_PlayEffect(audioScene, matches[static_cast<size_t>(pick)],
                                                 2, &zeroTime);
+    // PROOF-OF-PLAY (lane D): the one line that says the music channel was actually
+    // handed a track. Every track change logs; a run that never prints this has not
+    // played music, whatever the rest of the trace says.
+    fprintf(stderr, "[MusicPlayer] PLAY track=%d/%d ext=%llx scene=%p -> handle=%u\n",
+            pick, n, (unsigned long long)matches[static_cast<size_t>(pick)],
+            audioScene, handle);
+    fflush(stderr);
     *reinterpret_cast<uint32_t*>(mp + 0x00) = handle;
     *reinterpret_cast<uint64_t*>(mp + 0x10) = matches[static_cast<size_t>(pick)];
 }

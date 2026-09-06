@@ -76,8 +76,11 @@ void SubArrayDeepCopy(void* dstHdrPtr, const void* srcHdrPtr,
         fn_MemFreeStatic(dst->data);
     }
     dst->data = nullptr;
+    // Retail's `param_1[1] = 0` is ONE qword store over offsets 0x08..0x0f, so it
+    // clears count AND capacity together; only the count was cleared here, which
+    // left a stale capacity behind whenever the source array was empty.
     dst->count = 0;
-    // (Original sets count BEFORE capacity update below.)
+    dst->capacity = 0;
 
     int srcCount = src->count;
     dst->count = srcCount;
@@ -377,4 +380,23 @@ extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src) {
 
 extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count) {
     Struct60B_DtorRange_Body(unused, first, count);
+}
+
+// ============================================================
+// The two sub-array deep-copy leaves, exported by address (lane D close-out).
+// ============================================================
+// Retail 0x14001fdb0 (stride 0x14) and 0x14001fe60 (stride 0x02) are the two
+// helpers Struct60B's copy ctor calls; both were unregistered, so
+// fn_Struct60B_SubArrayCopyStride14/02 (engine_funcs.cpp:4947,4949) were null
+// forever and only the inline fallback above ever ran. Registering them makes
+// those two pointers truthful without changing which code executes — both
+// entry points are the same body. Retail returns dst in RAX.
+extern "C" void* Reimpl_Struct60B_SubArrayCopyStride14(void* dst, const void* src) {
+    SubArrayDeepCopy(dst, src, /*stride*/ 0x14, /*copy*/ 0x14, /*align*/ 2);
+    return dst;
+}
+
+extern "C" void* Reimpl_Struct60B_SubArrayCopyStride02(void* dst, const void* src) {
+    SubArrayDeepCopy(dst, src, /*stride*/ 0x02, /*copy*/ 0x02, /*align*/ 2);
+    return dst;
 }
