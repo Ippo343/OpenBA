@@ -85,7 +85,9 @@ container", not which class.
 Bridging those 66 to retail is where it dies: **0 hash matches, 6 weak fuzzy candidates
 (0.52–0.58), and the one that was decompiled to check was a confirmed FALSE match** (an STB
 pixel-expansion routine paired with `Audio::SoundBuffer::PlatformSerialize`). Net: at most 4 of
-2,467 retail `FUN_`s get even a weak unconfirmed candidate; zero confirmed. The reason is
+2,467 retail `FUN_`s get even a weak unconfirmed candidate; zero confirmed. Sharper still:
+**62 of the 66 have no retail candidate at all** — the map cannot even propose a partner for
+94% of them, so there is nothing to spot-check, let alone rename. The reason is
 structural and worth remembering — the functions worth string-anchoring are the substantive ones
 (codecs, parsers, thread bodies), which are exactly the ones whose codegen differs most between
 the two builds, so they are the *least* likely to match cleanly. The two levers are
