@@ -70,10 +70,10 @@ four `standalone/*_stubs.cpp` vtable files and `ui_dialog_stub_factories.cpp`.
 
 ### 1.4 Housekeeping before the runtime phase
 
-- Merge `wave/upgrade-path-complete` to `main` (382 commits; `main` last moved 2026-07-24).
-- Delete the 14 dead `IO::Serializer` registrations and the three dead `runtime/src/ui/*_debug.cpp` files.
-- Rewrite `decomp/README.md` legend for standalone mode; mark `final_steps.md` historical.
-- Fix CLAUDE.md: `SkipPlatformConfigure` no longer exists (see §2), exe function count, Ghidra program list.
+All done 2026-09-06 (`4eeed89`, `0f8257f`, `9d68a38`): `main` fast-forwarded; the 14 dead
+`IO::Serializer` registrations and `spritesheet_debug.{cpp,h}` removed (`--check` now 0/0);
+`decomp/README.md` rewritten for standalone mode; `final_steps.md` marked historical;
+CLAUDE.md launcher-dialog paragraph, function count and Ghidra program list corrected.
 
 ---
 
@@ -153,8 +153,10 @@ subclasses let the Runtime ctor stamp the base vtable and then copy or patch slo
 `code/Game/Dialog/saveloaddialog.cpp:854`, `code/Game/Component/frustumoutlinedescription.cpp:89`.
 A ported class must expose its vtable as a real symbol or reproduce the stamping order.
 
-**E. Dead code to remove now.** `runtime/src/ui/{sprite,spritesheet,element_sprite}_debug.cpp`
-have zero callers; `runtime/funcs/runtime_funcs.cpp` resolves nothing.
+**E. Dead code.** `runtime/src/ui/spritesheet_debug.cpp` had zero callers and was removed
+(2026-09-06). `sprite_debug.cpp` and `element_sprite_debug.cpp` are LIVE: `buildui.cpp`,
+`buildrequirementui.cpp` and `toolbardialog.cpp` reach them through bare `extern` declarations,
+which a filename grep misses. `runtime/funcs/runtime_funcs.cpp` still resolves nothing.
 
 ### 2.3 Runtime globals we reference (25 addresses; 17 have no export and need an accessor)
 
