@@ -38,11 +38,11 @@ The 14 unregistered `.text` addresses our own code requests:
 
 | # | Gap | Where |
 |---|---|---|
-| 1 | Crop-field state-machine handler bodies registered as `nullptr` | `code/Game/Component/cropfieldcomponent_states.cpp:41` |
+| 1 | ~~Crop-field state-machine handler bodies registered as `nullptr`~~ **CLOSED (lane A) — stale banner; all 11 handlers have bodies (`0x14011a920`…`0x140119d80`), the remaining nulls are the trans30 slot retail leaves empty. Field ran 9→10→11 end to end through the real tool path** | `docs/waves/exe_closeout/lane_a.md` |
 | 2 | ~~Citizen AI states Work / AdultTransition / ElderTransition unported~~ **CLOSED — the cited line was a stale comment; all three are in `citizenai_handlers3.cpp` and registered. Eat/Drink observed entering in-game; Work is never *offered* because `CitizenComponent+0x68` is 0 (housing link), not a handler gap** | `docs/waves/exe_closeout/lane_c.md` |
-| 3 | Fenced-area tool unported (pastures need scaffolding) | `code/Game/Game/starttown.cpp:2383` |
-| 4 | Drag-area / placement tools for crop field, hunter, gatherer | `code/Game/Game/starttown.cpp:3041` |
-| 5 | Pasture dialog unported (livestock type from env var) | `code/Game/Component/pasturecomponent_spawn.cpp:369` |
+| 3 | ~~Fenced-area tool unported~~ **CLOSED (lane B) — `FencedTool` fully ported (vtable `0x1401605d0`, CalcPath `0x1400dae00`) and in the tool-mode tree; pasture placed through it in-game** | `docs/waves/exe_closeout/lane_b.md` |
+| 4 | ~~Drag-area / placement tools for crop field, hunter, gatherer~~ **CLOSED (lane A) — both tools ported and default-on; the real gap was the harness (`FirePlacementTool` hard-coded WoodHouse), fixed** | `docs/waves/exe_closeout/lane_a.md` |
+| 5 | ~~Pasture dialog unported~~ **CLOSED (lane B) — `PastureUI` vtable `0x14015f610` incl. Slot11 SetLivestockType `0x1400b4c40`; livestock chosen through the real combo event in-game. Harness bug fixed: the pasture registry only holds FINISHED pastures** | `docs/waves/exe_closeout/lane_b.md` |
 | 6 | ~~Achievement award toast unported~~ **PORTED — `0x140096960` → `code/Game/Game/eventlog_achievement.cpp`, installed at Load step 30, toast verified in-game ("[award message elided]")** | `docs/waves/exe_closeout/lane_c.md` |
 | 7 | `ClearStorage` slot-3 Serialize is a no-op | `code/Game/Work/clearstorage.cpp:683` |
 | 8 | Trade controller event `0xa` registered null | `code/Game/Component/tradecomponent_states.cpp:620` |
@@ -55,8 +55,10 @@ The 14 unregistered `.text` addresses our own code requests:
 | 15 | `SubArrayDeepCopy` clears count but not capacity | `code/Game/Component/serialize_struct60b.cpp:76` |
 | 16 | `AmbientEmitterComponent` find, needs a counting run | `docs/waves/lanes/integrator_queue.md` |
 
-Items 1–5 are the ones a player would notice (farming, pastures, and the three tool types).
-Everything else is a corner. The `Stub_` marker count (813) is harness by design, mostly the
+Closeout 2026-09-06: items 1–5, the player-visible ones, were ALL stale source comments over
+code that was already ported (lanes A/B/C proved each end to end in-game); item 6 was a real gap
+and is ported. One upstream open surfaced by lane C: the Work state is never OFFERED because
+`CitizenComponent+0x68` (housing link) reads 0 for every citizen in the census run. Everything else is a corner. The `Stub_` marker count (813) is harness by design, mostly the
 four `standalone/*_stubs.cpp` vtable files and `ui_dialog_stub_factories.cpp`.
 
 ### 1.3 Documents that are now wrong
