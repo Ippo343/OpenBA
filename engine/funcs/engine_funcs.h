@@ -63,7 +63,10 @@ typedef void (*fn_App_SleepThread_t)(void* self, int ms);
 extern fn_App_SleepThread_t fn_App_SleepThread;
 
 // UI::UserInterface::Update(this, Time const&)
-typedef void (*fn_UI_Update_t)(void* self, void* time);
+// Returns INT (the cursor id the UI wants this frame), not void — the export is
+// ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z. This was declared void for a
+// long time and gameupdateloop.cpp worked around it with a local return-int cast.
+typedef int (*fn_UI_Update_t)(void* self, void* time);
 extern fn_UI_Update_t fn_UI_Update;
 
 // UI::UserInterface::Draw(this, Context&)

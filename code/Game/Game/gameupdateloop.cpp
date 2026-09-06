@@ -1507,8 +1507,8 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] WorldGeometry::Update done\n");
 
     // Step 9: UI::UserInterface::Update
-    // Note: fn_UI_Update is typed as void in engine_funcs.h but actually returns int (cursor).
-    // We use a local cast to capture the return value.
+    // fn_UI_Update returns the cursor id; engine_funcs.h now declares that directly
+    // (the export is ...QEAAH...). The local cast below is now redundant.
     TRACE("[GameUpdateLoop::Update] calling UI::UserInterface::Update...\n");
     typedef int (*fn_UI_Update_RetInt_t)(void* self, void* time);
     int uiCursor = ((fn_UI_Update_RetInt_t)fn_UI_Update)(self->m_userInterface, time);

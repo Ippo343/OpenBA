@@ -1579,9 +1579,12 @@ bool EngineFuncsInit() {
     fn_App_SleepThread = reinterpret_cast<fn_App_SleepThread_t>(
         ResolveExport("?SleepThread@Application@1@QEAAXH@Z"));
 
-    // UI::UserInterface::Update(Time const&) — resolve by name
+    // UI::UserInterface::Update(Time const&) -> int — resolve by name.
+    // The export is QEAAH...: it RETURNS INT (the cursor id), not void.
+    // We resolved it as QEAAX for a long time, a mangling the DLL does not
+    // contain, and only the ResolveAddr fallback below kept it non-null.
     fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
-        ResolveExport("?Update@UserInterface@UI@@QEAAXAEBVTime@System@@@Z"));
+        ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"));
     if (!fn_UI_Update) {
         fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
             ResolveAddr(Module::Runtime, 0x1801213C0));
@@ -3143,7 +3146,7 @@ bool EngineFuncsInit() {
     }
 
     fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
-        ResolveExport("?CheckPtr@InternalBasePtr@Object@@QEAAXXZ"));
+        ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
     if (!fn_InternalBasePtr_CheckPtr) {
         fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
             ResolveAddr(Module::Runtime, 0x1800c0290));
