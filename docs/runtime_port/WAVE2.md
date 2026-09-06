@@ -39,7 +39,7 @@ Pre-wave baseline, same harness, Wave 1 code: 32 sites, 5,735,801 calls, 88 dive
 |---|---|
 | `BANISHED_RT_SYSTEM=0` | Leave the whole System namespace on the DLL |
 | `BANISHED_RT_STRING=0` / `_FILENAME=0` / `_VALUE=0` / `_THREAD=0` | Per-class kill switches |
-| `BANISHED_RT_ALLOC=1` | **Opt-in, off by default, and it refuses to arm** while the allocator lock holds the prologues. Verdict is NO-GO; see WAVE2_ALLOCATOR.md |
+| `BANISHED_RT_ALLOC=1` | **Opt-in, off by default.** It refuses to arm if either allocator prologue has already been patched — but read the ordering note below before relying on that. Verdict is NO-GO; see WAVE2_ALLOCATOR.md |
 
 ## The findings that change other waves
 
@@ -200,15 +200,30 @@ you turn a latent bug into a live one. Fix it as its own change, with a run.
 ## What was deliberately NOT done
 
 * **The allocator is not live.** Its shadow proof has never executed a single instruction,
-  and the lane reported no numbers rather than numbers it did not have. `BANISHED_RT_ALLOC`
-  is opt-in and additionally hard-refuses to arm while `standalone/allocator_lock.cpp`
-  holds the two prologues — because `RuntimePortInit()` (`standalone/main.cpp:1599`) runs
-  BEFORE `InstallAllocatorLock()` (`:1660`), so arming it would make the lock's `memcmp`
-  guard decline and leave the allocator running **unlocked**. The lane proposed reordering
-  the installs; that was declined for this wave. Reordering the default boot path — used by
-  100% of runs — to protect an opt-in path used by nobody is the wrong trade. The refusal
-  makes the failure unreachable instead. The reorder is recorded in WAVE2_ALLOCATOR.md §4
-  as the prerequisite for whoever takes it live.
+  and the lane reported no numbers rather than numbers it did not have.
+
+  `RtSystemAllocatorRegister()` carries a guard that refuses to arm if either prologue no
+  longer matches the shipped DLL (13 bytes at `Allocate`, 12 at `Free`, compared against
+  memory rather than a mnemonic listing, since this build emits redundant REX prefixes).
+  It tests the bytes, not "is `allocator_lock.cpp` installed", so it also catches a foreign
+  patch nobody has written yet.
+
+  **But be precise about what that guard does, because an earlier draft of this document
+  was not.** `RuntimePortInit()` (`standalone/main.cpp:1599`) runs BEFORE
+  `InstallAllocatorLock()` (`:1660`). So at the moment the guard runs, the prologues are
+  still virgin: the guard does not fire, **the port arms, and the LOCK is the one that
+  refuses**. The outcome of `BANISHED_RT_ALLOC=1` today is therefore "port wins, lock never
+  installs" — not "port refuses" as first written here. That is still safe for locking
+  (§4's swap stub takes `self + 0x640` itself), but it means the stub must also carry
+  `ALLOCSTATS` and `RedzoneAlloc_TeardownOp`, or those diagnostics vanish silently the
+  moment the switch is flipped.
+
+  The lane proposed reordering the two installs. That was declined for this wave:
+  reordering the default boot path — used by 100% of runs — to protect an opt-in path used
+  by nobody is the wrong trade while the shadow numbers do not exist. The reorder plus
+  `AllocatorLockRetireForPort()` is what collapses this to one sequence with one owner, and
+  it is recorded in WAVE2_ALLOCATOR.md §4 as the prerequisite for whoever arms the
+  allocator — not as a prerequisite for landing this wave.
 * **`Time::Time(float)` and `Time::AsSeconds` are forwarders, not reimplementations.** They
   delegate to the DLL's `Timer::SecondsToTicks`/`TicksToSeconds` because the conversion
   depends on `Timer::_secondsPerTick`, a `QueryPerformanceFrequency`-derived global that
