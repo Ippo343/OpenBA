@@ -263,3 +263,30 @@ do the work. Do not add `BANISHED_BUILDERS` to a small-town food test.
 No new `RegisterExeAddr` / `RegisterDispatchSlot` was needed, so
 `standalone/reg_closeout_lane_a.cpp` was not created.
 `tools/dispatch_slot_map.py --check`: **0 mismatches, 0 double-registrations.**
+
+---
+
+## Re-running this verification (shared game dir)
+
+`C:/GOG Games/Banished` is shared between lanes. Claim it ATOMICALLY with a directory --
+a poll-then-write on a plain file is racy, and it did let two lanes claim inside the
+same minute during this wave:
+
+```bash
+until mkdir "/c/GOG Games/Banished/.agent_lock.d" 2>/dev/null; do sleep 10; done
+echo <your-lane-name> > "/c/GOG Games/Banished/.agent_lock.d/owner"
+```
+
+`mkdir` fails if the directory already exists, so the claim and the test are one
+operation and cannot interleave.
+
+Then wait until `tasklist //FI "IMAGENAME eq reimpl-x64.exe"` reports no process before
+deploying -- a running game is "locked" even when no lock file is present. Release with
+a `taskkill` of your own pid followed by `rm -rf "/c/GOG Games/Banished/.agent_lock.d"`.
+Treat the lock as abandoned only if the `owner` file's mtime is more than 30 minutes
+old. The older `.agent_lock` plain file is superseded: do not create it, and delete it
+only if it names you.
+
+Copy any log you need out of the game dir immediately -- the next lane's deploy wipes
+`standalone_debug.log`. Always check the deployed exe's timestamp against your build
+before believing a result; a failed build silently measures the old exe.
