@@ -110,6 +110,7 @@ bool        s_enabled     = false;
 bool        s_fired       = false;
 int         s_settleFrame = 60;      // frames after world-build before firing
 const char* s_toolName    = "removal";
+int         s_pf_panelFrame = 0;   // "pasturefull": frame to open the panel on
 
 void Init() {
     if (s_initialized) return;
@@ -1237,14 +1238,49 @@ void FirePasturePanel(void* entityUI) {
     if (!gs) { fprintf(stderr, "[PasturePanel] no entity-list singleton\n"); return; }
     int n = *reinterpret_cast<int*>(gs + 0x98);
     uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
-    if (n <= 0 || !list) {
-        fprintf(stderr, "[PasturePanel] no pastures in world list (n=%d) — set "
-               "BANISHED_BUILD_DEMO_PASTURE\n", n);
+    void* pastureComp = (n > 0 && list) ? *reinterpret_cast<void**>(list) : nullptr;
+
+    // The gs+0x90 registry holds only pastures that have REGISTERED — i.e. finished
+    // construction. A pasture the FencedTool just committed is still a building site,
+    // so with BANISHED_TOOL_HARNESS=pasturefull that list is empty (measured: n=0) even
+    // though the pasture entity exists. Fall back to the EntityList scan FireOrchardPanel
+    // uses, which finds the component on the entity regardless of build state — clicking
+    // an unfinished pasture opens its panel in retail too.
+    if (!pastureComp) {
+        void* gw = *g_pGameWorldSingleton;
+        uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+        uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
+        int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+        const uint32_t tidPastureComp = ::Object::GetTypeIdByName("PastureComponent");
+        for (int i = 0; i < en && arr && !pastureComp; ++i) {
+            void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* ent = *slot;
+            if (!ent) continue;
+            int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+            uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+            for (int c = 0; c < cN && cA; ++c) {
+                void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+                void* comp = *cs;
+                if (!comp) continue;
+                void** vt = *reinterpret_cast<void***>(comp);
+                typedef uint32_t (*G)(void*);
+                if (vt && vt[2] && reinterpret_cast<G>(vt[2])(comp) == tidPastureComp) {
+                    pastureComp = comp; break;
+                }
+            }
+        }
+        fprintf(stderr, "[PasturePanel] registry empty (n=%d); EntityList scan of %d "
+               "entities -> pastureComp=%p\n", n, en, pastureComp);
+    }
+    if (!pastureComp) {
+        fprintf(stderr, "[PasturePanel] no pasture in the world — set "
+               "BANISHED_BUILD_DEMO_PASTURE or use BANISHED_TOOL_HARNESS=pasturefull\n");
         return;
     }
-    void* pastureComp = *reinterpret_cast<void**>(list);
-    uint64_t entRef = pastureComp
-        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x10) : 0;
+    uint64_t entRef =
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x10);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
@@ -2650,6 +2686,20 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         s_br_stage = BR_DONE;
     }
 
+    // ---- "pasturefull": the two halves of the pasture feature in ONE run ----
+    // FirePastureTool places a real fenced pasture through the tool-mode tree
+    // (item 3 of PLAN §1.2); s_pf_panelFrame frames later FirePasturePanel opens
+    // THAT pasture's info panel and drives the livestock combo (item 5). Running
+    // them separately needs BANISHED_BUILD_DEMO_PASTURE for the second half, which
+    // is the scaffolded master-only pasture, not a tool-placed one — so only this
+    // chained mode proves the player-reachable path end to end.
+    if (s_pf_panelFrame != 0 && frameNum >= s_pf_panelFrame) {
+        s_pf_panelFrame = 0;
+        fprintf(stderr, "[ToolHarness][pasturefull] opening the tool-placed pasture's "
+                        "panel at frame %d\n", frameNum);
+        FirePasturePanel(entityUI);
+    }
+
     if (s_fired) return;
     if (frameNum < s_settleFrame) return;
 
@@ -2665,6 +2715,15 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FireBridgeTool(entityUI);
     } else if (std::strcmp(s_toolName, "pasture") == 0) {
         FirePastureTool(entityUI);
+    } else if (std::strcmp(s_toolName, "pasturefull") == 0) {
+        FirePastureTool(entityUI);
+        int delay = 240;
+        if (const char* d = std::getenv("BANISHED_PASTUREFULL_DELAY")) {
+            int v = std::atoi(d); if (v > 0) delay = v;
+        }
+        s_pf_panelFrame = frameNum + delay;
+        fprintf(stderr, "[ToolHarness][pasturefull] tool fired; panel scheduled for frame %d\n",
+               s_pf_panelFrame);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "select") == 0) {

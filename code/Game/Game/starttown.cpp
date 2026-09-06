@@ -2380,9 +2380,14 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     }
 
     // ── BANISHED_BUILD_DEMO_PASTURE — one COMPLETED pasture (test scaffolding) ──────
-    // Retail acquires pastures only through the fenced-area tool (still unported), so
-    // nothing can exercise the pasture controller (adopt/reproduce/produce) without
-    // this. Spawns Template\Pasture.rsc as a completed structure at the nearest free
+    // CORRECTED 2026-09-06 (lane B closeout): "the fenced-area tool is still unported"
+    // is FALSE and has been since fencedtool_calcpath.cpp landed -- FencedTool's vtable
+    // (fencedtool.cpp), its drag-commit (fencedtool_calcpath.cpp) and its tool-mode-tree
+    // node (tool_activation_standalone.cpp, CreateFencedDescription -> FencedTool) are
+    // all in the tree, so a toolbar pasture click really does place a pasture. This flag
+    // survives only as the INSTANT-BUILD shortcut (a completed pasture, no build wait);
+    // for the real acquisition path use BANISHED_TOOL_HARNESS=pasture or =pasturefull.
+    // Spawns Template\Pasture.rsc as a completed structure at the nearest free
     // footprint to the cluster centre, same ring scan as the extra houses. The pasture
     // then needs a livestock TYPE (BANISHED_PASTURE_AUTOTYPE=<Cow|Sheep|Chicken>) and
     // animals (BANISHED_PASTURE_FILL=<frame>, standalone/pasture_harness.cpp) to come
@@ -2459,8 +2464,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     }
 
     // ── BANISHED_BUILD_DEMO_ORCHARD — one COMPLETED orchard (test scaffolding) ─────
-    // Same rationale as BUILD_DEMO_PASTURE directly above: orchards are fenced areas,
-    // acquired only through the still-unported fenced-area tool, so without this there
+    // Same rationale as BUILD_DEMO_PASTURE directly above -- and the same correction: the
+    // fenced / drag-area tools ARE ported, this is only the instant-build shortcut. Without this there
     // is no way to open an orchard panel and exercise OrchardUI (tree-type combo +
     // yield bar). Identical ring scan from the founding-cluster centre.
     //

@@ -365,8 +365,16 @@ extern "C" void Pasture_SetLivestockType(void* pasture, void* newTypeTemplate) {
 }
 
 // ============================================================
-// Bring-up only (NOT retail): give an untyped pasture a livestock type so the
-// state-2 adopt pass has something to match while the pasture dialog is unported.
+// Bring-up only (NOT retail): give an untyped pasture a livestock type without
+// opening its panel, so the state-2 adopt pass has something to match.
+//
+// CORRECTED 2026-09-06 (lane B closeout): "the pasture dialog is unported" is FALSE.
+// PastureUI is ported AND promoted off the UI_DIALOG_STUB list (code/Game/Dialog/
+// pastureui.cpp): Slot4 populates the livestock combo, Slot9 routes the combo change
+// (msg 0x14 / element id 500) into Slot11 SetLivestockType -- exactly what a player
+// picking an animal in-game runs. This helper survives only as the headless shortcut
+// for runs that never open a panel (stress towns, achievement census); the real UI
+// path is BANISHED_TOOL_HARNESS=pasturepanel BANISHED_PASTUREPANEL_SELECT=<n>.
 //
 //   BANISHED_PASTURE_AUTOTYPE=1                -> first free-roaming livestock's prototype
 //   BANISHED_PASTURE_AUTOTYPE=Sheep|Cow|Chicken-> Template\Livestock<Name>.rsc
