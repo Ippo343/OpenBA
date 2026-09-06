@@ -1,0 +1,313 @@
+// ============================================================================
+// runtime/src/volume/frustum.cpp — Volume::Frustum
+// ============================================================================
+//
+// Wave 1, Lane 3 of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2/§6).
+// Every function below is a byte-faithful port of the decompilation at the
+// retail address named in its comment (Runtime-x64.dll, image base
+// 0x180000000, decompiled 2026-09-06). See runtime/types/volume/Volume.h for
+// the layout, the plane order and what the `isOrthographic` byte means.
+//
+// Mirrors the original `code\Runtime\Volume\Frustum.cpp` (recovered from the
+// profile build's debug strings — runtime/src/volume/README.md).
+//
+// FUN_180128110/FUN_180127d90/FUN_180126d10 (sqrtf/sinf/cosf) go through the
+// RtLibm seam (runtime/funcs/rt_libm.h), not <cmath> directly: our own libm
+// by default, or Runtime-x64.dll's own CRT under BANISHED_RT_LIBM=dll as a
+// diagnostic for attributing a diff-oracle divergence to libm rounding.
+// ============================================================================
+
+#include "rt_libm.h"
+#include "../../types/volume/Volume.h"
+#include "../../funcs/rt_port.h"
+
+namespace {
+
+// How many bytes of a Frustum are actually DEFINED, for the diff oracle.
+//
+// sizeof(Frustum) is 0x64: the six planes plus `isOrthographic` occupy
+// 0x00..0x60, and the compiler pads the tail to 4-byte alignment. Retail never
+// writes those three pad bytes -- the ctors zero 0x00..0x5f in qwords and then
+// store one byte at +0x60 -- and neither do we. Diffing sizeof(Frustum) was
+// therefore comparing three bytes of whatever was previously on the caller's
+// stack against a value-initialised scratch struct's zeros, and it reported a
+// divergence every time the stack happened to be dirty. That is a harness
+// defect, not a port defect: it manufactures false positives that would train
+// us to ignore the oracle. Compare only the defined prefix.
+constexpr size_t kFrustumDefinedBytes = offsetof(Frustum, isOrthographic) + sizeof(bool);
+static_assert(kFrustumDefinedBytes == 0x61, "Frustum defined prefix is 0x61 bytes");
+
+
+// Normalizes the 2D vector (a, b), matching the exact expression shape used
+// by every side-plane computation in the 6-Scalar perspective ctor below:
+// len = sqrt(a*a + b*b + 0.0); when len == 0, a and b are already 0 (their
+// squares summed to zero), so the "unchanged" branch and the "normalized"
+// branch agree in that case — the +0.0 term is exact and does not perturb
+// the sum.
+void NormalizeSide2(float a, float b, float& outA, float& outB) {
+    float len = RtLibm::Sqrt(a * a + b * b + 0.0f);
+    if (len == 0.0f) {
+        outA = a;
+        outB = b;
+    } else {
+        float inv = RtMathConst::kOne / len;
+        outA = a * inv;
+        outB = b * inv;
+    }
+}
+
+// Volume::Frustum::operator* — transforms one plane by a Transform3's basis
+// (rotate the normal, then fold the translation into `d`). Same formula
+// shape at all 6 planes in ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z
+// (retail 0x1800f9310); only the compiler's register scheduling differs
+// between planes, not the arithmetic order.
+Vector4 TransformPlane(const Vector4& p, const Transform3& t) {
+    Vector4 r;
+    r.x = p.x * t.axisX.x + p.y * t.axisY.x + p.z * t.axisZ.x;
+    r.y = p.y * t.axisY.y + p.x * t.axisX.y + p.z * t.axisZ.y;
+    r.z = p.y * t.axisY.z + p.x * t.axisX.z + p.z * t.axisZ.z;
+    r.w = t.translation.y * r.y + t.translation.x * r.x + t.translation.z * r.z + p.w;
+    return r;
+}
+
+// Shared by GetCorners and GetScreenDirection (both retail functions branch
+// on `isOrthographic` to compute the same four near-plane span values from
+// the same four side planes: ?GetCorners@Frustum@Volume@@ 0x1800f9850,
+// ?GetScreenDirection@Frustum@Volume@@ 0x1800f9c80).
+//
+//   perspective (isOrthographic == false): span = -planeSide.<axis> * near /
+//     planeSide.<perp axis>, i.e. where the side plane crosses the near plane.
+//   orthographic (isOrthographic == true): span = the side plane's own `d`
+//     term (sign-flipped for planes[3]/[4]), already an axis-aligned offset.
+void NearSpan(const Frustum& f, float nearDist, float& xLo, float& xHi, float& zLo, float& zHi) {
+    if (!f.isOrthographic) {
+        xLo = -f.planes[2].y * nearDist / f.planes[2].x;
+        xHi = -f.planes[3].y * nearDist / f.planes[3].x;
+        zLo = -f.planes[4].y * nearDist / f.planes[4].z;
+        zHi = -f.planes[5].y * nearDist / f.planes[5].z;
+    } else {
+        xLo = f.planes[2].w;
+        xHi = -f.planes[3].w;
+        zLo = -f.planes[4].w;
+        zHi = f.planes[5].w;
+    }
+}
+
+// n-vertex / p-vertex selection for the AABB-vs-plane test used by Contains
+// (the "Akenine-Möller p/n vertex" trick): FUN_1800f8fb0, retail
+// 0x1800f8fb0. n-vertex is the box corner most against the plane normal
+// (min on axes where normal >= 0, max where normal < 0); p-vertex is the
+// opposite corner.
+void SelectVertices(const Vector4& plane, const Box& box, Vector3& nVertex, Vector3& pVertex) {
+    nVertex.x = plane.x < 0.0f ? box.max.x : box.min.x;
+    nVertex.y = plane.y < 0.0f ? box.max.y : box.min.y;
+    nVertex.z = plane.z < 0.0f ? box.max.z : box.min.z;
+    pVertex.x = plane.x < 0.0f ? box.min.x : box.max.x;
+    pVertex.y = plane.y < 0.0f ? box.min.y : box.max.y;
+    pVertex.z = plane.z < 0.0f ? box.min.z : box.max.z;
+}
+
+}  // namespace
+
+// ============================================================
+// ??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z   retail 0x1800fa1e0
+// Symmetric perspective ctor: near, far, fovX (degrees), fovY (degrees).
+// Always builds a PERSPECTIVE frustum (isOrthographic = false); the four
+// side planes pass through the origin (w = 0), apex-at-eye style.
+// ============================================================
+Frustum* RtVolume_Frustum_Ctor_Perspective(Frustum* self, const Scalar* nearZ, const Scalar* farZ,
+                                            const Scalar* fovX, const Scalar* fovY) {
+    RT_DIFF_BEGIN("Volume::Frustum::Frustum (near,far,fovX,fovY)");
+    float halfFovXRad = fovX->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
+    float halfFovYRad = fovY->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
+    float sinX = RtLibm::Sin(halfFovXRad), cosX = RtLibm::Cos(halfFovXRad);
+    float sinY = RtLibm::Sin(halfFovYRad), cosY = RtLibm::Cos(halfFovYRad);
+
+    self->planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ->v };
+    self->planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ->v };
+    self->planes[2] = { cosX, sinX, 0.0f, 0.0f };
+    self->planes[3] = { -cosX, sinX, 0.0f, 0.0f };
+    self->planes[4] = { 0.0f, sinY, -cosY, 0.0f };
+    self->planes[5] = { 0.0f, sinY, cosY, 0.0f };
+    self->isOrthographic = false;
+
+    if (rt_diff_on__) {
+        Frustum theirs{};
+        RtOriginal<Frustum*(*)(Frustum*, const Scalar*, const Scalar*, const Scalar*, const Scalar*)>(
+            "??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z")(&theirs, nearZ, farZ, fovX, fovY);
+        RT_DIFF_BYTES(self, &theirs, kFrustumDefinedBytes);
+    }
+    return self;
+}
+
+// ============================================================
+// ??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z   retail 0x1800fa3d0
+// General ctor: isOrthographic flag, then 6 scalars (near, far, and 4 edge
+// values). near/far planes are identical between the two modes; only the 4
+// side planes differ (see Volume.h's Frustum comment for what each mode
+// means).
+// ============================================================
+Frustum* RtVolume_Frustum_Ctor_General(Frustum* self, bool isOrthographic,
+                                        const Scalar* nearZ, const Scalar* farZ,
+                                        const Scalar* edgeA, const Scalar* edgeB,
+                                        const Scalar* edgeC, const Scalar* edgeD) {
+    RT_DIFF_BEGIN("Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D)");
+    self->isOrthographic = isOrthographic;
+    self->planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ->v };
+    self->planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ->v };
+
+    if (!isOrthographic) {
+        float a, b;
+        NormalizeSide2(nearZ->v, -edgeA->v, a, b);
+        self->planes[2] = { a, b, 0.0f, 0.0f };
+        NormalizeSide2(edgeB->v, -nearZ->v, a, b);
+        self->planes[3] = { b, a, 0.0f, 0.0f };
+        NormalizeSide2(edgeC->v, -nearZ->v, a, b);
+        self->planes[4] = { 0.0f, a, b, 0.0f };
+        NormalizeSide2(-edgeD->v, nearZ->v, a, b);
+        self->planes[5] = { 0.0f, a, b, 0.0f };
+    } else {
+        self->planes[2] = { RtMathConst::kOne, 0.0f, 0.0f, edgeA->v };
+        self->planes[3] = { RtMathConst::kMinusOne, 0.0f, 0.0f, -edgeB->v };
+        self->planes[4] = { 0.0f, 0.0f, RtMathConst::kMinusOne, -edgeC->v };
+        self->planes[5] = { 0.0f, 0.0f, RtMathConst::kOne, edgeD->v };
+    }
+
+    if (rt_diff_on__) {
+        Frustum theirs{};
+        RtOriginal<Frustum*(*)(Frustum*, bool, const Scalar*, const Scalar*, const Scalar*,
+                                const Scalar*, const Scalar*, const Scalar*)>(
+            "??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z")(
+            &theirs, isOrthographic, nearZ, farZ, edgeA, edgeB, edgeC, edgeD);
+        RT_DIFF_BYTES(self, &theirs, kFrustumDefinedBytes);
+    }
+    return self;
+}
+
+// ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z   retail 0x1800f9310
+// operator*(Transform3) — returns (hidden slot) a new Frustum with every
+// plane transformed by `t` and the same isOrthographic flag.
+Frustum* RtVolume_Frustum_MulTransform3(const Frustum* self, Frustum* ret, const Transform3* t) {
+    RT_DIFF_BEGIN("Volume::Frustum::operator*(Transform3)");
+    for (int i = 0; i < 6; i++) ret->planes[i] = TransformPlane(self->planes[i], *t);
+    ret->isOrthographic = self->isOrthographic;
+    if (rt_diff_on__) {
+        Frustum theirs{};
+        RtOriginal<Frustum*(*)(const Frustum*, Frustum*, const Transform3*)>(
+            "??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z")(self, &theirs, t);
+        RT_DIFF_BYTES(ret, &theirs, kFrustumDefinedBytes);
+    }
+    return ret;
+}
+
+// ?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z   retail 0x1800f8e80
+//
+// NOT a bool despite the name: a hierarchical-culling plane bitmask.
+// `mask` has one bit per plane (bit i = "still test plane i"); a caller
+// culling a tree of boxes passes the parent's returned mask down to its
+// children so already-satisfied planes are never re-tested. For each set
+// bit: if the box is entirely on the outside of that plane, return the
+// sentinel 0x40 (fully culled) immediately; if entirely on the inside,
+// clear that bit (never needs testing again below this box); otherwise
+// (straddling) leave the bit set. A normal return of 0 means the box is
+// fully inside every plane that was tested.
+unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsigned int mask) {
+    RT_DIFF_BEGIN("Volume::Frustum::Contains");
+    unsigned int ours = mask;
+    for (int i = 0; i < 6; i++) {
+        unsigned int bit = 1u << i;
+        if (!(ours & bit)) continue;
+        const Vector4& plane = self->planes[i];
+        Vector3 nVertex, pVertex;
+        SelectVertices(plane, *box, nVertex, pVertex);
+        float dN = plane.y * nVertex.y + plane.x * nVertex.x + plane.z * nVertex.z - plane.w;
+        if (dN <= 0.0f) {
+            float dP = plane.y * pVertex.y + plane.x * pVertex.x + plane.z * pVertex.z - plane.w;
+            if (dP < 0.0f) { ours = 0x40u; goto diffed; }
+            // else: straddles this plane — leave the bit set, test the next plane.
+        } else {
+            ours &= ~bit;
+        }
+    }
+diffed:
+    RT_DIFF_SCALAR(ours, RtOriginal<unsigned int (*)(const Frustum*, const Box*, unsigned int)>(
+        "?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z")(self, box, mask));
+    return ours;
+}
+
+// ?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z   retail 0x1800f9850
+// Writes 8 corners through `out`: [0..3] near-plane corners
+// (x in {xLo,xHi}, y = near, z in {zLo,zHi}), [4..7] far-plane corners.
+// Orthographic: far corners share the near corners' x/z, y = far (axis-
+// aligned box). Perspective: far corners are found by normalizing the ray
+// from the origin through each near corner, then rescaling that ray so its
+// y-component lands exactly on `far`.
+void RtVolume_Frustum_GetCorners(const Frustum* self, Vector3* out) {
+    RT_DIFF_BEGIN("Volume::Frustum::GetCorners");
+    float nearDist = self->planes[0].w;
+    float farDist = -self->planes[1].w;
+    float xLo, xHi, zLo, zHi;
+    NearSpan(*self, nearDist, xLo, xHi, zLo, zHi);
+
+    out[0] = { xLo, nearDist, zLo };
+    out[1] = { xHi, nearDist, zLo };
+    out[2] = { xLo, nearDist, zHi };
+    out[3] = { xHi, nearDist, zHi };
+
+    if (self->isOrthographic) {
+        out[4] = { xLo, farDist, zLo };
+        out[5] = { xHi, farDist, zLo };
+        out[6] = { xLo, farDist, zHi };
+        out[7] = { xHi, farDist, zHi };
+    } else {
+        for (int i = 0; i < 4; i++) {
+            const Vector3& c = out[i];
+            float len = RtLibm::Sqrt(c.x * c.x + c.y * c.y + c.z * c.z);
+            Vector3 dir;
+            if (len == 0.0f) {
+                dir = c;
+            } else {
+                float inv = RtMathConst::kOne / len;
+                dir = { c.x * inv, c.y * inv, c.z * inv };
+            }
+            float scale = (RtMathConst::kOne / dir.y) * farDist;
+            out[4 + i] = { scale * dir.x, scale * dir.y, scale * dir.z };
+        }
+    }
+
+    if (rt_diff_on__) {
+        Vector3 theirs[8]{};
+        RtOriginal<void (*)(const Frustum*, Vector3*)>(
+            "?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z")(self, theirs);
+        RT_DIFF_BYTES(out, theirs, sizeof(theirs));
+    }
+}
+
+// ?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z   retail 0x1800f9c80
+// Returns (hidden slot) the world-space ray direction through screen point
+// (u,v) in [0,1]^2 across the near-plane span: x = lerp(xLo,xHi,u),
+// z = lerp(zLo,zHi,v), y = near; normalized unless the length is 0.
+Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Vector3* ret, float u, float v) {
+    RT_DIFF_BEGIN("Volume::Frustum::GetScreenDirection");
+    float nearDist = self->planes[0].w;
+    float xLo, xHi, zLo, zHi;
+    NearSpan(*self, nearDist, xLo, xHi, zLo, zHi);
+
+    float x = (xHi - xLo) * u + xLo;
+    float z = (zHi - zLo) * v + zLo;
+    float len = RtLibm::Sqrt(x * x + nearDist * nearDist + z * z);
+    if (len == 0.0f) {
+        *ret = { x, nearDist, z };
+    } else {
+        float inv = RtMathConst::kOne / len;
+        *ret = { x * inv, nearDist * inv, z * inv };
+    }
+
+    if (rt_diff_on__) {
+        Vector3 theirs{};
+        RtOriginal<Vector3*(*)(const Frustum*, Vector3*, float, float)>(
+            "?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z")(self, &theirs, u, v);
+        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
+    }
+    return ret;
+}

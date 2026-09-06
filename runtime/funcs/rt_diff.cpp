@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <cmath>
 
 // ---- Enable flag -----------------------------------------------------------
@@ -46,9 +47,34 @@ constexpr uint64_t kMaxVerboseReports = 3;
 void RtDiffRegister(RtDiffSite* site) {
     if (!site || site->linked) return;
     if (g_siteCount < kMaxSites) {
+        // Log the index -> address -> name pairing as each site appears. This is
+        // what makes a later corruption diagnosable: RtDiffSite objects are
+        // function-local statics scattered across the ported translation units,
+        // so once one has been overwritten the summary can still name the INDEX
+        // but has no safe way to recover the name from the wreckage. Recording
+        // the pairing here, while the site is provably intact, turns "the
+        // summary crashed" into "site N, which is <name>, was clobbered".
+        fprintf(stderr, "[RtDiff] site[%zu] @%p = %s\n",
+                g_siteCount, (const void*)site,
+                site->name ? site->name : "(unnamed)");
         g_sites[g_siteCount++] = site;
         site->linked = true;
     }
+}
+
+// Cheap sanity test for a site that a stray write may have overwritten.
+//
+// A live site has a plausible name pointer and cannot have diverged more times
+// than it was called. Anything else means the 32-byte static was scribbled on,
+// and dereferencing its name is how the summary previously turned a memory bug
+// into an ACCESS_VIOLATION that destroyed the entire report.
+static bool RtDiffSiteLooksLive(const RtDiffSite* s) {
+    if (!s || !s->name) return false;
+    // Names are string literals in .rdata. A float or small integer written
+    // over the field is not a plausible pointer; 0x10000 is below any image base.
+    if (reinterpret_cast<uintptr_t>(s->name) < 0x10000u) return false;
+    if (s->divergences > s->calls) return false;
+    return true;
 }
 
 // ---- Reporting -------------------------------------------------------------
@@ -106,8 +132,10 @@ void RtDiffSummary() {
     if (!RtDiffEnabled()) return;
     uint64_t totalCalls = 0, totalDiv = 0;
     size_t   dirtySites = 0;
+    size_t corrupt = 0;
     for (size_t i = 0; i < g_siteCount; i++) {
         RtDiffSite* s = g_sites[i];
+        if (!RtDiffSiteLooksLive(s)) { corrupt++; continue; }
         totalCalls += s->calls;
         totalDiv   += s->divergences;
         if (s->divergences) dirtySites++;
@@ -117,11 +145,29 @@ void RtDiffSummary() {
             (unsigned long long)totalDiv, dirtySites);
     for (size_t i = 0; i < g_siteCount; i++) {
         RtDiffSite* s = g_sites[i];
+        if (!RtDiffSiteLooksLive(s)) {
+            // Do NOT dereference s->name here — that is exactly what turned one
+            // corrupted site into a fault inside the summary and threw away the
+            // whole report. Print the raw fields and cross-reference the index
+            // against the "[RtDiff] site[N] @addr = name" line logged at
+            // registration to find out which function's site was hit.
+            fprintf(stderr, "[RtDiff]   site[%zu] @%p CORRUPTED — name=%p calls=%llu "
+                            "divergences=%llu (see the site[%zu] line above for its "
+                            "name; something wrote over this static)\n",
+                    i, (const void*)s, (const void*)(s ? s->name : nullptr),
+                    (unsigned long long)(s ? s->calls : 0),
+                    (unsigned long long)(s ? s->divergences : 0), i);
+            continue;
+        }
         fprintf(stderr, "[RtDiff]   %-48s calls=%-10llu divergences=%llu\n",
-                s->name ? s->name : "(unnamed)",
+                s->name,
                 (unsigned long long)s->calls,
                 (unsigned long long)s->divergences);
     }
+    if (corrupt)
+        fprintf(stderr, "[RtDiff] ==== %zu of %zu sites were CORRUPTED — a stray write hit "
+                        "the harness's own statics; the totals above exclude them ====\n",
+                corrupt, g_siteCount);
     fflush(stderr);
 }
 

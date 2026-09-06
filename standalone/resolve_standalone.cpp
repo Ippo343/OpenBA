@@ -5,6 +5,7 @@
 
 
 #include "resolve.h"
+#include "../runtime/funcs/rt_port.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -253,10 +254,15 @@ void DumpRuntimeRegistry() {
 }
 
 void RuntimePortInit() {
-    // Registrations themselves happen in runtime/src/**; the reg_rt_*.cpp wave
-    // files call RegisterRuntime* from static initializers or from an init
-    // function invoked here. Nothing to resolve at this point — the tables hold
-    // our own function pointers, not DLL addresses — so this only reports.
+    // Registrations happen in runtime/src/**, one *_PortInit() per wave, each
+    // declared in runtime/funcs/rt_port.h and each gated by its own
+    // BANISHED_RT_<WAVE> kill switch. They must run here, before
+    // AddressRegistryInit and EngineFuncsInit cache their pointers.
+    RtMathPortInit();     // Wave 1: Math
+    RtVolumePortInit();   // Wave 1: Volume
+
+    // Nothing to resolve at this point — the tables hold our own function
+    // pointers, not DLL addresses — so the rest of this only reports.
     RuntimeRegistryStats st = GetRuntimeRegistryStats();
     printf("[RtPort] runtime registry: %zu exports, %zu addrs, %zu ordinals%s\n",
            st.exports, st.addrs, st.ordinals,

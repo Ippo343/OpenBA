@@ -3067,8 +3067,30 @@ extern fn_Video_Context_SetFog_t fn_Video_Context_SetFog;
 typedef void* (*fn_Math_Transform_Ctor_t)(void* self);
 extern fn_Math_Transform_Ctor_t fn_Math_Transform_Ctor;
 
-// Math::Transform3::Identity() — returns pointer to a static identity transform.
-typedef void* (*fn_Math_Transform3_Identity_t)();
+// Math::Transform3::Identity() — retail 0x1800347f0,
+// ?Identity@Transform3@Math@@SA?AV12@XZ.
+//
+// This is a STATIC method RETURNING Math::Transform3 BY VALUE, so under the
+// MSVC x64 ABI the caller passes a hidden return-slot pointer in RCX and the
+// callee returns that same pointer in RAX. It writes 12 dwords (0x30 bytes)
+// through that slot.
+//
+// The old declaration took NO arguments and the comment claimed it "returns a
+// pointer to a static identity transform". Both were wrong. Called with no
+// argument, RCX held whatever the previous call had left there, and Identity
+// wrote 48 bytes of identity matrix over it — a wild write on every menu scene
+// load. It went unnoticed for so long because it is SELF-CONSISTENT: RAX comes
+// back pointing at the same garbage address, the caller hands it to
+// Graphics::Camera::Ctor, and the camera reads a perfectly valid identity
+// matrix back out of the memory that was just corrupted. Nothing looks wrong
+// until the 48 bytes land on something that matters.
+//
+// Found 2026-09-06 by the Wave 1 differential oracle: the leftover RCX happened
+// to be the address of a diff-harness static, whose first dword became 1.0f
+// (0x3F800000) and then faulted when read as a `const char*`.
+//
+// Callers MUST pass a caller-owned buffer of at least sizeof(Transform3) = 0x30.
+typedef void* (*fn_Math_Transform3_Identity_t)(void* retSlot);
 extern fn_Math_Transform3_Identity_t fn_Math_Transform3_Identity;
 
 // Volume::Frustum::Frustum(self, near, far, fovX, fovY) — perspective frustum.

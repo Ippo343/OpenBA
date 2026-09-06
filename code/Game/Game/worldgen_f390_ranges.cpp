@@ -119,6 +119,23 @@ static fn_Random_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 static fn_Vec2_Normalize_t      s_fn_Vec2Norm     = nullptr;
 static bool s_rangesResolved = false;
 
+// The ResolveExport below looked up "?Normalize@Vector2@Math@@QEAAAEAV12@XZ"
+// (an in-place, non-const overload) which does NOT exist in Runtime-x64.dll's
+// export table (verified with pefile 2026-09-06) — the DLL has no in-place
+// Vector2::Normalize at all, only a by-value one returning through a hidden
+// RDX slot (see runtime/types/math/Math.h's ABI note):
+//   ?Normalize@Vector2@Math@@QEBA?AV12@XZ   retail 0x18006c600
+// This adapter resolves the real export and copies its result back into
+// `self` so the in-place call sites below (vec2_normalize2) don't change.
+typedef void* (*fn_Vec2_NormalizeByVal_t)(const void* self, void* ret);
+static fn_Vec2_NormalizeByVal_t s_fn_Vec2NormByVal = nullptr;
+static float* vec2_normalize_real(float* self) {
+    float out[2];
+    s_fn_Vec2NormByVal(self, out);
+    self[0] = out[0]; self[1] = out[1];
+    return self;
+}
+
 // [WATER-DIAG] TryPlacePath reject-reason counters (BANISHED_WATER_DIAG dump in
 // wg_f390_paths). Disambiguate which validation gate rejects candidates.
 static long s_rejSelf  = 0;   // self-intersection reject
@@ -129,10 +146,11 @@ static void rg_EnsureInit() {
     s_rangesResolved = true;
     s_fn_Rand2        = (fn_Random_Rand2_t)ResolveExport("?Rand@Random@System@@QEAAHHH@Z");
     s_fn_RandFloatTol = (fn_Random_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
-    s_fn_Vec2Norm     = (fn_Vec2_Normalize_t)ResolveExport("?Normalize@Vector2@Math@@QEAAAEAV12@XZ");
-    fprintf(stderr, "[worldgen] ranges resolves: Rand2=%p RandFloatTol=%p Vec2Norm=%p "
+    s_fn_Vec2NormByVal = (fn_Vec2_NormalizeByVal_t)ResolveExport("?Normalize@Vector2@Math@@QEBA?AV12@XZ");
+    s_fn_Vec2Norm     = s_fn_Vec2NormByVal ? &vec2_normalize_real : nullptr;
+    fprintf(stderr, "[worldgen] ranges resolves: Rand2=%p RandFloatTol=%p Vec2NormByVal=%p "
             "Rand1=%p RandFloat=%p\n",
-            (void*)s_fn_Rand2, (void*)s_fn_RandFloatTol, (void*)s_fn_Vec2Norm,
+            (void*)s_fn_Rand2, (void*)s_fn_RandFloatTol, (void*)s_fn_Vec2NormByVal,
             (void*)fn_Random_Rand, (void*)fn_Random_RandFloat);
     fflush(stderr);
 }

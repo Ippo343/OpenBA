@@ -335,7 +335,7 @@ Runtime programs.
 | Wave | Scope | Size | Why here |
 |---|---|---|---|
 | **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
-| **1 Math + Volume** | 292 fns, 30 KB | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
+| **1 Math + Volume** — **LANDED 2026-09-06, see [WAVE1.md](WAVE1.md)** | 70 of the 71 functions our tree calls (Math 58/59, Volume 12/12); the one deferral is `Graphics::InterpolatedState<Transform>::Lerp`, whose layout nothing in this wave pins. **6,556,631 diffed calls, 0 divergences** against the DLL under `BANISHED_RT_LIBM=dll`; 90 residual 1-ULP divergences at 2 sin/cos sites under our own libm. Found 3 real defects — a **pre-existing wild write** (`fn_Math_Transform3_Identity` declared with no hidden return slot, scribbling 0x30 bytes through a stale RCX on every menu scene load), a reassociated float sum in `Transform::FromDirection`, and 4 exports resolved under manglings that do not exist in the DLL. | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
 | **2 System + Collection** | String, MemoryAllocator, Filename, WideString, Time/Timer, Random, CRC, Color, CriticalSection, Thread, Compression, Configuration; Collection templates as headers | M | 4,100+ inbound edges; allocator is global state (already detoured for locking) and must be swapped atomically with its `.data` singleton |
 | **3 Object** | Base, Type, BaseTypeInfo, Internal, External, InternalPtr, Factory, InternalFactory, ExternalFactory, ExternalList | M | The reflection + handle table. Once ours, object construction flows through us and vtable ownership stops being a problem |
 | **4 IO** | Stream family, Serializer (started), BinaryReader/Writer, Encoding, Persistence/Registry, FileSystem, PackageFile, Modification | L | PackageFile is the densest class in the DLL (25 KB) |
@@ -387,7 +387,12 @@ the diff harness have each caught at least one real divergence.
       Video 60, System 57, IO 39, Object 38, Achievement 37, Input 21, Audio 20, Save 20,
       Engine 19, Volume 12, Picking 8, Application 5, Utility 2, plus 245 non-namespaced
       internals, 7 ordinals and 4 names the census cannot attribute).
+- [x] **Wave 1 (Math + Volume) merged.** Census after the wave: **868 called, 70 ported (8.1%)** —
+      Math 58/59 (98.3%), Volume 12/12 (100%), everything else still 0.
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
+      Wave 1 on `sa-run`: **6,556,631 calls / 0 divergences** with `BANISHED_RT_LIBM=dll`;
+      90 divergences in 2 sites with our own libm, all 1 ULP and all sin/cos-fed
+      (`Vector3::FromYawPitch`, `Transform::FromYawPitchOffset`). Not yet run under `sa-stress`.
 - [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.

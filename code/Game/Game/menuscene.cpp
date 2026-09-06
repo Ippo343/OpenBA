@@ -683,7 +683,11 @@ static void MenuScene_TransformInit_Standalone(void* transformObj) {
     *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(transformObj) + 0x1C) = 0;
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(transformObj) + 0x24) = 0;
 
-    void* ident = fn_Math_Transform3_Identity();
+    // Transform3::Identity returns BY VALUE: the hidden return slot is an
+    // argument, not something the callee allocates. Passing nothing left it
+    // writing 0x30 bytes through a stale RCX (see engine_funcs.h).
+    uint8_t identBuf[0x40] = {};
+    void* ident = fn_Math_Transform3_Identity(identBuf);
 
     // Frustum ctor: arg order is (near, far, fovX, fovY). Original uses
     // near=1.0, far=100.0, fovX=fovY=90.0 (FUN_140098800).

@@ -127,7 +127,11 @@ static void* MenuScene_Helper_8800(void* transformObj) {
     Field<uint64_t>(transformObj, 0x1C) = 0;
     Field<uint32_t>(transformObj, 0x24) = 0;
 
-    void* ident = fn_Math_Transform3_Identity();
+    // Transform3::Identity returns BY VALUE: the hidden return slot is an
+    // argument, not something the callee allocates. Passing nothing left it
+    // writing 0x30 bytes through a stale RCX (see engine_funcs.h).
+    uint8_t identBuf[0x40] = {};
+    void* ident = fn_Math_Transform3_Identity(identBuf);
 
     // Frustum ctor takes 4 Scalar* args in order (near, far, fovX, fovY) — the
     // first two are stored as raw plane distances, the last two are interpreted

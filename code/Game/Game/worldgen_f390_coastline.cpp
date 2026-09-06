@@ -101,13 +101,38 @@ static fn_Vec2LengthSq_t  s_Vec2LengthSq  = nullptr;
 static fn_Vec2Normalize_t s_Vec2Normalize = nullptr;
 static bool s_coastResolved = false;
 
-// Inline Vector2 fallbacks — the engine's Math::Vector2 Length/LengthSquared/Normalize
-// are inlined in the original (no Runtime export), so ResolveExport returns null. Without
-// a working Normalize the subdivide displacement uses an un-normalized (huge) direction,
-// which makes every candidate ring invalid and cd090's placement loop never terminate.
+// Inline Vector2 fallbacks, used only if the real exports below fail to resolve.
 static float coast_vec2len_fb(void* self)   { const float* v = (const float*)self; return sqrtf(v[0]*v[0] + v[1]*v[1]); }
 static float coast_vec2lensq_fb(void* self) { const float* v = (const float*)self; return v[0]*v[0] + v[1]*v[1]; }
 static void* coast_vec2norm_fb(void* self)  { float* v = (float*)self; float L = sqrtf(v[0]*v[0] + v[1]*v[1]); if (L > 0.0f) { v[0]/=L; v[1]/=L; } return self; }
+
+// The three ResolveExport calls below used to look up mangled names that DO
+// NOT EXIST in Runtime-x64.dll's export table (verified with pefile 2026-09-06):
+//   "?Length@Vector2@Math@@QEBAMXZ"        (assumed a plain-float return)
+//   "?LengthSquared@Vector2@Math@@QEBAMXZ" (assumed a plain-float return)
+//   "?Normalize@Vector2@Math@@QEAAAEAV12@XZ" (assumed an in-place, non-const overload)
+// So s_Vec2Length/LengthSq/Normalize always resolved null and every call
+// silently ran the fallback above instead of the DLL. The real exports exist
+// under different signatures (Length/LengthSquared return Math::Scalar via a
+// hidden RDX return-slot pointer, per the ABI note in
+// runtime/types/math/Math.h; Normalize has NO in-place overload, only a
+// by-value one). These adapters resolve the real exports and preserve this
+// file's existing call-site shape (float return / in-place self-mutation).
+typedef float* (*fn_Vec2LengthReal_t)(const void* self, float* ret);
+typedef void*  (*fn_Vec2NormalizeReal_t)(const void* self, void* ret);
+static fn_Vec2LengthReal_t    s_Vec2LengthReal    = nullptr;  // ?Length@Vector2@Math@@QEBA?AVScalar@2@XZ        0x18006c880
+static fn_Vec2LengthReal_t    s_Vec2LengthSqReal  = nullptr;  // ?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ 0x18006c860
+static fn_Vec2NormalizeReal_t s_Vec2NormalizeReal = nullptr;  // ?Normalize@Vector2@Math@@QEBA?AV12@XZ (by value) 0x18006c600
+
+static float coast_vec2len_real(void* self)   { float ret; s_Vec2LengthReal(self, &ret); return ret; }
+static float coast_vec2lensq_real(void* self) { float ret; s_Vec2LengthSqReal(self, &ret); return ret; }
+static void* coast_vec2norm_real(void* self) {
+    float out[2];
+    s_Vec2NormalizeReal(self, out);
+    float* v = (float*)self;
+    v[0] = out[0]; v[1] = out[1];
+    return self;
+}
 
 static void coastline_EnsureInit() {
     if (s_coastResolved) return;
@@ -115,13 +140,12 @@ static void coastline_EnsureInit() {
     s_RandFloatTol  = (fn_RandFloatTol_t)  ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
     s_Rand1         = (fn_Rand1_t)         ResolveExport("?Rand@Random@System@@QEAAII@Z");   // uint Rand(uint) — was wrong (HH=int/int -> null)
     s_Rand2         = (fn_Rand2_t)         ResolveExport("?Rand@Random@System@@QEAAHHH@Z");
-    s_Vec2Length    = (fn_Vec2Length_t)    ResolveExport("?Length@Vector2@Math@@QEBAMXZ");
-    s_Vec2LengthSq  = (fn_Vec2LengthSq_t)  ResolveExport("?LengthSquared@Vector2@Math@@QEBAMXZ");
-    s_Vec2Normalize = (fn_Vec2Normalize_t) ResolveExport("?Normalize@Vector2@Math@@QEAAAEAV12@XZ");
-    // Vector2 ops are not exported by the Runtime — install inline fallbacks.
-    if (!s_Vec2Length)    s_Vec2Length    = &coast_vec2len_fb;
-    if (!s_Vec2LengthSq)  s_Vec2LengthSq  = &coast_vec2lensq_fb;
-    if (!s_Vec2Normalize) s_Vec2Normalize = &coast_vec2norm_fb;
+    s_Vec2LengthReal    = (fn_Vec2LengthReal_t)    ResolveExport("?Length@Vector2@Math@@QEBA?AVScalar@2@XZ");
+    s_Vec2LengthSqReal  = (fn_Vec2LengthReal_t)    ResolveExport("?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ");
+    s_Vec2NormalizeReal = (fn_Vec2NormalizeReal_t) ResolveExport("?Normalize@Vector2@Math@@QEBA?AV12@XZ");
+    s_Vec2Length    = s_Vec2LengthReal    ? &coast_vec2len_real    : &coast_vec2len_fb;
+    s_Vec2LengthSq  = s_Vec2LengthSqReal  ? &coast_vec2lensq_real  : &coast_vec2lensq_fb;
+    s_Vec2Normalize = s_Vec2NormalizeReal ? &coast_vec2norm_real   : &coast_vec2norm_fb;
     fprintf(stderr, "[worldgen] coastline resolves: RandFloatTol=%p Rand1=%p Rand2=%p "
             "Vec2Norm=%p(->%p) Vec2Len=%p Vec2LenSq=%p\n",
             (void*)s_RandFloatTol, (void*)s_Rand1, (void*)s_Rand2,

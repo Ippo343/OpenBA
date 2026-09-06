@@ -3943,8 +3943,14 @@ bool EngineFuncsInit() {
         ResolveExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z"));
     fn_Audio_Scene_StopEffect3D = reinterpret_cast<fn_Audio_Scene_StopEffect3D_t>(
         ResolveExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z"));
+    // Was resolving under a mangled name that does not exist in the DLL
+    // (Runtime-x64.dll's export table has this as ??8..., the MSVC operator==
+    // mangling, not "?operator==@..."; verified with pefile against the
+    // export table 2026-09-06). fn_Vector3_Equals_t's shape (bool return, no
+    // hidden slot, this in RCX/rhs in RDX) already matches this export's
+    // ABI, so only the name needed fixing.
     fn_Vector3_Equals = reinterpret_cast<fn_Vector3_Equals_t>(
-        ResolveExport("?operator==@Vector3@Math@@QEBA_NAEBV12@@Z"));
+        ResolveExport("??8Vector3@Math@@QEBA_NAEBV01@@Z"));  // retail 0x1800150a0
     fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
         ResolveAddr(Module::Exe, 0x1400607E0));
     fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
