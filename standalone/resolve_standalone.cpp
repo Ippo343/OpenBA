@@ -261,6 +261,7 @@ void RuntimePortInit() {
     RtMathPortInit();     // Wave 1: Math
     RtVolumePortInit();   // Wave 1: Volume
     RtSystemPortInit();   // Wave 2: System
+    RtObjectPortInit();   // Wave 3: Object
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.
