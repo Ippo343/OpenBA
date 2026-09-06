@@ -104,6 +104,10 @@ static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedS
 extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
                                            void* savedState, int* outParam);
 
+// code/Game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
+// 0x140096960). Installed on the AchievementManager at step 30 below.
+extern "C" void EventLog_OnAchievementAwarded(int achievementId);
+
 // ============================================================
 // Step 2 — ProfessionList load (WaveH2; env BANISHED_LIVE_PROFESSIONLIST)
 // ============================================================
@@ -1313,10 +1317,34 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // standalone, so g_ppAchievementManager is null → skip cleanly". That has not been
     // true since the slot was wired (engine_funcs.cpp) — the Achievements dialog reads
     // the same manager through it. The handler retail installs is exe 0x140096960, the
-    // award TOAST (it formats the achievement title into an event-log entry, type 0x19);
-    // that function is not ported yet, so we leave the handler null. A null handler only
-    // costs the on-screen announcement: Runtime's SetAchievementMet still records the
-    // award and still writes the "Ach" registry value.
+    // award TOAST (it formats the achievement title into an event-log entry, type 0x19).
+    // PORTED 2026-09-06 (exe close-out lane C): code/Game/Game/eventlog_achievement.cpp,
+    // registered by standalone/reg_closeout_lane_c.cpp. Until then the handler was left
+    // null, which cost only the on-screen announcement — Runtime's award bookkeeping and
+    // the "Ach" registry value never depended on it.
+    //
+    // Retail: RAX = *0x1401514f0 (AchievementManager::_singleton storage);
+    //         RCX = *RAX; RDX = 0x140096960; CALL SetEventHandler.
+    // We call our port directly rather than through ResolveAddr — the address IS
+    // registered for any retail-shaped caller, but this is the only call site.
+    {
+        typedef void (*fn_SetEventHandler_t)(void* self, void (*handler)(int));
+        static fn_SetEventHandler_t s_setEventHandler = nullptr;
+        if (!s_setEventHandler)
+            s_setEventHandler = reinterpret_cast<fn_SetEventHandler_t>(
+                ResolveExport("?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z"));
+        void* achMgr = (g_ppAchievementManager && *g_ppAchievementManager)
+                           ? **g_ppAchievementManager : nullptr;
+        if (s_setEventHandler && achMgr) {
+            s_setEventHandler(achMgr, &EventLog_OnAchievementAwarded);
+            fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
+                            "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", achMgr);
+        } else {
+            fprintf(stderr, "[GUL::Load] step30 SetEventHandler SKIPPED (mgr=%p fn=%p)\n",
+                    achMgr, (void*)s_setEventHandler);
+        }
+        fflush(stderr);
+    }
 
     // Retail reads +0x15C into a register HERE, before either branch, and writes it
     // back after step 32 (0x1400976d7). That ordering is load-bearing on the

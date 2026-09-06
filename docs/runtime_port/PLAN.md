@@ -39,11 +39,11 @@ The 14 unregistered `.text` addresses our own code requests:
 | # | Gap | Where |
 |---|---|---|
 | 1 | Crop-field state-machine handler bodies registered as `nullptr` | `code/Game/Component/cropfieldcomponent_states.cpp:41` |
-| 2 | Citizen AI states Work / AdultTransition / ElderTransition unported | `code/Game/Component/citizenai_handlers2.cpp:16` |
+| 2 | ~~Citizen AI states Work / AdultTransition / ElderTransition unported~~ **CLOSED — the cited line was a stale comment; all three are in `citizenai_handlers3.cpp` and registered. Eat/Drink observed entering in-game; Work is never *offered* because `CitizenComponent+0x68` is 0 (housing link), not a handler gap** | `docs/waves/exe_closeout/lane_c.md` |
 | 3 | Fenced-area tool unported (pastures need scaffolding) | `code/Game/Game/starttown.cpp:2383` |
 | 4 | Drag-area / placement tools for crop field, hunter, gatherer | `code/Game/Game/starttown.cpp:3041` |
 | 5 | Pasture dialog unported (livestock type from env var) | `code/Game/Component/pasturecomponent_spawn.cpp:369` |
-| 6 | Achievement award toast unported | `code/Game/Game/gameupdateloop_load.cpp:1317` |
+| 6 | ~~Achievement award toast unported~~ **PORTED — `0x140096960` → `code/Game/Game/eventlog_achievement.cpp`, installed at Load step 30, toast verified in-game ("[award message elided]")** | `docs/waves/exe_closeout/lane_c.md` |
 | 7 | `ClearStorage` slot-3 Serialize is a no-op | `code/Game/Work/clearstorage.cpp:683` |
 | 8 | Trade controller event `0xa` registered null | `code/Game/Component/tradecomponent_states.cpp:620` |
 | 9 | `AutoPickupWork` slots 1/2 are generic shims | `code/Game/Work/autopickupwork.cpp:98` |

@@ -13,10 +13,15 @@
 //                  + (no-target fallback) the MeshInstance "go invisible" render branch
 //   0x14010d560  CitizenAI_State_FindWork       (case 10)-> WalkTowards + 122be0/122b00 + 115a50
 //
-// HANDLERS DELIBERATELY NOT PORTED HERE (blocked on UNregistered deep helpers — see report):
-//   0x14010d790  State_Work          : CitizenAI_helper_db20 (0x14010db20) UNREG
-//   0x14010cd80  State_AdultTransition: CitizenAI_helper_e370 (0x14008e370) + FUN_14012ac30 (0x14012ac30) UNREG
-//   0x14010d2c0  State_ElderTransition: Entity_impl_ec70 (0x14008ec70) + FUN_14012ac30 (0x14012ac30) UNREG
+// HANDLERS NOT PORTED IN *THIS* FILE — they live in citizenai_handlers3.cpp.
+// (This list used to say "blocked on UNregistered deep helpers"; that stopped being
+// true when reg_citizenai_findhelpers.cpp landed db20/e370/ec70/2ac30, and the stale
+// wording survived long enough to be filed as PLAN.md §1.2 item 2 "unported". They
+// are ported, registered and observed entering in-game — see
+// docs/waves/exe_closeout/lane_c.md.)
+//   0x14010d790  State_Work           -> citizenai_handlers3.cpp (helper db20 @ 0x14010db20)
+//   0x14010cd80  State_AdultTransition-> citizenai_handlers3.cpp (e370 @ 0x14008e370 + 2ac30)
+//   0x14010d2c0  State_ElderTransition-> citizenai_handlers3.cpp (ec70 @ 0x14008ec70 + 2ac30)
 //
 // self chain (all handlers): param = CitizenAIComponent ; self = param+0x38 (sibling
 //   CitizenComponent IBP) ; *self = CitizenComponent. char = *(citizen+0x278). The action
