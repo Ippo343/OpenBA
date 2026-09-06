@@ -10,10 +10,15 @@ binary-compatible type header and a reimplementation.
 The end goal is a readable C++ codebase that mirrors the game's logic and can be compiled into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
 **Current state**: the project builds a standalone replacement exe (`reimpl-x64.exe`)
-that links against the original Runtime-x64.dll + VideoDX11-x64.dll and runs our
-reimplemented game logic from `code/Game/`. The old proxy-DLL/hooking mode has been
-removed. Remaining exe functions not yet reimplemented are stubbed or registered
-individually via the address registry (see below).
+that links against the original Runtime-x64.dll and runs our reimplemented game logic
+from `code/Game/`. VideoDX11-x64.dll is already fully replaced by `dx11/` (never loaded).
+The old proxy-DLL/hooking mode has been removed. Remaining exe functions not yet
+reimplemented are stubbed or registered individually via the address registry (see below).
+
+**Next phase (2026-09-06): port Runtime-x64.dll.** Review, facts, wave order, risks and the
+per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
+before any runtime work. `Runtime-x64-profile.dll` (ToolKit, debug strings + 5,182 exports) is
+imported into the Ghidra project and is the primary source for naming Runtime internals.
 
 ## Target Binaries
 
