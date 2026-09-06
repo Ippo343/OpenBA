@@ -61,3 +61,4 @@ inline Fn RtOriginal(const char* mangled) {
 // ---- Wave init entry points ------------------------------------------------
 void RtMathPortInit();     // runtime/src/math/
 void RtVolumePortInit();   // runtime/src/volume/
+void RtSystemPortInit();   // runtime/src/system/ — Wave 2
