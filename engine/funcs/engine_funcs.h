@@ -1939,7 +1939,13 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 typedef void* (*fn_External_GetPath_t)(void* self, void* retBuf);
 extern fn_External_GetPath_t fn_External_GetPath;
 
-// System::Filename::GetPathIdentifer(this, retval) -> String (member, non-trivial return)
+// System::Filename::GetPathIdentifer(this, retval) -> FILENAME, not String.
+// The export is ?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ ("?AV12@" =
+// Filename, the enclosing class); we resolved it for a long time under
+// ?AV...String@2@..., a mangling the DLL does not contain, and only the
+// ResolveAddr fallback below kept the pointer non-null. Both types are a
+// single pointer so the ABI is unaffected, but the name matters: it is what
+// a RegisterRuntimeExport port is keyed on.
 typedef void* (*fn_Filename_GetPathIdentifier_t)(void* self, void* retval);
 extern fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier;
 

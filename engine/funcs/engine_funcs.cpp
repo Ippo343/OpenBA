@@ -1745,7 +1745,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Runtime, 0x1801faa88));
 
     fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
-        ResolveExport("?AdjustDelimiters@Filename@System@@QEAAXXZ"));
+        ResolveExport("?AdjustDelimiters@Filename@System@@AEAAXXZ"));
     if (!fn_Filename_AdjustDelimiters) {
         fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
             ResolveAddr(Module::Runtime, 0x1800c6970));
@@ -3111,7 +3111,7 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x18006a3e0));
     }
     fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
-        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AVString@2@XZ"));
+        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
     if (!fn_Filename_GetPathIdentifier) {
         fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
             ResolveAddr(Module::Runtime, 0x1800c6610));
