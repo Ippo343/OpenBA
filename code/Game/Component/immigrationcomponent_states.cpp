@@ -1,0 +1,838 @@
+// code/Game/Component/immigrationcomponent_states.cpp
+// The IMMIGRATION (nomad arrival) state machine of the town hall — ported 2026-09-05
+// for the Immigrants achievement (Ach27, stat 28 = nomads admitted).
+//
+// ImmigrationComponent (0x68, a ControllerComponent on Template\TownHall.rsc) is the
+// town hall's nomad-arrival controller. In retail its behaviour is the state table
+// registered once by ImmigrationDescription_Setup -> helper_e6c0 (0x14004e6c0):
+//
+//   state 2    IDLE        enter d290 / tick d220 : if CanAccept -> 0xf
+//                          transitions -> {3, 0xf}
+//   state 0xf  WAITING     enter d1a0 : timer = (24 + rand*48) months
+//                          tick  d0d0 : timer -= dt; when expired AND month in
+//                                       [desc+0x50, desc+0x54] (spring) -> 0x10 if
+//                                       CanAccept else back to 2
+//                          transitions -> {3, 0x10, 2}
+//   state 0x10 ARRIVING    enter d090 : reset + Spawn the group at a map edge
+//                          tick  d070 : re-spawn if the group is empty
+//                          transitions -> {3 (dismiss on the way out), 0x11}
+//                          event 6  cff0 : one nomad reached the hall; all there -> 0x11
+//   state 0x11 WAITING-FOR-ANSWER
+//                          enter ceb0 : event-log "nomads have arrived" (type 0xe)
+//                          tick  ce00 : month >= desc+0x58 (autumn) -> dismiss -> 2
+//                          transitions -> {3 (dismiss), 2}
+//                          event 7  cd90 : ALLOW  = Accept (convert to citizens) -> 2
+//                          event 8  cd20 : DENY   = Dismiss (send them home)     -> 2
+//
+// The Allow/Deny buttons of the town hall's "Nomads" tab (ImmigrationUI_Slot9,
+// immigrationui.cpp) post events 7/8 through the StateMachineComponent node — the
+// same node-vtable slot 2 (PostEvent) the Dispatcher below implements.
+//
+// Component layout (retail ctor 0x14004e640):
+//   +0x10 owner entity IBP (the town hall)   +0x18 ImmigrationDescription
+//   +0x28 embedded state node (0x20 bytes; node+0x18 = this)
+//   +0x48 Time  wait timer                    +0x50 int   nomads arrived at the hall
+//   +0x58 IBP[] the nomad entities           +0x60 count  +0x64 capacity
+// ImmigrationDescription (immigrationdescription.cpp):
+//   +0x20 nomad entity template   +0x28 min population (80)
+//   +0x30/+0x38 required building templates (must be built: townMgr+0x160 count > 0)
+//   +0x40/+0x44 group size as a fraction of the population (0.05 .. 0.15)
+//   +0x48/+0x4c wait timer base/range in MONTHS (24 / 48; one month = 300 s)
+//   +0x50/+0x54 arrival month window (1..3)   +0x58 leave month (7)
+//   +0x5c spawn distance from the map edge (10)
+//   +0x60/+0x64 disease seed written to townMgr+0x1a8 / +0x1a0 on accept
+//
+// Opt-in: BANISHED_LIVE_IMMIGRATION (or BANISHED_LIVE_COMPONENTS). Default off keeps
+// the component inert exactly as before this port.
+//
+// Test fixtures (all env-gated, byte-unchanged when unset — NOT retail behaviour):
+//   BANISHED_NOMAD_TRACE=1            stderr trace of every state/event/spawn/accept
+//   BANISHED_NOMAD_TIMER_SCALE=<f>    multiply the 2..6-year wait timer (0.001 = now)
+//   BANISHED_NOMAD_ANY_SEASON=1       ignore the spring window and the autumn leave
+//   BANISHED_NOMAD_AUTOACCEPT=<n>     n ticks after the group is waiting, post the
+//                                     ALLOW event (7) through the SM node, exactly
+//                                     as the Allow button does; a NEGATIVE n posts
+//                                     DENY (event 8) after |n| ticks instead
+//
+// Faithful offset-by-offset port of 0x14004cd00 .. 0x14004e4b0 and 0x140050030 /
+// 0x1400501a0 (nomad -> citizen conversion).
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include "Object/factory_registration.h"
+#include "Component/controller_state_table.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
+
+namespace {
+
+// ---------------------------------------------------------------- constants
+constexpr float kSecondsPerMonth = 300.0f;   // DAT_140172234
+constexpr float kSecondsPerYear  = 3600.0f;  // DAT_14017225c
+constexpr float kMonthsPerYear   = 12.0f;    // DAT_1401721b8
+constexpr float kHalfCell        = 0.5f;     // DAT_140172114
+constexpr float kYawRange        = 180.0f;   // DAT_140172220
+
+// ---------------------------------------------------------------- resolved helpers
+typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);
+typedef void* (*fn_ResolvePos_t)(void* comp, float* out3, int kind, int idx, float* p5);
+typedef int   (*fn_ChildSum_t)(int64_t comp, int kind);
+typedef void* (*fn_CopyCtor_t)(void* mem, void* desc);
+typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entityIBP, int category);
+typedef void  (*fn_DynArray8_t)(void* arr, int newCount, void* fill);
+typedef void  (*fn_ZoneRefresh_t)(int* grid, void* p2, void* p3, int p4);
+typedef void  (*fn_SetTransformYaw_t)(uintptr_t model, const void* pos, float yaw);
+typedef void  (*fn_SetVariant_t)(int64_t* model, uint16_t variant, int16_t sub);
+typedef void  (*fn_DeferredInit_t)(int64_t citizen, void* pos, uint32_t gender, char isElder,
+                                   float age, char forceEmploy, int64_t* parentIBP, int64_t key);
+
+fn_FindComp_t        s_FindSM        = nullptr;  // 0x140003ea0  StateMachineComponent
+fn_ResolvePos_t      s_ResolvePos    = nullptr;  // 0x140122e20  Entity_impl_2e20
+fn_ChildSum_t        s_ChildSum      = nullptr;  // 0x140123070
+fn_CopyCtor_t        s_CopyCtor      = nullptr;  // 0x1400c3720  ComponentEntity_CopyCtor
+fn_RegisterEntity_t  s_RegisterEnt   = nullptr;  // 0x1400c48a0  EntityList_RegisterEntity
+fn_DynArray8_t       s_DynArray8     = nullptr;  // 0x140003110  DynArray8_ResizeFill
+fn_ZoneRefresh_t     s_ZoneRefresh   = nullptr;  // 0x14009c480
+fn_SetTransformYaw_t s_SetYaw        = nullptr;  // 0x140003870
+fn_SetVariant_t      s_SetVariant    = nullptr;  // 0x1401253d0
+fn_DeferredInit_t    s_DeferredInit  = nullptr;  // 0x140117080
+bool s_resolved = false;
+
+void Resolve() {
+    if (s_resolved) return;
+    s_FindSM       = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
+    s_ResolvePos   = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
+    s_ChildSum     = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
+    s_CopyCtor     = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
+    s_RegisterEnt  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_DynArray8    = reinterpret_cast<fn_DynArray8_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_ZoneRefresh  = reinterpret_cast<fn_ZoneRefresh_t>(ResolveAddr(Module::Exe, 0x14009c480));
+    s_SetYaw       = reinterpret_cast<fn_SetTransformYaw_t>(ResolveAddr(Module::Exe, 0x140003870));
+    s_SetVariant   = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
+    s_DeferredInit = reinterpret_cast<fn_DeferredInit_t>(ResolveAddr(Module::Exe, 0x140117080));
+    s_resolved = true;
+}
+
+// Type ids by name, resolved lazily from the live factory tree (the exe .rdata
+// globals are not all registered in standalone; see the ImmigrationUI stub note).
+uint32_t TidImmDesc()   { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("ImmigrationDescription"); return t; }
+uint32_t TidNomadDesc() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("NomadDescription");       return t; }
+uint32_t TidNomadComp() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("NomadComponent");         return t; }
+uint32_t TidResidence() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");     return t; }
+uint32_t TidCitDesc()   { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("CitizenDescription");     return t; }
+uint32_t TidInteractDesc() {
+    if (g_TypeId_InteractDescription_FC && *g_TypeId_InteractDescription_FC)
+        return *g_TypeId_InteractDescription_FC;
+    static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("InteractDescription"); return t;
+}
+
+// ---------------------------------------------------------------- env fixtures
+bool EnvSet(const char* n) {
+    const char* e = std::getenv(n);
+    return e && e[0] && std::strcmp(e, "0") != 0;
+}
+bool Trace() { static int v = -1; if (v < 0) v = EnvSet("BANISHED_NOMAD_TRACE") ? 1 : 0; return v == 1; }
+bool AnySeason() { static int v = -1; if (v < 0) v = EnvSet("BANISHED_NOMAD_ANY_SEASON") ? 1 : 0; return v == 1; }
+float TimerScale() {
+    static float v = -1.0f;
+    if (v < 0.0f) {
+        const char* e = std::getenv("BANISHED_NOMAD_TIMER_SCALE");
+        v = (e && e[0]) ? static_cast<float>(std::atof(e)) : 1.0f;
+        if (v <= 0.0f) v = 1.0f;
+    }
+    return v;
+}
+// <0 => unset. AutoAnswerEvent() is 7 (ALLOW) or 8 (DENY, from a negative value).
+int AutoAcceptTicks() {
+    static int v = -2;
+    if (v == -2) { const char* e = std::getenv("BANISHED_NOMAD_AUTOACCEPT"); v = (e && e[0]) ? std::abs(std::atoi(e)) : -1; }
+    return v;
+}
+int AutoAnswerEvent() {
+    static int v = 0;
+    if (v == 0) { const char* e = std::getenv("BANISHED_NOMAD_AUTOACCEPT"); v = (e && e[0] && std::atoi(e) < 0) ? 8 : 7; }
+    return v;
+}
+
+// ---------------------------------------------------------------- small accessors
+inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
+inline uint8_t* TownMgr(uint8_t* gw) { return *reinterpret_cast<uint8_t**>(gw + 0xf0); }
+inline void*    Rng(uint8_t* gw)     { return *reinterpret_cast<void**>(gw + 0xd8); }
+inline int*     Grid(uint8_t* gw)    { return *reinterpret_cast<int**>(gw + 0xf8); }
+inline uintptr_t Tiles(int* grid)    { return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80); }
+
+inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
+inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(dst, obj); else *reinterpret_cast<void**>(dst) = obj; }
+
+// desc = comp+0x18 if IsDerivedFrom(ImmigrationDescription) else null — retail
+// dereferences the null; a town hall without its description is a broken template.
+uint8_t* ImmDesc(uintptr_t comp) {
+    void* d = *reinterpret_cast<void**>(comp + 0x18);
+    if (d && fn_IsDerivedFrom && fn_IsDerivedFrom(d, TidImmDesc())) return reinterpret_cast<uint8_t*>(d);
+    static bool warned = false;
+    if (!warned) { warned = true; std::fprintf(stderr, "[ImmCtrl] comp=%p has no ImmigrationDescription (desc=%p tid=%08x)\n", (void*)comp, d, TidImmDesc()); std::fflush(stderr); }
+    return nullptr;
+}
+
+// The month of the in-game year: the clock at gw+0x128 holds {year int, Time-in-year}.
+int MonthOfYear(uint8_t* gw) {
+    void* clock = *reinterpret_cast<void**>(gw + 0x128);
+    if (!clock || !fn_Time_AsSeconds) return 0;
+    float secs = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(clock) + 8);
+    int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
+    if (m > 11) m = 0;
+    return m;
+}
+
+// Scan an entity's component list for the component whose GetTypeId == tid.
+void* FindComponentByTid(void* entity, uint32_t tid) {
+    if (!entity || !tid) return nullptr;
+    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
+    int n = *reinterpret_cast<int*>(e + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    for (int i = 0; i < n; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        CheckPtr(slot);
+        void* c = *slot;
+        if (!c) continue;
+        void** vt = *reinterpret_cast<void***>(c);
+        uint32_t got = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c);
+        if (got != tid) continue;
+        CheckPtr(slot);
+        c = *slot;
+        return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+    }
+    return nullptr;
+}
+
+// Post an event to an entity's StateMachineComponent through its node vtable slot 2,
+// the exact call shape retail uses: node->PostEvent(node, &sm, curIdx, eventId).
+void PostEventToEntity(void* entity, int eventId) {
+    if (!entity || !s_FindSM) return;
+    uint64_t smcIBP = 0;
+    s_FindSM(reinterpret_cast<uintptr_t>(entity), &smcIBP);
+    CheckPtr(&smcIBP);
+    uintptr_t smc = static_cast<uintptr_t>(smcIBP);
+    if (!smc) return;
+    void* node = *reinterpret_cast<void**>(smc + 0x48);
+    if (!node) return;
+    void** vt = *reinterpret_cast<void***>(node);
+    typedef char (*PostEvent_t)(void*, void*, int, int);
+    reinterpret_cast<PostEvent_t>(vt[2])(node, reinterpret_cast<void*>(smc + 0x48),
+                                        static_cast<int>(*reinterpret_cast<int8_t*>(smc + 0x51)), eventId);
+}
+
+}  // namespace
+
+// ============================================================
+// CanAccept — port of 0x14004e3f0
+// population >= desc+0x28 AND every required template in desc+0x30[0..+0x38) has a
+// built instance (townMgr+0x160 BST: key@+0, count@+0x10, left@+0x20, right@+0x28).
+// ============================================================
+extern "C" bool Immigration_CanAccept(void* compV) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc) return false;
+    uint8_t* tm = TownMgr(gw);
+    if (*reinterpret_cast<int*>(tm + 0xa8) < *reinterpret_cast<int*>(desc + 0x28)) return false;
+    int req = *reinterpret_cast<int*>(desc + 0x38);
+    if (req < 1) return true;
+    uint64_t* root = *reinterpret_cast<uint64_t**>(tm + 0x160);
+    uint64_t* keys = *reinterpret_cast<uint64_t**>(desc + 0x30);
+    for (int i = 0; i < req; ++i) {
+        uint64_t key = keys[i];
+        uint64_t* n = root;
+        while (n) {
+            if (key < n[0])       n = reinterpret_cast<uint64_t*>(n[4]);
+            else if (key <= n[0]) break;
+            else                  n = reinterpret_cast<uint64_t*>(n[5]);
+        }
+        if (!n || *reinterpret_cast<int*>(&n[2]) == 0) return false;
+    }
+    return true;
+}
+
+// ============================================================
+// FindSpawnCell — port of 0x14004e270
+// Up to 50 tries: a random cell within desc+0x5c of (x, y) that is walkable
+// (flag bit in 0xe07) and — after a zone refresh — in the same pathing zone
+// (tile+0x26) as the town hall's cell, or on a zone-less bridge/road class (0x1e0).
+// ============================================================
+extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc || !fn_Random_RandTol) return -1;
+    void* rng = Rng(gw);
+    int* grid = Grid(gw);
+    const int W = *grid;
+    const int reach = *reinterpret_cast<int*>(desc + 0x5c);
+    for (int t = 0; t < 50; ++t) {
+        int cx = x + fn_Random_RandTol(rng, reach);
+        int cy = y + fn_Random_RandTol(rng, reach);
+        if (cx < 0) cx = 0; else if (cx >= W) cx = W - 1;
+        if (cy < 0) cy = 0; else if (cy >= W) cy = W - 1;
+        int c = W * cy + cx;
+        uintptr_t tiles = Tiles(grid);
+        uint32_t fc = 1u << (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) & 0x1f);
+        if ((fc & 0xe07u) == 0) continue;
+        if (s_ZoneRefresh) s_ZoneRefresh(grid, nullptr, nullptr, hallCell);
+        tiles = Tiles(grid);
+        uintptr_t tc = tiles + static_cast<uintptr_t>(c) * 0x30;
+        uintptr_t th = tiles + static_cast<uintptr_t>(hallCell) * 0x30;
+        uint32_t mh = 1u << (*reinterpret_cast<uint8_t*>(th + 0x29) & 0x1f);
+        uint32_t mc = 1u << (*reinterpret_cast<uint8_t*>(tc + 0x29) & 0x1f);
+        uint32_t u = mc | mh;
+        uint32_t u8 = u | 0xe1fu;
+        if ((u8 & mc) && (u8 & mh)) {
+            if (u & 0x1e0u) return c;
+            int16_t zc = *reinterpret_cast<int16_t*>(tc + 0x26);
+            int16_t zh = *reinterpret_cast<int16_t*>(th + 0x26);
+            if (zc != 0 && zh != 0 && zc == zh) return c;
+        }
+    }
+    return -1;
+}
+
+// ============================================================
+// Nomad_Init — port of 0x140050030
+// Bind a freshly cloned nomad to its town hall: target (+0x28), spawn position
+// (+0x30), meeting position (+0x3c), gender (+0x50); place the model at the spawn
+// point with a random yaw, pick the mesh variant and material for the gender.
+// ============================================================
+extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, const float* meetPos) {
+    Resolve();
+    uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
+    uint8_t* gw = GW();
+    if (!gw) return;
+    void* nd = *reinterpret_cast<void**>(nomad + 0x18);
+    uint8_t* ndesc = (nd && fn_IsDerivedFrom && fn_IsDerivedFrom(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
+    *reinterpret_cast<uint64_t*>(nomad + 0x28) = *reinterpret_cast<uint64_t*>(ownerIBP);
+    float* sp = reinterpret_cast<float*>(nomad + 0x30);
+    sp[0] = spawnPos[0]; sp[1] = spawnPos[1]; sp[2] = spawnPos[2];
+    float* mp = reinterpret_cast<float*>(nomad + 0x3c);
+    mp[0] = meetPos[0]; mp[1] = meetPos[1]; mp[2] = meetPos[2];
+    void* rng = Rng(gw);
+    *reinterpret_cast<uint32_t*>(nomad + 0x50) = fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0;
+
+    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
+    void* entity = *reinterpret_cast<void**>(nomad + 0x10);
+    uint64_t modelIBP = 0;
+    fn_FindComponent_Character(entity, &modelIBP);   // ModelComponent (DAT_1401c7a50)
+    CheckPtr(&modelIBP);
+    uintptr_t model = static_cast<uintptr_t>(modelIBP);
+    if (!model) return;
+    float yaw = fn_Random_RandFloatTol(rng) * kYawRange;
+    if (s_SetYaw) s_SetYaw(model, reinterpret_cast<void*>(nomad + 0x30), yaw);
+    if (s_SetVariant) s_SetVariant(reinterpret_cast<int64_t*>(model),
+                                   static_cast<uint16_t>(*reinterpret_cast<uint32_t*>(nomad + 0x50)), 0);
+    if (ndesc && fn_Graphics_MeshInstance_SetMaterialInstance) {
+        void* mat = *reinterpret_cast<void**>(ndesc + ((*reinterpret_cast<uint32_t*>(nomad + 0x50) == 0) ? 0x28 : 0x30));
+        fn_Graphics_MeshInstance_SetMaterialInstance(reinterpret_cast<void*>(model + 0x28), 0, mat);
+    }
+}
+
+// ============================================================
+// Spawn — port of 0x14004dbe0
+// Pick a map edge, find a walkable edge cell in the hall's pathing zone, size the
+// group from the population (5..15%) plus a random share of the empty house slots
+// (minimum 2), then clone the nomad template once per member at that edge and
+// register each into the world.
+// ============================================================
+extern "C" void Immigration_Spawn(void* compV) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc || !fn_Random_Rand || !s_ResolvePos || !s_CopyCtor || !fn_MapGetTerrainPos) return;
+    void* rng = Rng(gw);
+    int* grid = Grid(gw);
+    const int W = *grid;
+    const int edge = *reinterpret_cast<int*>(desc + 0x5c);
+
+    CheckPtr(reinterpret_cast<void*>(comp + 0x10));
+    uint64_t posIBP = 0;
+    fn_Entity_FindComponent_Position(reinterpret_cast<uintptr_t>(*reinterpret_cast<void**>(comp + 0x10)), &posIBP);
+
+    int x = 0, y = 0, hallCell = 0, cell = -1;
+    for (int t = 0; t < 10; ++t) {
+        uint32_t r = fn_Random_Rand(rng, 4);
+        if (static_cast<int>(r) < 2) {
+            x = (r == 0) ? edge : (W - edge) - 1;
+            y = static_cast<int>(fn_Random_Rand(rng, W));
+        } else {
+            x = static_cast<int>(fn_Random_Rand(rng, W));
+            y = (r == 2) ? edge : (W - edge) - 1;
+        }
+        CheckPtr(&posIBP);
+        float hp[3] = {0, 0, 0};
+        s_ResolvePos(reinterpret_cast<void*>(posIBP), hp, 0, 0, nullptr);
+        int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
+        int cy = static_cast<int>(hp[1] + static_cast<float>(W >> 1));
+        if (cx < 0) cx = 0;
+        if (cx >= W) cx = W - 1;
+        if (cy < 0) cy = 0;
+        if (cy >= W) cy = W - 1;
+        hallCell = cy * W + cx;
+        cell = Immigration_FindSpawnCell(compV, x, y, hallCell);
+        if (cell >= 0) break;
+    }
+    if (cell < 0) {
+        if (Trace()) { std::fprintf(stderr, "[ImmCtrl] Spawn: no reachable edge cell after 10 tries\n"); std::fflush(stderr); }
+        return;
+    }
+
+    uint8_t* tm = TownMgr(gw);
+    const int pop = *reinterpret_cast<int*>(tm + 0xa8);
+    const float fLo = *reinterpret_cast<float*>(desc + 0x40);
+    const float fRand = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.5f;
+    const float fHi = *reinterpret_cast<float*>(desc + 0x44);
+
+    // Empty household slots across every registered house (townMgr+0x20/+0x28).
+    int emptySlots = 0;
+    {
+        int nh = *reinterpret_cast<int*>(tm + 0x28);
+        uintptr_t houses = *reinterpret_cast<uintptr_t*>(tm + 0x20);
+        for (int i = 0; i < nh; ++i) {
+            uint64_t h = *reinterpret_cast<uint64_t*>(houses + static_cast<uintptr_t>(i) * 8);
+            CheckPtr(&h);
+            void* res = FindComponentByTid(reinterpret_cast<void*>(h), TidResidence());
+            uint64_t rIBP = 0; MakeIBP(&rIBP, res);
+            CheckPtr(&rIBP);
+            uintptr_t rc = static_cast<uintptr_t>(rIBP);
+            if (!rc) continue;
+            int slots = *reinterpret_cast<int*>(rc + 0x58);
+            uintptr_t arr = *reinterpret_cast<uintptr_t*>(rc + 0x50);
+            for (int s = 0; s < slots; ++s)
+                if (*reinterpret_cast<int*>(arr + static_cast<uintptr_t>(s) * 0x10 + 8) == 0) ++emptySlots;
+        }
+    }
+    // Retail calls Rand(emptySlots*2) unguarded; skipped only when the range is 0.
+    int extra = (emptySlots > 0) ? static_cast<int>(fn_Random_Rand(rng, static_cast<uint32_t>(emptySlots * 2))) : 0;
+    int n = extra + static_cast<int>(static_cast<float>(pop) * (fRand * (fHi - fLo) + fLo));
+    if (n < 2) n = 2;
+
+    if (Trace()) {
+        std::fprintf(stderr, "[ImmCtrl] Spawn: edge (%d,%d) cell=%d hallCell=%d pop=%d emptySlots=%d -> group of %d\n",
+                     x, y, cell, hallCell, pop, emptySlots, n);
+        std::fflush(stderr);
+    }
+
+    for (int k = 0; k < n; ++k) {
+        int c = Immigration_FindSpawnCell(compV, x, y, hallCell);
+        if (c < 0) c = cell;
+
+        // A random "use point" on the town hall for this nomad to stand at.
+        CheckPtr(&posIBP);
+        uintptr_t pc = static_cast<uintptr_t>(posIBP);
+        void* idesc = *reinterpret_cast<void**>(pc + 0x18);
+        uint8_t* id = (idesc && fn_IsDerivedFrom && fn_IsDerivedFrom(idesc, TidInteractDesc())) ? reinterpret_cast<uint8_t*>(idesc) : nullptr;
+        uint32_t nPts = id ? *reinterpret_cast<uint32_t*>(id + 0x50) : 0;
+        int nChildren = *reinterpret_cast<int*>(pc + 0x30);
+        for (int ci = 0; ci < nChildren; ++ci) {
+            int64_t* child = reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(pc + 0x28) + static_cast<uintptr_t>(ci) * 8);
+            CheckPtr(child);
+            if (s_ChildSum) nPts += static_cast<uint32_t>(s_ChildSum(*child, 2));
+        }
+        CheckPtr(&posIBP);
+        uint32_t ptIdx = fn_Random_Rand(rng, nPts);
+        float meet[3] = {0, 0, 0};
+        s_ResolvePos(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
+
+        // Clone the nomad template.
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* ent = mem ? s_CopyCtor(mem, *reinterpret_cast<void**>(desc + 0x20)) : nullptr;
+        uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
+
+        // World position of the spawn cell, snapped to the terrain.
+        float half = static_cast<float>(W >> 1) - kHalfCell;
+        float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
+        float spawn[3] = {0, 0, 0};
+        fn_MapGetTerrainPos(grid, spawn, cellPos, '\0', nullptr);
+
+        // Bind its NomadComponent to this hall and drop it into the world.
+        CheckPtr(&entIBP);
+        void* nomad = FindComponentByTid(reinterpret_cast<void*>(entIBP), TidNomadComp());
+        uint64_t nomadIBP = 0; MakeIBP(&nomadIBP, nomad);
+        CheckPtr(&nomadIBP);
+        if (nomadIBP) Nomad_Init(reinterpret_cast<void*>(nomadIBP), reinterpret_cast<void*>(comp + 0x10), spawn, meet);
+        CheckPtr(&entIBP);
+        uintptr_t e = static_cast<uintptr_t>(entIBP);
+        if (e && s_RegisterEnt) {
+            int category = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(e + 0x28) + 0x20);
+            uint64_t regIBP = entIBP;
+            s_RegisterEnt(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
+        }
+        // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
+        // DynArray8 push; the registered resize does the same growth policy.
+        int count = *reinterpret_cast<int*>(comp + 0x60);
+        uint64_t pushIBP = entIBP;
+        if (s_DynArray8) s_DynArray8(reinterpret_cast<void*>(comp + 0x58), count + 1, &pushIBP);
+        if (Trace() && k < 3) {
+            std::fprintf(stderr, "[ImmCtrl]   nomad #%d ent=%p nomadComp=%p cell=%d spawn=(%.1f,%.1f,%.1f) meet=(%.1f,%.1f,%.1f) pts=%u\n",
+                         k, ent, nomad, c, spawn[0], spawn[1], spawn[2], meet[0], meet[1], meet[2], nPts);
+            std::fflush(stderr);
+        }
+    }
+    *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
+}
+
+// ============================================================
+// Dismiss — port of 0x14004d300: event 1 (LEAVE) to every nomad, drop the group.
+// ============================================================
+extern "C" void Immigration_Dismiss(void* compV) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    int n = *reinterpret_cast<int*>(comp + 0x60);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
+    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] Dismiss: %d nomads sent home\n", n); std::fflush(stderr); }
+    for (int i = 0; i < n; ++i) {
+        uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
+        CheckPtr(slot);
+        PostEventToEntity(reinterpret_cast<void*>(*slot), 1);
+    }
+    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
+    *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
+    *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
+}
+
+// ============================================================
+// Convert — port of 0x1400501a0: clone the citizen template for one nomad at the
+// nomad's current position and run the per-citizen deferred init (name, age,
+// gender, family link). Returns the new CitizenComponent (out IBP).
+// ============================================================
+extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t* parentIBP, int gender, char isChild) {
+    Resolve();
+    uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
+    uint8_t* gw = GW();
+    *outIBP = 0;
+    if (!gw || !s_CopyCtor || !s_DeferredInit) return nullptr;
+    void* nd = *reinterpret_cast<void**>(nomad + 0x18);
+    uint8_t* ndesc = (nd && fn_IsDerivedFrom && fn_IsDerivedFrom(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
+    if (!ndesc) return nullptr;
+    void* rng = Rng(gw);
+
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* ent = mem ? s_CopyCtor(mem, *reinterpret_cast<void**>(ndesc + 0x20)) : nullptr;
+    uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
+    CheckPtr(&entIBP);
+    fn_FindComponent_Citizen(reinterpret_cast<void*>(entIBP), outIBP);
+    CheckPtr(outIBP);
+    uintptr_t cit = static_cast<uintptr_t>(*outIBP);
+    if (!cit) return nullptr;
+    void* cd = *reinterpret_cast<void**>(cit + 0x18);
+    uint8_t* cdesc = (cd && fn_IsDerivedFrom && fn_IsDerivedFrom(cd, TidCitDesc())) ? reinterpret_cast<uint8_t*>(cd) : nullptr;
+
+    // Spawn the citizen where the nomad stands (its model transform translation).
+    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
+    uint64_t modelIBP = 0;
+    fn_FindComponent_Character(*reinterpret_cast<void**>(nomad + 0x10), &modelIBP);
+    CheckPtr(&modelIBP);
+    float pos[3] = {0, 0, 0};
+    if (modelIBP) {
+        const float* t = reinterpret_cast<const float*>(static_cast<uintptr_t>(modelIBP) + 0x158);
+        pos[0] = t[0]; pos[1] = t[1]; pos[2] = t[2];
+    }
+    float age;
+    float aLo = cdesc ? *reinterpret_cast<float*>(cdesc + 0x50) : 0.0f;
+    float aHi = cdesc ? *reinterpret_cast<float*>(cdesc + 0x54) : 0.0f;
+    if (isChild == 0) age = fn_Random_RandFloat(rng) * (aHi - aLo) + aLo;
+    else              age = fn_Random_RandFloat(rng) * aLo;
+    uint32_t r = fn_Random_Rand(rng, 1);
+    char flag = (r == 0 || isChild != 0) ? 0 : 1;
+    int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(gw + 0xb0) + 0x30);
+    int64_t parent = static_cast<int64_t>(*parentIBP);
+    CheckPtr(outIBP);
+    s_DeferredInit(static_cast<int64_t>(*outIBP), pos, static_cast<uint32_t>(gender), isChild, age, flag, &parent, key);
+
+    uint64_t regIBP = entIBP;
+    if (s_RegisterEnt) {
+        int category = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ndesc + 0x20) + 0x20);
+        s_RegisterEnt(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
+    }
+    return reinterpret_cast<void*>(*outIBP);
+}
+
+// ============================================================
+// Accept — port of 0x14004d450 (the ALLOW handler's body).
+// Seeds the town's disease clock (townMgr+0x1a8 chance, +0x1a0 duration), adds the
+// group to the NOMADS-ADMITTED counter at townMgr+0x1b0 (achievement stat 28), then
+// converts the group in fours: adult (gender 1), adult (gender 0) married to it,
+// and two children of the second adult; every converted nomad gets event 0
+// (DESTROY). Finally frees the group array.
+// ============================================================
+extern "C" void Immigration_Accept(void* compV) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc) return;
+    uint8_t* tm = TownMgr(gw);
+
+    float chance = *reinterpret_cast<float*>(desc + 0x60);
+    if (*reinterpret_cast<float*>(tm + 0x1a8) < chance) *reinterpret_cast<float*>(tm + 0x1a8) = chance;
+    int64_t dur = 0;
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&dur, static_cast<float>(*reinterpret_cast<int*>(desc + 0x64)) * kSecondsPerMonth);
+    if (*reinterpret_cast<int64_t*>(tm + 0x1a0) < dur) *reinterpret_cast<int64_t*>(tm + 0x1a0) = dur;
+
+    const int n = *reinterpret_cast<int*>(comp + 0x60);
+    *reinterpret_cast<int*>(TownMgr(gw) + 0x1b0) += n;
+    if (Trace()) {
+        std::fprintf(stderr, "[ImmCtrl] ACCEPT: %d nomads -> townMgr+0x1b0 (nomads admitted) = %d\n",
+                     n, *reinterpret_cast<int*>(TownMgr(gw) + 0x1b0));
+        std::fflush(stderr);
+    }
+
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
+    auto nomadAt = [&](int i) -> void* {
+        uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
+        CheckPtr(slot);
+        return *reinterpret_cast<void**>(slot);
+    };
+    auto convert = [&](int i, uint64_t* parent, int gender, char child) -> uintptr_t {
+        void* ent = nomadAt(i);
+        void* nomad = FindComponentByTid(ent, TidNomadComp());
+        uint64_t nIBP = 0; MakeIBP(&nIBP, nomad);
+        CheckPtr(&nIBP);
+        uint64_t citIBP = 0;
+        Nomad_ConvertToCitizen(reinterpret_cast<void*>(nIBP), &citIBP, parent, gender, child);
+        PostEventToEntity(nomadAt(i), 0);
+        return static_cast<uintptr_t>(citIBP);
+    };
+
+    int genderC = 0;
+    for (int i = 0; i < n; ) {
+        uint64_t nullIBP = 0; MakeIBP(&nullIBP, nullptr);
+        uintptr_t a = convert(i, &nullIBP, 1, 0);
+        if (i + 1 >= n) break;
+        uint64_t nullIBP2 = 0; MakeIBP(&nullIBP2, nullptr);
+        uintptr_t b = convert(i + 1, &nullIBP2, 0, 0);
+        uint64_t bIBP = b;
+        CheckPtr(&bIBP);
+        if (b) *reinterpret_cast<uintptr_t*>(b + 0x250) = a;
+        if (a) *reinterpret_cast<uintptr_t*>(a + 0x250) = b;
+        if (i + 2 >= n) break;
+        uint64_t parent = b;
+        convert(i + 2, &parent, genderC, 1);
+        if (i + 3 >= n) break;
+        int genderD = (genderC == 0) ? 1 : 0;
+        uint64_t parent2 = b;
+        convert(i + 3, &parent2, genderD, 1);
+        genderC = (genderD == 0) ? 1 : 0;
+        i += 4;
+    }
+    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
+    *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
+    *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
+}
+
+// ============================================================
+// State handlers (data = the ImmigrationComponent, sm = its StateMachine)
+// ============================================================
+namespace {
+void TraceState(const char* what, uintptr_t comp) {
+    if (!Trace()) return;
+    uint8_t* gw = GW();
+    std::fprintf(stderr, "[ImmCtrl] %s comp=%p month=%d pop=%d group=%d arrived=%d canAccept=%d\n",
+                 what, (void*)comp, gw ? MonthOfYear(gw) : -1,
+                 gw ? *reinterpret_cast<int*>(TownMgr(gw) + 0xa8) : -1,
+                 *reinterpret_cast<int*>(comp + 0x60), *reinterpret_cast<int*>(comp + 0x50),
+                 Immigration_CanAccept(reinterpret_cast<void*>(comp)) ? 1 : 0);
+    std::fflush(stderr);
+}
+int s_autoAcceptCountdown = -1;
+}  // namespace
+
+// state 2 IDLE — enter 0x14004d290 (returns 0), tick 0x14004d220 (returns 1)
+extern "C" char Imm_State2_Enter(void* data, void* sm) {
+    Resolve();
+    TraceState("state 2 (idle) enter", reinterpret_cast<uintptr_t>(data));
+    if (Immigration_CanAccept(data)) ::ControllerLive::RequestStateTransition(sm, 0xf);
+    return 0;
+}
+extern "C" char Imm_State2_Tick(void* data, void* sm, void* /*time*/) {
+    Resolve();
+    if (Immigration_CanAccept(data)) ::ControllerLive::RequestStateTransition(sm, 0xf);
+    return 1;
+}
+
+// state 0xf WAITING — enter 0x14004d1a0: timer = (base + rand*range) months
+extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc) return 0;
+    float r = fn_Random_RandFloat ? fn_Random_RandFloat(Rng(gw)) : 0.5f;
+    float months = r * *reinterpret_cast<float*>(desc + 0x4c) + *reinterpret_cast<float*>(desc + 0x48);
+    float secs = months * kSecondsPerMonth * TimerScale();
+    int64_t t = 0;
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
+    *reinterpret_cast<int64_t*>(comp + 0x48) = t;
+    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] state 0xf (waiting) enter: timer=%.1f months (%.0f s, scale %.3f)\n", months, secs, TimerScale()); std::fflush(stderr); }
+    return 0;
+}
+// tick 0x14004d0d0: countdown; in season -> 0x10 if CanAccept else 2
+extern "C" char Imm_StateF_Tick(void* data, void* sm, void* time) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc) return 1;
+    int64_t* timer = reinterpret_cast<int64_t*>(comp + 0x48);
+    *timer -= time ? *reinterpret_cast<int64_t*>(time) : 0;
+    int month = MonthOfYear(gw);
+    bool inSeason = AnySeason() ||
+        (*reinterpret_cast<int*>(desc + 0x50) <= month && month <= *reinterpret_cast<int*>(desc + 0x54));
+    if (*timer < 1 && inSeason) {
+        bool ok = Immigration_CanAccept(data);
+        TraceState(ok ? "state 0xf timer expired -> 0x10 (arriving)" : "state 0xf timer expired but cannot accept -> 2", comp);
+        ::ControllerLive::RequestStateTransition(sm, ok ? 0x10 : 2);
+    }
+    return 1;
+}
+
+// state 0x10 ARRIVING — enter 0x14004d090: reset the group and spawn it
+extern "C" char Imm_State10_Enter(void* data, void* /*sm*/) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
+    void* old = *reinterpret_cast<void**>(comp + 0x58);
+    if (old && fn_MemFreeStatic) fn_MemFreeStatic(old);
+    *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
+    *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
+    TraceState("state 0x10 (arriving) enter", comp);
+    Immigration_Spawn(data);
+    return 1;
+}
+// tick 0x14004d070: spawn again if the group is empty
+extern "C" char Imm_State10_Tick(void* data, void* /*sm*/, void* /*time*/) {
+    Resolve();
+    if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(data) + 0x60) == 0) Immigration_Spawn(data);
+    return 1;
+}
+// event 6 0x14004cff0: a nomad reached the hall
+extern "C" char Imm_State10_Event6_Arrived(void* data, void* sm) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    uint32_t arrived = ++*reinterpret_cast<uint32_t*>(comp + 0x50);
+    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] event 6: nomad arrived %u/%d\n", arrived, *reinterpret_cast<int*>(comp + 0x60)); std::fflush(stderr); }
+    if (arrived == *reinterpret_cast<uint32_t*>(comp + 0x60)) ::ControllerLive::RequestStateTransition(sm, 0x11);
+    return 1;
+}
+// transition 0x10/0x11 -> 3 handler 0x14004cd00: dismiss on the way out
+extern "C" void Imm_Trans3_Dismiss(void* data) {
+    Resolve();
+    Immigration_Dismiss(data);
+}
+
+// state 0x11 WAITING FOR AN ANSWER — enter 0x14004ceb0: the event-log line
+extern "C" char Imm_State11_Enter(void* data, void* /*sm*/) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    uint8_t* gw = GW();
+    if (gw) {
+        void* eventLog = *reinterpret_cast<void**>(gw + 0x138);
+        int64_t ownerIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
+        EventLog_AddEvent(eventLog, 0xe, 2, &ownerIBP);
+    }
+    s_autoAcceptCountdown = AutoAcceptTicks();
+    TraceState("state 0x11 (waiting for answer) enter — NOMADS HAVE ARRIVED", comp);
+    return 1;
+}
+// tick 0x14004ce00: past the leave month -> dismiss -> 2
+extern "C" char Imm_State11_Tick(void* data, void* sm, void* /*time*/) {
+    Resolve();
+    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
+    uint8_t* gw = GW();
+    uint8_t* desc = ImmDesc(comp);
+    if (!gw || !desc) return 1;
+    if (s_autoAcceptCountdown >= 0) {
+        if (s_autoAcceptCountdown-- == 0) {
+            // Post ALLOW/DENY through the SM node, exactly what the buttons do.
+            void* node = *reinterpret_cast<void**>(sm);
+            if (node) {
+                int ev = AutoAnswerEvent();
+                void** vt = *reinterpret_cast<void***>(node);
+                typedef char (*PostEvent_t)(void*, void*, int, int);
+                if (Trace()) { std::fprintf(stderr, "[ImmCtrl] AUTOACCEPT: posting event %d (%s)\n", ev, ev == 7 ? "ALLOW" : "DENY"); std::fflush(stderr); }
+                reinterpret_cast<PostEvent_t>(vt[2])(node, sm, static_cast<int>(*reinterpret_cast<int8_t*>(reinterpret_cast<uint8_t*>(sm) + 9)), ev);
+                return 1;
+            }
+        }
+    }
+    if (!AnySeason() && *reinterpret_cast<int*>(desc + 0x58) <= MonthOfYear(gw)) {
+        TraceState("state 0x11: leave month reached, nomads give up", comp);
+        Immigration_Dismiss(data);
+        ::ControllerLive::RequestStateTransition(sm, 2);
+    }
+    return 1;
+}
+// event 7 0x14004cd90: ALLOW
+extern "C" char Imm_Event7_Allow(void* data, void* sm) {
+    Resolve();
+    s_autoAcceptCountdown = -1;
+    Immigration_Accept(data);
+    ::ControllerLive::RequestStateTransition(sm, 2);
+    return 1;
+}
+// event 8 0x14004cd20: DENY
+extern "C" char Imm_Event8_Deny(void* data, void* sm) {
+    Resolve();
+    s_autoAcceptCountdown = -1;
+    Immigration_Dismiss(data);
+    ::ControllerLive::RequestStateTransition(sm, 2);
+    return 1;
+}
+
+// 0x1400a9ac0 — request a transition on a StateMachine (shared idiom).
+extern "C" void Imm_RequestStateTransition_9ac0(void* sm, int stateId) {
+    ::ControllerLive::RequestStateTransition(sm, stateId);
+}
+
+// ============================================================
+// Dispatcher + table (replicates ImmigrationDescription_helper_e6c0, 0x14004e6c0)
+// ============================================================
+namespace { struct ImmigrationCtrlTag {}; }
+using ImmigrationDispatch = ::ControllerLive::Dispatcher<ImmigrationCtrlTag>;
+
+extern "C" void** ImmigrationCtrl_NodeVtable() { return ImmigrationDispatch::Vtable(); }
+
+extern "C" void ImmigrationCtrl_PopulateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = ImmigrationDispatch::table;
+    if (t.count != 0) return;
+    // sub_7ba0(id, ENTER, p3, p4, TICK) -> {id, enter@+0x08, trans38@+0x18}
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&Imm_State2_Enter), nullptr,
+                       reinterpret_cast<void*>(&Imm_State2_Tick), nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableAddTransition(t, 0xf, nullptr);
+
+    TableRegisterState(t, 0xf, reinterpret_cast<void*>(&Imm_StateF_Enter), nullptr,
+                       reinterpret_cast<void*>(&Imm_StateF_Tick), nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableAddTransition(t, 0x10, nullptr);
+    TableAddTransition(t, 2, nullptr);
+
+    TableRegisterState(t, 0x10, reinterpret_cast<void*>(&Imm_State10_Enter), nullptr,
+                       reinterpret_cast<void*>(&Imm_State10_Tick), nullptr);
+    TableAddTransition(t, 3, reinterpret_cast<void*>(&Imm_Trans3_Dismiss));
+    TableAddTransition(t, 0x11, nullptr);
+    TableAddEvent(t, 6, reinterpret_cast<void*>(&Imm_State10_Event6_Arrived));
+
+    TableRegisterState(t, 0x11, reinterpret_cast<void*>(&Imm_State11_Enter), nullptr,
+                       reinterpret_cast<void*>(&Imm_State11_Tick), nullptr);
+    TableAddTransition(t, 3, reinterpret_cast<void*>(&Imm_Trans3_Dismiss));
+    TableAddTransition(t, 2, nullptr);
+    TableAddEvent(t, 7, reinterpret_cast<void*>(&Imm_Event7_Allow));
+    TableAddEvent(t, 8, reinterpret_cast<void*>(&Imm_Event8_Deny));
+}

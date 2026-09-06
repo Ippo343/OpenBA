@@ -690,6 +690,14 @@ static const char* const kDefaultOnFlags[] = {
     // short-circuit is load-bearing, not vestigial — do not "simplify" it to match
     // retail's helper_7960 shape without re-running that spawn.
     "BANISHED_LIVE_CLEARCTRL",
+    // The town hall's nomad-arrival state machine + the nomad walker
+    // (immigrationcomponent_states.cpp / nomadcomponent_states.cpp). Graduated
+    // 2026-09-05 after the Immigrants achievement (Ach27) was awarded natively three
+    // ways: auto-ALLOW through the SM node, the panel's real Allow button, and a
+    // DENY run whose nomads walked back out and were removed (docs/waves/
+    // achievements_wave.md 5.7). Retail's timer puts a group 2..6 in-game years
+    // apart, so a normal run only pays the idle/waiting tick.
+    "BANISHED_LIVE_IMMIGRATION",
     // StorageComponent vtable slot 6 (+0x30, OnAdded — retail 0x14012c640 =
     // StorageComponent::Draw; read straight off the real vtable at 0x140164720, where
     // [3]=0x14012c730 Shutdown and [6]=0x14012c640). Flags 0x81 has bit 0, so

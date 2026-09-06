@@ -595,8 +595,19 @@ void NomadComponent_InitFuncs() {
 // Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
 
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-COMPONENT_INERT_FACTORY_SER(NomadComponent, 0x78, 0x82, NomadComponent_Shutdown)
+// Immigrants wave 2026-09-05: the nomad walk-in/loiter/walk-out state machine
+// (nomadcomponent_states.cpp) replaces the inert factory. Node at +0x58 (CreateState
+// 0x140009060 = LEA RAX,[RCX+0x58]), default state 0 (0x140003730 = XOR EAX,EAX).
+// Opt-in BANISHED_LIVE_IMMIGRATION with the town-hall side; off => inert as before.
+// Slot 3 (stream Serialize) stays wired unconditionally, save/load wave 2026-08-28.
+extern "C" void** NomadCtrl_NodeVtable();
+extern "C" void   NomadCtrl_PopulateTable();
+CONTROLLER_LIVE_FACTORY_STATES(NomadComponent, 0x78, 0x82, 0x58, 0,
+                               "BANISHED_LIVE_IMMIGRATION",
+                               NomadCtrl_NodeVtable, NomadCtrl_PopulateTable)
+CONTROLLER_INSTALL_SERIALIZE(NomadComponent, NomadComponent_Shutdown)
 REGISTER_TYPE(NomadComponent, "ControllerComponent",
-              &NomadComponent_Factory, &NomadComponent_CreateInPlace);
+              &NomadComponent_Factory_Ser, &NomadComponent_CreateInPlace_Ser);

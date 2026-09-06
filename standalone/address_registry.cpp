@@ -373,6 +373,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 // own standalone/reg_component_<batch>.cpp and registers that batch's reimplemented
 // exe helper addresses. See notes/COMPONENT_REG_WAVE_BRIEF.md.
 extern void RegisterComponentBatch_people();
+extern void RegisterImmigrationWave();
 extern void RegisterComponentBatch_economy();
 extern void RegisterComponentBatch_nature();
 extern void RegisterComponentBatch_visuals();
@@ -621,6 +622,7 @@ static void RegisterCodeFunctions() {
     RegisterUnregLane1Batch();
     RegisterUnregLane4TypeIds();
     RegisterComponentBatch_people();
+    RegisterImmigrationWave();
     RegisterComponentBatch_economy();
     RegisterComponentBatch_nature();
     RegisterComponentBatch_visuals();

@@ -1,9 +1,9 @@
 # Achievements wave — state, method, and what is left
 
 **Branch** `wave/upgrade-path-complete` · commits `be610ee`..`f6d3d98` (13)
-**Status** 24 of 36 achievements unlock and persist. 12 remain, each with a named
-blocker below. Highwaymen and Jack of all Trades both closed 2026-09-05
-(`Ach25 : true`, `Ach5 : true`).
+**Status** 25 of 36 achievements unlock and persist. 11 remain, each with a named
+blocker below. Highwaymen, Jack of all Trades and Immigrants all closed 2026-09-05
+(`Ach25 : true`, `Ach5 : true`, `Ach27 : true`).
 
 Before this wave the achievement system was **structurally dead**: no achievement had
 ever been evaluated, in any run, ever. It is now live end to end — retail's
@@ -83,13 +83,13 @@ production by building type · 22 workers at building type · 23 paved road tile
 
 ---
 
-## 4. Unlocked (24)
+## 4. Unlocked (25)
 
-`Ach{0,1,2,4,5,6,10,11,12,13,15,17,19,20,25,26,28,29,30,31,32,33,34,35}` — Settlement,
+`Ach{0,1,2,4,5,6,10,11,12,13,15,17,19,20,25,26,27,28,29,30,31,32,33,34,35}` — Settlement,
 Village, Town, Uneducated, Mountain Men, Isolationist, One with Nature, Trader,
-MasterTrader, Firefighter, Livestock, Miner, Mason, Highwaymen, Golden Gate, Smiles all Around,
-Healthy, Built from Stone, Ready for Anything, Builder, MasterBuilder, Established,
-Tenure, Jack of all Trades.
+MasterTrader, Firefighter, Livestock, Miner, Mason, Highwaymen, Golden Gate, Immigrants,
+Smiles all Around, Healthy, Built from Stone, Ready for Anything, Builder, MasterBuilder,
+Established, Tenure, Jack of all Trades.
 
 Recipes worth keeping:
 
@@ -107,7 +107,7 @@ Recipes worth keeping:
 
 ---
 
-## 5. The 12 that remain, and what each needs
+## 5. The 11 that remain, and what each needs
 
 ### 5.1 Tombstone — 400 graves *(closest to done)*
 
@@ -269,9 +269,65 @@ so either our `AddWorker` port skips a de-registration retail does, or the area'
 needs the detach. Not achievement-specific, and it does not affect the award above
 (which lands ~1300 frames earlier).
 
-### 5.7 Immigrants — 200 nomads
+### 5.7 Immigrants — 200 nomads — **CLOSED 2026-09-05**
 
-`stat 28` (nomads admitted) is 0; nomad arrival events have not been exercised at all.
+`Ach27 : true`, awarded natively (mods aside, gate 0), **stat 28 = 374 >= 200** after
+three groups (212 + 86 + 76) were admitted in one 2,400-frame run at 50x. Population
+went 802 -> 1,014 -> 1,098: the nomads became real citizens, counted by stat 5.
+
+**The whole feature was unported.** `ImmigrationComponent` (the town hall's controller)
+and `NomadComponent` were both `COMPONENT_INERT_FACTORY_SER` — serializers only — so no
+nomad had ever arrived in this port. Retail's behaviour is two controller state machines,
+now ported faithfully and driven by the existing `ControllerLive::Dispatcher`:
+
+* `code/Game/Component/immigrationcomponent_states.cpp` — the town hall side
+  (`ImmigrationDescription_helper_e6c0`, 0x14004e6c0): state 2 idle -> 0xf waiting
+  (24..72 **months**, 300 s each) -> 0x10 arriving (spawn the group at a map edge in
+  the hall's pathing zone, 5..15% of the population + a share of the empty house slots,
+  min 2) -> 0x11 waiting for the answer (event-log line 0xe; leaves at month 7).
+  Event 6 = one nomad reached the hall; event 7 = ALLOW (`0x14004d450`: seeds the
+  disease clock at townMgr+0x1a0/+0x1a8, **adds the group to townMgr+0x1b0 = stat 28**,
+  converts the group in fours — two adults married via CitizenComponent+0x250, two
+  children of the second adult — through the same `CitizenComp_DeferredInit_117080`
+  the founding population uses, then event 0 to each nomad); event 8 = DENY.
+* `code/Game/Component/nomadcomponent_states.cpp` — the walker
+  (`NomadDescription_helper_fe70`, 0x14004fe70): state 0 MoveTo the hall's use point;
+  once the CharacterComponent action stack is idle (+0x60 == -1 — the walk gate) post
+  event 6 and loiter (state 1: MoveTo a random walkable cell within 8 every 30..45 s);
+  event 1 = leave (state 2: MoveTo the spawn point, then MarkForRemoval); event 0 =
+  destroyed (converted).
+* Factories: `CONTROLLER_LIVE_FACTORY_STATES` with node +0x28 / default state 2
+  (Immigration) and node +0x58 / default state 0 (Nomad); serializer slot 3 kept.
+  Gate `BANISHED_LIVE_IMMIGRATION`, now in `kDefaultOnFlags`.
+* `standalone/reg_immigration.cpp` registers the 29 retail addresses.
+
+Verified paths (all at 50x, `tools/stress_run.sh`, mods aside, `tools/ach_reset.sh`):
+
+| run | what | result |
+|---|---|---|
+| nomad2 | 3 groups, auto-ALLOW via the SM node | `Ach27 awarded=1`, stat 28 = 374 |
+| nomad4_deny | auto-DENY | Dismiss -> walk out -> entities removed, count flat |
+| nomad7_button | the real Allow button (ImmigrationUI_Slot9 on the live panel) | 149 + 81 admitted, `Ach27 awarded=1`, stat 28 = 230 |
+
+Fixtures (env-gated, none touch a run without them): `BANISHED_NOMAD_TRACE`,
+`BANISHED_NOMAD_TIMER_SCALE` (the 2..6-year timer), `BANISHED_NOMAD_ANY_SEASON`,
+`BANISHED_NOMAD_AUTOACCEPT=<ticks>` (negative = DENY) posting event 7/8 through the SM
+node exactly as the button does, and `BANISHED_IMMUI_AUTOCLICK=39000` pressing the
+panel's Allow from inside the live `ImmigrationUI` update (with `BANISHED_PANEL_HOLD=
+ImmigrationComponent` to keep the town hall panel open). A **negative** run: without
+the timer scale a group is 2..6 in-game years away, so a normal 6,000-frame stress run
+never sees one — the idle/waiting ticks are the only cost.
+
+Two things learned on the way:
+* The per-frame slot of a controller runs once per FRAME, not per sim iteration, so a
+  "ticks" countdown at 50x is 50x slower than the sim clock suggests.
+* An outside harness must not cache a panel controller pointer: the town hall panel
+  re-creates its `ImmigrationUI`, and a stale pointer crashed the first button attempt.
+  The stress town's orchard force-start at frame 180 also replaces any held panel —
+  open the panel after it.
+
+Perf: the extra entity-list cost is proportional to the extra population (about +20%
+citizens, about +20% ms) — no regression beyond the bigger town.
 
 ---
 

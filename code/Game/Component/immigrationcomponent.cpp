@@ -246,7 +246,18 @@ void ImmigrationComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-COMPONENT_INERT_FACTORY_SER(ImmigrationComponent, 0x68, 0x80, ImmigrationComponent_Shutdown)
+#include "Component/controller_live_base.h"
+#include "Component/controller_state_table.h"
+// Immigrants wave 2026-09-05: the nomad-arrival state machine (states 2/0xf/0x10/0x11,
+// immigrationcomponent_states.cpp) replaces the inert factory. Node at +0x28
+// (CreateState 0x140004080 = LEA RAX,[RCX+0x28]), default state 2 (0x1400026c0 =
+// MOV EAX,2). Opt-in BANISHED_LIVE_IMMIGRATION; off => inert, byte-unchanged.
+// Slot 3 (stream Serialize) stays wired unconditionally, save/load wave 2026-08-28.
+extern "C" void** ImmigrationCtrl_NodeVtable();
+extern "C" void   ImmigrationCtrl_PopulateTable();
+CONTROLLER_LIVE_FACTORY_STATES(ImmigrationComponent, 0x68, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_IMMIGRATION",
+                               ImmigrationCtrl_NodeVtable, ImmigrationCtrl_PopulateTable)
+CONTROLLER_INSTALL_SERIALIZE(ImmigrationComponent, ImmigrationComponent_Shutdown)
 REGISTER_TYPE(ImmigrationComponent, "ControllerComponent",
-              &ImmigrationComponent_Factory, &ImmigrationComponent_CreateInPlace);
+              &ImmigrationComponent_Factory_Ser, &ImmigrationComponent_CreateInPlace_Ser);

@@ -661,24 +661,49 @@ namespace uistub_ImmigrationUI {
                g_TypeId_StateMachineComponent_FC &&
                g_pGameWorldSingleton && *g_pGameWorldSingleton;
     }
+    // stderr, not stdout: the perf build strips printf, and the Immigrants wave's
+    // harness runs (tools/stress_run.sh) only keep standalone_error.log.
     void Trace(const char* slot, void* self) {
         if (!std::getenv("BANISHED_NOMAD_TRACE")) return;
         static int n=0; if (n>=16) return; ++n;
         void* ent = self ? *reinterpret_cast<void**>((uintptr_t)self+0x28) : nullptr;
-        printf("[ImmigrationUI] %s self=%p entity(+0x28)=%p dlg(+0x18)=%p\n", slot, self, ent,
-               self ? *reinterpret_cast<void**>((uintptr_t)self+0x18) : nullptr);
-        fflush(stdout);
+        fprintf(stderr, "[ImmigrationUI] %s self=%p entity(+0x28)=%p dlg(+0x18)=%p\n", slot, self, ent,
+                self ? *reinterpret_cast<void**>((uintptr_t)self+0x18) : nullptr);
+        fflush(stderr);
     }
     void Slot4(void* self) {
         if (!self) return;
         Trace("Slot4", self);
         ImmigrationUI_Slot4(reinterpret_cast<ImmigrationUI*>(self));
     }
+    // BANISHED_IMMUI_AUTOCLICK=<elementId> (39000 = Allow, 39001 = Deny), every
+    // BANISHED_IMMUI_AUTOCLICK_EVERY updates (default 100): press the button on the LIVE
+    // controller from inside its own update. The panel re-creates its controllers, so a
+    // pointer kept across frames by an outside harness goes stale (crashed at
+    // panel_hold_harness.cpp:132, Immigrants wave 2026-09-05); from here `self` is the
+    // instance the framework is updating right now. The event goes through the same
+    // Slot9 the framework calls for a real click; with no group waiting it is the same
+    // no-op as in retail. Test fixture: nothing runs unless the env var is set.
+    void HarnessAutoClick(void* self) {
+        static int s_id = -2, s_every = 100, s_n = 0;
+        if (s_id == -2) {
+            const char* e = std::getenv("BANISHED_IMMUI_AUTOCLICK");
+            s_id = (e && e[0]) ? std::atoi(e) : -1;
+            const char* ev = std::getenv("BANISHED_IMMUI_AUTOCLICK_EVERY");
+            if (ev && ev[0] && std::atoi(ev) > 0) s_every = std::atoi(ev);
+        }
+        if (s_id < 0) return;
+        if (++s_n % s_every != 0) return;
+        fprintf(stderr, "[ImmigrationUI] AUTOCLICK id=%d on self=%p (update #%d)\n", s_id, self, s_n);
+        fflush(stderr);
+        ImmigrationUI_Slot9(reinterpret_cast<ImmigrationUI*>(self), nullptr, 0x12, s_id, 0, 0);
+    }
     void Slot7(void* self) {
         EnsureGlobals();
         if (!self || !Ready()) return;
         Trace("Slot7", self);
         ImmigrationUI_Slot7(reinterpret_cast<ImmigrationUI*>(self));
+        HarnessAutoClick(self);
     }
     void Slot9(void* self, void* p2, int msg, int id, int p5, int p6) {
         EnsureGlobals();
@@ -689,8 +714,8 @@ namespace uistub_ImmigrationUI {
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; Trace("created", p); return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; Trace("created(inplace)", m); return m; }
 }
 REGISTER_TYPE(ImmigrationUI, "UI::DialogController",
               &uistub_ImmigrationUI::Factory, &uistub_ImmigrationUI::InPlace);
