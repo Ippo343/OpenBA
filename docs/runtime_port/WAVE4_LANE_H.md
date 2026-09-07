@@ -202,19 +202,28 @@ is the same trade `ModDialog::Apply` already makes.
 
 ## 5. Verification
 
-All runs: debug standalone from `C:/code/GIT/laneH`, deployed 2026-09-06 21:02, one process at a
-time.
+All runs: debug standalone, one process at a time. The first four were run in the shared game
+directory before another lane began deploying into it (see §5c); their logs carry this lane's own
+`[SaveLoadDialog::DoLoad]` trace and `(build default 0)`, and their RtDiff site lists contain none
+of the concurrent IO ports, so they are this lane's binary. **Runs 3 and 4 of §5b re-establish the
+same result on a binary verified by md5 before and after, in an isolated directory** — treat those
+as the authoritative numbers.
 
 | Run | Result |
 |---|---|
 | `BANISHED_AUTOLOAD=Save9` | World built, ran 154 s of simulation (citizens, burials, plague census, 218,463 `StorageDisplayComp::Draw` lines), `standalone_crash.log` empty, process alive at kill. |
 | `BANISHED_AUTOLOAD=Auto` | World built, ran 180 s of simulation, `standalone_crash.log` empty, process alive at kill. |
 | `BANISHED_AUTOLOAD=Save9 BANISHED_RT_DIFF=1` + pause-menu self-quit | Clean exit, diff summary printed: **54 sites, 18,510,887 calls, 60 divergences in 2 sites**. |
-| `BANISHED_AUTOLOAD=Save9 BANISHED_RT_DIFF=1 BANISHED_RT_INTERNAL_SHADOW=1` + self-quit | Clean exit: **58 sites, 18,864,110 calls, 65 divergences in 2 sites**. |
+| `BANISHED_AUTOLOAD=Save9 BANISHED_RT_DIFF=1 BANISHED_RT_INTERNAL_SHADOW=1` + self-quit | Clean exit: **58 sites, 18,864,110 calls, 65 divergences in 2 sites**. Re-run isolated and md5-verified (§5b run 4): **58 sites, 18,728,761 calls, 48 divergences in 3 sites**. |
 
-The only divergent sites in both runs are the two Wave 1 residuals, unchanged in character:
-`Math::Vector3::FromYawPitch` (18) and `Math::Transform::FromYawPitchOffset` (42 / 47) — the
-1-ULP sin/cos-fed sites WAVE1.md records. Nothing new.
+The divergent sites are the Wave 1 residuals, unchanged in character:
+`Math::Vector3::FromYawPitch` (18 / 9) and `Math::Transform::FromYawPitchOffset` (42 / 47 / 38) —
+the 1-ULP sin/cos-fed sites WAVE1.md records. The isolated re-run adds a **third** such site,
+`Math::Vector3::Heading` at **1 divergence in 47,850 calls**, which is the same trig-fed family
+(`Heading` is atan2-based) and was simply below the threshold of appearing in the earlier runs;
+the per-site counts move run to run because the call volumes do. Stated as a third site rather
+than folded in, because "2 sites" was what the earlier runs showed and the difference should not
+be quietly absorbed. Nothing outside that family diverged.
 
 Self-quit knobs used for the diff runs (needed because `RtDiffSummary()` prints from `WinMain`,
 not `atexit`): `BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 BANISHED_PAUSEMENU_BUTTON=6`.
@@ -323,6 +332,87 @@ saves were never written against.
 
 ---
 
+## 5b. The decisive A/B: same binary, mod in vs mod out
+
+Asked for by the team lead after the user pointed out that a save cannot be loaded with a mod
+disabled that was enabled when the save was written. **The hypothesis is CONFIRMED** — and it is
+the trigger for all three defects above, not an alternative to them.
+
+Run in an ISOLATED game directory (see §5c) with the deployed exe's md5 checked before *and* after
+each run, and every `BANISHED_*` variable cleared before each launch. "Control" is my base
+`562d2ff` with **none** of this lane's changes; "fixed" is the same tree plus the two files in
+commit `ef0debc`. All four runs used `BANISHED_AUTOLOAD=Save9`.
+
+| # | binary | `DebugMenu.pkm` | outcome |
+|---|---|---|---|
+| 1 | control `397e84fc…` | **out** | `CheckMod=1` → heap-tag corruption crash, `tag=0x000021ff…`, the +0x7FC signature |
+| 2 | control `397e84fc…` | **in** | `CheckMod=0` → **loads.** STAGE C, 655 plague censuses, 212,382 storage draws, no crash, alive at 155 s |
+| 3 | fixed `e57096aa…` | **out** | `CheckMod=1`, modal answered → **loads.** SetAchievements ran, 747 censuses, 242,155 draws, no crash, alive at 176 s |
+| 4 | fixed `e57096aa…` | **out**, `RT_DIFF=1 RT_INTERNAL_SHADOW=1`, self-quit | clean exit; **58 sites, 18,728,761 calls, 48 divergences in 3 sites** |
+
+Run 2 is the lead's test and it settles the question: **putting the mod back makes the save load on
+code that has none of this lane's fixes.** Run 1 is the same binary with the mod removed, so the
+mod set is the only variable.
+
+### Why this does not make the three defects go away
+
+Mounting the mod does not fix anything; it *skips* the code that is broken. With `CheckMod=0` the
+whole mod-warning block is never entered, so the modal (A) is never shown and the `String`
+destructor (B) never runs. And defect C is masked for a different reason: `.pkm` present means
+`AreUserPackFilesEnabled()` is true, which disables achievement evaluation, so
+`AchievementManager::Update` is never called and cannot fault on a null instance list. Run 2's log
+has no `SetAchievements` line at all and still runs fine — that is the masking, visible.
+
+So there are two working configurations, and they are not equivalent:
+
+* **mod in, unfixed code** — loads, but achievements are dead by design, and the moment any save
+  references a mod you do not have, all three defects are live again.
+* **mod out, fixed code** (runs 3 and 4) — loads, achievements initialise (`count=36`), and a
+  mod mismatch is now a logged line instead of a stall or a corrupted heap.
+
+The second is the configuration this lane leaves behind, because it is the only one in which the
+achievements wave and save-loading can both work.
+
+One more observation from run 1 worth recording, because it explains inconsistent earlier reports:
+**the unanswered modal does not always block.** `ShowDialog`'s loop exits as soon as the dialog is
+no longer in the UI's list, so depending on whether the warning dialog actually got added it either
+spins forever (the reported stall) or returns immediately and then hits defect B (run 1's crash).
+Same root cause, two presentations. A repro that "crashes instead of stalling" is not a different
+bug.
+
+---
+
+## 5c. Two process-hygiene facts this lane learned the hard way
+
+**1. Another lane was building and running the game in the shared directory.** Between 21:20 and
+21:45 `C:\GOG Games\Banished\reimpl-x64.exe` was repeatedly overwritten by a `make sa-stress`
+perf build from the main worktree (26,373,976 bytes, `55bbf702…`), and a second process was writing
+into the same `standalone_*.log` files — two `STAGE C` lines with different heap bases in one log.
+Two of this lane's experiments measured that foreign binary before it was caught. The tells:
+`[PerfX] … (build default 1)` instead of `0`, `[FrameLimiter] disabled … via BANISHED_FPS_CAP`,
+`BANISHED_SEED=31337`, and an `injecting New Game click` where `BANISHED_AUTOLOAD` was set — all of
+which are `stress_harness.cpp`'s `SetIfUnset` block, i.e. a `BANISHED_STRESS` run.
+
+**Never trust the deployed exe's mtime as identity.** Take its md5 immediately before launch and
+again after the run; if it changed, discard the result.
+
+**2. Run in a private game directory when other lanes are active.** The whole dependency is four
+files plus the packages, ~180 MB, and it gives you your own logs, your own exe and your own
+`WinData` (so you can mount or unmount a mod without touching anyone else's achievement runs):
+
+```sh
+mkdir -p /c/laneH_game/WinData
+cp "/c/GOG Games/Banished/"*.dll                 /c/laneH_game/
+cp "/c/GOG Games/Banished/WinData/"*.pkg         /c/laneH_game/WinData/
+cp <your build>/standalone/build/reimpl-x64.exe  /c/laneH_game/
+# then launch with the working directory set to /c/laneH_game
+```
+
+Saves live in `~/Documents/Banished/Save` and are shared, which is what you want. `IO::Persistence`
+is HKCU-registry-backed and is also shared — that is the one thing this recipe does not isolate.
+
+---
+
 ## 6. What this closes and what it does not
 
 **Closes**
@@ -345,3 +435,41 @@ saves were never written against.
   in the memory index, not a regression from this lane — but it is now reachable from a save load,
   which makes it cheaper to reproduce than the 800×10 stress town.
 * Nothing here touches `runtime/src/io/`.
+* **HEAD (`6435a40`) crashed on the save-load path inside a concurrent lane's IO port.** Built and
+  run deliberately as a control: `GameUpdateLoop_Load` -> `runtime/src/io/compressedstream.cpp`
+  -> `MemoryAllocator::Free` -> `ACCESS_VIOLATION`, WRITE of `00007f2a36a8bc82` (a garbage pointer
+  being freed). The source line this lane first quoted (`:375`) was misleading; the lead
+  symbolised the two Runtime frames and placed it precisely: `Runtime+0x6A57` is the locked
+  `MemoryAllocator::Free` wrapper `FUN_180006a10`, and `Runtime+0xA95E0` is the return address of
+  the `CALL` to it inside **`~CompressedMemoryStream`**, freeing `[RDI+0x10]` — the embedded
+  `MemoryStream`'s `Stream::_encoding`. So it is a free of an already-freed or corrupted
+  `_encoding`, raised by the DLL's own destructor; the destructor is the messenger, not the
+  writer. It is intermittent (a later run was clean). **The lead owns it**; the decisive test is
+  the same load with `BANISHED_RT_STREAM=0`. Recorded here only because this lane's fixed load
+  path is what made it reachable. This lane's commit is `562d2ff` plus two files under
+  `code/Game/Dialog/`, so it does not contain that port.
+
+---
+
+## 7. State this lane left behind — deliberate, not incidental
+
+* **`C:\GOG Games\Banished\WinData\` has NO `.pkm` in it.** Both mods are back in
+  `WinData\_mods_off\`, where this lane found them. That is the achievements-compatible
+  configuration, and after this lane's fix it is also a working save-load configuration — which
+  was not true this morning. `DebugMenu.pkm` was mounted there temporarily during investigation and
+  has been removed; verified by `ls WinData/*.pkm` returning nothing.
+* **The isolated directory `C:\laneH_game\` still exists** and holds the fixed control binary
+  (`e57096aa…`, base `562d2ff` + this lane's two files) plus its own `WinData` with NO `.pkm`.
+  It is ~180 MB and safe to delete; it is left in place because it is the only isolated harness
+  on this machine and §5c's recipe is cheaper to reuse than to re-derive. Its logs are the
+  evidence behind §5b runs 1-4.
+* **The git worktree `C:/code/GIT/laneH2` still exists**, detached at `562d2ff` with this lane's
+  two files checked out from `ef0debc` on top — that is the binary `e57096aa…` was built from.
+  Remove it with `git worktree remove --force C:/code/GIT/laneH2` when the isolated harness is
+  no longer wanted. (The earlier build worktree `C:/code/GIT/laneH` was already removed.)
+* **The shared `reimpl-x64.exe` was NOT restored by this lane**, because another lane was actively
+  deploying into it while this work finished. Whoever is running there owns that file; deploy your
+  own build before trusting it.
+* If you need to load one of this machine's pre-2026-09-05-18:47 saves on a build that does NOT
+  contain commit `ef0debc`, copy `WinData\_mods_off\DebugMenu.pkm` into `WinData\` first — and
+  remember that doing so silently disables every achievement.
