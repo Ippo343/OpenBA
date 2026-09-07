@@ -14,9 +14,9 @@ static FactoryRegistration* g_pending = nullptr;
 static bool g_invoked = false;
 
 FactoryRegistration::FactoryRegistration(const char* name, const char* parent,
-                                         const char* abstract,
+                                         const char* fileExtension,
                                          FactoryFn factory, InPlaceCreateFn inPlace)
-    : storage{}, typeName(name), parentName(parent), abstractName(abstract),
+    : storage{}, typeName(name), parentName(parent), fileExtension(fileExtension),
       factoryFn(factory), inPlaceCreateFn(inPlace),
       next(g_pending) {
     g_pending = this;
@@ -40,7 +40,7 @@ int InvokeAllRegistrations() {
         fn_BaseTypeInfo_Ctor(&r->storage,
                              r->typeName,
                              r->parentName,
-                             r->abstractName,
+                             r->fileExtension,
                              reinterpret_cast<void*>(r->factoryFn),
                              reinterpret_cast<void*>(r->inPlaceCreateFn));
         n++;

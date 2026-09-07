@@ -159,7 +159,12 @@ address (`code/Game/Game/filesystem_setup.cpp:113,190`, `code/Game/Dialog/mod_di
 `kInternalFactorySingleton` (`code/Game/Object/internal_factory_audit.cpp:16`).
 
 **C. Crash handler matches Runtime instruction offsets.** `standalone/main.cpp:518` (`+0xC0390…A0`,
-the `IsDerivedFrom` null-this fault) and `:533` (`+0xBC73E`, `External::Load`). Retire with Wave 3.
+the `IsDerivedFrom` null-this fault) and `:533` (`+0xBC73E`, `External::Load`).
+~~Retire with Wave 3.~~ **WRONG, corrected by Wave 3 lane A: KEEP, narrowed.** Porting
+`IsDerivedFrom` moves OUR callers into the exe, but no detour is installed, so the DLL's own
+internal callers still reach `Runtime+0xC0390` and the handler still has to recognise the fault
+for them. The match becomes retirable only when the function is detoured, or at cutover. A scope
+note to that effect is now a comment at `standalone/main.cpp:521`.
 
 **D. Vtables copied out of live Runtime objects.** The claim that began this entry — "No `??_7`
 vtable symbol is ever resolved" — was read as "none CAN be". **That is false: the DLL exports 147
@@ -182,7 +187,21 @@ A ported class must expose its vtable as a real symbol or reproduce the stamping
 `buildrequirementui.cpp` and `toolbardialog.cpp` reach them through bare `extern` declarations,
 which a filename grep misses. `runtime/funcs/runtime_funcs.cpp` still resolves nothing.
 
-### 2.3 Runtime globals we reference (25 addresses; 17 have no export and need an accessor)
+### 2.3 Runtime globals we reference (25 addresses; the "17 have no export" count is WRONG)
+
+**Corrected by Wave 3 lane A.** Three rows of this table were wrong, and the error was in the
+direction that overstates the cutover cost — each of these IS an exported data symbol that can be
+resolved by name instead of by address:
+
+| Address | This table used to say | Actually |
+|---|---|---|
+| 0x1801fc6e0 | `Object::Factory::_firstTypeInfo` | `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` — owned by **BaseTypeInfo**, not Factory |
+| 0x1801fc6e8 | "Factory singleton (LoadDialogResource)" | `?_singleton@Factory@Object@@0PEAV12@EA` — note the `0PEAV12@EA` mangling; the obvious `1PEAV12@A` is a phantom |
+| — | (absent) | `?_crcTable@CRC@System@@0PAIA` is exported too |
+
+So **the "17 have no export" figure has never been measured and must be re-measured** before any
+wave plans accessors around it. The table below still carries the old names; treat the three rows
+above as the correction rather than editing the grid in place, so the old claim stays recognisable.
 
 | Address | Name | Address | Name |
 |---|---|---|---|
@@ -347,7 +366,7 @@ Runtime programs.
 | **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
 | **1 Math + Volume** — **LANDED 2026-09-06, see [WAVE1.md](WAVE1.md)** | 70 of the 71 functions our tree calls (Math 58/59, Volume 12/12); the one deferral is `Graphics::InterpolatedState<Transform>::Lerp`, whose layout nothing in this wave pins. **6,556,631 diffed calls, 0 divergences** against the DLL under `BANISHED_RT_LIBM=dll`; 90 residual 1-ULP divergences at 2 sin/cos sites under our own libm. Found 3 real defects — a **pre-existing wild write** (`fn_Math_Transform3_Identity` declared with no hidden return slot, scribbling 0x30 bytes through a stale RCX on every menu scene load), a reassociated float sum in `Transform::FromDirection`, and 4 exports resolved under manglings that do not exist in the DLL. | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
 | **2 System + Collection** — **LANDED 2026-09-06, see [WAVE2.md](WAVE2.md)** | 53 of the 60 System functions our tree calls (String 18, Filename 11, Random/Time/DateTime/Color/Configuration 17, CriticalSection/Thread 8), plus the Collection layouts as headers ([WAVE2_COLLECTION.md](WAVE2_COLLECTION.md)) and MemoryAllocator reversed, ported and left **OPT-IN with a NO-GO verdict** ([WAVE2_ALLOCATOR.md](WAVE2_ALLOCATOR.md)). **22,733,915 diffed calls, 0 new divergences** — including 16,035,064 `Random::Rand` calls bit-exact. WideString/CRC/Compression/Timer are not called by our tree and were not ported. | M | 4,100+ inbound edges; the allocator is global state and is the one piece NOT taken live |
-| **3 Object** | Base, Type, BaseTypeInfo, Internal, External, InternalPtr, Factory, InternalFactory, ExternalFactory, ExternalList | M | The reflection + handle table. Once ours, object construction flows through us and vtable ownership stops being a problem |
+| **3 Object** — **LANDED 2026-09-06, see [WAVE3.md](WAVE3.md)** | 22 of the 41 Object functions our tree calls (type system 6, handle table 5, external table 11), across three lanes plus a perf lane. **38,613,179 diffed calls, 0 new divergences**; the handle-table shadow oracle ran clean at 93,387 calls each for `Internal::Internal`/`~Internal`. Four `ExternalFactory` mutators are NOT ported (no oracle possible / Wave 4 dependency) and five handle-table mutators are opt-in with a **NO-GO**. Found that the Wave 2 perf breach was ONE defect (`RtOriginal` is `GetProcAddress`, called inside `System::Time`'s body), that WAVE2.md's perf attribution was backwards, and that `CheckPtr` is a bare `RET` in the profile build too. **The vtable-ownership worry in this row did not materialise**: `??_7Internal`/`??_7Base` are exported, so the port stamps the DLL's own vtable — a per-class argument, not a general one. | M | The reflection + handle table |
 | **4 IO** | Stream family, Serializer (started), BinaryReader/Writer, Encoding, Persistence/Registry, FileSystem, PackageFile, Modification | L | PackageFile is the densest class in the DLL (25 KB) |
 | **5 Algorithm packages** (parallel lanes) | Collision2D, Picking, Pathfinding, Achievement, Save | M each | Self-contained, each ~13–18 KB, only System/Object below them |
 | **6 Video + Graphics** | Video abstraction (Device/Context/buffers; the VideoDX11 plugin interface stays), Scene/Renderer/Mesh/MeshInstance/Animation/Particle/Lights | L | Graphics→Video 73 edges, port Video first |
@@ -432,18 +451,41 @@ the diff harness have each caught at least one real divergence.
       and `MemoryAllocator::_singleton`. 27 further registrations exist in `allocator.cpp` /
       `allocator_win.cpp` and are **excluded from the count** because their Register function
       returns 0 unless armed — `tools/runtime_census.py` reports them separately.
+- [x] **Wave 3 (Object) merged.** Census after the wave: **877 called, 170 ported (19.4%)** —
+      Object 21/41 (51.2%), System 53/60, Math 58/59, Volume 12/12. The Object functions still
+      unported are the 4 `ExternalFactory`/`External` mutators (deliberate, no oracle), the 5
+      handle-table mutators (opt-in, NO-GO), `CheckPtr` (deliberate, see WAVE3.md finding 3) and
+      the exported DATA symbols, which cannot be registered before cutover.
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
       Wave 1 on `sa-run`: **6,556,631 calls / 0 divergences** with `BANISHED_RT_LIBM=dll`;
       90 divergences in 2 sites with our own libm, all 1 ULP and all sin/cos-fed
       (`Vector3::FromYawPitch`, `Transform::FromYawPitchOffset`). Not yet run under `sa-stress`.
-- [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
-      **BREACHED at the Wave 2 boundary and open**: 0.19 baseline -> 0.21, **+6.7% / +7.2%** over
-      two agreeing runs, of which ~2.5 points are Wave 2's own (A/B: `BANISHED_RT_SYSTEM=0` gives
-      +4.5%) and ~4.5 points predate it. Note `tools/stress_report.py` says "0 regressions over
-      threshold" — its threshold is looser than this gate, so the harness passing is NOT the gate
-      passing. Also fixed here: the perf build had not compiled since Wave 1 (`std::printf` defeats
-      `log_strip.h`'s `#define printf`), so no `sa-stress` number existed for Wave 1 at all.
+      Wave 3 on `sa-run`: **38,613,179 calls / 0 new divergences** across 59 sites, all 12 Object
+      sites with non-zero `calls=`. Residual is still those same 2 Wave 1 sites (138 divergences,
+      1 ULP). **Four Wave 3 functions could not be exercised at all** — see the `Save9.sav` row.
+- [x] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
+      **CLOSED at the Wave 3 boundary: +4.4% / +3.3% / +3.3% PASS over three runs.**
+      The Wave 2 breach was ONE defect, not the seam: `RtOriginal` is `GetProcAddress` and
+      `System::Time`'s ctor and `AsSeconds` called it inside their bodies, on the value type every
+      `Update(const Time&)` passes. Caching it took the Wave 2 boundary from +7.8% to +2.2%.
+      `perf/baselines/current.csv` was NOT touched.
+      Two corrections to what this row used to say. (a) The Wave 2 split (~2.5 Wave 2 /
+      ~4.5 predating) was **backwards** — measured over 3-5 runs per config it is drift +1.3,
+      Wave 1 +1.0, Wave 2 +4.8. Its control was a single run. (b) `tools/stress_report.py`'s
+      threshold being looser than this gate is now FIXED: it prints
+      `PLAN 5% gate (sim ms/iter): +N%  PASS/FAIL` explicitly.
+      **Standing rule from this wave: 3+ runs per config, and take the free `BANISHED_RT_PORT=0`
+      A/B at every boundary.** One run cannot resolve a 5-point effect.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.
+      **`Save9.sav` COULD NOT BE EVALUATED at the Wave 3 boundary, and could not have been at the
+      Wave 2 boundary either.** The `BANISHED_AUTOLOAD` harness injects its Load click and then
+      loops in `MenuDLT::Draw` forever with no world created. It reproduces with
+      `BANISHED_RT_OBJECT=0` and with both `Save9` and the documented `Auto`, so it is
+      **pre-existing and not save-specific**. Consequence: four Wave 3 functions live only on that
+      path and are landed registered-but-unexercised —
+      `InternalFactory::ClearPersistState`/`ResetPersistState` and
+      `ExternalFactory::GetReferenceId`/`GetPathForReferenceId`.
+      **Wave 4 (IO) should fix this harness first**, since it lives entirely on that path.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

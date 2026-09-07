@@ -237,7 +237,13 @@ void RtSystem_Random_Serialize(Random* self, void* serializer) {
 // DLL export, so there is nothing independent to compare.
 Time* RtSystem_Time_Ctor(Time* self, float seconds) {
     using SecondsToTicksFn = int64_t(*)(float);
-    self->ticks = RtOriginal<SecondsToTicksFn>("?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+    // RT_ORIGINAL_ONCE, not RtOriginal: this body runs on every Update(const
+    // Time&). Resolving per call put a GetProcAddress under the loader lock on
+    // the engine's hottest value type and cost 5.6 points of sim time -- most
+    // of the Wave 2 perf-gate breach, and invisible to both profilers because
+    // it lands in ntdll self time. See docs/runtime_port/WAVE3_LANE_P.md.
+    self->ticks = RT_ORIGINAL_ONCE(SecondsToTicksFn,
+                                   "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
     return self;
 }
 
@@ -245,7 +251,9 @@ Time* RtSystem_Time_Ctor(Time* self, float seconds) {
 // "nothing independent to compare" reasoning.
 float RtSystem_Time_AsSeconds(const Time* self) {
     using TicksToSecondsFn = float(*)(int64_t);
-    return RtOriginal<TicksToSecondsFn>("?TicksToSeconds@Timer@System@@SAM_J@Z")(self->ticks);
+    // Cached for the same reason as the ctor above.
+    return RT_ORIGINAL_ONCE(TicksToSecondsFn,
+                            "?TicksToSeconds@Timer@System@@SAM_J@Z")(self->ticks);
 }
 
 // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740

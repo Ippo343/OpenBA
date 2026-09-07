@@ -190,6 +190,27 @@ extern fn_String_Ctor_Copy_t fn_String_Ctor_Copy;
 extern void** g_pExternalFactorySingleton;
 
 // ExternalFactory::FindOrLoad(this, Filename const&) -> External const*
+// Retail 0x1800bf320, reversed 2026-09-06 (runtime port Wave 3 lane C).
+//
+// CACHING SEMANTICS, because several exe-side bugs have traced back to a wrong
+// belief about them:
+//   * A HIT does NOT reload and does NOT re-parse. Find() returns the cached
+//     External and FindOrLoad returns it unchanged. The only extra work is a
+//     second call to ExternalFactory::Add, and only when EnableLoad
+//     (factory+0x41) is set.
+//   * Add (0x1800be570) ORs `1 << factory->_cleanBitIndex` into the entry's
+//     usage mask (entry+0x10) and, ONLY IF that bit was not already set, calls
+//     the External's vtable slot +0x28 (Serialize) with an IO::VisitorStream —
+//     a reference-VISIT pass, not a re-read of the file. That is the "Serialize
+//     re-runs" effect; it is once per resource per clean generation, not once
+//     per FindOrLoad. See code/Game/Component/builddescription.cpp.
+//   * A MISS expands the path, builds `dataDir + dir + name + ext`, calls
+//     External::Load (0x1800bc620), then overwrites the new object's _path with
+//     the expanded RELATIVE path and Add()s it. So the tree is keyed on the
+//     relative path even though the file was opened by an absolute one.
+//   * A path with no `:identifier` suffix is looked up as `path + ":resource"`.
+//   * Lookup is case-INSENSITIVE (the tree compares with _stricmp).
+// NOT PORTED: it rewrites the resource tree and has no available oracle.
 typedef void* (*fn_ExternalFactory_FindOrLoad_t)(void* self, const void* filename);
 extern fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad;
 
@@ -198,7 +219,20 @@ extern fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad;
 typedef void* (*fn_ExternalFactory_Find_t)(void* self, const void* filename);
 extern fn_ExternalFactory_Find_t fn_ExternalFactory_Find;
 
-// ExternalFactory::Clean(this) — cleanup resources for freed bits
+// ExternalFactory::Clean(this) — evict resources unused in this generation.
+// Retail 0x1800be310, reversed 2026-09-06 (runtime port Wave 3 lane C). The old
+// one-liner here said "cleanup resources for freed bits", which named the
+// mechanism without saying what it does. Precisely:
+//   in-order walk the resource tree; for each entry, if factory->_cleanBitIndex
+//   (+0x00, SIGNED) is >= 0 clear bit `1 << (idx & 31)` from the entry's usage
+//   mask (+0x10) and collect the entry when the mask reaches zero; if the index
+//   is NEGATIVE, collect EVERY entry unconditionally. Then, for each collected
+//   key, call the External's vtable slot 0 with deleteFlag=1 (the scalar
+//   deleting destructor — the object is FREED, every cached External* to it is
+//   now dangling) and erase the tree node. Finally bump the generation counter
+//   at factory+0x08, which is what invalidates the exe's ExternalRef caches
+//   (see ResolveExternalByName_Impl below).
+// NOT PORTED: it rewrites the resource tree and has no available oracle.
 typedef void (*fn_ExternalFactory_Clean_t)(void* self);
 extern fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean;
 
@@ -1979,12 +2013,20 @@ extern fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion;
 typedef void (*fn_Configuration_CurrentBuildId_t)(void* retStr);
 extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
 
-// Object::InternalBasePtr::CheckPtr(this) — validates internal pointer
-// ?CheckPtr@InternalBasePtr@Object@@QEAAXXZ
+// Object::InternalBasePtr::CheckPtr(this) — validates NOTHING; see below.
+// ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ  (protected AND const)
+// The ...@QEAAXXZ mangling this line carried until Wave 3 does not exist in the
+// DLL. ResolveExport returned null for it and only the ResolveAddr fallback kept
+// the pointer alive — which also means a RegisterRuntimeExport port keyed on the
+// old name would have been silently inert (WAVE2.md finding 4).
 typedef void (*fn_InternalBasePtr_CheckPtr_t)(void* self);
 extern fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr;
-// PERF (2026-09-04): the shipped Runtime's CheckPtr body is a bare RET (a debug-build
-// leftover) and the port calls it ~60k times per frame through this pointer at 800x10.
+// PERF (2026-09-04): the shipped Runtime's CheckPtr body is a bare RET and the port
+// calls it ~60k times per frame through this pointer at 800x10.
+// NOT a debug-build leftover, as this comment claimed until Wave 3: the body is a
+// bare RET in the ToolKit PROFILE build too (0x18008c5d0, and AssignId at
+// 0x18008c5e0 with it), so it was compiled out at source level in every shipped
+// configuration. No build of this engine has ever validated an InternalBasePtr.
 // The resolver verifies the body byte (0xC3) and sets g_checkPtrIsNop; every direct
 // call site then skips the indirect call. Non-call uses (`if (fn_InternalBasePtr_CheckPtr)`)
 // still see the variable because a function-like macro only expands before '('.
@@ -3692,16 +3734,24 @@ extern fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart;
 typedef void (*fn_MainLoop_SetNextLoop_t)(void* self, void* loop);
 extern fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop;
 
-// Object::BaseTypeInfo::BaseTypeInfo(this, name, parent, abstract, factory, inPlace)
+// Object::BaseTypeInfo::BaseTypeInfo(this, name, parent, fileExtension, factory, inPlace)
 // ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z  (Runtime 0x180006320)
 // Builds the linked list at Runtime DLL's _firstTypeInfo. Object::Factory::Startup
 // later walks this list to populate the typeId tree. The 6-arg ctor stores
-// (name, parent[colon-stripped], abstract, factoryFn, inPlaceCreateFn) into the
-// 0x38-byte BaseTypeInfo slot pointed to by `self`, then prepends to _firstTypeInfo.
+// (name, parent[colon-stripped], fileExtension, factoryFn, inPlaceCreateFn) into
+// the 0x38-byte BaseTypeInfo slot pointed to by `self`, then prepends to
+// _firstTypeInfo.
+// The third argument is the FILE EXTENSION the type loads from, or null — NOT an
+// "abstract" flag or name, which is what this declaration called it until Wave 3.
+// Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0) _stricmp's +0x18
+// against a caller-supplied extension; nothing ever tests it for abstractness.
+// Every Component/Description registration in the exe passes null here; the types
+// that pass a real string are the Externals loaded from disk. See
+// runtime/types/object/TypeInfo.h and docs/runtime_port/WAVE3_LANE_A.md.
 typedef void (*fn_BaseTypeInfo_Ctor_t)(void* self,
                                        const char* name,
                                        const char* parent,
-                                       const char* abstract,
+                                       const char* fileExtension,
                                        void* factoryFn,
                                        void* inPlaceCreateFn);
 extern fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor;

@@ -391,8 +391,19 @@ static fn_CalcWindFactor_t fn_CalcWindFactor = nullptr;
 typedef void* (*fn_Time_Ctor_Seconds_t)(void* self, float seconds);
 static fn_Time_Ctor_Seconds_t fn_Time_Ctor_Seconds = nullptr;
 
-// Object::ExternalList::Find(this, retval, Filename const&, typeInfo*) (Runtime)
-typedef void (*fn_ExternalList_Find_t)(void* self, void* retval, void* filename, void* typeInfo);
+// Object::ExternalList::Find(this, retval, Filename const&, Object::Type) (Runtime 0x1800bf700)
+// `retval` is the HIDDEN RETURN SLOT for the ExternalPtr<External> this returns
+// by value; ExternalPtr is ONE RAW POINTER and holds NO reference.
+//
+// *** THE 4th ARGUMENT IS NEVER READ. *** Reversed 2026-09-06 (runtime port
+// Wave 3 lane C): R9 is dead through the whole body — the list is searched by
+// PATH only and the first path match is returned whatever its type. Do not
+// expect it to filter. (It is `Object::Type`, not a `typeInfo*`; the old
+// parameter name here implied both a pointer and an effect, and neither holds.)
+// The match is a linear scan and is case-SENSITIVE, unlike ExternalFactory::Find
+// over the same kind of path, which is case-insensitive. A path with no
+// `:identifier` suffix is searched as `path + ":resource"`.
+typedef void (*fn_ExternalList_Find_t)(void* self, void* retval, void* filename, void* type);
 static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 
 // System::Filename::Filename(this, const char*) (Runtime)

@@ -154,6 +154,9 @@ def compprof_last_window(path, top=12):
     return blocks[-1][: top + 1]
 
 
+# PLAN.md definition-of-done gate on the headline metric (section 5).
+PLAN_GATE_PCT = 5.0
+
 # Metrics compared against the baseline: (key, label, higher_is_better, regression threshold %)
 COMPARE = [
     ("per_iter_ms", "sim ms / iteration", False, 10),
@@ -247,6 +250,17 @@ def main():
             else:
                 print("  {:<22} {:>10} {:>10} {:>8}".format(label, fmt(bv), fmt(nv), "n/a"))
         print(f"  {regressions} regression(s) over threshold")
+
+        # PLAN gate (docs/runtime_port/PLAN.md, section 5): `sim ms / iteration`
+        # within 5% of the baseline at each wave boundary. That is TIGHTER than
+        # the 10% REGRESSION threshold above, so "0 regressions over threshold"
+        # is NOT the gate passing -- the Wave 2 boundary breached the gate at
+        # +7.8% while this reporter called the run clean. Print the verdict.
+        bv, nv = b.get("per_iter_ms", float("nan")), s.get("per_iter_ms", float("nan"))
+        if bv and not math.isnan(bv) and not math.isnan(nv):
+            d = (nv - bv) / abs(bv) * 100.0
+            print("  PLAN 5%% gate (sim ms/iter): %+.1f%%  %s"
+                  % (d, "PASS" if d <= PLAN_GATE_PCT else "FAIL"))
     return 0
 
 

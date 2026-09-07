@@ -312,6 +312,40 @@ previous exe in the game dir (check the `build=` stamp in `report.txt` against
 `standalone/build-perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
 together make the run ~15x slower — use one or the other.
 
+## Runtime port perf gate (2026-09-06, Wave 3 lane P)
+
+PLAN.md's definition of done requires `sim ms / iteration` within 5% of
+`perf/baselines/current.csv` (0.19238) at each runtime-port wave boundary. The Wave 2
+boundary measured **+7.8%**. Full writeup, with every run and its command:
+**[docs/runtime_port/WAVE3_LANE_P.md](../docs/runtime_port/WAVE3_LANE_P.md)**.
+
+The port's kill switches are RUNTIME switches, so one binary measures every configuration
+-- no compiler or layout differences in the comparison. Take the ports-off A/B at every
+wave boundary; it costs one extra run and separates "our port is slow" from "something
+drifted":
+
+| configuration | env | n | ms/iter | vs baseline |
+|---|---|---|---|---|
+| all ports off | `BANISHED_RT_PORT=0` | 4 | 0.1949 | +1.3% (drift) |
+| Wave 1 only (Math+Volume) | `BANISHED_RT_SYSTEM=0` | 3 | 0.1969 | +2.3% |
+| Wave 2 only (System) | `BANISHED_RT_MATH=0 BANISHED_RT_VOLUME=0` | 3 | 0.2043 | +6.2% |
+| as landed | (default) | 4 | 0.2074 | +7.8% |
+| + Timer resolve cached | (default) | 5 | 0.1967 | **+2.2%** |
+
+The whole breach was one defect: `RtOriginal` (`runtime/funcs/rt_port.h`) is
+`GetProcAddress`, and `System::Time`'s ctor and `AsSeconds` called it **per call** -- an
+export-table search by string, under the loader lock, on the value type every `Update()`
+passes. It is invisible in `[COMPPROF]` and nearly invisible in the sampler's self time;
+what it moves is **ntdll self time, 5.1% -> 8.6% -> 4.9%** across off/on/fixed. Caching the
+two pointers in statics is worth 5.5 points. **Never call `RtOriginal` from a function body
+on the live path.**
+
+Also recorded here: compiling the diff oracle out (`RT_DIFF_BEGIN` forces a stack frame on
+functions that would be frameless leaves) is worth only ~0.9% -- a negative result, not
+worth a build switch today. And `tools/stress_report.py` now prints an explicit
+`PLAN 5% gate (sim ms/iter): +X%  PASS|FAIL` line, because its own REGRESSION threshold is
+10% and it called the failing Wave 2 boundary clean.
+
 ## Reading a regression
 
 1. `report.txt` → which phase moved (EntityList vs CitizenList vs Animation vs PostSim).

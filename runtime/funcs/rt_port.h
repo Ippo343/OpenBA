@@ -53,10 +53,38 @@ inline bool RtWaveEnabled(const char* envName) {
 // detour trampolines. NEVER use ResolveExport here: once the port registers,
 // that would hand back our own function and the oracle would compare ours to
 // ours and always agree.
+//
+// *** THIS IS NOT A CHEAP ACCESSOR. *** ResolveExportRaw is GetProcAddress: an
+// export-table binary search by string, taken under the loader lock, EVERY time
+// you call it. It reads like a table lookup and costs like a syscall.
+//
+// That is not a theoretical worry — it is the whole of the Wave 2 perf-gate
+// breach. Two calls sitting in the BODY of System::Time's ctor and AsSeconds
+// (the value type every Update(const Time&) passes) cost 5.6 percentage points
+// of sim time on their own, and hiding as ntdll self time they were invisible
+// to both the sampling profiler's self-time column and the per-component
+// profile. See docs/runtime_port/WAVE3_LANE_P.md.
+//
+// So: inside RT_DIFF_* it is fine (the macro only evaluates it when diffing is
+// on, which no shipping run does). ANYWHERE ELSE — that is, on a path a normal
+// run executes — resolve once and cache. RT_ORIGINAL_ONCE does exactly that;
+// prefer it, and reach for bare RtOriginal only inside a diff guard.
 template <typename Fn>
 inline Fn RtOriginal(const char* mangled) {
     return reinterpret_cast<Fn>(ResolveExportRaw(mangled));
 }
+
+// Resolve once per call site, then reuse. Same value as RtOriginal(MANGLED),
+// minus the GetProcAddress on every call after the first.
+//
+//   using SecondsToTicksFn = int64_t(*)(float);
+//   self->ticks = RT_ORIGINAL_ONCE(SecondsToTicksFn,
+//                                  "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+//
+// The static lives in the enclosing function, so one cache per call site. Fn
+// must be a typedef'd name rather than an inline function-pointer type: a bare
+// `float(*)(const char*)` contains a comma the preprocessor would split on.
+#define RT_ORIGINAL_ONCE(Fn, MANGLED)                                              ([]() -> Fn {                                                                      static Fn rt_once__ = RtOriginal<Fn>(MANGLED);                                 return rt_once__;                                                          }())
 
 // ---- Wave init entry points ------------------------------------------------
 void RtMathPortInit();     // runtime/src/math/

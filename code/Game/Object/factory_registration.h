@@ -26,7 +26,15 @@ namespace Object {
 //   +0x00 typeId       (uint, set to 0xFFFFFFFF; Factory::Startup overwrites with CRC32)
 //   +0x08 name         (const char*)
 //   +0x10 parent       (const char*, colon-stripped)
-//   +0x18 abstract     (const char*, may be null)
+//   +0x18 fileExtension (const char*, may be null) -- the file extension this
+//                     type loads from. NOT an "abstract" flag or name, which
+//                     is what this table called it until Wave 3.
+//                     Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0)
+//                     _stricmp's +0x18 against a caller-supplied extension;
+//                     nothing ever tests it for abstractness. Every
+//                     Component/Description registration here passes null.
+//                     See runtime/types/object/TypeInfo.h and
+//                     docs/runtime_port/WAVE3_LANE_A.md.
 //   +0x20 factoryFn    (Base* (*)(void))
 //   +0x28 inPlaceFn    (Base* (*)(void*))
 //   +0x30 next         (BaseTypeInfo*) link in _firstTypeInfo
@@ -42,12 +50,12 @@ struct FactoryRegistration {
     BaseTypeInfoStorage  storage;
     const char*          typeName;
     const char*          parentName;
-    const char*          abstractName;
+    const char*          fileExtension;   // was `abstractName` until Wave 3
     FactoryFn            factoryFn;
     InPlaceCreateFn      inPlaceCreateFn;
     FactoryRegistration* next;
 
-    FactoryRegistration(const char* name, const char* parent, const char* abstract,
+    FactoryRegistration(const char* name, const char* parent, const char* fileExtension,
                         FactoryFn factory, InPlaceCreateFn inPlace);
 };
 
@@ -154,16 +162,16 @@ bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName);
 //
 // The macro builds a unique name per file via __LINE__ to allow multiple
 // registrations in the same translation unit (e.g. base + derived in one file).
-#define REGISTER_TYPE_IMPL2(name, parent, abstract, factory, inplace, lineNum)  \
+#define REGISTER_TYPE_IMPL2(name, parent, fileExtension, factory, inplace, lineNum)  \
     namespace {                                                                 \
         ::Object::FactoryRegistration g_factory_reg_##lineNum(                  \
-            name, parent, abstract,                                             \
+            name, parent, fileExtension,                                        \
             reinterpret_cast<::Object::FactoryFn>(factory),                     \
             reinterpret_cast<::Object::InPlaceCreateFn>(inplace));              \
     }
-#define REGISTER_TYPE_IMPL1(name, parent, abstract, factory, inplace, lineNum)  \
-    REGISTER_TYPE_IMPL2(name, parent, abstract, factory, inplace, lineNum)
-#define REGISTER_TYPE_FULL(Name, Parent, Abstract, Factory, InPlace)            \
-    REGISTER_TYPE_IMPL1(#Name, Parent, Abstract, Factory, InPlace, __LINE__)
+#define REGISTER_TYPE_IMPL1(name, parent, fileExtension, factory, inplace, lineNum)  \
+    REGISTER_TYPE_IMPL2(name, parent, fileExtension, factory, inplace, lineNum)
+#define REGISTER_TYPE_FULL(Name, Parent, FileExt, Factory, InPlace)              \
+    REGISTER_TYPE_IMPL1(#Name, Parent, FileExt, Factory, InPlace, __LINE__)
 #define REGISTER_TYPE(Name, Parent, Factory, InPlace)                           \
     REGISTER_TYPE_FULL(Name, Parent, nullptr, Factory, InPlace)

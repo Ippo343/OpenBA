@@ -57,7 +57,11 @@ static void* ReadDispatchSlot(uintptr_t slotAddr) {
 }
 
 // Thin guarded wrapper around the engine_funcs InternalBasePtr::CheckPtr pointer
-// (resolved via ?CheckPtr@InternalBasePtr@Object@@QEAAXXZ at startup).
+// (resolved via ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ at startup -- protected
+// AND const; the ...@QEAAXXZ mangling this comment used to name does not exist
+// in the DLL, so it resolved null and only the ResolveAddr fallback carried it.)
+// The body is a bare RET in BOTH retail and the profile build (Wave 3 lane B),
+// so this call validates nothing; engine_funcs.cpp sniffs that and NOPs it out.
 inline void CheckPtr(void* p) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
 }

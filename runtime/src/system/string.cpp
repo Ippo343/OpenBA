@@ -701,8 +701,12 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
     using ParamCountFn = int (*)(const char*);
     using ParamListFn  = String* (*)(String*, const String*, const String*);
 
+    // RT_ORIGINAL_ONCE: this is a normal-run path, not a diff guard, so a bare
+    // RtOriginal would GetProcAddress on every formatted string. Same defect
+    // shape as the System::Time one Wave 3 lane P root-caused; not separately
+    // measured (String is near-inert in the stress town) but the same fix.
     const int paramCount =
-        RtOriginal<ParamCountFn>("?FormatParamCount@String@System@@SAHPEBD@Z")(fmt);
+        RT_ORIGINAL_ONCE(ParamCountFn, "?FormatParamCount@String@System@@SAHPEBD@Z")(fmt);
 
     if (paramCount == 0) {
         ret->data = nullptr;
@@ -727,7 +731,8 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
 
     String fmtStr{nullptr};
     RtSystem_String_Set(&fmtStr, fmt);
-    RtOriginal<ParamListFn>("?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z")(
+    RT_ORIGINAL_ONCE(ParamListFn,
+                     "?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z")(
         ret, &fmtStr, params.data);
     RtString_ReleaseInline(&fmtStr);
 

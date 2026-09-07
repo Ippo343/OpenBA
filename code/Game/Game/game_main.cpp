@@ -484,8 +484,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // If the walk succeeded, every entry now has a non-FFFFFFFF typeId.
     {
         uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+        // Layout CONFIRMED against the DLL 2026-09-06 (Wave 3 lane A,
+        // runtime/types/object/TypeInfo.h): every offset here is right. The
+        // +0x18 field is the type's FILE EXTENSION (Factory::GetTypeIdForFileExtension,
+        // Runtime 0x1800c04c0), not an "abstract" name as this struct used to say.
         struct Probe { uint32_t typeId; uint32_t pad; const char* name; const char* parent;
-                       const char* abstract; void* f; void* ip; Probe* next; };
+                       const char* ext; void* f; void* ip; Probe* next; };
         Probe* head = headAddr ? *reinterpret_cast<Probe**>(headAddr) : nullptr;
         int n = 0, withId = 0;
         for (Probe* p = head; p && n < 1000; p = p->next, n++) {

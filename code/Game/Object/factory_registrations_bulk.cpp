@@ -63,9 +63,9 @@ namespace {
 #define REGISTER_NULL_FACTORY(Name, Parent)                                  \
     namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
     REGISTER_TYPE(Name, Parent, &NullFactory_##Name, &NullInPlace)
-#define REGISTER_NULL_FACTORY_FULL(Name, Parent, Abstract)                   \
+#define REGISTER_NULL_FACTORY_FULL(Name, Parent, FileExt)                    \
     namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
-    REGISTER_TYPE_FULL(Name, Parent, Abstract, &NullFactory_##Name, &NullInPlace)
+    REGISTER_TYPE_FULL(Name, Parent, FileExt, &NullFactory_##Name, &NullInPlace)
 // Macro: registers an abstract base type (no concrete factory by design).
 #define REGISTER_ABSTRACT_FACTORY(Name, Parent)                              \
     namespace { void* AbstractFactory_##Name() { return AbstractFactory(#Name); } } \

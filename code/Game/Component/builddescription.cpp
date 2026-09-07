@@ -66,7 +66,24 @@ void BuildDescription_Serialize(void* self, void* stream) {
     g_fn_Serializer_Ctor(serializer, stream, 0);
 
     // Preserve any already-populated requirement array across re-loads. The engine
-    // re-invokes this Serialize on EVERY FindOrLoad of an already-loaded resource.
+    // re-invokes this Serialize for an already-loaded resource.
+    //
+    // [CORRECTED 2026-09-06, runtime port Wave 3 lane C — this comment used to say
+    // "on EVERY FindOrLoad", and the mechanism is narrower than that.]
+    // ExternalFactory::FindOrLoad (Runtime 0x1800bf320) does NOT reload or re-parse a
+    // cached resource: on a Find hit it returns the cached External, and it calls
+    // ExternalFactory::Add (0x1800be570) again only when EnableLoad (factory+0x41) is
+    // set. Add is what re-invokes Serialize — vtable slot +0x28, driven with an
+    // IO::VisitorStream, i.e. a reference-VISIT pass over the object rather than a
+    // re-read of the file — and it does so only when `1 << factory->_cleanBitIndex`
+    // was NOT already set in the entry's usage mask (entry+0x10). So the re-invoke is
+    // once per resource per clean generation, not once per FindOrLoad, and the stream
+    // it runs against is a visitor, which is exactly why the re-passes below carry no
+    // data and yield empty elements.
+    // The 6× count measured for the Pasture is left as recorded; nobody has re-measured
+    // it against this mechanism, and a re-measurement is worth doing before trusting
+    // either number. See docs/runtime_port/WAVE3_LANE_C.md.
+    //
     // The first (path-mode) load resolves each _rawMaterial correctly; later
     // (reference-mode) re-loads read the ref through the standalone's incomplete
     // reference table and yield an empty element {material=0, count=0}. Without a

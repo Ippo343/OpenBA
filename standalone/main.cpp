@@ -64,7 +64,12 @@ struct ProbeBaseTypeInfo {
     uint32_t pad;
     const char* name;
     const char* parent;
-    const char* abstract;
+    // +0x18 is the type's FILE EXTENSION, compared with _stricmp in
+    // Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0). It was called
+    // `abstract` here until Wave 3 lane A confirmed the layout against the DLL
+    // (runtime/types/object/TypeInfo.h). All eight OFFSETS were correct; this
+    // one name was not. Nothing reads it, so the misnomer was inert.
+    const char* fileExtension;
     void* factoryFn;
     void* inPlaceFn;
     ProbeBaseTypeInfo* next;
@@ -516,6 +521,16 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // Specialized handler: IsDerivedFrom-NULL-this crash. RIP at Runtime+0xC039A
     // is the very first vtable read with RCX=NULL (factory returned NULL).
     // RDX at that point holds the EXPECTED typeId (the External base check).
+    //
+    // SCOPE NARROWED BY WAVE 3, NOT RETIRED. PLAN.md §2.2 hazard C says to
+    // "retire with Wave 3"; that is wrong. Wave 3 lane A ports
+    // Object::Base::IsDerivedFrom, and registration redirects OUR call sites
+    // only — no detour is installed — so the DLL's own internal callers still
+    // execute Runtime+0xC0390 and this handler still fires for them. What
+    // changed is that a null `this` coming from OUR code now faults inside
+    // reimpl-x64.exe instead, where this branch cannot see it: symbolize that
+    // one with nm against the exe. Retire this block at cutover, when nothing
+    // calls the DLL copy any more.
     uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
     if (runtimeBase && ctx->Rcx == 0 && ctx->Rip >= runtimeBase + 0xC0390 && ctx->Rip <= runtimeBase + 0xC03A0) {
         uint32_t expectedTypeId = (uint32_t)ctx->Rdx;

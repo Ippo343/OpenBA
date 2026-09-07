@@ -95,7 +95,8 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // This copy used to (a) MemAlloc a brand-new array on EVERY pass, discarding the
     // one already parsed, and (b) zero each element immediately before the encoding
     // call. Both are additions, and together they are destructive: an already-loaded
-    // resource gets its Serialize re-invoked on every ExternalFactory::FindOrLoad (see
+    // resource gets its Serialize re-invoked through ExternalFactory::Add's
+    // VisitorStream pass (NOT on every FindOrLoad — see the corrected mechanism note in
     // builddescription.cpp), and on any pass where the encoding does not write the
     // element back, the zero we just stored is what survives.
     //
