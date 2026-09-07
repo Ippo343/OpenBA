@@ -561,7 +561,7 @@ that property** — each does real work on the write path beyond emitting:
 |---|---|
 | `Audio::Scene::Serialize` | **nothing** — the resize is guarded to the reading side (`0x1800e00c0`'s JNZ). This is why it worked. |
 | `ExternalFactory::SerializeReferenceTable` | walks the reference set writing an id into every node (`MOV [RBX+0x14],EAX` inside the `0x1800bcdf4` branch) |
-| `InternalBasePtr::Serialize` | ends in `self->ptr = InternalFactory::PersistObject(...)` — mutates both the pointer and the global factory |
+| `InternalBasePtr::Serialize` | ends in `PersistObject` — mutates both the pointer and the global factory. **CLOSED by the prefix oracle 2026-09-07**: all four emissions precede the mutation, so `stopAfter=4` is not a partial view — it IS the whole emission sequence. 4 identical (non-null) + 1 identical (null, full compare); `BANISHED_AUTOLOAD=Save9` loaded and simulated 322,398 draw calls with the port live on the LOAD path. **Ungated**, having sat in the handle-table NO-GO tier without touching the handle table. |
 | `External::SaveText` | needs `IO::TextFileStream` before the question even arises |
 
 Running ours-then-theirs on any of those three would perform the mutation **twice**, on the one
