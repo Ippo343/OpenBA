@@ -146,6 +146,16 @@ static_assert(sizeof(BinaryCodec) == 0x30, "BinaryCodec is 0x30 bytes (allocator
 // The two concrete vtables, exported by name. Used by the ctor's shadow check.
 constexpr const char* kBinaryReaderVtableName = "??_7BinaryReader@IO@@6B@";  // 0x1801552e0
 constexpr const char* kBinaryWriterVtableName = "??_7BinaryWriter@IO@@6B@";  // 0x180155210
+// The THIRD ReaderWriter the engine actually produces, and the one that made
+// the Wave 4 integration run report 2,053 divergences on a correct port.
+// IO::Encoding is a policy object: the Serializer ctor calls whichever factory
+// slot the stream's Encoding provides and stores whatever comes back. On the
+// resource-reference VISIT pass (WAVE3.md finding 5: ExternalFactory::Add
+// re-invokes slot +0x28 against an IO::VisitorStream) that is an IO::Visitor,
+// not a BinaryWriter -- 5,687 referenced externals were preloaded on the run
+// that surfaced it. Verified by resolving the observed vtable pointer back
+// through the run's ASLR delta: 0x1801558b0 == ??_7Visitor@IO@@6B@.
+constexpr const char* kVisitorVtableName = "??_7Visitor@IO@@6B@";  // 0x1801558b0
 
 // ---------------------------------------------------------------------------
 // ReaderWriter vtable — RETAIL byte offsets.

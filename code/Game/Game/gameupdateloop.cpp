@@ -1448,11 +1448,19 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 // With the gate masked, Update runs on to its instance list at mgr+0x18
                 // and derefs it unguarded -- faithful, because retail always has one by
                 // then (Reset() builds it at new-game, Persist restores it on load).
-                // Measured 2026-09-05: a LOADED town can reach here with mgr+0x18 null,
-                // and Update then faults READ of 0 at Runtime+0x9E6F4. The gate had been
-                // hiding that. This fixture must not be the thing that kills the run, so
-                // report the empty list rather than entering it. A real fix restores the
-                // instances on the load path -- do NOT paper over that here.
+                // Measured 2026-09-05: a LOADED town could reach here with mgr+0x18
+                // null, and Update then faulted READ of 0 at Runtime+0x9E6F4.
+                // ROOT-CAUSED 2026-09-06 (Wave 4 lane H) and FIXED AT THE CAUSE: the
+                // Load path never called GameContainer_EnsureLists, so
+                // AchievementManager::SetAchievements never ran for a loaded game.
+                // Retail does it once at app init (GameContainer_Init 0x140099db0);
+                // standalone replaced that with per-dialog calls in New Game, Scenario
+                // and Achievements and MISSED Load. Fixed in MainMenuDialog_OpenLoad.
+                // The old diagnosis on this line -- "Reset()/Persist has not populated
+                // it, a load-path defect" -- named the wrong MECHANISM: it was a
+                // missing init, not a Persist defect.
+                // The report below is now a FIXTURE THAT SHOULD NEVER FIRE. If it does,
+                // some OTHER path into a game is missing that same call.
                 void* instList = *reinterpret_cast<void**>(
                     static_cast<uint8_t*>(achievementMgr) + 0x18);
                 if (modGate && !instList) {
@@ -1461,9 +1469,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                         s_warned = true;
                         fprintf(stderr, "[Ach] BANISHED_ACH_IGNORE_MODS: manager has NO "
                                 "INSTANCE LIST (mgr+0x18 null) -- nothing can be evaluated "
-                                "or awarded this run. Reset()/Persist has not populated it; "
-                                "on a LOADED game that is a load-path defect, not the mod "
-                                "gate. Skipping the Update call.\n");
+                                "or awarded this run. The Load path's missing "
+                                "GameContainer_EnsureLists was fixed 2026-09-06, so this "
+                                "should be unreachable -- some OTHER path into a game "
+                                "is missing that call. Skipping the Update call.\n");
                         fflush(stderr);
                     }
                 } else {

@@ -202,6 +202,34 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
     // failure that matters (a stream whose encoding is null, or is not the
     // shared 0x1801554a8 BinaryEncoding) while ignoring the address.
     if (rt_diff_on__) {
+        // Compare only the bytes the two ctors ACTUALLY WRITE. The rest is
+        // padding they leave alone, and comparing it pits a zeroed scratch
+        // buffer against the caller's uninitialised stack
+        // (gameupdateloop_serialize.cpp's `alignas(16) uint8_t cms[0x100]`),
+        // which is an artifact of the harness, not a difference between the two
+        // implementations.
+        //
+        // The set below is READ OFF THE SHIPPED BYTES of both constructors, in
+        // full, rather than discovered one divergence at a time:
+        //   ??0CompressedStream (0x1800aa3d0) writes +0x00 q, +0x08 d, +0x10 q,
+        //     +0x1c d, +0x20 d, then +0x28..+0x60 q  -> gaps 0x0c-0x0f,
+        //     0x18-0x1b, 0x24-0x27
+        //   ??0MemoryStream    (0x1800ae710) writes +0x00 q, +0x08 d, +0x10 q,
+        //     +0x18 q, +0x20 BYTE, +0x24 q        -> gaps rel 0x0c-0x0f,
+        //     0x21-0x23, 0x2c-0x2f, i.e. 0x74-0x77, 0x89-0x8b, 0x94-0x97 at
+        //     the embedded sub-object's base of 0x68
+        //
+        // TWO EARLIER ATTEMPTS AT THIS ARE WORTH KNOWING ABOUT. Excluding the
+        // gaps one at a time as the integration run reported them fixed 0x0c
+        // and then immediately failed at 0x18. Deriving the mask at runtime by
+        // constructing into a 0xff-filled buffer as well as a 0x00-filled one
+        // looked elegant and CRASHED THE GAME: the ctors and the matching dtor
+        // act on fields they never initialise, so handing them 0xff bytes hands
+        // them garbage pointers to free. Do not reintroduce either.
+        static const struct { unsigned short off, len; } kGaps[] = {
+            {0x0c, 4}, {0x18, 4}, {0x24, 4}, {0x74, 4}, {0x89, 3}, {0x94, 4},
+        };
+
         alignas(16) unsigned char theirs[sizeof(CompressedMemoryStream)];
         std::memset(theirs, 0, sizeof(theirs));
         RT_ORIGINAL_ONCE(CtorFn, "??0CompressedMemoryStream@IO@@QEAA@XZ")(theirs);
@@ -211,7 +239,13 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
         std::memcpy(a, self,   sizeof(a));
         std::memcpy(b, theirs, sizeof(b));
 
-        // Substitute *encoding for encoding at both sites, in both copies.
+        // The two IO::Encoding pointers (+0x10 on the CompressedStream base and
+        // +0x78 on the embedded MemoryStream) are fresh heap allocations and
+        // CANNOT match, so each is replaced in the comparison copies by the
+        // first qword of the object it points at -- the Encoding vtable. That
+        // still catches the failure that matters (an encoding that is null, or
+        // is not the shared 0x1801554a8 BinaryEncoding) while ignoring the
+        // address.
         for (size_t off : {size_t(0x10), size_t(0x78)}) {
             for (unsigned char* p : {a, b}) {
                 void* enc = nullptr;
@@ -219,6 +253,10 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
                 const void* tag = enc ? *reinterpret_cast<const void* const*>(enc) : nullptr;
                 std::memcpy(p + off, &tag, sizeof(tag));
             }
+        }
+        for (const auto& g : kGaps) {
+            std::memset(a + g.off, 0, g.len);
+            std::memset(b + g.off, 0, g.len);
         }
         RT_DIFF_BYTES(a, b, sizeof(a));
 

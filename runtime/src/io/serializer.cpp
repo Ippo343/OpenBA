@@ -434,15 +434,25 @@ Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
     self->readerWriter = rw;
 
     if (rt_diff_on__) {
-        static const void* kReaderVt = RtOriginal<const void*>(rt::io::kBinaryReaderVtableName);
-        static const void* kWriterVt = RtOriginal<const void*>(rt::io::kBinaryWriterVtableName);
+        static const void* kReaderVt  = RtOriginal<const void*>(rt::io::kBinaryReaderVtableName);
+        static const void* kWriterVt  = RtOriginal<const void*>(rt::io::kBinaryWriterVtableName);
+        static const void* kVisitorVt = RtOriginal<const void*>(rt::io::kVisitorVtableName);
         const void* expectVt = (stream->direction == rt::io::kDirectionReading) ? kReaderVt : kWriterVt;
         const void* actualVt = rw ? static_cast<const void*>(rw->vtable) : nullptr;
 
+        // The caveat above is not hypothetical: the Wave 4 integration run hit
+        // it 2,053 times in 150,574 calls, ALL on the writing side, and all
+        // with actualVt == ??_7Visitor@IO@@6B@. That is the resource-reference
+        // VISIT pass, not a defect -- Encoding is a policy object and the port
+        // correctly stores whatever its factory slot returns. Widened to accept
+        // the Visitor, and the version clause below now applies only to the
+        // BinaryWriter, whose +0x28 IS the version; Visitor's is not.
+        const bool isVisitor = (kVisitorVt && actualVt == kVisitorVt);
+
         bool ok = self->stream == stream && rw != nullptr;
         if (ok) ok = rw->serializer == static_cast<void*>(self) && rw->stream == static_cast<void*>(stream);
-        if (ok && expectVt) ok = (actualVt == expectVt);
-        if (ok && stream->direction != rt::io::kDirectionReading)
+        if (ok && expectVt && !isVisitor) ok = (actualVt == expectVt);
+        if (ok && !isVisitor && stream->direction != rt::io::kDirectionReading)
             ok = (reinterpret_cast<rt::io::BinaryCodec*>(rw)->version == version);
 
         char oursDesc[96], theirsDesc[96];
