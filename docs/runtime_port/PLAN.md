@@ -99,10 +99,11 @@ typed pointer tables.
 
 | Mechanism | Sites | What it is |
 |---|---|---|
-| `ResolveExport("?mangled@…")` | 909 | Exported Runtime function by MSVC name |
-| `ResolveAddr(Module::Runtime, 0x1800xxxxx)` | 281 | Non-exported Runtime internal by Ghidra address |
-| `ResolveOrdinal(n)` | 10 | Export by ordinal |
-| `RegisterDispatchSlot(exeSlot, ResolveExport(…))` | 148 | The exe's own PE import table; retail-shaped code reads `*(fn**)slot` |
+| `ResolveExport("?mangled@…")` | 990 | Exported Runtime function by MSVC name (651 distinct names) |
+| `ResolveAddr(Module::Runtime, 0x1800xxxxx)` | 401 | Non-exported Runtime internal by Ghidra address (301 distinct) |
+| `ResolveOrdinal(n)` | 14 | Export by ordinal (7 distinct) |
+| `RegisterDispatchSlot(exeSlot, ResolveExport(…))` | 139 | The exe's own PE import table; retail-shaped code reads `*(fn**)slot` |
+| `Dx11ResolveRuntimeImport(mangled, iat)` | `dx11/`'s own door | **Was missing from this table and from `runtime_census.py` until 2026-09-07.** `dx11/` imports from Runtime exactly as the shipped plugin did; 60 distinct names, all verified real exports. Video's called count goes 69 → 112 on this correction alone (WAVE9.md) |
 | `engine/funcs/engine_funcs.{h,cpp}` | ~1,029 resolves | Typed `fn_*` pointer table, the main consumer of the two above |
 | Runtime globals by address (`0x1801f…`, `0x1802…`) | see §2.2 | Singletons: MainLoop, Persistence, Video::Device, Timer, allocator |
 | Virtual calls through raw vtable pointers | everywhere | Objects built by retail ctors carry DLL vtables |
@@ -372,7 +373,7 @@ Runtime programs.
 | **6 Video + Graphics** — **LANDED 2026-09-07, see [WAVE6.md](WAVE6.md)** | 113 of the 148 functions our tree calls (Video 53/69, Graphics 59/87), across 7 lanes. **Two FINAL runs, 25,858,610 and 49,643,611 diffed calls, 0 Wave 6 divergences** — every remaining divergence is the pre-existing Wave 1 1-ULP family. Found 5 port defects and 2 oracle-design defects, plus a LIVE functional gap that was not a port: `Geometry::Attach`/`Detach` were spelled `AEAV12@` where the DLL only exports `PEAV12@`, `ResolveExport` has no address fallback, and both call sites are `if (ptr)`-guarded — so every attach and detach in `action_base_complete.cpp` had been silently dead since it was written. **This row's premise about the detour was WRONG in our favour**: `Video::Context` has no vtable and `??_7Geometry` is exported, so no detour was needed and none was installed. `Renderer::Draw` is held back and wants its own lane. | L | Graphics→Video 73 edges, port Video first |
 | **7 UI** — **LANDED 2026-09-07, see [WAVE7.md](WAVE7.md)** | 101 of the 147 functions our tree calls, across 6 lanes (Element 21/23, Dialog family 14/28, UserInterface 8/19, input widgets 18/27, layout widgets 20/24, sprite/text 20/23). **Two closing runs, 26,280,535 and 50,848,191 diffed calls, 0 Wave 7 divergences** — every residual is the Wave 1 1-ULP family. The integration run DID find 2 new sites (`SpriteSheet` ctor and `AddSpriteInfo`, both 100% divergent); both were the ORACLE comparing bytes neither side writes, root-caused from disassembly and closed with no ported body changed. **This row's premise about vtables was wrong in our favour**: all 68 UI vtables are exported, so a ported ctor stamps the DLL's own — the `??_7Geometry` lever from Wave 6, general across the namespace. `UserInterface` turned out to have NO vtable at all. Six pre-existing defects fixed at source, five latent-but-live. **The detour was again not needed and the count is still 0 across all 4,632 functions.** | XL | Element by element; DialogInstance and UserInterface last |
 | **8 Top** — **LANDED 2026-09-07, see [WAVE8.md](WAVE8.md)** | 49 of the 81 functions our tree calls across six namespaces (Engine 15/25, Audio 13/22, Input 15/21, Application 5/6, Save remainder 2/5, Utility 1/2), in 5 lanes; **32 held back with written reasons**, which is the highest holdback ratio of any wave and the correct outcome for a wave sitting on the allocator and the OS. **Two runs, 28,191,797 and 50,870,488 diffed calls, 0 Wave 8 divergences**; a third run under `BANISHED_RT_LIBM=dll` drives the WHOLE TREE to 0, which finally proves the Wave 1 1-ULP residual is libm rounding and not port logic. **THIS ROW'S PREMISE ABOUT THE DETOUR WAS RIGHT WHERE WAVES 6 AND 7 WERE WRONG, AND THE ANSWER IS STILL NOT AN INSTALLED DETOUR**: `MainLoop::OnVideoError`/`OnVideoRestart` each have exactly ONE internal caller (the static thunks the `MainLoop` ctor installs into `Video::Device::_singleton` +0x50/+0x58, reached only on device lost/restore), so a port that registered the export and stopped would be dead code reporting `calls=0 divergences=0`. Both held back; the count is still 0, but now because the case was FOUND AND DECLINED. The allocator NO-GO turned out to cover FOUR functions, not the ctor/dtor pair this plan predicted — `Engine::Startup` writes three allocator fields directly and `Shutdown` calls the allocator's shutdown. **Phantom export names went 3 → 0 tree-wide for the first time in the project**; all three were Wave 8 names and two had been diagnosed by Wave 5 and never fixed at the source. Six defects fixed at source, including a `tools/rt_run.sh` `tail -80` that MANUFACTURED `calls=0` for 1,100 of 1,200 oracle lines. | M | Integrators; mostly wiring |
-| **9 Cutover** | Remove `LoadLibrary` of Runtime; retire the §2.2 patches; VideoDX11 is already ours (`dx11/`) | S | |
+| **9 Cutover** — **SCOPED 2026-09-07, see [WAVE9.md](WAVE9.md); the "S" below was wrong** | Remove `LoadLibrary` of Runtime; retire the §2.2 patches; VideoDX11 is already ours (`dx11/`). **The honest gap is 319 items, not a `LoadLibrary` call**: 145 functions, 57 unnamed DLL internals by address, 51 ctors/dtors, and **59 exported DATA symbols (28 `??_7` vtables, 17 `?_singleton@`, 14 `?_typeInfo@`) that have no body to reimplement and must be MINTED**. Three things every earlier wave was allowed to defer all come due here at once: the allocator NO-GO (a heap cannot be half ours), the `FUN_` pool (§4.3 risk 4, closed to automation), and every wave-3-to-8 holdback. **And the whole verification apparatus dies at cutover** — `BANISHED_RT_DIFF`, `RtOriginal`, `BANISHED_RT_PORT=0` and the Wave 6/7 "stamp the DLL's own exported `??_7`" lever all need the DLL to be there, so nothing may be ported in this wave that was not diff-verified BEFORE the DLL goes. That inverts §6 step 6 for this wave and forces the lane order. The one piece of good news is that **the detour question becomes moot**: with no DLL running its own code, "the DLL's own internal callers" stops being a category and the count stays 0 forever. | **XL** (not S) | Nothing left to port against |
 
 ~~Waves 1–2 are the proving ground; do not parallelize past Wave 2 until the seam, the detour and
 the diff harness have each caught at least one real divergence.~~
@@ -652,6 +653,24 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       mouse — the unattended harness injects dialog clicks by calling handlers directly and never
       passes through the input layer, so `calls=0` there means "the harness did not ask", not
       "verified" (`reference_uncalled_port_is_not_verified.md`).
+- [ ] **Wave 9 (Cutover) SCOPED 2026-09-07, not started. See [WAVE9.md](WAVE9.md).**
+      **The census numbers this checklist has published since Wave 1 were wrong in BOTH
+      directions**, and the tool that found it is new: `BANISHED_RT_STRICT=1`
+      (`standalone/resolve_standalone.cpp`, `f95c1af`) records every resolve that misses the
+      port registry and falls through to the shipped DLL. One autostart run reported **260
+      distinct requests still arriving at Runtime-x64.dll**
+      (`docs/runtime_port/wave9_residue_autostart.txt`), and comparing that against
+      `runtime_census.py` found three tool defects: `dx11/`'s entire Runtime import surface
+      was invisible (**+51 called**), registrations inside an off-by-default `if (<flag>)`
+      block were counted as live ports (**-6 ported**, all of WAVE3.md's NO-GO handle-table
+      tier — Object 28 → 22, which is what WAVE3.md said all along), and 18 registrations
+      passing a named mangled-name constant were warned about instead of counted (UI 98 →
+      101).
+      **Honest census: 823 called, 504 ported (61.2%)** — not the 772 / 507 / 65.7% recorded
+      at the Wave 8 boundary. 319 unported: 145 functions, 57 unnamed internals, 51
+      ctors/dtors, 59 exported DATA symbols, 4 ordinals, 3 `.data` globals.
+      **An empty `[RtResidue]` list across the full harness matrix is the real cutover gate**,
+      and it is the first thing in this tree that asks the PROCESS rather than the source.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

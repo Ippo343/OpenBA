@@ -1,0 +1,686 @@
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      149      101        0   67.8%
+Video               573      112       53        0   47.3%
+Graphics            599       87       59        0   67.8%
+System              262       77       54        0   70.1%
+Math                228       63       58        0   92.1%
+internal                      60        0        0    0.0%
+IO                  407       53       36        0   67.9%
+Achievement         118       50       34        0   68.0%
+Object              191       44       22        0   50.0%
+Engine              108       29       15        0   51.7%
+Input                63       22       15        0   68.2%
+Audio               137       21       13        0   61.9%
+Save                 37       18       15        0   83.3%
+Volume               64       13       12        0   92.3%
+Picking              49        9        9        0  100.0%
+Application          26        8        5        0   62.5%
+ordinal                        6        2        0   33.3%
+Utility              16        2        1        0   50.0%
+------------------------------------------------------------------------------
+TOTAL              4632      823      504        0   61.2%
+
+total  = functions in the DLL (PLAN.md §3.1 Ghidra census; blank for non-namespaced internals)
+called = distinct functions our tree resolves today
+
+39 registration(s) are present in the source but NOT counted above:
+  runtime/src/system/allocator.cpp         21  (opt-in; its Register function returns 0 unless armed)
+  runtime/src/system/allocator_win.cpp     6  (opt-in; its Register function returns 0 unless armed)
+  runtime/src/object/internal.cpp          12  (opt-in; inside if(table) / if(shadow) / if(checkPtr))
+  A gated registration is not a port. Arm it, measure it, then move it.
+ported = of those, taken over by a RegisterRuntime* call
+detour = of those, ALSO patched in the DLL so its own internal callers come to us
+
+Ports with no caller in our tree (8 exports, 0 addresses) — check each is not
+a vestigial resolve:
+  export  ??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z
+  export  ??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z
+  export  ??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z
+  export  ?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z
+  export  ?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z
+
+Called but not ported (319):
+  export   Achievement  ??_7Achievement@0@6B@
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ??_7AchievementInstance@Achievement@@6B@
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ??_7Goal@Achievement@@6B@
+           runtime/src/achievement/goal.cpp
+  export   Achievement  ??_7GoalInstance@Achievement@@6B@
+           runtime/src/achievement/goal.cpp
+  export   Achievement  ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Achievement  ?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+           engine/funcs/engine_funcs.cpp, standalone/reg_goal.cpp
+  export   Achievement  ?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+           code/Game/Game/scenario.cpp
+  export   Achievement  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
+           standalone/address_registry.cpp
+  export   Achievement  ?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z
+           runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ?_singleton@AchievementManager@Achievement@@0PEAV12@EA
+           code/Game/Game/gameupdateloop_serialize.cpp, runtime/src/achievement/achievement_manager.cpp, standalone/reg_unreg_lane1.cpp
+  export   Achievement  ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A
+           code/Game/Game/gameupdateloop_load.cpp, runtime/src/achievement/achievement_manager.cpp
+  export   Achievement  ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Achievement  ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A
+           runtime/src/achievement/goal.cpp
+  export   Application  ?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ
+           dx11/src/devicedata.cpp
+  export   Application  ?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z
+           dx11/src/devicedata.cpp
+  export   Application  ?_singleton@Application@1@0PEAV11@EA
+           standalone/address_registry.cpp
+  export   Audio        ?FreeChannelPlatform@Device@Audio@@AEAAXH@Z
+           engine/funcs/engine_funcs.cpp
+  export   Audio        ?Pause@Scene@Audio@@QEAAXH_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   Audio        ?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Audio        ?StopAll@Scene@Audio@@QEAAXXZ
+           code/Game/Game/gameupdateloop.cpp
+  export   Audio        ?StopEffect3D@Scene@Audio@@QEAAXI@Z
+           engine/funcs/engine_funcs.cpp
+  export   Audio        ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   Audio        ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
+           code/Game/Game/gameupdateloop.cpp, engine/funcs/engine_funcs.cpp
+  export   Audio        ?_singleton@Configuration@Audio@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp
+  export   Engine       ??0Engine@0@QEAA@PEAX@Z
+           code/Game/Game/game_main.cpp
+  export   Engine       ??1Engine@0@QEAA@XZ
+           code/Game/Game/game_main.cpp
+  export   Engine       ??_7DialogLoaderLoopT@Engine@@6B@
+           runtime/src/engine/loops.cpp
+  export   Engine       ??_7DialogLoopT@Engine@@6B@
+           runtime/src/engine/loops.cpp
+  export   Engine       ??_7LoaderLoop@Engine@@6B@
+           runtime/src/engine/loops.cpp
+  export   Engine       ??_7UpdateLoop@Engine@@6B@
+           runtime/src/engine/loops.cpp
+  export   Engine       ?LoadResources@UpdateLoop@Engine@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   Engine       ?OnVideoError@MainLoop@Engine@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   Engine       ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   Engine       ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+           code/Game/Game/game_main.cpp
+  export   Engine       ?Shutdown@Engine@1@QEAAXXZ
+           code/Game/Game/game_main.cpp
+  export   Engine       ?Startup@Engine@1@QEAAIPEBDII_N@Z
+           code/Game/Game/game_main.cpp
+  export   Engine       ?_loader@LoaderLoop@Engine@@1VLoader@2@A
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  export   Engine       ?_singleton@MainLoop@Engine@@1PEAV12@EA
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/engine.cpp, standalone/reg_unreg_lane1.cpp
+  export   Graphics     ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ
+           code/Game/Game/w2_takescreenshot.cpp
+  export   Graphics     ??0SunLight@Graphics@@QEAA@XZ
+           engine/funcs/engine_funcs.cpp
+  export   Graphics     ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ
+           code/Game/Game/w2_takescreenshot.cpp
+  export   Graphics     ??_7AnimationEvent@Graphics@@6B@
+           runtime/src/graphics/animation.cpp
+  export   Graphics     ??_7Geometry@Graphics@@6B@
+           runtime/src/graphics/scene.cpp
+  export   Graphics     ??_7MaterialInstance@Graphics@@6B@
+           runtime/src/graphics/renderer.cpp
+  export   Graphics     ??_7Particle@Graphics@@6B@
+           runtime/src/graphics/animation.cpp
+  export   Graphics     ??_7ParticleInstance@Graphics@@6B@
+           runtime/src/graphics/animation.cpp
+  export   Graphics     ??_7ParticleSystemInstance@Graphics@@6B@
+           runtime/src/graphics/animation.cpp
+  export   Graphics     ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
+           engine/funcs/engine_funcs.cpp
+  export   Graphics     ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+           standalone/scene_watch.cpp
+  export   Graphics     ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp, standalone/reg_unreg_lane3.cpp
+  export   Graphics     ?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@W4Usage@45@W4Format@45@IHHW4FilterMode@45@W4AddressMode@45@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z
+           code/Game/Game/w2_takescreenshot.cpp
+  export   Graphics     ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
+           code/Game/Game/gameupdateloop.cpp, engine/funcs/engine_funcs.cpp
+  export   Graphics     ?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z
+           code/Game/Game/w2_takescreenshot.cpp
+  export   Graphics     ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Graphics     ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z
+           standalone/address_registry.cpp
+  export   Graphics     ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z
+           engine/funcs/engine_funcs.cpp
+  export   Graphics     ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
+           code/Game/Player/tool_base_tilerender.cpp
+  export   Graphics     ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z
+           standalone/address_registry.cpp
+  export   Graphics     ?_frameIndex@ParticleInstance@Graphics@@1HA
+           code/Game/Component/particlecomponent.cpp, standalone/reg_unreg_lane3.cpp
+  export   Graphics     ?_rng@Particle@Graphics@@1VRandom@System@@A
+           code/Game/Game/tornado.cpp
+  export   Graphics     ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA
+           code/Game/Component/citizenai_executor.cpp, standalone/address_registry.cpp, standalone/perf_experimental.cpp
+  export   Graphics     ?_singleton@AnimationManager@Graphics@@0PEAV12@EA
+           runtime/src/graphics/animation.cpp, runtime/src/graphics/mesh.cpp
+  export   Graphics     ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A
+           standalone/reg_unreg_lane3.cpp
+  export   Graphics     ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A
+           code/Game/Game/gameupdateloop_load.cpp, standalone/reg_unreg_lane3.cpp
+  export   Graphics     ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A
+           standalone/reg_unreg_lane3.cpp
+  export   Graphics     ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A
+           standalone/reg_unreg_lane3.cpp
+  export   IO           ??4FileSystem@IO@@QEAAAEAV01@AEBV01@@Z
+           standalone/filename_runtime_hook.cpp
+  export   IO           ??_7CompressedMemoryStream@IO@@6B@
+           runtime/src/io/compressedstream.cpp
+  export   IO           ??_7Stream@IO@@6B@
+           runtime/src/io/compressedstream.cpp
+  export   IO           ?Enable@Modification@IO@@QEAAXH_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?GetCount@Modification@IO@@QEBAHXZ
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z
+           standalone/filename_runtime_hook.cpp
+  export   IO           ?ReadSettings@Persistence@IO@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?RefreshList@Modification@IO@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  export   IO           ?SaveList@Modification@IO@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?SetWindow@CompressedStream@IO@@AEAA_NH@Z
+           standalone/filename_runtime_hook.cpp
+  export   IO           ?SetupFileSystem@Modification@IO@@QEAAXXZ
+           runtime/src/engine/loops.cpp
+  export   IO           ?Swap@Modification@IO@@QEAAXHH@Z
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?WriteSettings@Persistence@IO@@QEBAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   IO           ?_singleton@FileSystem@IO@@0PEAV12@EA
+           code/Game/Game/filesystem_setup.cpp, code/Game/Game/gameupdateloop.cpp, code/Game/Game/w2_takescreenshot.cpp, engine/funcs/engine_funcs.cpp …
+  export   IO           ?_singleton@Modification@IO@@2PEAV12@EA
+           standalone/reg_mods.cpp
+  export   IO           ?_singleton@Persistence@IO@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp, runtime/src/input/input.cpp, runtime/src/video/device.cpp
+  export   Input        ?EnableMouseClipping@Device@Input@@QEAAX_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   Input        ?Load@KeyMap@Input@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp, runtime/src/input/input.cpp
+  export   Input        ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   Input        ?Save@KeyMap@Input@@QEAAXXZ
+           runtime/src/input/input.cpp
+  export   Input        ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   Input        ?_singleton@Configuration@Input@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp
+  export   Input        ?_singleton@Device@Input@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp, runtime/src/input/input.cpp
+  export   Math         ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z
+           code/Game/Game/weather_particle_draw.cpp
+  export   Math         ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ
+           engine/funcs/engine_funcs.cpp
+  export   Math         ?Inverse@Matrix@Math@@QEBA?AV12@XZ
+           runtime/src/video/context.cpp
+  export   Math         ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
+           code/Game/Component/statusicon_geometry.cpp, engine/funcs/engine_funcs.cpp
+  export   Math         ?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z
+           runtime/src/graphics/scene.cpp
+  export   Object       ??0Internal@Object@@QEAA@XZ
+           runtime/src/achievement/achievement_manager.cpp, runtime/src/achievement/goal.cpp, runtime/src/ui/element.cpp, standalone/address_registry.cpp
+  export   Object       ??1Internal@Object@@UEAA@XZ
+           runtime/src/achievement/goal.cpp, runtime/src/ui/dialog.cpp, standalone/address_registry.cpp
+  export   Object       ??_7Base@Object@@6B@
+           runtime/src/achievement/achievement_manager.cpp, runtime/src/achievement/goal.cpp, runtime/src/graphics/renderer.cpp, runtime/src/object/external.cpp …
+  export   Object       ??_7CompiledExternal@Object@@6B@
+           runtime/src/video/buffers.cpp
+  export   Object       ??_7External@Object@@6B@
+           runtime/src/achievement/achievement_manager.cpp, runtime/src/achievement/goal.cpp, runtime/src/graphics/renderer.cpp, runtime/src/object/external.cpp …
+  export   Object       ??_7Internal@Object@@6B@
+           runtime/src/object/internal.cpp
+  export   Object       ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ
+           code/Game/Component/growthcomponent.cpp, code/Game/Component/herdcomponent.cpp, code/Game/Component/interactcomponent.cpp, code/Game/Component/wildanimalcomponent.cpp …
+  export   Object       ?Clean@ExternalFactory@Object@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  export   Object       ?ClearPersistState@InternalFactory@Object@@QEAAXXZ
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Object       ?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z
+           code/Game/Goal/goal_exe_helpers.cpp
+  export   Object       ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp, engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp, standalone/filename_runtime_hook.cpp
+  export   Object       ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z
+           standalone/filename_runtime_hook.cpp
+  export   Object       ?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Object       ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z
+           engine/funcs/engine_funcs.cpp
+  export   Object       ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
+           code/Game/Action/playanimation.cpp, code/Game/Action/showtool.cpp, code/Game/Component/buildcomponent.cpp, code/Game/Component/multiobjectcomponent.cpp …
+  export   Object       ?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   Object       ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA
+           code/Game/Game/game_main.cpp, runtime/src/object/type_system.cpp, standalone/main.cpp
+  export   Object       ?_singleton@ExternalFactory@Object@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp
+  export   Object       ?_singleton@Factory@Object@@0PEAV12@EA
+           runtime/src/object/external.cpp, runtime/src/object/type_system.cpp, standalone/address_registry.cpp
+  export   Object       ?_singleton@InternalFactory@Object@@0PEAV12@EA
+           code/Game/Game/gameupdateloop_serialize.cpp, runtime/src/object/internal.cpp
+  export   Object       ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A
+           standalone/reg_unreg_lane1.cpp
+  export   Object       ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A
+           code/Game/Game/gameupdateloop_load.cpp
+  export   Save         ??1SaveLoad@Save@@QEAA@XZ
+           engine/funcs/engine_funcs.cpp
+  export   Save         ?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z
+           code/Game/Game/gameupdateloop.cpp
+  export   Save         ?_singleton@SaveLoad@Save@@0PEAV12@EA
+           engine/funcs/engine_funcs.cpp, standalone/reg_unreg_lane1.cpp, standalone/saveload_harness.cpp
+  export   System       ??0WideString@System@@QEAA@PEB_W@Z
+           dx11/src/devicedata.cpp
+  export   System       ??1WideString@System@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   System       ??9String@System@@QEBA_NAEBV01@@Z
+           runtime/src/ui/widgets_input.cpp
+  export   System       ??_7Thread@System@@6B@
+           runtime/src/system/thread_win.cpp
+  export   System       ?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z
+           engine/funcs/engine_funcs.cpp, runtime/src/system/allocator.cpp, standalone/allocator_lock.cpp
+  export   System       ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ
+           dx11/src/devicedata.cpp
+  export   System       ?Display@Error@System@@SAXXZ
+           dx11/src/contextdata.cpp
+  export   System       ?Free@MemoryAllocator@System@@QEAAXPEAX@Z
+           runtime/src/system/allocator.cpp, standalone/allocator_lock.cpp
+  export   System       ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
+           code/Game/Action/action_pf_astar.cpp, code/Game/Action/action_pf_geom.cpp, code/Game/Action/keystone_a_zone.cpp, code/Game/Component/keystone_a_restree.cpp …
+  export   System       ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+           code/Game/Action/action_pf_geom.cpp, code/Game/Component/keystone_a_restree.cpp, code/Game/Component/wellcomponent.cpp, code/Game/Game/pathfinder_seed.cpp …
+  export   System       ?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z
+           engine/funcs/engine_funcs.cpp
+  export   System       ?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z
+           engine/funcs/engine_funcs.cpp
+  export   System       ?SetText@Error@System@@SAXPEBD_N@Z
+           dx11/src/contextdata.cpp, dx11/src/devicedata.cpp
+  export   System       ?StrCompare@String@System@@SAHPEBD0@Z
+           runtime/src/ui/element.cpp
+  export   System       ?StrLength@WideString@System@@SAHPEB_W@Z
+           dx11/src/devicedata.cpp
+  export   System       ?ThreadFunc@Thread@System@@CAIPEAX@Z
+           runtime/src/system/thread_win.cpp
+  export   System       ?ToInteger@String@System@@SAHPEBD@Z
+           runtime/src/ui/widgets_input.cpp
+  export   System       ?_errorString@Error@System@@0PADA
+           code/Game/Game/game_main.cpp
+  export   System       ?_secondsPerTick@Timer@System@@0NA
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/engine.cpp
+  export   System       ?_singleton@MemoryAllocator@System@@0PEAV12@EA
+           code/Game/Game/game_main.cpp, engine/funcs/engine_funcs.cpp, runtime/src/system/allocator.cpp, standalone/main.cpp
+  export   System       ?_systemInitialTick@Timer@System@@0_JA
+           engine/funcs/engine_funcs.cpp
+  export   System       ?_systemTicksPerSecond@Timer@System@@0_JA
+           engine/funcs/engine_funcs.cpp
+  export   System       ?_ticksPerSecond@Timer@System@@0_JA
+           engine/funcs/engine_funcs.cpp
+  export   UI           ??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@PEBVDialog@1@V?$InternalPtr@VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ??1DialogInstance@UI@@UEAA@XZ
+           engine/funcs/engine_funcs.cpp
+  export   UI           ??1Element@UI@@UEAA@XZ
+           standalone/address_registry.cpp
+  export   UI           ??1ElementDescription@UI@@UEAA@XZ
+           standalone/address_registry.cpp
+  export   UI           ??1UserInterface@UI@@QEAA@XZ
+           code/Game/Game/gameupdateloop.cpp
+  export   UI           ??_7DialogController@UI@@6B@
+           runtime/src/ui/dialog.cpp
+  export   UI           ??_7DialogInstance@UI@@6B@
+           code/Game/Player/tool_base_toolui.cpp
+  export   UI           ??_7Element@UI@@6B@
+           runtime/src/ui/element.cpp
+  export   UI           ??_7SpriteSheet@UI@@6B@
+           runtime/src/ui/sprite.cpp
+  export   UI           ?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@V?$ExternalPtr@VDialogControllerConfig@UI@@@4@V?$ExternalPtr@VElementDescription@UI@@@4@AEBVString@System@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@V?$ExternalPtr@VDialogControllerConfig@UI@@@4@V?$InternalPtr@VElement@UI@@@4@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddGraph@GraphElement@UI@@QEAAXI@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z
+           standalone/address_registry.cpp
+  export   UI           ?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@V?$ExternalPtr@VElementDescription@UI@@@4@0@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?CacheText@NumberElement@UI@@AEAAXXZ
+           runtime/src/ui/widgets_input.cpp
+  export   UI           ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@V?$ExternalPtr@VElementDescription@UI@@@4@@Z
+           engine/funcs/engine_funcs.cpp, standalone/address_registry.cpp
+  export   UI           ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+           standalone/address_registry.cpp
+  export   UI           ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?EnableCursor@UserInterface@UI@@QEAAX_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z
+           runtime/src/ui/element.cpp
+  export   UI           ?Play@UserInterface@UI@@QEAAXH@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?RemoveAllItems@ComboElement@UI@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?RemoveChildren@Element@UI@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SaveAllSettings@UserInterface@UI@@QEAAXXZ
+           code/Game/Game/gameupdateloop_serialize.cpp
+  export   UI           ?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z
+           standalone/address_registry.cpp
+  export   UI           ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z
+           code/Game/Component/frustumoutlineelement.cpp, standalone/address_registry.cpp
+  export   UI           ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z
+           code/Game/Component/frustumoutlineelement.cpp, standalone/address_registry.cpp
+  export   UI           ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?SetValue@NumberEditElement@UI@@QEAAXH@Z
+           engine/funcs/engine_funcs.cpp, runtime/src/ui/widgets_input.cpp
+  export   UI           ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+           engine/funcs/engine_funcs.cpp
+  export   UI           ?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z
+           code/Game/Dialog/autosavedialog.cpp
+  export   UI           ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  export   UI           ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A
+           runtime/src/ui/element.cpp
+  export   UI           ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  export   UI           ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A
+           code/Game/Player/tool_base_createbar.cpp
+  export   UI           ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A
+           runtime/src/ui/widgets_input.cpp
+  export   UI           ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A
+           runtime/src/ui/element.cpp
+  export   Utility      ??0PerlinNoise@Utility@@QEAA@MMHH@Z
+           engine/funcs/engine_funcs.cpp
+  export   Video        ??0Adapter@Device@Video@@QEAA@AEBU012@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0Adapter@Device@Video@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??0ConstantBufferData@Video@@QEAA@PEAVConstantBuffer@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z
+           engine/funcs/engine_funcs.cpp
+  export   Video        ??0ContextData@Video@@QEAA@PEAVContext@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z
+           dx11/src/exports.cpp
+  export   Video        ??0DisplayMode@Device@Video@@QEAA@HH@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0GraphicsInterface@Device@Video@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0RenderBuffer@Video@@QEAA@XZ
+           code/Game/Game/minimap_paint.cpp
+  export   Video        ??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0RenderStateData@Video@@QEAA@PEAVRenderState@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ??1Adapter@Device@Video@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??1ConstantBufferData@Video@@UEAA@XZ
+           dx11/src/buffers.cpp
+  export   Video        ??1Context@Video@@QEAA@XZ
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/engine.cpp
+  export   Video        ??1ContextData@Video@@UEAA@XZ
+           dx11/src/contextdata.cpp
+  export   Video        ??1DeviceData@Video@@UEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??1DisplayMode@Device@Video@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??1GraphicsInterface@Device@Video@@QEAA@XZ
+           dx11/src/devicedata.cpp
+  export   Video        ??1IndexBufferData@Video@@UEAA@XZ
+           dx11/src/buffers.cpp
+  export   Video        ??1PixelProgramData@Video@@UEAA@XZ
+           dx11/src/shaderprograms.cpp
+  export   Video        ??1RenderBuffer@Video@@QEAA@XZ
+           code/Game/Game/minimap_paint.cpp
+  export   Video        ??1RenderBufferData@Video@@UEAA@XZ
+           dx11/src/smallclasses.cpp
+  export   Video        ??1VertexBufferData@Video@@UEAA@XZ
+           dx11/src/buffers.cpp
+  export   Video        ??1VertexLayoutData@Video@@UEAA@XZ
+           dx11/src/vertexlayoutdata.cpp
+  export   Video        ??1VertexProgramData@Video@@UEAA@XZ
+           dx11/src/shaderprograms.cpp
+  export   Video        ??1VideoProgramData@Video@@UEAA@XZ
+           dx11/src/smallclasses.cpp
+  export   Video        ??3Context@Video@@SAXPEAX@Z
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/engine.cpp
+  export   Video        ??_7ImageBuffer@Video@@6B@
+           runtime/src/video/buffers.cpp
+  export   Video        ??_7ImageBufferData@Video@@6B@
+           runtime/src/video/buffers.cpp
+  export   Video        ??_7RenderStateData@Video@@6B@
+           runtime/src/video/device.cpp
+  export   Video        ?AdjustDisplay@Device@Video@@QEAAXXZ
+           dx11/src/devicedata.cpp
+  export   Video        ?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z
+           dx11/src/contextdata.cpp
+  export   Video        ?Bind@RenderBuffer@Video@@QEBAXAEAVContext@2@@Z
+           dx11/src/contextdata.cpp
+  export   Video        ?BindResources@Context@Video@@AEAAXXZ
+           dx11/src/contextdata.cpp
+  export   Video        ?BindTextures@Context@Video@@AEAAXXZ
+           dx11/src/contextdata.cpp
+  export   Video        ?ClearResources@Context@Video@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   Video        ?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z
+           dx11/src/devicedata.cpp
+  export   Video        ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z
+           dx11/src/devicedata.cpp
+  export   Video        ?Lock@Device@Video@@QEAAXXZ
+           dx11/src/buffers.cpp, dx11/src/contextdata.cpp, dx11/src/devicedata.cpp
+  export   Video        ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z
+           dx11/src/contextdata.cpp
+  export   Video        ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z
+           dx11/src/contextdata.cpp
+  export   Video        ?RecreateDynamic@Device@Video@@QEAAXXZ
+           dx11/src/contextdata.cpp, dx11/src/devicedata.cpp, engine/funcs/engine_funcs.cpp
+  export   Video        ?ReleaseDynamic@Device@Video@@QEAAXXZ
+           dx11/src/contextdata.cpp, dx11/src/devicedata.cpp, engine/funcs/engine_funcs.cpp
+  export   Video        ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
+           code/Game/Game/w2_takescreenshot.cpp
+  export   Video        ?Shutdown@Device@Video@@QEAAXXZ
+           engine/funcs/engine_funcs.cpp
+  export   Video        ?Startup@Device@Video@@QEAA_NXZ
+           engine/funcs/engine_funcs.cpp
+  export   Video        ?Unlock@Device@Video@@QEAAXXZ
+           dx11/src/buffers.cpp, dx11/src/contextdata.cpp, dx11/src/devicedata.cpp
+  export   Video        ?Unlock@IndexBuffer@Video@@QEAAXXZ
+           dx11/src/contextdata.cpp
+  export   Video        ?Unlock@VertexBuffer@Video@@QEAAXXZ
+           dx11/src/contextdata.cpp
+  export   Video        ?_singleton@Configuration@Video@@0PEAV12@EA
+           dx11/src/contextdata.cpp, dx11/src/devicedata.cpp, dx11/src/imagebufferdata.cpp, engine/funcs/engine_funcs.cpp …
+  export   Video        ?_singleton@Device@Video@@0PEAV12@EA
+           dx11/src/buffers.cpp, dx11/src/devicedata.cpp, dx11/src/imagebufferdata.cpp, dx11/src/renderstatedata.cpp …
+  export   Volume       ?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z
+           runtime/src/graphics/renderer.cpp
+  addr     internal     0x180000000
+           code/Game/Player/tool_base_toolui.cpp
+  addr     internal     0x180003970
+           runtime/src/achievement/achievement_manager.cpp
+  addr     internal     0x180004890
+           runtime/src/achievement/achievement_manager.cpp
+  addr     internal     0x180004e30
+           runtime/src/ui/sprite.cpp
+  addr     internal     0x180008b90
+           runtime/src/achievement/achievement_manager.cpp
+  addr     internal     0x180008d60
+           runtime/src/achievement/achievement_manager.cpp
+  addr     internal     0x180008ff0
+           runtime/src/achievement/achievement_manager.cpp
+  addr     internal     0x180009c30
+           runtime/src/graphics/scene.cpp, runtime/src/input/input.cpp
+  addr     internal     0x180010110
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  addr     internal     0x1800101e0
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x180010ab0
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  addr     internal     0x180011460
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x18001bf50
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18001c750
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18001c7e0
+           runtime/src/graphics/renderer.cpp
+  addr     internal     0x18001c8c0
+           runtime/src/graphics/renderer.cpp
+  addr     internal     0x18001c9e0
+           runtime/src/graphics/renderer.cpp
+  addr     internal     0x18001f470
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18001f990
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x180023130
+           runtime/src/input/input.cpp
+  addr     internal     0x180023830
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x180026ef0
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x18002a090
+           engine/funcs/engine_funcs.cpp, runtime/src/io/persistence.cpp
+  addr     internal     0x18002ace0
+           engine/funcs/engine_funcs.cpp, runtime/src/io/persistence.cpp
+  addr     internal     0x18002fea0
+           runtime/src/ui/widgets_layout.cpp
+  addr     internal     0x180033880
+           runtime/src/engine/engine.cpp
+  addr     internal     0x180033960
+           runtime/src/engine/engine.cpp
+  addr     internal     0x180033a40
+           runtime/src/engine/engine.cpp
+  addr     internal     0x1800416d0
+           runtime/src/ui/widgets_layout.cpp
+  addr     internal     0x18004f790
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x18004f8e0
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x180059140
+           runtime/src/picking/scene.cpp
+  addr     internal     0x18005bf60
+           runtime/src/graphics/animation.cpp
+  addr     internal     0x18005e4a0
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18005e5e0
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18005ee30
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18005f090
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18005f1f0
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x18005fc20
+           runtime/src/graphics/scene.cpp
+  addr     internal     0x180061480
+           runtime/src/graphics/renderer.cpp
+  addr     internal     0x18006a3e0
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x1800724d0
+           runtime/src/picking/scene.cpp
+  addr     internal     0x180072950
+           runtime/src/picking/scene.cpp
+  addr     internal     0x1800737f0
+           runtime/src/picking/scene.cpp
+  addr     internal     0x1800739e0
+           runtime/src/picking/scene.cpp
+  addr     internal     0x180073bb0
+           runtime/src/picking/scene.cpp
+  addr     internal     0x180073c90
+           runtime/src/picking/scene.cpp
+  addr     internal     0x1800764c0
+           runtime/src/ui/widgets_layout.cpp
+  addr     internal     0x180076900
+           runtime/src/ui/element.cpp
+  addr     internal     0x18007a0d0
+           engine/funcs/engine_funcs.cpp, runtime/src/engine/loops.cpp
+  addr     internal     0x18007af70
+           runtime/src/picking/scene.cpp
+  addr     internal     0x18007b390
+           runtime/src/picking/scene.cpp
+  addr     internal     0x18007b6d0
+           runtime/src/picking/scene.cpp
+  addr     internal     0x18007b960
+           runtime/src/picking/scene.cpp
+  addr     internal     0x18007fbfc
+           runtime/src/system/thread_win.cpp
+  addr     internal     0x18008f530
+           code/Game/Player/fencedtool.cpp
+  addr     internal     0x18008f880
+           code/Game/Player/fencedtool.cpp
+  addr     internal     0x1801fc6d0
+           code/Game/Game/game_main.cpp
+  addr     internal     0x1801fe7c0
+           engine/funcs/engine_funcs.cpp
+  addr     internal     0x1801fe7e0
+           engine/funcs/engine_funcs.cpp
+  ordinal  ordinal      2990
+           code/Game/Component/buildcomponent.cpp, code/Game/Component/residencecomponent.cpp
+  ordinal  ordinal      3214
+           dx11/src/buffers.cpp, engine/funcs/engine_funcs.cpp
+  ordinal  ordinal      443
+           code/Game/Entity/citizenbehavior.cpp
+  ordinal  ordinal      4462
+           dx11/src/buffers.cpp, engine/funcs/engine_funcs.cpp
