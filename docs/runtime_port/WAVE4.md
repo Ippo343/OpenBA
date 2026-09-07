@@ -17,6 +17,7 @@ it the `BANISHED_AUTOLOAD` stall, and every one of the wave's save/load ports li
 | Diff oracle | **83 sites, 21,672,859 calls, 0 IO divergences**; 3,515,498 of those calls are the IO ports |
 | Residual | 44 divergences in 2 sites — the same Wave 1 sin/cos-fed 1-ULP sites, unchanged in kind |
 | Held back | `ReadSettings` / `WriteSettings` (mutate the real HKCU registry, no safe oracle), `FileSystem::_singleton` (a DATA export), 6 Serializer forms with zero call sites |
+| Perf gate | **BREACHED at +7.7%, and DEFERRED BY THE USER to after the final stage** — see below |
 | Harness | `BANISHED_AUTOLOAD` **fixed** — `Save9` and `Auto` load to gameplay unattended for the first time |
 
 Lanes: A Serializer, B CompressedMemoryStream, C Persistence, D FileSystem + Modification,
@@ -31,6 +32,30 @@ H the harness. Detail per lane in
 |---|---|
 | `BANISHED_RT_IO=0` | Leave the whole IO namespace on the DLL |
 | `BANISHED_RT_SERIALIZER=0` / `_STREAM=0` / `_PERSISTENCE=0` / `_FILESYSTEM=0` | Per-lane kill switches |
+
+---
+
+## Performance — measured, breached, and deliberately not chased
+
+`sim ms/iteration` came in at **+7.7%** against `perf/baselines/current.csv`, on a machine
+verified quiet. The 5% gate is breached and the baseline was NOT touched.
+
+Three earlier runs read +8.4%, +7.0% and +9.8%, and were discarded: another session was building
+and running the game on the same box, so they measured contention. Worth recording that discarding
+them did **not** rescue the result — the clean run landed in the same range, so contention was not
+the explanation. Wave 3 closed at +3.3-4.4%, so Wave 4 appears to add roughly 3-4 points.
+
+**The user deferred the gate at this boundary** — *"dont really care if its slower we can fix that
+after the final stage"* — so the wave is not held open on it and PLAN §5 now records the gate as
+moved to the cutover stage rather than failed-and-ignored.
+
+**The `BANISHED_RT_PORT=0` A/B was not run.** It was the next step when the deferral arrived.
+Anyone picking performance up should run it FIRST: three runs, free, and the only thing that
+separates "the IO ports cost 3-4 points" from "drift". The plausible suspect is the `Serialize`
+forwarder family, which is genuinely hot — `Serialize(uchar&)` alone took 764,734 calls in a
+single load — and now goes through our seam. That is a hypothesis, not a finding: Wave 2 asserted
+exactly this shape about `Random::Rand` and was wrong, and the real cause there was one
+`GetProcAddress` in a hot body. Measure before believing it.
 
 ---
 

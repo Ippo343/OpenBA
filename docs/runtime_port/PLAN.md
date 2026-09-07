@@ -472,7 +472,20 @@ the diff harness have each caught at least one real divergence.
       Wave 3 on `sa-run`: **38,613,179 calls / 0 new divergences** across 59 sites, all 12 Object
       sites with non-zero `calls=`. Residual is still those same 2 Wave 1 sites (138 divergences,
       1 ULP). **Four Wave 3 functions could not be exercised at all** — see the `Save9.sav` row.
-- [x] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
+- [ ] `sa-stress` `sim ms / iteration` within 5% of the pre-port baseline at each wave boundary.
+      **DEFERRED BY THE USER 2026-09-06, at the Wave 4 boundary, to after the final stage:**
+      *"dont really care if its slower we can fix that after the final stage."* The gate is
+      therefore NOT a blocker for waves 4-8, and a wave must not be held open on it. It is not
+      cancelled: it moves to the cutover stage (§4.2 wave 9), where the DLL is gone and the
+      numbers mean something different anyway.
+      **Wave 4 measured and BREACHED it: +7.7% on a verified-quiet machine** (three earlier runs
+      at +8.4/+7.0/+9.8 were discarded as contaminated — another session was building and running
+      the game on the same box; the clean number landed in the same range, so contention was NOT
+      the explanation). `perf/baselines/current.csv` was NOT touched.
+      **The `BANISHED_RT_PORT=0` A/B was NOT run** — it was the next step when the deferral came
+      in. Whoever picks perf up should run it FIRST: it is free, it takes three runs, and it is
+      the only thing that says whether the ~3-4 points Wave 4 added are the IO ports or drift.
+      Wave 3 closed at +3.3-4.4%, so that is the delta to explain.
       **CLOSED at the Wave 3 boundary: +4.4% / +3.3% / +3.3% PASS over three runs.**
       The Wave 2 breach was ONE defect, not the seam: `RtOriginal` is `GetProcAddress` and
       `System::Time`'s ctor and `AsSeconds` called it inside their bodies, on the value type every
