@@ -716,6 +716,18 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       NOT port; and `FindOrLoad`/`Clean` were never blocked on Wave 4 at all — they have no
       possible oracle, because both rewrite the one shared AVL tree. A group summary that was
       accurate about the group was wrong about three of its four members.
+      **Two more unblocked the same day by reading a callee nobody had read.** Lane D held
+      `KeyMap::RegisterInput`/`Load` because it could not pin `FUN_180023060`'s first argument.
+      The callee settles it: **RCX is never read** — `0x180023097 MOV RCX,RBX` destroys it
+      before any use, loading the allocator critical section — so the signature is
+      `BindingNode* AllocNode(<unused>, const Binding* src, BindingNode* parent)`. The call
+      sites agree in the stronger form: RCX is `this` at one site and a zero-extended id byte at
+      the other two, and **a value that differs like that across call sites cannot be a
+      parameter the callee reads.** The allocator's body also confirms every layout lane D
+      reversed (node 0x38, element 0x18 copied as three qwords, parent +0x18, left/right
+      +0x20/+0x28, balance dword +0x30). What remains for both is an ORACLE, not an unknown:
+      they mutate the shared AVL tree, so they need a shadow (post-state) oracle rather than
+      replay. Corrected at source in WAVE8_LANE_D.md.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

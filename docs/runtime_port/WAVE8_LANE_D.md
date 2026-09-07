@@ -178,6 +178,57 @@ Win32 clip-rect side effect the DLL's call actually produces; porting the
 whole thing needs the same unresolved internal helper `Update` does. Held
 back for the same reason, not a separate one.
 
+
+**RESOLVED 2026-09-07 during Wave 9 prep — the ambiguity below is settled, and the answer is
+that the parameter does not exist.** The hold-back was correct on its own evidence and is now
+superseded; the reasoning is left in full because the *method* it warns about still applies.
+
+Lane D asked what `FUN_180023060`'s first argument is. **Reading the callee answers it: RCX is
+never read.** The first thing the helper does with RCX is destroy it —
+`0x180023097: MOV RCX,RBX`, loading the allocator critical section at `*(0x1801fc718) + 0x640`.
+Its only real inputs are `RDX` (a `const Binding*` source) and `R8` (the parent node):
+
+```
+180023060  MOV RBP,R8                    ; parent
+180023081  MOV RSI,RDX                   ; element source
+180023084  MOV RBX,[0x1801fc718]; ADD RBX,0x640
+180023097  MOV RCX,RBX                   ; <-- RCX first USED here, as the lock. Never read.
+18002309a  CALL [0x18014b390]            ; EnterCriticalSection
+1800230a1  MOV EDX,0x38 ; LEA R8D,[RDX-0x30]  ; size 0x38, align 8
+1800230aa  MOV RCX,[0x1801fc718]
+1800230b1  CALL 0x1800c6e60              ; MemoryAllocator::Allocate
+1800230bc  CALL [0x18014b388]            ; LeaveCriticalSection
+1800230c2  TEST RDI,RDI ; JZ -> return 0
+1800230cb  copy 3 qwords [RSI] -> [RDI]  ; the 0x18-byte Binding
+1800230e1  [RDI+0x18] = RBP              ; parent
+1800230e7  [RDI+0x20] = 0 ; [RDI+0x28] = 0 ; [RDI+0x30] = 0   ; left, right, balance/height
+1800230f2  MOV RAX,RDI                   ; return the node
+```
+
+So the signature is `BindingNode* AllocNode(<unused>, const Binding* src, BindingNode* parent)`.
+
+**The call-site evidence agrees, and sharpens one detail lane D got backwards.** The note below
+says the register holding the DLL's first argument at `0x1800a7ee6` was last written by the
+BST-descent scratch. It was not — *at that site*. `0x1800a7ee6` is reached only when `RBX == 0`
+(`0x1800a7e88 JZ`, then `0x1800a7ed9 TEST RBX,RBX / JNZ` diverts every non-empty-tree path away
+from it), and the descent loop at `0x1800a7e90` only runs when `RBX != 0`. On the path that
+actually reaches `0x1800a7ee6`, **RCX is still `this`, untouched since entry.** The scratch-byte
+observation is true of the OTHER two call sites (`0x1800a7f3a`, `0x1800a7f4d`), which are on the
+non-empty path — and that is the stronger form of the argument, not the weaker one: **a value
+that is `this` at one call site and a zero-extended id byte at the other two cannot be a
+parameter the callee reads.** Lane D reached the right verdict from a mis-attributed premise.
+
+**Everything else this lane reversed is confirmed by the allocator's own body**: node size
+`0x38`, a `0x18`-byte element copied as three qwords, `parent` at `+0x18`, `left`/`right` at
+`+0x20`/`+0x28` and the balance/height dword at `+0x30` — exactly the `BindingNode` and
+`Binding` layouts already `static_assert`-pinned in `runtime/types/input/Input.h`.
+
+`RegisterInput` and `Load` are therefore **unblocked for Wave 9 lane A**. What remains is not an
+unknown, it is an ORACLE: both mutate the shared AVL tree, so replay would insert twice, and the
+port needs a shadow oracle (post-state: the binding is present with the expected fields and the
+count moved by exactly one) rather than call-ours-call-theirs.
+
+---
 ### `?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z` (0x1800a7e70)
 
 The search half (find-by-id, return early if already registered) is identical
