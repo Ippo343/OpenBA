@@ -195,6 +195,23 @@ would have collided with the base class's file when that is ported.
 * **`ReadSettings` / `WriteSettings`** stay on the DLL. Both mutate the real `HKCU` registry and
   `WriteSettings` also deletes keys, so no safe oracle exists and a mistake corrupts the player's
   settings rather than crashing a debug exe.
+* **An INTERMITTENT crash on the load path**, narrowed but not closed. Lane H reported it at
+  `compressedstream.cpp:375` (the `Commit` call inside `Close`) and the orchestrator first
+  mis-attributed it to an oracle experiment that did not exist in the build that crashed.
+  Symbolising the two Runtime frames places it elsewhere, and more usefully:
+  `Runtime+0x6A57` is inside `FUN_180006a10`, the locked `MemoryAllocator::Free` wrapper, and
+  `Runtime+0xA95E0` is the instruction immediately after `CALL 0x180006a10` at `0x1800a95db` —
+  which is inside `??1CompressedMemoryStream` and frees `[RDI+0x10]`, i.e. **the embedded
+  `MemoryStream`'s `Stream::_encoding`**. So the fault is a free of an already-freed or corrupted
+  `_encoding` in the `MemoryStream` sub-object, raised by the DLL's own destructor. The
+  destructor is the messenger, not the writer.
+  What has been RULED OUT statically: retail's `~CompressedMemoryStream` (`0x1800a9560`) inlines
+  the same `Commit` guard the port uses, on the same offsets, so the port's dtor is faithful
+  there; `Commit` (`0x1800a9ee0`) does end in `Release`, so a double `Commit` WOULD produce this
+  shape, but retail is equally exposed to it and nothing yet shows our port calling `Close`
+  twice. Not yet run, and decisive: the same load with `BANISHED_RT_STREAM=0`, which leaves
+  `CompressedMemoryStream` on the DLL. If it still crashes the port is not the cause.
+
 * **Quit-to-menu teardown after loading `Auto.sav`** faults in the allocator via
   `EntityList_Shutdown` → `WorkComponent_OnRemove` → `HuntWork` scalar dtor → `MemFree`.
   `Save9`'s quit is clean, so it is content-dependent. Same family as the known 800x10 stress
