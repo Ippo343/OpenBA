@@ -451,6 +451,15 @@ the diff harness have each caught at least one real divergence.
       and `MemoryAllocator::_singleton`. 27 further registrations exist in `allocator.cpp` /
       `allocator_win.cpp` and are **excluded from the count** because their Register function
       returns 0 unless armed — `tools/runtime_census.py` reports them separately.
+- [x] **Wave 4 (IO) merged.** Census after the wave: **879 called, 217 ported (24.7%)** —
+      IO 36/41 (87.8%), Object 27/41, System 53/60, Math 58/59, Volume 12/12. 39 of the 41 IO
+      functions our tree calls are ported; the two that are not are `Persistence::ReadSettings`
+      and `WriteSettings` (they mutate the real HKCU registry and `WriteSettings` deletes keys,
+      so no safe oracle exists), plus `FileSystem::_singleton`, a DATA export that cannot be
+      registered before cutover. Diff oracle: **83 sites, 21,672,859 calls, 0 IO divergences**.
+      Wave 4 also FIXED the `BANISHED_AUTOLOAD` harness this row used to be blocked on, and
+      corrected three recorded facts about `IO::Serializer` that were wrong. See
+      [WAVE4.md](WAVE4.md).
 - [x] **Wave 3 (Object) merged.** Census after the wave: **877 called, 170 ported (19.4%)** —
       Object 21/41 (51.2%), System 53/60, Math 58/59, Volume 12/12.
       **THOSE TWO NUMBERS WERE AN UNDERCOUNT, corrected during Wave 4 to
@@ -499,6 +508,17 @@ the diff harness have each caught at least one real divergence.
       **Standing rule from this wave: 3+ runs per config, and take the free `BANISHED_RT_PORT=0`
       A/B at every boundary.** One run cannot resolve a 5-point effect.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.
+      **`Save9.sav` NOW LOADS (Wave 4 lane H, `ef0debc`).** The blocker was never the save and
+      never a port: `UI::UserInterface::ShowDialog` is a nested `MainLoop::Frame` loop and the
+      `modsMissing` prompt had no unattended answer. Two more defects sat behind it — the
+      long-standing "+0x7FC high dword wild write" (one `fn_String_Dtor` on an `InternalBasePtr`,
+      decrementing an allocator boundary tag) and a missing `GameContainer_EnsureLists` on the
+      Load path. All four Wave 3 functions that lived only on this path are now exercised:
+      `GetPathForReferenceId` 89,733 calls, one call each for `GetReferenceId`,
+      `ClearPersistState` and `ResetPersistState`, all 0 divergences — which retires
+      "registered but never executed" without being a volume argument.
+      **Tutorials 1-4 and the achievement count were NOT re-run at the Wave 4 boundary**, so this
+      box stays unticked. Only the `Save9` half was verified.
       **The `Save9.sav` harness is FIXED (Wave 4 lane H, see [WAVE4_LANE_H.md](WAVE4_LANE_H.md)).**
       `Save9` and `Auto` both load, build the world and reach gameplay unattended, and all four
       Wave 3 functions that lived only on that path are now exercised with 0 divergences —

@@ -223,7 +223,28 @@ would have collided with the base class's file when that is ported.
 * **`ReadSettings` / `WriteSettings`** stay on the DLL. Both mutate the real `HKCU` registry and
   `WriteSettings` also deletes keys, so no safe oracle exists and a mistake corrupts the player's
   settings rather than crashing a debug exe.
-* **An INTERMITTENT crash on the load path**, narrowed but not closed. Lane H reported it at
+* **The INTERMITTENT load-path crash: not reproduced in 8 runs, best explanation identified,
+  but NOT proved absent.** Eight `AUTOLOAD=Save9` runs on an md5-verified debug build at HEAD --
+  four with the stream port on, four with `BANISHED_RT_STREAM=0` -- all loaded the world and all
+  exited with an empty crash log.
+  **The A/B could not attribute anything, because neither arm crashed.** It was designed to
+  answer "is it lane B's port?" and instead answered "it does not happen here any more", which is
+  a weaker and different result. Eight clean runs do not prove an intermittent fault is gone.
+  What DOES explain it, from commit ordering rather than from runs: lane H built `6435a40` as its
+  control, and `6435a40` **predates `ef0debc`, lane H's own `String_Dtor` fix**. So its crash was
+  almost certainly defect 2 -- `fn_String_Dtor` on an `InternalBasePtr` corrupting the allocator
+  boundary tag in `DoLoad`'s mod-warning block -- surfacing at the next innocent free, which
+  happened to be `~CompressedMemoryStream` freeing `_encoding`. That is independently what the
+  symbolisation said: the destructor is the messenger, not the writer.
+  The orchestrator's own earlier crash was a SECOND, different corruption with the same
+  downstream signature: the `0xff`-filled oracle buffer, which hands the ctor and dtor garbage
+  pointers to free. Two causes, one signature -- which is exactly why a single clean run was
+  worthless as proof, and it was briefly treated as proof anyway.
+  Status: both identified causes are fixed and the symptom is gone from 8 runs. If it returns,
+  start from the allocator, not from `CompressedMemoryStream`.
+
+* ~~An INTERMITTENT crash on the load path~~, superseded by the entry above; the original
+  narrowing is kept there. Lane H reported it at
   `compressedstream.cpp:375` (the `Commit` call inside `Close`) and the orchestrator first
   mis-attributed it to an oracle experiment that did not exist in the build that crashed.
   Symbolising the two Runtime frames places it elsewhere, and more usefully:
