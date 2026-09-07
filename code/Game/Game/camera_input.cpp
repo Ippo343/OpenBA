@@ -39,7 +39,7 @@
 #include <cstdlib>
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
-extern "C" void RtOrphanProbeInGame();                    // standalone/rt_orphan_probe.cpp
+extern "C" void RtOrphanProbeInGame(void* keyMap);        // standalone/rt_orphan_probe.cpp
 
 namespace Game {
 
@@ -127,9 +127,8 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     // before the exit dumps -- so the only place to reach it is a live frame,
     // and this is the input path. One shot, then it costs one predictable
     // branch per frame.
-    RtOrphanProbeInGame();
-
     void* keyMap = CamKeyMap();
+    RtOrphanProbeInGame(keyMap);
     if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed || !fn_Time_AsSeconds) return;
 
     uint8_t* ui = (uint8_t*)entityUI;

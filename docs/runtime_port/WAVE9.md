@@ -200,7 +200,7 @@ ours), not chosen.
 | Lane | Scope | Gate |
 |---|---|---|
 | **0. Residue matrix** | Run `BANISHED_RT_STRICT=1` across the whole harness matrix — menu, mods menu, all 4 tutorials, `Save9.sav` autoload, `sa-stress`, and gameplay through the pause menu. Union the residue lists; entries are monotone, so the union is sound and any *shrink* is a tool bug. **Use a route that reaches gameplay** — `BANISHED_AUTOQUIT=1` quits at the MAIN MENU and cost this document one wrong finding (see the correction above); menu-only 260 vs gameplay 309. **No attended run is needed for `Input::Device` after all** — see the CLOSED section below. | A single work list that is what the process reaches, not what the tree mentions |
-| **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8 that lane 0 shows is reached: 32 from Wave 8, 5 handle-table mutators, 4 `ExternalFactory` mutators, `Renderer::Draw`, `MainLoop::OnVideoError`/`OnVideoRestart`. | 0 divergences, non-zero `calls=` on each |
+| **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8. **Triaged below into a per-function disposition** — P (1, a probe), B (10, blocked on a named dependency), N (7, allocator-bound or oracle-hard), D/X (14, stubs or already-unblocked). Start with X: four `ExternalFactory` mutators whose stated blocker was a Wave 4 dependency that has since landed. | 0 divergences and non-zero `calls=` for the ports; a written reason for each stub |
 | **B. The 145 named functions + 51 ctors/dtors** | The ordinary port wave, class-atomic (§4.1 rule 5). | 0 divergences |
 | **C. Data: 28 vtables, 17 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
 | **D. The 57 unnamed internals** | **The known-hard one.** PLAN §4.3 risk 4 records the `FUN_` pool as MEASURED AND UNSOLVED and CLOSED TO AUTOMATION: all three levers (hash/fuzzy, string anchors, call-graph) run to a fixed point at 2% touched, 9 names proposed, none verified, and no PDB exists. 57 is a far smaller target than the pool, and each has a call site that says what it is used for — that is the lever, not the name. | Each one either ported, or proved unreachable by lane 0 |
@@ -209,7 +209,7 @@ ours), not chosen.
 | **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. | The PLAN §5 box |
 | **H. Perf gate** | The deferred +7.7% breach. The user deferred it at the Wave 4 boundary explicitly *to this stage*. With the DLL gone the seam's `GetProcAddress`/registry indirection can be compiled out entirely, which is the main reason it was deferred here. Three runs minimum — `reference_one_perf_run_cannot_resolve_the_gate.md`. | ≤5% over the recorded baseline |
 
-## Open items inherited from earlier waves — three CLOSED 2026-09-07
+## Open items inherited from earlier waves — FOUR CLOSED, the rest triaged (2026-09-07)
 
 ### CLOSED — the 8 ports with no caller in our tree
 
@@ -334,16 +334,91 @@ comparison was close to vacuous. Both errors are
 `reference_one_perf_run_cannot_resolve_the_gate.md` in a new costume: check what your comparison
 actually contains, and never attribute a difference without a control.
 
-### Still open
+### CLOSED — `Input::KeyMap`'s three const readers
 
-* **The 32 held-back functions** from waves 3-8, each with a written reason in its lane doc.
-* **`KeyMap::GetDeviceForId` / `GetInputForId` / `GetIdForDeviceInput`** — the residue of the
-  attended-run item, needing a populated binding tree.
-* **`?IsRunning@UpdateLoop@Engine@@QEBA_NXZ`** — never observed executing in any of Wave 8's four
-  runs. It has a full replay oracle and reaches us through exe dispatch slot `0x140152850` from
-  `code/Game/Goal/populationgoal.cpp:141`, so it needs a run that actually evaluates population
-  goals. A candidate for the same probe treatment.
+Closed the same way and in the same run as `Input::Device`, once the point was
+generalised: they need a **populated** binding tree, and a live gameplay frame has one — the
+player's real key configuration, reached through the same `g_pKeyMapObjectExref` triple-deref
+`Camera_UpdateMovement` already uses. There was never anything attended about it.
+
+Swept exhaustively, not sampled — `id` is narrowed to a `uint8_t` by the port and by retail, so
+0..255 **is** the whole domain:
+
+| Reader | Domain | Comparisons | Result |
+|---|---|---|---|
+| `GetDeviceForId` | id 0..255 x slot 0..1 | 512 | 0 mismatches |
+| `GetInputForId` | id 0..255 x slot 0..1 | 512 | 0 mismatches |
+| `GetIdForDeviceInput` | device 0..2 x input 0..104 | 315 | 0 mismatches |
+
+The third matters most. It is the only member of the family that is **not** a lookup — it is an
+in-order walk of the whole tree checking both slots of every binding, so it is the only place a
+port could get `Leftmost`/`Successor` wrong, and a lookup-shaped test would never touch it.
+
+**With this, WAVE8.md's attended-run item is closed in full**: 1,909 comparisons across
+`Input::Device` and `Input::KeyMap`, 0 mismatches, no human at a keyboard.
+
+### The 32 wave-3-to-8 holdbacks: triaged, with a cutover disposition each
+
+These are the largest inherited item and they are **not paperwork** — most are real porting work
+that needs a dependency ported first. What was missing was not effort, it was a *decision per
+function*, so that lane A is a work list rather than a re-reading of five lane docs.
+
+**The reframe that makes the list tractable:** at cutover a held-back function cannot "stay on
+the DLL", because there is no DLL — but it does not automatically need a faithful port either.
+It needs to **not be a missing symbol**. So every row below resolves to one of *port*, *probe*,
+or *stub with a written reason* — and the three dead `IO::Serializer` overloads above are the
+precedent for the third being a legitimate answer.
+
+| # | Holdback | Disposition |
+|---|---|---|
+| **P — dissolvable by probe** | | |
+| 1 | `UpdateLoop::IsRunning` (lane A) | **PROBE.** Never observed executing in any of Wave 8's four runs, but it is a const read with a full replay oracle — the same shape as `Input::Device`, which the probe closed. Reaches us through exe dispatch slot `0x140152850` from `populationgoal.cpp:141`. Needs an `UpdateLoop*`, so it wants a probe point with one in hand. |
+| **B — blocked on a named dependency; ordinary port work once it lands** | | |
+| 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after `Audio::SoundBuffer`/`SoundEffect`.** All three reach `Device`'s COM channel objects; none of the three classes was in Wave 8's scope. `Scene::Update` also consumes `System::Random`, so it needs an oracle design, not just a body. |
+| 5-7 | `Audio::Scene::StopAll`, `Pause`, `StopEffect3D` | **PORT with 2-4.** Each calls into `Device::Stop` / the platform channel array. Porting the outer loop alone would put two implementations of one state machine in play (WAVE8.md §1). |
+| 8 | `Audio::Scene::Serialize` | **PORT after re-deriving retail's `IO::Encoding` vtable offsets.** Held back precisely because `reference_encoding_vtable_offsets_differ_between_builds.md` says the profile build's offsets do not match retail's, and a wrong guess desyncs every save silently. The re-derivation is the work; the body is small. |
+| 9 | `Engine::MainLoop::Run` (lane B) | **PORT after the allocator (row 12-15).** Lane B records the allocator embedding as the reason it is a holdback. |
+| 10 | `Input::KeyMap::RegisterInput` (lane D) | **PORT once the arg ABI is settled.** Held back for a real ambiguity, not a guess — see lane D §4. |
+| 11 | `Input::KeyMap::Load` (lane D) | **PORT with 10.** |
+| **N — NO-GO until the allocator is ours; then mandatory** | | |
+| 12-15 | `Engine::Engine` ctor, `~Engine`, `Engine::Startup`, `Engine::Shutdown` (lane B) | **PORT AS PART OF LANE E.** `Startup` writes three allocator fields directly and `Shutdown` calls the allocator's shutdown, which is why lane B found the NO-GO is four functions wide rather than the ctor/dtor pair PLAN predicted. These cannot be done before the heap and must not be done after it. |
+| 16 | `Input::Device::Update` (lane D) | **NO ORACLE BY CONSTRUCTION, and it is not optional.** Four unexported, unnamed internal helpers plus DirectInput8 COM pointers past `Device+0x11D0` (unmapped). Replaying it drains the input queue twice, so "call ours, call theirs, compare" corrupts the state being compared. A wrong port is a game that silently stops responding to keyboard and mouse. **This is the hardest single item in the wave** and deserves its own lane with a bespoke oracle (record-and-replay of the queue, not call-twice). |
+| 17 | `Input::Device::EnableMouseClipping` (lane D) | **PORT with 16** — same object, same unmapped region. |
+| 18 | `Engine::UpdateLoop::LoadResources` (lane A) | **PORT after the IO holdbacks.** |
+| **D — dead by construction; stub with a reason, do not port** | | |
+| 19-20 | `MainLoop::OnVideoError`, `OnVideoRestart` (lane B) | **STUB.** Wave 8 measured exactly ONE internal caller each — the static thunks the `MainLoop` ctor installs into `Video::Device::_singleton` +0x50/+0x58, reached only on device lost/restore. This is the detour case Wave 8 found and declined. At cutover they need to exist, not to be faithful; a port would be dead code reporting `calls=0`. **If a lane does port them, the device-lost path has to be forced, or the port is unverifiable.** |
+| 21-24 | `Save::~SaveLoad`, `Save::Draw`, and lane E's shadow markers (`Application::PlatformUpdate`, `SleepThread`, `YieldToThreads`) | **STUB or PORT-WITHOUT-ORACLE, decided per function.** Lane E states these have no oracle by construction. |
+| **X — already resolved by earlier waves, listed for completeness** | | |
+| 25-28 | 4 `Object::ExternalFactory` mutators (Wave 3) | **PORT.** Held back for "no oracle possible / Wave 4 dependency" — the Wave 4 dependency has since landed, so the stated blocker is gone and these should be re-examined first, cheaply. |
+| 29-32 | 5 handle-table mutators + `CheckPtr` (Wave 3, opt-in NO-GO) | **ARM AND MEASURE.** These are the `if (table)` / `if (shadow)` / `if (checkPtr)` blocks the census was wrongly counting as ported (see above). `CheckPtr` is a bare `RET` in every shipped build, so registering a real one silently re-enables ~60k indirect calls/frame — that is a perf decision, not a correctness one. |
+
+**What this triage changes.** Two of the four groups are not porting work at all: **P** is one
+probe on machinery that now exists, and **D** is six functions that need a stub and a sentence
+rather than a faithful body. **X** is four functions whose stated blocker has already been
+removed by a later wave and that nobody re-checked — the same shape as
+`project_jack_of_all_trades_closed.md`, where both listed blockers turned out to be already
+fixed and nobody had re-run the census. That leaves **B** and **N**, which are genuine
+multi-function porting work with named prerequisites, and inside them **`Input::Device::Update`
+is the one that needs a bespoke oracle rather than more time.**
+
+None of these can be closed by writing a body in this session without an oracle, and doing so
+would be the exact failure `reference_uncalled_port_is_not_verified.md` warns about — a green
+`calls=0` line over unverified code. They are lane work with a decided disposition, which is the
+honest end state for them before the wave opens.
+
+### Still open going into the wave
+
+Everything inherited now has either a verification or a written disposition. What remains is
+work, not undecided work:
+
+* **The 32 holdbacks** — triaged above into P (1, a probe), B (10, blocked on a named
+  dependency), N (7, allocator-bound or oracle-hard) and D/X (14, stubs or already-unblocked).
+  Lane A executes that table.
+* **`Input::Device::Update` needs a bespoke oracle**, not more time — call-twice corrupts the
+  DirectInput queue it is reading. It is the hardest single item in the wave.
 * **The perf gate**, deferred by the user to lane H.
+* **The 1-ULP libm answer is a bound, not a bit-exact result.** If lane B wants the stronger
+  answer it needs a deterministic world-gen fingerprint, which nothing in the tree emits today.
 
 ## Sizing
 

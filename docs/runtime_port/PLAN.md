@@ -693,6 +693,23 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       quits at the MAIN MENU, so two residue runs that never reached gameplay looked
       path-independent. Through the pause menu the residue is **309, not 260** — a strict
       superset, 49 new and none lost. Lane 0's matrix is required after all.
+- [x] **The Wave 8 attended-run item is CLOSED IN FULL, 2026-09-07** — `Input::Device`'s three
+      readers AND `Input::KeyMap`'s three, **1,909 comparisons, 0 mismatches**, no human at a
+      keyboard. Domains swept exhaustively rather than sampled (`id` is a `uint8_t`, so 0..255
+      IS the domain). See [[reference-const-reader-needs-a-caller-not-a-human]] in memory and
+      the CLOSED sections of [WAVE9.md](WAVE9.md).
+- [x] **The 32 wave-3-to-8 holdbacks are TRIAGED with a per-function cutover disposition**
+      (WAVE9.md). The reframe that makes them tractable: at cutover a holdback cannot stay on
+      the DLL, but it does not automatically need a faithful port either — it needs to **not be
+      a missing symbol**, so each resolves to *port*, *probe*, or *stub with a written reason*.
+      Groups: **P** 1 function (a probe on machinery that now exists), **B** 10 (blocked on a
+      named dependency — `Audio::SoundBuffer`/`SoundEffect`, retail's `IO::Encoding` offsets,
+      the allocator), **N** 7 (allocator-bound, or oracle-hard: `Input::Device::Update` needs a
+      BESPOKE oracle because call-twice drains the DirectInput queue it is reading), **D/X** 14
+      (stub-with-a-reason, or already unblocked). **Four of them — the `ExternalFactory`
+      mutators — were held back on a Wave 4 dependency that has since LANDED**, so lane A should
+      start by re-checking them; same shape as the Jack-of-all-Trades wave, where both listed
+      blockers were already fixed and nobody had re-run the census.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

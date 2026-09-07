@@ -195,9 +195,11 @@ void RtOrphanProbe() {
 //     would zero live input state mid-frame.
 //   * `KeyMap::SetInput` / `ClearInput` mutate the binding tree -- probing them
 //     would rewrite the player's key bindings.
-//   * `KeyMap::GetDeviceForId` / `GetInputForId` / `GetIdForDeviceInput` are
-//     const readers and ARE probeable in principle, but only against a
-//     populated binding tree; they stay on the attended-run list.
+//   * `KeyMap::GetDeviceForId` / `GetInputForId` / `GetIdForDeviceInput` need a
+//     POPULATED binding tree -- which is exactly what a live gameplay frame
+//     has, so they are probed here too rather than deferred. The tree is the
+//     player's real key configuration, read through the same
+//     `g_pKeyMapObjectExref` triple-deref `Camera_UpdateMovement` itself uses.
 //
 // Runs ONCE, from Camera_UpdateMovement (code/Game/Game/camera_input.cpp),
 // which is on the input path and only ticks once the world is live.
@@ -296,14 +298,84 @@ void ProbeInputDevice() {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Input::KeyMap -- the three const readers WAVE8.md left on the attended list.
+//
+// All three are pure reads of the binding tree with FULL REPLAY oracles:
+//   GetDeviceForId(id, slot)      BST lookup by id, then element.device[slot],
+//                                 SIGN-extended (-1 means both "no such id" and
+//                                 "slot unbound").
+//   GetInputForId(id, slot)       the same lookup, element.inputId[slot],
+//                                 ZERO-extended -- the asymmetry is retail's.
+//   GetIdForDeviceInput(dev, in)  NOT a lookup: an in-order walk of the WHOLE
+//                                 tree checking both slots of every binding.
+//
+// The domains are small enough to cover exhaustively, which matters most for
+// the third: its Leftmost/Successor walk is the only place in this family where
+// a port could get the tree traversal wrong, and a lookup-shaped test would
+// never touch it. `id` is narrowed to a uint8_t by the port (and by retail), so
+// 0..255 IS the whole domain, not a sample.
+// ---------------------------------------------------------------------------
+typedef int32_t (*KeyMapPairFn)(const void*, int32_t, int32_t);
+
+void ProbeInputKeyMap(void* keyMap) {
+    if (!keyMap) {
+        fprintf(stderr, "[RtOrphan] SKIP Input::KeyMap: no live KeyMap this frame\n");
+        return;
+    }
+
+    struct Sub { const char* name; const char* mangled; int32_t aLo, aHi, bLo, bHi; };
+    static const Sub kSubs[] = {
+        // id 0..255 x slot 0..1 -- the full domain of both id lookups.
+        { "GetDeviceForId",      "?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z",      0, 255, 0, 1 },
+        { "GetInputForId",       "?GetInputForId@KeyMap@Input@@QEBAHHH@Z",       0, 255, 0, 1 },
+        // device 0..2 x inputId 0..104 -- every device and every keyboard input.
+        { "GetIdForDeviceInput", "?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z", 0, 2,   0, 104 },
+    };
+
+    for (const Sub& sub : kSubs) {
+        KeyMapPairFn ours = reinterpret_cast<KeyMapPairFn>(ResolveExport(sub.mangled));
+        KeyMapPairFn theirs = reinterpret_cast<KeyMapPairFn>(ResolveExportRaw(sub.mangled));
+        if (!ours || !theirs || ours == theirs) {
+            fprintf(stderr, "[RtOrphan] FAIL Input::KeyMap::%s ours=%p theirs=%p%s\n",
+                    sub.name, (void*)ours, (void*)theirs,
+                    (ours && ours == theirs) ? " (port NOT registered)" : "");
+            ++g_fail;
+            continue;
+        }
+
+        int mismatches = 0, compared = 0;
+        for (int32_t a = sub.aLo; a <= sub.aHi; ++a) {
+            for (int32_t b = sub.bLo; b <= sub.bHi; ++b) {
+                int32_t vOurs = ours(keyMap, a, b);
+                int32_t vThem = theirs(keyMap, a, b);
+                ++compared;
+                if (vOurs != vThem && ++mismatches <= 3) {
+                    char detail[160];
+                    snprintf(detail, sizeof(detail), "(%d,%d) ours=%d theirs=%d",
+                             (int)a, (int)b, (int)vOurs, (int)vThem);
+                    Report("Input::KeyMap", sub.name, false, detail);
+                }
+            }
+        }
+        if (mismatches == 0) {
+            ++g_pass;
+            fprintf(stderr, "[RtOrphan] pass Input::KeyMap::%-20s %d comparisons\n",
+                    sub.name, compared);
+        }
+    }
+}
+
 }  // namespace
 
-extern "C" void RtOrphanProbeInGame() {
+extern "C" void RtOrphanProbeInGame(void* keyMap) {
     if (g_inGameDone || !Enabled()) return;
     g_inGameDone = true;
 
-    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device) ====\n");
+    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap) ====\n");
     ProbeInputDevice();
+    ProbeInputKeyMap(keyMap);
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }
