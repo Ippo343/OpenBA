@@ -517,9 +517,14 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       Math 58/63, Volume 12/13, IO 36/52, Achievement 34/50, Object 28/44, Save 15/20.
       Two final runs, **0 Wave 6 divergences** in 25.8M and 49.6M diffed calls, both with a
       zero-byte crash log. 86 of the 113 ports executed in the autostart run; 2 of the 7 EdgeMesh
-      ports executed under `BANISHED_TOOL_HARNESS=select` and **5 are registered but NOT
-      verified** (they build the outline mesh, which no harness reaches), as is the
-      `EdgeMeshInstance` COPY ctor, which this wave's own `engine_funcs` fix left with no caller.
+      ports executed under `BANISHED_TOOL_HARNESS=select`, and the remaining five were closed by
+      `BANISHED_TOOL_HARNESS=pasturefull` — a pasture has no per-cell mesh variant, so it takes
+      `tool_base_render.cpp`'s BUILD branch instead of its PREBUILT one (209 sites, 26,237,724
+      calls, 0 new divergences). **All 113 ports have now executed** except the
+      `EdgeMeshInstance` COPY ctor, which this wave's own `engine_funcs` fix left with no caller
+      at all. Wave 6 also added `BANISHED_SCREENSHOT_AT=<frame>`, the first thing in the tree that
+      can answer "is it actually on the screen" — the diff oracle and both censuses stop at the
+      GPU boundary.
       Held back with written reasons: `Renderer::Draw` + `AddDrawItem` (they pin `Video::Context`
       and `Geometry` layouts two lanes were porting concurrently — PLAN §4.3 risk 3, verbatim),
       `Video::Device` `Startup`/`Shutdown`/`Recreate`/`ReleaseDynamic` and `RenderBuffer`
