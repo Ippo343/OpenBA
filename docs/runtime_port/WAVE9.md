@@ -569,13 +569,29 @@ live tree or the one live factory. That is the same shared-state trap the family
 for, wearing a different hat — and `RegisterInput` already showed what it looks like when a second
 call succeeds *differently* rather than failing.
 
-**So the next unit of work is a PREFIX oracle, not more ports.** The emission sequence is still
+**The PREFIX oracle is now BUILT** (`Compare(..., stopAfter)`, 2026-09-07). The emission sequence is still
 fully determined by the object at entry, so what these three need is a way to compare the
 emissions *up to the first mutation* — either by stopping the body at a chosen emission index, or
 by snapshotting and restoring the small amount of state each one touches (`InternalBasePtr` is
 eight bytes; the reference-set ids are one dword per node). Lane S already records the sequence;
 what it lacks is a stop.
 
+It was proved on a subject already known clean — `Audio::Scene::Serialize`, which had just
+passed the full compare at 32,772 identical emissions, so a truncation to 8 *had* to pass. It
+failed twice, and both failures were the harness, not the port:
+
+1. the two recorders were **locals written after `setjmp` and read after `longjmp`** —
+   indeterminate, the one real rule `setjmp` imposes;
+2. **`longjmp` on Windows x64 UNWINDS**, running the SEH cleanup of every frame it jumps over.
+   Retail's `Serialize` bodies carry that cleanup (`MOV [RSP+0x20],-0x2` is the state marker) and
+   it calls the `ReaderWriter`'s deleting destructor — **which emits**. Our own port is a plain
+   C++ frame with nothing to unwind, so the sides were asymmetric by construction and the harness
+   reported a divergence it had caused itself. Fixed by clearing the recorder before jumping.
+
+**A prefix oracle that manufactures a divergence is worse than none, and only a known-good
+subject can tell the two apart** — the same shape as the Wave 6 oracle that compared bytes
+neither side wrote and read as a catastrophic port defect. What remains for the three rows is
+now a reachable subject for each, not a missing tool.
 **Recorded as a correction rather than fixed silently, because it is the fourth time this session
 that a group-level claim of mine failed per-function checking** — after the `ExternalFactory`
 four, `KeyMap::Load`, and `SerializeReferenceTable` as "the cheapest row". The per-function checks
