@@ -171,7 +171,7 @@ bool VerifyBody(const char* mangled, const uint8_t* expect, size_t n) {
 int  g_verifyFailures = 0;
 void VerifyFailed(const char* what, const char* detail) {
     ++g_verifyFailures;
-    std::printf("[RtIO/Serializer] VERIFY FAILED: %s -- %s\n", what, detail);
+    printf("[RtIO/Serializer] VERIFY FAILED: %s -- %s\n", what, detail);
 }
 
 } // namespace
@@ -597,7 +597,7 @@ int RtIoSerializerRegister() {
         VerifyFailed("??1Serializer@IO@@QEAA@XZ", "body bytes differ");
 
     if (g_verifyFailures != 0) {
-        std::printf("[RtIO/Serializer] %d verification failure(s) -- IO::Serializer stays on the DLL. "
+        printf("[RtIO/Serializer] %d verification failure(s) -- IO::Serializer stays on the DLL. "
                     "A wrong ReaderWriter vtable slot desyncs the save stream silently, so this is "
                     "a refusal, not a warning.\n", g_verifyFailures);
         g_portOn = false;
@@ -639,7 +639,7 @@ int RtIoSerializerRegister() {
     g_portOn = true;
 
     const int total = kForwarderCount + 3;
-    std::printf("[RtIO/Serializer] %d exports registered, all %d retail bodies verified "
+    printf("[RtIO/Serializer] %d exports registered, all %d retail bodies verified "
                 "(ReaderWriter vtable slots match the DLL's own tail-jumps)\n",
                 total, total);
     return total;

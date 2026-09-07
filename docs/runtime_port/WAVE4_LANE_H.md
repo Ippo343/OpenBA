@@ -245,6 +245,84 @@ off:
 
 ---
 
+## 5a. THE MACHINE-STATE FACT THAT CAUSED THIS — read this before touching save/load or achievements
+
+**Both of this machine's mods live in a holding pen, not in the mods folder:**
+
+```
+C:\GOG Games\Banished\WinData\_mods_off\betterFields.pkm   (10101 bytes)
+C:\GOG Games\Banished\WinData\_mods_off\DebugMenu.pkm      ( 5789 bytes)
+```
+
+The mods folder is `WinData\` itself (loose files -> `.pkg` -> `.pkm`). `_mods_off\` was created
+2026-09-05 18:47. The timeline is the whole story:
+
+| when | what |
+|---|---|
+| Sep 5 18:15 | `Auto.sav` written |
+| Sep 5 18:30 | `Save9.sav` written |
+| Sep 5 18:44 | `Save10.sav` written |
+| Sep 5 18:47 | both `.pkm` moved to `_mods_off\` |
+
+Every save on this machine was made with the mods mounted; every load attempted since 18:47 has
+run without them. That single fact explains both properties PLAN.md §5 recorded and could not
+account for — the stall is not save-specific (it hits `Save9` and `Auto` alike) and it reproduces
+with `BANISHED_RT_OBJECT=0` (it predates the port).
+
+**This is not discoverable from the code.** `find … -maxdepth 2 -iname '*.pkm'` misses these,
+because `_mods_off\` is itself at depth 2 and the files at depth 3 — that is exactly how this
+lane initially concluded "no `.pkm` anywhere".
+
+### The standing conflict: achievements and save-loading cannot both work on this save set
+
+`docs/waves/achievements_wave.md:20-30`: `FileSystem::_singleton+0x38` is the user-mod count and
+`AreUserPackFilesEnabled()` is literally `count > 0`, so **retail silently disables all achievement
+evaluation whenever any `.pkm` sits in `WinData`.** So:
+
+* achievement runs REQUIRE the mods out of `WinData\`;
+* loading any save written on this machine before Sep 5 18:47 REQUIRES `DebugMenu.pkm` in.
+
+Both cannot hold at once for this save set. This is a standing harness constraint, not a one-off,
+and it has now cost the project time twice. **After this lane's fix a mod-mismatched load no longer
+stalls** — it logs the mismatch and proceeds — so the achievements configuration (mods out) is the
+one that can stay, which is how this lane left the directory. See §7.
+
+### The function that does the comparing
+
+Lane D correctly ruled out `IO::Modification::Find` (no internal callers in the DLL). The
+comparing function is **`Save::SaveLoad::CheckMod`, retail `0x1800c1090`**, called only from the
+exe's `SaveLoadDialog::DoLoad` (`0x1400b61e0`). Decompiled, it:
+
+1. builds `IO::FileSystem::GetDataDirectory() + <the save's recorded mod path string>` and runs
+   `System::Filename::AdjustDelimiters` on it;
+2. linear-searches `IO::Modification::_singleton` — count at `+0x10`, array base at `+0x8`, stride
+   `0x80` — comparing the `String` at entry `+0x58` by length then `_stricmp`;
+3. returns **1** if no entry matches (→ `modsMissing`), else compares entry `+0x2c` against the
+   save record's `+0x10` (mismatch → **4**, `modsChanged`) and entry `+0x1c` against `+0x18`
+   (mismatch → **3**, `modsVersion`), and finally returns **2** (`modsOutOfDate`) only when the
+   save's `+0x14` is below `0x1000400`, else **0**.
+
+Our `DoLoad` trace prints exactly this pairing, which is how the mismatch was identified:
+
+```
+[SaveLoadDialog::DoLoad] installed mod count=0
+[SaveLoadDialog::DoLoad]   save mod[0] "Debug Menu" CheckMod=1
+```
+
+and with `DebugMenu.pkm` restored to `WinData\`:
+
+```
+[SaveLoadDialog::DoLoad] installed mod count=1
+[SaveLoadDialog::DoLoad]   installed[0] path="C:\GOG Games\Banished\WinData\DebugMenu.pkm"
+[SaveLoadDialog::DoLoad]   save mod[0] "Debug Menu" CheckMod=0
+```
+
+`betterFields.pkm` is **not** in any of these saves' recorded mod lists — only `"Debug Menu"` is —
+so only `DebugMenu.pkm` is needed to match, and mounting `betterFields.pkm` would add content the
+saves were never written against.
+
+---
+
 ## 6. What this closes and what it does not
 
 **Closes**
