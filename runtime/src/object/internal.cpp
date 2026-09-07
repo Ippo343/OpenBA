@@ -79,6 +79,7 @@
 
 #include "../../types/object/Internal.h"
 #include "../../funcs/rt_port.h"
+#include "../io/save_trace.h"   // Wave 9 lane S
 
 namespace RtObject {
 namespace {
@@ -502,7 +503,7 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 //
 //     Serializer ser(stream, 0);              // inlined; see below
 //     int count = _objects._size;
-//     ser.encoding->vtbl[0xa0](encoding, &count, 0);   // WRITE on save, READ on load
+//     ser.readerWriter->vtbl[0xa0](encoding, &count, 0);   // WRITE on save, READ on load
 //     _persistIds.SetSize(count);
 //     _objects.Reserve(count);
 //     for (i = 0; i < _persistIds._size; ++i) _persistIds[i] = -1;
@@ -524,16 +525,16 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
     SerializerLite ser;
     ser.stream   = stream;
-    ser.encoding = nullptr;
+    ser.readerWriter = nullptr;
 
     char*  s       = static_cast<char*>(stream);
     void*  factory = *reinterpret_cast<void**>(s + 0x10);
     void** fvtbl   = *reinterpret_cast<void***>(factory);
     const int mode = *reinterpret_cast<int*>(s + 0x08);
-    ser.encoding = reinterpret_cast<void* (*)(void*, void*)>(
+    ser.readerWriter = reinterpret_cast<void* (*)(void*, void*)>(
         fvtbl[(mode == 0 ? 0x18 : 0x20) / 8])(factory, &ser);
 
-    void*  enc     = ser.encoding;
+    void*  enc     = ser.readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
 
     int count = self->objects._size;
@@ -580,7 +581,7 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
 // the DLL wrote without reproducing the codec (Wave 4). It is registered only
 // under BANISHED_RT_INTERNAL_TABLE=1 and is UNVERIFIED.
 void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* ser) {
-    void*  enc     = ser->encoding;
+    void*  enc     = ser->readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
 
     char present = (self->ptr != nullptr) ? 1 : 0;
@@ -827,6 +828,22 @@ int RtObjectInternalRegister() {
                "NOT counted as ported.\n");
     }
 
+    // ---- InternalBasePtr::Serialize — UNGATED 2026-09-07 (Wave 9) -----------
+    // It sat in the TABLE tier below, but not because it touches the handle
+    // table: it does not. It was gated because WAVE3.md could not verify it —
+    // "has no oracle at all and lands in the save/load path". The lane S prefix
+    // oracle now verifies it on BOTH branches against the shipped body:
+    //   non-null  4 emissions (bool present, int index, uint gen, uint type)
+    //             identical — and those four ARE the whole emission sequence,
+    //             since the only thing after them is PersistObject, which both
+    //             sides would call identically
+    //   null      1 emission identical, full compare, no stop needed
+    // Gated-because-unverified is not the same as gated-because-dangerous, and
+    // keeping the two in one switch made a verified port look like a NO-GO.
+    RegisterRuntimeExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z",
+                          (void*)&RtObject_InternalBasePtr_Serialize); ++n;
+    RegisterRuntimeAddr(0x1800c0180, (void*)&RtObject_InternalBasePtr_Serialize);
+
     // ---- Tier 2: the real table ports. NO-GO until shadow is green. ---------
     if (table) {
         RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
@@ -845,9 +862,6 @@ int RtObjectInternalRegister() {
                               (void*)&RtObject_InternalFactory_ResetPersistState); ++n;
         RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
 
-        RegisterRuntimeExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z",
-                              (void*)&RtObject_InternalBasePtr_Serialize); ++n;
-        RegisterRuntimeAddr(0x1800c0180, (void*)&RtObject_InternalBasePtr_Serialize);
 
         printf("[RtPort]   Object::Internal: TABLE mode ARMED — our code now drives the live "
                "handle table. Verdict on this tier is NO-GO unless a SHADOW run has been "
@@ -858,3 +872,64 @@ int RtObjectInternalRegister() {
            table ? " (INCLUDING the unverified table tier)" : "");
     return n;
 }
+
+namespace RtObject {
+
+// ============================================================================
+// Wave 9 lane S probe — InternalBasePtr::Serialize, the "no oracle at all" one
+// ============================================================================
+// WAVE3.md listed this as the residual issue that survives even a fully green
+// shadow: "`InternalBasePtr::Serialize` has no oracle at all and lands in the
+// save/load path". That was true when it was written. It is not any more.
+//
+// Why the full A/B still cannot be used: the body ends in
+// `self->ptr = InternalFactory::PersistObject(...)`, which mutates the pointer
+// AND the global factory, so replaying the whole thing would persist twice.
+//
+// Why the PREFIX oracle is nonetheless the WHOLE answer here: every byte this
+// function contributes to the stream is emitted by its four calls -- bool
+// `present`, int `index`, uint `gen`, uint `type` -- and all four happen BEFORE
+// the mutation. Stopping after 4 skips only `PersistObject`, which is shared
+// code both sides would call identically. So the prefix is not a partial view
+// of the emission sequence; it IS the emission sequence.
+//
+// The subject is a real live object taken from the factory's own table
+// (`InternalFactory::objects`), not a synthetic one: the port reads
+// `_factoryIndex`, `_generation` and dispatches `Type()` through the object's
+// vtable, none of which a hand-built stand-in would exercise honestly.
+extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe() {
+    if (!RtSaveTrace::Enabled()) return;
+    static bool done = false;
+    if (done) return;
+
+    InternalFactory* f = Factory();
+    if (!f || !f->objects._data || f->objects._size <= 0) return;
+
+    Internal* live = nullptr;
+    for (int i = 0; i < f->objects._size && !live; ++i)
+        live = f->objects._data[i];
+    if (!live) return;                      // table exists but is all holes
+    done = true;
+
+    auto theirs = reinterpret_cast<void (*)(void*, void*)>(
+        ResolveExportRaw("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+    if (!theirs) {
+        std::printf("[RtSaveTrace] SKIP InternalBasePtr::Serialize: shipped body unresolved\n");
+        return;
+    }
+    auto ours = reinterpret_cast<void (*)(void*, void*)>(&RtObject_InternalBasePtr_Serialize);
+
+    // Two separate InternalBasePtrs, one per side, so neither call's trailing
+    // store can be seen by the other. Both start at the same live object.
+    static InternalBasePtr subject;
+    subject.ptr = live;
+    RtSaveTrace::Compare("Object::InternalBasePtr::Serialize", &subject, ours, theirs, 4);
+
+    // The null branch too: `present == 0` returns after ONE emission and stores
+    // only a null it already held, so it needs no stop and is a full compare.
+    static InternalBasePtr nullSubject;
+    nullSubject.ptr = nullptr;
+    RtSaveTrace::Compare("Object::InternalBasePtr::Serialize[null]", &nullSubject, ours, theirs);
+}
+
+}  // namespace RtObject

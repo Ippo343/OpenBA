@@ -40,6 +40,7 @@
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 extern "C" void RtOrphanProbeInGame(void* keyMap);        // standalone/rt_orphan_probe.cpp
+extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe();  // runtime/src/object/internal.cpp
 
 namespace Game {
 
@@ -129,6 +130,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     // branch per frame.
     void* keyMap = CamKeyMap();
     RtOrphanProbeInGame(keyMap);
+    RtObject_InternalBasePtr_SerializeTraceProbe();  // Wave 9 lane S (needs a live factory)
     if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed || !fn_Time_AsSeconds) return;
 
     uint8_t* ui = (uint8_t*)entityUI;

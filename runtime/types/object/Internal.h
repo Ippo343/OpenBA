@@ -184,9 +184,21 @@ static_assert(sizeof(InternalFactory) == 0x9e8,
 // header claims only the four offsets above, each of which is a literal in the
 // disassembly of 0x1800b9960 and 0x1800bfe40.
 // ============================================================
+// NAME CORRECTED 2026-09-07 (Wave 9). +0x08 is the READER/WRITER, not the
+// Encoding -- Wave 4 established that (`Serializer+0x08 is a ReaderWriter*`,
+// one of the three recorded facts it disproved), and the slot offsets this
+// file goes on to use (0x78 bool / 0x98 uint / 0xa0 int) are `rw_vtbl`'s, not
+// the Encoding's. The Encoding is reached from the STREAM, at Stream+0x10.
+//
+// The port was always correct -- the offsets are right and it never touched a
+// real Encoding -- so this is a name that was right about the MECHANISM and
+// wrong about the OWNER, which PLAN.md §6 step 8 names as its own error class
+// and which cost this project months elsewhere (the `str-4`/`str-8` header).
+// The old name is kept in the comment so a reader who meets it elsewhere
+// recognises it.
 struct SerializerLite {
-    void* stream;      // +0x00
-    void* encoding;    // +0x08
+    void* stream;         // +0x00  IO::Stream*
+    void* readerWriter;   // +0x08  IO::ReaderWriter*  (was named `encoding`)
 };
 static_assert(sizeof(SerializerLite) == 0x10, "IO::Serializer is 16 bytes");
 
