@@ -91,3 +91,4 @@ void RtMathPortInit();     // runtime/src/math/
 void RtVolumePortInit();   // runtime/src/volume/
 void RtSystemPortInit();   // runtime/src/system/ — Wave 2
 void RtObjectPortInit();   // runtime/src/object/ — Wave 3
+void RtIoPortInit();       // runtime/src/io/ — Wave 4

@@ -309,3 +309,9 @@ const Encoding* RtSerializer_GetEncoding(Serializer* self) {
 }
 
 } // extern "C"
+
+// ============================================================================
+// Wave 4 lane A registration hook. Scaffolding only until the lane lands; see
+// rt_io_port.cpp for the wave contract and the switches.
+// ============================================================================
+int RtIoSerializerRegister() { return 0; }
