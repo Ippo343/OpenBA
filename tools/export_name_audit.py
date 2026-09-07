@@ -34,7 +34,32 @@ DEFAULT_DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
 # .claude holds abandoned agent worktrees: stale copies of the tree whose hits
 # are not real and drown the live ones.
 SKIP_DIRS = {".git", ".claude", "build", "build-perf", "build-og", "obj", ".venv", "ToolKit"}
-PATTERN = re.compile(r'Resolve(?:Export|ExportRaw)\(\s*"([^"]+)"')
+PATTERN = re.compile(r'Resolve(?:Export|ExportRaw)\(\s*(?=")')
+STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"')
+
+
+def concat_literal(text, pos):
+    """Read the C++ string literal starting at `pos`, then absorb any further
+    literals that follow separated only by whitespace -- adjacent string
+    literals are concatenated by the C++ preprocessor, so a mangled name split
+    across two source lines is one name, not two. Returns the joined content
+    (quotes stripped)."""
+    parts = []
+    i = pos
+    while True:
+        m = STRING_LITERAL.match(text, i)
+        if not m:
+            break
+        parts.append(m.group(0)[1:-1])
+        i = m.end()
+        j = i
+        while j < len(text) and text[j] in " \t\r\n":
+            j += 1
+        if j < len(text) and text[j] == '"':
+            i = j
+            continue
+        break
+    return "".join(parts)
 
 
 def exported_names(dll):
@@ -56,8 +81,11 @@ def scan(root="."):
             except OSError:
                 continue
             for m in PATTERN.finditer(text):
+                name = concat_literal(text, m.end())
+                if not name:
+                    continue
                 line = text[:m.start()].count("\n") + 1
-                found[m.group(1)].append(f"{path.replace(os.sep, '/')}:{line}")
+                found[name].append(f"{path.replace(os.sep, '/')}:{line}")
     return found
 
 

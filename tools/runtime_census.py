@@ -39,13 +39,47 @@ SKIP_DIR_NAMES = {"build", "build-og", "build-perf", "obj", ".git", "__pycache__
 SOURCE_EXT = (".cpp", ".h", ".hpp", ".c")
 
 # --- call sites into the DLL -------------------------------------------------
-RE_EXPORT = re.compile(r'ResolveExport(?:Raw)?\s*\(\s*"([^"]+)"')
+# These match only up to the OPENING quote; the mangled name itself is read by
+# concat_literal() below, which absorbs any further string literals that
+# follow separated only by whitespace. A mangled name split across two source
+# lines is one C++ string literal after preprocessing, not two -- a plain
+# `"([^"]+)"` capture reads only the first fragment and silently truncates it.
+# (Confirmed live: gameupdateloop_load.cpp:71 SetAchievement, and
+# pickingcomponent.cpp:171 AddMesh, both reported as phantom exports by
+# export_name_audit.py before this fix.)
+STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"')
+
+
+def concat_literal(text, pos):
+    """Read the C++ string literal starting at `pos` and absorb any further
+    literals that immediately follow (separated only by whitespace) into one
+    joined name, exactly as the C++ preprocessor concatenates adjacent string
+    literals. Returns the joined content with quotes stripped."""
+    parts = []
+    i = pos
+    while True:
+        m = STRING_LITERAL.match(text, i)
+        if not m:
+            break
+        parts.append(m.group(0)[1:-1])
+        i = m.end()
+        j = i
+        while j < len(text) and text[j] in " \t\r\n":
+            j += 1
+        if j < len(text) and text[j] == '"':
+            i = j
+            continue
+        break
+    return "".join(parts)
+
+
+RE_EXPORT = re.compile(r'ResolveExport(?:Raw)?\s*\(\s*(?=")')
 RE_ORDINAL = re.compile(r'ResolveOrdinal(?:Raw)?\s*\(\s*(\d+)')
 RE_ADDR = re.compile(r'ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)')
 RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
 
 # --- ports -------------------------------------------------------------------
-RE_REG_EXPORT = re.compile(r'RegisterRuntimeExport\s*\(\s*"([^"]+)"')
+RE_REG_EXPORT = re.compile(r'RegisterRuntimeExport\s*\(\s*(?=")')
 
 # A RegisterRuntimeExport whose first argument is NOT a string literal. This
 # regex exists because of a real, silent under-count: Wave 4 lane D registered
@@ -180,7 +214,9 @@ def scan():
             continue
 
         for m in RE_EXPORT.finditer(text):
-            called_exports.setdefault(m.group(1), set()).add(rel)
+            name = concat_literal(text, m.end())
+            if name:
+                called_exports.setdefault(name, set()).add(rel)
         for m in RE_ORDINAL.finditer(text):
             called_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_ADDR.finditer(text):
@@ -195,7 +231,9 @@ def scan():
         gated = rel in GATED_OFF_FILES
 
         for m in RE_REG_EXPORT.finditer(text):
-            (gated_exports if gated else ported_exports).setdefault(m.group(1), set()).add(rel)
+            name = concat_literal(text, m.end())
+            if name:
+                (gated_exports if gated else ported_exports).setdefault(name, set()).add(rel)
         for m in RE_REG_EXPORT_NONLITERAL.finditer(text):
             # `const` is the parameter type in the DECLARATIONS of
             # RegisterRuntimeExport itself (rt_port.h, resolve.h,
