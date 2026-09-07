@@ -619,6 +619,12 @@ def main():
             print("  export  %s" % n)
         for a in orphan_addrs:
             print("  addr    0x%x" % a)
+        print("  All 8 of these have a WRITTEN VERDICT as of 2026-09-07 -- see the")
+        print("  'ports with no caller' table in docs/runtime_port/WAVE9.md. Three are")
+        print("  exercised by a direct C++ call from a sibling port, three are deliberately")
+        print("  dead members of the IO::Serializer forwarder family (verified structurally")
+        print("  at registration), and two are verified by standalone/rt_orphan_probe.cpp")
+        print("  and by disassembly. A NEW name appearing here has NOT been triaged.")
 
     if args.unported:
         print()
