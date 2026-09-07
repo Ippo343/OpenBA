@@ -706,10 +706,14 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       named dependency — `Audio::SoundBuffer`/`SoundEffect`, retail's `IO::Encoding` offsets,
       the allocator), **N** 7 (allocator-bound, or oracle-hard: `Input::Device::Update` needs a
       BESPOKE oracle because call-twice drains the DirectInput queue it is reading), **D/X** 14
-      (stub-with-a-reason, or already unblocked). **Four of them — the `ExternalFactory`
-      mutators — were held back on a Wave 4 dependency that has since LANDED**, so lane A should
-      start by re-checking them; same shape as the Jack-of-all-Trades wave, where both listed
-      blockers were already fixed and nobody had re-run the census.
+      (stub-with-a-reason, or already unblocked). **The table's own first draft got the
+      `ExternalFactory` group WRONG, and that is the argument for writing it per function**: it
+      asserted all four were held back on a Wave 4 dependency that has since landed. Checking
+      each shows a 1/1/2 split — only `SerializeReferenceTable` is unblocked (lane A's cheapest
+      row); `SaveText` needs `IO::TextFileStream`, which WAVE4.md says in as many words it did
+      NOT port; and `FindOrLoad`/`Clean` were never blocked on Wave 4 at all — they have no
+      possible oracle, because both rewrite the one shared AVL tree. A group summary that was
+      accurate about the group was wrong about three of its four members.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

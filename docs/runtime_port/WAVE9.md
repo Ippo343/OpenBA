@@ -150,6 +150,21 @@ So the residue is **monotone in coverage, and lane 0's matrix is required after 
 what the lane table said before this section was written. The cheap-lane-0 conclusion is
 withdrawn.
 
+**And the fact was already written down.** WAVE3.md's "Notes for later waves" says it plainly:
+
+> **Check `calls=`, not `divergences=`.** This wave's first integration run reported 22
+> registrations and zero divergences while most sites never executed — because
+> `BANISHED_AUTOQUIT` drives menu→**Quit**, not menu→New Game.
+
+Six waves later the same env var produced the same wrong conclusion in a different tool. That is
+worth more than the correction itself: **this project's failures are not usually unknown facts,
+they are known facts that did not reach the next wave.** It is the same shape as the two Wave 5
+phantom manglings that Wave 8 had to fix again because Wave 5 diagnosed them and never fixed them
+at source, and it is what PLAN §6 step 8 exists to prevent. The mitigation here is not another
+note in a wave doc nobody opens — it is that `BANISHED_AUTOQUIT`'s behaviour is now in the
+`BANISHED_RT_STRICT` memory entry and in lane 0's row of the table above, where someone reaching
+for the tool will actually meet it.
+
 **What survives, and is the useful half:** an entry, once present, never disappears on a longer
 run. That makes the union across the matrix a sound work list, and makes any *shrink* between two
 runs a tool bug rather than a fact — the shape of
@@ -389,17 +404,28 @@ precedent for the third being a legitimate answer.
 | 19-20 | `MainLoop::OnVideoError`, `OnVideoRestart` (lane B) | **STUB.** Wave 8 measured exactly ONE internal caller each — the static thunks the `MainLoop` ctor installs into `Video::Device::_singleton` +0x50/+0x58, reached only on device lost/restore. This is the detour case Wave 8 found and declined. At cutover they need to exist, not to be faithful; a port would be dead code reporting `calls=0`. **If a lane does port them, the device-lost path has to be forced, or the port is unverifiable.** |
 | 21-24 | `Save::~SaveLoad`, `Save::Draw`, and lane E's shadow markers (`Application::PlatformUpdate`, `SleepThread`, `YieldToThreads`) | **STUB or PORT-WITHOUT-ORACLE, decided per function.** Lane E states these have no oracle by construction. |
 | **X — already resolved by earlier waves, listed for completeness** | | |
-| 25-28 | 4 `Object::ExternalFactory` mutators (Wave 3) | **PORT.** Held back for "no oracle possible / Wave 4 dependency" — the Wave 4 dependency has since landed, so the stated blocker is gone and these should be re-examined first, cheaply. |
+| 25 | `ExternalFactory::SerializeReferenceTable` `0x1800bcb60` (Wave 3) | **PORT — genuinely unblocked.** Held back on `IO::Stream`/`Serializer`, which Wave 4 landed (22 `Serializer` functions, 0 divergences). Cheapest row in the table; do it first. |
+| 26 | `External::SaveText` `0x1800bb9d0` (Wave 3) | **STILL BLOCKED, on a class no wave has touched.** It drives the `+0x28 Serialize(IO::Stream&)` slot with an **`IO::TextFileStream`**, and WAVE4.md is explicit that `TextFileStream` (with `FileStream`, `BinaryFileStream`, `VisitorStream` and the codec) was NOT in Wave 4. Needs `TextFileStream` first. |
+| 27-28 | `ExternalFactory::FindOrLoad` `0x1800bf320`, `Clean` `0x1800be310` (Wave 3) | **NO ORACLE, and it was never a Wave 4 dependency.** Both rewrite the shared resource AVL tree, so running ours and theirs mutates the one tree twice, and a private replica is exactly what a stateful port must not keep. Same class of problem as `Input::Device::Update` (row 16): they need a bespoke oracle, not a later wave. |
 | 29-32 | 5 handle-table mutators + `CheckPtr` (Wave 3, opt-in NO-GO) | **ARM AND MEASURE.** These are the `if (table)` / `if (shadow)` / `if (checkPtr)` blocks the census was wrongly counting as ported (see above). `CheckPtr` is a bare `RET` in every shipped build, so registering a real one silently re-enables ~60k indirect calls/frame — that is a perf decision, not a correctness one. |
 
 **What this triage changes.** Two of the four groups are not porting work at all: **P** is one
 probe on machinery that now exists, and **D** is six functions that need a stub and a sentence
-rather than a faithful body. **X** is four functions whose stated blocker has already been
-removed by a later wave and that nobody re-checked — the same shape as
-`project_jack_of_all_trades_closed.md`, where both listed blockers turned out to be already
-fixed and nobody had re-run the census. That leaves **B** and **N**, which are genuine
-multi-function porting work with named prerequisites, and inside them **`Input::Device::Update`
-is the one that needs a bespoke oracle rather than more time.**
+rather than a faithful body. That leaves **B**, **N** and **X**, which are genuine
+porting work with named prerequisites, and inside them **`Input::Device::Update` needs a bespoke
+oracle rather than more time.**
+
+**A correction to this table's own first draft, which is the reason to write it out per
+function.** It began by asserting that all four `ExternalFactory`/`External` mutators were
+"held back on a Wave 4 dependency that has since landed", by analogy with
+`project_jack_of_all_trades_closed.md` — where both listed blockers turned out to be already
+fixed and nobody had re-run the census. Checking each one instead of the group shows a **1/1/2
+split**: only `SerializeReferenceTable` is actually unblocked; `SaveText` needs
+`IO::TextFileStream`, which WAVE4.md says in as many words it did NOT port; and `FindOrLoad` and
+`Clean` were never blocked on Wave 4 at all — they have **no possible oracle**, because both
+rewrite the one shared AVL tree. A group summary ("held back for no oracle / Wave 4") that was
+accurate about the group was wrong about three of its four members, and only a per-function pass
+catches that. Which is the argument for this table.
 
 None of these can be closed by writing a body in this session without an oracle, and doing so
 would be the exact failure `reference_uncalled_port_is_not_verified.md` warns about — a green
