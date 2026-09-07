@@ -7,6 +7,31 @@
 //
 // This is a plain struct with explicit padding — no C++ inheritance.
 // All field offsets validated with static_assert.
+//
+// ---------------------------------------------------------------------------
+// SUPERSEDED by runtime/types/engine/MainLoop.h (Wave 8 lane B).
+// ---------------------------------------------------------------------------
+// This header stays for the exe tree that already includes it, and every
+// OFFSET below is confirmed correct against the disassembly. Two claims it
+// made were WRONG and are corrected in place:
+//
+//   1. `_pad0C`, `_pad8C` and `_pad9C` were called padding. They are NOT
+//      padding. +0x00, +0x80 and +0x90 are each a `Collection::Array<T>` —
+//      `{T* _data; int32 _size; int32 _capacity}` — and those three dwords are
+//      the CAPACITY. `~MainLoop` (0x1800dd640) calls a distinct Array
+//      destructor on each, and 0x180033880 ends by zeroing `_data` and then a
+//      single qword covering both `_size` and `_capacity`. Code that grows a
+//      callback array through AddPostUpdate/AddPostDraw reads the capacity.
+//      The fields are renamed below; the old names are noted so the previous
+//      claim is recognisable if it is met elsewhere.
+//   2. `MainLoopAddr::IsRunning` was commented as a no-argument query. The
+//      shipped export at 0x1800314b0 is
+//      `?IsRunning@MainLoop@Engine@@QEBA_NPEBVUpdateLoop@2@@Z` (ordinal 3158)
+//      and takes a `const UpdateLoop*`. The no-arg `IsRunning` belongs to
+//      `UpdateLoop`, at a different address (0x1800dd7b0, ordinal 3160).
+//
+// There is also NO VTABLE: the ctor's first store into `this` is a zero (the
+// Array data pointer), not a vtable stamp — so `MainLoop` is not polymorphic.
 
 #include <cstdint>
 #include <cstddef>
@@ -20,6 +45,8 @@ namespace MainLoopAddr {
 
     // Methods (RVA in Runtime-x64.dll Ghidra space)
     constexpr uintptr_t Get             = 0x180031570;
+    // Takes a `const UpdateLoop*` — ?IsRunning@MainLoop@Engine@@QEBA_NPEBVUpdateLoop@2@@Z
+    // (ord 3158). NOT the no-arg query; that one is UpdateLoop's, at 0x1800dd7b0.
     constexpr uintptr_t IsRunning       = 0x1800314b0;
     constexpr uintptr_t GetContext      = 0x1800314d0;
     constexpr uintptr_t GetCurrentLoop  = 0x1800314e0;
@@ -49,9 +76,11 @@ namespace MainLoopAddr {
 
 struct MainLoop {
     // --- Resource tracking (used by OnVideoError/OnVideoRestart) ---
-    void*          m_resources;           // +0x00: array of tracked external resources
-    int32_t        m_resourceCount;       // +0x08: number of tracked resources
-    uint8_t        _pad0C[4];            // +0x0C
+    // Collection::Array<VideoResourceEntry>; entries are 0x18 bytes.
+    void*          m_resources;           // +0x00: element buffer (_data)
+    int32_t        m_resourceCount;       // +0x08: live count (_size)
+    int32_t        m_resourceCapacity;    // +0x0C: allocated count (_capacity).
+                                          //        Was `_pad0C` — NOT padding.
 
     // --- Video context ---
     VideoContext*  m_context;             // +0x10: Video::Context* (0x2168 bytes)
@@ -78,14 +107,17 @@ struct MainLoop {
     EngineInstance* m_engine;             // +0x78
 
     // --- Post-draw callbacks: array of PostCallback ---
-    PostCallback*  m_postDrawCallbacks;   // +0x80
-    int32_t        m_postDrawCount;       // +0x88
-    uint8_t        _pad8C[4];            // +0x8C
+    // Collection::Array<{void* func; void* context}>; entries are 0x10 bytes.
+    PostCallback*  m_postDrawCallbacks;   // +0x80: element buffer (_data)
+    int32_t        m_postDrawCount;       // +0x88: live count (_size)
+    int32_t        m_postDrawCapacity;    // +0x8C: allocated count (_capacity).
+                                          //        Was `_pad8C` — NOT padding.
 
     // --- Post-update callbacks: array of PostCallback ---
-    PostCallback*  m_postUpdateCallbacks; // +0x90
-    int32_t        m_postUpdateCount;     // +0x98
-    uint8_t        _pad9C[4];            // +0x9C
+    PostCallback*  m_postUpdateCallbacks; // +0x90: element buffer (_data)
+    int32_t        m_postUpdateCount;     // +0x98: live count (_size)
+    int32_t        m_postUpdateCapacity;  // +0x9C: allocated count (_capacity).
+                                          //        Was `_pad9C` — NOT padding.
 };
 
 // ============================================================

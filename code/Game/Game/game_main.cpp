@@ -686,7 +686,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 //   - patch vtable to g_GameLoadDialogLoopT_Vtable
                 //   - init colors at +0x188/+0x18c (0xff000000), zero +0x190,
                 //     System::Random at +0x194, zero +0xb58 (random text timer),
-                //     zero m_finished at +0x40
+                //     zero m_autoAdvance at +0x40
                 //
                 // Both Update stubs return false so Run exits on the first tick.
                 if (s_fn_MainLoop_Run && g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
@@ -739,7 +739,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             *reinterpret_cast<uint8_t*>(lp + 0x190) = 0;            // fade-done
                             fn_Random_Default_Ctor(reinterpret_cast<void*>(lp + 0x194));
                             *reinterpret_cast<uint64_t*>(lp + 0xb58) = 0;           // text timer
-                            *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_finished
+                            *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_autoAdvance
 
                             fn_String_Dtor(fileStr);
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "

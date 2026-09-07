@@ -30,7 +30,8 @@ struct DialogLoaderLoopT {
     UpdateLoop* m_nextLoop;     // +0x28: loop to transition to after loading
     int64_t m_elapsedTicks;     // +0x30: accumulated time since Startup
     int64_t m_delayTicks;       // +0x38: minimum display duration
-    uint8_t m_finished;         // +0x40: ready-to-transition flag (init=1)
+    uint8_t m_autoAdvance;      // +0x40: auto-advance gate, ctor sets 1 — see
+                                //        the correction note in LoaderLoop.h
     uint8_t _pad41[7];          // +0x41: padding
 
     // --- DialogLoaderLoopT fields (0x48 - 0x5F) ---

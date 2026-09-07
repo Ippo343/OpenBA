@@ -269,6 +269,11 @@ void RuntimePortInit() {
     RtVideoPortInit();    // Wave 6: Video
     RtGraphicsPortInit(); // Wave 6: Graphics
     RtUiPortInit();       // Wave 7: UI
+    RtEnginePortInit();       // Wave 8: Engine (lanes A+B)
+    RtAudioPortInit();        // Wave 8: Audio (lane C)
+    RtInputPortInit();        // Wave 8: Input (lane D)
+    RtApplicationPortInit();  // Wave 8: Application (lane E)
+    RtUtilityPortInit();      // Wave 8: Utility (lane E)
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.

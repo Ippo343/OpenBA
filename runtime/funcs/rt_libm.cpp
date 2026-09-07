@@ -17,6 +17,7 @@ float OurSqrt(float v)            { return std::sqrt(v); }
 float OurSin(float v)             { return std::sin(v); }
 float OurCos(float v)             { return std::cos(v); }
 float OurAtan2(float y, float x)  { return std::atan2(y, x); }
+float OurPow(float b, float e)    { return std::pow(b, e); }
 
 bool s_usingDll = false;
 
@@ -29,6 +30,10 @@ constexpr uintptr_t kDllSqrtf = 0x180128110;
 constexpr uintptr_t kDllSinf  = 0x180127d90;
 constexpr uintptr_t kDllCosf  = 0x180126d10;
 constexpr uintptr_t kDllAtan2f = 0x180126680;
+// Wave 8 lane E: Utility::PerlinNoise::Generate (0x1801089b0) calls this at
+// two sites — pow(2.0f, i) for the per-octave frequency and
+// pow(persistence, i) for the per-octave amplitude.
+constexpr uintptr_t kDllPowf  = 0x180127560;
 
 }  // namespace
 
@@ -38,6 +43,7 @@ float (*Sqrt)(float)           = &OurSqrt;
 float (*Sin)(float)            = &OurSin;
 float (*Cos)(float)            = &OurCos;
 float (*Atan2)(float, float)   = &OurAtan2;
+float (*Pow)(float, float)     = &OurPow;
 
 bool UsingDllLibm() { return s_usingDll; }
 
@@ -45,7 +51,7 @@ void Init() {
     const char* e = std::getenv("BANISHED_RT_LIBM");
     if (!e || std::strcmp(e, "dll") != 0) {
         // The default, and the only configuration that survives cutover.
-        Sqrt = &OurSqrt; Sin = &OurSin; Cos = &OurCos; Atan2 = &OurAtan2;
+        Sqrt = &OurSqrt; Sin = &OurSin; Cos = &OurCos; Atan2 = &OurAtan2; Pow = &OurPow;
         s_usingDll = false;
         return;
     }
@@ -56,17 +62,18 @@ void Init() {
     Unary  si = reinterpret_cast<Unary>(ResolveRuntimeRaw(kDllSinf));
     Unary  co = reinterpret_cast<Unary>(ResolveRuntimeRaw(kDllCosf));
     Binary at = reinterpret_cast<Binary>(ResolveRuntimeRaw(kDllAtan2f));
+    Binary pw = reinterpret_cast<Binary>(ResolveRuntimeRaw(kDllPowf));
 
     // ResolveRuntimeRaw returns 0 when the DLL is not mapped. Falling back to
     // our own libm is right here: this path is a diagnostic, and a null call
     // would be an EXEC-of-0 crash for a debugging convenience.
-    if (!sq || !si || !co || !at) {
+    if (!sq || !si || !co || !at || !pw) {
         std::fprintf(stderr, "[RtLibm] BANISHED_RT_LIBM=dll requested but the DLL CRT did "
-                             "not resolve (sqrt=%p sin=%p cos=%p atan2=%p) — keeping our libm\n",
-                     (void*)sq, (void*)si, (void*)co, (void*)at);
+                             "not resolve (sqrt=%p sin=%p cos=%p atan2=%p pow=%p) — keeping our libm\n",
+                     (void*)sq, (void*)si, (void*)co, (void*)at, (void*)pw);
         return;
     }
-    Sqrt = sq; Sin = si; Cos = co; Atan2 = at;
+    Sqrt = sq; Sin = si; Cos = co; Atan2 = at; Pow = pw;
     s_usingDll = true;
     std::fprintf(stderr, "[RtLibm] BANISHED_RT_LIBM=dll — transcendentals routed through "
                          "Runtime-x64.dll's CRT (DIAGNOSTIC ONLY, does not survive cutover)\n");

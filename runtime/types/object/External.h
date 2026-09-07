@@ -121,6 +121,19 @@ static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~E
 //        each entry's usage mask and evicts the entries whose mask reaches 0;
 //        when < 0 it evicts EVERYTHING unconditionally. Add (0x1800be570) sets
 //        the same bit on the entry it touches.
+//  +0x04 uint32 _cleanBitMask
+//        *** CORRECTED BY WAVE 8 LANE A. This field was declared `_pad04` and
+//        described as "zeroed with +0x00 as one qword". The zeroing claim is
+//        true — the ctor does write one qword — but the word is not padding:
+//        it is the ALLOCATION MASK for the 32 clean-bit slots, and the pair of
+//        functions that own it is in Engine, which is why Wave 3 saw no writer.
+//          Engine::UpdateLoop::UpdateLoop (0x1800ddd30) scans it with BT for
+//          the lowest CLEAR bit, sets that bit, and stores the bit's INDEX in
+//          UpdateLoop::_loadBit (+0x20), or stores -1 when all 32 are taken.
+//          Engine::UpdateLoop::~UpdateLoop (0x1800dddb0) writes that index into
+//          _cleanBitIndex above, calls Clean(), and then clears the bit here.
+//        So the engine supports at most 32 simultaneously live UpdateLoops, and
+//        an UpdateLoop's "load bit" is a slot rented out of this word.
 //  +0x08 int32  _generation
 //        Clean increments it once per sweep. This is the counter the exe's
 //        ResolveExternalByName cache compares against — see the ExternalRef
@@ -186,7 +199,7 @@ static_assert(offsetof(ReferenceSet::Node, right)  == 0x20, "reference node righ
 
 struct ExternalFactory {
     int32_t      _cleanBitIndex;         // +0x00
-    int32_t      _pad04;                 // +0x04 — zeroed with +0x00 as one qword
+    uint32_t     _cleanBitMask;          // +0x04 — see the note above
     int32_t      _generation;            // +0x08
     int32_t      _pad0c;                 // +0x0c
     ResourceSet  _resources;             // +0x10

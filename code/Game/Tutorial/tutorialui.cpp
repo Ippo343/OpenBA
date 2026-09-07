@@ -119,7 +119,7 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
         *(uint8_t*)(dl  + 0x190) = 0;   // [400] = 0
         fn_Random_Default_Ctor((void*)(dl + 0x194));
         *(uint64_t*)(dl + 0xb58) = 0;
-        *(uint8_t*)(dl  + 0x40)  = 0;   // m_finished override = 0
+        *(uint8_t*)(dl  + 0x40)  = 0;   // m_autoAdvance = 0 (see LoaderLoop.h)
 
         pDlLoop = dlLoop;
     }

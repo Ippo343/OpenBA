@@ -1,0 +1,204 @@
+==============================================================================
+== Engine  (25 called, 0 already ported)
+       0x1800db0d0  ord=151   ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800db3f0  ord=153   ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dbf00  ord=174   ??0Engine@0@QEAA@PEAX@Z
+        callers: code/Game/Game/game_main.cpp
+       0x1800dc1e0  ord=261   ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dd6b0  ord=263   ??0MainLoop@Engine@@QEAA@PEAV11@@Z
+        callers: code/Game/Game/game_main.cpp
+       0x1800ddd30  ord=468   ??0UpdateLoop@Engine@@QEAA@XZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dbec0  ord=586   ??1Engine@0@QEAA@XZ
+        callers: code/Game/Game/game_main.cpp
+       0x1800dd640  ord=627   ??1MainLoop@Engine@@QEAA@XZ
+        callers: code/Game/Game/game_main.cpp
+       0x1800dddb0  ord=704   ??1UpdateLoop@Engine@@UEAA@XZ
+        callers: code/Game/Game/gameupdateloop.cpp
+       0x1800dd7b0  ord=3160  ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ
+        callers: standalone/reg_unreg_lane3.cpp
+       0x1800dad50  ord=3200  ?Load@DialogLoaderLoopT@Engine@@UEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800db140  ord=3201  ?Load@DialogLoopT@Engine@@UEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dc050  ord=3204  ?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dd7d0  ord=3210  ?LoadResources@UpdateLoop@Engine@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dc5e0  ord=3291  ?OnVideoError@MainLoop@Engine@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dc3b0  ord=3295  ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dd3c0  ord=3601  ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+        callers: code/Game/Game/game_main.cpp
+       0x1800dd7a0  ord=3929  ?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800db4f0  ord=4047  ?Shutdown@Engine@1@QEAAXXZ
+        callers: code/Game/Game/game_main.cpp
+       0x1800db000  ord=4092  ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800db2f0  ord=4093  ?Startup@DialogLoopT@Engine@@UEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800db8a0  ord=4094  ?Startup@Engine@1@QEAAIPEBDII_N@Z
+        callers: code/Game/Game/game_main.cpp
+       0x1800db270  ord=4485  ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801fe7b8  ord=4794  ?_loader@LoaderLoop@Engine@@1VLoader@2@A
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801fe750  ord=4813  ?_singleton@MainLoop@Engine@@1PEAV12@EA
+        callers: engine/funcs/engine_funcs.cpp;standalone/reg_unreg_lane1.cpp
+==============================================================================
+== Audio  (22 called, 0 already ported)
+       0x1800e0160  ord=368   ??0Scene@Audio@@QEAA@XZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e0120  ord=668   ??1Scene@Audio@@QEAA@XZ
+        callers: code/Game/Game/gameupdateloop.cpp
+       0x1800dedf0  ord=1556  ?AddEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dee70  ord=2345  ?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800de6f0  ord=2380  ?FreeChannelPlatform@Device@Audio@@AEAAXH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dec00  ord=2592  ?GetEmitterCount@Scene@Audio@@QEBAHI@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800df680  ord=3118  ?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z
+        callers: code/Game/Game/unreg_lane5_musicplayer.cpp
+       0x1800dec40  ord=3234  ?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800df070  ord=3313  ?Pause@Scene@Audio@@QEAAXH_N@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800deeb0  ord=3422  ?PlayEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@AEBVVector3@Math@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800def60  ord=3423  ?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       *PHANTOM*    ord=None  ?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800decf0  ord=3554  ?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800dde10  ord=3603  ?Save@Configuration@Audio@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e0050  ord=3730  ?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z
+        callers: code/Game/Game/gameupdateloop_serialize.cpp
+       0x1800ded60  ord=3877  ?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800ddee0  ord=4084  ?Startup@Configuration@Audio@@QEAA_NXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800df150  ord=4107  ?StopAll@Scene@Audio@@QEAAXXZ
+        callers: code/Game/Game/gameupdateloop.cpp
+       0x1800df370  ord=4108  ?StopEffect3D@Scene@Audio@@QEAAXI@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800de520  ord=4481  ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800df6c0  ord=4502  ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
+        callers: code/Game/Game/gameupdateloop.cpp;engine/funcs/engine_funcs.cpp
+       0x1801fe758  ord=4801  ?_singleton@Configuration@Audio@@0PEAV12@EA
+        callers: engine/funcs/engine_funcs.cpp
+==============================================================================
+== Input  (21 called, 0 already ported)
+       0x1800a7d20  ord=1706  ?ClearAll@KeyMap@Input@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7d70  ord=1709  ?ClearInput@KeyMap@Input@@QEAAXHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7db0  ord=1710  ?ClearInput@KeyMap@Input@@QEAAXHHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e1780  ord=2296  ?EnableMouseClipping@Device@Input@@QEAAX_N@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7970  ord=2571  ?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7890  ord=2700  ?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7930  ord=2713  ?GetInputForId@KeyMap@Input@@QEBAHHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e1660  ord=3004  ?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7b60  ord=3005  ?GetValue@KeyMap@Input@@QEBAFHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e0c80  ord=3199  ?Load@Configuration@Input@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7190  ord=3203  ?Load@KeyMap@Input@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e16c0  ord=3431  ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7a80  ord=3432  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7e70  ord=3529  ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e1720  ord=3545  ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e0ef0  ord=3579  ?ResetState@Device@Input@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e0c00  ord=3604  ?Save@Configuration@Input@@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800a7e20  ord=3896  ?SetInput@KeyMap@Input@@QEAAXHHHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800e1490  ord=4482  ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801fe768  ord=4802  ?_singleton@Configuration@Input@@0PEAV12@EA
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801fe770  ord=4806  ?_singleton@Device@Input@@0PEAV12@EA
+        callers: engine/funcs/engine_funcs.cpp
+==============================================================================
+== Application  (6 called, 0 already ported)
+       0x18009f4e0  ord=3150  ?IsPaused@Application@1@QEAA_NXZ
+        callers: code/Game/Game/gameupdateloop.cpp
+       0x18009fdf0  ord=3410  ?PlatformUpdate@Application@1@AEAA_NXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x18009f4d0  ord=3437  ?Quit@Application@1@QEAAXXZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x18009f850  ord=4069  ?SleepThread@Application@1@QEAAXH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x18009f920  ord=4568  ?YieldToThreads@Application@1@QEAAXXZ
+        callers: code/Game/Action/keystone_a_zone.cpp;code/Game/Game/keystone_a_gamedtor.cpp;code/Game/Player/pathtool_setselected.cpp
+       0x1801fc678  ord=4800  ?_singleton@Application@1@0PEAV11@EA
+        callers: standalone/address_registry.cpp
+==============================================================================
+== Save  (20 called, 15 already ported)
+PORTED 0x1800c3d30  ord=360   ??0SaveLoad@Save@@QEAA@XZ
+        callers: code/Game/Game/gameupdateloop_load.cpp;standalone/menudialogloopt_stubs.cpp
+PORTED 0x1800c0ee0  ord=362   ??0SavedState@Save@@QEAA@XZ
+        callers: engine/funcs/engine_funcs.cpp
+       0x1800c3c90  ord=666   ??1SaveLoad@Save@@QEAA@XZ
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c0ea0  ord=667   ??1SavedState@Save@@QEAA@XZ
+        callers: code/Game/Game/gameupdateloop_load.cpp
+       *PHANTOM*    ord=None  ?CheckMod@SaveLoad@Save@@QEAAHHI@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c1090  ord=1691  ?CheckMod@SaveLoad@Save@@QEBAHHH@Z
+        callers: standalone/address_registry.cpp
+       0x1800c2eb0  ord=2260  ?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z
+        callers: code/Game/Game/gameupdateloop.cpp
+PORTED 0x1800c3c80  ord=2826  ?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3b80  ord=2885  ?GetSaveCount@SaveLoad@Save@@QEBAHXZ
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3b60  ord=2889  ?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3b50  ord=2891  ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c0e50  ord=3586  ?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z
+        callers: code/Game/Game/gameupdateloop_serialize.cpp
+PORTED 0x1800c3c40  ord=3920  ?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3c50  ord=3934  ?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3bb0  ord=3953  ?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z
+        callers: standalone/address_registry.cpp
+       *PHANTOM*    ord=None  ?SetSaveName@SaveLoad@Save@@QEAAXV?$String@D@System@@H@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c3b90  ord=3955  ?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+PORTED 0x1800c0da0  ord=4112  ?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z
+        callers: code/Game/Game/gameupdateloop_serialize.cpp
+PORTED 0x1800c2e40  ord=4501  ?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801fc6f0  ord=4817  ?_singleton@SaveLoad@Save@@0PEAV12@EA
+        callers: engine/funcs/engine_funcs.cpp;standalone/reg_unreg_lane1.cpp;standalone/saveload_harness.cpp
+==============================================================================
+== Utility  (2 called, 0 already ported)
+       0x180108c70  ord=305   ??0PerlinNoise@Utility@@QEAA@MMHH@Z
+        callers: engine/funcs/engine_funcs.cpp
+       0x1801089b0  ord=2396  ?Generate@PerlinNoise@Utility@@QEBAMMM@Z
+        callers: engine/funcs/engine_funcs.cpp

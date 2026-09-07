@@ -1,0 +1,85 @@
+== rt_run[wave8-ab-off] exe stamp: 2026-09-07 15:59:44.808134300 -0400
+== rt_run[wave8-ab-off] exited rc=0 after 35s
+-- crash log --
+(none)
+-- runtime port lines --
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MeshInstance::GetNodeToWorld           calls=6          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MeshInstance::PlayAnimation            calls=464        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::NormalizeWithMag                  calls=12532      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::Heading                           calls=6256       divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::ExternalFactory::FindNext                calls=95         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::ExternalList::Find                       calls=3          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Dialog::GetTemplate                          calls=10         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::SetName                             calls=10         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::SetUserData                         calls=10         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::SetToolTip                          calls=10         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::SetFlagsOnOff                       calls=10         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::ChildCount                          calls=70         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::Child                               calls=77         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Sprite::IsValid()                            calls=59         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::ImageElement::SetSprite                      calls=38         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::UserInterface::PausesGame                    calls=7375       divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::UserInterface::GetFirstDialog                calls=21         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MeshInstance::~MeshInstance            calls=15398      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MeshInstance::RootAnimationOffset      calls=220745     divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::operator=(const Transform&)     calls=220745     divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Transform(const Transform&)     calls=18020      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Picking::Scene::SetTransform                     calls=18020      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MeshInstance::IsAnimating              calls=220591     divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector2::Dot                               calls=119        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::operator*(const Vector3&)       calls=14715      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::Rotate(const Vector3&)         calls=14715      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::operator*(const Quaternion&)   calls=29430      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::AchievementManager::Update          calls=901        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::AchievementInstance::Update         calls=901        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::AchievementInstance::IsMet          calls=901        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::SetPadding                          calls=962        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetTime                          calls=2243       divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Scene::RemoveGlobalObject              calls=7          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::RenderBuffer::Create                      calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D) calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::SnapCameraToWorld              calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform3::AsMatrix()                     calls=2244       divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetCamera                        calls=2244       divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetDefaultRenderBuffer           calls=2          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::Reset                            calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Scene::~Scene()                        calls=2          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::~Renderer                    calls=2          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::Dot                               calls=292246     divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::GoalList::AreGoalsMetExcept         calls=259        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::GoalInstance::Update                calls=259        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::DialogInstance::GetController                calls=80         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Picking::Scene::~Scene()                         calls=2          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::AnimationManager::~AnimationManager()  calls=1          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::RenderStateData::~RenderStateData         calls=2          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Persistence::Set(int)                        calls=25         divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Persistence::Set(bool)                       calls=9          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Achievement::GoalInstance::~GoalInstance         calls=9          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Configuration::Save                       calls=1          divergences=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::String: 18 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::Filename: 11 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] System: 54 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Object::Internal: 5 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   External: 11 exports (Clean/FindOrLoad/SerializeReferenceTable/SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Object: 22 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedMemoryStream: 6 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO::Persistence: 5/7 exports registered (ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem/Modification: 6 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO: 39 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement::Goal: 13/15 exports registered (Goal::Serialize + GoalInstance::Persist held back -- see WAVE5_LANE_A.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement: 34 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Save: 15 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Picking: 9 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 21 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video: 53 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Graphics: 60 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI widgets(layout): 20 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI: 101 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] BANISHED_RT_ENGINE=0 -- Engine namespace port disabled
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] BANISHED_RT_AUDIO=0 -- Audio namespace port disabled
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] BANISHED_RT_INPUT=0 -- Input namespace port disabled
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] BANISHED_RT_APP=0 -- Application namespace port disabled
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] BANISHED_RT_UTILITY=0 -- Utility namespace port disabled
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] runtime registry: 461 exports, 262 addrs, 2 ordinals

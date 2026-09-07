@@ -374,13 +374,21 @@ extern fn_ModArrayCopy_t fn_ModArrayCopy;
 // Engine::Loader global instance (_loader) at 0x1801fe7b8
 extern void* g_pLoader;
 
-// _loader.m_flags at 0x1801fe7c0 (bit 0 = thread running)
+// _loader's System::Thread::runFlags at 0x1801fe7c0 (= _loader + 0x08; bit 0 =
+// thread running). Engine::Loader derives from System::Thread
+// (runtime/types/system/Thread.h), so this is that base's field, not a Loader
+// one — and bit 0 is the ONLY completion signal LoaderLoop::IsFinished
+// (0x1800dc150) and LoaderLoop::Update (0x1800dc2a0) consult.
 extern uint32_t* g_pLoaderFlags;
 
-// _loader.m_completionEvent at 0x1801fe7e0 (HANDLE, manual-reset event)
+// _loader's System::Thread::hFinished at 0x1801fe7e0 (= _loader + 0x28;
+// HANDLE, manual-reset). Loader::Load ResetEvents it and SetEvents hStart
+// (_loader + 0x18) — that pair IS System::Thread::Start, inlined.
 extern HANDLE* g_pLoaderCompletionEvent;
 
-// Application::Application::_singleton at 0x1801feb80
+// Application::Application::_singleton at 0x1801fc678 (Runtime export
+// ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
+// previous address here was stale and unused by any resolve call).
 extern void** g_pAppSingleton;
 
 // ============================================================
@@ -2498,11 +2506,20 @@ extern fn_KeyMap_Released_t fn_KeyMap_Released;
 typedef void* (*fn_DialogInstance_GetRoot_t)(void* self, void* retbuf);
 extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 
-// Audio::Scene::PlayEffect(this, soundId, count, time) — plays a sound effect
-// ?PlayEffect@Scene@Audio@@QEAAXVExternalPtr@Object@@HAEBVTime@System@@@Z
-// Dispatch table at 0x140152830
-typedef void (*fn_AudioScene_PlayEffect_t)(void* self, uint64_t soundId, int count, void* time);
-extern fn_AudioScene_PlayEffect_t fn_AudioScene_PlayEffect;
+// REMOVED at Wave 8 integration: fn_AudioScene_PlayEffect.
+// It was a vestigial resolve under a WRONG NAME. Slot 0x140152830 is NOT any
+// Audio::Scene::PlayEffect — tools/dispatch_slot_map.py reads it straight out of
+// the exe's PE import table as `??0Goal@Achievement@@QEAA@XZ`
+// (Achievement::Goal::Goal). The unregistered-slots wave (standalone/
+// reg_unreg_lane3.cpp:265-273, reg_unreg_lane4.cpp:53) had already identified
+// the mislabel and deliberately left the slot unregistered.
+//
+// It had ZERO call sites, so it never misbehaved — but it was armed: the moment
+// anyone registered that slot, this pointer would have become Goal's ctor called
+// through a guessed 4-argument signature. Same family as the ten vestigial fn_*
+// resolves deleted in the code-fn wave (reference_exe_has_a_real_pe_import_table.md).
+// The REAL Audio::Scene::PlayEffect exports are ported by Wave 8 lane C
+// (runtime/src/audio/audio.cpp) and registered by name AND address.
 
 // ============================================================
 // ModDetailsDialog support functions

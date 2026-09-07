@@ -26,12 +26,24 @@ struct LoaderLoop {
     UpdateLoop* m_nextLoop;     // +0x28: loop to transition to after loading completes
     int64_t m_elapsedTicks;     // +0x30: accumulated time since Startup
     int64_t m_delayTicks;       // +0x38: minimum display duration before transition
-    uint8_t m_finished;         // +0x40: set to 1 by loading thread on completion
-    uint8_t _pad41[7];          // +0x41: padding to 0x48
+    // +0x40: auto-advance gate. CORRECTED BY WAVE 8 LANE A: this was called
+    // `m_finished` and described as "set to 1 by loading thread on completion".
+    // It is not. The CONSTRUCTOR (0x1800dc1e0) sets it to 1 and nothing in the
+    // family writes it again; ?Update@LoaderLoop@ (0x1800dc2a0) only READS it,
+    // as the first term of the three-term test that hands m_nextLoop to
+    // MainLoop. The completion signal Update actually tests is bit 0 of
+    // Engine::Loader::_loader's System::Thread::runFlags (0x1801fe7c0), which
+    // is also all that ?IsFinished@LoaderLoop@ (0x1800dc150) looks at — and
+    // IsFinished does NOT read this byte at all. So zeroing it (which three
+    // sites in code/Game/ do) suppresses the inner loop's own transition and
+    // leaves the outer LoaderLoop to drive it; that is correct, and only the
+    // comments at those sites were wrong.
+    uint8_t m_autoAdvance;      // +0x40: ctor sets 1
+    uint8_t _pad41[7];          // +0x41: NEVER written by the ctor
 };
 static_assert(sizeof(LoaderLoop) == 0x48, "LoaderLoop must be 0x48 bytes");
 static_assert(offsetof(LoaderLoop, vtable) == 0x00, "vtable at +0x00");
 static_assert(offsetof(LoaderLoop, m_nextLoop) == 0x28, "m_nextLoop at +0x28");
 static_assert(offsetof(LoaderLoop, m_elapsedTicks) == 0x30, "m_elapsedTicks at +0x30");
 static_assert(offsetof(LoaderLoop, m_delayTicks) == 0x38, "m_delayTicks at +0x38");
-static_assert(offsetof(LoaderLoop, m_finished) == 0x40, "m_finished at +0x40");
+static_assert(offsetof(LoaderLoop, m_autoAdvance) == 0x40, "m_autoAdvance at +0x40");

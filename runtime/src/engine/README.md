@@ -21,4 +21,16 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+- `loops.cpp` — Wave 8 lane A. `Engine::UpdateLoop` (ctor, dtor, IsRunning),
+  `Engine::Loader::Load`, `Engine::LoaderLoop` (ctor), `Engine::DialogLoopT`
+  (ctor, Load, Startup, Update) and `Engine::DialogLoaderLoopT` (ctor, Load,
+  Startup) — 12 exports, entry point `int RtEngineLoopsRegister()`. Layouts in
+  `runtime/types/engine/UpdateLoop.h`; report in
+  `docs/runtime_port/WAVE8_LANE_A.md`. Held back:
+  `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` (no oracle, ~250 instructions on
+  the boot path). NOT registered by design:
+  `?_loader@LoaderLoop@Engine@@1VLoader@2@A` — it is the DLL's own static
+  `Loader` object, and the loader thread waits on ITS events.
+  There is no `_win` twin: the one Win32 idiom in the family (Loader::Load's
+  inlined `Thread::Start`) goes through the already-ported
+  `RtSystem_Thread_Start` in `runtime/src/system/thread_win.cpp`.

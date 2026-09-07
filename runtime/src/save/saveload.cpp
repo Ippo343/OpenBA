@@ -851,6 +851,13 @@ int RtSaveLoadRegister() {
     RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
     RegisterRuntimeExport("??1SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Dtor); ++n;
     RegisterRuntimeExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z", (void*)&RtSave_SaveLoad_CheckMod); ++n;
+    // Wave 8 lane E: engine_funcs.cpp's ResolveExport call for CheckMod was a
+    // phantom-name typo (QEAAHHI, not this real QEBAHHH) that had been dead
+    // since it was written; fixed at its source there. Registering by
+    // address too closes the WAVE7.md §3 failure mode where a phantom-name
+    // fix, once corrected, is still the ONLY door — a second port reached by
+    // address stays correct even if the name is mistyped again.
+    RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
     RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
     RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
     RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;
@@ -861,6 +868,9 @@ int RtSaveLoadRegister() {
     RegisterRuntimeExport("?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_SetMinOperationTime); ++n;
     RegisterRuntimeExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z", (void*)&RtSave_SaveLoad_SetOperation); ++n;
     RegisterRuntimeExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z", (void*)&RtSave_SaveLoad_SetSaveName); ++n;
+    // Wave 8 lane E: same phantom-name fix as CheckMod above, applied to
+    // engine_funcs.cpp's SetSaveName resolve; registered by address too.
+    RegisterRuntimeAddr(0x1800c3bb0, (void*)&RtSave_SaveLoad_SetSaveName);
     RegisterRuntimeExport("?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z", (void*)&RtSave_SaveLoad_SetSaveSprite); ++n;
     RegisterRuntimeExport("?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z", (void*)&RtSave_SavedState_Store); ++n;
     RegisterRuntimeExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_Update); ++n;

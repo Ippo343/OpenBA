@@ -98,3 +98,11 @@ void RtPickingPortInit();  // runtime/src/picking/ — Wave 5
 void RtVideoPortInit();    // runtime/src/video/ — Wave 6
 void RtGraphicsPortInit(); // runtime/src/graphics/ — Wave 6
 void RtUiPortInit();       // runtime/src/ui/ - Wave 7
+// Wave 8 (Top). Lanes A+B share runtime/src/engine/rt_engine_port.cpp; C, D and E
+// each own their own aggregator. Save's Wave 8 remainder is registered from the
+// existing RtSavePortInit() above rather than a second Save aggregator.
+void RtEnginePortInit();      // runtime/src/engine/ — Wave 8 lanes A+B
+void RtAudioPortInit();       // runtime/src/audio/ — Wave 8 lane C
+void RtInputPortInit();       // runtime/src/input/ — Wave 8 lane D
+void RtApplicationPortInit(); // runtime/src/application/ — Wave 8 lane E
+void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E

@@ -1,0 +1,237 @@
+// ============================================================================
+// runtime/src/utility/perlin.cpp — Wave 8 lane E — Utility::PerlinNoise
+// ============================================================================
+//   ??0PerlinNoise@Utility@@QEAA@MMHH@Z    retail 0x180108c70   ord 305
+//   ?Generate@PerlinNoise@Utility@@QEBAMMM@Z  retail 0x1801089b0   ord 2396
+//
+// See runtime/types/utility/PerlinNoise.h for the layout and the vtable
+// verdict (not polymorphic, proven from the ctor's first store being a float,
+// never a `LEA` of a `??_7…6B@` symbol).
+//
+// THE ONE GENUINELY PURE FUNCTION IN WAVE 8. Generate reads only `*this` and
+// its two float arguments, calls two private const helpers on the same
+// object (SmoothNoise) and two transcendentals (pow, cos), and allocates and
+// mutates nothing. It is used by map generation (this project's own callers
+// are terrain-shape code), so a wrong bit here changes a seeded world — which
+// is exactly the case WAVE8.md §5 singles out for "a full replay oracle to
+// the bit."
+//
+// TRANSCENDENTALS GO THROUGH runtime/funcs/rt_libm.h, NOT A DIRECT CALL TO
+// THE DLL. Disassembling 0x1801089b0 shows two CALLs to un-exported internal
+// helpers, 0x180127560 and 0x180126d10:
+//   * 0x180126d10 is already named in rt_libm.cpp as kDllCosf (found there by
+//     an earlier wave from Transform2's ctor and Vector3::Heading) — this
+//     lane's own disassembly reaches the identical address independently,
+//     which is a cross-check, not a new discovery.
+//   * 0x180127560 is powf (its body is the classic fdlibm-shaped ieee754_pow,
+//     confirmed by decompiling it and reading the exponent/mantissa branches)
+//     and was NOT in rt_libm before this lane. Added as RtLibm::Pow, same
+//     pattern as the other three (kDllPowf = 0x180127560).
+//
+// rt_libm.h's own policy (read it before assuming this is a shortcut) is that
+// the DEFAULT is OUR OWN libm (std::pow/std::cos), and the DLL's copies are a
+// DIAGNOSTIC ONLY (BANISHED_RT_LIBM=dll) that does not survive cutover — a
+// port that depends on Runtime-x64.dll staying loaded is not a port
+// (PLAN.md §4.1 decision 1). So Generate's own bit-exactness against retail
+// is bounded by MinGW's libm agreeing with MSVC's statically-linked CRT on
+// pow/cos to the last bit, which this lane does NOT claim — this is the same
+// "1-ULP residual" family the Wave 8 control run's own notes flag as already
+// present pre-wave (docs/runtime_port/WAVE8.md, "Pre-wave control"). The
+// oracle is RT_DIFF_FLOAT with a small tolerance for exactly that reason,
+// stated here rather than silently widened: not a port defect, a libm
+// difference, checkable by rerunning with BANISHED_RT_LIBM=dll (if that
+// makes the divergence disappear, libm was the whole story).
+// ============================================================================
+
+#include <cstdint>
+#include <cstring>
+#include <cmath>
+#include "../../funcs/rt_port.h"
+#include "../../funcs/rt_libm.h"
+#include "../../types/utility/PerlinNoise.h"
+
+using RtUtility::PerlinNoise;
+
+namespace {
+
+inline float BitsToFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+
+// Read directly out of the shipped DLL's .rdata (image base 0x180000000),
+// 2026-09-07, rather than assumed from the decompile's DAT_ placeholders:
+constexpr uint32_t kOneBits   = 0x3f800000u;  // DAT_18016169c = 1.0f
+constexpr uint32_t kHalfBits  = 0x3f000000u;  // DAT_180161694 = 0.5f
+constexpr uint32_t kTwoBits   = 0x40000000u;  // DAT_1801616d8 = 2.0f  (per-octave frequency base)
+constexpr uint32_t kPiBits    = 0x40490fdbu;  // DAT_1801616e0 = pi
+constexpr uint32_t kNormBits  = 0x30800000u;  // DAT_180161660 = 2^-24 (hash-to-float normaliser)
+constexpr uint32_t kW16Bits   = 0x3d800000u;  // DAT_180161680 = 1/16 (corner weight)
+constexpr uint32_t kW8Bits    = 0x3e000000u;  // DAT_180161688 = 1/8  (edge weight)
+constexpr uint32_t kW4Bits    = 0x3e800000u;  // DAT_18016168c = 1/4  (center weight)
+
+// Retail's lattice hash: `n ^ (n * 0x2000)`, a uint32 multiply-XOR (equal to
+// `n ^ (n << 13)` for the low bits that survive the later `& 0x7fffffff`, but
+// transcribed as the multiply retail actually performs, not the shift a
+// well-known tutorial algorithm would use — this project's own magic
+// constants (0xc0ae5, 0xd208dd0d) are NOT the textbook 789221/1376312589, so
+// nothing here is assumed from that tutorial).
+inline uint32_t LatticeHash(uint32_t n) { return n ^ (n * 0x2000u); }
+
+// `1.0f - (float)(((n*n*15731u + 789221u... )` — the actual retail constants:
+inline float CornerValue(uint32_t n) {
+    const uint32_t h = LatticeHash(n);
+    const uint32_t v = (h * h * 0x3d73u + 0xc0ae5u) * h + 0xd208dd0du;
+    return BitsToFloat(kOneBits) - static_cast<float>(v & 0x7fffffffu) * BitsToFloat(kNormBits);
+}
+
+// ============================================================================
+// Utility::PerlinNoise::SmoothNoise(int, int) const   retail 0x1801085c0   ord 4070
+// ?SmoothNoise@PerlinNoise@Utility@@AEBAMHH@Z
+// ----------------------------------------------------------------------------
+// NOT in this lane's function list (not exported to our tree at all — it is
+// `private`/AEBA and this project's census never lists it), so it is not
+// registered on its own. Reproduced here only because Generate needs it, the
+// same way Wave 5's CheckMod needed IO::Modification's layout without owning
+// that class.
+//
+// base = (_offsetY + y) * 57 + _offsetX + x
+// corners (weight 1/16): base-0x38, base-0x3a, base+0x38, base+0x3a
+// edges   (weight 1/8):  base+1, base-1, base-0x39, base+0x39
+// center  (weight 1/4):  base
+// Every offset and the summation ORDER is transcribed exactly as retail sums
+// them (float addition is not associative, so the order is load-bearing for
+// a bit-exact port).
+// ============================================================================
+float SmoothNoise(const PerlinNoise* self, int32_t x, int32_t y) {
+    // Unsigned arithmetic throughout, matching the raw 32-bit machine ops
+    // retail performs (hardware wraps; signed overflow here would be UB in
+    // C++ where retail's disassembly has none).
+    const uint32_t base = (static_cast<uint32_t>(self->_offsetY) + static_cast<uint32_t>(y)) * 57u +
+                           static_cast<uint32_t>(self->_offsetX) + static_cast<uint32_t>(x);
+
+    const uint32_t nCornerA = base - 0x38u;  // row-1, col+1
+    const uint32_t nCornerB = base - 0x3au;  // row-1, col-1
+    const uint32_t nCornerC = base + 0x38u;  // row+1, col-1
+    const uint32_t nCornerD = base + 0x3au;  // row+1, col+1
+    const uint32_t nEdgeA   = base + 1u;     // row+0, col+1
+    const uint32_t nEdgeB   = base - 1u;     // row+0, col-1
+    const uint32_t nEdgeC   = base - 0x39u;  // row-1, col+0
+    const uint32_t nEdgeD   = base + 0x39u;  // row+1, col+0
+
+    const float corners = (CornerValue(nCornerA) + CornerValue(nCornerB) +
+                            CornerValue(nCornerC) + CornerValue(nCornerD)) * BitsToFloat(kW16Bits);
+    const float edges   = (CornerValue(nEdgeA) + CornerValue(nEdgeB) +
+                            CornerValue(nEdgeC) + CornerValue(nEdgeD)) * BitsToFloat(kW8Bits);
+    const float center  = CornerValue(base) * BitsToFloat(kW4Bits);
+
+    return corners + edges + center;
+}
+
+}  // namespace
+
+// ============================================================================
+// Utility::PerlinNoise::PerlinNoise(float persistence, float octaves,
+//                                   int offsetX, int offsetY)   retail 0x180108c70
+// ??0PerlinNoise@Utility@@QEAA@MMHH@Z
+// ----------------------------------------------------------------------------
+// NOT in this lane's function list (see PerlinNoise.h's banner: the wave's
+// function table names only Generate for this class in wave8_lanes.txt's
+// call surface, and the ctor is reproduced here only as the plain four-store
+// body it is — no registration, since a caller that needs a NEW PerlinNoise
+// is out of this lane's scope and no oracle would be possible for a ctor
+// this lane does not own to compare (the Wave 5 SaveLoad ctor's ordering
+// argument does not transfer to a class with no singleton to publish).
+// Left here, unregistered, purely as the derivation this header's comment
+// promises. If a future lane needs to construct one, this is correct.
+// ============================================================================
+[[maybe_unused]] static PerlinNoise* PerlinNoise_Ctor(PerlinNoise* self, float persistence, float octaves,
+                                      int32_t offsetX, int32_t offsetY) {
+    self->_persistence = persistence;
+    self->_octaves     = octaves;
+    self->_offsetX     = offsetX;
+    self->_offsetY     = offsetY;
+    return self;
+}
+
+// ============================================================================
+// Utility::PerlinNoise::Generate(float x, float y) const   retail 0x1801089b0   ord 2396
+// ?Generate@PerlinNoise@Utility@@QEBAMMM@Z
+// ----------------------------------------------------------------------------
+// Classic multi-octave value noise: for octave i in [0, _octaves), frequency
+// = pow(2, i), amplitude = pow(_persistence, i); sample SmoothNoise at the
+// four lattice points around (x*freq, y*freq) and bilinearly interpolate
+// with cosine-smoothed weights, accumulating amplitude * interpolated value.
+//
+// TRANSCRIBED INSTRUCTION-FOR-INSTRUCTION, not "cleaned up": retail computes
+// the Y-axis frequency term (`fVar6`) from the SAME `fVar8` (2^i) that was
+// just used for X, reusing the register rather than recomputing pow; this
+// port mirrors that by computing `freq` once. The loop's float index
+// (`fVar12`) is reused mid-body to briefly HOLD the amplitude before being
+// reset to `(float)(i+1)` for the next pow call — reproduced with two
+// separate local variables here for clarity, which changes no value, only
+// which C++ name owns which SSA slot.
+//
+// ABI: `this` is a const PerlinNoise*, the two float args arrive in XMM1/XMM2
+// per the mangled `QEBAMMM` (member, const, returns M=float, args M,M) — no
+// hidden return slot, a float fits in XMM0.
+//
+// ORACLE: RT_DIFF_FLOAT with a small tolerance — see the file banner for why
+// a tolerance is used here (libm, not a port defect) rather than the 0.0f
+// this lane would otherwise default to for the one pure function in the wave.
+// ============================================================================
+float RtUtility_PerlinNoise_Generate(const PerlinNoise* self, float x, float y) {
+    RT_DIFF_BEGIN("Utility::PerlinNoise::Generate");
+
+    float total = 0.0f;
+    const float octaveBound = self->_octaves;
+    if (octaveBound > 0.0f) {
+        int32_t i = 0;
+        float loopIndex = 0.0f;
+        do {
+            const float freq = RtLibm::Pow(BitsToFloat(kTwoBits), loopIndex);
+
+            const float fx = freq * x;
+            const float fy = freq * y;
+            const int32_t ix = static_cast<int32_t>(fx);   // truncating cast, matches CVTTSS2SI
+            const int32_t iy = static_cast<int32_t>(fy);
+
+            const float cosX = RtLibm::Cos((fx - static_cast<float>(ix)) * BitsToFloat(kPiBits));
+            const float weightX = (BitsToFloat(kOneBits) - cosX) * BitsToFloat(kHalfBits);
+            const float cosY = RtLibm::Cos((fy - static_cast<float>(iy)) * BitsToFloat(kPiBits));
+            const float weightY = (BitsToFloat(kOneBits) - cosY) * BitsToFloat(kHalfBits);
+
+            const float s00 = SmoothNoise(self, ix,     iy);
+            const float s10 = SmoothNoise(self, ix + 1, iy);
+            const float s01 = SmoothNoise(self, ix,     iy + 1);
+            const float s11 = SmoothNoise(self, ix + 1, iy + 1);
+
+            const float amplitude = RtLibm::Pow(self->_persistence, loopIndex);
+            ++i;
+
+            const float interpTop    = s00 * (BitsToFloat(kOneBits) - weightX) + s10 * weightX;
+            const float interpBottom = s01 * (BitsToFloat(kOneBits) - weightX) + s11 * weightX;
+            total += (interpTop * (BitsToFloat(kOneBits) - weightY) + interpBottom * weightY) * amplitude;
+
+            loopIndex = static_cast<float>(i);
+        } while (loopIndex < octaveBound);
+    }
+
+    if (rt_diff_on__) {
+        using Fn = float (*)(const PerlinNoise*, float, float);
+        const float theirs =
+            RT_ORIGINAL_ONCE(Fn, "?Generate@PerlinNoise@Utility@@QEBAMMM@Z")(self, x, y);
+        // Tolerance: libm (pow/cos) rounding only — see the file banner.
+        // 4 ULP at float precision, i.e. 1 part in ~2^21 of the magnitude.
+        RT_DIFF_FLOAT(total, theirs, std::fabs(total) * 5.0e-7f + 5.0e-7f);
+    }
+    return total;
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
+int RtUtilityRegister() {
+    int n = 0;
+    RegisterRuntimeExport("?Generate@PerlinNoise@Utility@@QEBAMMM@Z",
+                          (void*)&RtUtility_PerlinNoise_Generate); ++n;
+    RegisterRuntimeAddr(0x1801089b0, (void*)&RtUtility_PerlinNoise_Generate);
+    return n;
+}

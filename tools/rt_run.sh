@@ -67,5 +67,15 @@ echo "-- crash log --"
 if [ -s "$GAME_DIR/standalone_crash.log" ]; then head -30 "$GAME_DIR/standalone_crash.log"; else echo "(none)"; fi
 echo "-- runtime port lines --"
 grep -a -E '\[RtPort\]|\[RtDiff\]|\[RtDetour\]|\[RtCensus\]' \
-     "$GAME_DIR/standalone_error.log" "$GAME_DIR/standalone_debug.log" 2>/dev/null | tail -80
+     "$GAME_DIR/standalone_error.log" "$GAME_DIR/standalone_debug.log" 2>/dev/null
+# NOTE: no `tail` on the grep above, deliberately. This used to end in `| tail -80`,
+# which silently truncated the RtDiff summary: a full run emits ~1,200 of these
+# lines, so only the last 80 sites were reported and every site before them looked
+# like it had ZERO CALLS. At the Wave 8 integration that read as 16 diff sites
+# "disappearing" between the control and the integration run -- including
+# Graphics::Scene::RemoveObject at 15,842 calls -- and cost seven bisection runs
+# before the raw log showed the sites had been there all along. A truncated oracle
+# report is worse than no report: `calls=0` is exactly the signal this project uses
+# to detect a dead port (reference_uncalled_port_is_not_verified.md), so a cap that
+# manufactures `calls=0` attacks the one number every wave is read on.
 exit "$RC"

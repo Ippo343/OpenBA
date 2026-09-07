@@ -603,7 +603,6 @@ fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6 = nullptr;
 // DragTool support
 fn_KeyMap_Released_t fn_KeyMap_Released = nullptr;
 fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
-fn_AudioScene_PlayEffect_t fn_AudioScene_PlayEffect = nullptr;
 
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
@@ -935,7 +934,9 @@ uint32_t* g_pLoaderFlags = nullptr;
 // _loader.m_completionEvent @ 0x1801fe7e0
 HANDLE* g_pLoaderCompletionEvent = nullptr;
 
-// Application::Application::_singleton @ 0x1801feb80
+// Application::Application::_singleton @ 0x1801fc678 (Runtime export
+// ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
+// previous address here was stale and unused by any resolve call).
 void** g_pAppSingleton = nullptr;
 
 // ============================================================
@@ -2966,8 +2967,16 @@ bool EngineFuncsInit() {
     // mangled name was not an export and the pointer had no callers. The real
     // function is ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VExternal@Object@@@Object@@H@Z
     // (0x1800388d0) and it takes an int index. See engine_funcs.h.
+    // Wave 8 lane C (docs/runtime_port/WAVE8_LANE_C.md): the name below used to
+    // read "...QEAIV?$Ext...VTime@System@@@Z" -- QEAI where every other member
+    // spells QEAA, and missing the AEBV reference qualifier on the trailing
+    // Time param. That string does not exist in the shipped DLL (one of only
+    // 3 phantoms left in the whole tree, tools/export_name_audit.py) and
+    // always resolved NULL; the fallback below (0x1800def60) is what every
+    // call actually reached, so this was never a functional gap. Fixed to the
+    // real, correctly-spelled export.
     fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
-        ResolveExport("?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z"));
+        ResolveExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z"));
     if (!fn_Audio_Scene_PlayEffect) {
         fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
             ResolveAddr(Module::Runtime, 0x1800def60));
@@ -3335,11 +3344,6 @@ bool EngineFuncsInit() {
     if (!fn_DialogInstance_GetRoot) {
         fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(
             ResolveExport("?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ"));
-    }
-    // Audio::Scene::PlayEffect — dispatch table at 0x140152830
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152830));
-        if (dispatch) fn_AudioScene_PlayEffect = reinterpret_cast<fn_AudioScene_PlayEffect_t>(*dispatch);
     }
 
     // --- Player/Tool module: shared engine APIs ---
@@ -4046,8 +4050,14 @@ bool EngineFuncsInit() {
     fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
         ResolveExport("??0UpdateLoop@Engine@@QEAA@XZ"));
     if (!fn_UpdateLoop_Ctor) {
+        // 0x1800ddd30, NOT 0x1800dcc00. The old address was a DEFECT found by
+        // Wave 8 lane A: 0x1800dcc00 is not a function entry at all, it is an
+        // address INSIDE the body of Engine::MainLoop::OnVideoError
+        // (0x1800dc5e0..0x1800dcd12). Latent, because the ResolveExport above
+        // has always succeeded — but a fallback that is only ever taken when
+        // something is already wrong is exactly where a wrong address hides.
         fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800dcc00));
+            ResolveAddr(Module::Runtime, 0x1800ddd30));
     }
     g_GameUpdateLoop_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015e2f0));
     fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
@@ -4561,17 +4571,35 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140102b60));
 
     // Phase G Wave 1: SaveLoadDialog DoLoad/DoSave/DoDelete + EventNotifyDialog NavigateToEvent
-    // Save::SaveLoad::CheckMod — Runtime DLL export (via dispatch table at 0x140152738)
+    // Save::SaveLoad::CheckMod — Runtime DLL export.
+    // FIXED (Wave 8 lane E): the mangled name here was a PHANTOM — it does
+    // not exist in the shipped DLL (confirmed with pefile against
+    // C:\GOG Games\Banished\Runtime-x64.dll). ResolveExport on a phantom
+    // returns NULL in silence, so this primary path had never once produced
+    // a pointer; only the exe-dispatch-slot fallback below (registered under
+    // the CORRECT name by standalone/address_registry.cpp) kept this call
+    // site alive. The real export is CONST and takes (int,int), not
+    // (int,unsigned) — see docs/runtime_port/WAVE5_LANE_C.md §1 and
+    // WAVE8_LANE_E.md. Now ported (runtime/src/save/saveload.cpp,
+    // RtSave_SaveLoad_CheckMod) and registered under this real name AND by
+    // address (0x1800c1090), so the fallback below is now genuinely a
+    // fallback rather than the only working path.
     fn_SaveLoad_CheckMod = reinterpret_cast<fn_SaveLoad_CheckMod_t>(
-        ResolveExport("?CheckMod@SaveLoad@Save@@QEAAHHI@Z"));
+        ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
     if (!fn_SaveLoad_CheckMod) {
         // Fallback: resolve via exe dispatch table
         fn_SaveLoad_CheckMod = *reinterpret_cast<fn_SaveLoad_CheckMod_t*>(
             ResolveAddr(Module::Exe, 0x140152738));
     }
-    // Save::SaveLoad::SetSaveName — Runtime DLL export (via dispatch table at 0x140151650)
+    // Save::SaveLoad::SetSaveName — Runtime DLL export.
+    // FIXED (Wave 8 lane E): same phantom-name defect as CheckMod above — the
+    // mangled name here spelled the String argument BY VALUE
+    // (`V?$String@D@System@@`), which the shipped DLL does not export; the
+    // real export takes it by const reference (`AEBVString@System@@`). Now
+    // ported (RtSave_SaveLoad_SetSaveName) and registered under the real name
+    // AND by address (0x1800c3bb0).
     fn_SaveLoad_SetSaveName = reinterpret_cast<fn_SaveLoad_SetSaveName_t>(
-        ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXV?$String@D@System@@H@Z"));
+        ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z"));
     if (!fn_SaveLoad_SetSaveName) {
         fn_SaveLoad_SetSaveName = *reinterpret_cast<fn_SaveLoad_SetSaveName_t*>(
             ResolveAddr(Module::Exe, 0x140151650));

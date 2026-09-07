@@ -12,7 +12,7 @@
 // Update() calls UI::UserInterface::Update, Draw() calls UI::UserInterface::Draw.
 //
 // Key differences from DialogLoaderLoopT:
-//   - No LoaderLoop base (no m_elapsedTicks, m_delayTicks, m_finished)
+//   - No LoaderLoop base (no m_elapsedTicks, m_delayTicks, m_autoAdvance)
 //   - No background loading (no Loader::Load, no WaitForSingleObject)
 //   - Update: just UI::Update — no sleep, no transition check
 //   - Draw: clears to gray (0xFF808080), no time uniforms

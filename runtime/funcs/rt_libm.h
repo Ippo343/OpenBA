@@ -5,7 +5,9 @@
 //
 // THE PROBLEM. Runtime-x64.dll's math routines call its own statically-linked
 // MSVC CRT: FUN_180128110 (sqrtf), FUN_180127d90 (sinf), FUN_180126d10 (cosf),
-// FUN_180126680 (atan2f). Our ports are compiled by MinGW GCC against a
+// FUN_180126680 (atan2f), FUN_180127560 (powf, added by Wave 8 lane E for
+// Utility::PerlinNoise::Generate — the frequency/amplitude terms are
+// pow(2, i) and pow(persistence, i)). Our ports are compiled by MinGW GCC against a
 // different libm. Where the two disagree they disagree in the last bit or two,
 // which is invisible in gameplay but shows up as a divergence in the Wave 0
 // diff oracle (rt_diff.h) — and a last-bit difference in a routine that feeds
@@ -42,6 +44,7 @@ extern float (*Sqrt)(float);
 extern float (*Sin)(float);
 extern float (*Cos)(float);
 extern float (*Atan2)(float y, float x);
+extern float (*Pow)(float base, float exp);
 
 // Reads BANISHED_RT_LIBM and, when it says "dll", repoints the four above at
 // Runtime-x64.dll's CRT. Reports which set is live. Safe to call more than once.
