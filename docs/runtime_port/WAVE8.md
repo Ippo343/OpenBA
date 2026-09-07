@@ -190,11 +190,23 @@ wave: **772 called, 507 ported (65.7%)**, up from 766 / 458 (59.8%).
 
 | Run | Sites with calls | Diffed calls | Divergences |
 |---|---|---|---|
-| `wave8_integration_autostart.txt` | 250 | **28,191,797** | 99 in 2 sites — Wave 1 family only |
-| `wave8_final_save9.txt` (load path) | 265 | **50,870,488** | 61 in 3 sites — Wave 1 family only |
+| `wave8_integration_autostart.txt` | 247 | **28,350,292** | 85 in 2 sites — Wave 1 family only |
+| `wave8_final_save9.txt` (load path) | 265 | **51,193,583** | 41 in 2 sites — Wave 1 family only |
 | `wave8_libm_dll.txt` (`BANISHED_RT_LIBM=dll`) | 250 | — | **0, tree-wide** |
 
-**Zero Wave 8 divergences in 79 million diffed calls across the two runs**, both with a
+**These two runs were re-measured on the COMMITTED tree, and the first pair were thrown away.**
+Lanes A and B kept working after they reported: lane B moved both its headers into
+`namespace RtEngine`, and lane A then made `loops.cpp` include lane B's `MainLoop.h` and read
+`MainLoopSingleton()->_currentLoop` instead of a hand-written `+0x20` — so **lanes A and B now
+build as one unit, take both or neither.** Those edits landed at 16:00–16:03, and the exe the
+first integration and Save9 runs measured was built at 15:59. The numbers were therefore taken
+against code that was no longer what got committed. The exe was rebuilt (16:17) and both runs
+repeated. This is the `feedback_no_build_skips_the_deploy.md` trap wearing a different hat:
+**a lane that keeps improving after it reports invalidates the integrator's measurement, and
+nothing warns.** Re-read `git status` and the source mtimes against the exe stamp before
+believing any integration number.
+
+**Zero Wave 8 divergences in 79.5 million diffed calls across the two runs**, both with a
 zero-byte `standalone_crash.log` and a clean self-quit. Every residual is the pre-existing Wave 1
 1-ULP family at `Vector3::FromYawPitch`, `Transform::FromYawPitchOffset` and `Vector3::Heading`,
 and the reported bytes confirm it (`e2` vs `e3`, `5a` vs `5b` — one ULP in the low byte).
@@ -293,8 +305,14 @@ Current: **651 distinct `ResolveExport` names, 0 missing from the shipped DLL.**
   through the input layer.
 * `Audio::Scene` ctor/dtor, `MoveEmitter`, `RemoveEmitter`, `GetEmitterCount`,
   `Configuration::Startup`.
-* `UpdateLoop::IsRunning`, `Application::IsPaused`, and lane E's three shadow-marker ports
-  (`PlatformUpdate`, `SleepThread`, `YieldToThreads`), which have no oracle by construction.
+* `Application::IsPaused`, and lane E's three shadow-marker ports (`PlatformUpdate`,
+  `SleepThread`, `YieldToThreads`), which have no oracle by construction.
+* **`?IsRunning@UpdateLoop@Engine@@QEBA_NXZ` — never observed executing in any of the four
+  runs**, and lane A asked specifically that it not be assumed. It is the ONE function in lane A
+  with a full replay oracle, so it is where a divergence would be most informative. It reaches us
+  through exe dispatch slot 0x140152850 from `code/Game/Goal/populationgoal.cpp:141`, so it needs
+  a run that actually evaluates population goals. Confirmed absent from both the autostart and
+  the Save9 logs (`grep -c IsRunning` = 0 on each), not merely missing from a digest.
 
 ### Still open after this wave
 
