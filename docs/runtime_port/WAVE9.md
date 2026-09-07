@@ -548,9 +548,40 @@ array plus the header and the five paused flags — and a separate gameplay run 
 regression (251 sites, 28,412,621 calls, 99 divergences, all in the two known Wave 1 sin/cos
 sites).
 
-**Three rows remain for this harness**: `ExternalFactory::SerializeReferenceTable`,
-`External::SaveText` (which additionally needs `IO::TextFileStream`), and Wave 3's
-`InternalBasePtr::Serialize`. None of them is blocked on the oracle any more.
+#### CORRECTION: lane S unblocks ONE of the four rows, not four
+
+This document claimed lane S "unblocks four rows at once". **Checking the other three
+per-function shows it does not, and the reason is precise enough to be useful.**
+
+Lane S rests on one property: *on the write path a Serialize is a pure read of the object.* That
+is what makes two calls into two sinks a legitimate replay. **Three of the four target rows break
+that property** — each does real work on the write path beyond emitting:
+
+| Row | What it mutates on the WRITE path |
+|---|---|
+| `Audio::Scene::Serialize` | **nothing** — the resize is guarded to the reading side (`0x1800e00c0`'s JNZ). This is why it worked. |
+| `ExternalFactory::SerializeReferenceTable` | walks the reference set writing an id into every node (`MOV [RBX+0x14],EAX` inside the `0x1800bcdf4` branch) |
+| `InternalBasePtr::Serialize` | ends in `self->ptr = InternalFactory::PersistObject(...)` — mutates both the pointer and the global factory |
+| `External::SaveText` | needs `IO::TextFileStream` before the question even arises |
+
+Running ours-then-theirs on any of those three would perform the mutation **twice**, on the one
+live tree or the one live factory. That is the same shared-state trap the family was held back
+for, wearing a different hat — and `RegisterInput` already showed what it looks like when a second
+call succeeds *differently* rather than failing.
+
+**So the next unit of work is a PREFIX oracle, not more ports.** The emission sequence is still
+fully determined by the object at entry, so what these three need is a way to compare the
+emissions *up to the first mutation* — either by stopping the body at a chosen emission index, or
+by snapshotting and restoring the small amount of state each one touches (`InternalBasePtr` is
+eight bytes; the reference-set ids are one dword per node). Lane S already records the sequence;
+what it lacks is a stop.
+
+**Recorded as a correction rather than fixed silently, because it is the fourth time this session
+that a group-level claim of mine failed per-function checking** — after the `ExternalFactory`
+four, `KeyMap::Load`, and `SerializeReferenceTable` as "the cheapest row". The per-function checks
+have been right every time; the summaries over them have been wrong every time. That is a
+measured property of this material, not bad luck: **these functions differ from each other in
+exactly the details that decide whether a technique applies.**
 
 ### The pattern this session hit three times: a known fact that did not reach the next wave
 

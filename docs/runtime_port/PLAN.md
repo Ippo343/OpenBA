@@ -743,8 +743,19 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       that a group-level claim was wrong about a member; the per-function table is the fix.
 - [x] **Wave 9 LANE S IS BUILT AND PROVEN; `Audio::Scene::Serialize` is PORTED AND VERIFIED —
       32,772 emissions identical, 0 diverged** (`runtime/src/io/save_trace.{h,cpp}`,
-      `BANISHED_RT_SAVE_TRACE=1`). Three rows remain for the harness and none is blocked on
-      the oracle any more. Details below.
+      `BANISHED_RT_SAVE_TRACE=1`). **It unblocks ONE of the four rows, not four** — a claim made
+      and corrected in the same session. The technique rests on the write path being a PURE READ
+      of the object, and three of the four targets break that: `SerializeReferenceTable` writes
+      an id into every reference-set node, `InternalBasePtr::Serialize` ends in
+      `PersistObject` (mutating the pointer AND the global factory), and `SaveText` needs
+      `IO::TextFileStream` first. Those three need a PREFIX oracle — compare emissions up to the
+      first mutation, by stopping the body or by snapshot/restore. Lane S already records the
+      sequence; it lacks a stop.
+      **Fourth group-level claim this session to fail per-function checking** (after the
+      `ExternalFactory` four, `KeyMap::Load`, and `SerializeReferenceTable` as "the cheapest
+      row"). The per-function checks were right every time and the summaries over them wrong
+      every time — these functions differ in exactly the details that decide whether a technique
+      applies, so triage per function or not at all.
 - [x] **Wave 9 LANE A IS OPEN, and its first deliverable was a TOOL, not a port.** Opening it on
       the two most tractable rows produced a better result than either port would have: **the
       remaining holdbacks are not 28 independent problems — the critical path is one missing
