@@ -10,9 +10,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+
+// Return address of our own caller, for the BANISHED_RT_STRICT residue census.
+// MSVC spells this `_ReturnAddress()` (an intrinsic in <intrin.h>); this tree
+// builds with MinGW GCC, where the builtin is the portable spelling.
+#if !defined(_MSC_VER)
+#define _ReturnAddress() __builtin_return_address(0)
+#endif
 
 // ============================================================
 // Module info — Exe slot unused
@@ -199,6 +207,31 @@ bool RtCensusEnabled() {
     return on != 0;
 }
 
+// ---- Cutover residue census (BANISHED_RT_STRICT) --------------------------
+// See the comment on RecordRuntimeResidue in resolve.h. Records every resolve
+// that misses the port registry and falls through to the shipped DLL, so the
+// wave 9 work list is what the PROCESS reaches rather than what the tree
+// mentions. Off unless the env var is set; one map insert per distinct miss.
+bool RtStrictEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_RT_STRICT");
+        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on != 0;
+}
+
+struct ResidueEntry {
+    unsigned long long count;
+    void* firstCaller;   // return address of the first asker, for attribution
+};
+// Keyed by the printable form of the request so all three doors share one
+// table and one sort order: the mangled name, "addr:0x1800xxxxx", or "ord:N".
+std::map<std::string, ResidueEntry>& RtResidue() {
+    static std::map<std::string, ResidueEntry> m;
+    return m;
+}
+
 } // namespace
 
 void RegisterRuntimeExport(const char* mangled_name, void* our_fn) {
@@ -334,6 +367,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
             g_rtHits++;
             return reinterpret_cast<uintptr_t>(it->second);
         }
+        RecordRuntimeResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
     }
 
     const ModuleInfo& mi = g_modules[static_cast<int>(mod)];
@@ -403,6 +437,38 @@ const ModuleInfo* GetModuleInfo(Module mod) {
     return &g_modules[static_cast<int>(mod)];
 }
 
+void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
+                          uint16_t ordinal, void* caller) {
+    if (!RtStrictEnabled()) return;
+    char key[512];
+    if (mangled_name) {
+        snprintf(key, sizeof(key), "%s", mangled_name);
+    } else if (ghidra_addr) {
+        snprintf(key, sizeof(key), "addr:0x%llx", (unsigned long long)ghidra_addr);
+    } else {
+        snprintf(key, sizeof(key), "ord:%u", (unsigned)ordinal);
+    }
+    ResidueEntry& e = RtResidue()[key];
+    if (e.count == 0) e.firstCaller = caller;
+    e.count++;
+}
+
+void DumpRuntimeResidue() {
+    if (!RtStrictEnabled()) return;
+    const std::map<std::string, ResidueEntry>& m = RtResidue();
+    fprintf(stderr,
+            "[RtResidue] ==== %zu distinct requests still fell through to "
+            "Runtime-x64.dll ====\n", m.size());
+    // Sorted (std::map) so two runs diff cleanly, same contract as [RtCensus].
+    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
+         it != m.end(); ++it) {
+        fprintf(stderr, "[RtResidue] %-8llu %-16p %s\n",
+                it->second.count, it->second.firstCaller, it->first.c_str());
+    }
+    fprintf(stderr, "[RtResidue] ==== end (0 means the DLL can be removed) ====\n");
+    fflush(stderr);
+}
+
 void* ResolveExportRaw(const char* mangled_name) {
     if (!g_modules[1].handle || !mangled_name) return nullptr;
     return reinterpret_cast<void*>(
@@ -434,6 +500,8 @@ void* ResolveExport(const char* mangled_name) {
             return it->second;
         }
     }
+    // Missed the port registry: this request is cutover residue.
+    RecordRuntimeResidue(mangled_name, 0, 0, _ReturnAddress());
     return ResolveExportRaw(mangled_name);
 }
 
@@ -446,6 +514,7 @@ void* ResolveOrdinal(uint16_t ordinal) {
             return it->second;
         }
     }
+    RecordRuntimeResidue(nullptr, 0, ordinal, _ReturnAddress());
     return ResolveOrdinalRaw(ordinal);
 }
 

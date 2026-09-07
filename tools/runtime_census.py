@@ -78,6 +78,23 @@ RE_ORDINAL = re.compile(r'ResolveOrdinal(?:Raw)?\s*\(\s*(\d+)')
 RE_ADDR = re.compile(r'ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)')
 RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
 
+# dx11/ reaches Runtime-x64.dll through its OWN resolver, not ResolveExport:
+#   Dx11ResolveRuntimeImport(mangled, iatGhidraAddress)
+# and it almost never passes the name at the call site -- the names live in
+# `{ &g_im.Field, "?Mangled@...", 0x1800134xx }` import tables that are then
+# walked in a loop. RE_EXPORT sees none of it, so every one of dx11's Runtime
+# imports was missing from `called` until the BANISHED_RT_STRICT residue census
+# caught 86 of them arriving at the DLL during a plain autostart run.
+#
+# That gap matters more than its size: dx11/ IS our VideoDX11 replacement, the
+# one subsystem that already survives its DLL being absent, and its Runtime
+# imports are part of the cutover surface exactly like the exe's are.
+#
+# Restricted to dx11/ and to names that look like MSVC C++ manglings (leading
+# '?', an '@@' somewhere) so an ordinary string literal cannot become a phantom
+# call row -- the failure strip_comments() exists to prevent.
+RE_DX11_MANGLED = re.compile(r'"(\?[A-Za-z0-9_?$@]*@@[A-Za-z0-9_?$@]*)"')
+
 # --- ports -------------------------------------------------------------------
 RE_REG_EXPORT = re.compile(r'RegisterRuntimeExport\s*\(\s*(?=")')
 
@@ -94,6 +111,17 @@ RE_REG_EXPORT = re.compile(r'RegisterRuntimeExport\s*\(\s*(?=")')
 # end in a census that does not describe reality, so both must be loud.
 RE_REG_EXPORT_NONLITERAL = re.compile(
     r'RegisterRuntimeExport\s*\(\s*(?!")([A-Za-z_][A-Za-z0-9_:]*)')
+
+# A file-scope `const char* const kName = "?Mangled@...";` definition. Spelling
+# the name once and using it at BOTH the RT_ORIGINAL_ONCE site and the
+# RegisterRuntimeExport site is good practice -- the diff oracle and the
+# registration cannot then drift apart -- so the census resolves these instead
+# of punishing them. Only same-file, single-literal definitions are resolved;
+# anything else still raises the NON-LITERAL warning above, because a name this
+# script cannot follow is a name it must not silently drop.
+RE_NAME_CONST = re.compile(
+    r'\b(?:static\s+)?const\s+char\s*\*\s*const\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?=")')
 RE_REG_ORDINAL = re.compile(r'RegisterRuntimeOrdinal\s*\(\s*(\d+)')
 RE_REG_ADDR = re.compile(r'RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)')
 
@@ -243,6 +271,51 @@ GATED_OFF_FILES = {
     "runtime/src/system/allocator_win.cpp",
 }
 
+# The same overstatement one level finer: a registration inside an `if (<flag>)`
+# block that is OFF by default. GATED_OFF_FILES cannot see these because the
+# file around them registers plenty of live ports too.
+#
+# Found 2026-09-07 while preparing wave 9, and found by the PROCESS, not by
+# reading: the BANISHED_RT_STRICT residue census recorded four names arriving
+# at Runtime-x64.dll that this script was calling ported --
+# `??0Internal@Object@@QEAA@XZ`, `??1Internal@Object@@UEAA@XZ`,
+# `?CheckPtr@InternalBasePtr@Object@@IEBAXXZ` and
+# `?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z`. All four are
+# in WAVE3.md's NO-GO handle-table tier, which is exactly why they are off.
+#
+# Keyed by file -> the gate variables whose `if (<var>) { ... }` body is opt-in.
+GATED_OFF_BLOCKS = {
+    "runtime/src/object/internal.cpp": ("table", "shadow", "checkPtr"),
+}
+
+
+def gated_block_spans(text, gate_vars):
+    """Byte spans of every `if (<gate>) { ... }` body, brace-matched.
+
+    Brace matching rather than a regex because the bodies contain both braces
+    and strings; strip_comments() has already run, so only string literals can
+    hide a brace, and those are skipped here."""
+    spans = []
+    for var in gate_vars:
+        for m in re.finditer(r'\bif\s*\(\s*%s\s*\)\s*\{' % re.escape(var), text):
+            i = m.end() - 1
+            depth = 0
+            while i < len(text):
+                ch = text[i]
+                if ch == '"':
+                    lit = STRING_LITERAL.match(text, i)
+                    i = lit.end() if lit else i + 1
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        spans.append((m.start(), i))
+                        break
+                i += 1
+    return spans
+
 
 def strip_comments(text):
     """Blank out C/C++ comments, preserving length so byte offsets still line up.
@@ -327,6 +400,9 @@ def scan():
             name = concat_literal(text, m.end())
             if name:
                 called_exports.setdefault(name, set()).add(rel)
+        if rel.startswith("dx11/"):
+            for m in RE_DX11_MANGLED.finditer(text):
+                called_exports.setdefault(m.group(1), set()).add(rel)
         for m in RE_ORDINAL.finditer(text):
             called_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_ADDR.finditer(text):
@@ -334,16 +410,30 @@ def scan():
         for m in RE_ADDR_RAW.finditer(text):
             called_addrs.setdefault(int(m.group(1), 16), set()).add(rel)
 
+        # Registrations inside an opt-in `if (<flag>)` block are gated the same
+        # way an opt-in FILE is -- see GATED_OFF_BLOCKS.
+        block_spans = gated_block_spans(text, GATED_OFF_BLOCKS.get(rel, ()))
+        def in_gated_block(pos):
+            return any(a <= pos <= b for a, b in block_spans)
         # A registration inside an OPT-IN file is NOT a live port: its
         # Register function is only called when an env var arms it, and it
         # returns 0 otherwise. Counting it would repeat the exact overstatement
         # this census exists to prevent -- see GATED_OFF_FILES.
         gated = rel in GATED_OFF_FILES
 
+        # Same-file `const char* const kX = "?Mangled@..."` table, so a
+        # registration passing kX is counted rather than warned about.
+        name_consts = {}
+        for m in RE_NAME_CONST.finditer(text):
+            lit = concat_literal(text, m.end())
+            if lit:
+                name_consts[m.group(1)] = lit
+
         for m in RE_REG_EXPORT.finditer(text):
             name = concat_literal(text, m.end())
             if name:
-                (gated_exports if gated else ported_exports).setdefault(name, set()).add(rel)
+                g = gated or in_gated_block(m.start())
+                (gated_exports if g else ported_exports).setdefault(name, set()).add(rel)
         for m in RE_REG_EXPORT_NONLITERAL.finditer(text):
             # `const` is the parameter type in the DECLARATIONS of
             # RegisterRuntimeExport itself (rt_port.h, resolve.h,
@@ -357,11 +447,18 @@ def scan():
             # ignore this block.
             if rel == "standalone/rt_selftest.cpp":
                 continue
+            resolved = name_consts.get(m.group(1))
+            if resolved:
+                g = gated or in_gated_block(m.start())
+                (gated_exports if g else ported_exports).setdefault(
+                    resolved, set()).add(rel)
+                continue
             nonliteral_regs.setdefault(rel, []).append(m.group(1))
         for m in RE_REG_ORDINAL.finditer(text):
             ported_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_REG_ADDR.finditer(text):
-            (gated_addrs if gated else ported_addrs).setdefault(int(m.group(1), 16), set()).add(rel)
+            g = gated or in_gated_block(m.start())
+            (gated_addrs if g else ported_addrs).setdefault(int(m.group(1), 16), set()).add(rel)
 
         for m in RE_DETOUR_ADDR.finditer(text):
             detoured.setdefault(int(m.group(2), 16), set()).add(rel)
@@ -487,6 +584,12 @@ def main():
                     if f in v)
             if n:
                 print("  %-40s %d  (opt-in; its Register function returns 0 unless armed)" % (f, n))
+        for f, gates in sorted(GATED_OFF_BLOCKS.items()):
+            n = sum(1 for v in list(d["gated_exports"].values()) + list(d["gated_addrs"].values())
+                    if f in v)
+            if n:
+                print("  %-40s %d  (opt-in; inside if(%s))"
+                      % (f, n, ") / if(".join(gates)))
         print("  A gated registration is not a port. Arm it, measure it, then move it.")
     nl = d.get("nonliteral_regs") or {}
     if nl:
@@ -498,6 +601,8 @@ def main():
         print("*** so every number above UNDERSTATES what is actually registered.")
         for f in sorted(nl):
             print("  %-44s %s" % (f, ", ".join(sorted(set(nl[f])))))
+        print("  A same-file `const char* const kX = \"?Mangled...\";` IS resolved now;")
+        print("  these are something else -- a name built at runtime, or from a header.")
         print("  Fix by spelling the mangled name as a literal at the call site.")
         print("  (Wave 4 lane D hit this: 6 ports registered through kName* constants")
         print("   reported as IO 30/41 when 36 were registered. Nothing warned.)")

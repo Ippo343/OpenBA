@@ -109,6 +109,29 @@ RuntimeRegistryStats GetRuntimeRegistryStats();
 // Written to stderr when BANISHED_RT_CENSUS is set.
 void DumpRuntimeRegistry();
 
+// ---- Cutover residue census (BANISHED_RT_STRICT=1) ------------------------
+// PLAN.md wave 9 removes `LoadLibrary("Runtime-x64.dll")` entirely. The gate on
+// that is not "how many functions are ported" but "does anything still ASK the
+// DLL for something at runtime". `tools/runtime_census.py` answers the first
+// question from source; only the process can answer the second, because the
+// source list is a superset -- it counts every resolve site in the tree,
+// including ones no reachable path ever executes.
+//
+// With BANISHED_RT_STRICT set, every ResolveExport / ResolveOrdinal /
+// ResolveAddr(Module::Runtime) that MISSES the port registry and falls through
+// to the shipped DLL is recorded, with the return address of whoever asked.
+// `DumpRuntimeResidue()` then prints one `[RtResidue]` line per distinct miss.
+// An empty residue list over the full harness matrix is the real cutover gate.
+//
+// LOG-ONLY BY DESIGN. It does not null the result or hand back a trap stub:
+// a large share of the misses are exported DATA (`?_singleton@...`, `??_7...`
+// vtables, `?_typeInfo@...`), and poisoning those corrupts the process long
+// before the call that would name the culprit. Strict mode observes; it does
+// not simulate the DLL being gone. Deleting the DLL is what does that.
+void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
+                          uint16_t ordinal, void* caller);
+void DumpRuntimeResidue();
+
 // ---- Unregistered-address census (BANISHED_UNREG_CENSUS=1) ----------------
 // ResolveAddr's NOT IMPLEMENTED warning fires ONCE per address for the whole
 // process, so an address hit at boot AND again during a save load is only ever

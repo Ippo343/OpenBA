@@ -1835,6 +1835,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // what the differential oracle saw (BANISHED_RT_DIFF=1). Same reason as
     // above for not using atexit.
     DumpRuntimeRegistry();
+    // Cutover residue (BANISHED_RT_STRICT=1): what still asked the DLL.
+    DumpRuntimeResidue();
     RtDiffSummary();
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
 
