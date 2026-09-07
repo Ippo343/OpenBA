@@ -283,3 +283,26 @@ real, but the action was declined and the wave closed without it, for two reason
 Lane B also withdrew the premise behind the suggestion once it saw the census: it had assumed ~25 of
 36 were flagged and that the registry was the blocker. At 6/36, 30 indices were eligible and the
 registry was never the blocker — the conjunction problem was the whole explanation.
+
+### Two rules this left behind, both from lane B's closing note
+
+**The cheapest reproducer for the achievement award branch.** `Settlement` and `Village` are single
+population StatGoals — no TimeGoal, no profession goals — satisfied outright at `have=802 >= 300`
+and `>= 600` by any stress town at default citizens. So the award branch of
+`AchievementManager::Update`, its event-handler call and the `IsAchievementAwarded` readback are all
+reachable in one short run:
+
+```
+BANISHED_STRESS=1 BANISHED_STRESS_FRAMES=1200 BANISHED_STRESS_CITIZENS=800 BANISHED_ACH_YEAR_BOOST=250 BANISHED_ACH_IGNORE_MODS=1 BANISHED_ACH_TRACE=400 BANISHED_RT_DIFF=1
+```
+
+Cheaper than the `Jack of all Trades` recipe in
+`project_jack_of_all_trades_closed.md`, which needs `BANISHED_BUILDERS=40`, a pasture autotype and a
+5-year clock deviation. Use Jack when the professions matter; use this when only the branch does.
+
+**A rule for `tools/ach_reset.sh`: run it when the evidence is a COUNT, never when it is a
+TRANSITION.** Its whole purpose is stopping an inherited award from being mistaken for a fresh pass,
+which is a real risk when the measurement is "N of 36 at the end" and no risk at all when the
+measurement is `6/36 -> 8/36` observed mid-run with `awarded=1` appearing at the first sample after
+the goals were met. An inherited award cannot fake a transition. Since the script destroys a record
+that `Ach5`, `Ach25` and `Ach27` each cost a long run to produce, the default is not to run it.
