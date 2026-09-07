@@ -24,5 +24,6 @@ void RtAudioPortInit() {
     n += RtAudioSceneRegister();
     n += RtAudioConfigurationRegister();
     printf("[RtPort] Audio: %d/22 exports registered "
-           "(7 held back, 1 phantom name fixed, 1 data export -- see WAVE8_LANE_C.md)\n", n);
+           "(3 held back, 1 phantom name fixed, 1 data export -- WAVE8_LANE_C.md for "
+           "Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5)\n", n);
 }

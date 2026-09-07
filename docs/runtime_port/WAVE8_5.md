@@ -11,25 +11,34 @@ held back on blockers that no longer existed, and the largest inherited item was
 
 ## Result
 
-**Census: 772 called / 507 ported (65.7%) → 827 / 507 (61.3%).** Both figures moved, and neither
-move was the port changing:
-the denominator grew because the census could not see `dx11/`'s door, and the numerator's basis
-changed because it was counting gated-off registrations as live.
+**Census: 772 called / 507 ported (65.7%) → 827 / 507 (61.3%) → 830 / 510 (61.4%).** The first
+move was not the port changing at all: the denominator grew because the census could not see
+`dx11/`'s door, and the numerator's basis changed because it was counting gated-off registrations
+as live. The second move is the close-out sitting's five real ports (§13).
 
-| | |
-|---|---|
-| Ports landed and verified | 3 |
-| Held-back functions verified without porting | 6 |
-| Tools built | 3 (`BANISHED_RT_STRICT`, `rt_orphan_probe`, lane S + prefix stop) |
-| Census defects fixed | 3 |
-| Stated blockers dissolved | 5 |
-| Comments/types corrected at source | 4 files |
-| Own claims corrected mid-wave | 5 |
+**The wave was written in two sittings and §1–§12 are the first one, left exactly as filed.** The
+close-out (§13–§16) works §12's four pickups and, in the course of it, corrects three conclusions
+§1–§12 reached — including this wave's own headline advice about the Audio lane. Read them in
+order; the corrections need something to correct.
 
-Whole-tree at close: **248–251 diff sites, ~28.4M calls, divergences only in the two known
-Wave 1 sin/cos sites.** `tools/export_name_audit.py` 0 phantoms of 651.
-`tools/dispatch_slot_map.py --check` 0 mismatches. `Save9.sav` loads and simulates 322,398 draw
-calls with the new save-path port live. Zero-byte crash log on every run.
+| | First sitting | Close-out | Total |
+|---|---|---|---|
+| Ports landed and verified | 3 | 5 | **8** |
+| Held-back functions verified without porting | 6 | — | 6 |
+| Tools built | 3 | 1 (the Audio device recorder) | 4 |
+| Census defects fixed | 3 | — | 3 |
+| Stated blockers dissolved | 5 | 6 + 4 Serialize write paths | **15** |
+| Comments/types corrected at source | 4 files | 3 | 7 |
+| Own claims corrected | 5 | 4 | **9** |
+
+Whole-tree at close: **253–269 diff sites, 25.6M–36.2M calls per run, divergences only in the two
+known Wave 1 sin/cos sites.** `tools/export_name_audit.py` 0 phantoms of 652.
+`tools/dispatch_slot_map.py --check` 0 mismatches, 0 shadowed. `Save9.sav` loads and simulates
+with the new save-path port live. Zero-byte crash log on every run.
+
+**WAVE CLOSED 2026-09-07.** §12's four pickups are all worked; what remains in Audio is
+`Scene::Update`, `Device::Update` and `Device::FreeChannelPlatform`, each with a per-function
+reason, and the next steps everywhere else are Wave 9 lane work with named prerequisites.
 
 ## 1. The census was wrong in BOTH directions
 
@@ -58,9 +67,11 @@ three defects:
    and the registration is GOOD practice, so the census now resolves same-file constants.
    UI 98 → 101.
 
-The orphan list ("Ports with no caller in our tree") now also says that all 8 have written
-verdicts, so a NINTH name appearing there reads as untriaged rather than as more of the same.
-## 2. CLOSED — the 8 ports with no caller in our tree
+The orphan list ("Ports with no caller in our tree") now also says that all of them have written
+verdicts, so a NEW name appearing there reads as untriaged rather than as more of the same. (The
+close-out added two — see §2's table — and the census text was updated with them rather than
+left to be absorbed into "more of the same", which is the whole point of the line.)
+## 2. CLOSED — the ports with no caller in our tree (8, and 10 after §14)
 
 `tools/runtime_census.py` has ended with this list since Wave 1, and
 `reference_uncalled_port_is_not_verified.md` exists because a wrong
@@ -76,6 +87,8 @@ verdicts, so a NINTH name appearing there reads as untriaged rather than as more
 | `?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z` (short[]) | Ditto. |
 | `?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z` | **NOW VERIFIED** — see the probe below. |
 | `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` | **NOW VERIFIED** — see the disassembly comparison below. |
+| `?PauseEffect@Scene@Audio@@QEAAXI@Z` | *(added by the close-out, §14.)* **Body exercised** — `Scene::Pause` calls it exactly as retail does (retail does not inline it), and `ProbeAudioScene` sweeps it directly. Only the export registration is idle. |
+| `?StopEffect@Scene@Audio@@QEAAXI@Z` | *(added by the close-out, §14.)* **Body exercised** from `Scene::StopEffect3D`, same as above. |
 
 The three `Serializer` overloads are the char/schar/short array members of an 18-member
 forwarder family. `RtIoSerializerRegister` verifies every one of the 18 **structurally at
@@ -452,6 +465,9 @@ because the measured hit rate on that question in this session was **three for t
 
 ## 12. Picking this up next session
 
+> **ALL FOUR OF THESE ARE DONE — see §13 onward.** Left as written because three of them turned
+> out differently than this list expected, and the list is the evidence for that.
+
 In the order that pays best, each unblocked by this wave rather than blocked on it:
 
 1. **`Audio::Scene::Pause` unpause path** — smallest complete unit, oracle already designed.
@@ -460,3 +476,239 @@ In the order that pays best, each unblocked by this wave rather than blocked on 
 3. **`ExternalFactory::SerializeReferenceTable`** via lane S's prefix stop — it mutates within
    ~2 emissions, so measure what the prefix actually covers before committing to it.
 4. **Re-check every remaining holdback's stated blocker first** (§10). Hit rate this wave: 3/3.
+
+## 13. THE CLOSE-OUT SITTING — §12's four pickups, worked
+
+Wave 8.5 landed at commit `77b50cc` with §12 listing four pickups "in the order that pays best".
+All four are now done, and three of them changed what the wave itself had concluded. This section
+is the second sitting; everything above it is the first, left as written so the corrections have
+something to correct.
+
+| §12 item | Outcome |
+|---|---|
+| 1. `Audio::Scene::Pause` unpause path | **PORTED — and so were four more, because item 2's premise was wrong.** |
+| 2. The Audio device-level fake | **NOT NEEDED for 3 of the 6, and 15 lines for the 4th.** See §14. |
+| 3. `SerializeReferenceTable` via the prefix stop | **MEASURED: the prefix covers 0.012%. Use the FULL compare — it is already safe.** See §15. |
+| 4. Re-check every remaining holdback's stated blocker | **6 dissolved, 17 stand, 2 moot.** See §16. |
+
+Close-out numbers, all on one build (`standalone-og`, 19:09:54):
+
+| | |
+|---|---|
+| Census | 827 called / 507 ported → **830 / 510 (61.4%)** |
+| Ports landed | 5 (`Pause`, `PauseEffect`, `StopEffect`, `StopEffect3D`, `StopAll`) |
+| Probe | **520 comparisons, 0 mismatches, 3,469 `Device::Stop` calls matched pairwise** |
+| Live diff, autostart (probe off) | 253 sites, 25,639,889 calls, 110 divergences — the two known Wave 1 sin/cos sites only |
+| Live diff, autostart (probe on) | 264 sites, 25,773,904 calls, 97 divergences — same two sites |
+| Live diff, `Save9` load | 269 sites, 36,241,696 calls, 45 divergences — same two sites |
+| `tools/export_name_audit.py` | 0 phantoms of 652 |
+| `tools/dispatch_slot_map.py --check` | 0 mismatches, 0 shadowed |
+| Crash log | zero bytes on every run |
+| Own claims corrected | 4 (see §14, and they are the interesting part) |
+
+Live `calls=` for the five new ports, and an honest note about where they come from:
+
+| Port | autostart, probe off | autostart, probe on | `Save9` load | divergences |
+|---|---|---|---|---|
+| `Scene::Pause` | 3 | 163 | 3 | 0 |
+| `Scene::PauseEffect` | — | 2,264 | — | 0 |
+| `Scene::StopEffect` | — | 236 | — | 0 |
+| `Scene::StopEffect3D` | — | 96 | — | 0 |
+| `Scene::StopAll` | 1 | 9 | 1 | 0 |
+
+**The probe-on column is mostly the probe's own calls**, and the dashes are the honest part: in a
+660-frame autostart with the probe off, `PauseEffect`, `StopEffect` and `StopEffect3D` are never
+entered at all — nothing in that window drives an ambient or fire emitter's handle count to zero,
+which is the only live path to `StopEffect3D` (`ambientenvironmentcomponent.cpp:170`,
+`firecomponent_ignite.cpp:373`). For those three the probe is not a supplement to a live oracle, it
+IS the oracle, which is exactly what §2 built it for and why the negative control in §14 is not
+optional.
+
+## 14. The Audio device fake was the wrong tool, and the probe's control proved it twice
+
+### The finding: the Device hangs off a SCENE field
+
+§9 concluded, from three of the six Audio holdbacks, that "every path ends in a stored completion
+callback fired through a function pointer", and therefore "the Audio lane needs a Device-level
+fake, not a better diff." **The root cause is right. The conclusion does not follow**, and reading
+the five retail bodies *per function* rather than as a family says why in one line:
+
+> the Device is reachable only through a non-null `Channel::platformChannel[b]` — and that is a
+> field of the **Scene**, not of the Device.
+
+| Function | The guard that puts the Device out of reach |
+|---|---|
+| `PauseEffect` `0x1800df4a0` | `TEST RDX,RDX / JZ` at `0x1800df4f8`, before `CALL 0x1800de200` |
+| `StopEffect` `0x1800df550` | `TEST RDX,RDX / JZ` at `0x1800df5ab`, before the same call |
+| `StopAll` `0x1800df150` | `TEST RCX,RCX / JZ` at `0x1800df1c8`, before the INLINED body |
+| `Pause` `0x1800df070` | reaches the Device only through `PauseEffect` |
+| `StopEffect3D` `0x1800df370` | reaches it only through `StopEffect` |
+
+So a **synthetic Scene** whose 256 channels have null platform channels removes the device by
+construction, and both implementations can be stepped side by side over the whole state space —
+no interposer, no recorder, no fake. `StopAll` even loads the Device singleton into RBX at
+`0x1800df192` *before* the null test; it is never dereferenced, so the singleton may legitimately
+be null there.
+
+That closed **three of the six holdbacks** (`Pause`, `StopEffect3D`, `StopAll` — all three in the
+`--unported` CALLED set) plus the two siblings they call. The other three are untouched by it and
+for a stated reason: `Device::Update` and `FreeChannelPlatform` are device internals, where the
+device is the *subject* rather than an unreachable callee, and `Scene::Update` consumes
+`System::Random` state, so removing the device still leaves it non-replayable.
+
+`Scene::Update`'s stated dependency also narrows the way §9 predicted: it does NOT need
+`SoundBuffer`/`SoundEffect` **ported** (Wave 8 said it did). It needs their **layout**. A faithful
+body may call them by address exactly as this family calls `Device::Stop`.
+
+**This is the fifth time in this wave that a group-level claim over these functions failed
+per-function checking** — after the `ExternalFactory` four, `KeyMap::Load`, `SerializeReferenceTable`
+as "the cheapest row", and §8's own "lane S unblocks four rows". The per-function checks keep being
+right and the summaries over them keep being wrong. At five for five it is no longer worth calling
+a pattern; it is the material.
+
+### The device fake, once it was actually needed, was fifteen lines
+
+Phase 1 of the probe (null channels) verified all five bodies' selection-and-reset logic. It also
+reported **`PauseEffect`: 64 comparisons, 0 mismatches** — and that was worthless, because with
+null platform channels `PauseEffect` *cannot do anything*. Its entire body is inside the branch
+the probe had removed.
+
+The probe caught that itself, because it carries a third scene: an untouched control `C`, compared
+against `A` after every case purely to answer **"did this case change anything at all?"** The line
+`WARNING Audio::Scene::PauseEffect: 0 of its cases changed the scene — agreement here is VACUOUS`
+is the whole reason phase 2 exists. This is
+`reference_uncalled_port_is_not_verified.md` one level down: not a port with no caller, but a
+caller that reaches no code.
+
+Phase 2 gives the channels **sentinel** platform-channel pointers and detours
+`?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` to a recorder, so both sides run the release
+loop and the **device call sequence** is compared alongside the state. That is the "device-level
+fake" §12 item 2 asked for, and it turned out to be one detour and a two-field struct rather than
+a Device model — because the only thing the Scene-level family ever asks of the Device is
+`Stop(channel)`. Anything arriving while the probe is not running is passed through to the real
+body, so installing it cannot swallow a genuine stop.
+
+`StopAll` is deliberately EXCLUDED from phase 2, and the exclusion is not a shortcut: retail's
+`StopAll` does not *call* `Device::Stop`, it **inlines** it (`0x1800df1eb`..`0x1800df289`), so the
+detour would catch our call and miss theirs and the two sides would be asymmetric by construction
+— the same shape as §8's longjmp-unwind trap, where the harness manufactured its own divergence.
+`StopAll` keeps null channels and phase 1's verdict.
+
+**520 comparisons (264 phase 1, 256 phase 2), 0 mismatches, 3,469 `Device::Stop` calls matched
+pairwise, and every one of the five functions has effective cases** (Pause 80, PauseEffect 30,
+StopEffect 60, StopEffect3D 38, StopAll 8).
+
+### The negative control found a defect in the probe, not in the port
+
+A probe that cannot fail proves nothing, so two defects were injected into the port and the probe
+re-run:
+
+1. `channelFlags[b] &= 0xfd` → `&= 0xfe` — **caught, 46 failures.**
+2. `StopAll` working on channel `i` instead of the tag-derived `idx` — **NOT CAUGHT.**
+
+The second is the point. The seeder built its "aliased" channels by *synthesising* a tag with this
+channel's own generation and another channel's index bits — which can never pass the
+`0xfffffe00` guard, so the aliasing cases never fired and the one branch that distinguishes `i`
+from `idx` was untested behind 264 green comparisons. Fixed by **copying** another channel's tag
+verbatim, and the mutation is now caught (374 differing fields on the first case). Both mutations
+were then reverted and the clean run reproduced.
+
+### Two shadow predicates and one comment were wrong about RETAIL
+
+The live-path oracle for these five is a `RT_DIFF_SHADOW`: our body runs for real, and the DLL's
+own read-only observer is asked whether the resulting state is what it should be. The first
+version of three of them reported divergences, and **every one was the predicate, not the port**
+(`reference_shadow_predicate_must_name_its_failing_term.md`, in its exact form):
+
+| Predicate as first written | Divergences | Why it was wrong about retail |
+|---|---|---|
+| `StopAll`: "no channel still has a tag" | 8 of 9 | A channel whose tag names a DIFFERENT channel keeps its own tag while the other one is reset. Rewritten to pre-compute the obligation set *before* the call using the DLL's own `IsEffectPlaying`, then check it afterwards. |
+| `StopEffect`: "the handle no longer validates" | 2 of 236 | False for a handle whose generation bits are all zero — it validates against a zeroed tag in retail too. Rewritten as the exact post-condition, "the record was zeroed". |
+| `StopEffect3D`: "on reject, `GetEmitterCount` equals the slot's size" | 56 of 96 | The DLL's `0xffffe000` mask **is** bits 13..31, i.e. the generation and nothing else — the same predicate retail spells as `(idTag>>13) != (id>>13)`. A source comment claiming the two "differ by one bit" was wrong, and the predicate was built on it. Rewritten as `GetEmitterCount == 0`, which makes the reject path a full replay of the guard against the DLL. |
+
+All three now read 0 divergences over 163 / 236 / 96 live calls.
+
+### `calls=0` did not mean what the whole tree reads it as
+
+`Pause` first shipped with the faithful early-out (`if (paused[type] == paused) return;`) ahead of
+its shadow. It then reported **`calls=0` on a fresh autostart AND on a `Save9` load** — while
+`site[189] = Audio::Scene::Pause` sat in the site list, which only happens if the body was
+ENTERED. Every one of the six live call sites asks the scene for a state it is already in.
+
+A shadow placed after an early return makes `calls=` mean *"did work"*, when
+`reference_uncalled_port_is_not_verified.md` and every reader of that column take it to mean
+*"was entered"* — a port that is called constantly and always early-returns reads exactly like a
+dead port. The guard paths now report too, and on the `Save9` load `Pause` reads `calls=3,
+divergences=0`, all three of them early-outs. `PauseEffect`, `StopEffect` and `StopEffect3D` got
+the same treatment, and in their case the guard replay is the STRONGEST check available: the DLL's
+`IsEffectPlaying` computes the identical predicate, so reporting it is asking retail whether our
+guard agreed with retail's, on real handles on a real scene.
+
+### One thing this deliberately did NOT do
+
+`Audio::Scene::Update` (`0x1800df6c0`) is still held back, and the synthetic scene does not reach
+it. Removing the device leaves the RNG: a replay that draws twice from `System::Random` diverges
+by construction. Snapshot/restore of the Random state is a real and bounded next step, and it is
+now the ONLY thing between this technique and the last called Audio function.
+
+## 15. §12 item 3, measured: the prefix stop is the wrong tool here too
+
+Full write-up in [WAVE8_5_PREFIX_MEASUREMENT.md](WAVE8_5_PREFIX_MEASUREMENT.md). Static analysis of
+`?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z` (`0x1800bcb60`..`0x1800bcf38`):
+
+* **Q1. Emissions before the first mutation: 2** — before `MOV [RBX+0x14],EAX`, the one §8 names.
+  Before the mutation §8 did NOT name — a full recursive teardown of the `_references` tree at
+  `0x1800bcb80`, eight instructions in — **zero**. No emission index can get in front of it.
+* **Q2. Total write-path emissions are `3 + 3N`**, N = `_resources._count`. The one empirical N in
+  the tree is `[PreloadRefs] preloaded 5687/5688` on the `Save9` load, so ≈ 17,067 emissions.
+  **Prefix coverage ≈ 0.012%**, and it is the wrong 0.012%: it verifies the factory choice and the
+  entry count, and touches none of the walk, the id assignment, the id/path pairing, the string
+  encoding or the terminator — i.e. nothing that can desync a save. `save_trace.h`'s own warning
+  applies: a partial oracle that reads like a full one is worse than none.
+* **Q3. Neither prefix nor snapshot is needed** — the write path's mutations are **idempotent and
+  value-identical**. The teardown's second call reads a null root and returns; the per-node
+  `referenceId = id` writes the same 1..N over a tree neither call modifies; the `GetPath`
+  refcounts are balanced within each iteration. So the FULL compare (`stopAfter = 0`) is safe.
+
+**This is a third distinct shape in one family** — `Audio::Scene::Serialize` mutates nothing,
+`InternalBasePtr::Serialize` mutates irreversibly and needed the stop, this one mutates
+reversibly-by-repetition — which is §8's per-function point confirmed a fourth time.
+
+Two traps are recorded for whoever ports it, both silent: the second argument is a `Stream&`, not
+a `Serializer&` (so lane S's `Compare` needs a one-line wrapper), and the teardown emits nothing,
+so a port that forgets it passes a clean emission compare and needs an explicit call-site
+assertion instead.
+
+## 16. §12 item 4, done: 6 blockers dissolved, 17 stand, 2 moot
+
+Full table in [WAVE8_5_HOLDBACK_RECHECK.md](WAVE8_5_HOLDBACK_RECHECK.md). Every dissolved item is a
+**transport failure** in §10's sense — the answering fact already existed in the tree, and none of
+the six needed new Ghidra work; they were found by grepping for the name the blocker itself
+already stated.
+
+The two that pay best:
+
+1. **`Input::KeyMap::Load` was blocked on three things and is blocked on one.** (a) The unexported
+   registry-string parser `FUN_18007f034` "in retail is a bare tail-jump to CRT `strtol(s,0,10)`"
+   — written in `runtime/src/io/persistence.cpp:127` AND `WAVE4_LANE_C.md:167`, three waves before
+   the holdback was recorded. (b) `System::String::Format` has been ported since Wave 2
+   (`runtime/src/system/string.cpp:609`). (c) The `IO::Persistence` `Set<Pair<String,String>>`
+   lookup genuinely remains.
+2. **`UI::NumberEditElement::SetValue`'s "calling-convention risk" is gone.** The risk was calling
+   the DLL's *exported variadic* `String::Format` across two toolchains' varargs ABI. Our tree has
+   had a native, non-forwarding `RtSystem_String_Format` since Wave 2 — an ordinary same-toolchain
+   call with none of that exposure.
+
+And a structural one worth more than either: **lane S dissolves "no oracle possible" for four more
+`Serialize`/`Persist` functions on their WRITE direction** — `AchievementManager::Persist`,
+`Achievement::Serialize`, `Graphics::MeshInstance::Serialize`, and (flagged as needing the
+per-function check, NOT assumed) `Goal::Serialize` / `GoalInstance::Persist`. Wave 5 held four of
+these back as a GROUP for "all four construct an `IO::Serializer`, no oracle possible"; §8 has
+already shown once what a group claim over Serialize functions is worth, so the recheck explicitly
+refuses to close the two it did not read.
+
+Three holdbacks are recorded as **framing stale, disposition unchanged** — `Save::SaveLoad::Draw`,
+`Video::Context` ctor/dtor and `Graphics::FrameCopyImageBuffer` all cite "that's Wave 6/7/8's
+class" as a reason, and those waves are closed, which reads as if the dependency resolved. It did
+not: the specific classes named are still individually unported. The load-bearing reasons (a live
+GPU context, zero callers) are independent and stand.

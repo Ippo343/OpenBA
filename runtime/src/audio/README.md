@@ -26,4 +26,14 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+`audio.cpp` -- `Audio::Scene` and `Audio::Configuration`, 17 of the 22 Audio exports our tree
+calls. Wave 8 lane C landed 13; the Wave 8.5 close-out added the channel-teardown family
+(`Pause`, `PauseEffect`, `StopEffect`, `StopEffect3D`, `StopAll`). Its oracle is
+`ProbeAudioScene` in `standalone/rt_orphan_probe.cpp`, which steps two synthetic Scenes side by
+side -- see the block comment above those bodies for why that works without a Device fake.
+
+`rt_audio_port.cpp` -- the namespace aggregator (`RtAudioPortInit`).
+
+Still on the DLL, each with a stated reason in `audio.cpp`'s header: `Scene::Update`,
+`Device::Update`, `Device::FreeChannelPlatform`. The file names have NOT been split to match the
+original tree above yet -- that is a mechanical follow-up, not a port.

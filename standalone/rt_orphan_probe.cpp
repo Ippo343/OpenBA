@@ -38,8 +38,10 @@
 // ============================================================================
 
 #include "resolve.h"
+#include "runtime_detour.h"
 #include "../engine/types/common.h"
 #include "../runtime/types/math/Math.h"
+#include "../runtime/types/audio/Audio.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -148,6 +150,563 @@ void ProbeVector2NormalizeWithMag() {
             Report(kSubject, c.name, false, detail);
         } else {
             Report(kSubject, c.name, true, nullptr);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Audio::Scene — the channel-teardown family, on a SYNTHETIC scene
+// ---------------------------------------------------------------------------
+//
+// WAVE8_5.md §9 held six Audio functions back behind one root cause — every
+// path ends in a stored completion callback fired through a function pointer,
+// so "replaying either function fires every live effect's completion handler
+// twice", and concluded the lane needed a **Device-level fake**.
+//
+// The root cause is right and the conclusion does not follow. Reading the five
+// retail bodies per function shows the device is reachable ONLY through a
+// non-null `Channel::platformChannel[b]`:
+//
+//   PauseEffect  0x1800df4f8   TEST RDX,RDX / JZ  before CALL 0x1800de200
+//   StopEffect   0x1800df5ab   TEST RDX,RDX / JZ  before CALL 0x1800de200
+//   StopAll      0x1800df1c8   TEST RCX,RCX / JZ  before the inlined body
+//   Pause        reaches the device only via PauseEffect
+//   StopEffect3D reaches it only via StopEffect
+//
+// and `platformChannel[]` is a field of the **Scene**, not of the Device. So a
+// synthetic Scene whose 256 channels have null platform channels puts the
+// device out of reach BY CONSTRUCTION — no interposer, no recorder, no fake —
+// and both implementations can then be stepped side by side over the whole
+// state space. `StopAll` even loads the Device singleton into RBX at
+// 0x1800df192 before the null test; it is never dereferenced, so the singleton
+// may legitimately be null here.
+//
+// TWO INDEPENDENT SCENES, not one scene twice. That is what makes this a
+// replay rather than the `RegisterInput` trap WAVE8_5.md §9 warns about:
+// `Pause`'s first line is `if (paused[type] == paused) return;`, so a second
+// call on ONE scene would early-return and report green having compared
+// nothing. Each side gets its own byte-identical copy, seeded from the same
+// deterministic PRNG.
+//
+// EXCLUDED FROM THE COMPARISON, and why: `Channel::_pad0c` and
+// `Channel::_pad6d[3]`. Retail's `StopEffect` (0x1800df5e6) and `StopAll`
+// (0x1800df2af) build the reset record by writing a DWORD to a stack slot and
+// reading a QWORD back, so those 7 bytes per channel receive whatever the
+// CALLER left on the stack. Comparing them would fail 100% of calls and read
+// as a catastrophic port defect — the mirror image of the Wave 6 oracle that
+// compared bytes neither side wrote
+// (reference_oracle_must_not_compare_unwritten_bytes.md). Both are documented
+// as never read, in runtime/types/audio/Audio.h.
+//
+// `EffectSlot::positions._data` is excluded for a different and weaker reason:
+// the two scenes allocate independently, so the POINTERS cannot match. Its
+// null-ness, `_size` and `_capacity` are all compared.
+// ---------------------------------------------------------------------------
+
+typedef void (*ScenePauseFn)      (void*, int32_t, bool);
+typedef void (*SceneHandleFn)     (void*, uint32_t);
+typedef void (*SceneStopAllFn)    (void*);
+typedef void* (*RtMemAllocFn)     (uint64_t, int);
+
+// Phase-2 sentinel platform-channel pointers. Chosen far from any real
+// mapping and never dereferenced: Device::Stop is detoured to a recorder
+// before any scene carrying these is stepped, and the detour is removed
+// immediately afterwards.
+constexpr uint64_t kFakeChannelBase = 0x0000600000000000ull;
+
+struct AudioStopCall { void* device; void* channel; };
+AudioStopCall g_audioStopLog[2][2048];
+int      g_audioStopCount[2] = {0, 0};
+int      g_audioStopSide = -1;          // -1 = not inside a probe case
+RtDetour g_audioStopDetour;
+typedef void (*DeviceStopFn)(void*, void*);
+DeviceStopFn g_audioStopTramp = nullptr;
+
+// The whole "device fake" WAVE8_5.md §12 item 2 asked for, in fifteen lines.
+// It is not a COM interposer and does not model a device: it records the one
+// call the Scene-level family makes and returns. Anything arriving while the
+// probe is not running is passed through to the real body, so installing it
+// cannot silently swallow a genuine stop.
+void DetouredAudioDeviceStop(void* device, void* channel) {
+    if (g_audioStopSide < 0) {
+        if (g_audioStopTramp) g_audioStopTramp(device, channel);
+        return;
+    }
+    int side = g_audioStopSide;
+    if (g_audioStopCount[side] < 2048)
+        g_audioStopLog[side][g_audioStopCount[side]] = { device, channel };
+    ++g_audioStopCount[side];
+}
+
+struct SynthScene {
+    RtAudio::Scene      scene;
+    RtAudio::Channel    channels[256];
+    RtAudio::EffectSlot effects[4096];
+};
+
+// xorshift32 — deterministic, and identical for both sides because each side
+// is seeded with the same value rather than sharing a stream.
+struct Rng {
+    uint32_t s;
+    explicit Rng(uint32_t seed) : s(seed ? seed : 0x9e3779b9u) {}
+    uint32_t operator()() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s; }
+};
+
+// Seed one scene. Called once per side with the SAME seed, so the two scenes
+// start byte-identical (modulo the two `positions` allocations, which are
+// separate buffers with identical contents).
+// `fakeChannels` switches the probe from phase 1 to phase 2 (see
+// ProbeAudioScene): it fills a deterministic subset of platformChannel[]
+// with sentinel pointers that are NEVER dereferenced, because Device::Stop
+// is detoured to a recorder for the duration.
+void SeedSynthScene(SynthScene* ss, uint32_t seed, RtMemAllocFn memAlloc,
+                    bool fakeChannels = false) {
+    Rng rng(seed);
+    memset(ss, 0, sizeof(*ss));
+
+    ss->scene.time           = (int64_t)rng() << 8;
+    ss->scene.playGeneration = (int32_t)(rng() & 0x7fff) + 1;
+    ss->scene.channels._data     = ss->channels;
+    ss->scene.channels._size     = 256;
+    ss->scene.channels._capacity = 256;
+    ss->scene.effects._data      = ss->effects;
+    ss->scene.effects._size      = 4096;
+    ss->scene.effects._capacity  = 4096;
+    for (int i = 0; i < 5; ++i) ss->scene.paused[i] = (uint8_t)(rng() & 1);
+
+    uint8_t aliasWanted[256] = {0};
+    for (int i = 0; i < 256; ++i) {
+        RtAudio::Channel& ch = ss->channels[i];
+        uint32_t r = rng();
+        uint32_t gen = (rng() & 0x7fffff);
+        switch (r & 7) {
+            case 0:
+            case 1:
+                ch.handleTag = 0;                       // dead slot
+                break;
+            case 2:
+                // ALIASED: this channel stores a handle belonging to a
+                // DIFFERENT channel. It is the one case that separates a port
+                // which works on channel `i` from one that works on channel
+                // `(tag>>1)&0xff` -- which is what StopAll and Pause actually
+                // do. Filled in by the second pass below, because the tag has
+                // to be COPIED from the other channel: a synthesised one with
+                // this channel's own generation would fail the 0xfffffe00
+                // guard and the case would never fire. (It did not, for one
+                // whole run -- the negative control caught it: a StopAll
+                // mutated to work on `i` instead of `idx` passed 264 cases.)
+                ch.handleTag = 0;
+                aliasWanted[i] = 1;
+                break;
+            case 3:
+                // Generation that will NOT validate against whatever channel
+                // the index bits land on -- exercises the 0xfffffe00 guard.
+                ch.handleTag = ((gen ^ 0x5a5a5au) << 9) | (uint32_t)((i & 0xff) << 1);
+                break;
+            default:
+                ch.handleTag = (gen << 9) | (uint32_t)((i & 0xff) << 1);
+                break;
+        }
+        // soundType deliberately ranges past the 5 real types: the loops filter
+        // on it with a plain !=, and a port that masked or clamped it would
+        // pass a 0..4-only test.
+        ch.soundType = rng() % 7;
+        ch.startTime = (int64_t)rng();
+        ch.volume    = (float)(rng() & 0xffff) / 65535.0f;
+        ch.pitch     = (float)(rng() & 0xffff) / 65535.0f;
+        ch.started   = (uint8_t)(rng() & 1);
+        for (int b = 0; b < 8; ++b) {
+            uint32_t pick = rng();
+            ch.platformChannel[b] =
+                (fakeChannels && (pick & 3) != 0)
+                    ? (void*)(uintptr_t)(kFakeChannelBase + (uint64_t)i * 0x400 + (uint64_t)b * 0x50)
+                    : nullptr;                      // phase 1: THE INVARIANT.
+            ch.channelFlags[b]    = (uint8_t)(rng() & 0xff);
+        }
+        ch.soundEffectRef = ((uint64_t)rng() << 32) | rng();
+    }
+
+    // Second pass: give every channel marked ALIASED the verbatim handle of
+    // another channel that has one, so the handle validates against the OTHER
+    // channel and the two candidate implementations diverge.
+    for (int i = 0; i < 256; ++i) {
+        if (!aliasWanted[i]) continue;
+        for (int k = 1; k < 256; ++k) {
+            int j = (i + 37 * k) & 0xff;
+            if (j != i && ss->channels[j].handleTag != 0 && !aliasWanted[j]) {
+                ss->channels[i].handleTag = ss->channels[j].handleTag;
+                break;
+            }
+        }
+    }
+
+    // Only the first 64 EffectSlots are given content; StopEffect3D indexes one
+    // slot per call and seeding 4096 would cost 4096 allocations for nothing.
+    for (int i = 0; i < 64; ++i) {
+        RtAudio::EffectSlot& es = ss->effects[i];
+        uint32_t r = rng();
+        uint32_t gen = rng() & 0x7ffff;
+        es.idTag = (gen << 13) | (uint32_t)((i & 0xfff) << 1) | 1u;
+        if ((r & 3) == 0) es.idTag = 0;
+        es.soundType      = rng() % 7;
+        es.soundEffectRef = ((uint64_t)rng() << 32) | rng();
+        es.startTime      = (int64_t)rng();
+        es.baseVolume     = (float)(rng() & 0xffff) / 65535.0f;
+        es.posX = (float)(int32_t)rng() / 4096.0f;
+        es.posY = (float)(int32_t)rng() / 4096.0f;
+        es.posZ = (float)(int32_t)rng() / 4096.0f;
+        // Half the slots point at a live channel, so the StopEffect3D ->
+        // StopEffect edge is taken; the other half take the skip.
+        es.channelHandle = (r & 4) ? ss->channels[(i * 3) & 0xff].handleTag : 0;
+
+        int n = (int)(r % 4);      // 0..3 emitter instances
+        if (n > 0 && memAlloc) {
+            es.positions._data =
+                (RtAudio::EmitterInstance*)memAlloc(sizeof(RtAudio::EmitterInstance) * (uint64_t)n, 4);
+            es.positions._size = n;
+            es.positions._capacity = n;
+            for (int k = 0; k < n; ++k) {
+                es.positions._data[k].x = (float)(int32_t)rng() / 4096.0f;
+                es.positions._data[k].y = (float)(int32_t)rng() / 4096.0f;
+                es.positions._data[k].z = (float)(int32_t)rng() / 4096.0f;
+                es.positions._data[k].volume = (float)(rng() & 0xffff) / 65535.0f;
+            }
+        }
+    }
+}
+
+// Field-wise comparison. Returns the number of differing fields and writes the
+// first difference into `detail`.
+int CompareSynthScenes(const SynthScene* a, const SynthScene* b, char* detail, size_t detailSize) {
+    int diffs = 0;
+    detail[0] = '\0';
+    auto note = [&](const char* what, int index, unsigned long long x, unsigned long long y) {
+        ++diffs;
+        if (detail[0] == '\0')
+            snprintf(detail, detailSize, "%s[%d] ours=0x%llx theirs=0x%llx", what, index, x, y);
+    };
+
+    for (int i = 0; i < 5; ++i)
+        if (a->scene.paused[i] != b->scene.paused[i])
+            note("paused", i, a->scene.paused[i], b->scene.paused[i]);
+
+    for (int i = 0; i < 256; ++i) {
+        const RtAudio::Channel& x = a->channels[i];
+        const RtAudio::Channel& y = b->channels[i];
+        if (x.soundEffectRef != y.soundEffectRef) note("ch.soundEffectRef", i, x.soundEffectRef, y.soundEffectRef);
+        if (x.soundType != y.soundType)           note("ch.soundType", i, x.soundType, y.soundType);
+        if (x.startTime != y.startTime)           note("ch.startTime", i, (unsigned long long)x.startTime, (unsigned long long)y.startTime);
+        if (memcmp(&x.volume, &y.volume, 4) != 0) note("ch.volume", i, 0, 0);
+        if (memcmp(&x.pitch, &y.pitch, 4) != 0)   note("ch.pitch", i, 0, 0);
+        if (x.handleTag != y.handleTag)           note("ch.handleTag", i, x.handleTag, y.handleTag);
+        if (x.started != y.started)               note("ch.started", i, x.started, y.started);
+        for (int b2 = 0; b2 < 8; ++b2) {
+            if (x.platformChannel[b2] != y.platformChannel[b2])
+                note("ch.platformChannel", i * 8 + b2,
+                     (unsigned long long)(uintptr_t)x.platformChannel[b2],
+                     (unsigned long long)(uintptr_t)y.platformChannel[b2]);
+            if (x.channelFlags[b2] != y.channelFlags[b2])
+                note("ch.channelFlags", i * 8 + b2, x.channelFlags[b2], y.channelFlags[b2]);
+        }
+        // _pad0c and _pad6d[3] are NOT compared -- retail writes caller stack
+        // garbage there. See the note at the top of this section.
+    }
+
+    for (int i = 0; i < 64; ++i) {
+        const RtAudio::EffectSlot& x = a->effects[i];
+        const RtAudio::EffectSlot& y = b->effects[i];
+        if (memcmp(&x.posX, &y.posX, 12) != 0) note("es.pos", i, 0, 0);
+        if (x.soundType != y.soundType)         note("es.soundType", i, x.soundType, y.soundType);
+        if (x.soundEffectRef != y.soundEffectRef) note("es.soundEffectRef", i, x.soundEffectRef, y.soundEffectRef);
+        if (x.startTime != y.startTime)         note("es.startTime", i, (unsigned long long)x.startTime, (unsigned long long)y.startTime);
+        if (x.channelHandle != y.channelHandle) note("es.channelHandle", i, x.channelHandle, y.channelHandle);
+        if (x.idTag != y.idTag)                 note("es.idTag", i, x.idTag, y.idTag);
+        if (memcmp(&x.baseVolume, &y.baseVolume, 4) != 0) note("es.baseVolume", i, 0, 0);
+        if (x.positions._size != y.positions._size)
+            note("es.positions._size", i, (unsigned)x.positions._size, (unsigned)y.positions._size);
+        if (x.positions._capacity != y.positions._capacity)
+            note("es.positions._capacity", i, (unsigned)x.positions._capacity, (unsigned)y.positions._capacity);
+        // The buffers themselves are separate allocations, so only null-ness is
+        // comparable; the CONTENTS are compared when both are live.
+        if ((x.positions._data == nullptr) != (y.positions._data == nullptr))
+            note("es.positions._data null-ness", i,
+                 (unsigned long long)(uintptr_t)x.positions._data,
+                 (unsigned long long)(uintptr_t)y.positions._data);
+        else if (x.positions._data && y.positions._data && x.positions._size == y.positions._size &&
+                 memcmp(x.positions._data, y.positions._data,
+                        sizeof(RtAudio::EmitterInstance) * (size_t)x.positions._size) != 0)
+            note("es.positions contents", i, 0, 0);
+    }
+    return diffs;
+}
+
+// The device must remain unreachable for the whole probe. If any platform
+// channel is ever non-null the probe is UNSOUND, not merely failing, so it
+// says so in those words rather than reporting a mismatch.
+bool PlatformChannelsAllNull(const SynthScene* ss) {
+    for (int i = 0; i < 256; ++i)
+        for (int b = 0; b < 8; ++b)
+            if (ss->channels[i].platformChannel[b]) return false;
+    return true;
+}
+
+// Phase 2's weaker invariant: a platform channel may be non-null, but only if
+// it is one of OUR sentinels. A pointer from anywhere else would mean the
+// scene had acquired a real channel and the recorder is no longer sufficient.
+bool PlatformChannelsAllSentinel(const SynthScene* ss) {
+    for (int i = 0; i < 256; ++i)
+        for (int b = 0; b < 8; ++b) {
+            uint64_t v = (uint64_t)(uintptr_t)ss->channels[i].platformChannel[b];
+            if (v != 0 && (v < kFakeChannelBase || v >= kFakeChannelBase + 0x100000ull))
+                return false;
+        }
+    return true;
+}
+
+void ProbeAudioScene() {
+    struct Fn { const char* name; const char* subject; };
+    static const Fn kFns[] = {
+        { "?Pause@Scene@Audio@@QEAAXH_N@Z",        "Audio::Scene::Pause"        },
+        { "?PauseEffect@Scene@Audio@@QEAAXI@Z",    "Audio::Scene::PauseEffect"  },
+        { "?StopEffect@Scene@Audio@@QEAAXI@Z",     "Audio::Scene::StopEffect"   },
+        { "?StopEffect3D@Scene@Audio@@QEAAXI@Z",   "Audio::Scene::StopEffect3D" },
+        { "?StopAll@Scene@Audio@@QEAAXXZ",         "Audio::Scene::StopAll"      },
+    };
+    void* ours[5];
+    void* theirs[5];
+    for (int f = 0; f < 5; ++f) {
+        ours[f]   = ResolveExport(kFns[f].name);
+        theirs[f] = ResolveExportRaw(kFns[f].name);
+        if (!ours[f] || !theirs[f] || ours[f] == theirs[f]) {
+            fprintf(stderr, "[RtOrphan] FAIL %s: ours=%p theirs=%p%s\n", kFns[f].subject,
+                    ours[f], theirs[f],
+                    (ours[f] && ours[f] == theirs[f]) ? " (port NOT registered)" : "");
+            ++g_fail;
+            return;
+        }
+    }
+    auto memAlloc = reinterpret_cast<RtMemAllocFn>(
+        ResolveExportRaw("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
+
+    SynthScene* A = (SynthScene*)malloc(sizeof(SynthScene));
+    SynthScene* B = (SynthScene*)malloc(sizeof(SynthScene));
+    // C is the UNTOUCHED control. Without it a case in which BOTH sides did
+    // nothing -- every Pause hitting its early-return, every handle failing the
+    // guard -- reports "identical" and reads exactly like a verified one. That
+    // is the vacuous pass this whole file exists to refuse
+    // (reference_uncalled_port_is_not_verified.md) one level down: not a port
+    // with no caller, but a caller that reaches no code. It EARNED ITS KEEP on
+    // the first run: phase 1 gave PauseEffect 64 green cases of which 0 changed
+    // anything, because with null platform channels PauseEffect cannot do
+    // anything. Phase 2 exists because of that line.
+    SynthScene* C = (SynthScene*)malloc(sizeof(SynthScene));
+    if (!A || !B || !C) {
+        fprintf(stderr, "[RtOrphan] SKIP Audio::Scene: out of memory\n");
+        free(A); free(B); free(C);
+        return;
+    }
+
+    int comparisons = 0, mismatches = 0, unsound = 0, effective = 0;
+    int effectivePerFn[5] = {0, 0, 0, 0, 0};
+    int stopCalls = 0;
+    bool fakeChannels = false;      // phase selector, read by runCase
+
+    // A case is (seed, which function, argument). Both sides are re-seeded from
+    // `seed` before every case, so cases never contaminate each other.
+    auto runCase = [&](uint32_t seed, int f, uint32_t arg, int32_t argB, const char* label) {
+        SeedSynthScene(A, seed, memAlloc, fakeChannels);
+        SeedSynthScene(B, seed, memAlloc, fakeChannels);
+        SeedSynthScene(C, seed, memAlloc, fakeChannels);
+        char pre[160];
+        if (CompareSynthScenes(A, B, pre, sizeof(pre)) != 0) {
+            fprintf(stderr, "[RtOrphan] UNSOUND Audio::Scene seeding: %s\n", pre);
+            ++unsound;
+            return;
+        }
+        g_audioStopCount[0] = g_audioStopCount[1] = 0;
+        g_audioStopSide = fakeChannels ? 0 : -1;
+        switch (f) {
+            case 0:
+                reinterpret_cast<ScenePauseFn>(ours[0])(&A->scene, argB, arg != 0);
+                if (fakeChannels) g_audioStopSide = 1;
+                reinterpret_cast<ScenePauseFn>(theirs[0])(&B->scene, argB, arg != 0);
+                break;
+            case 1: case 2: case 3:
+                reinterpret_cast<SceneHandleFn>(ours[f])(&A->scene, arg);
+                if (fakeChannels) g_audioStopSide = 1;
+                reinterpret_cast<SceneHandleFn>(theirs[f])(&B->scene, arg);
+                break;
+            case 4:
+                reinterpret_cast<SceneStopAllFn>(ours[4])(&A->scene);
+                if (fakeChannels) g_audioStopSide = 1;
+                reinterpret_cast<SceneStopAllFn>(theirs[4])(&B->scene);
+                break;
+        }
+        g_audioStopSide = -1;
+        ++comparisons;
+
+        bool invariantOk = fakeChannels ? (PlatformChannelsAllSentinel(A) && PlatformChannelsAllSentinel(B))
+                                        : (PlatformChannelsAllNull(A) && PlatformChannelsAllNull(B));
+        if (!invariantOk) {
+            fprintf(stderr, "[RtOrphan] UNSOUND %s [%s]: a platform channel outside the "
+                            "expected set appeared, so the Device was reachable after all\n",
+                    kFns[f].subject, label);
+            ++unsound;
+            return;
+        }
+
+        // Phase 2 also compares the DEVICE CALL SEQUENCE. This is the half of
+        // these bodies that state comparison cannot see: StopEffect does not
+        // null the pointers it releases (the record is overwritten anyway), so
+        // a port that released the WRONG channel, or none, would leave an
+        // identical scene behind.
+        if (fakeChannels) {
+            if (g_audioStopCount[0] != g_audioStopCount[1]) {
+                ++mismatches;
+                fprintf(stderr, "[RtOrphan] FAIL %s [%s]: Device::Stop called %d times by "
+                                "ours, %d by theirs\n", kFns[f].subject, label,
+                        g_audioStopCount[0], g_audioStopCount[1]);
+                return;
+            }
+            int n = g_audioStopCount[0];
+            if (n > 2048) n = 2048;
+            for (int k = 0; k < n; ++k) {
+                if (g_audioStopLog[0][k].channel != g_audioStopLog[1][k].channel ||
+                    g_audioStopLog[0][k].device  != g_audioStopLog[1][k].device) {
+                    ++mismatches;
+                    fprintf(stderr, "[RtOrphan] FAIL %s [%s]: Device::Stop #%d ours=(%p,%p) "
+                                    "theirs=(%p,%p)\n", kFns[f].subject, label, k,
+                            g_audioStopLog[0][k].device, g_audioStopLog[0][k].channel,
+                            g_audioStopLog[1][k].device, g_audioStopLog[1][k].channel);
+                    return;
+                }
+            }
+            stopCalls += n;
+        }
+
+        char detail[160];
+        int d = CompareSynthScenes(A, B, detail, sizeof(detail));
+        if (d != 0) {
+            ++mismatches;
+            fprintf(stderr, "[RtOrphan] FAIL %s [%s]: %d differing fields, first: %s\n",
+                    kFns[f].subject, label, d, detail);
+            return;
+        }
+        // Agreement is only worth something if there was something to agree
+        // ABOUT. Count the cases in which the scene actually moved.
+        char ctl[160];
+        if (CompareSynthScenes(A, C, ctl, sizeof(ctl)) != 0 ||
+            (fakeChannels && g_audioStopCount[0] > 0)) {
+            ++effective;
+            ++effectivePerFn[f];
+        }
+    };
+
+    // The case sweep, run once per phase. `fns` selects which of the five are
+    // eligible: phase 2 excludes StopAll, and the exclusion is not a shortcut.
+    // Retail's StopAll does not CALL Device::Stop, it INLINES it (0x1800df1eb
+    // .. 0x1800df289), so the detour would catch our call and miss theirs and
+    // the two sides would be asymmetric by construction -- the same shape as
+    // the longjmp-unwind trap in WAVE8_5.md §8, where the harness manufactured
+    // its own divergence. StopAll keeps null channels and phase 1's verdict.
+    auto sweep = [&](bool doStopAll) {
+        for (uint32_t seed = 1; seed <= 8; ++seed) {
+            for (int32_t type = 0; type <= 4; ++type) {
+                runCase(seed, 0, 1, type, "pause=true");
+                runCase(seed, 0, 0, type, "pause=false");
+            }
+
+            SeedSynthScene(A, seed, memAlloc, fakeChannels);   // read the seeded tags back
+            uint32_t handles[8];
+            handles[0] = 0;                                   // the zero handle
+            handles[1] = 0xffffffffu;                         // never validates
+            handles[2] = A->channels[3].handleTag;
+            handles[3] = A->channels[17].handleTag;
+            handles[4] = A->channels[200].handleTag;
+            handles[5] = A->channels[17].handleTag ^ 0x200u;  // one generation bit off
+            handles[6] = A->channels[17].handleTag ^ 0x2u;    // one INDEX bit off (not masked)
+            handles[7] = A->channels[17].handleTag | 1u;      // bit 0 set (never compared)
+            for (int h = 0; h < 8; ++h) {
+                char lbl[48];
+                snprintf(lbl, sizeof(lbl), "handle#%d=0x%08x", h, handles[h]);
+                runCase(seed, 1, handles[h], 0, lbl);
+                runCase(seed, 2, handles[h], 0, lbl);
+            }
+
+            uint32_t ids[6];
+            ids[0] = 0;
+            ids[1] = A->effects[0].idTag;
+            ids[2] = A->effects[5].idTag;
+            ids[3] = A->effects[13].idTag;
+            ids[4] = A->effects[13].idTag ^ 0x2000u;   // one generation bit off
+            ids[5] = A->effects[13].idTag ^ 0x2u;      // one index bit off -- retail's
+                                                       // guard does NOT cover it, so
+                                                       // this must still act
+            for (int k = 0; k < 6; ++k) {
+                char lbl[48];
+                snprintf(lbl, sizeof(lbl), "id#%d=0x%08x", k, ids[k]);
+                runCase(seed, 3, ids[k], 0, lbl);
+            }
+
+            if (doStopAll) runCase(seed, 4, 0, 0, "whole table");
+        }
+    };
+
+    // ---- Phase 1: null platform channels, device unreachable by construction.
+    fakeChannels = false;
+    sweep(/*doStopAll=*/true);
+    int phase1 = comparisons;
+
+    // ---- Phase 2: sentinel platform channels + Device::Stop detoured to a
+    //      recorder. This is the "device-level fake" WAVE8_5.md §12 item 2
+    //      asked for, and it turned out to be one detour and a two-element
+    //      struct rather than a Device model -- because the only thing the
+    //      Scene-level family asks of the Device is Stop(channel).
+    if (InstallRuntimeDetourExport("probe:Audio::Device::Stop",
+                                   "?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z",
+                                   reinterpret_cast<void*>(&DetouredAudioDeviceStop),
+                                   &g_audioStopDetour)) {
+        g_audioStopTramp = reinterpret_cast<DeviceStopFn>(g_audioStopDetour.trampoline);
+        fakeChannels = true;
+        sweep(/*doStopAll=*/false);
+        fakeChannels = false;
+        g_audioStopSide = -1;
+        RemoveDetour(&g_audioStopDetour);
+        g_audioStopTramp = nullptr;
+    } else {
+        fprintf(stderr, "[RtOrphan] SKIP Audio::Scene phase 2: could not detour "
+                        "Audio::Device::Stop -- PauseEffect's release loop stays UNVERIFIED\n");
+    }
+
+    free(A);
+    free(B);
+    free(C);
+
+    if (unsound) {
+        fprintf(stderr, "[RtOrphan] Audio::Scene: %d UNSOUND cases -- the probe's own "
+                        "premise failed, treat every pass below as void\n", unsound);
+        ++g_fail;
+        return;
+    }
+    if (mismatches) {
+        ++g_fail;
+    } else {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan] pass Audio::Scene teardown family: %d comparisons "
+                        "(%d phase 1 null-channel, %d phase 2 recorded-device), 0 mismatches, "
+                        "%d Device::Stop calls matched pairwise; %d cases CHANGED the scene "
+                        "(Pause %d, PauseEffect %d, StopEffect %d, StopEffect3D %d, StopAll %d)\n",
+                comparisons, phase1, comparisons - phase1, stopCalls, effective,
+                effectivePerFn[0], effectivePerFn[1], effectivePerFn[2],
+                effectivePerFn[3], effectivePerFn[4]);
+        // A function with zero effective cases was never actually exercised,
+        // so its share of the "0 mismatches" is worth nothing. Say so rather
+        // than let the headline number cover for it.
+        for (int f = 0; f < 5; ++f) {
+            if (effectivePerFn[f] == 0)
+                fprintf(stderr, "[RtOrphan] WARNING %s: 0 of its cases changed "
+                                "the scene -- agreement here is VACUOUS\n",
+                        kFns[f].subject);
         }
     }
 }
@@ -454,10 +1013,17 @@ extern "C" void RtOrphanProbeInGame(void* keyMap) {
     if (g_inGameDone || !Enabled()) return;
     g_inGameDone = true;
 
-    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap, UpdateLoop) ====\n");
+    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap, UpdateLoop, Audio::Scene) ====\n");
     ProbeInputDevice();
     ProbeInputKeyMap(keyMap);
     ProbeUpdateLoopIsRunning();
+    // Audio::Scene runs HERE and not in the boot probe: seeding a synthetic
+    // scene calls System::MemoryAllocator::MemAlloc, and RtOrphanProbe() is
+    // reached from Init() before Engine::Startup has built the allocator --
+    // where the first call faults on a WRITE to +0x648 of a null singleton.
+    // It needs no live world of its own; it only needs the process to be past
+    // that point.
+    ProbeAudioScene();
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }

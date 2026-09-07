@@ -1,47 +1,54 @@
 // ============================================================================
 // runtime/src/audio/audio.cpp — Wave 8, lane C — Audio::Scene / ::Configuration
 // ============================================================================
-// Ports 13 of the 22 Audio exports our tree calls. Every retail body below was
+// Ports 16 of the 21 Audio exports our tree calls (Wave 8 landed 13; the
+// Wave 8.5 close-out added Pause, StopEffect3D and StopAll, plus the two
+// unexported-by-our-tree siblings PauseEffect and StopEffect they call). Every retail body below was
 // decompiled AND disassembled at its real address in the SHIPPED
 // Runtime-x64.dll (image base 0x180000000, read 2026-09-07); addresses and the
 // oracle shape for each function are in docs/runtime_port/WAVE8_LANE_C.md.
 //
-// HELD BACK, with reasons (docs/runtime_port/WAVE8_LANE_C.md has the full
-// argument; PLAN §6: a held-back function with a stated reason is a result):
+// STILL HELD BACK, with reasons (docs/runtime_port/WAVE8_LANE_C.md has Wave
+// 8's argument; PLAN §6: a held-back function with a stated reason is a
+// result). THREE, down from seven — see the Wave 8.5 close-out block further
+// down this file for why the other four moved and what each of their stated
+// blockers turned out to be worth:
 //
-//   ?StopEffect3D@Scene@Audio@@…       0x1800df370 — calls the sibling members
-//       Scene::StopEffect/PauseEffect, which reach Audio::Device::Stop (an
-//       actual platform mixer call, not in this lane's 22). Half-porting the
-//       outer function while leaving the inner call on retail would create
-//       exactly the two-implementations-in-play hazard WAVE8.md §1 warns
-//       about, for a function with an audible, non-replayable side effect and
-//       therefore no oracle either way.
-//   ?Pause@Scene@Audio@@…              0x1800df070 — same reason: reaches
-//       Scene::PauseEffect -> Device::Stop.
-//   ?StopAll@Scene@Audio@@…            0x1800df150 — walks Device's platform
-//       channel array directly (COM vtable calls at Device+0xaa0, critical
-//       sections at Device+0xa50), none of which is in this lane's scope or
-//       independently verified.
 //   ?Update@Scene@Audio@@…             0x1800df6c0 — ~150 decompiled lines
 //       spatialising every live emitter against Device::PlayPlatform, mixing
-//       in System::Random state and calling back into Device's COM channel
-//       objects. No oracle is possible (it plays sound and consumes RNG
-//       state), and it needs Audio::SoundBuffer/SoundEffect internals this
-//       lane does not own.
+//       in System::Random state and calling back into Device's channel
+//       objects. The synthetic-scene technique that unblocked the teardown
+//       family does NOT reach this one: putting the device out of reach still
+//       leaves the RNG, and a replay that draws twice from System::Random
+//       diverges by construction. What it needs is a snapshot/restore of the
+//       Random state as well, which is a real and bounded next step rather
+//       than a missing tool. It does NOT need SoundBuffer/SoundEffect PORTS —
+//       Wave 8 said it did; what it needs from them is LAYOUT, and a faithful
+//       body may call them by address exactly as the teardown family calls
+//       Device::Stop.
 //   ?Update@Device@Audio@@…            0x1800de520 — Device internals
-//       (platform channel completion callbacks), out of scope.
-//   ?FreeChannelPlatform@Device@Audio@@…ord2380 — PRIVATE member, COM vtable
-//       call at (**channel)+0x90, critical section at Device+0xa50. Same
-//       class of hazard as Update.
-//   ?Serialize@Scene@Audio@@…          0x1800e0050 — sits on the save stream
-//       and drives an IO::Encoding vtable dispatch (calls through a vtable
-//       slot resolved from the Serializer, at offsets +0x18/+0x20/+0xa0 on
-//       that resolved object). WAVE8.md §6 / WAVE4's own history
-//       (reference_encoding_vtable_offsets_differ_between_builds.md) says the
-//       profile build's Encoding vtable OFFSETS do not match retail's — this
-//       lane did not re-derive retail's own offsets independently within its
-//       budget, and a wrong guess here desyncs every save silently. Left on
-//       the DLL rather than risk that.
+//       (platform channel completion callbacks). Here the device IS the
+//       subject, not an unreachable callee, so no synthetic Scene helps.
+//   ?FreeChannelPlatform@Device@Audio@@…ord2380 (0x1800de6f0) — PRIVATE
+//       member, COM vtable call at (**channel)+0x90, critical section at
+//       Device+0xa50. Same class as Device::Update, and for the same reason.
+//
+// PORTED SINCE, and the blockers that did not survive being re-read (each was
+// correct on the evidence its lane had — WAVE8_5.md §10 is about transport,
+// not judgement):
+//
+//   ?Serialize@Scene@Audio@@…          0x1800e0050 — held back because "the
+//       profile build's IO::Encoding vtable offsets do not match retail's and
+//       this lane did not re-derive retail's own". Wave 4 had already written
+//       retail's offsets into runtime/src/io/rt_io_port.cpp, where they had
+//       sat since. Ported in Wave 8.5, 32,772 identical emissions.
+//   ?StopEffect3D@ / ?Pause@ / ?StopAll@Scene@Audio@@ — held back because
+//       they "reach Audio::Device::Stop, an audible non-replayable side
+//       effect, and therefore have no oracle either way". True of a LIVE
+//       scene and false in general: Device::Stop is reachable only through a
+//       non-null Channel::platformChannel[b], which is a SCENE field, so a
+//       synthetic scene removes the device by construction. Ported in Wave
+//       8.5's close-out with an exhaustive side-by-side probe.
 //
 // `?_singleton@Configuration@Audio@@0PEAV12@EA` (ord 4801) is a DATA export,
 // not a function — nothing to register; engine_funcs.cpp already resolves it
@@ -635,6 +642,413 @@ void RtAudio_Scene_Serialize(void* self, void* serializer) {
     }
 }
 
+// ============================================================================
+// Wave 8.5 (close-out) — the Audio channel-teardown family
+// ============================================================================
+// WAVE8_5.md §9 concluded that the six Audio holdbacks "share ONE root cause,
+// a stored completion callback fired through a function pointer", and that the
+// lane therefore "needs a Device-level fake, not a better diff".
+//
+// The root cause is right. **The conclusion does not follow, and reading the
+// five retail bodies per function instead of as a family shows why:**
+//
+//     the Device is reachable ONLY through a non-null
+//     `Channel::platformChannel[b]` — and that is a field of the SCENE.
+//
+// Every device call in this family — `Device::Stop` (0x1800de200), and the
+// sequence `StopAll` inlines instead of calling it — sits inside
+// `if (platformChannel[b] != 0)`. Nothing here dereferences the Device
+// singleton before that test; `StopAll` loads it into RBX at 0x1800df192 and
+// `StopEffect`/`PauseEffect` into RBP/R14 on entry, but the first instruction
+// that touches what it points at is behind the null check.
+//
+// So a SYNTHETIC Scene whose 256 channels have null `platformChannel[]` puts
+// the device out of reach BY CONSTRUCTION, and both implementations can then
+// be run side by side over the whole state space — no interposer, no recorder,
+// no fake. That is what `ProbeAudioScene` in standalone/rt_orphan_probe.cpp
+// does, and it is why these three CALLED holdbacks land here rather than
+// waiting on a tool. The remaining three (`Scene::Update`, `Device::Update`,
+// `Device::FreeChannelPlatform`) are NOT unblocked by it: the first consumes
+// System::Random state and the other two are device internals, where the
+// device is the subject rather than an unreachable callee.
+//
+// This is WAVE8_5.md §8's own correction happening a fifth time: a group-level
+// claim over these functions failed per-function checking. Recorded, not fixed
+// silently.
+//
+// WHAT THE LIVE PATH GETS. On a real scene the platform channels are NOT null,
+// so there is no call-level replay: running both bodies would fire every live
+// effect's completion callback twice (§9's point, which stands). Each function
+// below therefore carries a SHADOW check instead — after our body runs, the
+// DLL's own read-only observer is asked whether the resulting state is what it
+// should be — exactly the pattern `PlayEffect` above already uses. The full
+// state comparison is the probe's job; the shadow's job is to give the live
+// path a `calls=` number and catch a port that stopped agreeing with reality.
+//
+// RETAIL READS UNINITIALISED STACK, and a byte oracle must know it.
+// `StopEffect` (0x1800df5e6) and `StopAll` (0x1800df2af) both build the reset
+// Channel by writing a DWORD to a stack slot and reading a QWORD back out:
+//     MOV dword ptr [RSP+0x28],EDX      ; 4 bytes written
+//     MOV RAX,qword ptr [RSP+0x28]      ; 8 bytes read
+//     MOV qword ptr [RSI+RCX+0x8],RAX   ; soundType=0, _pad0c=STACK GARBAGE
+// and the same shape at [RSP+0x88] for +0x68 (handleTag=0, started=0,
+// _pad6d[3]=garbage). Both landing fields are the padding this file's type
+// header already documents as never read. We write zeroes; the probe EXCLUDES
+// those 7 bytes per channel rather than pretending to reproduce a caller's
+// stack (reference_oracle_must_not_compare_unwritten_bytes.md, in reverse —
+// there the trap was comparing bytes NEITHER side wrote, here it is bytes only
+// one side can write meaningfully).
+// ============================================================================
+
+// Audio::Device::Stop(AudioChannel*) — retail 0x1800de200, ord 4105. The one
+// device entry point this family needs, and the one that fires the stored
+// completion callback (WAVE8_5.md §9). Left on the DLL: it is Device's own
+// code, not Scene's, and calling it by address is the same faithful delegation
+// this file already uses for the two Collection internals in Scene::Serialize.
+using AudioDeviceStopFn = void (*)(void* device, void* audioChannel);
+
+static void* AudioDeviceSingleton() {
+    // ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805) is an exported DATA
+    // symbol: the export address IS the pointer slot, so this is one deref,
+    // matching retail's `MOV RBX,qword ptr [0x1801fe760]`.
+    static void** slot = reinterpret_cast<void**>(
+        ResolveExportRaw("?_singleton@Device@Audio@@0PEAV12@EA"));
+    return slot ? *slot : nullptr;
+}
+
+// Release every live platform channel hanging off one Channel record.
+// `clearSlots` reproduces the one behavioural difference between the two
+// retail callers: PauseEffect nulls the pointer and clears bit 1 of the flag
+// byte as it goes (0x1800df50d/0x1800df515), because the Channel record
+// SURVIVES a pause; StopEffect does not bother (0x1800df5a3..0x1800df5bf),
+// because the whole record is overwritten with the default two instructions
+// later.
+static void ReleasePlatformChannels(Scene* self, uint32_t chOffsetBytes, bool clearSlots) {
+    void* device = AudioDeviceSingleton();
+    for (int b = 0; b < 8; ++b) {
+        // Retail RE-READS channels._data on every iteration (the callee could
+        // in principle move it); reproduced rather than hoisted.
+        auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+        auto* ch = reinterpret_cast<Channel*>(base + chOffsetBytes);
+        void* p = ch->platformChannel[b];
+        if (!p) continue;
+        RT_ORIGINAL_ONCE(AudioDeviceStopFn,
+            "?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z")(device, p);
+        if (clearSlots) {
+            base = reinterpret_cast<uint8_t*>(self->channels._data);
+            ch = reinterpret_cast<Channel*>(base + chOffsetBytes);
+            ch->platformChannel[b] = nullptr;
+            ch->channelFlags[b] &= 0xfd;
+        }
+    }
+}
+
+// The default-constructed Channel every teardown path writes back, per
+// FUN_180051020 and reconfirmed by StopEffect's and StopAll's identical reset
+// blocks: everything zero except volume and pitch, which are 1.0f.
+static void ResetChannel(Channel* ch) {
+    ch->soundEffectRef = 0;
+    ch->soundType      = 0;
+    ch->_pad0c         = 0;   // retail leaves stack garbage here; see the header
+    ch->startTime      = 0;
+    ch->volume         = 1.0f;
+    ch->pitch          = 1.0f;
+    for (int b = 0; b < 8; ++b) ch->platformChannel[b] = nullptr;
+    for (int b = 0; b < 8; ++b) ch->channelFlags[b] = 0;
+    ch->handleTag = 0;
+    ch->started   = 0;
+    ch->_pad6d[0] = ch->_pad6d[1] = ch->_pad6d[2] = 0;   // ditto
+}
+
+// The channel-handle validity test, spelled once. `(stored ^ handle) & top-23`
+// — the encoding this file's type header documents. Retail repeats it inline
+// in PauseEffect, UnpauseEffect, StopEffect, StopAll, Pause and
+// IsEffectPlaying.
+static bool ChannelHandleMatches(const Scene* self, uint32_t handle, uint32_t* outIndex) {
+    uint32_t idx = (handle >> 1) & 0xff;
+    *outIndex = idx;
+    return ((self->channels._data[idx].handleTag ^ handle) & 0xfffffe00) == 0;
+}
+
+// ============================================================================
+// void Audio::Scene::PauseEffect(uint handle) — retail 0x1800df4a0, ord 3314
+// ============================================================================
+// Releases the platform channels of one live effect but KEEPS the Channel
+// record, so the effect can be restarted by clearing `started` later — which
+// is exactly what Pause's unpause direction does. Not called from our tree
+// directly; it is here because Scene::Pause CALLs it (retail does not inline
+// it) and a port of Pause that left this on the DLL would be the half-ported
+// hazard WAVE8.md §1 warns about.
+// ============================================================================
+void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
+    RT_DIFF_BEGIN("Audio::Scene::PauseEffect");
+    auto* self = static_cast<Scene*>(selfPtr);
+    uint32_t idx;
+    const bool matched = ChannelHandleMatches(self, handle, &idx);
+
+    // SHADOW, and it is a FULL REPLAY of the only branch this function has.
+    // The DLL's IsEffectPlaying (0x1800df680) computes the identical predicate
+    // on the same channel, so asking it is asking retail whether our guard
+    // agreed with retail's, for real handles on a real scene. Reported BEFORE
+    // the early return, so the guard-fail path still counts as a call: a shadow
+    // placed after the return makes `calls=` mean "did work" when every reader
+    // of that column takes it to mean "was entered".
+    using IsPlayingFn = bool (*)(void*, uint32_t);
+    RT_DIFF_SHADOW(matched == RT_ORIGINAL_ONCE(IsPlayingFn,
+                       "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z")(self, handle),
+                   matched ? "handle matches" : "handle rejected", "DLL IsEffectPlaying");
+    if (!matched) return;
+    ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/true);
+
+    // POST-CONDITION, stated exactly: a paused channel keeps its record (that
+    // is the whole difference from StopEffect) and holds no platform channel.
+    const Channel& ch = self->channels._data[idx];
+    bool anyLeft = false;
+    for (int b = 0; b < 8; ++b) if (ch.platformChannel[b]) anyLeft = true;
+    RT_DIFF_SHADOW(!anyLeft, "0 platform channels, record kept", "post-condition");
+}
+
+// ============================================================================
+// void Audio::Scene::StopEffect(uint handle) — retail 0x1800df550, ord 4109
+// ============================================================================
+// Releases the platform channels AND resets the Channel record to default, so
+// the handle stops validating. Reached from our tree only through
+// StopEffect3D; ported for the same reason as PauseEffect.
+// ============================================================================
+void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
+    RT_DIFF_BEGIN("Audio::Scene::StopEffect");
+    auto* self = static_cast<Scene*>(selfPtr);
+    uint32_t idx;
+    const bool matched = ChannelHandleMatches(self, handle, &idx);
+
+    // SHADOW: the same full replay of the guard as PauseEffect, reported before
+    // the early return for the same reason.
+    using IsPlayingFn = bool (*)(void*, uint32_t);
+    auto isPlaying = RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z");
+    RT_DIFF_SHADOW(matched == isPlaying(self, handle),
+                   matched ? "handle matches" : "handle rejected", "DLL IsEffectPlaying");
+    if (!matched) return;
+    ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/false);
+    ResetChannel(&self->channels._data[idx]);
+
+    // POST-CONDITION. Stated as "the record was zeroed", NOT as "the handle no
+    // longer validates" -- the first attempt said the latter and it is FALSE
+    // for a handle whose generation bits are all zero, which validates against
+    // a zeroed tag in retail too. That predicate reported 2 divergences in 236
+    // live calls and every one of them was the PREDICATE being wrong about
+    // retail, not the port (reference_shadow_predicate_must_name_its_failing_term.md).
+    RT_DIFF_SHADOW(self->channels._data[idx].handleTag == 0,
+                   "channel record reset", "post-condition");
+}
+
+// ============================================================================
+// void Audio::Scene::Pause(int soundType, bool paused) — retail 0x1800df070
+// ============================================================================
+// Called six times a menu->game cycle (mainmenudialog.cpp pausing types 4/3/2
+// on open, gameupdateloop_load.cpp unpausing them after a load).
+//
+// The two directions are not symmetric, and the asymmetry is the function:
+//   paused = true   -> PauseEffect every live channel of this sound type,
+//                      which releases its platform channels.
+//   paused = false  -> for every live channel of this type, re-validate the
+//                      handle it stores AGAINST ITSELF and clear `started`,
+//                      so Scene::Update restarts it. This direction calls
+//                      NOTHING — it is `UnpauseEffect` (0x1800df470) inlined,
+//                      instruction for instruction.
+// Retail strides a HARDCODED 0x7000 bytes (256 channels), not `_size`;
+// reproduced.
+//
+// The leading early-out (`if (paused[soundType] == paused) return;`) is the
+// reason a naive ours-then-theirs replay would report green having compared
+// nothing — WAVE8_5.md §9's observation, and the `RegisterInput` trap. The
+// probe steps INDEPENDENT scenes, so it does not apply there.
+//
+// `soundType` is sign-extended (MOVSXD RSI,EDX) and used unchecked as an index
+// into `paused[5]`; a negative or >4 value reads and writes out of bounds in
+// retail too. Left faithful (CLAUDE.md: do not "fix" a faithful deref).
+// ============================================================================
+void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
+    RT_DIFF_BEGIN("Audio::Scene::Pause");
+    auto* self = static_cast<Scene*>(selfPtr);
+    int64_t t = soundType;
+    const bool alreadyThere = (self->paused[t] == (uint8_t)paused);
+
+    if (!alreadyThere) {
+        if (paused) {
+            for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
+                auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+                auto* ch = reinterpret_cast<Channel*>(base + off);
+                uint32_t tag = ch->handleTag;
+                if (tag == 0 || (int32_t)ch->soundType != soundType) continue;
+                RtAudio_Scene_PauseEffect(self, tag);
+            }
+        } else {
+            for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
+                auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+                auto* ch = reinterpret_cast<Channel*>(base + off);
+                uint32_t tag = ch->handleTag;
+                if (tag == 0 || (int32_t)ch->soundType != soundType) continue;
+                uint32_t idx;
+                if (!ChannelHandleMatches(self, tag, &idx)) continue;
+                self->channels._data[idx].started = 0;
+            }
+        }
+        self->paused[t] = (uint8_t)paused;
+    }
+
+    // SHADOW: the DLL's own IsPaused (0x180050990, ord 3151) is a one-byte read
+    // of paused[soundType] and cannot disturb anything.
+    //
+    // The early-out is INSIDE the shadow's reach on purpose. Written the
+    // faithful way -- `if (paused[t] == paused) return;` before any reporting --
+    // this port ran on both a fresh autostart and a Save9 load and reported
+    // `calls=0` on BOTH, because every one of the six live call sites asks for
+    // a state the scene is already in. The site appeared in the site list (so
+    // the body WAS entered) while the count said zero, which is precisely the
+    // shape of reference_uncalled_port_is_not_verified.md and would have been
+    // read as a dead port. `calls=` has to mean "entered".
+    using IsPausedFn = bool (*)(void*, int32_t);
+    bool theirs = RT_ORIGINAL_ONCE(IsPausedFn, "?IsPaused@Scene@Audio@@QEBA_NH@Z")(self, soundType);
+    RT_DIFF_SHADOW(theirs == paused,
+                   alreadyThere ? (paused ? "paused (early-out)" : "unpaused (early-out)")
+                                : (paused ? "paused" : "unpaused"),
+                   "DLL IsPaused");
+}
+
+// ============================================================================
+// void Audio::Scene::StopEffect3D(uint id) — retail 0x1800df370
+// ============================================================================
+// Stops the Channel a 3D effect is playing on (if any) and resets its
+// EffectSlot to default. The slot's `positions` array is released through
+// Collection's own array-assign-from-empty, called by address exactly as
+// Scene::Serialize calls its two Collection internals.
+//
+// The guard is spelled differently from FindEffectSlot's and means the SAME
+// THING. Retail compares the generation halves (`id >> 13` against
+// `idTag >> 13`, 0x1800df3a7/0x1800df3aa); FindEffectSlot masks with
+// 0xffffe000, which is bits 13..31 -- the generation, and nothing else. An
+// earlier draft of this comment claimed they "differ by one bit" and built a
+// shadow predicate on that claim; the predicate reported 56 divergences in 96
+// live calls, all of them the claim being wrong. Retail's spelling is kept
+// here because it is retail's, not because it differs.
+// ============================================================================
+using AudioArrayAssignFn = void (*)(void* dst, const void* src);
+using AudioArrayDtorFn   = void (*)(void* arr);
+
+void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
+    RT_DIFF_BEGIN("Audio::Scene::StopEffect3D");
+    static auto arrayAssign = reinterpret_cast<AudioArrayAssignFn>(
+        ResolveAddr(Module::Runtime, 0x180050d30));
+    static auto arrayDtor = reinterpret_cast<AudioArrayDtorFn>(
+        ResolveAddr(Module::Runtime, 0x180051d80));
+
+    auto* self = static_cast<Scene*>(selfPtr);
+    uint32_t idx = (id >> 1) & 0xfff;
+    EffectSlot* slot = &self->effects._data[idx];
+    using GetCountFn = int (*)(void*, uint32_t);
+    auto getCount = RT_ORIGINAL_ONCE(GetCountFn, "?GetEmitterCount@Scene@Audio@@QEBAHI@Z");
+
+    if ((slot->idTag >> 13) != (id >> 13)) {
+        // SHADOW on the reject path -- reported rather than returned silently,
+        // for the same reason as Pause's early-out: `calls=` must mean
+        // "entered". The DLL's GetEmitterCount uses a guard one bit WIDER than
+        // this one (0xffffe000 against the generation-only compare here), so a
+        // reject here does NOT imply a reject there; what it does imply is that
+        // the slot is untouched, which is what is asserted.
+        // The DLL's GetEmitterCount validates with `(idTag ^ id) & 0xffffe000`,
+        // which is bits 13..31 -- the generation, and NOTHING ELSE. That is the
+        // same predicate this guard spells as `(idTag >> 13) != (id >> 13)`, so
+        // a reject here means a reject there and GetEmitterCount must answer 0.
+        // A full replay of the guard, against the DLL, on live ids.
+        RT_DIFF_SHADOW(getCount(self, id) == 0,
+                       "generation rejected", "DLL GetEmitterCount");
+        return;
+    }
+
+    if (slot->channelHandle != 0)
+        RtAudio_Scene_StopEffect(self, slot->channelHandle);
+
+    // Retail's stack-local default EffectSlot; only its `positions` member is
+    // used (as the empty source of the assign), but the whole record is built.
+    EffectSlot tmp{};
+    tmp.baseVolume = 1.0f;
+
+    slot->posX = slot->posY = slot->posZ = 0.0f;
+    slot->soundType      = 0;
+    slot->soundEffectRef = 0;
+    slot->startTime      = 0;
+    slot->channelHandle  = 0;
+    slot->idTag          = 0;
+    slot->baseVolume     = 1.0f;
+    arrayAssign(&slot->positions, &tmp.positions);
+    arrayDtor(&tmp.positions);
+
+    // SHADOW: the DLL's read-only GetEmitterCount on the id we just retired
+    // must report 0 -- the slot is default and its idTag no longer validates.
+    RT_DIFF_SHADOW(getCount(self, id) == 0, "slot reset", "DLL GetEmitterCount");
+}
+
+// ============================================================================
+// void Audio::Scene::StopAll() — retail 0x1800df150, ord 4107
+// ============================================================================
+// Called once, from GameUpdateLoop teardown (gameupdateloop.cpp:2880).
+//
+// It is `StopEffect` applied to all 256 channels, with `Device::Stop`'s body
+// INLINED rather than called — and the inlining is exact: 0x1800df1eb's
+// `CMP [device+0xa88],0` guard is `Device::StopPlatform` (0x1800dea20)'s own
+// first instruction, 0x1800df25b calls `FreeChannelPlatform` (0x1800de6f0)
+// just as Device::Stop does, and 0x1800df260..0x1800df289 is Device::Stop's
+// trailer instruction for instruction (clear the low 2 flag bits, null the
+// callback slot, then fire the callback that was in it). So delegating to the
+// exported `Device::Stop` is not an approximation of this body — it is the
+// same code with the call re-introduced.
+//
+// The INDIRECTION is faithful and deliberate: the outer loop reads the tag
+// from channel `i` but does all its work on channel `(tag>>1)&0xff`. Those are
+// the same channel for any handle the Scene itself minted, so the difference
+// is invisible in a normal run — and reproducing it costs one line.
+// ============================================================================
+void RtAudio_Scene_StopAll(void* selfPtr) {
+    RT_DIFF_BEGIN("Audio::Scene::StopAll");
+    auto* self = static_cast<Scene*>(selfPtr);
+
+    // The set this call is OBLIGED to retire, computed BEFORE any of it runs
+    // and computed with the DLL's OWN predicate (IsEffectPlaying is
+    // `((storedTag ^ handle) & 0xfffffe00) == 0` on the channel the handle
+    // names -- exactly the test at 0x1800df1ac). Deciding the obligation after
+    // the fact is what made the first version of this shadow wrong: "no channel
+    // still has a tag" is FALSE of retail, because a channel whose tag names a
+    // DIFFERENT channel keeps its own tag while the other one is reset. That
+    // predicate reported 8 divergences in 9 calls and all 8 were the predicate.
+    using IsPlayingFn = bool (*)(void*, uint32_t);
+    auto isPlaying = RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z");
+    uint8_t owed[256];
+    if (rt_diff_on__) {
+        for (int i = 0; i < 256; ++i) {
+            uint32_t tag = self->channels._data[i].handleTag;
+            owed[i] = (uint8_t)(tag != 0 && isPlaying(self, tag) ? ((tag >> 1) & 0xff) + 1 : 0);
+        }
+    }
+
+    for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
+        auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+        uint32_t tag = reinterpret_cast<Channel*>(base + off)->handleTag;
+        if (tag == 0) continue;
+        uint32_t idx;
+        if (!ChannelHandleMatches(self, tag, &idx)) continue;
+        ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/false);
+        ResetChannel(&self->channels._data[idx]);
+    }
+
+    if (rt_diff_on__) {
+        bool ok = true;
+        for (int i = 0; i < 256; ++i)
+            if (owed[i] && self->channels._data[owed[i] - 1].handleTag != 0) ok = false;
+        RT_DIFF_SHADOW(ok, "every channel a live handle named was reset",
+                       "pre-computed from DLL IsEffectPlaying");
+    }
+}
+
 int RtAudioSceneRegister() {
     int n = 0;
     RegisterRuntimeExport("??0Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Ctor); ++n;
@@ -659,6 +1073,21 @@ int RtAudioSceneRegister() {
     RegisterRuntimeExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtAudio_Scene_Serialize);
     RegisterRuntimeAddr(0x1800e0050, (void*)&RtAudio_Scene_Serialize); ++n;
+
+    // Wave 8.5 close-out: the channel-teardown family. Unblocked by reading
+    // the bodies per function rather than as a group -- the Device is only
+    // reachable through a non-null Channel::platformChannel[b], which is a
+    // SCENE field, so a synthetic scene replays all five with no device fake.
+    // Verified by ProbeAudioScene (standalone/rt_orphan_probe.cpp) and by a
+    // live SHADOW check each; see the block comment above these bodies.
+    RegisterRuntimeExport("?PauseEffect@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_PauseEffect); ++n;
+    RegisterRuntimeExport("?StopEffect@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_StopEffect); ++n;
+    RegisterRuntimeExport("?Pause@Scene@Audio@@QEAAXH_N@Z", (void*)&RtAudio_Scene_Pause);
+    // engine_funcs.cpp has an address fallback for Pause (it reads the exe
+    // dispatch slot when the name misses), so the address must land on us too.
+    RegisterRuntimeAddr(0x1800df070, (void*)&RtAudio_Scene_Pause); ++n;
+    RegisterRuntimeExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_StopEffect3D); ++n;
+    RegisterRuntimeExport("?StopAll@Scene@Audio@@QEAAXXZ", (void*)&RtAudio_Scene_StopAll); ++n;
     return n;
 }
 
