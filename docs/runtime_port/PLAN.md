@@ -671,6 +671,28 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       ctors/dtors, 59 exported DATA symbols, 4 ordinals, 3 `.data` globals.
       **An empty `[RtResidue]` list across the full harness matrix is the real cutover gate**,
       and it is the first thing in this tree that asks the PROCESS rather than the source.
+- [x] **Three Wave 9 prerequisites CLOSED 2026-09-07** (details in [WAVE9.md](WAVE9.md)):
+      (a) **All 8 census orphans have verdicts.** Three are exercised by a direct C++ call from
+      a sibling port; three are the char/schar/short members of the 18-member `IO::Serializer`
+      forwarder family, verified structurally at registration and deliberately dead;
+      `Vector2::Normalize(Scalar&)` is verified by a new probe (10/10 cases, `0xCD`-poisoned
+      buffers) and `EdgeMeshInstance`'s copy ctor by instruction-for-instruction comparison with
+      retail `0x1800174f0`, all three of its bindings confirmed against the export directory.
+      (b) **`Input::Device` no longer needs an attended run, and WAVE8.md's premise was half
+      wrong.** Its three readers never touch the hardware — they are const reads of latched
+      state with full replay oracles, so what they needed was a CALLER. `RtOrphanProbeInGame`
+      sweeps every valid triple: **570 comparisons, 0 mismatches**. What remains of the item is
+      three `KeyMap` const readers needing a populated binding tree.
+      (c) **The 1-ULP libm residual is decided and now measured.** The decision was already
+      written in `runtime/funcs/rt_libm.h` (our libm ships; the DLL route is diagnostic-only).
+      The unmeasured risk was world-gen compounding: three `sa-stress` runs show **the control
+      moves further than the change** (102 entities between two same-libm runs vs 69 between
+      libms) and every deterministic column is identical. A bound below the harness noise floor,
+      not a proof of bit-identity.
+      **A wrong finding was published and withdrawn in the same session**: `BANISHED_AUTOQUIT=1`
+      quits at the MAIN MENU, so two residue runs that never reached gameplay looked
+      path-independent. Through the pause menu the residue is **309, not 260** — a strict
+      superset, 49 new and none lost. Lane 0's matrix is required after all.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---

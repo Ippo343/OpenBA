@@ -111,51 +111,56 @@ being gone.
 
 **An empty `[RtResidue]` list across the full harness matrix is the real cutover gate.**
 
-First run — one `BANISHED_AUTOSTART=1 BANISHED_AUTOQUIT=1` boot → gameplay → quit, log kept
-at `docs/runtime_port/wave9_residue_autostart.txt`:
+Two runs so far, both kept in `docs/runtime_port/`:
 
-**260 distinct requests still arrived at Runtime-x64.dll.**
+| Run | How | Distinct requests still reaching the DLL |
+|---|---|---|
+| `wave9_residue_autostart.txt` | `BANISHED_AUTOSTART=1 BANISHED_AUTOQUIT=1` | **260** |
+| `wave9_residue_gameplay.txt` | `BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120` | **309** |
 
-| Kind | Count |
-|---|---|
-| function | 100 |
-| unnamed DLL internal, by address | 55 |
-| ctor/dtor | 39 |
-| `?_typeInfo@…` | 27 |
-| DLL `.data` global, by address | 19 |
-| `?_singleton@…` | 11 |
-| `??_7` vtable | 7 |
-| ordinal | 2 |
+Kinds, from the 309-entry gameplay run: 100+ ordinary functions, ~57 unnamed DLL internals by
+address, ~39 ctors/dtors, 27 `?_typeInfo@…`, 19 `.data` globals by address, 11
+`?_singleton@…`, 7 `??_7` vtables, 2 ordinals. 47 of them are reached only from `dx11/`.
 
-47 of the 260 are reached only from `dx11/`.
+Counts are per *resolve*, not per call — most are pointer-table fills at init, so `?MemFree@…`
+showing 7 does not mean seven frees. The residue measures the **resolve surface**, which is
+exactly what the cutover gate is about.
 
-Counts are per *resolve*, not per call — most of these are pointer-table fills at init, so
-`?MemFree@…` showing 7 does not mean seven frees. The residue measures the **resolve
-surface**, which is exactly what the cutover gate is about.
+### A correction, recorded rather than quietly fixed
 
-### The residue is almost entirely path-independent, and that cuts both ways
+**This document first claimed the residue set was path-independent, and that was wrong.**
 
-A second run on a completely different path — `BANISHED_AUTOLOAD=Save9`, which quit at the
-menu after 20 s and never reached gameplay at all — produced a residue set **identical to the
-full boot → gameplay → quit run. Same 260 entries, zero either way.**
+The evidence for it looked strong: an `AUTOSTART`+`AUTOQUIT` run and a `BANISHED_AUTOLOAD=Save9`
+run produced *byte-identical* 260-entry lists, which was written up as `EngineFuncsInit` filling
+the `fn_*` tables eagerly at boot.
 
-That is `EngineFuncsInit` / `RuntimeFuncsInit` doing their job: the typed `fn_*` tables are
-filled eagerly at boot, so almost every name in the tree is resolved before the first frame
-regardless of what the run then does.
+The real explanation is duller and the lesson is sharper. **`BANISHED_AUTOQUIT=1` injects a Quit
+click at the MAIN MENU** (`[AutoStart] menu settled — injecting Quit click`). Neither run ever
+reached gameplay. They were byte-identical because **they were the same path**, and the boot half
+of that path is genuinely deterministic. Two runs agreeing is evidence about the runs, not about
+the program — and "different env vars" is not the same as "different path".
 
-**Good news for lane 0:** the work list is essentially complete after one boot. The residue
-matrix is much cheaper than a per-path sweep would suggest.
+Re-run through the pause menu, which does reach gameplay, the residue is **309**: a strict
+superset, **49 new entries and none lost**. The 49 are exactly what a menu-only run cannot
+reach — `Achievement::ReadAchievements`, `AchievementManager::CreateInstance`,
+`SaveLoad::Draw`, `Audio::Scene::StopAll`, `Matrix::Inverse`, `~UserInterface`, five Video
+`*Data` dtors, and five more unnamed internals.
 
-**But it is not a reachability proof, and must not be read as one.** An eagerly-resolved name
-appears in the residue whether or not anything ever calls through the pointer — this is
-`reference_uncalled_port_is_not_verified.md` wearing the opposite hat. The residue answers
-"what does the process ASK the DLL for", which is the right question for *cutover*
-(an unresolvable import is fatal whether or not it is called), and the wrong question for
-*verification*. Lane 0 still needs the matrix, for the opposite reason: to find the **lazily**
-resolved names the eager pass misses. `Serialize` bodies are the classic case — they are the
-last methods to take their lazy resolve
-(`reference_serialize_lazy_resolve_and_wrong_slot.md`), which is exactly why the static census
-lists 319 unported where one boot only surfaces 260.
+So the residue is **monotone in coverage, and lane 0's matrix is required after all** — which is
+what the lane table said before this section was written. The cheap-lane-0 conclusion is
+withdrawn.
+
+**What survives, and is the useful half:** an entry, once present, never disappears on a longer
+run. That makes the union across the matrix a sound work list, and makes any *shrink* between two
+runs a tool bug rather than a fact — the shape of
+`reference_truncated_tool_output_manufactures_calls_zero.md`, where a `tail -80` faked sixteen
+sites disappearing.
+
+**And it is still not a reachability proof.** An eagerly-resolved name appears whether or not
+anything ever calls through the pointer — the opposite hat of
+`reference_uncalled_port_is_not_verified.md`. Residue answers "what does the process ASK the DLL
+for", which is the right question for *cutover* (an unresolvable import is fatal whether or not
+it is called) and the wrong one for *verification*.
 
 ## What the residue census found on its first run
 
@@ -194,7 +199,7 @@ ours), not chosen.
 
 | Lane | Scope | Gate |
 |---|---|---|
-| **0. Residue matrix** | Run `BANISHED_RT_STRICT=1` across the whole harness matrix — autostart, menu, mods menu, all 4 tutorials, `Save9.sav` autoload, `sa-stress`, and an **attended** run with real keyboard and mouse (the only way to reach `Input::Device`, per the Wave 8 holdback). Union the residue lists. | A single work list that is what the process reaches, not what the tree mentions |
+| **0. Residue matrix** | Run `BANISHED_RT_STRICT=1` across the whole harness matrix — menu, mods menu, all 4 tutorials, `Save9.sav` autoload, `sa-stress`, and gameplay through the pause menu. Union the residue lists; entries are monotone, so the union is sound and any *shrink* is a tool bug. **Use a route that reaches gameplay** — `BANISHED_AUTOQUIT=1` quits at the MAIN MENU and cost this document one wrong finding (see the correction above); menu-only 260 vs gameplay 309. **No attended run is needed for `Input::Device` after all** — see the CLOSED section below. | A single work list that is what the process reaches, not what the tree mentions |
 | **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8 that lane 0 shows is reached: 32 from Wave 8, 5 handle-table mutators, 4 `ExternalFactory` mutators, `Renderer::Draw`, `MainLoop::OnVideoError`/`OnVideoRestart`. | 0 divergences, non-zero `calls=` on each |
 | **B. The 145 named functions + 51 ctors/dtors** | The ordinary port wave, class-atomic (§4.1 rule 5). | 0 divergences |
 | **C. Data: 28 vtables, 17 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
@@ -204,20 +209,141 @@ ours), not chosen.
 | **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. | The PLAN §5 box |
 | **H. Perf gate** | The deferred +7.7% breach. The user deferred it at the Wave 4 boundary explicitly *to this stage*. With the DLL gone the seam's `GetProcAddress`/registry indirection can be compiled out entirely, which is the main reason it was deferred here. Three runs minimum — `reference_one_perf_run_cannot_resolve_the_gate.md`. | ≤5% over the recorded baseline |
 
-## Open items inherited from earlier waves
+## Open items inherited from earlier waves — three CLOSED 2026-09-07
 
-- **~22 of Wave 8's 49 ports produced no diff site.** All of `Input::Device` and most of
-  `Input::KeyMap`. The unattended harness injects dialog clicks by calling handlers directly
-  and never passes through the input layer, so `calls=0` there means "the harness did not
-  ask", not "verified". Lane 0's attended run is the only fix.
-- **8 ports have no caller in our tree** (`??0EdgeMeshInstance`, `??0Quaternion`,
-  `??DQuaternion`, `Transform::FromDirection`, `Vector2::Normalize`, three
-  `Serializer::Serialize` overloads). Each needs a verdict, not a shrug — a wrong
-  `Quaternion::operator*` survived all of Wave 1 in exactly this state.
-- **The Wave 1 1-ULP residual is closed as a cause but not as a number.** Wave 8's
-  `BANISHED_RT_LIBM=dll` run drives the whole tree to 0 divergences, proving it is libm
-  rounding. At cutover there is no DLL libm to fall back to, so the wave must decide whether
-  to ship MinGW's rounding or carry the fix.
+### CLOSED — the 8 ports with no caller in our tree
+
+`tools/runtime_census.py` has ended with this list since Wave 1, and
+`reference_uncalled_port_is_not_verified.md` exists because a wrong
+`Quaternion::operator*` hid in it for a whole wave. Each now has a verdict.
+
+| Port | Verdict |
+|---|---|
+| `??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z` | **Body exercised.** Three direct C++ calls from `Quaternion::Rotate` (x2) and `Transform::operator*` — only the export registration is idle. This is the one that was WRONG in z, and those callers are what caught it. |
+| `??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z` | **Body exercised** from `RtMath_Transform_FromDirection` (`transform.cpp:770`). |
+| `?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z` | **Body exercised** from `transform.cpp:798`; Wave 1 found a reassociated float sum in it through that path. |
+| `?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z` (schar[]) | **Structurally verified, deliberately dead.** |
+| `?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z` (char[]) | Ditto. |
+| `?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z` (short[]) | Ditto. |
+| `?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z` | **NOW VERIFIED** — see the probe below. |
+| `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` | **NOW VERIFIED** — see the disassembly comparison below. |
+
+The three `Serializer` overloads are the char/schar/short array members of an 18-member
+forwarder family. `RtIoSerializerRegister` verifies every one of the 18 **structurally at
+registration**: it decodes the DLL's own 3-instruction tail-jump and asserts the ReaderWriter
+vtable slot our port uses is the slot the DLL jumps to. The other 15 have a `ResolveExport`
+site; these three do not, so they never run. Deleting 3 of 18 to satisfy a census line would
+make the family asymmetric and buy nothing — they are kept, and the verification they DO have is
+the structural check, not a `calls=` number.
+
+**`standalone/rt_orphan_probe.cpp` (new)** is for the remainder: a port no harness path reaches,
+no sibling calls, and no structural check covers. It calls our registered port and the shipped
+DLL side by side over inputs chosen to cover every branch. It guards against the vacuous pass —
+if `ResolveExport` and `ResolveExportRaw` return the same pointer then the port is not
+registered and the probe would be comparing the DLL against itself, which it reports as a
+failure rather than a pass.
+
+`Math::Vector2::Normalize(Scalar&)`: **10 cases, 10 pass, 0 fail** — zero vector (the one
+branch), unit axes, exact-length-5, denormals, overflow-to-infinity, mixed magnitudes and
+`-0.0`. Output buffers are poisoned with `0xCD` on both sides first, so a field neither side
+writes cannot read as agreement (`reference_oracle_must_not_compare_unwritten_bytes.md`).
+
+`Graphics::EdgeMeshInstance::EdgeMeshInstance(const&)` cannot be probed: constructing a valid
+source in isolation and destroying the copy would run `Geometry::~Geometry` over an attach array
+shared with the source and clear live siblings' parent links. It is closed the other way, by
+**static comparison against the retail disassembly** at `0x1800174f0`, which is five statements:
+
+| Retail | Port |
+|---|---|
+| `CALL 0x180015b60` | `RtGeometryCopyCtor()(self, other)` |
+| `LEA RAX,[0x180154d70]; MOV [RDI],RAX` | `emi->_base._vtable = RtEdgeMeshInstanceVtable()` |
+| `MOV RAX,[RBX+0xc0]; MOV [RDI+0xc0],RAX` | `emi->_mesh = src->_mesh` |
+| `MOV RAX,[RBX+0xc8]; MOV [RDI+0xc8],RAX` | `emi->_followed = src->_followed` |
+| `MOV RAX,RDI; RET` | `return self` |
+
+All three bindings confirmed against the shipped export directory with `pefile`:
+`??0Geometry@Graphics@@QEAA@AEBV01@@Z` **is** `0x180015b60`,
+`??_7EdgeMeshInstance@Graphics@@6B@` **is** `0x180154d70`, and `_mesh` / `_followed` are
+`static_assert`-pinned at `+0xc0` / `+0xc8`, 8 bytes each. Instruction for instruction.
+
+### CLOSED — `Input::Device`, and WAVE8.md's premise about it was half wrong
+
+WAVE8.md said the whole of `Input::Device` "**needs an ATTENDED run with real keyboard and mouse
+input** before it counts as exercised — the harness injects dialog clicks by calling handlers
+directly and never passes through the input layer."
+
+**The second half is true and the first half does not follow.** `GetValue`, `Pressed` and
+`Released` never touch the hardware: each computes `DeviceArrayBase(this, device, deviceCtx) +
+inputIdx` and returns one field of the `State` record it lands on. Lane D gave all three a FULL
+REPLAY oracle for exactly that reason. What they need is not a human at a keyboard — it is a
+**caller**. Whether a key was down changes the value both sides read; it does not change whether
+they read the same address, and the address arithmetic is the entire port.
+
+A probe also covers it *better* than a person could: an attended run reaches only the triples
+the player happens to press, while `RtOrphanProbeInGame` sweeps every valid one.
+
+**570 comparisons, 0 mismatches** — joystick 216 (4 contexts x 18 inputs x 3 functions),
+keyboard 315 (105 x 3), mouse 39 (13 x 3), against the live `Input::Device::_singleton` on a
+real gameplay frame. It runs once, from `Camera_UpdateMovement`, which is on the input path and
+only ticks with a live world: the boot probe cannot reach the singleton (`Engine::Startup`
+builds it later) and the exit dumps cannot either (`Engine::Shutdown` destroys it first).
+
+Deliberately NOT probed, each for a stated reason: `Device::ResetState` **writes** (it memsets
+the three State ranges) and its oracle is a self-check rather than a replay, so a probe adds
+nothing and would zero live input mid-frame; `KeyMap::SetInput` / `ClearInput` mutate the
+binding tree and would rewrite the player's key bindings. `KeyMap::GetDeviceForId` /
+`GetInputForId` / `GetIdForDeviceInput` are const readers and are probeable in principle, but
+only against a populated binding tree — **they are what actually remains of the attended-run
+item**, and it is now three functions rather than "the whole of `Input::Device` and most of
+`KeyMap`".
+
+### CLOSED (as a decision) — the Wave 1 1-ULP residual
+
+**The decision was already made and written**, in `runtime/funcs/rt_libm.h`: our own libm is the
+default and `BANISHED_RT_LIBM=dll` is a diagnostic only, because "a port that cannot survive the
+DLL's removal is not a port". Nothing about cutover changes that; the diagnostic simply stops
+working, exactly as its own comment says.
+
+What was genuinely open is the risk that same header flags: *"a last-bit difference in a routine
+that feeds world generation is not automatically harmless, because generation is
+seed-deterministic and small differences compound."* That had never been measured. It now has
+been — three `sa-stress` runs at `--seed 12345 --frames 1200`, all on one build:
+
+| Column | mingw #1 | DLL CRT | mingw #2 (control) |
+|---|---|---|---|
+| entities @600 | 13577 | 13577 | 13577 |
+| entities @1200 | 13637 | 13706 | **13739** |
+| citizens / homed / worked | 802 / 801 / 215 | 802 / 801 / 215 | 802 / 801 / 215 |
+| age_mean, hunger_mean | 2.25, 5.5 | 2.25, 5.5 | 2.25, 5.5 |
+
+**The control moves further than the change does.** Two runs of the *same* libm differ by 102
+entities at frame 1200; our libm and the DLL's differ by 69. Every column that is deterministic
+at all is identical across all three.
+
+Stated at the strength the evidence supports: **the 1-ULP residual is below this harness's own
+run-to-run noise floor** over 1200 frames and ~13,600 entities. That is a bound, not a proof of
+bit-identity — the stress town steps in real time at 10x and is not frame-deterministic, so it
+*cannot* resolve a 1-ULP effect. A bit-exact answer needs a deterministic world-gen fingerprint
+that nothing in the tree currently emits; that is the follow-up if lane B ever wants one.
+
+**The trap this nearly fell into is worth recording**, because the first attempt compared two
+`standalone_debug.log`s and found exactly one differing line — the menu camera Transform — which
+read like a clean libm signal. It is not: the control shows that same line differing between two
+runs of the *same* libm. And those logs contained no world-generation output at all, so the
+comparison was close to vacuous. Both errors are
+`reference_one_perf_run_cannot_resolve_the_gate.md` in a new costume: check what your comparison
+actually contains, and never attribute a difference without a control.
+
+### Still open
+
+* **The 32 held-back functions** from waves 3-8, each with a written reason in its lane doc.
+* **`KeyMap::GetDeviceForId` / `GetInputForId` / `GetIdForDeviceInput`** — the residue of the
+  attended-run item, needing a populated binding tree.
+* **`?IsRunning@UpdateLoop@Engine@@QEBA_NXZ`** — never observed executing in any of Wave 8's four
+  runs. It has a full replay oracle and reaches us through exe dispatch slot `0x140152850` from
+  `code/Game/Goal/populationgoal.cpp:141`, so it needs a run that actually evaluates population
+  goals. A candidate for the same probe treatment.
+* **The perf gate**, deferred by the user to lane H.
 
 ## Sizing
 

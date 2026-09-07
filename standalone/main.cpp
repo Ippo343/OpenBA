@@ -1618,6 +1618,10 @@ static bool Init() {
     //     before it caches.
     extern void RtSelfTest();
     RtSelfTest();
+    // Ports with no caller in our tree, probed against the DLL directly
+    // (BANISHED_RT_ORPHAN_PROBE=1). Must follow RuntimePortInit().
+    extern void RtOrphanProbe();
+    RtOrphanProbe();
     StallDebug::Mark("RuntimePortInit");
 
     // 3. Populate address registry (exe dispatch slots, code fns, vtables).

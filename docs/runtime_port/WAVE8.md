@@ -295,6 +295,16 @@ Current: **651 distinct `ResolveExport` names, 0 missing from the shipped DLL.**
 27 of the 49 ports produced a live diff site. **The other ~22 have no runtime evidence**, and per
 `reference_uncalled_port_is_not_verified.md` that is not the same as verified:
 
+**CORRECTED 2026-09-07 during Wave 9 prep, see [WAVE9.md](WAVE9.md): `Input::Device::GetValue`,
+`Pressed` and `Released` are now VERIFIED, and the claim below that they need an ATTENDED run
+does not follow.** They never read the hardware — each is a const read of already-latched state
+at `DeviceArrayBase(this, device, deviceCtx) + inputIdx`, which is why lane D gave all three a
+FULL REPLAY oracle. What they needed was a CALLER, not a human: `standalone/rt_orphan_probe.cpp`
+sweeps every valid (device, deviceCtx, inputIdx) triple against the live singleton on a real
+gameplay frame — **570 comparisons, 0 mismatches** — which is broader coverage than a person
+pressing keys could produce. What genuinely remains of this item is three `KeyMap` const readers
+that need a populated binding tree. The bullet is left as written so the old claim is
+recognisable if it is met elsewhere.
 * **The whole of `Input::Device`** (`GetValue`, `Pressed`, `Released`, `ResetState`) and most of
   `KeyMap` (`ClearInput` ×2, `GetDeviceForId`, `GetInputForId`, `GetIdForDeviceInput`,
   `SetInput`). Lane D predicted this and was **half right**: it expected the unattended harness to

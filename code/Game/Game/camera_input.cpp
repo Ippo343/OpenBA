@@ -39,6 +39,7 @@
 #include <cstdlib>
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
+extern "C" void RtOrphanProbeInGame();                    // standalone/rt_orphan_probe.cpp
 
 namespace Game {
 
@@ -119,6 +120,15 @@ inline char SettingByte(int byteOffset) {
 void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!entityUI) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    // BANISHED_RT_ORPHAN_PROBE: the in-game half of standalone/rt_orphan_probe.cpp.
+    // Input::Device's readers need the Device singleton, which Engine::Startup
+    // builds long after the boot-time probe runs and Engine::Shutdown destroys
+    // before the exit dumps -- so the only place to reach it is a live frame,
+    // and this is the input path. One shot, then it costs one predictable
+    // branch per frame.
+    RtOrphanProbeInGame();
+
     void* keyMap = CamKeyMap();
     if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed || !fn_Time_AsSeconds) return;
 
