@@ -138,15 +138,70 @@ never registers a site at all. Measured against the site list:
 
 * **86 of the 113 ports executed** in the autostart run, including `Geometry::Attach` and
   `Detach`, whose first execution in this project's history is the phantom-name fix above.
-* **2 of the 7 EdgeMesh ports** (`EdgeMeshInstance::EdgeMeshInstance`, `EdgeMeshInstance::SetMesh`)
-  executed under `BANISHED_TOOL_HARNESS=select`, 0 divergences. The other five — `EdgeMesh` ctor,
-  `EdgeMesh::Set`, `SetMaterials`, and the `EdgeVertex` / `TriangleVertex` ctors — build the
-  outline MESH rather than an instance of it, and neither `select` nor `selectcitizen` reaches
-  them. **Registered, reachable, NOT verified.**
+* **All 7 EdgeMesh ports now execute, 0 divergences** — but finding the run that does took four
+  attempts and the answer is worth recording. `TOOL_HARNESS=select` (a founding house) and
+  `selectcitizen` reach only `EdgeMeshInstance` ctor + `SetMesh`; `placement`, `markremoval` and
+  `road` reach none of them. `BANISHED_OUTLINE_TRACE=1` explains why in one line:
+
+      [Outline] c4a0 cellIdx=(3,2) ... PREBUILT-branch variant=(3,2) ... cellMesh=...
+
+  `tool_base_render.cpp` has TWO branches. An entity WITH a per-cell mesh variant takes the
+  PREBUILT path and never tessellates; only `iVar10 < 0 || iVar11 < 0` takes the BUILD branch that
+  calls `Impl_b930` and with it the five EdgeMesh builders. A house and a citizen both have
+  variants. **A pasture does not** — `BANISHED_TOOL_HARNESS=pasturefull` logs
+  `cellIdx=(0,-1)` / `BUILD-branch` and exercises the lot:
+
+  | Export | calls | divergences |
+  |---|---|---|
+  | `EdgeMesh::TriangleVertex::TriangleVertex` | 858 | 0 |
+  | `EdgeMesh::EdgeVertex::EdgeVertex` | 192 | 0 |
+  | `EdgeMeshInstance::EdgeMeshInstance` | 16 | 0 |
+  | `EdgeMesh::EdgeMesh` / `Set` / `SetMaterials` | 2 each | 0 |
+  | `EdgeMeshInstance::SetMesh` | 2 | 0 |
+
+  Whole run: **209 sites, 26,237,724 calls, 87 divergences — the two Wave 1 sites only.**
+  The general lesson: "no harness reaches it" is usually "no harness reaches the BRANCH", and a
+  trace that prints which branch was taken finds the right harness faster than trying harnesses.
 * `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` (the COPY ctor) is now in the census orphan list
   with no caller at all. That is a direct consequence of this wave's own `engine_funcs` fix: its
   only "caller" was the fallback that resolved 0x1800174f0 under the DEFAULT ctor's name, and that
   fallback was wrong and is deleted. The port is registered and cannot be verified by any run.
+
+## The missing trees/rocks/iron report — RESOLVED, not reproducible
+
+Reported mid-wave by the user: on a new map no trees, rocks or iron were visible, while the
+tutorial (which loads a prebuilt save) showed them.
+
+Wave 6 is exonerated, and then the symptom itself is gone. Three measurements, in increasing order
+of what they can see:
+
+1. **Scene stage.** `BANISHED_LOD_CENSUS=1` on an identical pinned map (`BANISHED_SEED=12345
+   BANISHED_CAMERA_PIN=0,0,50`), ports ON vs OFF: `meshInstances=16137 multiLevel=2301 meshes=36
+   variants[1..4]=0/362/15775/0` — **identical**.
+2. **Draw stage.** `[DrawCensus] drawItems=1341 group0=366 groups=4` — **identical**. A third arm
+   with the `Geometry::Attach`/`Detach` fix reverted is identical too, which had to be checked
+   separately because the `BANISHED_RT_*` kill switches do NOT disable that fix.
+3. **The screen.** Neither census sees the GPU, so a new harness was added to close that gap
+   (below). Screenshots at frame 700 on the current build show trees, boulder clusters, the river
+   and the founding town rendering normally, both at `CAMERA_PIN=0,0,50` and `CAMERA_PIN=town,70`.
+
+**Most likely explanation: the report was made against a mid-wave build.** The user was testing the
+selection outline while runs 1-4 were live, and that window contained lane E's `SetMesh`,
+pool-slot-dereference and sign-extension defects — all three in `MeshInstance`, which is exactly
+what draws a tree. Runs 5+ have those fixed. Not proven, but it fits, and the current build does
+not reproduce the symptom.
+
+### New harness: `BANISHED_SCREENSHOT_AT=<frame>`
+
+`code/Game/Game/gameupdateloop.cpp` — raises the same request bit the 0x21 quicksave key raises,
+once, at that frame, so retail's own ported `GameUpdateLoop::TakeScreenshot` (0x140095da0) writes
+`Documents\Banished\Screenshots\Screenshot<N>.bmp` exactly as a keypress would.
+
+This exists because **the diff oracle, `[LodCensus]` and `[DrawCensus]` all stop short of the
+GPU.** Wave 6 had a visual regression report and no unattended way to answer it. With
+`BANISHED_SEED` + `BANISHED_CAMERA_PIN` making framing reproducible, a visual regression becomes a
+file two runs can diff. `tools/bmp2png.py <in.bmp> <out.png> <step>` converts the 24-bpp BMP with
+the standard library only (no Pillow in the project venv, and no pip).
 
 ## Outcome
 

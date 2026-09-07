@@ -1778,6 +1778,34 @@ post_simulation:
         if (fn_KeyMap_Pressed(keyMap, 0, 0x21)) {
             self->m_quickSavePressed = 1;
         }
+
+        // HARNESS, not retail: BANISHED_SCREENSHOT_AT=<frame> raises the same
+        // request bit the 0x21 keypress raises, once, at that frame. Retail's
+        // GameUpdateLoop::TakeScreenshot (0x140095da0, ported in
+        // code/Game/Game/w2_takescreenshot.cpp) then runs from Draw and writes a
+        // .bmp, exactly as a real keypress would.
+        //
+        // WHY THIS EXISTS: the diff oracle, [LodCensus] and [DrawCensus] between
+        // them cover the scene walk and the draw submission, and NONE of them can
+        // answer "is it actually on the screen" -- they all stop short of the GPU.
+        // Wave 6 needed that answer for a report of missing terrain resources and
+        // had no way to get it unattended. Combined with BANISHED_SEED and
+        // BANISHED_CAMERA_PIN (which make framing reproducible run to run) this
+        // turns a visual regression into a file two runs can diff.
+        {
+            static const char* const ssEnv = std::getenv("BANISHED_SCREENSHOT_AT");
+            static const long ssAt = ssEnv ? std::atol(ssEnv) : -1;
+            static long ssFrame = 0;
+            static bool ssFired = false;
+            ++ssFrame;
+            if (ssAt >= 0 && !ssFired && ssFrame >= ssAt) {
+                ssFired = true;
+                self->m_quickSavePressed = 1;
+                std::fprintf(stderr, "[Screenshot] BANISHED_SCREENSHOT_AT=%ld reached at frame %ld"
+                                     " -- raising the TakeScreenshot request bit\n", ssAt, ssFrame);
+            }
+        }
+
         if (fn_KeyMap_Pressed(keyMap, 0, 0x22)) {
             self->m_quickLoadPressed = 1;
         }
