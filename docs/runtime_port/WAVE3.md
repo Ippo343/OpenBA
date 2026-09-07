@@ -198,7 +198,16 @@ keyed on the old name would have been silently inert. Fixed; the `engine_funcs.h
 run. If it ever does, the bug is upstream: something handed us an `External` the factory never
 `Add()`ed. `FindNext` has the same shape one level down.
 
-### E. The `BANISHED_AUTOLOAD` harness stalls at the main menu (PRE-EXISTING, OPEN)
+### E. The `BANISHED_AUTOLOAD` harness stalls at the main menu (PRE-EXISTING, **CLOSED 2026-09-06 by Wave 4 lane H — see [WAVE4_LANE_H.md](WAVE4_LANE_H.md)**)
+
+> **Closed.** The stall was `UI::UserInterface::ShowDialog` (Runtime `0x18011fd10`) being a
+> nested `MainLoop::Frame` loop around an unanswerable `modsMissing` prompt — which is why it
+> looked like "`MenuDLT::Draw` forever": the process really was drawing menu frames, from
+> inside the modal. Two further defects sat behind it (a `String` destructor on an
+> `InternalBasePtr` corrupting an allocator tag, and a missing `GameContainer_EnsureLists` on
+> the Load path). All four functions below are now exercised on a real `Save9`/`Auto` load
+> with 0 divergences; the counts are in WAVE4_LANE_H.md §5. The paragraph that follows is
+> kept as written so the old claim stays recognisable.
 
 Injects the Load click, then loops in `MenuDLT::Draw` indefinitely with no world ever created.
 Reproduces with `BANISHED_RT_OBJECT=0` and with both `Save9` and the documented `Auto`, so it is

@@ -37,6 +37,7 @@
 #include "ui/Dialogs.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
@@ -909,6 +910,51 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 }
 
 // ============================================================
+// Unattended-harness escape for the modal dialogs on the save/load path
+// ============================================================
+// UI::UserInterface::ShowDialog (Runtime 0x18011fd10) is a NESTED MODAL LOOP: it
+// re-enters Engine::MainLoop::Frame until the dialog is removed. No autostart driver
+// can reach it -- AutoStart::TickMenu runs INSIDE that nested loop with its phase
+// already Done -- so an unanswered modal here is an unbounded stall that reads exactly
+// like "the menu never advances and no world is created". Same shape and same remedy as
+// ModDialog::Apply BANISHED_MODAL_ANSWER (code/Game/Dialog/moddialog.cpp).
+// 2 is the "confirm" answer every caller on this path tests for.
+// True when a harness env var says nobody is at the keyboard. Same list as
+// HarnessGuardUnattendedBoot (standalone/main.cpp) -- kept in step deliberately: both
+// answer the question "may we take a decision retail would put to the player?".
+static bool SaveLoad_UnattendedRun() {
+    static const char* const kVars[] = {
+        "BANISHED_AUTOSTART", "BANISHED_AUTOQUIT", "BANISHED_AUTOLOAD",
+        "BANISHED_AUTOTUTORIAL", "BANISHED_AUTOMENU_BUTTON", "BANISHED_PAUSEMENU_BUTTON",
+    };
+    for (const char* n : kVars) {
+        const char* v = std::getenv(n);
+        if (v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0) return true;
+    }
+    return false;
+}
+
+static int SaveLoad_ModalShowDialog(void* ui, void* dlgPtr, const char* what) {
+    const char* forced = std::getenv("BANISHED_MODAL_ANSWER");
+    if ((forced && *forced) || SaveLoad_UnattendedRun()) {
+        int answer = (forced && *forced) ? std::atoi(forced) : 2;
+        printf("[SaveLoadDialog] unattended run: answering modal \"%s\" with %d "
+               "(ShowDialog skipped; override with BANISHED_MODAL_ANSWER)\n",
+               what ? what : "?", answer);
+        fflush(stdout);
+        return answer;
+    }
+    printf("[SaveLoadDialog] entering MODAL ShowDialog \"%s\" -- re-enters MainLoop::Frame "
+           "and blocks until a human clicks; set BANISHED_MODAL_ANSWER=2 to run unattended\n",
+           what ? what : "?");
+    fflush(stdout);
+    int r = fn_UI_ShowDialog(ui, dlgPtr);
+    printf("[SaveLoadDialog] modal \"%s\" answered %d\n", what ? what : "?", r);
+    fflush(stdout);
+    return r;
+}
+
+// ============================================================
 // Helper: create a confirm-style MessageDialog from a .rsc path string
 // ============================================================
 // Loads the External resource by filename, verifies it is a DialogInstance,
@@ -946,7 +992,7 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // ShowDialog(ui, InternalPtr<DialogInstance>)
     uint64_t dlgPtr = 0;
     fn_InternalBasePtr_Ctor(&dlgPtr, dlg);
-    int result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dlgPtr);
+    int result = SaveLoad_ModalShowDialog(*(void**)(s + 0x10), &dlgPtr, rscPath);
     fn_InternalBasePtr_DeletePtr(&dlgPtr);
     return result;
 }
@@ -1046,9 +1092,36 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     int selectedIdx = *(int*)(s + 0xC0);
     void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
     int modCount = *(int*)((uintptr_t)saveInfo + 0x50);
+    printf("[SaveLoadDialog::DoLoad] selectedIdx=%d saveInfo=%p save-mod-count=%d gameWorld=%p\n",
+           selectedIdx, saveInfo, modCount,
+           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+    fflush(stdout);
+    // The list CheckMod matches the save against is IO::Modification::_singleton.
+    // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.
+    if (g_ppModificationSingleton && *g_ppModificationSingleton && fn_Modification_GetCount) {
+        void* modSgl = *g_ppModificationSingleton;
+        int installed = fn_Modification_GetCount(modSgl);
+        printf("[SaveLoadDialog::DoLoad] installed mod count=%d\n", installed);
+        for (int mi = 0; mi < installed && fn_Modification_GetMod; mi++) {
+            void* m = fn_Modification_GetMod(modSgl, mi);
+            const char* path = m ? *(const char* const*)((uintptr_t)m + 0x58) : nullptr;
+            printf("[SaveLoadDialog::DoLoad]   installed[%d] path=\"%s\"\n", mi, path ? path : "(null)");
+        }
+        fflush(stdout);
+    }
 
     for (int i = 0; i < modCount; i++) {
         int modStatus = fn_SaveLoad_CheckMod(saveLoad, selectedIdx, i);
+        {
+            void* si = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+            void* nameBase = *(void**)((uintptr_t)si + 0x48);
+            const char* nm = nameBase
+                ? *(const char* const*)((uintptr_t)nameBase + (uintptr_t)i * 0x20)
+                : nullptr;
+            printf("[SaveLoadDialog::DoLoad]   save mod[%d] \"%s\" CheckMod=%d\n",
+                   i, nm ? nm : "(null)", modStatus);
+            fflush(stdout);
+        }
         if (modStatus == 0) continue;  // mod is fine
 
         // Get mod name string pointer: saveInfo->modList[i] (stride 0x20 from base at +0x48)
@@ -1126,14 +1199,26 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         fn_String_Dtor(fmtBuf);
         fn_String_Dtor(verStrBuf);
 
-        // Show the warning dialog and check if user confirmed
-        uint64_t showPtr = 0;
-        fn_InternalBasePtr_Ctor(&showPtr, warnDlg);  // re-wrap for ShowDialog
-        // Note: original passes warnDlgPtr (the dialog InternalPtr from +0x77 slot)
-        // which was constructed above from warnDlg. Re-use warnDlgPtr.
-        int warnResult = fn_UI_ShowDialog(*(void**)(s + 0x10), &warnDlgPtr);
+        // Show the warning dialog and check if user confirmed.
+        // Retail (0x1400b61e0) copies the dialog InternalPtr into a scratch slot,
+        // hands ShowDialog the COPY (it takes its argument by value and writes
+        // through the slot it is given), and releases the ORIGINAL afterwards with
+        // InternalBasePtr::DeletePtr. There is no String destructor anywhere on this
+        // path.
+        //
+        // This block used to call `fn_String_Dtor(&showPtr)` on an InternalBasePtr
+        // holding `warnDlg`, a MemAlloc(0xC0) user pointer. System::String::~String
+        // does `*(int*)(data-4) -= 1`, and for a MemAlloc user pointer `data-4` is the
+        // HIGH DWORD OF THE ALLOCATOR BOUNDARY TAG (`data-8`), not a refcount -- so it
+        // decremented a live tag, borrowing into the tag's 41-bit size field and
+        // setting bits 32..40. That is the "load-path wild write whose fault address is
+        // a real pointer with +0x7FC in the high dword" (0x1FF << 32, times 4 = 0x7FC
+        // in the high dword of block + size*4). It was never a wild write and never
+        // save-specific: it is this line, and it fires on any load whose save names a
+        // mod that is not installed.
+        uint64_t showPtr = warnDlgPtr;
+        int warnResult = SaveLoad_ModalShowDialog(*(void**)(s + 0x10), &showPtr, warnPath);
         fn_InternalBasePtr_DeletePtr(&warnDlgPtr);
-        fn_String_Dtor(&showPtr);  // cleanup the extra ptr we built
 
         if (warnResult != 2) return;  // user declined mod warning — abort load
     }

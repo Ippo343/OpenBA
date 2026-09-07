@@ -135,6 +135,18 @@ void MainMenuDialog_OpenNewGame(MainMenuDialog* self) {
 // OpenLoad (0x1400B3770): "Dialog/SaveLoad.rsc", size 0x160, mode=1 (load)
 // Ctor: FUN_1400b8270(self, ui, extRes, nullParent, mode, enginePtr, gameWorldPtr)
 void MainMenuDialog_OpenLoad(MainMenuDialog* self) {
+    // Same reason as OpenAchievement below: retail fills the Game container and hands
+    // slot [0] to the AchievementManager ONCE at app init (GameContainer_Init,
+    // 0x140099db0, from FUN_140001120), so every path into a game finds the manager
+    // populated. Standalone replaced that with per-dialog GameContainer_EnsureLists()
+    // calls in New Game, Scenario and Achievements -- and the LOAD path had none. A
+    // loaded game therefore reached GameUpdateLoop::Update with the manager's instance
+    // list (mgr+0x18) still null and faulted READ of 0 inside
+    // AchievementManager::Update (Runtime 0x18009e6f4). That is the "achievement
+    // instances are null after a load" open: it was a MISSING INIT on this path, not a
+    // load-path Persist defect.
+    GameContainer_EnsureLists();
+
     uintptr_t s = (uintptr_t)self;
     void* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
     void* dlgObj = nullptr;

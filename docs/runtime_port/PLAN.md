@@ -486,15 +486,22 @@ the diff harness have each caught at least one real divergence.
       **Standing rule from this wave: 3+ runs per config, and take the free `BANISHED_RT_PORT=0`
       A/B at every boundary.** One run cannot resolve a 5-point effect.
 - [ ] Tutorials 1–4, a new game to 36/36 achievements' current 25 count, and `Save9.sav` load all green at each wave boundary.
-      **`Save9.sav` COULD NOT BE EVALUATED at the Wave 3 boundary, and could not have been at the
-      Wave 2 boundary either.** The `BANISHED_AUTOLOAD` harness injects its Load click and then
-      loops in `MenuDLT::Draw` forever with no world created. It reproduces with
-      `BANISHED_RT_OBJECT=0` and with both `Save9` and the documented `Auto`, so it is
-      **pre-existing and not save-specific**. Consequence: four Wave 3 functions live only on that
-      path and are landed registered-but-unexercised —
-      `InternalFactory::ClearPersistState`/`ResetPersistState` and
-      `ExternalFactory::GetReferenceId`/`GetPathForReferenceId`.
-      **Wave 4 (IO) should fix this harness first**, since it lives entirely on that path.
+      **The `Save9.sav` harness is FIXED (Wave 4 lane H, see [WAVE4_LANE_H.md](WAVE4_LANE_H.md)).**
+      `Save9` and `Auto` both load, build the world and reach gameplay unattended, and all four
+      Wave 3 functions that lived only on that path are now exercised with 0 divergences —
+      `ExternalFactory::GetPathForReferenceId` 89,733 calls, `GetReferenceId` 1,
+      `InternalFactory::ClearPersistState` 1 and `ResetPersistState` 1 (the last two in shadow
+      mode). Three defects, none of them a port and none of them save-specific: (a)
+      `UI::UserInterface::ShowDialog` is a NESTED `MainLoop::Frame` LOOP, and the `modsMissing`
+      prompt every save on this machine triggers ("Debug Menu", not installed) had no unattended
+      answer — that was the whole stall; (b) the "load-path wild write with +0x7FC in the high
+      dword" was `fn_String_Dtor` called on an `InternalBasePtr` in `SaveLoadDialog::DoLoad`,
+      decrementing an allocator boundary tag's high dword — one line, not a wild write; (c) the
+      Load path never called `GameContainer_EnsureLists`, which is why a loaded game's
+      `AchievementManager` had no instance list. This row used to say the harness "loops in
+      `MenuDLT::Draw` forever with no world created" and that the four functions were
+      registered-but-unexercised; both are now false. Tutorials 1–4 and the 36/36 run have NOT
+      been re-measured at this boundary.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---
