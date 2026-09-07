@@ -702,7 +702,9 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       (WAVE9.md). The reframe that makes them tractable: at cutover a holdback cannot stay on
       the DLL, but it does not automatically need a faithful port either — it needs to **not be
       a missing symbol**, so each resolves to *port*, *probe*, or *stub with a written reason*.
-      Groups: **P** 1 function (a probe on machinery that now exists), **B** 10 (blocked on a
+      Groups: **P** 1 function — **now CLOSED**, `UpdateLoop::IsRunning` probed on both
+      branches including the near-miss `_nextLoop` field, true branch confirmed reached —
+      **B** 10 (blocked on a
       named dependency — `Audio::SoundBuffer`/`SoundEffect`, retail's `IO::Encoding` offsets,
       the allocator), **N** 7 (allocator-bound, or oracle-hard: `Input::Device::Update` needs a
       BESPOKE oracle because call-twice drains the DirectInput queue it is reading), **D/X** 14

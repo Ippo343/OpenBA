@@ -45,6 +45,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <cstdint>
 
 namespace {
 
@@ -367,15 +368,96 @@ void ProbeInputKeyMap(void* keyMap) {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Engine::UpdateLoop::IsRunning -- WAVE8.md: "never observed executing in any
+// of the four runs", and lane A asked specifically that it not be assumed.
+//
+// It is the ONE function in lane A with a full replay oracle, which is where a
+// divergence would be most informative, and it had no caller. Retail is two
+// instructions:
+//
+//     MOV RAX,[0x1801fe750]        ; Engine::MainLoop::_singleton
+//     CMP RCX,[RAX+0x20]           ; this == _singleton->_currentLoop ?
+//
+// `this` is COMPARED, never dereferenced -- which is what makes the false
+// branch safe to probe with pointers that are not UpdateLoops at all. The true
+// branch needs the genuinely running loop, and only a live frame has one.
+//
+// Both branches matter: a port that returned a constant, or that compared
+// against `_nextLoop` (+0x28) instead of `_currentLoop` (+0x20), would pass a
+// one-sided test. `_nextLoop` is included below for exactly that reason -- it
+// is the near-miss field, and on a frame where a loop switch is pending it is a
+// DIFFERENT pointer that must still answer false.
+// ---------------------------------------------------------------------------
+typedef bool (*IsRunningFn)(const void*);
+
+void ProbeUpdateLoopIsRunning() {
+    const char* kName = "?IsRunning@UpdateLoop@Engine@@QEBA_NXZ";
+    const char* kSubject = "Engine::UpdateLoop::IsRunning";
+
+    IsRunningFn ours = reinterpret_cast<IsRunningFn>(ResolveExport(kName));
+    IsRunningFn theirs = reinterpret_cast<IsRunningFn>(ResolveExportRaw(kName));
+    if (!ours || !theirs || ours == theirs) {
+        fprintf(stderr, "[RtOrphan] FAIL %s: ours=%p theirs=%p%s\n", kSubject,
+                (void*)ours, (void*)theirs,
+                (ours && ours == theirs) ? " (port NOT registered)" : "");
+        ++g_fail;
+        return;
+    }
+
+    void** slot = reinterpret_cast<void**>(
+        ResolveExportRaw("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
+    uint8_t* mainLoop = slot ? reinterpret_cast<uint8_t*>(*slot) : nullptr;
+    if (!mainLoop) {
+        fprintf(stderr, "[RtOrphan] SKIP %s: no MainLoop singleton\n", kSubject);
+        return;
+    }
+    void* currentLoop = *reinterpret_cast<void**>(mainLoop + 0x20);
+    void* nextLoop    = *reinterpret_cast<void**>(mainLoop + 0x28);
+
+    struct Case { const char* name; void* self; };
+    int dummy = 0;
+    const Case kCases[] = {
+        { "current-loop (true branch)", currentLoop },
+        { "next-loop (the near miss)",  nextLoop    },
+        { "null",                       nullptr     },
+        { "unrelated pointer",          &dummy      },
+        { "the MainLoop itself",        mainLoop    },
+    };
+
+    int mismatches = 0;
+    for (const Case& c : kCases) {
+        bool a = ours(c.self);
+        bool b = theirs(c.self);
+        if (a != b) {
+            char detail[128];
+            snprintf(detail, sizeof(detail), "self=%p ours=%d theirs=%d",
+                     c.self, (int)a, (int)b);
+            Report(kSubject, c.name, false, detail);
+            ++mismatches;
+        }
+    }
+    if (mismatches == 0) {
+        ++g_pass;
+        // Say whether the TRUE branch was actually reached: if currentLoop were
+        // null this would be five agreeing falses, which is a vacuous pass of
+        // exactly the kind this file exists to refuse.
+        fprintf(stderr, "[RtOrphan] pass %s 5 cases (true branch %s)\n", kSubject,
+                (currentLoop && ours(currentLoop)) ? "REACHED" : "NOT reached");
+    }
+}
+
 }  // namespace
 
 extern "C" void RtOrphanProbeInGame(void* keyMap) {
     if (g_inGameDone || !Enabled()) return;
     g_inGameDone = true;
 
-    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap) ====\n");
+    fprintf(stderr, "[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap, UpdateLoop) ====\n");
     ProbeInputDevice();
     ProbeInputKeyMap(keyMap);
+    ProbeUpdateLoopIsRunning();
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }

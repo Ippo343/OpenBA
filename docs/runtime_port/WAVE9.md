@@ -386,8 +386,8 @@ precedent for the third being a legitimate answer.
 
 | # | Holdback | Disposition |
 |---|---|---|
-| **P — dissolvable by probe** | | |
-| 1 | `UpdateLoop::IsRunning` (lane A) | **PROBE.** Never observed executing in any of Wave 8's four runs, but it is a const read with a full replay oracle — the same shape as `Input::Device`, which the probe closed. Reaches us through exe dispatch slot `0x140152850` from `populationgoal.cpp:141`. Needs an `UpdateLoop*`, so it wants a probe point with one in hand. |
+| **P — dissolvable by probe: DONE 2026-09-07** | | |
+| 1 | `UpdateLoop::IsRunning` (lane A) | **CLOSED — 5 cases, 0 mismatches, true branch REACHED.** Retail is two instructions: `MOV RAX,[0x1801fe750]; CMP RCX,[RAX+0x20]` — `this` is COMPARED, never dereferenced, which is what makes the false branch safe to probe with pointers that are not `UpdateLoop`s. Cases: the running loop (true), **`_nextLoop` (+0x28) — the near miss, because a port comparing the pending loop instead of the current one would pass a one-sided test**, null, an unrelated stack address, and the `MainLoop` itself. The probe prints whether the true branch was reached, so five agreeing falses cannot read as a pass. |
 | **B — blocked on a named dependency; ordinary port work once it lands** | | |
 | 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after `Audio::SoundBuffer`/`SoundEffect`.** All three reach `Device`'s COM channel objects; none of the three classes was in Wave 8's scope. `Scene::Update` also consumes `System::Random`, so it needs an oracle design, not just a body. |
 | 5-7 | `Audio::Scene::StopAll`, `Pause`, `StopEffect3D` | **PORT with 2-4.** Each calls into `Device::Stop` / the platform channel array. Porting the outer loop alone would put two implementations of one state machine in play (WAVE8.md §1). |
@@ -437,9 +437,11 @@ honest end state for them before the wave opens.
 Everything inherited now has either a verification or a written disposition. What remains is
 work, not undecided work:
 
-* **The 32 holdbacks** — triaged above into P (1, a probe), B (10, blocked on a named
-  dependency), N (7, allocator-bound or oracle-hard) and D/X (14, stubs or already-unblocked).
-  Lane A executes that table.
+* **The 31 remaining holdbacks** — triaged above. **P is DONE** (`UpdateLoop::IsRunning`,
+  closed by probe). What is left is B (10, blocked on a named dependency), N (7,
+  allocator-bound or oracle-hard) and D/X (14, stubs or, for one of them,
+  `SerializeReferenceTable`, genuinely unblocked and lane A's cheapest row). Lane A executes
+  that table.
 * **`Input::Device::Update` needs a bespoke oracle**, not more time — call-twice corrupts the
   DirectInput queue it is reading. It is the hardest single item in the wave.
 * **The perf gate**, deferred by the user to lane H.
