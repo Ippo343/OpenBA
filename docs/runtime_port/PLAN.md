@@ -369,7 +369,7 @@ Runtime programs.
 | **3 Object** — **LANDED 2026-09-06, see [WAVE3.md](WAVE3.md)** | 22 of the 41 Object functions our tree calls (type system 6, handle table 5, external table 11), across three lanes plus a perf lane. **38,613,179 diffed calls, 0 new divergences**; the handle-table shadow oracle ran clean at 93,387 calls each for `Internal::Internal`/`~Internal`. Four `ExternalFactory` mutators are NOT ported (no oracle possible / Wave 4 dependency) and five handle-table mutators are opt-in with a **NO-GO**. Found that the Wave 2 perf breach was ONE defect (`RtOriginal` is `GetProcAddress`, called inside `System::Time`'s body), that WAVE2.md's perf attribution was backwards, and that `CheckPtr` is a bare `RET` in the profile build too. **The vtable-ownership worry in this row did not materialise**: `??_7Internal`/`??_7Base` are exported, so the port stamps the DLL's own vtable — a per-class argument, not a general one. | M | The reflection + handle table |
 | **4 IO** — **LANDED 2026-09-06, see [WAVE4.md](WAVE4.md)** | 39 of the 41 IO functions our tree calls (Serializer 22, CompressedMemoryStream 6, Persistence 5, FileSystem/Modification 6); **21,672,859 diffed calls, 0 IO divergences**. Also FIXED the `BANISHED_AUTOLOAD` harness this plan had blocked on since Wave 2, and disproved three recorded facts about `IO::Serializer` (the ctor's `version` is NOT ignored, the factory-slot arity IS 3, and `Serializer+0x08` is a `ReaderWriter*`). The 5% perf gate is BREACHED at +7.7%/+7.5% and DEFERRED BY THE USER to after the final stage. Scoped to the 39 IO symbols our tree actually calls, which is far less than this row implied. "Stream family" is 6 exports on ONE class, `IO::CompressedMemoryStream`, all thin shims over `IO::CompressedStream`; the codec, `FileStream`, `BinaryFileStream`, `TextFileStream`, `VisitorStream`, `CompressedFileStream` and `CompressedCopyFileStream` are untouched. **`PackageFile` and `BinaryReader/Writer` are NOT in this wave at all** — our tree never calls them, so the "densest class in the DLL" note describes work no wave has yet needed. Lanes: A Serializer (19), B CompressedMemoryStream (6), C Persistence (7), D FileSystem+Modification (7), H the `BANISHED_AUTOLOAD` harness | M | Encoding vtable offsets differ between retail and the profile build — see the warning in `runtime/src/io/rt_io_port.cpp` |
 | **5 Algorithm packages** — **LANDED 2026-09-06, see [WAVE5.md](WAVE5.md)** | 58 of the 74 functions our tree calls: Achievement 34 (Goal 13 + Manager family 21), Save 15, Picking 9/9. **Collision2D and Pathfinding are TRUE ZEROES** — our tree calls neither, and pathfinding is reimplemented natively in the exe (`code/Game/Action/action_pf_*.cpp`), so this row's five namespaces are really three. 14 runs, the largest 160,416,395 diffed calls, **0 divergences in every Wave 5 site**. Found 2 live defects (4 phantom `Goal` manglings, one of which skipped the InternalFactory swap-remove before a `MemFree`; a `SavedState` fallback pointing 0x90 bytes INTO another function), a pre-existing mods-menu crash, and **an uninitialised read in the shipped DLL** (`RemoveMesh` leaves `Entry::_userValue2` uninitialised). Also fixed three census blind spots. | M each | Self-contained, each ~13–18 KB, only System/Object below them |
-| **6 Video + Graphics** | Video abstraction (Device/Context/buffers; the VideoDX11 plugin interface stays), Scene/Renderer/Mesh/MeshInstance/Animation/Particle/Lights | L | Graphics→Video 73 edges, port Video first |
+| **6 Video + Graphics** — **LANDED 2026-09-07, see [WAVE6.md](WAVE6.md)** | 113 of the 148 functions our tree calls (Video 53/69, Graphics 59/87), across 7 lanes. **Two FINAL runs, 25,858,610 and 49,643,611 diffed calls, 0 Wave 6 divergences** — every remaining divergence is the pre-existing Wave 1 1-ULP family. Found 5 port defects and 2 oracle-design defects, plus a LIVE functional gap that was not a port: `Geometry::Attach`/`Detach` were spelled `AEAV12@` where the DLL only exports `PEAV12@`, `ResolveExport` has no address fallback, and both call sites are `if (ptr)`-guarded — so every attach and detach in `action_base_complete.cpp` had been silently dead since it was written. **This row's premise about the detour was WRONG in our favour**: `Video::Context` has no vtable and `??_7Geometry` is exported, so no detour was needed and none was installed. `Renderer::Draw` is held back and wants its own lane. | L | Graphics→Video 73 edges, port Video first |
 | **7 UI** | 73 classes, 1,625 fns, 193 KB | XL | Element by element; DialogInstance and UserInterface last |
 | **8 Top** | Audio, Input, Application, Engine (MainLoop/UpdateLoop/Loader family, some already reimplemented in the hook era: `engine/types/MainLoop.h` etc.), Save | M | Integrators; mostly wiring |
 | **9 Cutover** | Remove `LoadLibrary` of Runtime; retire the §2.2 patches; VideoDX11 is already ours (`dx11/`) | S | |
@@ -387,6 +387,16 @@ our own call sites are what matter — but it does mean **the "DLL's own interna
 (§4.1 decision 3) remains completely unexercised**. The first wave that ports something the DLL
 calls internally will be using that mechanism for the first time, in anger, with no prior
 evidence it works beyond one self-test.
+
+**Wave 6 was expected to be that wave, and it was not.** It ported `Video::Context`, which the
+DLL's own `Graphics::Renderer`, `UI::Begin` and `MainLoop::Draw` call internally — the exact
+shape this note describes. It still needed no detour, for two reasons worth carrying forward:
+`Video::Context` has NO vtable, so our port and the DLL's code operate on one live object with no
+dispatch ambiguity as long as the layout is faithful; and where a vtable was involved
+(`Graphics::Geometry`), `??_7Geometry@Graphics@@6B@` is EXPORTED, so the ported ctor stamps the
+DLL's own vtable byte for byte instead of minting one. The detour count is still 0 across all
+4,632 functions. The mechanism remains unproven in anger, and the first wave that ports a
+*stateful* class the DLL drives internally will still be its first real user.
 
 ### 4.3 Risks, ranked
 
@@ -502,6 +512,23 @@ evidence it works beyond one self-test.
       invokes on resource release, and scenarios live for the process), and `SaveLoad::Update` cases
       3 and 5. Seven more are held back with reasons, four of them because constructing an
       `IO::Serializer` emits a 12-byte stream header and admits no oracle.
+- [x] **Wave 6 (Video + Graphics) merged.** Census after the wave: **756 called, 360 ported
+      (47.6%)** — Video 53/69 (76.8%), Graphics 59/87 (67.8%), Picking 9/9, System 54/68,
+      Math 58/63, Volume 12/13, IO 36/52, Achievement 34/50, Object 28/44, Save 15/20.
+      Two final runs, **0 Wave 6 divergences** in 25.8M and 49.6M diffed calls, both with a
+      zero-byte crash log. 86 of the 113 ports executed in the autostart run; 2 of the 7 EdgeMesh
+      ports executed under `BANISHED_TOOL_HARNESS=select` and **5 are registered but NOT
+      verified** (they build the outline mesh, which no harness reaches), as is the
+      `EdgeMeshInstance` COPY ctor, which this wave's own `engine_funcs` fix left with no caller.
+      Held back with written reasons: `Renderer::Draw` + `AddDrawItem` (they pin `Video::Context`
+      and `Geometry` layouts two lanes were porting concurrently — PLAN §4.3 risk 3, verbatim),
+      `Video::Device` `Startup`/`Shutdown`/`Recreate`/`ReleaseDynamic` and `RenderBuffer`
+      ctor/dtor (real D3D11 device + a Win32 critical section, no oracle in either direction),
+      `MeshInstance::AddDrawItems` (`standalone/scene_watch.cpp` resolves its ADDRESS as an
+      identity token to recognise a MeshInstance — registering it would silently blind
+      `BANISHED_LOD_CENSUS`, the `0x1400f2f00` shape from §1.1), `AnimationManager::Update` /
+      `Serialize`, `FrameCopyImageBuffer`, `ImageBuffer::SaveImageToFile`, and the exported DATA
+      symbols. See [WAVE6.md](WAVE6.md).
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
       Wave 1 on `sa-run`: **6,556,631 calls / 0 divergences** with `BANISHED_RT_LIBM=dll`;
       90 divergences in 2 sites with our own libm, all 1 ULP and all sin/cos-fed
