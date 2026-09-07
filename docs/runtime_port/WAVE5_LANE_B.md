@@ -1,7 +1,11 @@
 # Wave 5, lane B — Achievement / AchievementInstance / AchievementManager
 
 Following [PLAN.md](PLAN.md) §4.2 and §6. Lane B owns the 19 code exports and 3
-data exports the brief listed on these three classes.
+data exports the brief listed on these three classes, **plus 4 more the brief
+could not see** — `Achievement`'s constructor, destructor, `GetFileVersion` and
+`Serialize`, which `code/Game/Game/scenario.cpp:72-78` reaches by RAW ADDRESS
+and which therefore never appeared in the `ResolveExport` grep the brief was
+built from. Scope total: **23 code exports**, of which 21 are ported.
 
 Files owned and written by this lane — **no edits outside this set**:
 
@@ -16,20 +20,55 @@ orchestrator to apply.
 
 ---
 
+## 0. The headline finding — what `AchievementManager+0x30` is
+
+Nobody in this project had characterised this behaviour, so it is stated here
+before anything else.
+
+**`AchievementManager+0x30` is a `Collection::Array<System::Time>` of
+ACCUMULATED per-achievement time, and `Update` is a rotating cursor that
+evaluates exactly ONE achievement per tick.** Every tick, every not-yet-completed
+achievement's slot gets the frame delta added and every completed one's slot is
+hard-zeroed. When the cursor (`_lastAchievementUpdate`, +0x40) reaches an
+achievement, that achievement's instance is updated with its WHOLE accumulated
+total, the slot is zeroed, and the cursor advances with wraparound, skipping
+completed entries.
+
+So **each achievement is evaluated once every `_instances._size` ticks, with
+`_size` ticks' worth of time** — not once per tick, and not with the frame
+delta. That is the entire reason the times array exists, and it is why the
+integration run shows `AchievementManager::Update` and
+`AchievementInstance::Update` at the same 901 calls while 36 achievements exist:
+one instance is touched per tick, in rotation.
+
+Retail inlines all of it, which is why it was not readable before; the profile
+build (0x180028cd0) spells the call out as
+`AchievementInstance::Update(inst, _updateTimes[_lastAchievementUpdate])`.
+
+The gate above it matters too: **if any user pack file (mod) is mounted,
+`Update` returns immediately and not one line of the above runs.** Retail
+inlines this as `CMP dword [FileSystem::_singleton+0x38],0 / JG done`; the
+profile build names it `IO::FileSystem::AreUserPackFilesEnabled` (0x1800acfc0).
+That is the whole mechanism behind `BANISHED_ACH_IGNORE_MODS` and behind
+`reference_mods_off_breaks_save_loading.md`'s "achievements need the mods OUT".
+
+---
+
 ## 1. Result
 
 | | |
 |---|---|
-| Ported | **18 of 19** code exports |
-| Held back | `?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z` — see §5 |
+| Ported | **21 of 23** code exports |
+| Held back | `AchievementManager::Persist` and `Achievement::Serialize` — **both construct an `IO::Serializer`**, see §5 |
 | Not portable before cutover | the 3 DATA exports (`?_singleton@AchievementManager@…`, `?_typeInfo@Achievement@1@…`, `?_typeInfo@AchievementInstance@…`) — see §6 |
-| `RtAchManagerRegister()` returns | **18** |
-| Census (`tools/runtime_census.py --namespace Achievement`) | Achievement **0 → 31 of 49 called (63.3%)**; 18 of those 31 are this lane's, 13 are lane A's `goal.cpp`. Verified by counting one-line `RegisterRuntimeExport("` literals per file: goal.cpp 13 + achievement_manager.cpp 18 = 31 |
-| Diff sites added | **18** — 9 full oracles, 9 shadow verdicts |
+| `RtAchManagerRegister()` returns | **21** |
+| Registration form | **both forms for every one of the 21**: 21 `RegisterRuntimeExport("<one-line literal>"` and 21 `RegisterRuntimeAddr(0x…)`, verified by count |
+| Census | `Achievement` **0 → 31 of 46 called (67.4%)** — 18 of this lane's + 13 of lane A's `goal.cpp`. This lane's 3 new `Achievement` lifecycle ports land in the census's **`internal`** bucket, not the `Achievement` one, because `tools/runtime_census.py:287` files every address-called row under `internal` regardless of namespace (§7.6). All three read `ported=1` in the CSV. 18 + 3 = the 21 registered |
+| Diff sites added | **21** — 10 full oracles (one of them a full 0x58-byte oracle), 11 shadow verdicts |
 | `tools/abi_retslot_audit.py` | **0 suspicious of 49**, unchanged |
-| `tools/export_name_audit.py` | none of this lane's 22 names is a phantom; all 19 code exports verified present in the shipped export directory with `pefile` **before any body was written** (§2) |
+| `tools/export_name_audit.py` | after lane E's two-adjacent-literals fix: 11 phantoms tree-wide, **none of them this lane's**. All 23 code exports were verified present in the shipped export directory with `pefile` **before any body was written** (§2) |
 | Build | `mingw32-make standalone-debug` clean, no new warnings |
-| **Measured in a run** | **NOTHING. No `sa-run`, no `sa-stress`, no `BANISHED_RT_DIFF=1` pass.** The brief reserves integration runs to the orchestrator. Every claim below is static: decompile + disassembly + a clean compile. Read none of it as "observed agreeing." |
+| **Measured in a run** | the FIRST 18 were exercised by the orchestrator's integration pass (§8). The 3 added afterwards have NOT been. |
 
 ---
 
@@ -64,6 +103,26 @@ DATA 0x1801fc670 ord=4798  ?_singleton@AchievementManager@Achievement@@0PEAV12@E
 DATA 0x1801f9898 ord=4823  ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A
 DATA 0x1801f98d0 ord=4824  ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A
 ```
+
+### The four the brief's grep could not see
+
+`code/Game/Game/scenario.cpp:72-78` resolves these four by
+`ResolveAddr(Module::Runtime, …)`, never by name, so a `ResolveExport` grep
+misses them entirely and a name-only registration would never reach them:
+
+```
+OK  0x18009e240 ord=24    ??0Achievement@0@QEAA@XZ                  [PORTED]
+OK  0x18009e180 ord=518   ??1Achievement@0@UEAA@XZ                  [PORTED]
+OK  0x18009e170 ord=2608  ?GetFileVersion@Achievement@1@UEBAHXZ     [PORTED]
+OK  0x18009e070 ord=3618  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z  [HELD BACK, §5]
+```
+
+That file uses addresses on purpose, and its own comment says why: the ordinals
+it used to use (0x26d/0x26e/0x309) are **stale** in the shipped DLL and resolve
+to `~LayoutElement`, `~Light` and `EdgeMeshInstance::operator new`, so
+`Scenario_Init` called `~LayoutElement` on a fresh Scenario and corrupted the
+heap. That history is the reason this lane registers **both** forms for all 21
+ports rather than only the one currently in use.
 
 Same pass also verified the six dependencies this lane calls but does not port:
 `??0Internal@Object@@QEAA@XZ` 0x1800bfd10, `?IsDerivedFrom@Base@Object@@QEBA_NI@Z`
@@ -169,6 +228,9 @@ guessing (an earlier draft of the source attributed `Get` to profile
 | 16 | `AchievementManager::SetAchievements` | 0x18009e860 | not looked up | store the list, size `_updateTimes` and `_completed`, `ReadAchievements()` | shadow — DLL `GetAchievementCount` agrees with both array sizes |
 | 17 | `AchievementManager::Reset` | 0x18009e5c0 | not looked up | size `_instances`, fill with `Achievement::CreateInstance` | shadow (§4.4) |
 | 18 | `AchievementManager::Update` | 0x18009e6c0 | 0x180028cd0 | the rotating updater (§4.5) | shadow, mostly weak (§4.5) |
+| 19 | `Achievement::Achievement()` | 0x18009e240 | not looked up | 13 stores, no call: stamp Base then External then Achievement vtable, zero +0x08..+0x50 | **full BYTE oracle**, §4.7 |
+| 20 | `Achievement::GetFileVersion` | 0x18009e170 | not looked up | `return 3` (virtual, slot 3) | **full** |
+| 21 | `Achievement::~Achievement()` | 0x18009e180 | not looked up | re-stamp vtable, free the goal array, release 3 Strings, `External::~External` | shadow — refcount deltas, §4.8 |
 
 ### 4.1 The constructor's shadow
 
@@ -254,6 +316,42 @@ awarded something, the DLL's own `IsAchievementAwarded` reads back true. Most
 ticks award nothing and therefore prove only the cursor invariant — said here
 rather than left for a reader to discover.
 
+### 4.7 `Achievement::Achievement()` gets the one real byte oracle
+
+The constructor's writes are confined to `this` and cover all 0x58 bytes, and
+it calls nothing. So the DLL's copy can be run into a **poisoned (0xCD) scratch
+buffer** and compared byte for byte with `RT_DIFF_BYTES` — no side effect, and
+a proof of every byte rather than of an invariant. The poison matters: without
+it a byte the DLL writes and we do not would accidentally match a zero.
+
+The two dead vtable stores (Base, then External, then Achievement, all to
+`[this+0x00]`) are kept. They are the inlined base constructors, they are the
+body, and a detour or a debugger break between them would make the intermediate
+values observable. All three vtables are **exported data symbols**
+(`??_7Base@Object@@6B@` 0x180154788, `??_7External@Object@@6B@` 0x1801547a0,
+`??_7Achievement@0@6B@` 0x180154740), so the port resolves them by name and
+stamps the DLL's own vtables instead of cloning slots (PLAN.md §2.2 D).
+
+### 4.8 `~Achievement` — the shadow that checks the dangerous part
+
+Running the DLL's destructor as an oracle is a double free, so instead each of
+the three `String` fields is snapshotted as `{data, refcount}` **before**, and
+the arithmetic checked after:
+
+* refcount was > 1 → it must now be exactly one less, and the field null;
+* refcount was == 1 → the block is gone and unreadable, so only the field is
+  checked: it must hold `data - 8`.
+
+That asymmetric leftover (`data - 8` on the freeing branch, null on the sharing
+branch) is retail's, and is **not** tidied. Reproducing it exactly is the
+point: the one-line bug behind
+`reference_load_wild_write_high_dword_7fc.md` was this same idiom applied to
+something that was not a String, and the way not to repeat it is to run the
+already-ported, already-diffed `RtString_ReleaseInline` on fields whose offsets
+came out of the bytes. The goal-array free (`FUN_180004890`) and
+`Object::External::~External` remain the DLL's code, called; nothing here
+claims to prove their halves.
+
 ### 4.6 One deliberate departure from Wave 4 lane C's resolution rule
 
 Lane C's rule (`runtime/src/io/persistence.cpp`) is that a port should ask the
@@ -272,9 +370,11 @@ to be exactly one owner.
 
 ---
 
-## 5. Held back: `AchievementManager::Persist` (0x18009e910)
+## 5. Held back: the two functions that construct an `IO::Serializer`
 
-Fully reversed, deliberately not ported. The body:
+**`AchievementManager::Persist` (0x18009e910)** and
+**`Achievement::Serialize` (0x18009e070)**. Both fully reversed, both
+deliberately not ported, for one shared reason. `Persist`'s body:
 
 ```
 Serializer s;                      // INLINED, on the stack: {Stream* , ReaderWriter*}
@@ -309,12 +409,45 @@ s._rw->vtable[0](s._rw, 1);                           // deleting dtor
    serialize slot at +0xa0 are vtable displacements, and this project has a
    standing finding that those differ between retail and the profile build.
 
-**Unported, every caller keeps the DLL's version, byte for byte unchanged**
-(`code/Game/Game/gameupdateloop_serialize.cpp:161` is the only one). Landing it
-later is a bounded job for whoever owns the Wave 4 Serializer machinery: the
-body above is complete, and the four helpers it needs (`RemoveAll` 0x18009e9d0,
-`Array<InternalPtr>::SetSize` 0x180008d60, `FUN_180009a20`, and a Serializer
-constructed the Wave 4 way) all exist.
+**`Achievement::Serialize` (0x18009e070) is the same shape and is held for the
+same reason.** It builds a Serializer from the stream in the identical inlined
+way, then streams `_stringTable` (+0x20), `_title` (+0x28), `_description`
+(+0x30), `_spriteSheet` (+0x38), `_spriteName` (+0x40), an int count at +0x50
+and the goal array at +0x48, and destroys the codec. Same 12-byte header, same
+absence of any oracle, same silent-desync failure mode — and this one is on the
+**resource load** path, where a wrong byte count corrupts every subsequent
+resource in the pack file rather than one save.
+
+**Unported, every caller keeps the DLL's version, byte for byte unchanged** —
+`code/Game/Game/gameupdateloop_serialize.cpp:161` for `Persist`,
+`code/Game/Game/scenario.cpp:78` for `Serialize`. Landing either later is a
+bounded job for whoever owns the Wave 4 Serializer machinery: both bodies are
+recorded here, and the helpers they need (`RemoveAll` 0x18009e9d0,
+`Array<InternalPtr>::SetSize` 0x180008d60, `FUN_180009a20`, `FUN_180005110`,
+`FUN_180005220`, and a Serializer constructed the Wave 4 way) all exist.
+
+### Does holding these two split the class?
+
+**No, and the reason is specific rather than reassuring.** The lead's worry —
+a half-ported class mutating shared state — needs the two implementations to be
+able to disagree about state that outlives a call. Here they cannot:
+
+* `Achievement`'s constructor writes **only to `this`** (13 stores, no call, no
+  allocation, no registration — read out of the bytes at 0x18009e240).
+* Its destructor writes only to `this` plus the one shared heap, which both
+  sides already reach through the same `MemoryAllocator::_singleton`; the goal
+  array free and `External::~External` are still the DLL's own code, called.
+* `GetFileVersion` returns a constant.
+* `Serialize`'s state is the stream, and it stays entirely the DLL's.
+
+So an `Achievement` constructed by the DLL and destroyed by our port — or the
+reverse — sees identical bytes. That reverse case is not hypothetical: the DLL
+builds its own `Achievement`s through `?CreateNewObject@Achievement@1@` /
+`?CreateInPlaceObject@…`, which call the constructor **internally, DLL to DLL,
+through no export**, and no detour is installed, so those keep using the DLL's
+copy no matter what we register (PLAN.md §4.2's standing note that the detour
+mechanism has still never been exercised on a port). Only `scenario.cpp`'s
+Scenario, an exe-side subclass, comes to ours.
 
 ---
 
@@ -367,7 +500,11 @@ export cited. This lane reads it through
 `RtAchievement::kFileSystemUserPackFileCountOffset` in the meantime and says
 why at the constant.
 
-### 7.3 `engine/funcs/engine_funcs.cpp:4711` — a phantom export name (live)
+### 7.3 `engine/funcs/engine_funcs.cpp:4711` — phantom export name — **FIXED**
+
+**Status: already corrected in the tree** (the line now reads `UEAAX`, and the
+name no longer appears in `export_name_audit.py`'s output). Recorded because
+this lane found it and because the shape is worth remembering.
 
 ```cpp
 fn_GoalInstance_Persist = ResolveExport("?Persist@GoalInstance@Achievement@@QEAAXAEAVStream@IO@@@Z");
@@ -377,10 +514,9 @@ That name is **not in the DLL** and never resolves; `tools/export_name_audit.py`
 lists it. The real export is `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z`
 (`U`, not `Q` — it is virtual), at 0x18009ef70. Currently harmless only because
 the next two lines fall back to `ResolveAddr(Module::Runtime, 0x18009ef70)`,
-which is the correct address — so the pointer is right and the name is dead.
-Exactly the shape `reference_resolveexport_phantom_names.md` warns about, with
-the fallback doing the hiding. Lane A's territory (`GoalInstance`), reported
-here because this lane's audit pass found it.
+which is the correct address — so the pointer was right and only the name was
+dead. Exactly the shape `reference_resolveexport_phantom_names.md` warns about,
+with the fallback doing the hiding.
 
 ### 7.4 `tools/runtime_census.py` — a self-inflicted phantom row
 
@@ -394,6 +530,18 @@ the tool this project treats as authoritative over any agent's claims, so it is
 worth either rewording those four comments or teaching the census to skip
 comment lines.
 
+### 7.6 `tools/runtime_census.py` files every address-called row under `internal`
+
+Line 287 hardcodes the namespace `"internal"` for rows in `called_addrs`, so a
+function that our tree reaches ONLY by `ResolveAddr` never counts toward its own
+namespace's `ported` column even when the census knows the address. This lane's
+three `Achievement` lifecycle ports are the case in point: the CSV shows
+`addr,0x18009e240,internal,1` (and the same for 0x18009e170 / 0x18009e180), so
+they ARE counted — just in the `internal` row, which is why `Achievement` reads
+31 and not 34. Not a defect, but it means "namespace X is N% ported" understates
+any class our tree calls by address, and Wave 5's totals should be read with
+that in mind.
+
 ### 7.5 A note for whoever ports `Collection::Array` itself
 
 `Array<bool>::SetSize` (0x180008b90) does **not** initialise elements past the
@@ -405,12 +553,40 @@ because `ReadAchievements` immediately writes every slot — but a future port o
 
 ---
 
-## 8. What this lane did NOT verify
+## 8. Measured — and what is still unmeasured
 
-* **Nothing has executed.** No `sa-run`, no `sa-stress`, no
-  `BANISHED_RT_DIFF=1`. The 18 diff sites are written but have never been
-  registered at runtime, so every `calls=` is unknown and the divergence count
-  is not zero — it is *unmeasured*.
+The orchestrator's integration pass (autostart + pause-menu quit, world
+teardown, `BANISHED_RT_DIFF=1`) covered the **first 18** ports: 91 sites tree
+wide, 24,050,239 calls, 99 divergences all confined to the two pre-existing
+Wave 1 sin/cos sites, no new divergent site, clean exit, empty crash log. This
+lane's live counts, all `divergences=0`:
+
+| Site | calls |
+|---|---|
+| `AchievementManager::Update` | 901 |
+| `AchievementInstance::Update` | 901 |
+| `AchievementInstance::IsMet` | 901 |
+| `SetEventHandler` | 2 |
+| `SetAchievements` | 1 |
+| `GetAchievementCount` | 1 |
+| `Reset` | 1 |
+
+`Update`/`IsMet` at 901 each is one per simulation tick, exactly as §4.5
+predicts. `SetAchievements` and `Reset` at 1 each confirm the once-per-game
+ordering, which means the
+`reference_achievementmanager_has_no_list_until_setachievements.md` sequence
+held under a real run with our port in the path. `GetAchievementCount`'s
+`calls=1` also proves the point of §7.1 in the lead's correction: that function
+is resolved NAME-FIRST at `engine_funcs.cpp:2749`, so the name registration
+already reaches it.
+
+### Still unmeasured
+
+* **The three ports added after that run** — `Achievement`'s constructor,
+  destructor and `GetFileVersion` — have NOT executed. They are reached from
+  `scenario.cpp`, i.e. only when a Scenario is built, which the integration run
+  did not do. Their `calls=` is unknown, and their divergence count is not
+  zero, it is *absent*.
 * The nine shadow verdicts are invariants, not equivalences. §4.3 and §4.5 in
   particular prove very little per call.
 * `Persist` (§5) was reversed but not ported and not exercised.
@@ -420,21 +596,20 @@ because `ReadAchievements` immediately writes every slot — but a future port o
   un-inlined form made the retail shape readable (`Update`,
   `GetAchievementInstance`).
 
-## 9. What the orchestrator should run
+## 9. What is still worth running
 
-`BANISHED_RT_DIFF=1` on a run that reaches gameplay and awards at least one
-achievement — the achievement-heavy harness (`BANISHED_ACH_TIME_SCALE`,
-`BANISHED_ACH_TRACE`) is the right vehicle, since eight of the 18 sites are
-only reachable once a game is running and `Reset`/`SetAchievements` fire
-exactly once each per game. Specifically worth checking in the summary:
-
-* every site has a non-zero `calls=` except `Persist` (absent) — a zero there
-  means a phantom name or a dead call path, not a clean port;
-* `Achievement::AchievementManager::Update` should show roughly one call per
-  simulation tick;
-* `SetAchievements` and `Reset` should show exactly 1 each on a new game, and
-  `Reset` **0** on a load-from-save (that path goes through `Persist`, which is
-  still the DLL's);
-* a save/load round trip, because `Persist` staying on the DLL while
-  `_instances` is now filled by OUR `Reset` is the one cross-implementation
-  seam this lane creates.
+1. **A SCENARIO or TUTORIAL start under `BANISHED_RT_DIFF=1`.** That is the only
+   thing that reaches the three new ports, since `scenario.cpp` is their only
+   caller. The constructor site is a full byte oracle, so it either agrees on
+   all 0x58 bytes or names the first byte that differs — this is the highest
+   information-per-call site in the lane and it has never fired.
+   `BANISHED_AUTOTUTORIAL` is the cheapest vehicle.
+2. **A run that actually AWARDS an achievement** (`BANISHED_ACH_TIME_SCALE`,
+   `BANISHED_ACH_TRACE`). The integration run's 901 `Update` calls all took the
+   not-met path, so `SetAchievementMet` and the event-handler branch of §4.5,
+   and the whole of `IsAchievementAwarded`, are still unexercised. Note
+   `IsAchievementAwarded` did not appear in the run's site list at all.
+3. **A save/load round trip.** `Persist` staying on the DLL while `_instances`
+   is now filled by OUR `Reset` is the one cross-implementation seam this lane
+   creates. Expect `Reset` `calls=0` on a load-from-save — that is correct, not
+   a dead port.

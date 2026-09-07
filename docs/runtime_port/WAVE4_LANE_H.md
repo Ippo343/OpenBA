@@ -302,8 +302,12 @@ Lane D correctly ruled out `IO::Modification::Find` (no internal callers in the 
 comparing function is **`Save::SaveLoad::CheckMod`, retail `0x1800c1090`**, called only from the
 exe's `SaveLoadDialog::DoLoad` (`0x1400b61e0`). Decompiled, it:
 
-1. builds `IO::FileSystem::GetDataDirectory() + <the save's recorded mod path string>` and runs
-   `System::Filename::AdjustDelimiters` on it;
+1. builds `IO::FileSystem::GetDataDirectory() + <the save's ModInfo+0x08 string>` and runs
+   `System::Filename::AdjustDelimiters` on it. **The field is `ModInfo+0x08`, the package path
+   relative to the data directory — not `+0x00`, which is the display name the `DoLoad` trace
+   below prints.** The proof is `LEA R8,[RBP+0x8]` immediately before the `System::operator+`
+   call, with `RBP = modIndex*0x20 + saveInfo->modsData` (Wave 5 lane C, which ported the
+   function; layout in `runtime/types/save/SaveLoad.h`);
 2. linear-searches `IO::Modification::_singleton` — count at `+0x10`, array base at `+0x8`, stride
    `0x80` — comparing the `String` at entry `+0x58` by length then `_stricmp`;
 3. returns **1** if no entry matches (→ `modsMissing`), else compares entry `+0x2c` against the

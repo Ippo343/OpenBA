@@ -204,6 +204,49 @@ ArrayAssignFn ArrayAssignGoalPtrs() {
     return fn;
 }
 
+// ---- Object::External::~External - retail 0x1800bc950 ----------------------
+// Exported (??1External@Object@@UEAA@XZ, ord 588). Called, not reimplemented:
+// it is Wave 3 lane C's class, and it releases the Filename at +0x08 and the
+// 0x10-stride reference array at +0x10.
+using ExternalDtorFn = void (*)(void* self);
+ExternalDtorFn ExternalDtor() {
+    static ExternalDtorFn fn = reinterpret_cast<ExternalDtorFn>(
+        ResolveExport("??1External@Object@@UEAA@XZ"));
+    return fn;
+}
+
+// ---- Collection::Array<ExternalPtr<Goal>>::~Array - retail 0x180004890 -----
+// Not exported. Frees the buffer under the allocator lock, then zeroes the
+// {_data} qword and the {_size,_capacity} qword - so capacity is cleared too,
+// unlike the exe-side SubArrayDeepCopy case PLAN.md 1.2 item 15 records.
+using ArrayFreeFn = void (*)(void* array);
+ArrayFreeFn ArrayFreeGoalPtrs() {
+    static ArrayFreeFn fn = reinterpret_cast<ArrayFreeFn>(
+        ResolveAddr(Module::Runtime, 0x180004890));
+    return fn;
+}
+
+// ---- The three vtables Achievement's constructor stamps, in order ----------
+// All three are EXPORTED data symbols, so the port stamps the DLL's own
+// vtables rather than cloning slots out of a live object (PLAN.md 2.2 D).
+// The addresses are given only to cross-check the ctor's own bytes at
+// 0x18009e251 / 0x18009e25b / 0x18009e27b; the code resolves them by NAME.
+//   ??_7Base@Object@@6B@       ord 1389  0x180154788
+//   ??_7External@Object@@6B@   ord 1432  0x1801547a0
+//   ??_7Achievement@0@6B@      ord 1382  0x180154740
+void* VtableObjectBase() {
+    static void* v = ResolveExport("??_7Base@Object@@6B@");
+    return v;
+}
+void* VtableObjectExternal() {
+    static void* v = ResolveExport("??_7External@Object@@6B@");
+    return v;
+}
+void* VtableAchievement() {
+    static void* v = ResolveExport("??_7Achievement@0@6B@");
+    return v;
+}
+
 // ---- DLL data symbols ------------------------------------------------------
 // Addresses of VARIABLES, resolved lazily: RtAchievementPortInit() runs before
 // anything has constructed these, so nothing may be read at registration time.
@@ -877,6 +920,178 @@ void RtAch_AchievementManager_Update(AchievementManager* self, const ::Time* tim
     }
 }
 
+// ############################################################################
+// #  Achievement (the External resource) - lifecycle
+// #
+// #  These are reached ONLY by raw address, from code/Game/Game/scenario.cpp
+// #  lines 72-78, which builds a Scenario on top of the Achievement base. That
+// #  file resolves them by ResolveAddr on purpose: its own comment records that
+// #  the ordinals it used to use (0x26d/0x26e/0x309) are STALE in the shipped
+// #  DLL and resolve to ~LayoutElement, ~Light and EdgeMeshInstance::operator
+// #  new - so Scenario_Init called ~LayoutElement on a fresh Scenario and
+// #  corrupted the heap. Registering the ADDRESS (as well as the name) is what
+// #  makes a port reach that call site at all; a name-only registration would
+// #  never be consulted there.
+// #
+// #  DOES PORTING THESE SPLIT THE CLASS? No, and the reason is specific rather
+// #  than reassuring. The DLL builds its own Achievements through
+// #  ?CreateNewObject@Achievement@1@ / ?CreateInPlaceObject@..., which call the
+// #  constructor INTERNALLY - DLL to DLL, through no export - and no detour is
+// #  installed, so those keep using the DLL's copy whatever we register
+// #  (PLAN.md 4.2's note that the detour mechanism is still unexercised). That
+// #  would be a hazard if the two copies could disagree about SHARED state.
+// #  They cannot: the constructor writes only to `this`, and the destructor
+// #  only to `this` plus the one shared heap both sides already reach through
+// #  the same MemoryAllocator singleton. An Achievement built by the DLL and
+// #  destroyed by our port, or the reverse, sees identical bytes.
+// #
+// #  ?Serialize@Achievement@1@ (0x18009e070), the fourth address scenario.cpp
+// #  uses, is NOT ported - it constructs an IO::Serializer, exactly like
+// #  AchievementManager::Persist, and for exactly the same reason has no
+// #  runnable oracle. See WAVE5_LANE_B.md section 5.
+// ############################################################################
+
+// ============================================================================
+// Achievement::Achievement() - retail 0x18009e240
+//
+// Thirteen stores and nothing else: no call, no allocation, no registration.
+// Read out of the bytes, in order:
+//     [this]      = ??_7Base@Object@@6B@       (0x180154788)
+//     [this]      = ??_7External@Object@@6B@   (0x1801547a0)   ; overwritten
+//     [this+0x08] = [this+0x10] = [this+0x18] = 0              ; External's tail
+//     [this]      = ??_7Achievement@0@6B@      (0x180154740)   ; overwritten again
+//     [this+0x20 .. this+0x50] = 0
+// The two dead vtable stores are the inlined Base and External constructors.
+// They are kept because they ARE the body; a detour or a debugger break
+// between them would make the intermediate values observable.
+//
+// FULL BYTE ORACLE - the only mutator in this file that gets a real one. The
+// constructor's writes are confined to `this` and cover all 0x58 bytes, so
+// running the DLL's copy into a poisoned scratch buffer is side-effect free
+// and proves every byte rather than an invariant.
+// ============================================================================
+void* RtAch_Achievement_Ctor(void* selfRaw) {
+    RT_DIFF_BEGIN("Achievement::Achievement::ctor");
+
+    uint8_t* self = static_cast<uint8_t*>(selfRaw);
+    auto qword = [](uint8_t* p, size_t off) -> void*& {
+        return *reinterpret_cast<void**>(p + off);
+    };
+
+    qword(self, 0x00) = VtableObjectBase();
+    qword(self, 0x00) = VtableObjectExternal();
+    qword(self, 0x08) = nullptr;
+    qword(self, 0x10) = nullptr;
+    qword(self, 0x18) = nullptr;
+    qword(self, 0x00) = VtableAchievement();
+    qword(self, 0x20) = nullptr;
+    qword(self, 0x28) = nullptr;
+    qword(self, 0x30) = nullptr;
+    qword(self, 0x38) = nullptr;
+    qword(self, 0x40) = nullptr;
+    qword(self, 0x48) = nullptr;
+    qword(self, 0x50) = nullptr;
+
+    if (rt_diff_on__) {
+        using CtorFn = void* (*)(void*);
+        alignas(16) uint8_t scratch[sizeof(Achievement)];
+        // Poisoned, so a byte the DLL's ctor writes and ours does not shows up
+        // as a divergence instead of accidentally matching a zero.
+        std::memset(scratch, 0xCD, sizeof(scratch));
+        RT_ORIGINAL_ONCE(CtorFn, "??0Achievement@0@QEAA@XZ")(scratch);
+        RT_DIFF_BYTES(self, scratch, sizeof(Achievement));
+    }
+    return self;
+}
+
+// ============================================================================
+// int Achievement::GetFileVersion() const - retail 0x18009e170
+// The whole body is `return 3;`. Virtual, vtable slot 3 (+0x18); Scenario's
+// own override ORs 0x600 onto it (Scenario_Slot3, exe 0x1400a9460).
+// ============================================================================
+int RtAch_Achievement_GetFileVersion(const void* self) {
+    RT_DIFF_BEGIN("Achievement::Achievement::GetFileVersion");
+
+    const int ours = 3;
+
+    if (rt_diff_on__) {
+        using VersionFn = int (*)(const void*);
+        RT_DIFF_SCALAR(ours,
+                       RT_ORIGINAL_ONCE(VersionFn,
+                           "?GetFileVersion@Achievement@1@UEBAHXZ")(self));
+    }
+    return ours;
+}
+
+// ============================================================================
+// Achievement::~Achievement() - retail 0x18009e180
+//
+//     [this] = ??_7Achievement@0@6B@         ; re-stamp before destroying
+//     Array<ExternalPtr<Goal>>::~Array(this+0x48)
+//     release _spriteName  (+0x40)
+//     release _description (+0x30)
+//     release _title       (+0x28)
+//     Object::External::~External(this)
+//
+// The three releases are the String idiom Wave 2 already ported and diffed as
+// RtString_ReleaseInline, INCLUDING retail's asymmetry: on the freeing branch
+// the field is left holding `data - 8`, on the sharing branch it is nulled.
+// That asymmetry is not tidied here. Reproducing it exactly is the point - the
+// one-line bug behind reference_load_wild_write_high_dword_7fc.md was this
+// idiom applied to something that was not a String, and the way not to repeat
+// it is to run the already-proven idiom on fields whose offsets came out of
+// the bytes.
+//
+// SHADOW VERDICT - and this one checks the part that is actually dangerous.
+// Running the DLL's destructor as an oracle would be a double free, so instead
+// each String's {data, refcount} is snapshotted BEFORE and the arithmetic is
+// checked after:
+//   * refcount was > 1  -> it must now be exactly one less, and the field null
+//   * refcount was == 1 -> the block is gone (unreadable), so only the field is
+//                          checked: it must hold data - 8
+// A field that was already null is skipped. Nothing here can prove
+// External::~External did its half; that is Wave 3 lane C's class and its own
+// code runs either way.
+// ============================================================================
+void RtAch_Achievement_Dtor(void* selfRaw) {
+    RT_DIFF_BEGIN("Achievement::Achievement::dtor");
+
+    Achievement* self = static_cast<Achievement*>(selfRaw);
+
+    char*   beforeData[3] = { self->spriteName.data, self->description.data, self->title.data };
+    int32_t beforeRc[3]   = { 0, 0, 0 };
+    if (rt_diff_on__) {
+        for (int i = 0; i < 3; ++i)
+            if (beforeData[i]) beforeRc[i] = StringRefCount(beforeData[i]);
+    }
+
+    self->base._vftable = VtableAchievement();
+    ArrayFreeGoalPtrs()(&self->goals);
+    RtSystem::RtString_ReleaseInline(&self->spriteName);
+    RtSystem::RtString_ReleaseInline(&self->description);
+    RtSystem::RtString_ReleaseInline(&self->title);
+    ExternalDtor()(self);
+
+    if (rt_diff_on__) {
+        String* fields[3] = { &self->spriteName, &self->description, &self->title };
+        bool equal = (self->goals._data == nullptr) && (self->goals._size == 0);
+        int  firstBad = -1;
+        for (int i = 0; i < 3; ++i) {
+            if (!beforeData[i]) continue;
+            const bool ok = (beforeRc[i] > 1)
+                ? (fields[i]->data == nullptr && StringRefCount(beforeData[i]) == beforeRc[i] - 1)
+                : (fields[i]->data == beforeData[i] - 8);
+            if (!ok && firstBad < 0) { firstBad = i; equal = false; }
+        }
+        char a[112], b[112];
+        std::snprintf(a, sizeof(a), "goals={%p,%d} firstBadString=%d",
+                      static_cast<void*>(self->goals._data), self->goals._size, firstBad);
+        std::snprintf(b, sizeof(b), "rc before {%d,%d,%d}, each -1 or freed",
+                      beforeRc[0], beforeRc[1], beforeRc[2]);
+        RT_DIFF_SHADOW(equal, a, b);
+    }
+}
+
 // ============================================================================
 // Registration.
 //
@@ -956,8 +1171,23 @@ int RtAchManagerRegister() {
     RegisterRuntimeExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ", (void*)&RtAch_Achievement_GetSpriteName); ++n;
     RegisterRuntimeAddr(0x1800013a0, (void*)&RtAch_Achievement_GetSpriteName);
 
-    printf("[RtPort]   Achievement::AchievementManager/Instance/Achievement: %d/19 exports "
-           "registered (Persist held back -- no oracle exists for a Serializer "
-           "construction, see WAVE5_LANE_B.md)\n", n);
+    // ---- Achievement lifecycle, reached from scenario.cpp BY ADDRESS ---------
+    // Both forms registered. Nothing in our tree resolves these by name today,
+    // but a name-only registration would never reach scenario.cpp, and an
+    // address-only one would silently revert to the DLL the day somebody
+    // switches that file to ResolveExport.
+    RegisterRuntimeExport("??0Achievement@0@QEAA@XZ", (void*)&RtAch_Achievement_Ctor); ++n;
+    RegisterRuntimeAddr(0x18009e240, (void*)&RtAch_Achievement_Ctor);
+
+    RegisterRuntimeExport("??1Achievement@0@UEAA@XZ", (void*)&RtAch_Achievement_Dtor); ++n;
+    RegisterRuntimeAddr(0x18009e180, (void*)&RtAch_Achievement_Dtor);
+
+    RegisterRuntimeExport("?GetFileVersion@Achievement@1@UEBAHXZ", (void*)&RtAch_Achievement_GetFileVersion); ++n;
+    RegisterRuntimeAddr(0x18009e170, (void*)&RtAch_Achievement_GetFileVersion);
+
+    printf("[RtPort]   Achievement::AchievementManager/Instance/Achievement: %d/23 exports "
+           "registered (AchievementManager::Persist and Achievement::Serialize held back -- "
+           "both construct an IO::Serializer, which has no runnable oracle; "
+           "see WAVE5_LANE_B.md)\n", n);
     return n;
 }

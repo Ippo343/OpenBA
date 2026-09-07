@@ -1124,8 +1124,20 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         }
         if (modStatus == 0) continue;  // mod is fine
 
-        // Get mod name string pointer: saveInfo->modList[i] (stride 0x20 from base at +0x48)
-        // saveInfo+0x48 = base of mod name array; each entry is 0x20 bytes; entry+0 = String
+        // saveInfo+0x48 = base of the save's ModInfo array; each entry is 0x20 bytes.
+        // entry+0x00 is the mod's DISPLAY NAME ("Debug Menu") and is what the
+        // warning dialog shows. It is NOT what CheckMod compares: CheckMod
+        // (retail 0x1800c1090) concatenates FileSystem::GetDataDirectory() with
+        // the String at entry+**0x08** -- the package path relative to the data
+        // directory -- and matches that against IO::Modification's per-entry path
+        // String at +0x58. The proof is one instruction, `LEA R8,[RBP+0x8]`
+        // immediately before the System::operator+ call, where RBP is
+        // modIndex*0x20 + saveInfo->modsData. So a save can name a mod whose
+        // display name you recognise and still report missing, because the two
+        // strings are different fields. Layout: runtime/types/save/SaveLoad.h.
+        // (Wave 5 lane C, which ported CheckMod; this comment previously said
+        // only "entry+0 = String", which is right for printing and wrong for
+        // the comparison.)
         void* saveInfo2 = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
         void* modNameBase = *(void**)((uintptr_t)saveInfo2 + 0x48);
         void* modNameStr = (void*)((uintptr_t)modNameBase + (uintptr_t)i * 0x20);  // String at stride 0x20

@@ -199,6 +199,67 @@ GATED_OFF_FILES = {
 }
 
 
+def strip_comments(text):
+    """Blank out C/C++ comments, preserving length so byte offsets still line up.
+
+    Added 2026-09-06 (Wave 5). The census reported a port row literally named
+    `<literal>` -- a function that does not exist -- because four source files
+    document this tool's own match pattern inside a comment. The regex matched
+    the comment text. One fake row in the tool this project treats as
+    authoritative over any agent's "all N ported" claim is exactly the kind of
+    small wrongness that makes the true rows less believable, so it is fixed
+    here rather than by rewording the four comments: a reworded comment fixes
+    the four that exist, this fixes the fifth nobody has written yet.
+
+    Comment bodies are replaced with SPACES rather than deleted so that every
+    match offset stays valid for concat_literal(), which reads forward from
+    m.end() to join adjacent string literals.
+
+    String and character literals are tracked, so a "//" or "/*" inside one (a
+    URL, a Windows path) is not mistaken for the start of a comment.
+    """
+    BACKSLASH = chr(92)
+    out = list(text)
+    i, n = 0, len(text)
+    state = None          # None | '"' | "'" | '//' | '/*'
+    while i < n:
+        c = text[i]
+        if state is None:
+            if c == '"' or c == "'":
+                state = c
+            elif c == '/' and i + 1 < n and text[i + 1] == '/':
+                state = '//'
+                out[i] = out[i + 1] = ' '
+                i += 2
+                continue
+            elif c == '/' and i + 1 < n and text[i + 1] == '*':
+                state = '/*'
+                out[i] = out[i + 1] = ' '
+                i += 2
+                continue
+        elif state == '"' or state == "'":
+            if c == BACKSLASH:
+                i += 2
+                continue
+            if c == state:
+                state = None
+        elif state == '//':
+            if c == '\n':
+                state = None
+            else:
+                out[i] = ' '
+        elif state == '/*':
+            if c == '*' and i + 1 < n and text[i + 1] == '/':
+                out[i] = out[i + 1] = ' '
+                state = None
+                i += 2
+                continue
+            if c != '\n':
+                out[i] = ' '
+        i += 1
+    return ''.join(out)
+
+
 def scan():
     called_exports, called_addrs, called_ordinals = {}, {}, {}
     ported_exports, ported_addrs, ported_ordinals = {}, {}, {}
@@ -212,6 +273,10 @@ def scan():
             text = open(path, encoding="utf-8", errors="replace").read()
         except OSError:
             continue
+
+        # Match against CODE only. A comment that quotes this tool's own match
+        # pattern used to produce a phantom port row -- see strip_comments().
+        text = strip_comments(text)
 
         for m in RE_EXPORT.finditer(text):
             name = concat_literal(text, m.end())

@@ -85,13 +85,13 @@ namespace {
 //
 // CORRECTION to what this project has been telling agents (PLAN §6 step 8).
 // The advice "spell every name as a SINGLE literal on ONE line, the census
-// cannot see a multi-line literal" is STALE. Both tools now join adjacent
-// string literals exactly as the preprocessor does — `concat_literal()` in
-// tools/runtime_census.py:53 and in tools/export_name_audit.py:41, the latter
-// with a comment saying so in as many words. Verified on this lane's own long
-// AddMesh name: `code/Game/Component/pickingcomponent.cpp:171` splits it over
-// two source lines and `export_name_audit.py` does NOT report it as a phantom
-// (11 phantoms today, none of them Picking). The remaining blind spot is a
+// cannot see a multi-line literal" is now STALE — but it was true until this
+// wave. Wave 5 lane E added a `concat_literal()` helper to BOTH tools
+// (tools/runtime_census.py:53, tools/export_name_audit.py:41) that joins
+// adjacent string literals exactly as the preprocessor does; before that, the
+// split AddMesh literal at code/Game/Component/pickingcomponent.cpp:171 was one
+// of five FALSE phantom reports. Today `export_name_audit.py` reports 11
+// phantoms and none of them is a Picking name. The remaining blind spot is a
 // non-literal name, and the census now WARNS on that rather than swallowing it.
 // ============================================================================
 const char* const kSceneCtor    = "??0Scene@Picking@@QEAA@XZ";
@@ -207,6 +207,26 @@ uint32_t RtGridAdd(Scene* scene, const AddDesc* desc) {
 void RtGridReindex(Scene* scene, uint32_t id) {
     using Fn = void (*)(Scene*, uint32_t);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800724d0));
+    fn(scene, id);
+}
+
+// Unthread an entry from every cell of its rectangle. Retail 0x180072950; takes
+// &entry->_cellX (it reads the y from _cellX[1]), the two uint16 extents, and
+// the entry index. Walks the same hash the cell iterator does and calls
+// FUN_180072d10 to unlink the entry's Link from each cell's list.
+void RtGridUnthread(Scene* scene, int32_t* cellXY, uint16_t w, uint16_t h, int32_t id) {
+    using Fn = void (*)(Scene*, int32_t*, uint16_t, uint16_t, int32_t);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180072950));
+    fn(scene, cellXY, w, h, id);
+}
+
+// Release an entry back to the free list. Retail 0x18007b390: assigns an
+// all-zero Entry over it (which frees the inner Array<Transform> through the
+// Entry assignment operator), destroys the temporary, then pushes the slot onto
+// the free list — `entry->_nextFree = scene->_freeEntry; scene->_freeEntry = id`.
+void RtGridFreeEntry(Scene* scene, uint32_t id) {
+    using Fn = void (*)(Scene*, uint32_t);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007b390));
     fn(scene, id);
 }
 

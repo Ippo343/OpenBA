@@ -392,9 +392,10 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
         fn_String_Dtor((void*)(s + 0x48));  // statAString
     }
 
-    // Call base Achievement::Goal::~Goal
-    // The base dtor is at a dispatch slot; we call it via the parent vtable
-    // Since ~Goal is called from the dtor, we need its address
+    // Call base Achievement::Goal::~Goal.
+    // This used to say "the base dtor is at a dispatch slot; we call it via the
+    // parent vtable". It is neither: it is a plain Runtime export (ordinal 600)
+    // resolved by name, with no slot and no vtable in the path.
     typedef void (*fn_GoalDtor_t)(void* self);
     static fn_GoalDtor_t s_fn_GoalDtor = nullptr;
     static bool s_dtorResolved = false;

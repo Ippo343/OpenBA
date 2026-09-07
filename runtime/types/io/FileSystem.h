@@ -70,8 +70,16 @@ struct FileSystem {
     uint8_t          _unknown1A[0x20 - 0x1A];
     PackageFileView** packfiles;         // +0x20 — GetPackfileId's `*(this+0x20)`, array of PackageFile*
     int32_t          packfileCount;      // +0x28 — read by ModProbe_DumpPackageIndex, not by this lane
-    uint8_t          _unknown2C[0x40 - 0x2C];  // includes the +0x30/+0x38 filename array+count
-                                                // ModProbe_DumpFileSystem names but nothing here reads
+    uint8_t          _unknown2C[0x40 - 0x2C];  // includes the +0x30/+0x38 filename array+count.
+                                                // NOT unread: +0x38 is the flag
+                                                // IO::FileSystem::AreUserPackFilesEnabled
+                                                // (0x1800acfc0) returns, and Achievement::
+                                                // AchievementManager::Update reads it EVERY TICK
+                                                // as the "mods are mounted, do not award" gate --
+                                                // the mechanism behind BANISHED_ACH_IGNORE_MODS.
+                                                // (Wave 5 lane B. This comment previously said
+                                                // "nothing here reads" it, which was true of this
+                                                // file and read as true of the tree.)
     PackfileIndexNode* packfileIndexRoot; // +0x40 — GetPackfileId's `*(this+0x40)`
 };
 static_assert(offsetof(FileSystem, sourceDirectory)      == 0x00, "see field comment");
