@@ -63,12 +63,12 @@ That is the whole mechanism behind `BANISHED_ACH_IGNORE_MODS` and behind
 | Not portable before cutover | the 3 DATA exports (`?_singleton@AchievementManager@…`, `?_typeInfo@Achievement@1@…`, `?_typeInfo@AchievementInstance@…`) — see §6 |
 | `RtAchManagerRegister()` returns | **21** |
 | Registration form | **both forms for every one of the 21**: 21 `RegisterRuntimeExport("<one-line literal>"` and 21 `RegisterRuntimeAddr(0x…)`, verified by count |
-| Census | `Achievement` **0 → 31 of 46 called (67.4%)** — 18 of this lane's + 13 of lane A's `goal.cpp`. This lane's 3 new `Achievement` lifecycle ports land in the census's **`internal`** bucket, not the `Achievement` one, because `tools/runtime_census.py:287` files every address-called row under `internal` regardless of namespace (§7.6). All three read `ported=1` in the CSV. 18 + 3 = the 21 registered |
+| Census | `Achievement` **0 → 34 of 50 called**, after the orchestrator rebuilt the census's address handling (§7.6). 21 of the 34 are this lane's, 13 are lane A's `goal.cpp` |
 | Diff sites added | **21** — 10 full oracles (one of them a full 0x58-byte oracle), 11 shadow verdicts |
 | `tools/abi_retslot_audit.py` | **0 suspicious of 49**, unchanged |
 | `tools/export_name_audit.py` | after lane E's two-adjacent-literals fix: 11 phantoms tree-wide, **none of them this lane's**. All 23 code exports were verified present in the shipped export directory with `pefile` **before any body was written** (§2) |
 | Build | `mingw32-make standalone-debug` clean, no new warnings |
-| **Measured in a run** | the FIRST 18 were exercised by the orchestrator's integration pass (§8). The 3 added afterwards have NOT been. |
+| **Measured in a run** | **20 of the 21 have executed with 0 divergences** across two orchestrator passes (§8). The one that has NOT is `~Achievement`. |
 
 ---
 
@@ -530,17 +530,33 @@ the tool this project treats as authoritative over any agent's claims, so it is
 worth either rewording those four comments or teaching the census to skip
 comment lines.
 
-### 7.6 `tools/runtime_census.py` files every address-called row under `internal`
+### 7.6 `tools/runtime_census.py` address handling — **REPORTED AND FIXED**
 
-Line 287 hardcodes the namespace `"internal"` for rows in `called_addrs`, so a
-function that our tree reaches ONLY by `ResolveAddr` never counts toward its own
-namespace's `ported` column even when the census knows the address. This lane's
-three `Achievement` lifecycle ports are the case in point: the CSV shows
-`addr,0x18009e240,internal,1` (and the same for 0x18009e170 / 0x18009e180), so
-they ARE counted — just in the `internal` row, which is why `Achievement` reads
-31 and not 34. Not a defect, but it means "namespace X is N% ported" understates
-any class our tree calls by address, and Wave 5's totals should be read with
-that in mind.
+**Reported by this lane and lane D independently; fixed by the orchestrator.**
+The census used to hardcode the namespace `"internal"` for every row in
+`called_addrs`, so a function our tree reaches only by `ResolveAddr` never
+counted toward its own namespace, and a function reached by BOTH doors was
+counted twice. This lane's three `Achievement` lifecycle ports were the case in
+point: the CSV read `addr,0x18009e240,internal,1`, so they were counted, but in
+the `internal` row.
+
+The census now resolves every registered/called address back through the
+shipped DLL's export directory: an address that names an export lands in that
+export's namespace, a function reached by both doors is counted once, and a
+port is an orphan only if NEITHER door has a caller. The `internal` bucket fell
+262 → 35 and TOTAL called fell 898 → 727, that difference being pure double
+counting.
+
+**One position of this lane's was overruled, correctly.** This doc previously
+argued the tool should be left alone and that a permanently-listed
+insurance registration was "the honest cost". The orchestrator's counter is
+better and is recorded here rather than quietly dropped: a list that
+permanently contains entries everyone knows to ignore stops being read, and
+this is precisely the list that exists to catch
+`reference_uncalled_port_is_not_verified.md`. It has to stay clean to stay
+useful. The orphan list fell from 11 exports + 72 addresses to 7 exports + 0
+addresses, and the 7 remaining are genuine pre-existing orphans from Waves
+1/2/4.
 
 ### 7.5 A note for whoever ports `Collection::Array` itself
 
@@ -580,13 +596,42 @@ held under a real run with our port in the path. `GetAchievementCount`'s
 is resolved NAME-FIRST at `engine_funcs.cpp:2749`, so the name registration
 already reaches it.
 
-### Still unmeasured
+### The second pass — the scenario ports fired
 
-* **The three ports added after that run** — `Achievement`'s constructor,
-  destructor and `GetFileVersion` — have NOT executed. They are reached from
-  `scenario.cpp`, i.e. only when a Scenario is built, which the integration run
-  did not do. Their `calls=` is unknown, and their divergence count is not
-  zero, it is *absent*.
+`BANISHED_AUTOTUTORIAL=1 BANISHED_RT_DIFF=1 BANISHED_RT_INTERNAL_SHADOW=1`
+with a pause-menu quit: 133 sites, 5,953,991 calls. This lane's sites, all
+`divergences=0`:
+
+| Site | calls |
+|---|---|
+| `Achievement::Achievement::ctor` | 4 |
+| `Achievement::Achievement::GetFileVersion` | 4 |
+| `Achievement::Achievement::GetTitle` | 4 |
+| `Achievement::Achievement::GetDescription` | 4 |
+| `Achievement::Achievement::GetSpriteName` | 4 |
+| `AchievementInstance::ctor` | 1 |
+| `AchievementInstance::SetAchievement` | 1 |
+| `AchievementInstance::IsMet` | 2402 |
+| `AchievementInstance::Update` | 2402 |
+| `AchievementInstance::HasFailed` | 1201 |
+| `AchievementManager::Update` | 1201 |
+
+**The 0x58-byte constructor oracle agreed on every byte, four times, against a
+0xCD-poisoned scratch buffer** (§4.7). That was the highest-information site in
+the lane and the one with the most to prove; it is now green.
+
+### Still unmeasured — three things, and none of them is carried by the results above
+
+1. **`~Achievement`'s shadow verdict has never run.** The destructor did not
+   appear in either pass. Its refcount-delta check (§4.8) is written and
+   unexercised, and the constructor's clean byte oracle says nothing about it —
+   they are different bodies with different failure modes, and the destructor's
+   is the one that touches the heap. Treat `~Achievement` as registered,
+   reachable and UNVERIFIED.
+2. **The award branch of `AchievementManager::Update`.** All 1,201 + 901 calls
+   took the not-met path, so `SetAchievementMet`, the event-handler call and
+   the shadow's `IsAchievementAwarded` readback are all unexercised. See §9.
+3. **`IsAchievementAwarded` itself** has never appeared in any run's site list.
 * The nine shadow verdicts are invariants, not equivalences. §4.3 and §4.5 in
   particular prove very little per call.
 * `Persist` (§5) was reversed but not ported and not exercised.
@@ -596,20 +641,84 @@ already reaches it.
   un-inlined form made the retail shape readable (`Update`,
   `GetAchievementInstance`).
 
-## 9. What is still worth running
+## 9. What is still worth running, cheapest first
 
-1. **A SCENARIO or TUTORIAL start under `BANISHED_RT_DIFF=1`.** That is the only
-   thing that reaches the three new ports, since `scenario.cpp` is their only
-   caller. The constructor site is a full byte oracle, so it either agrees on
-   all 0x58 bytes or names the first byte that differs — this is the highest
-   information-per-call site in the lane and it has never fired.
-   `BANISHED_AUTOTUTORIAL` is the cheapest vehicle.
-2. **A run that actually AWARDS an achievement** (`BANISHED_ACH_TIME_SCALE`,
-   `BANISHED_ACH_TRACE`). The integration run's 901 `Update` calls all took the
-   not-met path, so `SetAchievementMet` and the event-handler branch of §4.5,
-   and the whole of `IsAchievementAwarded`, are still unexercised. Note
-   `IsAchievementAwarded` did not appear in the run's site list at all.
-3. **A save/load round trip.** `Persist` staying on the DLL while `_instances`
-   is now filled by OUR `Reset` is the one cross-implementation seam this lane
-   creates. Expect `Reset` `calls=0` on a load-from-save — that is correct, not
-   a dead port.
+**1. `IsAchievementAwarded` — free, no game required.** Its only real caller is
+the Achievements dialog (`code/Game/Dialog/achievementdialog.cpp:229`, one call
+per achievement per refresh). `BANISHED_AUTOMENU_BUTTON=8` opens that dialog
+from the FRONT END, so a menu-only run drives `IsAchievementAwarded`,
+`GetAchievementCount`, `GetAchievement` and the three String getters with no
+world at all. `BANISHED_ACH_TRACE=<n>` reaches it in any run via
+`standalone/achievement_probe.cpp:370`.
+
+**2. The award branch — check the REGISTRY before spending a long run.** The
+branch is `if (_completed[idx] == 0 && SetAchievementMet(…))`, and `_completed`
+is loaded by `ReadAchievements` from `HKCU\Software\Shining Rock Software LLC\
+Banished`, section `"Ach"`, key `"<index>"`. **An achievement already flagged
+there can never take the branch again, however long the run.** This machine has
+historically awarded 25 of 36, so on an unmodified registry only 11 indices are
+even eligible — which is a likelier explanation for the empty award path than
+run length. Clearing the `Ach*` values makes every already-satisfied
+achievement re-award on its next rotation.
+
+**3. THE AWARD RUN — use the STRESS TOWN, not autostart.** A recipe that has
+already awarded an achievement natively in this project is recorded in
+`project_jack_of_all_trades_closed.md`, with controls:
+
+```
+tools/ach_reset.sh
+BANISHED_BUILDERS=40 BANISHED_ACH_TRACE=600 BANISHED_ACH_TIME_SCALE=50 BANISHED_PASTURE_AUTOTYPE=Cow,Sheep,Chicken tools/stress_run.sh --label ach --speed 50 --frames 1500
+```
+
+Jack of all Trades (Ach5) was met between f=600 and f=1200 on that, with 20 of
+its 21 goals passing on REAL measured values and only the 5-year TimeGoal
+carried by the declared clock deviation.
+
+**The load-bearing difference from the autostart attempt is the TOWN, not the
+clock.** Every achievement in the set is a conjunction, and the half that a
+time knob cannot touch is a population or profession threshold. An autostart
+town has 23 people, so `population >= 300` can never be met however fast the
+clock runs; the stress town starts with 800 standing at frame 0. Accelerating
+time cannot award a conjunction whose other half needs a real town — the clock
+knob only ever carries the TimeGoal half.
+
+Three operational notes for that run:
+* `tools/ach_reset.sh` FIRST. The manager skips already-awarded achievements,
+  so an inherited award is indistinguishable from a pass.
+* The diff oracle SURVIVES the perf build that `stress_run.sh` uses:
+  `standalone/log_strip.h` strips unqualified `printf` only, and all of
+  `rt_diff.cpp` writes through `fprintf(stderr, …)`. Read the summary in
+  `standalone_error.log`, not `standalone_debug.log`. (This lane's own
+  `[RtPort]` registration line IS stripped there — cosmetic; the registrations
+  still happen.)
+* Keep `--frames` at ~1500. The stress town starves at ~100k ticks at any
+  speed, and the award lands around f=600-1200, so a longer run adds risk
+  without adding coverage.
+
+**3b. The no-TimeGoal alternative, same town.**
+`standalone/ach_clock.cpp`'s own header records that Established and Tenure have
+NO TimeGoal — they are a population StatGoal plus `stat26 >= 100 / 200`, and
+`BANISHED_ACH_YEAR_BOOST` moves that counter directly. So the stress town
+(`make sa-stress`, 800 citizens standing at frame 0) plus
+`BANISHED_ACH_YEAR_BOOST=250 BANISHED_ACH_IGNORE_MODS=1 BANISHED_RT_DIFF=1`
+should satisfy both goals within a frame or two, and the rotating cursor
+(§0) reaches that index within at most `_instances._size` ticks. A few thousand
+frames, not a vigil. `BANISHED_ACH_TIME_SCALE=50` is the fallback for the
+3-year pair (Miner, Mason), which additionally needs a staffed quarry and mine.
+
+What that would and would not prove: `SetAchievementMet` is the DLL's, not this
+lane's, so the gain is the award branch of OUR `Update`, its event-handler call
+and its shadow readback through `IsAchievementAwarded` — worth having, but it
+is one branch, not a new class of coverage. If it is not cheap, recording those
+branches as unexercised in WAVE5.md is the honest outcome and better than
+implying the 2,102 not-met calls covered them.
+
+**4. `~Achievement`.** Reached when a Scenario is destroyed — a quit-to-menu or
+a second scenario load after the first, rather than the pause-menu quit both
+passes used. Worth one run, because it is the only heap-touching body in the
+lane.
+
+**5. A save/load round trip.** `Persist` staying on the DLL while `_instances`
+is now filled by OUR `Reset` is the one cross-implementation seam this lane
+creates. Expect `Reset` `calls=0` on a load-from-save — that is correct, not a
+dead port.

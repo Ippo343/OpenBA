@@ -47,3 +47,132 @@ the value CLAUDE.md's *mods menu* recipe uses for a different dialog, cancels th
 is indistinguishable from the stall lane H fixed: the Load click fires, `[AutoStart] AUTOLOAD
 sequence fired` is logged, and the process then loops in `MenuDLT::Draw` forever with no world
 created. **The correct invocation passes no `BANISHED_MODAL_ANSWER` at all.**
+
+---
+
+## Verification — every run, and what each one actually proved
+
+All on the `-O0` `standalone-debug` exe with `BANISHED_RT_DIFF=1` and a pause-menu self-quit
+(`RtDiffSummary` prints from `WinMain`, so a killed process reports nothing).
+
+| # | Run | Sites | Calls | Divergences |
+|---|---|---|---|---|
+| 0a | control, autostart (pre-wave, `1a86921`) | 76 | 24,752,689 | 101 / 2 sites |
+| 0b | control, `AUTOLOAD=Save9` (pre-wave) | 83 | 29,638,857 | 54 / 3 sites |
+| 1 | autostart | 91 | 24,050,239 | 99 / 2 sites |
+| 2 | `AUTOLOAD=Save9` | 111 | 29,914,569 | 57 / 2 sites |
+| 3 | `AUTOSTART + SAVE_TEST=700` | 111 | 28,111,981 | 98 / 2 sites |
+| 4 | round-trip: `AUTOLOAD=Auto` on the save run 3 wrote | 104 | 9,952,450 | 67 / 2 sites |
+| 5 | autostart + `RT_INTERNAL_SHADOW=1` | 99 | 23,972,823 | 97 / 2 sites |
+| 6 | `AUTOTUTORIAL=1` + `RT_INTERNAL_SHADOW=1` | 133 | 5,953,991 | 80 / **3 sites** |
+| 7 | autostart + `ACH_TIME_SCALE=800 ACH_YEAR_BOOST=2 ACH_TRACE=600` | 110 | 28,283,271 | 112 / 2 sites |
+| 8 | `AUTOTUTORIAL=1` again, after lane D's predicate fix | 133 | 6,226,761 | 69 / 2 sites |
+| 9 | `STRESS=1 FRAMES=1200 CITIZENS=800 ACH_YEAR_BOOST=250 ACH_TRACE=400` | 127 | **67,539,645** | 92 / 3 sites |
+
+Every divergence in runs 1-5 and 7 is the pre-existing Wave 1 1-ULP sin/cos family
+(`Transform::FromYawPitchOffset`, `Vector3::FromYawPitch`, and in the controls `Vector3::Heading`).
+**Run 6 was the exception and it found a real problem; run 8 is the same run with the fix and is
+clean.** Every run exited cleanly with an empty `standalone_crash.log`.
+
+### What each run was FOR — because a call count is not coverage
+
+* **Run 4 is the one that settles the Save lane.** Run 3 proved our `Store` agrees with the DLL on
+  one buffer; run 4 proved the bytes it wrote are actually a save the game can read back and build a
+  world from. For a lane whose warned-about failure mode is a desync surfacing later on an innocent
+  record, those are different tests and only the second addresses it.
+* **Run 5 is the one that settles the destructor fix.** `Object::Internal::Internal` and
+  `~Internal` ran 93,253 calls each through Wave 3's handle-table shadow oracle, 0 divergences,
+  with lane A's `~GoalInstance` routed through it. Before this, lane A's base-call helpers used
+  `RT_ORIGINAL_ONCE` (GetProcAddress), which bypasses the registry — so `~GoalInstance` would have
+  been the ONE path in the tree reaching `~Internal` that the oracle cannot see, and it is exactly
+  the path the `863e4f9` fix made live. The swap-remove is now checked against the factory's
+  predicted state, not merely observed not to crash.
+* **Run 6 reached the Scenario path** and fired lane B's three `scenario.cpp` ports for the first
+  time — `Achievement::ctor` agreed on all 0x58 bytes against a 0xCD-poisoned scratch, 4 calls.
+  Those three had been registered-but-unreachable (see below).
+* **Run 7 exercised the Achievement READ surface** — `IsAchievementAwarded` 108,
+  `AchievementManager::Get` 1,862, `GetAchievement`/`GetAchievementInstance`/`GetGoalList` 108 each,
+  `Goal::GetText`/`GoalInstance::GetGoal`/`IsMet`/`HasFailed` 402 each, `GoalList::GetGoal` 402.
+  It also confirmed lane A's prediction that `GoalInstance::GetGoal` reads `calls=0` without
+  `BANISHED_ACH_TRACE`.
+
+### Not verified, stated plainly
+
+* ~~No run has awarded an achievement.~~ **CLOSED by run 9.** Run 7 did not: its census read
+  `awarded 6/36` at the first sample and the last, because the time knobs accelerate `TimeGoal`s
+  while the achievements they reach are CONJUNCTIONS — `Established` and `Tenure` had their year
+  goals met at year 251 and their population goals sitting at `have=23 >= 300`. A fresh autostart
+  town has 23 people, so no amount of clock acceleration can award a conjunction whose other half
+  needs a real town. Run 9 supplied the town instead of more time: the stress harness's 802
+  citizens plus `ACH_YEAR_BOOST=250` awarded **`Settlement` and `Village` during the run**
+  (6/36 -> 8/36), so the award branch of `AchievementManager::Update`, its event-handler call and
+  its `IsAchievementAwarded` readback all executed, at 1,201 `Update` calls and 0 divergences.
+  Credit to lane B for the diagnosis: it predicted the conjunction problem and named the stress
+  town as the fix.
+* **`Save::SavedState::SavedState` is at `calls=0` in every run.** Its only two callers
+  (`moddialog.cpp:722`, `mod_dialog_vtables.cpp:438`) are on the Mods-menu apply/reload path, which
+  no run above opens. Lane C's doc claims 14 of 15, not 15.
+* **`Save::SaveLoad::Update` cases 3 (`UpdateLoadFromFile`) and 5 (`UpdateDelete`)** are untaken by
+  any run. Cases 1, 2 and 4 are covered by runs 2 and 3.
+* **`~Goal` is self-check-only end to end** and is recorded that way without qualification: its base
+  half reaches Wave 3's `External::~External` port, which has no oracle behind it, so there is
+  nothing to appeal to. A self-check that agrees with itself proves nothing about the DLL.
+* **`Achievement::~Achievement`** has not appeared in any run; its refcount-delta shadow verdict is
+  unexercised. It is the only heap-touching body in lane B, so the ctor's clean 0x58-byte result
+  does NOT carry it. Reaching it needs a Scenario *destroyed* — a quit-to-menu from a scenario, or a
+  second scenario load — rather than the pause-menu quit every pass above used.
+* **`Picking::Scene::GetUserData` and `SetMeshUserData`** are still at `calls=0`. Run 9 closed
+  `PickingMesh::Vertices` (2,382 calls) and drove `SetTransform` to 963,202, `Intersect` to 23,274
+  and `AddMesh`/`RemoveMesh` to 1,810 each, all 0 divergences — but `GetUserData` needs a click on a
+  placed building (the `Intersect`+`GetUserData` pair `EditTool` uses) and `SetMeshUserData` needs a
+  bridge. Neither is driven by any harness in these runs.
+* **A correction to this lane's own brief:** `mapquery.cpp` was described to lane D as a live
+  `Intersect` consumer hit "on essentially every click". Lane D checked: the call is gated on the
+  terrain cell's floor counter (`cellRec+0x2d > 0`), so it fires only over a dock or bridge deck,
+  and not at all in a town without one. `edittool.cpp` is the real per-click consumer.
+
+### The one new divergent site Wave 5 produced, and what it turned out to be
+
+Run 6 reported `Picking::Scene::RemoveMesh calls=17 divergences=16` — the only new divergent site
+in the whole wave. It was **not a defect in the port**, and the way it was settled is worth keeping.
+
+Retail `0x180125290` is exactly the port's two calls with the same arguments, and both callees stay
+in the DLL, so the port's post-state IS retail's by construction and a post-state predicate that
+disagrees with it must itself be wrong. That narrowed it to one of 14 conjuncts — and the failure
+message rendered only 3 of them, so it could not say which.
+
+The answer was found statically, in retail's own bytes. `0x18007b390` builds a zeroed `Entry`
+template on its stack with **eleven** stores covering 0x44 of the 0x48 bytes:
+
+```
+18007b3af  MOV dword [RSP+0x28],ECX        template +0x00  _queryStamp = 0
+18007b3b3  MOV dword [RSP+0x2c],0xffffffff template +0x04  _nextFree  = -1
+18007b3bb  MOV qword [R11-0x48],RCX        template +0x08  _cellX/_cellY
+18007b3bf  MOV dword [RSP+0x38],ECX        template +0x10  _cellW/_cellH
+18007b3cb..d7  four qwords = 0             template +0x18..+0x37
+18007b3db  MOV dword [RSP+0x60],ECX        template +0x38  _userValue
+18007b3df  MOV qword [R11-0x10],RCX        template +0x40  _callback
+```
+
+`R11 = RSP+0x78` and the template base is `R11-0x50` = `RSP+0x28`, so template `+0x3c`
+(`Entry::_userValue2`) is at `RSP+0x64` — **and nothing ever writes it.** `0x18007b590` then copies
+`+0x3c` faithfully (`MOV EAX,[RBX+0x3c] ; MOV [RDI+0x3c],EAX`).
+
+**So every retail `RemoveMesh` stores an uninitialised stack dword into `Entry::_userValue2`.**
+That is a genuine uninitialised read in the shipped DLL. It explains the exact pattern observed —
+call #1 passed because the slot happened to hold zero, #2 onward inherited a previous frame's
+leftovers. It is unobservable in practice, which is presumably how it shipped: `_userValue2` has no
+exported getter (`GetUserValue` reads `+0x38`) and `0x18007b210` overwrites `+0x3c` from the
+descriptor before the slot is reused.
+
+The `_userValue2 == 0` term was **dropped, not weakened** — there is no value it could assert.
+Every other term stands, including both of the orchestrator's suspects (`_queryStamp == 0` holds;
+the `_transforms` triple holds). Run 8 re-ran the same tutorial pass: `RemoveMesh 17 calls,
+0 divergences`.
+
+**The standing lesson, which cost this wave two investigations:** a shadow predicate is a verdict
+AND a description, computed by different means, and the description is only ever exercised when the
+verdict fails — exactly when it cannot afford to be uninformative. If `eq` is a conjunction of N
+terms, the message must be able to name all N. Lane D found the same latent flaw in `Intersect`
+before it fired (it compared the out normal but printed only the position) and fixed both; all five
+Picking shadow sites now report the first failing term by name with its actual and expected values.

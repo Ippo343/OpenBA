@@ -61,7 +61,7 @@ brief's `ResolveExport` grep could not see (§2.1). Nothing is held back.
 | 3 | `?AddMesh@Scene@Picking@@…` | `0x1801252e0` | 1571 | **PORTED** | **FULL on the computed part** — theirs runs into a private scratch `Scene`, the two flattened transform arrays are compared bit-for-bit, then the scratch entry is removed |
 | 4 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` | `0x1800722d0` | 2998 | **PORTED** | **FULL** — pure, call both |
 | 5 | `?Intersect@Scene@Picking@@…` | `0x1801246c0` | 3081 | **PORTED** | **FULL, tolerance 0** — call both, compare the int return and both out-`Vector3`s bit-for-bit |
-| 5b | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` | `0x180125290` | 3560 | **PORTED** | POST-STATE only — a replay would release an already-free entry |
+| 5b | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` | `0x180125290` | 3560 | **PORTED** | POST-STATE only — a replay would release an already-free entry. **Predicate corrected, see §13** |
 | 6 | `?SetMeshUserData@Scene@Picking@@…` | `0x180125240` | 3917 | **PORTED** | **FULL by idempotent replay** — snapshot the 0x48-byte entry after ours, run theirs, `memcmp` |
 | 7 | `?SetTransform@Scene@Picking@@…` | `0x1800721b0` | 3993 | **PORTED** | **FULL by idempotent replay** — entry + root transform |
 | 8 | `?Vertices@PickingMesh@Picking@@…` | `0x180071e10` | 4536 | **PORTED** | **FULL** — pure, call both |
@@ -624,11 +624,97 @@ What would close them, cheapest first:
 
 ### Still open, and not this lane's to close
 
-* **`RemoveMesh` has never been diffed.** It was added after the four integration runs, so
-  its post-state oracle has compiled and not executed — and both of its call sites are
-  address-only, so nothing incidental would have reached it. It runs whenever a building or
-  a floor is removed; one demolition in any run closes it.
+* **`RemoveMesh` HAS now been diffed — 17 calls on a tutorial run — and the 16 reported
+  divergences were a wrong term in the post-state predicate, not a wrong port. See §13.**
+  The corrected predicate has not been re-run.
 * **The census still reports `Picking 8/8`** and lists `RemoveMesh` as a port with no caller.
   That is the tool, not the port — see §2.1. Do not read the 8 as the scope.
 * **Whether `Picking::Scene` is split: it is NOT.** See §0. That question is answered rather
   than open.
+
+
+---
+
+## 13. `RemoveMesh` reported 16 divergences in 17 calls — the PREDICATE was wrong, not the port
+
+MEASURED. A tutorial run (`BANISHED_AUTOTUTORIAL=1 BANISHED_RT_DIFF=1`) reported
+`Picking::Scene::RemoveMesh calls=17 divergences=16`, while `AddMesh` 17/0, `SetTransform`
+19,216/0, the ctor 2/0 and the dtor 2/0 were all clean. Every field the failure message
+*printed* agreed:
+
+```
+call #2  ours=free=0 next=16 size=0   theirs=free=0 next=16 size=0
+```
+
+**The port is correct and one term of its post-state predicate was not.** The finding is in
+retail's own bytes, and it did not need a run to settle — it needed the right forty bytes of
+disassembly.
+
+### What retail actually does
+
+`0x18007b390` (the entry release) builds an all-zero `Entry` on its stack at `RSP+0x28` and
+copies it over the entry. Its initialising stores, read as raw bytes out of the shipped DLL
+at `0x18007b3af`:
+
+```
+89 4C 24 28              [RSP+0x28] = 0        template +0x00   _queryStamp
+C7 44 24 2C FFFFFFFF     [RSP+0x2c] = -1       template +0x04   _nextFree
+49 89 4B B8              [R11-0x48] = 0  (q)   template +0x08   _cellX/_cellY
+89 4C 24 38              [RSP+0x38] = 0        template +0x10   _cellW/_cellH
+49 89 4B C8 / D0 / D8 / E0   four qwords = 0   template +0x18 .. +0x37
+89 4C 24 60              [RSP+0x60] = 0        template +0x38   _userValue
+49 89 4B F0              [R11-0x10] = 0  (q)   template +0x40   _callback
+```
+
+Eleven stores. **The dword at `RSP+0x64` — template `+0x3c`, `Entry::_userValue2` — is never
+written.** And `0x18007b590`, the field-by-field `Entry` copy, *does* copy it
+(`MOV EAX,[RBX+0x3c] ; MOV [RDI+0x3c],EAX` at `0x18007b5e5`).
+
+**So every retail `RemoveMesh` stores an uninitialised stack dword into
+`Entry::_userValue2`.** That is a real uninitialised read in the shipped DLL. It explains the
+exact pattern observed: call #1 passed because that stack slot happened to hold zero, and
+every call after it inherited a previous frame's leftovers.
+
+It is harmless, which is presumably how it shipped. `_userValue2` has **no exported getter** —
+`GetUserValue` (`0x1800722e0`) reads `+0x38`, not `+0x3c` — and the entry allocator
+`0x18007b210` overwrites `+0x3c` from the descriptor before the slot is handed out again.
+Nothing can observe the garbage.
+
+### The fix
+
+The term `_userValue2 == 0` is **dropped, not weakened**: there is no value it could assert,
+because retail does not define one. Every other term stands unchanged — in particular
+`_queryStamp == 0` (`0x18007b590` copies template `+0x00`, which *is* zeroed) and the
+`_transforms` triple, which were the two leading suspects and are both fine. `+0x14` is also
+not checked, for a different reason: `0x18007b590` skips `+0x14..+0x17` entirely, so the
+entry keeps its old bytes there.
+
+### The second, more useful fix: the messages
+
+The real failure here was not the wrong term, it was that **a fourteen-conjunct verdict
+printed three hand-picked fields**, so a divergence rendered two identical strings and cost
+an integration run to localise. That was a defect in every shadow site in this file, not just
+`RemoveMesh`. All five now go through a shared `RtFirstFailure()` helper over a table of
+named `{name, got, want}` terms, and report **the first failing term by name with both
+values**:
+
+| Site | Terms | What a failure now prints |
+|---|---|---|
+| ctor | 18 | e.g. `_freeLink=0` vs `_freeLink=-1`; bucket contents as `_cellHeads[i] first differing i` |
+| dtor | 12 | e.g. `_links._capacity=64` vs `_links._capacity=0` |
+| `AddMesh` | 7 | e.g. `transforms first differing byte=44` vs `-1` |
+| `Intersect` (hit) | 3 | `hit id`, `outPos first differing byte`, `outNormal first differing byte`, plus both vectors to 9 digits |
+| `Intersect` (miss) | 3 | same three terms |
+
+`Intersect` had the same latent flaw in a form that had not yet fired: it **compared** the out
+normal but only **printed** the position, so a normal-only divergence would have rendered two
+identical strings too. Fixed in the same pass.
+
+### Standing lesson
+
+A shadow predicate is two things — a verdict and a description — and they are checked by
+different means. The verdict is checked by running it; the description is only ever checked
+when the verdict fails, which is exactly when you cannot afford it to be uninformative. **If
+a shadow site's `eq` is a conjunction of N terms, its message must be able to name all N.**
+This is the second time in Wave 5 that a printed description agreed while the verdict
+disagreed.
