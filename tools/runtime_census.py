@@ -111,6 +111,51 @@ TOTAL_FUNCTIONS = {
 }
 
 
+# Absolute path of the shipped DLL, used ONLY to turn a raw address back into
+# the exported name at that address. Everything else in this script is a source
+# scan.
+RUNTIME_DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+
+
+def load_export_addrs():
+    """{ image address -> mangled name } for every export in the shipped DLL.
+
+    Added 2026-09-06 (Wave 5), because the census had a third blind spot that
+    both lane B and lane D hit independently:
+
+        A function our tree reaches only by RAW ADDRESS was bucketed under the
+        pseudo-namespace "internal", never into the namespace it belongs to.
+
+    So a namespace row UNDER-COUNTED any class our tree calls by address --
+    "Picking 8/8 100%" while a ninth Picking function (RemoveMesh, reached only
+    at 0x180125290) sat in the internal bucket -- and, worse, the same function
+    could be counted TWICE when one call site used the name and another used
+    the address. Both directions corrupt the number this project treats as its
+    authority over any agent's "all N ported" claim.
+
+    Returns {} if pefile or the DLL is unavailable, in which case the census
+    degrades to its old address-blind behaviour rather than failing.
+    """
+    try:
+        import pefile
+    except ImportError:
+        return {}
+    if not os.path.exists(RUNTIME_DLL):
+        return {}
+    try:
+        pe = pefile.PE(RUNTIME_DLL, fast_load=True)
+        pe.parse_data_directories(
+            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"]])
+        base = pe.OPTIONAL_HEADER.ImageBase
+        out = {}
+        for e in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+            if e.name:
+                out[base + e.address] = e.name.decode("utf-8", "replace")
+        return out
+    except Exception:
+        return {}
+
+
 def namespace_of(mangled):
     """Outermost namespace of an MSVC mangled name: ?Method@Class@Namespace@@...
 
@@ -344,13 +389,40 @@ def main():
 
     d = scan()
 
-    rows = []  # kind, key, namespace, ported, detoured, callers
+    # An address that names an EXPORT is the same function as that export.
+    # Resolving it lets the row land in its real namespace, and lets a function
+    # our tree reaches BOTH ways be counted once instead of twice. See
+    # load_export_addrs() for the two failure modes this fixes.
+    addr_to_name = load_export_addrs()
+
+    merged = {}   # canonical key -> [kind, key, ns, ported, detoured, set(files)]
+
+    def add_entity(kind, key, ns, ported, detoured, files):
+        e = merged.get(key)
+        if e is None:
+            merged[key] = [kind, key, ns, ported, detoured, set(files)]
+        else:
+            e[3] = e[3] or ported
+            e[4] = e[4] or detoured
+            e[5].update(files)
+
     for name, files in d["called_exports"].items():
-        rows.append(("export", name, namespace_of(name),
-                     name in d["ported_exports"], name in d["detoured"], sorted(files)))
+        add_entity("export", name, namespace_of(name),
+                   name in d["ported_exports"], name in d["detoured"], files)
     for addr, files in d["called_addrs"].items():
-        rows.append(("addr", "0x%x" % addr, "internal",
-                     addr in d["ported_addrs"], addr in d["detoured"], sorted(files)))
+        name = addr_to_name.get(addr)
+        ported = addr in d["ported_addrs"]
+        detoured = addr in d["detoured"]
+        if name:
+            # Named export reached by address. Its port may be registered under
+            # either door, so consult both.
+            add_entity("export", name, namespace_of(name),
+                       ported or (name in d["ported_exports"]),
+                       detoured or (name in d["detoured"]), files)
+        else:
+            add_entity("addr", "0x%x" % addr, "internal", ported, detoured, files)
+
+    rows = [(k, key, ns, p, det, sorted(f)) for k, key, ns, p, det, f in merged.values()]
     for ordn, files in d["called_ordinals"].items():
         # An ordinal carries no name, so no namespace can be inferred from it —
         # its own bucket, not lumped in with names that failed to parse.
@@ -360,9 +432,17 @@ def main():
     # Ports with no caller in our tree are worth surfacing: for the exe port a
     # registration nobody asks for was usually a vestigial resolve, and the same
     # trap exists here.
-    called_export_names = set(d["called_exports"])
+    # A port is an orphan only if NEITHER door has a caller. Registering both
+    # the name and the address for one function is deliberate insurance in this
+    # project, and before this was fixed it made every such function report as
+    # caller-less forever -- which trained the reader to ignore the list that
+    # exists to catch reference_uncalled_port_is_not_verified.md.
+    name_of_called_addr = {addr_to_name[a] for a in d["called_addrs"] if a in addr_to_name}
+    called_export_names = set(d["called_exports"]) | name_of_called_addr
     orphan_exports = sorted(set(d["ported_exports"]) - called_export_names)
-    called_addr_set = set(d["called_addrs"])
+
+    addr_of_called_name = {a for a, nm in addr_to_name.items() if nm in d["called_exports"]}
+    called_addr_set = set(d["called_addrs"]) | addr_of_called_name
     orphan_addrs = sorted(set(d["ported_addrs"]) - called_addr_set)
 
     per_ns = collections.defaultdict(lambda: {"called": 0, "ported": 0, "detoured": 0})

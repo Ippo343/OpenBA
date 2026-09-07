@@ -3519,13 +3519,29 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400b4790));
     fn_Game_ReloadWithSave = reinterpret_cast<fn_Game_ReloadWithSave_t>(
         ResolveAddr(Module::Exe, 0x1400b49f0));
+    // ??0SavedState@Save@@QEAA@XZ is a real export (retail 0x1800c0ee0,
+    // ordinal 362), verified against the shipped export directory, so this
+    // always resolves.
+    //
+    // The fallback that used to sit here has been DELETED rather than
+    // corrected, and it is worth saying why. It read
+    //     ResolveAddr(Module::Runtime, 0x18006f330)   // "might be in exe"
+    // and every part of that was wrong: 0x18006f330 is not the SavedState
+    // constructor, and it is not a function entry at all -- it is 0x90 bytes
+    // INSIDE the body of FUN_18006f2a0 (entry 0x18006f2a0, body ends
+    // 0x18006f3ca), an unrelated internal. Taking it would have jumped into
+    // the middle of another function with a SavedState* in RCX. The comment
+    // also said "might be in exe" while the code passed Module::Runtime.
+    //
+    // It was dead code -- the name path never fails -- which is exactly what
+    // made it worth removing: it is the phantom-name pattern with the failure
+    // pre-loaded, waiting for someone to rename or remove the name above.
+    // Wave 5 lane C found it; the mid-function address is the same class of
+    // defect as the 2026-08-28 sweep that found 0x1800f8f50 pointing into
+    // Frustum::Contains. Deleted, not repointed, because Wave 5 registers this
+    // export and a second door earns nothing.
     fn_SavedState_Ctor = reinterpret_cast<fn_SavedState_Ctor_t>(
         ResolveExport("??0SavedState@Save@@QEAA@XZ"));
-    if (!fn_SavedState_Ctor) {
-        // Fallback: SavedState ctor might be in exe
-        fn_SavedState_Ctor = reinterpret_cast<fn_SavedState_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x18006f330));
-    }
     g_ReloadDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c480);
 
     // --- IO::Serializer (shared globals) ---

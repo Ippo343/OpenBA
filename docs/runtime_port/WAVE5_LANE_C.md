@@ -11,6 +11,11 @@ are small enough that every displacement came out of retail bytes directly, whic
 export not portable before cutover; and the two names the lead flagged as suspected phantoms
 are confirmed phantoms.**
 
+**Verified live (§6): 14 of the 15 ports have executed across four `BANISHED_RT_DIFF=1` runs with
+0 divergences on every `Save::…` site**, including a save written by these ports and read back by
+them. The fifteenth, `??0SavedState`, sits on the Mods-menu path that none of those runs reaches
+and is **not** claimed as verified.
+
 Census after the lane (`tools/runtime_census.py --namespace Save`):
 `Save 37 total / 20 called / 15 ported / 75.0%`.
 
@@ -261,6 +266,38 @@ I own three files and have edited only those, so these are reported, not fixed.
 | `code/Game/Dialog/saveloaddialog.cpp:1130-1132` | `// saveInfo+0x48 = base of mod name array; each entry is 0x20 bytes; entry+0 = String` | Correct as far as it goes, but `CheckMod` matches `entry+0x08` (the path), not `entry+0x00` (the display name). Exact replacement wording below. |
 | `docs/runtime_port/WAVE4_LANE_H.md:305` | "builds `GetDataDirectory() + <the save's recorded mod path string>`" | Right, and now specific: that string is `ModInfo+0x08`. Exact replacement wording below. |
 
+### A latent defect found while chasing the one unexercised port — `engine_funcs.cpp:3524-3527`
+
+Not a comment problem; a wrong address. Tracking down why `??0SavedState` never fires led to its
+resolve site, which has the same name-then-address shape as the two phantoms:
+
+```cpp
+fn_SavedState_Ctor = ResolveExport("??0SavedState@Save@@QEAA@XZ");
+if (!fn_SavedState_Ctor) {
+    // Fallback: SavedState ctor might be in exe
+    fn_SavedState_Ctor = ResolveAddr(Module::Runtime, 0x18006f330);
+}
+```
+
+Three things wrong with those four lines:
+
+* **`0x18006f330` is not the `SavedState` constructor.** The constructor is `0x1800c0ee0`
+  (ordinal 362), verified against the shipped export directory.
+* **`0x18006f330` is not a function at all.** It is 0x90 bytes *inside* the body of
+  `FUN_18006f2a0` (entry `0x18006f2a0`, body `0x18006f2a0`–`0x18006f3ca`), an unrelated
+  internal. Taking this fallback would call into the middle of another function with a
+  `SavedState*` in RCX — arbitrary behaviour, no diagnostic.
+* **The comment contradicts the code.** It says "might be in exe" while the call passes
+  `Module::Runtime`.
+
+It is **dead today**: the export name is real, so `ResolveExport` never returns null and the
+fallback never runs. That is exactly what makes it worth writing down — it is the phantom-name
+pattern with the failure pre-loaded, waiting for the name path to be renamed or removed. The fix
+is to correct the address to `0x1800c0ee0` and the comment, or to delete the fallback entirely
+(my preference: the name is real and this lane now registers it, so the fallback earns nothing).
+
+`engine/funcs/` is not mine, so this is reported, not fixed.
+
 ### Exact wording for those two edits
 
 The team lead owns both files. Proposed text, ready to paste.
@@ -332,30 +369,85 @@ are confirmed by this lane's port.
 
 **Did NOT** run the game myself (as instructed — the orchestrator runs the integration passes).
 
-### Live results — the team lead's integration pass, 2026-09-06
+### Live results — the team lead's integration passes, 2026-09-06
 
-Autostart + pause-menu quit with `BANISHED_RT_DIFF=1` and a full world teardown:
-**91 sites, 24,050,239 calls, 99 divergences — all 99 confined to the two pre-existing Wave 1
-sin/cos sites. No new divergent site anywhere.** Clean exit, empty crash log.
+Four runs, all with `BANISHED_RT_DIFF=1` and a clean self-quit. **In every one, every divergence
+was on the two pre-existing Wave 1 sin/cos sites; no new divergent site appeared anywhere, and
+no `Save::…` site diverged once.** All four exited cleanly with an empty `standalone_crash.log`.
 
-This lane's rows from that run:
-
-| Function | `calls=` | `divergences=` |
+| Run | What | Totals |
 |---|---|---|
-| `Save::SaveLoad::SaveLoad` | 2 | 0 |
-| `Save::SaveLoad::Update [shadow]` | 1,039 | 0 |
+| 0 | autostart + pause-menu quit, full world teardown | 91 sites, 24,050,239 calls, 99 divergences |
+| 1 | `BANISHED_AUTOLOAD=Save9` | 111 sites, 29,914,569 calls, 57 divergences |
+| 2 | `BANISHED_AUTOSTART=1 BANISHED_SAVE_TEST=700` | 111 sites, 28,111,981 calls, 98 divergences |
+| 3 | `BANISHED_AUTOLOAD=Auto` — **loading back the save run 2 wrote** | 104 sites, 9,952,450 calls, 67 divergences |
 
-So the blanket "registered but never executed" caveat is **partly** retired — for two functions.
-Read that table the way this project's own scar tissue says to read it
-(`reference_uncalled_port_is_not_verified.md`): **the other 13 registered functions still show
-nothing from this run**, and the two that do show something are the two the menu path happens to
-touch. In particular the run drives no save/load operation, so `_operation` is `0` for all 1,039
-`Update` calls and the switch never dispatched — see the recommendation below. Runs #1 and #2
-are still the ones that matter.
+Run 1 built the world (`[GUL::Load] EXIT — world built`). Run 2 logged
+`frame 761: SAVE OPERATION COMPLETE` and produced `Auto.sav` at 7,401,017 bytes. **Run 3 is the
+one that settles this lane** and the lead ran it unprompted: a `Store` that agrees with the DLL
+is worth much less than a `Store` whose output the game can read back, because the failure mode
+this lane was warned about is a desync that surfaces later on an innocent record. It reads back.
+No desync marker in either log.
 
-What the run does settle: `??0SaveLoad`'s ordered scratch-copy diff (theirs first, because the
-ctor publishes `_singleton = this` and ours must be the last writer) survives a real run twice
-over, with the singleton left pointing at the live object both times.
+Per function, with the oracle that actually fired:
+
+| Function | oracle that fired | `calls=` | `div=` | where |
+|---|---|---|---|---|
+| `SaveLoad::Update [shadow]` | shadow on the accumulation; **switch now covered end to end** | 1,177 | 0 | run 1 |
+| `SaveLoad::GetOperation` | full diff | 417 | 0 | run 1 |
+| `SaveLoad::GetSaveInfo` | full diff | 18 | 0 | run 1 |
+| `SaveLoad::SaveLoad` | scratch-copy diff, `0xCD`-filled, theirs first | 2 | 0 | run 1 |
+| `SaveLoad::SetOperation` | scratch-copy diff | 2 | 0 | run 1 |
+| `SaveLoad::SetMinOperationTime` | scratch-copy diff | 2 | 0 | run 1 |
+| `SaveLoad::GetSaveCount` | full diff | 1 | 0 | run 1 |
+| `SaveLoad::GetSaveState` | full diff | 1 | 0 | run 1 |
+| `SaveLoad::CheckMod` | full diff | 1 | 0 | run 1 |
+| `SaveLoad::SetSaveSprite` | scratch-copy diff | 1 | 0 | run 1 |
+| `SavedState::Retrieve` | scratch-object diff | 1 | 0 | run 1 |
+| `SavedState::~SavedState` | **none** | 1 | — | run 1 |
+| `SavedState::Store` | scratch-object diff | 1 | 0 | run 2 |
+| `SaveLoad::SetSaveName` | scratch-copy diff **with refcount compensation** | 1 | 0 | run 2 |
+| `SavedState::SavedState` | scratch-copy diff | **0** | — | — |
+
+**The `Update` gate (below) is MET.** Case 2 (`UpdateLoad`) and case 1 (`UpdateList`, which
+populates the list the dialog shows) are covered by run 1's completed load; case 4
+(`UpdateSave`) by run 2's save file. The switch is no longer the untested part. Recording the
+history rather than the conclusion: at run 0 `Update` had 1,039 calls and 0 divergences and was
+**still** unverified, because `_operation` was `0` for every one of them and all 1,039 fell
+through to `default`. A clean count is not coverage of the branch the count never took.
+
+Two caveats that should not be rounded off:
+
+* **`~SavedState` ran once and proved only that it did not crash.** It is the one port with no
+  oracle at all; `calls=1` retires "never executed" and nothing more.
+* **`SavedState::SavedState` is still at `calls=0` in all four runs** — see below for why, and
+  for the run that would exercise it. It should not be recorded as verified.
+
+### The one port still at `calls=0`, and why
+
+`??0SavedState@Save@@QEAA@XZ`. **This is expected, not a gap in the runs**, and the reason is
+specific: the constructor has exactly two callers in our tree, `code/Game/Dialog/moddialog.cpp:722`
+and `code/Game/Dialog/mod_dialog_vtables.cpp:438`, both on the **Mods menu's apply/reload path**
+— the one that captures a `SavedState` so the world can be rebuilt after remounting packages.
+None of runs 0-3 opens the Mods menu, so none of them can reach it.
+
+The run that would: the mods-menu harness from CLAUDE.md, e.g.
+`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6
+BANISHED_MODAL_ANSWER=1 BANISHED_RT_DIFF=1`. Note `BANISHED_MODAL_ANSWER=1` is correct *there*
+and wrong on a Save9 load — see run #1's warning below; the two are different dialogs. Until
+that run happens, `SavedState::SavedState` is a registered port that nothing has executed, and
+this document does not claim otherwise.
+
+**A note on the count.** The lead's message said two ports were still at `calls=0`; by my
+reckoning of the site list it is exactly one, the row above — 12 sites reported in run 1 plus
+`Store` and `SetSaveName` in run 2 accounts for 14 of my 15 diff sites. If the tooling says two,
+I would like the second name rather than let the discrepancy stand, because a site that is
+missing from a summary for some *other* reason than "zero calls" is a tooling question worth
+answering.
+
+What run 0 already settled and the later runs re-confirmed: `??0SaveLoad`'s **ordered**
+scratch-copy diff (theirs first, because the ctor publishes `_singleton = this` and ours must be
+the last writer) survives a real run, with the singleton left pointing at the live object.
 
 ### ABI traps checked, one by one
 
@@ -407,11 +499,17 @@ from `WinMain` rather than `atexit`:
    targets are `RT_ORIGINAL_ONCE`-cached, so there is **no `GetProcAddress` on any per-frame
    path** (`reference_rtoriginal_is_getprocaddress.md`).
 
-### `Update`: keep it registered — with a stated gate
+### `Update`: keep it registered — the gate was stated, and it is now MET
+
+**Outcome first: the condition below was satisfied by runs 1 and 2 (see §6), and `Update` stays
+registered.** The argument is kept in full rather than replaced by its conclusion, because what
+matters for the next lane is that the decision was conditional and the condition was checked —
+not that it turned out fine.
 
 The team lead asked me directly whether `Update` should stay registered, given that its 1,039
-clean calls prove the time accumulation and not the switch. **Recommendation: KEEP, gated on
-runs #1 and #2 passing.** The reasoning, so the choice can be re-examined rather than trusted:
+clean calls proved the time accumulation and not the switch. **Recommendation at the time: KEEP,
+gated on runs #1 and #2 passing.** The reasoning, so the choice can be re-examined rather than
+trusted:
 
 * **The 1,039 calls prove less than they look like.** All of them ran with `_operation == 0`,
   so they fell through the switch to `default`. They are evidence about the accumulation and
@@ -440,6 +538,12 @@ runs #1 and #2 passing.** The reasoning, so the choice can be re-examined rather
 `RegisterRuntimeExport` line, which reverts the whole dispatcher to the DLL and leaves the other
 14 ports untouched. If both pass, `Update` has a genuine end-to-end oracle and this note can be
 closed. I would not keep it registered if it shipped without those two runs.
+
+**Resolved 2026-09-06: both runs passed.** Run 1's completed load exercised cases 1 and 2, run 2's
+`Auto.sav` exercised case 4, and run 3 read that save back. Cases 3 (`UpdateLoadFromFile`) and 5
+(`UpdateDelete`) remain untaken by any run — `LoadFromFile` is the command-line/scenario entry and
+`Delete` needs the save dialog's delete button. Both are one integer comparison each in the same
+transcribed switch, so this is stated for completeness rather than flagged as a risk.
 
 ### Honest residual risk
 

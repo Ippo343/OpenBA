@@ -29,9 +29,30 @@ retire — three of the eight still have no evidence of ever having been called,
 
 ---
 
+## 0. The one-line answer to "split or whole?"
+
+**`Picking::Scene` ends up WHOLLY OURS. It is not split.** MEASURED, two ways:
+
+* Our tree calls **nine** of `Picking::Scene`'s 21 exported symbols, and all nine are now
+  ported and registered. A grep across `code/`, `engine/`, `standalone/`, `runtime/` and
+  `dx11/` finds **no call site for any of the other twelve** — not `Update`, not `Clip`, not
+  `GetMesh` / `GetAABB` / `GetLocalAABB` / `GetTransform` / `GetUserValue`, not the copy ctor
+  or `operator=`.
+* `get_xrefs_to` on `Update`, on `Clip` and on all nine ported addresses returns **only
+  `DATA`** references — the export address and name tables, plus `.pdata` unwind records.
+  **Runtime-x64.dll never calls any of them internally either.**
+
+So there is no path by which the DLL and this port both mutate one `Scene`. The twelve
+unported exports are dormant code in a DLL nothing dispatches into. Every one of the nine is
+registered **twice**, under its mangled name *and* under its retail address, which is what
+makes that true in practice rather than only on paper — see §2.1.
+
+---
+
 ## 1. Result table
 
-All eight assigned exports are ported and registered. Nothing is held back.
+All **nine** are ported and registered — the eight assigned plus `RemoveMesh`, which the
+brief's `ResolveExport` grep could not see (§2.1). Nothing is held back.
 
 | # | Export | Retail | Ord | Status | Oracle |
 |---|---|---|---|---|---|
@@ -40,6 +61,7 @@ All eight assigned exports are ported and registered. Nothing is held back.
 | 3 | `?AddMesh@Scene@Picking@@…` | `0x1801252e0` | 1571 | **PORTED** | **FULL on the computed part** — theirs runs into a private scratch `Scene`, the two flattened transform arrays are compared bit-for-bit, then the scratch entry is removed |
 | 4 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` | `0x1800722d0` | 2998 | **PORTED** | **FULL** — pure, call both |
 | 5 | `?Intersect@Scene@Picking@@…` | `0x1801246c0` | 3081 | **PORTED** | **FULL, tolerance 0** — call both, compare the int return and both out-`Vector3`s bit-for-bit |
+| 5b | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` | `0x180125290` | 3560 | **PORTED** | POST-STATE only — a replay would release an already-free entry |
 | 6 | `?SetMeshUserData@Scene@Picking@@…` | `0x180125240` | 3917 | **PORTED** | **FULL by idempotent replay** — snapshot the 0x48-byte entry after ours, run theirs, `memcmp` |
 | 7 | `?SetTransform@Scene@Picking@@…` | `0x1800721b0` | 3993 | **PORTED** | **FULL by idempotent replay** — entry + root transform |
 | 8 | `?Vertices@PickingMesh@Picking@@…` | `0x180071e10` | 4536 | **PORTED** | **FULL** — pure, call both |
@@ -79,6 +101,74 @@ ordinal 3560 (the AddMesh oracle calls it to keep its scratch scene bounded).
 **NOT present, and worth stating because it shapes the design: there is no
 `??_7Scene@Picking@@6B@`.** The only `??_7` in the namespace is
 `??_7PickingMesh@Picking@@6B@` (`0x180158fb0`, ordinal 1478). See §4.
+
+### 2.1 The scope was 9, not 8 — and the census still says 8
+
+The brief's eight exports came from grepping `ResolveExport`. That misses every call site
+that resolves by RAW ADDRESS. Lane E's sweep of the 246 `ResolveAddr(Module::Runtime, ...)`
+sites found the ninth, and I confirmed each site by hand:
+
+```
+code/Game/Component/pickingcomponent.cpp:171   AddMesh     by NAME (the two-line literal)
+code/Game/Component/citizenai_executor.cpp:406 AddMesh     0x1801252e0  ADDRESS ONLY
+code/Game/Component/floorcomponent.cpp:303     AddMesh     0x1801252e0  ADDRESS ONLY
+code/Game/Component/floorcomponent.cpp:308     RemoveMesh  0x180125290  ADDRESS ONLY
+code/Game/Component/pickingcomponent.cpp:344   RemoveMesh  0x180125290  ADDRESS ONLY
+```
+
+`?RemoveMesh@Scene@Picking@@QEAAXI@Z` (`0x180125290`, ordinal 3560) is now ported. It had to
+be: `AddMesh` and `RemoveMesh` are the two halves of one free list — `AddMesh` pops
+`Scene::_freeEntry`, `RemoveMesh` pushes onto it — so porting one and leaving the other would
+have two implementations taking turns on one object's mesh table. It would not fail at the
+seam; it would hand out a colliding or stale mesh id and surface later as a wrong pick or a
+`_userData` pointing at a freed entity. `pickingcomponent.cpp:336-342` records that this
+class has already produced exactly that crash once (2026-07-21, foundation click, dead in
+`EditTool_SelectEntity_Impl`).
+
+**Every one of the nine is registered under BOTH its mangled name and its retail address**,
+and that was true of the eight before this correction too — which is the only reason `AddMesh`
+recorded 119 live calls, since two of its three call sites are address-only.
+
+#### A THIRD census blind spot — MEASURED
+
+`tools/runtime_census.py` still reports **`Picking 49 8 8 0 100.0%`** after the ninth port
+landed, and separately lists `?RemoveMesh@Scene@Picking@@QEAAXI@Z` under *"Ports with no
+caller in our tree"*. Both are the same artifact, and it is distinct from the two blind spots
+this project already knows about (the named-constant one, and the multi-line literal one lane
+E just fixed):
+
+> **A function our tree reaches only by raw address is attributed to the `internal` bucket,
+> not to its namespace.** So its namespace row under-counts the real scope, and its *name*
+> registration looks caller-less because the census never connects `0x180125290` to
+> `?RemoveMesh@Scene@Picking@@…`.
+
+This is not cosmetic — it is the mechanism that made the brief's scope list miss `RemoveMesh`
+in the first place, and any future lane whose scope is built the same way will miss the same
+class of function. A census that resolved registered addresses back to their export names
+(the mapping is in the shipped export directory and the tool already opens it) would close it.
+
+The mirror image also shows: `0x1801246c0` (`Intersect`) appears in the "ports with no
+caller" **address** list, because our tree reaches `Intersect` by name and through the exe
+dispatch slot but never by `ResolveAddr`. That registration is deliberate belt-and-braces,
+not a vestigial resolve.
+
+#### The call-site comment's neighbours, checked — MEASURED
+
+`pickingcomponent.cpp:340-342` claims `0x1801252e0` is the paired `AddMesh` and that
+`0x18010c3c0` is "Collision::Scene::RemoveMesh, wrong one". Verified against the export
+directory rather than taken on trust:
+
+* `0x1801252e0` **is** `AddMesh`, ordinal 1571. Correct.
+* `0x18010c3c0` is `?RemoveMesh@Scene@`**`Collision2D`**`@@QEAAXI@Z`, ordinal **3559** — the
+  namespace in the comment is slightly off (`Collision2D`, not `Collision`), and the ordinal
+  sits *immediately* before Picking's 3560, which is precisely why the two are easy to
+  confuse.
+* The comment understates the danger. `0x18010c3c0` is a two-instruction adjustor thunk,
+  `ADD RCX,0x60 ; JMP 0x180068620` — `Collision2D::Scene` embeds the same generic grid at
+  its offset 0x60 and shares the implementation. Calling it on a `Picking::Scene` would not
+  be a no-op: it would run the grid code against `scene + 0x60`, which is **past the end** of
+  a 0x60-byte `Picking::Scene`. That is a wild write into whatever follows the object, not a
+  wrong answer.
 
 ### The brief's claim about `export_name_audit.py` — TRUE WHEN WRITTEN, FIXED MID-WAVE
 
@@ -248,6 +338,8 @@ does — the shape Wave 4 lane C used for `Map_Find`/`Map_Insert`.
 | `0x180059140` | `Array<Transform>::SetSize(n)`, stride 0x1c, new slots = identity | AddMesh |
 | `0x18007af70` | the grid insert: allocate an Entry, deep-copy the descriptor, compute the cell rectangle, thread it onto every covered cell; returns the entry index | AddMesh |
 | `0x1800724d0` | the grid re-index: recompute the cell rectangle and rethread only if it changed | SetTransform |
+| `0x180072950` | unthread an entry from every cell of its rectangle | RemoveMesh |
+| `0x18007b390` | release an entry: assign an all-zero `Entry` over it (freeing the inner `Array<Transform>`), then push the slot onto the free list | RemoveMesh |
 | `0x18007b6d0` | the cell-rectangle iterator, skipping entries already stamped this query | Intersect |
 
 One deliberate substitution, flagged because it is a deviation and not a transcription:
@@ -259,12 +351,9 @@ belongs to a dying local, so the observable effect is identical. It keeps `<wind
 of the file. Every `Array<T>::~Array` for a trivially-destructible `T` is byte-identical and
 `Math::Transform` is one.
 
-`?RemoveMesh@Scene@Picking@@QEAAXI@Z` (`0x180125290`) is **not in this lane's scope** and
-stays on the DLL, even though `floorcomponent.cpp` and `pickingcomponent.cpp` call it (both
-by address, `ResolveAddr(Module::Runtime, 0x180125290)`, so it does not appear in the census
-as a Picking export). It shares the layout above, so mixing it with the ported ctor and
-AddMesh is safe by the §4 argument. Whoever picks it up next should note that it is the
-mutating twin of `AddMesh` and has the same "no oracle by double-running" problem.
+`?RemoveMesh@Scene@Picking@@QEAAXI@Z` (`0x180125290`) was **added to this lane after the
+brief** and is ported — see §2.1 for how it was missed and why leaving it behind would have
+been the wave's sharpest hazard rather than a bookkeeping gap.
 
 ---
 
@@ -383,7 +472,7 @@ watchdog (`BANISHED_REDZONE=watch`) can say that, and it has not been run.
   (insert then remove), but `PickingComponent_RegisterMesh` is default-on, so a stress town
   will drive it thousands of times. Untested.
 * `abi_retslot_audit.py`: **0 suspicious of 49 by-value-returning exports.** MEASURED, but
-  note what that tool covers — none of this lane's eight returns a class by value.
+  note what that tool covers — none of this lane's nine returns a class by value.
   `Vertices` returns a *reference* (`AEBV…`), so it has **no** hidden return slot and the
   whole body is one `LEA` into RAX. Getting that backwards would be a wild write on every
   call, with RDX — the caller's buffer — read as the sub-mesh index. It is written the right
@@ -535,18 +624,11 @@ What would close them, cheapest first:
 
 ### Still open, and not this lane's to close
 
-* **`?RemoveMesh@Scene@Picking@@QEAAXI@Z` (`0x180125290`) is unported.** Lane E's scope audit
-  reaches the same conclusion independently and puts Wave 5's real Picking scope at **9, not
-  8**. Our tree calls it from `floorcomponent.cpp:308` and `pickingcomponent.cpp:344`, both
-  by raw address. It is the mutating twin of `AddMesh` and inherits the same "cannot be
-  diffed by double-running" problem; the scratch-scene construction in §7b is the pattern
-  that would work for it.
-* **Whether `Picking::Scene` ends up wholly ours or permanently split.** §4 shows the split
-  is *safe* (no vtable, no internal callers). It is still a split, and the layout in
-  `runtime/types/picking/Scene.h` is load-bearing for exactly as long as it lasts.
-* **Lane E's warning about `AddMesh`'s three disagreeing call sites is handled.** One resolves
-  by name (`pickingcomponent.cpp:171`), two by address (`citizenai_executor.cpp:406`,
-  `floorcomponent.cpp:304`); registering only the name would have left two call sites on the
-  DLL and driven one live `Scene` through two implementations. **Every one of this lane's
-  eight functions is registered under BOTH its mangled name and its retail address**, which
-  is why `AddMesh` shows a non-zero call count at all.
+* **`RemoveMesh` has never been diffed.** It was added after the four integration runs, so
+  its post-state oracle has compiled and not executed — and both of its call sites are
+  address-only, so nothing incidental would have reached it. It runs whenever a building or
+  a floor is removed; one demolition in any run closes it.
+* **The census still reports `Picking 8/8`** and lists `RemoveMesh` as a port with no caller.
+  That is the tool, not the port — see §2.1. Do not read the 8 as the scope.
+* **Whether `Picking::Scene` is split: it is NOT.** See §0. That question is answered rather
+  than open.
