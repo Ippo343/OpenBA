@@ -127,15 +127,22 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
     RT_DIFF_BEGIN("IO::FileSystem::Exists");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
+    // RT_ORIGINAL_ONCE, not bare RtOriginal: these two calls are on the NORMAL
+    // path, not inside a diff guard, and RtOriginal is GetProcAddress -- an
+    // export-table binary search by string under the loader lock on EVERY call.
+    // Two of them in the body of a function the quicksave path calls per file
+    // is the Wave 2 perf-gate defect exactly (WAVE3_LANE_P.md): it cost 5.6
+    // points of sim time from inside System::Time and was invisible to both
+    // profilers because it lands in ntdll self time.
     bool ours;
     if (fs->existsInPackfileGate != 0 &&
-        RtOriginal<fn_Exists_t>(
+        RT_ORIGINAL_ONCE(fn_Exists_t,
             "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(fs, path)) {
         ours = true;
     } else if (fs->platformExistsGate == 0) {
         ours = false;
     } else {
-        ours = RtOriginal<fn_Exists_t>(
+        ours = RT_ORIGINAL_ONCE(fn_Exists_t,
             "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(fs, path);
     }
 

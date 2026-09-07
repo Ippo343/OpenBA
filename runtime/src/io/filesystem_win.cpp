@@ -113,21 +113,24 @@ bool SameFilenameText(const Filename* a, const Filename* b) {
 }
 
 // The body, independent of the `this` FileSystem pointer (see header note).
+// Every RtOriginal here is RT_ORIGINAL_ONCE: these run on the NORMAL path, not
+// inside a diff guard, and bare RtOriginal is GetProcAddress on every call
+// (WAVE3_LANE_P.md, the Wave 2 perf-gate defect).
 void ComputeSaveDirectory(Filename* ret) {
     wchar_t buf[264];
     const HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, buf);
     if (hr != S_OK) {
-        RtOriginal<fn_ErrorSetText_t>(kNameErrorSetText)(
+        RT_ORIGINAL_ONCE(fn_ErrorSetText_t, kNameErrorSetText)(
             "FileSystem: Unable to retrive the Documents folder for saving!", true);
         ret->data = nullptr;
         return;
     }
 
     WideStringHandle ws{nullptr};
-    RtOriginal<fn_WideStringSet_t>(kNameWideStringSet)(&ws, buf);
+    RT_ORIGINAL_ONCE(fn_WideStringSet_t, kNameWideStringSet)(&ws, buf);
 
     String utf8{nullptr};
-    RtOriginal<fn_WideStringAsUTF8_t>(kNameWideStringAsUTF8)(&ws, &utf8);
+    RT_ORIGINAL_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8);
 
     String formatted{nullptr};
     RtSystem::RtSystem_String_Format(&formatted, "%s\\%s\\",
