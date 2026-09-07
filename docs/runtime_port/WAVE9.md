@@ -413,8 +413,8 @@ precedent for the third being a legitimate answer.
 | **P — dissolvable by probe: DONE 2026-09-07** | | |
 | 1 | `UpdateLoop::IsRunning` (lane A) | **CLOSED — 5 cases, 0 mismatches, true branch REACHED.** Retail is two instructions: `MOV RAX,[0x1801fe750]; CMP RCX,[RAX+0x20]` — `this` is COMPARED, never dereferenced, which is what makes the false branch safe to probe with pointers that are not `UpdateLoop`s. Cases: the running loop (true), **`_nextLoop` (+0x28) — the near miss, because a port comparing the pending loop instead of the current one would pass a one-sided test**, null, an unrelated stack address, and the `MainLoop` itself. The probe prints whether the true branch was reached, so five agreeing falses cannot read as a pass. |
 | **B — blocked on a named dependency; ordinary port work once it lands** (**1 of the 10 PORTED AND VERIFIED 2026-09-07**) | | |
-| 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after `Audio::SoundBuffer`/`SoundEffect`.** All three reach `Device`'s COM channel objects; none of the three classes was in Wave 8's scope. `Scene::Update` also consumes `System::Random`, so it needs an oracle design, not just a body. |
-| 5-7 | `Audio::Scene::StopAll`, `Pause`, `StopEffect3D` | **PORT with 2-4.** Each calls into `Device::Stop` / the platform channel array. Porting the outer loop alone would put two implementations of one state machine in play (WAVE8.md §1). |
+| 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after a DEVICE-LEVEL FAKE, not after `SoundBuffer`/`SoundEffect`** — see the shared-root-cause section below. A faithful port may CALL those classes by address, as `ClearAll`/`RegisterInput`/`Scene::Serialize` do with `Collection` internals, so what is needed from them is LAYOUT, not ports. The irreducible blocker is the stored completion callback. `Scene::Update` carries a second one: it consumes `System::Random`, so even a perfect device fake needs the RNG snapshotted too. |
+| 5-7 | `Audio::Scene::StopAll` `0x1800df150`, `Pause` `0x1800df070`, `StopEffect3D` | **PORT with 2-4.** Read directly: both `StopAll` and `Pause`→`PauseEffect`→`0x1800de200` end in `CALL RAX` on the completion callback stored in the channel record, plus `FreeChannelPlatform`'s COM `Stop` under a lock. The state is bounded (256 x 0x70 channels + `paused[5]`) so snapshot/restore WOULD work — **but a callback that has already run into game state cannot be un-run**. `Pause` also early-returns when the flag already matches, so a naive ours-then-theirs would compare nothing and report green. |
 | 8 | `Audio::Scene::Serialize` `0x1800e0050` | **PORTED AND VERIFIED 2026-09-07 — 32,772 emissions identical, 0 diverged**, by lane S. The stated blocker was answered by a fact the tree had since Wave 4 (retail's Encoding offsets, bool `+0x78` / uint `+0x98` / int `+0xa0`, in `rt_io_port.cpp`'s warning block). 40 instructions touching one Encoding slot (`kScalarInt +0xa0`) and one ReaderWriter slot (`kArrayBool +0x20`, n=5 for `Scene::paused`). Its two "unexported callees" are ordinary `Collection` internals called by address as `ClearAll` and `RegisterInput` already do. |
 | 9 | `Engine::MainLoop::Run` (lane B) | **PORT after the allocator (row 12-15).** Lane B records the allocator embedding as the reason it is a holdback. |
 | 10 | `Input::KeyMap::RegisterInput` (lane D) | **PORTED AND VERIFIED 2026-09-07 — 50 calls, 0 divergences.** Lane D held it back because it could not pin `FUN_180023060`'s first argument. Reading the callee answers it: **RCX is never read** — `0x180023097 MOV RCX,RBX` destroys it before any use. The call sites agree in the stronger form: RCX is `this` at one site and a zero-extended id byte at the other two, and **a value that differs like that across call sites cannot be a parameter the callee reads.** Oracle: **our writer, their readers** — there is no replay (a second insert of the same id returns early, making replay vacuous), so the insert is verified by asking the DLL's own `GetDeviceForId`/`GetInputForId`/`GetIdForDeviceInput` to read it back, the last of which walks the WHOLE tree and so exercises our linkage and the rebalance through code we did not write. |
@@ -598,6 +598,49 @@ four, `KeyMap::Load`, and `SerializeReferenceTable` as "the cheapest row". The p
 have been right every time; the summaries over them have been wrong every time. That is a
 measured property of this material, not bad luck: **these functions differ from each other in
 exactly the details that decide whether a technique applies.**
+
+### The six Audio holdbacks share ONE root cause, and it is not what the lane doc says
+
+WAVE8_LANE_C listed six reasons for six functions — "no oracle (plays sound)", "no oracle (stops
+real audio)", "COM vtable calls", "audible side effect", "needs `SoundBuffer`/`SoundEffect`
+internals". Reading three of them directly (`StopAll` `0x1800df150`, `Pause` `0x1800df070`, and
+`FreeChannelPlatform` `0x1800de6f0` transitively) shows they converge on one thing, and it is
+sharper and more actionable than any of those phrasings:
+
+**Every path ends in a stored completion callback fired through a function pointer.**
+
+* `StopAll` — walks 256 channels × 8 handles; per channel it `SetEvent`s the device wait handle,
+  makes the COM `Stop` call at `Device+0xaa0`, calls `FreeChannelPlatform`, and then
+  `CALL RAX` on the callback stored in the channel record.
+* `Pause` → `PauseEffect` `0x1800df4a0` → `0x1800de200`, whose three calls are `0x1800dea20`,
+  `FreeChannelPlatform` `0x1800de6f0`, and again `CALL RAX` — the same stored callback.
+
+**Why that specific fact decides the oracle.** Every other technique this wave has used would
+otherwise apply: the emissions have no stream, so lane S is irrelevant; the state is bounded (the
+channel array is 256 × 0x70 = 28 KB plus `Scene::paused[5]`), so **snapshot/restore would work** —
+except that **a callback which has already run into game state cannot be un-run.** Replaying
+either function fires every live effect's completion handler twice. That is not an audible
+artefact, it is arbitrary game-side reentrancy.
+
+It also explains a detail lane C noticed but did not connect: `Pause`'s first line is
+`if (paused[soundType] == paused) return;`, so a naive ours-then-theirs would have the second call
+**early-return** and report green having compared nothing — the exact `RegisterInput` trap, in a
+class where the first call has already done the damage.
+
+**So the Audio lane needs a Device-level fake, not a better diff.** Interpose on the channel
+records so the completion callbacks and the COM `Stop` land in a recorder instead of the real
+device, then both sides can run. That is the same shape as lane S — replace the sink, not the
+subject — one level lower in the stack. Sizing it is the Audio lane's first task, and it is a
+better first task than porting `SoundBuffer`/`SoundEffect` (71 exports), because **without it
+those 71 ports would still have no oracle.**
+
+**And it narrows the stated dependency.** Lane C said `Scene::Update` "needs
+`SoundBuffer`/`SoundEffect` internals this lane does not own". A faithful port may CALL those
+classes by address — that is what `ClearAll`, `RegisterInput` and `Scene::Serialize` all do with
+`Collection` internals. What the wave actually needs from them is **layout**, not ports. The
+irreducible blocker is the callback, and `Scene::Update`'s own extra one: it consumes
+`System::Random` state, so even a perfect device fake leaves it non-replayable without also
+snapshotting the RNG.
 
 ### The pattern this session hit three times: a known fact that did not reach the next wave
 
