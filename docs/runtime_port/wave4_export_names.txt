@@ -45,3 +45,20 @@ OK  0x1800b88e0 ord=4561  ?WriteSettings@Persistence@IO@@QEBAXXZ
 OK  0x1801fc6a8 ord=4811  ?_singleton@FileSystem@IO@@0PEAV12@EA
 
 39 ok, 0 MISSING, of 39
+
+# ---------------------------------------------------------------------------
+# COMDAT / ICF folding: CHECKED, AND THERE IS NONE.
+#
+# The addresses above are scattered rather than grouped by class (the three
+# by-value getters GetSavePath/GetSourceDirectory/GetDataDirectory sit together
+# in a low 0x1800070xx-0x180007bxx band, far from the rest of Persistence and
+# FileSystem; the Serializer overloads are spread across the whole image). That
+# LOOKS like identical-COMDAT folding, and the orchestrator initially told three
+# lanes to expect it.
+#
+# It is not. Across the DLL's entire export directory, 0 of the 38 distinct
+# Wave-4 function addresses is exported under more than one name. Every overload
+# is its own body; the scatter is linker COMDAT ordering by object file.
+#
+# So a Wave-4 count of "N ported" means N bodies, and no port registered at one
+# of these addresses silently serves a second name.
