@@ -207,6 +207,29 @@ This is the same lesson as `reference_uncalled_port_is_not_verified.md` and
 checked against the process.** The residue census is the first thing in the tree that asks
 the process.
 
+## A porting a function can GROW the cutover surface
+
+Measured on the first holdback closed by porting. `KeyMap::RegisterInput` landed and the census
+went **823 called / 504 ported → 825 / 505**: +1 ported, **+2 called**. Net coverage did not
+move (61.2% both times).
+
+The two new entries are the port's own dependencies. Retail's insert calls two unexported
+`Collection::Set` internals — the node allocator `0x180023060` and the AVL rebalance
+`0x180023170` — and a faithful port calls them the same way, by address, exactly as `ClearAll`
+already did. Each `ResolveAddr(Module::Runtime, …)` is a new row in the **unnamed DLL internals**
+bucket, which is the one bucket with no export name to work from (lane D, the `FUN_` pool).
+
+**Consequences for lane sequencing:**
+* **`called` is not a fixed denominator counting down to zero.** A port that reaches into DLL
+  internals moves work from the named column into the hardest unnamed one. A wave that measured
+  progress purely as "ported / called" could port for a day and show no movement while doing
+  real work — or worse, look like it was going backwards.
+* **Prefer ports whose callees are already ours**, and when a port must call an internal, treat
+  that internal as a lane D row created by the port, not as a free dependency.
+* The two rows this one created are shared `Collection::Set<E24>` internals, so they are paid for
+  once and every other `KeyMap` mutator (`Load`, and Wave 3's tree mutators) reuses them. That is
+  the good case; it is not automatic.
+
 ## Proposed lane order
 
 The order is forced by §2 (verify while the oracle exists) and §3 (the heap cannot be half
