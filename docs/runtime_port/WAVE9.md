@@ -494,6 +494,31 @@ That harness converts four "no oracle possible" rows into ordinary ports, and it
 retroactively strengthen Wave 4's own `Serializer` family, which today is verified by call-level
 diffing rather than by byte-comparing what it actually wrote.
 
+#### And "no oracle possible" is WRONG for the write path — which is the half that desyncs
+
+Wave 3 wrote off `InternalBasePtr::Serialize` as having "no oracle at all", Wave 5 and Wave 8
+used the same reasoning, and this document repeated it above. It is only true of the READ path.
+
+**On the WRITE path a `Serialize` is a pure read of the object.** It walks the object and emits
+bytes; it does not mutate what it is serializing. So calling ours and then theirs is a legitimate
+replay **provided the two calls emit into different sinks** — the thing that made replay
+impossible was never the function, it was that both calls shared one stream.
+
+That gives lane S a much cheaper shape than a full `MemoryStream` pair. The comparison that
+actually matters is not the bytes on disk but **the sequence of typed emissions**, because a
+desync IS "a different sequence of typed writes". So the sink can be a synthetic double: a stub
+`Stream` whose `+0x08` says writing and whose `+0x10` points at a stub `Encoding` whose vtable
+slots record `(slot, size, value)` into a vector instead of touching a buffer. Run the port
+against one recorder and the shipped body against another, then compare the two traces.
+
+Everything needed to shape those doubles is already measured: `Serializer+0x00` is the `Stream*`,
+`Stream+0x08` is the mode (non-zero = writing), `Stream+0x10` is the `Encoding*`, the
+`+0x18`/`+0x20` pair returns the field object, and retail's field slots are bool `+0x78` /
+uint `+0x98` / int `+0xa0`.
+
+**The read path stays hard** — it consumes the stream and mutates the object — but it is also the
+half that a write-path oracle indirectly protects: if our writer emits the same sequence retail's
+does, a retail reader will accept our save, which is the property that actually matters.
 **This is the single highest-leverage item left in the wave**, and it is why the remaining
 holdbacks should not be attacked in the order they appear in the table.
 
