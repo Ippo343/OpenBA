@@ -92,3 +92,6 @@ void RtVolumePortInit();   // runtime/src/volume/
 void RtSystemPortInit();   // runtime/src/system/ — Wave 2
 void RtObjectPortInit();   // runtime/src/object/ — Wave 3
 void RtIoPortInit();       // runtime/src/io/ — Wave 4
+void RtAchievementPortInit(); // runtime/src/achievement/ — Wave 5
+void RtSavePortInit();     // runtime/src/save/ — Wave 5
+void RtPickingPortInit();  // runtime/src/picking/ — Wave 5

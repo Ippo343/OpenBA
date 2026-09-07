@@ -263,6 +263,9 @@ void RuntimePortInit() {
     RtSystemPortInit();   // Wave 2: System
     RtObjectPortInit();   // Wave 3: Object
     RtIoPortInit();       // Wave 4: IO
+    RtAchievementPortInit();  // Wave 5: Achievement
+    RtSavePortInit();     // Wave 5: Save
+    RtPickingPortInit();  // Wave 5: Picking
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.
