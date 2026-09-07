@@ -244,3 +244,42 @@ run or to a stated reason. Runs 10-14:
 | Unexercised | 4, each with the justification above |
 | Defects found | 2 live (the 4 phantom Goal manglings incl. the skipped handle-table swap-remove; the `SavedState` mid-function fallback), 1 pre-existing crash recorded, 1 uninitialised read **in the shipped DLL** |
 | Collision2D / Pathfinding | **TRUE ZEROES** — our tree calls neither; pathfinding is reimplemented natively in the exe |
+
+---
+
+## One operational fact for later waves: the diff oracle SURVIVES the perf build
+
+Raised by lane B and verified here, because it decides whether PLAN §5's "passes the diff harness
+on `sa-run` **and `sa-stress`**" box is even reachable.
+
+`standalone/log_strip.h` strips **unqualified `printf` only**. `runtime/funcs/rt_diff.cpp` emits
+every one of its 8 output calls through `fprintf(stderr, …)` and contains no bare `printf`. So
+`BANISHED_RT_DIFF=1` works on the `standalone-perf` exe that `tools/stress_run.sh` builds, and the
+summary is read from `standalone_error.log`, not `standalone_debug.log`.
+
+What IS stripped there is the `[RtPort] … registered` line — cosmetic; the registrations still
+happen. Do not read its absence as "the ports did not load".
+
+Wave 5's run 9 used `BANISHED_STRESS=1` on the **debug** exe, which is a functional check and not a
+perf measurement (`perf/README.md`: never record a baseline from `-O0`). A perf-exe stress run under
+the diff oracle is therefore available to the next wave and was not needed by this one.
+
+## A note on `tools/ach_reset.sh`, deliberately NOT run
+
+Lane B recommended clearing the `Ach*` registry values before the award run, on the reasoning that
+an inherited award is indistinguishable from a fresh pass. The reasoning is sound and the concern is
+real, but the action was declined and the wave closed without it, for two reasons:
+
+1. **It was not necessary.** Run 9's census moved 6/36 -> 8/36 *during the run*, with `Settlement`
+   and `Village` reading `awarded=1` at the first sample after their population goals were satisfied
+   by the stress town's 802 citizens. The transition was observed, not inferred from a final count,
+   so there was nothing for an inherited award to fake.
+2. **It destroys project state that is not this wave's to spend.** The achievement record is a
+   tracked artifact of several earlier waves (`project_production_achievements_stat20.md`,
+   `project_immigrants_nomads_closed.md`, `project_jack_of_all_trades_closed.md` — Ach5, Ach25,
+   Ach27 were each closed by a long run). Wiping it to tidy one branch's evidence is a bad trade,
+   and it is the user's call rather than a lane's.
+
+Lane B also withdrew the premise behind the suggestion once it saw the census: it had assumed ~25 of
+36 were flagged and that the registry was the blocker. At 6/36, 30 indices were eligible and the
+registry was never the blocker — the conjunction problem was the whole explanation.
