@@ -1,0 +1,47 @@
+# Wave 4 (IO) — export-name verification, 2026-09-06
+# pefile over C:\GOG Games\Banished\Runtime-x64.dll, the SHIPPED retail DLL.
+# All 39 IO symbols our tree calls resolve. NO phantom names this wave.
+# (reference_resolveexport_phantom_names.md — a name the DLL lacks resolves
+#  NULL silently, the address fallback hides it, and the port lands inert.)
+
+OK  0x1800a9520 ord=106   ??0CompressedMemoryStream@IO@@QEAA@XZ
+OK  0x1800b9960 ord=381   ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z
+OK  0x1800a9560 ord=551   ??1CompressedMemoryStream@IO@@UEAA@XZ
+OK  0x1800b99b0 ord=675   ??1Serializer@IO@@QEAA@XZ
+OK  0x1800a9620 ord=1719  ?Close@CompressedMemoryStream@IO@@UEAAXXZ
+OK  0x1800a9600 ord=1874  ?Create@CompressedMemoryStream@IO@@QEAA_NXZ
+OK  0x1800ab310 ord=2321  ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z
+OK  0x1800aea10 ord=2339  ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z
+OK  0x1800b81e0 ord=2421  ?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z
+OK  0x1800b8290 ord=2423  ?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z
+OK  0x180007bd0 ord=2554  ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ
+OK  0x180006290 ord=2593  ?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ
+OK  0x180024350 ord=2784  ?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ
+OK  0x1800ab050 ord=2829  ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z
+OK  0x1800acfd0 ord=2886  ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ
+OK  0x180007ad0 ord=2890  ?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ
+OK  0x180007b90 ord=2922  ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ
+OK  0x1800070b0 ord=3011  ?GetVersion@Serializer@IO@@QEBAHXZ
+OK  0x1800a9500 ord=3302  ?Open@CompressedMemoryStream@IO@@QEAA_NXZ
+OK  0x1800b84b0 ord=3462  ?ReadSettings@Persistence@IO@@QEAAXXZ
+OK  0x18007c3b0 ord=3732  ?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z
+OK  0x180055c80 ord=3734  ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z
+OK  0x18007c3c0 ord=3735  ?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z
+OK  0x1800675a0 ord=3736  ?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z
+OK  0x1800061d0 ord=3737  ?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z
+OK  0x1800061f0 ord=3738  ?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z
+OK  0x180021660 ord=3739  ?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z
+OK  0x1800061e0 ord=3742  ?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z
+OK  0x180054160 ord=3745  ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z
+OK  0x180034fe0 ord=3747  ?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z
+OK  0x180077660 ord=3748  ?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z
+OK  0x180029e60 ord=3749  ?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z
+OK  0x1800150d0 ord=3750  ?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z
+OK  0x180052920 ord=3753  ?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z
+OK  0x1800346d0 ord=3804  ?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z
+OK  0x1800b80c0 ord=3817  ?Set@Persistence@IO@@QEAAXPEBD0H@Z
+OK  0x1800b8380 ord=3818  ?Set@Persistence@IO@@QEAAXPEBD0_N@Z
+OK  0x1800b88e0 ord=4561  ?WriteSettings@Persistence@IO@@QEBAXXZ
+OK  0x1801fc6a8 ord=4811  ?_singleton@FileSystem@IO@@0PEAV12@EA
+
+39 ok, 0 MISSING, of 39
