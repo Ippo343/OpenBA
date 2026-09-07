@@ -192,6 +192,155 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
     RT_DIFF_SHADOW(true, "matching slots cleared", "same (self-check)");
 }
 
+// ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z  retail 0x1800a7e70  ord 3712
+//
+// UNBLOCKED 2026-09-07. Wave 8 lane D held this back because it could not pin
+// the first argument of the node allocator FUN_180023060. Reading the CALLEE
+// settles it: RCX is never read -- 0x180023097 `MOV RCX,RBX` destroys it before
+// any use, loading the allocator critical section at *(0x1801fc718)+0x640. The
+// real signature is
+//     BindingNode* AllocNode(<unused>, const Binding* src, BindingNode* parent)
+// and the call sites agree in the stronger form: RCX is `this` at 0x1800a7ee6
+// (reached only when the tree is empty, so the descent loop never ran) and a
+// zero-extended id byte at 0x1800a7f3a/0x1800a7f4d. A value that differs like
+// that across call sites cannot be a parameter the callee reads.
+// See docs/runtime_port/WAVE8_LANE_D.md for the full write-up.
+//
+// SHAPE (0x1800a7e70). Retail descends the tree TWICE and that is kept:
+//   1. a read-only descent that returns early if `id` is already registered;
+//   2. the element is built on the stack;
+//   3. a second descent from the root tracking the parent, then the new node is
+//      linked as that leaf's left or right child, rebalanced, and _count++.
+// The empty-tree path skips the rebalance and increments BEFORE storing _root
+// (0x1800a7eeb then 0x1800a7eee) -- order kept.
+//
+// The id compare is UNSIGNED (retail `CMP DL,CL; JC` -- JC is below, not less),
+// matching FindBinding above and every other member of this family.
+//
+// Slot 1 is initialised UNBOUND: device[1] = 0xFF, inputId[1] = 0
+// (0x1800a7eca, 0x1800a7ecf). _pad02 and _pad14 are NOT written by retail, so
+// the node inherits whatever the allocator handed back there -- faithful, and
+// the reason the oracle below compares fields rather than bytes
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+//
+// ORACLE: OUR WRITER, THEIR READERS -- and it has to be, because there is no
+// replay available. RegisterInput mutates the one shared AVL tree, so calling
+// ours and then theirs would insert the same id twice (the second call would in
+// fact return early, silently making the oracle vacuous). Instead the insert is
+// verified by asking the DLL'S OWN accessors, resolved through
+// ResolveExportRaw so they are the shipped bodies, to read back what we wrote:
+// GetDeviceForId / GetInputForId must report the pair we inserted for slot 0
+// and `unbound` for slot 1, GetIdForDeviceInput -- which walks the WHOLE tree
+// through Leftmost/Successor rather than doing a lookup -- must find the id,
+// and _count must have moved by exactly one. That exercises the node linkage
+// and the rebalance through code we did not write, which a self-check on our
+// own bookkeeping would not.
+using SetAllocNodeFn  = BindingNode* (*)(void* unused, const Binding* src, BindingNode* parent);
+using SetRebalanceFn  = void (*)(void* setPtr, BindingNode** parentSlot);
+
+void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
+                                  int32_t inputId, const char* name, bool exclusive) {
+    RT_DIFF_BEGIN("Input::KeyMap::RegisterInput");
+    static auto allocNode = reinterpret_cast<SetAllocNodeFn>(
+        ResolveAddr(Module::Runtime, 0x180023060));
+    static auto rebalance = reinterpret_cast<SetRebalanceFn>(
+        ResolveAddr(Module::Runtime, 0x180023170));
+
+    auto* km = static_cast<KeyMap*>(self);
+    auto* root = static_cast<BindingNode*>(km->_root);
+    const uint8_t key = static_cast<uint8_t>(id);
+
+    // 1. Already registered? Retail's first descent (0x1800a7e90) tracks no
+    //    parent and leaves the root in RBX untouched, which is what the
+    //    `TEST RBX,RBX` at 0x1800a7ed9 then re-reads.
+    for (BindingNode* n = root; n; ) {
+        const uint8_t nid = n->element.id;
+        if (key < nid)       n = n->left;
+        else if (nid >= key) return;       // equal -> already registered
+        else                 n = n->right;
+    }
+
+    // 2. Build the element (0x1800a7eae..0x1800a7ed4). _pad02/_pad14 are left
+    //    alone deliberately: retail does not write them either.
+    Binding elem;
+    elem.id          = key;
+    elem.exclusive   = static_cast<uint8_t>(exclusive);
+    elem.description = name;
+    elem.device[0]   = static_cast<uint8_t>(device);
+    elem.device[1]   = 0xFF;
+    elem.inputId[0]  = static_cast<uint8_t>(inputId);
+    elem.inputId[1]  = 0;
+
+    void* setPtr = &km->_root;
+    const int32_t countBefore = km->_count;
+
+    if (!root) {
+        // 3a. Empty tree: the node IS the root, with a null parent.
+        BindingNode* node = allocNode(nullptr, &elem, nullptr);
+        km->_count += 1;          // retail increments first (0x1800a7eeb)
+        km->_root = node;
+    } else {
+        // 3b. Second descent, tracking the parent in a stack slot the
+        //     rebalance step is then handed BY ADDRESS (0x1800a7f56:
+        //     `LEA RDX,[RSP+0x50]`), so `parent` must be a real local.
+        BindingNode* parent = root;
+        for (;;) {
+            const uint8_t nid = parent->element.id;
+            if (key < nid) {
+                if (!parent->left) {
+                    parent->left = allocNode(nullptr, &elem, parent);
+                    break;
+                }
+                parent = parent->left;
+            } else if (nid >= key) {
+                return;                     // equal -> already registered
+            } else {
+                if (!parent->right) {
+                    parent->right = allocNode(nullptr, &elem, parent);
+                    break;
+                }
+                parent = parent->right;
+            }
+        }
+        rebalance(setPtr, &parent);
+        km->_count += 1;
+    }
+
+    if (rt_diff_on__) {
+        // Their readers, on our tree. ResolveExportRaw so these are the shipped
+        // bodies even once the ports are registered
+        // (reference_resolveaddr_consults_port_registry_first.md).
+        using PairFn = int32_t (*)(const void*, int32_t, int32_t);
+        auto theirDevice = reinterpret_cast<PairFn>(
+            ResolveExportRaw("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z"));
+        auto theirInput = reinterpret_cast<PairFn>(
+            ResolveExportRaw("?GetInputForId@KeyMap@Input@@QEBAHHH@Z"));
+        auto theirFind = reinterpret_cast<PairFn>(
+            ResolveExportRaw("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z"));
+
+        bool ok = theirDevice && theirInput && theirFind;
+        int32_t d0 = ok ? theirDevice(km, id, 0) : 0;
+        int32_t i0 = ok ? theirInput(km, id, 0) : 0;
+        int32_t d1 = ok ? theirDevice(km, id, 1) : 0;
+        int32_t found = ok ? theirFind(km, device, inputId) : -1;
+        ok = ok
+          && d0 == static_cast<int32_t>(static_cast<int8_t>(device))
+          && i0 == static_cast<int32_t>(static_cast<uint8_t>(inputId))
+          && d1 == -1                                   // slot 1 unbound (0xFF)
+          && found == static_cast<int32_t>(key)         // reachable by a FULL tree walk
+          && km->_count == countBefore + 1;
+
+        char a[176], b[112];
+        std::snprintf(a, sizeof(a),
+                      "theirs read back dev0=%d in0=%d dev1=%d walkFound=%d count=%d",
+                      (int)d0, (int)i0, (int)d1, (int)found, (int)km->_count);
+        std::snprintf(b, sizeof(b), "dev0=%d in0=%d dev1=-1 walkFound=%d count=%d",
+                      (int)static_cast<int8_t>(device), (int)static_cast<uint8_t>(inputId),
+                      (int)key, (int)countBefore + 1);
+        RT_DIFF_SHADOW(ok, a, b);
+    }
+}
+
 // ?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z  retail 0x1800a7970  ord 2571
 // Returns -1 both for "id not registered" AND "slot unbound" (0xFF sign-
 // extends to -1 through the SAME `MOVSX` retail uses — 0x1800a7995..799d).
@@ -485,6 +634,12 @@ int RtInputRegister() {
 
     RegisterRuntimeExport("?ClearAll@KeyMap@Input@@QEAAXXZ", (void*)&RtInput_KeyMap_ClearAll);
     RegisterRuntimeAddr(0x1800a7d20, (void*)&RtInput_KeyMap_ClearAll); ++n;
+
+    // Wave 9: unblocked once FUN_180023060's first argument turned out not to
+    // exist (see the port's header comment and WAVE8_LANE_D.md).
+    RegisterRuntimeExport("?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z",
+                          (void*)&RtInput_KeyMap_RegisterInput);
+    RegisterRuntimeAddr(0x1800a7e70, (void*)&RtInput_KeyMap_RegisterInput); ++n;
 
     RegisterRuntimeExport("?ClearInput@KeyMap@Input@@QEAAXHH@Z", (void*)&RtInput_KeyMap_ClearInput_HH);
     RegisterRuntimeAddr(0x1800a7d70, (void*)&RtInput_KeyMap_ClearInput_HH); ++n;

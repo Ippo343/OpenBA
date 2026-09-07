@@ -728,6 +728,19 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       +0x20/+0x28, balance dword +0x30). What remains for both is an ORACLE, not an unknown:
       they mutate the shared AVL tree, so they need a shadow (post-state) oracle rather than
       replay. Corrected at source in WAVE8_LANE_D.md.
+      **`RegisterInput` is now PORTED AND VERIFIED — 50 calls, 0 divergences**, the whole key
+      map built by our code on a gameplay run, whole-tree total 28,290,908 calls with the only
+      105 divergences in the two known Wave 1 sin/cos sites. Its oracle is worth reusing: there
+      is no replay for a mutating insert (a second insert of the same id returns early, so
+      replay is VACUOUS), so it is **our writer, their readers** — the DLL's own
+      `GetDeviceForId`/`GetInputForId`/`GetIdForDeviceInput` read the insert back, and the last
+      of those walks the whole tree, exercising our linkage and the rebalance through code we
+      did not write.
+      **`Load` was WRONGLY bundled with it in this list's first draft** and is still blocked:
+      it does not touch `FUN_180023060` at all, and needs an unexported registry-string parser,
+      a `String::Format` pair per binding, and a second differently-typed
+      `Collection::Set<Pair<String,String>>` in `IO::Persistence`. Second time in one session
+      that a group-level claim was wrong about a member; the per-function table is the fix.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---
