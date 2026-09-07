@@ -46,6 +46,20 @@ RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
 
 # --- ports -------------------------------------------------------------------
 RE_REG_EXPORT = re.compile(r'RegisterRuntimeExport\s*\(\s*"([^"]+)"')
+
+# A RegisterRuntimeExport whose first argument is NOT a string literal. This
+# regex exists because of a real, silent under-count: Wave 4 lane D registered
+# its six FileSystem/Modification ports through `kName*` constants, which
+# RE_REG_EXPORT cannot see through, and the census reported IO 30/41 while 36
+# were in fact registered. Nothing failed and nothing warned -- the ports were
+# live in the process and invisible to the tool the project treats as its
+# authority over any agent's "all N ported" claim.
+#
+# This is the mirror image of reference_uncalled_port_is_not_verified.md: there
+# a port is counted but never runs; here a port runs but is never counted. Both
+# end in a census that does not describe reality, so both must be loud.
+RE_REG_EXPORT_NONLITERAL = re.compile(
+    r'RegisterRuntimeExport\s*\(\s*(?!")([A-Za-z_][A-Za-z0-9_:]*)')
 RE_REG_ORDINAL = re.compile(r'RegisterRuntimeOrdinal\s*\(\s*(\d+)')
 RE_REG_ADDR = re.compile(r'RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)')
 
@@ -156,6 +170,7 @@ def scan():
     ported_exports, ported_addrs, ported_ordinals = {}, {}, {}
     gated_exports, gated_addrs = {}, {}
     detoured = {}
+    nonliteral_regs = {}   # file -> [identifier, ...] the census cannot resolve
 
     for path in iter_sources():
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
@@ -181,6 +196,20 @@ def scan():
 
         for m in RE_REG_EXPORT.finditer(text):
             (gated_exports if gated else ported_exports).setdefault(m.group(1), set()).add(rel)
+        for m in RE_REG_EXPORT_NONLITERAL.finditer(text):
+            # `const` is the parameter type in the DECLARATIONS of
+            # RegisterRuntimeExport itself (rt_port.h, resolve.h,
+            # resolve_standalone.cpp), not a call passing a constant.
+            if m.group(1) == "const":
+                continue
+            # rt_selftest.cpp deliberately registers a FAKE name and one real
+            # one to prove the seam works end to end. It is a self-test, not a
+            # port, and counting it would be wrong -- so it is excluded rather
+            # than left to emit a permanent warning that trains readers to
+            # ignore this block.
+            if rel == "standalone/rt_selftest.cpp":
+                continue
+            nonliteral_regs.setdefault(rel, []).append(m.group(1))
         for m in RE_REG_ORDINAL.finditer(text):
             ported_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_REG_ADDR.finditer(text):
@@ -192,6 +221,7 @@ def scan():
             detoured.setdefault(m.group(2), set()).add(rel)
 
     return dict(
+        nonliteral_regs=nonliteral_regs,
         gated_exports=gated_exports, gated_addrs=gated_addrs,
         called_exports=called_exports, called_addrs=called_addrs,
         called_ordinals=called_ordinals, ported_exports=ported_exports,
@@ -275,6 +305,20 @@ def main():
             if n:
                 print("  %-40s %d  (opt-in; its Register function returns 0 unless armed)" % (f, n))
         print("  A gated registration is not a port. Arm it, measure it, then move it.")
+    nl = d.get("nonliteral_regs") or {}
+    if nl:
+        total = sum(len(v) for v in nl.values())
+        print()
+        print("*** WARNING: %d RegisterRuntimeExport call(s) pass a NON-LITERAL name."
+              % total)
+        print("*** These ports are LIVE in the process but INVISIBLE to this census,")
+        print("*** so every number above UNDERSTATES what is actually registered.")
+        for f in sorted(nl):
+            print("  %-44s %s" % (f, ", ".join(sorted(set(nl[f])))))
+        print("  Fix by spelling the mangled name as a literal at the call site.")
+        print("  (Wave 4 lane D hit this: 6 ports registered through kName* constants")
+        print("   reported as IO 30/41 when 36 were registered. Nothing warned.)")
+        print()
     print("ported = of those, taken over by a RegisterRuntime* call")
     print("detour = of those, ALSO patched in the DLL so its own internal callers "
           "come to us")

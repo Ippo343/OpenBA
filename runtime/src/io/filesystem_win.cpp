@@ -177,7 +177,10 @@ Filename* RtIo_FileSystem_GetSaveDirectory(const void* fsVoid, Filename* ret) {
 // ============================================================================
 int RtIoFileSystemWinRegister() {
     using namespace RtIO;
-    RegisterRuntimeExport(kNameGetSaveDirectory, (void*)&RtIo_FileSystem_GetSaveDirectory);
+    // Literal, not kNameGetSaveDirectory -- tools/runtime_census.py cannot see
+    // through a named constant (see the note in filesystem.cpp).
+    RegisterRuntimeExport("?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
+                          (void*)&RtIo_FileSystem_GetSaveDirectory);
     RegisterRuntimeAddr(0x1800acfd0, (void*)&RtIo_FileSystem_GetSaveDirectory);
     return 1;
 }

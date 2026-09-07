@@ -345,11 +345,25 @@ int RtIoFileSystemRegister() {
     using namespace RtIO;
     int n = 0;
 
-    RegisterRuntimeExport(kNameExists,              (void*)&RtIo_FileSystem_Exists); ++n;
-    RegisterRuntimeExport(kNameGetDataDirectory,    (void*)&RtIo_FileSystem_GetDataDirectory); ++n;
-    RegisterRuntimeExport(kNameGetSourceDirectory,  (void*)&RtIo_FileSystem_GetSourceDirectory); ++n;
-    RegisterRuntimeExport(kNameGetPackfileId,       (void*)&RtIo_FileSystem_GetPackfileId); ++n;
-    RegisterRuntimeExport(kNameModFind,             (void*)&RtIo_Modification_Find); ++n;
+    // The mangled names are LITERALS here, not the kName* constants above, and
+    // that is load-bearing rather than style: tools/runtime_census.py matches
+    // `RegisterRuntimeExport("<literal>"` and CANNOT see through a named
+    // constant. Registering through the constants made all six of this lane's
+    // ports invisible to the census -- it reported IO 30/41 while 36 were
+    // actually registered. The census is this project's authority over any
+    // agent's "all N ported" claim, so a registration it cannot see is worse
+    // than no registration. It also keeps a human grep for the mangled name
+    // landing on the registration site. The census now WARNS on this pattern.
+    RegisterRuntimeExport("?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
+                          (void*)&RtIo_FileSystem_Exists); ++n;
+    RegisterRuntimeExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
+                          (void*)&RtIo_FileSystem_GetDataDirectory); ++n;
+    RegisterRuntimeExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
+                          (void*)&RtIo_FileSystem_GetSourceDirectory); ++n;
+    RegisterRuntimeExport("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z",
+                          (void*)&RtIo_FileSystem_GetPackfileId); ++n;
+    RegisterRuntimeExport("?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z",
+                          (void*)&RtIo_Modification_Find); ++n;
 
     RegisterRuntimeAddr(0x1800ab310, (void*)&RtIo_FileSystem_Exists);
     RegisterRuntimeAddr(0x180007bd0, (void*)&RtIo_FileSystem_GetDataDirectory);

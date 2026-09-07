@@ -452,7 +452,16 @@ the diff harness have each caught at least one real divergence.
       `allocator_win.cpp` and are **excluded from the count** because their Register function
       returns 0 unless armed — `tools/runtime_census.py` reports them separately.
 - [x] **Wave 3 (Object) merged.** Census after the wave: **877 called, 170 ported (19.4%)** —
-      Object 21/41 (51.2%), System 53/60, Math 58/59, Volume 12/12. The Object functions still
+      Object 21/41 (51.2%), System 53/60, Math 58/59, Volume 12/12.
+      **THOSE TWO NUMBERS WERE AN UNDERCOUNT, corrected during Wave 4 to
+      Object 27/41 (65.9%).** `type_system.cpp` registered its six ports through
+      `kName*` constants, and `tools/runtime_census.py` matches
+      `RegisterRuntimeExport("<literal>"` and cannot see through a named
+      constant. The ports were live in the process the whole time and invisible
+      to the tool this project treats as its authority over any agent's
+      "all N ported" claim. Found only because Wave 4 lane D repeated the
+      pattern. The census now WARNS on a non-literal registration name, so this
+      cannot recur silently; the registrations are spelled as literals. The Object functions still
       unported are the 4 `ExternalFactory`/`External` mutators (deliberate, no oracle), the 5
       handle-table mutators (opt-in, NO-GO), `CheckPtr` (deliberate, see WAVE3.md finding 3) and
       the exported DATA symbols, which cannot be registered before cutover.

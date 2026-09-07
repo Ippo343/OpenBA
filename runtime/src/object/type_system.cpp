@@ -483,12 +483,27 @@ int RtObjectTypeSystemRegister() {
     using namespace RtObject;
     int n = 0;
 
-    RegisterRuntimeExport(kNameIsA,               (void*)&RtObject_Base_IsA); ++n;
-    RegisterRuntimeExport(kNameIsDerivedFrom,     (void*)&RtObject_Base_IsDerivedFrom); ++n;
-    RegisterRuntimeExport(kNameGetTypeIdFromName, (void*)&RtObject_Factory_GetTypeIdFromName); ++n;
-    RegisterRuntimeExport(kNameCreateObject,      (void*)&RtObject_Factory_CreateObject); ++n;
-    RegisterRuntimeExport(kNameTypeSerialize,     (void*)&RtObject_Type_Serialize); ++n;
-    RegisterRuntimeExport(kNameBaseTypeInfoCtor,  (void*)&RtObject_BaseTypeInfo_Ctor); ++n;
+    // LITERALS, not the kName* constants above (which are still used for the
+    // RtOriginal lookups). tools/runtime_census.py matches
+    // `RegisterRuntimeExport("<literal>"` and cannot see through a named
+    // constant, so registering through the constants made these six ports
+    // INVISIBLE to the census. Found in Wave 4 when lane D repeated the
+    // pattern; the census now warns on it. These six happened to still be
+    // counted, because they are ALSO registered by address below and the
+    // census takes either -- but that was luck, not design, and a port
+    // registered by name only would have vanished silently.
+    RegisterRuntimeExport("?IsA@Base@Object@@QEBA_NI@Z",
+                          (void*)&RtObject_Base_IsA); ++n;
+    RegisterRuntimeExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z",
+                          (void*)&RtObject_Base_IsDerivedFrom); ++n;
+    RegisterRuntimeExport("?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z",
+                          (void*)&RtObject_Factory_GetTypeIdFromName); ++n;
+    RegisterRuntimeExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z",
+                          (void*)&RtObject_Factory_CreateObject); ++n;
+    RegisterRuntimeExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z",
+                          (void*)&RtObject_Type_Serialize); ++n;
+    RegisterRuntimeExport("??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z",
+                          (void*)&RtObject_BaseTypeInfo_Ctor); ++n;
 
     RegisterRuntimeAddr(0x1800491c0, (void*)&RtObject_Base_IsA);
     RegisterRuntimeAddr(0x1800c0390, (void*)&RtObject_Base_IsDerivedFrom);
