@@ -478,7 +478,7 @@ the diff harness have each caught at least one real divergence.
       therefore NOT a blocker for waves 4-8, and a wave must not be held open on it. It is not
       cancelled: it moves to the cutover stage (§4.2 wave 9), where the DLL is gone and the
       numbers mean something different anyway.
-      **Wave 4 measured and BREACHED it: +7.7% on a verified-quiet machine** (three earlier runs
+      **Wave 4 measured and BREACHED it: +7.7% and +7.5% over two runs on a verified-quiet machine** (three earlier runs
       at +8.4/+7.0/+9.8 were discarded as contaminated — another session was building and running
       the game on the same box; the clean number landed in the same range, so contention was NOT
       the explanation). `perf/baselines/current.csv` was NOT touched.

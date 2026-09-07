@@ -37,8 +37,11 @@ H the harness. Detail per lane in
 
 ## Performance — measured, breached, and deliberately not chased
 
-`sim ms/iteration` came in at **+7.7%** against `perf/baselines/current.csv`, on a machine
-verified quiet. The 5% gate is breached and the baseline was NOT touched.
+`sim ms/iteration` came in at **+7.7% and +7.5%** over two runs against
+`perf/baselines/current.csv`, on a machine verified quiet. The 5% gate is breached and the
+baseline was NOT touched. (A third run was started and ABORTED by the crash A/B that followed;
+two agreeing runs is one short of this project's own 3-run rule, and is stated as two rather
+than rounded up.)
 
 Three earlier runs read +8.4%, +7.0% and +9.8%, and were discarded: another session was building
 and running the game on the same box, so they measured contention. Worth recording that discarding
