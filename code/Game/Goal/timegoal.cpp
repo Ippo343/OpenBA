@@ -119,8 +119,21 @@ void* TimeGoal_Slot11(void* self, uint32_t flags) {
     static fn_GoalInstanceDtor_t s_fn_GoalInstanceDtor = nullptr;
     static bool s_resolved = false;
     if (!s_resolved) {
+        // UEAA, not QEAA -- GoalInstance is polymorphic (see the note in
+        // statgoal.cpp). Retail 0x18009ef40, whose whole body is
+        //   *(void**)this = &GoalInstance::_vftable_;
+        //   Object::Internal::~Internal(this);
+        // and that ~Internal IS the InternalFactory swap-remove. Resolving the
+        // non-existent QEAA spelling returned null, the guard below skipped the
+        // call, and the object was MemFree'd on the next line with its handle
+        // table entry still pointing at it -- exactly the landmine described in
+        // reference_internalfactory_swapremove_wild_write.md, and undetectable
+        // because CheckPtr is a bare RET in every shipped build. GoalList's
+        // dtor calls this slot for every element, so it fired on every tutorial
+        // teardown, quit-to-menu and achievement reset. Fixed 2026-09-06,
+        // Wave 5 lane A.
         s_fn_GoalInstanceDtor = (fn_GoalInstanceDtor_t)ResolveExport(
-            "??1GoalInstance@Achievement@@QEAA@XZ");
+            "??1GoalInstance@Achievement@@UEAA@XZ");
         s_resolved = true;
     }
     if (s_fn_GoalInstanceDtor) {
@@ -154,8 +167,9 @@ void* TimeGoal_Dtor(TimeGoal* self, uint32_t flags) {
     static fn_GoalDtor_t s_fn_GoalDtor = nullptr;
     static bool s_resolved = false;
     if (!s_resolved) {
+        // UEAA, not QEAA -- see the note in statgoal.cpp. Retail 0x18009edb0.
         s_fn_GoalDtor = (fn_GoalDtor_t)ResolveExport(
-            "??1Goal@Achievement@@QEAA@XZ");
+            "??1Goal@Achievement@@UEAA@XZ");
         s_resolved = true;
     }
     if (s_fn_GoalDtor) {

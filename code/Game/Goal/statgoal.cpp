@@ -399,14 +399,21 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
     static fn_GoalDtor_t s_fn_GoalDtor = nullptr;
     static bool s_dtorResolved = false;
     if (!s_dtorResolved) {
-        // Achievement::Goal::~Goal — export from Runtime DLL
+        // Achievement::Goal::~Goal, retail 0x18009edb0.
+        //
+        // The mangling is UEAA, not QEAA: Goal is polymorphic, so MSVC exports
+        // the VIRTUAL destructor spelling. This resolved
+        // "??1Goal@Achievement@@QEAA@XZ" until 2026-09-06 (Wave 5 lane A) --
+        // a name the shipped DLL has never contained -- with a fallback to
+        // "?~Goal@Achievement@@QEAA@XZ", which is not a valid MSVC mangling in
+        // any build. Both returned null silently, the guard below skipped the
+        // call, and the caller went on to MemFree the object anyway: every
+        // StatGoal destruction leaked its text String (refcounted at +0x28) and
+        // skipped Object::External::~External. Control case that proves the
+        // rule: GoalList really IS non-virtual and really DOES export
+        // "??1GoalList@Achievement@@QEAA@XZ".
         s_fn_GoalDtor = (fn_GoalDtor_t)ResolveExport(
-            "??1Goal@Achievement@@QEAA@XZ");
-        if (!s_fn_GoalDtor) {
-            // Fallback: try ordinal
-            s_fn_GoalDtor = (fn_GoalDtor_t)ResolveExport(
-                "?~Goal@Achievement@@QEAA@XZ");
-        }
+            "??1Goal@Achievement@@UEAA@XZ");
         s_dtorResolved = true;
     }
     if (s_fn_GoalDtor) {

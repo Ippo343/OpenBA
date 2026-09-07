@@ -5238,12 +5238,17 @@ extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
 // ============================================================
 
 // Achievement::Goal::~Goal (Runtime 0x18009edb0, ordinal 600)
-// ?~Goal@Achievement@@UEAA@XZ — destroys Goal base (string dtor + External dtor)
+// ??1Goal@Achievement@@UEAA@XZ — destroys Goal base (string dtor + External dtor)
+// NOT "?~Goal@..." (this line said that until 2026-09-06) and NOT the QEAA
+// spelling: a destructor mangles as ??1, and Goal is polymorphic so it is
+// UEAA. Both wrong spellings were live in code/Game/Goal/ and resolved to
+// null silently — see the note at code/Game/Goal/statgoal.cpp.
 typedef void (*fn_Goal_BaseDtor_t)(void* self);
 extern fn_Goal_BaseDtor_t fn_Goal_BaseDtor;
 
 // Achievement::Goal::Goal() (Runtime 0x18009ed50, ordinal 207)
-// ?Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields
+// ??0Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields (a ctor
+// mangles as ??0; this line said "?Goal@..." until 2026-09-06)
 typedef void (*fn_Goal_BaseCtor_t)(void* self);
 extern fn_Goal_BaseCtor_t fn_Goal_BaseCtor;
 

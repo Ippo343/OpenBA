@@ -4708,7 +4708,7 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x18009ef40));
 
     fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
-        ResolveExport("?Persist@GoalInstance@Achievement@@QEAAXAEAVStream@IO@@@Z"));
+        ResolveExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"));
     if (!fn_GoalInstance_Persist)
         fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
             ResolveAddr(Module::Runtime, 0x18009ef70));
