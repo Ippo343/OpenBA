@@ -28,7 +28,7 @@ order; the corrections need something to correct.
 | Tools built | 3 | 1 (the Audio device recorder) | 4 |
 | Census defects fixed | 3 | — | 3 |
 | Stated blockers dissolved | 5 | 6 + 4 Serialize write paths | **15** |
-| Comments/types corrected at source | 4 files | 3 | 7 |
+| Comments/types corrected at source | 4 files | 6 | 10 |
 | Own claims corrected | 5 | 4 | **9** |
 
 Whole-tree at close: **253–269 diff sites, 25.6M–36.2M calls per run, divergences only in the two
@@ -712,3 +712,10 @@ Three holdbacks are recorded as **framing stale, disposition unchanged** — `Sa
 class" as a reason, and those waves are closed, which reads as if the dependency resolved. It did
 not: the specific classes named are still individually unported. The load-bearing reasons (a live
 GPU context, zero callers) are independent and stand.
+
+**All three comments were CORRECTED AT SOURCE** (`saveload.cpp`, `context.cpp`, `animation.cpp`)
+rather than only noted here, because that is the whole lesson of §10: a fact recorded in a wave
+doc does not reach the lane that needs it. **A blocker phrased as "waiting on another wave"
+silently becomes a lie the day that wave lands** — it is the one form of holdback that rots
+without anyone touching it, and there is no tool that flags it. Each now leads with the reason
+that does not expire and keeps the wave-ownership note only as a correction of itself.

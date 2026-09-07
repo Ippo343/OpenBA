@@ -92,7 +92,12 @@
 //       `Engine::MainLoop::CreateVideoContext` (0x1800dd500) allocates 0x2168
 //       bytes from `System::MemoryAllocator` and runs this ctor, and
 //       `CreateVideoContext` / `ReleaseVideoContext` / `~MainLoop` /
-//       `OnVideoError` run the dtor. `Engine::MainLoop` is Wave 8, not Wave 6.
+//       `OnVideoError` run the dtor. (This used to say "`Engine::MainLoop` is
+//       Wave 8, not Wave 6", which now reads as resolved -- Wave 8 is closed.
+//       It is not a wave-ownership question: `engine.cpp:367` calls the DLL's
+//       `CreateVideoContext` BY ADDRESS, which is a call-through to the DLL's
+//       own ctor, not a reimplementation, so `fn_VideoCtx_Ctor` still has zero
+//       callers. Corrected in the Wave 8.5 close-out.)
 //       The ctor also allocates FIVE sub-objects (a VertexBuffer, an
 //       IndexBuffer, an instance VertexBuffer, a RenderBuffer and two
 //       ImageBuffers) through each class's own `operator new`, and calls each

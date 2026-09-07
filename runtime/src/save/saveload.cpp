@@ -13,10 +13,20 @@
 //       Graphics::FrameCopyImageBuffer, a Video::ImageBuffer, a
 //       Video::RenderBuffer, a Graphics::MaterialInstance, a UI::SpriteSheet,
 //       a Graphics::Camera and a UI::SpriteContext by hand, stamping five
-//       vtables this project does not own. Those classes are Waves 6 and 7. It
-//       also has no oracle: it renders into the live Video::Context and
-//       allocates and destroys GPU resources, so running both implementations
-//       would draw twice and leak a render target every frame.
+//       vtables this project does not own.
+//       THE LOAD-BEARING REASON IS THE ORACLE, NOT THE OWNERSHIP: it renders
+//       into the live Video::Context and allocates and destroys GPU resources,
+//       so running both implementations would draw twice and leak a render
+//       target every frame. That is independent of who owns the classes and it
+//       does not expire.
+//       (The ownership half of this comment used to read "those classes are
+//       Waves 6 and 7", which now reads as RESOLVED because both waves are
+//       closed. It is not: MaterialInstance's and SpriteSheet's vtables and
+//       SpriteContext::AddLine/SetScissor are still individually unported.
+//       Corrected in the Wave 8.5 close-out -- see
+//       docs/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md -- because a blocker
+//       phrased as "waiting on another wave" silently becomes a lie the day
+//       that wave lands.)
 //
 //   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — the destructor walks the
 //       Array<SaveInfo> at +0x50 through FUN_1800329c0, which calls the

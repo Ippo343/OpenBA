@@ -53,6 +53,14 @@
 // in-flight layouts, not the DLL's own dormant internals. There is also no
 // memcmp oracle for "did the GPU texture get copied correctly" -- only a
 // screenshot pixel comparison would tell, which is outside RT_DIFF's model.
+// RE-CHECKED IN THE WAVE 8.5 CLOSE-OUT and still held, but the FRAMING above
+// has aged badly and would mislead the next reader: "lanes A/B/C's scope this
+// wave" reads as resolved now that Wave 6 has closed with 0 divergences. The
+// entanglement did NOT resolve -- `Video::RenderBuffer`'s ctor/dtor and
+// `Video::Context`'s ctor are still individually unported and held back by
+// name in runtime/src/video/context.cpp and device.cpp. The GPU-oracle
+// argument above is the load-bearing one and is unaffected either way.
+// See docs/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md.
 // Held back as a whole class rather than split, for the same reason
 // WAVE5_LANE_D.md gives for NOT splitting Picking::Scene: a method of ours
 // and a method of the DLL's operating on the same RenderBuffer must agree on
