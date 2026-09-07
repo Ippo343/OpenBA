@@ -176,3 +176,71 @@ verdict fails — exactly when it cannot afford to be uninformative. If `eq` is 
 terms, the message must be able to name all N. Lane D found the same latent flaw in `Intersect`
 before it fired (it compared the out normal but printed only the position) and fixed both; all five
 Picking shadow sites now report the first failing term by name with its actual and expected values.
+
+---
+
+## Closing the last five gaps: five more runs, four justified holds
+
+The wave was not closeable while five ports sat listed as "not verified". Each was chased to a
+run or to a stated reason. Runs 10-14:
+
+| # | Run | Result |
+|---|---|---|
+| 10 | `TOOL_HARNESS=selectcitizen` | **`Scene::GetUserData` CLOSED** — 1 call, 0 divergences. 108 sites, 27,135,817 calls. |
+| 11 | `TOOL_HARNESS=bridge BUILDERS=30 FORCE_SPEED=40` | Bridge built and COMPLETE; `SetMeshUserData` still 0. 114 sites, **160,416,395 calls**, 0 new divergences. `AddMesh`/`RemoveMesh` 95 each, `SetTransform` 100,025, `Intersect` 168 — all clean. |
+| 12 | in-game Mods menu | **CRASHED** in `ModDialog_ToggleMod_Impl`. See below. |
+| 13 | same, `BANISHED_RT_PORT=0` | **Crashed identically** — pre-existing, not Wave 5. |
+| 14 | `AUTOSTART_GAMES=2` | `Achievement::ctor` stayed at 4 across TWO games; `~Achievement` never fired. |
+
+### The four holds, each with the reason that makes it a hold and not an omission
+
+1. **`Picking::Scene::SetMeshUserData` — unexercised, and the harness cannot reach it.**
+   Both call sites (`bridgetool_calcpath.cpp:211` `SeatSegmentPickOwner`, `fencedtool_calcpath.cpp:143`
+   `SeatPickOwner_1290d0`) guard on `pickComp+0x28 >= 0` and return early otherwise. The function
+   *re-points an already-registered* pick mesh; a freshly built entity has no mesh at the moment its
+   owner is seated, so the guard fires. Run 11 built a bridge to completion and the call was skipped
+   for exactly this reason. The port is registered, the dispatch slot `0x1401529a0` is verified
+   correct, and nothing exercises it. **Not claimed as verified.**
+
+2. **`Save::SavedState::SavedState` — blocked by a PRE-EXISTING crash, proven not ours.**
+   Its only callers are `moddialog.cpp:722` and `mod_dialog_vtables.cpp:438`, both on the Mods
+   apply/reload path. Driving that path (run 12) crashes first, in `ModDialog_ToggleMod_Impl`
+   (`moddialog.cpp:561`), `ACCESS_VIOLATION` reading `0xd0`, stack
+   `ModDialog_ToggleMod_Impl <- ModDialog_Slot8 <- ModDialog_VOnElementEvent <- PauseMenuHarness_Tick`.
+   Run 13 re-ran it with `BANISHED_RT_PORT=0` — **every runtime port disabled** — and got the
+   identical fault at the identical offset with the identical `RAX=0xD0`. So it predates this wave
+   and is not a Wave 5 defect. `fn_Modification_GetMod` returns null and `mod+0x50` is dereferenced
+   unguarded at `moddialog.cpp:561`. **Recorded as a separate open defect; not fixed here** (it is
+   outside Wave 5's scope, and CLAUDE.md's rule is to find the upstream null rather than guard the
+   deref).
+
+3. **`Achievement::~Achievement` — not reachable by any path this harness can drive.**
+   It is called only from `Scenario_Dtor` (`scenario.cpp:110`), which has **no direct caller in our
+   tree**: it is installed at Scenario vtable slot +0x00 (`scenario.cpp:289`) and invoked by the DLL
+   when the Scenario *resource* is released. Scenario resources are `Object::External`s loaded once
+   and held for the process — run 14 confirms it, `Achievement::ctor` reads 4 across ONE game and
+   still 4 across TWO — so the dtor runs at process teardown if at all, which is after
+   `RtDiffSummary` prints. Its refcount-delta shadow verdict has never executed and the ctor's clean
+   0x58-byte result does NOT carry it: different body, different failure mode, and it is the only
+   heap-touching body in lane B. **Not claimed as verified.**
+
+4. **`Save::SaveLoad::Update` cases 3 (`UpdateLoadFromFile`) and 5 (`UpdateDelete`) — untaken.**
+   Cases 1, 2 and 4 are covered (runs 2 and 3). Case 3 is the scenario/command-line entry and case 5
+   needs the save dialog's delete button, which no harness drives. Both are a single integer compare
+   in a switch that is otherwise transcribed and shadow-checked, and all five `UpdateXxx` targets
+   stay on the DLL. **Stated, not claimed.**
+
+`~Goal` remains self-check-only end to end, as recorded above.
+
+## Wave 5 result
+
+| | |
+|---|---|
+| Ported | **58 of the 74 functions our tree calls** in these namespaces — Goal 13, AchievementManager family 21, Save 15, Picking 9 |
+| Census | Achievement 34/50, Save 15/20, **Picking 9/9 (100%)**; TOTAL 727 called, 248 ported (34.1%) |
+| Diff oracle | **14 runs; the largest single run 160,416,395 calls; 0 divergences in every Wave 5 site across all of them** |
+| Residual | The pre-existing Wave 1 1-ULP sin/cos family only, in every run |
+| Held back | 7 with written reasons: `Goal::Serialize`, `GoalInstance::Persist`, `AchievementManager::Persist`, `Achievement::Serialize` (all four construct an `IO::Serializer` — a 12-byte stream header, no oracle possible), `SaveLoad::Draw` (builds five Wave 6/7 classes by hand), `~SaveLoad` (frees through an un-exported element dtor), plus the DATA exports which cannot be registered before cutover |
+| Unexercised | 4, each with the justification above |
+| Defects found | 2 live (the 4 phantom Goal manglings incl. the skipped handle-table swap-remove; the `SavedState` mid-function fallback), 1 pre-existing crash recorded, 1 uninitialised read **in the shipped DLL** |
+| Collision2D / Pathfinding | **TRUE ZEROES** — our tree calls neither; pathfinding is reimplemented natively in the exe |
