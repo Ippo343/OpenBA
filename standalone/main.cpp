@@ -36,6 +36,10 @@
 #include <windows.h>
 #include <dbghelp.h>
 
+// Wave 9 lane S save-stream oracle summary (runtime/src/io/save_trace.cpp).
+namespace RtSaveTrace { void Summary(); }
+static inline void RtSaveTraceSummary() { RtSaveTrace::Summary(); }
+
 // ============================================================
 // GPU preference exports (match original exe)
 // ============================================================
@@ -1842,6 +1846,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Cutover residue (BANISHED_RT_STRICT=1): what still asked the DLL.
     DumpRuntimeResidue();
     RtDiffSummary();
+    // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
+    RtSaveTraceSummary();
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
 
     return rc;

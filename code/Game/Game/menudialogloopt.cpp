@@ -26,6 +26,9 @@
 #include <cmath>
 #include <cstdlib>
 
+// Wave 9 lane S probe (runtime/src/audio/audio.cpp).
+extern "C" void RtAudio_Scene_SerializeTraceProbe(void* scene);
+
 // ============================================================
 // MenuDLT struct field offsets (Engine::DialogLoopT subclass)
 // ============================================================
@@ -1286,6 +1289,11 @@ void MenuDialogLoopT_TickAudioScene(void* self, void* time) {
 
     void* audioScene = reinterpret_cast<void*>(
         reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
+    // Wave 9 lane S: one-shot A/B of Audio::Scene::Serialize against the shipped
+    // body, using a live Scene. Runs against synthetic sinks, never a real
+    // stream, and only under BANISHED_RT_SAVE_TRACE.
+    RtAudio_Scene_SerializeTraceProbe(audioScene);
+
     void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
 
     int64_t elapsed  = *reinterpret_cast<int64_t*>(time);  // *(u64*)time — System::Time ticks

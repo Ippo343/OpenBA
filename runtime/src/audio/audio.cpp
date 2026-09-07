@@ -67,6 +67,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
 #include "../../../engine/types/common.h"   // Vector3
+#include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
+#include "../io/save_trace.h"                 // Wave 9 lane S
+
+// ----------------------------------------------------------------------------
+// ResolveAddr / Module, forward-declared rather than pulled in from
+// standalone/resolve.h — same reason input.cpp does it (windows.h leaks
+// engine-colliding macros). Must stay byte-identical to resolve.h.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 using RtAudio::Scene;
 using RtAudio::Configuration;
@@ -528,6 +537,104 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 // ============================================================================
 // Registration.
 // ============================================================================
+// ============================================================================
+// Audio::Scene::Serialize(IO::Serializer&)   retail 0x1800e0050  ord 3730
+// ============================================================================
+// UNBLOCKED AND PORTED 2026-09-07 (Wave 9 lane A). Wave 8 lane C held this back
+// because THAT LANE "did not independently re-derive retail's own IO::Encoding
+// vtable offsets within its budget", and a wrong guess desyncs every save
+// silently. It did not have to: Wave 4 had already written retail's offsets
+// into the warning block at the top of runtime/src/io/rt_io_port.cpp -- bool
+// +0x78 / uint +0x98 / int +0xa0, against the profile build's +0x90/+0xb0/+0xb8
+// -- and runtime/types/io/Serializer.h's `rw_vtbl` maps all 26 slots.
+//
+// Disassembling 0x1800e0050 narrows the exposure to ONE slot: the function
+// touches exactly one Encoding entry, kScalarInt (+0xa0), plus kArrayBool
+// (+0x20) on the ReaderWriter. 40 instructions.
+//
+// SHAPE (0x1800e0050), kept:
+//   * a LOCAL Serializer is built on the stack holding the caller's Stream and
+//     a null ReaderWriter, and it is that local -- not the caller's Serializer
+//     -- that is handed to the bulk element pass. Retail never writes through
+//     the caller's object.
+//   * the ReaderWriter comes from the Encoding factory pair, +0x20 when the
+//     stream is WRITING and +0x18 when reading (`CMP [stream+8],0; JNZ`).
+//   * the effect count is serialized as a scalar int, and ONLY on the reading
+//     side is the array resized to it (0x1800e00c0's JNZ skips the resize when
+//     direction != 0) -- so a save never reallocates what it is saving.
+//   * `paused[5]` goes out as kArrayBool with n == 5 (`LEA EDX,[R9+0x5]` after
+//     `XOR R9D,R9D`, R8 = this+0x30).
+//   * the ReaderWriter is released through its scalar-deleting dtor with
+//     flags == 1.
+//
+// The two unexported callees are ordinary Collection internals, called by
+// address exactly as Input::KeyMap::ClearAll and RegisterInput already do:
+//   0x180051390  Collection::Array<EffectSlot>::Resize(int)   0x40-byte
+//                elements, 3x growth heuristic, allocator-locked free
+//   0x180052640  the bulk element serialize
+// Neither is reimplemented here; both are shared Collection code whose own port
+// belongs to whoever ports Collection, not to Audio.
+//
+// ORACLE: the Wave 9 lane S save-stream A/B harness
+// (runtime/src/io/save_trace.h). There is no call-level replay for anything on
+// the save path -- ours then theirs would emit twice into one stream -- but on
+// the WRITE path a Serialize is a PURE READ of the object, so the two calls can
+// be replayed into two INDEPENDENT recording sinks and their emission sequences
+// compared. That is what `RtSaveTrace::Compare` does, and it is why this port
+// is not held back for "no oracle".
+using AudioArrayResizeFn = void (*)(void* array, int32_t newCount);
+using AudioBulkSerFn     = void (*)(void* serializer, int32_t count, void* data);
+
+void RtAudio_Scene_Serialize(void* self, void* serializer) {
+    RT_DIFF_BEGIN("Audio::Scene::Serialize");
+    static auto arrayResize = reinterpret_cast<AudioArrayResizeFn>(
+        ResolveAddr(Module::Runtime, 0x180051390));
+    static auto bulkSerialize = reinterpret_cast<AudioBulkSerFn>(
+        ResolveAddr(Module::Runtime, 0x180052640));
+
+    auto* scene = static_cast<Scene*>(self);
+    auto* ser = static_cast<rt::io::Serializer*>(serializer);
+
+    // Retail's stack-local Serializer: the caller's Stream, a null ReaderWriter
+    // until the factory fills it. NOT the caller's object.
+    rt::io::Serializer local;
+    local.stream = ser->stream;
+    local.readerWriter = nullptr;
+
+    rt::io::Stream* st = local.stream;
+    void** encVtable = *reinterpret_cast<void***>(st->encoding);
+    const int factorySlot = (st->direction != rt::io::kDirectionReading) ? 0x20 : 0x18;
+    using FactoryFn = void* (*)(void*, void*, void*);
+    auto factory = reinterpret_cast<FactoryFn>(encVtable[factorySlot / 8]);
+    void* rw = factory(st->encoding, &local, nullptr);
+    local.readerWriter = static_cast<rt::io::ReaderWriter*>(rw);
+
+    void** rwVtable = *reinterpret_cast<void***>(rw);
+
+    // kScalarInt (+0xa0) -- (int& value, const char* name)
+    int32_t count = scene->effects._size;
+    using ScalarIntFn = void (*)(void*, int32_t*, const char*);
+    reinterpret_cast<ScalarIntFn>(rwVtable[rt::io::rw_vtbl::kScalarInt / 8])(
+        rw, &count, nullptr);
+
+    // Reading only: grow the array to the count just read. Retail's JNZ at
+    // 0x1800e00c0 skips this when writing, so saving never reallocates.
+    if (local.stream->direction == rt::io::kDirectionReading)
+        arrayResize(&scene->effects, count);
+
+    bulkSerialize(&local, count, scene->effects._data);
+
+    // kArrayBool (+0x20) -- (int n, bool* data, const char* name), n == 5.
+    using ArrayBoolFn = void (*)(void*, int32_t, void*, const char*);
+    reinterpret_cast<ArrayBoolFn>(rwVtable[rt::io::rw_vtbl::kArrayBool / 8])(
+        rw, 5, scene->paused, nullptr);
+
+    if (rw) {
+        using DtorFn = void (*)(void*, uint32_t);
+        reinterpret_cast<DtorFn>(rwVtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    }
+}
+
 int RtAudioSceneRegister() {
     int n = 0;
     RegisterRuntimeExport("??0Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Ctor); ++n;
@@ -545,6 +652,13 @@ int RtAudioSceneRegister() {
     RegisterRuntimeExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z", (void*)&RtAudio_Scene_PlayEffect); ++n;
     RegisterRuntimeAddr(0x1800def60, (void*)&RtAudio_Scene_PlayEffect);
     RegisterRuntimeExport("?PlayEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@AEBVVector3@Math@@@Z", (void*)&RtAudio_Scene_PlayEffect3D); ++n;
+
+    // Wave 9 lane A: unblocked once retail's IO::Encoding offsets turned out to
+    // be recorded already (Wave 4), and verified by the lane S save-stream A/B
+    // oracle rather than by call-level replay, which the save path cannot have.
+    RegisterRuntimeExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z",
+                          (void*)&RtAudio_Scene_Serialize);
+    RegisterRuntimeAddr(0x1800e0050, (void*)&RtAudio_Scene_Serialize); ++n;
     return n;
 }
 
@@ -553,4 +667,32 @@ int RtAudioConfigurationRegister() {
     RegisterRuntimeExport("?Save@Configuration@Audio@@QEAAXXZ", (void*)&RtAudio_Configuration_Save); ++n;
     RegisterRuntimeExport("?Startup@Configuration@Audio@@QEAA_NXZ", (void*)&RtAudio_Configuration_Startup); ++n;
     return n;
+}
+
+// ============================================================================
+// Wave 9 lane S probe — verify Audio::Scene::Serialize against the shipped body
+// ============================================================================
+// Called once, from the menu loop where a live `Audio::Scene` is in hand
+// (`MenuDLT + 0xb30`). Any harness path reaches the menu, so this needs no
+// gameplay and no save.
+//
+// It runs BOTH bodies against synthetic recording sinks in the WRITING
+// direction, so neither touches a real stream and neither mutates the Scene --
+// see runtime/src/io/save_trace.h for why a write-path Serialize is replayable
+// at all when the family was held back for "no oracle possible".
+extern "C" void RtAudio_Scene_SerializeTraceProbe(void* scene) {
+    if (!scene || !RtSaveTrace::Enabled()) return;
+    static bool done = false;
+    if (done) return;
+    done = true;
+
+    auto theirs = reinterpret_cast<void (*)(void*, void*)>(
+        ResolveExportRaw("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z"));
+    if (!theirs) {
+        std::fprintf(stderr, "[RtSaveTrace] SKIP Audio::Scene::Serialize: "
+                             "the shipped body did not resolve\n");
+        return;
+    }
+    RtSaveTrace::Compare("Audio::Scene::Serialize", scene,
+                         &RtAudio_Scene_Serialize, theirs);
 }
