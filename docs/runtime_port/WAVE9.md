@@ -414,7 +414,7 @@ precedent for the third being a legitimate answer.
 | **B — blocked on a named dependency; ordinary port work once it lands** (**1 of the 10 PORTED AND VERIFIED 2026-09-07**) | | |
 | 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after `Audio::SoundBuffer`/`SoundEffect`.** All three reach `Device`'s COM channel objects; none of the three classes was in Wave 8's scope. `Scene::Update` also consumes `System::Random`, so it needs an oracle design, not just a body. |
 | 5-7 | `Audio::Scene::StopAll`, `Pause`, `StopEffect3D` | **PORT with 2-4.** Each calls into `Device::Stop` / the platform channel array. Porting the outer loop alone would put two implementations of one state machine in play (WAVE8.md §1). |
-| 8 | `Audio::Scene::Serialize` | **PORT after re-deriving retail's `IO::Encoding` vtable offsets.** Held back precisely because `reference_encoding_vtable_offsets_differ_between_builds.md` says the profile build's offsets do not match retail's, and a wrong guess desyncs every save silently. The re-derivation is the work; the body is small. |
+| 8 | `Audio::Scene::Serialize` `0x1800e0050` | **THE STATED BLOCKER IS ALREADY ANSWERED — by a fact this project has had since Wave 4.** Lane C held it back because *that lane* "did not independently re-derive retail's own offsets within its budget". It did not have to: retail's offsets are written down in `runtime/src/io/rt_io_port.cpp`'s warning block — **bool `+0x78` / uint `+0x98` / int `+0xa0`** (vs the profile build's +0x90/+0xb0/+0xb8). Disassembling the function confirms it: it touches exactly ONE Encoding slot, `CALL [RAX+0xa0]`, the **int** slot, at the recorded offset — and `SerializeReferenceTable` corroborates the pair independently with `+0x98`/`+0xa0`. It is 40 instructions. What remains is an ORACLE (it writes the save stream, so replay double-writes) and two unexported callees, `0x180051390` and `0x180052640`. |
 | 9 | `Engine::MainLoop::Run` (lane B) | **PORT after the allocator (row 12-15).** Lane B records the allocator embedding as the reason it is a holdback. |
 | 10 | `Input::KeyMap::RegisterInput` (lane D) | **PORTED AND VERIFIED 2026-09-07 — 50 calls, 0 divergences.** Lane D held it back because it could not pin `FUN_180023060`'s first argument. Reading the callee answers it: **RCX is never read** — `0x180023097 MOV RCX,RBX` destroys it before any use. The call sites agree in the stronger form: RCX is `this` at one site and a zero-extended id byte at the other two, and **a value that differs like that across call sites cannot be a parameter the callee reads.** Oracle: **our writer, their readers** — there is no replay (a second insert of the same id returns early, making replay vacuous), so the insert is verified by asking the DLL's own `GetDeviceForId`/`GetInputForId`/`GetIdForDeviceInput` to read it back, the last of which walks the WHOLE tree and so exercises our linkage and the rebalance through code we did not write. |
 | 11 | `Input::KeyMap::Load` (lane D) | **STILL BLOCKED — and this row's own first draft was wrong to bundle it with 10.** `Load` does not touch `FUN_180023060` at all, so the resolved ABI does nothing for it. It is blocked on three separate things: an unexported registry-string parse helper (`FUN_18007f034`), a `System::String::Format` allocation pair per binding, and a lookup into a **second, differently-typed** `Collection::Set<Pair<String,String>>` inside `IO::Persistence`. Lane D called it the densest of its 21 in every dimension, and it still is. |
@@ -427,7 +427,7 @@ precedent for the third being a legitimate answer.
 | 19-20 | `MainLoop::OnVideoError`, `OnVideoRestart` (lane B) | **STUB.** Wave 8 measured exactly ONE internal caller each — the static thunks the `MainLoop` ctor installs into `Video::Device::_singleton` +0x50/+0x58, reached only on device lost/restore. This is the detour case Wave 8 found and declined. At cutover they need to exist, not to be faithful; a port would be dead code reporting `calls=0`. **If a lane does port them, the device-lost path has to be forced, or the port is unverifiable.** |
 | 21-24 | `Save::~SaveLoad`, `Save::Draw`, and lane E's shadow markers (`Application::PlatformUpdate`, `SleepThread`, `YieldToThreads`) | **STUB or PORT-WITHOUT-ORACLE, decided per function.** Lane E states these have no oracle by construction. |
 | **X — already resolved by earlier waves, listed for completeness** | | |
-| 25 | `ExternalFactory::SerializeReferenceTable` `0x1800bcb60` (Wave 3) | **PORT — genuinely unblocked.** Held back on `IO::Stream`/`Serializer`, which Wave 4 landed (22 `Serializer` functions, 0 divergences). Cheapest row in the table; do it first. |
+| 25 | `ExternalFactory::SerializeReferenceTable` `0x1800bcb60` (Wave 3) | **UNBLOCKED, but NOT cheap — this row's own "cheapest row in the table, do it first" was wrong and is withdrawn.** Reading it: ~200 instructions that tear down and rebuild a `Collection::Set`, do reference-counted `System::String` traffic through the allocator (the `INC`/`DEC [RAX-4]` header pattern, `SUB RCX,8` then free), run an in-order tree walk with an inlined string compare, **and dispatch through the `IO::Encoding` vtable at +0x18/+0x20/+0x98/+0xa0 on the SAVE PATH** — the same hazard filed under row 8, which the first draft of this table put in a different category. A silent save desync is this project's most-cited failure mode; this wants a lane, not a slot. |
 | 26 | `External::SaveText` `0x1800bb9d0` (Wave 3) | **STILL BLOCKED, on a class no wave has touched.** It drives the `+0x28 Serialize(IO::Stream&)` slot with an **`IO::TextFileStream`**, and WAVE4.md is explicit that `TextFileStream` (with `FileStream`, `BinaryFileStream`, `VisitorStream` and the codec) was NOT in Wave 4. Needs `TextFileStream` first. |
 | 27-28 | `ExternalFactory::FindOrLoad` `0x1800bf320`, `Clean` `0x1800be310` (Wave 3) | **NO ORACLE, and it was never a Wave 4 dependency.** Both rewrite the shared resource AVL tree, so running ours and theirs mutates the one tree twice, and a private replica is exactly what a stateful port must not keep. Same class of problem as `Input::Device::Update` (row 16): they need a bespoke oracle, not a later wave. |
 | 29-32 | 5 handle-table mutators + `CheckPtr` (Wave 3, opt-in NO-GO) | **ARM AND MEASURE.** These are the `if (table)` / `if (shadow)` / `if (checkPtr)` blocks the census was wrongly counting as ported (see above). `CheckPtr` is a bare `RET` in every shipped build, so registering a real one silently re-enables ~60k indirect calls/frame — that is a perf decision, not a correctness one. |
@@ -454,6 +454,32 @@ None of these can be closed by writing a body in this session without an oracle,
 would be the exact failure `reference_uncalled_port_is_not_verified.md` warns about — a green
 `calls=0` line over unverified code. They are lane work with a decided disposition, which is the
 honest end state for them before the wave opens.
+
+### The pattern this session hit three times: a known fact that did not reach the next wave
+
+Three separate holdbacks and one wrong finding, all the same shape — **the information existed in
+this repository and the person who needed it did not have it.**
+
+1. **`BANISHED_AUTOQUIT` quits at the main menu.** WAVE3.md's "Notes for later waves" says so, and
+   records that it had already produced one green-over-unexercised report. Six waves later it
+   produced a wrong path-independence finding in a new tool.
+2. **`KeyMap::RegisterInput`'s disputed parameter.** Lane D could not pin `FUN_180023060`'s first
+   argument from the call sites. The callee answers it in nine instructions: RCX is never read.
+   The function is now ported, 50 calls, 0 divergences.
+3. **`Audio::Scene::Serialize`'s `IO::Encoding` offsets.** Lane C held it back because *that lane*
+   had not re-derived retail's offsets. Wave 4 had already written them into
+   `runtime/src/io/rt_io_port.cpp` — bool +0x78 / uint +0x98 / int +0xa0 — where they have sat
+   ever since.
+
+**Each holdback was correct on the evidence its lane had.** The failure is not judgement, it is
+transport: a lane doc records what a lane learned, and the next lane reads its own brief. Two of
+the three facts above were in a *wave doc* and did not travel; the one that did travel was in a
+**source comment at the point of use** (`rt_io_port.cpp`), and even that one was not consulted by
+a lane in a different namespace.
+
+**This is the argument for lane 0 of Wave 9 being a reading pass, not just a residue matrix.**
+Before porting anything, re-check each holdback's stated blocker against what the tree now knows —
+because the measured hit rate on that question in this session was **three for three**.
 
 ### Still open going into the wave
 

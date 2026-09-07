@@ -108,6 +108,25 @@ Full reasoning is in the header comment of `audio.cpp`; summarized here.
 | `StopEffect3D@Scene@Audio` | Same reason: calls `Scene::StopEffect` -> `Device::Stop`. |
 | `Serialize@Scene@Audio` | Sits on the save stream and drives an `IO::Encoding` vtable dispatch resolved from the `Serializer` argument (calls through that object's vtable at +0x18/+0x20/+0xa0). WAVE8.md §6 and this project's own history (`reference_encoding_vtable_offsets_differ_between_builds.md`, Wave 4) say the profile build's `Encoding` vtable OFFSETS do not match retail's. This lane did not independently re-derive retail's own offsets within its budget; a wrong guess here desyncs every save silently, which is exactly the failure class this project has been bitten by before. Left on the DLL rather than risk it. |
 
+**CORRECTED 2026-09-07 during Wave 9 prep: the stated blocker was already answered, by a fact
+this project has had since Wave 4.** This lane held `Scene::Serialize` back because *this lane*
+"did not independently re-derive retail's own offsets within its budget" — which was honest, and
+unnecessary. Retail's `IO::Encoding` vtable offsets are written down in the warning block at the
+top of `runtime/src/io/rt_io_port.cpp`: **bool `+0x78` / uint `+0x98` / int `+0xa0`**, against the
+profile build's +0x90 / +0xb0 / +0xb8.
+
+Disassembling `0x1800e0050` confirms it and narrows the exposure to a single slot: the function
+touches exactly ONE Encoding entry, `CALL [RAX+0xa0]` — the **int** slot, at the recorded retail
+offset — after the usual `[RAX+0x18]`/`[RAX+0x20]` read/write pair selected on `Stream+0x8`.
+`ExternalFactory::SerializeReferenceTable` corroborates the pair independently, using `+0x98` and
+`+0xa0` in the same shape. The whole function is 40 instructions.
+
+What actually remains is **an oracle** — it writes the save stream, so replay double-writes — and
+two unexported callees, `0x180051390` and `0x180052640`. Those are the real work; the offsets
+were never the obstacle. Left in the table above unchanged so the original reasoning stays
+legible.
+
+
 A held-back function with a stated reason is a result (PLAN §6); nothing
 above was skipped for lack of time to *read* it — every one was decompiled
 and understood, and held back on its merits.
