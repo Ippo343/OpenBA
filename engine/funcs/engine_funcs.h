@@ -46,7 +46,8 @@ extern fn_AudioDevice_FreeChannel_t fn_AudioDevice_FreeChannel;
 typedef bool (*fn_App_PlatformUpdate_t)(void* self);
 extern fn_App_PlatformUpdate_t fn_App_PlatformUpdate;
 
-// Video::Context::ClearResources(this)
+// Video::Context::ClearResources(this) — RESOLVED, NEVER CALLED; see the
+// Video::Context LIFECYCLE note further down this header.
 typedef void (*fn_VideoCtx_ClearResources_t)(void* self);
 extern fn_VideoCtx_ClearResources_t fn_VideoCtx_ClearResources;
 
@@ -91,6 +92,18 @@ extern fn_DynArrayPush_t fn_PostUpdatePush;
 // Video::Context lifecycle
 // ============================================================
 
+// Video::Context LIFECYCLE — RESOLVED, NEVER CALLED. Corrected 2026-09-07
+// (Wave 6 lane A, docs/runtime_port/WAVE6_LANE_A.md §6). The comments below say
+// what these three ARE and were silent about the fact that nothing drives them,
+// which is the failure mode PLAN.md §6 step 8 is about. The Context is created
+// and destroyed entirely inside Runtime's Engine::MainLoop
+// (CreateVideoContext 0x1800dd500 / ReleaseVideoContext / ~MainLoop), so these
+// three pointers plus fn_VideoCtx_ClearResources exist only for the
+// EngineFuncsDump() diagnostic at engine_funcs.cpp:4123-4141.
+// fn_VideoCtx_Reset is the one member of this group with a live caller
+// (standalone/main.cpp:1321). Note the resolve MECHANISM differs per row: the
+// ctor and operator delete come from ResolveAddr(Module::Runtime, ...)
+// (engine_funcs.cpp:1620, :1628), not from a mangled name.
 // Video::Context::Context(this, Device*, int, int, int, RenderBuffer*)
 typedef void* (*fn_VideoCtx_Ctor_t)(void* self, void* device, int param1, int param2, int param3, void* renderBuf);
 extern fn_VideoCtx_Ctor_t fn_VideoCtx_Ctor;
@@ -5512,7 +5525,10 @@ extern fn_EdgeMeshInstance_SetMesh_t fn_EdgeMeshInstance_SetMesh;
 
 // Graphics::EdgeMeshInstance::EdgeMeshInstance() — default ctor (constructs the
 // HighlightComponent+0x28 sub-object, which is zeroed under COMPONENT_INERT_FACTORY).
-// ??0EdgeMeshInstance@Graphics@@QEAA@XZ   (Runtime 0x1800174f0)
+// ??0EdgeMeshInstance@Graphics@@QEAA@XZ   (Runtime 0x1800a3ab0, ordinal 163)
+// ADDRESS CORRECTED 2026-09-07 (Wave 6 lane E, WAVE6_LANE_E.md §6.1): this line
+// used to say 0x1800174f0, which is the COPY ctor
+// (??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z, ordinal 162).
 typedef void* (*fn_EdgeMeshInstance_Ctor_t)(void* self);
 extern fn_EdgeMeshInstance_Ctor_t fn_EdgeMeshInstance_Ctor;
 

@@ -266,6 +266,8 @@ void RuntimePortInit() {
     RtAchievementPortInit();  // Wave 5: Achievement
     RtSavePortInit();     // Wave 5: Save
     RtPickingPortInit();  // Wave 5: Picking
+    RtVideoPortInit();    // Wave 6: Video
+    RtGraphicsPortInit(); // Wave 6: Graphics
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.

@@ -3386,10 +3386,15 @@ bool EngineFuncsInit() {
         ResolveExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z"));
     fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
         ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
-    if (!fn_EdgeMeshInstance_Ctor) {
-        fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800174f0));
-    }
+    // NO FALLBACK. There used to be a `if (!fn_EdgeMeshInstance_Ctor)` branch here
+    // resolving Runtime 0x1800174f0 — which is the COPY ctor
+    // (??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z, ordinal 162), not the default
+    // ctor (0x1800a3ab0, ordinal 163). Latent, never live, because the name above
+    // resolves; had it ever fired it would have run the copy ctor with an
+    // uninitialised RDX and dereferenced it twice. Removed 2026-09-07, Wave 6
+    // lane E (docs/runtime_port/WAVE6_LANE_E.md §6.1): the name is present in the
+    // shipped DLL and is now also in the runtime port registry, so the fallback
+    // could only ever be wrong.
     // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering (exe function)
     fn_TileRender = reinterpret_cast<fn_TileRender_t>(
         ResolveAddr(Module::Exe, 0x1401008c0));

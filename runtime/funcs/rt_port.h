@@ -95,3 +95,5 @@ void RtIoPortInit();       // runtime/src/io/ — Wave 4
 void RtAchievementPortInit(); // runtime/src/achievement/ — Wave 5
 void RtSavePortInit();     // runtime/src/save/ — Wave 5
 void RtPickingPortInit();  // runtime/src/picking/ — Wave 5
+void RtVideoPortInit();    // runtime/src/video/ — Wave 6
+void RtGraphicsPortInit(); // runtime/src/graphics/ — Wave 6

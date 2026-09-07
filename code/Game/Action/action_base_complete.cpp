@@ -379,10 +379,17 @@ static void EnsureShow() {
     // unregistered. Bind the REAL Time-from-float slot.
     s_TimeCtorMesh   = reinterpret_cast<fn_TimeCtor_t>(ReadDispatchSlot(0x140152b00));
     s_SceneAddObject = reinterpret_cast<fn_SceneAddObject_t>(ReadDispatchSlot(0x140151370));
+    // PHANTOM NAMES, fixed 2026-09-07 (Wave 6). These two read `AEAV12@` (a
+    // Geometry REFERENCE) until today; the DLL only ever exported the POINTER
+    // spelling `PEAV12@` (Attach 0x1800a3fa0, Detach 0x1800a3f20). ResolveExport
+    // has NO address fallback, so both pointers were NULL and the two `if (s_Geom*)`
+    // guards below silently skipped every attach and detach this file performs --
+    // dead since the day they were written. Found by tools/export_name_audit.py.
+    // See reference_resolveexport_phantom_names.md.
     s_GeomAttach     = reinterpret_cast<fn_GeometryAttach_t>(
-        ResolveExport("?Attach@Geometry@Graphics@@QEAAXAEAV12@H@Z"));
+        ResolveExport("?Attach@Geometry@Graphics@@QEAAXPEAV12@H@Z"));
     s_GeomDetach     = reinterpret_cast<fn_GeometryDetach_t>(
-        ResolveExport("?Detach@Geometry@Graphics@@QEAAXAEAV12@@Z"));
+        ResolveExport("?Detach@Geometry@Graphics@@QEAAXPEAV12@@Z"));
     s_SceneRemove    = reinterpret_cast<fn_SceneRemoveObject_t>(
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
     s_GetNodeIdx     = reinterpret_cast<fn_GetNodeIdx_t>(

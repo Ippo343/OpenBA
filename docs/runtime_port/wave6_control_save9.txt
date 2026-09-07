@@ -1,0 +1,239 @@
+[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
+[RtDiff] site[0] @00007ff6dc2cf280 = Object::BaseTypeInfo::BaseTypeInfo
+[RtDiff] site[1] @00007ff6dc2cf640 = System::operator+(String,String)
+[RtDiff] site[2] @00007ff6dc2cf660 = System::operator+(String,char*)
+[RtDiff] site[3] @00007ff6dc2ce380 = Achievement::Goal::Goal
+[RtDiff] site[4] @00007ff6dc2cf220 = Object::Factory::GetTypeIdFromName
+[RtDiff] site[5] @00007ff6dc2cf200 = Object::Base::IsDerivedFrom
+[RtDiff] site[6] @00007ff6dc2ce6a0 = IO::Persistence::Get(int&)
+[RtDiff] site[7] @00007ff6dc2ce6c0 = IO::Persistence::Get(bool&)
+[RtDiff] site[8] @00007ff6dc2ce9c0 = IO::Serializer::Serializer(Stream&,int)
+[RtDiff] site[9] @00007ff6dc2ce7e0 = IO::Serializer::Serialize(int&)
+[RtDiff] site[10] @00007ff6dc2ce740 = IO::Serializer::Serialize(bool&)
+[RtDiff] site[11] @00007ff6dc2cf040 = Object::ExternalFactory::Find
+[RtDiff] site[12] @00007ff6dc2cf620 = System::Filename::GetPathIdentifer
+[RtDiff] site[13] @00007ff6dc2ce9e0 = IO::Serializer::~Serializer [not diffable]
+[RtDiff] site[14] @00007ff6dc2ce9a0 = IO::Serializer::GetEncoding
+[RtDiff] site[15] @00007ff6dc2cf020 = Object::ExternalFactory::IsReferenceModeEnabled
+[RtDiff] site[16] @00007ff6dc2cf260 = Object::Type::Serialize [not diffable]
+[RtDiff] site[17] @00007ff6dc2ce820 = IO::Serializer::Serialize(float&)
+[RtDiff] site[18] @00007ff6dc2ce960 = IO::Serializer::SerializeBytes
+[RtDiff] site[19] @00007ff6dc2cef20 = Math::Vector3::FromYawPitch
+[RtDiff] site[20] @00007ff6dc2cf6a0 = System::String::operator==(char*)
+[RtDiff] site[21] @00007ff6dc2cf6e0 = System::String::SubString
+[RtDiff] site[22] @00007ff6dc2ce980 = IO::Serializer::GetVersion
+[RtDiff] site[23] @00007ff6dc2ce940 = IO::Serializer::Serialize(n,float*)
+[RtDiff] site[24] @00007ff6dc2ce320 = Achievement::Achievement::ctor
+[RtDiff] site[25] @00007ff6dc2ce340 = Achievement::Achievement::GetFileVersion
+[RtDiff] site[26] @00007ff6dc2cf120 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+[RtDiff] site[27] @00007ff6dc2cf760 = System::Random::Rand(uint)
+[RtDiff] site[28] @00007ff6dc2cea20 = Math::Transform::Transform()
+[RtDiff] site[29] @00007ff6dc2cec80 = Math::Transform3::Identity()
+[RtDiff] site[30] @00007ff6dc2cf8a0 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+[RtDiff] site[31] @00007ff6dc2ce8e0 = IO::Serializer::Serialize(n,ushort*)
+[RtDiff] site[32] @00007ff6dc2ce8c0 = IO::Serializer::Serialize(n,short*)
+[RtDiff] site[33] @00007ff6dc2ce8a0 = IO::Serializer::Serialize(n,uchar*)
+[RtDiff] site[34] @00007ff6dc2ce780 = IO::Serializer::Serialize(uchar&)
+[RtDiff] site[35] @00007ff6dc2ce900 = IO::Serializer::Serialize(n,int*)
+[RtDiff] site[36] @00007ff6dc2cf000 = Object::External::GetPath
+[RtDiff] site[37] @00007ff6dc2ce800 = IO::Serializer::Serialize(uint&)
+[RtDiff] site[38] @00007ff6dc2cece0 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #137  ours=+0xc: e2 0f 2f 3f 81 b6 e3 c1  theirs=+0xc: e3 0f 2f 3f 81 b6 e3 c1
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #289  ours=+0xc: 5a af 2e 3f f2 5c 15 43  theirs=+0xc: 5b af 2e 3f f2 5c 15 43
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #480  ours=+0xc: d4 c3 0e 3f 1b 73 59 c2  theirs=+0xc: d5 c3 0e 3f 1b 73 59 c2
+[RtDiff] Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&): further divergences counted only
+[RtDiff] site[39] @00007ff6dc2cf3c0 = Save::SaveLoad::SaveLoad
+[RtDiff] site[40] @00007ff6dc2cf500 = Save::SaveLoad::Update [shadow]
+[RtDiff] site[41] @00007ff6dc2ced40 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+[RtDiff] site[42] @00007ff6dc2ced20 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+[RtDiff] site[43] @00007ff6dc2ced00 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+[RtDiff] site[44] @00007ff6dc2cea80 = Math::Transform3::Transform3(const Transform3&)
+[RtDiff] site[45] @00007ff6dc2ceba0 = Math::Transform::Inverse()
+[RtDiff] site[46] @00007ff6dc2cf8e0 = Volume::Frustum::operator*(Transform3)
+[RtDiff] site[47] @00007ff6dc2cf900 = Volume::Frustum::Contains
+[RtDiff] site[48] @00007ff6dc2ceb60 = Math::Transform::AsMatrix()
+[RtDiff] site[49] @00007ff6dc2ce2c0 = Achievement::AchievementManager::SetAchievements
+[RtDiff] site[50] @00007ff6dc2ce100 = Achievement::AchievementManager::GetAchievementCount
+[RtDiff] site[51] @00007ff6dc2cf4a0 = Save::SaveLoad::SetSaveSprite
+[RtDiff] site[52] @00007ff6dc2cf480 = Save::SaveLoad::SetMinOperationTime
+[RtDiff] site[53] @00007ff6dc2cf460 = Save::SaveLoad::SetOperation
+[RtDiff] site[54] @00007ff6dc2cf3e0 = Save::SaveLoad::GetOperation
+[RtDiff] site[55] @00007ff6dc2cf400 = Save::SaveLoad::GetSaveCount
+[RtDiff] site[56] @00007ff6dc2cf420 = Save::SaveLoad::GetSaveInfo
+[RtDiff] site[57] @00007ff6dc2cf4e0 = Save::SaveLoad::CheckMod
+[RtDiff] site[58] @00007ff6dc2cf440 = Save::SaveLoad::GetSaveState
+[RtDiff] site[59] @00007ff6dc2cf0c0 = Object::ExternalList::GetResourceCount
+[RtDiff] site[60] @00007ff6dc2cf720 = System::Random::Random(uint)
+[RtDiff] site[61] @00007ff6dc2cf2a0 = Picking::Scene::Scene()
+[RtDiff] site[62] @00007ff6dc2cf740 = System::Random::Rand
+[RtDiff] site[63] @00007ff6dc2ce2a0 = Achievement::AchievementManager::SetEventHandler
+[RtDiff] site[64] @00007ff6dc2ce520 = IO::CompressedMemoryStream::CompressedMemoryStream
+[RtDiff] site[65] @00007ff6dc2ce5c0 = IO::CompressedMemoryStream::GetMemoryStream
+[RtDiff] site[66] @00007ff6dc2cf580 = Save::SavedState::Retrieve
+[RtDiff] site[67] @00007ff6dc2ce580 = IO::CompressedMemoryStream::Open
+[RtDiff] site[68] @00007ff6dc2cf080 = Object::ExternalFactory::GetPathForReferenceId
+[RtDiff] site[69] @00007ff6dc2ce3c0 = Achievement::GoalInstance::GoalInstance
+[RtDiff] site[70] @00007ff6dc2ce7a0 = IO::Serializer::Serialize(short&)
+[RtDiff] site[71] @00007ff6dc2ce880 = IO::Serializer::Serialize(n,bool*)
+[RtDiff] site[72] @00007ff6dc2ce7c0 = IO::Serializer::Serialize(ushort&)
+[RtDiff] site[73] @00007ff6dc2ce760 = IO::Serializer::Serialize(schar&)
+[RtDiff] site[74] @00007ff6dc2cf1e0 = Object::Base::IsA
+[RtDiff] site[75] @00007ff6dc2cf060 = Object::ExternalFactory::GetReferenceId
+[RtDiff] site[76] @00007ff6dc2cefc0 = Math::Vector3::NormalizeWithMag
+[RtDiff] site[77] @00007ff6dc2cf7c0 = System::Random::RandFloatTol
+[RtDiff] site[78] @00007ff6dc2cec60 = Math::Transform::Identity()
+[RtDiff] site[79] @00007ff6dc2ce920 = IO::Serializer::Serialize(n,uint*)
+[RtDiff] site[80] @00007ff6dc2cf360 = Picking::Scene::AddMesh
+[RtDiff] site[81] @00007ff6dc2ce5a0 = IO::CompressedMemoryStream::Close
+[RtDiff] site[82] @00007ff6dc2ce540 = IO::CompressedMemoryStream::~CompressedMemoryStream
+[RtDiff] site[83] @00007ff6dc2cf540 = Save::SavedState::~SavedState [no oracle]
+[RtDiff] site[84] @00007ff6dc2cf0a0 = Object::ExternalFactory::FindNext
+[RtDiff] site[85] @00007ff6dc2cf0e0 = Object::ExternalList::Find
+[RtDiff] site[86] @00007ff6dc2cea60 = Math::Transform::operator=(const Transform&)
+[RtDiff] site[87] @00007ff6dc2ceea0 = Math::Vector2::Normalize
+[RtDiff] site[88] @00007ff6dc2cef40 = Math::Vector3::Heading
+[RtDiff] site[89] @00007ff6dc2cef00 = Math::Vector3::Dot
+[RtDiff] site[90] @00007ff6dc2cf7a0 = System::Random::RandFloat
+[RtDiff] site[91] @00007ff6dc2ced60 = Math::Transform::operator*(const Vector3&)
+[RtDiff] site[92] @00007ff6dc2cec00 = Math::Quaternion::Rotate(const Vector3&)
+[RtDiff] site[93] @00007ff6dc2cebe0 = Math::Quaternion::operator*(const Quaternion&)
+[RtDiff] site[94] @00007ff6dc2cf3a0 = Picking::Scene::Intersect
+[RtDiff] site[95] @00007ff6dc2cea40 = Math::Transform::Transform(const Transform&)
+[RtDiff] site[96] @00007ff6dc2cf340 = Picking::Scene::SetTransform
+[RtDiff] site[97] @00007ff6dc2ce300 = Achievement::AchievementManager::Update
+[RtDiff] site[98] @00007ff6dc2ce280 = Achievement::AchievementInstance::Update
+[RtDiff] site[99] @00007ff6dc2ce1a0 = Achievement::AchievementInstance::IsMet
+[RtDiff] site[100] @00007ff6dc2cf240 = Object::Factory::CreateObject
+[RtDiff] site[101] @00007ff6dc2cebc0 = Math::Transform3::Inverse()
+[RtDiff] site[102] @00007ff6dc2ceb80 = Math::Transform3::AsMatrix()
+[RtDiff] site[103] @00007ff6dc2ceac0 = Math::Matrix::operator*(const Matrix&)
+[RtDiff] site[104] @00007ff6dc2ceae0 = Math::Matrix::operator*(const Vector4&)
+[RtDiff] site[105] @00007ff6dc2cf7e0 = System::Random::RandTol
+[RtDiff] site[106] @00007ff6dc2cee00 = Math::Vector2::Dot
+[RtDiff] site[107] @00007ff6dc2ce4e0 = Achievement::GoalList::AreGoalsMetExcept
+[RtDiff] site[108] @00007ff6dc2ce500 = Achievement::GoalInstance::Update
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #1277  ours=+0x0: 20 65 0e bf 73 6c a4 be  theirs=+0x0: 21 65 0e bf 74 6c a4 be
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #1840  ours=+0x0: a7 4e 0b bf b0 db a0 be  theirs=+0x0: a8 4e 0b bf b1 db a0 be
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #2086  ours=+0x0: a6 70 09 bf bd b3 9e be  theirs=+0x0: a7 70 09 bf be b3 9e be
+[RtDiff] Math::Vector3::FromYawPitch: further divergences counted only
+[RtDiff] DIVERGENCE Math::Vector3::Heading  call #56937  ours=0.00350574055 [3b65c091]  theirs=0.00350574101 [3b65c093]
+[RtDiff] site[109] @00007ff6dc2cf380 = Picking::Scene::RemoveMesh
+[RtDiff] site[110] @00007ff6dc2cf2c0 = Picking::Scene::~Scene()
+[RtDiff] site[111] @00007ff6dc2ce6e0 = IO::Persistence::Set(int)
+[RtDiff] site[112] @00007ff6dc2ce700 = IO::Persistence::Set(bool)
+[RtDiff] site[113] @00007ff6dc2ce3e0 = Achievement::GoalInstance::~GoalInstance
+[RtDiff] ==== 114 sites, 29602036 calls, 49 divergences in 3 sites ====
+[RtDiff]   Object::BaseTypeInfo::BaseTypeInfo               calls=312        divergences=0
+[RtDiff]   System::operator+(String,String)                 calls=9          divergences=0
+[RtDiff]   System::operator+(String,char*)                  calls=487        divergences=0
+[RtDiff]   Achievement::Goal::Goal                          calls=139        divergences=0
+[RtDiff]   Object::Factory::GetTypeIdFromName               calls=38         divergences=0
+[RtDiff]   Object::Base::IsDerivedFrom                      calls=9321199    divergences=0
+[RtDiff]   IO::Persistence::Get(int&)                       calls=10         divergences=0
+[RtDiff]   IO::Persistence::Get(bool&)                      calls=6          divergences=0
+[RtDiff]   IO::Serializer::Serializer(Stream&,int)          calls=150573     divergences=0
+[RtDiff]   IO::Serializer::Serialize(int&)                  calls=134122     divergences=0
+[RtDiff]   IO::Serializer::Serialize(bool&)                 calls=57334      divergences=0
+[RtDiff]   Object::ExternalFactory::Find                    calls=575        divergences=0
+[RtDiff]   System::Filename::GetPathIdentifer               calls=588        divergences=0
+[RtDiff]   IO::Serializer::~Serializer [not diffable]       calls=150573     divergences=0
+[RtDiff]   IO::Serializer::GetEncoding                      calls=241864     divergences=0
+[RtDiff]   Object::ExternalFactory::IsReferenceModeEnabled  calls=236427     divergences=0
+[RtDiff]   Object::Type::Serialize [not diffable]           calls=690        divergences=0
+[RtDiff]   IO::Serializer::Serialize(float&)                calls=59659      divergences=0
+[RtDiff]   IO::Serializer::SerializeBytes                   calls=27773      divergences=0
+[RtDiff]   Math::Vector3::FromYawPitch                      calls=3324       divergences=7
+[RtDiff]   System::String::operator==(char*)                calls=530        divergences=0
+[RtDiff]   System::String::SubString                        calls=101        divergences=0
+[RtDiff]   IO::Serializer::GetVersion                       calls=151743     divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,float*)              calls=8          divergences=0
+[RtDiff]   Achievement::Achievement::ctor                   calls=4          divergences=0
+[RtDiff]   Achievement::Achievement::GetFileVersion         calls=4          divergences=0
+[RtDiff]   Object::InternalBasePtr::InternalBasePtr(Internal*) calls=1710871    divergences=0
+[RtDiff]   System::Random::Rand(uint)                       calls=9451       divergences=0
+[RtDiff]   Math::Transform::Transform()                     calls=13887      divergences=0
+[RtDiff]   Math::Transform3::Identity()                     calls=4          divergences=0
+[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=1718       divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,ushort*)             calls=724        divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,short*)              calls=383697     divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,uchar*)              calls=339308     divergences=0
+[RtDiff]   IO::Serializer::Serialize(uchar&)                calls=764734     divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,int*)                calls=2467       divergences=0
+[RtDiff]   Object::External::GetPath                        calls=4333       divergences=0
+[RtDiff]   IO::Serializer::Serialize(uint&)                 calls=694216     divergences=0
+[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=319937     divergences=41
+[RtDiff]   Save::SaveLoad::SaveLoad                         calls=2          divergences=0
+[RtDiff]   Save::SaveLoad::Update [shadow]                  calls=1177       divergences=0
+[RtDiff]   Math::Transform::FromLookAt(const Vector3&, const Vector3&) calls=1118       divergences=0
+[RtDiff]   Math::Transform::FromDirection(const Vector3&, const Vector3&) calls=1118       divergences=0
+[RtDiff]   Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&) calls=1118       divergences=0
+[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=5380       divergences=0
+[RtDiff]   Math::Transform::Inverse()                       calls=5136       divergences=0
+[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=10516      divergences=0
+[RtDiff]   Volume::Frustum::Contains                        calls=3261792    divergences=0
+[RtDiff]   Math::Transform::AsMatrix()                      calls=379883     divergences=0
+[RtDiff]   Achievement::AchievementManager::SetAchievements calls=1          divergences=0
+[RtDiff]   Achievement::AchievementManager::GetAchievementCount calls=1          divergences=0
+[RtDiff]   Save::SaveLoad::SetSaveSprite                    calls=1          divergences=0
+[RtDiff]   Save::SaveLoad::SetMinOperationTime              calls=2          divergences=0
+[RtDiff]   Save::SaveLoad::SetOperation                     calls=2          divergences=0
+[RtDiff]   Save::SaveLoad::GetOperation                     calls=417        divergences=0
+[RtDiff]   Save::SaveLoad::GetSaveCount                     calls=1          divergences=0
+[RtDiff]   Save::SaveLoad::GetSaveInfo                      calls=19         divergences=0
+[RtDiff]   Save::SaveLoad::CheckMod                         calls=1          divergences=0
+[RtDiff]   Save::SaveLoad::GetSaveState                     calls=1          divergences=0
+[RtDiff]   Object::ExternalList::GetResourceCount           calls=2          divergences=0
+[RtDiff]   System::Random::Random(uint)                     calls=1          divergences=0
+[RtDiff]   Picking::Scene::Scene()                          calls=2          divergences=0
+[RtDiff]   System::Random::Rand                             calls=2          divergences=0
+[RtDiff]   Achievement::AchievementManager::SetEventHandler calls=2          divergences=0
+[RtDiff]   IO::CompressedMemoryStream::CompressedMemoryStream calls=1          divergences=0
+[RtDiff]   IO::CompressedMemoryStream::GetMemoryStream      calls=1          divergences=0
+[RtDiff]   Save::SavedState::Retrieve                       calls=1          divergences=0
+[RtDiff]   IO::CompressedMemoryStream::Open                 calls=1          divergences=0
+[RtDiff]   Object::ExternalFactory::GetPathForReferenceId   calls=89733      divergences=0
+[RtDiff]   Achievement::GoalInstance::GoalInstance          calls=9          divergences=0
+[RtDiff]   IO::Serializer::Serialize(short&)                calls=81934      divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,bool*)               calls=8          divergences=0
+[RtDiff]   IO::Serializer::Serialize(ushort&)               calls=147456     divergences=0
+[RtDiff]   IO::Serializer::Serialize(schar&)                calls=147456     divergences=0
+[RtDiff]   Object::Base::IsA                                calls=8157       divergences=0
+[RtDiff]   Object::ExternalFactory::GetReferenceId          calls=1          divergences=0
+[RtDiff]   Math::Vector3::NormalizeWithMag                  calls=148046     divergences=0
+[RtDiff]   System::Random::RandFloatTol                     calls=16830      divergences=0
+[RtDiff]   Math::Transform::Identity()                      calls=2          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,uint*)               calls=2          divergences=0
+[RtDiff]   Picking::Scene::AddMesh                          calls=119        divergences=0
+[RtDiff]   IO::CompressedMemoryStream::Close                calls=1          divergences=0
+[RtDiff]   IO::CompressedMemoryStream::~CompressedMemoryStream calls=1          divergences=0
+[RtDiff]   Save::SavedState::~SavedState [no oracle]        calls=1          divergences=0
+[RtDiff]   Object::ExternalFactory::FindNext                calls=95         divergences=0
+[RtDiff]   Object::ExternalList::Find                       calls=3          divergences=0
+[RtDiff]   Math::Transform::operator=(const Transform&)     calls=5298742    divergences=0
+[RtDiff]   Math::Vector2::Normalize                         calls=73663      divergences=0
+[RtDiff]   Math::Vector3::Heading                           calls=74002      divergences=1
+[RtDiff]   Math::Vector3::Dot                               calls=3480637    divergences=0
+[RtDiff]   System::Random::RandFloat                        calls=318202     divergences=0
+[RtDiff]   Math::Transform::operator*(const Vector3&)       calls=189428     divergences=0
+[RtDiff]   Math::Quaternion::Rotate(const Vector3&)         calls=189428     divergences=0
+[RtDiff]   Math::Quaternion::operator*(const Quaternion&)   calls=378856     divergences=0
+[RtDiff]   Picking::Scene::Intersect                        calls=1252       divergences=0
+[RtDiff]   Math::Transform::Transform(const Transform&)     calls=74783      divergences=0
+[RtDiff]   Picking::Scene::SetTransform                     calls=74783      divergences=0
+[RtDiff]   Achievement::AchievementManager::Update          calls=901        divergences=0
+[RtDiff]   Achievement::AchievementInstance::Update         calls=901        divergences=0
+[RtDiff]   Achievement::AchievementInstance::IsMet          calls=901        divergences=0
+[RtDiff]   Object::Factory::CreateObject                    calls=703        divergences=0
+[RtDiff]   Math::Transform3::Inverse()                      calls=69666      divergences=0
+[RtDiff]   Math::Transform3::AsMatrix()                     calls=70883      divergences=0
+[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=69666      divergences=0
+[RtDiff]   Math::Matrix::operator*(const Vector4&)          calls=139332     divergences=0
+[RtDiff]   System::Random::RandTol                          calls=2117       divergences=0
+[RtDiff]   Math::Vector2::Dot                               calls=1534       divergences=0
+[RtDiff]   Achievement::GoalList::AreGoalsMetExcept         calls=259        divergences=0
+[RtDiff]   Achievement::GoalInstance::Update                calls=259        divergences=0
+[RtDiff]   Picking::Scene::RemoveMesh                       calls=119        divergences=0
+[RtDiff]   Picking::Scene::~Scene()                         calls=2          divergences=0
+[RtDiff]   IO::Persistence::Set(int)                        calls=10         divergences=0
+[RtDiff]   IO::Persistence::Set(bool)                       calls=6          divergences=0
+[RtDiff]   Achievement::GoalInstance::~GoalInstance         calls=9          divergences=0
