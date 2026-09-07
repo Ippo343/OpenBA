@@ -238,7 +238,7 @@ ours), not chosen.
 | Lane | Scope | Gate |
 |---|---|---|
 | **0. Residue matrix** | Run `BANISHED_RT_STRICT=1` across the whole harness matrix — menu, mods menu, all 4 tutorials, `Save9.sav` autoload, `sa-stress`, and gameplay through the pause menu. Union the residue lists; entries are monotone, so the union is sound and any *shrink* is a tool bug. **Use a route that reaches gameplay** — `BANISHED_AUTOQUIT=1` quits at the MAIN MENU and cost this document one wrong finding (see the correction above); menu-only 260 vs gameplay 309. **No attended run is needed for `Input::Device` after all** — see the CLOSED section below. | A single work list that is what the process reaches, not what the tree mentions |
-| **S. The save-stream A/B oracle** | Write the same object through two independent `IO::MemoryStream`s — ours and the shipped body — and `memcmp`. Replay is impossible anywhere on the save path, and a second call often succeeds *differently and silently*, so the oracle reads green while proving nothing. **Unblocks four rows at once** (see below) and retroactively strengthens Wave 4's `Serializer` family. Build this before porting any `Serialize`. | Byte-identical output on a real save |
+| **S. The save-stream A/B oracle** — **BUILT AND PROVEN 2026-09-07**, `runtime/src/io/save_trace.{h,cpp}`, `BANISHED_RT_SAVE_TRACE=1` | Replays both bodies into two independent **synthetic** sinks and compares the **emission sequence** — not the bytes on disk, because a desync IS a different sequence of typed writes, and because a synthetic sink needs no `MemoryStream` and no codec. First subject: `Audio::Scene::Serialize`, **32,772 emissions identical, 0 diverged.** | An identical emission sequence |
 | **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8. **Triaged below into a per-function disposition** — P (1, a probe), B (10, blocked on a named dependency), N (7, allocator-bound or oracle-hard), D/X (14, stubs or already-unblocked). Start with X: four `ExternalFactory` mutators whose stated blocker was a Wave 4 dependency that has since landed. | 0 divergences and non-zero `calls=` for the ports; a written reason for each stub |
 | **B. The 145 named functions + 51 ctors/dtors** | The ordinary port wave, class-atomic (§4.1 rule 5). | 0 divergences |
 | **C. Data: 28 vtables, 17 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
@@ -415,7 +415,7 @@ precedent for the third being a legitimate answer.
 | **B — blocked on a named dependency; ordinary port work once it lands** (**1 of the 10 PORTED AND VERIFIED 2026-09-07**) | | |
 | 2-4 | `Audio::Scene::Update`, `Audio::Device::Update`, `FreeChannelPlatform` | **PORT after `Audio::SoundBuffer`/`SoundEffect`.** All three reach `Device`'s COM channel objects; none of the three classes was in Wave 8's scope. `Scene::Update` also consumes `System::Random`, so it needs an oracle design, not just a body. |
 | 5-7 | `Audio::Scene::StopAll`, `Pause`, `StopEffect3D` | **PORT with 2-4.** Each calls into `Device::Stop` / the platform channel array. Porting the outer loop alone would put two implementations of one state machine in play (WAVE8.md §1). |
-| 8 | `Audio::Scene::Serialize` `0x1800e0050` | **THE STATED BLOCKER IS ALREADY ANSWERED — by a fact this project has had since Wave 4.** Lane C held it back because *that lane* "did not independently re-derive retail's own offsets within its budget". It did not have to: retail's offsets are written down in `runtime/src/io/rt_io_port.cpp`'s warning block — **bool `+0x78` / uint `+0x98` / int `+0xa0`** (vs the profile build's +0x90/+0xb0/+0xb8). Disassembling the function confirms it: it touches exactly ONE Encoding slot, `CALL [RAX+0xa0]`, the **int** slot, at the recorded offset — and `SerializeReferenceTable` corroborates the pair independently with `+0x98`/`+0xa0`. It is 40 instructions. What remains is an ORACLE (it writes the save stream, so replay double-writes) and two unexported callees, `0x180051390` and `0x180052640`. |
+| 8 | `Audio::Scene::Serialize` `0x1800e0050` | **PORTED AND VERIFIED 2026-09-07 — 32,772 emissions identical, 0 diverged**, by lane S. The stated blocker was answered by a fact the tree had since Wave 4 (retail's Encoding offsets, bool `+0x78` / uint `+0x98` / int `+0xa0`, in `rt_io_port.cpp`'s warning block). 40 instructions touching one Encoding slot (`kScalarInt +0xa0`) and one ReaderWriter slot (`kArrayBool +0x20`, n=5 for `Scene::paused`). Its two "unexported callees" are ordinary `Collection` internals called by address as `ClearAll` and `RegisterInput` already do. |
 | 9 | `Engine::MainLoop::Run` (lane B) | **PORT after the allocator (row 12-15).** Lane B records the allocator embedding as the reason it is a holdback. |
 | 10 | `Input::KeyMap::RegisterInput` (lane D) | **PORTED AND VERIFIED 2026-09-07 — 50 calls, 0 divergences.** Lane D held it back because it could not pin `FUN_180023060`'s first argument. Reading the callee answers it: **RCX is never read** — `0x180023097 MOV RCX,RBX` destroys it before any use. The call sites agree in the stronger form: RCX is `this` at one site and a zero-extended id byte at the other two, and **a value that differs like that across call sites cannot be a parameter the callee reads.** Oracle: **our writer, their readers** — there is no replay (a second insert of the same id returns early, making replay vacuous), so the insert is verified by asking the DLL's own `GetDeviceForId`/`GetInputForId`/`GetIdForDeviceInput` to read it back, the last of which walks the WHOLE tree and so exercises our linkage and the rebalance through code we did not write. |
 | 11 | `Input::KeyMap::Load` (lane D) | **STILL BLOCKED — and this row's own first draft was wrong to bundle it with 10.** `Load` does not touch `FUN_180023060` at all, so the resolved ABI does nothing for it. It is blocked on three separate things: an unexported registry-string parse helper (`FUN_18007f034`), a `System::String::Format` allocation pair per binding, and a lookup into a **second, differently-typed** `Collection::Set<Pair<String,String>>` inside `IO::Persistence`. Lane D called it the densest of its 21 in every dimension, and it still is. |
@@ -521,6 +521,36 @@ half that a write-path oracle indirectly protects: if our writer emits the same 
 does, a retail reader will accept our save, which is the property that actually matters.
 **This is the single highest-leverage item left in the wave**, and it is why the remaining
 holdbacks should not be attacked in the order they appear in the table.
+
+### Lane S, built — and the harness found its own bug the way it was designed to
+
+`runtime/src/io/save_trace.{h,cpp}`, gated on `BANISHED_RT_SAVE_TRACE=1`.
+
+Two design choices are worth carrying to the remaining three rows:
+
+**1. Compare the emission SEQUENCE, not the buffer.** A desync is precisely "a different sequence
+of typed writes", so the sink does not need a real `MemoryStream` or a codec at all — a stub
+`Stream` whose direction says writing, pointing at a stub `Encoding` whose factory returns a stub
+`ReaderWriter` that records `(slot, args, value)`. That collapsed the estimated work from "build a
+MemoryStream pair" to one file, and it makes divergences *legible*: the report names the emission
+index, the slot, and both values, instead of "the buffers differ at byte 4118".
+
+**2. Bind every slot, not the known ones.** The harness's first run crashed `EXEC-of-0` on the
+stub `Encoding` vtable. Retail reaches an `Encoding` slot that `Scene::Serialize`'s own
+disassembly never names, because the bulk element pass (`0x180052640`) derives its **own**
+reader/writer from the `Stream` rather than reusing the caller's. A null slot faults and tells you
+nothing; a bound one records and names itself. **The unknown slots are exactly the ones worth
+binding** — that is the whole reason the harness could diagnose itself in one run instead of
+needing a debugger.
+
+The first subject came out clean at **32,772 emissions identical** — the full 4,096-entry effect
+array plus the header and the five paused flags — and a separate gameplay run showed no whole-tree
+regression (251 sites, 28,412,621 calls, 99 divergences, all in the two known Wave 1 sin/cos
+sites).
+
+**Three rows remain for this harness**: `ExternalFactory::SerializeReferenceTable`,
+`External::SaveText` (which additionally needs `IO::TextFileStream`), and Wave 3's
+`InternalBasePtr::Serialize`. None of them is blocked on the oracle any more.
 
 ### The pattern this session hit three times: a known fact that did not reach the next wave
 

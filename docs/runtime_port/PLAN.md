@@ -741,7 +741,11 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       a `String::Format` pair per binding, and a second differently-typed
       `Collection::Set<Pair<String,String>>` in `IO::Persistence`. Second time in one session
       that a group-level claim was wrong about a member; the per-function table is the fix.
-- [ ] **Wave 9 LANE A IS OPEN, and its first deliverable is a TOOL, not a port.** Opening it on
+- [x] **Wave 9 LANE S IS BUILT AND PROVEN; `Audio::Scene::Serialize` is PORTED AND VERIFIED —
+      32,772 emissions identical, 0 diverged** (`runtime/src/io/save_trace.{h,cpp}`,
+      `BANISHED_RT_SAVE_TRACE=1`). Three rows remain for the harness and none is blocked on
+      the oracle any more. Details below.
+- [x] **Wave 9 LANE A IS OPEN, and its first deliverable was a TOOL, not a port.** Opening it on
       the two most tractable rows produced a better result than either port would have: **the
       remaining holdbacks are not 28 independent problems — the critical path is one missing
       oracle shared by four rows.** `Audio::Scene::Serialize`, 
