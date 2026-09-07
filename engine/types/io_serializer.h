@@ -30,7 +30,7 @@
 //   the same cursor is at CompressedMemoryStream + 0x68 + 0x24 = + 0x8C.
 //
 // Every IO::Serializer::Serialize/SerializeBytes/GetVersion method is a pure
-// tail-jump forwarder: it loads RCX = serializer->m_encoding (this+0x08), then
+// tail-jump forwarder: it loads RCX = serializer->m_readerWriter (this+0x08), then
 // `JMP [encoding->vtable + slot]`, forwarding RDX/R8/... unchanged. The
 // Encoding (a BinaryReader on load, BinaryWriter on save) does the real work.
 // ============================================================================
@@ -160,29 +160,62 @@ constexpr size_t kCompressedMemoryStream_Size    = kCompressedMemoryStream_MemBa
 // ----------------------------------------------------------------------------
 // IO::Serializer  (0x10 bytes)
 // ----------------------------------------------------------------------------
-// Ctor (Runtime 0x1800b9960) — NOTE: the `version` ctor arg is IGNORED:
-//   m_stream   = stream
-//   m_encoding = 0
-//   factoryVtbl = *(stream->m_encoding)           // vtable of the factory
-//   if (stream->m_loadingFlag == 0)               // LOADING
-//       m_encoding = factoryVtbl[0x18/8](factory)             // decode encoding
-//   else                                          // SAVING
-//       m_encoding = factoryVtbl[0x20/8](factory, this)       // encode encoding
+// Ctor (Runtime 0x1800b9960), transcribed from the shipped bytes by Wave 4
+// lane A and re-verified by the orchestrator against the same disassembly:
+//   m_stream       = stream                      // MOV [RCX],RDX
+//   m_readerWriter = 0                           // MOV [RCX+8],0
+//   factoryVtbl    = *(stream->m_encoding)       // MOV RCX,[RDX+0x10]; MOV RAX,[RCX]
+//   arg2 = this                                  // MOV RDX,RBX  @0x1800b997f
+//   if (stream->m_loadingFlag == 0)              // LOADING
+//       m_readerWriter = factoryVtbl[0x18](factory, this, version)
+//   else                                         // SAVING
+//       m_readerWriter = factoryVtbl[0x20](factory, this, version)
+//
+// TWO CORRECTIONS, both previously wrong HERE and in the project's memory
+// notes, and both load-bearing:
+//
+//  1. The `version` ctor arg is NOT IGNORED. This comment said it was. The
+//     body never TOUCHES R8D -- which is exactly why it is still live as
+//     argument 3 at the CALL. The callee is
+//     ??0Binary{Reader,Writer}@IO@@QEAA@AEAVSerializer@1@H@Z, i.e.
+//     (Serializer&, int), and BinaryWriter's ctor stores it at +0x28 and
+//     WRITES IT TO THE STREAM. It is the save-format version stamped into
+//     the file. "Not stored by this function" was read as "discarded".
+//
+//  2. THE CALL ARITY IS 3, NOT 1 AND 2. This comment showed the decode slot
+//     taking (factory) and the encode slot taking (factory, this). Both take
+//     (factory, this, version): `MOV RDX,RBX` sets arg 2 before the branch,
+//     so it is common to both paths, and R8D carries arg 3 through untouched.
+//     The project's memory note recorded this arity as "NOT pinned -- Ghidra's
+//     analysis at those sites is demonstrably wrong". It is pinned now, from
+//     the instruction bytes. Wave 3's ResetPersistState carries a stated
+//     non-byte-faithful deviation that rests on the old uncertainty and can
+//     now be revisited.
 //
 // Dtor (Runtime 0x1800b99b0):
-//   if (m_encoding) m_encoding->vtable[0](m_encoding, 1)   // scalar-deleting dtor
+//   if (m_readerWriter) m_readerWriter->vtable[0](m_readerWriter, 1)  // scalar-deleting dtor
 //
-//   +0x00  m_stream   : Stream*
-//   +0x08  m_encoding : Encoding*   (BinaryReader on load, BinaryWriter on save)
+//   +0x00  m_stream       : Stream*
+//   +0x08  m_readerWriter : ReaderWriter*  (BinaryReader on load, BinaryWriter on save)
+//
+// NAMING CORRECTION: this field was called `m_encoding` and typed `Encoding*`.
+// It is an IO::ReaderWriter, a DIFFERENT class. IO::Encoding is the policy
+// object at stream+0x10 whose slots +0x18/+0x20 CREATE ReaderWriters; calling
+// both "Encoding" hid that distinction. No alias is kept: nothing in the tree
+// read this field by name, so the rename breaks nothing. The C++ TYPE is left
+// as Encoding* rather than introducing a ReaderWriter struct here -- both are
+// one pointer and runtime/types/io/Serializer.h (Wave 4 lane A) is now the
+// authoritative layout for this class.
 struct Serializer {
     Stream*   m_stream;     // +0x00
-    Encoding* m_encoding;   // +0x08
+    Encoding* m_readerWriter;   // +0x08  -- really ReaderWriter*, see above
 };
 static_assert(offsetof(Serializer, m_stream)   == 0x00, "Serializer.m_stream @ 0x00");
-static_assert(offsetof(Serializer, m_encoding) == 0x08, "Serializer.m_encoding @ 0x08");
+static_assert(offsetof(Serializer, m_readerWriter) == 0x08, "Serializer.m_readerWriter @ 0x08");
 static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 
-// Factory vtable slot offsets on the Stream's m_encoding factory object.
+// Vtable slot offsets on the IO::Encoding at stream+0x10. Both are called with
+// THREE arguments -- (encoding, serializer, version) -- see the ctor note above.
 namespace factory_vtbl {
     constexpr int kGetDecodeEncoding = 0x18; // -> BinaryReader (Runtime 0x1800a8120)
     constexpr int kGetEncodeEncoding = 0x20; // -> BinaryWriter (Runtime 0x1800a8080)

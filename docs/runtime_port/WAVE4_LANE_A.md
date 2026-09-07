@@ -40,41 +40,38 @@ Two things were run, both read-only and both against the shipped binary rather t
 
 ---
 
-## 2. Export names — all 22 verified, none phantom
+## 2. Export names — all 22 verified, none phantom, none folded
 
 `reference_resolveexport_phantom_names.md`: a `ResolveExport` name the DLL does not contain
 returns NULL silently, the `ResolveAddr` fallback hides it, and the port then registers under a
-name nothing resolves — census counts it, diff says `calls=0`. Every name was checked against the
-shipped DLL's export directory with `pefile` **before** any body was written.
+name nothing resolves — census counts it, diff says `calls=0`.
+
+**The 19 names in this lane's brief are covered centrally by
+[`wave4_export_names.txt`](wave4_export_names.txt)** — 39 Wave-4 IO symbols checked against the
+shipped `Runtime-x64.dll` export directory with `pefile`, 39 ok / 0 missing, address and ordinal
+per name. This lane checked the same 19 independently before writing any body and got byte-identical
+addresses and ordinals; cite the central file, not this paragraph.
+
+Three names this lane ports are **not** in that file, because the brief's list omitted them (they
+have no `ResolveExport` site — they are reached only through exe dispatch slots, see §5). They were
+verified the same way:
 
 ```
-tools/ghidra_mcp/.venv/Scripts/python.exe   # pefile over C:\GOG Games\Banished\Runtime-x64.dll
-OK  0x1800b9960 ord=381   ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z
-OK  0x1800b99b0 ord=675   ??1Serializer@IO@@QEAA@XZ
-OK  0x1800070b0 ord=3011  ?GetVersion@Serializer@IO@@QEBAHXZ
-OK  0x180006290 ord=2593  ?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ
-OK  0x1800061e0 ord=3742  ?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z
-OK  0x18007c3b0 ord=3732  ?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z
-OK  0x180055c80 ord=3734  ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z
-OK  0x18007c3c0 ord=3735  ?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z
-OK  0x1800675a0 ord=3736  ?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z
-OK  0x1800061d0 ord=3737  ?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z
-OK  0x1800061f0 ord=3738  ?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z
-OK  0x180021660 ord=3739  ?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z
-OK  0x180052920 ord=3753  ?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z
-OK  0x180054160 ord=3745  ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z
-OK  0x180034fe0 ord=3747  ?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z
-OK  0x180077660 ord=3748  ?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z
-OK  0x180029e60 ord=3749  ?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z
-OK  0x1800150d0 ord=3750  ?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z
-OK  0x1800346d0 ord=3804  ?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z
-OK  0x180034fd0 ord=3744  ?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z    (added, see §5)
-OK  0x18007c3f0 ord=3743  ?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z    (added, see §5)
-OK  0x18007c400 ord=3746  ?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z    (added, see §5)
+OK  0x180034fd0 ord=3744  ?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z    (n, char*)
+OK  0x18007c3f0 ord=3743  ?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z    (n, signed char*)
+OK  0x18007c400 ord=3746  ?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z    (n, short*)
 ```
 
 `tools/export_name_audit.py` reports 20 phantom names project-wide; **none of them is an
 `IO::Serializer` name.**
+
+### No ICF/COMDAT folding — 22 names, 22 distinct bodies
+
+The scattered addresses (`0x1800061d0/e0/f0` sit together, everything else is spread across the
+image) look like folding but are not. Checked over the whole export directory: **all 22 addresses
+are distinct, and not one of them is exported under more than one name.** So "22 ported" means 22
+bodies, and no body has to land under a second name. This matches the orchestrator's finding for
+the wave's other 38 addresses and extends it to this lane's three extras.
 
 ### Hidden return slots — checked per name, none present
 
