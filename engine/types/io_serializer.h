@@ -153,6 +153,9 @@ static_assert(offsetof(MemoryStream, m_size)        == 0x28, "MemoryStream.m_siz
 constexpr size_t kCompressedMemoryStream_MemBase = 0x68;
 constexpr size_t kCompressedMemoryStream_Cursor  = kCompressedMemoryStream_MemBase + 0x24; // 0x8C
 constexpr size_t kCompressedMemoryStream_Size    = kCompressedMemoryStream_MemBase + 0x28; // 0x90
+// NOTE: this is the COMPRESSED-image cursor. The CompressedStream's own
+// position in the DECOMPRESSED stream is a different field, at +0x1c.
+// Full layout for all four stream classes: runtime/types/io/Stream.h.
 
 // ----------------------------------------------------------------------------
 // IO::Serializer  (0x10 bytes)

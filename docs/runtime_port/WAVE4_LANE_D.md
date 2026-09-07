@@ -40,8 +40,13 @@ does and this is what the port does," never as "this was observed agreeing."
 
 ## 2. The 7 symbols — verification and hidden-return-slot audit
 
-All 7 manglings were checked against `C:\GOG Games\Banished\Runtime-x64.dll`'s
-export directory with `pefile` before any code was written:
+Export-name verification for the whole wave was done centrally by the
+orchestrator and is authoritative: `docs/runtime_port/wave4_export_names.txt`
+(`pefile` over the shipped `Runtime-x64.dll`, all 39 IO symbols the wave
+calls, 0 MISSING). This lane's own independent pefile pass before writing any
+code (below) agrees with it exactly, including that `_singleton`'s `0PEAV12@EA`
+mangling — which an earlier draft of this section second-guessed — is the
+correct, present export:
 
 ```
 OK  0x1800ab310 ord=2321  ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z
@@ -61,12 +66,18 @@ OK  0x1800ab180 ord=2322  ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@Sy
 OK  0x1800adc70 ord=3378  ?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z
 ```
 
-One correction to the brief: the suggested mangling for `Modification`'s
-singleton, `?_singleton@Modification@IO@@0PEAV12@EA`, is **not** an export.
-The real one is `?_singleton@Modification@IO@@2PEAV12@EA` — note the digit is
-`2` (protected static), not `0` (private static) like `FileSystem`'s. Not
-ported either way — it is out of this lane's 7-symbol scope and is DATA (§5)
-— but worth recording so nobody chases the wrong string later.
+`Modification::_singleton`'s mangling — not ported (out of this lane's
+7-symbol scope, and DATA regardless, §5) — is
+`?_singleton@Modification@IO@@2PEAV12@EA` (digit `2`, protected static, not
+`0`/private static like `FileSystem`'s); recorded so nobody chases a
+different string later.
+
+**No export folding this wave** (checked centrally, confirmed against this
+lane specifically): none of the 7 addresses is exported under more than one
+name, including `GetDataDirectory` (`0x180007bd0`) and `GetSourceDirectory`
+(`0x180007b90`), which sit only `0x40` apart and share a tail-call target
+(§3) but are separate bodies — each was decompiled and disassembled
+individually rather than assumed identical from proximity.
 
 ### Hidden return slots — three, all already correct
 
@@ -177,6 +188,55 @@ comparing stored length first and only then `StriCmpAscii`. Returns the index
 of the first match or `-1`.
 
 **Full oracle.** Read-only on both sides.
+
+#### Not-found behaviour and the mod-mismatch load stall
+
+Asked to check specifically, given the user-reported stall when a save is
+loaded with a mod that was ENABLED at save time but is now DISABLED/removed:
+
+* **`Find` returns `-1`** when the queried `Filename` matches no mounted
+  mod — the initialised `ours = -1` never changes if the loop runs to
+  completion. Retail's own sentinel, transcribed exactly.
+* **`Find` has ZERO internal callers inside `Runtime-x64.dll`.**
+  `get_xrefs_to(0x1800aea10)` in the retail DLL returns only a `.data` table
+  entry and the export-table entry-point reference — no `CALL` site anywhere
+  in the DLL's own code. This means **the DLL's own save/load path does not
+  call `IO::Modification::Find` at all**; whatever function actually compares
+  a save's recorded mod list against the currently mounted mods (the
+  mechanism lane H is chasing) is a *different* function. This lane's port —
+  registration-only, no detour — could not be the cause of that stall even in
+  principle, because nothing inside the DLL is redirected to it.
+* **The only caller in OUR tree is `code/Game/Dialog/moddetailsdialog.cpp`**
+  (two sites, lines 225 and 288), building the "conflicts with other
+  installed mods" list for the mod-details dialog. Both pass the result
+  **completely unguarded** into `fn_Modification_GetMod(modification, cIdx)`
+  — i.e. `?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z` (retail
+  `0x18000da80`), whose entire body is:
+  ```
+  Mod* GetModification(int idx) const { return mods + idx * 0x80; }
+  ```
+  No bounds check on either end, in retail. A `-1` result therefore produces
+  a wild pointer `0x80` bytes *before* the mods array, which the caller then
+  reads as a `Mod` (name pointer, enabled byte at `+0x50`, BST root at
+  `+0x60`) — whatever heap bytes happen to precede the array, interpreted as
+  those fields. That is retail's own faithful (if fragile) behaviour, not
+  something this lane added or should guard.
+* **A normal `sa-run` will not exercise the `-1` path here.** Both call sites
+  look up mods from `m+0x70`, the CURRENT mod's own recorded conflict list —
+  by construction, a mod's conflict metadata should already reference mods
+  that exist in the mount table (they were discovered as actual conflicts at
+  scan time). `-1` would only occur if a mod's conflict list names another
+  mod that has since been uninstalled — an edge case, and one this lane's
+  diff oracle will only ever see if the orchestrator specifically constructs
+  that scenario (open the mod-details dialog for a mod whose declared
+  conflict is no longer installed).
+
+**Bottom line for lane H**: `Modification::Find` is very unlikely to be the
+mechanism behind the save/mod-mismatch stall — it is not called from
+anywhere in the DLL's own code, only from our mod-details dialog UI. The
+stall almost certainly lives in a different function (a save-time mod-list
+comparison inside `Save::SaveLoad` or `IO::Persistence`, neither owned by
+this lane).
 
 ### `IO::FileSystem::GetSaveDirectory` — retail `0x1800acfd0` (`filesystem_win.cpp`)
 

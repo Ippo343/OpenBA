@@ -1,44 +1,92 @@
 #pragma once
 // ============================================================================
-// runtime/src/io/serializer.h — clean reimplementation of IO::Serializer
+// runtime/src/io/serializer.h — the ported IO::Serializer surface (Wave 4, A)
 // ============================================================================
 //
-// Debuggable C++ reimplementations of the IO::Serializer forwarder methods
-// from Runtime-x64.dll, byte-accurate to the originals. See serializer.cpp
-// for the decompile references and the full read-path documentation.
+// Byte-faithful reimplementations of the 22 exported IO::Serializer members our
+// tree reaches. See serializer.cpp for the retail addresses, the pinned
+// ReaderWriter vtable offsets and the oracle story; see
+// runtime/types/io/Serializer.h for the layouts.
 //
-// A/B SAFETY: every wrapper below checks the env var BANISHED_REIMPL_SERIALIZER
-// (cached once). When UNSET (default), it tail-calls the resolved Runtime
-// original so the default build stays byte-identical. When SET to "1", it runs
-// the clean reimpl (which you can step through with source).
+// ----------------------------------------------------------------------------
+// TWO ENTRY PATHS, ONE IMPLEMENTATION
+// ----------------------------------------------------------------------------
+// These functions are reached two ways, and that is deliberate — they are the
+// SAME function pointer both times, not two ports of one class:
 //
-// These are registered into the exe dispatch slots in
-// standalone/address_registry.cpp (gated on STANDALONE_EXE).
+//   1. RegisterRuntimeExport(<mangled>, &RtSerializer_X) in
+//      RtIoSerializerRegister(). Flips every ResolveExport call site
+//      (engine/funcs/engine_funcs.cpp's fn_* table, and any direct caller).
+//
+//   2. RegisterDispatchSlot(0x1401524xx, &RtSerializer_X) in
+//      standalone/address_registry.cpp. The exe's retail-shaped code reads
+//      `*(fn**)slot` directly and never consults ResolveExport, so those 14
+//      slots must be bound to something; they are bound to these functions.
+//      They are NOT a second redirection mechanism — removing them would leave
+//      the slots null and EXEC-of-0 at the first save.
+//
+// ----------------------------------------------------------------------------
+// BANISHED_REIMPL_SERIALIZER IS RETIRED
+// ----------------------------------------------------------------------------
+// The 2025-era version of this file gated every wrapper on
+// BANISHED_REIMPL_SERIALIZER, defaulting OFF, so the shipped build tail-called
+// the DLL. That gate is gone and replaced by the wave switches
+// BANISHED_RT_IO / BANISHED_RT_SERIALIZER (runtime/src/io/rt_io_port.cpp),
+// which default ON. RtSerializer_ReimplEnabled() no longer exists.
+//
+// The kill switch has to be tested INSIDE each body rather than expressed by
+// "do not register", because path 2 above binds the dispatch slots
+// unconditionally from AddressRegistryInit(). With BANISHED_RT_SERIALIZER=0
+// nothing is registered, the internal flag stays false, and every one of these
+// functions tail-calls the shipped DLL — i.e. both paths are killed together.
 // ============================================================================
 
 #include <cstdint>
 
-namespace io { struct Serializer; struct Encoding; }
+#include "../../types/io/Serializer.h"
 
 extern "C" {
 
-// Returns true once if BANISHED_REIMPL_SERIALIZER is set to a non-"0"/"false"
-// value. Cached; cheap to call repeatedly. Exposed for tests/diagnostics.
-bool RtSerializer_ReimplEnabled();
+// ---- lifetime --------------------------------------------------------------
+// The ctor returns `this` in RAX, as every MSVC ctor does. It also CONSUMES OR
+// EMITS 12 BYTES of stream (see runtime/types/io/Serializer.h) — it is not a
+// cheap wrapper construction.
+rt::io::Serializer* RtSerializer_Ctor(rt::io::Serializer* self, rt::io::Stream* stream, int version);
+void                RtSerializer_Dtor(rt::io::Serializer* self);
 
-// ---- Forwarders matching the Runtime IO::Serializer signatures -------------
-// (this = IO::Serializer*; name = field-name C string, unused by binary codec)
-void  RtSerializer_Serialize_Int   (io::Serializer* self, int*      v,   const char* name);
-void  RtSerializer_Serialize_UInt  (io::Serializer* self, uint32_t* v,   const char* name);
-void  RtSerializer_Serialize_Float (io::Serializer* self, float*    v,   const char* name);
-void  RtSerializer_Serialize_Bool  (io::Serializer* self, bool*     v,   const char* name);
-void  RtSerializer_Serialize_UChar (io::Serializer* self, uint8_t*  v,   const char* name);
-void  RtSerializer_Serialize_IntArr   (io::Serializer* self, int count, int32_t*  data, const char* name);
-void  RtSerializer_Serialize_UShortArr(io::Serializer* self, int count, uint16_t* data, const char* name);
-void  RtSerializer_Serialize_ShortArr (io::Serializer* self, int count, int16_t*  data, const char* name);
-void  RtSerializer_Serialize_UCharArr (io::Serializer* self, int count, uint8_t*  data, const char* name);
-void  RtSerializer_SerializeBytes  (io::Serializer* self, int size, void* ptr, const char* name);
-int   RtSerializer_GetVersion      (io::Serializer* self);
-const io::Encoding* RtSerializer_GetEncoding(io::Serializer* self);
+// ---- accessors -------------------------------------------------------------
+int                     RtSerializer_GetVersion (rt::io::Serializer* self);
+const rt::io::Encoding* RtSerializer_GetEncoding(rt::io::Serializer* self);
+
+// ---- scalar forwarders (this, T&, name) ------------------------------------
+void RtSerializer_Serialize_Bool  (rt::io::Serializer* self, bool*     v, const char* name);
+void RtSerializer_Serialize_SChar (rt::io::Serializer* self, int8_t*   v, const char* name);
+void RtSerializer_Serialize_UChar (rt::io::Serializer* self, uint8_t*  v, const char* name);
+void RtSerializer_Serialize_Short (rt::io::Serializer* self, int16_t*  v, const char* name);
+void RtSerializer_Serialize_UShort(rt::io::Serializer* self, uint16_t* v, const char* name);
+void RtSerializer_Serialize_Int   (rt::io::Serializer* self, int32_t*  v, const char* name);
+void RtSerializer_Serialize_UInt  (rt::io::Serializer* self, uint32_t* v, const char* name);
+void RtSerializer_Serialize_Float (rt::io::Serializer* self, float*    v, const char* name);
+
+// ---- array forwarders (this, count, T*, name) ------------------------------
+// The char / signed char forms are here because two exe dispatch slots
+// (0x140152490 and 0x140152478) are real PE imports of them, even though no
+// ResolveExport site in the tree names them. See serializer.cpp.
+void RtSerializer_Serialize_CharArr  (rt::io::Serializer* self, int n, char*     d, const char* name);
+void RtSerializer_Serialize_SCharArr (rt::io::Serializer* self, int n, int8_t*   d, const char* name);
+void RtSerializer_Serialize_BoolArr  (rt::io::Serializer* self, int n, bool*     d, const char* name);
+void RtSerializer_Serialize_UCharArr (rt::io::Serializer* self, int n, uint8_t*  d, const char* name);
+void RtSerializer_Serialize_ShortArr (rt::io::Serializer* self, int n, int16_t*  d, const char* name);
+void RtSerializer_Serialize_UShortArr(rt::io::Serializer* self, int n, uint16_t* d, const char* name);
+void RtSerializer_Serialize_IntArr   (rt::io::Serializer* self, int n, int32_t*  d, const char* name);
+void RtSerializer_Serialize_UIntArr  (rt::io::Serializer* self, int n, uint32_t* d, const char* name);
+void RtSerializer_Serialize_FloatArr (rt::io::Serializer* self, int n, float*    d, const char* name);
+
+// ---- raw -------------------------------------------------------------------
+void RtSerializer_SerializeBytes(rt::io::Serializer* self, int size, void* ptr, const char* name);
 
 } // extern "C"
+
+// Wave 4 lane A registration hook, called from rt_io_port.cpp under
+// BANISHED_RT_SERIALIZER. Returns the number of exports registered.
+int RtIoSerializerRegister();

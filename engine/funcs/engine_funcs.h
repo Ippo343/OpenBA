@@ -1247,7 +1247,8 @@ extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
 // and that name does not exist in the DLL, so ResolveExport returned NULL and
 // this pointer stayed null (an EXEC-of-0 on the saved-scenario branch every
 // tutorial takes). engine_funcs.cpp:2575 fixed the RESOLVE on 2026-08-30 and
-// records why; this comment was left behind until Wave 4 lane D found it.
+// records why; this comment was left behind until Wave 4 lane C found it
+// (lane D found the identical defect on GetDataDirectory below, independently).
 // String and Filename are both one pointer, so the ABI never complained.
 typedef void* (*fn_Persistence_GetSavePath_t)(void* self, void* retval);
 extern fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath;

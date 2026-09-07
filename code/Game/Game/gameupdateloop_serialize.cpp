@@ -724,7 +724,10 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
 //
 // A load that dies inside a sub-serializer is almost always a *stream desync*
 // that started in an earlier section: one side wrote N bytes, the other read
-// M. There is no IO::Stream::Tell export, so dump the head of the stream
+// M. There is no Tell, but there IS ?GetCurrentPos@ on every concrete Stream
+// (vtable slot 5, +0x28): MemoryStream 0x1800ae9c0, CompressedStream
+// 0x1800aa850, FileStream 0x1800aac50 -- all exported. Failing that, dump the
+// head of the stream
 // object at each section boundary — whichever qword advances monotonically is
 // the cursor. Run once saving and once loading with the env var set and diff
 // the two traces: the first section where the cursors stop matching is the
@@ -1102,8 +1105,13 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     if (HdrTraceOn()) {
         fprintf(stderr, "[HdrTrace] LOAD achIBP self+0x150 raw=%016llx\n",
                 (unsigned long long)*(uint64_t*)(self + 0x150));
-        // Ground truth. The cursor lives at stream+0x1C (NOT the MemoryStream
-        // +0x24 in io_serializer.h -- this is a different stream class), so the
+        // Ground truth. The cursor lives at stream+0x1C. That is NOT a
+        // contradiction of io_serializer.h's MemoryStream +0x24: this object
+        // CONTAINS a MemoryStream at +0x68, so that cursor is live here at
+        // +0x8c. They measure different things -- +0x1c is
+        // CompressedStream::_position in the DECOMPRESSED stream, +0x8c is the
+        // embedded MemoryStream::_cursor in the COMPRESSED byte image. Full
+        // layout: runtime/types/io/Stream.h. So the
         // buffer pointer is one of the qwords in the object header. Find it by
         // testing which candidate has the town name we just read sitting at the
         // cursor the string read started from: that pins buffer AND proves
@@ -1232,7 +1240,11 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
         return;
     }
 
-    alignas(16) uint8_t cms[0x100];   // sizeof(CompressedMemoryStream) = 0x68 + MemoryStream
+    // sizeof(IO::CompressedMemoryStream) == 0x98, MEASURED: its deleting-dtor
+    // thunk (Runtime 0x1800244a0) passes 0x98 as the eh_vector_destructor
+    // stride. 0x68 CompressedStream base + 0x30 embedded MemoryStream at +0x68.
+    // Layout: runtime/types/io/Stream.h.
+    alignas(16) uint8_t cms[0x100];
     s_fn_CMS_Ctor(cms);
     if (save == 0) {
         s_fn_SavedState_Retrieve(savedState, s_fn_CMS_GetMemStream(cms));

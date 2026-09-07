@@ -47,7 +47,7 @@
 #include "../../funcs/rt_port.h"
 
 extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
-extern int RtIoStreamRegister();        // stream.cpp        (lane B)
+extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 
@@ -58,7 +58,7 @@ void RtIoPortInit() {
     }
     int n = 0;
     if (RtWaveEnabled("BANISHED_RT_SERIALIZER"))  n += RtIoSerializerRegister();
-    if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoStreamRegister();
+    if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     printf("[RtPort] IO: %d exports registered\n", n);

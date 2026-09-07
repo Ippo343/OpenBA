@@ -40,3 +40,12 @@ confirm against the retail DLL before porting one.
 
 - `serializer.cpp`
 - `serializer.h`
+- `compressedstream.cpp` — `IO::CompressedMemoryStream` (Wave 4 lane B)
+- `filesystem.cpp`, `filesystem_win.cpp` — `IO::FileSystem`, `IO::Modification` (Wave 4 lane D)
+- `persistence.cpp` — `IO::Persistence` (Wave 4 lane C)
+- `rt_io_port.cpp` — `RtIoPortInit()`, the wave entry point (not an original-tree file)
+
+Naming note: `compressedstream.cpp` was scaffolded as `stream.cpp` and renamed.
+The recovered tree has BOTH `IO\Stream.cpp` (the `IO::Stream` base) and
+`IO\CompressedStream.cpp`, so the original name would have collided with the
+base class's file when that gets ported.

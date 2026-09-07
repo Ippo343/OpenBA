@@ -1,0 +1,82 @@
+#pragma once
+// ============================================================================
+// runtime/types/io/Persistence.h — IO::Persistence (Wave 4, lane C)
+// ============================================================================
+//
+// Retail Runtime-x64.dll, image base 0x180000000. Layout is PARTIAL: only the
+// two fields this lane's five ported functions actually touch are pinned.
+// Everything else in the object is unknown and left as opaque padding — do
+// not extend this struct from a decompile without a static_assert, and do not
+// allocate a Persistence from this declaration; every instance this lane
+// deals with is the live DLL singleton (`?_singleton@Persistence@IO@@0PEAV12@EA`,
+// exported data, retail 0x1801fc6b8 — see WAVE4_LANE_C.md §"the singleton").
+//
+// FIELDS PINNED
+// -------------
+//   +0x00  root pointer of an in-memory Collection::Set<Pair<String,String>>
+//          holding every "section+key" -> "value" entry ever Get/Set this
+//          session (loaded from the registry by ReadSettings, flushed back by
+//          WriteSettings — neither ported by this lane, see the wave doc).
+//          Pinned by IO::Persistence::Get/Set (retail 0x1800b81e0, 0x1800b8290,
+//          0x1800b80c0, 0x1800b8380), every one of which passes `this` itself
+//          — not `this + N` — as the first argument to the shared internal
+//          helpers `Map_Find` (retail 0x18002ace0) and `Map_Insert` (retail
+//          0x18002a090), both of which read/write `*(void**)self` as the tree
+//          root. Map_Find/Map_Insert are NOT owned by this lane (see below).
+//   +0x90  System::String _savePath. Pinned by IO::Persistence::GetSavePath
+//          (retail 0x180007ad0): `if (*(longlong*)(this+0x90) != 0) { copy
+//          the pointer into the hidden return slot; ++refcount; }` — a plain
+//          ref-counted read of a String field, nothing else.
+//
+// Offsets 0x08..0x8F are UNKNOWN. ReadSettings/WriteSettings construct their
+// own `Registry` helper object on the STACK (`Registry::Registry(&local, 0)`),
+// not through a field of `this`, so whatever else lives in that gap is not
+// evidenced by any function this lane read. Held-back functions (see the wave
+// doc) may need it; a future lane extending this struct must repin it with
+// its own static_assert, not assume this comment's gap is empty.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "../system/String.h"
+
+namespace RtIo {
+
+struct Persistence {
+    void*            settingsMapRoot;  // +0x00 — Set<Pair<String,String>> root
+    uint8_t          _unknown[0x88];   // +0x08 .. +0x8F — NOT pinned, NOT modeled
+    RtSystem::String savePath;         // +0x90
+};
+static_assert(offsetof(Persistence, savePath) == 0x90,
+              "IO::Persistence::_savePath must sit at +0x90 (GetSavePath, retail 0x180007ad0)");
+
+// ----------------------------------------------------------------------------
+// The settings map's node — a PREFIX view only.
+// ----------------------------------------------------------------------------
+// Map_Find returns a node pointer whose first two qwords are the key and
+// value Strings (Persistence::Get reads `*(node+8)` as the value's `char*`;
+// Persistence::Set writes through the same offset). The node continues past
+// this with parent/left/right pointers at +0x10/+0x18/+0x20 — the exact
+// pattern WAVE3_LANE_A.md measured for Set<Pair<K,V>> generally
+// (`parent @ align8(sizeof K + sizeof V)`, then left, then right) — but this
+// lane never walks, inserts, or rebalances a node by hand, so those fields
+// are not declared here. Do not take sizeof(SettingsMapNode) as the real node
+// size; it is a PREFIX overlay onto memory Map_Find/Map_Insert own.
+//
+// Map_Find (retail 0x18002ace0) and Map_Insert (retail 0x18002a090) are
+// process-wide shared code, not Persistence-specific: MSVC folds every
+// `Set<Pair<String,String>, ...>` instantiation in the DLL into these same
+// two routines because both K and V are 8-byte String handles regardless of
+// the conceptual map. They belong to Collection::Set, a class no lane has
+// ported yet (PLAN.md §3.3, §4.3 risk 1), so this lane calls them BY ADDRESS
+// as opaque engine dependencies — exactly PLAN §6 step 3 ("resolve deps") —
+// rather than reimplementing AVL insert/find by hand, which would repeat the
+// "one BST for two node layouts" trap WAVE3_LANE_A.md and
+// reference_one_bst_find_two_node_layouts.md both warn about.
+struct SettingsMapNode {
+    RtSystem::String key;    // +0x00
+    RtSystem::String value;  // +0x08
+};
+static_assert(sizeof(SettingsMapNode) == 0x10, "SettingsMapNode prefix must be exactly key+value, 0x10 bytes");
+
+}  // namespace RtIo
