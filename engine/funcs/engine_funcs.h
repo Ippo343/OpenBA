@@ -1239,15 +1239,28 @@ extern fn_Audio_Scene_Update_t fn_Audio_Scene_Update;
 typedef void (*fn_SaveLoad_Update_t)(void* saveLoad, void* time);
 extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
 
-// IO::Persistence::GetSavePath(this, retval) -> Filename (non-trivial return ABI)
-// ?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ
-// MSVC x64 member: RCX=this, RDX=hidden_retval (Filename buffer)
+// IO::Persistence::GetSavePath(this, retval) -> String (non-trivial return ABI)
+// ?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ   (retail 0x180007ad0)
+// MSVC x64 member: RCX=this, RDX=hidden_retval (String buffer)
+// Was documented as "?GetSavePath@...@QEAA?AVFilename@System@@XZ", returning a
+// Filename. Both halves were wrong -- QEAA vs QEBA, and Filename vs String --
+// and that name does not exist in the DLL, so ResolveExport returned NULL and
+// this pointer stayed null (an EXEC-of-0 on the saved-scenario branch every
+// tutorial takes). engine_funcs.cpp:2575 fixed the RESOLVE on 2026-08-30 and
+// records why; this comment was left behind until Wave 4 lane D found it.
+// String and Filename are both one pointer, so the ABI never complained.
 typedef void* (*fn_Persistence_GetSavePath_t)(void* self, void* retval);
 extern fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath;
 
-// IO::FileSystem::GetDataDirectory(this, retval) -> String (non-trivial return ABI)
-// ?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ
-// MSVC x64 member: RCX=this, RDX=hidden_retval (String buffer)
+// IO::FileSystem::GetDataDirectory(this, retval) -> Filename (non-trivial return ABI)
+// ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  (retail 0x180007bd0)
+// MSVC x64 member: RCX=this, RDX=hidden_retval (Filename buffer)
+// Was documented as "?GetDataDirectory@...@QEBAAEBVString@System@@XZ", a
+// reference-returning String overload that DOES NOT EXIST in the DLL -- the sole
+// export returns Filename BY VALUE. Same defect and same 2026-08-30 fix as
+// GetSavePath above (engine_funcs.cpp:2575); only the comment was stale.
+// The hidden return slot IS correctly declared below -- audited by Wave 4
+// lane D, 0 suspicious of 49 (tools/abi_retslot_audit.py).
 typedef void* (*fn_FileSystem_GetDataDirectory_t)(void* self, void* retval);
 extern fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory;
 
