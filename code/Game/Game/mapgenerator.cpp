@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Locally resolved function pointers (not in shared engine_funcs.h)
@@ -197,12 +199,26 @@ void MapGenerator_Init(MapGenerator* self) {
 // start-condition data (citizen families, structures, resource/cull lists, env
 // template refs) is actually present for the start-town ECS spawn.
 //
-// FRESH-LOAD ASSUMPTION: Serialize runs once on a freshly-constructed
-// MapGenerator (Init zeroed every count/cap/ptr). So the exe array-resize
-// helpers (FUN_14001b270/340/4e0/6c0) collapse to "alloc count*stride + init
-// each element" — the copy/destruct (grow/shrink) paths never execute. See
-// MG_AllocArray below. (If Serialize were ever re-run on a populated generator,
-// the old buffers would leak; not a concern for new-game load.)
+// SERIALIZE RUNS MORE THAN ONCE. Object::External::Load re-invokes Serialize on an
+// ALREADY-LOADED external on every ExternalFactory::FindOrLoad, so a MapGenerator
+// parsed for the New Game combo box is parsed AGAIN when anything else re-requests
+// StartConditions.rsc (the tutorial's ScenarioDialog does). The second pass does not
+// write the pool names back, so anything this function clears before the element
+// vcall is what survives. That is exactly what emptied every start-condition pool
+// after a tutorial: an earlier version allocated a FRESH buffer and zeroed each
+// element on every pass, and the next generated world scattered no resources and
+// placed no structures ([startTown::res] name="(null)").
+// Same family as CreatePlacedDescription::Serialize / _placeBitArray.
+//
+// Retail's shape, which MG_Resize/MG_Serialize* below reproduce:
+//   * the count goes through a LOCAL seeded from the struct's current count;
+//   * the resize runs ONLY on the load leg (`*(int*)(*(void**)serializer + 8) == 0`);
+//   * the resize is a complete NO-OP when the new count equals the old one
+//     (FUN_14001b270/340/4e0 all start `if (newCount != oldCount)`), so a re-parse
+//     of the same .rsc never touches an element;
+//   * only elements PAST the old count are default-initialized; existing ones —
+//     including the resolved-template cache at +0x10 — are preserved verbatim;
+//   * the element loop then serializes each element IN PLACE, zeroing nothing.
 //
 // RESOLVE DEFERRED: the original resolves each ExternalRef name to a template
 // during deserialize (FUN_14001b1d0). We SKIP that here — every start-town
@@ -213,40 +229,118 @@ void MapGenerator_Init(MapGenerator* self) {
 // Stream order mirrors the original 0x1400a2980 EXACTLY (note the non-monotonic
 // tail: +0x118, +0x138, +0x130, +0x150, +0x158, +0x170).
 namespace {
-// Fresh-load dynamic array: set header {ptr@0, count@8, cap@0xC} and allocate
-// count*stride bytes. Returns the new buffer (uninitialized — caller inits).
-void* MG_AllocArray(void* header, int count, int stride) {
+// True on the LOAD leg. The Serializer's FIRST qword is the Stream, and Stream+8
+// is its mode — 0 means loading. NOT serializer+8, which is the encoding.
+bool MG_IsLoading(void* serializer) {
+    void* stream = *(void**)serializer;
+    return stream && *(int32_t*)((uint8_t*)stream + 8) == 0;
+}
+
+// Faithful port of the exe's three array-resize helpers: FUN_14001b270 (stride 8,
+// InitialFamily), FUN_14001b340 (stride 0x18, ExternalRef) and FUN_14001b4e0
+// (stride 0x30, InitialStructure). Header is {void* data@0; int count@8; int cap@0xc}.
+//
+// `initElem` default-constructs ONE new element; it is called only for indices at
+// or past the old count. Elements that already exist are carried over byte-wise
+// (a move: the destination takes over the source's String buffer, so the old array
+// is freed without destroying its strings — retail copy-constructs and then runs
+// ~String on the source, which has the same net effect).
+void MG_Resize(void* header, int newCount, int stride, void (*initElem)(uint8_t*)) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8)   = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
-    return buf;
+    const int oldCount = *(int32_t*)(h + 8);
+    if (newCount == oldCount) return;          // the load-bearing early-out
+    uint8_t* oldBuf = *(uint8_t**)h;
+    *(int32_t*)(h + 8) = newCount;
+    uint8_t* buf = oldBuf;
+    if (*(int32_t*)(h + 0xc) < newCount) {
+        int cap = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;  // growth rule
+        *(int32_t*)(h + 0xc) = cap;
+        buf = (fn_MemAlloc && g_pMemAllocSingleton)
+              ? reinterpret_cast<uint8_t*>(
+                    fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * (uint32_t)stride, 8))
+              : nullptr;
+        *(void**)h = buf;
+    }
+    if (!buf) return;
+    const int firstNew = (buf == oldBuf) ? oldCount : 0;
+    for (int i = firstNew; i < newCount; ++i) {
+        uint8_t* d = buf + (size_t)i * (uint32_t)stride;
+        if (i < oldCount && oldBuf) std::memcpy(d, oldBuf + (size_t)i * (uint32_t)stride, stride);
+        else                        initElem(d);
+    }
+    if (buf != oldBuf && oldBuf && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
 }
-// Read a count int from the stream into *countField; return it.
-int MG_ReadCount(void* serializer, void* countField) {
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, countField, nullptr);
-    return *(int32_t*)countField;
+
+// Element default-constructors (the `else` arms of the three resize helpers).
+void MG_InitFamily(uint8_t* e) {           // stride 8: bool _educated@0, int _maxChildCount@4
+    *e = 0;
+    *(int32_t*)(e + 4) = 0;
 }
-// Read a pool of ExternalRef entries (stride 0x18: String@0, gen@8=-1, ptr@0x10=0).
-// header/countField are the array header and its count int in the struct.
+void MG_InitRef(uint8_t* e) {              // stride 0x18: String@0, gen@8, resolved@0x10
+    *(uint64_t*)e          = 0;
+    *(int32_t*)(e + 8)     = -1;
+    *(uint64_t*)(e + 0x10) = 0;
+}
+void MG_InitStructure(uint8_t* e) {        // stride 0x30: ExternalRef + placement ints
+    MG_InitRef(e);
+    *(uint64_t*)(e + 0x18) = 0;                        // _offsetX, _offsetY
+    *(uint64_t*)(e + 0x20) = 0xFFFFFFFFFFFFFFFFULL;    // _width = _height = -1
+    *(int32_t*)(e + 0x28)  = 0;                        // _rotation
+}
+
+// Serialize a count the way retail does: through a LOCAL seeded from the struct,
+// resizing only on the load leg. Returns the count to iterate.
+int MG_SerializeCount(void* serializer, void* header, void* countField,
+                      int stride, void (*initElem)(uint8_t*)) {
+    int n = *(int32_t*)countField;
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &n, nullptr);
+    if (MG_IsLoading(serializer)) MG_Resize(header, n, stride, initElem);
+    return n;
+}
+
+// A pool of ExternalRef entries (stride 0x18). header/countField are the array
+// header and its count int in the struct.
 void MG_ReadRefPool(void* serializer, void* header, void* countField) {
-    int n = MG_ReadCount(serializer, countField);
-    uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(header, n, 0x18));
+    const int n = MG_SerializeCount(serializer, header, countField, 0x18, &MG_InitRef);
+    uint8_t* e = *(uint8_t**)header;
+    if (!e) return;
     for (int i = 0; i < n; ++i, e += 0x18) {
-        *(uint64_t*)e        = 0;            // String (empty)
-        *(int32_t*)(e + 8)   = -1;           // factory generation (unresolved)
-        *(uint64_t*)(e + 0x10) = 0;          // resolved template ptr
-        if (g_fn_String_Serialize) g_fn_String_Serialize(e, serializer);  // read name
+        if (g_fn_String_Serialize) g_fn_String_Serialize(e, serializer);  // in place
     }
 }
 } // namespace
 
+// [diag] BANISHED_MAPGEN_TRACE=1 -- an ENTER and an EXIT line per Serialize pass
+// per instance, with the resource pool's first three names. This is what caught the
+// post-tutorial empty world: pass 1 (the New Game combo) printed the three
+// Template\NaturalResource*.rsc names and pass 2 (the tutorial's ScenarioDialog
+// re-requesting StartConditions.rsc) printed "(null) | (null) | (null)". Keep it --
+// a second pass wiping already-parsed data is silent everywhere else.
+static int MapGen_TraceOn() {
+    static int on = -1;
+    if (on < 0) { const char* e = std::getenv("BANISHED_MAPGEN_TRACE");
+                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return on;
+}
+
 void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    int passNo = 0;
+    if (MapGen_TraceOn()) {
+        // pass counter kept in a tiny fixed table keyed on the instance pointer
+        static void* seen[64]; static int cnt[64]; static int nSeen = 0;
+        int i = 0;
+        for (; i < nSeen; ++i) if (seen[i] == self) break;
+        if (i == nSeen && nSeen < 64) { seen[nSeen] = self; cnt[nSeen] = 0; ++nSeen; }
+        if (i < 64) passNo = ++cnt[i];
+        fprintf(stderr, "[MapGen] Serialize ENTER self=%p pass=%d stream=%p "
+                "resArr@0x70=%p cnt=%d name@0x28=%p\n",
+                (void*)self, passNo, stream, *(void**)(s + 0x70),
+                *(int32_t*)(s + 0x78), *(void**)(s + 0x28));
+        fflush(stderr);
+    }
     uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_String_Serialize || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
@@ -266,10 +360,9 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        int n = MG_ReadCount(serializer, s + 0x68);
-        uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(s + 0x60, n, 8));
-        for (int i = 0; i < n; ++i, e += 8) {
-            *(uint64_t*)e = 0;
+        const int n = MG_SerializeCount(serializer, s + 0x60, s + 0x68, 8, &MG_InitFamily);
+        uint8_t* e = *(uint8_t**)(s + 0x60);
+        for (int i = 0; e && i < n; ++i, e += 8) {
             g_fn_Serialize_Bool(serializer, e, nullptr);        // _educated
             g_fn_Serialize_Int(serializer, e + 4, nullptr);     // _maxChildCount
         }
@@ -281,15 +374,9 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     // --- _structures: InitialStructure[] (stride 0x30: String@0, gen@8, ptr@0x10,
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
-        int n = MG_ReadCount(serializer, s + 0x88);
-        uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(s + 0x80, n, 0x30));
-        for (int i = 0; i < n; ++i, e += 0x30) {
-            *(uint64_t*)e          = 0;          // String (empty)
-            *(int32_t*)(e + 8)     = -1;         // gen
-            *(uint64_t*)(e + 0x10) = 0;          // ptr
-            *(uint64_t*)(e + 0x18) = 0;          // _offsetX, _offsetY
-            *(uint64_t*)(e + 0x20) = 0xFFFFFFFFFFFFFFFFULL;  // _width=-1, _height=-1
-            *(int32_t*)(e + 0x28)  = 0;          // _rotation
+        const int n = MG_SerializeCount(serializer, s + 0x80, s + 0x88, 0x30, &MG_InitStructure);
+        uint8_t* e = *(uint8_t**)(s + 0x80);
+        for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
             g_fn_String_Serialize(e, serializer);            // _structure ref name
             g_fn_Serialize_Int(serializer, e + 0x18, nullptr);  // _offsetX
             g_fn_Serialize_Int(serializer, e + 0x1c, nullptr);  // _offsetY
@@ -330,6 +417,17 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     g_fn_String_Serialize(s + 0x158, serializer);       // descRef3 (vegetation)
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x170), nullptr);
 
+    if (MapGen_TraceOn()) {
+        uint8_t* pool = *(uint8_t**)(s + 0x70);
+        fprintf(stderr, "[MapGen] Serialize EXIT  self=%p pass=%d resArr=%p cnt=%d "
+                "names=[%.32s | %.32s | %.32s] name@0x28=\"%.24s\"\n",
+                (void*)self, passNo, (void*)pool, *(int32_t*)(s + 0x78),
+                (pool && *(int32_t*)(s+0x78) > 0 && *(char**)(pool))        ? *(char**)(pool)        : "(null)",
+                (pool && *(int32_t*)(s+0x78) > 1 && *(char**)(pool+0x18))   ? *(char**)(pool+0x18)   : "(null)",
+                (pool && *(int32_t*)(s+0x78) > 2 && *(char**)(pool+0x30))   ? *(char**)(pool+0x30)   : "(null)",
+                *(char**)(s + 0x28) ? *(char**)(s + 0x28) : "(null)");
+        fflush(stderr);
+    }
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
     return;
 }

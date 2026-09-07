@@ -1,16 +1,68 @@
 # A new game started after a tutorial builds a world with no models
 
-**Status: OPEN. Reproduced, localised, PRE-EXISTING (not the Runtime port).**
-Found 2026-09-07 by the user during Wave 6; investigated at the Wave 6 close.
+**Status: CLOSED 2026-09-07.** One defect in `MapGenerator::Serialize`. Pre-existing, not the
+Runtime port. Found 2026-09-07 by the user during Wave 6; localised at the Wave 6 close and
+root-caused the same day.
 
 ## Symptom
 
-Start a tutorial, quit it to the main menu, start a New Game. The new world has terrain, water and
+Start a tutorial, quit it to the main menu, start a New Game. The new world had terrain, water and
 the citizens' status icons, and **no trees, no rocks, no ore, no buildings, no citizen models**.
 
-`new -> quit -> new` is CLEAN. The tutorial is what poisons the next world — which matters,
-because a tutorial is a **loaded retail save** and a new game is a **generated world**, so they
-tear down through different paths.
+`new -> quit -> new` was CLEAN. Only a tutorial first reproduced it.
+
+## Root cause
+
+`MapGenerator::Serialize` (`code/Game/Game/mapgenerator.cpp`, exe `0x1400a2980`) reads the
+start-condition data: the citizen-family list, the initial-structure list, and six ExternalRef
+pools (scattered resources, cull lists, agriculture plants/trees/livestock, env templates).
+
+Our port carried a **FRESH-LOAD ASSUMPTION**: it allocated a brand-new element buffer on every
+pass and zeroed each element before serializing it. That assumption is false. Retail's
+`Object::External::Load` re-invokes `Serialize` on an **already-loaded** external on every
+`ExternalFactory::FindOrLoad`, and the second pass does not write the names back — so the zero we
+had just stored is what survived. Every pool came back with a null name String.
+
+The tutorial is what triggers the second pass: `ScenarioDialog` re-requests `StartConditions.rsc`.
+A plain `new -> quit -> new` never asks twice, which is exactly why it was clean.
+
+Downstream, `StartTown_SpawnResources` logged `[startTown::res] begin [0] name="(null)"`,
+`StartTown_ResolveTemplate` returned null for all three pools, and the world was generated with no
+scattered resources, no initial structures and no starting herd. Nothing was wrong with the
+meshes, the scene, the LOD pick or the draw path — the entities were never created.
+
+Same family as `reference_createplaced_placebitarray_zeroed_by_reparse.md` (`_placeBitArray`).
+
+## The fix
+
+The three exe array-resize helpers were read out of Ghidra and ported faithfully:
+`FUN_14001b270` (stride 8, `InitialFamily`), `FUN_14001b340` (stride 0x18, `ExternalRef`) and
+`FUN_14001b4e0` (stride 0x30, `InitialStructure`). All three begin with
+
+```c
+if (newCount != oldCount) { ... }
+```
+
+so a re-parse of the same `.rsc` — where the count is unchanged — **does nothing at all**: no
+realloc, no re-init, existing elements (including the resolved-template cache at `+0x10`) untouched.
+When the count does change, only elements past the old count are default-constructed.
+
+`MapGenerator::Serialize` now mirrors retail on all four points:
+
+* the count goes through a **local** seeded from the struct's current count, not straight into the
+  struct field;
+* the resize runs **only on the load leg** (`*(int*)(*(void**)serializer + 8) == 0`);
+* the resize is a no-op at equal counts (above);
+* the element loops serialize **in place** and zero nothing.
+
+## Diagnostics added
+
+* `BANISHED_MAPGEN_TRACE=1` — an ENTER and an EXIT line per `MapGenerator::Serialize` pass per
+  instance, with the resource pool's first three names. This is the probe that settled it: pass 1
+  printed the three `Template\NaturalResource*.rsc` names, pass 2 printed
+  `(null) | (null) | (null)`.
+* `BANISHED_MODEL_TRACE=<n>` now takes the log budget as its value (was a fixed 96 lines, which a
+  ~16k-model world exhausts long before a second world).
 
 ## Repro (unattended)
 
@@ -23,53 +75,21 @@ BANISHED_SCREENSHOT_AT=1000 ./reimpl-x64.exe
 
 `BANISHED_AUTOSTART_GAMES` alongside `BANISHED_AUTOTUTORIAL` was added for this bug
 (`standalone/autostart.cpp`): after the tutorial's Load click the driver rearms, so a
-quit-to-menu (`PAUSEMENU_BUTTON=5`) is followed by a New Game. The old games-loop could only
-express `new -> quit -> new`, which does not reproduce it.
+quit-to-menu (`PAUSEMENU_BUTTON=5`) is followed by a New Game.
 
 The screenshot lands in the SECOND world only if the frame is late enough — the counter is
-process-wide across worlds, and world 2 starts around frame 737, so use 1000, not 700.
-Convert with `tools/bmp2png.py <in.bmp> <out.png> 3`.
+process-wide across worlds, and world 2 starts around frame 737, so use 1000, not 700. Screenshots
+land in `~/Documents/Banished/Screenshots/`; convert with `tools/bmp2png.py <in.bmp> <out.png> 3`.
 
-## What is measured
+## Verification
 
 `BANISHED_LOD_CENSUS=1`, same sequence, camera pinned:
 
-| World | meshInstances | drawItems |
+| World | meshInstances | before |
 |---|---|---|
-| A direct new game | **16,137** | 1,341 |
-| A new game after a tutorial | **12** | 159 |
+| A direct new game | 16,133 | 16,137 |
+| A new game after a tutorial | **16,137** | **12** |
 
-**The models are never added to the scene.** This is not culling, not the LOD pick, and not the
-draw submission — the world is genuinely built without them. Terrain renders because terrain is
-its own path; the status icons render because they are sprites, not meshes.
-
-## Ruled out
-
-* **The Runtime port (Wave 6) is NOT the cause.** With `BANISHED_RT_GRAPHICS=0 BANISHED_RT_VIDEO=0`
-  — the whole wave's kill switch — the post-tutorial world is byte-for-byte the same empty scene.
-  Screenshots of both arms are indistinguishable.
-* Not the `Geometry::Attach`/`Detach` phantom-name fix either: that fix is live in both arms
-  (the `BANISHED_RT_*` switches do not disable it), and a third arm with it reverted also matches.
-
-## Where to look next
-
-Something with **process lifetime** survives the tutorial's teardown in a state that stops the next
-world from creating model geometry. The shape to suspect is a cache or table that the tutorial
-world's teardown frees or empties while a process-lifetime owner still points at it — the same
-family as `reference_lazy_init_guard_also_matches_restored.md` and
-`reference_rawmaterial_startup_slot4_never_installed.md` (a registry that only ever gets its
-entries once).
-
-Concretely, in rough order of suspicion:
-
-1. The `Object::ExternalFactory` / `External` resource table — descriptions and `GraphicsMesh` /
-   `Material` externals are `FindOrLoad`ed and process-lifetime. Wave 3 deliberately did NOT port
-   `ExternalFactory::Clean`, so retail's own `Clean` runs at teardown; if it drops entries a
-   generated world then re-requests, the second world gets null meshes.
-2. Whatever the tutorial's save-load path installs that a generated world does not
-   (`ScenarioDialog::LoadSelected` swaps `persistence+0x90` to the data directory — if that is not
-   swapped back, a new game may look for its resources in the wrong place).
-3. The description/type-id caches the exe keeps across worlds.
-
-A cheap first probe: log `FindOrLoad` results for `GraphicsMesh` in world 2 and see whether it
-returns null or an empty mesh, which separates "never asked" from "asked and got nothing".
+The post-tutorial world 2 now spawns exactly what a direct new game does — 8 structures,
+24 citizens, 15,512 scattered resources, 982 environment entities and the 8-head starting herd —
+and the direct-new-game path is unchanged.

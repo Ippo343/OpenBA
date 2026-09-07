@@ -395,13 +395,18 @@ void ModelComponent_Serialize(ModelComponent* self) {
     // dispatch happened at all and, crucially, whether SetMesh left the embedded
     // MeshInstance with a NODE ARRAY (+0x28+0xf0). A null node array there is the
     // exact state EdgeMeshInstance::Draw faults on (tool_base_render.cpp guard).
+    // The budget is the numeric value of BANISHED_MODEL_TRACE (default 96). A world
+    // holds ~16k models, so the process-wide default cannot reach a SECOND world --
+    // pass a large value when diffing world 1 against world 2.
     static int s_mcTrace = -1;
+    static int s_mcBudget = 96;
     if (s_mcTrace < 0) {
         const char* e = std::getenv("BANISHED_MODEL_TRACE");
         s_mcTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+        if (s_mcTrace) { int v = atoi(e); if (v > 1) s_mcBudget = v; }
     }
     static int s_serLog = 0;
-    if (s_mcTrace && s_serLog < 96) {
+    if (s_mcTrace && s_serLog < s_mcBudget) {
         ++s_serLog;
         fprintf(stderr, "[ModelTrace] Startup self=%p desc=%p variantIdx=%d "
                 "modelVariant=%d groups@+0x20=%p groupCount@+0x28=%u mesh=%p nodes@+0xf0=%p\n",
