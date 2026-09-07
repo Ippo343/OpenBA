@@ -141,7 +141,8 @@ tag by one on every mod-warning shown, and left the block's size field claiming 
 allocation that walked past it faulted.
 
 Retail (`0x1400b61e0`) does no such thing — it copies the InternalPtr into a scratch slot, hands
-`ShowDialog` the copy (it takes its argument by value and writes through the slot it is given),
+`ShowDialog` the copy (it takes its argument by value, so under the MSVC x64 convention the
+CALLER owns and destroys the copy; the callee only reads the slot),
 and releases the original with `InternalBasePtr::DeletePtr`:
 
 ```c
@@ -156,6 +157,17 @@ was not luck. Mounting the mod makes `CheckMod` return 0, which skips the whole 
 which skips this line.
 
 ---
+
+**Correction, Wave 7 lane C (2026-09-07), from reading the body rather than inferring it.**
+This clause used to end "and writes through the slot it is given". The by-value half is
+right and the caller-side fix built on it is right and unchanged; the writes-through half is
+not. `?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z`
+(0x18011fd10) only READS `*param_2`, four times — setting `dialog+0x10` to the nested UI,
+ORing flag bit 5 into `dialog+0x20`, pushing it onto the nested `_addDialogs`, and walking
+the nested list for it in the frame loop — then reads `*(int*)(*param_2 + 0x24)` as the
+return value. It never stores to the slot. What the retail caller at exe 0x1400b61e0 is
+honouring is the by-value convention, not a callee write-back. Nothing about root cause B,
+the fix, or the `BANISHED_MODAL_ANSWER` escape changes.
 
 ## 3. Root cause C — the load path never ran `GameContainer_EnsureLists`
 

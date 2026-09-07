@@ -268,6 +268,7 @@ void RuntimePortInit() {
     RtPickingPortInit();  // Wave 5: Picking
     RtVideoPortInit();    // Wave 6: Video
     RtGraphicsPortInit(); // Wave 6: Graphics
+    RtUiPortInit();       // Wave 7: UI
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.

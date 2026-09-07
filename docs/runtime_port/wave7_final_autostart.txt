@@ -1,0 +1,456 @@
+[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
+[RtDiff] site[0] @00007ff7588d4fc0 = Video::Context::Clear[slot]
+[RtDiff] site[1] @00007ff7588d4fe0 = Video::Context::DrawIndexed[slot]
+[RtDiff] site[2] @00007ff7588d5000 = Video::Context::GetMaxDynamicInstances[slot]
+[RtDiff] site[3] @00007ff7588d5020 = Video::Context::BeginVertices[slot]
+[RtDiff] site[4] @00007ff7588d5040 = Video::Context::EndVertices[slot]
+[RtDiff] site[5] @00007ff7588d5060 = Video::Context::BeginIndexedVertices[slot]
+[RtDiff] site[6] @00007ff7588d5080 = Video::Context::EndIndexedVertices[slot]
+[RtDiff] site[7] @00007ff7588d50a0 = Video::Context::BeginInstancedIndexedVertices[slot]
+[RtDiff] site[8] @00007ff7588d50c0 = Video::Context::EndInstancedIndexedVertices[slot]
+[RtDiff] site[9] @00007ff7588d43c0 = UI::Element::ComputeLayout[thunk]
+[RtDiff] site[10] @00007ff7588d43e0 = UI::Element::Draw[thunk]
+[RtDiff] site[11] @00007ff7588d40e0 = UI::DialogInstance::OnUpdateLayout[shape]
+[RtDiff] site[12] @00007ff7588d4100 = UI::DialogInstance::OnUpdate[shape]
+[RtDiff] site[13] @00007ff7588d4120 = UI::DialogInstance::OnElementEvent[shape]
+[RtDiff] site[14] @00007ff7588d4140 = UI::DialogController::~DialogController[shape]
+[RtDiff] site[15] @00007ff7588d3a20 = Object::BaseTypeInfo::BaseTypeInfo
+[RtDiff] site[16] @00007ff7588d3de0 = System::operator+(String,String)
+[RtDiff] site[17] @00007ff7588d3e00 = System::operator+(String,char*)
+[RtDiff] site[18] @00007ff7588d5120 = Video::Device::GetMultisampleModeCount
+[RtDiff] site[19] @00007ff7588d5140 = Video::Device::IsMultisampleModeSupported
+[RtDiff] site[20] @00007ff7588d23a0 = Achievement::Goal::Goal
+[RtDiff] site[21] @00007ff7588d4400 = UI::Sprite::Sprite()
+[RtDiff] site[22] @00007ff7588d39c0 = Object::Factory::GetTypeIdFromName
+[RtDiff] site[23] @00007ff7588d39a0 = Object::Base::IsDerivedFrom
+[RtDiff] site[24] @00007ff7588d4bc0 = Video::ImageBuffer::Width
+[RtDiff] site[25] @00007ff7588d4be0 = Video::ImageBuffer::Height
+[RtDiff] site[26] @00007ff7588d4c80 = Video::ImageBuffer::IsGenerated
+[RtDiff] site[27] @00007ff7588d4cc0 = Video::ImageBuffer::IsRendered
+[RtDiff] site[28] @00007ff7588d4c20 = Video::ImageBuffer::IsCompressed
+[RtDiff] site[29] @00007ff7588d4c00 = Video::ImageBuffer::GetLevelCount
+[RtDiff] site[30] @00007ff7588d4c40 = Video::ImageBuffer::IsDepthBuffer
+[RtDiff] site[31] @00007ff7588d4ca0 = Video::ImageBuffer::IsRenderBuffer
+[RtDiff] site[32] @00007ff7588d4420 = UI::Sprite::Sprite(sheet,name)
+[RtDiff] site[33] @00007ff7588d2e40 = IO::Persistence::Get(int&)
+[RtDiff] site[34] @00007ff7588d2e60 = IO::Persistence::Get(bool&)
+[RtDiff] site[35] @00007ff7588d3160 = IO::Serializer::Serializer(Stream&,int)
+[RtDiff] site[36] @00007ff7588d2f80 = IO::Serializer::Serialize(int&)
+[RtDiff] site[37] @00007ff7588d2ee0 = IO::Serializer::Serialize(bool&)
+[RtDiff] site[38] @00007ff7588d37e0 = Object::ExternalFactory::Find
+[RtDiff] site[39] @00007ff7588d3dc0 = System::Filename::GetPathIdentifer
+[RtDiff] site[40] @00007ff7588d3180 = IO::Serializer::~Serializer [not diffable]
+[RtDiff] site[41] @00007ff7588d3140 = IO::Serializer::GetEncoding
+[RtDiff] site[42] @00007ff7588d37c0 = Object::ExternalFactory::IsReferenceModeEnabled
+[RtDiff] site[43] @00007ff7588d3a00 = Object::Type::Serialize [not diffable]
+[RtDiff] site[44] @00007ff7588d2fc0 = IO::Serializer::Serialize(float&)
+[RtDiff] site[45] @00007ff7588d3100 = IO::Serializer::SerializeBytes
+[RtDiff] site[46] @00007ff7588d36c0 = Math::Vector3::FromYawPitch
+[RtDiff] site[47] @00007ff7588d3e40 = System::String::operator==(char*)
+[RtDiff] site[48] @00007ff7588d3e80 = System::String::SubString
+[RtDiff] site[49] @00007ff7588d3120 = IO::Serializer::GetVersion
+[RtDiff] site[50] @00007ff7588d2540 = Graphics::AnimationEvent::AnimationEvent()
+[RtDiff] site[51] @00007ff7588d30e0 = IO::Serializer::Serialize(n,float*)
+[RtDiff] site[52] @00007ff7588d2340 = Achievement::Achievement::ctor
+[RtDiff] site[53] @00007ff7588d2360 = Achievement::Achievement::GetFileVersion
+[RtDiff] site[54] @00007ff7588d38c0 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+[RtDiff] site[55] @00007ff7588d3fe0 = UI::DialogInstance::FindElement
+[RtDiff] site[56] @00007ff7588d41e0 = UI::Element::FindElement
+[RtDiff] site[57] @00007ff7588d4760 = UI::UserInterface::SetFullscreenFadeSprite
+[RtDiff] site[58] @00007ff7588d4740 = UI::UserInterface::SetFullscreenFade
+[RtDiff] site[59] @00007ff7588d4ee0 = Video::Context::SetRenderBuffer
+[RtDiff] site[60] @00007ff7588d4e80 = Video::Context::SetViewport
+[RtDiff] site[61] @00007ff7588d4ec0 = Video::Context::SetVertexBuffer
+[RtDiff] site[62] @00007ff7588d3f00 = System::Random::Rand(uint)
+[RtDiff] site[63] @00007ff7588d31c0 = Math::Transform::Transform()
+[RtDiff] site[64] @00007ff7588d3420 = Math::Transform3::Identity()
+[RtDiff] site[65] @00007ff7588d52a0 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+[RtDiff] site[66] @00007ff7588d2900 = Graphics::Camera::Camera
+[RtDiff] site[67] @00007ff7588d28e0 = Graphics::Camera::SetFrustum
+[RtDiff] site[68] @00007ff7588d3260 = Math::Matrix::operator*(const Matrix&)
+[RtDiff] site[69] @00007ff7588d2a60 = Graphics::Geometry::Geometry()
+[RtDiff] site[70] @00007ff7588d4d60 = Video::VertexBuffer::VertexBuffer
+[RtDiff] site[71] @00007ff7588d4d40 = Video::IndexBuffer::IndexBuffer
+[RtDiff] site[72] @00007ff7588d3080 = IO::Serializer::Serialize(n,ushort*)
+[RtDiff] site[73] @00007ff7588d4dc0 = Video::VertexBuffer::Create
+[RtDiff] site[74] @00007ff7588d4de0 = Video::VertexBuffer::Set
+[RtDiff] site[75] @00007ff7588d4d80 = Video::IndexBuffer::Create
+[RtDiff] site[76] @00007ff7588d4da0 = Video::IndexBuffer::Set
+[RtDiff] site[77] @00007ff7588d3060 = IO::Serializer::Serialize(n,short*)
+[RtDiff] site[78] @00007ff7588d3040 = IO::Serializer::Serialize(n,uchar*)
+[RtDiff] site[79] @00007ff7588d2f20 = IO::Serializer::Serialize(uchar&)
+[RtDiff] site[80] @00007ff7588d30a0 = IO::Serializer::Serialize(n,int*)
+[RtDiff] site[81] @00007ff7588d4ba0 = Video::ImageBuffer::ImageBuffer
+[RtDiff] site[82] @00007ff7588d4d20 = Video::ImageBuffer::Create
+[RtDiff] site[83] @00007ff7588d4ce0 = Video::ImageBuffer::CopyToTexture
+[RtDiff] site[84] @00007ff7588d4c60 = Video::ImageBuffer::IsDynamic
+[RtDiff] site[85] @00007ff7588d37a0 = Object::External::GetPath
+[RtDiff] site[86] @00007ff7588d2fa0 = IO::Serializer::Serialize(uint&)
+[RtDiff] site[87] @00007ff7588d2980 = Graphics::Renderer::Renderer
+[RtDiff] site[88] @00007ff7588d2be0 = Graphics::Scene::Scene()
+[RtDiff] site[89] @00007ff7588d2780 = Graphics::MeshInstance::MeshInstance()
+[RtDiff] site[90] @00007ff7588d2740 = Graphics::MeshInstance::SetMesh
+[RtDiff] site[91] @00007ff7588d2700 = Graphics::MeshInstance::UpdateHierarchy
+[RtDiff] site[92] @00007ff7588d2c60 = Graphics::Scene::AddGlobalObject
+[RtDiff] site[93] @00007ff7588d3480 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+[RtDiff] site[94] @00007ff7588d2ac0 = Graphics::Geometry::SetTransform
+[RtDiff] site[95] @00007ff7588d2660 = Graphics::GraphicsMesh::GetMaterialList
+[RtDiff] site[96] @00007ff7588d2720 = Graphics::MeshInstance::SetMaterialInstance
+[RtDiff] site[97] @00007ff7588d2c20 = Graphics::Scene::AddObject
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #137  ours=+0xc: e2 0f 2f 3f 81 b6 e3 c1  theirs=+0xc: e3 0f 2f 3f 81 b6 e3 c1
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #289  ours=+0xc: 5a af 2e 3f f2 5c 15 43  theirs=+0xc: 5b af 2e 3f f2 5c 15 43
+[RtDiff] DIVERGENCE Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)  call #648  ours=+0xc: 7a b3 30 3f 25 4c e1 41  theirs=+0xc: 7b b3 30 3f 25 4c e1 41
+[RtDiff] Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&): further divergences counted only
+[RtDiff] site[98] @00007ff7588d2640 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
+[RtDiff] site[99] @00007ff7588d4a40 = UI::ImageElement::SetRotation
+[RtDiff] site[100] @00007ff7588d3b60 = Save::SaveLoad::SaveLoad
+[RtDiff] site[101] @00007ff7588d42a0 = UI::Element::SetElementId
+[RtDiff] site[102] @00007ff7588d4d00 = Video::ImageBuffer::CopyFromTexture
+[RtDiff] site[103] @00007ff7588d3ca0 = Save::SaveLoad::Update [shadow]
+[RtDiff] site[104] @00007ff7588d34e0 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+[RtDiff] site[105] @00007ff7588d34c0 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+[RtDiff] site[106] @00007ff7588d34a0 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+[RtDiff] site[107] @00007ff7588d2920 = Graphics::Camera::SetCameraToWorld
+[RtDiff] site[108] @00007ff7588d2620 = Graphics::ParticleInstance::IncrementInstanceIndex
+[RtDiff] site[109] @00007ff7588d2ca0 = Graphics::Scene::Clean
+[RtDiff] site[110] @00007ff7588d2b20 = Graphics::Geometry::Clean
+[RtDiff] site[111] @00007ff7588d4e60 = Video::Context::SetFog
+[RtDiff] site[112] @00007ff7588d29c0 = Graphics::Renderer::GetCullCamera
+[RtDiff] site[113] @00007ff7588d3220 = Math::Transform3::Transform3(const Transform3&)
+[RtDiff] site[114] @00007ff7588d2b60 = Graphics::Geometry::GetTransform
+[RtDiff] site[115] @00007ff7588d3340 = Math::Transform::Inverse()
+[RtDiff] site[116] @00007ff7588d2960 = Graphics::Camera::GetFrustum
+[RtDiff] site[117] @00007ff7588d52e0 = Volume::Frustum::operator*(Transform3)
+[RtDiff] site[118] @00007ff7588d5300 = Volume::Frustum::Contains
+[RtDiff] site[119] @00007ff7588d29e0 = Graphics::Renderer::GetShader
+[RtDiff] site[120] @00007ff7588d3300 = Math::Transform::AsMatrix()
+[RtDiff] site[121] @00007ff7588d4f20 = Video::Context::SetTransform
+[RtDiff] site[122] @00007ff7588d4e00 = Video::Context::SetColor
+[RtDiff] site[123] @00007ff7588d4ea0 = Video::Context::SetImageBuffer
+[RtDiff] site[124] @00007ff7588d22e0 = Achievement::AchievementManager::SetAchievements
+[RtDiff] site[125] @00007ff7588d2120 = Achievement::AchievementManager::GetAchievementCount
+[RtDiff] site[126] @00007ff7588d3860 = Object::ExternalList::GetResourceCount
+[RtDiff] site[127] @00007ff7588d4600 = UI::String::String(table,name)
+[RtDiff] site[128] @00007ff7588d4660 = UI::String::operator System::String()
+[RtDiff] site[129] @00007ff7588d45a0 = UI::StringTable::GetText(int)
+[RtDiff] site[130] @00007ff7588d4940 = UI::EditElement::SetText
+[RtDiff] site[131] @00007ff7588d4880 = UI::ComboElement::GetItemCount
+[RtDiff] site[132] @00007ff7588d48a0 = UI::ComboElement::GetItemData
+[RtDiff] site[133] @00007ff7588d48c0 = UI::NumberEditElement::GetValue
+[RtDiff] site[134] @00007ff7588d25c0 = Graphics::Particle::Particle()
+[RtDiff] site[135] @00007ff7588d40a0 = UI::ElementDescription::ctor
+[RtDiff] site[136] @00007ff7588d40c0 = UI::ElementDescription::GetFileVersion
+[RtDiff] site[137] @00007ff7588d3ec0 = System::Random::Random(uint)
+[RtDiff] site[138] @00007ff7588d4680 = UI::UserInterface::UserInterface
+[RtDiff] site[139] @00007ff7588d3a40 = Picking::Scene::Scene()
+[RtDiff] site[140] @00007ff7588d3ee0 = System::Random::Rand
+[RtDiff] site[141] @00007ff7588d2580 = Graphics::AnimationManager::AnimationManager()
+[RtDiff] site[142] @00007ff7588d22c0 = Achievement::AchievementManager::SetEventHandler
+[RtDiff] site[143] @00007ff7588d2300 = Achievement::AchievementManager::Reset
+[RtDiff] site[144] @00007ff7588d2480 = Achievement::Goal::GetInstanceType
+[RtDiff] site[145] @00007ff7588d23e0 = Achievement::GoalInstance::GoalInstance
+[RtDiff] site[146] @00007ff7588d3f80 = System::Random::RandTol
+[RtDiff] site[147] @00007ff7588d3f60 = System::Random::RandFloatTol
+[RtDiff] site[148] @00007ff7588d3600 = Math::Vector2::Length
+[RtDiff] site[149] @00007ff7588d3640 = Math::Vector2::Normalize
+[RtDiff] site[150] @00007ff7588d3620 = Math::Vector2::LengthSquared
+[RtDiff] site[151] @00007ff7588d3f40 = System::Random::RandFloat
+[RtDiff] site[152] @00007ff7588d3f20 = System::Random::Rand(int,int)
+[RtDiff] site[153] @00007ff7588d4580 = UI::StringTable::GetCount()
+[RtDiff] site[154] @00007ff7588d4620 = UI::String::String(table,index)
+[RtDiff] site[155] @00007ff7588d39e0 = Object::Factory::CreateObject
+[RtDiff] site[156] @00007ff7588d44e0 = UI::SpriteSheet::GetSpriteCount()
+[RtDiff] site[157] @00007ff7588d2b40 = Graphics::Geometry::SetBounds
+[RtDiff] site[158] @00007ff7588d3240 = Math::Transform2::Transform2(const Scalar&, const Vector2&)
+[RtDiff] site[159] @00007ff7588d3440 = Math::Transform2::FromYawOffset(const Scalar&, const Vector2&)
+[RtDiff] site[160] @00007ff7588d32a0 = Math::Transform2::operator*(const Transform2&)
+[RtDiff] site[161] @00007ff7588d32c0 = Math::Transform2::operator*(const Vector2&)
+[RtDiff] site[162] @00007ff7588d3b00 = Picking::Scene::AddMesh
+[RtDiff] site[163] @00007ff7588d2c40 = Graphics::Scene::RemoveObject
+[RtDiff] site[164] @00007ff7588d3b20 = Picking::Scene::RemoveMesh
+[RtDiff] site[165] @00007ff7588d2680 = Graphics::GraphicsMesh::GetNodeIndexFromName
+[RtDiff] site[166] @00007ff7588d26c0 = Graphics::MeshInstance::GetNodeToWorld
+[RtDiff] site[167] @00007ff7588d2760 = Graphics::MeshInstance::PlayAnimation
+[RtDiff] site[168] @00007ff7588d3760 = Math::Vector3::NormalizeWithMag
+[RtDiff] site[169] @00007ff7588d36e0 = Math::Vector3::Heading
+[RtDiff] site[170] @00007ff7588d3840 = Object::ExternalFactory::FindNext
+[RtDiff] site[171] @00007ff7588d3880 = Object::ExternalList::Find
+[RtDiff] site[172] @00007ff7588d4060 = UI::Dialog::GetTemplate
+[RtDiff] site[173] @00007ff7588d42e0 = UI::Element::SetName
+[RtDiff] site[174] @00007ff7588d4380 = UI::Element::SetUserData
+[RtDiff] site[175] @00007ff7588d4340 = UI::Element::SetToolTip
+[RtDiff] site[176] @00007ff7588d42c0 = UI::Element::SetFlagsOnOff
+[RtDiff] site[177] @00007ff7588d41c0 = UI::Element::ChildCount
+[RtDiff] site[178] @00007ff7588d41a0 = UI::Element::Child
+[RtDiff] site[179] @00007ff7588d4460 = UI::Sprite::IsValid()
+[RtDiff] site[180] @00007ff7588d4a60 = UI::ImageElement::SetSprite
+[RtDiff] site[181] @00007ff7588d46e0 = UI::UserInterface::PausesGame
+[RtDiff] site[182] @00007ff7588d46c0 = UI::UserInterface::GetFirstDialog
+[RtDiff] site[183] @00007ff7588d27c0 = Graphics::MeshInstance::~MeshInstance
+[RtDiff] site[184] @00007ff7588d26e0 = Graphics::MeshInstance::RootAnimationOffset
+[RtDiff] site[185] @00007ff7588d3200 = Math::Transform::operator=(const Transform&)
+[RtDiff] site[186] @00007ff7588d31e0 = Math::Transform::Transform(const Transform&)
+[RtDiff] site[187] @00007ff7588d3ae0 = Picking::Scene::SetTransform
+[RtDiff] site[188] @00007ff7588d35a0 = Math::Vector2::Dot
+[RtDiff] site[189] @00007ff7588d26a0 = Graphics::MeshInstance::IsAnimating
+[RtDiff] site[190] @00007ff7588d3500 = Math::Transform::operator*(const Vector3&)
+[RtDiff] site[191] @00007ff7588d33a0 = Math::Quaternion::Rotate(const Vector3&)
+[RtDiff] site[192] @00007ff7588d3380 = Math::Quaternion::operator*(const Quaternion&)
+[RtDiff] site[193] @00007ff7588d3400 = Math::Transform::Identity()
+[RtDiff] site[194] @00007ff7588d2320 = Achievement::AchievementManager::Update
+[RtDiff] site[195] @00007ff7588d22a0 = Achievement::AchievementInstance::Update
+[RtDiff] site[196] @00007ff7588d21c0 = Achievement::AchievementInstance::IsMet
+[RtDiff] site[197] @00007ff7588d4320 = UI::Element::SetPadding
+[RtDiff] site[198] @00007ff7588d4e40 = Video::Context::SetTime
+[RtDiff] site[199] @00007ff7588d2c80 = Graphics::Scene::RemoveGlobalObject
+[RtDiff] site[200] @00007ff7588d51a0 = Video::RenderBuffer::Create
+[RtDiff] site[201] @00007ff7588d52c0 = Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D)
+[RtDiff] site[202] @00007ff7588d3460 = Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&)
+[RtDiff] site[203] @00007ff7588d2940 = Graphics::Camera::SnapCameraToWorld
+[RtDiff] site[204] @00007ff7588d3320 = Math::Transform3::AsMatrix()
+[RtDiff] site[205] @00007ff7588d4f40 = Video::Context::SetCamera
+[RtDiff] site[206] @00007ff7588d4f00 = Video::Context::SetDefaultRenderBuffer
+[RtDiff] site[207] @00007ff7588d4f60 = Video::Context::Reset
+[RtDiff] site[208] @00007ff7588d2c00 = Graphics::Scene::~Scene()
+[RtDiff] site[209] @00007ff7588d29a0 = Graphics::Renderer::~Renderer
+[RtDiff] site[210] @00007ff7588d4e20 = Video::Context::SetInverseScale
+[RtDiff] site[211] @00007ff7588d36a0 = Math::Vector3::Dot
+[RtDiff] site[212] @00007ff7588d2500 = Achievement::GoalList::AreGoalsMetExcept
+[RtDiff] site[213] @00007ff7588d2520 = Achievement::GoalInstance::Update
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #653  ours=+0x0: b1 f2 0d bf 50 e8 a3 be  theirs=+0x0: b2 f2 0d bf 51 e8 a3 be
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #654  ours=+0x0: b1 f2 0d bf 50 e8 a3 be  theirs=+0x0: b2 f2 0d bf 51 e8 a3 be
+[RtDiff] DIVERGENCE Math::Vector3::FromYawPitch  call #739  ours=+0x0: e0 ec 0d bf 98 e1 a3 be  theirs=+0x0: e1 ec 0d bf 99 e1 a3 be
+[RtDiff] Math::Vector3::FromYawPitch: further divergences counted only
+[RtDiff] site[214] @00007ff7588d3fc0 = UI::DialogInstance::GetController
+[RtDiff] site[215] @00007ff7588d3a60 = Picking::Scene::~Scene()
+[RtDiff] site[216] @00007ff7588d2a80 = Graphics::Geometry::~Geometry()
+[RtDiff] site[217] @00007ff7588d25a0 = Graphics::AnimationManager::~AnimationManager()
+[RtDiff] site[218] @00007ff7588d51c0 = Video::RenderStateData::~RenderStateData
+[RtDiff] site[219] @00007ff7588d2e80 = IO::Persistence::Set(int)
+[RtDiff] site[220] @00007ff7588d2ea0 = IO::Persistence::Set(bool)
+[RtDiff] site[221] @00007ff7588d2400 = Achievement::GoalInstance::~GoalInstance
+[RtDiff] site[222] @00007ff7588d51e0 = Video::Configuration::Save
+[RtDiff] ==== 223 sites, 26280535 calls, 91 divergences in 2 sites ====
+[RtDiff]   Video::Context::Clear[slot]                      calls=1          divergences=0
+[RtDiff]   Video::Context::DrawIndexed[slot]                calls=1          divergences=0
+[RtDiff]   Video::Context::GetMaxDynamicInstances[slot]     calls=1          divergences=0
+[RtDiff]   Video::Context::BeginVertices[slot]              calls=1          divergences=0
+[RtDiff]   Video::Context::EndVertices[slot]                calls=1          divergences=0
+[RtDiff]   Video::Context::BeginIndexedVertices[slot]       calls=1          divergences=0
+[RtDiff]   Video::Context::EndIndexedVertices[slot]         calls=1          divergences=0
+[RtDiff]   Video::Context::BeginInstancedIndexedVertices[slot] calls=1          divergences=0
+[RtDiff]   Video::Context::EndInstancedIndexedVertices[slot] calls=1          divergences=0
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdateLayout[shape]        calls=1          divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdate[shape]              calls=1          divergences=0
+[RtDiff]   UI::DialogInstance::OnElementEvent[shape]        calls=1          divergences=0
+[RtDiff]   UI::DialogController::~DialogController[shape]   calls=1          divergences=0
+[RtDiff]   Object::BaseTypeInfo::BaseTypeInfo               calls=312        divergences=0
+[RtDiff]   System::operator+(String,String)                 calls=9          divergences=0
+[RtDiff]   System::operator+(String,char*)                  calls=515        divergences=0
+[RtDiff]   Video::Device::GetMultisampleModeCount           calls=2          divergences=0
+[RtDiff]   Video::Device::IsMultisampleModeSupported        calls=2          divergences=0
+[RtDiff]   Achievement::Goal::Goal                          calls=139        divergences=0
+[RtDiff]   UI::Sprite::Sprite()                             calls=2          divergences=0
+[RtDiff]   Object::Factory::GetTypeIdFromName               calls=38         divergences=0
+[RtDiff]   Object::Base::IsDerivedFrom                      calls=406531     divergences=0
+[RtDiff]   Video::ImageBuffer::Width                        calls=407        divergences=0
+[RtDiff]   Video::ImageBuffer::Height                       calls=407        divergences=0
+[RtDiff]   Video::ImageBuffer::IsGenerated                  calls=855        divergences=0
+[RtDiff]   Video::ImageBuffer::IsRendered                   calls=850        divergences=0
+[RtDiff]   Video::ImageBuffer::IsCompressed                 calls=6338       divergences=0
+[RtDiff]   Video::ImageBuffer::GetLevelCount                calls=3550       divergences=0
+[RtDiff]   Video::ImageBuffer::IsDepthBuffer                calls=414        divergences=0
+[RtDiff]   Video::ImageBuffer::IsRenderBuffer               calls=405        divergences=0
+[RtDiff]   UI::Sprite::Sprite(sheet,name)                   calls=20         divergences=0
+[RtDiff]   IO::Persistence::Get(int&)                       calls=10         divergences=0
+[RtDiff]   IO::Persistence::Get(bool&)                      calls=6          divergences=0
+[RtDiff]   IO::Serializer::Serializer(Stream&,int)          calls=3609       divergences=0
+[RtDiff]   IO::Serializer::Serialize(int&)                  calls=11869      divergences=0
+[RtDiff]   IO::Serializer::Serialize(bool&)                 calls=12679      divergences=0
+[RtDiff]   Object::ExternalFactory::Find                    calls=605        divergences=0
+[RtDiff]   System::Filename::GetPathIdentifer               calls=618        divergences=0
+[RtDiff]   IO::Serializer::~Serializer [not diffable]       calls=3609       divergences=0
+[RtDiff]   IO::Serializer::GetEncoding                      calls=10400      divergences=0
+[RtDiff]   Object::ExternalFactory::IsReferenceModeEnabled  calls=6251       divergences=0
+[RtDiff]   Object::Type::Serialize [not diffable]           calls=606        divergences=0
+[RtDiff]   IO::Serializer::Serialize(float&)                calls=3594       divergences=0
+[RtDiff]   IO::Serializer::SerializeBytes                   calls=27770      divergences=0
+[RtDiff]   Math::Vector3::FromYawPitch                      calls=3701       divergences=16
+[RtDiff]   System::String::operator==(char*)                calls=531        divergences=0
+[RtDiff]   System::String::SubString                        calls=105        divergences=0
+[RtDiff]   IO::Serializer::GetVersion                       calls=566        divergences=0
+[RtDiff]   Graphics::AnimationEvent::AnimationEvent()       calls=10         divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,float*)              calls=5          divergences=0
+[RtDiff]   Achievement::Achievement::ctor                   calls=4          divergences=0
+[RtDiff]   Achievement::Achievement::GetFileVersion         calls=4          divergences=0
+[RtDiff]   Object::InternalBasePtr::InternalBasePtr(Internal*) calls=503846     divergences=0
+[RtDiff]   UI::DialogInstance::FindElement                  calls=53         divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=65         divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFadeSprite       calls=5          divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFade             calls=14         divergences=0
+[RtDiff]   Video::Context::SetRenderBuffer                  calls=3620       divergences=0
+[RtDiff]   Video::Context::SetViewport                      calls=3619       divergences=0
+[RtDiff]   Video::Context::SetVertexBuffer                  calls=252415     divergences=0
+[RtDiff]   System::Random::Rand(uint)                       calls=16035369   divergences=0
+[RtDiff]   Math::Transform::Transform()                     calls=16714      divergences=0
+[RtDiff]   Math::Transform3::Identity()                     calls=3          divergences=0
+[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=2420       divergences=0
+[RtDiff]   Graphics::Camera::Camera                         calls=4          divergences=0
+[RtDiff]   Graphics::Camera::SetFrustum                     calls=2421       divergences=0
+[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=4665       divergences=0
+[RtDiff]   Graphics::Geometry::Geometry()                   calls=71         divergences=0
+[RtDiff]   Video::VertexBuffer::VertexBuffer                calls=4          divergences=0
+[RtDiff]   Video::IndexBuffer::IndexBuffer                  calls=4          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,ushort*)             calls=237        divergences=0
+[RtDiff]   Video::VertexBuffer::Create                      calls=4          divergences=0
+[RtDiff]   Video::VertexBuffer::Set                         calls=1154       divergences=0
+[RtDiff]   Video::IndexBuffer::Create                       calls=4          divergences=0
+[RtDiff]   Video::IndexBuffer::Set                          calls=2          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,short*)              calls=101408     divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,uchar*)              calls=50708      divergences=0
+[RtDiff]   IO::Serializer::Serialize(uchar&)                calls=26844      divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,int*)                calls=5          divergences=0
+[RtDiff]   Video::ImageBuffer::ImageBuffer                  calls=6          divergences=0
+[RtDiff]   Video::ImageBuffer::Create                       calls=6          divergences=0
+[RtDiff]   Video::ImageBuffer::CopyToTexture                calls=5          divergences=0
+[RtDiff]   Video::ImageBuffer::IsDynamic                    calls=5          divergences=0
+[RtDiff]   Object::External::GetPath                        calls=2855       divergences=0
+[RtDiff]   IO::Serializer::Serialize(uint&)                 calls=127997     divergences=0
+[RtDiff]   Graphics::Renderer::Renderer                     calls=3          divergences=0
+[RtDiff]   Graphics::Scene::Scene()                         calls=3          divergences=0
+[RtDiff]   Graphics::MeshInstance::MeshInstance()           calls=29410      divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMesh                  calls=42762      divergences=0
+[RtDiff]   Graphics::MeshInstance::UpdateHierarchy          calls=42762      divergences=0
+[RtDiff]   Graphics::Scene::AddGlobalObject                 calls=11         divergences=0
+[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=43046      divergences=75
+[RtDiff]   Graphics::Geometry::SetTransform                 calls=318345     divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetMaterialList          calls=12673      divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMaterialInstance      calls=15154      divergences=0
+[RtDiff]   Graphics::Scene::AddObject                       calls=29547      divergences=0
+[RtDiff]   Graphics::ParticleSystemInstance::ParticleSystemInstance() calls=126        divergences=0
+[RtDiff]   UI::ImageElement::SetRotation                    calls=799        divergences=0
+[RtDiff]   Save::SaveLoad::SaveLoad                         calls=2          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=38         divergences=0
+[RtDiff]   Video::ImageBuffer::CopyFromTexture              calls=4          divergences=0
+[RtDiff]   Save::SaveLoad::Update [shadow]                  calls=1039       divergences=0
+[RtDiff]   Math::Transform::FromLookAt(const Vector3&, const Vector3&) calls=980        divergences=0
+[RtDiff]   Math::Transform::FromDirection(const Vector3&, const Vector3&) calls=980        divergences=0
+[RtDiff]   Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&) calls=980        divergences=0
+[RtDiff]   Graphics::Camera::SetCameraToWorld               calls=979        divergences=0
+[RtDiff]   Graphics::ParticleInstance::IncrementInstanceIndex calls=77         divergences=0
+[RtDiff]   Graphics::Scene::Clean                           calls=1040       divergences=0
+[RtDiff]   Graphics::Geometry::Clean                        calls=6          divergences=0
+[RtDiff]   Video::Context::SetFog                           calls=2417       divergences=0
+[RtDiff]   Graphics::Renderer::GetCullCamera                calls=7248       divergences=0
+[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=9491       divergences=0
+[RtDiff]   Graphics::Geometry::GetTransform                 calls=7248       divergences=0
+[RtDiff]   Math::Transform::Inverse()                       calls=7248       divergences=0
+[RtDiff]   Graphics::Camera::GetFrustum                     calls=9491       divergences=0
+[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=16739      divergences=0
+[RtDiff]   Volume::Frustum::Contains                        calls=4570345    divergences=0
+[RtDiff]   Graphics::Renderer::GetShader                    calls=7248       divergences=0
+[RtDiff]   Math::Transform::AsMatrix()                      calls=220624     divergences=0
+[RtDiff]   Video::Context::SetTransform                     calls=279007     divergences=0
+[RtDiff]   Video::Context::SetColor                         calls=222867     divergences=0
+[RtDiff]   Video::Context::SetImageBuffer                   calls=200038     divergences=0
+[RtDiff]   Achievement::AchievementManager::SetAchievements calls=1          divergences=0
+[RtDiff]   Achievement::AchievementManager::GetAchievementCount calls=1          divergences=0
+[RtDiff]   Object::ExternalList::GetResourceCount           calls=15         divergences=0
+[RtDiff]   UI::String::String(table,name)                   calls=27         divergences=0
+[RtDiff]   UI::String::operator System::String()            calls=16         divergences=0
+[RtDiff]   UI::StringTable::GetText(int)                    calls=64         divergences=0
+[RtDiff]   UI::EditElement::SetText                         calls=0          divergences=0
+[RtDiff]   UI::ComboElement::GetItemCount                   calls=5          divergences=0
+[RtDiff]   UI::ComboElement::GetItemData                    calls=3          divergences=0
+[RtDiff]   UI::NumberEditElement::GetValue                  calls=1          divergences=0
+[RtDiff]   Graphics::Particle::Particle()                   calls=1          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=2          divergences=0
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          divergences=0
+[RtDiff]   System::Random::Random(uint)                     calls=2          divergences=0
+[RtDiff]   UI::UserInterface::UserInterface                 calls=1          divergences=0
+[RtDiff]   Picking::Scene::Scene()                          calls=2          divergences=0
+[RtDiff]   System::Random::Rand                             calls=2          divergences=0
+[RtDiff]   Graphics::AnimationManager::AnimationManager()   calls=1          divergences=0
+[RtDiff]   Achievement::AchievementManager::SetEventHandler calls=2          divergences=0
+[RtDiff]   Achievement::AchievementManager::Reset           calls=1          divergences=0
+[RtDiff]   Achievement::Goal::GetInstanceType               calls=125        divergences=0
+[RtDiff]   Achievement::GoalInstance::GoalInstance          calls=9          divergences=0
+[RtDiff]   System::Random::RandTol                          calls=2246       divergences=0
+[RtDiff]   System::Random::RandFloatTol                     calls=117187     divergences=0
+[RtDiff]   Math::Vector2::Length                            calls=766        divergences=0
+[RtDiff]   Math::Vector2::Normalize                         calls=157004     divergences=0
+[RtDiff]   Math::Vector2::LengthSquared                     calls=590592     divergences=0
+[RtDiff]   System::Random::RandFloat                        calls=252502     divergences=0
+[RtDiff]   System::Random::Rand(int,int)                    calls=64         divergences=0
+[RtDiff]   UI::StringTable::GetCount()                      calls=6          divergences=0
+[RtDiff]   UI::String::String(table,index)                  calls=6          divergences=0
+[RtDiff]   Object::Factory::CreateObject                    calls=79106      divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteCount()                calls=34         divergences=0
+[RtDiff]   Graphics::Geometry::SetBounds                    calls=35         divergences=0
+[RtDiff]   Math::Transform2::Transform2(const Scalar&, const Vector2&) calls=16         divergences=0
+[RtDiff]   Math::Transform2::FromYawOffset(const Scalar&, const Vector2&) calls=8          divergences=0
+[RtDiff]   Math::Transform2::operator*(const Transform2&)   calls=40         divergences=0
+[RtDiff]   Math::Transform2::operator*(const Vector2&)      calls=768        divergences=0
+[RtDiff]   Picking::Scene::AddMesh                          calls=47         divergences=0
+[RtDiff]   Graphics::Scene::RemoveObject                    calls=16748      divergences=0
+[RtDiff]   Picking::Scene::RemoveMesh                       calls=47         divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetNodeIndexFromName     calls=12         divergences=0
+[RtDiff]   Graphics::MeshInstance::GetNodeToWorld           calls=6          divergences=0
+[RtDiff]   Graphics::MeshInstance::PlayAnimation            calls=555        divergences=0
+[RtDiff]   Math::Vector3::NormalizeWithMag                  calls=14818      divergences=0
+[RtDiff]   Math::Vector3::Heading                           calls=7399       divergences=0
+[RtDiff]   Object::ExternalFactory::FindNext                calls=95         divergences=0
+[RtDiff]   Object::ExternalList::Find                       calls=3          divergences=0
+[RtDiff]   UI::Dialog::GetTemplate                          calls=10         divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=10         divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         divergences=0
+[RtDiff]   UI::Sprite::IsValid()                            calls=59         divergences=0
+[RtDiff]   UI::ImageElement::SetSprite                      calls=38         divergences=0
+[RtDiff]   UI::UserInterface::PausesGame                    calls=7375       divergences=0
+[RtDiff]   UI::UserInterface::GetFirstDialog                calls=27         divergences=0
+[RtDiff]   Graphics::MeshInstance::~MeshInstance            calls=16711      divergences=0
+[RtDiff]   Graphics::MeshInstance::RootAnimationOffset      calls=258587     divergences=0
+[RtDiff]   Math::Transform::operator=(const Transform&)     calls=258587     divergences=0
+[RtDiff]   Math::Transform::Transform(const Transform&)     calls=23426      divergences=0
+[RtDiff]   Picking::Scene::SetTransform                     calls=23426      divergences=0
+[RtDiff]   Math::Vector2::Dot                               calls=145        divergences=0
+[RtDiff]   Graphics::MeshInstance::IsAnimating              calls=258342     divergences=0
+[RtDiff]   Math::Transform::operator*(const Vector3&)       calls=15057      divergences=0
+[RtDiff]   Math::Quaternion::Rotate(const Vector3&)         calls=15057      divergences=0
+[RtDiff]   Math::Quaternion::operator*(const Quaternion&)   calls=30114      divergences=0
+[RtDiff]   Math::Transform::Identity()                      calls=1          divergences=0
+[RtDiff]   Achievement::AchievementManager::Update          calls=901        divergences=0
+[RtDiff]   Achievement::AchievementInstance::Update         calls=901        divergences=0
+[RtDiff]   Achievement::AchievementInstance::IsMet          calls=901        divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=962        divergences=0
+[RtDiff]   Video::Context::SetTime                          calls=2243       divergences=0
+[RtDiff]   Graphics::Scene::RemoveGlobalObject              calls=8          divergences=0
+[RtDiff]   Video::RenderBuffer::Create                      calls=1          divergences=0
+[RtDiff]   Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D) calls=1          divergences=0
+[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          divergences=0
+[RtDiff]   Graphics::Camera::SnapCameraToWorld              calls=1          divergences=0
+[RtDiff]   Math::Transform3::AsMatrix()                     calls=2244       divergences=0
+[RtDiff]   Video::Context::SetCamera                        calls=2244       divergences=0
+[RtDiff]   Video::Context::SetDefaultRenderBuffer           calls=2          divergences=0
+[RtDiff]   Video::Context::Reset                            calls=1          divergences=0
+[RtDiff]   Graphics::Scene::~Scene()                        calls=2          divergences=0
+[RtDiff]   Graphics::Renderer::~Renderer                    calls=2          divergences=0
+[RtDiff]   Video::Context::SetInverseScale                  calls=2243       divergences=0
+[RtDiff]   Math::Vector3::Dot                               calls=374971     divergences=0
+[RtDiff]   Achievement::GoalList::AreGoalsMetExcept         calls=259        divergences=0
+[RtDiff]   Achievement::GoalInstance::Update                calls=259        divergences=0
+[RtDiff]   UI::DialogInstance::GetController                calls=104        divergences=0
+[RtDiff]   Picking::Scene::~Scene()                         calls=2          divergences=0
+[RtDiff]   Graphics::Geometry::~Geometry()                  calls=1          divergences=0
+[RtDiff]   Graphics::AnimationManager::~AnimationManager()  calls=1          divergences=0
+[RtDiff]   Video::RenderStateData::~RenderStateData         calls=2          divergences=0
+[RtDiff]   IO::Persistence::Set(int)                        calls=25         divergences=0
+[RtDiff]   IO::Persistence::Set(bool)                       calls=9          divergences=0
+[RtDiff]   Achievement::GoalInstance::~GoalInstance         calls=9          divergences=0
+[RtDiff]   Video::Configuration::Save                       calls=1          divergences=0

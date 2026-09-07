@@ -52,7 +52,14 @@ struct ImageElement {
     uint32_t    spriteFlags;        // +0xCC  sprite flags/padding
 
     // Additional image properties
-    uint32_t    fieldD0;            // +0xD0  zeroed in ctor (image mode/flags?)
+    float       rotation;           // +0xD0  CORRECTED by Wave 7 lane E: this is
+                                     //        the rotation set by SetRotation
+                                     //        (0x1801182c0), a plain float in
+                                     //        degrees with NO dirty-flag walk.
+                                     //        The old comment ("zeroed in ctor,
+                                     //        image mode/flags?") was an
+                                     //        unverified guess; see
+                                     //        docs/runtime_port/WAVE7_LANE_E.md.
     uint32_t    fieldD4;            // +0xD4  init -1 (0xFFFFFFFF)
     uint32_t    fieldD8;            // +0xD8  init -1 (0xFFFFFFFF)
     uint32_t    padDC;              // +0xDC  padding to 0xE0
@@ -64,6 +71,6 @@ static_assert(offsetof(ImageElement, elementBase)  == 0x08, "elementBase at +0x0
 static_assert(offsetof(ImageElement, spriteSheet)  == 0xC0, "spriteSheet at +0xC0");
 static_assert(offsetof(ImageElement, spriteIndex)  == 0xC8, "spriteIndex at +0xC8");
 static_assert(offsetof(ImageElement, spriteFlags)  == 0xCC, "spriteFlags at +0xCC");
-static_assert(offsetof(ImageElement, fieldD0)      == 0xD0, "fieldD0 at +0xD0");
+static_assert(offsetof(ImageElement, rotation)      == 0xD0, "rotation at +0xD0");
 static_assert(offsetof(ImageElement, fieldD4)      == 0xD4, "fieldD4 at +0xD4");
 static_assert(offsetof(ImageElement, fieldD8)      == 0xD8, "fieldD8 at +0xD8");

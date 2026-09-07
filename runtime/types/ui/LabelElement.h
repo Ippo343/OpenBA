@@ -12,17 +12,33 @@
 //   GetSprite:     0x1800429d0 (?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ)
 //
 // TextElement base (0xC0..0xFF):
+//
+// *** CORRECTED by Wave 7 lane E (docs/runtime_port/WAVE7_LANE_E.md) against
+// live call sites; the block below is what shipped here before and was WRONG
+// about the text string's offset. Kept only as a record of what was disproved
+// -- do not use it. ***
 //   Default ctor @ 0x18011eb80: Element base, then text fields:
-//     +0xC0: 8 bytes = 0  (text string ptr / System::String)
-//     +0xC8: 8 bytes = 0  (text data)
-//     +0xD0: 8 bytes = 0  (font ptr?)
-//     +0xD8: 8 bytes = 0  (unknown)
-//     +0xE0: 4 bytes = -1 (text color? ARGB)
+//     +0xC0: 8 bytes = 0  (text string ptr / System::String)   -- WRONG, see below
+//     +0xC8: 8 bytes = 0  (text data)                          -- WRONG, see below
+//     +0xD0: 8 bytes = 0  (font ptr?)                          -- WRONG, see below
+//     +0xD8: 8 bytes = 0  (unknown)                            -- WRONG, see below
+//     +0xE0: 4 bytes = -1 (text color? ARGB)                   -- WRONG, see below
 //     +0xE8: 2 bytes = 0  (text flags?)
 //     +0xEC: 4 bytes = 100 (max width / wrap limit?)
 //     +0xF0: 4 bytes = -1 (unknown)
 //     +0xF4: 4 bytes = 0  (unknown)
-//     +0xF8: 8 bytes = 0  (cached text ptr?)
+//     +0xF8: 8 bytes = 0  (cached text ptr?)                   -- this one IS right
+//
+// ACTUAL layout, proven from TextElement::SetParameter (0x18011e9b0) and
+// TextElement::SetText (0x180042070) -- see runtime/types/ui/TextElement.h for
+// the full evidence and the ported bodies in runtime/src/ui/widgets_layout.cpp:
+//     +0xC8: Collection::Array<System::String> _params .data
+//     +0xD0: _params .size  (int32_t)   -- read by SetParameter's bounds check
+//     +0xD4: _params .capacity (int32_t, inferred, not directly read)
+//     +0xD8: UI::String _text, 16 bytes (0xD8, 0xE0)  -- what SetText(UI::String) writes
+//     +0xF8: cached formatted-text pointer, managed by the private CacheText
+// +0xC0..0xC8 (8 bytes) is not touched by either function this lane ported;
+// the old guess ("text string ptr") is neither confirmed nor refuted here.
 //
 // SetSprite behavior:
 //   - Sprite embedded at +0x100 (NOT +0xC0 like ImageElement)

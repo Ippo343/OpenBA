@@ -518,7 +518,7 @@ fn_String_Assign_t fn_String_Assign = nullptr;
 fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry = nullptr;
 fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor = nullptr;
 fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
-fn_Dialog_GetReference_t fn_Dialog_GetReference = nullptr;
+// fn_Dialog_GetReference removed — see engine_funcs.h (Wave 7 lane B)
 fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
 fn_StringTable_GetText_t fn_StringTable_GetText = nullptr;
 fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink = nullptr;
@@ -684,7 +684,7 @@ fn_Modification_Enable_t fn_Modification_Enable = nullptr;
 fn_Modification_RefreshList_t fn_Modification_RefreshList = nullptr;
 fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
-fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
+// fn_DialogInstance_AddController removed — see engine_funcs.h (Wave 7 lane B)
 fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout = nullptr;
 fn_DialogInstance_OnUpdate_t fn_DialogInstance_OnUpdate = nullptr;
 // fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
@@ -1598,9 +1598,17 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x180121890));
     }
 
-    // UI::UserInterface::CloseDialog(InternalPtr<DialogInstance>&) — resolve by name
+    // UI::UserInterface::CloseDialog(InternalPtr<DialogInstance>) — resolve by name.
+    // The DLL exports the BY-VALUE spelling (`V?$InternalPtr@…`) only. We asked
+    // for the by-reference one (`AEAV…`) for a long time; that name does not
+    // exist, ResolveExport returned NULL in silence, and only the address
+    // fallback below kept this non-null (Wave 7 lane C,
+    // reference_resolveexport_phantom_names.md). Same ABI either way —
+    // InternalPtr<T> has a non-trivial copy ctor, so MSVC x64 passes it by
+    // address in both spellings — so the call has always reached the right
+    // function; the name was simply a phantom the fallback hid.
     fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
-        ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+        ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     if (!fn_UI_CloseDialog) {
         fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
             ResolveAddr(Module::Runtime, 0x180120F20));
@@ -2493,11 +2501,18 @@ bool EngineFuncsInit() {
 
     // SaveLoadDialog::PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
 
+    // Wave 7 lane D phantom-name fix: `?SetText@EditElement@UI@@QEAAXVString@2@@Z`
+    // is not in the shipped export table (reference_resolveexport_phantom_names.md);
+    // ResolveExport always returned null here and the OLD fallback address
+    // (0x180042070) was UI::TextElement::SetText, not EditElement's — see the
+    // header comment above fn_EditElement_SetText_t for the full story. Resolve
+    // the real by-reference EditElement::SetText directly; same raw ABI, so
+    // spritecaptureui.cpp:100's call site is unaffected.
     fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
-        ResolveExport("?SetText@EditElement@UI@@QEAAXVString@2@@Z"));
+        ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
     if (!fn_EditElement_SetText)
         fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
-            ResolveAddr(Module::Runtime, 0x180042070));
+            ResolveAddr(Module::Runtime, 0x1800d0db0));
 
     fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
@@ -2901,8 +2916,12 @@ bool EngineFuncsInit() {
         fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
             ResolveAddr(Module::Runtime, 0x1800a7b60));
     }
+    // The DLL exports the CONST spelling (`QEBA`) only; we asked for `QEAA`,
+    // which does not exist, so this resolved NULL and ran on the address
+    // fallback below (Wave 7 lane C). Const-ness has no ABI, so the call has
+    // always been correct — the name was a phantom the fallback hid.
     fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
-        ResolveExport("?GetFirstContainedDialog@UserInterface@UI@@QEAA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z"));
+        ResolveExport("?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z"));
     if (!fn_UI_GetFirstContainedDialog) {
         fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
             ResolveAddr(Module::Runtime, 0x18011fb00));
@@ -2943,8 +2962,10 @@ bool EngineFuncsInit() {
             ResolveExport("??0String@UI@@QEAA@XZ"));
     fn_Sprite_Default_Ctor = reinterpret_cast<fn_Sprite_Default_Ctor_t>(
         ResolveExport("??0Sprite@UI@@QEAA@XZ"));
-    fn_Dialog_GetReference = reinterpret_cast<fn_Dialog_GetReference_t>(
-        ResolveExport("?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VDialogReference@UI@@@Object@@XZ"));
+    // fn_Dialog_GetReference resolve removed 2026-09-07 (Wave 7 lane B): the
+    // mangled name was not an export and the pointer had no callers. The real
+    // function is ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VExternal@Object@@@Object@@H@Z
+    // (0x1800388d0) and it takes an int index. See engine_funcs.h.
     fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
         ResolveExport("?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z"));
     if (!fn_Audio_Scene_PlayEffect) {
@@ -3248,8 +3269,11 @@ bool EngineFuncsInit() {
         fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
             ResolveAddr(Module::Runtime, 0x180114a60));
     }
+    // By-VALUE spelling: the by-reference `AEAV…` name we used to ask for does
+    // not exist in the DLL and resolved NULL in silence, leaving this on the
+    // address fallback below (Wave 7 lane C). Same ABI, same target.
     fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
-        ResolveExport("?BringDialogToFront@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+        ResolveExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     if (!fn_UI_BringDialogToFront) {
         fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
             ResolveAddr(Module::Runtime, 0x180120440));
@@ -3482,13 +3506,11 @@ bool EngineFuncsInit() {
             reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(*dispatchPtr);
     }
 
-    fn_DialogInstance_AddController = reinterpret_cast<fn_DialogInstance_AddController_t>(
-        ResolveExport("?AddController@DialogInstance@UI@@QEAAXIHHPEBVExternal@Object@@AEBVString@System@@@Z"));
-    if (!fn_DialogInstance_AddController) {
-        void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a60));
-        if (dispatchPtr) fn_DialogInstance_AddController =
-            reinterpret_cast<fn_DialogInstance_AddController_t>(*dispatchPtr);
-    }
+    // fn_DialogInstance_AddController resolve removed 2026-09-07 (Wave 7 lane B).
+    // The mangled name was not an export, so this ALWAYS fell through to exe
+    // dispatch slot 0x140151a60 — which is ?AddChild@Element@UI@@…, not
+    // AddController. The correctly-named six-argument overload is already
+    // resolved as fn_DialogInstance_AddController6 above. See engine_funcs.h.
 
     // --- DialogInstance::OnUpdateLayout / OnUpdate (dispatch slots 0x1401517b0/0x1401517b8) ---
     // These back the 6-byte JMP-thunks at exe 0x14003a98a (slot +0x30) and

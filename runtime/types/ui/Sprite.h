@@ -11,6 +11,21 @@
 //   Ctor (default): 0x18011ba10 (??0Sprite@UI@@QEAA@XZ)
 //   Ctor (index):   0x18011ba30 (??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z)
 //   IsValid:        0x180030c40 (?IsValid@Sprite@UI@@QEBA_NXZ)
+//   Width:          0x180030bf0 (?Width@Sprite@UI@@QEBAHXZ)
+//   Height:         0x180030c10 (?Height@Sprite@UI@@QEBAHXZ)
+//
+// RE-VERIFIED (Wave 7 lane F, 2026-09-07): every fact already written in this
+// file was checked against a fresh decompile of Runtime-x64.dll and is
+// correct, including the pad0C claim below -- confirmed independently by
+// SpriteSheet.h's evidence for the entry width/height offsets, which needed
+// Width/Height's own bodies to be read anyway.
+//
+// pad0C IS NEVER WRITTEN by any of the three ctors (only the qword at +0x00
+// and the dword at +0x08 are stored). A diff oracle that memcmp's a freshly
+// poisoned scratch object against a live one must stop at 0xC bytes, not
+// 0x10, or it reports a false divergence on whatever garbage was already in
+// the caller's storage -- reference_oracle_must_not_compare_unwritten_bytes.md.
+// See RtUi_Sprite_* in runtime/src/ui/sprite.cpp.
 
 #include <cstdint>
 #include <cstddef>
@@ -51,6 +66,10 @@ struct Sprite {
         return (spriteIndex >= 0) && (spriteSheet != nullptr);
     }
 };
+
+// Bytes a diff oracle may compare between two Sprite objects. pad0C (the last
+// 4) is never written by any ctor -- see the note above.
+inline constexpr size_t kSpriteWrittenBytes = 0x0C;
 
 static_assert(sizeof(Sprite) == 0x10, "Sprite must be 0x10 bytes");
 static_assert(offsetof(Sprite, spriteSheet) == 0x00, "spriteSheet at +0x00");

@@ -370,7 +370,7 @@ Runtime programs.
 | **4 IO** — **LANDED 2026-09-06, see [WAVE4.md](WAVE4.md)** | 39 of the 41 IO functions our tree calls (Serializer 22, CompressedMemoryStream 6, Persistence 5, FileSystem/Modification 6); **21,672,859 diffed calls, 0 IO divergences**. Also FIXED the `BANISHED_AUTOLOAD` harness this plan had blocked on since Wave 2, and disproved three recorded facts about `IO::Serializer` (the ctor's `version` is NOT ignored, the factory-slot arity IS 3, and `Serializer+0x08` is a `ReaderWriter*`). The 5% perf gate is BREACHED at +7.7%/+7.5% and DEFERRED BY THE USER to after the final stage. Scoped to the 39 IO symbols our tree actually calls, which is far less than this row implied. "Stream family" is 6 exports on ONE class, `IO::CompressedMemoryStream`, all thin shims over `IO::CompressedStream`; the codec, `FileStream`, `BinaryFileStream`, `TextFileStream`, `VisitorStream`, `CompressedFileStream` and `CompressedCopyFileStream` are untouched. **`PackageFile` and `BinaryReader/Writer` are NOT in this wave at all** — our tree never calls them, so the "densest class in the DLL" note describes work no wave has yet needed. Lanes: A Serializer (19), B CompressedMemoryStream (6), C Persistence (7), D FileSystem+Modification (7), H the `BANISHED_AUTOLOAD` harness | M | Encoding vtable offsets differ between retail and the profile build — see the warning in `runtime/src/io/rt_io_port.cpp` |
 | **5 Algorithm packages** — **LANDED 2026-09-06, see [WAVE5.md](WAVE5.md)** | 58 of the 74 functions our tree calls: Achievement 34 (Goal 13 + Manager family 21), Save 15, Picking 9/9. **Collision2D and Pathfinding are TRUE ZEROES** — our tree calls neither, and pathfinding is reimplemented natively in the exe (`code/Game/Action/action_pf_*.cpp`), so this row's five namespaces are really three. 14 runs, the largest 160,416,395 diffed calls, **0 divergences in every Wave 5 site**. Found 2 live defects (4 phantom `Goal` manglings, one of which skipped the InternalFactory swap-remove before a `MemFree`; a `SavedState` fallback pointing 0x90 bytes INTO another function), a pre-existing mods-menu crash, and **an uninitialised read in the shipped DLL** (`RemoveMesh` leaves `Entry::_userValue2` uninitialised). Also fixed three census blind spots. | M each | Self-contained, each ~13–18 KB, only System/Object below them |
 | **6 Video + Graphics** — **LANDED 2026-09-07, see [WAVE6.md](WAVE6.md)** | 113 of the 148 functions our tree calls (Video 53/69, Graphics 59/87), across 7 lanes. **Two FINAL runs, 25,858,610 and 49,643,611 diffed calls, 0 Wave 6 divergences** — every remaining divergence is the pre-existing Wave 1 1-ULP family. Found 5 port defects and 2 oracle-design defects, plus a LIVE functional gap that was not a port: `Geometry::Attach`/`Detach` were spelled `AEAV12@` where the DLL only exports `PEAV12@`, `ResolveExport` has no address fallback, and both call sites are `if (ptr)`-guarded — so every attach and detach in `action_base_complete.cpp` had been silently dead since it was written. **This row's premise about the detour was WRONG in our favour**: `Video::Context` has no vtable and `??_7Geometry` is exported, so no detour was needed and none was installed. `Renderer::Draw` is held back and wants its own lane. | L | Graphics→Video 73 edges, port Video first |
-| **7 UI** | 73 classes, 1,625 fns, 193 KB | XL | Element by element; DialogInstance and UserInterface last |
+| **7 UI** — **LANDED 2026-09-07, see [WAVE7.md](WAVE7.md)** | 101 of the 147 functions our tree calls, across 6 lanes (Element 21/23, Dialog family 14/28, UserInterface 8/19, input widgets 18/27, layout widgets 20/24, sprite/text 20/23). **Two closing runs, 26,280,535 and 50,848,191 diffed calls, 0 Wave 7 divergences** — every residual is the Wave 1 1-ULP family. The integration run DID find 2 new sites (`SpriteSheet` ctor and `AddSpriteInfo`, both 100% divergent); both were the ORACLE comparing bytes neither side writes, root-caused from disassembly and closed with no ported body changed. **This row's premise about vtables was wrong in our favour**: all 68 UI vtables are exported, so a ported ctor stamps the DLL's own — the `??_7Geometry` lever from Wave 6, general across the namespace. `UserInterface` turned out to have NO vtable at all. Six pre-existing defects fixed at source, five latent-but-live. **The detour was again not needed and the count is still 0 across all 4,632 functions.** | XL | Element by element; DialogInstance and UserInterface last |
 | **8 Top** | Audio, Input, Application, Engine (MainLoop/UpdateLoop/Loader family, some already reimplemented in the hook era: `engine/types/MainLoop.h` etc.), Save | M | Integrators; mostly wiring |
 | **9 Cutover** | Remove `LoadLibrary` of Runtime; retire the §2.2 patches; VideoDX11 is already ours (`dx11/`) | S | |
 
@@ -534,6 +534,49 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       `BANISHED_LOD_CENSUS`, the `0x1400f2f00` shape from §1.1), `AnimationManager::Update` /
       `Serialize`, `FrameCopyImageBuffer`, `ImageBuffer::SaveImageToFile`, and the exported DATA
       symbols. See [WAVE6.md](WAVE6.md).
+- [x] **Wave 7 (UI) merged.** Census after the wave: **766 called, 458 ported (59.8%)** —
+      UI 98/149 (65.8%), Math 58/63, Volume 12/13, Picking 9/9, Video 53/69, Graphics 59/87,
+      System 54/71, IO 36/52, Achievement 34/50, Object 28/44, Save 15/20.
+      Two closing runs, **0 Wave 7 divergences** in 26,280,535 and 50,848,191 diffed calls, both
+      with a zero-byte crash log; every residual is the Wave 1 1-ULP family.
+      **101 functions registered** across 6 lanes (the process prints `[RtPort] UI: 101`; the
+      census's 98 is the *called*-surface subset — both correct, different denominators).
+      **Coverage was total on the save path: zero `calls=0` sites.** The one exception across both
+      paths is `UI::EditElement::SetText`, registered and never exercised — its only live caller
+      is `SpriteCaptureUI::Serialize`, a dev tool neither harness reaches.
+      The integration run FOUND 2 new 100%-divergent sites (`SpriteSheet` ctor, `AddSpriteInfo`)
+      and both were the ORACLE comparing bytes neither side writes — closed by narrowing the
+      compare extent to the writer's final store, read out of the shipped binary and verified
+      twice. No ported body changed.
+      **Six pre-existing defects fixed at source**, five latent-but-live: `fn_Element_SetPadding`'s
+      argument order (retail is left/RIGHT/TOP/bottom); `EditElement::SetText`'s fallback
+      resolving to `UI::TextElement::SetText`, a different class; `fn_DialogInstance_AddController`
+      silently bound to `Element::AddChild` by an always-firing fallback; a `Dialog::GetReference`
+      mangling naming a class (`DialogReference`) that exists nowhere in the 4,926 exports; a
+      `GetController` type-id filter of `0` in `Toolbar_CenterOnEntity_Impl` that had **survived
+      its own fix note** (see `reference_getcontroller_third_arg_is_a_type_filter`, now on its
+      third occurrence); and `runtime/types/ui/String.h` compiling only by accident of include
+      order. Also corrected `Collection.h`'s `LinkedList` size comment (said 0x10 where the same
+      block says 0x18) — in the file §4.3 risk 1 ranks the highest layout risk in the port.
+      **Two premises in the wave brief were WRONG and the lanes disproved them**: a phantom export
+      name is NOT automatically a dead call site (the call sites carry their own
+      `ResolveAddr(Module::Runtime, …)` fallback, so three of the six were benign), and a
+      written-extent constant is a property of a WRITER, not of a type — the same field is
+      correctly excluded from one oracle and included in another.
+      **New project-wide hazard, and the most transferable thing the wave produced:**
+      `ResolveAddr(Module::Runtime, addr)` consults the port registry BEFORE the module handle
+      (`standalone/resolve_standalone.cpp:325`), so code that reads shipped bytes at an address it
+      also registers decodes **its own prologue**. Only `RtOriginal`/`ResolveExportRaw` reaches the
+      DLL. The first wave to install a detour or build a trampoline hits this by construction.
+      Held back with written reasons (48): `Element` dtor (no live caller in the tree AND no
+      oracle) and `RemoveChildren` (a replay frees every child twice); 10 in the Dialog family
+      (allocation/ownership split, the handle-table swap-remove, and `ElementDescription::Serialize`,
+      whose name would re-point exe slot `0x1401518c8` onto the `.rsc` parse path); 11 of
+      `UserInterface`, including `ShowDialog` (a nested `MainLoop::Frame` loop); 9 input widgets;
+      4 layout widgets; 3 `SpriteContext` (they submit into the live GPU vertex buffer). Five more
+      lane-E mutators are registered with an explicit NO ORACLE, because the restore-based oracle
+      that works for the other nine is a use-after-free where ours has already run a scalar
+      deleting dtor or released a refcount. See [WAVE7.md](WAVE7.md).
 - [ ] Every ported function passes the diff harness against the DLL on `sa-run` and `sa-stress`.
       Wave 1 on `sa-run`: **6,556,631 calls / 0 divergences** with `BANISHED_RT_LIBM=dll`;
       90 divergences in 2 sites with our own libm, all 1 ULP and all sin/cos-fed

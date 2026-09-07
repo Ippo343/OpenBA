@@ -74,7 +74,13 @@ extern fn_UI_Update_t fn_UI_Update;
 typedef void (*fn_UI_Draw_t)(void* self, void* context);
 extern fn_UI_Draw_t fn_UI_Draw;
 
-// UI::UserInterface::CloseDialog(this, InternalPtr<DialogInstance>&)
+// UI::UserInterface::CloseDialog(this, InternalPtr<DialogInstance> BY VALUE)
+// ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+// (0x180120f20, ordinal 1725). Previously documented — and resolved — as
+// `AEAV…`, by reference; that name is NOT in the export table. Passing a
+// pointer is right either way: InternalPtr<T> has a non-trivial copy ctor, so
+// MSVC x64 passes it by address in both spellings, and this callee only READS
+// the slot. Wave 7 lane C.
 typedef void (*fn_UI_CloseDialog_t)(void* self, void* dialogPtr);
 extern fn_UI_CloseDialog_t fn_UI_CloseDialog;
 
@@ -432,8 +438,17 @@ extern fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId;
 
 // --- UI::Element ---
 
-// Element::SetFlagsOnOff(this, hideFlags, showFlags)
-typedef void (*fn_Element_SetFlagsOnOff_t)(void* self, uint32_t hideFlags, uint32_t showFlags);
+// Element::SetFlagsOnOff(this, setFlags, clearFlags)   retail 0x180116160
+//
+// The body is `_flags = (_flags | setFlags) & ~clearFlags`, i.e. (bits to SET,
+// bits to CLEAR) — NOT (hideFlags, showFlags), which is what this typedef said
+// until Wave 7 lane A reversed it. That old name reads correctly only by
+// accident: flag BIT 0 MEANS "HIDDEN" (?IsVisible@ 0x1800354e0 is
+// `NOT EAX; AND EAX,1`), so the ubiquitous (1,0) call sets the hidden bit and
+// (0,1) clears it. Every other bit inverts that intuition. Retail then runs the
+// parent dirty walk only when BIT 0 changed — no other bit triggers it.
+// The full bit map is UI::ElementFlag in runtime/types/ui/Element.h.
+typedef void (*fn_Element_SetFlagsOnOff_t)(void* self, uint32_t setFlags, uint32_t clearFlags);
 extern fn_Element_SetFlagsOnOff_t fn_Element_SetFlagsOnOff;
 
 // Element::SetElementId(this, id)
@@ -444,8 +459,19 @@ extern fn_Element_SetElementId_t fn_Element_SetElementId;
 typedef void (*fn_Element_SetName_t)(void* self, const void* str);
 extern fn_Element_SetName_t fn_Element_SetName;
 
-// Element::SetToolTip(this, Sprite) — by value (UI::Sprite is small)
-typedef void (*fn_Element_SetToolTip_t)(void* self, void* sprite);
+// Element::SetToolTip(this, UI::String) — by value, 0x10 bytes, so MSVC passes
+// a POINTER to the caller's temporary.   retail 0x180035740
+//
+// The argument is a UI::String, not a Sprite — this typedef called it `sprite`
+// until Wave 7 lane A reversed the function. The mangled name says so:
+// ?SetToolTip@Element@UI@@QEAAXVString@2@@Z, where `String@2` back-references
+// UI. So does every call site: buildui.cpp, professionui.cpp, toolbardialog.cpp
+// and townhallui.cpp all build one with fn_UIString_Ctor into a uint8_t[16] and
+// pass that. The body copies 0x10 bytes to Element+0x48 and touches no refcount
+// (UI::String is a POD {StringTable*, int index, int pad}); contrast
+// fn_Element_SetToolTipString below, whose argument IS a refcounted
+// System::String. Layout: UI::UiString in runtime/types/ui/Element.h.
+typedef void (*fn_Element_SetToolTip_t)(void* self, void* uiString);
 extern fn_Element_SetToolTip_t fn_Element_SetToolTip;
 
 // Element::SetToolTipString(this, String const&)
@@ -493,9 +519,14 @@ extern fn_Element_FindElement_t fn_Element_FindElement;
 typedef void* (*fn_DialogController_GetContainer_t)(void* self, void* retval);
 extern fn_DialogController_GetContainer_t fn_DialogController_GetContainer;
 
-// DialogInstance::GetController(this, retval, index) -> InternalPtr<DialogController> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=index
-typedef void* (*fn_DialogInstance_GetController_t)(const void* self, void* retval, uint32_t index);
+// DialogInstance::GetController(this, retval, typeId) -> InternalPtr<DialogController> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=typeId
+// THE THIRD ARGUMENT IS A TYPE ID, NOT AN INDEX (corrected 2026-09-07, Wave 7
+// lane B). Retail 0x180113320 walks the whole controller array and compares the
+// argument against each controller's own type id — vtable slot +0x10, the
+// Object::Internal Type slot — and returns null when nothing matches. Calling
+// it with 0 asks for "the controller whose type id is 0", not "the first one".
+typedef void* (*fn_DialogInstance_GetController_t)(const void* self, void* retval, uint32_t typeId);
 extern fn_DialogInstance_GetController_t fn_DialogInstance_GetController;
 
 // DialogInstance::FindElementType(this, retval, typeId) -> InternalPtr<Element> (member, non-trivial return)
@@ -1188,8 +1219,25 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 struct SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
-// TextElement::SetText(this, UI::String*) — sets text element text (takes UI::String, 16 bytes)
-// ?SetText@TextElement@UI@@QEAAXVString@2@@Z (0x180042070)
+// FORMERLY resolved to the WRONG function. `?SetText@EditElement@UI@@QEAAXVString@2@@Z`
+// (a by-value overload) is Wave 7 lane D's phantom name #6 — it is NOT IN THE
+// SHIPPED EXPORT TABLE (confirmed by pefile query,
+// reference_resolveexport_phantom_names.md) — so ResolveExport always failed
+// and the code fell back to a hardcoded address, 0x180042070, which is NOT
+// EditElement at all: it is `UI::TextElement::SetText(UI::String)`, a base
+// class taking an unrelated 16-byte UI::String and writing to TextElement's
+// OWN cached-display-text field at this+0xd8/+0xe0 (see CacheText). Called on
+// an EditElement (which has a DIFFERENT, dedicated System::String field at
+// +0xc8, guarded by a readonly check EditElement::SetText itself performs),
+// this corrupted TextElement's base string field with raw bytes from a
+// System::String and never touched the field the edit box actually displays
+// or the readonly guard — the one live caller, spritecaptureui.cpp:100 (the
+// sprite-capture dev tool's "default capture path" edit box), silently never
+// worked: its typed default text never stuck, and TextElement::CacheText ran
+// over garbage. Retargeted to the real, by-reference EditElement::SetText
+// (0x1800d0db0, exported) below — identical raw ABI (self, pointer-to-String),
+// so the existing caller needs no change.
+// ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z (0x1800d0db0)
 typedef void (*fn_EditElement_SetText_t)(void* self, void* str);
 extern fn_EditElement_SetText_t fn_EditElement_SetText;
 
@@ -1557,9 +1605,26 @@ extern fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount;
 // Scenario type ID pointer (for IsDerivedFrom check in ScenarioDialog)
 extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
 
-// UI::Element::SetPadding(this, left, top, right, bottom)
-// ?SetPadding@Element@UI@@QEAAXHHHH@Z
-typedef void (*fn_Element_SetPadding_t)(void* self, int left, int top, int right, int bottom);
+// UI::Element::SetPadding(this, left, RIGHT, TOP, bottom)
+// ?SetPadding@Element@UI@@QEAAXHHHH@Z   retail 0x180115480
+//
+// *** THE 2nd AND 3rd ARGUMENTS ARE (right, top), NOT (top, right). ***
+// This typedef said (left, top, right, bottom) until Wave 7 lane A reversed the
+// function; if you meet that order anywhere else, it is the old wrong claim.
+// Retail stores EDX->+0x18, R8D->+0x1c, R9D->+0x20, [RSP+0x28]->+0x24, and the
+// four one-line exported accessors settle which offset is which field:
+//   ?GetLeftPad@   0x1800355e0  MOV EAX,[RCX+0x18]
+//   ?GetRightPad@  0x180035600  MOV EAX,[RCX+0x1c]
+//   ?GetTopPad@    0x1800355f0  MOV EAX,[RCX+0x20]
+//   ?GetBottomPad@ 0x180035610  MOV EAX,[RCX+0x24]
+// Corroborated by ?GetPaddedSize@ (0x180115f10), which computes
+// width = _layoutWidth + [+0x1c] + [+0x18] and height = _layoutHeight + [+0x24] + [+0x20].
+// Field names and offsets: runtime/types/ui/Element.h. Write-up:
+// docs/runtime_port/WAVE7_LANE_A.md §6.
+//
+// The defect was LATENT when it was found — no caller outside engine_funcs.cpp —
+// so nothing in the tree needed fixing alongside it.
+typedef void (*fn_Element_SetPadding_t)(void* self, int left, int right, int top, int bottom);
 extern fn_Element_SetPadding_t fn_Element_SetPadding;
 
 // UI::Sprite::Sprite(retval, ExternalPtr<SpriteSheet>, String const&) — non-trivial return
@@ -1792,8 +1857,11 @@ extern fn_KeyMap_GetValue_t fn_KeyMap_GetValue;
 
 // UI::UserInterface::GetFirstContainedDialog(this, x, y) -> InternalPtr<DialogInstance>
 // Member, non-trivial return: RCX=this, RDX=retval, R8=x, R9=y
-// ?GetFirstContainedDialog@UserInterface@UI@@QEAA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z
-// (0x18011fb00)
+// ?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z
+// (0x18011fb00, ordinal 2669). The export is QEBA (const); this line used to
+// say QEAA, a name the DLL does not contain, and the resolve fell through to
+// the address form. Const-ness has no ABI, so nothing about the call changes.
+// Wave 7 lane C. PORTED: runtime/src/ui/userinterface.cpp.
 typedef void* (*fn_UI_GetFirstContainedDialog_t)(void* self, void* retval, int x, int y);
 extern fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog;
 
@@ -1845,11 +1913,20 @@ extern fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor;
 typedef void* (*fn_Sprite_Default_Ctor_t)(void* retval);
 extern fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor;
 
-// UI::Dialog::GetReference(this, retval) -> ExternalPtr (member, non-trivial return)
-// RCX=this(Dialog*), RDX=retval
-// ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VDialogReference@UI@@@Object@@XZ
-typedef void* (*fn_Dialog_GetReference_t)(void* self, void* retval);
-extern fn_Dialog_GetReference_t fn_Dialog_GetReference;
+// fn_Dialog_GetReference — REMOVED 2026-09-07 (Wave 7 lane B,
+// docs/runtime_port/WAVE7_LANE_B.md §5). It was declared as
+//   UI::Dialog::GetReference(this, retval) -> ExternalPtr<UI::DialogReference>
+//   ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VDialogReference@UI@@@Object@@XZ
+// and BOTH halves of that were wrong. The DLL exports no symbol containing
+// "DialogReference" at all — the class name was invented — and the real
+// function takes an INT INDEX the typedef omitted:
+//   ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VExternal@Object@@@Object@@H@Z
+//   Runtime 0x1800388d0, ordinal 2861: `*out = ((void**)this[0x78])[index]`,
+//   the twin of ?GetTemplate@ (0x1800388b0) against Dialog+0x78 instead of +0x68.
+// So this pointer has been NULL since it was written (ResolveExport has no
+// address fallback), with no fallback branch to hide it. Deleted rather than
+// repaired because it had ZERO callers tree-wide; whoever needs it should
+// declare the real signature, index and all.
 
 // Audio::Scene::PlayEffect(scene, soundEffect, soundType, time) -> uint
 // ?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z
@@ -2368,8 +2445,10 @@ extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 typedef void (*fn_DialogInstance_SetUpperLeft_t)(void* self, int x, int y, bool animate);
 extern fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft;
 
-// UI::UserInterface::BringDialogToFront(this, InternalPtr<DialogInstance>&)
-// ?BringDialogToFront@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+// UI::UserInterface::BringDialogToFront(this, InternalPtr<DialogInstance> BY VALUE)
+// ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+// (0x180120440, ordinal 1672). The `AEAV…` by-reference spelling this line
+// used to carry is not in the export table; same ABI, same target. Wave 7 lane C.
 typedef void (*fn_UI_BringDialogToFront_t)(void* self, void* dialogPtr);
 extern fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront;
 
@@ -2514,11 +2593,25 @@ typedef void (*fn_DialogInstance_OnElementEvent_t)(void* self, void* elementPtr,
     int msg, int id, uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8);
 extern fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent;
 
-// UI::DialogInstance::AddController(this, typeId, p3, p4, external, nameStr)
-// Adds a sub-controller to a dialog instance.
-typedef void (*fn_DialogInstance_AddController_t)(void* self, uint32_t typeId,
-    int p3, int p4, void* external, void* nameStr);
-extern fn_DialogInstance_AddController_t fn_DialogInstance_AddController;
+// fn_DialogInstance_AddController — REMOVED 2026-09-07 (Wave 7 lane B,
+// docs/runtime_port/WAVE7_LANE_B.md §5). It was declared as
+//   AddController(this, typeId, int p3, int p4, void* external, void* nameStr)
+//   ?AddController@DialogInstance@UI@@QEAAXIHHPEBVExternal@Object@@AEBVString@System@@@Z
+// which is not an export. It was a mis-mangling of the six-argument overload
+// at Runtime 0x180113470 / ordinal 1541, whose real signature is
+//   (uint, Object::Base*, ExternalPtr<DialogControllerConfig>,
+//    ExternalPtr<ElementDescription>, System::String const&)
+// — the two `int`s were pointer arguments (the exact
+// reference_hidden_retval_and_int_pointer_args.md failure). That overload is
+// ALREADY resolved correctly, right below, as fn_DialogInstance_AddController6,
+// so this was a duplicate as well as a wrong name.
+//
+// Worse than dead: its ResolveExport returned null, so its fallback fired and
+// read exe dispatch slot 0x140151a60, which tools/dispatch_slot_map.py says is
+// ?AddChild@Element@UI@@… — the pointer was silently bound to Element::AddChild.
+// standalone/reg_unreg_lane2.cpp's note claiming that branch "never fires
+// because the ResolveExport already succeeds" was wrong for the same reason.
+// Deleted rather than repaired because it had ZERO callers tree-wide.
 
 // UI::DialogInstance::OnUpdateLayout(this) — virtual, slot +0x30
 // Iterates child elements at +0x78 (count at +0x80) and dispatches their
@@ -3824,7 +3917,11 @@ typedef void (*fn_ReadGameSettings_t)(int32_t* gameSettings);
 extern fn_ReadGameSettings_t fn_ReadGameSettings;
 
 // ApplyKeyMapToUI(keyMapSingleton, userInterface) — copies keymap config fields to UI
-// FUN_140099260 in exe: copies +0x58..+0x78, +0xA8/+0xB0 to UI, sets UI scale
+// FUN_140099260 in exe: copies the KEYMAP's +0x58..+0x78 and +0xA8/+0xB0 into the UI,
+// sets UI scale. The offsets named here are SOURCE offsets in the KeyMap; the
+// destinations are UserInterface +0xA8..+0xC8 (sound slots 2..6 of _sounds[7] at +0x98)
+// and the fade sprite at UI +0xe0 (Wave 7 lane C, which reversed that layout).
+// Read as a claim about UI offsets until then, which it is not.
 typedef void (*fn_ApplyKeyMapToUI_t)(void* keyMap, void* userInterface);
 extern fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI;
 
@@ -4751,26 +4848,52 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     if (*(uintptr_t*)parentDialogPtr != 0) {
         fn_InternalBasePtr_CheckPtr(parentDialogPtr);
 
-        // Get controller from dialog instance
+        // Retail FUN_140103040 reads DWORD_1401c4f00 — whose registrar is
+        // RegisterType_EntityUI — TWICE, and both reads matter. Disassembled at
+        // 0x14010307a..0x1401030af (the decompiled C shows only the second; it drops
+        // GetController's third argument entirely and prints the retval buffer as a
+        // `uint` — reference_ghidra_c_output_vs_disassembly.md):
+        //
+        //     MOV  R8D,[0x1401c4f00]   ; arg 3 = the EntityUI type-id FILTER
+        //     MOV  RCX,[RBX]           ; this = DialogInstance*
+        //     LEA  RDX,[RBP+0x6f]      ; hidden retval slot
+        //     CALL [0x140151768]       ; UI::DialogInstance::GetController
+        //     ...
+        //     MOV  EDX,[0x1401c4f00]   ; and again, for IsDerivedFrom
+        //     CALL [0x140152a98]       ; fn_IsDerivedFrom
+        //
+        // So the type id has to be resolved BEFORE the GetController call, not after.
+        //
+        // GetController's third parameter is a TYPE-ID FILTER, not an index: retail
+        // 0x180113320 walks the controller array and compares the argument against each
+        // controller's own type id (Object::Internal vtable slot +0x10), returning null
+        // when nothing matches. Nothing has type id 0.
+        // (reference_getcontroller_third_arg_is_a_type_filter; the mangled name says so
+        // too — the trailing `I` in ...@Object@@I@Z is that uint32.)
+        //
+        // HISTORY, because this site has now been wrong twice in two different places and
+        // the second fix looked complete when it was not:
+        //   * Originally the downstream IsDerivedFrom used g_TypeId_PageToggleUI — a
+        //     different class (own slot 0x1401c5408, which nothing in this tree reads).
+        //     That was corrected to tidEntityUI, and the note left behind declared the
+        //     "camera centres but never FOLLOWS the entity" bug cured.
+        //   * IT WAS NOT. The UPSTREAM filter was left at literal 0, so GetController
+        //     returned null for every dialog, `controllerRaw` was null, the guard below
+        //     failed, panelController stayed null and entity+0xd8 was never set — the
+        //     identical symptom, for every caller ("go to entity" in workplace /
+        //     profession / residence / townhall / statusbar / toolbar / citizen panels),
+        //     now hidden behind a comment asserting it was fixed. Corrected 2026-09-07
+        //     (Wave 7 lane B; the port of GetController is what surfaced it).
+        // Guard the VALUE, not the pointer: a null-but-resolvable id is not a valid filter.
+        static uint32_t s_tid_EntityUI_toolbar = 0;
+        const uint32_t tidEntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI_toolbar);
+
+        // Get the EntityUI controller from the dialog instance.
         uint8_t controllerBuf[16] = {};
-        fn_DialogInstance_GetController(*(void**)parentDialogPtr, controllerBuf, 0);
+        fn_DialogInstance_GetController(*(void**)parentDialogPtr, controllerBuf, tidEntityUI);
 
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;
-        // Retail FUN_140103040 gates this on DWORD_1401c4f00, whose registrar is
-        // RegisterType_EntityUI — so the controller this wants is an **EntityUI**, and the
-        // accepted pointer is handed to EntityUI_helper_66b0. It is NOT a PageToggleUI (a
-        // different class, own slot 0x1401c5408, which nothing in this tree reads).
-        //
-        // This previously read g_TypeId_PageToggleUI. That global is null unless
-        // statusiconui.cpp's by-name lazy fill had run, and when it HAD run it held the real
-        // PageToggleUI id — wrong-but-NONZERO, which the old `&& g_TypeId_PageToggleUI` null
-        // check could not detect. Either way IsDerivedFrom failed, panelController stayed
-        // null, and entity+0xd8 was never set: the camera centred on the entity but never
-        // FOLLOWED it, for every caller ("go to entity" in workplace/profession/residence/
-        // townhall/statusbar/toolbar/citizen panels). Guard the VALUE, not the pointer.
-        static uint32_t s_tid_EntityUI_toolbar = 0;
-        const uint32_t tidEntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI_toolbar);
         if (controllerRaw != 0 && tidEntityUI) {
             fn_InternalBasePtr_CheckPtr(controllerBuf);
             if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {

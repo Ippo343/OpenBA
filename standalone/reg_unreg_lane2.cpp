@@ -136,12 +136,17 @@ void RegisterUnregLane2() {
     //   0x140151a30 OnElementEvent, 0x140151a60 AddChild@Element — engine_funcs.cpp's
     //       fn_DialogInstance_OnElementEvent / fn_Element_AddChild both resolve by
     //       ResolveExport + Runtime-address fallback first, independent of these slots.
-    //       (Note: engine_funcs.cpp:3486 reads exe slot 0x140151a60 as a FALLBACK for
-    //       fn_DialogInstance_AddController — a naming mismatch, since 0x140151a60 is
-    //       actually Element::AddChild's slot, not AddController's. Currently harmless
-    //       because fn_DialogInstance_AddController's own ResolveExport already
-    //       succeeds so that fallback branch never fires — flagging for whoever next
-    //       touches engine_funcs.cpp, not fixing here since it's a shared file.)
+    //       (This note used to add: "engine_funcs.cpp reads exe slot 0x140151a60 as a
+    //       FALLBACK for fn_DialogInstance_AddController — a naming mismatch, but
+    //       harmless because that pointer's own ResolveExport already succeeds so the
+    //       fallback never fires." The mismatch was real; the reassurance was NOT.
+    //       That ResolveExport used a mangled name the DLL does not contain
+    //       (?AddController@DialogInstance@UI@@QEAAXIHHPEBVExternal@Object@@AEBV...),
+    //       so it returned null on every run and the fallback ALWAYS fired, binding
+    //       fn_DialogInstance_AddController to Element::AddChild. It stayed harmless
+    //       only because the pointer had zero callers. Both the pointer and its
+    //       resolve were deleted 2026-09-07 by Wave 7 lane B — see
+    //       docs/runtime_port/WAVE7_LANE_B.md §5 and the note in engine_funcs.h.)
     //   0x140151a90 / 0x1401529d0 AddController (6-arg / 5-arg tab), 0x1401529c8
     //       TabElement::AddTab — engine_funcs.cpp already falls back to hardcoded
     //       Runtime RVAs (0x180113470 / 0x1801133b0 / 0x1800da130) documented as

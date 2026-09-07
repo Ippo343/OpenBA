@@ -195,7 +195,14 @@ struct LinkedList {
     Node*   _tail;       // +0x08
     int32_t _count;      // +0x10
     int32_t _pad14;      // +0x14: NOT PINNED — never read or written by any
-                         //        decompiled body; present so sizeof == 0x10
+                         //        decompiled body; present so sizeof == 0x18.
+                         //        (Read "0x10" until Wave 7 lane C: a typo, and
+                         //        one the same comment block contradicts 26
+                         //        lines up, which states 0x18 correctly. The
+                         //        arithmetic settles it — head 8 + tail 8 +
+                         //        count 4 + pad 4 = 0x18 — and it is now pinned
+                         //        by a static_assert in
+                         //        runtime/types/ui/UserInterface.h.)
 };
 
 // ============================================================
