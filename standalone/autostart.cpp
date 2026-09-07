@@ -169,6 +169,20 @@ void Init() {
             if (std::strcmp(t, "1") != 0) s_tutorialIndex = std::atoi(t);
             s_enabled = true;
             s_phase   = Phase::WaitTutorialMenu;
+            // This block RETURNS before BANISHED_AUTOSTART_GAMES is parsed below, so
+            // read it here and default to ZERO on the tutorial path. Defaulting to
+            // s_gamesLeft's initial 1 would silently make every existing AUTOTUTORIAL
+            // run start a New Game after a quit-to-menu, which is not what those runs
+            // have always meant.
+            s_gamesLeft = 0;
+            if (const char* g = std::getenv("BANISHED_AUTOSTART_GAMES")) {
+                const int n = std::atoi(g);
+                if (n > 0) {
+                    s_gamesLeft = n;
+                    fprintf(stderr, "[AutoStart] AUTOTUTORIAL + %d New Game(s) after a "
+                           "quit-to-menu (BANISHED_AUTOSTART_GAMES)\n", n);
+                }
+            }
             fprintf(stderr, "[AutoStart] AUTOTUTORIAL ENABLED — will click Tutorial after "
                    "%d menu frames, then load entry #%d\n",
                    s_settleFrames, s_tutorialIndex);
@@ -478,6 +492,22 @@ void TickMenu(void* menuDLT) {
         fprintf(stderr, "[AutoStart] tutorial list ready (%d entries) — selecting #%d "
                 "and injecting Load click\n", count, pick);
         InjectClick(dlg, kMsg_ButtonClick, kSD_LoadClick);
+        // BANISHED_AUTOSTART_GAMES=<n> alongside AUTOTUTORIAL rearms the driver so a
+        // quit-to-main-menu (PAUSEMENU_BUTTON=5) is followed by n NEW GAMES. Added
+        // 2026-09-07 for a user-reported repro that the pre-existing games-loop could
+        // not express: new -> quit -> new is CLEAN, but TUTORIAL -> quit -> new builds
+        // an empty world. The distinction matters because a tutorial is a loaded
+        // retail save and a new game is a generated world, so they tear down through
+        // different paths -- and only the tutorial's leaves the next world broken.
+        if (s_gamesLeft > 0) {
+            s_phase        = Phase::WaitMenuSettle;
+            s_phaseFrame   = 0;
+            s_newGameFrame = 0;
+            s_lastMenu     = nullptr;   // the tutorial never clicked a MainMenuDialog
+            fprintf(stderr, "[AutoStart] AUTOTUTORIAL sequence fired — rearmed for %d "
+                   "New Game(s) after a quit-to-menu\n", s_gamesLeft);
+            break;
+        }
         s_phase = Phase::Done;
         fprintf(stderr, "[AutoStart] AUTOTUTORIAL sequence fired — driver done\n");
         break;
