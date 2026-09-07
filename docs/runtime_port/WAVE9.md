@@ -238,6 +238,7 @@ ours), not chosen.
 | Lane | Scope | Gate |
 |---|---|---|
 | **0. Residue matrix** | Run `BANISHED_RT_STRICT=1` across the whole harness matrix — menu, mods menu, all 4 tutorials, `Save9.sav` autoload, `sa-stress`, and gameplay through the pause menu. Union the residue lists; entries are monotone, so the union is sound and any *shrink* is a tool bug. **Use a route that reaches gameplay** — `BANISHED_AUTOQUIT=1` quits at the MAIN MENU and cost this document one wrong finding (see the correction above); menu-only 260 vs gameplay 309. **No attended run is needed for `Input::Device` after all** — see the CLOSED section below. | A single work list that is what the process reaches, not what the tree mentions |
+| **S. The save-stream A/B oracle** | Write the same object through two independent `IO::MemoryStream`s — ours and the shipped body — and `memcmp`. Replay is impossible anywhere on the save path, and a second call often succeeds *differently and silently*, so the oracle reads green while proving nothing. **Unblocks four rows at once** (see below) and retroactively strengthens Wave 4's `Serializer` family. Build this before porting any `Serialize`. | Byte-identical output on a real save |
 | **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8. **Triaged below into a per-function disposition** — P (1, a probe), B (10, blocked on a named dependency), N (7, allocator-bound or oracle-hard), D/X (14, stubs or already-unblocked). Start with X: four `ExternalFactory` mutators whose stated blocker was a Wave 4 dependency that has since landed. | 0 divergences and non-zero `calls=` for the ports; a written reason for each stub |
 | **B. The 145 named functions + 51 ctors/dtors** | The ordinary port wave, class-atomic (§4.1 rule 5). | 0 divergences |
 | **C. Data: 28 vtables, 17 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
@@ -454,6 +455,47 @@ None of these can be closed by writing a body in this session without an oracle,
 would be the exact failure `reference_uncalled_port_is_not_verified.md` warns about — a green
 `calls=0` line over unverified code. They are lane work with a decided disposition, which is the
 honest end state for them before the wave opens.
+
+### Lane A, opened: the remaining holdbacks are not 28 independent problems
+
+Opening lane A on its two most tractable rows produced a better result than either port would
+have: **the critical path is one missing tool, shared by four rows.**
+
+`Audio::Scene::Serialize` turned out to be 40 instructions whose stated blocker was already
+answered (above), and whose two unexported callees are ordinary `Collection` internals a faithful
+port may call by address exactly as `ClearAll` and `RegisterInput` already do —
+`0x180051390` is `Collection::Array<Emitter>::Resize` (0x40-byte elements, 3x growth heuristic,
+allocator-locked free of the old buffer) and `0x180052640` is the bulk element serialize. Nothing
+there is a wall.
+
+**The wall is the oracle, and it is the same wall four times over.** Everything on the save path
+shares one property: *replay is impossible*. Calling ours and then theirs either consumes the
+stream twice or writes it twice, and — the specific trap — a second call often **succeeds
+differently and silently**, which makes the oracle vacuous while it reports green. That is the
+`RegisterInput` lesson (a second insert of the same id returns early) applied to a whole family.
+
+Rows that are blocked on exactly this and nothing else:
+
+| Row | Function | Why replay fails |
+|---|---|---|
+| 8 | `Audio::Scene::Serialize` `0x1800e0050` | consumes/emits the stream |
+| 25 | `ExternalFactory::SerializeReferenceTable` `0x1800bcb60` | same, plus it rebuilds a `Set` |
+| 26 | `External::SaveText` `0x1800bb9d0` | same, via `TextFileStream` |
+| (Wave 3, opt-in tier) | `InternalBasePtr::Serialize` | WAVE3.md: "has **no oracle at all** and lands in the save/load path" |
+
+**So lane A's first deliverable should be a tool, not a port: a save-stream A/B harness.** Write
+the same object through *two* independent `IO::MemoryStream`s — one driven by our port, one by
+the shipped body — and `memcmp` the bytes. The pieces already exist: `??0MemoryStream@IO@@QEAA@XZ`
+(`0x1800ae710`) is already constructed by the Wave 4 `CompressedMemoryStream` port, and Wave 4
+landed 22 `Serializer` functions with 0 divergences, so the `Serializer`/`Encoding` pair over a
+scratch stream is assemblable from parts that are already ours.
+
+That harness converts four "no oracle possible" rows into ordinary ports, and it would
+retroactively strengthen Wave 4's own `Serializer` family, which today is verified by call-level
+diffing rather than by byte-comparing what it actually wrote.
+
+**This is the single highest-leverage item left in the wave**, and it is why the remaining
+holdbacks should not be attacked in the order they appear in the table.
 
 ### The pattern this session hit three times: a known fact that did not reach the next wave
 

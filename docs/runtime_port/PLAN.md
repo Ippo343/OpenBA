@@ -741,6 +741,26 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       a `String::Format` pair per binding, and a second differently-typed
       `Collection::Set<Pair<String,String>>` in `IO::Persistence`. Second time in one session
       that a group-level claim was wrong about a member; the per-function table is the fix.
+- [ ] **Wave 9 LANE A IS OPEN, and its first deliverable is a TOOL, not a port.** Opening it on
+      the two most tractable rows produced a better result than either port would have: **the
+      remaining holdbacks are not 28 independent problems — the critical path is one missing
+      oracle shared by four rows.** `Audio::Scene::Serialize`, 
+      `ExternalFactory::SerializeReferenceTable`, `External::SaveText` and Wave 3's
+      `InternalBasePtr::Serialize` are each blocked on exactly one thing: **replay is impossible
+      on the save path**, and the specific trap is that a second call often succeeds
+      DIFFERENTLY AND SILENTLY, so the oracle reads green while proving nothing (the
+      `RegisterInput` lesson — a second insert of the same id returns early — applied to a whole
+      family). The fix is **lane S, a save-stream A/B harness**: write the same object through
+      two independent `IO::MemoryStream`s, ours and the shipped body, and `memcmp`. The pieces
+      are already ours — `??0MemoryStream@IO@@QEAA@XZ` (`0x1800ae710`) is constructed by the
+      Wave 4 `CompressedMemoryStream` port, and Wave 4 landed 22 `Serializer` functions. It also
+      retroactively strengthens Wave 4's own family, which today is verified by call-level
+      diffing rather than by byte-comparing what it actually wrote.
+      Also measured while opening the lane: `Scene::Serialize`'s two "unexported callee"
+      dependencies are ordinary `Collection` internals a faithful port may call by address
+      (`0x180051390` is `Collection::Array<Emitter>::Resize`, 0x40-byte elements; `0x180052640`
+      is the bulk element serialize) — the same latitude `ClearAll` and `RegisterInput` already
+      use. Nothing there is a wall.
 - [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---
