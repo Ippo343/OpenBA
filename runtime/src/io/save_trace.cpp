@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <csetjmp>
 
 namespace RtSaveTrace {
 namespace {
@@ -36,6 +37,9 @@ struct Recorder {
 };
 
 Recorder* g_active = nullptr;      // set for the duration of one side's call
+int       g_stopAfter = 0;         // 0 = run the whole body; see Compare's doc
+std::jmp_buf g_stopJmp;
+bool      g_stopArmed = false;
 size_t    g_maxEmissions = 200000; // a runaway port must not eat the heap
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,33 @@ const char* SlotName(int off) {
     return i ? i->name : "?";
 }
 
+// The prefix stop. Abandons the rest of the body once the configured number
+// of emissions has been recorded -- see Compare's doc in save_trace.h for why
+// this is needed at all and what it costs.
+void MaybeStop(Recorder* r) {
+    if (g_stopArmed && g_stopAfter > 0 &&
+        static_cast<int>(r->log.size()) >= g_stopAfter) {
+        g_stopArmed = false;          // one shot per side
+        // STOP RECORDING BEFORE JUMPING, and this line is load-bearing.
+        //
+        // longjmp on Windows x64 UNWINDS: it runs the SEH cleanup of every
+        // frame it jumps over. Retail's Serialize bodies carry such cleanup
+        // (`MOV [RSP+0x20],-0x2` is the state marker) and it calls the
+        // ReaderWriter's deleting destructor -- WHICH EMITS. Our own port is a
+        // plain C++ frame with nothing to unwind, so without this line the two
+        // sides are asymmetric by construction: ours stops at N, theirs records
+        // an N+1'th `dtor` emission on the way out, and the harness reports a
+        // divergence it caused itself.
+        //
+        // Found by running the stop against a subject the FULL compare had just
+        // passed at 32,772 identical emissions. A prefix stop that manufactures
+        // a divergence is worse than no prefix stop, and only a known-good
+        // subject can tell the two apart.
+        g_active = nullptr;
+        std::longjmp(g_stopJmp, 1);
+    }
+}
+
 uint64_t ReadValue(const void* p, uint8_t size) {
     if (!p || !size) return 0;
     uint64_t v = 0;
@@ -137,6 +168,7 @@ uint64_t RecordEmission(int slot, uint64_t a, uint64_t b, uint64_t c) {
         }
     }
     r->log.push_back(Emission{ slot, a, b, c, value });
+    MaybeStop(r);
     return 0;
 }
 
@@ -186,8 +218,10 @@ int   g_sinkSide = 0;
 uint64_t RecordEncoding(int slot) {
     Recorder* r = g_active;
     Sink* s = g_sink[g_sinkSide];
-    if (r && r->log.size() < g_maxEmissions)
+    if (r && r->log.size() < g_maxEmissions) {
         r->log.push_back(Emission{ 0x1000 | slot, 0, 0, 0, 0 });
+        MaybeStop(r);
+    }
     return s ? reinterpret_cast<uint64_t>(&s->rwObject[0]) : 0;
 }
 
@@ -244,7 +278,8 @@ bool Enabled() {
 }
 
 bool Compare(const char* name, void* obj,
-             void (*ours)(void*, void*), void (*theirs)(void*, void*)) {
+             void (*ours)(void*, void*), void (*theirs)(void*, void*),
+             int stopAfter) {
     if (!Enabled() || !obj || !ours || !theirs) return true;
     if (ours == theirs) {
         // The vacuous pass this project keeps paying for: if the port is not
@@ -258,16 +293,34 @@ bool Compare(const char* name, void* obj,
         return false;
     }
 
-    static Sink sinkA, sinkB;   // static: ~1 KB each, and Compare is not reentrant
-    Recorder recA, recB;
+    // BOTH the sinks and the recorders are static, and the recorders MUST be.
+    // They are written after setjmp() and read after longjmp(), and a local
+    // modified in that window has an INDETERMINATE value once the jump lands --
+    // the one real C rule setjmp imposes. The prefix stop's own self-test caught
+    // this as a phantom 8-vs-9 length divergence on a subject the full compare
+    // had just passed at 32,772 identical emissions, which is exactly why the
+    // stop is proved on a known-good subject before being trusted on a new one.
+    static Sink sinkA, sinkB;   // ~1 KB each; Compare is not reentrant
+    static Recorder recA, recB;
+    recA.log.clear(); recA.overflowed = false;
+    recB.log.clear(); recB.overflowed = false;
     BuildSink(sinkA);
     BuildSink(sinkB);
     g_sink[0] = &sinkA;
     g_sink[1] = &sinkB;
 
-    g_sinkSide = 0; g_active = &recA; ours(obj, &sinkA.serializer);
-    g_sinkSide = 1; g_active = &recB; theirs(obj, &sinkB.serializer);
+    g_stopAfter = stopAfter;
+
+    g_sinkSide = 0; g_active = &recA;
+    g_stopArmed = (stopAfter > 0);
+    if (setjmp(g_stopJmp) == 0) ours(obj, &sinkA.serializer);
+
+    g_sinkSide = 1; g_active = &recB;
+    g_stopArmed = (stopAfter > 0);
+    if (setjmp(g_stopJmp) == 0) theirs(obj, &sinkB.serializer);
+
     g_active = nullptr;
+    g_stopArmed = false;
 
     ++g_compared;
 
@@ -300,12 +353,28 @@ bool Compare(const char* name, void* obj,
             "[RtSaveTrace] DIVERGE %s: same prefix but ours emitted %zu and theirs %zu — "
             "a length difference IS the desync\n",
             name, recA.log.size(), recB.log.size());
+        // Show the tail of each. A bare count says there IS a difference; the
+        // last few emissions say WHICH side ran on past the other.
+        for (int side = 0; side < 2; ++side) {
+            const std::vector<Emission>& lg = side ? recB.log : recA.log;
+            std::fprintf(stderr, "[RtSaveTrace]   %-6s tail:", side ? "theirs" : "ours");
+            size_t from = lg.size() > 4 ? lg.size() - 4 : 0;
+            for (size_t k = from; k < lg.size(); ++k)
+                std::fprintf(stderr, "  [%zu]%s(+0x%x)=%llu", k, SlotName(lg[k].slot),
+                             lg[k].slot & 0xfff, (unsigned long long)lg[k].value);
+            std::fprintf(stderr, "\n");
+        }
         ++g_diverged;
         return false;
     }
 
-    std::fprintf(stderr, "[RtSaveTrace] pass %s: %zu emissions identical\n",
-                 name, recA.log.size());
+    if (stopAfter > 0)
+        std::fprintf(stderr, "[RtSaveTrace] pass %s: %zu emissions identical — PREFIX ONLY, "
+                             "stopped after %d; everything past that is NOT compared\n",
+                     name, recA.log.size(), stopAfter);
+    else
+        std::fprintf(stderr, "[RtSaveTrace] pass %s: %zu emissions identical\n",
+                     name, recA.log.size());
     return true;
 }
 

@@ -695,4 +695,10 @@ extern "C" void RtAudio_Scene_SerializeTraceProbe(void* scene) {
     }
     RtSaveTrace::Compare("Audio::Scene::Serialize", scene,
                          &RtAudio_Scene_Serialize, theirs);
+    // Self-test of the lane S PREFIX STOP on a subject already known clean:
+    // the same comparison truncated to 8 emissions must still pass and must
+    // say PREFIX ONLY. Proving the stop on a known-good subject is the only
+    // way to tell a working stop from a stop that silently compares nothing.
+    RtSaveTrace::Compare("Audio::Scene::Serialize[prefix8]", scene,
+                         &RtAudio_Scene_Serialize, theirs, 8);
 }

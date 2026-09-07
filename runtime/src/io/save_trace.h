@@ -61,8 +61,34 @@ bool Enabled();
 // [RtSaveTrace] channel either way, naming the FIRST differing emission --
 // slot, index and value -- because "they differ" is not actionable and
 // "emission 41 wrote int 7 where retail wrote int 0" is.
+// `stopAfter` > 0 runs each side only until it has made that many emissions,
+// then abandons the rest of the body. THIS IS THE PREFIX ORACLE, and it exists
+// because the pure-read property above does NOT hold for every member of the
+// family:
+//
+//   Audio::Scene::Serialize            mutates nothing on the write path (its
+//                                      resize is guarded to the reading side)
+//   ExternalFactory::SerializeReferenceTable  writes an id into every node
+//   InternalBasePtr::Serialize         ends in PersistObject -- mutates the
+//                                      pointer AND the global factory
+//
+// For the mutating ones, replaying the WHOLE body performs the mutation twice
+// on the one live tree or factory: the same shared-state trap the family was
+// held back for. Stopping before the first mutation keeps the half that decides
+// the stream layout -- the emission sequence -- and skips the half that cannot
+// be run twice.
+//
+// THE COST, stated because a partial oracle that reads like a full one is worse
+// than none: everything after the stop is NOT compared, and the report says so
+// on every line. Choose `stopAfter` from the disassembly -- the emission index
+// of the last call before the first store -- not by trial.
+//
+// Implemented with setjmp/longjmp, so the abandoned frames are retail's own and
+// must have nothing that needs unwinding. That holds for this family (no C++
+// destructors, no lock held across the emissions); it is not a general licence.
 bool Compare(const char* name, void* obj,
-             void (*ours)(void*, void*), void (*theirs)(void*, void*));
+             void (*ours)(void*, void*), void (*theirs)(void*, void*),
+             int stopAfter = 0);
 
 // Totals for the end-of-run summary, printed beside [RtDiff].
 void Summary();
