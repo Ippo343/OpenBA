@@ -104,6 +104,12 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // The platform half (singleton_ctors_win.cpp).
 void RtLaneXPlatformLockInit(void* cs);
 void RtLaneXPlatformLockDelete(void* cs);
+// Installs allocator.cpp's `g_plat` function-pointer seam if it is not already
+// installed, and returns whether it took. See the long comment above the
+// MemoryAllocator subject in the probe: `rtalloc::Construct` opens with
+// `g_plat.lockInit(...)`, and on a normal run that table is all-null because the
+// only two callers of RtSystemAllocatorInstallPlatform() are opt-in.
+bool RtLaneXEnsureAllocatorPlatform();
 
 // System::MemoryAllocator's constructor body already exists: lane E ported it
 // as `rtalloc::Construct` / `rtalloc::Destruct` in runtime/src/system/
@@ -802,6 +808,23 @@ void ControlMustDetect(size_t n) {
     g_ours[n - 1] = save;
 }
 
+// ---------------------------------------------------------------------------
+// THE SINGLETON WINDOW MUST BE ZERO INSTRUCTIONS WIDE.
+//
+// Both constructors publish, so between a ctor returning and our restore the
+// process-wide `?_singleton@X@` points at a 0xCD scratch buffer. For twelve of
+// the thirteen subjects that is merely wrong; for MemoryAllocator it means THE
+// PROCESS ALLOCATOR IS A SCRATCH BUFFER, and any MemAlloc/MemFree in that
+// window -- inside RtDiffReportBytes, inside a printf that touches the engine
+// heap, inside a lazy resolve -- lands on an allocator with `ranges == nullptr`
+// and frees a real pointer into a fake one.
+//
+// The first draft of this file held that window open across BOTH ctors and all
+// of the reporting. It never fired (the run died earlier, on the seam below),
+// which is exactly why it is closed now rather than after it does: read `*slot`
+// on the instruction after the ctor returns, restore on the one after that, and
+// report from the captured bool.
+// ---------------------------------------------------------------------------
 #define LANEX_PROBE(LABEL, SIZE, SLOTFN, CTORNAME, OURFN)                      \
     do {                                                                       \
         RT_DIFF_BEGIN(LABEL);                                                  \
@@ -812,31 +835,90 @@ void ControlMustDetect(size_t n) {
         std::memset(g_theirs, 0xCD, (SIZE));                                   \
         if (rt_diff_on__) {                                                    \
             RT_ORIGINAL_ONCE(CtorFn, CTORNAME)(g_theirs);                      \
+            if (slot__) *slot__ = saved__;                                     \
         }                                                                      \
         OURFN(g_ours);                                                         \
         const bool published__ = (slot__ != nullptr &&                         \
                                   *slot__ == static_cast<void*>(g_ours));      \
+        if (slot__) *slot__ = saved__;                                         \
         if (published__) ++g_singletonOk;                                      \
         RT_DIFF_SHADOW(published__, "_singleton == our object",                \
                        "the ctor must publish the slot");                      \
         RT_DIFF_BYTES(g_ours, g_theirs, (SIZE));                               \
         RT_DIFF_WORK(true);                                                    \
         ControlMustDetect((SIZE));                                             \
-        if (slot__) *slot__ = saved__;                                         \
         ++g_probed;                                                            \
     } while (0)
 
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// RtLaneXSingletonCtorProbe — called at the end of RtSingletonCtorsPortInit().
+// RtLaneXSingletonCtorProbe — called from RuntimePortInit() AFTER
+// RtDataMintInit(), NOT from RtSingletonCtorsPortInit().
+//
+// The registrations must happen BEFORE the mint (its verdict for a storage row
+// depends on whether that row's writer is registered), but the probe must
+// happen AFTER it, and the reason is this lane's own subject matter.
+//
+// RT_DATA_SLOT caches a hit. The first thing the probe does with each of the
+// fourteen names is resolve it, so probing before the mint would warm those
+// caches with the DLL's .data address and freeze them there -- and then, on a
+// run where the mint IS armed, every ported constructor would publish into the
+// DLL's copy and leave the minted row zero forever. That is precisely the
+// failure this lane exists to close, displaced into the lane's own harness.
+//
+// Not hypothetical: the first version of this file probed from inside PortInit,
+// and [RtResolveEarly] reported ELEVEN of these names resolving before
+// RtResolvePortInitDone(). They were reported `benign` only because the mint
+// registers nothing unless BANISHED_RT_MINT=1 -- i.e. benign on every run we do
+// today and wrong on the first run that matters. Moving the call is the whole
+// fix, and it also makes the probe verify the door against the storage the
+// constructors will actually be handed.
 // ---------------------------------------------------------------------------
 void RtLaneXSingletonCtorProbe() {
     if (!RtDiffEnabled()) return;
 
-    // ---- MemoryAllocator: compare AROUND the CRITICAL_SECTION at +0x640 ----
-    // Lane E3's row, and the reason this lane exists in the shape it does.
-    {
+    // =======================================================================
+    // MemoryAllocator. Lane E3's row, and the reason this lane exists in the
+    // shape it does.
+    //
+    // THE PLATFORM SEAM MUST BE INSTALLED FIRST, AND IT IS NOT INSTALLED BY
+    // DEFAULT. `rtalloc::Construct` opens with `g_plat.lockInit(self->lock)`
+    // (allocator.cpp:635), and `g_plat` is a function-pointer table populated
+    // ONLY by RtSystemAllocatorInstallPlatform(), which on a normal run is
+    // called from just two places -- RtAllocShadowStartup() and
+    // RtSystemAllocatorRegister() -- both opt-in and both disarmed here.
+    //
+    // allocator.cpp's contract is that nothing under `rtalloc::` ever runs on a
+    // half-built seam: RtSystemAllocatorRegister() REFUSES to register anything
+    // when `!g_platInstalled`, and says so. The first draft of this probe walked
+    // around that refusal by calling rtalloc::Construct directly, and paid for
+    // it with an EXEC-of-0 on a null g_plat.lockInit -- the fault landing on
+    // `g_ours + 0x640`, the CRITICAL_SECTION, which is why the crash handler's
+    // "VCALL-of-0 / vtable=cdcdcdcd" line was a heuristic misread: a
+    // CRITICAL_SECTION has no vtable, and MemoryAllocator has no vtable either.
+    //
+    // So the seam is installed here, deliberately and only under the diff gate.
+    // This is NOT arming the allocator port: InstallPlatform fills g_plat and
+    // nothing else -- no export registered, no detour installed, both of which
+    // are RtSystemAllocatorRegister()'s job and separately gated. The two
+    // functions that consume the seam re-install it themselves when it is
+    // absent, so pre-installing is a no-op for them, and `g_platInstalled` is
+    // read nowhere else in the tree.
+    //
+    // If the install does not take we REFUSE this one subject and say which
+    // symbol is missing. That is not the guard the fix must not be: a guard
+    // around the deref would turn a hard fault into lane E3's silent skip. This
+    // refuses to run the oracle at all, loudly, and the summary line's arithmetic
+    // moves so a reader cannot miss it.
+    // =======================================================================
+    if (!RtLaneXEnsureAllocatorPlatform()) {
+        printf("[RtPort] Wave9 lane X: REFUSING to probe "
+               "System::MemoryAllocator::ctor -- RtSystemAllocatorInstallPlatform() "
+               "left g_plat.lockInit null, so rtalloc::Construct cannot run. "
+               "See runtime/src/system/allocator_win.cpp\n");
+    } else {
+        // Compare AROUND the CRITICAL_SECTION at +0x640.
         RT_DIFF_BEGIN("Wave9X::System::MemoryAllocator::ctor");
         using CtorFn = void* (*)(void*);
         constexpr size_t kLockAt  = offsetof(rt::system::MemoryAllocator, lock);
@@ -847,9 +929,11 @@ void RtLaneXSingletonCtorProbe() {
         std::memset(g_theirs, 0xCD, kSizeMemoryAllocator);
         if (rt_diff_on__) {
             RT_ORIGINAL_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(g_theirs);
+            if (slot) *slot = saved;   // the process allocator, back at once
         }
         Ctor_MemoryAllocator(g_ours);
         const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
+        if (slot) *slot = saved;       // and again, before anything can allocate
         if (published) ++g_singletonOk;
         RT_DIFF_SHADOW(published, "_singleton == our object",
                        "the ctor must publish the slot");
@@ -860,7 +944,6 @@ void RtLaneXSingletonCtorProbe() {
         ControlMustDetect(kLockAt);
         RtLaneXPlatformLockDelete(g_ours   + kLockAt);
         RtLaneXPlatformLockDelete(g_theirs + kLockAt);
-        if (slot) *slot = saved;
         ++g_probed;
     }
 
@@ -896,16 +979,17 @@ void RtLaneXSingletonCtorProbe() {
         std::memset(g_theirs, 0xCD, kSizeApplication);
         if (rt_diff_on__) {
             RT_ORIGINAL_ONCE(CtorFn, "??0Application@0@QEAA@PEAX@Z")(g_theirs, kArg);
+            if (slot) *slot = saved;
         }
         Ctor_Application(g_ours, kArg);
         const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
+        if (slot) *slot = saved;
         if (published) ++g_singletonOk;
         RT_DIFF_SHADOW(published, "_singleton == our object",
                        "the ctor must publish the slot");
         RT_DIFF_BYTES(g_ours, g_theirs, kSizeApplication);
         RT_DIFF_WORK(true);
         ControlMustDetect(kSizeApplication);
-        if (slot) *slot = saved;
         ++g_probed;
     }
 
@@ -923,9 +1007,11 @@ void RtLaneXSingletonCtorProbe() {
         std::memset(g_theirs, 0xCD, kSizeVideoDevice);
         if (rt_diff_on__) {
             RT_ORIGINAL_ONCE(CtorFn, "??0Device@Video@@QEAA@W4DeviceType@01@@Z")(g_theirs, 0);
+            if (slot) *slot = saved;
         }
         Ctor_VideoDevice(g_ours, 0);
         const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
+        if (slot) *slot = saved;
         if (published) ++g_singletonOk;
         RT_DIFF_SHADOW(published, "_singleton == our object",
                        "DeviceType 0 must publish the slot");
@@ -942,7 +1028,6 @@ void RtLaneXSingletonCtorProbe() {
         ControlMustDetect(offsetof(RtVideo::Device, lock));
         RtLaneXPlatformLockDelete(g_ours + offsetof(RtVideo::Device, lock));
         RtLaneXPlatformLockDelete(g_theirs + offsetof(RtVideo::Device, lock));
-        if (slot) *slot = saved;
         ++g_probed;
     }
     {
@@ -952,11 +1037,11 @@ void RtLaneXSingletonCtorProbe() {
         std::memset(g_ours, 0xCD, kSizeVideoDevice);
         Ctor_VideoDevice(g_ours, 1);
         const bool untouched = (slot == nullptr || *slot == saved);
+        if (slot) *slot = saved;
         RT_DIFF_SHADOW(untouched, "_singleton unchanged",
                        "a non-zero DeviceType must leave the slot alone");
         RT_DIFF_WORK(true);
         RtLaneXPlatformLockDelete(g_ours + offsetof(RtVideo::Device, lock));
-        if (slot) *slot = saved;
         ++g_probed;
     }
 
@@ -975,9 +1060,11 @@ void RtLaneXSingletonCtorProbe() {
         std::memset(g_theirs, 0xCD, kSizeInternalFactory);
         if (rt_diff_on__) {
             RT_ORIGINAL_ONCE(CtorFn, "??0InternalFactory@Object@@QEAA@XZ")(g_theirs);
+            if (slot) *slot = saved;
         }
         Ctor_InternalFactory(g_ours);
         const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
+        if (slot) *slot = saved;
         if (published) ++g_singletonOk;
         RT_DIFF_SHADOW(published, "_singleton == our object",
                        "the ctor must publish the slot");
@@ -996,7 +1083,6 @@ void RtLaneXSingletonCtorProbe() {
                        "init_genrand recurrence (seed is wall-clock, not diffed)");
         RT_DIFF_WORK(true);
         ControlMustDetect(0x24);
-        if (slot) *slot = saved;
         ++g_probed;
     }
 
@@ -1006,9 +1092,13 @@ void RtLaneXSingletonCtorProbe() {
     // proves the byte comparison can still FAIL — a memcmp over two identically
     // 0xCD-filled buffers is exactly the shape that passes when a size or a
     // pointer is wrong. `control caught` MUST equal `control run`.
+    const bool ok = (g_probed == 13 && g_singletonOk == 12 &&
+                     g_controlRun == 12 && g_controlCaught == 12);
     printf("[RtPort] Wave9 lane X probe: %d subjects executed, "
-           "%d published their singleton, control caught %d of %d corruptions\n",
-           g_probed, g_singletonOk, g_controlCaught, g_controlRun);
+           "%d published their singleton, control caught %d of %d corruptions "
+           "-- expected 13 / 12 / 12 of 12: %s\n",
+           g_probed, g_singletonOk, g_controlCaught, g_controlRun,
+           ok ? "PASS" : "*** FAIL ***");
     printf("[RtPort] Wave9 lane X: IO::Persistence and Audio::Device are "
            "REGISTERED but NOT probed -- their base ctor starts a suspended "
            "worker thread (see their banners in singleton_ctors.cpp)\n");
@@ -1046,7 +1136,8 @@ void RtSingletonCtorsPortInit() {
     RegisterRuntimeExport("??0Configuration@Audio@@QEAA@XZ",          (void*)&Ctor_AudioConfiguration);  ++n;
     printf("[RtPort] Wave9 lane X (singleton ctors): %d exports registered\n", n);
 
-    RtLaneXSingletonCtorProbe();
+    // THE PROBE IS NOT CALLED FROM HERE. It runs from RuntimePortInit() after
+    // RtDataMintInit(); the split is deliberate and the reason is on the probe.
 }
 
 #undef LANEX_PROBE

@@ -104,9 +104,20 @@ The probe runs only under `if (!RtDiffEnabled()) return;` — semantically right
 (it is an oracle) and what keeps its `RT_ORIGINAL_ONCE` calls off a normal run's
 path for `tools/rawdoor_audit.py`.
 
-**Cells needed from the integrator**: one `BANISHED_RT_DIFF=1` run of any route
-(the probe runs at init, so the menu is enough), reading the `[RtPort] Wave9 lane
-X probe:` line and the `Wave9X::…` RtDiff rows.
+**MEASURED**, exe stamped 2026-09-08 03:08, `BANISHED_AUTOQUIT=1
+BANISHED_RT_DIFF=1`, `standalone_crash.log` 0 bytes, process exit 0:
+
+```
+[RtPort] Wave9 lane X probe: 13 subjects executed, 12 published their singleton,
+         control caught 12 of 12 corruptions -- expected 13 / 12 / 12 of 12: PASS
+[RtDiff] ==== 209 sites, 1131567 calls, 0 divergences in 0 sites ====
+```
+
+Per site, all thirteen `divergences=0`, `worked=1`, `calls=2` (shadow + byte
+compare) or `calls=3` (shadow + two byte ranges, where a CRITICAL_SECTION is
+excluded). A companion run with the diff harness OFF also exits 0 with an empty
+crash log and prints only the registration line, confirming the probe costs a
+normal run nothing.
 
 ---
 
@@ -246,3 +257,117 @@ census's `ported_exports` set (or its "ports with no caller" list) in addition t
 the CSV — and it belongs to lane C2, who owns the tool. Until it lands, the
 authoritative answer for these fourteen rows is the table in §1 plus the probe's
 `published their singleton` count, not the audit's `(c)` bucket.
+
+---
+
+## 9. The probe crashed on its first subject. Root cause, established.
+
+The merged build faulted at init under `BANISHED_RT_DIFF=1`, on the first probe
+subject, blocking every remaining verification cell in the wave.
+
+```
+[RtDiff] site[15] ... = Wave9X::System::MemoryAllocator::ctor
+Exception: 0xC0000005 ACCESS_VIOLATION at 0000000000000000
+Fault: EXEC of 0000000000000000
+VCALL-of-0: this=00007ff7dd2c5510  vtable=cdcdcdcdcdcdcdcd
+  this[+0x00] .. [+0x28] = 0xCDCDCDCDCDCDCDCD
+  this[+0x30] = 0, this[+0x38] = 0
+RCX = RDX = 00007FF7DD2C5510, RBX = 8, R8 = 0x600
+```
+
+**Reproduced locally, then symbolised.** Image base from stack frame #8:
+`0x7FF7DCC912EE − 0x12EE = 0x7FF7DCC90000`. `nm` on the deployed exe:
+
+| | |
+|---|---|
+| `(anonymous namespace)::g_ours` | `0x140634ed0` → RVA `0x634ed0` |
+| fault `this` | RVA `0x635510` |
+| **`this − g_ours`** | **`0x640` = `offsetof(MemoryAllocator, lock)`** |
+| `g_ours + kSizeMemoryAllocator` | RVA `0x635540` = `this + 0x30` |
+
+`addr2line` on the frames:
+
+```
+#1 rtalloc::Construct(...)      runtime/src/system/allocator.cpp:635
+#2 Ctor_MemoryAllocator         runtime/src/engine/singleton_ctors.cpp
+#3 RtLaneXSingletonCtorProbe()
+```
+
+Both ends of the arithmetic close. `this` is `g_ours->lock` — a
+**CRITICAL_SECTION**, which has no vtable, in a class (`MemoryAllocator`) that
+has no vtable either. The 0xCD→0 boundary at `this[+0x30]` is exactly the end of
+the probe's `memset` length (`0x640 + 0x30 == 0x670 == sizeof`), which is what
+identifies the buffer. `allocator.cpp:635` is:
+
+```c
+    g_plat.lockInit(self->lock);
+```
+
+**It is (c), and sharper than "the ctor never ran": the ctor ran and faulted on
+its first indirect call, and the ordering that is wrong is the SEAM's, not the
+registry's.** `g_plat` is a table of function pointers filled only by
+`RtSystemAllocatorInstallPlatform()`, whose only two callers —
+`RtAllocShadowStartup()` and `RtSystemAllocatorRegister()` — are both opt-in and
+both disarmed on a normal run. So `g_plat.lockInit` was null.
+
+Not (a): nothing virtual is involved anywhere. The crash handler's
+`VCALL-of-0 / vtable=cdcd` line is a heuristic that prints `RCX[0]` as a vtable
+whenever an indirect call faults, and here `RCX[0]` is the first qword of an
+uninitialised lock. Not (b): the ctor does not get far enough to write `+0x00`,
+and `+0x00` for this class is `ranges`, never a vtable. Also a red herring:
+`[REDZONE-DUMP] no allocator singleton` is emitted by the CRASH HANDLER
+(`redzone_alloc.cpp:805`) and only means the redzone shim was never armed.
+
+`allocator.cpp`'s own contract is that nothing under `rtalloc::` runs on a
+half-built seam — `RtSystemAllocatorRegister()` *refuses to register anything*
+when `!g_platInstalled`, and says so. **The probe walked around that refusal by
+calling `rtalloc::Construct` directly.** The body was never at fault.
+
+### The fix, and what it deliberately is not
+
+1. **Install the seam, under the diff gate only.**
+   `RtLaneXEnsureAllocatorPlatform()` (`singleton_ctors_win.cpp`) calls
+   `RtSystemAllocatorInstallPlatform()` and returns whether `g_plat.lockInit` is
+   non-null. This is **not arming the allocator port**: it fills `g_plat` and
+   nothing else — no export registered, no detour installed, and
+   `RtSystemAllocatorRegister()` still refuses on its own separate grounds. Both
+   consumers of the seam re-install it themselves when absent, so pre-installing
+   is a no-op for them, and `g_platInstalled` is read nowhere else in the tree
+   (7 grep hits, all inside `allocator.cpp`). `BANISHED_RT_ALLOC` is not set.
+   If the install does not take, the probe REFUSES that one subject and names the
+   missing symbol — which moves the summary line's arithmetic visibly. That is
+   the opposite of a guard around the deref: a guard would have converted this
+   hard fault into lane E3's silent skip, which is the whole thing this lane is
+   about. **The 0xCD fill is untouched**; it is load-bearing for the gap
+   comparison, and it is what turned a wrong answer into a locatable fault.
+
+2. **A second, latent defect found while fixing the first.** The probe held the
+   process-wide `?_singleton@X@` pointing at a 0xCD scratch across BOTH
+   constructors *and all of the reporting*. For twelve subjects that is merely
+   wrong; for `MemoryAllocator` it means **the process allocator is a scratch
+   buffer**, so any `MemAlloc`/`MemFree` inside `RtDiffReportBytes` or a lazy
+   resolve would land on an allocator with `ranges == nullptr`, or free a real
+   pointer into a fake one. It never fired only because the run died one call
+   earlier. Now every site reads `*slot` on the instruction after the ctor
+   returns, restores on the one after that, and reports from the captured bool.
+
+3. **A third, from the run's own diagnostics.** With the probe called from
+   `RtSingletonCtorsPortInit()`, `[RtResolveEarly]` reported **twelve** of the
+   fourteen `?_singleton@…` names resolving before `RtResolvePortInitDone()`.
+   `RT_DATA_SLOT` caches a hit, and those are the very caches the ported
+   constructors publish through — so on a run with the mint armed, all fourteen
+   would have published into the DLL's copy and left the minted row zero forever.
+   That is this lane's own failure mode, displaced into its harness, and it read
+   as `benign` today only because the mint registers nothing unless
+   `BANISHED_RT_MINT=1`. Fixed by splitting the entry points: registrations stay
+   in `RtSingletonCtorsPortInit()` (before the mint, which needs them), and the
+   probe is now called last from `RuntimePortInit()` — after `RtDataMintInit()`
+   *and* after `RtResolveMarkPortInitDone()`. `[RtResolveEarly]` went **15 → 3**,
+   the three being the pre-lane-X baseline.
+
+### Gates after the fix — unchanged from §7
+
+`rawdoor` 478 sites / 8 UNGUARDED / 36 DEFERRED · `port_bypass` ADDRESS door 191
+sites / 0 bypasses, NAME door 0 · `rt_data_door` exit 0 · census `called` 846,
+`ported` 589, ports-with-no-caller 51. Both runs (diff on and diff off) exit 0
+with a 0-byte `standalone_crash.log`.
