@@ -125,6 +125,12 @@ extern int RtIoCompressedStreamReleaseRegister();  // compressed_stream_release.
 // mounted package. Own switch -- Open is what decides whether a packfile header
 // is well-formed, so a boot regression must be attributable to exactly it.
 extern int RtIoCompressedStreamOpenRegister();     // compressed_stream_open.cpp
+// Wave 9 lane PKG3: ?ReadPackfile@PackageFile@IO@@ itself -- the .pkg parser,
+// and the last body between LoadPackages and a mounted package. Its own switch
+// because it is all-or-nothing (a 660-instruction transcription that cannot be
+// half-registered), so if a boot regresses the integrator must be able to take
+// exactly it out and leave lane PKG2's five rungs of callees standing.
+extern int RtIoPackageFileReadRegister();          // package_file_read_win.cpp
 namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
@@ -158,6 +164,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_MEMSTREAM"))   n += RtIoMemoryStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CSRELEASE"))   n += RtIoCompressedStreamReleaseRegister();
     if (RtWaveEnabled("BANISHED_RT_CSOPEN"))      n += RtIoCompressedStreamOpenRegister();
+    if (RtWaveEnabled("BANISHED_RT_PKG3"))        n += RtIoPackageFileReadRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
