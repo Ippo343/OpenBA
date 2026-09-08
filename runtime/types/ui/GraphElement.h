@@ -16,7 +16,12 @@
 //                                    non-exported FUN_1800417d0, then writes
 //                                    `color` into the new element's first
 //                                    4 bytes.
-//   AddGraphPoint(g,v)  0x180040690  HELD BACK -- appends to a per-series
+//   AddGraphPoint(g,v)  0x180040690  PORTED by Wave 9 lane UIF (the hold-back
+//                                    below is the ORIGINAL Wave 7 note, kept
+//                                    because its mechanism was right; what
+//                                    changed is only that 0x180023830 became
+//                                    ours in lane Q, so the row now closes).
+//                                    Appends to a per-series
 //                                    Array<int32_t> living inside graph series
 //                                    `g` at (seriesArray[g] + 0x08), via the
 //                                    exported-by-address 0x180023830

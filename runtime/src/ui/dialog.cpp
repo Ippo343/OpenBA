@@ -40,7 +40,10 @@
 //   | ??1DialogController (dtor)            | 0x1800cd2f0 |  572 | yes    | shape  |
 //   | ?GetContainer@DialogController@       | 0x18003b700 | 2508 | yes    | replay |
 //   | ??0ElementDescription (ctor)          | 0x180115a40 |  173 | yes    | replay |
-//   | ??1ElementDescription (dtor)          | 0x180116100 |  585 | NO     | —      |
+//   | ??1ElementDescription (dtor)          | 0x180116100 |  585 | yes(*) | none   |
+//     (*) WAVE 9 LANE UIF. `none` is the literal oracle disposition, not a gap
+//         nobody noticed: a replay would double-release a refcounted String and
+//         run ~External twice. See the body's header near the bottom of this file.
 //   | ?CreateInstance@ElementDescription@   | 0x180115ad0 | 2004 | NO     | —      |
 //   | ?GetFileVersion@ElementDescription@   | 0x180116af0 | 2624 | yes    | replay |
 //   | ?Serialize@ElementDescription@        | 0x180116b00 | 3687 | NO     | —      |
@@ -936,6 +939,94 @@ int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
 }
 
 // ============================================================================
+// ??1ElementDescription@UI@@UEAA@XZ  retail 0x180116100  ord 585
+//                                                          (WAVE 9 LANE UIF)
+// ============================================================================
+//
+// WHY THIS ROW EXISTS AT ALL. Like `??1Element`, this destructor is not reached
+// by any direct C++ caller in our tree — it is reached through a LIVE MINTED
+// VTABLE. `??_7ElementDescription@UI@@6B@` slot 0 is the vector deleting
+// destructor `??_EElementDescription@UI@@` at 0x180035350, one of the 37 Wave 9
+// lane K ported, and lane K reaches `~Class` by ADDRESS through ResolveAddr.
+// With this row unported that edge went to the DLL, and after cutover to NULL.
+//
+// 0x180035350 WAS DISASSEMBLED FOR THIS LANE, and it is one of lane K's "22 of
+// 37 that INLINE the scalar branch": only its ARRAY branch names the destructor
+// (`LEA R9,[0x180116100]` at 0x180035377), while its scalar branch open-codes
+// the same instructions. That is exactly why lane K's port calls `~Class` on
+// BOTH branches rather than reproducing the inlining — so this registration is
+// what both branches now land on.
+//
+// THE BODY, from the disassembly at 0x180116100 (13 instructions, one tail
+// jump), and it is small enough to quote in full:
+//
+//     this->_vtable = &??_7ElementDescription@UI@@6B@;   // 0x1801561c0
+//     <release this->_textName>                          // +0x60, the ONE String
+//     JMP ~External(this);                               // 0x1800bc950, TAIL
+//
+// runtime/types/ui/ElementDescription.h already says this in its SIZE argument
+// ("`??1ElementDescription` (0x180116100) releases exactly one String, the one
+// at +0x60, before chaining"), written by Wave 7 lane B from the same bytes.
+// The port agreeing with a header derived independently is a weak check, but it
+// is a real one and it is free.
+//
+// EVERY CALLEE IS SATISFIED — the admission test, and this is the cheapest row
+// in the cluster to pass it:
+//   * 0x1800c7ad0 MemFree      — PORTED, lane Q
+//   * 0x1800bc950 ~External    — PORTED, Wave 9 lane B2 (?? 1External@Object@@)
+// Two callees, both ours. The row CLOSES; it does not move one frame deeper.
+//
+// NO ORACLE, for the same reason as `??1Element` and stated for the same
+// reason: a replay would decrement the `_textName` refcount a second time and,
+// where our body already took it to zero, free a block twice and then run
+// `~External` twice over a handle that no longer exists. `RT_DIFF_WORK` records
+// how many calls actually released a buffer; `calls=` stays 0 because there is
+// no comparison to report. Liveness, not correctness.
+void RtUiElementDescription_Dtor(ElementDescription* self) {
+    RT_DIFF_BEGIN("UI::ElementDescription::~ElementDescription");
+    bool didWork = false;
+
+    static void* const vtblEd = ResolveExport(RtUI::kVtblElementDescription);
+    if (vtblEd) *reinterpret_cast<void**>(self) = vtblEd;
+
+    // Retail's String release, with its asymmetry intact: the FREEING branch
+    // leaves the field holding `data - 8` (dangling), the SHARING branch nulls
+    // it. See runtime/types/system/String.h.
+    if (char* p = self->_textName) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            self->_textName = p - 8;
+            using FreeFn = void (*)(void*);
+            static FreeFn freeFn = reinterpret_cast<FreeFn>(
+                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+            if (freeFn) freeFn(self->_textName);
+            didWork = true;
+        } else {
+            self->_textName = nullptr;
+        }
+    }
+
+    RT_DIFF_WORK(didWork);
+
+    // ~External — a TAIL JMP in retail, a normal call here (the same single
+    // deliberate departure `??1Element` makes, for the same reason).
+    //
+    // Reached by NAME rather than by address: 0x1800bc950 IS exported, as
+    // `??1External@Object@@UEAA@XZ` (checked against the shipped export
+    // directory with pefile before this line was written — a name the DLL does
+    // not contain resolves NULL in silence and the port still registers,
+    // reference_resolveexport_phantom_names.md). The name door is the one this
+    // file already uses for every ported sibling, and `UEAA` is the virtual
+    // spelling, which is what this destructor is; `QEAA` would resolve null
+    // behind the guard below (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    {
+        using Fn = void (*)(void*);
+        static Fn fn = reinterpret_cast<Fn>(
+            ResolveExport("??1External@Object@@UEAA@XZ"));
+        if (fn) fn(self);
+    }
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Every port is registered TWICE — under its mangled name and under its retail
@@ -1015,6 +1106,12 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("?GetFileVersion@ElementDescription@UI@@UEBAHXZ",
                           (void*)&RtUiElementDescription_GetFileVersion);
     RegisterRuntimeAddr(0x180116af0, (void*)&RtUiElementDescription_GetFileVersion);   ++n;
+
+    // WAVE 9 LANE UIF — a live minted-vtable row: `??_7ElementDescription` slot
+    // 0 is lane K's ported deleting destructor, which reaches this by address.
+    RegisterRuntimeExport("??1ElementDescription@UI@@UEAA@XZ",
+                          (void*)&RtUiElementDescription_Dtor);
+    RegisterRuntimeAddr(0x180116100, (void*)&RtUiElementDescription_Dtor);            ++n;
 
     // ---- Wave 9 lane Z: three DialogInstance vtable slots ------------------
     // Registered by NAME and by ADDRESS like the rest of the lane. The name is

@@ -769,6 +769,73 @@ void GraphElement_RemoveGraphs(void* self) {
     }
 }
 
+// ============================================================================
+// ?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z  retail 0x180040690  ord 1561
+//                                                          (WAVE 9 LANE UIF)
+// ============================================================================
+//
+// Wave 7 lane E held this back; runtime/types/ui/GraphElement.h still carries
+// that note and the mechanism it worked out, which was right. What it lacked
+// was the one thing that decides admission now: whether the append helper is
+// ours yet. It is — so the hold-back is spent and the row closes.
+//
+// THE BODY, 12 instructions at 0x180040690:
+//
+//     AddGraphPoint(this, int graph, int value):
+//         [home slot] = value                 ; spilled so R8 can point AT it
+//         RCX = this->[0xf0]                  ; the graph-series array's data
+//         RAX = (int64)graph                  ; MOVSXD — SIGNED widening
+//         RDX = RAX * 3
+//         RCX = RCX + 8 + RDX*8               ; = data + graph*0x18 + 8
+//         EDX = RCX->[8] + 1                  ; the point array's size, plus one
+//         R8  = &value
+//         JMP/CALL 0x180023830                ; Array<uint32>::SetSize(n, &fill)
+//
+// So a series record is 0x18 bytes (RDX = RAX*3 then scaled by 8) and the
+// per-series point Array lives at record+8. `SetSize(size+1, &value)` is this
+// engine's APPEND idiom: grow by one and fill the new tail from `*fill`.
+//
+// THE MOVSXD IS REPRODUCED AS A SIGNED WIDENING, deliberately. Ghidra's
+// decompiled C prints MOVSXD as a zero extension and that misreading caused
+// three Wave 6 defects including a crash
+// (reference_ghidra_c_output_vs_disassembly.md), so `graph` is `int32_t` and is
+// widened by the C++ conversion, not masked. A negative `graph` therefore
+// indexes backwards exactly as retail does. NOT guarded: retail has no guard,
+// the port is byte-faithful, and inventing one here would hide a caller bug
+// rather than fix it (CLAUDE.md, "don't fix a faithful crash with a null check").
+//
+// EVERY CALLEE IS SATISFIED — one callee, and it is ours:
+//   * 0x180023830 Array<uint32>::SetSize(n, &fill) — PORTED, Wave 9 lane Q, as
+//     `RtColl_ArraySetSizeFill_180023830` (runtime/src/collection/array.cpp).
+//     Reached by ADDRESS, which lands on that port because ResolveAddr consults
+//     the port registry before the module handle. It is the SAME stride-4
+//     instantiation runtime/src/graphics/scene.cpp already calls through
+//     `RtArrayU32SetSize` for Graphics::Scene — an independent confirmation of
+//     the address that GraphElement.h had already noticed.
+// So this row CLOSES rather than moving one frame deeper.
+//
+// ORACLE: none, and the reason is specific rather than inherited. A replay
+// would append the point a SECOND time — the array is grown from its own
+// current size, so running the shipped body after ours yields size+2 with a
+// duplicated tail, which is a second side effect and not a comparison
+// (and it would also reallocate, invalidating the buffer). `RT_DIFF_WORK(true)`
+// records liveness: this body has no early-out, so every entered call does the
+// whole append. `calls=` stays 0 because there is nothing to report.
+void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
+    RT_DIFF_BEGIN("UI::GraphElement::AddGraphPoint");
+
+    uint8_t* seriesData = *reinterpret_cast<uint8_t**>(B(self, GRE::kGraphsData));
+    // record = data + graph*0x18; the point Array header sits at record + 8.
+    uint8_t* pointArray = seriesData + static_cast<int64_t>(graph) * 0x18 + 8;
+    const int32_t newSize = *reinterpret_cast<int32_t*>(pointArray + 8) + 1;
+
+    using Fn = void (*)(void*, int32_t, const int32_t*);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180023830));
+    if (fn) fn(pointArray, newSize, &value);
+
+    RT_DIFF_WORK(true);
+}
+
 // ============================================================
 // UI::Element::RemoveChildren  retail 0x180115570  (Wave 9 lane B3)
 // ============================================================
@@ -872,8 +939,26 @@ int RtUiWidgetsLayRegister() {
     // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md §1b).
     RegisterRuntimeExport("?RemoveChildren@Element@UI@@QEAAXXZ",
                           (void*)&Element_RemoveChildren); ++n;
-    // ?AddGraph@GraphElement@UI@@... / ?AddGraphPoint@GraphElement@UI@@... --
-    // HELD BACK (WAVE7_LANE_E.md sec2).
+    // WAVE 9 LANE UIF — A REAL HOLE, FOUND BY tools/port_bypass_audit.py, not
+    // by reading. Lane B3 registered this port under its NAME only, so
+    // `ResolveAddr(Module::Runtime, 0x180115570)` missed the address registry
+    // and fell through to the DLL — and after cutover, to NULL. Nothing
+    // exercised it until `??1Element` (runtime/src/ui/element.cpp) became the
+    // first by-address caller, at which point the audit flagged it as the
+    // tree's only address-door BYPASS. This is exactly the Wave-5-lane-D
+    // failure mode the "register TWICE, name AND address" convention exists to
+    // close (see the Registration note in element.cpp and dialog.cpp).
+    RegisterRuntimeAddr(0x180115570, (void*)&Element_RemoveChildren);
+    // WAVE 9 LANE UIF: AddGraphPoint's hold-back is spent — its one callee
+    // (0x180023830) became ours in lane Q, so the row closes.
+    RegisterRuntimeExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z",
+                          (void*)&GraphElement_AddGraphPoint); ++n;
+    RegisterRuntimeAddr(0x180040690, (void*)&GraphElement_AddGraphPoint);
+    // ?AddGraph@GraphElement@UI@@... -- STILL HELD BACK (WAVE7_LANE_E.md sec2),
+    // and lane UIF re-checked the reason rather than inheriting it: AddGraph
+    // calls 0x1800417d0, an UNEXPORTED internal that no lane has ported. So
+    // porting it would MOVE the cutover row one frame deeper instead of closing
+    // it, which is the admission test this wave runs. See WAVE9_LANE_UIF.md.
 
     printf("[RtPort] UI widgets(layout): %d exports registered\n", n);
     return n;
