@@ -112,6 +112,11 @@ extern int RtIoCompressedStreamReadRegister(); // compressed_stream_read.cpp (la
 // of anything this lane has landed and the integrator must be able to remove
 // exactly it.
 extern int RtIoFileSystemOpenFileRegister();  // filesystem_openfile_win.cpp (lane PKG2)
+// Wave 9 lane PKG2 rung 4b-ii: IO::MemoryStream's six virtual bodies. Its own
+// switch because it sits UNDER CompressedStream::Open -- every stream read in
+// the packfile header path goes through it, so the integrator must be able to
+// remove exactly it if a boot regresses.
+extern int RtIoMemoryStreamRegister();        // memory_stream.cpp (lane PKG2)
 namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
@@ -142,6 +147,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
     if (RtWaveEnabled("BANISHED_RT_CSREAD"))      n += RtIoCompressedStreamReadRegister();
     if (RtWaveEnabled("BANISHED_RT_OPENFILE"))    n += RtIoFileSystemOpenFileRegister();
+    if (RtWaveEnabled("BANISHED_RT_MEMSTREAM"))   n += RtIoMemoryStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

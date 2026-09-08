@@ -305,6 +305,7 @@ void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
 void RtIo_FileSystemOpenFileProbe(const FileSystem* fs);
 // Rung 4's operator= oracle (same file).
 void RtIo_FileInfoAssignProbe();
+// Rung 4b-ii's MemoryStream oracle (memory_stream_probe.cpp, namespace RtIo).
 }  // namespace RtIO
 // Lane PKG2 rung 2's lockstep probe (compressed_stream_probe.cpp). It lives in
 // `RtIo`, not `RtIO`: the tree carries BOTH spellings — runtime/types/io/Stream.h
@@ -313,6 +314,7 @@ void RtIo_FileInfoAssignProbe();
 // qualification: the two names differ by one character's case and the linker is
 // the only thing that notices.
 namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
+namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream_probe.cpp)
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
 namespace RtSystem { void RtSystem_CompressionProbe(); }
@@ -890,6 +892,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // process where an OpenFile of a packed name can succeed at all.
         RtIo_FileSystemOpenFileProbe(self);
         RtIo_FileInfoAssignProbe();
+        RtIo::RtIo_MemoryStreamProbe();
     }
 }
 
