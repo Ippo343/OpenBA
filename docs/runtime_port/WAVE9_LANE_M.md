@@ -621,3 +621,138 @@ that cannot follow the thing it is chasing must say what it did not look at. The
 mitigations are the self-test (proving it can still fire at all) and INVERT (which needs no
 difference and no header convention — it just corrupts the heap and crashes, in the function
 that did it).
+
+---
+
+## Finding 4, dispositioned — and a third, worse thing found while doing it
+
+Source-only analysis; no run was needed for either verdict, and neither rests on a
+"pre-existing" assertion.
+
+### 4(a) Goals menu — NOT A DEFECT, NOT A CUTOVER BLOCKER, NOT REACHABLE
+
+**Disposition: the harness synthesised an event retail's UI cannot produce. Do not add a null
+check; do not port anything. Re-label the cell as an invalid route.**
+
+The lead asked the decisive question: *does retail deref that pointer unguarded at the front end
+too?* It does. Retail's `GoalDialog::Slot4` at `0x140069810`:
+
+```
+1400698ba: MOV RAX, qword ptr [0x1401c3dd8]     ; the GameWorld pointer's CONTENTS
+1400698c1: MOV RAX, qword ptr [RAX + 0x150]     ; deref +0x150, unguarded
+```
+
+Two `MOV`s, which is one `*` in C — exactly what `goaldialog.cpp:98` writes as
+`*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x150)`. **Our port is faithful, including
+the absent guard.** Retail's own `MainMenuDialog::OnCommand` (`0x1400B3B50`) likewise dispatches
+`param_4 == 10` straight to `GoalDialog_Ctor` with no world check. Given that event with no
+world, retail crashes identically.
+
+Retail's protection is not a guard — **it is that the button does not exist.**
+`ToolKit/resource/Dialog/MainMenu.rsc` places exactly seven buttons:
+
+```
+"buttonNew", "buttonLoad", "buttonTutorial", "buttonAchievement",
+"buttonOptions", "buttonMod", "buttonQuit"
+```
+
+`buttonGoal` is *defined* in that file as a `ButtonDescription` and is **in no `_elements` list
+anywhere in the shipped resource tree** — a grep for `"buttonGoal"` as a placed child across
+`ToolKit/resource/` returns nothing, `Pause.rsc` included (it places nine buttons and not that
+one). It is a declared-but-never-placed template. The codebase already knew this shape:
+`mainmenudialog.cpp:1011` says of another id, *"buttonMenu is not in MainMenu.rsc, only in
+Pause.rsc, so this case is unreachable from the front end."*
+
+**Reachable at cutover: NO.** No user action and no unattended route can produce id=10; only
+`BANISHED_AUTOMENU_BUTTON=10`, which injects the OnCommand directly.
+
+**One correction to the record.** `project_achievements_menu_two_defects.md` records
+"ACHIEVEMENTS + GOALS BUTTONS CLOSED". The Achievements half is real — `buttonAchievement` IS
+placed and the `menus_btn8` cell is clean at 195 sites / 1,660,606 calls. **The Goals half added
+a switch case for a button that is never placed**, so it was never verifiable through the UI, and
+the only thing that has ever exercised it is a harness injection. Not a defect in the closure — a
+claim broader than its evidence. It should read "Achievements closed; Goals wired but
+unreachable".
+
+### 4(b) Mods row click — HARNESS MISUSE over a REAL, still-open question
+
+**Disposition on the crash: harness misuse. Do not guard it.** `ModDialog_Slot8` calls
+`fn_Modification_GetMod(modSingleton, 1)` for a row the dialog never built. Retail's `GetMod`
+(`0x18000da80`) is four instructions and cannot fail:
+
+```
+18000da80: MOVSXD RAX,EDX          ; index
+18000da83: SHL    RAX,0x7          ; * 0x80 stride
+18000da87: ADD    RAX,[RCX + 0x8]  ; + the array data pointer
+18000da8b: RET
+```
+
+With `[this+8] == 0` (an empty list) that returns `0x80` for index 1, and `cmpb $0,0x50(%rax)`
+then reads `0xd0`. The observed `RAX=0x80` therefore **proves the singleton is a valid object
+holding an empty array, not a null singleton** — `GetCount` (`0x18000da90`) is
+`MOV EAX,[RCX+0x10]` and returned 0 without faulting, which a null `this` could not do. Retail's
+UI never raises a click for a row that does not exist.
+
+**The real finding is upstream and is NOT dispositioned: `[ModDialog] rows=0 … mods=0` with
+`WinData/betterFields.pkm` and `WinData/DebugMenu.pkm` both present on disk.** Not the
+`mods-off-breaks-save-loading` situation — nothing was moved aside. `Engine::Loader::Load`
+(`runtime/src/engine/loops.cpp:655`, live at `RegisterRuntimeAddr(0x1800dc050, …)`) is the only
+boot-path caller of `Modification::RefreshList`, and calls it only when
+`mod[1] != allowsModChanges`. **That guard was checked against retail instruction by instruction
+and our port is equivalent** for a bool return in {0,1}: retail's extra `TEST DL,DL` branches at
+`0x1800dc089` and `0x1800dc09d` are implied by the outer `CMP DL,AL; JZ`. So the empty list is
+not that port.
+
+**Cell needed (I cannot run it):** the Mods route with the mod-state probe, which is what
+`mod_dialog_vtables.cpp:464` built the `[ModProbe]` lines for —
+`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=p,101,m6` — reading `RefreshList` /
+`SetupFileSystem` / `pkm` in the **raw** log. My archived cells cannot answer it: the
+distillation kept only `[AutoStart]`/`[PauseMenu]`/`[ModDialog]`/`[RtDiff]` lines. **Reachable at
+cutover: the crash NO (needs an injected click on a row that does not exist); the empty mod list
+YES — it is on every boot.**
+
+### 4(c) THE ONE THAT MATTERS: a minted singleton with NO constructor, dereferenced by a live boot-path port
+
+Found while chasing 4(b), from source alone. **This is a cutover blocker and it is on no gate
+row.**
+
+`standalone/rt_data_mint_tables.inc` mints the `IO::Modification` singleton:
+
+```
+{ "?_singleton@Modification@IO@@2PEAV12@EA", 0x1801fc6b0ull, 8, &kStorageBytes[…],
+  "singleton pointer", nullptr },
+```
+
+The trailing `nullptr` is `ctorInit`, and `MintConstructedStatics()` skips every row that has
+none (`rt_data_mint.cpp`, `if (!s.ctorInit) continue;`). So at cutover this symbol is **8 zeroed
+bytes that nothing ever writes** — while `RegisterMintedData()` registers every storage row under
+its export name, so `ResolveExport("?_singleton@Modification@IO@@2PEAV12@EA")` returns our
+storage instead of the DLL's.
+
+`ModificationSingleton()` (`loops.cpp:264`) returns `*p`, i.e. **null**, and
+`RtEngine_Loader_Load` — registered, on the boot path — then does:
+
+```c
+uint8_t* mod = ModificationSingleton();
+if (mod[1] != static_cast<uint8_t>(allowsModChanges)) {   // <-- null deref at cutover
+```
+
+**`?CreateInstance@Modification@IO@@` has no port anywhere in the tree** (grep across `runtime/`,
+`standalone/`, `code/` returns nothing), so nothing will construct a `Modification` into that
+storage. `runtime/src/save/saveload.cpp:579` is a second consumer.
+
+Today this is invisible because the mint is **off by default** and arms only under
+`BANISHED_RT_MINT=1`, which WAVE9.md calls cutover-only and which this lane was told not to set.
+So it fires for the first time on cutover day, on the boot path — precisely the situation
+WAVE9.md §2 exists to prevent: *"nothing here may run for the first time on cutover day."*
+
+**Why the mint-shadow gate cannot see it.** That gate compares the MAPPING (the DLL's slot holds
+X; ours holds our port of X), and its constructed-statics half only checks rows that *have* a
+`ctorInit`. A row with no `ctorInit` and no live writer is outside both checks by construction.
+`?_loader@LoaderLoop@Engine@@` was caught only because someone had written a ctor for it.
+
+**Recommended, for whoever owns lane C2/E** (the mint tables are lane C2's files and were being
+edited while this was written, so line numbers here may move — the symbol names will not):
+enumerate every minted storage row with `ctorInit == nullptr` and name, for each, what writes it
+after cutover. **Any row whose only writer was DLL code is this same bug.** It is a source-only
+sweep, doable today without the directory.
