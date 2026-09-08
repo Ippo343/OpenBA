@@ -223,7 +223,11 @@ void RtFreeArrayPtr(void* arr) {
 // the DLL's own free path (FUN_180009c30, below) will return them.
 void* RtMemAlloc(uint64_t size, int align) {
     using Fn = void* (*)(uint64_t, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    // Retry a miss rather than caching it: at cutover this address is supplied
+    // by the allocator's arming path, so a caller that ran earlier would freeze
+    // a null here forever. See runtime/src/collection/array.cpp MemAlloc.
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
     return fn(size, align);
 }
 

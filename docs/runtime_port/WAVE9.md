@@ -1512,6 +1512,60 @@ address** so by-address callers reach our port, then re-run. That is a smaller j
 any rung since attempt 08, and it is the last thing standing between the boot and
 whatever comes after `FileSystem::Startup`.
 
+### Attempt 14: the allocator rung CLOSES, and the boot clears the whole IO/startup phase
+
+The fix is `RegisterAllocatorAddresses()` in `runtime/src/system/allocator.cpp`, called
+from the **cutover branch only** of `RtSystemAllocatorRegister`. Four addresses:
+
+| address | symbol | who reaches it by address |
+|---|---|---|
+| `0x1800c7a50` | `?MemAlloc@` (static, locking) | `runtime/src/collection/array.cpp`, `runtime/src/graphics/scene.cpp` |
+| `0x1800c7ad0` | `?MemFree@` (static, locking) | `array.cpp`, `runtime/src/ui/widgets_input.cpp`, `standalone/filename_runtime_hook.cpp` |
+| `0x1800c6e60` | `?Allocate@` (member) | `engine/funcs/engine_funcs.cpp:1631` |
+| `0x1800c6c00` | `?Free@` (member) | no live reader; registered so the pair cannot drift |
+
+**Cutover-only is load-bearing, not caution.** On the DLL-present path the swap is a
+detour, so an unregistered `ResolveAddr` hands back retail's address and calling it
+lands in our port anyway — and registering would hand
+`standalone/allocator_lock.cpp` OUR function to patch, since `ResolveAddr` consults the
+port registry FIRST. The run confirms allocator_lock stands down correctly at cutover
+(`[AllocLock] could not resolve Allocate` — expected, and never the wall).
+
+**A second defect the same crash was hiding.** All three by-address call sites cached
+the resolved pointer in a plain function-local `static`, so any caller that ran before
+arming would have frozen a null in for the life of the process. Changed to cache a hit
+and retry a miss (the `RtResolveCached` contract). Without this the registration alone
+would have been an ordering lottery.
+
+Result — `[RtAlloc] cutover: 4 allocator ADDRESSES registered`, then:
+
+```
+#4 Game::RunGameMain
+#3 RtEngine_Engine_Startup      +0x22C
+#2 RtIo_FileSystem_Startup
+#1 RtIo_FileSystem_LoadPackages +0x184   <- attempt 12 died at +0x140
+   VCALL-of-0: this=0x250039802d0, vtable=0, and this[+0x00..+0x38] are ALL ZERO
+```
+
+Immediately above it in `standalone_error.log`:
+`[RtResolve] MISS "??0PackageFile@IO@@QEAA@XZ" -> NULL`. `LoadPackages` allocates a
+`PackageFile`, the constructor resolves to nothing, so the vtable is never installed
+and the next virtual call on the zeroed object executes address 0. **The wall is the
+`IO::PackageFile` class.**
+
+### The surface is now BOUNDED: 43 symbols
+
+The boot no longer dies in the name-resolution phase — it clears `FileSystem::Startup`,
+`Engine::Startup`, the video/UI registration pass, and reaches `[AutoStart] ENABLED`.
+`BANISHED_RT_STRICT` records **43 distinct unresolved symbols** across the whole run
+(`wave9_attempt14_error.txt`). That is the remaining cutover surface as measured, not
+estimated — though it is what this run ASKED for, so each rung that falls can expose
+more.
+
+Two of the 43 are the handoff's lead #1: `?Startup@Device@Video@@` and `?Shutdown@` are
+one-instruction JMP thunks onto `PlatformStartup`/`PlatformShutdown`, so one port closes
+both rows plus the unsatisfied call in our own `Engine::Startup`.
+
 ### The `dirAlias` finding — a local that is written, passed, released and NEVER READ
 
 Lane FIND found that `FindFiles`' `dirAlias` at `[RSP+0x58]` is built, handed to

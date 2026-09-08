@@ -146,9 +146,16 @@ static_assert(offsetof(ArrayHdr, _capacity) == 0x0c, "Array::_capacity @ +0x0c")
 // ============================================================================
 // The allocator boundary. See the banner for why these go by address.
 // ============================================================================
+// RETRIES A NULL rather than caching it, which is not defensive tidying: at
+// cutover this address is supplied by RegisterAllocatorAddresses() inside the
+// allocator's arming path, and ANY caller that ran before that point would
+// otherwise freeze a null into this static for the life of the process and take
+// the whole heap down with it. Same contract as RtResolveCached (rt_port.h):
+// cache a hit, retry a miss. A hit costs one load, exactly as before.
 void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
     return fn(bytes, align);
 }
 
@@ -157,7 +164,8 @@ void* MemAlloc(uint64_t bytes, int align) {
 // the callers below hand it a possibly-null pointer exactly as retail does.
 void MemFree(void* p) {
     using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    static Fn fn = nullptr;   // retry a miss — see MemAlloc above
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
     fn(p);
 }
 

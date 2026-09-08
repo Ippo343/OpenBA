@@ -233,7 +233,10 @@ StringNotEqualFn StringNotEqual() {
 }
 using MemFreeFn = void (*)(void*);
 MemFreeFn MemFreeStatic() {
-    static MemFreeFn fn = reinterpret_cast<MemFreeFn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    // Retry a miss rather than caching it — at cutover this address arrives
+    // with the allocator's arming path. See runtime/src/collection/array.cpp.
+    static MemFreeFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<MemFreeFn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
     return fn;
 }
 

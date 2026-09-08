@@ -1178,6 +1178,7 @@ bool RuntimeDllPresent() {
 // Defined below, after RtSystemAllocatorRegister, next to the export list it
 // owns; both arming paths call it.
 int RegisterAllocatorExports(void* allocateEntry, void* freeEntry);
+int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry);
 }
 
 extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn) {
@@ -1238,6 +1239,10 @@ int RtSystemAllocatorRegister() {
             return 0;
         }
         const int n = RegisterAllocatorExports(composedAlloc, composedFree);
+        const int nAddr = RegisterAllocatorAddresses(composedAlloc, composedFree);
+        printf("[RtAlloc] cutover: %d allocator ADDRESSES registered for by-address "
+               "callers (rtcoll::MemAlloc and friends). See RegisterAllocatorAddresses.\n",
+               nAddr);
         printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- %d exports registered, "
                "no detour installed because there are no DLL-internal callers to redirect. "
                "?Allocate@/?Free@ point at the COMPOSED entry points, which take the "
@@ -1330,5 +1335,70 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
     // their bodies.
     const int platformExports = RtSystemAllocatorRegisterPlatformExports();
     return 21 + platformExports;
+}
+
+// ============================================================================
+// The ADDRESS registrations — cutover only, and the "only" is the whole point
+// ============================================================================
+//
+// Wave 9, attempt 13. The DLL-less boot got eight frames past attempt 12 and
+// then died `EXEC of 0` at `rtcoll::MemAlloc +0x81`:
+//
+//     #4 AppendFilename +0x2D  ->  #3 RtColl_ArraySetSizeFill_180026880 +0x39
+//     #2 rtcoll::SetSizeCore +0x181  ->  #1 rtcoll::MemAlloc +0x81
+//
+// Nothing was missing a NAME. `runtime/src/collection/array.cpp` reaches the
+// allocator through the two exported statics BY ADDRESS, deliberately (read its
+// "THE ALLOCATOR BOUNDARY" banner), and its own comment states this dependency
+// in advance: "At cutover ResolveAddr(Module::Runtime, 0x1800c7a50) resolves
+// nothing, because there is no DLL. These two accessors MUST be repointed at
+// lane E's allocator in the same commit that arms it." That commit is this one.
+// No name-based instrument could ever have seen it, because the call site does
+// not mention a name — which is also why gate row E named the wrong mechanism
+// (it predicted an unminted `?_singleton@`; that symbol IS minted).
+//
+// The four addresses, and who reaches each:
+//
+//   0x1800c7a50  ?MemAlloc@ (static, locking)  runtime/src/collection/array.cpp
+//                                              runtime/src/graphics/scene.cpp
+//   0x1800c7ad0  ?MemFree@  (static, locking)  runtime/src/collection/array.cpp
+//                                              runtime/src/ui/widgets_input.cpp
+//                                              standalone/filename_runtime_hook.cpp
+//   0x1800c6e60  ?Allocate@ (member)           engine/funcs/engine_funcs.cpp:1631
+//   0x1800c6c00  ?Free@     (member)           (no live reader today; registered
+//                                              so the pair cannot drift apart)
+//
+// The member pair gets `allocateEntry`/`freeEntry`, which on this path are the
+// COMPOSED (locked) stubs — the same pointers `?Allocate@`/`?Free@` are given
+// three lines above. The static pair gets rtalloc::MemAlloc/MemFree, which take
+// the critical section themselves exactly as retail's statics do. So both doors
+// into the free list are locked, which is the invariant WAVE2_ALLOCATOR.md §4
+// exists to protect.
+//
+// *** WHY THIS IS NOT CALLED ON THE DLL-PRESENT PATH ***
+//
+// Two reasons, and the second is a live hazard, not a preference:
+//
+//  1. It is unnecessary. With the DLL present the swap is a DETOUR: retail's
+//     bytes at 0x1800c6e60/0x1800c6c00 JMP to our composed stubs. An
+//     unregistered `ResolveAddr` there hands back the DLL's address, and calling
+//     it lands in our port anyway. The heap is entirely ours either way.
+//  2. It would collide with standalone/allocator_lock.cpp, which resolves those
+//     same two addresses in order to PATCH the prologue it finds there.
+//     `ResolveAddr(Module::Runtime, ...)` consults this registry FIRST
+//     ([[reference-resolveaddr-consults-port-registry-first]]), so registering
+//     them would hand the patcher OUR function to patch. Its memcmp guard would
+//     refuse — safely, but the refusal would read as a mysterious prologue
+//     mismatch rather than as what it is.
+//
+// At cutover neither reason applies: there is no DLL to detour and no prologue
+// for allocator_lock to have patched (it prints "could not resolve" and stands
+// down, which is the correct behaviour and was never the wall).
+int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry) {
+    RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&rtalloc::MemAlloc));
+    RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&rtalloc::MemFree));
+    RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
+    RegisterRuntimeAddr(0x1800c6c00, freeEntry);
+    return 4;
 }
 }  // namespace
