@@ -297,6 +297,30 @@ extern "C" void RtSysMemPlatformInstall(const rt::system::RtSysMemPlatform* p);
 typedef bool (*RtAllocDetourInstaller)(void* ourAllocate, void* ourFree);
 extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn);
 
+// ---- CUTOVER ARMING (Wave 9 lane E4) ---------------------------------------
+//
+// The seam above is a DLL-PRESENT concept from top to bottom, and that is why
+// the allocator could not arm with the DLL renamed aside: the detour exists
+// solely to redirect the DLL's OWN internal callers, and the prologue guard
+// reads the DLL's bytes to check nobody else owns them. With no DLL there are
+// no internal callers and no bytes, so the guard resolves null, reports
+// "unresolved", and REFUSES — correctly by its own logic, and wrongly for the
+// situation.
+//
+// With no DLL there is also no second allocator, so the whole reason the swap
+// had to be atomic disappears: registering the exports IS the complete swap.
+// This seam is that path. The host hands back the COMPOSED (locked) entry
+// points to register for the two member exports, because with no DLL there is
+// nothing for allocator_lock.cpp to patch and the critical section has to come
+// from somewhere.
+//
+// Returns false to refuse; RtSystemAllocatorRegister() then registers nothing,
+// exactly as it does when the detour installer refuses.
+typedef bool (*RtAllocCutoverArmer)(void* ourAllocate, void* ourFree,
+                                    void** outComposedAllocate,
+                                    void** outComposedFree);
+extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
+
 // runtime/src/system/allocator_win.cpp — installs the Win32 seam and holds the
 // six exported Platform* bodies. The portable half calls this once, under
 // #if defined(_WIN32); a _posix/_sdl twin provides the same two symbols.

@@ -1694,6 +1694,13 @@ static bool Init() {
     //     Inert unless BANISHED_RT_ALLOC=1 arms the allocator port.
     RtSystemAllocatorSetDetourInstaller(&RtAllocSwapInstall);
 
+    //     ...and the DLL-ABSENT arming path. These are two different jobs, not a
+    //     fallback: the detour installer redirects the DLL's own internal
+    //     callers, and at cutover there are none. Without this seam
+    //     RtSystemAllocatorRegister() refuses at cutover -- which is what the
+    //     DLL-absent boot hit, with MemAlloc/MemFree left unresolved.
+    RtSystemAllocatorSetCutoverArmer(&RtAllocSwapArmCutover);
+
     //     Observe-only shadow oracle for the same port: runs our body into a
     //     private replica arena beside retail's real work and compares, without
     //     taking the heap. No-op unless BANISHED_RT_DIFF=1 and

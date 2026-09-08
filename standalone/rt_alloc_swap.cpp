@@ -300,6 +300,50 @@ extern "C" bool RtAllocSwapInstall(void* ourAllocate, void* ourFree) {
 }
 
 // ============================================================================
+// CUTOVER ARMING -- no DLL, so no detour is possible OR necessary
+// ============================================================================
+//
+// Wave 9 lane E4. The DLL-absent boot ran with BANISHED_RT_ALLOC=1 and MemAlloc
+// and MemFree still came back on the unresolved list. The arming path was wired
+// all along (runtime/src/system/rt_system_port.cpp reads the env var and calls
+// RtSystemAllocatorRegister); what blocked it was its OWN SAFETY GUARD.
+// FindPatchedPrologue() reads the DLL's bytes through ResolveExportRaw to check
+// nobody else owns the two prologues, and with the module gone that resolves
+// null, reports "unresolved (Runtime-x64.dll not loaded?)" and REFUSES. Correct
+// by its own logic; wrong for the situation.
+//
+// Nothing here installs a detour, and that is not a shortcut. A detour exists
+// only to redirect the DLL's OWN internal callers, which are direct rel32 CALLs
+// inside the DLL. With no DLL there are none, so registering the exports IS the
+// complete swap and the atomicity requirement has nothing left to protect.
+//
+// What does NOT come for free is the critical section. On the DLL-present path
+// it arrives either from allocator_lock.cpp's prologue patches or from the
+// composed detour stub; at cutover neither exists, and retail's own Allocate and
+// Free take no lock (allocator_lock.h). So we hand back the SAME composed stubs
+// the detour would have installed, and RtSystemAllocatorRegister registers those
+// for ?Allocate@/?Free@ rather than the raw bodies. rtalloc::MemAlloc/MemFree
+// take the lock themselves, faithfully, as retail's statics do.
+extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
+                                      void** outComposedAllocate,
+                                      void** outComposedFree) {
+    if (!ourAllocate || !ourFree || !outComposedAllocate || !outComposedFree) return false;
+    g_ourAllocate = reinterpret_cast<OurAllocateFn>(ourAllocate);
+    g_ourFree     = reinterpret_cast<OurFreeFn>(ourFree);
+    *outComposedAllocate = reinterpret_cast<void*>(&SwapAllocate);
+    *outComposedFree     = reinterpret_cast<void*>(&SwapFree);
+
+    // Nothing to retire: with no DLL there is no prologue for allocator_lock to
+    // have patched. Say so rather than leave it ambiguous -- a silent skip here
+    // is exactly how "the lock quietly disappeared" would look.
+    fprintf(stderr, "[RtAllocSwap] cutover arm: no detour installed (no DLL, so no "
+                    "DLL-internal callers to redirect); ?Allocate@/?Free@ will be the "
+                    "composed stubs, which take the allocator CS at self+0x640.\n");
+    fflush(stderr);
+    return true;
+}
+
+// ============================================================================
 // Post-registration fixup — see WAVE9_LANE_E.md "Correction 3"
 // ============================================================================
 // RtSystemAllocatorRegister() registers the RAW ported bodies for

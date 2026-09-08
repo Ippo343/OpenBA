@@ -31,6 +31,13 @@ extern "C" bool RtAllocSwapInstall(void* ourAllocate, void* ourFree);
 // Repoints the ?Allocate@/?Free@ export registrations at the composed stubs so
 // OUR call sites get the same critical section the DLL's detoured callers get.
 // See WAVE9_LANE_E.md "Correction 3".
+// Hand this to RtSystemAllocatorSetCutoverArmer() BEFORE RuntimePortInit().
+// The DLL-ABSENT arming path: no detour is possible or necessary, so this only
+// hands back the composed (locked) entry points for the two member exports.
+extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
+                                      void** outComposedAllocate,
+                                      void** outComposedFree);
+
 extern "C" void RtAllocSwapPostRegister();
 
 // Observe-only shadow driver. Call BEFORE RuntimePortInit() (it must be in

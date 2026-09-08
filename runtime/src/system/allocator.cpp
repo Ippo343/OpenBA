@@ -1129,10 +1129,46 @@ const char* FindPatchedPrologue() {
 }
 
 RtAllocDetourInstaller g_installDetours = nullptr;
+RtAllocCutoverArmer    g_armCutover     = nullptr;
+
+// Which member of the platform seam is still null. Returns nullptr when the
+// table is complete. Naming it matters: `g_platInstalled` is one bool over ten
+// function pointers, and lane X spent a probe on a half-built seam because the
+// refusal said only "not installed".
+const char* PlatformSeamMissing() {
+    if (!g_plat.reserve)       return "reserve (VirtualAlloc MEM_RESERVE)";
+    if (!g_plat.reserveCommit) return "reserveCommit (VirtualAlloc RESERVE|COMMIT)";
+    if (!g_plat.commit)        return "commit (VirtualAlloc MEM_COMMIT)";
+    if (!g_plat.decommit)      return "decommit (VirtualFree MEM_DECOMMIT)";
+    if (!g_plat.release)       return "release (VirtualFree MEM_RELEASE)";
+    if (!g_plat.pageSize)      return "pageSize (GetSystemInfo)";
+    if (!g_plat.lockInit)      return "lockInit (InitializeCriticalSectionAndSpinCount)";
+    if (!g_plat.lockEnter)     return "lockEnter (EnterCriticalSection)";
+    if (!g_plat.lockLeave)     return "lockLeave (LeaveCriticalSection)";
+    if (!g_plat.lockDelete)    return "lockDelete (DeleteCriticalSection)";
+    return nullptr;
+}
+
+// Is the shipped DLL there at all? Asked STRUCTURALLY rather than from an env
+// var: both raw lookups resolving null means the module is not mapped.
+// ResolveExportRaw deliberately bypasses the port registry, so this cannot be
+// fooled by our own registrations.
+bool RuntimeDllPresent() {
+    return ResolveExportRaw("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z") != nullptr ||
+           ResolveExportRaw("?Free@MemoryAllocator@System@@QEAAXPEAX@Z") != nullptr;
+}
+
+// Defined below, after RtSystemAllocatorRegister, next to the export list it
+// owns; both arming paths call it.
+int RegisterAllocatorExports(void* allocateEntry, void* freeEntry);
 }
 
 extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn) {
     g_installDetours = fn;
+}
+
+extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
+    g_armCutover = fn;
 }
 
 int RtSystemAllocatorRegister() {
@@ -1140,11 +1176,58 @@ int RtSystemAllocatorRegister() {
     if (!g_platInstalled) RtSystemAllocatorInstallPlatform();
 #endif
     if (!g_platInstalled) {
-        printf("[RtPort] MemoryAllocator: platform seam not installed "
-                    "(runtime/src/system/allocator_win.cpp did not install) "
-                    "-- refusing to register. See docs/runtime_port/WAVE2_ALLOCATOR.md\n");
+        const char* missing = PlatformSeamMissing();
+        printf("[RtPort] MemoryAllocator: REFUSING to arm -- platform seam incomplete, "
+               "first missing entry is '%s' (runtime/src/system/allocator_win.cpp did "
+               "not install it). A half-built seam is worse than none: rtalloc::Construct "
+               "would call a null lockInit. See docs/runtime_port/WAVE2_ALLOCATOR.md\n",
+               missing ? missing : "(table complete but g_platInstalled is false)");
         return 0;
     }
+
+    // ---- CUTOVER: no DLL, so no detour is possible OR necessary -------------
+    //
+    // Everything below this block is DLL-present machinery. The detour exists
+    // only to redirect the DLL's own internal callers; the prologue guard reads
+    // the DLL's bytes. With the module gone, FindPatchedPrologue() resolves null
+    // and reports "unresolved", so the guard REFUSES -- correct by its own logic
+    // and wrong for the situation. That is exactly why BANISHED_RT_ALLOC=1 did
+    // not take on the DLL-absent boot: the arming path was wired, and its safety
+    // guard was the thing blocking it.
+    //
+    // With no DLL there is no second allocator, so the atomicity requirement
+    // ("register nothing unless the swap took") has nothing left to protect
+    // against: registering the exports IS the complete swap. The one thing that
+    // does NOT come for free is the critical section, which normally arrives via
+    // allocator_lock.cpp's patches or the composed detour stub -- neither of
+    // which exists here. The host hands the composed (locked) entry points back
+    // through the cutover armer, and they are what gets registered.
+    if (!RuntimeDllPresent()) {
+        if (g_armCutover == nullptr) {
+            printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
+                   "and no cutover armer is installed. Registering the raw bodies alone "
+                   "would leave ?Allocate@/?Free@ running with NO critical section, which "
+                   "is the free-list race allocator_lock.cpp exists to prevent. "
+                   "standalone/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
+            return 0;
+        }
+        void* composedAlloc = nullptr;
+        void* composedFree  = nullptr;
+        if (!g_armCutover(reinterpret_cast<void*>(&rtalloc::Allocate),
+                          reinterpret_cast<void*>(&rtalloc::Free),
+                          &composedAlloc, &composedFree) ||
+            composedAlloc == nullptr || composedFree == nullptr) {
+            printf("[RtPort] MemoryAllocator: cutover armer REFUSED -- registering nothing\n");
+            return 0;
+        }
+        const int n = RegisterAllocatorExports(composedAlloc, composedFree);
+        printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- %d exports registered, "
+               "no detour installed because there are no DLL-internal callers to redirect. "
+               "?Allocate@/?Free@ point at the COMPOSED entry points, which take the "
+               "allocator critical section.\n", n);
+        return n;
+    }
+
     // HARD REFUSE if anything already owns these two prologues. Proceeding would
     // silently drop the allocator lock; see the comment on FindPatchedPrologue.
     if (const char* patched = FindPatchedPrologue()) {
@@ -1171,14 +1254,27 @@ int RtSystemAllocatorRegister() {
         return 0;
     }
 
+    const int n = RegisterAllocatorExports(reinterpret_cast<void*>(&rtalloc::Allocate),
+                                           reinterpret_cast<void*>(&rtalloc::Free));
+    printf("[RtAlloc] ARMED (atomic swap taken, Runtime-x64.dll present) -- %d exports "
+           "registered; the DLL's own Allocate/Free now JMP to our composed stubs.\n", n);
+    return n;
+}
+
+// The registration block, shared by both arming paths. `allocateEntry` and
+// `freeEntry` are what the two MEMBER exports point at: the raw ported bodies on
+// the DLL-present path (where the composed stub is reached through the detour,
+// and RtAllocSwapPostRegister repoints these afterwards), or the composed locked
+// entry points on the cutover path, where there is no detour and no
+// allocator_lock patch, so the critical section has to come from here.
+namespace {
+int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
     RegisterRuntimeExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",
                           reinterpret_cast<void*>(&rtalloc::MemAlloc));
     RegisterRuntimeExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
                           reinterpret_cast<void*>(&rtalloc::MemFree));
-    RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z",
-                          reinterpret_cast<void*>(&rtalloc::Allocate));
-    RegisterRuntimeExport("?Free@MemoryAllocator@System@@QEAAXPEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::Free));
+    RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z", allocateEntry);
+    RegisterRuntimeExport("?Free@MemoryAllocator@System@@QEAAXPEAX@Z", freeEntry);
     RegisterRuntimeExport("?Get@MemoryAllocator@System@@SAPEAV12@XZ",
                           reinterpret_cast<void*>(&rtalloc::Get));
     RegisterRuntimeExport("?GetAllocationSize@MemoryAllocator@System@@QEAA_KPEAX@Z",
@@ -1216,7 +1312,6 @@ int RtSystemAllocatorRegister() {
     // The six Platform* exports are registered by the _win half, which owns
     // their bodies.
     const int platformExports = RtSystemAllocatorRegisterPlatformExports();
-    printf("[RtPort] MemoryAllocator: ATOMIC SWAP TAKEN -- %d exports registered\n",
-                21 + platformExports);
     return 21 + platformExports;
 }
+}  // namespace
