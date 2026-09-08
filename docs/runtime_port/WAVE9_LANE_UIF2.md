@@ -46,14 +46,22 @@ copies of the script from one working directory measures that directory
 twice and prints two identical reports that look like "my change did
 nothing". This lane did exactly that and nearly published it — see §7.
 
+**`addr_door_audit.py` here is the FIXED version from `f5dbeb8`** (lane ADDR),
+not the one on this lane's base. The old one matched its pattern inside
+comments; §7 reports that this lane found the same defect independently and
+left it for its owner, and its owner fixed it in the same wave. Both columns
+below use the fixed tool, so they are comparable to each other and to anything
+measured after `f5dbeb8`. The pre-fix numbers are in §7 for continuity.
+
 | Instrument | base `fd30180` | `wave9/lane-uif` | delta |
 |---|---|---|---|
 | `unsatisfied_export_scan` — names with no port and no mint | **129** | **126** | **−3** |
 | … of those, outside a diff guard | 126 | 123 | −3 |
-| `addr_door_audit` — UNREGISTERED | **16** | **19** | **+3** |
-| `addr_door_audit` — by-address call sites | 295 | 300 | +5 |
-| `addr_door_audit` — distinct addresses | 198 | 203 | +5 |
+| `addr_door_audit` — UNREGISTERED | **15** | **18** | **+3** |
+| `addr_door_audit` — by-address call sites | 270 | 275 | +5 |
+| `addr_door_audit` — distinct addresses | 192 | 197 | +5 |
 | `addr_door_audit` — registered addresses | 1186 | 1190 | +4 |
+| `addr_door_audit` — non-literal call sites (blind spot) | 15 | 15 | **+0** |
 
 **Set-diff, exports CLOSED (3):**
 
@@ -253,11 +261,23 @@ unmeasured:
 porting `Draw` is 2 new doors plus at least 3 behind `Begin`. Declining it
 keeps the arithmetic at −3/+3 instead of −4/+5-or-worse.
 
-**Note for whoever picks it up, and it changes the plan:** lane CTX's warning
-about `?Inverse@Matrix@Math@@` inside `Video::Context::SetCamera` is live on
-`Draw`'s path — `Draw` calls `SetCamera` at 0x180121ca8. This lane did **not**
-port `Inverse`, per the brief's instruction to leave it to lane GFXR, and did
-not touch `context.cpp`.
+**Note for whoever picks it up — and this half of it is now CLOSED.** Lane
+CTX's warning about `?Inverse@Matrix@Math@@` inside
+`Video::Context::SetCamera` is live on `Draw`'s path: `Draw` calls `SetCamera`
+at 0x180121ca8. This lane did **not** port `Inverse`, per the brief's
+instruction to leave it to lane GFXR, and did not touch `context.cpp`.
+**Lane GFXR landed it in `f5dbeb8`** (bit-exact over 2,240,021 adversarial
+cases, negative control firing at 89.01%), and the same change converts
+`MatrixInverse()` from a frozen `static Fn fn = ResolveExport(...)` to
+`RT_EXPORT_ONCE`, so a call arriving before `RtMathPortInit()` no longer
+caches a null forever.
+
+So `Draw`'s `SetCamera` dependency is satisfied and is **no longer part of
+this decline.** The decline stands on the other two rows unchanged:
+`SpriteContext::Begin` (0x18011d2b0, plus at least three unregistered callees
+of its own) and the `SpriteCapture` bounds pass (0x1800d8a60). Anyone
+re-costing `Draw` after `f5dbeb8` should re-take the closure rather than
+trusting this table — one of its rows has already moved.
 
 ### `?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z` — 0x1801213c0
 
@@ -351,16 +371,39 @@ headline number said the lane had added nothing. This is the fifth instance of
 *while writing the section that quotes the number*. Fixed in `779f790`: each
 of the five spells its address once, as a literal, in its own resolver.
 
-**A second, smaller finding in the same instrument, reported not fixed.** After
-the fix, `addr_door_audit --nonliteral` still attributes 3 non-literal sites to
-this file: lines 98, 190 and 607. All three are **prose** — comments that
-mention `ResolveAddr(Module::Runtime, …)` while explaining the doors. The
-scanner matches its pattern inside comments, so *documenting* a door
-manufactures a phantom one, the mirror image of
-`reference_documenting_a_check_can_delete_it.md`. It inflates only the
-self-declared blind-spot line, never `UNREGISTERED`, so it is harmless today;
-it is left alone because a shared instrument should be fixed by one owner in
+**A second, smaller finding in the same instrument — reported not fixed, and
+its owner then fixed it.** After the literal fix above,
+`addr_door_audit --nonliteral` still attributed 3 non-literal sites to this
+file: lines 98, 190 and 607. All three were **prose** — comments that mention
+`ResolveAddr(Module::Runtime, …)` while explaining the doors. The scanner
+matched its pattern inside comments, so *documenting* a door manufactured a
+phantom one, the mirror image of
+`reference_documenting_a_check_can_delete_it.md`. It inflated only the
+self-declared blind-spot line, never `UNREGISTERED`, so it was harmless; this
+lane left it alone because a shared instrument should be fixed by one owner in
 one commit and this lane is not that owner.
+
+**Lane ADDR reached the same defect from the other end and fixed it in
+`f5dbeb8`** ("a census that was inventing work"). Two lanes finding one
+instrument defect independently, and the owner landing the fix, is the
+mechanism working. The correction is large — it was counting a lot of prose
+tree-wide, not just this file's:
+
+| `addr_door_audit` on base `fd30180` | pre-fix | fixed (`f5dbeb8`) |
+|---|---|---|
+| by-address call sites | 295 | 270 |
+| distinct addresses | 198 | 192 |
+| UNREGISTERED | 16 | 15 |
+| non-literal call sites | 77 | 15 |
+
+**This lane's conclusion is unchanged under the fixed tool**, which is the
+point of re-running rather than patching the old numbers: −3 exports for +3
+address doors either way, the same three rows
+(0x18011ba40, 0x1800d8ef0, 0x1800d8b20), and the non-literal delta now **+0**
+instead of +3 — the fixed tool no longer counts this file's prose, which is
+the independent confirmation that the 3 were phantom. §1 carries the fixed
+numbers; these pre-fix ones are kept only so a reader comparing against an
+earlier draft can see why they moved.
 
 **And the trap that nearly ate the whole measurement:** both scanners walk
 `os.walk("runtime")` **relative to the current working directory**, not to the
@@ -385,6 +428,7 @@ Every denominator **rose or held**; none shrank
 | `rawdoor_audit` | 607 sites, **0** UNGUARDED-CALL, 66 DEFERRED | 613 sites, **0** UNGUARDED-CALL, 66 DEFERRED |
 | `detour_target_audit` | clean | clean |
 | `abi_retslot_audit` | 0 of 48 | 0 of 48 (**does not cover this file** — §3) |
+| `addr_door_audit` (fixed, `f5dbeb8`) | 270 sites, UNREG 15 | 275 sites, UNREG **18** |
 | `runtime_census` UI | 153 called / 118 ported / 77.1% | 158 called / 123 ported / 77.8% |
 | `runtime_census` internal | 106 called / 94 ported / 88.7% | 108 called / 96 ported / 88.9% |
 
@@ -442,7 +486,40 @@ to both columns, so coverage barely moves. It is the same fact §1 states as
    `extern int RtUiSpriteContextRegister();` link edge.
    **A successful link is not a successful run**; limit 1 still stands.
 
-## 10. Worktree hazard encountered — read before trusting any concurrent lane's tree
+## 10. Provenance of this branch, and the worktree hazard
+
+**Worktree:** `C:/code/GIT/untitled_rev_eng_project/.claude/worktrees/lane-addr`
+— a directory named for a DIFFERENT lane, which is itself part of the
+incident below. **Branch:** `wave9/lane-uif`. **Base:** `fd30180`.
+`git diff --name-only fd30180 wave9/lane-uif` is exactly the five files listed
+at the top of this document.
+
+### This branch was written to by another lane and reset. Nothing was lost.
+
+`git reflog wave9/lane-uif` records the whole sequence, and the ORDER is what
+settles it:
+
+```
+@{6}  branch: Created from fd30180              <- this lane's `checkout -b`
+@{5}  commit: WAVE 9 LANE ADDR: the address-door census was reading prose as code
+@{4}  branch: Reset to fd30180                  <- lane ADDR's own repair
+@{3}  commit: WAVE 9 LANE UIF: SpriteContext opens…
+@{2}  commit: Lane UIF: spell the five internal addresses as literals…
+@{1}  commit: Lane UIF: the write-up…
+@{0}  commit: Lane UIF: the 4-int forwarder…
+```
+
+Lane ADDR's commit landed on this branch and lane ADDR reset it back to the
+creation point **before this lane had committed anything**. All four UIF
+commits are `@{3}`..`@{0}`, i.e. after the repair. ADDR's assessment ("you had
+no commits at that moment, so nothing of yours was lost") is confirmed from
+this side, from the reflog rather than from either lane's recollection.
+
+There is a pleasing symmetry worth recording: the commit that briefly sat on
+this branch was ADDR's fix for *the same instrument defect this lane reported
+in §7* — an address-door census reading prose as code.
+
+### The hazard itself
 
 This session's worktree assignment **moved between tool calls**, four times,
 landing on `lane-mod9` (branch `wave9/lane-mod`), `lane-uid-089e6eb4` and back.
