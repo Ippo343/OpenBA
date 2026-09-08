@@ -162,8 +162,16 @@ void DumpRuntimeResidue();
 //
 // Until 2026-09-07 the tree carried 163 sites shaped
 //
-//     fn = ResolveExport("?Mangled@...");
-//     if (!fn) fn = ResolveAddr(Module::Runtime, 0x1800xxxxx);   // <- fallback
+//     fn = ResolveExport(<the mangled name>);
+//     if (!fn) fn = ResolveAddr(Module::Runtime, <a hardcoded address>);  // <- the fallback
+//
+// (spelled without a string literal on purpose: tools/export_name_audit.py
+// harvests every ResolveExport call with a string-literal argument, and a
+// worked example in a
+// comment reads to it as a 663rd symbol that the DLL does not export -- a
+// checker made to cry wolf by the documentation of the thing it checks, which
+// is the same shape as the comment that pushed a live site out of
+// resolve_fallback_audit.py's window and deleted it from the audit)
 //
 // Every one of those fallbacks was DEAD, because the primary always succeeded.
 // They could not survive cutover: with the DLL gone no ResolveExport can

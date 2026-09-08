@@ -556,6 +556,14 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // Specialized handler: External::Load tree-walk crash. The instruction at
     // Runtime+0xBC73E is `MOV RAX, [RCX+0x10]` with RCX=NULL because the
     // typeId in [RBP+0x48] wasn't found in Factory::_singleton's tree.
+    //
+    // SAME SCOPE AS THE BLOCK ABOVE (PLAN.md §2.2 hazard C), spelled out here
+    // too because Wave 9 lane F found the note only on the other one and lane G
+    // has to retire BOTH. Retire at cutover: `runtimeBase` is
+    // GetModuleHandleA("Runtime-x64.dll"), which returns null once the DLL is
+    // gone, so this block cannot fire and the `+ 0xBC73E` offset has no base to
+    // be added to. Until then it is live for the DLL's OWN internal callers,
+    // which our registrations do not redirect.
     if (runtimeBase && ctx->Rip == runtimeBase + 0xBC73E) {
         uint32_t* typeIdSlot = reinterpret_cast<uint32_t*>(ctx->Rbp + 0x48);
         if (!IsBadReadPtr(typeIdSlot, sizeof(uint32_t))) {
