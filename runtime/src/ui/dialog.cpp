@@ -13,7 +13,7 @@
 //   | Export (short form)                   | Retail      | Ord  | Ported | Oracle |
 //   |---------------------------------------|-------------|------|--------|--------|
 //   | ??0DialogInstance (ctor)              | 0x180114870 |  147 | NO     | —      |
-//   | ??1DialogInstance (dtor)              | 0x180114d40 |  574 | NO     | —      |
+//   | ??1DialogInstance (dtor)              | 0x180114d40 |  574 | W9-UID | shape  |
 //   | ??_7DialogInstance (vtable)           | 0x180156d70 | 1420 | n/a    | —      |
 //   | ?AddController@ (I,H,H,External*,Str) |  NOT AN EXPORT     | n/a    | —      |
 //   | ?AddController@ (…ExtPtr,ExtPtr,Str)  | 0x180113470 | 1541 | NO     | —      |
@@ -30,7 +30,9 @@
 //   | ?Persist@DialogInstance@              | 0x180114fa0 | 3322 | W9-Z   | none   |
 //   | ?OnSerializeSettings@DialogInstance@  | 0x180115470 | 3281 | W9-Z   | none   |
 //   | ?TypeName@DialogInstance@             | 0x180045400 | 4379 | W9-Z   | none   |
-//   | ?OnClosed@DialogInstance@             | 0x180115330 | 3269 | NO     | —      |
+//   | ?OnClosed@DialogInstance@             | 0x180115330 | 3269 | NO(*)  | —      |
+//     (*) DECLINED AGAIN by WAVE 9 LANE UID, on a blocker RE-MEASURED rather
+//         than inherited — see the block below RtUiDialogInstance_Dtor.
 //   | ?StartTimer@                          | 0x1801137c0 | 4081 | NO     | —      |
 //   | ?StopTimer@                           | 0x180113730 | 4111 | yes    | replay |
 //   | ?CreateElement@Dialog@                | 0x180112ed0 | 1888 | NO     | —      |
@@ -100,12 +102,21 @@
 //
 // It is safe here because of four facts, each checked rather than assumed:
 //
-//   1. NOTHING PORTED HERE ALLOCATES, FREES, OR RESHAPES A TREE. Every ported
-//      body either reads a field, writes fields of an object somebody else
-//      owns at offsets static_assert'ed in the headers, or walks an existing
-//      array. Every function that allocates (both AddControllers, StartTimer,
-//      CreateElement, CreateInstance, the two ctors) or frees (both dtors,
-//      ~ElementDescription) is held back — see §2 of WAVE7_LANE_B.md.
+//   1. ⚠ NO LONGER TRUE AS WRITTEN — corrected by WAVE 9 LANE UID rather than
+//      left standing. Wave 7's claim was: nothing ported here allocates,
+//      frees or reshapes a tree; every body reads a field, writes fields of
+//      an object somebody else owns at static_assert'ed offsets, or walks an
+//      existing array. That still describes every Wave 7 body, and it is why
+//      the replay oracle is sound for them.
+//      IT DOES NOT DESCRIBE `??1DialogInstance@UI@@` (lane UID). That body
+//      FREES two arrays, destroys a whole child tree through slot 0, clears
+//      a linked list and removes the object from the handle table. It is
+//      therefore NOT covered by argument 3 below either: it has no replay
+//      oracle and cannot have one. What carries it instead is stated at the
+//      body — a shape check of the six values that could silently be wrong,
+//      compared against the shipped bytes while the DLL is still present.
+//      Everything else that allocates (both AddControllers, StartTimer,
+//      CreateInstance, the two ctors) is still held back — WAVE7_LANE_B.md §2.
 //   2. NO PORTED BODY STAMPS A VTABLE IT MINTED. The one ported function that
 //      writes vtable pointers, `??0ElementDescription`, resolves all three of
 //      them (`??_7Base@Object@@6B@`, `??_7External@Object@@6B@`,
@@ -241,6 +252,13 @@ void* ResolveExport(const char* mangled_name);
 // using it here rather than calling the C++ symbol directly.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// WAVE 9 LANE UID. The RAW address door -- the shipped DLL and nothing else --
+// needed by the two shape oracles at the bottom of the anonymous namespace,
+// which must read the SHIPPED instruction stream and not our own prologue
+// (reference_resolveaddr_consults_port_registry_first.md, and the thirteen
+// detour installers lane FNHOOK found aimed at our own bytes). Byte-identical
+// to standalone/resolve.h:108; the linker checks the two against each other.
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace {
 
@@ -508,6 +526,242 @@ inline const uint8_t* DialogInstanceTypeInfo() {
 // it is spelled as a constant here only because that header cannot be included
 // in this TU — see the ⚠ note beside the includes.
 constexpr int kBaseTypeInfoName = 0x08;
+
+
+// ---- WAVE 9 LANE UID helpers ----------------------------------------------
+// All four use the RETRY-a-miss form (RT_DATA_SLOT / RT_EXPORT_ONCE, and the
+// hand-written equivalent for the one address door), not the frozen
+// function-local static this file uses elsewhere. That is lane E3's finding
+// applied rather than repeated: 22 sites in the tree let the FIRST caller fix
+// a null for the life of the process, and `~DialogInstance` runs during
+// teardown, which is exactly when an ordering assumption is least safe.
+
+using DeletingDtorFn = void* (*)(void* self, unsigned flags);
+using VoidPtrFn      = void  (*)(void* p);
+
+inline void* VtblDialogInstance() {
+    return RT_DATA_SLOT(void*, "??_7DialogInstance@UI@@6B@");
+}
+
+// Slot 0 of any Object::Base-derived vtable is the SCALAR DELETING DESTRUCTOR
+// (runtime/src/object/deleting_dtor.cpp). Retail calls it with EDX = 1, which
+// means "destruct AND free"; see the note in the block below.
+inline DeletingDtorFn DeletingDtorOf(void* obj) {
+    return reinterpret_cast<DeletingDtorFn>((*reinterpret_cast<void***>(obj))[0]);
+}
+
+// 0x1800c7ad0, which is the out-of-line spelling of the lock+Free retail
+// inlines at both of this dtor's array frees. Same argument
+// runtime/src/collection/linkedlist.cpp's header block makes for 0x180009c30.
+inline void MemFreeStatic(void* p) {
+    RT_EXPORT_ONCE(VoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+}
+
+// 0x1800325f0 — Collection::LinkedList<T=8>::Clear. UNEXPORTED, so the only
+// door is the address one; port-aware, so `BANISHED_RT_LINKEDLIST=0` still
+// routes this to the DLL exactly as it does that file's other two bodies.
+inline void ListClear(void* list) {
+    static VoidPtrFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x1800325f0));
+    if (fn) fn(list);
+}
+
+// ??1Internal@Object@@UEAA@XZ — the tail retail inlines. Reached by NAME
+// through the port registry, which is precisely what RtUiDialogController_Dtor
+// already does for the identical tail.
+inline void InternalDtor(void* self) {
+    RT_EXPORT_ONCE(VoidPtrFn, "??1Internal@Object@@UEAA@XZ")(self);
+}
+
+// ---- the two shape oracles ------------------------------------------------
+//
+// Both read the SHIPPED instruction stream through a RAW door and compare its
+// literal displacements and relocation targets against what the ports assume.
+// Raw is mandatory here and is not an oversight of the port-aware rule: an
+// oracle that resolved through the registry would read OUR OWN prologue once
+// the port registers and compare the port against itself
+// (WAVE9_LANE_FNHOOK.md found thirteen detour installers doing exactly that).
+// Both are called only from RtUiDialogRegister and only when the oracle is on,
+// so neither is a live call site at cutover.
+
+// Little-endian rel32 at p[+off], resolved against the end of the instruction.
+inline const uint8_t* Rel32Target(const uint8_t* p, int off, int instrLen) {
+    int32_t rel = 0;
+    std::memcpy(&rel, p + off, 4);
+    return p + off + (instrLen - off) + rel;
+}
+
+// ??1DialogInstance@UI@@UEAA@XZ, 0x180114d40. Six values, and for a destructor
+// whose every other operation is a store of zero they ARE the failure surface:
+// the three vtables it stamps, the two functions it calls, and the field it
+// hands to the first of them.
+void VerifyDialogInstanceDtorShape(RtDiffSite* site) {
+    if (!RtDiffEnabled()) return;
+    RtDiffRegister(site);
+
+    // RT_RAW_OK: an ORACLE read of the shipped bytes; guarded by RtDiffEnabled
+    // above and never reached on a normal run.
+    const uint8_t* p = static_cast<const uint8_t*>(
+        ResolveExportRaw("??1DialogInstance@UI@@UEAA@XZ"));
+
+    char ours[224], theirs[224];
+    // RT_RAW_OK: oracle expectations, read raw for the same reason.
+    const void* wantVtDlg  = ResolveExportRaw("??_7DialogInstance@UI@@6B@");
+    const void* wantVtInt  = ResolveExportRaw("??_7Internal@Object@@6B@");
+    const void* wantVtBase = ResolveExportRaw("??_7Base@Object@@6B@");
+    const void* wantClear  = reinterpret_cast<const void*>(ResolveRuntimeRaw(0x1800325f0));
+    const void* wantSetSz  = reinterpret_cast<const void*>(ResolveRuntimeRaw(0x18002fca0));
+    const unsigned wantChildren =
+        static_cast<unsigned>(offsetof(DialogInstance, _children));
+
+    std::snprintf(ours, sizeof(ours), "vt=%p/%p/%p call=%p/%p children+0x%x",
+                  wantVtDlg, wantVtInt, wantVtBase, wantClear, wantSetSz, wantChildren);
+
+    if (!p) {
+        std::snprintf(theirs, sizeof(theirs), "shipped body not resolvable");
+        RtDiffReport(site, false, ours, theirs);
+        return;
+    }
+
+    // Scan the 0x18a-byte body once, collecting the LEA RAX,[rip+d32] targets
+    // (48 8d 05), the direct CALL rel32 targets (e8) and the LEA RCX,[RDI+d8]
+    // (48 8d 4f d8) that computes the argument to the third call.
+    const void* lea[4]  = { nullptr, nullptr, nullptr, nullptr };
+    const void* call[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    int nLea = 0, nCall = 0;
+    int childrenDisp = -1;
+    for (size_t i = 0; i + 5 <= 0x190; ++i) {
+        if (p[i] == 0x48 && p[i + 1] == 0x8d && p[i + 2] == 0x05) {
+            if (nLea < 4) lea[nLea++] = Rel32Target(p + i, 3, 7);
+            i += 6;
+        } else if (p[i] == 0x48 && p[i + 1] == 0x8d && p[i + 2] == 0x4f) {
+            if (childrenDisp < 0) childrenDisp = p[i + 3];
+            i += 3;
+        } else if (p[i] == 0xe8) {
+            if (nCall < 6) call[nCall++] = Rel32Target(p + i, 1, 5);
+            i += 4;
+        }
+    }
+
+    std::snprintf(theirs, sizeof(theirs), "vt=%p/%p/%p call=%p/%p children+0x%x",
+                  lea[0], lea[1], lea[2], call[2], call[3],
+                  childrenDisp < 0 ? 0xffffu : static_cast<unsigned>(childrenDisp));
+
+    const bool equal =
+        (nLea >= 3) && (nCall >= 4) &&
+        (lea[0]  == wantVtDlg)  &&
+        (lea[1]  == wantVtInt)  &&
+        (lea[2]  == wantVtBase) &&
+        (call[2] == wantClear)  &&
+        (call[3] == wantSetSz)  &&
+        (childrenDisp >= 0) &&
+        (static_cast<unsigned>(childrenDisp) == wantChildren);
+    RtDiffReport(site, equal, ours, theirs);
+}
+
+// 0x1800325f0 — LinkedList::Clear. Four displacements: the `next` link the walk
+// follows and the three fields it zeroes. Nothing else in that body can be
+// wrong without being wrong loudly.
+void VerifyListClearShape(RtDiffSite* site) {
+    if (!RtDiffEnabled()) return;
+    RtDiffRegister(site);
+
+    using LL = Collection::LinkedList<RtObject::InternalBasePtr>;
+    char ours[160], theirs[160];
+    std::snprintf(ours, sizeof(ours), "next+0x%x tail+0x%x head+0x%x count+0x%x",
+                  0x10u,
+                  (unsigned)offsetof(LL, _tail),
+                  (unsigned)offsetof(LL, _head),
+                  (unsigned)offsetof(LL, _count));
+
+    // RT_RAW_OK: an ORACLE read of the shipped bytes, guarded above.
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(ResolveRuntimeRaw(0x1800325f0));
+    if (!p) {
+        std::snprintf(theirs, sizeof(theirs), "shipped body not resolvable");
+        RtDiffReport(site, false, ours, theirs);
+        return;
+    }
+
+    //   48 8b 7e 10     MOV RDI,[RSI+0x10]        the `next` read, BEFORE the free
+    //   49 89 46 08     MOV [R14+0x8],RAX         tail  = 0
+    //   49 89 06        MOV [R14],RAX             head  = 0
+    //   41 89 46 10     MOV dword [R14+0x10],EAX  count = 0
+    int next = -1, tail = -1, count = -1;
+    bool headSeen = false;
+    for (size_t i = 0; i + 4 <= 0x9a; ++i) {
+        if (p[i] == 0x48 && p[i + 1] == 0x8b && p[i + 2] == 0x7e && next  < 0) next  = p[i + 3];
+        if (p[i] == 0x49 && p[i + 1] == 0x89 && p[i + 2] == 0x46 && tail  < 0) tail  = p[i + 3];
+        if (p[i] == 0x49 && p[i + 1] == 0x89 && p[i + 2] == 0x06)              headSeen = true;
+        if (p[i] == 0x41 && p[i + 1] == 0x89 && p[i + 2] == 0x46 && count < 0) count = p[i + 3];
+    }
+    std::snprintf(theirs, sizeof(theirs), "next+0x%x tail+0x%x head%s count+0x%x",
+                  next < 0 ? 0xffu : (unsigned)next,
+                  tail < 0 ? 0xffu : (unsigned)tail,
+                  headSeen ? "+0x0" : " ABSENT",
+                  count < 0 ? 0xffu : (unsigned)count);
+
+    const bool equal = (next == 0x10) && headSeen &&
+                       (tail  >= 0 && (unsigned)tail  == offsetof(LL, _tail)) &&
+                       (count >= 0 && (unsigned)count == offsetof(LL, _count));
+    RtDiffReport(site, equal, ours, theirs);
+}
+
+// The NEGATIVE CONTROL for both of the above, and it RUNS — a shape checker
+// that cannot be seen to fail is worth nothing, and this wave has already paid
+// for two controls that came back green because they could not fire
+// (WAVE9.md, the Picking negative control, and lane COLL's own). It feeds each
+// decoder a body that is deliberately NOT the one it expects and requires a
+// MISMATCH; if either comes back equal, the decoder is matching on something
+// that is not there and its green verdict above means nothing.
+//
+// The wrong body is `??1DialogController@UI@@UEAA@XZ` for the dtor decoder (a
+// real destructor of the same family, so it exercises the decoder rather than
+// bouncing off a null) and `0x18007a010`, LinkedList::Remove, for the list one
+// (same file, same container, different displacements).
+void VerifyLaneUidControls() {
+    if (!RtDiffEnabled()) return;
+    static RtDiffSite sNeg = { "WAVE9 lane UID shape decoders [negative control]",
+                               0, 0, false, false };
+    RtDiffRegister(&sNeg);
+
+    // RT_RAW_OK: oracle reads, guarded above.
+    const uint8_t* wrongDtor = static_cast<const uint8_t*>(
+        ResolveExportRaw("??1DialogController@UI@@UEAA@XZ"));
+    const uint8_t* wrongList = reinterpret_cast<const uint8_t*>(ResolveRuntimeRaw(0x18007a010));
+
+    bool dtorFired = true, listFired = true;
+
+    if (wrongDtor) {
+        // The DialogController dtor stamps ONE vtable and TAIL-JUMPS (e9, not
+        // e8), so a decoder that really requires three LEAs and four CALLs
+        // cannot match it.
+        int nLea = 0, nCall = 0;
+        for (size_t i = 0; i + 5 <= 0x40; ++i) {
+            if (wrongDtor[i] == 0x48 && wrongDtor[i + 1] == 0x8d && wrongDtor[i + 2] == 0x05) { ++nLea; i += 6; }
+            else if (wrongDtor[i] == 0xe8) { ++nCall; i += 4; }
+        }
+        dtorFired = !(nLea >= 3 && nCall >= 4);
+    }
+    if (wrongList) {
+        int next = -1, count = -1;
+        for (size_t i = 0; i + 4 <= 0x9a; ++i) {
+            if (wrongList[i] == 0x48 && wrongList[i + 1] == 0x8b && wrongList[i + 2] == 0x7e && next < 0)
+                next = wrongList[i + 3];
+            if (wrongList[i] == 0x41 && wrongList[i + 1] == 0x89 && wrongList[i + 2] == 0x46 && count < 0)
+                count = wrongList[i + 3];
+        }
+        // Remove zeroes prev/next and decrements the count through a different
+        // encoding entirely, so the full four-way match must NOT hold.
+        listFired = !(next == 0x10 && count == 0x10);
+    }
+
+    char ours[96], theirs[160];
+    std::snprintf(ours, sizeof(ours), "both decoders REJECT a body that is not theirs");
+    std::snprintf(theirs, sizeof(theirs), "dtor-decoder rejected=%s list-decoder rejected=%s%s",
+                  dtorFired ? "yes" : "NO", listFired ? "yes" : "NO",
+                  (wrongDtor && wrongList) ? "" : "  (a control body was not resolvable)");
+    RtDiffReport(&sNeg, dtorFired && listFired && wrongDtor && wrongList, ours, theirs);
+}
 
 }  // namespace
 
@@ -925,6 +1179,166 @@ void RtUiDialogController_Dtor(DialogController* self) {
     static void* const internalDtor = ResolveExport("??1Internal@Object@@UEAA@XZ");
     *reinterpret_cast<void**>(self) = vtbl;
     reinterpret_cast<void (*)(void*)>(internalDtor)(self);
+}
+
+
+// ============================================================================
+// WAVE 9 LANE UID — ??1DialogInstance@UI@@UEAA@XZ  0x180114d40  ord 574
+// ============================================================================
+//
+// The dialog lifecycle's teardown half, declined by lane UIF (row 6, "the one
+// genuinely close call") and again by lane UIC (§7). BOTH DECLINES RESTED ON
+// THREE STATED BLOCKERS AND ALL THREE DISSOLVED ON RE-CHECKING
+// (reference_holdback_blockers_are_stale_check_them_first.md). Each is answered
+// from the bytes below rather than argued:
+//
+//  1. "0x18002fca0 (int)" — NOT unported. `ArrayPtrSetSize` in
+//     runtime/src/object/internal.cpp has been the port of FUN_18002fca0 since
+//     Wave 3, with the address in the comment directly above it. What was
+//     missing was the REGISTRATION at that address, which this lane added
+//     (internal.cpp, ungated). A half-registered port reads exactly like an
+//     absent one from a callee census, which is how it survived two lanes.
+//  2. "0x1800325f0 (int, list free-all)" — now ported, as
+//     `RtColl_LinkedListClear_1800325f0` in runtime/src/collection/linkedlist.cpp,
+//     the fourth member of the `Collection::LinkedList<T=8>` family lane UIC
+//     opened. ~20 lines; its whole failure surface is four displacements and
+//     they are shape-checked below.
+//  3. "the body OPEN-CODES the InternalFactory swap-remove inline at
+//     0x180114e71 … in a function with no oracle, and it is the one row where
+//     being wrong CORRUPTS THE HANDLE TABLE."
+//
+//     This one is the substance of both declines, and it is answered by reading
+//     `??1Internal@Object@@UEAA@XZ` (0x1800bfdb0) beside it. THE TWO ARE THE
+//     SAME INSTRUCTION STREAM, register allocation aside:
+//
+//       0x1800bfdb0  ~Internal              0x180114e64  ~DialogInstance tail
+//       ---------------------------------  ---------------------------------
+//       LEA RAX,[0x180154720]              LEA RAX,[0x180154720]
+//       MOV [RCX],RAX                      MOV [RDI],RAX
+//       MOV dword [RCX+0xc],0x0            MOV dword [RDI+0xc],EBP   (EBP == 0)
+//       MOV RCX,[0x1801fc6d8]              MOV RCX,[0x1801fc6d8]
+//       MOV EDX,[RCX+0x8] / DEC EDX        MOV EDX,[RCX+0x8] / DEC EDX
+//       MOVSXD R11,[RBX+0x8]               MOVSXD R11,[RDI+0x8]
+//       CMP EDX,R11D / JZ skip             CMP EDX,R11D / JZ skip
+//       MOV R9,[RCX] / LEA R10,[R11*8]     MOV R9,[RCX] / LEA R10,[R11*8]
+//       MOVSXD RAX,EDX                     MOVSXD RAX,EDX
+//       MOV R8,[R9+RAX*8]                  MOV R8,[R9+RAX*8]
+//       MOV [R9+R10],R8                    MOV [R9+R10],R8
+//       MOV RAX,[RCX] / MOV R8,[RAX+R10]   MOV RAX,[RCX] / MOV R8,[RAX+R10]
+//       MOV [R8+0x8],R11D                  MOV [R8+0x8],R11D
+//       skip: CALL 0x18002fca0             skip: CALL 0x18002fca0
+//       LEA RAX,[0x180154788]              LEA RAX,[0x180154788]
+//       MOV [RBX],RAX                      MOV [RDI],RAX
+//
+//     So retail's "open-coded swap-remove" IS `Object::Internal::~Internal`,
+//     INLINED VERBATIM — not a second, private handle-table mutator. This port
+//     therefore does what `??1DialogController@UI@@` (60 lines above, Wave 7,
+//     shape-verified) already does for the identical tail: it calls the ONE
+//     body the tree owns, through the seam, so exactly one handle-table mutator
+//     is ever in play and it is whichever one the `BANISHED_RT_OBJECT_TABLE`
+//     tier has armed. Nothing here reimplements the swap-remove, and nothing
+//     here arms a tier that is off.
+//
+//     ⚠ THE COUPLING IS REAL AND IS NOT HIDDEN: with the DLL present and that
+//     tier off (the default), this dtor's tail is the DLL's `~Internal`, which
+//     is correct. AT CUTOVER the tier must be armed — WAVE9.md already records
+//     it as "Opt-in, and MANDATORY at cutover", so this adds no new obligation,
+//     but it does add a caller that will fault loudly if the promise is broken.
+//
+// WHAT THE BODY IS, in retail's own order (0x180114d40-0x180114ec9):
+//
+//     this->vptr = ??_7DialogInstance@UI@@6B@          (0x180156d70)
+//     if (_root) { _root->vtbl[0](_root, 1); _root = 0; }        // scalar-del
+//     for (i = 0; i < _controllers._size; ++i) {
+//         c = _controllers._data[i];                  // RE-READ each iteration
+//         if (c) { c->vtbl[0](c, 1); _controllers._data[i] = 0; }
+//     }
+//     if (_controllers._data) MemFree(_controllers._data);
+//     _controllers._data = 0;  _controllers._size = 0;   // NOT _capacity
+//     if (_timers._data)      MemFree(_timers._data);
+//     _timers._data = 0;       _timers._size = 0;        // NOT _capacity
+//     LinkedList::Clear(&_children);                   // 0x1800325f0
+//     Object::Internal::~Internal(this);               // inlined, see above
+//
+// FOUR DETAILS THAT A TIDIER REWRITE WOULD GET WRONG:
+//   * `_controllers._data` is RE-LOADED INSIDE the loop (0x180114da0), not
+//     hoisted. A controller's own destructor can reallocate the array it is
+//     being destroyed out of, and retail re-reads for that reason or by
+//     accident — either way, hoisting changes what the next iteration sees.
+//   * `_capacity` IS LEFT ALONE for both arrays. Only data and size are zeroed.
+//   * THE `if (ptr)` BEFORE EACH MemFree IS RETAIL'S OWN redundancy — MemFree
+//     (0x1800c7ad0) opens with `TEST RCX,RCX; JZ ret`. It is reproduced rather
+//     than dropped; this is not a guard added to paper over a crash.
+//   * SLOT 0 IS CALLED WITH FLAG 1 — the SCALAR DELETING destructor, which
+//     frees the child. Passing 0 would destruct without freeing and leak every
+//     element and controller of every dialog.
+//
+// ORACLE: NONE, and none is possible — it is a destructor, so a replay is not a
+// comparison but a second destruction: it would run every child's deleting
+// destructor again, free both arrays twice, and swap-remove a handle that no
+// longer exists. It ships in the disposition lanes M, Z and UIF established: a
+// no-oracle port with NO call into the shipped body at all.
+//
+// What stands in for it is a SHAPE CHECK, `VerifyDialogInstanceDtorShape`,
+// which reads the shipped instruction stream and compares the three vtable
+// addresses this body stamps, the two functions it calls, and the `_children`
+// displacement it hands to the first of them. That is not "some" of the failure
+// surface — for a destructor whose every other operation is a store of zero,
+// those six values ARE what could silently be wrong, and all six are compared
+// against the DLL while the DLL is still there (WAVE9.md §2: the verification
+// budget has to be spent before the removal).
+void RtUiDialogInstance_Dtor(DialogInstance* self) {
+    // LIVENESS ONLY, not a comparison. `calls=` will read 0 here because
+    // nothing is diffed; `worked=` is the whole signal and it answers the one
+    // question a no-oracle port cannot otherwise answer -- did this body EVER
+    // RUN (reference_uncalled_port_is_not_verified.md). It counts calls that
+    // had real teardown to do, so a dtor reached only on an already-empty
+    // dialog cannot inflate it.
+    //
+    // THREAD SAFETY, stated rather than assumed: rt_diff.cpp has NO
+    // synchronisation (WAVE9.md §2), so a site here would be a data race if
+    // dialogs were torn down off the main thread. They are not -- every
+    // `~DialogInstance` reachable from this tree runs from
+    // `UI::UserInterface::Update` / `CleanRemovedDialogs` / `CloseDialog`, all
+    // of which are called from `Engine::MainLoop::Frame` on the main thread.
+    RT_DIFF_BEGIN("UI::DialogInstance::~DialogInstance [liveness]");
+    RT_DIFF_WORK(self->_root != nullptr || self->_controllers._size > 0 ||
+                 self->_children._head != nullptr);
+
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+
+    *reinterpret_cast<void**>(p) = VtblDialogInstance();
+
+    // --- the root Element, through its scalar deleting destructor ------------
+    if (self->_root) {
+        DeletingDtorOf(self->_root)(self->_root, 1);
+        self->_root = nullptr;
+    }
+
+    // --- every controller, same way. _data is re-read each iteration ---------
+    for (int i = 0; i < self->_controllers._size; ++i) {
+        DialogController** data = self->_controllers._data;   // re-read: see above
+        DialogController*  c    = data[i];
+        if (c) {
+            DeletingDtorOf(c)(c, 1);
+            data[i] = nullptr;
+        }
+    }
+
+    if (self->_controllers._data) MemFreeStatic(self->_controllers._data);
+    self->_controllers._data = nullptr;
+    self->_controllers._size = 0;      // _capacity deliberately untouched
+
+    if (self->_timers._data) MemFreeStatic(self->_timers._data);
+    self->_timers._data = nullptr;
+    self->_timers._size = 0;           // _capacity deliberately untouched
+
+    ListClear(&self->_children);
+
+    // Retail inlines Object::Internal::~Internal here; the instruction-for-
+    // instruction comparison is in the block above. Reached through the seam so
+    // that exactly one handle-table mutator is in play.
+    InternalDtor(self);
 }
 
 // ============================================================================
@@ -1550,6 +1964,31 @@ int RtUiDialogRegister() {
                           (void*)&RtUiDialogInstance_TypeName);
     RegisterRuntimeAddr(0x180045400, (void*)&RtUiDialogInstance_TypeName);             ++n;
 
+    // ---- Wave 9 lane UID: the teardown half of the dialog lifecycle -------
+    // Registered under BOTH doors, which is the convention lane UIF's
+    // half-registered `?SetUpperLeft@` proved is not decoration:
+    //   * BY NAME  -- engine/funcs/engine_funcs.cpp:1757 binds
+    //     `fn_DialogInstance_Dtor` through ResolveExport.
+    //   * BY ADDRESS -- runtime/src/object/deleting_dtor.cpp's RT_DELDTOR row
+    //     for UI::DialogInstance (0x1800458c0 -> 0x180114d40) reaches ~this
+    //     by address, and the minted `??_7DialogInstance@UI@@6B@` fills its
+    //     slot 0 from that deleting destructor.
+    // The mangling is the VIRTUAL one, UEAA, taken from the shipped export
+    // directory rather than constructed: QEAA would resolve NULL in silence
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    RegisterRuntimeExport("??1DialogInstance@UI@@UEAA@XZ",
+                          (void*)&RtUiDialogInstance_Dtor);
+    RegisterRuntimeAddr(0x180114d40, (void*)&RtUiDialogInstance_Dtor);                ++n;
+
+    // The IDENTITY LINE for this lane. Every measurement in
+    // docs/runtime_port/WAVE9_LANE_UID.md is gated on finding this string in
+    // THAT RUN'S OWN log, not on "I rebuilt" and not on a timestamp -- lanes
+    // in this wave have measured the wrong exe more than once.
+    std::printf("[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + "
+                "LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door "
+                "(0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read "
+                "the [negative control] line first.\n");
+
     // ---- Wave 9 lane UIC: the two rows lane UIF declined at 8 and 11 -------
     // Both names were verified present in the shipped export directory with
     // pefile BEFORE the bodies were written (tools/uic_probe.py), and both are
@@ -1590,6 +2029,17 @@ int RtUiDialogRegister() {
                         // RT_RAW_OK: an ORACLE read -- VerifyDtorThunk compares the DLL's own
                         ResolveExportRaw("??_7DialogController@UI@@6B@"),
                         ResolveExportRaw("??1Internal@Object@@UEAA@XZ"));
+
+        // ---- Wave 9 lane UID ----------------------------------------------
+        // Two decoders and ONE NEGATIVE CONTROL THAT RUNS. Read the control
+        // line first: if it says a decoder failed to REJECT a body that is not
+        // its own, the two green lines above it mean nothing
+        // (reference_probe_needs_an_effectiveness_control.md).
+        static RtDiffSite sDlgDtor = { "UI::DialogInstance::~DialogInstance[shape]", 0, 0, false, false };
+        static RtDiffSite sLlClear = { "Collection::LinkedList::Clear(0x1800325f0)[shape]", 0, 0, false, false };
+        VerifyDialogInstanceDtorShape(&sDlgDtor);
+        VerifyListClearShape(&sLlClear);
+        VerifyLaneUidControls();
     }
 
     return n;
