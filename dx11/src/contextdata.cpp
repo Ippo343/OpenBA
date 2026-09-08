@@ -150,6 +150,8 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 namespace VideoDX11 {
 namespace {
@@ -588,6 +590,57 @@ static_assert(static_cast<int>(DXGI_FORMAT_B8G8R8A8_UNORM) == 0x57,
 // registers them this code picks up the port automatically — the same thing the
 // original does, because the original also dispatches virtually.
 // ============================================================
+// ============================================================
+// BANISHED_FORCE_DEVICE_LOST=<frame>  -- Wave 9 lane ENGIO
+//
+// PLAN 5.5 wants a forced device-lost event exercised before cutover and it had
+// never happened: nothing in the harness can make Present fail, and waiting for
+// a real driver reset is not a test. This injects ONE synthetic
+// DXGI_ERROR_DEVICE_RESET into the Present result on the Nth call to Finish,
+// and then never again.
+//
+// WHY IT IS SOUND AS A DRIVE RATHER THAN A SIMULATION. It substitutes the
+// RETURN VALUE of Present and nothing else, at the exact place a real reset
+// would deliver it, so every line after it -- the two DXGI error comparisons,
+// the onLost notify, ReleaseDynamic, the d3dDevice null, DeviceData slots 3 and
+// 2, RecreateDynamic, the onRestored notify -- runs for real on the real
+// device. In particular the device really IS torn down and recreated; this is
+// not a mock of the recovery, it is the recovery.
+//
+// The one thing it does NOT reproduce is the D3D device being genuinely
+// removed, so `GetDeviceRemovedReason` is never consulted -- and it cannot be,
+// because DEVICE_RESET is one of the two values that SKIP that query
+// (0x180001820's two comparisons). Stated rather than implied: this drives the
+// NOTIFY-AND-RECREATE half of the path, which is the half PLAN 5.5 is about and
+// the half MainLoop::OnVideoError / OnVideoRestart live on.
+//
+// Off unless the env var is set, and `getenv` is process-cached
+// (standalone/env_cache.h), so the read costs nothing per frame.
+// ============================================================
+namespace {
+
+// Returns true exactly once, on the Nth ContextData_Finish call.
+bool ForceDeviceLostThisFrame() {
+    static int  wanted = -2;      // -2 = not yet read, -1 = disabled
+    static long frame  = 0;
+    static bool fired  = false;
+    if (wanted == -2) {
+        const char* v = std::getenv("BANISHED_FORCE_DEVICE_LOST");
+        wanted = (v && *v) ? std::atoi(v) : -1;
+        if (wanted > 0)
+            std::fprintf(stderr,
+                "[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be "
+                "injected on Present #%d (PLAN 5.5 forced device-lost drive)\n",
+                wanted);
+    }
+    ++frame;
+    if (wanted <= 0 || fired || frame < wanted) return false;
+    fired = true;
+    return true;
+}
+
+}  // namespace
+
 void ContextData_Finish(ContextData* self) {
     const Imports* im = GetImports();
     if (!im) { Orig<void (*)(ContextData*)>(3)(self); return; }
@@ -600,6 +653,17 @@ void ContextData_Finish(ContextData* self) {
 
     HRESULT hr = static_cast<IDXGISwapChain*>(dd->swapChain)->Present(sync, 0);
     im->DeviceUnlock(device);
+
+    // The PLAN 5.5 drive. Substitutes the Present result and nothing else; see
+    // the block comment above ContextData_Finish.
+    if (ForceDeviceLostThisFrame()) {
+        std::fprintf(stderr, "[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET "
+                             "(real Present returned 0x%08lx)\n",
+                     static_cast<unsigned long>(hr));
+        std::fflush(stderr);
+        hr = DXGI_ERROR_DEVICE_RESET;
+    }
+
     if (hr == 0) return;
 
     if (hr != DXGI_ERROR_DEVICE_REMOVED && hr != DXGI_ERROR_DEVICE_RESET)
@@ -609,6 +673,10 @@ void ContextData_Finish(ContextData* self) {
     void* owner = dd->device;   // DeviceData+0x08, the Video::Device*
 
     DeviceNotifyFn onLost = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceLost);
+    std::fprintf(stderr, "[DeviceLost] hr=0x%08lx onLost=%p -> %s\n",
+                 static_cast<unsigned long>(hr), (void*)onLost,
+                 onLost ? "calling" : "*** NULL, notification SKIPPED ***");
+    std::fflush(stderr);
     if (onLost) onLost();
 
     im->DeviceReleaseDynamic(owner);
@@ -640,7 +708,13 @@ void ContextData_Finish(ContextData* self) {
     im->DeviceRecreateDynamic(owner);
 
     DeviceNotifyFn onRestored = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceRestored);
+    std::fprintf(stderr, "[DeviceLost] recreate OK; onRestored=%p -> %s\n",
+                 (void*)onRestored,
+                 onRestored ? "calling" : "*** NULL, notification SKIPPED ***");
+    std::fflush(stderr);
     if (onRestored) onRestored();
+    std::fprintf(stderr, "[DeviceLost] device-lost round trip COMPLETE\n");
+    std::fflush(stderr);
 }
 static_assert(static_cast<unsigned>(DXGI_ERROR_DEVICE_REMOVED) == 0x887a0005u, "hr constant");
 static_assert(static_cast<unsigned>(DXGI_ERROR_DEVICE_RESET)   == 0x887a0007u, "hr constant");

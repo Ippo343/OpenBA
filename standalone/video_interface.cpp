@@ -108,6 +108,21 @@ HMODULE SentinelModule() {
     return h;
 }
 
+void FillDx11Slot(void* device);
+
+}  // namespace
+
+// Wave 9 lane ENGIO. The slot fill, reachable WITHOUT the detour.
+//
+// See the correction on InstallVideoInterfacePrefill below: at cutover the
+// detour is the ONLY path that reaches this, and the detour cannot exist. Whoever
+// ports Video::Device::InitializeInterfaces (0x1800F79F0) must call this from
+// the ported body -- that is what turns the pre-fill from a DLL-present hack
+// into the real thing.
+void VideoInterfaceFillDx11Slot(void* device) { FillDx11Slot(device); }
+
+namespace {
+
 void FillDx11Slot(void* device) {
     uint8_t* slot = static_cast<uint8_t*>(device) + kSlot0
                   + kInterfaceDX11 * kSlotStride;
@@ -150,10 +165,38 @@ void InstallVideoInterfacePrefill() {
                              "Video::Device::InitializeInterfaces"));
 
     if (!g_origInitializeInterfaces) {
+        // *** THE SECOND SENTENCE OF THIS MESSAGE USED TO BE WRONG AT CUTOVER,
+        // *** WHICH IS THE ONE PLACE IT IS GUARANTEED TO BE PRINTED.
+        //
+        // Wave 9 lane ENGIO measured it. With Runtime-x64.dll ABSENT the detour
+        // fails because there is no 0x1800F79F0 to patch -- expected, and the
+        // message is right to appear. But the consequence it names cannot
+        // happen: "Runtime will LoadLibrary VideoDX11-x64.dll" needs a Runtime,
+        // and there isn't one. Nothing loads VideoDX11 and nothing falls back
+        // to VideoDX9 either.
+        //
+        // The REAL consequence is quieter and is the thing to watch for:
+        // `FillDx11Slot` is reachable ONLY from `WrapInitializeInterfaces`
+        // (grepped -- there is no other caller), so with the detour gone
+        // **NOBODY FILLS THE DX11 INTERFACE SLOT AT ALL** unless the ported
+        // `Video::Device::InitializeInterfaces` calls
+        // `VideoInterfaceFillDx11Slot` itself. That function is exported above
+        // for exactly that purpose. `VideoInterfacePrefilled()` stays false and
+        // is the detector.
+        //
+        // 0x1800F79F0 is UNPORTED AND UNREGISTERED as of this lane (grepped
+        // across runtime/, standalone/, engine/ and dx11/: every hit is a
+        // comment). Recorded in docs/runtime_port/WAVE9_LANE_ENGIO.md.
         fprintf(stderr,
-                "[VideoInterface] *** DETOUR FAILED *** Runtime will LoadLibrary "
-                "VideoDX11-x64.dll and, if it is missing, silently fall back to "
-                "VideoDX9-x64.dll. See dx11/README.md.\n");
+                "[VideoInterface] *** DETOUR FAILED *** Video::Device::"
+                "InitializeInterfaces (0x1800F79F0) could not be resolved.\n"
+                "[VideoInterface]   With the DLL PRESENT this means the pre-fill "
+                "did not happen and Runtime will LoadLibrary VideoDX11-x64.dll, "
+                "falling back to VideoDX9-x64.dll if it is missing.\n"
+                "[VideoInterface]   With the DLL ABSENT (cutover) it means "
+                "something MUST call VideoInterfaceFillDx11Slot() from the ported "
+                "InitializeInterfaces -- nothing else fills the slot, and nothing "
+                "loads VideoDX9 either. See dx11/README.md.\n");
         fflush(stderr);
     }
 }
