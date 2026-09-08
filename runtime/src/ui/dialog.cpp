@@ -216,6 +216,7 @@ using RtUI::DialogInstance;
 using RtUI::DialogTimer;
 using RtUI::ElementDescription;
 using RtUI::kDialogInstanceCtorExtent;
+using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)
 
 // ----------------------------------------------------------------------------
 // ResolveExport, forward-declared rather than pulled in from standalone/resolve.h
@@ -228,6 +229,18 @@ using RtUI::kDialogInstanceCtorExtent;
 // the two against each other. (Precedent: runtime/src/video/context.cpp and
 // runtime/src/achievement/achievement_manager.cpp declare the same prototype.)
 void* ResolveExport(const char* mangled_name);
+
+// ResolveAddr, same reasoning and the same "must stay byte-identical to
+// resolve.h's" contract. WAVE 9 LANE UIC needs it for one unexported-by-us edge
+// (`?AdjustUpperLeft@Element@UI@@`, reached through the seam so that
+// BANISHED_RT_UIELEMENT=0 puts it back on the DLL).
+//
+// AND IT IS NOT "ALWAYS THE DLL": ResolveAddr(Module::Runtime, …) consults the
+// port registry FIRST (standalone/resolve_standalone.cpp:471,
+// reference_resolveaddr_consults_port_registry_first.md). That is the point of
+// using it here rather than calling the C++ symbol directly.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -257,6 +270,11 @@ const char* const kGetContainer =
     "?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ";
 const char* const kEdCtor        = "??0ElementDescription@UI@@QEAA@XZ";
 const char* const kEdFileVersion = "?GetFileVersion@ElementDescription@UI@@UEBAHXZ";
+// WAVE 9 LANE UIC
+const char* const kCreateElement =
+    "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
+    "V?$ExternalPtr@VElementDescription@UI@@@4@@Z";
+const char* const kSetUpperLeft  = "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z";
 
 // The Element helpers the two Find* forwarders tail into. Neither is in this
 // lane's scope; both are exported and both are resolved through the SEAM
@@ -285,6 +303,37 @@ using StopTimerFn   = void   (*)(void* self, int32_t id);
 using CtorFn        = void*  (*)(void* self);
 using IntFn         = int32_t(*)(const void* self);
 using TypeIdFn      = uint32_t(*)(void* controller);
+
+// ---- WAVE 9 LANE UIC helpers ----------------------------------------------
+// The `System::String` release retail open-codes at every temporary, with its
+// asymmetry intact: the FREEING branch leaves the local holding `data - 8`
+// (dangling, and then freed), the SHARING branch nulls it. Identical to the one
+// `??1ElementDescription@` at the bottom of this file spells out; factored here
+// because `?CreateElement@` performs it three times.
+//
+// Takes the local BY REFERENCE so the two different post-states are visible to
+// the caller exactly as they are in retail — a by-value helper would look
+// correct and silently drop the asymmetry.
+void ReleaseStringLocal(char*& p) {
+    if (!p) return;
+    if (--RtSystem::StringRefCount(p) == 0) {
+        p -= 8;
+        using FreeFn = void (*)(void*);
+        static FreeFn freeFn = reinterpret_cast<FreeFn>(
+            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+        if (freeFn) freeFn(p);
+    } else {
+        p = nullptr;
+    }
+}
+
+// `?_singleton@Device@Video@@0PEAV12@EA` — a MINTED data slot
+// (standalone/rt_data_mint_tables.inc:1565), reached through the same
+// RT_DATA_SLOT door runtime/src/ui/userinterface.cpp uses rather than by a raw
+// address read, so it is satisfied at cutover and never caches a null.
+inline void** VideoDeviceSingleton() {
+    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+}
 
 // ============================================================================
 // (a) The replay oracle
@@ -1027,6 +1076,378 @@ void RtUiElementDescription_Dtor(ElementDescription* self) {
 }
 
 // ============================================================================
+// WAVE 9 LANE UIC — the two rows WAVE9_LANE_UIF.md declined at 8 and 11
+// ============================================================================
+
+// ---- ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@
+//      V?$ExternalPtr@VElementDescription@UI@@@4@@Z   0x180112ed0  ord 1888 ---
+//
+// "Make an element from this description, unless I have a NAMED TEMPLATE that
+// overrides it." The named-template table at Dialog+0x58/+0x60 is already
+// recovered — runtime/types/ui/Dialog.h's `DialogNamedTemplate`, stride 0x10,
+// {ExternalPtr +0x00, String +0x08} — and this body is what pinned it.
+//
+// ABI. `QEBA` returning a class: RCX = this, RDX = the HIDDEN RETURN SLOT,
+// R8 = the `ExternalPtr<ElementDescription>` argument, and RAX = RDX at the RET
+// (`MOV RAX,RSI` at 0x180113089). engine/funcs/engine_funcs.h:689 already
+// declares the three-argument shape, and counting arguments against the mangled
+// name agrees: one by-value pointer-sized argument plus the return slot
+// (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
+// is a wild write that still returns the right answer).
+//
+// R8 IS THE DESCRIPTION ITSELF, not a pointer to an ExternalPtr. It is handed
+// straight to `?GetPath@External@Object@@` as `this` at 0x180112f08, and in the
+// no-match path it is re-loaded from its home slot and its VTABLE is read
+// (`MOV RAX,[RCX]` at 0x180113054). An 8-byte ExternalPtr has neither.
+//
+// THE VIRTUAL CALL AT 0x18011305d IS SLOT 8, AND SLOT 8 IS PURE.
+// WAVE9_LANE_UIF.md declined this row on that call being "a virtual dispatch on
+// an ElementDescription-family vtable whose slot 8 I did not identify". It is
+// identified, out of a table rather than by guessing:
+// standalone/rt_data_mint_tables.inc's `??_7ElementDescription@UI@@6B@`
+// (kVSlots20, 9 slots) has index 8 — byte offset 0x40 — as `RT_MINT_PURECALL`
+// at 0x18007ec28. So it is PURE VIRTUAL on the base and is only ever reached on
+// a CONCRETE derived description's vtable. That matters for exactly one reason:
+// **porting this body introduces no new cutover symbol.** Retail's own body
+// dispatches through the same derived slot; whether that slot is satisfied is
+// the description class's problem either way, unchanged by this port.
+// Its shape from the call site is
+// `virtual InternalPtr<Element> <slot8>(const Dialog*) const`.
+//
+// THE INLINE STRCMP IS TRANSCRIBED, NOT SUMMARISED. It is guarded by a length
+// compare on `String`'s length dword at [p-8] and only then walks bytes, with
+// the result formed as `(signed char)ours[i] - (signed char)theirs[i]`.
+// reference_uniform_population_is_not_a_verification.md is about precisely this
+// construct: a ported inline strcmp that returned 0 for every distinct pair
+// sharing a first byte survived four waves of oracles because the population it
+// was tested on had thirteen copies of one value. The loop below is written out
+// instruction for instruction for that reason, and §"Oracle" in
+// docs/runtime_port/WAVE9_LANE_UIC.md records what the population actually was.
+//
+// The five direct callees are all ours: `GetPath` (0x180006250) and
+// `GetPathIdentifer` (0x1800c6610) are ported and registered under both doors
+// (runtime/src/object/external.cpp:739/763, runtime/src/system/filename.cpp:
+// 450/477), and `MemFree` (0x1800c7ad0, three call sites) is lane E's.
+//
+// ORACLE: replay, and it is sound here. The body is a PURE READ of the Dialog
+// and of the description — the only writes are to the caller's return slot and
+// to two String refcounts it also releases before returning, so it is net
+// refcount-neutral. Running it twice and comparing the two returned pointers
+// therefore compares the whole decision: which table entry matched, and which
+// object the virtual was dispatched on. What it does NOT isolate is the virtual
+// itself: if slot 8 has a side effect, the replay runs it twice. That is stated
+// rather than hidden, and it is the same disposition every replayed Wave 7
+// dialog getter carries.
+void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
+    RT_DIFF_BEGIN("UI::Dialog::CreateElement");
+
+    if (!desc) { *ret = nullptr; RT_DIFF_WORK(false); return ret; }
+
+    // `String name = desc->GetPath().GetPathIdentifer();`
+    // Both temporaries are released before the scan, with a STRONG REFERENCE
+    // taken on the identifier's buffer first (0x180112f3e `INC [RCX-4]`) —
+    // which is why the scan can still read it afterwards.
+    using GetPathFn  = void* (*)(const void* self, void* out);
+    using GetIdentFn = void* (*)(void* self, void* out);
+    static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
+        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
+    static GetIdentFn getIdent = reinterpret_cast<GetIdentFn>(
+        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
+
+    void* pathTmp  = nullptr;   // System::Filename — first qword is its String
+    char* identTmp = nullptr;   // System::String
+    char* name     = nullptr;
+
+    if (getPath && getIdent) {
+        void* fn = getPath(desc, &pathTmp);
+        void* id = getIdent(fn, &identTmp);
+        name = *static_cast<char**>(id);
+        if (name) { ++RtSystem::StringRefCount(name); }
+
+        // Release identTmp, then pathTmp — retail's order, with retail's
+        // asymmetry (the freeing branch leaves the local holding `data - 8`,
+        // the sharing branch nulls it). See runtime/types/system/String.h.
+        ReleaseStringLocal(identTmp);
+        // System::Filename's first qword IS its String buffer — retail releases
+        // the Filename temporary by exactly this inline String release on
+        // [RSP+0x28] (0x180112f6e..0x180112f9b), never through a ~Filename.
+        ReleaseStringLocal(*reinterpret_cast<char**>(&pathTmp));
+    }
+
+    // Linear scan of Dialog::_namedTemplates for an entry whose name equals
+    // `name`. `_data` and the cursor are both re-read per iteration exactly as
+    // retail does (0x180112fb2 re-tests RBX, 0x180112fbe re-loads [R11]).
+    void* target  = desc;          // the no-match answer: the argument itself
+    bool  matched = false;
+    const int32_t count = self->_namedTemplateCount;
+
+    // ---- POPULATION INSTRUMENT, not decoration ----------------------------
+    // The inline strcmp below is the construct
+    // reference_uniform_population_is_not_a_verification.md is about, and a
+    // clean replay proves nothing about it unless the strcmp ACTUALLY RAN on
+    // DISTINCT values. It usually does not: the length gate short-circuits
+    // every entry whose name is a different length, so a table of twenty names
+    // can exercise the byte loop zero times.
+    //
+    // So the diff message below reports what the population WAS, not just
+    // whether the answer matched: how many entries were scanned, how many
+    // reached the byte loop at all (a length tie), and how many distinct FIRST
+    // BYTES those tied entries had — the first byte being exactly what the
+    // known defect keyed on. A reader who sees `tied=0` has learned that this
+    // call could not have falsified anything.
+    int32_t nScanned = 0, nTied = 0, nTiedEq = 0;
+    uint32_t firstByteSeen[8] = {0,0,0,0,0,0,0,0};   // 256-bit set
+    auto noteFirstByte = [&](unsigned char c) {
+        firstByteSeen[c >> 5] |= (1u << (c & 31));
+    };
+    for (int32_t i = 0; i < count; ++i) {
+        const DialogNamedTemplate& e = self->_namedTemplates[i];
+
+        // Length gate first: String's length dword lives at [p-8], and a null
+        // buffer counts as length 0 (0x180112fbc / 0x180112fcc both fall
+        // through to EDI, which is 0 here).
+        const int32_t lenOurs   = name    ? *reinterpret_cast<const int32_t*>(name    - 8) : 0;
+        const int32_t lenTheirs = e._name ? *reinterpret_cast<const int32_t*>(e._name - 8) : 0;
+        ++nScanned;
+        if (e._name) noteFirstByte(static_cast<unsigned char>(e._name[0]));
+        if (lenOurs != lenTheirs) continue;
+
+        if (!name)      { matched = true; }                 // 0x180112fd5
+        else if (lenOurs == 0) { matched = true; }          // 0x180112fdb
+        else if (!e._name) { matched = false; }             // LEA ECX,[R8+1] -> 1
+        else {
+            // The inlined strcmp at 0x180112fe8..0x180113021, transcribed.
+            const char* a = name;      // "ours"
+            const char* b = e._name;   // the table entry
+            size_t k = 0;
+            unsigned char c = static_cast<unsigned char>(a[0]);
+            if (c == static_cast<unsigned char>(b[0])) {
+                while (c != 0 && b[k] != 0) {
+                    ++k;
+                    c = static_cast<unsigned char>(a[k]);
+                    if (c != static_cast<unsigned char>(b[k])) break;
+                }
+            }
+            const int diff = static_cast<int>(static_cast<signed char>(a[k])) -
+                             static_cast<int>(static_cast<signed char>(b[k]));
+            matched = (diff == 0);
+            ++nTied;                     // the byte loop actually ran
+            if (matched) ++nTiedEq;
+        }
+
+        if (matched) { target = e._description; break; }
+    }
+
+    if (matched && !target) {
+        // 0x180113045: the table entry matched but holds a null description.
+        // Retail writes 0 into the return slot and does NOT dispatch.
+        *ret = nullptr;
+    } else {
+        void** vtbl = *reinterpret_cast<void***>(target);
+        reinterpret_cast<void* (*)(void*, void**, const Dialog*)>(vtbl[8])(
+            target, ret, self);
+    }
+
+    // Release the strong reference taken above (0x180113061..0x180113087).
+    if (name) ReleaseStringLocal(name);
+
+    if (rt_diff_on__) {
+        void*  theirsSlot = nullptr;
+        using Fn = void** (*)(const Dialog*, void**, void*);
+        RT_ORIGINAL_ONCE(Fn, kCreateElement)(self, &theirsSlot, desc);
+
+        int distinctFirstBytes = 0;
+        for (uint32_t w : firstByteSeen)
+            for (int b = 0; b < 32; ++b) if (w & (1u << b)) ++distinctFirstBytes;
+
+        // PRINTED UNCONDITIONALLY, not folded into the shadow message.
+        // RT_DIFF_SHADOW only emits its strings on a MISMATCH, so a population
+        // description carried inside it is invisible on exactly the runs where
+        // someone would want to know whether the population could have failed.
+        // This is the same instrument bug the AdjustUpperLeft sweep hit from
+        // the other side (fourteen comparisons reported as `calls=1`): if the
+        // control is only visible when the test fails, it is not a control.
+        //
+        // Capped so a dialog-heavy run cannot bury the log.
+        static int printed = 0;
+        if (printed < 24) {
+            ++printed;
+            std::fprintf(stderr,
+                "[UIC-pop] CreateElement #%d: entries=%d scanned=%d "
+                "reached-the-byte-loop=%d (equal=%d) distinct-first-bytes=%d "
+                "ourName=%s\n",
+                printed, count, nScanned, nTied, nTiedEq, distinctFirstBytes,
+                name ? name : "(null)");
+        }
+
+        char ours[224], their[224];
+        std::snprintf(ours, sizeof(ours),
+                      "ret=%p  [population] entries=%d scanned=%d "
+                      "reached-the-byte-loop=%d (equal=%d) distinct-first-bytes=%d",
+                      *ret, count, nScanned, nTied, nTiedEq, distinctFirstBytes);
+        std::snprintf(their, sizeof(their), "ret=%p", theirsSlot);
+        RT_DIFF_SHADOW(*ret == theirsSlot, ours, their);
+    }
+
+    // `worked` is NOT `count > 0`: a scan that never reached the byte loop has
+    // not exercised the thing this port can get wrong.
+    RT_DIFF_WORK(nTied > 0);
+    return ret;
+}
+
+// ---- ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z  0x180114a60  ord 3997 ----
+//
+// Move a dialog so its top-left sits at (x, y), CLAMPED so the dialog stays on
+// screen, and translate the whole element tree by the delta.
+//
+// `_N` is the third argument: when true, (x, y) arrive in UNSCALED units and
+// are multiplied by the UI scale, exactly as the screen size is
+// (0x180114abc..0x180114ada). engine/funcs/engine_funcs.h:2453 already spells
+// the four-argument signature.
+//
+// THE UI SCALE IS `_ui->[+0xdc]`, reached as `DialogInstance+0x10` then +0xdc.
+// runtime/types/ui/Element.h documents the same float from the other side
+// ("?GetPaddedSize@ reaches the UI scale through the ROOT element's copy of
+// this: root->_dialogParent[+0x10][+0xdc]"), which is independent
+// corroboration of the offset rather than the evidence for it.
+//
+// `Video::Device::_singleton` (0x1801fe7a8) supplies the screen size at +4/+8.
+// It is a MINTED data slot (standalone/rt_data_mint_tables.inc:1565), so it is
+// satisfied at cutover; reached here through the same RT_DATA_SLOT door
+// runtime/src/ui/userinterface.cpp uses, not by a raw address read.
+//
+// THE VIRTUAL AT 0x180114ae8 IS ELEMENT SLOT 4 = ComputeSize, which
+// runtime/types/ui/Element.h names and standalone/rt_data_mint_tables.inc's
+// `??_7Element@UI@@6B@` (kVSlots19) confirms is RT_MINT_PURECALL on the base —
+// so, as with CreateElement's slot 8, it is a pure virtual dispatched on the
+// concrete element and introduces NO new cutover symbol.
+//
+// FLAG BITS 0x20 / 0x10 at Element+0x34 mean "this dialog is as wide / as tall
+// as the screen". Retail reaches the scale for that branch through the LAST
+// element on the parent chain (`while (e->_parent) e = e->_parent;` at
+// 0x180114b24..0x180114b36) and then that root's `_dialogParent`, NOT through
+// `self->_ui` — a different route to what is normally the same float.
+// Reproduced as written; collapsing the two would be an assumption.
+//
+// THE CLAMP ORDER IS LOAD-BEARING and is transcribed rather than rewritten:
+// x is floored at 0 FIRST (CMOVS at 0x180114b8a) and the overflow test
+// `w + x > screenW` then uses the ALREADY-FLOORED x (LEA at 0x180114b90). A
+// rewrite that clamps both ends symmetrically gives a different answer whenever
+// a dialog is wider than the screen.
+//
+// The trailing translate open-codes AdjustUpperLeft's first border iteration
+// inline on the root and then calls it for the border chain. Reproduced in that
+// shape.
+//
+// ORACLE: NONE, and none is manufactured. Replay is not a comparison here but a
+// SECOND MOVE: the body's own guard is `delta != 0`, so a second call with the
+// same (x, y) finds delta == 0 and does nothing at all — a replay would compare
+// "the dialog is where we put it" against itself and report green for a port
+// that put it in the wrong place. (That is the same shape as `Audio::Scene::
+// Pause`'s early return, recorded in WAVE9.md's holdback table.) What DOES
+// carry verification is the enabling port underneath it: every translate this
+// body performs goes through `?AdjustUpperLeft@Element@UI@@`, whose
+// invertibility oracle in runtime/src/ui/element.cpp checks the whole subtree.
+// RT_DIFF_WORK here reports whether the delta was non-zero, so `worked=0` on
+// every call means the population never moved a dialog.
+void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
+                                     bool scaled) {
+    RT_DIFF_BEGIN("UI::DialogInstance::SetUpperLeft");
+
+    const float scale =
+        *reinterpret_cast<const float*>(
+            static_cast<const uint8_t*>(self->_ui) + 0xdc);
+
+    const uint8_t* device = static_cast<const uint8_t*>(*VideoDeviceSingleton());
+    const int32_t screenW = static_cast<int32_t>(
+        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * scale);
+    const int32_t screenH = static_cast<int32_t>(
+        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * scale);
+
+    if (scaled) {
+        x = static_cast<int32_t>(static_cast<float>(x) * scale);
+        y = static_cast<int32_t>(static_cast<float>(y) * scale);
+    }
+
+    uint8_t* root = static_cast<uint8_t*>(self->_root);
+
+    // Element vtable slot 4 — ComputeSize. Pure virtual on the base; see above.
+    {
+        void** vtbl = *reinterpret_cast<void***>(root);
+        reinterpret_cast<void (*)(void*)>(vtbl[4])(root);
+    }
+
+    // The padded size, open-coded: _layout{Width,Height} + the two pads, each
+    // floored at _min{Width,Height}.
+    int32_t w = *reinterpret_cast<const int32_t*>(root + 0x60) +
+                *reinterpret_cast<const int32_t*>(root + 0x1c) +
+                *reinterpret_cast<const int32_t*>(root + 0x18);
+    int32_t h = *reinterpret_cast<const int32_t*>(root + 0x64) +
+                *reinterpret_cast<const int32_t*>(root + 0x24) +
+                *reinterpret_cast<const int32_t*>(root + 0x20);
+    const uint32_t flags = *reinterpret_cast<const uint32_t*>(root + 0x34);
+    if (w < *reinterpret_cast<const int32_t*>(root + 0x28))
+        w = *reinterpret_cast<const int32_t*>(root + 0x28);
+    if (h < *reinterpret_cast<const int32_t*>(root + 0x2c))
+        h = *reinterpret_cast<const int32_t*>(root + 0x2c);
+
+    // Retail tests the LOW BYTE of _flags (`TEST R10B,0x30`), so only bits
+    // 4 and 5 of the low byte take part.
+    if ((flags & 0x30u) != 0) {
+        const uint8_t* e = root;
+        while (*reinterpret_cast<void* const*>(e + 0x98) != nullptr)
+            e = *reinterpret_cast<const uint8_t* const*>(e + 0x98);   // _parent
+        const uint8_t* dlg = *reinterpret_cast<const uint8_t* const*>(e + 0x90);
+        if ((flags & 0x20u) != 0) {
+            const float s = *reinterpret_cast<const float*>(
+                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
+            w = static_cast<int32_t>(
+                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * s);
+        }
+        if ((flags & 0x10u) != 0) {
+            const float s = *reinterpret_cast<const float*>(
+                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
+            h = static_cast<int32_t>(
+                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * s);
+        }
+    }
+
+    if (x < 0) x = 0;
+    if (w + x > screenW) x = screenW - w;
+    if (y < 0) y = 0;
+    if (h + y > screenH) y = screenH - h;
+
+    const int32_t dx = x - self->_upperLeftX;
+    const int32_t dy = y - self->_upperLeftY;
+
+    if (dx != 0 || dy != 0) {
+        uint8_t* r = static_cast<uint8_t*>(self->_root);
+        *reinterpret_cast<int32_t*>(r + 0x68) += dx;
+        *reinterpret_cast<int32_t*>(r + 0x70) += dx;
+        *reinterpret_cast<int32_t*>(r + 0x6c) += dy;
+        *reinterpret_cast<int32_t*>(r + 0x74) += dy;
+
+        using AdjustFn = void (*)(void*, int32_t, int32_t);
+        static AdjustFn adjust = nullptr;
+        if (!adjust) adjust = reinterpret_cast<AdjustFn>(
+            ResolveAddr(Module::Runtime, 0x180115840));
+
+        const int32_t n = *reinterpret_cast<const int32_t*>(r + 0xa8);
+        for (int32_t i = 0; i < n; ++i) {
+            void* child = (*reinterpret_cast<void** const*>(r + 0xa0))[i];
+            if (child && adjust) adjust(child, dx, dy);
+        }
+        if (void* border = *reinterpret_cast<void* const*>(r + 0xb0))
+            if (adjust) adjust(border, dx, dy);
+
+        self->_upperLeftX = x;
+        self->_upperLeftY = y;
+    }
+
+    RT_DIFF_WORK(dx != 0 || dy != 0);
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Every port is registered TWICE — under its mangled name and under its retail
@@ -1128,6 +1549,23 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("?TypeName@DialogInstance@UI@@UEBAPEBDXZ",
                           (void*)&RtUiDialogInstance_TypeName);
     RegisterRuntimeAddr(0x180045400, (void*)&RtUiDialogInstance_TypeName);             ++n;
+
+    // ---- Wave 9 lane UIC: the two rows lane UIF declined at 8 and 11 -------
+    // Both names were verified present in the shipped export directory with
+    // pefile BEFORE the bodies were written (tools/uic_probe.py), and both are
+    // registered under BOTH doors: `?CreateElement@` is reached by NAME from
+    // engine/funcs/engine_funcs.cpp:1959 and by DISPATCH SLOT from
+    // standalone/address_registry.cpp:1414, and `?SetUpperLeft@` by NAME from
+    // engine/funcs/engine_funcs.cpp:2932.
+    RegisterRuntimeExport(
+        "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
+        "V?$ExternalPtr@VElementDescription@UI@@@4@@Z",
+        (void*)&RtUiDialog_CreateElement);
+    RegisterRuntimeAddr(0x180112ed0, (void*)&RtUiDialog_CreateElement);                ++n;
+
+    RegisterRuntimeExport("?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z",
+                          (void*)&RtUiDialogInstance_SetUpperLeft);
+    RegisterRuntimeAddr(0x180114a60, (void*)&RtUiDialogInstance_SetUpperLeft);         ++n;
 
     // ---- the shape oracle, run once, here ----------------------------------
     // These four cannot be replayed (running them twice would tick every

@@ -106,6 +106,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 
@@ -160,6 +161,8 @@ const char* const kSetPadding   = "?SetPadding@Element@UI@@QEAAXHHHH@Z";
 const char* const kSetToolTip   = "?SetToolTip@Element@UI@@QEAAXVString@2@@Z";
 const char* const kSetUserData  = "?SetUserData@Element@UI@@QEAAXPEAVBase@Object@@@Z";
 const char* const kSetOffsets   = "?SetOffsets@ContainerElement@UI@@QEAAXHH@Z";
+// WAVE 9 LANE UIC
+const char* const kAdjustUL     = "?AdjustUpperLeft@Element@UI@@QEAAXHH@Z";
 
 // ============================================================================
 // Dependencies this lane CALLS rather than reimplements.
@@ -1434,6 +1437,280 @@ void RtUi_Element_Dtor(Element* self) {
     }
 }
 
+// ---- ?AdjustUpperLeft@Element@UI@@QEAAXHH@Z  0x180115840  ord 1596 ---------
+//                                                        WAVE 9 LANE UIC
+//
+// Translate this element's screen rectangle by (dx, dy), then every descendant,
+// then everything on its border chain. Thirty-two instructions, ZERO calls
+// other than the recursion into itself — the cheapest enabling port in the
+// dialog cluster, and the only thing standing between
+// `?SetUpperLeft@DialogInstance@` (WAVE9_LANE_UIF.md row 8) and admission.
+//
+//     180115860  ADD [RBX+0x68],EDX      ; _layoutLeft   += dx
+//     180115863  ADD [RBX+0x70],EDX      ; _layoutRight  += dx
+//     180115866  ADD [RBX+0x6c],EBP      ; _layoutTop    += dy
+//     180115869  ADD [RBX+0x74],EBP      ; _layoutBottom += dy
+//     18011586c  XOR EDI,EDI             ; i = 0   <- INSIDE the border loop
+//     18011586e  CMP [RBX+0xa8],EDI / JLE
+//     180115880  MOV RAX,[RBX+0xa0] / MOV RCX,[RSI+RAX] ; children[i]
+//     18011588b  TEST RCX,RCX / JZ                      ; null children skipped
+//     180115893  CALL 0x180115840                       ; recurse
+//     180115898  MOV EDX,[RSP+0x38]      ; dx reloaded — EDX is volatile
+//     1801158aa  MOV RBX,[RBX+0xb0] / TEST RBX,RBX / JNZ 0x180115860
+//
+// THE BORDER IS A LOOP, NOT A RECURSION. The tail at 0x1801158aa jumps back to
+// 0x180115860, so the border chain is walked ITERATIVELY while children are
+// walked recursively. Written as a `while` here for that reason; a recursive
+// `AdjustUpperLeft(self->_border, dx, dy)` computes the same answer but is a
+// different stack profile on a long border chain, and this body is reached from
+// a UI frame.
+//
+// `_children._data` IS RE-LOADED ON EVERY ITERATION (0x180115880 is inside the
+// loop). Nothing in the body can move it — but the load is in the shipped code,
+// and hoisting it is the kind of tidy-up that turns a transcription into an
+// assumption. Reproduced.
+//
+// No null test on `self`: retail has none, and the two callers
+// (`?SetUpperLeft@DialogInstance@` 0x180114a60 and this body itself) both test
+// before calling. CLAUDE.md's rule — the deref is load-bearing.
+namespace {
+// NEGATIVE CONTROL. `BANISHED_RT_ADJUSTUL_NEGCTL=<mode>` injects a defect of a
+// shape a real port would plausibly have, so a green run can be distinguished
+// from an oracle that cannot fail
+// (reference_probe_needs_an_effectiveness_control.md — a probe needs to be
+// shown going red on a KNOWN-BAD input, or "0 divergences" is unfalsifiable):
+//
+//   swap      — translate by (dy,dx). Invisible on every case where dx == dy,
+//               which is why the sweep includes one-axis and asymmetric pairs.
+//   noborder  — skip the `_border` chain. The single most likely real mistake,
+//               because the border is a LOOP at the bottom of the body rather
+//               than an obvious recursive call.
+//   nochild   — skip the children. The other half of the same mistake.
+//   once      — do the first border iteration only (i.e. treat the `while` as
+//               an `if`), which is what a careless transcription produces.
+//
+// Read once, cached. Costs one predictable branch per node in a diff run and
+// nothing at all in a normal one, because the whole sweep is inside
+// `if (rt_diff_on__)`.
+enum class AdjustNeg { None, Swap, NoBorder, NoChild, Once };
+AdjustNeg AdjustNegMode() {
+    static AdjustNeg mode = []() {
+        const char* e = std::getenv("BANISHED_RT_ADJUSTUL_NEGCTL");
+        if (!e) return AdjustNeg::None;
+        if (std::strcmp(e, "swap")     == 0) return AdjustNeg::Swap;
+        if (std::strcmp(e, "noborder") == 0) return AdjustNeg::NoBorder;
+        if (std::strcmp(e, "nochild")  == 0) return AdjustNeg::NoChild;
+        if (std::strcmp(e, "once")     == 0) return AdjustNeg::Once;
+        return AdjustNeg::None;
+    }();
+    return mode;
+}
+
+// The recursive core. `neg` is passed down rather than re-read per node so that
+// `Swap` swaps ONCE at the top — re-reading it inside the recursion would swap
+// again at every level and cancel itself out below the root, which would make
+// the control a much weaker defect than the one it claims to inject.
+void AdjustUpperLeftCore(Element* self, int32_t dx, int32_t dy, AdjustNeg neg) {
+    bool firstBorderPass = true;
+    while (self) {
+        if (!firstBorderPass && neg == AdjustNeg::Once) return;
+        firstBorderPass = false;
+        self->_layoutLeft   += dx;
+        self->_layoutRight  += dx;
+        self->_layoutTop    += dy;
+        self->_layoutBottom += dy;
+        if (neg != AdjustNeg::NoChild) {
+            for (int32_t i = 0; i < self->_children._size; ++i) {
+                Element* child = self->_children._data[i];
+                if (child) AdjustUpperLeftCore(child, dx, dy, neg);
+            }
+        }
+        if (neg == AdjustNeg::NoBorder) return;
+        self = static_cast<Element*>(self->_border);
+    }
+}
+
+void AdjustUpperLeftImpl(Element* self, int32_t dx, int32_t dy) {
+    const AdjustNeg neg = AdjustNegMode();
+    if (neg == AdjustNeg::Swap) { const int32_t t = dx; dx = dy; dy = t; }
+    AdjustUpperLeftCore(self, dx, dy, neg);
+}
+
+// ---------------------------------------------------------------------------
+// THE ORACLE: INVERTIBILITY, not replay.
+// ---------------------------------------------------------------------------
+// A plain replay is useless here — running ours then theirs translates the tree
+// by 2*(dx,dy) and compares nothing. But the function is EXACTLY INVERTIBLE, so
+// there is a real two-sided check available:
+//
+//     snapshot the subtree
+//     OURS(dx, dy)
+//     THEIRS(-dx, -dy)          <- the shipped body, undoing it
+//     compare against the snapshot        <- the verification
+//     THEIRS(dx, dy)            <- apply for real, so the caller sees retail's
+//                                  result and not ours
+//
+// This is strictly stronger than a field-by-field replay of a single node. A
+// node OURS FAILS TO VISIT is left at -(dx,dy) by the undo; a node OURS VISITS
+// TWICE is left at +(dx,dy); a swapped dx/dy shows on any node with dx != dy.
+// So it checks the visit MULTIPLICITY over the whole subtree, which is the part
+// of this function that can actually be wrong.
+//
+// WHAT IT DOES NOT CHECK, stated rather than glossed: the snapshot is taken by
+// a breadth-first walk written here, over the same {children, border} closure
+// retail's depth-first walk covers. If retail reached a node through some edge
+// this walk does not know about, that node is neither snapshotted nor compared.
+// The two walks agreeing on the NODE SET is an assumption; everything else is
+// measured.
+//
+// EFFECTIVENESS CONTROL (reference_probe_needs_an_effectiveness_control.md).
+// A call with dx == dy == 0 passes trivially, and so does a call on a single
+// childless element. The reported string therefore always carries the visited
+// node count and the delta, so a run whose sites all read `nodes=1 d=(0,0)` is
+// visibly a population that could not have failed rather than a clean pass.
+constexpr size_t kAdjustSnapMax = 512;   // 512 nodes = 12 KB of snapshot
+struct AdjustSnap { Element* e; int32_t l, t, r, b; };
+AdjustSnap g_adjustSnap[kAdjustSnapMax];
+
+// Breadth-first over {children, border}, deliberately a DIFFERENT traversal
+// order from the body under test. Returns the node count, or SIZE_MAX if the
+// subtree does not fit — in which case the call is simply NOT DIFFED, rather
+// than reported as a divergence. "The oracle's buffer was too small" is not a
+// fact about the port (the same disposition WAVE7_LANE_B.md §4 records for
+// StopTimer's timer buffer).
+size_t AdjustSnapshot(Element* root) {
+    size_t n = 0;
+    if (!root) return 0;
+    g_adjustSnap[n++] = { root, 0, 0, 0, 0 };
+    for (size_t head = 0; head < n; ++head) {
+        Element* e = g_adjustSnap[head].e;
+        g_adjustSnap[head].l = e->_layoutLeft;
+        g_adjustSnap[head].t = e->_layoutTop;
+        g_adjustSnap[head].r = e->_layoutRight;
+        g_adjustSnap[head].b = e->_layoutBottom;
+        for (int32_t i = 0; i < e->_children._size; ++i) {
+            Element* c = e->_children._data[i];
+            if (!c) continue;
+            if (n >= kAdjustSnapMax) return SIZE_MAX;
+            g_adjustSnap[n++] = { c, 0, 0, 0, 0 };
+        }
+        if (Element* b = static_cast<Element*>(e->_border)) {
+            if (n >= kAdjustSnapMax) return SIZE_MAX;
+            g_adjustSnap[n++] = { b, 0, 0, 0, 0 };
+        }
+    }
+    return n;
+}
+
+size_t AdjustCompare(size_t n) {
+    size_t bad = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const AdjustSnap& s = g_adjustSnap[i];
+        if (s.e->_layoutLeft   != s.l || s.e->_layoutTop    != s.t ||
+            s.e->_layoutRight  != s.r || s.e->_layoutBottom != s.b) ++bad;
+    }
+    return bad;
+}
+
+// Write the snapshot back. WITHOUT THIS THE SWEEP IS UNSOUND, and the negative
+// control is what proved it rather than reasoning.
+//
+// `BANISHED_RT_ADJUSTUL_NEGCTL=noborder` should have failed all 13 non-zero
+// cases; it failed exactly 10. The four that passed were `(0,0)` — vacuous, as
+// designed — plus `(0,-1)`, `(-1,-1)` and `(-1,1)`, and those three are the
+// exact inverses of cases that ran earlier in the sweep. A case that leaves
+// residue leaves it for the NEXT case, whose comparison is against the same
+// original snapshot, so a later case can CANCEL an earlier case's error and
+// report clean. That is a defect hiding inside the oracle, not inside the port.
+//
+// Restoring after every case makes the cases independent, which is what the
+// sweep claimed to be all along. Cheap: n integer stores.
+void AdjustRestore(size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        const AdjustSnap& s = g_adjustSnap[i];
+        s.e->_layoutLeft   = s.l;
+        s.e->_layoutTop    = s.t;
+        s.e->_layoutRight  = s.r;
+        s.e->_layoutBottom = s.b;
+    }
+}
+}  // namespace
+
+void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
+    RT_DIFF_BEGIN("UI::Element::AdjustUpperLeft");
+
+    if (!rt_diff_on__) {
+        AdjustUpperLeftImpl(self, dx, dy);
+        RT_DIFF_WORK(dx != 0 || dy != 0);
+        return;
+    }
+
+    using Fn = void (*)(Element*, int32_t, int32_t);
+    Fn theirs = RT_ORIGINAL_ONCE(Fn, kAdjustUL);
+
+    const size_t n = AdjustSnapshot(self);
+    if (n == 0 || n == SIZE_MAX || !theirs) {
+        // Not diffable: no subtree, does not fit, or the original did not
+        // resolve. Do the work and report no comparison rather than a pass.
+        AdjustUpperLeftImpl(self, dx, dy);
+        RT_DIFF_WORK(dx != 0 || dy != 0);
+        return;
+    }
+
+    // THE SWEEP. The live population for this function is tiny — its only
+    // caller is `?SetUpperLeft@DialogInstance@`, and a whole 115-second tutorial
+    // run produced exactly ONE call. One comparison is not a verification
+    // (reference_uniform_population_is_not_a_verification.md), and the fix is
+    // not a longer run: it is a CALLER
+    // (reference_const_reader_needs_a_caller_not_a_human.md).
+    //
+    // Because each (dx,dy) is applied by ours and then undone by theirs, every
+    // extra pair is SELF-CANCELLING and leaves the tree exactly as it found it.
+    // So one live call can carry a whole sweep at no cost to the game state:
+    // both signs on each axis, one axis at a time (which is what catches a
+    // swapped dx/dy), a large value, and the caller's own delta last.
+    //
+    // (0,0) is deliberately INCLUDED and deliberately NOT COUNTED as effective:
+    // it is the negative-space case, and it also proves the harness itself does
+    // not perturb the tree.
+    static const int32_t kSweep[][2] = {
+        {  0,   0}, {  1,   0}, {  0,   1}, { -1,   0}, {  0,  -1},
+        {  1,   1}, { -1,  -1}, {  1,  -1}, { -1,   1},
+        { 37,   0}, {  0,  37}, {-37,  91}, {1024, -2048},
+    };
+    // ONE RtDiffReport PER CASE, not one for the whole sweep. That is the whole
+    // reason `calls=` exists: an aggregated report makes fourteen comparisons
+    // look like one, and a reader checking `calls=` cannot then tell a sweep
+    // that ran from a sweep that was skipped. `calls=` on this site is the
+    // literal number of invertibility checks performed.
+    size_t effective = 0;
+    auto oneCase = [&](int32_t cdx, int32_t cdy) -> size_t {
+        AdjustSnapshot(self);          // re-read: cases must be independent
+        AdjustUpperLeftImpl(self, cdx, cdy);
+        theirs(self, -cdx, -cdy);
+        const size_t off = AdjustCompare(n);
+        AdjustRestore(n);              // and leave no residue for the next case
+        if (cdx != 0 || cdy != 0) ++effective;
+        char a[192], b[192];
+        std::snprintf(a, sizeof(a),
+                      "ours(%d,%d) then theirs(%d,%d) over %zu nodes: %zu off",
+                      cdx, cdy, -cdx, -cdy, n, off);
+        std::snprintf(b, sizeof(b),
+                      "expected all %zu nodes back at their snapshot", n);
+        RT_DIFF_SHADOW(off == 0, a, b);
+        return off;
+    };
+
+    for (const auto& d : kSweep) oneCase(d[0], d[1]);
+
+    // The caller's own delta, checked the same way and then applied for real,
+    // so the caller receives RETAIL's result rather than ours.
+    oneCase(dx, dy);
+    theirs(self, dx, dy);
+
+    RT_DIFF_WORK(effective != 0);
+}
+
 int RtUiElementRegister() {
     int count = 0;
 
@@ -1514,6 +1791,13 @@ int RtUiElementRegister() {
     // destructor is directly below.
     RegisterRuntimeExport("??1Element@UI@@UEAA@XZ", (void*)&RtUi_Element_Dtor); ++count;
     RegisterRuntimeAddr(0x1801161a0, (void*)&RtUi_Element_Dtor);
+
+    // WAVE 9 LANE UIC: the enabling port for ?SetUpperLeft@DialogInstance@.
+    // Exported (checked against the shipped export directory before this line
+    // was written — reference_resolveexport_phantom_names.md) so it is
+    // registered under BOTH doors like every sibling above.
+    RegisterRuntimeExport("?AdjustUpperLeft@Element@UI@@QEAAXHH@Z", (void*)&RtUi_Element_AdjustUpperLeft); ++count;
+    RegisterRuntimeAddr(0x180115840, (void*)&RtUi_Element_AdjustUpperLeft);
 
     return count;
 }

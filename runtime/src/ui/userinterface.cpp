@@ -948,6 +948,104 @@ extern "C" void RtUi_UserInterface_EnableCursor(UserInterface* self, bool enable
 // (reference_census_cannot_see_nonliteral_registrations.md). The census is
 // this project's authority over any agent's "N ported" claim, including this
 // lane's, so it has to be able to read this function.
+// ---- ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@
+//      VDialogInstance@UI@@@Object@@@Z   0x180120440  ord 1672 --------------
+//                                                        WAVE 9 LANE UIC
+//
+// Move one dialog to the FRONT of `_dialogs`, which per
+// runtime/types/ui/UserInterface.h means the TAIL: `_head` is the backmost
+// dialog and `_tail` the frontmost. Retail, all of it:
+//
+//     18012044a  MOV R8,[RCX+0x8]      ; tail
+//     18012044e  MOV RAX,[RDX]         ; the DialogInstance* inside the ptr
+//     180120457  CMP [R8],RAX / JZ ret ; already frontmost -> nothing
+//     18012045c  CALL 0x18007a010      ; LinkedList::Remove(this, ptr)
+//     180120464  MOV RDX,RDI / CALL 0x180032750   ; node = NewNode(ptr)
+//     180120469  MOV RCX,[RBX+0x8]     ; tail, RE-READ after the Remove
+//     180120472  MOV [RCX+0x10],RAX    ; tail->next = node
+//     18012047a  MOV [RAX+0x8],RCX     ; node->prev = tail
+//     18012047e  INC [RBX+0x10] / MOV [RBX+0x8],RAX
+//   (tail was null:)
+//     180120490  INC [RBX+0x10] / MOV [RBX],RAX / MOV [RBX+0x8],RAX
+//
+// THE FIRST DEREFERENCE IS UNGUARDED AND RETAIL MEANS IT. `CMP [R8],RAX` reads
+// through the tail with no null test, so calling this on an EMPTY dialog list
+// faults. That is load-bearing (it asserts the caller already added the
+// dialog), and CLAUDE.md's rule applies: a guard here would skip the behaviour
+// rather than restore it. Reproduced. Note the irony that the code four
+// instructions later DOES test the tail — because `Remove` may have emptied the
+// list in between.
+//
+// THE ARGUMENT IS A POINTER TO AN InternalPtr, NOT THE DIALOG. `MOV RAX,[RDX]`
+// dereferences it once, and both callees take the same `&value`.
+// engine/funcs/engine_funcs.h:2460 already declares the two-argument shape, and
+// counting arguments against the mangled name agrees (one by-value class
+// argument, no hidden return slot).
+//
+// `CALL 0x180032750` IS MADE WITHOUT SETTING RCX. That is not a transcription
+// gap: the callee never reads RCX (`XOR ECX,ECX` destroys it before any use),
+// which is settled by reading the callee, and is written up at the port in
+// runtime/src/collection/linkedlist.cpp.
+//
+// Both internals are ported by this lane and registered by address, so this
+// body introduces no unsatisfied callee: 0x18007a010 and 0x180032750 (and
+// 0x180009c30 underneath them) are all in linkedlist.cpp.
+//
+// ORACLE: NONE, and none is manufactured. The body is a list mutation whose own
+// first test is "already frontmost" — so a replay finds the dialog already at
+// the tail and does NOTHING, comparing an untouched list against itself and
+// reporting green for any port at all. That is the same false-pass shape
+// WAVE9.md records for `Audio::Scene::Pause`'s early return. Ships as a
+// no-oracle port with NO call into the shipped body. `worked=` reports whether
+// the call actually relinked, so `worked=0` everywhere means the population
+// never brought a background dialog forward and the port is UNEXERCISED, not
+// verified (reference_uncalled_port_is_not_verified.md).
+extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
+                                                      void** dlgPtr) {
+    RT_DIFF_BEGIN("UI::UserInterface::BringDialogToFront");
+
+    // The list header is UserInterface+0x00; treat it as the three raw fields
+    // rather than pulling Collection.h's template in for one use.
+    uint8_t* list = reinterpret_cast<uint8_t*>(self);
+    void**   tail = reinterpret_cast<void**>(list + 0x08);
+
+    void* dlg = *dlgPtr;
+    if (**reinterpret_cast<void***>(tail) == dlg) {   // unguarded, see above
+        RT_DIFF_WORK(false);
+        return;
+    }
+
+    using RemoveFn  = void  (*)(void*, void* const*);
+    using NewNodeFn = void* (*)(void*, void* const*);
+    static RemoveFn  remove  = nullptr;
+    static NewNodeFn newNode = nullptr;
+    if (!remove)  remove  = reinterpret_cast<RemoveFn>(
+        ResolveAddr(Module::Runtime, 0x18007a010));
+    if (!newNode) newNode = reinterpret_cast<NewNodeFn>(
+        ResolveAddr(Module::Runtime, 0x180032750));
+
+    remove(list, dlgPtr);
+    uint8_t* node = static_cast<uint8_t*>(newNode(nullptr, dlgPtr));
+
+    // `tail` is RE-READ here (0x180120469): Remove may have just emptied the
+    // list. Reading the cached value instead is the one mistake this body
+    // invites.
+    uint8_t* t = *reinterpret_cast<uint8_t**>(list + 0x08);
+    if (t) {
+        *reinterpret_cast<void**>(t + 0x10) = node;                    // tail->next
+        *reinterpret_cast<void**>(node + 0x08) =
+            *reinterpret_cast<void**>(list + 0x08);                    // node->prev
+        ++*reinterpret_cast<int32_t*>(list + 0x10);
+        *reinterpret_cast<void**>(list + 0x08) = node;
+    } else {
+        ++*reinterpret_cast<int32_t*>(list + 0x10);
+        *reinterpret_cast<void**>(list + 0x00) = node;
+        *reinterpret_cast<void**>(list + 0x08) = node;
+    }
+
+    RT_DIFF_WORK(true);
+}
+
 int RtUiManagerRegister() {
     int count = 0;
 
@@ -1001,6 +1099,16 @@ int RtUiManagerRegister() {
     RegisterRuntimeExport("?EnableCursor@UserInterface@UI@@QEAAX_N@Z",
                           (void*)&RtUi_UserInterface_EnableCursor); ++count;
     RegisterRuntimeAddr(0x180122580, (void*)&RtUi_UserInterface_EnableCursor);
+
+    // ---- Wave 9 lane UIC ---------------------------------------------------
+    // The BY-VALUE `V?$InternalPtr…` spelling. The by-reference `AEAV…` name
+    // this project once asked for is NOT in the export table and resolved NULL
+    // in silence for a whole wave (engine/funcs/engine_funcs.cpp:2934's comment
+    // records that; reference_resolveexport_phantom_names.md). Checked against
+    // the shipped export directory again before this line was written.
+    RegisterRuntimeExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z",
+                          (void*)&RtUi_UserInterface_BringDialogToFront); ++count;
+    RegisterRuntimeAddr(0x180120440, (void*)&RtUi_UserInterface_BringDialogToFront);
 
     return count;
 }
