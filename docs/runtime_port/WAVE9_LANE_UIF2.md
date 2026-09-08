@@ -442,16 +442,15 @@ to both columns, so coverage barely moves. It is the same fact §1 states as
 
 ## 9. HONEST LIMITS
 
-1. **Nothing here has been RUN.** No `sa-run`, no `BANISHED_RT_DIFF` run, no
-   `calls=` or `divergences=` figure. The game directory is shared and was
-   held by other lanes for the whole of this lane's window; per the brief this
-   lane did not take the lock. **Every oracle in §4 is designed and compiled,
-   not exercised.** Treat the port as unverified until someone runs it.
-   The first run should be
-   `BANISHED_RT_DIFF=1 make sa-run` and then a gameplay run, reading the
-   `worked=` column beside every `divergences=`.
-2. **The `SetScissor` unchanged-branch oracle may report `calls=0` in a menu-
-   only run** and that would not mean "unexercised". Read §4's table first.
+1. **THIS HAS NOW BEEN RUN. §11 supersedes what this item used to say.**
+   8,165 differential comparisons against the shipped bodies, 0 divergences --
+   but three branches ran ~11,000 times with NO oracle covering them and are
+   still not verified against retail. That distinction is the whole of §11.
+2. **A `calls=0` from this lane can mean "always took the branch the oracle
+   does not cover" -- and in one measured case it did.** This item used to say
+   only that a `calls=0` "would not mean unexercised", which was right in the
+   abstract; the lane then mis-diagnosed a concrete instance of it. See §11's
+   `FlushDeferred` correction.
 3. **`sizeof(UI::SpriteContext)` is a LOWER BOUND (0x88), not a proven size.**
    The object is a stack local of `UserInterface::Draw`, never heap-allocated,
    so no allocation site spells its size. Nothing in this lane allocates one,
@@ -545,3 +544,100 @@ Consequences, both handled:
 may have had the same experience and may not have noticed.** A lane that ran
 `git commit -a`, or that took a "before" measurement in one directory and an
 "after" in another, has a contaminated result.
+
+---
+
+## 11. THE RUNS — what is verified, what merely executed
+
+Added 2026-09-08 after the lane was merged. **This section supersedes §9's
+first two items**, which said nothing had been run.
+
+Two runs, both with `Runtime-x64.dll` present. Together: **8,165 differential
+comparisons against the shipped bodies, 0 divergences.** That number is worth
+less than it looks and §11.3 says why.
+
+### 11.1 The driven probe — `BANISHED_RT_SPRITECTX_PROBE=1`
+
+```
+[SpriteCtxProbe] ALIVE -- 28 cases, 0 divergences vs the shipped bodies.
+Effectiveness: appended=11 culled=4 earlyOut=5 (all three branches exercised).
+Both negative controls FIRED (cull=1 retslot=1). Flush-tripwire skips=0.
+```
+
+**It crashed the boot on its first attempt, and that is recorded rather than
+repaired away.** ACCESS_VIOLATION at `Runtime-x64.dll+0x11BA66` reading address
+`0x100`, return address `0x18011D0F9` — `SetScissor`'s `CALL 0x18011ba40`,
+i.e. inside `Flush`, at `MOV RCX,[RAX+0x100]` with `RAX` = the Video device
+global at `0x1801fe7a8`, which is null at registration time. The probe walked
+into the exact hole its own header documents, and the cause was its own
+retslot negative control forcing the changed branch. Fixed by keeping both
+subjects on the unchanged branch while still forcing their returns to differ,
+plus a `WouldReachFlush()` tripwire that skips any future case that would
+reach `Flush` and prints why.
+
+### 11.2 The live minimap cell
+
+`BANISHED_AUTOSTART=1 BANISHED_TOOL_HARNESS=utility BANISHED_RT_DIFF=1
+BANISHED_RT_SPRITECTX_PROBE=0`, binary md5 `f31d14e43499a36d2b9f2c89624ffd13`
+(own build of `e608c6c`), rc=0, zero-byte crash log. `FireUtilityDialog` opened
+`Template\UtilityMap.rsc` at frame 60. Probe OFF, so every number is a real
+caller with no subtraction.
+
+```
+SetScissor(int,int,int,int)   calls=0     worked=1633   divergences=0
+SetScissor(Viewport const&)   calls=1633  worked=1633   divergences=0
+FlushDeferred                 calls=0     worked=1633   divergences=0
+AddLine                       calls=0     worked=6532   divergences=0
+AddSpriteDraw                 calls=6532  worked=0      divergences=0
+```
+
+**The hidden return slot is now verified LIVE.** `calls=1633` on
+`SetScissor(Viewport const&)` is 1,633 differential comparisons through the
+real caller's register state, each checking all 16 bytes of the returned
+Viewport *and* that RAX is the slot. The slot mechanism is identical on both
+branches — only the values differ — so this closes the hazard §3 was written
+about, and closes it with a mechanism `tools/abi_retslot_audit.py`
+structurally cannot see (§9 item 8, and the 21-pointer blind spot).
+
+### 11.3 A PREDICTION THIS LANE GOT WRONG, AND THE SHAPE OF THE ERROR
+
+This document, and two messages to the integrator, said a `FlushDeferred`
+`calls=0` would be **"expected, not dead, because `_deferring` is retail's
+deferred-font path and nothing on the boot path sets it."**
+
+**That is wrong.** `worked=1633` means `_deferring` was set on *every* call and
+the **drain path ran 1,633 times** — once per changed scissor, since
+`SetScissor`'s changed branch calls `FlushDeferred`. The `calls=0` is real, but
+its cause is the opposite of the one predicted: not "never called" but
+**"called 1,633 times and always took the branch the oracle does not cover."**
+
+The lane had warned the integrator, in the abstract, that a `calls=0` is
+ambiguous between "not exercised" and "not covered" — and then mis-diagnosed a
+concrete instance of that ambiguity in its own port, on the basis of a
+plausible reading of `_deferring` rather than a measurement. **A branch's
+frequency is not deducible from what the branch appears to be for.**
+
+### 11.4 The ledger: verified vs merely executed
+
+`divergences=0` across five sites reads like five verified functions. It is
+not, and the split matters more than the total.
+
+| Branch | Live executions | Differentially verified? |
+|---|---|---|
+| `AddSpriteDraw` cull | 6,532 | **YES** — 6,532 comparisons |
+| `SetScissor(Viewport)` unchanged exit | 1,633 | **YES** — 1,633, incl. retslot |
+| `AddSpriteDraw` append | 0 live | probe only (11 cases) |
+| `AddLine` early-out | 0 live | probe only (4 cases) |
+| `SetScissor` changed branch | 3,266 | **NO — no oracle** |
+| `AddLine` queueing path | 6,532 | **NO — probe only** |
+| `FlushDeferred` drain | 1,633 | **NO — no oracle** |
+
+Roughly **11,400 executions carry no differential evidence at all.** They ran
+without faulting, which is real but is absence-of-crash, not
+agreement-with-retail. Specifically unverified against the shipped body: the
+values `SetScissor` returns on its changed branch, and everything the drain
+does.
+
+Closing those needs an oracle that survives a `Flush` call — i.e. a port of
+`Flush` (0x18011ba40), which is this lane's remaining wall and was its one
+opened address door all along.
