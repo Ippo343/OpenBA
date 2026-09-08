@@ -105,6 +105,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
+#include "wave9_lane_gfxd.h"
 
 using RtGraphics::Geometry;
 using RtGraphics::Scene;
@@ -1737,6 +1738,20 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
 // sites and by the scene watch, not here.
 // ============================================================================
 extern "C" void RtGraphics_Scene_Clean(Scene* self) {
+    // WAVE 9 LANE GFXD -- the deferred half of that lane's oracle.
+    //
+    // Its phase-2 arms ALLOCATE (Renderer::AddScene grows the scene
+    // array from empty), and its own registration runs right after
+    // ResolveInit()'s LoadLibrary, where the DLL's MemoryAllocator is
+    // constructed but not STARTED. So the arms are armed at init and
+    // fired HERE instead: Scene::Clean runs per frame and cannot be
+    // reached before Engine::Startup has built a scene, which is the
+    // same self-scheduling contract scene_grid.cpp uses two files over.
+    //
+    // Costs one predictable not-taken branch per frame in a normal run,
+    // and nothing at all unless BANISHED_RT_GFXD_PROBE armed it.
+    rtgfxd::ProbeGate();
+
     RT_DIFF_BEGIN("Graphics::Scene::Clean");
 
     typedef Collection::LinkedList<Geometry*>::Node Node;
