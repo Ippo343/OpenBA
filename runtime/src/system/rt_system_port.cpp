@@ -18,6 +18,10 @@
 //                              registrations off does NOT send those data
 //                              reads back to the DLL, because our storage
 //                              holds the same constants either way.
+//   BANISHED_RT_FSDIRS=0   ... Wave 9 lane FS: System::WideString + the three
+//                              System leaves of FileSystem::SetupDirectories.
+//                              The SAME variable also gates the IO half in
+//                              rt_io_port.cpp, so =0 removes the whole lane.
 //   BANISHED_RT_ALLOC=1    ... MemoryAllocator: OPT-IN, see allocator.cpp.
 //                              Never default-on: registering MemAlloc without a
 //                              detour means we allocate and the DLL frees.
@@ -46,6 +50,12 @@ extern int RtSystemConfigurationRegister();  // configuration.cpp (lane ENG)
 // so at cutover the first SetText call overflows kStorageBytes. Hold this with
 // BANISHED_RT_ERROR=0 until that row is widened. See runtime/src/system/error.cpp §2.
 extern int RtSystemErrorRegister();          // error.cpp (lane ENG)
+// Wave 9 lane FS. System::WideString (4 rows) plus the three System leaves of
+// IO::FileSystem::SetupDirectories. ONE switch for both, shared with the IO
+// half in rt_io_port.cpp, so the integrator can A/B the whole wall in a single
+// run rather than bisecting five files.
+extern int RtSystemWideStringRegister();       // widestring.cpp     (lane FS)
+extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
 
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
@@ -60,6 +70,10 @@ void RtSystemPortInit() {
     if (RtWaveEnabled("BANISHED_RT_TIMER"))    n += RtSystemTimerRegister();
     if (RtWaveEnabled("BANISHED_RT_CONFIG"))   n += RtSystemConfigurationRegister();
     if (RtWaveEnabled("BANISHED_RT_ERROR"))    n += RtSystemErrorRegister();
+    if (RtWaveEnabled("BANISHED_RT_FSDIRS")) {
+        n += RtSystemWideStringRegister();
+        n += RtSystemSetupDirHelpersRegister();
+    }
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)

@@ -68,6 +68,11 @@ extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane EN
 // in this tree that reads the player's real Windows registry, so the integrator
 // must be able to take it out on its own. WriteSettings is NOT in it.
 extern int RtIoPersistenceRegistryRegister(); // persistence_registry_win.cpp (lane BOOT2)
+// Wave 9 lane FS: FileSystem::SetupDirectories + GetRootDirectory, the row
+// immediately behind FileSystem::Startup. BANISHED_RT_FSDIRS also gates the
+// lane's System half (WideString and the three System leaves) in
+// rt_system_port.cpp — one variable removes the whole lane.
+extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (lane FS)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -82,5 +87,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_REGREAD"))     n += RtIoPersistenceRegistryRegister();
+    if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
