@@ -610,7 +610,7 @@ const DelDtorSpec* Specs() { return kSpecs; }
 // ============================================================================
 void RtObjectDeletingDtorPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_DELDTOR")) {
-        std::printf("[RtDelDtor] DISABLED via BANISHED_RT_DELDTOR=0 -- all 37 "
+        printf("[RtDelDtor] DISABLED via BANISHED_RT_DELDTOR=0 -- all 37 "
                     "deleting destructors stay on the DLL\n");
         return;
     }
@@ -655,7 +655,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
 
-    std::printf("[RtDelDtor] 37 deleting destructors registered "
+    printf("[RtDelDtor] 37 deleting destructors registered "
                 "(one body, 37 rows); ~Class resolves lazily\n");
 
     // The byte-comparing half of the oracle. It allocates nothing and runs
