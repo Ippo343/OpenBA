@@ -6,7 +6,10 @@ Branch **`wave9/lane-vidl`**, worktree
 
 **Landed: 2 exported members, 2 unexported Collection instantiations, 7
 BaseTypeInfo mint rows, 0 new unregistered address doors, and three stale
-sentences in `engine.cpp` corrected in place.**
+sentences in `engine.cpp` corrected in place. VERIFIED LIVE: the forced
+device-lost round trip reached both members (`calls=1`, `divergences=0`)
+and `SetSize` passed a byte-exact replay against the shipped body (9 cases,
+0 mismatches, negative control CAUGHT 17 of 162).**
 **Declined: nothing in the assignment. Three of `OnVideoRestart`'s callees are
 taken as NAMED doors rather than ported, with the cost measured and stated.**
 
@@ -185,10 +188,113 @@ port would get wrong:
 The probe's `WrongSetSize` negative control (retail's rule with the
 `oldSize != 0` guard dropped) applies to this row like every other.
 
-### 4.2 The live drive: `BANISHED_FORCE_DEVICE_LOST`
+### 4.2 The live drive: `BANISHED_FORCE_DEVICE_LOST` — RUN, and it fired
 
-Lane ENGIO's forced device-lost event is the driver. **See §6 for what was and
-was not actually run.**
+One run, gated on an identity line **only this build emits**, read out of that
+run's own log:
+
+```
+[RtPort]   MainLoop device-lost pair (lane VIDL): 2 exports registered
+           (OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize
+           0x18004f620 and elem-destroy 0x180034440 by ADDRESS; …)
+```
+
+exe md5 `99155c623fea84a26493308653fe8ac8` (built and deployed compared, equal),
+`rt_run` exit 0, **`standalone_crash.log` 0 bytes**. Env: `BANISHED_AUTOSTART=1
+BANISHED_RT_DIFF=1 BANISHED_FORCE_DEVICE_LOST=400 BANISHED_RT_ARRAY_PROBE=neg
+BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120`.
+
+The device really was lost and rebuilt:
+
+```
+[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be injected on Present #400
+[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET (real Present returned 0x00000000)
+[DeviceLost] hr=0x887a0007 onLost=00007ff6c7e64fd9 -> calling
+[DeviceLost] recreate OK; onRestored=00007ff6c7e6503f -> calling
+[DeviceLost] device-lost round trip COMPLETE
+```
+
+and it reached **our** bodies:
+
+```
+[RtDiff]   Engine::MainLoop::OnVideoError            calls=1    worked=?  divergences=0
+[RtDiff]   Engine::MainLoop::OnVideoRestart          calls=1    worked=?  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18004f620   calls=995  worked=?  divergences=0
+[RtDiff] ==== 537 sites, 18,216,161 calls, 1 divergences in 1 sites ====
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+```
+
+**`calls=1` is the expected number, not a disappointment**: the pair runs once
+per device-lost event and one was injected. `SetSize`'s 995 is the resource
+sweep — every `Video`/`Graphics` external alive at frame 400.
+
+The tree-wide divergence is the **pre-existing** `Object::Factory::Startup`
+self-check (WAVE9.md instrument #6, lane SYS2's open item 2), not this lane's;
+all three of this lane's sites report `divergences=0`.
+
+`[RtResolve] 0 misses` is the check that the eleven `_typeInfo` names, the four
+singletons and the three new function names all resolved — a phantom mangled
+name resolves NULL *in silence* while the census still counts the port
+(`reference_resolveexport_phantom_names.md`), and this is what rules that out.
+
+**READ `worked=?`, NOT `worked=0`.** All three sites are among the 415 that do
+not declare did-work, so their coverage is **UNKNOWN, not zero** — the summary
+says so itself. What is known is `calls=`, and `calls=1`/`calls=995` with the
+`[DeviceLost] … COMPLETE` line above it is what says the bodies ran.
+
+### 4.2.1 The probe, which is the result that actually verifies something
+
+```
+[RtArrayProbe] 0x18004f620 Array<MainLoop::VideoResource:0x18>
+               arity=3 stride=0x18 align=8 cases=9 did-work=8 mismatches=0
+[RtArrayProbe] ==== 195 comparisons, 0 mismatches ====
+[RtArrayProbe] EFFECTIVENESS: 178 of 195 comparisons changed something
+               (realloc 94, copy-loop 57, fill-loop 111, free 79;
+                17 were the n==size early return)
+[RtArrayProbe] UNWRITTEN WINDOWS: 12 excluded windows verified as genuinely
+               unwritten, 0 turned out to be written
+[RtArrayProbe] NEGATIVE CONTROL: the wrong body was flagged in 17 of 162 cases
+```
+
+Nine cases, **eight of which did work**, compared **byte for byte against the
+shipped 0x18004f620**, zero mismatches. The stride and align the probe reports
+are the ones read off the listing (`0x18` and `MOV EDX,8`), so the row also
+checks that the spec describes the function it is registered for.
+
+### 4.2.2 It was measured TWICE, by accident, and the two agree exactly
+
+A stray lock contender this lane had left running won the lock one second after
+the first run released it and ran the whole thing again, against the same exe
+(md5 equal on both deploys) with the same environment, overwriting the copied
+logs.
+
+That was a mistake in the harness driving, not a designed replicate — but the
+measurement it produced is real and is worth having, so it is reported rather
+than hidden. **Every number quoted above is reproduced byte-identically by the
+second run**: `calls=1 / 1 / 995`, `divergences=0` on all three, the same 195
+comparisons and 0 mismatches, the same 178/195 effectiveness split, the same
+17-of-162 negative control, `[RtResolve] 0 misses`, one
+`device-lost round trip COMPLETE`, and `standalone_crash.log` 0 bytes both
+times. The logs in the evidence directory are the SECOND run's.
+
+The lesson is the harness one, and it is the same shape as the failure this lane
+already hit twice: **a lock acquired in one step and used in another is not
+held in between.** Two of this lane's `game_dir_lock.sh acquire` calls won the
+lock and then EXITED, leaving it held by a lane that was not using it, while a
+separate contender spun against it. Acquire and use in ONE script.
+
+Three controls, all of which fired:
+
+* **EFFECTIVENESS** — 178 of 195 comparisons changed something. A green run
+  where nothing changed is a green run that proves nothing
+  (`reference_probe_needs_an_effectiveness_control.md`).
+* **NEGATIVE CONTROL** — the deliberately wrong body was **caught in 17 of 162
+  cases**. A control that cannot fire is worse than none.
+* **UNWRITTEN WINDOWS** — 12 excluded windows were verified as genuinely
+  unwritten and **0 turned out to be written**. This is the check on this lane's
+  own `[0x04, 0x08)` claim: had those four bytes actually been written by
+  somebody, the probe would have said so instead of quietly excluding them
+  (`reference_oracle_must_not_compare_unwritten_bytes.md`).
 
 ### 4.3 The shadow oracles
 
@@ -293,7 +399,21 @@ and +0x08 only) fails there and nowhere else.
    merged tree, not to hand-merge the hunks.
 
 8. **This lane did NOT run the DLL-less cutover boot.** That is the
-   integrator's, per the brief.
+   integrator's, per the brief. What §4.2 exercised is the device-lost path
+   with the DLL still present.
+
+8b. **ONE run, on one machine, on one GPU, with ONE injected reset.** The same
+   limit lane ENGIO recorded for the driver itself. `calls=1` means the pair
+   ran once; it does not mean it is re-entrant, or that a SECOND device loss
+   after a restart behaves the same — and the second one is the case where
+   `_capacity` is stale from the first, which is the one field retail
+   deliberately does not clear.
+
+8c. **All three sites report `worked=?`, not a number.** They do not declare
+   did-work to the diff harness, so their branch coverage is UNKNOWN rather
+   than measured. `calls=` plus the `[DeviceLost] … COMPLETE` line is what
+   establishes that the bodies ran; nothing establishes which arms inside them
+   were taken.
 
 9. **The census's own blind spots apply here as everywhere.** The
    `unsatisfied_export_scan` output names two resolves that go through a wrapper
