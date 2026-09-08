@@ -58,6 +58,11 @@ extern int RtIoFileSystemStartupRegister();  // filesystem_startup.cpp (lane ENG
 // Wave 9 lane ENG, iteration 3. Engine::Startup step 4. Own switch, own file,
 // same reasoning as the row above.
 extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane ENG)
+// Wave 9 lane FS: FileSystem::SetupDirectories + GetRootDirectory, the row
+// immediately behind FileSystem::Startup. BANISHED_RT_FSDIRS also gates the
+// lane's System half (WideString and the three System leaves) in
+// rt_system_port.cpp — one variable removes the whole lane.
+extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (lane FS)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -71,5 +76,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
+    if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

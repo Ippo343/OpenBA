@@ -64,7 +64,14 @@ static_assert(offsetof(PackageFileView, packfileId) == 0xA8,
 struct FileSystem {
     RtSystem::String sourceDirectory;    // +0x00 — GetSourceDirectory's `(Filename*)this`
     RtSystem::String dataDirectory;      // +0x08 — GetDataDirectory's `this+8`; GetPackfileId's prefix
-    uint8_t          _unknown10[0x18 - 0x10];
+    // +0x10 — the PACK directory, and the third field
+    // ?SetupDirectories@FileSystem@IO@@ (0x1800abd00) writes: it is seeded as
+    // a copy of dataDirectory (retail's inlined String::operator= at
+    // 0x1800ac1b0 with RSI = this+0x10, RDI = this+8) and then overridden by a
+    // `-pathpkg` command-line switch. `?GetPackDirectory@FileSystem@IO@@`
+    // (0x180007c10) is its reader. Named by Wave 9 lane FS; it was
+    // `_unknown10[8]` before, and nothing anywhere read that padding.
+    RtSystem::String packDirectory;
     uint8_t          existsInPackfileGate; // +0x18 — Exists()'s `CMP byte [RCX+0x18],0`
     uint8_t          platformExistsGate;   // +0x19 — Exists()'s `CMP byte [RBX+0x19],0`
     uint8_t          _unknown1A[0x20 - 0x1A];
@@ -84,6 +91,7 @@ struct FileSystem {
 };
 static_assert(offsetof(FileSystem, sourceDirectory)      == 0x00, "see field comment");
 static_assert(offsetof(FileSystem, dataDirectory)        == 0x08, "see field comment");
+static_assert(offsetof(FileSystem, packDirectory)        == 0x10, "see field comment");
 static_assert(offsetof(FileSystem, existsInPackfileGate) == 0x18, "see field comment");
 static_assert(offsetof(FileSystem, platformExistsGate)   == 0x19, "see field comment");
 static_assert(offsetof(FileSystem, packfiles)            == 0x20, "see field comment");
