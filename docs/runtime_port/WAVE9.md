@@ -1680,6 +1680,70 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### Attempt 19: THE BOOT NAMES ITS OWN REMAINING SURFACE — 27 symbols, and only ONE is reached
+
+Tip `fd30180` (lanes GFX3 + FNHOOK + COLL merged). Exe md5 `1cef3ae7…`, DLL renamed
+to `.absent`, restored immediately after.
+
+**The packfile-sort wall is GONE.** Lane COLL's `0x1800264a0` closed it, and the
+boot walked all the way from `SetupDirectories` through `LoadPackages` and the
+type-system build (`358` factory registrations, both `Loading.rsc` target descs
+found) into `Engine::Startup`. The fault moved from `LoadPackages +0x274` to
+`Engine::Startup +0x338` — six rungs in one attempt.
+
+**The failure changes CLASS again, and this is the important part.** Every prior
+attempt died somewhere the log did not name, and the diagnosis was archaeology:
+symbolize a frame, guess the callee, disassemble. This one died on a line the run
+had already printed:
+
+```
+[RtResolve] MISS "?RefreshList@Modification@IO@@QEAAXXZ" -> NULL. Nothing has
+registered it and the shipped DLL does not export it (or is absent). ... If this
+is cutover, this symbol still needs minting.
+```
+
+then a null call through RAX with `RCX=RDX=` the `Modification` object. **The
+boot is now self-diagnosing.** The crash handler still labels this `VCALL-of-0`
+and prints `vtable=0x101`, which is not a vtable — `this[+0x00]` is data. That
+label has now misled twice (I misread attempt 14 the same way and lane PKG2
+corrected me); it is a `CALL RAX` on a null, not a virtual dispatch.
+
+**What that unlocks: the residue is no longer estimated, it is ENUMERATED.** The
+run's own `[RtUnresolved]` lines list **27 symbols** — the complete live cutover
+surface on the boot path — each with the address that asked for it. Exactly ONE
+(`RefreshList`) was actually CALLED; the other 26 were resolved-and-stored during
+lazy init and are null calls waiting downstream. That distinction matters: the
+wall count is not 27 rungs, it is 27 symbols that will surface over some smaller
+number of attempts.
+
+This is the first attempt whose output could be turned directly into a work
+breakdown with no Ghidra archaeology at all, and it was farmed out the same hour:
+
+| lane | symbols |
+|---|---|
+| MOD | `RefreshList@Modification` (**the live wall**), `SaveText@External` |
+| RES | `FindOrLoad@ExternalFactory`, `Clean@ExternalFactory`, `LoadResources@UpdateLoop` |
+| UID | `ShowDialog`, `CloseDialog`, `??1DialogInstance`, `OnClosed@DialogInstance` |
+| UIW2 | `SetCurrentItem@ComboElement`, `SetParameter@SliderElement`, `SetProgressTextParameter@ProgressElement`, `CreateInstance@ElementDescription`, `Serialize@ElementDescription` |
+| UIF | `Update@UserInterface`, `Draw@UserInterface`, `AddLine@SpriteContext`, `SetScissor@SpriteContext` x2 |
+| GFXR | `Inverse@Matrix` (**prerequisite, ordered first**), `Draw@Renderer`, `BuildParameters@MaterialInstance`, `Serialize@MeshInstance`, `Update@AnimationManager` |
+| ENGIO | `Update@Device@Input`, `Update@Scene@Audio`, `OnVideoError`, `OnVideoRestart` |
+
+Three of those had a decomposition already done by a lane that DECLINED them —
+INPUT wrote the `GetDeviceState` recorder recipe for `Update@Device@Input`, FNHOOK
+wrote §4.3 for `FindOrLoad`, CTX wrote the ordering warning that makes `Inverse`
+lane GFXR's first commit. **A decline that leaves a recipe is worth more than a
+port that leaves none**, and this attempt is where that paid.
+
+**Expected-at-cutover, confirmed not a defect:** `[FNHook] could not resolve
+ExternalFactory::FindOrLoad` / `External::Load` / `Video::Device::InitializeInterfaces`
+are lane FNHOOK's installers now resolving RAW against an absent DLL, which is
+the correct behaviour for an unported target. Before FNHOOK's fix they resolved
+through the port registry and would have silently aimed at our own prologue.
+
+Address doors at this attempt: **UNREGISTERED 16**, 198 distinct. Census 1003
+called / 753 ported / 75.1%.
+
 ### Attempt 18: `ReadPackfile` RETURNS — the wall is the packfile sort
 
 Lane DESTROY ported `0x180026b50` (attempt 17's fault address). The boot now runs
