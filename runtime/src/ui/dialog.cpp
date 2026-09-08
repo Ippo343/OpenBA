@@ -27,6 +27,10 @@
 //   | ?OnUpdateLayout@                      | 0x1801153a0 | 3289 | yes    | shape  |
 //   | ?SetFlagsOnOff@                       | 0x180114690 | 3882 | yes    | replay |
 //   | ?SetUpperLeft@                        | 0x180114a60 | 3997 | NO     | —      |
+//   | ?Persist@DialogInstance@              | 0x180114fa0 | 3322 | W9-Z   | none   |
+//   | ?OnSerializeSettings@DialogInstance@  | 0x180115470 | 3281 | W9-Z   | none   |
+//   | ?TypeName@DialogInstance@             | 0x180045400 | 4379 | W9-Z   | none   |
+//   | ?OnClosed@DialogInstance@             | 0x180115330 | 3269 | NO     | —      |
 //   | ?StartTimer@                          | 0x1801137c0 | 4081 | NO     | —      |
 //   | ?StopTimer@                           | 0x180113730 | 4111 | yes    | replay |
 //   | ?CreateElement@Dialog@                | 0x180112ed0 | 1888 | NO     | —      |
@@ -187,6 +191,21 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
+// ⚠ WAVE 9 LANE Z — `runtime/types/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
+// and the reason is a real defect in another lane's header rather than anything
+// about this file. `runtime/types/object/External.h` opens `namespace RtObject
+// {` at its line 37 and then `#include "TypeInfo.h"` at its line 276, INSIDE
+// that namespace — so every declaration in TypeInfo.h lands in
+// `RtObject::RtObject`, and `#pragma once` means whichever translation unit
+// pulls External.h first (here, via ElementDescription.h) fixes that nesting for
+// the whole TU. `RtObject::BaseTypeInfo` then does not name a type.
+//
+// Filed, NOT fixed: moving that one `#include` out of External.h's namespace is
+// a two-line change in a header 40+ files depend on, it is not this lane's file,
+// and it cannot be validated without a full build — which lane Z does not hold.
+// `?TypeName@DialogInstance@` below therefore spells the one offset it needs as
+// a raw offset with its evidence at the use site, which is the convention
+// runtime/types/ui/UserInterface.h already states for foreign offsets.
 
 using RtUI::Dialog;
 using RtUI::DialogController;
@@ -423,7 +442,130 @@ void VerifyDtorThunk(RtDiffSite* site, const char* mangled,
     RtDiffReport(site, vtbl == expectedVtable && tail == expectedTail, ours, theirs);
 }
 
+// ---- Wave 9 lane Z: the exported DATA slot ?TypeName@ reads ----------------
+// Through RT_DATA_SLOT, which caches a hit and RETRIES a miss, so the row can
+// be minted after this file first resolves it. See the ⚠ note on
+// RtUiDialogInstance_TypeName below: this row is NOT in the mint today.
+inline const uint8_t* DialogInstanceTypeInfo() {
+    return RT_DATA_SLOT(const uint8_t*,
+                        "?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A");
+}
+
+// `Object::BaseTypeInfo::name`. The layout is runtime/types/object/TypeInfo.h's
+// (+0x00 typeId, +0x04 an unused word, +0x08 `const char* name`, 0x38 total);
+// it is spelled as a constant here only because that header cannot be included
+// in this TU — see the ⚠ note beside the includes.
+constexpr int kBaseTypeInfoName = 0x08;
+
 }  // namespace
+
+// ============================================================================
+// WAVE 9 LANE Z — three DialogInstance vtable slots the CUTOVER needs
+// ============================================================================
+// The DLL-absent boot asks for four `DialogInstance` virtuals, all four from
+// ONE exe-side site (0x7ff71e05a0dc, four times each): the derived-dialog vtable
+// builders in code/Game/Dialog/mod_dialog_vtables.cpp,
+// code/Game/Dialog/toolbar_vtable_standalone.cpp and
+// code/Game/Player/tool_base_toolui.cpp, which copy the base class's slots into
+// each derived table. With no DLL those copies are nulls STAMPED INTO A LIVE
+// VTABLE — an EXEC-of-0 on the first virtual call, several frames from anything
+// naming `DialogInstance`.
+//
+// Three of the four land here. `?OnClosed@` is DECLINED and why is recorded at
+// the end of this block.
+// ============================================================================
+
+// ---- ?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z  0x180114fa0 ord 3322
+// ---- ?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z
+//      0x180115470 ord 3281 -----------------------------------------------
+//
+// Both are ONE INSTRUCTION in the shipped DLL:
+//
+//     180114fa0  RET
+//     180115470  RET
+//
+// (three bytes each per Ghidra's function ranges, because MSVC pads them; the
+// body is the single `RET`). They are the base class's do-nothing hooks —
+// `Object::Internal`'s `Persist` slot and the dialog's settings hook — and every
+// derived dialog that cares overrides them.
+//
+// AN EMPTY BODY IS STILL A PORT, and it is worth stating why rather than
+// treating it as trivia. What the cutover needs is not behaviour, it is a
+// NON-NULL ADDRESS to stamp into slot 3 and slot 9 of every derived vtable. A
+// null there is indistinguishable at the call site from a correct empty
+// override right up until it is called. There is deliberately no oracle: a
+// function with no reads, no writes and no return value has nothing to compare,
+// and `RT_DIFF_BEGIN` is omitted rather than added for the sake of a `calls=`
+// row that could only ever be `divergences=0` over nothing
+// (reference_probe_needs_an_effectiveness_control.md — a green count over work
+// that never happened is the shape to avoid, not to manufacture).
+extern "C" void RtUiDialogInstance_Persist(void* /*self*/, void* /*stream*/) {
+}
+
+extern "C" void RtUiDialogInstance_OnSerializeSettings(void* /*self*/,
+                                                       void* /*stream*/) {
+}
+
+// ---- ?TypeName@DialogInstance@UI@@UEBAPEBDXZ  0x180045400  ord 4379 -------
+//
+//     180045400  MOV RAX,qword ptr [0x1801faac8]
+//     180045407  RET
+//
+// TWO INSTRUCTIONS, and the whole of the work is knowing what 0x1801faac8 is.
+// It is not a string pointer of its own: the symbol at 0x1801faac0 is
+// `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A`, and +0x8 into an
+// `Object::BaseTypeInfo` is its `name` field (runtime/types/object/TypeInfo.h:
+// +0x00 `typeId`, +0x04 unused word, +0x08 `const char* name`). So retail
+// returns `_typeInfo.name`, i.e. the literal "DialogInstance" the BaseTypeInfo
+// constructor was handed.
+//
+// The corroboration is the NEXT slot: `?Type@DialogInstance@UI@@UEBAIXZ`
+// (0x1800453e0) is `MOV EAX,dword ptr [0x1801faac0] / RET` — the SAME object,
+// read at +0x00 for the type id. Two adjacent vtable slots reading +0x00 and
+// +0x08 of one address is what makes this a BaseTypeInfo rather than a guess.
+//
+// RETURNING A STRING LITERAL WAS REJECTED. `"DialogInstance"` would compare
+// equal under every `strcmp` in the tree and would need no data slot at all —
+// and it would be a different POINTER from the one `Object::Factory::Startup`
+// CRC'd into the type id and from the one every other reader of this
+// BaseTypeInfo sees. A port whose only failure mode is pointer identity is a
+// port that fails silently and late; reading the real field cannot.
+//
+// ⚠ **THIS PORT NAMES A MISSING MINT ROW, AND THAT IS THE POINT.**
+// `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A` (0x1801faac0) is NOT
+// among the 33 `?_typeInfo@` rows in standalone/rt_data_mint_tables.inc, even
+// though `??_7DialogInstance@UI@@6B@` IS minted there in full and TWO of its
+// slots — this one and `?Type@` — read nothing else. That file is lane C2's and
+// this lane did not touch it. Until the row exists, this body dereferences a
+// null and dies IN A FUNCTION THAT NAMES ITSELF, which is strictly better than
+// the alternative it replaces (a null stamped into a derived vtable, faulting
+// later with no name attached) and is exactly the "do not fix a faithful crash
+// with a null check" case: the fix is upstream, in the mint, not a guard here.
+extern "C" const char* RtUiDialogInstance_TypeName(const void* /*self*/) {
+    return *reinterpret_cast<const char* const*>(
+        DialogInstanceTypeInfo() + kBaseTypeInfoName);
+}
+
+// ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269 — DECLINED
+//
+// The fourth virtual that site asks for, and it is NOT ported, because porting
+// it would MOVE the cutover row rather than close it (WAVE9.md, "porting a
+// function can GROW the cutover surface"). Its body is:
+//
+//     18011533d  CALL 0x180114240        ; ?SaveSettings@DialogInstance@UI@@QEAAXXZ
+//     ... then walk _controllers (+0x78, count +0x80) calling each
+//         controller's vtable slot +0x30 ...
+//
+// `SaveSettings` is 507 bytes, is itself exported (ordinal 3613) and is NOT
+// ported by any wave. A port of `OnClosed` would therefore resolve one name at
+// cutover and immediately request another that resolves to null — the same null
+// call, one frame deeper and under a different name. It becomes a one-function
+// job the moment `?SaveSettings@` lands.
+//
+// (The controller loop's slot +0x30 is a fifth `DialogController` vtable slot
+// not yet in runtime/types/ui/DialogInstance.h's enum, which lists +0x10, +0x38,
+// +0x40 and +0x48. Recorded here rather than added to that header, because a
+// slot pinned by ONE unported caller is not yet evidence of a name.)
 
 // ============================================================================
 // UI::DialogInstance — const accessors
@@ -873,6 +1015,22 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("?GetFileVersion@ElementDescription@UI@@UEBAHXZ",
                           (void*)&RtUiElementDescription_GetFileVersion);
     RegisterRuntimeAddr(0x180116af0, (void*)&RtUiElementDescription_GetFileVersion);   ++n;
+
+    // ---- Wave 9 lane Z: three DialogInstance vtable slots ------------------
+    // Registered by NAME and by ADDRESS like the rest of the lane. The name is
+    // what the exe-side vtable builders ask for; the address is what the minted
+    // `??_7DialogInstance@UI@@6B@` looks up through RtPortLookupAddr.
+    RegisterRuntimeExport("?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z",
+                          (void*)&RtUiDialogInstance_Persist);
+    RegisterRuntimeAddr(0x180114fa0, (void*)&RtUiDialogInstance_Persist);              ++n;
+
+    RegisterRuntimeExport("?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z",
+                          (void*)&RtUiDialogInstance_OnSerializeSettings);
+    RegisterRuntimeAddr(0x180115470, (void*)&RtUiDialogInstance_OnSerializeSettings);  ++n;
+
+    RegisterRuntimeExport("?TypeName@DialogInstance@UI@@UEBAPEBDXZ",
+                          (void*)&RtUiDialogInstance_TypeName);
+    RegisterRuntimeAddr(0x180045400, (void*)&RtUiDialogInstance_TypeName);             ++n;
 
     // ---- the shape oracle, run once, here ----------------------------------
     // These four cannot be replayed (running them twice would tick every
