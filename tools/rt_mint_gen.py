@@ -114,6 +114,17 @@ EXTRA_SIZES = {
     "?_systemInitialTick@Timer@System@@0_JA": (8, "int64"),
     "?_systemTicksPerSecond@Timer@System@@0_JA": (8, "int64"),
     "?_ticksPerSecond@Timer@System@@0_JA": (8, "int64"),
+    # Wave 9 lane W: the three class-static heads of the intrusive live-object
+    # lists Video::{Image,Index,Vertex}Buffer::Platform{Construct,Destruct}
+    # maintain. Each is one pointer; the size is pinned by
+    # runtime/types/video/{ImageBuffer,Buffers}.h, whose link fields sit at
+    # +0x50/+0x58 and +0x10/+0x18 of the objects these heads point at.
+    "?_firstSurface@ImageBuffer@Video@@0PEAV12@EA":
+        (8, "ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct)"),
+    "?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA":
+        (8, "IndexBuffer* -- head of the live-index-buffer list"),
+    "?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA":
+        (8, "VertexBuffer* -- head of the live-vertex-buffer list"),
 }
 
 # Vtables the census CANNOT see, because the only thing that needs them is this
