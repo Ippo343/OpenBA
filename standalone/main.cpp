@@ -1942,6 +1942,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.
     RtResolveMissSummary();
+    // Wave 9 lane H: is the early-snapshot port-bypass class LIVE? A number,
+    // not an argument -- see runtime/funcs/rt_resolve_cache.cpp.
+    RtResolveEarlySummary();
     // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
     RtSaveTraceSummary();
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }

@@ -72,6 +72,111 @@ bool AlreadyNamed(const char* mangled) {
 
 }  // namespace
 
+// ============================================================================
+// EARLY-RESOLVE RECORDER (Wave 9 lane H, second half)
+// ============================================================================
+//
+// The defect this instrument exists for is the one the retry contract above
+// does NOT fix, and it is live TODAY rather than at cutover: a non-null answer
+// is still frozen, so a site whose FIRST call happens before RuntimePortInit()
+// has registered its port captures the DLL's address permanently and bypasses
+// our own body for the life of the process.
+//
+// Nothing we have built can see it. The site is spelled correctly, it goes
+// through the right (registry-aware) door, so tools/port_bypass_audit.py finds
+// nothing; and the diff oracle reports the port clean for the same reason it
+// always does when a port is bypassed -- our body never runs, so it never
+// disagrees. ONLY THE ORDERING IS WRONG.
+//
+// So measure the ordering directly. A resolve is recorded here when it happened
+// BEFORE RuntimePortInit() returned AND missed the port registry at the time.
+// At summary, each recorded name is asked of the registry again:
+//
+//   * registered NOW  -> the port exists and this caller did not get it. If the
+//                        call site caches, that is a LIVE PORT BYPASS.
+//   * still absent    -> benign. Nothing has ever ported it, so reaching the
+//                        DLL early is the same answer it would get later.
+//
+// The caller address is recorded so the site can be named with `nm` against
+// standalone/build/reimpl-x64.exe (image base 0x140000000), exactly as
+// BANISHED_RT_STRICT does for cutover residue.
+//
+// COVERAGE, stated so the number is not over-read: this hooks the three
+// REGISTRY-AWARE doors (ResolveExport, ResolveOrdinal,
+// ResolveAddr(Module::Runtime)). It deliberately does not hook
+// ResolveExportRaw -- that door is supposed to reach the shipped body, so an
+// early raw resolve is not a bypass. It also cannot tell whether the CALLER
+// caches; that is what the recorded return address is for.
+// ============================================================================
+
+namespace {
+
+struct EarlyRec { const char* name; uintptr_t addr; uint16_t ordinal; void* caller; };
+const int kMaxEarly = 256;
+EarlyRec g_early[kMaxEarly];
+int      g_earlyCount = 0;
+uint64_t g_earlyTotal = 0;
+bool     g_portInitDone = false;
+
+}  // namespace
+
+void RtResolveMarkPortInitDone() { g_portInitDone = true; }
+bool RtResolvePortInitDone()     { return g_portInitDone; }
+
+void RtResolveNoteEarly(const char* mangled, uintptr_t ghidra_addr,
+                        uint16_t ordinal, void* caller) {
+    if (g_portInitDone) return;
+    ++g_earlyTotal;
+    for (int i = 0; i < g_earlyCount; ++i) {
+        const EarlyRec& e = g_early[i];
+        if (e.addr == ghidra_addr && e.ordinal == ordinal && e.caller == caller &&
+            ((e.name == nullptr && mangled == nullptr) ||
+             (e.name && mangled && std::strcmp(e.name, mangled) == 0)))
+            return;                       // already recorded this exact site
+    }
+    if (g_earlyCount >= kMaxEarly) return;
+    g_early[g_earlyCount++] = { mangled, ghidra_addr, ordinal, caller };
+}
+
+uint64_t RtResolveEarlyCount() { return g_earlyTotal; }
+
+void RtResolveEarlySummary() {
+    if (g_earlyCount == 0) {
+        std::fprintf(stderr,
+            "[RtResolveEarly] 0 registry-aware resolves happened before "
+            "RuntimePortInit() finished. The early-snapshot port-bypass class is "
+            "NOT LIVE on this path.\n");
+        std::fflush(stderr);
+        return;
+    }
+    int confirmed = 0;
+    std::fprintf(stderr,
+        "[RtResolveEarly] %llu early registry-aware resolve(s), %d distinct site(s). "
+        "A site is a LIVE BYPASS only if the symbol is registered NOW and the site "
+        "caches; the caller address names it (nm against reimpl-x64.exe, base "
+        "0x140000000).\n",
+        (unsigned long long)g_earlyTotal, g_earlyCount);
+    for (int i = 0; i < g_earlyCount; ++i) {
+        const EarlyRec& e = g_early[i];
+        const bool now = e.name && RuntimeExportIsRegistered(e.name);
+        if (now) ++confirmed;
+        if (e.name)
+            std::fprintf(stderr, "[RtResolveEarly]   %-9s caller=%p  \"%s\"\n",
+                         now ? "BYPASS?" : "benign", e.caller, e.name);
+        else if (e.ordinal)
+            std::fprintf(stderr, "[RtResolveEarly]   benign    caller=%p  ordinal %u\n",
+                         e.caller, (unsigned)e.ordinal);
+        else
+            std::fprintf(stderr, "[RtResolveEarly]   benign    caller=%p  addr 0x%llx\n",
+                         e.caller, (unsigned long long)e.addr);
+    }
+    std::fprintf(stderr,
+        "[RtResolveEarly] %d of %d are registered now -- those are the candidates. "
+        "Do NOT fix them here; name them and hand them on.\n",
+        confirmed, g_earlyCount);
+    std::fflush(stderr);
+}
+
 void* RtResolveCached(const char* mangled, void** cache) {
     if (*cache) return *cache;
     void* p = ResolveExport(mangled);

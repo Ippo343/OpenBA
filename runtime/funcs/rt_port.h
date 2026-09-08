@@ -67,6 +67,27 @@ void*    RtResolveCached(const char* mangled, void** cache);
 uint64_t RtResolveMissCount();     // 0 across a run == every cached resolve hit
 void     RtResolveMissSummary();   // one line; call beside RtDiffSummary()
 
+// ---- Early-resolve recorder ------------------------------------------------
+//
+// Measures the defect the retry contract above does NOT fix: a NON-null answer
+// is still frozen, so a site first called before RuntimePortInit() registered
+// its port keeps the DLL's address for the life of the process and bypasses our
+// body. Invisible to tools/port_bypass_audit.py (the spelling and the door are
+// both correct -- only the ORDERING is wrong) and invisible to the diff oracle
+// (a bypassed port never runs, so it never disagrees). Live today, not at
+// cutover. See runtime/funcs/rt_resolve_cache.cpp and WAVE9_LANE_H.md §5.
+void     RtResolveMarkPortInitDone();   // called at the end of RuntimePortInit()
+bool     RtResolvePortInitDone();
+void     RtResolveNoteEarly(const char* mangled, uintptr_t ghidra_addr,
+                            uint16_t ordinal, void* caller);
+uint64_t RtResolveEarlyCount();
+void     RtResolveEarlySummary();
+
+// Was this name registered by a port? Distinct from "does ResolveExport return
+// something", which cannot tell a registry hit from a DLL hit. Implemented in
+// standalone/resolve_standalone.cpp, which owns the table.
+bool     RuntimeExportIsRegistered(const char* mangled_name);
+
 // Per-wave kill switch: BANISHED_RT_<NAME>=0 leaves the wave unregistered, so
 // every call goes to the DLL exactly as before. Checked once, at init.
 inline bool RtWaveEnabled(const char* envName) {

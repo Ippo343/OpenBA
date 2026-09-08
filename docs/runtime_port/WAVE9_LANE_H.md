@@ -201,6 +201,9 @@ Pass conditions:
    sites appearing or disappearing is the signal, and a matching `divergences=0` over a
    different denominator proves nothing.
 3. Boot reaches gameplay and the achievement census is unchanged.
+4. `[RtResolveEarly]` — reported, not gated. It answers a different question from this
+   lane's conversion and does not pass or fail it. Zero scopes the early-snapshot class as
+   theoretical on that path; non-zero is a finding to hand on.
 
 There is no negative control to design here: the conversion is not a measurement, it is a
 behaviour change whose claim is "nothing changed". The falsifier is condition 2's denominator.
@@ -219,6 +222,42 @@ Retry does not touch it, because retry only re-resolves a null. Anyone reading "
 as a fix for early snapshotting will be wrong. The real fix is ordering (resolve after
 `RuntimePortInit`) or not caching at all, and it needs its own lane and its own audit — the
 audit's DIRECT bucket (1016) and its ordering are exactly the material.
+
+### 5.1 It is now MEASURED rather than argued
+
+No existing instrument can see this class. The site is spelled correctly and goes through the
+right registry-aware door, so `tools/port_bypass_audit.py` finds nothing; and the diff oracle
+reports the port clean for the reason it always does when a port is bypassed — our body never
+runs, so it never disagrees. **Only the ordering is wrong.**
+
+So the ordering is measured directly, and it costs nothing to carry on the runs this lane
+already owes. `runtime/funcs/rt_resolve_cache.cpp` records every resolve that happened
+**before `RuntimePortInit()` returned AND missed the port registry at the time**, with the
+caller's return address. At summary each recorded name is asked of the registry *again*:
+
+| verdict | meaning |
+|---|---|
+| **registered NOW** | the port exists and this caller did not get it. If the site caches, that is a **live port bypass** |
+| still absent | benign — nothing has ever ported it, so reaching the DLL early is the same answer it would get later |
+
+Hooked into the three **registry-aware** doors only: `ResolveExport`, `ResolveOrdinal`,
+`ResolveAddr(Module::Runtime)`. `ResolveExportRaw` is deliberately not hooked — that door is
+*supposed* to reach the shipped body, so an early raw resolve is not a bypass.
+
+Two limits, stated so the number is not over-read. It cannot tell whether the CALLER caches
+— that is what the recorded return address is for (`nm` against
+`standalone/build/reimpl-x64.exe`, image base `0x140000000`). And a *distinct-site* cap of 256
+means a pathological run could truncate the listing, though the total count keeps rising.
+
+`RtResolveMarkPortInitDone()` is called at the end of `RuntimePortInit()`
+(`standalone/resolve_standalone.cpp`), and `RuntimeExportIsRegistered()` is new there because
+`ResolveExport`'s return value cannot distinguish a registry hit from a DLL hit — and that
+distinction is the whole question.
+
+**Either answer is worth having.** Zero means the class is theoretical on that path and can be
+scoped as such. Non-zero names the specific sites, and we will know we have live port bypasses
+in the tree today. **Do not fix any it finds** — name them and hand them on; that is a
+different lane with a different oracle.
 
 ---
 

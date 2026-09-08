@@ -268,6 +268,15 @@ void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn) {
     RtOrdinalReg()[ordinal] = our_fn;
 }
 
+// Wave 9 lane H: did a PORT register this name? ResolveExport cannot answer
+// that -- its return value cannot distinguish a registry hit from a DLL hit,
+// and the whole early-snapshot question is exactly that distinction.
+bool RuntimeExportIsRegistered(const char* mangled_name) {
+    if (!mangled_name) return false;
+    auto& reg = RtExportReg();
+    return reg.find(mangled_name) != reg.end();
+}
+
 RuntimeRegistryStats GetRuntimeRegistryStats() {
     return { RtExportReg().size(), RtAddrReg().size(), RtOrdinalReg().size(), g_rtHits };
 }
@@ -360,6 +369,11 @@ void RuntimePortInit() {
            st.exports, st.addrs, st.ordinals,
            RtPortEnabled() ? "" : "  (DISABLED via BANISHED_RT_PORT=0)");
     DumpRuntimeRegistry();
+
+    // Wave 9 lane H: everything resolved from here on sees the full registry.
+    // Anything recorded BEFORE this line resolved against a partly-built one,
+    // and if its call site caches, it is frozen on the pre-registration answer.
+    RtResolveMarkPortInitDone();
 }
 
 // ============================================================
@@ -413,6 +427,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
             return reinterpret_cast<uintptr_t>(it->second);
         }
         RecordRuntimeResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
+        RtResolveNoteEarly(nullptr, ghidra_addr, 0, _ReturnAddress());   // Wave 9 lane H
     }
 
     const ModuleInfo& mi = g_modules[static_cast<int>(mod)];
@@ -689,6 +704,7 @@ void* ResolveExport(const char* mangled_name) {
     // Missed the port registry: this request is cutover residue.
     void* caller = _ReturnAddress();
     RecordRuntimeResidue(mangled_name, 0, 0, caller);
+    RtResolveNoteEarly(mangled_name, 0, 0, caller);   // Wave 9 lane H
     void* fn = ResolveExportRawImpl(mangled_name);
     // Wave 9 lane F: nothing catches a null from here any more. Say so.
     if (!fn) RecordResolveMiss(mangled_name, 0, caller);
@@ -706,6 +722,7 @@ void* ResolveOrdinal(uint16_t ordinal) {
     }
     void* caller = _ReturnAddress();
     RecordRuntimeResidue(nullptr, 0, ordinal, caller);
+    RtResolveNoteEarly(nullptr, 0, ordinal, caller);   // Wave 9 lane H
     void* fn = ResolveOrdinalRawImpl(ordinal);
     if (!fn) RecordResolveMiss(nullptr, ordinal, caller);
     return fn;
