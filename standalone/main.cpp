@@ -27,6 +27,7 @@
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
 #include "rt_alloc_swap.h"
+#include "rt_port.h"                        // RtResolveMissSummary
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetDetourInstaller
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
@@ -1938,6 +1939,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     RtDiffSummary();
     RtAllocShadowSummary();
+    // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
+    // A non-zero count names the symbols that would be unminted at cutover.
+    RtResolveMissSummary();
+    // Wave 9 lane H: is the early-snapshot port-bypass class LIVE? A number,
+    // not an argument -- see runtime/funcs/rt_resolve_cache.cpp.
+    RtResolveEarlySummary();
     // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
     RtSaveTraceSummary();
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }

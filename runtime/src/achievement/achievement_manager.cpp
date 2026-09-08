@@ -262,8 +262,8 @@ void* VtableAchievement() {
 
 // ?_singleton@AchievementManager@Achievement@@0PEAV12@EA  (0x1801fc670)
 AchievementManager** ManagerSingletonCell() {
-    static AchievementManager** cell = reinterpret_cast<AchievementManager**>(
-        ResolveExport("?_singleton@AchievementManager@Achievement@@0PEAV12@EA"));
+    AchievementManager** cell = RT_DATA_SLOT(AchievementManager**,
+        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
     return cell;
 }
 
@@ -272,15 +272,15 @@ AchievementManager** ManagerSingletonCell() {
 // code/Game/Game/gameupdateloop_load.cpp:57 already uses, and the one
 // GetAchievement's `MOV EDX,dword ptr [0x1801f9898]` proves.
 uint32_t AchievementTypeId() {
-    static const uint32_t* p = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
     return p ? *p : 0u;
 }
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA  (0x1801fc6a8)
 RtIO::FileSystem** FileSystemSingletonCell() {
-    static RtIO::FileSystem** cell = reinterpret_cast<RtIO::FileSystem**>(
-        ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
+    RtIO::FileSystem** cell = RT_DATA_SLOT(RtIO::FileSystem**,
+        "?_singleton@FileSystem@IO@@0PEAV12@EA");
     return cell;
 }
 

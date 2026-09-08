@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 
 extern "C" void StatGoal_ProbeOperands(void* goal, int* outA, int* outB);
 
@@ -308,8 +309,8 @@ extern "C" void AchievementProbe_Tick(int frameNum) {
     // in this census meaningless as evidence about award behaviour.
     int fsGate = -1;
     {
-        static void** s_ppFileSystem = reinterpret_cast<void**>(
-            ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
+        void** s_ppFileSystem = RT_DATA_SLOT(void**,
+        "?_singleton@FileSystem@IO@@0PEAV12@EA");
         if (s_ppFileSystem && *s_ppFileSystem)
             fsGate = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*s_ppFileSystem) + 0x38);
     }

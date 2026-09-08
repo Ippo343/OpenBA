@@ -74,6 +74,7 @@ static bool LiveToolsEnabled() {
 #include "renderdoc_integration.h"
 #include "scene_watch.h"
 #include "citizen_vitals.h"
+#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
 // used as a standalone fallback for the Dialog type-id when the exe data slot
@@ -1423,8 +1424,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                     s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
                 }
                 if (s_ignoreMods == 1) {
-                    static void** s_ppFileSystem = reinterpret_cast<void**>(
-                        ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
+                    void** s_ppFileSystem = RT_DATA_SLOT(void**,
+        "?_singleton@FileSystem@IO@@0PEAV12@EA");
                     if (s_ppFileSystem && *s_ppFileSystem) {
                         modGate = reinterpret_cast<int32_t*>(
                             static_cast<uint8_t*>(*s_ppFileSystem) + 0x38);

@@ -536,6 +536,256 @@ composition is unproved**.
 register if not" printed only the branches that NEVER ran — which reads like neither branch
 ran. **A coverage instrument that is itself wrong reads as coverage.**
 
+### ⛔ "Caches a null forever on the first call" is a CLASS of ~22 — lane E3, 2026-09-08
+
+`SingletonSlot` is **not one function**. Under `runtime/` + `dx11/` + `engine/` there are
+**111 function-local statics caching a Runtime resolve**; narrowed to the ones resolving
+exported DATA (`?_singleton@`, `?_typeInfo@`, `?_firstTypeInfo@`) — the symbols that stop
+existing at cutover — **~57 sites covering at least 14 distinct singletons** (MemoryAllocator,
+IO::FileSystem, IO::Persistence, Object::Factory, Object::InternalFactory,
+Achievement::AchievementManager, Audio::Device, Video::Device, Video::Configuration,
+Input::Device, Input::Configuration, Engine::MainLoop, Graphics::AnimationManager,
+Save::SaveLoad) plus ~10 `_typeInfo`s. That matches this document's own census of 17 + 14
+among the 319 unported.
+
+| Form | Count | Behaviour on a null |
+|---|---:|---|
+| function-local `static` — **FROZEN** | **22** | the first caller fixes the answer **for the process**; a later registration cannot repair it |
+| `if (!g_x) g_x = Resolve(...)` — **RETRY** | 5 | re-resolves each call; a registration that lands later still works |
+
+**The correct form is ALREADY IN THE TREE** — `runtime/src/object/internal.cpp:143` and
+`runtime/src/object/type_system.cpp:65`. Nothing needs inventing; it needs applying to the
+other 22.
+
+**Severity splits by DISTANCE FROM THE CAUSE, not by count:**
+* 33 of the 34 single-line frozen statics resolve `??_7` vtables. A cached null there is
+  stamped into an object and dies as **EXEC-of-0 at the first virtual call** — loud, and the
+  VEH handler already names it.
+* The dangerous subclass is **data slot + a guard that swallows the null**. Confirmed at
+  three sites so far: `?_singleton@MemoryAllocator`, `?_singleton@Device@Audio`
+  (`audio.cpp:879`, `return slot ? *slot : nullptr;`), and the `video/device.cpp:123` pair
+  pending a caller check. **Only 4 of 22 were checked — that membership is a FLOOR.**
+
+`_singleton@MemoryAllocator` ranks worst because **cutover executes it FIRST**: it fails
+before any other subsystem gets a chance to fail more loudly, and `null+0x640` names nothing.
+
+**The property that makes this fixable now:** the retry form is **behaviour-identical while
+the DLL answers**, so unlike the mint and unlike every other cutover repair, this one is
+**verifiable TODAY** rather than on the day no instrument survives.
+
+**Also recorded as gate-step-4 items belonging to no current lane:** §5.2
+(`Shutdown`/dtor/`operator=`/accessors) and §5.3 (the 5% perf gate, three runs per config on
+the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
+
+### Finding 3 — ORACLE-INDEPENDENT, scheduler family ELIMINATED, and the stack moved AGAIN
+
+Lane N, 2026-09-08, exe `01:33:19`, self-evidencing `[WorkSchedProbe] ARMED`.
+
+**1. THE CRASH IS ORACLE-INDEPENDENT — PROVED.** The stress cell with `BANISHED_RT_DIFF`
+UNSET faulted anyway (rc=3, ACCESS_VIOLATION). **Finding 3 is a real defect in the port, not
+an artifact of the diff harness.** A second oracle-off run of the same cell came back rc=0,
+so intermittency is unchanged at ~4 in 10 — the oracle is not what makes it fire.
+
+**2. THE SCHEDULER FAMILY IS ELIMINATED.** `8e30calls=280 unfiled=280 entryNotFound=0
+bucketNotFound=0 bucketRootNull=0` — every erase found its entry and erased it, and no call
+reached either state retail `0x1400f8f5e` would have faulted on. **The erase-no-op mechanism
+derived from source is NOT the cause**, and the five-tree enumeration has ruled out the
+family rather than found the culprit — the outcome the probe was built to be able to state,
+reported with the weight a hit would have carried. The `InternalFactory` handle-table audit
+was also run **during teardown for the first time** (its only scan point had been inside
+`Update`): `bad=0` at every checkpoint including shutdown-enter (count=92,777) and
+post-entitylist (count=738), `freed-while-registered total=0`. So mode (A) of
+`internal_factory_audit.h` — *"the next `~Internal` writes `*(int*)(freedPtr+0x08) = idx`"*,
+which has **exactly this crash's signature** — did not occur either.
+⚠️ **CAVEAT, not buried: both clean tallies come from runs that did NOT crash.** A clean
+probe on a non-crashing run is much weaker than a clean probe on a crashing one.
+
+**3. A DEFECT IN THE PROBE ITSELF, and the general rule it yields.** The first version armed
+its exit tally via `atexit` — **and the crash handler ends in `ExitProcess`, which skips
+`atexit` entirely.** So on the one run where the probe fired, it printed `ARMED` and then
+NOTHING, making the all-zero outcome **indistinguishable from "the probe is not in this
+binary"**. Both tallies now print from the crash handler too, beside `Dx11SeamReport`, which
+already existed for exactly this reason.
+> **A diagnostic whose output is destroyed by the event it diagnoses is not a diagnostic.**
+
+**4. THE STACK MOVED AGAIN — third distinct path.** REDZONE named the corrupt block this
+time: `CORRUPT block @00000238035f8248 tag=0x0000000200000010 size=34359738432`, and the
+path symbolizes to `GameUpdateLoop_Shutdown` → `EntityList_Shutdown_c3d30 **+0x22e**` →
+`EntityList_RemoveEntity +0x3b3` → `ComponentEntity_Dtor` → `DtorBody` →
+`RtObject_InternalBasePtr_DeletePtr` → `Inert_ScalarDtor` → `MemFree` → `FreeLocked`.
+**Note `+0x22e`, not the `+0x104` mark loop reported before — this is `EntityList::Shutdown`'s
+LATER DRAIN LOOP.** The corrupt tag is `{low=0x10, high=2}`: the same two-small-integers
+shape as the other three, now on an allocator **boundary tag** rather than a link.
+`Inert_ScalarDtor` is the shared stand-in destructor for components with no real dtor, and
+its own source comment describes the mode-(A) corruption **which the audit measured absent**.
+**The shape matches; the documented mechanism is measured absent; there is no replacement
+mechanism yet.**
+
+⚠️ **Three distinct stacks have now been reported for this fault** (lane M's `Tutorial_Dtor`
+→ `TreeNodeFree`, disproved; lane N's `WorkComponent` task-cleanup, family now eliminated;
+and this drain-loop path). **It should not be assumed these are one defect.**
+
+### The frozen-cache class: 481 not 206, converted 90, live proof still OWED — lane H, `8055bf7`
+
+**The denominator was wrong in the dangerous direction.** The first pass said **206** frozen
+sites. `RT_ORIGINAL_ONCE` and `RT_EXPORT_ONCE` are **macros that manufacture this exact
+idiom**, and their 282 call sites contain no `ResolveExport(` text, so the tool saw none of
+them. Real population: **FROZEN 481 · RETRY 79 · DIRECT 1015 · 1,575 doors.** The 481 splits
+212 `RT_ORIGINAL_ONCE`, 64 `RT_EXPORT_ONCE`, 139 hand-rolled code, 40 hand-rolled `??_7`,
+**26 hand-rolled exported DATA**.
+*Fifth distinct form of the wrapper blind spot this wave: **a macro that manufactures an
+idiom is invisible to a checker keyed on that idiom's text.***
+
+**(1) The swallowing subclass is 26 sites, ENUMERATED not sampled** — all exported DATA
+(`?_singleton@`, `?_typeInfo@`), the only kind where a cached null is *swallowed* rather
+than dying loudly as EXEC-of-0. The earlier "3 of 4 checked" **both undercounted the
+population and overcounted its confidence**. Ranked by cutover execution order:
+**tier 1 is `?_singleton@MemoryAllocator` ALONE** (provably first — nothing can allocate
+before it); tier 2 the nine `Engine::Startup` singletons (Video::Device ×3,
+Video::Configuration ×2, IO::Persistence ×3, Input::Device, Audio::Device, Engine::MainLoop);
+tier 3 the eleven first-frame/first-load ones. Tiers 2-3 are marked APPROXIMATE.
+
+**(2) Converted with a NAMED REFUSAL.** New `RtResolveCached()` caches a **hit** (steady
+state is one plain load — no `GetProcAddress` in the hot path), **retries** a miss, and
+**names it once** with a counter. 26 sites → `RT_DATA_SLOT`; then **one edit to the
+`RT_EXPORT_ONCE` macro body moved 64 more that needed no touching**. **90 sites left the
+frozen class.**
+Also corrected a stale comment at `video/device.cpp:120` claiming the registry *"holds
+function redirections only, and nothing has registered — or can register — a data slot before
+cutover."* **Both halves false**, and left standing it would have argued a future reader out
+of lane C2's mint. **This lane and C2's are two halves of one repair: the mint is only
+reachable because these sites now retry.**
+
+**(3) Denominator, before and after** — the audit now counts the macro spellings, because
+otherwise a converted site **vanishes**, which reads exactly like a clean pass:
+```
+BEFORE (clean worktree at HEAD, same tool):  FROZEN=417  RETRY=143  DIRECT=1015  doors=1575
+AFTER  (working tree):                       FROZEN=391  RETRY=169  DIRECT=1016  doors=1576
+```
+FROZEN −26 / RETRY +26 = the conversions; DIRECT +1 / doors +1 = the helper's own resolve.
+**The tool CANNOT show the macro edit** — it keys on a spelling that did not change, only the
+contract behind it — so contract-level the move is **481 → 391**, said explicitly rather than
+letting the numbers imply the macro edit did nothing. Audit-vs-grep reconciles exactly:
+212 sites + 5 comment-only lines + 1 statement carrying two uses = grep's 218.
+
+**(4) Load-bearing nulls — `RT_ORIGINAL_ONCE` IS the `RemoveGraphs` equivalent, at 212
+sites.** It is the oracle door, registry-blind BY DESIGN; converting it would make every
+oracle compare ours against ours, then retry `GetProcAddress` against an absent module at
+cutover. **Left untouched.** Self-resolve candidates: 455 names are resolved-and-registered
+tree-wide (that is the design); narrowing to *the same file doing both* — the actual
+`RemoveGraphs` shape — leaves **3** (`loops.cpp:947`, `widgets_input.cpp:194`,
+`thread_win.cpp:142`), all checked at body level, **none recurses**, none in the conversion
+set.
+
+**✅ LIVE PROOF PASSED 2026-09-08** (lane H, `43c0235`, treatment stamp `01:46:22`; self-evidencing
+— treatment emits `[RtResolve]`/`[RtResolveEarly]`, prefixes no earlier binary can produce, control
+emits neither). **10 runs, 325,855,883 diffed calls on the treatment, 0 divergences, `[RtResolve]
+0 misses` on all six treatment runs.** H3 stress ran clean (129.2M calls, 0-byte crash log). All 26
+converted data slots and 64 `RT_EXPORT_ONCE` sites resolved every time, so the retry path was never
+taken and **the conversion is inert while the DLL answers** — which is exactly what it had to prove.
+Denominator re-measured against the new tip: `417/143/1015 → 391/169/1016`, identical to §4, so lane
+N added no doors and the doc needed no correction.
+
+⚠️ **THE LANE'S OWN PASS CONDITION WAS NOT MEASURABLE, and it caught that before reading anything
+into it.** It had specified "the `[RtDiff]` SITE COUNT must match a reverted-build control". Treatment
+331 vs control 329 — a mismatch. It then **ran the control against ITSELF: 329 / 331 / 329.** *The
+same binary, same cell.* The count is **nondeterministic ±2**, so **no pair of single runs could ever
+satisfy that criterion, not even two of the identical binary.** Strict-sounding and unusable — the
+shape this wave has caught five times in other tools and now once in its own.
+**Replacement: compare the SET, not the count.** It survives the noise AND names the offender —
+diffing two control runs immediately identified the ±2 as `Math::Transform::Identity()` and
+`Video::Context::SetInverseScale`. Stable core (∩ of 2 runs) 329 both sides, union (∪) 331 both sides,
+**byte-identical sets, `diff` empty on both**; the deeper Save9 cell 354 sites on both binaries,
+identical set.
+➡️ **Handed on: the two flaky sites make ANY cross-build site-count comparison noisy by ±2. Anyone
+reading a 2-site delta as signal will chase nothing. Compare sets.**
+
+**✅ THE EARLY-SNAPSHOT CLASS IS MEASURED NOT-LIVE ON THESE PATHS.** Identical on all three cells:
+**3 early registry-aware resolves, 0 of 3 registered now → ZERO live bypasses.** The design is what
+makes that meaningful — the counter **re-queries the registry at summary**, separating "resolved
+early" (common, mostly harmless) from "resolved early AND thereby missed a port that exists" (the
+actual defect). All three are structural: `InstallAllocatorLock()` and `InstallFreeLock()` run before
+`RuntimePortInit()` **by design** and have no port to miss while `BANISHED_RT_ALLOC` is off, and
+`?_singleton@Factory@Object@@` is resolved from inside a `*PortInit()` body — port-init code resolving
+during port-init is early **by construction**. Nothing fixed; there was nothing to fix.
+**`ResolveExportRaw` is deliberately NOT hooked** — that door is *supposed* to reach the shipped body,
+so an early raw resolve is not a bypass, and hooking it would have inflated the count with 212
+`RT_ORIGINAL_ONCE` sites correct by design.
+⚠️ **Two limits, stated so the number is not over-read:** the counter sees only the three
+registry-aware doors, and **"not live on these three paths" is not "not live anywhere"** — the class
+stays OPEN with no instrument beyond this counter.
+
+### ⛔ NEW LIVE DEFECT CLASS: the EARLY SNAPSHOT — "frozen → retry" does NOT fix it
+
+Lane H, 2026-09-08, flagged against its own work.
+
+**Retry only re-resolves a NULL. A non-null answer is still frozen.** So a site whose first
+call happens **before `RuntimePortInit()`** captures the DLL's address permanently and
+**bypasses a port registered afterwards**. That is the port-bypass defect
+(`reference_bypassed_port_needs_a_source_checker.md`) frozen in — and unlike everything else
+in this section it is **LIVE TODAY, not at cutover**.
+
+**Anyone reading "frozen → retry" as a fix for early snapshotting will be wrong.** The 90
+converted sites are protected against a *null* resolve, not against an *early* one.
+
+Why no existing instrument sees it: the site is spelled correctly, resolves through the
+right door, and `port_bypass_audit` finds nothing — **only the ORDERING is wrong**. A source
+checker cannot see it, and the diff oracle reports the port clean because our body never
+runs. It joins the list of things visible only to a runtime observation.
+
+**The material is the DIRECT bucket (1,016 sites) plus its ordering.** Needs its own lane and
+its own audit. **Suggested measurement, since the machinery now exists:** `RtResolveCached`
+already counts and names its misses — have it also record any resolve that happens **before
+`RuntimePortInit()` returns**, which converts "is this class live?" from an argument into a
+number, on an ordinary run, today.
+
+**Also carried forward, belonging to no current lane:** WAVE9_LANE_E2 §5.2 (the allocator's
+`Shutdown`, `~MemoryAllocator`, `operator=`, `GetAllocationSize`, `GetAllocatedSize`, `Get`
+— never exercised by the shadow) and §5.3 (the 5% `sim ms/iteration` gate, three runs per
+config on the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
+
+### Finding 3 — the "latent wild write" reading is RULED OUT; three stacks, and lane M was right
+
+Lane N, 2026-09-08, `85f1eca`. **All three probe tallies now come from runs that ACTUALLY
+CRASHED** — the caveat that made the earlier clean tallies weak.
+
+**1. THE HEAP IS INTACT WHEN TEARDOWN BEGINS.** Bracketing teardown with the allocator
+boundary-tag walk (`BANISHED_TEARDOWN_HEAPWALK`) on a run that crashed:
+`'shutdown-enter': no tag corruption` and `free-list forward links also intact`.
+**So "one latent wild write during the sim with a moving victim" is RULED OUT. The
+corruption is produced by the TEARDOWN CASCADE ITSELF** — for stack A, in the window between
+the 135th and 136th `8e30` call. That is the discrimination that was worth more than another
+repro, and it halves the hunt.
+
+**2. Eliminations now hold ON A CRASHING RUN:** `WorkSchedProbe 8e30calls=136 unfiled=135`,
+all three failure counters 0 — the 136th call IS the one that died, so **the scheduler family
+is eliminated on the run that faulted**. `ObjAudit` at shutdown-enter `count=92492 bad=0`,
+freed-while-registered 0 — **mode (A), whose signature matches this crash exactly, did not
+happen.** And the fault reproduces with `BANISHED_RT_DIFF` unset: **oracle-independent**.
+
+**3. THREE DISTINCT STACKS, tabulated rather than merged:**
+
+| | Path | Corrupt value |
+|---|---|---|
+| **A** | `EntityList_Shutdown +0x104` (mark loop) → … → `8e30`, faulting on `int k = *e` | `{low = 2 or 0x22, high = that run's heap prefix}` |
+| **B** | `EntityList_Shutdown +0x22e` (drain loop) → `RemoveEntity` → `Inert_ScalarDtor` → `FreeLocked` | boundary tag `0x0000000200000010` |
+| **C** | `Tutorial_Dtor +0x330` → recursive `TreeNodeFree_2df90` | node ptr `0x0000000200000020` |
+
+**A and C are the same shape** — a live pointer's LOW DWORD replaced by a small integer, and
+for A the high half is provably that run's heap prefix. **B is a boundary tag, so B may be a
+DIFFERENT DEFECT**; the data does not settle it and lane N does not pretend otherwise.
+
+**4. A reading lane N WITHDRAWS of its own:** that `0x200000010` is a free-block tag
+`{size,2}`. The allocator stores size in the low 41 bits
+(`blkBytes = (tag & 0x1ffffffffff) * 4`, `redzone_alloc.cpp:867`), so a 16-byte block tags as
+**4**. It is genuine corruption, not a misread tag.
+
+**WRITER STILL NOT FOUND, and not forced.** What the next lane inherits: the victim is one
+instruction; the write shape is **a 4-byte store of a small integer over a pointer's low
+half**; and because of result 1 **a hardware write watchpoint only has to cover TEARDOWN, not
+1,200 frames of sim** — which makes `standalone/hw_watch.cpp` cheap in a way it was not this
+morning.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
@@ -582,10 +832,10 @@ compare against, so a gate not recorded before cutover can never be recorded at 
 | Gate | Command | Status |
 |---|---|---|
 | **libm bit-exactness** | `mingw32-make libm-sweep` — exits non-zero on any divergence AND on a negative control that finds nothing | **PASSED 2026-09-07, recorded in `wave9_libm_sweep_gate.txt`**: 1,493,087,610 comparisons, 0 differing bits on all five; negative control fires on 4 of 5 (`sqrtf` reporting 0 for the control too is a TRUE result — the retail body is a bare `sqrtss` and IEEE sqrt is correctly rounded) |
-| **Differential oracle, full matrix** | `BANISHED_RT_DIFF=1` across the harness cells | ⚠️ **NOT MET — but findings 1 and 2 are CLOSED 2026-09-08 (lane N, [WAVE9_LANE_N.md](WAVE9_LANE_N.md)); only finding 3 and the two menu crashes remain.** **Clean cells, each with a FIRING negative control** (lane M, 22 runs; re-confirmed by lane N on a clean `921eb23` tree, exe `2026-09-08 00:43:02`): main menu 181/1.1M, gameplay 314/29.1M, save+load 336/54.1M, tutorial 0 328/8.8M, menus-Achievements 195/1.7M, menus-Mods 182/2.4M. `calls=` was checked, not just `divergences=`: of 417 distinct sites exactly **two are never called in any cell** — `UI::EditElement::SetText` (a documented NO-ORACLE port) and `Audio::Scene::Serialize` (covered by lane S, not by this row). **(1) CLOSED — ORACLE defect.** `NumberElement::SetValue` (both overloads) ends in the DLL's private `CacheText`, which swaps a refcounted `String` at `+0xD0`; the prefix replay worked from a SHALLOW copy and handed retail's own body a pointer ours had already released. Lane M's detector **acceptance test was run FIRST, while the defect still existed** — self-test `ALIVE`, detector fired by name, block header `{len=0,rc=0}`, `theirs(N)==ours(N+1)` in the log, captured verbatim. Fixed by making `SetValueInt`, `SetValueFloat` and `NumberEditElement::SetMinMax` **NO-ORACLE ports**, never a `+0xd0` exclusion: tutorial-1 **10 → 0**, site count unchanged at 335. Layout corrected from disassembly (`+0xD0` owning refcounted String, `+0xC0` `Font*`, `+0xE0` `bool`, **size 0xE8 not 0xE0** — the old size made the replay read a byte past its own stack object), and the three-way `+0xD0` disagreement resolved **without touching `TextElement.h`**: a `NumberElement` is not a `TextElement`, so both headers were right about their own class. **(2) CLOSED — a REAL PORT DEFECT, a MOVED TERM.** Retail adds the inverse transform's translation LAST, one `addss` against the fully accumulated rotated sum (`0x180124B56`-`BB4`); `localOx` did, `localOy`/`localOz` read `t + a + b + c`, folding the translation in FIRST. Only visible where translation and rotated part nearly cancel — the whole 1-in-23,654 story, and why **a clean re-run could never have exonerated it**. Proved on a deterministic fixture with the **denominator unchanged**: 244,824 rays / 29,867 hits, **21 → 0**; whole run 353 sites / 109,085,103 calls / 0 divergences; still 0 after the merge. The tie-break hypothesis is disproved twice and annotated in the source so it cannot be re-proposed. **(3) OPEN — reproduced 4× in ~9 runs, and LANE M'S STACK WAS WRONG.** `nm`-symbolized against lane N's own binary, only `GameUpdateLoop_Shutdown` survives: the real path is `EntityList_Shutdown_c3d30` → `ActHunt_MarkEntityRemoval_c2ea0` → `WorkComponent_OnRemoveVSlot` → `OnRemove_CancelWork` → `RegisterWorkSlot` → `ActCt_TaskCleanup_8e30 +0x2bf` — the **WorkComponent task-cleanup path**, not a tutorial tree. `TreeNodeFree` was checked instruction-by-instruction against retail `0x14002CE60` and is FAITHFUL, so **both previously implicated families are ELIMINATED, not merely unexamined**. `8e30` walks intrusive BSTs reading `int key = *task`, and **the faulting address IS the node pointer** (`READ of 000001ab00000002`) — a child link holding a freed-and-reused block. Same family as `reference_workarea_bst_bad_entry.md` (*"ask what should have ERASED an entry before what WROTE it"*), and `CheckPtr` is a bare `RET`, so nothing validates the handle in between. **NOT FOUND: which teardown step frees a node without erasing it from `taskMgr+0x30`/`+0x40`.** It is a verification blocker in practice, not theory — it destroyed lane N's own merged-tree confirmation run *after* the sweep had completed cleanly. **(4) OPEN:** two menu routes crash independently of the oracle. **NOT DRIVEABLE by this harness:** the in-game save WRITE path and world-teardown-to-menu. |
+| **Differential oracle, full matrix** | `BANISHED_RT_DIFF=1` across the harness cells | ⚠️ **NOT MET — but findings 1 and 2 are CLOSED 2026-09-08 (lane N, [WAVE9_LANE_N.md](WAVE9_LANE_N.md)); only finding 3 and the two menu crashes remain.** **Clean cells, each with a FIRING negative control** (lane M, 22 runs; re-confirmed by lane N on a clean `921eb23` tree, exe `2026-09-08 00:43:02`): main menu 181/1.1M, gameplay 314/29.1M, save+load 336/54.1M, tutorial 0 328/8.8M, menus-Achievements 195/1.7M, menus-Mods 182/2.4M. `calls=` was checked, not just `divergences=`: of 417 distinct sites exactly **two are never called in any cell** — `UI::EditElement::SetText` (a documented NO-ORACLE port) and `Audio::Scene::Serialize` (covered by lane S, not by this row). **(1) CLOSED — ORACLE defect.** `NumberElement::SetValue` (both overloads) ends in the DLL's private `CacheText`, which swaps a refcounted `String` at `+0xD0`; the prefix replay worked from a SHALLOW copy and handed retail's own body a pointer ours had already released. Lane M's detector **acceptance test was run FIRST, while the defect still existed** — self-test `ALIVE`, detector fired by name, block header `{len=0,rc=0}`, `theirs(N)==ours(N+1)` in the log, captured verbatim. Fixed by making `SetValueInt`, `SetValueFloat` and `NumberEditElement::SetMinMax` **NO-ORACLE ports**, never a `+0xd0` exclusion: tutorial-1 **10 → 0**, site count unchanged at 335. Layout corrected from disassembly (`+0xD0` owning refcounted String, `+0xC0` `Font*`, `+0xE0` `bool`, **size 0xE8 not 0xE0** — the old size made the replay read a byte past its own stack object), and the three-way `+0xD0` disagreement resolved **without touching `TextElement.h`**: a `NumberElement` is not a `TextElement`, so both headers were right about their own class. **(2) CLOSED — a REAL PORT DEFECT, a MOVED TERM.** Retail adds the inverse transform's translation LAST, one `addss` against the fully accumulated rotated sum (`0x180124B56`-`BB4`); `localOx` did, `localOy`/`localOz` read `t + a + b + c`, folding the translation in FIRST. Only visible where translation and rotated part nearly cancel — the whole 1-in-23,654 story, and why **a clean re-run could never have exonerated it**. Proved on a deterministic fixture with the **denominator unchanged**: 244,824 rays / 29,867 hits, **21 → 0**; whole run 353 sites / 109,085,103 calls / 0 divergences; still 0 after the merge. The tie-break hypothesis is disproved twice and annotated in the source so it cannot be re-proposed. **(3) OPEN — reproduced 4× in ~9 runs, THREE DISTINCT STACKS, and the corruption is produced BY TEARDOWN ITSELF.** ⛔ *An earlier claim here that "lane M's stack was wrong" is WITHDRAWN by lane N as its own error — it generalised from a single symbolized sample, and a later crash symbolizes to exactly lane M's path. **Lane M was right.*** The three paths, tabulated rather than merged: **A** `EntityList_Shutdown +0x104` (mark loop) → `ActCt_TaskCleanup_8e30`, faulting on `int k = *e`; **B** `EntityList_Shutdown +0x22e` (drain loop) → `RemoveEntity` → `Inert_ScalarDtor` → `FreeLocked`, a boundary tag; **C** `Tutorial_Dtor +0x330` → recursive `TreeNodeFree_2df90`. **A and C share a shape** (a live pointer's LOW DWORD replaced by a small integer, A's high half provably that run's heap prefix); **B is a boundary tag and MAY BE A DIFFERENT DEFECT** — the data does not settle it. **THE DECISIVE RESULT: the heap is INTACT when teardown begins and corrupt by the time it faults** (boundary-tag walk on a CRASHING run: no tag corruption at `shutdown-enter`, free-list links intact). **So "one latent wild write during the sim with a moving victim" is RULED OUT** — the teardown cascade produces the corruption, for A between the 135th and 136th `8e30` call. All eliminations now hold ON CRASHING RUNS: scheduler family (`8e30calls=136 unfiled=135`, all failure counters 0 — the 136th IS the call that died) and the handle table (`count=92492 bad=0`), so mode (A), whose signature matches this crash exactly, did not happen. Oracle-independent (faults with `BANISHED_RT_DIFF` unset). **WRITER NOT FOUND, not forced.** The victim is one instruction; the write shape is a 4-byte store of a small integer over a pointer's low half; and because the heap is clean at teardown entry **a hardware write watchpoint now only has to cover TEARDOWN, not 1,200 frames of sim** — which makes `standalone/hw_watch.cpp` cheap in a way it was not this morning. It is a verification blocker in practice, not theory — it destroyed lane N's own merged-tree confirmation run *after* the sweep had completed cleanly. **(4) OPEN:** two menu routes crash independently of the oracle. **NOT DRIVEABLE by this harness:** the in-game save WRITE path and world-teardown-to-menu. |
 | **Minted DATA vs the DLL** | `BANISHED_RT_MINT_SHADOW=1` (lane C2). **Not byte-for-byte** — a filled slot holds OUR address by construction, so a byte compare would fail on exactly the slots that represent progress. It compares the MAPPING (the DLL's slot holds function X; ours holds our registered port of X, and never a DLL address), plus `BaseTypeInfo` fields by `strcmp`, excluding `next` and BSS contents. | **PASSED 2026-09-08**, exe stamp `00:24:27`, `rt_run[mintctor] rc=0`: **429 ground-truth slot comparisons / 0 MISMATCH**, 78 slots minted from our own ported code / 0 MISMATCH, **165 `BaseTypeInfo` field comparisons / 0 MISMATCH**, 0 slot-count suspects, 0 symbols absent, `clean: 0 problem(s)` at **both** `phase=init` and `phase=exit`. 14 of 46 vtables complete. `typeId INFO` 0 at init / 33 at exit, the predicted `Factory::Startup` ordering. |
 | **Constructed statics vs the DLL** | `BANISHED_RT_MINT_CTOR=1 BANISHED_RT_MINT_SHADOW=1` (lane C2). The DLL's `.CRT$XC` array constructs three of the minted symbols at load; the mint reproduces them and the check compares each pair's non-null WORD SHAPE (values cannot match — different vtable, different HANDLEs, a `time()` seed). Catches a ctor that leaves the handles or the vtable null. | **PASSED 2026-09-08**, same run: **3 of 3 built, shape compared on 3, 0 SHAPE MISMATCH.** One `SHAPE-INFO` at exit — `?_loader…+0x30` (`Loader::_loop`) set in the DLL, null in ours, because nothing hands our Loader a loop. **The run also FOUND a defect**: `?_rng@Particle@Graphics@@` reported `DLL=WRITTEN` at init, refuting lane C2's earlier "never seeded" claim; it is constructed by initialiser `0x180149650` with a `_time64`-seeded MT19937. Fixed, and the sweep that missed it now matches a field reference, not only a base address ([WAVE9_LANE_C2.md](WAVE9_LANE_C2.md) §2). |
-| **Allocator shadow** | `BANISHED_RT_DIFF=1 BANISHED_RT_ALLOC_SHADOW=1` on `sa-run` + `sa-stress` + autoload, plus a deliberate perturbation that must go red | **GATE STEP 2 MET 2026-09-07 — GO, meaning READY TO ARM, NOT ARMED** ([WAVE9_LANE_E2.md](WAVE9_LANE_E2.md)). All four conditions on one binary: `divergences=0` on three routes, **12,750,873** shadowed operations, all four skip counters zero, and a negative control that goes red (392,243). `BANISHED_RT_ALLOC` was never set — the heap was not taken. Three defects found, **all in the ORACLE, none in the port**: (1) it armed on `MemoryAllocator::Startup`, which has **zero callers** (MSVC inlined it into `Engine::Startup`; a rel32 scan of the whole DLL `.text` finds none, and finds 348 for `Allocate`) — it read `armed=0 observed=0 skipped_pre_startup=1,788,875`, **a green summary over nothing**; (2) the replay map deleted by writing `nullptr`, which is also its linear-probe terminator, so every delete truncated colliding keys' probe chains; (3) **the PRESCRIBED negative control cannot fail** — `minBin=0xbe` is overwritten by `AddNewMemoryRange` while arming, so accepting it would have rested the entire gate on a probe only ever seen green when broken. Replaced by a geometry control that fires on the first perturbed call. **ARENA-GROWTH HOLE — SPECIFIED 2026-09-08, lane E3 ([WAVE9_LANE_E3.md](WAVE9_LANE_E3.md)), RUN QUEUED.** Growth condition established against RETAIL'S BYTES, not our transcription: a rel32 scan finds exactly three `AddNewMemoryRange` call sites and **only `0x1800c6ecf` inside `Allocate` is a live growth trigger** (the others are the dead `Startup` and the inlined arming call for range 0). A second range is created iff one `Allocate` wants `want` bytes and no linked free block anywhere is ≥ `want`. ⚠️ **The pass criterion was wrong as I specified it: `N > 1` is NOT enough, require `N ≥ 3`.** Capacity goes 0→2→4 and **only the 2→4 step takes `ExpandMemoryRangeTable`'s `memcpy` + `release(src)` branch**, so `ranges=2` leaves the range-table copy unexecuted while reading as a pass. **And the question dissolved rather than being answered:** no workload reaches it (12.75M ops across three cells all ended at `ranges=1`), but **the 512 MB is OUR OWN literal** at `code/Game/Game/game_main.cpp:439`, not the engine's. So neither "test it" nor "argue it" — **shrink the arena via the new `BANISHED_ARENA_MB` (unset ⇒ 512, byte-identical) and re-run the cells we already have**, with the EXISTING oracle covering the growth path on the real allocator with the real DLL beside it. A probe would have been a worse instrument on a synthetic subject. At 16 MB route B (a single request larger than any free block) comes for free, which 512 MB can never reach. **Controls, with POWER COMPUTED — the standard the rest of this wave lacked:** effectiveness counters `grow` / `tableCopy` / `crossRange` count what ACTUALLY happened, and the driver prints `grow=0 — the arena-growth path did NOT run in this cell` explicitly. New negative control `NEGCTL=grow` bumps `minRangeSize` AFTER range 0 exists, so it is silent for the whole single-range life and diverges on the very first growth: **per-event detection probability 1, expected divergences ≥ 10⁵**, versus `=size`'s ~17 sampled. **G4 passes only on `divergences > 0` AND `grow ≥ 1`; a green `=grow` WITH `grow ≥ 1` means the oracle is blind and every green growth run must be discarded.** That conditional structure is exactly what lane N's 0-of-525 underpowered control lacked. Previously recorded: the arena-growth path never executed — a coverage control reports `ranges ours=1 theirs=1` on all three runs, so the second `MemoryRange`, the range-table realloc and every `rangeIndex != 0` comparison are unexercised by all 12.75M ops. **Close before gate step 4.** |
+| **Allocator shadow** | `BANISHED_RT_DIFF=1 BANISHED_RT_ALLOC_SHADOW=1` on `sa-run` + `sa-stress` + autoload, plus a deliberate perturbation that must go red | **GATE STEP 2 MET 2026-09-07 — GO, meaning READY TO ARM, NOT ARMED** ([WAVE9_LANE_E2.md](WAVE9_LANE_E2.md)). All four conditions on one binary: `divergences=0` on three routes, **12,750,873** shadowed operations, all four skip counters zero, and a negative control that goes red (392,243). `BANISHED_RT_ALLOC` was never set — the heap was not taken. Three defects found, **all in the ORACLE, none in the port**: (1) it armed on `MemoryAllocator::Startup`, which has **zero callers** (MSVC inlined it into `Engine::Startup`; a rel32 scan of the whole DLL `.text` finds none, and finds 348 for `Allocate`) — it read `armed=0 observed=0 skipped_pre_startup=1,788,875`, **a green summary over nothing**; (2) the replay map deleted by writing `nullptr`, which is also its linear-probe terminator, so every delete truncated colliding keys' probe chains; (3) **the PRESCRIBED negative control cannot fail** — `minBin=0xbe` is overwritten by `AddNewMemoryRange` while arming, so accepting it would have rested the entire gate on a probe only ever seen green when broken. Replaced by a geometry control that fires on the first perturbed call. **ARENA-GROWTH HOLE — CLOSED 2026-09-08** (lane E3, `c86c6ea`, exe `2026-09-08 01:19:24`, `BANISHED_RT_ALLOC` unset in all four cells, all figures read out of the raw 1,342-line log). **G1/G2/G3 PASS on every criterion:** `ranges` ours/theirs **4/4, 5/5, 5/5**; `reserved` 64/80/80 MB matching; `grow` 3/4/4; `tableCopy` **1/2/2**; `crossRange` 0.5M/2.9M/2.1M; **12,757,581 operations, 0 divergences**, four skip counters 0, growth machinery exercised 11 times, no cell with `grow=0`, no ladder needed. `tableCopy` follows the predicted 0→2→4→6 schedule exactly. **⚠️ Had my original `N>1` been kept, G1 would have stopped at `ranges=2`, `tableCopy` would have been 0, and the `memcpy`+`release` branch would have gone UNEXECUTED BEHIND A GREEN RESULT.** **G4 is a valid RED:** `divergences=1,172,233` **and** `grow=3` — caught on the very call that created range 1 (`ours res=33558528` vs `theirs res=33554440`, difference 4,088) with the geometry terms still agreeing, which is exactly what adding `totalReserved` to the tuple bought. Same binary, one env var: 1.66M clean → 1.17M red. **BONUS:** `theirs res` = 2×16MB **+8** proves range 1's size was `want`, not `minRangeSize` — retail took the **oversized-single-request** branch too, so BOTH routes to a new range are covered. (The `COVERAGE reserved` line printed `>>20`, making it read as "every range took `minRangeSize`" — a cosmetic format bug producing a WRONG FACT; recorded.) ⛔ **BUT A NEW BLOCKER, and it is nastier than the hole it closed.** Asked of the allocator, the owns-a-structure-from-empty question has NO hot-path hole — the shadow replica IS our side owning a virgin arena, so `Allocate`/`Free`/`AddNewMemoryRange`/`GetFreeTagForSize`/`Link`/`Unlink`/`CommitToPage`/`ReleaseToPage` and **both** `ExpandMemoryRangeTable` branches have now run in exactly the configuration cutover creates. **Outside it, `Construct` (`??0`) has NEVER RUN and fails SILENTLY at cutover:** `SingletonSlot()` resolves `?_singleton@MemoryAllocator@System@@0PEAV12@EA` — **unminted exported data, nothing in the tree mints it** — and caches the result in a **function-local static**, so the first caller fixes the answer for the process and registering it later cannot repair it. `Construct`'s write is `if (slot) *slot = self`, so **with no DLL the write is skipped without a word**, `Get()` returns null forever, and the first `MemAlloc` faults on `null+0x640` several frames from anything naming `_singleton`. Fix (NOT done — unverifiable while the DLL still answers): mint `_singleton` as real storage registered before `RuntimePortInit` returns, and make `SingletonSlot()` **REFUSE RATHER THAN CACHE A NULL**. Previous specification: **ARENA-GROWTH HOLE — SPECIFIED 2026-09-08, lane E3 ([WAVE9_LANE_E3.md](WAVE9_LANE_E3.md)), RUN QUEUED.** Growth condition established against RETAIL'S BYTES, not our transcription: a rel32 scan finds exactly three `AddNewMemoryRange` call sites and **only `0x1800c6ecf` inside `Allocate` is a live growth trigger** (the others are the dead `Startup` and the inlined arming call for range 0). A second range is created iff one `Allocate` wants `want` bytes and no linked free block anywhere is ≥ `want`. ⚠️ **The pass criterion was wrong as I specified it: `N > 1` is NOT enough, require `N ≥ 3`.** Capacity goes 0→2→4 and **only the 2→4 step takes `ExpandMemoryRangeTable`'s `memcpy` + `release(src)` branch**, so `ranges=2` leaves the range-table copy unexecuted while reading as a pass. **And the question dissolved rather than being answered:** no workload reaches it (12.75M ops across three cells all ended at `ranges=1`), but **the 512 MB is OUR OWN literal** at `code/Game/Game/game_main.cpp:439`, not the engine's. So neither "test it" nor "argue it" — **shrink the arena via the new `BANISHED_ARENA_MB` (unset ⇒ 512, byte-identical) and re-run the cells we already have**, with the EXISTING oracle covering the growth path on the real allocator with the real DLL beside it. A probe would have been a worse instrument on a synthetic subject. At 16 MB route B (a single request larger than any free block) comes for free, which 512 MB can never reach. **Controls, with POWER COMPUTED — the standard the rest of this wave lacked:** effectiveness counters `grow` / `tableCopy` / `crossRange` count what ACTUALLY happened, and the driver prints `grow=0 — the arena-growth path did NOT run in this cell` explicitly. New negative control `NEGCTL=grow` bumps `minRangeSize` AFTER range 0 exists, so it is silent for the whole single-range life and diverges on the very first growth: **per-event detection probability 1, expected divergences ≥ 10⁵**, versus `=size`'s ~17 sampled. **G4 passes only on `divergences > 0` AND `grow ≥ 1`; a green `=grow` WITH `grow ≥ 1` means the oracle is blind and every green growth run must be discarded.** That conditional structure is exactly what lane N's 0-of-525 underpowered control lacked. Previously recorded: the arena-growth path never executed — a coverage control reports `ranges ours=1 theirs=1` on all three runs, so the second `MemoryRange`, the range-table realloc and every `rangeIndex != 0` comparison are unexercised by all 12.75M ops. **Close before gate step 4.** |
 | **`[RtRawResidue]` verdicts** | every row ORACLE-ONLY / REAL DEPENDENCY / DATA READ / DEAD | **MET 2026-09-08** (lane V, [WAVE9_LANE_V.md](WAVE9_LANE_V.md) §7 + `wave9_rawresidue_verdicts.csv`): **104 of 104 rows carry a verdict, zero undetermined** — REAL DEPENDENCY 26, DATA READ 29 (26 minted, **3 NOT**), ORACLE-ONLY 38, DEAD 11. Round 1 read 70/29/3/2; every round-1 finding had since been acted on, so **re-running the census after the tree moved changed the answer** — the `IO::Serializer` gate repair alone moved 22 rows to ORACLE-ONLY. **Nothing was defaulted to DEAD**: a DEAD verdict required a literal-and-alias sweep finding no raw-door site, with the port-aware door and registration named. ⚠️ **OPEN, handed to lane C2 — a cutover CRASH:** `??_7MeshInstance@Graphics@@6B@`, `??_7EdgeMeshInstance@Graphics@@6B@`, `??_7EdgeMesh@Graphics@@6B@` (`mesh.cpp:271/275/279`) are read via `RtVtable()` → `ResolveExportRaw` and **stamped into slot 0 by a ported ctor**, and are NOT in the mint — at cutover that is a NULL vtable in every such object and an EXEC-of-0 on the first virtual call. **And the door is wrong as well as the table**: `RtVtable()` is `ResolveExportRaw` for *all* callers including the already-minted `??_7Base@Object@@6B@`, and the raw door is `GetProcAddress`, which never consults the port registry — so adding table rows alone would not fix it. |
 | **`resolve_fallback_audit.py` reports 0 SITES** | not 0 defects — 0 **sites** | **MET 2026-09-07, lane F** ([WAVE9_LANE_F.md](WAVE9_LANE_F.md)): **0 sites, 0 defects, exit 0.** Deleted in two batches — 137 whose primary names a registered port, then the 26 still on the DLL — with the count checked against the audit after each, because a site *vanishing* reads exactly like a clean pass. Replaced by a null-resolve policy: `ResolveExport`/`ResolveOrdinal` now record and NAME every miss (`[RtUnresolved]`), non-fatal by default because on cutover day every unported symbol misses and aborting on the first one prints one name instead of the work list. |
 | **`rawdoor_audit.py` reports 0 UNGUARDED-CALL** | a raw call outside a guard reaches the DLL on an ordinary run today, and is a **null call** the moment the DLL is gone | **MET 2026-09-08** (lane V2, [WAVE9_LANE_V2.md](WAVE9_LANE_V2.md)): **0 UNGUARDED-CALL, 518 sites scanned**, self-test green. 28 -> 0; denominator 555 -> 519 -> 518, and **555 - 519 = 36 = exactly the number of sites converted**, per file — a conversion removes a site from the population, so the drop MUST equal the conversion count, and it was checked because a vanishing site reads exactly like a clean pass. **27 of 28 were REAL DEPENDENCY** -> `RT_EXPORT_ONCE`. **1 was ORACLE-ONLY and must NEVER be converted**: `widgets_layout.cpp` `RemoveGraphs` — that function IS the registered port of its own name, so `RT_EXPORT_ONCE` would resolve to ITSELF and recurse to stack death. It was also sitting OUTSIDE its guard between `RT_DIFF_BEGIN` and `RT_DIFF_SCALAR`, calling retail every frame; now inside `if (rt_diff_on__)`. **A blanket conversion — the obvious way to drive this gate to zero — would have shipped that crash.** 0 DATA READ; **0 DEAD, because none could be PROVEN unreachable and none was asserted.** ⚠️ **Two caveats that survive the green number.** (1) `rawdoor_audit` has a MEASURED blind spot: its resolve-and-call regex is per-line, so a site whose argument list opens on the NEXT line is invisible. Measured, not guessed — 364 immediate-call sites, 83 line-wrapped, **4 of those UNGUARDED and invisible to the audit** (`audio.cpp:451,760`, `filesystem.cpp:139,145`), one of which sits TWO LINES above two sites lane R did convert *because the checker flagged those and not it*. All six converted; probe kept as `docs/runtime_port/wave9_laneV2_wrapscan.py`. **The checker is measured, NOT fixed** — the fix is to paren-match forward. (2) **Reachability is established for NOTHING here** — the evidence is structural, never "a run executed it", and the 36 conversions have never been EXECUTED, twelve of them on the save/load path. Each resolves an unported-or-detoured name so `ResolveExport` returns the same pointer `ResolveExportRaw` did, but only an autoload cell settles it. ⛔ **0 UNGUARDED-CALL IS NOT "NO NULL CALLS AT CUTOVER" — lane V, 2026-09-08.** `ResolveExport` misses the port registry for an unported symbol and **falls through to `ResolveExportRawImpl`** (`standalone/resolve_standalone.cpp:692`), which returns null with no module handle. So converting `RT_ORIGINAL_ONCE` → `RT_EXPORT_ONCE` on a symbol that has **no port and no mint entry** changes only WHICH RESIDUE LIST IT PRINTS IN. It is still a null call the moment the DLL is gone. **14 of lane V2's conversions are in exactly that state** — `?UpdateList@SaveLoad`, `??0CompressedStream`, `?Stop@Device@Audio` and eleven more. ⚠️ **AND 25 IS A FLOOR — lane W measured 141.** Residue records what a run ASKED FOR: `?UpdateSave` / `?UpdateDelete` sit in the SAME `switch` as three rows lane V did list, same door, same disposition, and appear in ZERO rows of the verdicts CSV because no cell saved or deleted. The source-side question is answered by `tools/unsatisfied_export_scan.py`: **141 names have neither a port nor a mint entry, 138 with a live site.** Reachability is established for none of them; the scan states its own blind spot (2 wrapper resolves) as a number, and its effectiveness control is that all nine of lane W's ports dropped out of it. **25 rows remain real cutover work: 11 still on the raw door + 14 migrated-but-unsatisfied.** This gate row is necessary and NOT sufficient; the sufficient condition is a port or a mint entry, which is lane B/C/E work. |

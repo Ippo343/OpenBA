@@ -198,8 +198,8 @@ using SecToTicksFn = int64_t (*)(float);
 // Data globals — resolved by exported name, never through the registry.
 // See "HOW THE DEPENDENCIES ARE RESOLVED" above.
 MainLoop** MainLoopSingletonSlot() {
-    static MainLoop** p = reinterpret_cast<MainLoop**>(
-        ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
+    MainLoop** p = RT_DATA_SLOT(MainLoop**,
+        "?_singleton@MainLoop@Engine@@1PEAV12@EA");
     return p;
 }
 
@@ -207,8 +207,8 @@ MainLoop** MainLoopSingletonSlot() {
 // into the pointed-at Device at +0x50/+0x58 — the profile build calls that
 // setter `Video::Device::SetVideoErrorFuncs` (0x1800fd860); retail inlines it.
 void** VideoDeviceSingletonSlot() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
+    void** p = RT_DATA_SLOT(void**,
+        "?_singleton@Device@Video@@0PEAV12@EA");
     return p;
 }
 

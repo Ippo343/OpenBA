@@ -165,8 +165,8 @@ void CallExternalDtor(void* self) {
 // returns GOALINSTANCE's type, because "the instance type" is the type
 // GoalList::Initialize must ask the factory to create for this goal.)
 const uint32_t* GoalInstanceTypeInfo() {
-    static const uint32_t* p = static_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
     return p;
 }
 

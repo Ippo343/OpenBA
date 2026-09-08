@@ -54,6 +54,40 @@ void* ResolveExportRaw(const char* mangled_name);
 // tools/port_bypass_audit.py.
 void* ResolveExport(const char* mangled_name);
 
+// ---- Resolve-and-cache that NEVER caches a null ----------------------------
+//
+// runtime/funcs/rt_resolve_cache.cpp; read its banner before using either of
+// the macros below. Short version: caching a null in a function-local static
+// lets the FIRST caller fix the answer for the whole process, so a symbol
+// minted later — which is how cutover supplies the exported DATA the DLL used
+// to provide — can never be picked up, and nothing says which symbol was
+// missing. This caches a hit (so the steady-state cost is one load) and retries
+// a miss, naming it once.
+void*    RtResolveCached(const char* mangled, void** cache);
+uint64_t RtResolveMissCount();     // 0 across a run == every cached resolve hit
+void     RtResolveMissSummary();   // one line; call beside RtDiffSummary()
+
+// ---- Early-resolve recorder ------------------------------------------------
+//
+// Measures the defect the retry contract above does NOT fix: a NON-null answer
+// is still frozen, so a site first called before RuntimePortInit() registered
+// its port keeps the DLL's address for the life of the process and bypasses our
+// body. Invisible to tools/port_bypass_audit.py (the spelling and the door are
+// both correct -- only the ORDERING is wrong) and invisible to the diff oracle
+// (a bypassed port never runs, so it never disagrees). Live today, not at
+// cutover. See runtime/funcs/rt_resolve_cache.cpp and WAVE9_LANE_H.md §5.
+void     RtResolveMarkPortInitDone();   // called at the end of RuntimePortInit()
+bool     RtResolvePortInitDone();
+void     RtResolveNoteEarly(const char* mangled, uintptr_t ghidra_addr,
+                            uint16_t ordinal, void* caller);
+uint64_t RtResolveEarlyCount();
+void     RtResolveEarlySummary();
+
+// Was this name registered by a port? Distinct from "does ResolveExport return
+// something", which cannot tell a registry hit from a DLL hit. Implemented in
+// standalone/resolve_standalone.cpp, which owns the table.
+bool     RuntimeExportIsRegistered(const char* mangled_name);
+
 // Per-wave kill switch: BANISHED_RT_<NAME>=0 leaves the wave unregistered, so
 // every call goes to the DLL exactly as before. Checked once, at init.
 inline bool RtWaveEnabled(const char* envName) {
@@ -111,9 +145,30 @@ inline Fn RtOriginal(const char* mangled) {
 // GetProcAddress cost (reference_rtoriginal_is_getprocaddress.md), and thereby
 // bypassing our own ports. Wave 1 proved ??DQuaternion bit-exact and
 // MeshInstance::UpdateHierarchy had been running the DLL's copy ever since.
-// Same caching contract as RT_ORIGINAL_ONCE: one static per call site, Fn must
-// be a typedef'd name.
-#define RT_EXPORT_ONCE(Fn, MANGLED)                                                ([]() -> Fn {                                                                      static Fn rt_export_once__ = reinterpret_cast<Fn>(ResolveExport(MANGLED));         return rt_export_once__;                                                   }())
+// One static per call site, and Fn must be a typedef'd name.
+//
+// It does NOT share RT_ORIGINAL_ONCE's caching contract any more (Wave 9 lane
+// H): a HIT is cached exactly as before, but a MISS is named and retried rather
+// than frozen. RT_ORIGINAL_ONCE keeps the old behaviour deliberately — it is
+// the oracle door, it must reach the SHIPPED body, and at cutover its call
+// sites are compiled out rather than made to retry a GetProcAddress against a
+// module that is not there (WAVE9.md §2).
+#define RT_EXPORT_ONCE(Fn, MANGLED)  ([]() -> Fn { static void* rt_export_once__ = nullptr; return reinterpret_cast<Fn>(RtResolveCached((MANGLED), &rt_export_once__)); }())
+
+// A DATA slot the DLL exports -- ?_singleton@..., ?_typeInfo@..., ?_firstTypeInfo@...
+// The export ADDRESS is the slot, so T is normally a pointer-to-pointer.
+//
+//     MemoryAllocator** SingletonSlot() {
+//         return RT_DATA_SLOT(MemoryAllocator**,
+//                             "?_singleton@MemoryAllocator@System@@0PEAV12@EA");
+//     }
+//
+// Same never-cache-a-null contract as RT_EXPORT_ONCE, and for data it matters
+// more: a null function pointer dies loudly as EXEC-of-0 with the VEH handler
+// naming the detour, while a null data slot is either swallowed by an `if` or
+// dereferenced somewhere else entirely. T must be a typedef'd name or a
+// comma-free type, because the preprocessor splits on commas.
+#define RT_DATA_SLOT(T, MANGLED)  ([]() -> T { static void* rt_data_slot__ = nullptr; return reinterpret_cast<T>(RtResolveCached((MANGLED), &rt_data_slot__)); }())
 
 // ---- Wave init entry points ------------------------------------------------
 void RtMathPortInit();     // runtime/src/math/
