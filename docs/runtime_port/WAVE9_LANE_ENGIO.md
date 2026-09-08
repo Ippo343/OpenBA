@@ -13,20 +13,39 @@ stated blocker shown to be STALE and replaced by a smaller, named one.**
 
 ---
 
-## 1. The door count, with a set-diff and unmoved denominators
+## 1. The door count — RE-MEASURED on clean trees with ONE instrument version
 
-Before/after on the SAME tree. The "before" is not a memory of an earlier
-number: the six touched paths were restored to their `ae8195b` blobs in a
-scratch copy and both audits were run against it, because the first attempt
-compared against a different checkout at a different commit and produced a
-delta that was partly somebody else's.
+⚠️ **The numbers this section carried in its first version are WITHDRAWN**, and
+not because they were wrong about the port. Two things invalidated them:
+
+1. **`tools/addr_door_audit.py` had no notion of a comment.** It matched
+   `ResolveAddr` / `RegisterRuntimeAddr` text inside comment blocks and counted
+   it as live call sites — 25 of 295 "call sites" tree-wide were prose. Lane
+   ADDR's fix landed in `f5dbeb8`.
+2. **This session was pinned into other lanes' worktrees for part of the run**
+   (§8.1), and a dirty tree corrupts numbers as well as refs — lane ADDR
+   measured a contaminated 296/199/1189/650 against a clean 270/192/1186/647.
+
+So everything below was re-taken. Both sides are **checkouts built straight from
+the object store** (`git archive` of the two commits — no working directory is
+involved, so no neighbour's uncommitted file can reach either side), and **the
+same instrument version, `f5dbeb8`'s, is copied into both.** A "before" from the
+old tool against an "after" from the new one is a meaningless diff that reads as
+closures nobody made.
+
+```
+BEFORE = ae8195b   (this lane's base)
+AFTER  = 2d763dc   (this lane's tip)
+TOOLS  = f5dbeb8   (comment-aware addr_door_audit), on BOTH sides
+```
 
 | instrument | BEFORE | AFTER |
 |---|---|---|
-| `addr_door_audit` by-address call sites | 295 | **295** |
-| `addr_door_audit` distinct addresses | 198 | **198** |
+| `addr_door_audit` by-address call sites | 270 | **270** |
+| `addr_door_audit` distinct addresses | 192 | **192** |
 | `addr_door_audit` registered addresses | 1186 | 1187 (+1) |
-| `addr_door_audit` UNREGISTERED | 16 | **16** |
+| `addr_door_audit` UNREGISTERED | 15 | **15** |
+| `addr_door_audit` non-literal (its own blind spot) | 15 / 8 | **15 / 8** |
 | `unsatisfied_export_scan` names through a door | 848 | **848** |
 | `unsatisfied_export_scan` unsatisfied | 126 | **125** |
 | `runtime_census` called | 1003 | **1003** |
@@ -36,34 +55,38 @@ delta that was partly somebody else's.
 | `rawdoor_audit` | 607 sites, 0 UNGUARDED-CALL | 608 sites, **0 UNGUARDED-CALL** |
 | `detour_target_audit` | clean | **clean** |
 
-Set-diff of the unsatisfied-name list:
+Set-diff of the unsatisfied-name list (126 -> 125):
 
 ```
 removed: ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z
 added  : (none)
 ```
 
-**Every denominator is unmoved.** `called` did not grow, which is the check
-WAVE9.md's *"porting a function can GROW the cutover surface"* section asks for:
-the +1 registered address is this lane's own `RegisterRuntimeAddr(0x1800E1490)`
-and the +1 raw-door site is the probe's `ResolveExportRaw`, classified
-`OK-ORACLE`.
+**Every denominator is unmoved and exactly one thing moves in each column.** The
++1 registered address is this lane's own `RegisterRuntimeAddr(0x1800E1490)`; the
++1 raw-door site is the probe's `ResolveExportRaw`, classified `OK-ORACLE`; the
+one removed name is the symbol the lane was given. `called` did not grow, which
+is the check WAVE9.md's *"porting a function can GROW the cutover surface"*
+section asks for.
 
-### A SECOND instance of lane ADDR's own finding, caught by this before/after
+### The finding this section originally reported, and what survives of it
 
-The first AFTER measurement read **297 call sites / 200 distinct addresses** for
-a lane that adds no `ResolveAddr` at all. Both extra rows were **COMMENT PROSE**:
-two banner lines in this lane's files spelled `ResolveAddr(Module::Runtime, 0x…)`
-verbatim, and `addr_door_audit.py`'s `CALL_LIT` regex counted them as call sites.
+The FIRST measurement — old tool, both sides — read **297/200** for a lane that
+adds no `ResolveAddr` at all, and the two extra rows were two of this lane's own
+banner lines spelling `ResolveAddr(Module::Runtime, 0x…)` verbatim inside a
+comment. That was an independent reproduction of the defect `ae8195b` was
+committed to fix, found because a lane that knew its own delta should be ZERO
+noticed a two. **A lane expecting a small positive delta would have accepted it.**
 
-`ae8195b` is *"the address-door census was reading prose as code"*. So the fix
-there did not cover this case — **the checker still reads prose**, and the only
-reason it was noticed is that a lane that knew its own delta should be zero saw
-a two. A lane that expected a small positive delta would have accepted it. Both
-lines are rephrased and the count is back to 295/198; the checker is lane ADDR's
-to fix and this is the evidence.
+`f5dbeb8`'s comment-aware version makes the prose invisible, so the two lines no
+longer need rephrasing — but the rephrasing is KEPT. It costs nothing, and a
+comment that reads as code is worth not writing whatever the current tool does
+with it.
 
----
+**What does NOT survive:** the claim, in the first version of this document, that
+lane ADDR's fix was incomplete. It was written against `ae8195b`, which does not
+contain the fix; `f5dbeb8` does, and against `f5dbeb8` the prose is correctly
+ignored. Withdrawn.
 
 ## 2. `Input::Device::Update` — the closure, counted before a line was written
 
@@ -436,7 +459,20 @@ Two things done about it, neither of them a port:
     OUR scripted device. Nothing proves the DLL's loop and ours agree on a
     failure the DLL's own Acquire would produce.
 
-### 8.1 Environment, and where the commits actually are
+### 8.1 Where this lane is, and where its commits are
+
+* **Worktree:** `C:\code\GIT\untitled_rev_eng_project\.claude\worktrees\engio-lane`
+  — created by this lane, shared with nobody, `git status` empty. The earlier
+  worktree (`…/w9-addr-089e6eb4/.claude/worktrees/engio-089e6eb4`) was nested
+  INSIDE lane ADDR's tree and had lane MOD's files leak into it; abandoned for
+  that reason, not because anything in it was wrong.
+* **Branch:** `wave9/lane-engio-work`. NOT `wave9/lane-engio`, which the main
+  checkout took.
+* `git diff --stat ae8195b wave9/lane-engio-work` is **12 files, all this
+  lane's** — checked before handing the branch over, per the standing rule that
+  a lane can silently write into a neighbour's worktree during the churn.
+
+### 8.2 Environment damage, and what was done about it
 
 The session was pinned into **other lanes' worktrees** and its working directory
 was silently relocated three times mid-run, twice landing edits in another

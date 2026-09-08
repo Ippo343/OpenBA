@@ -1,0 +1,33 @@
+Lane ENGIO re-measurement -- clean trees from the object store, ONE tool version
+BEFORE = ae8195b (base)   AFTER = 2d763dc (tip)   TOOLS = f5dbeb8 on both sides
+
+-------- BEFORE --------
+by-address call sites   270
+distinct addresses      192
+registered addresses    1186  (647 literal + 539 mint-supplied)
+UNREGISTERED            15
+(non-literal call sites 15, non-literal registrations 8 -- invisible to both halves; see --nonliteral)
+unsatisfied_export_scan: 848 distinct names resolved through a door; 129 have neither a port nor a mint entry
+  of those, 126 have at least one site OUTSIDE a diff guard:
+rawdoor_audit: 607 raw-door sites scanned, 0 UNGUARDED-CALL, 66 DEFERRED-CALL
+detour_target_audit: clean -- every detour target resolves RAW
+Input                63       28       22        0   78.6%
+TOTAL              4632     1003      771        3   76.9%
+
+-------- AFTER --------
+by-address call sites   270
+distinct addresses      192
+registered addresses    1187  (648 literal + 539 mint-supplied)
+UNREGISTERED            15
+(non-literal call sites 15, non-literal registrations 8 -- invisible to both halves; see --nonliteral)
+unsatisfied_export_scan: 848 distinct names resolved through a door; 128 have neither a port nor a mint entry
+  of those, 125 have at least one site OUTSIDE a diff guard:
+rawdoor_audit: 608 raw-door sites scanned, 0 UNGUARDED-CALL, 67 DEFERRED-CALL
+detour_target_audit: clean -- every detour target resolves RAW
+Input                63       28       23        0   82.1%
+TOTAL              4632     1003      772        3   77.0%
+
+-------- set-diff of the unsatisfied names --------
+removed:
+  ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z
+added:
