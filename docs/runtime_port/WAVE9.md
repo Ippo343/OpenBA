@@ -1735,6 +1735,18 @@ count). The md5 tells you which exe is on disk at the moment you look; the log l
 you which exe *ran*. Derive the expected string from your own build each time — lane
 PICK's changed the moment its registrations grew.
 
+### A probe that ALLOCATES cannot run from a `*PortInit` (lane PKG2)
+
+Lane PKG2's `Decompress` probe crashed writing through `null+0x640`. Nothing in the
+crash named the probe. The cause: it was called from `RtSystemPortInit`, and **that init
+runs before the allocator publishes its singleton** — so the very first allocation
+dereferences a null `_singleton` and lands on the critical section at `+0x640`.
+
+`+0x640` in a fault address is the allocator's lock offset and is therefore a signature:
+it means "something took the allocator's CS before the allocator existed". Schedule a
+probe that allocates on its first *real* call instead, the way lane PICK's grid probe
+self-schedules.
+
 ### Two more rules the lanes paid for
 
 **A family found by a caller-driven survey is bounded BELOW, not above** (lane UIC). Lane
