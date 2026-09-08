@@ -6,6 +6,11 @@
 //                                 UpdateLoop / Loader / LoaderLoop /
 //                                 DialogLoopT / DialogLoaderLoopT
 //   BANISHED_RT_ENGINECORE=0  ... just Engine::Engine + Engine::MainLoop (lane B)
+//   BANISHED_RT_MAINLOOPRUN=0 ... just MainLoop::Run + MainLoop::Update (lane
+//                                 ADDR). Its own switch because Run is the
+//                                 process's ONE main loop and has no oracle:
+//                                 a defect shows up as "the game does not run",
+//                                 not as a divergence row.
 //
 // Two lanes, two register functions, one aggregator — the Wave 6 shape
 // (runtime/src/video/rt_video_port.cpp), because Video likewise had lanes that
@@ -40,13 +45,14 @@
 extern int RtEngineLoopsRegister();     // loops.cpp            (lane A)  — 12
 extern int RtEngineCoreRegister();      // engine.cpp           (lane B)  — 3
 extern int RtEngineLifecycleRegister(); // engine_lifecycle.cpp (lane ENG) — 8
+extern int RtEngineMainLoopRunRegister();// mainloop_run.cpp    (lane ADDR)— 2
 
 void RtEnginePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ENGINE")) {
         printf("[RtPort] BANISHED_RT_ENGINE=0 -- Engine namespace port disabled\n");
         return;
     }
-    int loops = 0, core = 0, life = 0;
+    int loops = 0, core = 0, life = 0, mlrun = 0;
     if (RtWaveEnabled("BANISHED_RT_ENGINELOOP")) loops = RtEngineLoopsRegister();
     if (RtWaveEnabled("BANISHED_RT_ENGINECORE")) core  = RtEngineCoreRegister();
     // Wave 9 lane ENG. Kept as its OWN switch rather than folded into
@@ -58,13 +64,24 @@ void RtEnginePortInit() {
     // bytes, so the shadow would report skipped_pre_startup and call the run
     // INVALID. See docs/runtime_port/WAVE9_LANE_ENG.md §5.
     if (RtWaveEnabled("BANISHED_RT_ENGINELIFE")) life = RtEngineLifecycleRegister();
+    // Wave 9 lane ADDR. MainLoop::Run + MainLoop::Update, on their OWN switch
+    // because Run is the process's single main loop: it is called once from
+    // game_main.cpp:176, never returns until quit, and CANNOT have a diff
+    // oracle. If it is wrong the symptom is "the game does not run", with no
+    // divergence row to read, so the integrator needs to be able to A/B this
+    // one function without also giving up the Engine lifecycle ports.
+    if (RtWaveEnabled("BANISHED_RT_MAINLOOPRUN")) mlrun = RtEngineMainLoopRunRegister();
     printf("[RtPort]   Engine loop family (lane A): %d exports registered "
            "(LoadResources held back -- no oracle, see WAVE8_LANE_A.md)\n", loops);
     printf("[RtPort]   Engine::Engine + MainLoop (lane B): %d exports registered "
-           "(3 held back: 2 detour-required + Run, plus _singleton which is DATA -- "
-           "see WAVE8_LANE_B.md)\n", core);
+           "(2 held back: both detour-required, plus _singleton which is DATA -- "
+           "see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)\n", core);
+    printf("[RtPort]   MainLoop::Run + Update (lane ADDR): %d exports registered "
+           "(Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME "
+           "doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE "
+           "by construction -- see WAVE9_LANE_ADDR.md)\n", mlrun);
     printf("[RtPort]   Engine lifecycle (lane ENG): %d exports registered "
            "(ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, "
            "calls=0 by construction -- see WAVE9_LANE_ENG.md)\n", life);
-    printf("[RtPort] Engine: %d exports registered\n", loops + core + life);
+    printf("[RtPort] Engine: %d exports registered\n", loops + core + life + mlrun);
 }
