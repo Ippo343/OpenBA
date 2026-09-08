@@ -710,6 +710,48 @@ number, on an ordinary run, today.
 — never exercised by the shadow) and §5.3 (the 5% `sim ms/iteration` gate, three runs per
 config on the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
 
+### Finding 3 — the "latent wild write" reading is RULED OUT; three stacks, and lane M was right
+
+Lane N, 2026-09-08, `85f1eca`. **All three probe tallies now come from runs that ACTUALLY
+CRASHED** — the caveat that made the earlier clean tallies weak.
+
+**1. THE HEAP IS INTACT WHEN TEARDOWN BEGINS.** Bracketing teardown with the allocator
+boundary-tag walk (`BANISHED_TEARDOWN_HEAPWALK`) on a run that crashed:
+`'shutdown-enter': no tag corruption` and `free-list forward links also intact`.
+**So "one latent wild write during the sim with a moving victim" is RULED OUT. The
+corruption is produced by the TEARDOWN CASCADE ITSELF** — for stack A, in the window between
+the 135th and 136th `8e30` call. That is the discrimination that was worth more than another
+repro, and it halves the hunt.
+
+**2. Eliminations now hold ON A CRASHING RUN:** `WorkSchedProbe 8e30calls=136 unfiled=135`,
+all three failure counters 0 — the 136th call IS the one that died, so **the scheduler family
+is eliminated on the run that faulted**. `ObjAudit` at shutdown-enter `count=92492 bad=0`,
+freed-while-registered 0 — **mode (A), whose signature matches this crash exactly, did not
+happen.** And the fault reproduces with `BANISHED_RT_DIFF` unset: **oracle-independent**.
+
+**3. THREE DISTINCT STACKS, tabulated rather than merged:**
+
+| | Path | Corrupt value |
+|---|---|---|
+| **A** | `EntityList_Shutdown +0x104` (mark loop) → … → `8e30`, faulting on `int k = *e` | `{low = 2 or 0x22, high = that run's heap prefix}` |
+| **B** | `EntityList_Shutdown +0x22e` (drain loop) → `RemoveEntity` → `Inert_ScalarDtor` → `FreeLocked` | boundary tag `0x0000000200000010` |
+| **C** | `Tutorial_Dtor +0x330` → recursive `TreeNodeFree_2df90` | node ptr `0x0000000200000020` |
+
+**A and C are the same shape** — a live pointer's LOW DWORD replaced by a small integer, and
+for A the high half is provably that run's heap prefix. **B is a boundary tag, so B may be a
+DIFFERENT DEFECT**; the data does not settle it and lane N does not pretend otherwise.
+
+**4. A reading lane N WITHDRAWS of its own:** that `0x200000010` is a free-block tag
+`{size,2}`. The allocator stores size in the low 41 bits
+(`blkBytes = (tag & 0x1ffffffffff) * 4`, `redzone_alloc.cpp:867`), so a 16-byte block tags as
+**4**. It is genuine corruption, not a misread tag.
+
+**WRITER STILL NOT FOUND, and not forced.** What the next lane inherits: the victim is one
+instruction; the write shape is **a 4-byte store of a small integer over a pointer's low
+half**; and because of result 1 **a hardware write watchpoint only has to cover TEARDOWN, not
+1,200 frames of sim** — which makes `standalone/hw_watch.cpp` cheap in a way it was not this
+morning.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
