@@ -956,13 +956,7 @@ waiting.
 
 **⚠️ THE INSTRUMENT SUPPRESSES THE FAULT.** A silent, shim-independent boundary-tag scan
 called between teardown steps (`BANISHED_TEARDOWN_BRACKET=16`) gave **10 of 10 stress runs
-clean, zero faults**, against a prior rate of ~4 in 10 — **p ≈ 0.006. Suppression, not
-luck.** A fault that vanishes under a purely READ-ONLY timing perturbation is
-timing-dependent, which points at a **RACE** rather than a straight-line logic error — and
-would explain the intermittency, the three different victims, and the same small-integer
-shape landing sometimes on a pointer's low half and sometimes on a tag's HIGH half. *Stated
-as the best-supported direction, explicitly NOT as a claim.* **The next person will otherwise
-build the same bracket and conclude the bug is fixed.**
+clean, zero faults**, against a prior rate of ~4 in 10 — **⛔ **THE p-VALUE AND THE SUPPRESSION READING ARE BOTH WITHDRAWN — lane N, 2026-09-08.** Control runs settled it: **6 of 6 clean with the bracket OFF on the SAME binary**, giving **16 consecutive clean runs** — which refutes BOTH candidate readings. **NOT "the instrument suppresses it"** (it stays silent with the scan off), and **NOT "the lanes E/H merge fixed it"** (build `02:05:47` already contained that merge and **faulted on its first run**). What remains is that the bracket code — which performs **no writes** and is inert with its env var unset — changes the code and stack **LAYOUT** of `EntityList_Shutdown_c3d30` and the timing of the cascade. So the best-supported reading is a **LAYOUT- or TIMING-SENSITIVE fault**, which is also the only one that comfortably covers the intermittency, the three victims, and one write shape landing sometimes on a pointer's low half and sometimes on a tag's high half. **The `p ≈ 0.006` was quoted against a ~40% baseline measured across a MIX of builds and env combinations; no controlled baseline was ever established on one fixed binary, so no rigorous probability attaches.** Strong informal evidence, nothing more. **NOTHING HERE FIXES THE DEFECT** — the next person will otherwise build the same bracket, watch it go quiet, and close it.
 
 **WHY DR0-DR3 CANNOT BE USED HERE** (write this down so nobody rediscovers it): a hardware
 watchpoint needs an ADDRESS, and **this victim's address is not knowable until after it has
