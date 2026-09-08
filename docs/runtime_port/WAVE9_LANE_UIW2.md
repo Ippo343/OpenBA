@@ -781,8 +781,12 @@ never entered, not entered-and-silent. `CacheText` is reached only when a
 `SetValue` changes a value, so its absence is inherited from a caller that never
 ran.
 
-**The reason is now known, and it is not in this lane.** See §9d. Knowing the
-reason does not retire the miss: the assertion was made before the check.
+**The reason is NOT known.** An earlier revision of this sentence said it was and
+pointed at §9d; §9d is retracted, and §9f re-derives what is actually
+established: cause 3 is ruled out structurally, cause 2 is ruled out three ways,
+and cause 1 is open and now **observable** rather than argued. **That does not
+retire the miss either way** -- the assertion was made before any check, and it
+would still have been an unchecked assertion had it turned out true.
 
 **What remains genuinely open for `CacheText`:** its **float** branch has never
 executed anywhere. That is where `_showSign` selects `"%+.2f"` vs `"%.2f"` and
@@ -864,8 +868,21 @@ be read as confirming it. Cf.
 ### 9e. A FALSIFIABLE PREDICTION, left standing so it can fail
 
 `BANISHED_AUTOTUTORIAL=1` with the diff harness has not been run. **This lane
-predicts `SetValueInt` will show `calls=0` there too**, because the same
-unregistered `statusbarui.cpp` owns the status bar on that route.
+predicts `SetValueInt` will show `calls=0` there too.**
+
+> ⚠ **THE PREDICTION STANDS; ITS STATED REASON IS GONE.** It originally read
+> *"because the same **unregistered** `statusbarui.cpp` owns the status bar on
+> that route"*, and §9d retracted that premise — the file registers. The
+> prediction is left standing anyway, because a prediction that survives the
+> removal of its argument is still falsifiable and still worth marking right or
+> wrong; but it is now a **bare guess with no supporting reason**, and it must
+> be read as one. **A `calls=0` on the tutorial route does NOT confirm it** —
+> confirmation would require the observations in §9f (`[StatusBarUI] SA first
+> OnUpdate` and `SA build OK`) showing *why*. Cf.
+> [[reference-calls-zero-can-mean-always-took-the-uncovered-branch]].
+>
+> **The question mark this section raised over lane M's Finding 1 therefore
+> stays OPEN**, and is not settled in either direction by anything §9d claimed.
 
 **If instead it shows a large `calls=`, this prediction is wrong and something
 other than `statusbarui.cpp` drives `SetValueInt`** — which is the thing to find,
@@ -879,3 +896,109 @@ Recorded here rather than in a message so that whoever runs it can mark this
 paragraph right or wrong. Comparing a max-over-cells against a single cell and
 calling the difference a regression was a mistake this lane and the integrator
 both nearly made, and the guard against it is that the prediction names the cell.
+
+### 9f. THE `SetValueInt` ZEROS, RE-DERIVED WITHOUT THE DEAD-CODE PREMISE
+
+§9d's retraction voided the *explanation* for the two zeros. This section rebuilds
+it. **The load-bearing step never needed §9d and should have been stated first** —
+that is the real methodological failure here, larger than the wrong grep: a
+structural argument was available that settles half the taxonomy on its own, and
+this lane reached past it for a source claim instead.
+
+#### The structural fact that rules out cause 3 by itself
+
+`RT_DIFF_BEGIN` registers the site **on entry, before any branch**:
+
+```cpp
+static RtDiffSite rt_diff_site__ = { NAME };
+const bool rt_diff_on__ = RtDiffEnabled();
+if (rt_diff_on__) RtDiffRegister(&rt_diff_site__);
+```
+
+and `RtDiffSummary()` walks **every** registered site and prints a row for each,
+regardless of `calls`. So:
+
+> **A site ABSENT from the summary was never ENTERED. A site entered and then
+> early-outed is PRESENT with `calls=0`.**
+
+`UI::NumberElement::SetValueInt` is absent from all 515 rows of the gameplay cell
+and from the pasture cell. Cause 3 — *"reached every time, down a branch the
+oracle does not cover"* — produces a **present row**, which is exactly the shape
+`String::operator!=` shows at `calls=2 worked=0`. It cannot produce absence.
+**Cause 3 is ruled out for this site, and it was ruled out before anyone looked
+at `statusbarui.cpp`.**
+
+The integrator's framing — *"a `calls=0 worked=N` is a live-but-unverified body,
+not an unexercised one"* — is right, and it applies to a row that **exists**.
+Here there is no row.
+
+#### Cause 2 is ruled out three independent ways
+
+| Check | Result |
+|---|---|
+| Is the caller's registration live? | Yes — `REGISTER_TYPE` static initializer, confirmed in the linked binary (§9d) |
+| Does the caller's door name the symbol we registered? | **Exactly.** `widgets_input.cpp:363` registers `?SetValue@NumberElement@UI@@QEAAXH@Z`; `engine_funcs.cpp:1901` resolves the identical string. Same for the `@M@Z` float overload |
+| Does `fn_*` bind to our port or the DLL? | Ours — `RuntimePortInit()` (`main.cpp:1715`) runs before `EngineFuncsInit()` (`:1741`), and `ResolveExport` consults the port registry first |
+
+**So if `StatusBarUI_Startup` runs, our body runs and the site declares.** The
+zeros are therefore a statement about whether that function executed, and about
+nothing else.
+
+#### Cause 1 is what remains, and it is OBSERVABLE rather than inferrable
+
+This is the part §9d skipped past by reasoning about what a toolbar is for.
+`StatusBarUI_Startup` — which owns all 15 `fn_NumberElement_SetValueInt` call
+sites — is reached from exactly two minted vtable slots, both behind guards:
+
+```
+g_vt[7] = W_Refresh    -> Bound && Ready && TownReady; build if !Built; then Startup
+g_vt[8] = W_OnUpdate   -> same guards; builds on first call, then Startup every 30th
+```
+
+and the file prints its own state. **These are the observations to make; do not
+re-derive it from the source a third time:**
+
+| Log marker (`statusbarui.cpp`) | What its presence/absence means |
+|---|---|
+| `[StatusBarUI] SA first OnUpdate: self=… bound=… built=… ready=…` (`:834`) | The controller's `OnUpdate` ran at all. **It prints the guard values**, so if present it names which guard blocked |
+| `[StatusBarUI] SA build OK — elements bound, first refresh` (`:872`) | Elements bound and `StatusBarUI_Startup` ran at least once |
+| `[StatusBarUI] SA stock slots (cur@+0):` (`:855`) | The stock read ran |
+
+**The decision this yields, including the outcome that implicates this lane:**
+
+| Observation | Reading |
+|---|---|
+| No `SA first OnUpdate` | The controller never updated — cause 1, upstream of the guards. Zeros explained, nothing wrong with the port |
+| `SA first OnUpdate` present with `bound=0` / `ready=0` / `built=0` | Cause 1, and the line names the guard. Zeros explained |
+| **`SA build OK` present and `SetValueInt` STILL absent** | **Cause 1 is ruled out too, and the zero is a real defect on our side.** That is the outcome this lane must come back for |
+
+**A consistency check that does not depend on the status bar at all:** every
+other caller of `fn_NumberElement_SetValueInt` is a panel that has to be opened —
+`townhallui` (20 sites), `tradeui` (9), `productionui`, `professionui`,
+`citizenui`, `storageui`, `debugui`, `mapparamsdialog`. The status bar is the
+only always-on one. A cell that opened no panel and in which the status bar had
+not built yields zero **without anything being wrong**, which is why the zeros
+were never strong evidence of a defect in the first place — and why reaching for
+"the caller is dead code" was over-reading them.
+
+#### The lane UID analogy, corrected rather than withdrawn
+
+§9d cited lane UID's half-registered `Collection::Array<8>::SetSize` as "the same
+shape one level up". **The analogy was wrong; UID's finding is not.** Checked
+independently: the fix is live at `runtime/src/object/internal.cpp:1016`,
+`RegisterRuntimeAddr(0x18002fca0, &RtObject_ArrayPtrSetSize_18002fca0)`, with a
+comment stating the body was *"ported since Wave 3 and never registered"*. It
+stands on its own evidence.
+
+What was invalid was transplanting UID's test across a boundary it does not
+cross:
+
+| Body lives | Its publisher | Is "no address in `standalone/`" evidence of deadness? |
+|---|---|---|
+| Runtime-side, reached by `ResolveAddr(Module::Runtime, addr)` | `RegisterRuntimeAddr(addr, &fn)` | **YES** — absence is real deadness. Lane UID is here |
+| Exe-side promoted type / dialog controller | `REGISTER_TYPE` static initializer, which mints its own vtable | **NO** — the retail address is never registered even when correct. §9d was here |
+
+**And the check that settles it regardless of spelling is the LINKED BINARY, not
+the source:** `nm reimpl-x64.exe | grep _GLOBAL__sub_I_<any symbol from that TU>`
+answers "does this file's static-initializer registration actually run" in one
+command, and neither of §9d's two source greps could have.
