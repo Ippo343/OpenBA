@@ -773,6 +773,35 @@ const ArraySpec kSpec_Window = {                  // 0x180024c10  Array<Window>
     "Array<CompressedStream::Window>", 0x18, 8, &Assign18, &InitWindow, nullptr,
     true, 0, 0, 0, 0, 0, 0 };
 
+// WAVE 9 LANE GFX3, 2026-09-08 — 0x18005fb00, Array<Graphics::Scene::Node>.
+// The node array `Graphics::Scene`'s grid appends to. Read out of its own body
+// rather than inferred from the element type, and it lands one field away from
+// kSpec_Window, which is a lookalike this lane had to rule out rather than
+// adopt (fourth time this family has offered a wrong answer by resemblance;
+// the earlier three differed in an alignment immediate, a shift, and a trailing
+// call):
+//   * stride 0x18 — `LEA RCX,[RAX+RAX*2]; SHL RCX,3` at 18005fb53/fb57. Same
+//     as kSpec_Window.
+//   * align 8 — `MOV EDX,0x8` at 18005fb5b. Same as kSpec_Window.
+//   * assign = three plain qword moves at +0x00/+0x08/+0x10 (18005fba2..fbb4),
+//     with no zero-first store. Same body as Assign18.
+//   * *** init = NONE. *** This is the difference. 0x180024c10 has an `else`
+//     arm that builds an empty Window; 0x18005fb00's loop has NO else arm at
+//     all — `CMP R8,RSI; CMOVL RCX,R10` picks the old element or the FILL and
+//     there is no third case, because every caller of this address passes a
+//     fill. Reusing kSpec_Window would have run InitWindow over the new tail on
+//     any two-argument call, writing three qwords retail never writes.
+// So it is a distinct row, and it is the three-argument form only.
+//
+// The element's +0x14 is a DON'T-CARE the caller supplies as an uninitialised
+// stack dword (see runtime/src/graphics/scene_grid.cpp's GridAdd banner and
+// runtime/types/graphics/Scene.h). The assign COPIES it, faithfully; nothing
+// here has to know that, and no oracle may compare it.
+const ArraySpec kSpec_Node18 = {                  // 0x18005fb00  Array<Scene::Node>
+    "Array<Graphics::Scene::Node>", 0x18, 8, &Assign18,
+    nullptr,   // NO else arm in retail's loop — the three-argument form only
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_PtrZero = {                 // 0x180008d60, 0x1800764c0
     "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1290,6 +1319,12 @@ J3_ENTRY3(180048fe0, kSpec_Fill8Z)      // UI:       RadioElement::_checkBoxes(+
 J3_ENTRY3(1800298f0, kSpec_PkgEntry)    // IO:       PackageFile's entry array [NON-TRIVIAL]
 J3_ENTRY3(180034860, kSpec_StringRef)   // UI:       ComboElement::_strings   (+0xe8) [NON-TRIVIAL]
 J3_ENTRY3(1800417d0, kSpec_GraphSeries) // UI:       GraphElement::_graphs    (+0xf0) [NON-TRIVIAL]
+// WAVE 9 LANE GFX3 — the Graphics::Scene node array. Registered HERE and not in
+// runtime/src/graphics/scene_grid.cpp on purpose: it is a member of this
+// family, and a private second copy of SetSizeCore in the graphics tree is
+// exactly the drift this parameterisation exists to prevent. Its oracle is the
+// graphics grid probe, whose append arm drives it against the shipped body.
+J3_ENTRY3(18005fb00, kSpec_Node18)      // Graphics: Array<Scene::Node>
 
 #undef J3_ENTRY3
 
@@ -1398,6 +1433,8 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18004f8e0, (void*)&RtColl_ArraySetSizeFill_18004f8e0);
     RegisterRuntimeAddr(0x180076900, (void*)&RtColl_ArraySetSizeFill_180076900);
     RegisterRuntimeAddr(0x18007a0d0, (void*)&RtColl_ArraySetSizeFill_18007a0d0);
+    // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
+    RegisterRuntimeAddr(0x18005fb00, (void*)&RtColl_ArraySetSizeFill_18005fb00);
     // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
     RegisterRuntimeAddr(0x180024fe0, (void*)&RtColl_ArraySetSizeFill_180024fe0);
     RegisterRuntimeAddr(0x18004bfc0, (void*)&RtColl_ArraySetSizeFill_18004bfc0);

@@ -1,0 +1,6 @@
+[GfxGridProbe] comparisons=19 mismatches=0
+[GfxGridProbe] work: addAppend=7 addReuse=3 threadEmpty=7 threadRing=4
+[GfxGridProbe] work: unthreadHead=1 unthreadMiddle=2 unthreadEmptied=1
+[GfxGridProbe] work: reindexFirst=10 reindexMoved=1 reindexNoop=8 levels=4 maxRing=4
+[GfxGridProbe] freeGlobals: post-state clean, reclamation agrees (blocks reclaimed ours=3 theirs=3)
+[GfxGridProbe] PASS -- every ported grid body agreed with the shipped one

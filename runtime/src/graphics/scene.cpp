@@ -252,7 +252,21 @@ void* RtMemAlloc(uint64_t size, int align) {
 //     through null, on the first frame that draws or the first scene built.
 //     They are HARD cutover dependencies, not a watch list.
 //
-// Registering them is NOT sufficient and porting them is NOT this lane's work:
+// *** ALL SEVEN ARE NOW CLOSED (2026-09-08). *** Read the paragraph below as
+// the history it is, not as the current state:
+//
+//   0x18001f470  BoxTransform    — lane PICK, runtime/src/picking/scene_grid.cpp
+//   0x180009c30  FreeLocked      — lane COLL, runtime/src/collection/linkedlist.cpp
+//   0x18005e4a0  GridInit    \
+//   0x18005e5e0  GridAdd      |
+//   0x18005f090  GridUnthread |  lane GFX3, runtime/src/graphics/scene_grid.cpp
+//   0x18005ee30  GridReindex  |  (with 0x18005f4b0 GridThread and 0x18005fb00
+//   0x18005f1f0  FreeGlobals /    Array<Node>::SetSize, their closure)
+//
+// So every forwarder below now reaches a PORT, because ResolveAddr consults the
+// port registry first. Each one's own comment says which lane owns it.
+//
+// Registering them was NOT sufficient and porting them was NOT lane GFX2's work:
 // they are unexported Runtime internals with no port anywhere in the tree.
 // What IS fixed here is the second half of the defect commit 309c015 found in
 // this same file: `static Fn fn = ResolveAddr(...)` CACHES A NULL FOREVER, so
@@ -268,7 +282,11 @@ void* RtMemAlloc(uint64_t size, int align) {
 // retail 0x180009c30: `if (p) { Enter; Free(_singleton, p); Leave; }`. Its
 // first parameter is ignored by the body but is passed (`this`) by retail, so
 // it is passed here too.
-// CUTOVER: unexported, unported, unregistered — a null call. See the block above.
+// *** PORTED AND REGISTERED (Wave 9 lane COLL) *** as
+// `RtColl_FreeLocked_180009c30` in runtime/src/collection/linkedlist.cpp, which
+// establishes instruction by instruction that it IS `MemFree` with an ignored
+// leading argument. This forwarder therefore no longer reaches the DLL, and the
+// row is closed for cutover. ONE registration, there: do not add a second here.
 void RtFreeLocked(void* ignoredThis, void* p) {
     using Fn = void (*)(void*, void*);
     static Fn fn = nullptr;
@@ -329,6 +347,20 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
     return fn(xf, ret);
 }
 
+// ---------------------------------------------------------------------------
+// THE FIVE GRID FORWARDERS BELOW NO LONGER REACH THE DLL (Wave 9 lane GFX3,
+// 2026-09-08). All five addresses are ported and registered in
+// runtime/src/graphics/scene_grid.cpp, and `ResolveAddr` consults the port
+// registry FIRST — so every one of these now executes our body. Their closure
+// went with them: 0x18005f4b0 (the thread-in, in that same file) and
+// 0x18005fb00 (Array<Scene::Node>::SetSize, added to lane Q's family in
+// runtime/src/collection/array.cpp). Kill switch `BANISHED_RT_GFXGRID=0` puts
+// all five back on the DLL.
+//
+// The descriptions kept below are what each retail body does and are still
+// accurate; what changed is WHO executes it.
+// ---------------------------------------------------------------------------
+
 // The Scene grid initialiser — retail 0x18005e4a0. Seeds cellSize / half-cell /
 // level count, then SetSize()s the three int32 arrays (8 level offsets seeded
 // {0,1,5,0x15,0x55,0x155,0x555,0x1555}, 0x5555 cell heads filled with -1 and
@@ -356,6 +388,12 @@ uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
 // The grid unthread — retail 0x18005f090. Splices node `id` out of its cell's
 // chain (fixing the cell head at Scene+0x30 when the node was the head) and out
 // of the two int32 links at node+0x08 / node+0x0c.
+//
+// THE CHAIN IS CIRCULAR, NOT NULL-TERMINATED — a lone node's `_next` and `_prev`
+// both name the node itself (0x18005f4b0's empty-cell arm at 0x18005f51c). That
+// is why the splice stores are unconditional and why there is a SECOND head fix.
+// See scene_grid.cpp's banner; a null-terminated reading of it makes retail look
+// like it writes sixteen bytes in front of the node buffer, and it does not.
 void RtSceneGridUnthread(Scene* self, int32_t id) {
     using Fn = void (*)(Scene*, int32_t);
     static Fn fn = nullptr;
@@ -1380,8 +1418,14 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // Six calls and nothing else, in retail's order: the global list first, then
 // the four int32/uint32 Arrays from +0x50 down to +0x20, then the node Array at
 // +0x10. Each callee is one COMDAT instantiation of Array<T>::~Array (or, for
-// the list, the walk-and-free at 0x18005f1f0); they stay in the DLL because
-// every one of them frees under the allocator's Win32 critical section.
+// the list, the walk-and-free at 0x18005f1f0).
+//
+// *** NONE OF THE SIX IS IN THE DLL ANY MORE. *** This comment used to end
+// "they stay in the DLL because every one of them frees under the allocator's
+// Win32 critical section", and that reason dissolved twice: lane Q ported the
+// five `Array<T>::~Array` instantiations, and lane GFX3 ported 0x18005f1f0.
+// Both reach the heap through the ported `MemFree` static, so nothing here
+// needs <windows.h> and nothing here is a cutover door.
 //
 // ORACLE: post-state only, and that is all it can be. Running the original
 // afterwards would double-free every buffer. What is checked is what retail's

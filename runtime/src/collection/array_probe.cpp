@@ -606,6 +606,10 @@ const Target kJ3Trivial[] = {
     { 0x18004f8e0, &rtcoll::kSpec_Fill16,    3,     0 },
     { 0x180076900, &rtcoll::kSpec_Fill8Z,    3,     0 },
     { 0x18007a0d0, &rtcoll::kSpec_Fill8Z,    3,     0 },
+    // Wave 9 lane GFX3 — Array<Graphics::Scene::Node>. Three-argument only:
+    // 0x18005fb00's loop has no else arm, so a two-argument case would be
+    // driving an arm retail does not have.
+    { 0x18005fb00, &rtcoll::kSpec_Node18,    3,     0 },
 };
 
 // Seeded exactly like the other thirteen except for each spec's own

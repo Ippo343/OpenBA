@@ -110,6 +110,7 @@ extern const ArraySpec kSpec_Fill8;       // 0x18001f990
 extern const ArraySpec kSpec_Fill8Z;      // 0x180076900, 0x18007a0d0
 extern const ArraySpec kSpec_Fill4;       // 0x180023830
 extern const ArraySpec kSpec_Fill16;      // 0x18004f790, 0x18004f8e0
+extern const ArraySpec kSpec_Node18;      // 0x18005fb00   (Wave 9 lane GFX3)
 extern const ArraySpec kSpec_Sprite38;    // 0x180004e30   NON-TRIVIAL
 extern const ArraySpec kSpec_EffectSlot;  // 0x180051390   NON-TRIVIAL
 extern const ArraySpec kSpec_StringExt;   // 0x180061480   NON-TRIVIAL
