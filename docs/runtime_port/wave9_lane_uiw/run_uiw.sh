@@ -25,6 +25,11 @@ TIMEOUT="${1:?timeout}"; shift
 
 [ -f "$SRC" ] || { echo "run_uiw: no built exe at $SRC"; exit 2; }
 
+# The session-wide advisory mutex over the shared game directory. It is the
+# right first gate; the two checks below it are the ones that do not go stale.
+"$ROOT/tools/game_dir_lock.sh" acquire lane-UIW 1800 || exit 2
+trap '"$ROOT/tools/game_dir_lock.sh" release lane-UIW' EXIT
+
 for i in $(seq 1 120); do
     tasklist 2>/dev/null | grep -qi 'reimpl' || break
     [ "$i" = 1 ] && echo "run_uiw[$LABEL]: waiting for another lane's run to finish..."
@@ -84,5 +89,21 @@ cp "$GAME_DIR/standalone_crash.log" "$HERE/${LABEL}_crash.log" 2>/dev/null
 AFTER="$(md5sum "$DST" 2>/dev/null | cut -d' ' -f1)"
 echo "run_uiw[$LABEL]: exe md5 after = $AFTER (want $WANT)"
 [ "$AFTER" = "$WANT" ] || echo "run_uiw[$LABEL]: *** THE EXE CHANGED UNDER US — DISCARD THIS RUN ***"
+
+# ACCEPTANCE MARKER — the check the on-disk md5 cannot make.
+# An md5 says which bytes are on disk NOW; it cannot say which binary produced
+# the log we are about to read (lane MOD's finding). This does: the site name
+# below is registered by RtUiWidgetsInRegister only in THIS lane's build, so its
+# presence in the run's OWN log is proof the log came from our exe.
+MARKER='UI::ComboElement::AddItem'
+if grep -q "$MARKER" "$HERE/${LABEL}_error.log" 2>/dev/null; then
+    echo "run_uiw[$LABEL]: acceptance marker PRESENT — this log is from lane UIW's build"
+else
+    echo "run_uiw[$LABEL]: *** ACCEPTANCE MARKER ABSENT — this log is NOT from our build, DISCARD ***"
+fi
+# Two [RtDiff] summary banners in one log means two processes wrote it.
+BANNERS=$(grep -c 'RtDiff\] ==== .* sites, .* calls' "$HERE/${LABEL}_error.log" 2>/dev/null)
+[ "${BANNERS:-0}" -le 1 ] || echo "run_uiw[$LABEL]: *** $BANNERS DIFF SUMMARIES IN ONE LOG — two processes wrote it, DISCARD ***"
+
 [ "$FOREIGN" = 0 ] || echo "run_uiw[$LABEL]: *** ANOTHER reimpl RAN CONCURRENTLY — the shared logs may be mixed ***"
 echo "run_uiw[$LABEL]: logs in $HERE/${LABEL}_*.log"

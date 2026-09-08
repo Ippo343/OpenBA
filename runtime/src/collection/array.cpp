@@ -615,7 +615,18 @@ void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
     /* +0x04 .. +0x07 deliberately untouched — retail does not write them */
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    RtColl_I32ArrayAssign(d + 8, s + 8);
+    // BY ADDRESS, not as a direct C++ call to the body two functions up — the
+    // same convention `Assign38Call` and `DestroyStringExt` above already
+    // follow for an element operation that is a CALL in retail. It is not
+    // pedantry: the FIRST version of this line called the inner body directly,
+    // which is the same instructions but skips the registered entry point, so
+    // `0x18001cdf0`'s diff site never fired and the run reported no coverage
+    // for a whole ported body. Retail's 0x1800418b1 is a CALL to that address;
+    // going through the registry is both faithful and instrumented.
+    using Fn = void* (*)(void*, const void*);
+    static Fn fn = nullptr;                 // cache a hit, retry a miss
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cdf0));
+    fn(d + 8, s + 8);
 }
 
 // 0x1800419b0, the destroy-range for the same element — and, exactly like
