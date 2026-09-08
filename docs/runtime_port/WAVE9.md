@@ -577,6 +577,54 @@ the DLL answers**, so unlike the mint and unlike every other cutover repair, thi
 (`Shutdown`/dtor/`operator=`/accessors) and §5.3 (the 5% perf gate, three runs per config on
 the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
 
+### Finding 3 — ORACLE-INDEPENDENT, scheduler family ELIMINATED, and the stack moved AGAIN
+
+Lane N, 2026-09-08, exe `01:33:19`, self-evidencing `[WorkSchedProbe] ARMED`.
+
+**1. THE CRASH IS ORACLE-INDEPENDENT — PROVED.** The stress cell with `BANISHED_RT_DIFF`
+UNSET faulted anyway (rc=3, ACCESS_VIOLATION). **Finding 3 is a real defect in the port, not
+an artifact of the diff harness.** A second oracle-off run of the same cell came back rc=0,
+so intermittency is unchanged at ~4 in 10 — the oracle is not what makes it fire.
+
+**2. THE SCHEDULER FAMILY IS ELIMINATED.** `8e30calls=280 unfiled=280 entryNotFound=0
+bucketNotFound=0 bucketRootNull=0` — every erase found its entry and erased it, and no call
+reached either state retail `0x1400f8f5e` would have faulted on. **The erase-no-op mechanism
+derived from source is NOT the cause**, and the five-tree enumeration has ruled out the
+family rather than found the culprit — the outcome the probe was built to be able to state,
+reported with the weight a hit would have carried. The `InternalFactory` handle-table audit
+was also run **during teardown for the first time** (its only scan point had been inside
+`Update`): `bad=0` at every checkpoint including shutdown-enter (count=92,777) and
+post-entitylist (count=738), `freed-while-registered total=0`. So mode (A) of
+`internal_factory_audit.h` — *"the next `~Internal` writes `*(int*)(freedPtr+0x08) = idx`"*,
+which has **exactly this crash's signature** — did not occur either.
+⚠️ **CAVEAT, not buried: both clean tallies come from runs that did NOT crash.** A clean
+probe on a non-crashing run is much weaker than a clean probe on a crashing one.
+
+**3. A DEFECT IN THE PROBE ITSELF, and the general rule it yields.** The first version armed
+its exit tally via `atexit` — **and the crash handler ends in `ExitProcess`, which skips
+`atexit` entirely.** So on the one run where the probe fired, it printed `ARMED` and then
+NOTHING, making the all-zero outcome **indistinguishable from "the probe is not in this
+binary"**. Both tallies now print from the crash handler too, beside `Dx11SeamReport`, which
+already existed for exactly this reason.
+> **A diagnostic whose output is destroyed by the event it diagnoses is not a diagnostic.**
+
+**4. THE STACK MOVED AGAIN — third distinct path.** REDZONE named the corrupt block this
+time: `CORRUPT block @00000238035f8248 tag=0x0000000200000010 size=34359738432`, and the
+path symbolizes to `GameUpdateLoop_Shutdown` → `EntityList_Shutdown_c3d30 **+0x22e**` →
+`EntityList_RemoveEntity +0x3b3` → `ComponentEntity_Dtor` → `DtorBody` →
+`RtObject_InternalBasePtr_DeletePtr` → `Inert_ScalarDtor` → `MemFree` → `FreeLocked`.
+**Note `+0x22e`, not the `+0x104` mark loop reported before — this is `EntityList::Shutdown`'s
+LATER DRAIN LOOP.** The corrupt tag is `{low=0x10, high=2}`: the same two-small-integers
+shape as the other three, now on an allocator **boundary tag** rather than a link.
+`Inert_ScalarDtor` is the shared stand-in destructor for components with no real dtor, and
+its own source comment describes the mode-(A) corruption **which the audit measured absent**.
+**The shape matches; the documented mechanism is measured absent; there is no replacement
+mechanism yet.**
+
+⚠️ **Three distinct stacks have now been reported for this fault** (lane M's `Tutorial_Dtor`
+→ `TreeNodeFree`, disproved; lane N's `WorkComponent` task-cleanup, family now eliminated;
+and this drain-loop path). **It should not be assumed these are one defect.**
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
