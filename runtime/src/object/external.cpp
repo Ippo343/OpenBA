@@ -192,6 +192,40 @@ External* RtObject_External_Ctor(External* self) {
     return self;
 }
 
+// ?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z
+//                                                        retail 0x1800066e0
+//
+// WAVE 9 LANE Y, 2026-09-08. Slot 4 of ??_7External@Object@@6B@ (0x1801547a0),
+// and until now a NAMED TRAP in the mint. The whole retail body, verbatim:
+//
+//     1800066e0  MOV EAX,0x1
+//     1800066e5  RET
+//
+// It is `External`'s virtual DEFAULT: the base class cannot compile anything,
+// so it answers CompileResult(1) and every resource type that can compile
+// overrides the slot. `?A` in the mangling means the enum is returned BY VALUE,
+// but a `W4` enum is 4 bytes, so it comes back in EAX and there is NO hidden
+// return slot — the arg count matches the name (this, const Filename&) with
+// nothing shifted (reference_hidden_retslot_wild_write.md checked, not assumed;
+// the returning-a-CLASS-by-value rule that bites GetPath below does not apply
+// to a scalar enum).
+//
+// `path` is genuinely dead: RDX is never read in the two instructions. It is
+// kept in the signature because the vtable slot's type demands it.
+//
+// ORACLE: RT_DIFF_SCALAR against the shipped body. The function is pure — no
+// stores, no calls, no reads of `this` — so replaying it is free and the
+// comparison is exact rather than a shape check.
+uint32_t RtObject_External_Compile(External* self, const void* path) {
+    RT_DIFF_BEGIN("Object::External::Compile");
+    const uint32_t ours = 1u;
+    RT_DIFF_SCALAR(ours,
+        RtOriginal<uint32_t (*)(External*, const void*)>(
+            "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z")(
+                self, path));
+    return ours;
+}
+
 // ??1External@Object@@UEAA@XZ  retail 0x1800bc950
 //
 // Order matters and is retail's: stamp External's vtable (so a virtual called
@@ -460,7 +494,30 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
 //   * Retail does NOT null-check the type-map lookup: a type id absent from the
 //     map falls out of the search loop with a null node and is then read at
 //     +0x08. Faithful, unguarded, same argument as GetReferenceId above.
-static void** g_pFactorySingleton = nullptr;   // Runtime 0x1801fc6e8-family; see below
+// WAVE 9 LANE Y, 2026-09-08 — this used to be resolved ONCE inside
+// RtObjectExternalRegister() and cached here. That is the frozen-cache defect
+// (WAVE9.md, "caches a null forever on the first call"), and the DLL-absent
+// boot MEASURED it: `RtObjectPortInit()` runs at resolve_standalone.cpp:325 and
+// `RtDataMintInit()` at :405, so at cutover the resolve happened EIGHTY LINES
+// of init before the minted storage for `?_singleton@Factory@Object@@0PEAV12@EA`
+// was registered, and the cache froze on null for the life of the process.
+// Attempt 04 names it in its own words:
+//     [RtResolveEarly]   BYPASS?   caller=…  "?_singleton@Factory@Object@@0PEAV12@EA"
+//     [RtUnresolved] 1  …  ?_singleton@Factory@Object@@0PEAV12@EA
+// The symptom would NOT have been a crash. `factoryRoot` null makes FindNext's
+// inlined IsDerivedFrom walk zero nodes, so every derived-type query silently
+// finds nothing — a wrong answer with a healthy-looking pointer, which is the
+// failure mode this file's own header warns about one section down.
+//
+// RtResolveCached caches a HIT and RETRIES a miss, naming it once, so the mint
+// registering later is picked up. Deliberately NOT resolved at registration
+// time: nothing here may assume an init ordering it does not control.
+static void* g_factorySingletonCache = nullptr;   // Runtime 0x1801fc6e8
+
+static void** FactorySingletonSlot() {
+    return reinterpret_cast<void**>(RtResolveCached(
+        "?_singleton@Factory@Object@@0PEAV12@EA", &g_factorySingletonCache));
+}
 
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
                                                   uint32_t typeId,
@@ -488,9 +545,10 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
     }
 
     const External* ours = nullptr;
+    void** pFactorySingleton = FactorySingletonSlot();
     const uint8_t* factoryRoot =
-        g_pFactorySingleton ? *reinterpret_cast<const uint8_t* const*>(*g_pFactorySingleton)
-                            : nullptr;
+        pFactorySingleton ? *reinterpret_cast<const uint8_t* const*>(*pFactorySingleton)
+                          : nullptr;
 
     while (cursor != nullptr) {
         External* candidate = cursor->element.external;
@@ -667,11 +725,10 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
 int RtObjectExternalRegister() {
     using namespace RtObject;
 
-    // Object::Factory::_singleton, needed by FindNext's inlined IsDerivedFrom.
-    // Lane A owns the accessor; resolved by name here so this lane does not
-    // hardcode a second copy of the address.
-    g_pFactorySingleton =
-        reinterpret_cast<void**>(ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
+    // Object::Factory::_singleton is NOT resolved here any more — see
+    // FactorySingletonSlot() above. Resolving it at registration time froze a
+    // null at cutover, because the mint that supplies it registers 80 lines of
+    // init later.
 
     int n = 0;
 
@@ -681,6 +738,8 @@ int RtObjectExternalRegister() {
                           (void*)&RtObject_External_Dtor); ++n;
     RegisterRuntimeExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ",
                           (void*)&RtObject_External_GetPath); ++n;
+    RegisterRuntimeExport("?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z",
+                          (void*)&RtObject_External_Compile); ++n;
     RegisterRuntimeExport("?EnableReferenceMode@ExternalFactory@Object@@QEAAX_N@Z",
                           (void*)&RtObject_ExternalFactory_EnableReferenceMode); ++n;
     RegisterRuntimeExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ",
@@ -702,6 +761,7 @@ int RtObjectExternalRegister() {
     RegisterRuntimeAddr(0x1800bc9c0, (void*)&RtObject_External_Ctor);
     RegisterRuntimeAddr(0x1800bc950, (void*)&RtObject_External_Dtor);
     RegisterRuntimeAddr(0x180006250, (void*)&RtObject_External_GetPath);
+    RegisterRuntimeAddr(0x1800066e0, (void*)&RtObject_External_Compile);
     RegisterRuntimeAddr(0x1800bcf40, (void*)&RtObject_ExternalFactory_EnableReferenceMode);
     RegisterRuntimeAddr(0x1800bf0f0, (void*)&RtObject_ExternalFactory_IsReferenceModeEnabled);
     RegisterRuntimeAddr(0x1800bdeb0, (void*)&RtObject_ExternalFactory_Find);

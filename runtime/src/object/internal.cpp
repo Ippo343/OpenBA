@@ -60,16 +60,27 @@
 //                                     BANISHED_RT_DIFF=1 to report.
 //
 //   BANISHED_RT_INTERNAL_TABLE=1      TIER 2 — the real ports of the four
-//                                     table mutators plus
-//                                     InternalBasePtr::Serialize take over.
-//                                     *** VERDICT: NO-GO until a SHADOW run is
-//                                     green with calls= in the thousands. ***
+//                                     table mutators take over. (
+//                                     InternalBasePtr::Serialize LEFT this tier
+//                                     in Wave 9: lane S verified it, and
+//                                     gated-because-unverified is not the same
+//                                     as gated-because-dangerous.)
 //                                     TABLE and SHADOW are mutually exclusive;
 //                                     asking for both is refused.
 //
-// CheckPtr is DELIBERATELY NOT REGISTERED in any tier — see the long comment on
-// RtObject_InternalBasePtr_CheckPtr. `BANISHED_RT_INTERNAL_CHECKPTR=1` arms it
-// for anyone who wants to measure that decision rather than take it on trust.
+//   BANISHED_RT_NO_DLL=1              ALSO ARMS TIER 2, and is why the old
+//                                     "*** VERDICT: NO-GO ***" line is gone
+//                                     from here (Wave 9 lane Y, 2026-09-08).
+//                                     The NO-GO was about TWO writers driving
+//                                     one live table; with the DLL absent there
+//                                     is one writer and no fallback. See the
+//                                     long note in RtObjectInternalRegister.
+//
+// CheckPtr is REGISTERED UNCONDITIONALLY as of 2026-09-08 (Wave 9 lane Y). It
+// used to say "DELIBERATELY NOT REGISTERED in any tier"; the reason for that has
+// been fixed at its source rather than worked around — see the long comment on
+// RtObject_InternalBasePtr_CheckPtr. It is not part of any tier: it touches no
+// shared state, and the cutover needs the symbol to exist.
 //
 // No C++ exceptions anywhere in this file (PLAN.md §4.3 risk 5).
 // ============================================================================
@@ -87,11 +98,26 @@ namespace {
 // ============================================================
 // The DLL's allocator and PRNG
 // ============================================================
-// Same rule as runtime/src/system/string.cpp: the handle table's buffers cross
-// the DLL boundary in both directions (the DLL's own Internal ctors grow the
-// very same array), so allocation MUST stay on the DLL's heap. Resolved with
-// RtOriginal<> rather than ResolveExport so that an armed MemoryAllocator port
-// cannot silently split it.
+// Same rule as runtime/src/system/string.cpp: WHILE THE DLL IS LOADED the handle
+// table's buffers cross the DLL boundary in both directions (the DLL's own
+// Internal ctors grow the very same array), so allocation MUST stay on the DLL's
+// heap. That is why the primary door here is RtOriginal<> — the RAW door — and
+// not ResolveExport: an armed MemoryAllocator port must not be able to split the
+// one heap that owns those buffers.
+//
+// WAVE 9 LANE Y, 2026-09-08 — that reasoning has a boundary, and this is it.
+// RtOriginal IS GetProcAddress (reference_rtoriginal_is_getprocaddress.md). With
+// Runtime-x64.dll absent it returns NULL and the next line calls it, so at
+// cutover the tier-2 table ports below would die on their first allocation.
+// The premise dies with the DLL as well: with no DLL there are no DLL-side
+// Internal ctors, there is exactly ONE heap (lane E's), and "do not split it"
+// becomes "use it".
+//
+// So: raw door first, port-aware door when the raw door has nothing to offer.
+// This is NOT the `ResolveExport -> ResolveAddr(Module::Runtime, addr)` fallback
+// idiom lane F deleted 166 of — that one falls back to an ADDRESS IN A MODULE
+// THAT WILL NOT BE MAPPED. This falls the other way, from the DLL to our own
+// registered port, which is the only thing that can still answer.
 //
 // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  0x1800c7a50
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     0x1800c7ad0
@@ -106,14 +132,22 @@ MemFreeFn  g_memFree  = nullptr;
 RandFn     g_rand     = nullptr;
 
 void* MemAlloc(uint64_t bytes, int align) {
-    if (!g_memAlloc)
+    if (!g_memAlloc) {
         g_memAlloc = RtOriginal<MemAllocFn>("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
+        if (!g_memAlloc)   // no DLL: our port is the only heap there is
+            g_memAlloc = reinterpret_cast<MemAllocFn>(
+                ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
+    }
     return g_memAlloc(bytes, align);
 }
 
 void MemFree(void* p) {
-    if (!g_memFree)
+    if (!g_memFree) {
         g_memFree = RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+        if (!g_memFree)
+            g_memFree = reinterpret_cast<MemFreeFn>(
+                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+    }
     g_memFree(p);
 }
 
@@ -371,24 +405,39 @@ void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr*
 // optimised out of retail. `?AssignId@InternalBasePtr@Object@@IEAAXXZ`
 // (0x1800c0280) is the same three bytes.
 //
-// NOT REGISTERED BY DEFAULT, and the reason is not squeamishness — registering
-// it would be an active regression:
+// REGISTERED BY DEFAULT since 2026-09-08 (Wave 9 lane Y). This block used to
+// say "NOT REGISTERED BY DEFAULT, and the reason is not squeamishness —
+// registering it would be an active regression", and the argument was:
 //
-//   engine/funcs/engine_funcs.cpp:3154-3172 inspects the FIRST BYTE of whatever
+//   engine/funcs/engine_funcs.cpp inspects the FIRST BYTE of whatever
 //   `?CheckPtr@…@IEBAXXZ` resolves to, and sets `g_checkPtrIsNop` only when it
 //   is `C3` or `C2 00 00`. That flag makes ~60,000 calls per frame at 800x10
 //   disappear. Register this port and the resolved body becomes a GCC-compiled
-//   function whose first byte is neither — so the flag goes false, the calls
-//   come back, and the `[CheckPtr]` line in standalone_error.log flips to
-//   "real call". We would have replaced a no-op with a no-op and paid 60k
-//   indirect calls a frame for it.
+//   function whose first byte is neither — so the flag goes false and the calls
+//   come back. We would have replaced a no-op with a no-op and paid for it.
 //
-//   Worse in the perf build: with BANISHED_CHECKPTR_STATIC_NOP the call sites
-//   are compiled out entirely, so a registered port would never execute at all
-//   while the census counted it as ported — Wave 1 defect #4 exactly
-//   (reference_uncalled_port_is_not_verified.md).
+// That was TRUE, and it was a statement about the DETECTOR, not about this
+// function. It is now fixed where it was wrong: the detector asks
+// `RuntimeExportIsRegistered("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ")` and
+// treats our own port as a no-op, which it provably is — the body below is
+// empty and we wrote it. The flag stays true, the ~60k calls stay gone, and
+// registering costs nothing.
 //
-// BANISHED_RT_INTERNAL_CHECKPTR=1 arms it anyway, for measuring that claim.
+// The perf-build half of the old argument is unchanged and is not a reason
+// against registering: with BANISHED_CHECKPTR_STATIC_NOP the call sites are
+// compiled out entirely, so this body never runs there. Anyone reading a census
+// row for it should read this paragraph — it is a REGISTERED SYMBOL, not an
+// EXERCISED one, and in the perf build it has no callers by construction
+// (reference_uncalled_port_is_not_verified.md, acknowledged rather than hidden).
+//
+// WHY IT MUST BE REGISTERED AT ALL, given it does nothing: at cutover the symbol
+// has to exist. It is on the DLL-absent boot's [RtUnresolved] list, and 2,333 of
+// its 3,475 call sites in this tree have no `if (fn_...)` null guard — they go
+// through the engine_funcs.h macro, which with a null resolve and a false flag
+// calls a null pointer. Leaving it unregistered is an EXEC-of-0 at cutover.
+//
+// BANISHED_RT_INTERNAL_CHECKPTR=1 is retained only as a positive assertion in
+// the log; it no longer gates anything.
 void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr*) {
 }
 
@@ -520,14 +569,36 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 // direction (0 == reading) and stream+0x10 is the encoding factory whose vtable
 // slot 3 (+0x18) makes a reader and slot 4 (+0x20) makes a writer.
 //
-// DEVIATION, stated because it is a real one: both factory calls are made here
-// with (factory, &serializer). Retail's read branch passes only RCX in the
-// decompile, but Ghidra also invents two junk arguments for the write branch,
-// so its argument analysis at these two sites is not trustworthy. Passing an
-// extra register argument to a callee that ignores it is a no-op in the
-// Microsoft x64 ABI, so this is safe in either direction; it is not, however,
-// byte-faithful, and if this function is ever taken live the two slots should
-// be disassembled and the exact arity written down.
+// ARITY — RESOLVED 2026-09-08, WAVE 9 LANE Y. This block used to say the arity
+// was unknown and "should be disassembled if this function is ever taken live";
+// that was WAVE3_LANE_B.md's gate step 2, and it is now closed from the bytes.
+// Retail, 0x1800bfe68-0x1800bfe84:
+//
+//     MOV RCX,[RDX+0x10]     ; arg1 = stream->encoding  (the factory)
+//     XOR R8D,R8D            ; arg3 = 0                 <-- SET BEFORE the test
+//     MOV RAX,[RCX]          ; factory vtable
+//     CMP [RDX+0x8],EBX      ; direction == 0 ?
+//     LEA RDX,[RSP+0x28]     ; arg2 = &serializer
+//     JNZ +5
+//     CALL [RAX+0x18]        ; reading -> CreateReader
+//     CALL [RAX+0x20]        ; writing -> CreateWriter
+//
+// THREE arguments, identical on both branches, and the third is a literal 0.
+// The port passed only two, leaving R8 holding whatever the caller left there.
+//
+// It is not an academic point, and the tree had already proved it: Wave 4's
+// IO::Serializer port disassembled the SAME two slots from the out-of-line
+// ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z (0x1800b9960) and wrote in
+// runtime/src/io/serializer.cpp: "The `int version` argument is NOT ignored …
+// R8D is live all the way to the CALL, and the thing being called is
+// ??0Binary{Reader,Writer}@IO@@QEAA@AEAVSerializer@1@H@Z — (Serializer&, int).
+// BinaryWriter STORES it and writes it to the stream. That pins the arity of
+// both factory slots at 3." So the callee reads R8, and a two-argument call
+// would have handed BinaryWriter a garbage stream version.
+//
+// The third argument is the serializer VERSION, and retail's inlined copy here
+// passes 0 — this call site does not version its record. Written as a named
+// constant so the 0 cannot be mistaken for a placeholder.
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
     SerializerLite ser;
     ser.stream   = stream;
@@ -537,8 +608,9 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
     void*  factory = *reinterpret_cast<void**>(s + 0x10);
     void** fvtbl   = *reinterpret_cast<void***>(factory);
     const int mode = *reinterpret_cast<int*>(s + 0x08);
-    ser.readerWriter = reinterpret_cast<void* (*)(void*, void*)>(
-        fvtbl[(mode == 0 ? 0x18 : 0x20) / 8])(factory, &ser);
+    const int kSerializerVersion = 0;   // retail's XOR R8D,R8D at 0x1800bfe6c
+    ser.readerWriter = reinterpret_cast<void* (*)(void*, void*, int)>(
+        fvtbl[(mode == 0 ? 0x18 : 0x20) / 8])(factory, &ser, kSerializerVersion);
 
     void*  enc     = ser.readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
@@ -582,10 +654,15 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
 // the same three calls. Transcribing the profile numbers writes the right
 // values through the wrong slots and desyncs every save.
 //
-// NOT DIFFABLE and NOT SHADOWED: the call advances a stream, so a second run
-// would consume or emit the record twice, and there is no way to observe what
-// the DLL wrote without reproducing the codec (Wave 4). It is registered only
-// under BANISHED_RT_INTERNAL_TABLE=1 and is UNVERIFIED.
+// NOT DIFFABLE and NOT SHADOWED by the byte oracle: the call advances a stream,
+// so a second run would consume or emit the record twice.
+//
+// The last two sentences of this block used to read "It is registered only
+// under BANISHED_RT_INTERNAL_TABLE=1 and is UNVERIFIED." BOTH halves are stale
+// and are corrected here rather than left to mislead (PLAN §6 step 8): Wave 9
+// lane S UNGATED the registration (see the registration function below) and
+// VERIFIED it with the emission-sequence oracle — 4 emissions on the non-null
+// branch and 1 on the null branch, identical to the shipped body.
 void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* ser) {
     void*  enc     = ser->readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
@@ -770,13 +847,46 @@ int RtObjectInternalRegister() {
     int n = 0;
 
     const bool shadow   = RtOptIn("BANISHED_RT_INTERNAL_SHADOW");
-    const bool table    = RtOptIn("BANISHED_RT_INTERNAL_TABLE");
     const bool checkPtr = RtOptIn("BANISHED_RT_INTERNAL_CHECKPTR");
 
+    // WAVE 9 LANE Y, 2026-09-08 — the tier-2 arming condition.
+    //
+    // `??0Internal@Object@@QEAA@XZ` and `??1Internal@Object@@UEAA@XZ` are on the
+    // DLL-absent boot's [RtUnresolved] list. They are not optional at cutover:
+    // Internal is the base of every object in the engine, and an unresolved ctor
+    // is a null call on the first one constructed. So the tier arms ITSELF when
+    // there is no DLL, and stays opt-in when there is.
+    //
+    // This is not the NO-GO being waived, it is the NO-GO's own premise expiring.
+    // WAVE3_LANE_B.md held the tier back because "our code now drives the LIVE
+    // handle table" while the DLL's own Internal ctors drive it too — two writers,
+    // one AVL-adjacent array, and a wrong `_factoryIndex` is the swap-remove wild
+    // write with no proximate symptom. With Runtime-x64.dll absent THERE IS NO
+    // SECOND WRITER, and there is also no DLL body left to fall through to. The
+    // hazard and the alternative disappear together.
+    //
+    // The tier's own gate (WAVE3_LANE_B.md §5) is otherwise satisfied and was
+    // already satisfied when it was written: step 1 asked for a green SHADOW run
+    // with `calls=` in the thousands, and WAVE3.md records `Internal::Internal` /
+    // `~Internal` at 93,387 calls each, 0 divergences, with the ctor and dtor
+    // counts identical. Step 2 asked for the encoding-factory arity, which this
+    // lane closed from the bytes — see ResetPersistState above. Step 3 is the
+    // wave-boundary run, which is a cell for the integrator, not a code change.
+    //
+    // WHAT IS STILL OWED, said plainly rather than implied by the arming: the two
+    // persist-state shadow sites have NEVER EXECUTED (WAVE3.md, defect E — they
+    // live only on the save/load path). `BANISHED_AUTOLOAD` was repaired in Wave
+    // 4, so that is now a runnable cell and it is asked for in the lane report.
+    const bool noDll = RtOptIn("BANISHED_RT_NO_DLL");
+    const bool table = RtOptIn("BANISHED_RT_INTERNAL_TABLE") || noDll;
+
     if (shadow && table) {
-        printf("[RtPort]   Object::Internal: REFUSED — BANISHED_RT_INTERNAL_SHADOW and "
-               "BANISHED_RT_INTERNAL_TABLE are mutually exclusive (shadow needs the DLL to "
-               "own the table). Nothing registered.\n");
+        printf("[RtPort]   Object::Internal: REFUSED — BANISHED_RT_INTERNAL_SHADOW is mutually "
+               "exclusive with the table tier%s (shadow needs the DLL to own the table, and to "
+               "BE there). Nothing registered.\n",
+               noDll ? " — and the tier is armed here by BANISHED_RT_NO_DLL, not by "
+                       "BANISHED_RT_INTERNAL_TABLE"
+                     : "");
         return 0;
     }
 
@@ -804,13 +914,34 @@ int RtObjectInternalRegister() {
                           (void*)&RtObject_Internal_Persist); ++n;
     RegisterRuntimeAddr(0x1800bfda0, (void*)&RtObject_Internal_Persist);
 
-    // ---- CheckPtr: opt-in only. See the comment on the function. ------------
+    // ---- CheckPtr: DEFAULT-ON as of 2026-09-08 (Wave 9 lane Y) --------------
+    //
+    // It used to be opt-in behind BANISHED_RT_INTERNAL_CHECKPTR, for the reason
+    // written on the function: registering it made the exe-side byte sniff in
+    // engine_funcs.cpp see a GCC prologue instead of a RET, flip
+    // `g_checkPtrIsNop` to false, and pay ~60k indirect calls a frame for a
+    // no-op. THAT WAS A FACT ABOUT THE DETECTOR, NOT ABOUT THE PORT, and it is
+    // now fixed at its source: the detector asks
+    // `RuntimeExportIsRegistered("?CheckPtr@...")` first, so our empty body is
+    // recognised and the flag stays TRUE. Registering is therefore behaviour-
+    // and cost-neutral with the DLL present, and in the perf build (
+    // BANISHED_CHECKPTR_STATIC_NOP) the call sites are compiled out regardless.
+    //
+    // The reason to register rather than leave it: at cutover the symbol has to
+    // EXIST. `?CheckPtr@InternalBasePtr@Object@@IEBAXXZ` is on the DLL-absent
+    // boot's [RtUnresolved] list (attempt 04, asked at 7ff71e24209f), and 2,333
+    // of its 3,475 call sites have no null guard — they call through the macro,
+    // which with a null resolve and a false flag calls a null pointer.
+    //
+    // BANISHED_RT_INTERNAL_CHECKPTR is kept as a positive assertion for anyone
+    // measuring the decision; it no longer gates the registration.
+    RegisterRuntimeExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ",
+                          (void*)&RtObject_InternalBasePtr_CheckPtr); ++n;
+    RegisterRuntimeAddr(0x1800c0290, (void*)&RtObject_InternalBasePtr_CheckPtr);
     if (checkPtr) {
-        RegisterRuntimeExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ",
-                              (void*)&RtObject_InternalBasePtr_CheckPtr); ++n;
-        RegisterRuntimeAddr(0x1800c0290, (void*)&RtObject_InternalBasePtr_CheckPtr);
-        printf("[RtPort]   Object::InternalBasePtr::CheckPtr ARMED — expect the [CheckPtr] "
-               "line to say \"real call\" and ~60k extra indirect calls per frame.\n");
+        printf("[RtPort]   Object::InternalBasePtr::CheckPtr registered (it is now default-on); "
+               "BANISHED_RT_INTERNAL_CHECKPTR no longer changes anything. Read the [CheckPtr] "
+               "line: it must say source=\"our port\" and \"NOP (calls skipped)\".\n");
     }
 
     // ---- Shadow oracle ------------------------------------------------------
@@ -850,7 +981,7 @@ int RtObjectInternalRegister() {
                           (void*)&RtObject_InternalBasePtr_Serialize); ++n;
     RegisterRuntimeAddr(0x1800c0180, (void*)&RtObject_InternalBasePtr_Serialize);
 
-    // ---- Tier 2: the real table ports. NO-GO until shadow is green. ---------
+    // ---- Tier 2: the real table ports. Opt-in, and MANDATORY at cutover. ----
     if (table) {
         RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
                               (void*)&RtObject_Internal_Ctor); ++n;
@@ -869,13 +1000,17 @@ int RtObjectInternalRegister() {
         RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
 
 
-        printf("[RtPort]   Object::Internal: TABLE mode ARMED — our code now drives the live "
-               "handle table. Verdict on this tier is NO-GO unless a SHADOW run has been "
-               "green with calls= in the thousands (docs/runtime_port/WAVE3_LANE_B.md §5).\n");
+        printf("[RtPort]   Object::Internal: TABLE mode ARMED by %s — our code now drives the "
+               "handle table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "
+               "ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed "
+               "2026-09-08. STILL UNEXERCISED: ClearPersistState/ResetPersistState, which "
+               "only the save/load path reaches.\n",
+               noDll ? "BANISHED_RT_NO_DLL (there is no other implementation)"
+                     : "BANISHED_RT_INTERNAL_TABLE");
     }
 
     printf("[RtPort]   Object::Internal: %d exports registered%s\n", n,
-           table ? " (INCLUDING the unverified table tier)" : "");
+           table ? " (INCLUDING the table tier)" : "");
     return n;
 }
 
