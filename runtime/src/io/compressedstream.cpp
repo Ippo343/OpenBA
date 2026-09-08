@@ -512,6 +512,21 @@ RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
 // PORT-AWARE door for the reason mesh.cpp's RtVtable() records: the raw door is
 // GetProcAddress, which returns null at cutover for a symbol the mint carries
 // correctly just as much as for one it has never heard of.
+// ----------------------------------------------------------------------------
+// ResolveAddr / Module, forward-declared rather than pulled in from
+// standalone/resolve.h -- that header drags in <windows.h>, whose <wingdi.h>
+// declares a function called `Rectangle` and whose <windef.h> #defines `near`
+// and `far` away, both of which collide with engine type and member names
+// (PLAN 4.1 decision 1). Must stay byte-identical to resolve.h's; the linker
+// checks the two against each other.
+//
+// Needed by Wave 9 lane W round 2: the shared IO::Encoding vtable at
+// 0x1801554a8 is UNEXPORTED, so the only port-aware door to it is the ADDRESS
+// one -- which is exactly the door lane C2's address-keyed mint registers.
+// ----------------------------------------------------------------------------
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
+
 static const void* VtblMemoryStream() {
     static const void* v = ResolveExport("??_7MemoryStream@IO@@6B@");
     return v;
@@ -694,6 +709,211 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
     }
 }
 
+// ============================================================================
+// Wave 9 lane W, round 2 — ??0MemoryStream and ??0CompressedStream
+//
+//   0x1800ae710  ??0MemoryStream@IO@@QEAA@XZ        ord 273
+//   0x1800aa3d0  ??0CompressedStream@IO@@QEAA@XZ    ord 108
+//
+// THE BLOCKER THAT HELD THESE BACK IS GONE, AND HALF OF WHY I RECORDED IT WAS
+// WRONG. §4 of WAVE9_LANE_W.md said these two "cannot be closed by porting: the
+// shared encoding vtable at 0x1801554a8 has no exported name and no row the mint
+// can carry." The first clause is true — checked against the export directory by
+// address. **The second was not.** Lane C2 (`c77b26f`) mints it KEYED BY ADDRESS
+// (`symbol == nullptr`, registered through `RegisterRuntimeAddr`, reached with
+// `ResolveAddr(Module::Runtime, ...)`), with the count carrying the STRONGER
+// adjacency proof: the table ends exactly where `??_7BinaryFileStream@IO@@6B@`
+// begins. "Unexported" was never "unmintable", and the mint being keyed by name
+// was a property of the table, not of the mechanism.
+//
+// WHAT THAT DOES AND DOES NOT DO — the distinction has to survive into this
+// file, because a partial close that reads as a full one is worse than an open
+// row. Lane C2's own words: **minting is ENABLING, NOT SUFFICIENT.** All five
+// slots of that vtable (0x1800a81e0, 0x1800a81d0, 0x1800a81c0, 0x1800a8120,
+// 0x1800a8080) are unexported `.text` internals, none is ported, so all five
+// mint as NAMED TRAPS. So:
+//
+//   * Porting these two ctors removes the CALL THROUGH NULL at construction —
+//     the failure this lane measured live at `calls=1` on both the save and the
+//     load cell (WAVE9_LANE_W.md §9 finding 3).
+//   * It does NOT make an `IO::Encoding` functional. The object these ctors
+//     build carries a vtable whose every slot is a trap, so the first VIRTUAL
+//     CALL through `stream->_encoding` after cutover still stops — at a trap
+//     that names the vtable and the slot, instead of an EXEC-of-0 several frames
+//     from the cause. Better failure, not no failure. See §11 for which of the
+//     five stampers that leaves and what still has to happen.
+//
+// TRANSCRIBED FROM THE LISTINGS (0x1800ae710..0x1800ae7c7 and
+// 0x1800aa3d0..0x1800aa4a5), which are the same function with a different field
+// set. Details the decompiled C would have lost:
+//
+//   * `MOV byte ptr [RCX+0x20],BPL` — `_ownsData` is a BYTE store, not the
+//     `undefined8` Ghidra prints around it.
+//   * `MOV qword ptr [RCX+0x24],RBP` — ONE 8-byte store spanning `_cursor`
+//     (+0x24) and `_size` (+0x28), and deliberately UNALIGNED. Writing the two
+//     u32 fields separately is byte-equivalent and is what is done here.
+//   * CompressedStream writes `+0x1c` and `+0x20` as DWORDs (`+0x20` = -1) and
+//     leaves `+0x18` and `+0x24` untouched — the two gaps this file's existing
+//     CompressedMemoryStream oracle already excludes.
+//   * `MOV RAX,RDI` before the return: MSVC constructors return `this`. The
+//     `CtorFn` typedef this file already uses is `void*(*)(void*)`, which is why
+//     the existing call sites work and why these return `self`.
+//   * The allocation is `CALL 0x1800c6e60` with RCX=`_singleton`, EDX=8, R8D=4
+//     between an `EnterCriticalSection(_singleton+0x640)` / `LeaveCriticalSection`
+//     pair. 0x1800c6e60 is `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z`, so
+//     that trio is `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50)
+//     inlined — compared instruction by instruction, not assumed, exactly as for
+//     `MemoryStream::Open` above.
+//   * The `if (_encoding) MemFree(_encoding)` before the final store is retail's
+//     and is reproduced even though `_encoding` was set to 0 eleven instructions
+//     earlier and the branch is therefore dead in every reachable call. It is one
+//     `TEST`/`JZ` in the shipped bytes; removing it would be a divergence for no
+//     gain, and `FUN_180006a10` — the un-exported second copy of MemFree retail
+//     calls there — is the same code as the exported name used here.
+//   * An allocation FAILURE leaves `_encoding` NULL and the constructor returns
+//     normally. Faithful, and not guarded: retail's callers rely on it never
+//     failing, and a guard would hide the upstream problem rather than fix it.
+//
+// ORACLE for both: FULL, by constructing THEIRS into a private scratch buffer
+// and comparing every byte the constructor writes. Nothing live is touched and
+// the scratch is destroyed with the DLL's own destructor, so nothing leaks —
+// the identical shape `RtIo_CompressedMemoryStream_Ctor` above already uses,
+// and its gap mask is the cross-check: that function's verified
+// {0x0c, 0x18, 0x24, 0x74, 0x89, 0x94} decomposes EXACTLY into
+// CompressedStream's {0x0c, 0x18, 0x24} plus MemoryStream's
+// {0x0c, 0x21, 0x2c} shifted by the embedded sub-object's 0x68. Two independent
+// derivations of the same masks agreeing is worth more than either alone.
+//
+// The `_encoding` pointer at +0x10 is a fresh heap allocation on both sides and
+// CANNOT match, so in both comparison copies it is replaced by the first qword
+// of the object it points at — the encoding vtable. That still catches the
+// failure that matters (an encoding that is null, or that is not the shared
+// 0x1801554a8 table) while ignoring the address.
+// ============================================================================
+
+// The shared IO::Encoding vtable, 0x1801554a8. UNEXPORTED, so it is reached by
+// ADDRESS through the port-aware address door — which is precisely the door
+// lane C2's address-keyed mint registers, so this is the DLL's table today and
+// the minted one at cutover, with no change here.
+const void* VtblBinaryEncoding() {
+    static const void* v = reinterpret_cast<const void*>(
+        ResolveAddr(Module::Runtime, 0x1801554a8ull));
+    return v;
+}
+const void* VtblCompressedStream() {
+    static const void* v = ResolveExport("??_7CompressedStream@IO@@6B@");
+    return v;
+}
+
+// The shared tail of both constructors: allocate the 8-byte IO::Encoding, stamp
+// the shared vtable into it, release whatever `_encoding` held, store.
+void ConstructEncoding(Stream* base) {
+    void* enc = RT_EXPORT_ONCE(MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);
+    if (enc != nullptr)
+        *reinterpret_cast<const void**>(enc) = VtblBinaryEncoding();
+    // Retail's dead-but-shipped release of the previous encoding. See the header.
+    if (base->encoding != nullptr)
+        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(base->encoding);
+    base->encoding = enc;
+}
+
+// Replace the `_encoding` pointer at `off` with the vtable it points at, in a
+// comparison copy. Both sides allocate independently, so the addresses cannot
+// agree and comparing them would fail 100% of calls for a reason that is not a
+// port defect.
+void TagEncodingPointer(unsigned char* copy, size_t off) {
+    void* enc = nullptr;
+    std::memcpy(&enc, copy + off, sizeof(enc));
+    const void* tag = enc ? *reinterpret_cast<const void* const*>(enc) : nullptr;
+    std::memcpy(copy + off, &tag, sizeof(tag));
+}
+
+extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
+    RT_DIFF_BEGIN("IO::MemoryStream::MemoryStream");
+
+    self->base.vptr      = VtblStream();          // the inlined IO::Stream ctor
+    self->base.direction = 0;
+    self->base.encoding  = nullptr;
+    self->base.vptr      = VtblMemoryStream();
+    self->data           = nullptr;
+    self->ownsData       = 0;                     // BYTE store in retail
+    self->cursor         = 0;                     // retail: ONE qword over
+    self->size           = 0;                     //   +0x24..+0x2b
+    ConstructEncoding(&self->base);
+
+    if (rt_diff_on__) {
+        // Gaps retail never writes: +0x0c (Stream's pad), +0x21..+0x23 (the
+        // three bytes after the _ownsData BYTE), +0x2c (the tail past _size).
+        static const struct { unsigned short off, len; } kGaps[] = {
+            {0x0c, 4}, {0x21, 3}, {0x2c, 4},
+        };
+        alignas(16) unsigned char theirs[sizeof(MemoryStream)];
+        std::memset(theirs, 0, sizeof(theirs));
+        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(theirs);
+
+        alignas(16) unsigned char a[sizeof(MemoryStream)];
+        alignas(16) unsigned char b[sizeof(MemoryStream)];
+        std::memcpy(a, self,   sizeof(a));
+        std::memcpy(b, theirs, sizeof(b));
+        TagEncodingPointer(a, 0x10);
+        TagEncodingPointer(b, 0x10);
+        for (const auto& g : kGaps) {
+            std::memset(a + g.off, 0, g.len);
+            std::memset(b + g.off, 0, g.len);
+        }
+        RT_DIFF_BYTES(a, b, sizeof(a));
+
+        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(theirs);
+    }
+    return self;
+}
+
+extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) {
+    RT_DIFF_BEGIN("IO::CompressedStream::CompressedStream");
+
+    unsigned char* p = reinterpret_cast<unsigned char*>(self);
+    Stream* base     = reinterpret_cast<Stream*>(self);
+
+    base->vptr      = VtblStream();               // the inlined IO::Stream ctor
+    base->direction = 0;
+    base->encoding  = nullptr;
+    base->vptr      = VtblCompressedStream();
+
+    // +0x18 and +0x24 are NOT written by retail and are left alone here; they
+    // are two of the gaps this file's CompressedMemoryStream oracle already
+    // excludes, which is the independent confirmation.
+    *reinterpret_cast<int32_t*>(p + 0x1c) = 0;            // _position
+    *reinterpret_cast<int32_t*>(p + 0x20) = -1;           // _activeWindow
+    for (size_t off = 0x28; off <= 0x60; off += 8)
+        *reinterpret_cast<uint64_t*>(p + off) = 0;
+    ConstructEncoding(base);
+
+    if (rt_diff_on__) {
+        static const struct { unsigned short off, len; } kGaps[] = {
+            {0x0c, 4}, {0x18, 4}, {0x24, 4},
+        };
+        alignas(16) unsigned char theirs[sizeof(CompressedStream)];
+        std::memset(theirs, 0, sizeof(theirs));
+        RT_ORIGINAL_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(theirs);
+
+        alignas(16) unsigned char a[sizeof(CompressedStream)];
+        alignas(16) unsigned char b[sizeof(CompressedStream)];
+        std::memcpy(a, self,   sizeof(a));
+        std::memcpy(b, theirs, sizeof(b));
+        TagEncodingPointer(a, 0x10);
+        TagEncodingPointer(b, 0x10);
+        for (const auto& g : kGaps) {
+            std::memset(a + g.off, 0, g.len);
+            std::memset(b + g.off, 0, g.len);
+        }
+        RT_DIFF_BYTES(a, b, sizeof(a));
+
+        RT_ORIGINAL_ONCE(DtorFn, "??1CompressedStream@IO@@UEAA@XZ")(theirs);
+    }
+    return self;
+}
+
 // RegisterRuntimeExport flips every ResolveExport call site in our tree; the
 // paired RegisterRuntimeAddr covers anything that asks for the same function by
 // Ghidra address. No detour is installed: per the vtable-ownership argument at
@@ -728,6 +948,14 @@ int RtIoCompressedStreamRegister() {
     RegisterRuntimeAddr(0x180024350, (void*)&RtIo_CompressedMemoryStream_GetMemoryStream);
 
     // ---- Wave 9 lane W ----
+    RegisterRuntimeExport("??0MemoryStream@IO@@QEAA@XZ",
+                          (void*)&RtIo_MemoryStream_Ctor); ++n;
+    RegisterRuntimeAddr(0x1800ae710, (void*)&RtIo_MemoryStream_Ctor);
+
+    RegisterRuntimeExport("??0CompressedStream@IO@@QEAA@XZ",
+                          (void*)&RtIo_CompressedStream_Ctor); ++n;
+    RegisterRuntimeAddr(0x1800aa3d0, (void*)&RtIo_CompressedStream_Ctor);
+
     RegisterRuntimeExport("?Open@MemoryStream@IO@@QEAA_NH@Z",
                           (void*)&RtIo_MemoryStream_Open); ++n;
     RegisterRuntimeAddr(0x1800ae670, (void*)&RtIo_MemoryStream_Open);

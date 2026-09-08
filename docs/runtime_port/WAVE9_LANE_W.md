@@ -229,6 +229,12 @@ was perfectly happy with it.
 
 ## 4. The blocker on `??0MemoryStream` / `??0CompressedStream`, stated as a fact
 
+> ⛔ **HALF OF THIS SECTION IS WITHDRAWN — see §11.** "No exported name" is true. **"…and no row
+> the mint can carry" was WRONG**: lane C2 (`c77b26f`) mints the table KEYED BY ADDRESS, and both
+> constructors are now ported. The rest of the section is kept because its evidence is what made
+> the address-keyed row provable — and because §11's real finding is that porting them
+> *converts* the save/load blocker rather than closing it.
+
 Every concrete `IO::Stream` constructor in this family allocates an 8-byte `IO::Encoding` and
 stores exactly one pointer into it: the shared encoding vtable at **0x1801554a8**.
 `RtIo_CompressedMemoryStream_Ctor`'s oracle already special-cases that address by value.
@@ -376,13 +382,12 @@ Two specific things to watch that a clean summary would hide:
 * **Rows 7, 8, 10, 13, 16, 18, 19, 20, 23, 24, 25** — eleven ports specified with their blocker
   or dependency named in §2, none started. The two largest (`?UpdateList` at 1706 bytes and
   `?UpdateLoad` at 987) are save-path and want their own lane.
-* **Rows 12 and 14** — blocked on §4's unexported vtable. This needs a *decision*, not effort:
-  either the mint grows a mechanism for unexported tables, or the concrete `IO::Encoding` class
-  is identified and its table rebuilt. **PROMOTED TO THE LANE'S TOP ITEM BY §9 FINDING 3**: the
-  runs measure the enclosing ported constructor at `calls=1` on BOTH the save and the load path,
-  so at cutover this is a null call before the first save and the first load can do any work. It
-  is no longer "two rows handed over"; it is a save/load-blocking gap with a known cause and no
-  current mechanism.
+* ~~**Rows 12 and 14**~~ — **PORTED, see §11.** The decision this asked for was taken by lane C2:
+  the mint carries the table by ADDRESS. What remains is NOT these two rows but the two slots they
+  stamp: **`FUN_1800a8120` and `FUN_1800a8080`**, the `kCreateReader`/`kCreateWriter` factories
+  every save and every load dispatches through, both unexported, both minting as named traps.
+  Porting the constructors converted an EXEC-of-0 at construction into a named trap at the first
+  serializer dispatch; it did not make a save work.
 * ~~**The two branches cutover takes FIRST**~~ and ~~**`Video::{Index,Vertex}Buffer::PlatformDestruct`**~~
   — **BOTH CLOSED BY §10's empty-list probe, pending one run.** They had one answer: a probe that
   borrows the real list head under the Device lock (safe, because every DLL walker takes that same
@@ -530,9 +535,12 @@ names are unported and unminted, so at cutover `ResolveExport` misses and return
 > inferred from a source sweep — observed as `calls=1` on the enclosing port in two different
 > cells.
 
-And it cannot be closed by porting harder: the encoding vtable has no exported name for
-`ResolveExport` to take and no row the mint can carry. **This is the highest-priority item this
-lane hands over**, and it is a mint-mechanism decision, not a porting slot.
+~~And it cannot be closed by porting harder: the encoding vtable has no exported name for
+`ResolveExport` to take and no row the mint can carry.~~ **SUPERSEDED BY §11.** The mint can carry
+it, by ADDRESS, and lane C2 landed that. Both constructors are now ported — which removes the
+EXEC-of-0 at construction and moves the stop to the first `Serializer` dispatch, where two of the
+five minted slots are named traps. The remaining row is exact: port `FUN_1800a8120` and
+`FUN_1800a8080`.
 
 ### A defect found in this lane's own probe, kept on the record
 
@@ -686,3 +694,125 @@ check, not an oracle — it would catch a null or self-inconsistent head and wou
 our link order being the mirror of retail's, which is precisely the failure this probe does
 catch. That gap is the reason to run the probe before lane G rather than to rely on the smoke
 test after it.
+
+---
+
+## 11. `??0MemoryStream` / `??0CompressedStream` PORTED — and what that does **not** close
+
+§4 said these two "cannot be closed by porting: the shared encoding vtable at 0x1801554a8 has no
+exported name and no row the mint can carry." **The first clause is true and the second was
+wrong.** Lane C2 (`c77b26f`) mints that table KEYED BY ADDRESS — `symbol == nullptr`, registered
+through `RegisterRuntimeAddr`, reached with `ResolveAddr(Module::Runtime, ...)`. "Unexported" was
+never "unmintable"; the mint being keyed by name was a property of the table, not of the
+mechanism. §4's conclusion is withdrawn and this section replaces it.
+
+Independently re-confirmed here, because the adjacency proof is what makes the slot count safe:
+`??_7BinaryFileStream@IO@@6B@` is at **0x1801554d0**, exactly **0x28 = 5 slots** past
+0x1801554a8. It is a table HEAD, not an interior — 0x180155488..0x1801554a0 are the four
+`_purecall` slots of the abstract base, which this file had already established.
+
+Both constructors are ported (`RtIo_MemoryStream_Ctor`, `RtIo_CompressedStream_Ctor`), each with
+the same full scratch-construction oracle the `CompressedMemoryStream` ctor above already uses.
+**The gap masks are a genuine cross-check rather than a re-derivation**: that function's already-
+verified `{0x0c, 0x18, 0x24, 0x74, 0x89, 0x94}` decomposes EXACTLY into CompressedStream's
+`{0x0c, 0x18, 0x24}` plus MemoryStream's `{0x0c, 0x21, 0x2c}` shifted by the embedded
+sub-object's 0x68. Two independent derivations agreeing is worth more than either alone.
+
+### ⛔ THIS DOES NOT CLOSE THE SAVE/LOAD BLOCKER. IT CONVERTS IT.
+
+Holding lane C2's distinction, because a partial close that reads as a full one is worse than an
+open row: **minting is ENABLING, NOT SUFFICIENT.** All five slots of the minted table are
+unexported `.text` internals, none is ported, so all five mint as NAMED TRAPS.
+
+And two of those five are not incidental — they are the ones the save and load paths dispatch
+through on every single operation:
+
+| Minted slot | Offset | Target | Who dispatches |
+|---|---|---|---|
+| 3 | +0x18 | `FUN_1800a8120` (0x94 bytes, `(this, Serializer*, int)`) | `kCreateReader`, `runtime/types/io/Serializer.h:103` |
+| 4 | +0x20 | `FUN_1800a8080` (0x94 bytes, same signature) | `kCreateWriter`, `Serializer.h:105` |
+
+`runtime/src/io/serializer.cpp:445-449` and `runtime/src/achievement/goal_serialize.cpp:170-176`
+both read `stream->encoding`, pick slot `kCreateReader` or `kCreateWriter` by direction, and call
+through it. So the cutover behaviour changes from:
+
+> **before** — `??0MemoryStream` resolves NULL inside `RtIo_CompressedMemoryStream_Ctor`;
+> EXEC-of-0 at construction, several frames from the cause (measured live at `calls=1` on both
+> the save and the load cell, §9 finding 3)
+
+to
+
+> **after** — construction SUCCEEDS and the object carries the minted table; the first
+> `Serializer` dispatch hits `RtMintTrapStub_0_3` / `RtMintTrapStub_0_4`, which names the vtable
+> and the slot.
+
+**Better failure, not no failure.** The first save and the first load after cutover still stop.
+
+**What actually closes it is now precisely specified: port `FUN_1800a8120` and `FUN_1800a8080`.**
+Two unexported internals, 0x94 bytes each, one signature, reached only through those two slots.
+That is the real remaining row and it is ordinary port work with a full oracle available (both are
+called on the save path and the load path, so a diffed cell reaches them).
+
+### The five stampers — and "still trapping" is the wrong frame for three of them
+
+The coordinator's list was `??0CompressedStream`, `??0MemoryStream`, `??0BinaryFileStream`,
+`UserInterface::SaveAllSettings` and `DialogInstance::OnOpened`, all stamping 0x1801554a8 at +0x00
+of a fresh heap object that goes to `stream+0x10`. Checked, and the frame matters:
+**stamping a vtable is a pointer store and never traps. Only a DISPATCH through a slot traps.**
+So the question is not whether the other three "still trap" but whether they are cutover rows at
+all. Answered from `tools/unsatisfied_export_scan.py`, re-run after this port:
+
+| Stamper | In the unsatisfied-export inventory? | Disposition |
+|---|---|---|
+| `??0CompressedStream@IO@@QEAA@XZ` | **gone** (was a row) | PORTED here |
+| `??0MemoryStream@IO@@QEAA@XZ` | **gone** (was a row) | PORTED here |
+| `??0BinaryFileStream@IO@@QEAA@XZ` | never present | our tree never resolves it; DLL-internal, ceases to exist at cutover. **Not a cutover row.** |
+| `?OnOpened@DialogInstance@UI@@` | never present | same |
+| `?SaveAllSettings@UserInterface@UI@@QEAAXXZ` | **still present**, `code/Game/Game/gameupdateloop_serialize.cpp:157` | a live cutover row — but an ORDINARY unported export, in the same category as the other 135. Its relation to this vtable is incidental. |
+
+So the inventory moved **141 → 139 unsatisfied names, 138 → 136 with a live site**, which is
+exactly the two ports and nothing else.
+
+### A conflation to head off
+
+The `IO::Encoding` offsets recorded by Wave 4 and Wave 8 (`bool +0x78`, `uint +0x98`,
+`int +0xa0`) **cannot belong to this table** — it is 5 slots, 0x28 bytes, proven by adjacency.
+They belong to a different, larger Encoding vtable. Anyone reading
+`reference_encoding_vtable_offsets_differ_between_builds.md` next to this section should not
+assume one table.
+
+---
+
+## 12. ⚠️ TWO GATES ARE RED ON THE INTEGRATION TIP, AND NEITHER IS THIS LANE'S
+
+Measured by stashing this lane's uncommitted work and re-running at `c77b26f` — because a
+regression that appears in the same run as new work will be attributed to the new work.
+
+| Gate | at `c77b26f` (baseline) | with lane W round 2 | Verdict |
+|---|---|---|---|
+| `rawdoor_audit.py` | 469 sites, **9 UNGUARDED-CALL** | 473 sites, **9 UNGUARDED-CALL** | **RED BEFORE ME.** Site-for-site identical; my delta is +4 sites, all guarded |
+| `port_bypass_audit.py --by-name` | 395 NAME sites, **BYPASS=1** | 399 NAME sites, **BYPASS=1** | **RED BEFORE ME.** Same single site |
+| `rt_data_door_audit.py` | exit 0 | exit 0 | green (2 UNCLASSIFIED doors reported, both pre-existing) |
+
+WAVE9.md records both of those gate rows as **MET (0 UNGUARDED-CALL / 0 on both doors)**. They are
+not met at the tip. Diagnosed rather than just reported red:
+
+**All ten are checker false positives of one shape — a guard the checker does not recognise.**
+
+* `runtime/funcs/rt_port.h:133` is the **definition of the `RT_ORIGINAL_ONCE` macro itself**, not
+  a call site. A checker artifact.
+* The other eight (`runtime/src/ui/element.cpp:876, 888, 911, 984, 1012, 1070, 1129` and
+  `runtime/src/picking/scene.cpp:778`, the latter also being the lone BYPASS) sit inside
+  `if (replay.copy) { ... }`, where `replay` is a `ReplayGuard` constructed as
+  `ReplayGuard replay(rt_diff_on__, self)` — it only takes a copy when diffing is on, so
+  `replay.copy` is a **correct and complete** diff guard. `rawdoor_audit.py` recognises only the
+  literal `rt_diff_on__` token, so it reads a semantically-guarded site as unguarded.
+
+So the ports are fine and **the checker needs to learn the `ReplayGuard` idiom** (and to skip its
+own macro definition). Deliberately NOT fixed here: `tools/rawdoor_audit.py` and
+`tools/port_bypass_audit.py` are shared gate instruments that several lanes are quoting numbers
+from this hour, and changing what they count mid-wave is how a denominator silently moves.
+Handed over with the diagnosis and the exact line list.
+
+This is the hazard WAVE9.md's own bypass row states — *"re-run after every LANDING, not after
+every edit"* — landing on the gate rows themselves.
