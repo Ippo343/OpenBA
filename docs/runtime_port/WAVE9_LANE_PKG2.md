@@ -626,3 +626,180 @@ which iteration 1's A/B proved pre-existing and which the integrator has since f
   the constructor byte-exact.
 * **Which normal-play action triggers the second `LoadPackages`** (and so `0x180008340`,
   the tree free) is still unconfirmed. A mods reload is the candidate; it was not verified.
+
+---
+
+# Iteration 3 — rung 2: the `CompressedStream` read path
+
+## 18. Ported
+
+`runtime/src/io/compressed_stream_read.cpp`, `BANISHED_RT_CSREAD=0`.
+
+| Export | Retail | Ord | Instrs |
+|---|---|---|---|
+| `?Read@CompressedStream@IO@@UEAA_NHPEAX@Z` | `0x1800aa780` | 3449 | 51 |
+| `?SetWindow@CompressedStream@IO@@AEAA_NH@Z` | `0x1800a9aa0` | 4016 | 296 |
+| `?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ` | `0x1800a9980` | 2458 | 79 |
+| `?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z` | `0x1800a96b0` | 2152 | 52 |
+
+```
+[RtDiff] IO::CompressedStream::ReadPath [lockstep probe] calls=1 worked=1 divergences=0
+[CSRead] lockstep probe: image=132813 bytes; cfg w=1 75 reads, w=4 75 reads,
+         w=4+revisit 75 reads (591474 bytes total) -- IDENTICAL (bytes, ORIGINAL
+         content, position, activeWindow, every window record and page)
+[CSRead] SetWindow branches: fastPath=221 scanHit=3 readMiss=19 inMemory=0
+         growDelegated=0 -- the three READ-PATH branches are all exercised
+```
+
+**225 reads, 591,474 bytes, three configurations, 0 divergences.**
+
+### The stream format, recovered in full
+
+`?Open@CompressedStream@IO@@` spells it out and validates it by exact sum:
+
+```
+[uint32 blockCount][blockCount x Header{srcOffset, compSize:u16, uncompSize:u16}][blocks]
+```
+
+A block is a fixed 32 KB of *decompressed* data, so `blockIndex = offset >> 15`
+throughout, and **`compSize == 0` means STORED, not empty**. Two new record types with a
+`static_assert` per offset are in `runtime/types/io/Stream.h`.
+
+### Three quirks a tidied-up port would "fix" and break
+
+1. **`SetWindow`'s scan tests the ACTIVE window's `start`, not the candidate's.**
+   `TEST R8D,R8D ; JS` sits inside the loop but R8D is loaded once *before* it and never
+   rewritten. When the active window is free, the scan skips every window and falls
+   through to eviction even if a loaded window covers `pos`. It reads exactly like a
+   copy-paste bug; "correcting" it changes which window is evicted and therefore the LRU
+   for the rest of the stream.
+2. **`GetAvailableWindow` keeps the LAST free window**, not the first — `CMOVL` with no
+   break.
+3. **Its LRU tie-break keeps the EARLIER index** (`JLE`, strictly-greater replaces). Every
+   window is 0 on a fresh stream, so this decides the very first eviction.
+
+## 19. The oracle: lockstep, state, and three configurations
+
+Both of lane PICK's requirements were live and both are met.
+
+* **State, not just bytes.** After *every* read the probe compares the returned bool, the
+  bytes, `position`, `activeWindow`, and for every window its `useCount`, `start`, `end`
+  and the **full 32 KB page** of any loaded window. A wrong block index leaves every
+  counter agreeing and the page different.
+* **Lockstep.** One read on each stream, compare immediately.
+* **Right, not merely equal.** Each read is also compared against the ORIGINAL content —
+  two identically wrong readers would agree with each other.
+
+Isolation is structural: our `Read` calls our `SetWindow` by direct C++ call, the DLL's
+calls its own by a direct relative `CALL` no registration can redirect.
+
+### The effectiveness control was WRONG TWICE, and both times it said PASS
+
+This is the part worth keeping.
+
+1. **v1 counted changes of `activeWindow`.** `?Open@CompressedMemoryStream@IO@@` hardcodes
+   **one** window, so `activeWindow` is 0 forever — it reported "1 window switch, LRU
+   UNVERIFIED" on a run that in fact evicted on every block. The control fired, but for
+   the wrong reason.
+2. **v2 counted "reads that did not refill" and reported LRU EXERCISED.** That number is
+   dominated by `SetWindow`'s **fast path** and says nothing about the scan. It was a
+   false pass.
+3. **v3 counts the branches INSIDE `SetWindow`.** Only a counter in the body can say which
+   branch ran: `fastPath=221 scanHit=3 readMiss=19`.
+
+And v3 showed the corpus was inadequate: **sequential reading never returns to a resident
+block, so `scanHit` was 0 with any window count.** A third configuration was added — 4
+windows plus a schedule that rewinds the position by two blocks — and `scanHit` went to 3.
+Without it, three of the four bodies would have been "verified" by a green run that never
+entered their interesting branch.
+
+`inMemory=0 growDelegated=0` are write-side branches; a read-only probe leaving them at 0
+is expected and is stated as such rather than counted as coverage.
+
+## 20. What is NOT ported, and one named cutover blocker
+
+`SetWindow`'s miss path forks on `Stream::direction` (+0x08). The **read** fork
+(`direction == 0`) and the **in-memory** fork are ported. The third —
+`direction != 0` with `blockIndex >= headerSize`, ~200 instructions of two inlined
+`Collection::Array` growth loops that extend a stream being written — is **not**.
+
+It is guarded, delegated to the shipped body, **counted, and announced once**. A partial
+port that silently did nothing there would corrupt a save.
+
+**At cutover that delegation is a null call. This is a named cutover blocker**, not an
+oversight: `[CSRead] GROW path delegated` in a log is the tell that a run took it. It read
+0 on every run here, which is expected for a read path and is not evidence it is dead —
+saving is what reaches it.
+
+**A SECOND blocker, which porting this rung CREATED rather than found.**
+`GetAvailableWindow` flushes a dirty window before evicting it — `if (start >= 0 &&
+direction == 1) CompressWindow(...)` — and `?CompressWindow@CompressedStream@IO@@`
+(`0x1800a9810`) is unported. Before this lane nothing in the tree reached that name at
+all; `unsatisfied_export_scan.py` now lists it as a **live** door, correctly: it is in no
+diff guard, and every save that evicts a dirty window takes it. That is
+`reference_porting_can_grow_the_cutover_surface.md` for the fifth time this wave, and it
+is recorded here rather than left for the next census to find.
+
+So the **write** side of this class now owes three things at cutover — the grow path,
+`CompressWindow`, and whatever those pull in. The **read** side, which is the row this
+lane was asked for, owes nothing.
+
+Also declined: `?Open@CompressedStream@IO@@` (needs `SetWindowCount` and
+`Array<Header>::SetSize`, is once-per-stream, and **this lane uses it to build its own
+test subjects — it must not also be its author**), `?CompressWindow@`, `?Write@`,
+`?Commit@`, `?PreCommit@`, `?Close@`.
+
+## 21. Rung 1 now has real callers
+
+`DecompressFromSource` calls `?Decompress@Compression@System@@` directly, so rung 1's
+codec moved from probe corpora to actual stream blocks in the same run:
+
+```
+System::Compression::Decompress  calls=177 -> 196   worked=137 -> 156   divergences=0
+```
+
+Nineteen of those are real 32 KB blocks decoded through the ported stream stack. That is
+the plan's bottom-up argument paying off rather than being asserted.
+
+## 22. Three defects the runs found that reading did not
+
+1. **`?Create@CompressedMemoryStream@IO@@` does not give its MemoryStream any storage.**
+   Writing works until the first window fills; the flush then copies into a stream with no
+   buffer — `REP MOVSB` with `RDI = 0` inside the DLL's memcpy, two calls downstream of the
+   mistake, with nothing in the dump naming the probe.
+2. **`?Open@MemoryStream@IO@@QEAA_NH@Z` is the wrong overload** — it sets
+   `direction = 0` (reading). The writer needs `?Create@MemoryStream@IO@@QEAA_NH@Z`, which
+   is the same body but for `MOV dword ptr [RBP+0x8],1`. Two exports, one letter apart in
+   intent, and the compiler cannot tell them apart.
+3. **The revisit schedule I added deadlocked the probe.** Rewinding `total` along with the
+   position made progress net-negative (five reads advance ~13 KB, each revisit jumps back
+   64 KB), so the loop never terminated and the harness killed the run at its timeout.
+   `total` is now the read *budget* and only `position` rewinds.
+
+## 23. `port_bypass_audit.py` caught a real bypass in this lane
+
+It flagged the probe calling `??1CompressedMemoryStream@IO@@` through a raw door — **a
+function Wave 4 lane B ported**. The `RT_RAW_OK` marker on those lines was borrowed from
+`rt_data_door_audit.py`'s convention, which this audit does not share, and an exemption
+would have been the wrong answer anyway: the *subject factory* deliberately uses the DLL
+(a subject built by the code under test is worthless), but *teardown* has no such reason.
+Routing it through `RT_EXPORT_ONCE` removed the bypass and exercises Wave 4's dtor for free.
+
+Three more sites were flagged because their `RtDiffEnabled()` guard lived in the **caller**,
+which the audit's per-site analysis cannot see. Rather than ask for an allowlist entry, each
+helper now carries its own local guard — which also removes an invariant a future caller
+could break silently. **`port_bypass_audit.py`: 0 bypasses on both doors.**
+
+## 24. A reporting note worth carrying
+
+`IO::CompressedStream::Read` reports `calls=0 worked=225`. **`calls=0` here means "this
+site performs no self-comparison", not "this function never ran"** — `Read` and
+`SetWindow` are verified by the lockstep probe, not by a comparison of their own. Reading
+that column as execution coverage would be exactly backwards.
+
+## 25. The next rung
+
+**Rung 3: `?OpenFile@FileSystem@IO@@` (264 instrs) + `?ReadFile@` (90).** Win32, so a
+`*_win.cpp`; lane FS already models `FileInfo` and already calls both through
+`RT_EXPORT_ONCE`, so their signatures are settled. Then rung 4, `ReadPackfile` itself,
+which is now a transcription onto two verified layers.

@@ -99,6 +99,14 @@ extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FI
 // removes both halves; if the probe is the problem, it is already gated on the
 // diff harness and a normal run does not run it.
 extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
+// Wave 9 lane PKG2 rung 2: the IO::CompressedStream READ path (Read, SetWindow,
+// GetAvailableWindow, DecompressFromSource) — the stack ?ReadPackfile@ stands
+// on, and the thing that gives rung 1's Compression::Decompress its first real
+// caller. Own switch: it is on the package-mount path AND on the save/load path
+// (a CompressedMemoryStream is how saves are written), so the integrator must be
+// able to take exactly it out without disturbing Wave 4's stream ports.
+extern int RtIoCompressedStreamReadRegister(); // compressed_stream_read.cpp (lane PKG2)
+namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
 // GetModification, Enable, Swap, SaveList) plus the unexported Mod-entry
@@ -126,6 +134,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
     if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
+    if (RtWaveEnabled("BANISHED_RT_CSREAD"))      n += RtIoCompressedStreamReadRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

@@ -302,6 +302,13 @@ namespace RtIO {
 // LoadPackages' tail inside the diff guard — see the comment at the call site.
 void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
 }  // namespace RtIO
+// Lane PKG2 rung 2's lockstep probe (compressed_stream_probe.cpp). It lives in
+// `RtIo`, not `RtIO`: the tree carries BOTH spellings — runtime/types/io/Stream.h
+// is `RtIo` and runtime/types/io/FileSystem.h is `RtIO` — and rung 2 is built on
+// Stream.h, so it follows Stream.h. Worth a line rather than a silent
+// qualification: the two names differ by one character's case and the linker is
+// the only thing that notices.
+namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
 namespace RtSystem { void RtSystem_CompressionProbe(); }
@@ -866,6 +873,13 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // Here the heap is provably live — the body above allocated a 0xF0
         // PackageFile per package to get this far.
         RtSystem::RtSystem_CompressionProbe();
+
+        // Rung 2's lockstep probe. Same placement and the same reason as the
+        // two above: it builds two CompressedMemoryStreams, which ALLOCATE, so
+        // it cannot run from a *PortInit where the allocator singleton is still
+        // null. This is the first point on the boot path where the heap is
+        // provably live.
+        RtIo::RtIo_CompressedStreamReadProbe();
     }
 }
 

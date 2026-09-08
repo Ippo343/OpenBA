@@ -1,0 +1,478 @@
+// ============================================================================
+// runtime/src/io/compressed_stream_read.cpp — Wave 9 lane PKG2, rung 2
+// IO::CompressedStream — the READ path under ReadPackfile
+// ============================================================================
+//
+//   | Export                                          | Retail      | Ord  | Instrs |
+//   |-------------------------------------------------|-------------|------|--------|
+//   | ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z        | 0x1800aa780 | 3449 |   51   |
+//   | ?SetWindow@CompressedStream@IO@@AEAA_NH@Z       | 0x1800a9aa0 | 4016 |  296   |
+//   | ?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ| 0x1800a9980 | 2458 |   79   |
+//   | ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z | 0x1800a96b0 | 2152 | 52 |
+//
+// Names and ordinals printed out of Runtime-x64.dll's export directory with
+// `pefile`. `tools/export_name_audit.py` re-checks them.
+//
+// Kill switch: BANISHED_RT_CSREAD=0 leaves all four on the DLL.
+//
+// ---------------------------------------------------------------------------
+// 1. WHERE THIS SITS
+// ---------------------------------------------------------------------------
+// Rung 2 of docs/runtime_port/WAVE9_READPACKFILE_PLAN.md. `?ReadPackfile@` does
+// ~25 windowed reads through a CompressedStream, and MSVC inlined
+// `CompressedStream::Read` at every one of them — which is where 1,864 of its
+// instructions went. Nothing above this can be verified until this works.
+//
+// It also gives rung 1 its first real caller: `DecompressFromSource` calls
+// `?Decompress@Compression@System@@` directly (0x1800a9746), so from here the
+// codec ported last iteration decodes actual package bytes rather than probe
+// corpora.
+//
+// ---------------------------------------------------------------------------
+// 2. THE FORMAT AND THE MACHINE, both read out of the disassembly
+// ---------------------------------------------------------------------------
+// A CompressedStream is a fixed set of 32 KB decompression WINDOWS over a
+// source stream carrying a directory of blocks. `?Open@CompressedStream@IO@@`
+// spells the format out completely (see runtime/types/io/Stream.h):
+//
+//     [uint32 blockCount][blockCount x Header{srcOffset, compSize, uncompSize}][blocks]
+//
+// A block is a fixed 32 KB of DECOMPRESSED data, so `blockIndex = offset >> 15`
+// everywhere, and `compSize == 0` means the block is STORED, not empty.
+//
+// `Read(n, dst)` loops: point the window machinery at `position`, copy as much
+// as that window holds, advance, repeat. `SetWindow(pos)` is the machinery:
+// fast path if the active window already covers `pos`, else scan the loaded
+// windows, else evict one (`GetAvailableWindow`, an LRU) and fill it
+// (`DecompressFromSource`).
+//
+// ---------------------------------------------------------------------------
+// 3. THREE QUIRKS THAT A TIDIED-UP PORT WOULD "FIX" AND BREAK
+// ---------------------------------------------------------------------------
+//  1. **SetWindow's scan tests the ACTIVE window's `start`, not the candidate's.**
+//     `TEST R8D,R8D ; JS` at 0x1800a9b08 is inside the loop, but R8D is loaded
+//     ONCE before it (0x1800a9acf) and is never rewritten in the body. So when
+//     the active window is FREE (`start < 0`), the scan skips every window and
+//     falls through to eviction — even if a loaded window covers `pos`. That
+//     reads exactly like a copy-paste bug and it is retail's behaviour; a port
+//     that "corrects" it to `wins[i].start` changes which window gets evicted
+//     and therefore what the LRU does for the rest of the stream.
+//  2. **GetAvailableWindow's free-window search keeps the LAST match, not the
+//     first.** `CMOVL EBX,ECX` at 0x1800a99c6 runs on every iteration with no
+//     break, so the highest-indexed free window wins.
+//  3. **Its LRU tie-break keeps the EARLIER index.** `JLE` at 0x1800a99f8 means
+//     strictly-greater replaces, so equal use counts leave the incumbent. With
+//     a fresh stream every window has useCount 0, so this decides the very first
+//     eviction — and every window assignment after it.
+//
+// ---------------------------------------------------------------------------
+// 4. WHAT IS PORTED AND WHAT IS NOT — the direction split
+// ---------------------------------------------------------------------------
+// `SetWindow`'s miss path forks on `Stream::direction` (+0x08):
+//
+//   direction == 0 (READING, what ?Open@ sets):  GetAvailableWindow, then
+//       DecompressFromSource(position >> 15) — pull the block from the source
+//       stream. **PORTED.**
+//   direction != 0 (WRITING/in-memory) and blockIndex < headerSize: the same
+//       eviction, then decode from `blockData` (+0x50) instead of the source.
+//       ~30 instructions. **PORTED** — it is cheap and it is what a
+//       CompressedMemoryStream that has been written and re-read takes.
+//   direction != 0 and blockIndex >= headerSize: ~200 instructions that GROW
+//       the header and block arrays to extend the stream. **NOT PORTED.**
+//
+// The grow path is declined for a stated reason rather than skipped: it is two
+// inlined `Collection::Array` growth loops that allocate under the allocator
+// lock and append empty blocks, i.e. it is stream WRITING, and nothing on the
+// package read path reaches it. It is guarded and delegated to the shipped body
+// through `RT_ORIGINAL_ONCE`, counted, and announced once — a partial port that
+// silently did nothing there would corrupt a save.
+//
+// **THIS IS A CUTOVER BLOCKER AND IT IS NAMED AS ONE.** With the DLL gone that
+// delegation is a null call. Whoever finishes this class must port the grow path
+// or prove it unreachable; `[CSRead] GROW path delegated` in the log is the
+// tell that a run took it.
+//
+// **AND THERE IS A SECOND ONE, which porting this rung CREATED rather than
+// found.** `GetAvailableWindow` flushes a dirty window before evicting it —
+// `if (w[best].start >= 0 && direction == 1) CompressWindow(...)` — and
+// `?CompressWindow@CompressedStream@IO@@AEAAXH@Z` (0x1800a9810) is unported.
+// Before this lane, nothing in our tree reached that name at all; now
+// `tools/unsatisfied_export_scan.py` lists it as a LIVE door, because it is one:
+// it is not inside any diff guard, and every save that evicts a dirty window
+// takes it. That is `reference_porting_can_grow_the_cutover_surface.md` again,
+// and it is recorded here rather than left for the next census to discover.
+//
+// So the write side of this class now owes THREE things at cutover: the grow
+// path, `CompressWindow`, and whatever those two pull in. The read path — the
+// row this lane was asked for — owes nothing.
+//
+// ---------------------------------------------------------------------------
+// 5. THE ORACLE — LOCKSTEP, AND STATE NOT JUST BYTES
+// ---------------------------------------------------------------------------
+// Both requirements come from lane PICK and both are live here, which is why
+// this rung's oracle is a bespoke probe rather than the usual replay:
+//
+//  * **State, not just bytes.** A read mutates `position` (+0x1c),
+//    `activeWindow` (+0x20) and EVERY window's `useCount`. Two implementations
+//    can return identical bytes and leave the object in different states, and
+//    the next read then diverges for reasons the previous comparison called
+//    fine. Rung 1 was exempt because `Decompress` is static with a local cursor;
+//    this rung has no such excuse.
+//  * **Lockstep, not end-to-end.** A CompressedStream carries state between
+//    blocks. A defect that cancels out compares equal at the end while every
+//    intermediate read differed.
+//
+// So `RtIo_CompressedStreamReadProbe()` builds TWO CompressedMemoryStreams over
+// byte-identical content, drives one entirely through our ports and the other
+// entirely through the DLL's, and after EVERY read compares: the returned bool,
+// the bytes, `position`, `activeWindow`, and the full window array — each
+// window's `useCount`, `start`, `end`, and the CONTENT of every loaded window's
+// 32 KB page. It stops at the first mismatch and names which term failed.
+//
+// The two stacks are genuinely independent: our `Read` calls our `SetWindow` by
+// direct C++ call and the DLL's calls its own by a direct relative CALL, so
+// neither can be entered by accident.
+//
+// The content is produced by the DLL's own WRITER (Create + Write + Close),
+// the same trick rung 1 used with `Compress` — valid input by construction,
+// and the writer is deliberately not ported so a shared misreading cannot pass
+// its own test.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/io/Stream.h"
+
+namespace RtIo {
+
+using Window = CompressedStreamWindow;
+using Header = CompressedStreamHeader;
+
+namespace {
+
+constexpr int32_t kWin = kCompressedStreamWindowSize;   // 0x8000
+
+typedef bool (*SetWindowFn)(CompressedStream*, int32_t);
+typedef void (*CompressWindowFn)(CompressedStream*, int32_t);
+typedef int32_t (*GetAvailFn)(CompressedStream*);
+typedef bool (*DecompressFromSourceFn)(CompressedStream*, int32_t);
+typedef bool (*ReadFn)(CompressedStream*, int32_t, void*);
+typedef int (*DecompressFn)(const void*, uint32_t, void*, uint32_t);
+
+inline Window* Windows(CompressedStream* s) {
+    return static_cast<Window*>(s->windowData);
+}
+inline Header* Headers(CompressedStream* s) {
+    return static_cast<Header*>(s->headerData);
+}
+
+// The source stream's vtable, used by DecompressFromSource. Slot indices rather
+// than byte offsets so the arithmetic is visible: retail calls `[RAX+0x18]` and
+// `[RAX+0x20]`, i.e. slots 3 and 4.
+constexpr int kStreamSlotRead          = 3;   // +0x18  Read(int n, void* dst)
+constexpr int kStreamSlotSetCurrentPos = 4;   // +0x20  SetCurrentPos(int pos)
+
+typedef bool (*StreamReadFn)(void*, int32_t, void*);
+typedef bool (*StreamSetPosFn)(void*, int32_t);
+
+inline void* SourceSlot(void* stream, int slot) {
+    return (*static_cast<void***>(stream))[slot];
+}
+
+}  // namespace
+
+// SetWindow's branch histogram. Five outcomes, counted rather than inferred,
+// because the probe cannot see from outside which one a read took — and the
+// first two versions of that probe both tried to infer it from window state and
+// both measured a proxy that was constant by construction. A branch that reads
+// zero is an UNVERIFIED branch, and only a counter inside the body can say so.
+struct SetWindowBranchCounts {
+    int64_t fastPath   = 0;   // the active window already covers pos
+    int64_t scanHit    = 0;   // another LOADED window covers pos (the LRU re-use path)
+    int64_t readMiss   = 0;   // direction == 0: evict + DecompressFromSource
+    int64_t inMemory   = 0;   // direction != 0, block resident: evict + decode blockData
+    int64_t growDelegated = 0;   // direction != 0, block beyond the end: NOT PORTED (§4)
+};
+static SetWindowBranchCounts g_swBranch;
+
+const SetWindowBranchCounts& RtIo_SetWindowBranchCounts() { return g_swBranch; }
+
+// ============================================================================
+// ?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ           retail 0x1800a9980
+// ============================================================================
+// Pick a window to evict. Free windows first (the LAST free one — §3.2), else
+// the largest useCount (ties keep the earlier index — §3.3).
+extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* self) {
+    RT_DIFF_BEGIN("IO::CompressedStream::GetAvailableWindow");
+
+    Window* const w = Windows(self);
+    const int32_t n = self->windowSize;                 // 1800a999a
+    int32_t best = -1;                                  // 1800a99a0  OR EBX,-1
+
+    if (n > 0) {
+        // `CMOVL EBX,ECX` with NO break: every free window overwrites the
+        // previous choice, so the highest-indexed one wins.
+        for (int32_t i = 0; i < n; ++i)                 // 1800a99c0
+            if (w[i].start < 0) best = i;
+    }
+    if (best < 0) {                                     // 1800a99d2  JNS skips this
+        best = 0;                                       // 1800a99d9
+        // Strictly greater (JLE at 1800a99f8 skips), so equal counts keep the
+        // incumbent. Every window is 0 on a fresh stream, which makes this the
+        // rule that decides the FIRST eviction.
+        for (int32_t i = 1; i < n; ++i)                 // 1800a99f0
+            if (w[i].useCount > w[best].useCount) best = i;
+    }
+
+    // Flush before evicting, but only when WRITING. On the read path
+    // `direction` is 0 and CompressWindow is never reached — which is why this
+    // lane does not port it.
+    if (w[best].start >= 0 && self->base.direction == 1) {   // 1800a9a1d / 1800a9a24
+        RT_EXPORT_ONCE(CompressWindowFn, "?CompressWindow@CompressedStream@IO@@AEAAXH@Z")(
+            self, best);                                     // 1800a9a2f
+    }
+
+    w[best].start    = -1;                              // 1800a9a38
+    w[best].end      = -1;                              // 1800a9a45
+    w[best].useCount = 0;                               // 1800a9a52
+    for (int32_t i = 0; i < self->windowSize; ++i)      // 1800a9a59
+        if (i != best) ++w[i].useCount;                 // 1800a9a6a
+
+    // No oracle here: this MUTATES the window array, so calling the shipped body
+    // to compare would evict a second window and corrupt the state being
+    // compared. It is verified through the lockstep probe in §5, which compares
+    // the whole window array after every read — that is where its effect is
+    // visible, and comparing it here would destroy what the probe measures.
+    RT_DIFF_SHADOW(best >= 0 && best < self->windowSize,
+                   "evicted a window in range",
+                   "SHADOW ONLY (mutates; verified by the lockstep probe)");
+    RT_DIFF_WORK(true);
+    return best;                                        // 1800a9a8a
+}
+
+// ============================================================================
+// ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z       retail 0x1800a96b0
+// ============================================================================
+// Fill the ACTIVE window from block `blk` of the source stream.
+extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* self,
+                                                           int32_t blk) {
+    RT_DIFF_BEGIN("IO::CompressedStream::DecompressFromSource");
+
+    if (blk >= self->headerSize) return false;          // 1800a96c2  JL continues
+
+    // Retail's `_alloca(0x8020)` (0x1800a96b7 via 0x180095060, the stack probe).
+    // The extra 0x20 is MSVC's home space for the calls below, not part of the
+    // block; the block itself can never exceed 0x8000.
+    uint8_t scratch[kWin];
+
+    const Header* const h = &Headers(self)[blk];        // 1800a96ec
+    Window* const w = &Windows(self)[self->activeWindow];  // 1800a96f0..fc
+
+    w->start = blk << 15;                               // 1800a96d9 / 1800a9700
+    w->end   = w->start + h->uncompressedSize;          // 1800a9703 / 1800a9709
+
+    void* const src = self->source;                     // 1800a970c
+    reinterpret_cast<StreamSetPosFn>(SourceSlot(src, kStreamSlotSetCurrentPos))(
+        src, static_cast<int32_t>(h->sourceOffset));    // 1800a9715  CALL [RAX+0x20]
+
+    if (h->compressedSize != 0) {                       // 1800a9723  TEST DX,DX
+        reinterpret_cast<StreamReadFn>(SourceSlot(src, kStreamSlotRead))(
+            src, h->compressedSize, scratch);           // 1800a9730  CALL [RAX+0x18]
+        // Rung 1's port, reached through the port-aware door — this is the call
+        // that finally gives Compression::Decompress real package bytes.
+        RT_EXPORT_ONCE(DecompressFn,
+            "?Decompress@Compression@System@@SAHPEBXIPEAXI@Z")(
+                scratch, h->compressedSize, w->buffer,
+                static_cast<uint32_t>(kWin));           // 1800a9746
+    } else {
+        // STORED: read straight into the window. compressedSize == 0 is the
+        // stored marker, not an empty block (§2).
+        reinterpret_cast<StreamReadFn>(SourceSlot(src, kStreamSlotRead))(
+            src, h->uncompressedSize, w->buffer);       // 1800a9755
+    }
+
+    RT_DIFF_SHADOW(w->end >= w->start && w->end - w->start <= kWin,
+                   "filled the active window",
+                   "SHADOW ONLY (consumes the source; verified by the lockstep probe)");
+    RT_DIFF_WORK(true);
+    return true;                                        // 1800a9768
+}
+
+// ============================================================================
+// ?SetWindow@CompressedStream@IO@@AEAA_NH@Z                  retail 0x1800a9aa0
+// ============================================================================
+extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t pos) {
+    RT_DIFF_BEGIN("IO::CompressedStream::SetWindow");
+
+    self->position = pos;                               // 1800a9ac0
+    const int32_t active = self->activeWindow;          // 1800a9ac3
+    Window* const w = Windows(self);
+
+    // Loaded ONCE, and deliberately not reloaded inside the scan below — see
+    // §3.1. This single value is both the fast-path test and the scan's guard.
+    const int32_t activeStart = w[active].start;        // 1800a9acf
+
+    if (activeStart >= 0 && pos >= activeStart && pos < activeStart + kWin) {
+        ++g_swBranch.fastPath;
+        RT_DIFF_WORK(false);                            // the no-op fast path
+        return true;                                    // 1800a9ae7
+    }
+
+    const int32_t n = self->windowSize;                 // 1800a9af3
+    int32_t found = -1;
+    for (int32_t i = 0; i < n; ++i) {                   // 1800a9b03
+        if (i == active)      continue;                 // 1800a9b06
+        if (activeStart < 0)  continue;                 // 1800a9b0b — NOT w[i].start (§3.1)
+        const int32_t s = w[i].start;                   // 1800a9b0d
+        if (pos < s)          continue;                 // 1800a9b12
+        if (pos < s + kWin) { found = i; break; }       // 1800a9b1c
+    }
+
+    if (found >= 0) {                                   // 1800a9b2e
+        ++g_swBranch.scanHit;
+        w[found].useCount = 0;                          // 1800a9b35
+        for (int32_t k = 0; k < self->windowSize; ++k)  // 1800a9b3c
+            if (k != found) ++w[k].useCount;            // 1800a9b4d
+        self->activeWindow = found;                     // 1800a9b61
+        RT_DIFF_WORK(true);
+        return true;
+    }
+
+    // ---- miss ------------------------------------------------------------
+    if (self->base.direction == 0) {                    // 1800a9b69
+        ++g_swBranch.readMiss;
+        // READING: evict and pull the block from the source.
+        self->activeWindow =
+            RtIo_CompressedStream_GetAvailableWindow(self);   // 1800a9b72
+        const bool ok = RtIo_CompressedStream_DecompressFromSource(
+            self, self->position >> 15);                      // 1800a9b7d/83
+        RT_DIFF_WORK(true);
+        return ok;                                            // 1800a9b88
+    }
+
+    const int32_t blk = pos >> 15;                      // 1800a9b8d
+    if (blk >= self->headerSize) {                      // 1800a9b94  JL -> in-memory
+        // THE DECLINED GROW PATH (§4). Delegated to the shipped body rather
+        // than approximated, counted rather than silent, and announced once so a
+        // run that takes it says so. At cutover this is a null call — it is a
+        // NAMED CUTOVER BLOCKER, not an oversight.
+        //
+        // Re-entering the shipped body re-does the `position` store above, which
+        // is idempotent (same value), and nothing else has been written on this
+        // path yet.
+        if (++g_swBranch.growDelegated == 1)
+            std::printf("[CSRead] GROW path delegated to the DLL (blk=%d >= headerSize=%d)"
+                        " -- NOT PORTED, a cutover blocker; see compressed_stream_read.cpp\n",
+                        blk, self->headerSize);
+        RT_DIFF_WORK(true);
+        return RT_ORIGINAL_ONCE(SetWindowFn,
+            "?SetWindow@CompressedStream@IO@@AEAA_NH@Z")(self, pos);
+    }
+
+    // ---- in-memory block (direction != 0, block already present) ---------
+    ++g_swBranch.inMemory;
+    self->activeWindow = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800a9e3f
+    const int32_t b = self->position >> 15;             // 1800a9e47/4a
+    const Header* const h  = &Headers(self)[b];
+    void* const* const blocks = static_cast<void* const*>(self->blockData);  // +0x50
+    Window* const aw = &Windows(self)[self->activeWindow];
+
+    aw->start = b << 15;                                // 1800a9e6a/6d
+    aw->end   = aw->start + h->uncompressedSize;        // 1800a9e71/79
+
+    if (h->compressedSize != 0) {                       // 1800a9e83  TEST AX,AX
+        RT_EXPORT_ONCE(DecompressFn,
+            "?Decompress@Compression@System@@SAHPEBXIPEAXI@Z")(
+                blocks[b], h->compressedSize, aw->buffer,
+                static_cast<uint32_t>(kWin));           // 1800a9e9d
+    } else {
+        std::memcpy(aw->buffer, blocks[b], h->uncompressedSize);  // 1800a9eb6
+    }
+    RT_DIFF_WORK(true);
+    return true;                                        // 1800a9ebb
+}
+
+// ============================================================================
+// ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z                   retail 0x1800aa780
+// ============================================================================
+//   while (n > 0) {
+//       if (!SetWindow(position)) return false;
+//       chunk = min(n, window.end - position);
+//       memcpy(dst, window.buffer + (position - window.start), chunk);
+//       position += chunk; n -= chunk; dst += chunk;
+//   }
+// Note the loop re-enters SetWindow every iteration with the UPDATED position,
+// which is what makes a read spanning several blocks work.
+extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, void* dst) {
+    RT_DIFF_BEGIN("IO::CompressedStream::Read");
+
+    uint8_t* out = static_cast<uint8_t*>(dst);
+    const bool didWork = (n > 0);
+
+    while (n > 0) {                                     // 1800aa7a2 / 1800aa806
+        if (!RtIo_CompressedStream_SetWindow(self, self->position)) {  // 1800aa7b6
+            RT_DIFF_WORK(didWork);
+            return false;                               // 1800aa825
+        }
+        const Window* const w = &Windows(self)[self->activeWindow];  // 1800aa7bf
+        int32_t chunk = n;                              // 1800aa7c3  ESI = EBP
+        const int32_t pos = self->position;             // 1800aa7d5
+        if (pos + n > w->end) chunk = w->end - pos;     // 1800aa7db/7df/7e1
+        std::memcpy(out, static_cast<const uint8_t*>(w->buffer) + (pos - w->start),
+                    static_cast<size_t>(chunk));        // 1800aa7e3..f7
+        self->position += chunk;                        // 1800aa7fc
+        n   -= chunk;                                   // 1800aa7ff
+        out += chunk;                                   // 1800aa801
+    }
+
+    RT_DIFF_WORK(didWork);
+    return true;                                        // 1800aa808
+}
+
+int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.growDelegated; }
+
+}  // namespace RtIo
+
+// ============================================================================
+// Registration
+// ============================================================================
+int RtIoCompressedStreamReadRegister() {
+    using namespace RtIo;
+    int n = 0;
+
+    RegisterRuntimeExport("?Read@CompressedStream@IO@@UEAA_NHPEAX@Z",
+                          (void*)&RtIo_CompressedStream_Read); ++n;
+    RegisterRuntimeAddr(0x1800aa780, (void*)&RtIo_CompressedStream_Read);
+
+    RegisterRuntimeExport("?SetWindow@CompressedStream@IO@@AEAA_NH@Z",
+                          (void*)&RtIo_CompressedStream_SetWindow); ++n;
+    RegisterRuntimeAddr(0x1800a9aa0, (void*)&RtIo_CompressedStream_SetWindow);
+
+    RegisterRuntimeExport("?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ",
+                          (void*)&RtIo_CompressedStream_GetAvailableWindow); ++n;
+    RegisterRuntimeAddr(0x1800a9980, (void*)&RtIo_CompressedStream_GetAvailableWindow);
+
+    RegisterRuntimeExport("?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z",
+                          (void*)&RtIo_CompressedStream_DecompressFromSource); ++n;
+    RegisterRuntimeAddr(0x1800a96b0, (void*)&RtIo_CompressedStream_DecompressFromSource);
+
+    // A lane-owned identity marker, for the same reason package_file.cpp has one:
+    // a SHARED total moves whenever any other lane lands in the same namespace,
+    // so it cannot be used to prove which exe ran.
+    printf("[RtPort]   IO::CompressedStream read path (lane PKG2): %d exports registered\n", n);
+
+    // DELIBERATELY ABSENT — §4 and the plan doc.
+    //   the direction!=0 GROW path inside SetWindow  (~200 instrs, DELEGATED,
+    //       counted, announced; A NAMED CUTOVER BLOCKER)
+    //   ?Open@CompressedStream@IO@@        0x1800aa560   needs SetWindowCount
+    //       (0x1800aa020) and Array<Header>::SetSize (0x180024d70). Not on the
+    //       hot path — once per stream — and this lane uses the DLL's to build
+    //       its own test subjects, which it must not also be the author of.
+    //   ?CompressWindow@CompressedStream@IO@@  0x1800a9810   write path only.
+    //   ?Write@ / ?Commit@ / ?PreCommit@ / ?Close@   the writer half.
+    return n;
+}

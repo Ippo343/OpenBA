@@ -131,7 +131,30 @@ a uniform population hides — feed it garbage and nearly every case returns 0 f
 bounds check, and 5,000 agreeing zeroes read as thorough. The corpus is built to fill all
 six on purpose.
 
-### Rung 2 — the `CompressedStream` read path
+### Rung 2 — the `CompressedStream` read path — **DONE AND MEASURED, lane PKG2 iteration 3**
+
+`runtime/src/io/compressed_stream_read.cpp`, `BANISHED_RT_CSREAD=0`. Four bodies
+(`Read`, `SetWindow`, `GetAvailableWindow`, `DecompressFromSource`).
+
+```
+[CSRead] lockstep probe: 3 configurations, 225 reads, 591,474 bytes -- IDENTICAL
+         (bytes, ORIGINAL content, position, activeWindow, every window record and page)
+[CSRead] SetWindow branches: fastPath=221 scanHit=3 readMiss=19 -- all three
+         READ-PATH branches exercised
+```
+
+Both requirements below were met, and both mattered: the effectiveness control was **wrong
+twice before it was right**, and the third configuration (4 windows + a rewinding read
+schedule) is the only thing that ever entered `SetWindow`'s scan-hit branch. Details in
+WAVE9_LANE_PKG2.md §19.
+
+**One named cutover blocker came out of it**: `SetWindow`'s `direction != 0` GROW path
+(~200 instructions) is delegated to the shipped body, counted and announced. It is a null
+call once the DLL is gone, and it is the save path that reaches it.
+
+The original plan text follows.
+
+### Rung 2 — the `CompressedStream` read path (as planned)
 
 `SetWindow` (296) + `GetAvailableWindow` (79) + `DecompressFromSource` (52) + `Read` (51)
 + `Open` (66). ~544 instructions, one coherent object, layout already modelled.

@@ -194,6 +194,74 @@ static_assert(offsetof(CompressedStream, blockData)    == 0x50, "CompressedStrea
 static_assert(offsetof(CompressedStream, compression)  == 0x60, "CompressedStream.compression @ 0x60");
 static_assert(sizeof(CompressedStream) == 0x68, "sizeof(IO::CompressedStream) == 0x68");
 
+// ---- the two record types the +0x30 and +0x40 arrays hold -------------------
+// Wave 9 lane PKG2 rung 2. Wave 4 named the ARRAYS; these are their ELEMENTS.
+//
+// One decompression window. Stride 24 (0x18), pinned four independent ways:
+// SetWindow's `LEA RCX,[R10 + R10*0x2]` then `*8` (0x1800a9acb), Read's identical
+// pair (0x1800aa7c5), GetAvailableWindow's `ADD RAX,0x18` walk (0x1800a99c2) and
+// SetWindowCount's `LEA RSI,[RSI + 0x18]` (0x1800aa0bf).
+struct CompressedStreamWindow {
+    // +0x00 — the LRU age. Zeroed on the window that just became active and
+    // incremented on every OTHER window, so the largest value is the least
+    // recently used. GetAvailableWindow evicts the max.
+    int32_t useCount;
+    // +0x04 — first stream offset this window covers, or -1 when the window
+    // holds nothing. The -1 is load-bearing in two places: it is how
+    // GetAvailableWindow finds a free window, and it is what SetWindow's fast
+    // path tests before trusting the active window.
+    int32_t start;
+    int32_t end;          // +0x08 — one past the last offset covered
+    uint32_t _pad0c;      // +0x0C — never written by anything this lane read
+    // +0x10 — the 0x8000-byte decompressed page. Allocated one per window by
+    // SetWindowCount (`MOV EDX,0x8000 ; MOV R8D,4` at 0x1800aa07d) and memset to
+    // zero immediately after.
+    void*    buffer;
+};
+static_assert(sizeof(CompressedStreamWindow) == 0x18,
+              "SetWindow 0x1800a9acb: `LEA RCX,[R10+R10*2]` then scale 8 = stride 24");
+static_assert(offsetof(CompressedStreamWindow, start)  == 0x04,
+              "SetWindow 0x1800a9acf: `MOV R8D,[RDI + RCX*8 + 0x4]`");
+static_assert(offsetof(CompressedStreamWindow, end)    == 0x08,
+              "Read 0x1800aa7cd: `MOV EDX,[RAX + RCX*8 + 0x8]`");
+static_assert(offsetof(CompressedStreamWindow, buffer) == 0x10,
+              "SetWindowCount 0x1800aa0a4: `MOV [RSI + RCX + 0x10],RBX`");
+
+// One compressed block. Stride 8, and the whole on-disk directory is an array of
+// these. Read three ways that agree: Open's `LEA EAX,[RDX*0x8]` size check
+// (0x1800aa5c4), its `ADD RAX,8` verification walk (0x1800aa61f), and
+// DecompressFromSource's `LEA RDI,[RAX + RCX*0x8]` (0x1800a96ec).
+//
+// THE STREAM FORMAT, which falls out of ?Open@CompressedStream@IO@@ in full:
+//
+//     [uint32 blockCount]
+//     [blockCount x CompressedStreamHeader]
+//     [the blocks themselves, in order]
+//
+// and Open validates it by summing: `4 + blockCount*8 + sum(block sizes)` must
+// equal the source's total size exactly (`SETZ AL` at 0x1800aa63b).
+struct CompressedStreamHeader {
+    uint32_t sourceOffset;      // +0x00 — where the block starts in the source
+    // +0x04 — compressed length, and ZERO IS NOT "empty": it is the STORED
+    // (uncompressed) marker. Both DecompressFromSource (0x1800a9723 `TEST DX,DX`)
+    // and Open's size walk (0x1800aa613) branch on it, and Open's walk falls back
+    // to `uncompressedSize` when it is zero — which is what proves the meaning.
+    uint16_t compressedSize;
+    uint16_t uncompressedSize;  // +0x06 — always the real size, <= 0x8000
+};
+static_assert(sizeof(CompressedStreamHeader) == 8,
+              "Open 0x1800aa5c4: `LEA EAX,[RDX*0x8]` sizes the directory");
+static_assert(offsetof(CompressedStreamHeader, compressedSize) == 4,
+              "DecompressFromSource 0x1800a9718: `MOVZX EDX,word ptr [RDI + 0x4]`");
+static_assert(offsetof(CompressedStreamHeader, uncompressedSize) == 6,
+              "DecompressFromSource 0x1800a9703: `MOVZX EAX,word ptr [RDI + 0x6]`");
+
+// The window size, and the reason every `>> 15` and `<< 15` in this family is
+// the same constant. Blocks are a fixed 32 KB of DECOMPRESSED data, so the block
+// index for a stream offset is `offset >> 15` (SetWindow 0x1800a9b7d,
+// `SAR EDX,0xf`) and a block's first offset is `index << 15`.
+constexpr int32_t kCompressedStreamWindowSize = 0x8000;
+
 // ============================================================
 // IO::CompressedMemoryStream — 0x98 bytes.
 //
