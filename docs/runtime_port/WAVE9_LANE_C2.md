@@ -510,8 +510,10 @@ to be ported anyway for the object to exist at all — the criterion is the part
 that is easy to leave out, and leaving it out reproduces lane E3's silent skip
 exactly.
 
-**What cannot be established statically**: the ORDER in which these are first
-dereferenced, and therefore which one a first cutover boot hits first. Each row
+**What cannot be established statically** — and the procedure that answers it
+is specified in
+[WAVE9_CUTOVER_BOOT_RUNBOOK.md](WAVE9_CUTOVER_BOOT_RUNBOOK.md): the ORDER in
+which these are first dereferenced, and therefore which one a first cutover boot hits first. Each row
 above has a reader on a known-executing path, but "known-executing" comes from
 where the reader lives, not from an observed sequence. That is a real limit and
 it argues for a controlled first cutover boot — one that expects to fail, reads
