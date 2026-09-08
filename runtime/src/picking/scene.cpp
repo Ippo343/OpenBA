@@ -47,6 +47,31 @@
 // each one says what it is. This is the same shape Wave 4 lane C used for
 // `Map_Find` / `Map_Insert`.
 //
+// *** UPDATE, WAVE 9 LANE PICK (2026-09-08): FIVE OF THEM NO LONGER DO. ***
+// The paragraph above is the reason the Wave 5 lane stopped where it did, and
+// it was right at the time. It has been overtaken twice over:
+//
+//   1. The platform boundary is now a function call. Wave 9 lane Q's
+//      `rtcoll::MemAlloc` / `rtcoll::MemFree` ARE the Enter/Allocate/Leave and
+//      Enter/Free/Leave triples retail inlines, reached through the port-aware
+//      address door, so an allocating body can live under runtime/src after all.
+//   2. The ADDRESS-door census (ce1d8e9 / 4ef55b6) showed what leaving them
+//      cost: five `ResolveAddr(Module::Runtime, 0x…)` sites in THIS FILE that
+//      resolve to NULL with the DLL absent, invisible to every name-based
+//      instrument because the call sites never mention a name.
+//
+// `RtGridAdd`, `RtGridReindex`, `RtGridUnthread`, `RtGridFreeEntry` and
+// `RtCellIterAdvance` below are therefore no longer DLL calls. Their five
+// addresses — and the fourteen more internals they reach — are ported and
+// registered in runtime/src/picking/scene_grid.cpp, and `ResolveAddr` consults
+// the port registry FIRST, so these forwarders reach that port with NO EDIT.
+// The forwarders are deliberately left exactly as they are: their analysis is
+// what the new lane was built from, and rewriting them would lose it.
+//
+// The five `RtFreeArray*` / `RtCellHeadsInit` / `RtTransformArraySetSize`
+// forwarders further down are lane Q's and lane D2's, and were already ported.
+// Nothing in this file still reaches Runtime-x64.dll by address.
+//
 // IS THE CLASS SPLIT?  No -- every Scene method this process ever invokes is
 // now ours. `Picking::Scene` exports 21 symbols; our tree calls nine of them
 // (the table above), and a grep across code/, engine/, standalone/, runtime/
