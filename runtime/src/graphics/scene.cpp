@@ -231,13 +231,48 @@ void* RtMemAlloc(uint64_t size, int align) {
     return fn(size, align);
 }
 
+// ---------------------------------------------------------------------------
+// WAVE 9 LANE GFX2, 2026-09-08 — THE SEVEN BY-ADDRESS DOORS IN THIS FILE, AND
+// WHY THEIR `static Fn fn = ...` NOW RETRIES A NULL
+//
+// The integrator's address-door census (docs/runtime_port/
+// wave9_unregistered_addr_doors.csv, commit ce1d8e9, corrected in 4ef55b6)
+// lists seven unregistered `ResolveAddr(Module::Runtime, ...)` sites in this
+// file. All seven were checked here and the verdict is the same for every one:
+//
+//   * NONE of the seven is exported (tools/pe_exports.py over the shipped DLL
+//     returns nothing for any of the seven addresses), so no name-based
+//     instrument — census, residue, unsatisfied_export_scan — can see them.
+//   * EVERY one has a LIVE, non-diff-guarded caller in a ported body in this
+//     file: Geometry::Clean (RtBoxTransform), Scene::Scene (RtSceneGridInit),
+//     Scene::~Scene (RtSceneFreeGlobals), Scene::AddObject (RtSceneGridAdd),
+//     Scene::RemoveObject (RtSceneGridUnthread), RemoveGlobalObject
+//     (RtFreeLocked) and Scene::Clean (RtSceneGridReindex).
+//   * So at cutover all seven resolve to nothing and every one is a call
+//     through null, on the first frame that draws or the first scene built.
+//     They are HARD cutover dependencies, not a watch list.
+//
+// Registering them is NOT sufficient and porting them is NOT this lane's work:
+// they are unexported Runtime internals with no port anywhere in the tree.
+// What IS fixed here is the second half of the defect commit 309c015 found in
+// this same file: `static Fn fn = ResolveAddr(...)` CACHES A NULL FOREVER, so
+// even once a port exists a caller that ran before it was armed would freeze
+// the null in for the life of the process. That is the `RtResolveCached`
+// contract — cache a hit, retry a miss — and 309c015 applied it only to
+// RtMemAlloc. It is applied to the other eight here (the seven plus
+// Quaternion::Lerp) so that registering them later is a one-line change and
+// not an ordering lottery.
+// ---------------------------------------------------------------------------
+
 // The allocator-lock Free wrapper retail's RemoveGlobalObject tail-calls —
 // retail 0x180009c30: `if (p) { Enter; Free(_singleton, p); Leave; }`. Its
 // first parameter is ignored by the body but is passed (`this`) by retail, so
 // it is passed here too.
+// CUTOVER: unexported, unported, unregistered — a null call. See the block above.
 void RtFreeLocked(void* ignoredThis, void* p) {
     using Fn = void (*)(void*, void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
     fn(ignoredThis, p);
 }
 
@@ -251,7 +286,8 @@ void RtFreeLocked(void* ignoredThis, void* p) {
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
 float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
     using Fn = float* (*)(float*, const Transform*, const float*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001f470));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001f470));
     return fn(out, xf, localBox);
 }
 
@@ -264,7 +300,8 @@ float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
 Quaternion* RtQuaternionLerp(const Quaternion* from, Quaternion* ret,
                              const Quaternion* to, const Scalar* t) {
     using Fn = Quaternion* (*)(const Quaternion*, Quaternion*, const Quaternion*, const Scalar*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001d500));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001d500));
     return fn(from, ret, to, t);
 }
 
@@ -288,7 +325,8 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
 // allocator lock.
 void RtSceneGridInit(Scene* self, float cellSize) {
     using Fn = void* (*)(Scene*, float);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e4a0));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e4a0));
     fn(self, cellSize);
 }
 
@@ -299,7 +337,8 @@ void RtSceneGridInit(Scene* self, float cellSize) {
 // or the allocator, so it is layout-compatible with this port.
 uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
     using Fn = uint64_t (*)(Scene*, Geometry* const*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e5e0));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e5e0));
     return static_cast<uint32_t>(fn(self, geo));
 }
 
@@ -308,7 +347,8 @@ uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
 // of the two int32 links at node+0x08 / node+0x0c.
 void RtSceneGridUnthread(Scene* self, int32_t id) {
     using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f090));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f090));
     fn(self, id);
 }
 
@@ -318,7 +358,8 @@ void RtSceneGridUnthread(Scene* self, int32_t id) {
 // reported a change.
 void RtSceneGridReindex(Scene* self, int32_t id) {
     using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005ee30));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005ee30));
     fn(self, id);
 }
 
@@ -326,7 +367,8 @@ void RtSceneGridReindex(Scene* self, int32_t id) {
 // node under the allocator lock, then clears {head, tail, count}.
 void RtSceneFreeGlobals(void* list) {
     using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f1f0));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f1f0));
     fn(list);
 }
 
