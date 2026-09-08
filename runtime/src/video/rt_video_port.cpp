@@ -111,5 +111,15 @@ void RtVideoPortInit() {
         if (probe && *probe && std::strcmp(probe, "0") != 0)
             RtVideoContextLifecycleProbe();
     }
+    // Wave 9 lane EVM: the plugin-loading half of the
+    // EnumerateVideoModes chain. InitializeInterfaces is the body
+    // standalone/video_interface.cpp has been asking for in writing since
+    // lane ENGIO -- it is the only thing that fills the DX11 slot once the
+    // detour cannot exist.
+    {
+        extern int RtVideoInterfacesRegister();
+        n += RtVideoInterfacesRegister();
+    }
+
     printf("[RtPort] Video: %d exports registered\n", n);
 }
