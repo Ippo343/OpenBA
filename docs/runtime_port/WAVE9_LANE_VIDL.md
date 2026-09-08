@@ -232,6 +232,17 @@ and +0x08 only) fails there and nowhere else.
   counters). Not merged — merging would re-bind and re-`Load` in a different
   interleaving, and `External::Load` is not ours, so nothing in this tree could
   tell us whether that mattered.
+* **The SaveLoad loop bound is re-read every iteration**, not hoisted
+  (0x1800dcc62 is inside the loop, and so is the base load at 0x1800dcc30).
+  The body calls a scalar-deleting destructor through a vtable — arbitrary code
+  that can shrink that array or move its buffer. The port hoisted it in its
+  first draft and was corrected; a hoisted bound is a port that is right only
+  while that destructor happens to be well-behaved.
+* **ONE DELIBERATE REORDERING, declared:** retail interleaves the ten global
+  reads with the ten pushes; the port reads all ten first. Safe because the ten
+  are static `BaseTypeInfo` objects and the only thing running in between is the
+  allocator, which cannot reach them — but it is a reordering, and it is in the
+  source as such rather than passed off as a transcription.
 * **`0x180034440`'s first parameter is not a parameter.** RCX is stored to its
   home slot at 0x180034449 and never read; all three retail call sites leave RCX
   holding whatever the previous instruction put there.

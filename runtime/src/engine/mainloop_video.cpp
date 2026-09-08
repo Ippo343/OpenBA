@@ -472,6 +472,18 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     RT_DIFF_BEGIN("Engine::MainLoop::OnVideoError");
 
     // ---- 1. the ten type ids -------------------------------------------------
+    // THE ONE DELIBERATE REORDERING IN THIS FILE, DECLARED RATHER THAN HIDDEN.
+    // Retail INTERLEAVES: read global #1, push, read global #2, push, and so on
+    // for ten pairs. This reads all ten first and then pushes ten times.
+    //
+    // It is safe because the ten reads are of STATIC `Object::BaseTypeInfo`
+    // objects and the only thing running between them in retail is the
+    // allocator, which cannot reach them. It is done this way because the
+    // alternative -- an array of ten function pointers, called by index -- adds
+    // an indirection for no gain and hides which global is which.
+    //
+    // It IS still a reordering, and it would stop being safe the day one of
+    // these globals became something a MemAlloc could touch.
     rtcoll::ArrayHdr types = { nullptr, 0, 0 };
     const uint32_t ids[10] = {
         TypeIdImageBuffer(),
