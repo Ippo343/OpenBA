@@ -56,11 +56,11 @@ bool RtDiffEnabled();
 // members of an aggregate, so the whole instrument arrives with ZERO edits to
 // any port. Do not reorder these.
 struct RtDiffSite {
-    const char* name;
-    uint64_t    calls;
-    uint64_t    divergences;
-    bool        reported;   // first divergence has been logged with a stack
-    bool        linked;     // present in the summary list
+    const char* name        = nullptr;
+    uint64_t    calls       = 0;
+    uint64_t    divergences = 0;
+    bool        reported    = false;   // first divergence has been logged with a stack
+    bool        linked      = false;  // present in the summary list
 
     // ---- THE DID-WORK COUNTER (lane M) ------------------------------------
     // `calls` counts calls ENTERED, and a large `calls` is NOT coverage. Wave 9
@@ -75,15 +75,40 @@ struct RtDiffSite {
     // summary rather than `worked=0` or nothing at all — an undeclared site is
     // an UNKNOWN, and printing the unknown is the point (a blank column would
     // read as "fine", which is the trap this exists to close).
-    uint64_t    worked;
-    bool        workDeclared;
+    uint64_t    worked       = 0;
+    bool        workDeclared = false;
 
     // ---- THE RELEASED-POINTER DETECTOR (lane M) ---------------------------
     // Counts calls where the scratch the DLL's body ran on was found holding a
     // pointer into a block our body had already released. This is a finding
     // about the HARNESS, never about the port. See RtDiffReportBytes.
-    uint64_t    freedPtrHits;
+    uint64_t    freedPtrHits = 0;
 };
+
+// ---------------------------------------------------------------------------
+// THE APPEND-ONLY INVARIANT, ENFORCED RATHER THAN REMEMBERED.
+//
+// The comment above says "do not reorder these". Wave 9 learned repeatedly that
+// a rule which exists only as a comment gets violated -- widgets_input.cpp's own
+// header forbade prefix-replaying a body that swaps a refcounted pointer, and
+// SetValueInt was prefix-replayed anyway, handing retail a pointer we had freed
+// on ~10 calls per run. So the invariant is a build error now.
+//
+// WHY IT IS LOAD-BEARING: all ~170 sites in the tree initialise this aggregate
+// as `= { NAME, 0, 0, false, false }`. C++ value-initialises the remaining
+// members, which is what let lane M's did-work counter and released-pointer
+// detector arrive with ZERO edits to any port. Reorder or insert, and every one
+// of those 170 initialisers silently assigns the wrong member -- with no
+// diagnostic, because the project does not build with
+// -Wmissing-field-initializers (lane E3 found that it is currently the only
+// warning the tree emits, and it is silent).
+//
+// The first five offsets are therefore frozen. APPEND new fields only.
+static_assert(offsetof(RtDiffSite, name)        == 0,  "RtDiffSite: append only, do not reorder");
+static_assert(offsetof(RtDiffSite, calls)       == 8,  "RtDiffSite: append only, do not reorder");
+static_assert(offsetof(RtDiffSite, divergences) == 16, "RtDiffSite: append only, do not reorder");
+static_assert(offsetof(RtDiffSite, reported)    == 24, "RtDiffSite: append only, do not reorder");
+static_assert(offsetof(RtDiffSite, linked)      == 25, "RtDiffSite: append only, do not reorder");
 
 // Register a site (idempotent) so it appears in the summary even with 0 calls.
 void RtDiffRegister(RtDiffSite* site);
@@ -174,7 +199,15 @@ void RtDiffSetReadableProbe(bool (*fn)(const void* p, size_t n));
 // ---- Macros ---------------------------------------------------------------
 
 #define RT_DIFF_BEGIN(NAME)                                                    \
-    static RtDiffSite rt_diff_site__ = { NAME, 0, 0, false, false };           \
+    /* `= { NAME }`, NOT `{ NAME, 0, 0, false, false }`: C++ value-           \
+     * initialises EVERY remaining member, so this one spelling stays correct \
+     * for any number of appended fields.  Listing the four explicitly was    \
+     * equivalent but fragile: it made all ~170 sites trip                    \
+     * -Wmissing-field-initializers the moment three fields were appended,    \
+     * and that warning is SILENT in this project's normal flags, so the tree \
+     * carried it unnoticed.  This form removes the warning AND removes the   \
+     * need to edit here on a future append. */                               \
+    static RtDiffSite rt_diff_site__ = { NAME };                              \
     const bool rt_diff_on__ = RtDiffEnabled();                                 \
     if (rt_diff_on__) RtDiffRegister(&rt_diff_site__)
 
