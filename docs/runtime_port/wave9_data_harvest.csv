@@ -1,0 +1,272 @@
+kind,symbol,namespace,rva,note,slot_index,slot_va,slot_name,slot_ported,fold_group,consumers
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,0,0x180001680,FUN_180001680,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,1,0x180001040,?TypeName@Achievement@1@UEBAPEBDXZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,2,0x180001020,?Type@Achievement@1@UEBAIXZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,3,0x18009e170,?GetFileVersion@Achievement@1@UEBAHXZ,1,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,5,0x18009e070,?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z,0,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,6,0x180001270,?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,7,0x180001370,?Destruct@Achievement@1@UEAAXXZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Achievement@0@6B@,Achievement,0x154740,,8,0x1800012f0,?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7AchievementInstance@Achievement@@6B@,Achievement,0x154700,,0,0x180001a90,FUN_180001a90,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7AchievementInstance@Achievement@@6B@,Achievement,0x154700,,1,0x1800017c0,?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7AchievementInstance@Achievement@@6B@,Achievement,0x154700,,2,0x1800017a0,?Type@AchievementInstance@Achievement@@UEBAIXZ,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7AchievementInstance@Achievement@@6B@,Achievement,0x154700,,3,0x18009e4a0,?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z,,,runtime/src/achievement/achievement_manager.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,0,0x180001d70,FUN_180001d70,,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,1,0x180001b60,?TypeName@Goal@Achievement@@UEBAPEBDXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,2,0x180001b40,?Type@Goal@Achievement@@UEBAIXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,3,0x18009ee10,?GetFileVersion@Goal@Achievement@@UEBAHXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,5,0x18009ee20,?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z,0,,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [7, 8]",6,0x18007ec28,_purecall,,7;8,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [6, 8]",7,0x18007ec28,_purecall,,6;8,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [6, 7]",8,0x18007ec28,_purecall,,6;7,runtime/src/achievement/goal.cpp
+vtable,??_7Goal@Achievement@@6B@,Achievement,0x1546b0,,9,0x18009eeb0,?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ,1,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,0,0x1800020c0,FUN_1800020c0,,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,1,0x180001e60,?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,2,0x180001e40,?Type@GoalInstance@Achievement@@UEBAIXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,3,0x18009ef70,?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z,0,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,4,0x18009f000,?Startup@GoalInstance@Achievement@@UEAAXXZ,,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,5,0x18009f010,?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z,1,,runtime/src/achievement/goal.cpp
+vtable,??_7GoalInstance@Achievement@@6B@,Achievement,0x154678,,6,0x18009f060,?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ,,,runtime/src/achievement/goal.cpp
+singleton,?_singleton@AchievementManager@Achievement@@0PEAV12@EA,Achievement,0x1fc670,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,code/Game/Game/gameupdateloop_serialize.cpp;runtime/src/achievement/achievement_manager.cpp;standalone/reg_unreg_lane1.cpp
+typeinfo,?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A,Achievement,0x1f9898,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'Achievement', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,code/Game/Game/gameupdateloop_load.cpp;runtime/src/achievement/achievement_manager.cpp
+typeinfo,?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A,Achievement,0x1f98d0,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'AchievementInstance', 'parentName': 'Object::Internal', 'fileExtension': None, 'factoryFn': '?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z', 'next_raw': '0x0'}",,,code/Game/Game/gameupdateloop_serialize.cpp
+typeinfo,?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A,Achievement,0x1f9940,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'GoalInstance', 'parentName': 'Object::Internal', 'fileExtension': None, 'factoryFn': '?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z', 'next_raw': '0x0'}",,,runtime/src/achievement/goal.cpp
+singleton,?_singleton@Application@1@0PEAV11@EA,Application,0x1fc678,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,standalone/address_registry.cpp
+singleton,?_singleton@Configuration@Audio@@0PEAV12@EA,Audio,0x1fe758,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp
+singleton,?_singleton@Device@Audio@@0PEAV12@EA,Audio,0x1fe760,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,runtime/src/audio/audio.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,0,0x18004d670,FUN_18004d670,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,1,0x1800db000,?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ,1,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,2,0x1800dafc0,?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,3,0x1800daf20,?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,4,0x1800dae20,?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,5,0x180031740,?DrawFailed@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,6,0x1800dad50,?Load@DialogLoaderLoopT@Engine@@UEAAXXZ,1,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,7,0x180031750,?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,8,0x1800dc360,?OnVideoError@LoaderLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,9,0x180031770,?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,10,0x180031780,?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,,11,0x180031790,?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoaderLoopT@Engine@@6B@,Engine,0x1578d0,"pure virtual, never overridden by this class -- not lane D work",12,0x18007ec28,_purecall,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,0,0x18004d8b0,FUN_18004d8b0,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,1,0x1800db2f0,?Startup@DialogLoopT@Engine@@UEAAXXZ,1,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,2,0x1800db2c0,?Shutdown@DialogLoopT@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,3,0x1800db270,?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z,1,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,4,0x1800db210,?Draw@DialogLoopT@Engine@@UEAAXM@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,5,0x180031740,?DrawFailed@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,6,0x1800db140,?Load@DialogLoopT@Engine@@UEAAXXZ,1,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,7,0x180031750,?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,8,0x180031760,?OnVideoError@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,9,0x180031770,?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,10,0x180031780,?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,,11,0x180031790,?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7DialogLoopT@Engine@@6B@,Engine,0x1579a0,"pure virtual, never overridden by this class -- not lane D work",12,0x18007ec28,_purecall,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,0,0x18004d4f0,FUN_18004d4f0,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,1,0x1800dc260,?Startup@LoaderLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,2,0x1800dc280,?Shutdown@LoaderLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,3,0x1800dc2a0,?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,4,0x1800dc310,?Draw@LoaderLoop@Engine@@UEAAXM@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,5,0x180031740,?DrawFailed@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,6,0x1800dc350,?Load@LoaderLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,7,0x180031750,?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,8,0x1800dc360,?OnVideoError@LoaderLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,9,0x180031770,?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,10,0x180031780,?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7LoaderLoop@Engine@@6B@,Engine,0x157940,,11,0x180031790,?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,0,0x180031900,FUN_180031900,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3, 4, 6]",1,0x18007ec28,_purecall,,2;3;4;6,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 3, 4, 6]",2,0x18007ec28,_purecall,,1;3;4;6,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 4, 6]",3,0x18007ec28,_purecall,,1;2;4;6,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 3, 6]",4,0x18007ec28,_purecall,,1;2;3;6,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,5,0x180031740,?DrawFailed@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 3, 4]",6,0x18007ec28,_purecall,,1;2;3;4,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,7,0x180031750,?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,8,0x180031760,?OnVideoError@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,9,0x180031770,?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,10,0x180031780,?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ,,,runtime/src/engine/loops.cpp
+vtable,??_7UpdateLoop@Engine@@6B@,Engine,0x155ba0,,11,0x180031790,?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ,,,runtime/src/engine/loops.cpp
+singleton,?_singleton@MainLoop@Engine@@1PEAV12@EA,Engine,0x1fe750,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp;runtime/src/engine/engine.cpp;standalone/reg_unreg_lane1.cpp;standalone/rt_orphan_probe.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,,0,0x180011800,FUN_180011800,,,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,,1,0x1800116f0,?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ,,,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,,2,0x1800116d0,?Type@AnimationEvent@Graphics@@UEBAIXZ,,,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [5, 6, 7, 8]",3,0x18007ec28,_purecall,,5;6;7;8,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 6, 7, 8]",5,0x18007ec28,_purecall,,3;6;7;8,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 7, 8]",6,0x18007ec28,_purecall,,3;5;7;8,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 6, 8]",7,0x18007ec28,_purecall,,3;5;6;8,runtime/src/graphics/animation.cpp
+vtable,??_7AnimationEvent@Graphics@@6B@,Graphics,0x154bf0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 6, 7]",8,0x18007ec28,_purecall,,3;5;6;7,runtime/src/graphics/animation.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,0,0x180015e90,FUN_180015e90,,,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3]",1,0x18007ec28,_purecall,,2;3,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 3]",2,0x18007ec28,_purecall,,1;3,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2]",3,0x18007ec28,_purecall,,1;2,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,4,0x1800a4020,?UpdateAttached@Geometry@Graphics@@UEAAXXZ,1,,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,5,0x1800a43c0,?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z,1,,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,6,0x1800154a0,?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z,1,,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,7,0x180015590,?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z,1,,runtime/src/graphics/scene.cpp
+vtable,??_7Geometry@Graphics@@6B@,Graphics,0x154e60,,8,0x1800a4420,?Clean@Geometry@Graphics@@UEAA_NXZ,1,,runtime/src/graphics/scene.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,0,0x180002d60,FUN_180002d60,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,1,0x180002810,?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,2,0x1800027f0,?Type@MaterialInstance@Graphics@@UEBAIXZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,3,0x180103a60,?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,5,0x180103a70,?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,6,0x180002a50,?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,7,0x180002b50,?Destruct@MaterialInstance@Graphics@@UEAAXXZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7MaterialInstance@Graphics@@6B@,Graphics,0x1545e0,,8,0x180002ad0,?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/graphics/renderer.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,0,0x180020160,FUN_180020160,,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,1,0x18001ff30,?TypeName@Particle@Graphics@@UEBAPEBDXZ,,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,2,0x18001ff10,?Type@Particle@Graphics@@UEBAIXZ,,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,3,0x180104080,?GetFileVersion@Particle@Graphics@@UEBAHXZ,,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,,5,0x180103f00,?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [7, 8]",6,0x18007ec28,_purecall,,7;8,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [6, 8]",7,0x18007ec28,_purecall,,6;8,runtime/src/graphics/animation.cpp
+vtable,??_7Particle@Graphics@@6B@,Graphics,0x155130,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [6, 7]",8,0x18007ec28,_purecall,,6;7,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,0,0x180020310,FUN_180020310,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,"pure virtual, never overridden by this class -- not lane D work",1,0x18007ec28,_purecall,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,2,0x180104230,?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,3,0x180104700,?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,4,0x1800a4020,?UpdateAttached@Geometry@Graphics@@UEAAXXZ,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,5,0x1800a43c0,?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,6,0x1801047f0,?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,7,0x180015590,?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,8,0x1800a4420,?Clean@Geometry@Graphics@@UEAA_NXZ,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleInstance@Graphics@@6B@,Graphics,0x1550e0,,9,0x180104a00,?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,0,0x180020ce0,FUN_180020ce0,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,1,0x1800a5600,?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,2,0x180104230,?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,3,0x180104700,?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,4,0x1800a4020,?UpdateAttached@Geometry@Graphics@@UEAAXXZ,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,5,0x1800a43c0,?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,6,0x1801047f0,?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z,,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,7,0x180015590,?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,8,0x1800a4420,?Clean@Geometry@Graphics@@UEAA_NXZ,1,,runtime/src/graphics/animation.cpp
+vtable,??_7ParticleSystemInstance@Graphics@@6B@,Graphics,0x155040,,9,0x1800a6a80,?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z,,,runtime/src/graphics/animation.cpp
+singleton,?_singleton@AnimationManager@Graphics@@0PEAV12@EA,Graphics,0x1fe7b0,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,runtime/src/graphics/animation.cpp;runtime/src/graphics/mesh.cpp
+typeinfo,?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A,Graphics,0x1fa708,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'GraphicsMesh', 'parentName': 'Object::CompiledExternal', 'fileExtension': None, 'factoryFn': '?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,standalone/reg_unreg_lane3.cpp
+typeinfo,?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A,Graphics,0x1fa740,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'Material', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,code/Game/Game/gameupdateloop_load.cpp;standalone/reg_unreg_lane3.cpp
+typeinfo,?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A,Graphics,0x1fa778,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'MaterialInstance', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,standalone/reg_unreg_lane3.cpp
+typeinfo,?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A,Graphics,0x1fa7b0,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'Particle', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,standalone/reg_unreg_lane3.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,0,0x1800244a0,FUN_1800244a0,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,1,0x18000c6a0,?GetSource@Stream@IO@@UEBA?AVString@System@@XZ,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,2,0x1800aa6c0,?Write@CompressedStream@IO@@UEAA_NHPEBX@Z,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,3,0x1800aa780,?Read@CompressedStream@IO@@UEAA_NHPEAX@Z,0,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,4,0x1800aa830,?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,5,0x1800aa850,?GetCurrentPos@CompressedStream@IO@@UEBAIXZ,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,6,0x1800aa860,?GetSize@CompressedStream@IO@@UEBAIXZ,,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,7,0x1800a9620,?Close@CompressedMemoryStream@IO@@UEAAXXZ,1,,runtime/src/io/compressedstream.cpp
+vtable,??_7CompressedMemoryStream@IO@@6B@,IO,0x155560,,8,0x1800a9660,?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ,,,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,,0,0x18000c610,FUN_18000c610,,,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,,1,0x18000c6a0,?GetSource@Stream@IO@@UEBA?AVString@System@@XZ,,,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 4, 5, 6]",2,0x18007ec28,_purecall,,3;4;5;6,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 4, 5, 6]",3,0x18007ec28,_purecall,,2;4;5;6,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3, 5, 6]",4,0x18007ec28,_purecall,,2;3;5;6,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3, 4, 6]",5,0x18007ec28,_purecall,,2;3;4;6,runtime/src/io/compressedstream.cpp
+vtable,??_7Stream@IO@@6B@,IO,0x1549a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3, 4, 5]",6,0x18007ec28,_purecall,,2;3;4;5,runtime/src/io/compressedstream.cpp
+singleton,?_singleton@FileSystem@IO@@0PEAV12@EA,IO,0x1fc6a8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,code/Game/Game/filesystem_setup.cpp;code/Game/Game/gameupdateloop.cpp;code/Game/Game/w2_takescreenshot.cpp;engine/funcs/engine_funcs.cpp �
+singleton,?_singleton@Modification@IO@@2PEAV12@EA,IO,0x1fc6b0,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,standalone/reg_mods.cpp
+singleton,?_singleton@Persistence@IO@@0PEAV12@EA,IO,0x1fc6b8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp;runtime/src/input/input.cpp;runtime/src/video/device.cpp
+singleton,?_singleton@Configuration@Input@@0PEAV12@EA,Input,0x1fe768,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp
+singleton,?_singleton@Device@Input@@0PEAV12@EA,Input,0x1fe770,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp;runtime/src/input/input.cpp;standalone/rt_orphan_probe.cpp
+vtable,??_7Base@Object@@6B@,Object,0x154788,,0,0x1800065b0,FUN_1800065b0,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7Base@Object@@6B@,Object,0x154788,"pure virtual, never overridden by this class -- not lane D work",1,0x18007ec28,_purecall,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7Base@Object@@6B@,Object,0x154788,,2,0x1800c0380,?Type@Base@Object@@UEBAIXZ,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,,0,0x18000b7e0,FUN_18000b7e0,,,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,,1,0x18000b6b0,?TypeName@CompiledExternal@Object@@UEBAPEBDXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,,2,0x18000b690,?Type@CompiledExternal@Object@@UEBAIXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [5, 6, 7]",3,0x18007ec28,_purecall,,5;6;7,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 6, 7]",5,0x18007ec28,_purecall,,3;6;7,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 7]",6,0x18007ec28,_purecall,,3;5;7,runtime/src/video/buffers.cpp
+vtable,??_7CompiledExternal@Object@@6B@,Object,0x154a30,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 6]",7,0x18007ec28,_purecall,,3;5;6,runtime/src/video/buffers.cpp
+vtable,??_7External@Object@@6B@,Object,0x1547a0,,0,0x180006640,FUN_180006640,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,,1,0x1800066c0,?TypeName@External@Object@@UEBAPEBDXZ,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,,2,0x1800066d0,?Type@External@Object@@UEBAIXZ,,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [5, 6, 7]",3,0x18007ec28,_purecall,,5;6;7,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 6, 7]",5,0x18007ec28,_purecall,,3;6;7,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 7]",6,0x18007ec28,_purecall,,3;5;7,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7External@Object@@6B@,Object,0x1547a0,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [3, 5, 6]",7,0x18007ec28,_purecall,,3;5;6,runtime/src/achievement/achievement_manager.cpp;runtime/src/achievement/goal.cpp;runtime/src/graphics/renderer.cpp;runtime/src/object/external.cpp �
+vtable,??_7Internal@Object@@6B@,Object,0x154720,,0,0x180006440,FUN_180006440,,,runtime/src/object/internal.cpp
+vtable,??_7Internal@Object@@6B@,Object,0x154720,,1,0x1800064c0,?TypeName@Internal@Object@@UEBAPEBDXZ,,,runtime/src/object/internal.cpp
+vtable,??_7Internal@Object@@6B@,Object,0x154720,,2,0x1800064d0,?Type@Internal@Object@@UEBAIXZ,,,runtime/src/object/internal.cpp
+vtable,??_7Internal@Object@@6B@,Object,0x154720,,3,0x1800bfda0,?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z,1,,runtime/src/object/internal.cpp
+singleton,?_singleton@ExternalFactory@Object@@0PEAV12@EA,Object,0x1fc6c8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp
+singleton,?_singleton@Factory@Object@@0PEAV12@EA,Object,0x1fc6e8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,runtime/src/object/external.cpp;runtime/src/object/type_system.cpp;standalone/address_registry.cpp
+singleton,?_singleton@InternalFactory@Object@@0PEAV12@EA,Object,0x1fc6d8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,code/Game/Game/gameupdateloop_serialize.cpp;runtime/src/object/internal.cpp
+typeinfo,?_typeInfo@External@Object@@0VBaseTypeInfo@2@A,Object,0x1f9b38,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'External', 'parentName': 'Base', 'fileExtension': None, 'factoryFn': '?CreateNewObject@External@Object@@SAPEAVBase@2@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z', 'next_raw': '0x0'}",,,standalone/reg_unreg_lane1.cpp
+typeinfo,?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A,Object,0x1f9be0,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'ExternalList', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z', 'next_raw': '0x0'}",,,code/Game/Game/gameupdateloop_load.cpp
+singleton,?_singleton@SaveLoad@Save@@0PEAV12@EA,Save,0x1fc6f0,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,engine/funcs/engine_funcs.cpp;standalone/reg_unreg_lane1.cpp;standalone/saveload_harness.cpp
+vtable,??_7Thread@System@@6B@,System,0x155f20,"pure virtual, never overridden by this class -- not lane D work",0,0x18007ec28,_purecall,,,runtime/src/system/thread_win.cpp
+vtable,??_7Thread@System@@6B@,System,0x155f20,,1,0x18000c590,?OnCompleted@Thread@System@@UEAAXXZ,,,runtime/src/system/thread_win.cpp
+singleton,?_singleton@MemoryAllocator@System@@0PEAV12@EA,System,0x1fc718,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,code/Game/Game/game_main.cpp;engine/funcs/engine_funcs.cpp;runtime/src/system/allocator.cpp;standalone/main.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,0,0x18003b800,FUN_18003b800,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,1,0x18003b6d0,?TypeName@DialogController@UI@@UEBAPEBDXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,2,0x18003b6b0,?Type@DialogController@UI@@UEBAIXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,3,0x1800bfda0,?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z,1,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,4,0x1800cd2b0,?OnCreated@DialogController@UI@@UEAAXXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,5,0x1800cd2a0,?OnOpened@DialogController@UI@@UEAAXXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,6,0x1800cd290,?OnClosed@DialogController@UI@@UEAAXXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,7,0x1800cd280,?OnUpdateLayout@DialogController@UI@@UEAAXXZ,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,8,0x1800cd270,?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,9,0x1800cd260,?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogController@UI@@6B@,UI,0x1565f0,,10,0x1800cd250,?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z,,,runtime/src/ui/dialog.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,0,0x1800458c0,FUN_1800458c0,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,1,0x180045400,?TypeName@DialogInstance@UI@@UEBAPEBDXZ,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,2,0x1800453e0,?Type@DialogInstance@UI@@UEBAIXZ,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,3,0x180114fa0,?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,4,0x180114fb0,?OnOpened@DialogInstance@UI@@UEAAXXZ,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,5,0x180115330,?OnClosed@DialogInstance@UI@@UEAAXXZ,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,6,0x1801153a0,?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ,1,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,7,0x180115400,?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z,1,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,8,0x180114ed0,?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z,1,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7DialogInstance@UI@@6B@,UI,0x156d70,,9,0x180115470,?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z,,,code/Game/Player/tool_base_toolui.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,0,0x180035c10,FUN_180035c10,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,1,0x180035440,?TypeName@Element@UI@@UEBAPEBDXZ,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,2,0x180035420,?Type@Element@UI@@UEBAIXZ,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,3,0x180116870,?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,"pure virtual, never overridden by this class -- not lane D work",4,0x18007ec28,_purecall,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,5,0x1801168d0,?ComputeLayout@Element@UI@@UEAAXHHHH@Z,1,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,6,0x1801168f0,?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z,1,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,7,0x180116270,?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,8,0x180116910,?Enable@Element@UI@@UEAAX_N@Z,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,9,0x1801169e0,?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,10,0x180035620,?SetColor@Element@UI@@UEAAXI@Z,,,runtime/src/ui/element.cpp
+vtable,??_7Element@UI@@6B@,UI,0x156160,,11,0x180035630,?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ,,,runtime/src/ui/element.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,0,0x1800037b0,FUN_1800037b0,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,1,0x180002e50,?TypeName@SpriteSheet@UI@@UEBAPEBDXZ,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,2,0x180002e30,?Type@SpriteSheet@UI@@UEBAIXZ,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,3,0x18011d710,?GetFileVersion@SpriteSheet@UI@@UEBAHXZ,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,4,0x18011d720,?Compile@SpriteSheet@UI@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,5,0x18011d730,?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,6,0x180003080,?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,7,0x180003180,?Destruct@SpriteSheet@UI@@UEAAXXZ,,,runtime/src/ui/sprite.cpp
+vtable,??_7SpriteSheet@UI@@6B@,UI,0x154590,,8,0x180003100,?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/ui/sprite.cpp
+typeinfo,?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A,UI,0x1f9d68,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'ClipRegionElement', 'parentName': 'Element', 'fileExtension': None, 'factoryFn': '?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,runtime/src/ui/element.cpp
+typeinfo,?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A,UI,0x1faa88,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'Dialog', 'parentName': 'Object::External', 'fileExtension': None, 'factoryFn': '?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,engine/funcs/engine_funcs.cpp;runtime/src/engine/loops.cpp
+typeinfo,?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A,UI,0x1fac48,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'ImageElement', 'parentName': 'Element', 'fileExtension': None, 'factoryFn': '?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,code/Game/Player/tool_base_createbar.cpp
+typeinfo,?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A,UI,0x1fa190,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'NumberEditElement', 'parentName': 'EditElement', 'fileExtension': None, 'factoryFn': '?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,runtime/src/ui/widgets_input.cpp
+typeinfo,?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A,UI,0x1fad98,typeId sentinel 0xFFFFFFFF + name/parentName/fileExtension/factoryFn/inPlaceFactoryFn are LINK-TIME CONSTANTS baked into the file; 'next' is runtime-only (head-inserted by the ctor) and reads 0 here,,,"{'typeId': '0xffffffff', 'name': 'ScrollElement', 'parentName': 'Element', 'fileExtension': None, 'factoryFn': '?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ', 'inPlaceFactoryFn': '?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z', 'next_raw': '0x0'}",,,runtime/src/ui/element.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,0,0x18001ed20,FUN_18001ed20,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,1,0x18001e900,?TypeName@ImageBuffer@Video@@UEBAPEBDXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,2,0x18001e8e0,?Type@ImageBuffer@Video@@UEBAIXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,3,0x1800f26e0,?GetFileVersion@ImageBuffer@Video@@UEBAHXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,4,0x1800066e0,?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z,0,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,5,0x1800f26f0,?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,6,0x18001ea80,?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,7,0x18001eab0,?Destruct@ImageBuffer@Video@@UEAAXXZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,8,0x18001eaa0,?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBuffer@Video@@6B@,Video,0x154fc0,,9,0x1800f2680,?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z,1,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,,0,0x180058a10,FUN_180058a10,,,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2, 3, 4, 5, 6]",1,0x18007ec28,_purecall,,2;3;4;5;6,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 3, 4, 5, 6]",2,0x18007ec28,_purecall,,1;3;4;5;6,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 4, 5, 6]",3,0x18007ec28,_purecall,,1;2;4;5;6,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 3, 5, 6]",4,0x18007ec28,_purecall,,1;2;3;5;6,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 3, 4, 6]",5,0x18007ec28,_purecall,,1;2;3;4;6,runtime/src/video/buffers.cpp
+vtable,??_7ImageBufferData@Video@@6B@,Video,0x158b50,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1, 2, 3, 4, 5]",6,0x18007ec28,_purecall,,1;2;3;4;5,runtime/src/video/buffers.cpp
+vtable,??_7RenderStateData@Video@@6B@,Video,0x158a60,,0,0x180058690,FUN_180058690,,,runtime/src/video/device.cpp
+vtable,??_7RenderStateData@Video@@6B@,Video,0x158a60,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [2]",1,0x18007ec28,_purecall,,2,runtime/src/video/device.cpp
+vtable,??_7RenderStateData@Video@@6B@,Video,0x158a60,"pure virtual, never overridden by this class -- not lane D work; shares target with slot(s) [1]",2,0x18007ec28,_purecall,,1,runtime/src/video/device.cpp
+singleton,?_singleton@Configuration@Video@@0PEAV12@EA,Video,0x1fe7a0,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,dx11/src/contextdata.cpp;dx11/src/devicedata.cpp;dx11/src/imagebufferdata.cpp;engine/funcs/engine_funcs.cpp �
+singleton,?_singleton@Device@Video@@0PEAV12@EA,Video,0x1fe7a8,NOT backed by file data (BSS-style) or zero -- only ever set at runtime; do not read this as null,,,(empty read),,,dx11/src/buffers.cpp;dx11/src/devicedata.cpp;dx11/src/imagebufferdata.cpp;dx11/src/renderstatedata.cpp �

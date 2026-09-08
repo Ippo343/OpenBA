@@ -31,7 +31,7 @@ Everything here is in service of that single line.
 | unnamed DLL internal, by address | 57 | `ResolveAddr(Module::Runtime, 0x1800xxxxx)` with no export name — the `FUN_` pool |
 | ctor/dtor | 51 | `??0` / `??1`; these bind the class-atomicity rule below |
 | `??_7` vtable | 28 | exported DATA |
-| `?_singleton@…` | 17 | exported DATA |
+| `?_singleton@…` | 18 | exported DATA |
 | `?_typeInfo@…` (`BaseTypeInfo`) | 14 | exported DATA |
 | ordinal | 4 | |
 | DLL `.data` global, by address | 3 | `0x1801f…`, e.g. the `MainLoop` singleton region |
@@ -40,9 +40,13 @@ By namespace: internal 60, Video 59, UI 48, Graphics 28, System 23, Object 22, I
 Achievement 16, Engine 14, Audio 8, Input 7, Math 5, ordinal 4, Application 3, Save 3,
 Utility 1, Volume 1.
 
-**59 of the 319 are DATA, not code.** A vtable, a singleton slot and a `BaseTypeInfo` cannot
-be "ported" in the sense the per-function recipe means — there is no body to reimplement.
-They have to be *minted*, with a layout that every ported and unported consumer agrees on.
+**60 of the 319 are DATA, not code** — this table originally said 17 singletons / 59, and
+both numbers were wrong by one. Lane C's harvest
+([WAVE9_LANE_C.md](WAVE9_LANE_C.md)) found 18 distinct `?_singleton@…` symbols with no
+duplicates; a first manual grep had missed `IO::FileSystem`, `Video::Configuration` and
+`Video::Device`. A vtable, a singleton slot and a `BaseTypeInfo` cannot be "ported" in the
+sense the per-function recipe means — there is no body to reimplement. They have to be
+*minted*, with a layout that every ported and unported consumer agrees on.
 
 ### 2. Every verification mechanism this project has built dies at cutover
 
@@ -241,7 +245,7 @@ ours), not chosen.
 | **S. The save-stream A/B oracle** — **BUILT AND PROVEN 2026-09-07**, `runtime/src/io/save_trace.{h,cpp}`, `BANISHED_RT_SAVE_TRACE=1` | Replays both bodies into two independent **synthetic** sinks and compares the **emission sequence** — not the bytes on disk, because a desync IS a different sequence of typed writes, and because a synthetic sink needs no `MemoryStream` and no codec. First subject: `Audio::Scene::Serialize`, **32,772 emissions identical, 0 diverged.** | An identical emission sequence |
 | **A. Reclaim the holdbacks** | Port + diff-verify, against the still-present DLL, everything held back in waves 3–8. **Triaged below into a per-function disposition** — P (1, a probe), B (10, blocked on a named dependency), N (7, allocator-bound or oracle-hard), D/X (14, stubs or already-unblocked). Start with X: four `ExternalFactory` mutators whose stated blocker was a Wave 4 dependency that has since landed. | 0 divergences and non-zero `calls=` for the ports; a written reason for each stub |
 | **B. The 145 named functions + 51 ctors/dtors** | The ordinary port wave, class-atomic (§4.1 rule 5). | 0 divergences |
-| **C. Data: 28 vtables, 17 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
+| **C. Data: 28 vtables, 18 singletons, 14 `BaseTypeInfo`** | Mint them. Each vtable's slots must all point at ported functions, so this lane *follows* B per class and cannot lead it. | `static_assert` on every offset; a shadow oracle comparing our minted vtable against the DLL's exported one, byte for byte, while both exist |
 | **D. The 57 unnamed internals** | **The known-hard one.** PLAN §4.3 risk 4 records the `FUN_` pool as MEASURED AND UNSOLVED and CLOSED TO AUTOMATION: all three levers (hash/fuzzy, string anchors, call-graph) run to a fixed point at 2% touched, 9 names proposed, none verified, and no PDB exists. 57 is a far smaller target than the pool, and each has a call site that says what it is used for — that is the lever, not the name. | Each one either ported, or proved unreachable by lane 0 |
 | **E. Allocator** | Arm `BANISHED_RT_ALLOC`, revisit the NO-GO, and take the heap. Includes `Engine::Startup`'s three direct field writes and `Shutdown`. | `sa-stress` clean under `BANISHED_REDZONE=watch` |
 | **F. Retire the §2.2 patches** | The four byte-patch files, the crash handler's Runtime instruction offsets (§2.2 C, kept and narrowed by Wave 3), the `MessageBoxW` IAT swap, and the direct layout reads in §2.2 B. | Each one deleted, not carried |
