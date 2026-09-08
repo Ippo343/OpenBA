@@ -113,6 +113,12 @@
 #include "../../types/ui/EditElement.h"
 #include "../../types/ui/RadioElement.h"
 #include "../../types/ui/ProgressElement.h"
+// WAVE 9 LANE UIW2. SliderElement/ProgressElement/ComboElement all write
+// into a wrapped TEXT widget's own parameter array, so this lane uses lane
+// E's TextElement offsets rather than making a second, independent reading
+// of them. Sprite.h is for ComboElement::UpdateText's 16-byte sprite copy.
+#include "../../types/ui/TextElement.h"
+#include "../../types/ui/Sprite.h"
 
 using UI::Element;
 using UI::SpinnerElement;
@@ -422,6 +428,142 @@ void NumberEditElement_SetValue(NumberEditElement* self, int value) {
     // the number worth reading. Same shape and same honesty as
     // Application::SleepThread in runtime/src/application/application_win.cpp.
     RT_DIFF_SHADOW(true, "set", "not diffable");
+}
+
+
+// ============================================================================
+// WAVE 9 LANE UIW2 — dependencies for ComboElement::SetCurrentItem/UpdateText
+// and the two "parameter into the wrapped TextElement" setters.
+// ============================================================================
+//
+// EVERY ONE OF THESE REUSES A DOOR THE TREE ALREADY HAD. That is what makes the
+// set-diff in docs/runtime_port/WAVE9_LANE_UIW2.md come out the right way:
+// three exported names close and NO new unsatisfied name and NO new
+// unregistered address open. If you add a dependency here, re-run
+// tools/unsatisfied_export_scan.py and tools/addr_door_audit.py and put the
+// delta in that document — a lane that closes 3 doors and opens 4 has gone
+// backwards, and only the set-diff can tell you which happened.
+
+// ?CacheText@TextElement@UI@@AEAAXXZ (0x18011ec10) — TextElement's OWN
+// CacheText, the SHARED base implementation. NOT NumberElement's private
+// 0x1801189f0 above; Wave 7 lane D disambiguated the two with get_xrefs_to and
+// this file already carries that note at NumberElementCacheText(). Not ported
+// by any wave (its remaining callee is ?SetParameterCount@TextElement@
+// 0x18011e8e0), so it is a door that resolves to null at cutover — but NOT A
+// NEW ONE: runtime/src/ui/widgets_layout.cpp:102 already opened it under this
+// exact mangled name for TextElement::SetParameter/SetText. Spelling it
+// identically keeps the two on ONE row of tools/unsatisfied_export_scan.py.
+using TextCacheTextFn = void (*)(void*);
+inline TextCacheTextFn TextElementCacheText() {
+    return RT_EXPORT_ONCE(TextCacheTextFn, "?CacheText@TextElement@UI@@AEAAXXZ");
+}
+
+// ??4String@System@@QEAAAEAV01@AEBV01@@Z (0x1800c9810) — System::String's
+// refcounted assignment, PORTED in Wave 2 (runtime/src/system/string.cpp
+// registers it under both name and address). Reached through the port registry
+// so this file does not walk past our own body into the DLL's
+// (reference_bypassed_port_needs_a_source_checker.md). Its post-condition,
+// `dst->data == src->data`, is what the shadow predicates below assert.
+using StringAssignFn = void* (*)(void*, const void*);
+inline StringAssignFn StringAssign() {
+    return RT_EXPORT_ONCE(StringAssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z");
+}
+
+// ?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z
+// (0x180115760) — PORTED in Wave 7 lane A as RtUi_Element_FindElementType
+// (runtime/src/ui/element.cpp, registered under name AND address). EXACT
+// type-id equality, not IsDerivedFrom.
+//
+// *** `QEAA`, NOT `QEBA`, AND THIS LANE GOT IT WRONG FIRST. *** The first draft
+// spelled it `QEBA` (const member) on the assumption that a finder is const. It
+// is not, and `?FindElementType@Element@UI@@QEBA…` IS NOT IN THE EXPORT TABLE —
+// it would have resolved to NULL in silence, the port would still have
+// registered, and the census would still have counted it
+// (reference_resolveexport_phantom_names.md, the same defect Wave 7 lane B
+// found twice in one file).
+//
+// WHAT CAUGHT IT WAS THE SET-DIFF, NOT REVIEW. tools/unsatisfied_export_scan.py
+// went 129 -> 127 where 126 was expected, and the entered/left comparison named
+// the one symbol that had appeared: this typedef's own phantom. A lane that had
+// only read the "-2, good, went down" headline would have shipped it. That is
+// the whole argument for diffing the SET rather than the COUNT, and it is why
+// the header of this block asks the next person to re-run both audits.
+//
+// The hidden return slot IS real here and is in the typedef: `?AV?$InternalPtr@…`
+// returns by value, so the second argument is the return slot and the type id is
+// third. tools/abi_retslot_audit.py is what enforces that
+// (reference_hidden_retslot_wild_write.md).
+using FindElementTypeFn = void* (*)(void* self, void** ret, uint32_t typeId);
+inline FindElementTypeFn FindElementType() {
+    return RT_EXPORT_ONCE(FindElementTypeFn,
+        "?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z");
+}
+
+// ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+// (0x180120f20) — NOT ported. WAVE9_LANE_UIF.md row 4 declined it at depth 3
+// and that verdict stands; this lane re-checked the blocker rather than
+// inheriting it (reference_holdback_blockers_are_stale_check_them_first.md) and
+// it is still real. The DOOR, however, is engine/funcs/engine_funcs.cpp:1607's
+// and is reused verbatim, so SetCurrentItem adds no second row for it.
+//
+// ABI: the InternalPtr<DialogInstance> is passed BY ADDRESS even though the
+// mangled name spells it by value — InternalPtr<T> has a non-trivial copy
+// constructor, so MSVC x64 passes it indirectly. Retail's `LEA RDX,[RSP+0x30]`
+// at 0x180112564 is that indirection, and engine_funcs.h's typedef records the
+// same conclusion from the other direction.
+using CloseDialogFn = void (*)(void* ui, void* dialogPtrSlot);
+inline CloseDialogFn CloseDialog() {
+    return RT_EXPORT_ONCE(CloseDialogFn,
+        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z");
+}
+
+// The two type ids these bodies read — AND THE FINDING THAT MADE THIS LANE
+// CHEAP. Both are EXPORTED DATA. Checked with pefile against the shipped export
+// directory, 2026-09-08:
+//
+//   0x1801faee8  ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        ord 4922
+//   0x1801fa040  ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       ord 4877
+//   0x1801fa190  ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  ord 4886
+//
+// All three are already carried by lane C2's mint, so a NAMED read costs
+// nothing at cutover while an ADDRESS read books a row in the unregistered
+// -address bucket. The sibling accessor NumberEditElementTypeId() above resolves
+// its slot by ADDRESS (0x1801fa190) and therefore pays that cost for a symbol
+// that has a perfectly good name. This lane does NOT change that live accessor —
+// retuning another lane's working call site is not this lane's to do — but it is
+// recorded here and in WAVE9_LANE_UIW2.md as a one-line fix at source
+// (PLAN §6 step 8), because the next person to copy the idiom from this file
+// should copy the named form.
+//
+// The FIRST DWORD of a BaseTypeInfo is the type id: the same reading
+// runtime/src/achievement/achievement_manager.cpp:274 uses, and the one retail's
+// own `MOV EDX,dword ptr [0x1801faee8]` at 0x1800d6cb9 proves.
+inline uint32_t TextElementTypeId() {
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A");
+    return p ? *p : 0u;
+}
+inline uint32_t LabelElementTypeId() {
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A");
+    return p ? *p : 0u;
+}
+
+// The address of parameter slot `index` of a TextElement's own
+// Collection::Array<System::String> (data +0xC8, size +0xD0 — see
+// runtime/types/ui/TextElement.h, derived from TextElement::SetParameter's own
+// call site at 0x18011e9b0). Factored out because it is the ONE piece of
+// arithmetic in this lane that can be silently wrong in a way no run would
+// notice, and RtUiW2SelfTest() at the bottom of this file exercises it with a
+// negative control that is verified to fire.
+inline void* TextParamSlot(void* textElem, int32_t index) {
+    auto* data = *reinterpret_cast<uint8_t**>(
+        static_cast<uint8_t*>(textElem) + UI::TextElementOffsets::kParamArrayData);
+    return data + static_cast<size_t>(index) * 8;
+}
+inline int32_t TextParamCount(const void* textElem) {
+    return *reinterpret_cast<const int32_t*>(
+        static_cast<const uint8_t*>(textElem) + UI::TextElementOffsets::kParamCount);
 }
 
 } // namespace
@@ -1076,6 +1218,416 @@ void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
     }
 }
 
+
+// ============================================================================
+// WAVE 9 LANE UIW2 — SliderElement::SetParameter,
+//                    ProgressElement::SetProgressTextParameter,
+//                    ComboElement::UpdateText + ::SetCurrentItem
+// ============================================================================
+// Full write-up, closure set-diff and HONEST LIMITS:
+//   docs/runtime_port/WAVE9_LANE_UIW2.md
+//
+// ---------------------------------------------------------------------------
+// ARGUMENT COUNT, CHECKED AGAINST THE MANGLED NAME BEFORE ANYTHING ELSE
+// ---------------------------------------------------------------------------
+// The brief's warning for this lane, and the failure family behind it
+// (reference_hidden_retslot_wild_write.md): a String-RETURNING member has a
+// hidden return slot between `this` and its arguments, and a pointer parameter
+// typed `int` only goes wrong from the 5th argument on. Neither applies here,
+// and that is a checked conclusion rather than an assumption:
+//
+//   ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z
+//   ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z
+//       QEAA X  H  AEBVString@System@@  -> returns VOID (no hidden slot),
+//       takes (this, int, const String&) = RCX, EDX, R8. Three integer slots,
+//       all register-passed. The disassembly agrees: `MOVSXD RDI,EDX`
+//       sign-extends the int, `MOV RSI,R8` keeps the reference.
+//
+//   ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z
+//       QEAA X H -> void (this, int) = RCX, EDX.
+//
+// tools/abi_retslot_audit.py covers this file and is run in the lane doc.
+//
+// ---------------------------------------------------------------------------
+// WHY THERE IS NO REPLAY ORACLE ON ANY OF THE FOUR — AND WHAT REPLACES IT
+// ---------------------------------------------------------------------------
+// Every one of them ends in `System::String::operator=` on a slot of a CHILD
+// object reached through a pointer that a byte-for-byte scratch copy would
+// share (the "shared-child caveat" this file's Wave 7 header already states).
+// A replay would therefore run the refcount acquire/release TWICE on the one
+// live string, and restoring the slot's raw pointer to undo our write can make
+// retail's subsequent access a use-after-free rather than a diagnostic. That is
+// exactly the argument runtime/src/ui/widgets_layout.cpp's TextElement::
+// SetParameter makes for the identical tail, and it is why lane M's Finding 1
+// says a body of this shape must NOT be prefix-replayed.
+//
+// What is here instead, and what each part is worth:
+//
+//   * RT_DIFF_WORK — the DID-WORK counter WAVE9.md asks for beside `calls=`.
+//     A large `calls=` reads as coverage and is the same trap as `calls=0`
+//     reading as clean, one level up: 12,886 of NumberElement::SetValueInt's
+//     12,896 calls took an early-out. Every body below counts the calls that
+//     REACHED THE ASSIGNMENT, separately from the calls that entered.
+//   * RT_DIFF_SHADOW on a post-condition that is FALSIFIABLE, not a second
+//     spelling of the code above it: after `String::operator=(dst, src)` the
+//     ported body of that function guarantees `dst->data == src->data`
+//     (runtime/src/system/string.cpp:360). That predicate FAILS if the slot
+//     address is computed wrong — the wrong base offset, the wrong element
+//     stride, the wrong index — which is the whole of what this lane could get
+//     wrong that a run would not otherwise notice.
+//   * RtUiW2SelfTest() at the bottom: a positive AND a negative control for
+//     that arithmetic, run once per diff-enabled process, printing ALIVE or
+//     BROKEN. It exists for the reason lane M's released-pointer detector
+//     needed one — a predicate that can no longer fire is indistinguishable
+//     from a predicate that has nothing to report
+//     (reference_probe_needs_an_effectiveness_control.md).
+//
+// The shadow predicate is NOT a substitute for a differential oracle and this
+// lane does not claim it is. It is silent about the dirty-flag walk, about
+// CacheText's effects, and about anything past the offsets it names.
+// ============================================================================
+
+namespace {
+
+// The tail both parameter setters run once the child is resolved and the index
+// is in range. Retail 0x1800d6cf0-0x1800d6d1c and 0x180119b80-0x180119bac are
+// the SAME SEVEN INSTRUCTIONS in the same order:
+//   dirty-walk from the CHILD (not from `this`) up the parent chain,
+//   String::operator=(&child->_params[index], str),
+//   TextElement::CacheText(child).
+// Returns the assigned slot so the caller can state a post-condition about it.
+void* WrappedTextSetParam(void* child, int32_t index, const void* str) {
+    MarkNeedsSizeCalcUpToRoot(reinterpret_cast<Element*>(child));
+    void* slot = TextParamSlot(child, index);
+    StringAssign()(slot, str);
+    TextElementCacheText()(child);
+    return slot;
+}
+
+// The shadow predicate shared by every assignment site below: our ported
+// String::operator= shares the buffer pointer rather than copying, so after the
+// call the destination slot's data pointer IS the source's.
+inline bool SlotSharesBuffer(const void* slot, const void* src) {
+    return *static_cast<const void* const*>(slot) == *static_cast<const void* const*>(src);
+}
+
+} // namespace
+
+// ---- ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z  0x1800d6ca0
+//
+// Wave 7 lane D held this back for three stated reasons and ALL THREE HAVE
+// EXPIRED — checked, not assumed:
+//   (a) "the target object belongs to a class this lane does not own or model"
+//       — runtime/types/ui/TextElement.h has existed since Wave 7 lane E and is
+//       derived from TextElement::SetParameter's own call site.
+//   (b) "String::operator='s exact refcount sequence was not independently
+//       confirmed" — it is PORTED and diff-verified
+//       (runtime/src/system/string.cpp, Wave 2).
+//   (c) "a refcount swap has no safe replay oracle regardless" — STILL TRUE,
+//       and it is the one reason this port ships without one. (b) expiring does
+//       not make (c) expire; they are different claims.
+//
+// The child is `_children._data[0]` cast through IsDerivedFrom against
+// TextElement's type id, i.e. FirstChildAs<> — the same shape SpinnerElement's
+// seven exports use, and the reason this file already has that helper.
+void RtUi_SliderElement_SetParameter(Element* self, int32_t index, const void* str) {
+    RT_DIFF_BEGIN("UI::SliderElement::SetParameter [no oracle: refcounted String swap on a shared child]");
+
+    void* child = FirstChildAs<void>(self, TextElementTypeId());
+
+    // Retail 0x1800d6ccf and 0x1800d6cd4 are TWO separate exits — `JZ` on the
+    // cast result and then `JZ` on the pointer itself. The second is redundant
+    // (a successful IsDerivedFrom implies non-null) and is transcribed anyway,
+    // because it is what makes this function DIFFER from its Progress sibling
+    // below. See that function's header.
+    if (child == nullptr) { RT_DIFF_WORK(false); return; }
+    if (index < 0) { RT_DIFF_WORK(false); return; }
+    if (index >= TextParamCount(child)) { RT_DIFF_WORK(false); return; }
+
+    void* slot = WrappedTextSetParam(child, index, str);
+
+    RT_DIFF_WORK(true);
+    RT_DIFF_SHADOW(SlotSharesBuffer(slot, str),
+                   "param slot shares the source String buffer",
+                   "not diffable (see the header)");
+}
+
+// ---- ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z
+//      0x180119b30
+//
+// THE SAME PROGRAM AS THE SLIDER ABOVE EXCEPT FOR ONE BRANCH, AND THAT
+// DIFFERENCE IS THE INTERESTING PART OF THIS PORT.
+//
+//   Slider   0x1800d6ccd  TEST AL,AL   / JZ done   <- cast failed, bail
+//            0x1800d6cd1  TEST RBX,RBX / JZ done   <- and bail on a null child
+//   Progress 0x180119b62  XOR EDI,EDI
+//            0x180119b66  CMOVNZ RDI,RBX          <- child = ok ? first : NULL
+//            0x180119b6c  TEST ESI,ESI / JS done  <- only the NEGATIVE index exits
+//            0x180119b6e  CMP ESI,dword ptr [RDI+0xd0]   <- READS THROUGH IT ANYWAY
+//
+// *** RETAIL HARD-FAULTS HERE WHERE THE SLIDER RETURNS QUIETLY. *** With a
+// first child that is not a TextElement and a non-negative index,
+// SetProgressTextParameter reads address 0x00000000000000d0 and dies. The
+// CMOVNZ is not a null check; it is a cast, and retail then asserts the cast
+// succeeded by dereferencing.
+//
+// This port REPRODUCES THAT, which means the load below is deliberately through
+// a possibly-null pointer. It is spelled as byte arithmetic on a `uint8_t*`
+// rather than `child->_paramCount` so the compiler emits the load instead of
+// concluding the pointer cannot be null and deleting the branch around it.
+//
+// DO NOT "FIX" THIS WITH A NULL CHECK. Retail's unguarded deref is the
+// assertion that a ProgressElement's first child is a TextElement, and a guard
+// would keep us running in a state retail treats as impossible — the exact
+// inversion WAVE9.md's Finding 3 records, where a null check had been MASKING a
+// fault for a whole port rather than preventing one. If this faults, the thing
+// to find is who built a ProgressElement whose first child is not a text
+// widget.
+void RtUi_ProgressElement_SetProgressTextParameter(Element* self, int32_t index, const void* str) {
+    RT_DIFF_BEGIN("UI::ProgressElement::SetProgressTextParameter [no oracle: refcounted String swap on a shared child]");
+
+    void* child = FirstChildAs<void>(self, TextElementTypeId());
+
+    if (index < 0) { RT_DIFF_WORK(false); return; }
+    // Faithful to 0x180119b6e — see the header. `child` may be null here.
+    const int32_t count = *reinterpret_cast<const int32_t*>(
+        static_cast<const uint8_t*>(child) + UI::TextElementOffsets::kParamCount);
+    if (index >= count) { RT_DIFF_WORK(false); return; }
+
+    void* slot = WrappedTextSetParam(child, index, str);
+
+    RT_DIFF_WORK(true);
+    RT_DIFF_SHADOW(SlotSharesBuffer(slot, str),
+                   "param slot shares the source String buffer",
+                   "not diffable (see the header)");
+}
+
+// ============================================================================
+// ComboElement::UpdateText — private, UNEXPORTED, retail 0x180112180
+// ============================================================================
+// Wave 7 lane D named this as one of two things blocking SetCurrentItem and did
+// not resolve its address; WAVE9_LANE_UIF.md row 16 pinned it at 0x180112180
+// and still declined. It is ported here because it is the CHEAPER half: all
+// four of its callees are already ours or already have a door —
+// Element::FindElementType (ported, Wave 7 lane A), Object::Base::IsDerivedFrom
+// (ported, Wave 3), System::String::operator= (ported, Wave 2), and
+// TextElement::CacheText (an existing door, see the accessor above). Porting it
+// therefore opens NOTHING, and leaving it unported would have meant
+// SetCurrentItem calling 0x180112180 by address — one brand-new row in the
+// hardest bucket, which is precisely the trap
+// reference_porting_can_grow_the_cutover_surface.md describes.
+//
+// It finds the LABEL widget the combo displays its current item in, then pushes
+// both the current item's STRING and its SPRITE into it.
+//
+// TWO THINGS A READER WILL WANT TO CHECK AGAINST THE LISTING, because both look
+// like transcription slips and neither is:
+//
+//   1. `_children._data[4]`, NOT [0]. 0x18011219b/0x1801121a7 are
+//      `MOV RBX,[RCX+0xa0]` then `MOV RBX,[RBX+0x20]` — 0x20/8 = 4. Every other
+//      wrapped-widget lookup in this file is children[0]; this one is the fifth
+//      child. Ghidra's C prints both loads as one expression, which is the
+//      shape reference_ghidra_c_output_vs_disassembly.md warns about.
+//   2. NEITHER index into `_strings` NOR into `_sprites` is bounds-checked
+//      against the arrays' own sizes. Retail guards only the ITEM COUNT at the
+//      top (+0xf0) and, for the sprite, the sprite's own validity. A
+//      `_currentItem` of -1 — which ?RemoveAllItems@ sets — would index [-1].
+//      That is unreachable in practice only because the +0xf0 guard makes the
+//      array non-empty and SetCurrentItem never leaves -1 behind; it is not a
+//      check retail performs, so it is not one this port performs.
+void RtUi_ComboElement_UpdateText(ComboElement* self) {
+    RT_DIFF_BEGIN("UI::ComboElement::UpdateText [no oracle: refcounted String swap on a shared child]");
+
+    if (self->_strings._size <= 0) { RT_DIFF_WORK(false); return; }
+
+    const uint32_t labelType = LabelElementTypeId();
+
+    // children[4], then: EXACT type match short-circuits the search entirely
+    // (0x1801121bb `CMP EAX,R12D` against the virtual Type(), slot 2).
+    Element* start = self->base._children._data[4];
+    void* found = nullptr;
+    {
+        using TypeFn = uint32_t (*)(const Element*);
+        void** vtbl = *reinterpret_cast<void***>(start);
+        if (reinterpret_cast<TypeFn>(vtbl[2])(start) == labelType) {
+            found = start;
+        } else {
+            // Retail re-reads `start->_children._data` on every iteration
+            // (0x1801121f0 `MOV RAX,[R15]`) while holding `&_size` fixed in
+            // R14; transcribed with the same re-read for the same reason
+            // widgets_layout.cpp's Element_RemoveChildren does.
+            for (int32_t i = 0; i < start->_children._size; ++i) {
+                Element* c = start->_children._data[i];
+                if (c == nullptr) continue;
+                void* out = nullptr;
+                FindElementType()(c, &out, labelType);
+                found = out;
+                if (found != nullptr) break;
+            }
+        }
+    }
+
+    // 0x180112234: the found node is re-tested with IsDerivedFrom, which is
+    // redundant after an exact-type FindElementType and is transcribed anyway.
+    // It is NOT redundant on the short-circuit path above, where `start` was
+    // matched on its own virtual Type().
+    if (!IsDerivedFrom()(found, labelType)) { RT_DIFF_WORK(false); return; }
+    if (found == nullptr) { RT_DIFF_WORK(false); return; }
+
+    bool didWork = false;
+
+    // ---- the STRING half (0x180112258-0x1801122a5) -------------------------
+    if (TextParamCount(found) > 0) {
+        MarkNeedsSizeCalcUpToRoot(reinterpret_cast<Element*>(found));
+        void* slot = TextParamSlot(found, 0);
+        const void* src = reinterpret_cast<const uint8_t*>(self->_strings._data)
+                        + static_cast<size_t>(self->_currentItem) * 8;
+        StringAssign()(slot, src);
+        TextElementCacheText()(found);
+        didWork = true;
+        RT_DIFF_SHADOW(SlotSharesBuffer(slot, src),
+                       "label param[0] shares the current item's String buffer",
+                       "not diffable (see the header)");
+    }
+
+    // ---- the SPRITE half (0x1801122aa-0x180112306) -------------------------
+    // `_sprites` is Array<UI::Sprite>, 16 bytes per element — retail computes
+    // the offset as `(currentItem + currentItem) * 8`, which is the same thing
+    // and is why the listing shows an `ADD RCX,RCX` before an `RCX*8` scale.
+    // The two guards ARE UI::Sprite::IsValid() taken apart: index >= 0
+    // (0x1801122bb `JL`) and sheet != null (0x1801122c2 `JZ`).
+    {
+        auto* sprites = reinterpret_cast<uint8_t*>(self->_sprites._data);
+        auto* src = reinterpret_cast<const ::Sprite*>(
+            sprites + static_cast<size_t>(self->_currentItem) * 16);
+        if (src->spriteIndex >= 0 && src->spriteSheet != nullptr) {
+            auto* dst = reinterpret_cast<::Sprite*>(
+                reinterpret_cast<uint8_t*>(found) + 0x100);
+            // Retail compares the sheet pointer and the index, then stores all
+            // 16 bytes EITHER WAY — the dirty walk is what the comparison
+            // gates, not the store (0x1801122ee `JZ` jumps straight to the
+            // MOVUPS at 0x180112306). pad0C rides along in the 16-byte store
+            // and is deliberately not part of the comparison, matching both
+            // retail and runtime/types/ui/Sprite.h's note that no ctor writes
+            // it (reference_oracle_must_not_compare_unwritten_bytes.md).
+            if (dst->spriteSheet != src->spriteSheet || dst->spriteIndex != src->spriteIndex)
+                MarkNeedsSizeCalcUpToRoot(reinterpret_cast<Element*>(found));
+            *dst = *src;
+            didWork = true;
+        }
+    }
+
+    RT_DIFF_WORK(didWork);
+}
+
+// ---- ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z  0x180112540 ---------------
+//
+// Wave 7 lane D held this back on TWO named blockers and Wave 9 lane UIW
+// repeated one of them. Re-checked here rather than inherited
+// (reference_holdback_blockers_are_stale_check_them_first.md):
+//
+//   (a) "UserInterface::CloseDialog — one of this wave's six phantom names,
+//        owned by lane C and not yet fixed" — the PHANTOM is fixed. Wave 7 lane
+//        C established the real mangling (by value, not `AEAV…`) and
+//        engine_funcs.cpp:1607 resolves it correctly today. The function is
+//        still unported, so the door is still null at cutover — but it is
+//        engine_funcs' existing door, not a new one, and "unported" is a
+//        different claim from "phantom".
+//   (b) "a private UpdateText helper this lane did not resolve" — resolved
+//        (0x180112180) and PORTED, immediately above.
+//
+// The body itself allocates nothing and frees nothing. Note what it does NOT
+// do: after handing `_openDialog` to CloseDialog it simply ZEROES the field
+// (0x18011256e) with no release and no destructor call — Object::InternalPtr is
+// a handle, not a refcounted pointer, and the callee only reads the slot.
+//
+// The out-of-range branch resets `_currentItem` to 0, NOT to -1 (0x1801125a8,
+// `MOV dword ptr [RBX+0x118],0x0`). ?RemoveAllItems@ is the only thing that
+// leaves -1. Getting this backwards would put the combo on the wrong item
+// silently, so it is called out rather than left to the reader.
+void RtUi_ComboElement_SetCurrentItem(ComboElement* self, int32_t index) {
+    RT_DIFF_BEGIN("UI::ComboElement::SetCurrentItem [no oracle: closes a dialog and rewrites a shared child]");
+
+    if (self->_openDialog != nullptr) {
+        // The local slot retail builds at [RSP+0x30] and passes by address.
+        void* dialogSlot = self->_openDialog;
+        void* ui = *reinterpret_cast<void**>(
+            static_cast<uint8_t*>(self->_openDialog) + 0x10);   // DialogInstance::_ui
+        CloseDialog()(ui, &dialogSlot);
+        self->_openDialog = nullptr;
+    }
+
+    if (self->_currentItem == index) { RT_DIFF_WORK(false); return; }
+
+    const bool inRange = (index >= 0 && index < self->_strings._size);
+    self->_currentItem = inRange ? index : 0;
+    RtUi_ComboElement_UpdateText(self);
+
+    RT_DIFF_WORK(true);
+    RT_DIFF_SHADOW(self->_currentItem == (inRange ? index : 0),
+                   "current item committed",
+                   "not diffable (see the header)");
+}
+
+// ============================================================================
+// RtUiW2SelfTest — the effectiveness control, with a negative control that
+// IS VERIFIED TO FIRE
+// ============================================================================
+// WHAT IT PROVES, stated narrowly so nobody reads more into a green line than
+// is there: that TextParamSlot()/TextParamCount() address the slot retail
+// addresses, using the offsets in runtime/types/ui/TextElement.h. That is the
+// only arithmetic in this lane that can be wrong in a way no run would notice —
+// a wrong stride or base writes a valid-looking String into the wrong place and
+// the UI simply shows the wrong text.
+//
+// IT PROVES NOTHING ABOUT the dirty-flag walk, about CacheText, about the
+// combo's child search, or about anything past the two offsets it names. It is
+// a control for the arithmetic, not an oracle for the port.
+//
+// WHY A NEGATIVE CONTROL AT ALL. The positive half of this test cannot fail
+// once the offsets are right, so on its own it is a green line that would stay
+// green if the test stopped executing — the shape
+// reference_probe_needs_an_effectiveness_control.md and lane M's released-
+// pointer detector both had to fix the hard way. So the test ALSO runs a
+// deliberately mis-scaled computation (stride 4 instead of 8, the single most
+// plausible way to get this wrong) and REQUIRES it to disagree. If the negative
+// control comes back green, the test says BROKEN and its silence means nothing.
+void RtUiW2SelfTest() {
+    if (!RtDiffEnabled()) return;
+
+    // A synthetic TextElement: 0x120 bytes is past both offsets this lane uses.
+    // Nothing here is a real UI object and nothing is called on it — the test
+    // exercises the ADDRESS ARITHMETIC only, which is why it needs no String,
+    // no allocator and no DLL.
+    alignas(16) uint8_t fake[0x120] = {};
+    alignas(8)  uint8_t params[8 * 8] = {};
+    *reinterpret_cast<uint8_t**>(fake + UI::TextElementOffsets::kParamArrayData) = params;
+    *reinterpret_cast<int32_t*>(fake + UI::TextElementOffsets::kParamCount) = 6;
+
+    const bool posCount = (TextParamCount(fake) == 6);
+    const bool posSlot0 = (TextParamSlot(fake, 0) == static_cast<void*>(params));
+    const bool posSlot3 = (TextParamSlot(fake, 3) == static_cast<void*>(params + 24));
+    const bool positive = posCount && posSlot0 && posSlot3;
+
+    // NEGATIVE CONTROL: the same index under a 4-byte stride. It MUST disagree
+    // with the real computation, and for index 0 it would not (0*4 == 0*8),
+    // which is why it is taken at index 3.
+    const void* misScaled = params + 3 * 4;
+    const bool negativeFired = (TextParamSlot(fake, 3) != misScaled);
+
+    if (positive && negativeFired) {
+        printf("[UIW2 self-test] ALIVE -- TextElement param slot arithmetic agrees with "
+               "TextElement.h (+0x%X data, +0x%X count); the 4-byte-stride negative "
+               "control FIRED.\n",
+               UI::TextElementOffsets::kParamArrayData, UI::TextElementOffsets::kParamCount);
+    } else {
+        printf("[UIW2 self-test] *** BROKEN -- its silence means NOTHING *** "
+               "positive=%d (count=%d slot0=%d slot3=%d) negativeFired=%d\n",
+               (int)positive, (int)posCount, (int)posSlot0, (int)posSlot3,
+               (int)negativeFired);
+    }
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -1153,6 +1705,38 @@ int RtUiWidgetsInRegister() {
     RegisterRuntimeAddr(0x180077ec0, (void*)&RtUi_ProgressElement_SetMaximumValue);
     RegisterRuntimeExport(kProgressSetCurrent,  (void*)&RtUi_ProgressElement_SetCurrentValue); ++count;
     RegisterRuntimeAddr(0x180077ed0, (void*)&RtUi_ProgressElement_SetCurrentValue);
+
+
+    // WAVE 9 LANE UIW2 — the last three of Wave 7 lane D's nine hold-backs that
+    // this file could close, plus the private helper one of them needs.
+    //
+    // REGISTERED TWICE, NAME AND ADDRESS, for the reason widgets_layout.cpp's
+    // ?RemoveChildren@ note spells out at length: a port registered under only
+    // one of its two doors reads as ported to the census and still reaches the
+    // DLL — and, after cutover, null — through the other. tools/
+    // port_bypass_audit.py is what catches the half-registered case.
+    //
+    // Mangled names are spelled out literally here rather than reused from a
+    // named constant: tools/runtime_census.py cannot see through one
+    // (reference_census_cannot_see_nonliteral_registrations.md).
+    RegisterRuntimeExport("?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z",
+                          (void*)&RtUi_SliderElement_SetParameter); ++count;
+    RegisterRuntimeAddr(0x1800d6ca0, (void*)&RtUi_SliderElement_SetParameter);
+    RegisterRuntimeExport("?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z",
+                          (void*)&RtUi_ProgressElement_SetProgressTextParameter); ++count;
+    RegisterRuntimeAddr(0x180119b30, (void*)&RtUi_ProgressElement_SetProgressTextParameter);
+    RegisterRuntimeExport("?SetCurrentItem@ComboElement@UI@@QEAAXH@Z",
+                          (void*)&RtUi_ComboElement_SetCurrentItem); ++count;
+    RegisterRuntimeAddr(0x180112540, (void*)&RtUi_ComboElement_SetCurrentItem);
+    // ComboElement::UpdateText is PRIVATE and UNEXPORTED — checked with pefile
+    // against the shipped export directory, no mangled name contains
+    // "UpdateText@ComboElement". Address only, and deliberately NOT counted in
+    // `count`, which is the number of EXPORTS this lane registers.
+    RegisterRuntimeAddr(0x180112180, (void*)&RtUi_ComboElement_UpdateText);
+
+    // The arithmetic control for the three bodies above. No-ops unless the diff
+    // harness is on; prints ALIVE or BROKEN, never nothing.
+    RtUiW2SelfTest();
 
     return count;
 }
