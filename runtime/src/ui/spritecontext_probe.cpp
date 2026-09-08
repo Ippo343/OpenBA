@@ -206,6 +206,25 @@ bool SubjectsAgree(const char*& what) {
     return true;
 }
 
+// ---- the Flush tripwire -----------------------------------------------------
+// A `SetScissor` case reaches `Flush` if and only if the scaled-down rect
+// differs from the subject's stored one — the same predicate both bodies use.
+// It can therefore be evaluated WITHOUT calling anything, and any case that
+// would take the changed branch is skipped instead of crashing the boot.
+//
+// This guard exists because the first version of this probe did crash exactly
+// that way (see the retslot negative control below). One crash per lesson is
+// enough; a table that grows a case later should not be able to repeat it.
+bool WouldReachFlush(const SpriteContext* c, int x, int y, int w, int h) {
+    const float s = c->_scale;
+    const int nx = static_cast<int>(static_cast<float>(x) / s);
+    const int ny = static_cast<int>(static_cast<float>(y) / s);
+    const int nw = static_cast<int>(static_cast<float>(w) / s);
+    const int nh = static_cast<int>(static_cast<float>(h) / s);
+    return !(nx == c->_scissorX && ny == c->_scissorY &&
+             nw == c->_scissorW && nh == c->_scissorH);
+}
+
 struct Counters {
     int cases      = 0;
     int appended   = 0;   // effectiveness: cases that queued a record
@@ -213,6 +232,7 @@ struct Counters {
     int earlyOut   = 0;
     int mismatches = 0;
     int addLine = 0, addDraw = 0, scissorVp = 0, scissorInt = 0, flushDef = 0;
+    int skippedFlush = 0;
 };
 
 Counters g_n;
@@ -354,6 +374,17 @@ void RtUiSpriteContextProbe() {
         Reset(g_ours, s);
         Reset(g_theirs, s);
 
+        // The tripwire. Both subjects are seeded identically here, so one test
+        // covers both; it is still written as an explicit skip rather than an
+        // assumption, because the case table is the thing most likely to grow.
+        if (WouldReachFlush(g_ours.ctx(), c.x, c.y, c.w, c.h)) {
+            ++g_n.skippedFlush;
+            printf("[SpriteCtxProbe] SKIPPED SetScissor case %d (%s): it would take "
+                   "the changed-rect branch and call Flush, which needs a live Video "
+                   "device this probe does not have.\n", (int)i, c.note);
+            continue;
+        }
+
         ClipRect inVp = { c.x, c.y, c.w, c.h };
         ClipRect ourRet, theirRet;
         std::memset(&ourRet,   0xCD, sizeof(ourRet));
@@ -439,19 +470,34 @@ void RtUiSpriteContextProbe() {
     // A second negative control, aimed at the retslot specifically: if the
     // comparison of the returned Viewport were dead code, nothing above would
     // notice. Give the two bodies different scales so their returns MUST differ.
+    // *** THIS CONTROL CRASHED THE FIRST RUN, AND THE CRASH BELONGS IN THE
+    // RECORD. *** Its first version gave the two subjects different STORED
+    // rects (ours `_scissorX` 10, theirs 999) against ONE shared input, so the
+    // shipped body saw a CHANGED rect, took the changed branch and called
+    // `Flush` — which reads the Video device global at 0x1801fe7a8 and then
+    // dereferences `[RAX+0x100]`. At registration time that global is null, so
+    // the process died at Runtime-x64.dll+0x11BA66 reading address 0x100, from
+    // return address 0x18011D0F9 — `SetScissor`'s `CALL 0x18011ba40`.
+    //
+    // That is EXACTLY the hole this file's header documents, and the lane then
+    // walked into it with its own control. The fix is not to guard `Flush`
+    // (nothing is wrong with it) but to keep BOTH subjects on the unchanged
+    // branch while still forcing their RETURNS to differ: give each subject a
+    // different stored rect AND its own matching input, so each compares equal
+    // to itself and returns its own raw ints.
     bool negativeRetFired = false;
     {
-        Seed a = base; a.scale = 1.0f;
-        Seed b = base; b.scale = 1.0f;
-        a.sx = 10; b.sx = 999;          // different stored rects -> different returns
+        Seed a = base; a.sx = 10; a.sy = 20; a.sw = 300; a.sh = 200;
+        Seed b = base; b.sx = 11; b.sy = 21; b.sw = 301; b.sh = 201;
         Reset(g_ours,   a);
         Reset(g_theirs, b);
-        ClipRect inVp = { 10, 20, 300, 200 };
+        ClipRect inA = { a.sx, a.sy, a.sw, a.sh };
+        ClipRect inB = { b.sx, b.sy, b.sw, b.sh };
         ClipRect r1, r2;
         std::memset(&r1, 0xCD, sizeof(r1));
         std::memset(&r2, 0xCD, sizeof(r2));
-        RtUi_SpriteContext_SetScissor_Viewport(g_ours.ctx(),   &r1, &inVp);
-        theirScisVp                           (g_theirs.ctx(), &r2, &inVp);
+        RtUi_SpriteContext_SetScissor_Viewport(g_ours.ctx(),   &r1, &inA);
+        theirScisVp                           (g_theirs.ctx(), &r2, &inB);
         ++g_n.scissorVp;
         negativeRetFired = (std::memcmp(&r1, &r2, sizeof(ClipRect)) != 0);
     }
@@ -463,9 +509,10 @@ void RtUiSpriteContextProbe() {
     if (alive) {
         printf("[SpriteCtxProbe] ALIVE -- %d cases, 0 divergences vs the shipped bodies. "
                "Effectiveness: appended=%d culled=%d earlyOut=%d (all three branches "
-               "exercised). Both negative controls FIRED (cull=%d retslot=%d).\n",
+               "exercised). Both negative controls FIRED (cull=%d retslot=%d). "
+               "Flush-tripwire skips=%d.\n",
                g_n.cases, g_n.appended, g_n.culled, g_n.earlyOut,
-               (int)negativeFired, (int)negativeRetFired);
+               (int)negativeFired, (int)negativeRetFired, g_n.skippedFlush);
     } else {
         printf("[SpriteCtxProbe] *** BROKEN -- its silence means NOTHING *** "
                "cases=%d divergences=%d appended=%d culled=%d earlyOut=%d "
@@ -474,11 +521,39 @@ void RtUiSpriteContextProbe() {
                (int)negativeFired, (int)negativeRetFired);
     }
 
-    // What the probe ADDED to each live site's counter, so a reader can
-    // subtract it and recover the real gameplay count.
-    printf("[SpriteCtxProbe] probe calls added to the live diff counters: "
-           "AddLine=%d AddSpriteDraw=%d SetScissor(Viewport)=%d SetScissor(4int)=%d "
-           "FlushDeferred=%d -- subtract these from any [RtDiff] calls= for this lane.\n",
+    // What the probe drove DIRECTLY. These are NOT the numbers to subtract from
+    // a `[RtDiff] calls=` line, and saying so is a correction to this probe's
+    // own first version, which told the reader to subtract them.
+    //
+    // Two things break that arithmetic, both measured rather than reasoned:
+    //   * `calls=` counts REPORTING calls, not entries. `AddSpriteDraw` is
+    //     entered 16 times in a probe-only run and reports 4, because only the
+    //     cull branch has a comparison to make.
+    //   * the bodies call each other. `AddLine` reaches `AddSpriteDraw`, and
+    //     `SetScissor(4 ints)` forwards to `SetScissor(Viewport)`, so a direct
+    //     count under-reports both callees.
+    //
+    // The subtraction baseline is therefore the whole `[RtDiff]` block from a
+    // PROBE-ONLY run (`BANISHED_AUTOQUIT=1`, no gameplay). Measured on
+    // 2026-09-08, and it reconciles exactly with the case table:
+    //
+    //   AddSpriteDraw            calls=4  worked=12   (16 entries: 12 cases +
+    //                                                  1 control + 3 via AddLine;
+    //                                                  4 culled, 12 appended)
+    //   AddLine                  calls=4  worked=3    (7 cases: 4 invalid, 3 queued)
+    //   SetScissor(Viewport)     calls=9  worked=0    (4 cases + 1 control +
+    //                                                  4 forwarded from the ints)
+    //   SetScissor(int,int,int,int) calls=4 worked=0
+    //   FlushDeferred            calls=1  worked=0
+    //
+    // Anything above those in a gameplay run is a real caller.
+    printf("[SpriteCtxProbe] driven directly by the probe: AddLine=%d AddSpriteDraw=%d "
+           "SetScissor(Viewport)=%d SetScissor(4int)=%d FlushDeferred=%d. "
+           "NOTE these are ENTRIES, not [RtDiff] calls= -- calls= counts only "
+           "REPORTING entries and the bodies call each other. The subtraction "
+           "baseline is the whole [RtDiff] block of a probe-only run: "
+           "AddSpriteDraw 4/12, AddLine 4/3, SetScissorVp 9/0, SetScissor4 4/0, "
+           "FlushDeferred 1/0 (calls/worked).\n",
            g_n.addLine, g_n.addDraw, g_n.scissorVp, g_n.scissorInt, g_n.flushDef);
 
     // The hole, restated where the numbers are, not only in the file header.
