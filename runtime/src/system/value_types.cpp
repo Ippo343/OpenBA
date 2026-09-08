@@ -14,9 +14,15 @@
 // (runtime/types/system/String.h) — this file never models or touches it.
 // Every String these functions produce is built by calling the DLL's own
 // String::Set / String::Format / String::operator+= / String::Release
-// through RtOriginal<>(), exactly as retail's own code does; we only ever
+// through the DLL's own String routines, exactly as retail's own code does; we
+// only ever
 // read a String's PUBLIC content (its data pointer used as a plain
-// null-terminated C string), never its private refcount/length header. The
+// null-terminated C string), never its private refcount/length header.
+//
+// UPDATED Wave 9 lane B3: those calls now go through RT_EXPORT_ONCE, not
+// RtOriginal<>. Set / Format / operator+= / Release are all PORTED, and
+// RtOriginal deliberately skips the port registry, so every one of them was a
+// live-path port bypass. The
 // local `StrSlot` type below is deliberately an opaque 8-byte pass-through
 // (not a port of System::String) used only to give these calls a typed
 // hidden-return-slot argument.
@@ -320,7 +326,16 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
         ret, "%s %s", static_cast<const char*>(dateStr.p), static_cast<const char*>(timeStr.p));
 
     using ReleaseFn = void(*)(StrSlot*);
-    ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
+    // RT_EXPORT_ONCE, for the same reason as GetVersionString below: String::Release
+    // is PORTED (Wave 9 lane B3) and this is a live-path release of a temporary --
+    // the WORK, not an oracle readback -- so it must reach our body.
+    //
+    // tools/port_bypass_audit.py could NOT see this one. Storing the pointer in a
+    // local and calling it on the next line reads to the checker as
+    // OK-RESOLVE-ONLY; only the resolve-and-call-in-one-expression site in
+    // GetVersionString was reported. Two of the three bypasses this file had were
+    // therefore invisible to the gate that caught the third.
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
     release(&dateStr);
     release(&timeStr);
     return ret;
@@ -339,7 +354,16 @@ StrSlot* RtSystem_Configuration_CurrentBuildId(StrSlot* ret) {
     using SetFn = void(*)(StrSlot*, const char*);
     SetFn set = RT_EXPORT_ONCE(SetFn, "?Set@String@System@@QEAAXPEBD@Z");   // ported
     using ReleaseFn = void(*)(StrSlot*);
-    ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
+    // RT_EXPORT_ONCE, for the same reason as GetVersionString below: String::Release
+    // is PORTED (Wave 9 lane B3) and this is a live-path release of a temporary --
+    // the WORK, not an oracle readback -- so it must reach our body.
+    //
+    // tools/port_bypass_audit.py could NOT see this one. Storing the pointer in a
+    // local and calling it on the next line reads to the checker as
+    // OK-RESOLVE-ONLY; only the resolve-and-call-in-one-expression site in
+    // GetVersionString was reported. Two of the three bypasses this file had were
+    // therefore invisible to the gate that caught the third.
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
 
     StrSlot dateStr{};
     set(&dateStr, "Sep 10 2017");  // 0x180155c50 -- the DLL's own __DATE__-style literal
@@ -393,7 +417,13 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
     using OpAppendFn = StrSlot*(*)(StrSlot*, StrSlot*, const char*);
     StrSlot tmp{};
     RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
-    RtOriginal<void(*)(StrSlot*)>("?Release@String@System@@AEAAXXZ")(&tmp);
+    // RT_EXPORT_ONCE, not RtOriginal: String::Release is PORTED (Wave 9 lane B3), and
+    // RtOriginal deliberately skips the port registry so the diff oracle can reach the
+    // shipped body. Using it here ran the DLL's Release while our port sat registered,
+    // counted by the census and reported clean by the oracle -- invisible to both.
+    // Caught by tools/port_bypass_audit.py, which is the only instrument that can see it.
+    using ReleaseFn = void (*)(StrSlot*);
+    RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);
     return ret;
 }
 

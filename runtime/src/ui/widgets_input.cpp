@@ -67,6 +67,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/ui/SpinnerElement.h"
 #include "../../types/ui/ComboElement.h"
 #include "../../types/ui/NumberEditElement.h"
@@ -138,18 +139,34 @@ ToIntegerFn StringToInteger() {
     return fn;
 }
 
-// The REAL `?SetValue@NumberEditElement@UI@@QEAAXH@Z` (0x1800d4bb0), used as
-// an opaque dependency by SpinnerElement::SetMinMax/SetValue and
-// NumberEditElement::SetMinMax — exactly the way WAVE6_LANE_A.md's SetCamera
-// calls Math::Matrix::Inverse through ResolveExport rather than reimplementing
-// it. NumberEditElement::SetValue's OWN body is HELD BACK by this lane (it
-// calls the variadic `System::String::Format`, which this lane declined to
-// reproduce — WAVE7_LANE_D.md §3) but calling the DLL's real implementation
-// here is a plain, non-variadic call site and carries none of that risk.
+// `?SetValue@NumberEditElement@UI@@QEAAXH@Z` (0x1800d4bb0), used as a
+// dependency by SpinnerElement::SetMinMax/SetValue and
+// NumberEditElement::SetMinMax.
+//
+// **THE HOLDBACK IS OVER, AND THE STATED BLOCKER WAS ALREADY STALE.** Wave 7
+// lane D held this body back because it calls the variadic
+// `System::String::Format`, "which this lane declined to reproduce"
+// (WAVE7_LANE_D.md §3). `?Format@String@System@@SA?AV12@PEBDZZ` has in fact
+// been PORTED since Wave 2 (runtime/src/system/string.cpp registers it), so the
+// blocker had already dissolved before Wave 9 opened -- the same shape as
+// reference_holdback_blockers_are_stale_check_them_first.md, three for three in
+// one session. It is ported below as NumberEditElement_SetValue; this accessor
+// stays as the name the three call sites already use and now goes through
+// ResolveExport so it reaches OUR body rather than bypassing it.
 using NumberEditSetValueFn = void (*)(NumberEditElement*, int);
 NumberEditSetValueFn RealNumberEditElementSetValue() {
     static NumberEditSetValueFn fn = reinterpret_cast<NumberEditSetValueFn>(
-        ResolveExportRaw("?SetValue@NumberEditElement@UI@@QEAAXH@Z"));
+        ResolveExport("?SetValue@NumberEditElement@UI@@QEAAXH@Z"));
+    return fn;
+}
+
+// ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z  (0x1800d0db0) -- exported,
+// not ported by any wave; SetValue's second call. Resolved through the port
+// registry so a later port of it is reached without editing this line.
+using EditSetTextFn = void (*)(void*, const RtSystem::String*);
+EditSetTextFn EditElementSetText() {
+    static EditSetTextFn fn = reinterpret_cast<EditSetTextFn>(
+        ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
     return fn;
 }
 
@@ -226,6 +243,69 @@ const char* const kEditSetText         = "?SetText@EditElement@UI@@QEAAXAEBVStri
 const char* const kRadioSetActiveRadio = "?SetActiveRadio@RadioElement@UI@@QEAAXH@Z";
 const char* const kProgressSetMax      = "?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z";
 const char* const kProgressSetCurrent  = "?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z";
+
+// ============================================================
+// UI::NumberEditElement::SetValue  retail 0x1800d4bb0  (Wave 9 lane B3)
+// ============================================================
+//
+//   int v = this->_min;                        // +0xF8
+//   if (value >= this->_min) {
+//       v = value;
+//       if (value > this->_max) v = this->_max;    // +0xFC, CMOVG
+//   }
+//   String tmp; String::Format(&tmp, "%i", v);     // 0x1800c9730, literal 0x180154848
+//   EditElement::SetText(this, tmp);               // 0x1800d0db0
+//   tmp.Release();
+//
+// The clamp is written the way retail branches it rather than as
+// `std::clamp(value, min, max)`, because the two are NOT the same function when
+// `_min > _max`: retail's below-min branch (0x1800d4bcc `JL`) returns `_min`
+// without consulting `_max` at all, so a table configured min=10 max=5 answers
+// 10 for `value=0` and 5 for `value=20`. A clamp() would answer 5 for both.
+// Nothing in the game is known to configure an inverted range; the point is
+// that the port must not decide that for it.
+//
+// The format literal at 0x180154848 reads "%i" (bytes 25 69 00), confirmed by
+// direct memory read against the shipped DLL rather than assumed from context.
+//
+// NO ORACLE. SetText mutates the element's text, rebuilds its cached sprite
+// text and can resize the widget; calling ours then theirs would run all of
+// that twice on the one live element. There is no independent replica to
+// build -- a scratch NumberEditElement would need a live UI parent, a sprite
+// context and a string table. The site below is an EXECUTION WITNESS only --
+// see the comment at it for why a shadow predicate over the clamp would have
+// been a tautology rather than a check. This body is UNVERIFIED; what its
+// diff row establishes is that it ran, and how often.
+void NumberEditElement_SetValue(NumberEditElement* self, int value) {
+    RT_DIFF_BEGIN("UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element]");
+
+    int clamped = self->_min;
+    if (value >= self->_min) {
+        clamped = value;
+        if (value > self->_max) clamped = self->_max;
+    }
+
+    using FormatFn = RtSystem::String* (*)(RtSystem::String*, const char*, int);
+    RtSystem::String tmp{nullptr};
+    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "%i", clamped);
+
+    EditElementSetText()(self, &tmp);
+
+    // retail's inlined String::Release, the asymmetric one (runtime/types/
+    // system/String.h): the freeing branch leaves `data - 8` in the object.
+    using ReleaseFn = void (*)(RtSystem::String*);
+    RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);
+
+    // An EXECUTION WITNESS, not a verdict. A shadow predicate here would have
+    // to be a second spelling of the clamp three lines above, and two spellings
+    // of the same arithmetic agree by construction -- N green rows that did no
+    // work, which is exactly what
+    // reference_probe_needs_an_effectiveness_control.md says not to ship. This
+    // site therefore claims only that the body RAN, and its calls= column is
+    // the number worth reading. Same shape and same honesty as
+    // Application::SleepThread in runtime/src/application/application_win.cpp.
+    RT_DIFF_SHADOW(true, "set", "not diffable");
+}
 
 } // namespace
 
@@ -583,6 +663,12 @@ void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
 // ============================================================================
 int RtUiWidgetsInRegister() {
     int count = 0;
+
+    // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md 1b); the Wave 7
+    // holdback over the variadic String::Format is over, see the note at
+    // RealNumberEditElementSetValue.
+    RegisterRuntimeExport("?SetValue@NumberEditElement@UI@@QEAAXH@Z",
+                          (void*)&NumberEditElement_SetValue); ++count;
 
     RegisterRuntimeExport(kSpinnerGetMaxValue,  (void*)&RtUi_SpinnerElement_GetMaxValue);  ++count;
     RegisterRuntimeAddr(0x1800d7cb0, (void*)&RtUi_SpinnerElement_GetMaxValue);

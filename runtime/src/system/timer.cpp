@@ -234,12 +234,20 @@ float RtSystem_Timer_TicksToSeconds(int64_t ticks) {
     return ours;
 }
 
+// ??4Timer@System@@QEAAAEAV01@AEBV01@@Z  retail 0x180007890
+// The compiler-generated copy assignment: `MOV RAX,RCX; RET`. System::Timer
+// has no instance state at all -- every one of its five statics is a file-scope
+// global -- so assignment copies nothing and returns `this`. Two instructions,
+// and it is the tenth and last export of the class.
+void* RtSystem_Timer_Assign(void* self, const void* /*other*/) { return self; }
+
 // ============================================================
 // RtSystemTimerRegister — called from RtSystemPortInit() under
 // BANISHED_RT_TIMER (rt_system_port.cpp).
 // ============================================================
 int RtSystemTimerRegister() {
     int n = 0;
+    RegisterRuntimeExport("??4Timer@System@@QEAAAEAV01@AEBV01@@Z", (void*)&RtSystem_Timer_Assign); ++n;
     RegisterRuntimeExport("?Startup@Timer@System@@SA_NXZ",         (void*)&RtSystem_Timer_Startup); ++n;
     RegisterRuntimeExport("?Shutdown@Timer@System@@SAXXZ",         (void*)&RtSystem_Timer_Shutdown); ++n;
     RegisterRuntimeExport("?PlatformStartup@Timer@System@@CA_NXZ", (void*)&RtSystem_Timer_PlatformStartup); ++n;

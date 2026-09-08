@@ -76,13 +76,14 @@ inline void WalkDirty(void* self) {
 // same reason: these are not exported at all, so RtOriginal/ResolveExportRaw
 // cannot reach them).
 
-// ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) -- exported despite being
-// simple; genuinely shared Element/ContainerElement behaviour this lane has no
-// business reimplementing.
-void RtRemoveChildren(void* self) {
-    using Fn = void (*)(void*);
-    RT_ORIGINAL_ONCE(Fn, "?RemoveChildren@Element@UI@@QEAAXXZ")(self);
-}
+// ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) -- PORTED by Wave 9 lane B3
+// as Element_RemoveChildren, near the end of this namespace. Wave 7 left it on
+// the DLL as shared behaviour it had no business reimplementing;
+// WAVE9_LANE_V.md §1b lists this call site (:84) as a REAL DEPENDENCY, i.e. a
+// call through null at cutover, so it had to be owned. This forwarder keeps the
+// name the rest of the file already uses; it is defined next to the port
+// because the port needs RtArrayCellsSetSize, declared further down.
+void RtRemoveChildren(void* self);
 
 // ?CacheText@TextElement@UI@@AEAAXXZ (0x18011ec10) -- private but exported.
 // Reformats the cached display string from the raw text + parameter array.
@@ -742,6 +743,68 @@ void GraphElement_RemoveGraphs(void* self) {
     RT_DIFF_SCALAR(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)), 0);
 }
 
+// ============================================================
+// UI::Element::RemoveChildren  retail 0x180115570  (Wave 9 lane B3)
+// ============================================================
+//
+//   for (i = 0; i < this->_children.size; ++i) {
+//       Element** data = this->_children.data;      // RE-READ every iteration
+//       if (data[i]) { data[i]->vtbl[0](data[i], 1); data[i] = nullptr; }
+//   }
+//   Collection::Array<Element*>::SetSize(&this->_children, 0);   // TAIL JMP
+//
+// Slot 0 called with a flag of 1 is the scalar deleting destructor -- destroy
+// AND free -- the idiom runtime/types/object/Internal.h already names as
+// kInternalVtblScalarDtor. It is NOT `??1Element`: `??1` is not `??_G`, and the
+// wrong one of the two resolves null behind a guard
+// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+//
+// THE RE-READ OF `_children.data` INSIDE THE LOOP IS LOAD-BEARING, and is why
+// this is an index loop over a refetched base rather than the obvious cached
+// pointer: retail reloads `[RBP + 0xa0]` at 0x1801155a0 on every iteration,
+// after the previous child's destructor has run. A destructor that reallocated
+// or freed the parent's child array would leave a cached base dangling. Retail
+// does not assume that cannot happen and neither does this.
+//
+// The loop bound, by contrast, IS hoisted in retail -- `_children.size` is read
+// into EBX's comparand from `[RBP+0xa8]` each iteration (0x1801155ca) but the
+// SetSize that changes it runs only after the loop. Reading it once here is the
+// same sequence of accesses for any object whose destructors do not resize the
+// parent, and for one that does, retail's per-iteration reload would be the
+// faithful spelling -- noted rather than silently chosen, because it is the one
+// place this port is not instruction-for-instruction.
+//
+// NO ORACLE, stated rather than glossed: the function DESTROYS the children.
+// Running ours and then the shipped body over the same object frees an already
+// freed list, and there is nothing to snapshot -- the children are separately
+// allocated objects with their own destructors, so "a copy of the state" is not
+// a thing that can be made. The shadow below asserts the post-condition retail
+// guarantees (the array is empty), which is a weaker claim than a diff and is
+// labelled as one.
+void Element_RemoveChildren(void* selfRaw) {
+    RT_DIFF_BEGIN("UI::Element::RemoveChildren [no oracle: destroys its children]");
+
+    auto* self = static_cast<uint8_t*>(selfRaw);
+    uint8_t* childArray = self + 0xa0;              // Collection::Array<Element*>
+    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0xa8);
+
+    for (int32_t i = 0; i < count; ++i) {
+        auto** data = *reinterpret_cast<void***>(childArray);   // re-read, see above
+        void* child = data[i];
+        if (child == nullptr) continue;
+        void** vtbl = *static_cast<void***>(child);
+        reinterpret_cast<void (*)(void*, int)>(vtbl[0])(child, 1);
+        data[i] = nullptr;
+    }
+    RtArrayCellsSetSize(childArray, 0);
+
+    const bool ok = *reinterpret_cast<const int32_t*>(self + 0xa8) == 0;
+    RT_DIFF_SHADOW(ok, "children cleared", "not diffable");
+}
+
+// The forwarder declared at the top of this namespace.
+void RtRemoveChildren(void* self) { Element_RemoveChildren(self); }
+
 }  // namespace
 
 // ============================================================================
@@ -780,6 +843,9 @@ int RtUiWidgetsLayRegister() {
     RegisterRuntimeExport("?SetActivePage@PageElement@UI@@QEAAXH@Z", (void*)&PageElement_SetActivePage); ++n;
 
     RegisterRuntimeExport("?RemoveGraphs@GraphElement@UI@@QEAAXXZ", (void*)&GraphElement_RemoveGraphs); ++n;
+    // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md §1b).
+    RegisterRuntimeExport("?RemoveChildren@Element@UI@@QEAAXXZ",
+                          (void*)&Element_RemoveChildren); ++n;
     // ?AddGraph@GraphElement@UI@@... / ?AddGraphPoint@GraphElement@UI@@... --
     // HELD BACK (WAVE7_LANE_E.md sec2).
 

@@ -165,6 +165,27 @@
 // DLL does not export it under any of the three. tools/export_name_audit.py has
 // nothing to check here, which is itself the finding.
 //
+// THREE FUNCTIONS, AND ONLY ONE OF THEM IS SLOT 0. Worth spelling out, because
+// the project has now been bitten by this distinction twice:
+//
+//   ??1<Class>@@UEAA@XZ       the REAL destructor. No flags argument. EXPORTED
+//                             -- lane B2 ported twelve of them.
+//   ??_G<Class>@@UEAAPEAXI@Z  SCALAR deleting destructor. One flag bit, no
+//                             cookie, no iterator. NOT what is here.
+//   ??_E<Class>@@UEAAPEAXI@Z  VECTOR deleting destructor: `TEST DL,2`, the
+//                             cookie at [this-8], the iterator. <-- slot 0.
+//
+// The discriminator is `TEST DL,0x2`: it does not occur in a `??_G` at all,
+// because a scalar deleting destructor has no array form and nothing to test
+// bit 1 for. Its presence in every one of these 37 IS the identification.
+//
+// This is also why lane B2 porting twelve `??1` moved lane C2's filled-slot
+// count by EXACTLY ZERO, which is correct arithmetic and not a measurement
+// error: the `??1` is the CALLEE, and slot 0 holds the `??_E` thunk that calls
+// it. Registering the twelve thunks here is what fills those slots -- and
+// because lane B2 already owns the callees, both halves are ours for all
+// twelve, which takes those twelve vtables from "one trap" to COMPLETE.
+//
 // ---------------------------------------------------------------------------
 // THE ORACLE — TWO HALVES, BECAUSE ONE CANNOT COVER BOTH RISKS
 // ---------------------------------------------------------------------------

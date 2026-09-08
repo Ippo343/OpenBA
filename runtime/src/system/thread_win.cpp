@@ -324,10 +324,55 @@ unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
     return (r == 1) ? 0u : 0xFFFFFFFFu;
 }
 
+// ============================================================================
+// System::Thread::OnCompleted()   retail 0x18000c590   (Wave 9 lane B3)
+// ?OnCompleted@Thread@System@@UEAAXXZ
+// ----------------------------------------------------------------------------
+// `RET`. One instruction: the base class's do-nothing hook, called from
+// ThreadFunc's slot 1 above once the work function returns. Derived classes
+// that care override it; `Engine::Loader` does not.
+//
+// WHY A ONE-INSTRUCTION PORT IS WORTH LANDING. It fills a trapped slot in TWO
+// minted vtables at once, which is the only reason it was picked up here:
+//   ??_7Thread@System@@6B@  0x180155f20 = [ _purecall, OnCompleted ]
+//   ??_7Loader@Engine@@6B@  0x180157a08 inherits OnCompleted in slot 1
+// `Run` is pure in Thread and Loader overrides it, so slot 0 differs between
+// the two while slot 1 is the same function. Lane C2's mint picks this up with
+// no regeneration.
+//
+// NO DIFF SITE, and this is a rule rather than a judgement call. This body runs
+// on a WORKER thread (ThreadFunc dispatches it), and `runtime/funcs/rt_diff.cpp`
+// contains zero synchronisation primitives -- no mutex, no atomic, no
+// Interlocked, no CRITICAL_SECTION -- so registration is a bare
+// `g_sites[g_siteCount++]` and counting a bare `site->calls++`. A site here
+// would be a data race in every worker the game creates and would produce a
+// count nobody could trust (WAVE9.md §2). Lane P hit exactly this porting
+// ThreadFunc and shipped an opt-in execution witness instead; the same witness
+// is used below, and the same property holds for it: ZERO LINES MEANS ZERO
+// DISPATCHES, so an absence is informative rather than merely quiet.
+//
+// There is also nothing an oracle could compare: the shipped body is `RET`, so
+// ours and theirs agree on every input by construction and a green row would be
+// a no-op (reference_probe_needs_an_effectiveness_control.md).
+void RtSystem_Thread_OnCompleted(Thread* self) {
+    static const bool trace = std::getenv("BANISHED_RT_THREADFUNC_TRACE") != nullptr;
+    static bool announced = false;
+    if (trace && !announced) {
+        announced = true;
+        std::fprintf(stderr,
+                     "[RtThreadFunc] PORT DISPATCHED OnCompleted: thread=%lu self=%p\n",
+                     GetCurrentThreadId(), (void*)self);
+    }
+    // Retail's body, in full.
+}
+
 // ---- Registration ------------------------------------------------------------
 
 int RtSystemThreadRegister() {
     int n = 0;
+    // Wave 9 lane B3: fills slot 1 of BOTH ??_7Thread@System@@ and
+    // ??_7Loader@Engine@@ -- see the note above the body.
+    RegisterRuntimeExport("?OnCompleted@Thread@System@@UEAAXXZ", (void*)&RtSystem_Thread_OnCompleted); ++n;
     RegisterRuntimeExport("??0CriticalSection@System@@QEAA@XZ", (void*)&RtSystem_CriticalSection_Ctor); ++n;
     RegisterRuntimeExport("??1CriticalSection@System@@QEAA@XZ", (void*)&RtSystem_CriticalSection_Dtor); ++n;
     RegisterRuntimeExport("?Lock@CriticalSection@System@@QEAAXXZ", (void*)&RtSystem_CriticalSection_Lock); ++n;

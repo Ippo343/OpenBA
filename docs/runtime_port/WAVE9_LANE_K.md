@@ -12,7 +12,8 @@ run** — the integrator owns the exe this round. What was run: `g++
 
 | | |
 |---|---|
-| slot-0 traps retired | **37 of 37** (not 27 — see §1) |
+| slot-0 traps retired | **37 of 37** (not 27, and not 36 — see §1) |
+| vtables taken from "one trap" to **COMPLETE** | **12 of 39** — the whole `Video::*Data` family (§1a) |
 | distinct bodies | **1** |
 | corrections to the assumed MSVC shape | **the shape itself was wrong** — these are `??_E`, the VECTOR deleting destructor, not `??_G` (§2) |
 | `operator delete` variants collapsed | 10 addresses → 1 function (§3) |
@@ -21,17 +22,30 @@ run** — the integrator owns the exe this round. What was run: `g++
 
 ---
 
-## 1. It is 37, not 27 — the brief's count came from a stale CSV
+## 1. It is 37 — enumerated from the regenerated tables, not from the CSV
 
-The brief and lane C2's prose both say 27, from
-`docs/runtime_port/wave9_data_harvest.csv`, which holds 28 vtables. The
-**generated** `standalone/rt_data_mint_tables.inc` has since been regenerated to
-**38 vtables**, and it carries **37 `RT_MINT_UNNAMED` slots — every one of them
-at index 0**:
+The original brief said 27, from `docs/runtime_port/wave9_data_harvest.csv`
+(28 vtables). A later correction from the lead said 36 of 38, 313 slots. Both
+are one generation behind. Enumerated from `standalone/rt_data_mint_tables.inc`
+as it stands at `ca7ce73`:
 
 ```
-python: 37 unnamed slots, all at slot index 0
+vtables: 39   slots: 315   RT_MINT_UNNAMED: 37   all at slot index 0: True
+vtables with NO unnamed slot 0: ??_7Loader@Engine@@6B@, ??_7Thread@System@@6B@
 ```
+
+`Thread@System`'s slot 0 is `_purecall` (lane C2 said so); `Loader@Engine` is
+new since. **37 is the number, and it is the number this lane registers** — the
+two sets are equal, checked mechanically against the `.inc` and against
+`deleting_dtor.cpp`:
+
+```
+my registrations: 37    unnamed slot-0 set: 37
+in the tables but NOT registered: []      registered but NOT in the tables: []
+```
+
+Re-run that check after any regeneration of the `.inc`. It is the only thing
+standing between a newly minted vtable and a slot-0 trap nobody noticed.
 
 The ten the CSV does not have are exactly the `Video::*Data` family lane B2 read
 the shape from, at `0x180058590 + 0x80·k`: `RenderBufferData`,
@@ -42,6 +56,74 @@ the family.
 
 **The generated `.inc` is ahead of the CSV.** Anything else using
 `wave9_data_harvest.csv` as a worklist is short by ten rows in the same way.
+
+## 1a. The twelve `Video::*Data` vtables are now COMPLETE
+
+The lead's priority call was right, and it was already delivered — all twelve
+were in this lane's table from the start (§4). Every one of those vtables is
+**one unnamed slot 0 plus nothing but `_purecall`**:
+
+```
+??_7ConstantBufferData@Video@@6B@   slots= 4  purecall= 3  unnamed=1  named=0
+??_7ContextData@Video@@6B@          slots=20  purecall=19  unnamed=1  named=0
+??_7DeviceData@Video@@6B@           slots=20  purecall=19  unnamed=1  named=0
+??_7ImageBufferData@Video@@6B@      slots= 7  purecall= 6  unnamed=1  named=0
+??_7IndexBufferData@Video@@6B@      slots= 7  purecall= 6  unnamed=1  named=0
+??_7PixelProgramData@Video@@6B@     slots= 3  purecall= 2  unnamed=1  named=0
+??_7RenderBufferData@Video@@6B@     slots= 4  purecall= 3  unnamed=1  named=0
+??_7RenderStateData@Video@@6B@      slots= 3  purecall= 2  unnamed=1  named=0
+??_7VertexBufferData@Video@@6B@     slots= 7  purecall= 6  unnamed=1  named=0
+??_7VertexLayoutData@Video@@6B@     slots= 3  purecall= 2  unnamed=1  named=0
+??_7VertexProgramData@Video@@6B@    slots= 3  purecall= 2  unnamed=1  named=0
+??_7VideoProgramData@Video@@6B@     slots= 3  purecall= 2  unnamed=1  named=0
+```
+
+Filling slot 0 therefore leaves nothing unfilled: **lane C2's "0 of 28 COMPLETE"
+should become 12 of 39.** All twelve also have their `~Class` already ported by
+lane B2, so both halves are ours.
+
+That is a prediction to check on the run, not an assertion: `[RtMintShadow]
+complete vtables` should read **12 of 39**. If it still reads 0, the mint is not
+seeing these registrations, and that is a finding about init order rather than
+about this table.
+
+## 1b. Slot 0 is `??_E` — and it is neither `??1` nor `??_G`. How to tell.
+
+Three different functions, and the project has now been bitten by the
+distinction twice. Stated explicitly because the lead asked for it — and the
+answer corrects the request:
+
+| | what it is | how you recognise it | exported |
+|---|---|---|---|
+| `??1<Class>@@UEAA@XZ` | the **real** destructor | restamps the vtable, destroys members, **no flags argument** | **yes** — lane B2 ported twelve |
+| `??_G<Class>@@UEAAPEAXI@Z` | **scalar** deleting destructor | `~Class(this); if (flags & 1) operator delete(this); return this;` — **one** flag bit, no cookie, no iterator | n/a |
+| `??_E<Class>@@UEAAPEAXI@Z` | **vector** deleting destructor | **`TEST DL,0x2`**, `MOV R8D,[RCX-8]` (array cookie), `CALL 0x18007ec98`, frees and returns `this-8` | no |
+
+**All 37 are the third.** The tell the lead already had in hand is decisive:
+`TEST DL,0x2` **does not occur in `??_G` at all** — a scalar deleting destructor
+has no array form and nothing to test bit 1 for. Lane C2 reading `test dl,2` in
+four of these bodies is not a curiosity to reconcile with the canonical `??_G`
+form; it *is* the proof that they are not `??_G`.
+
+**The flags question has a both/and answer, not an either/or.** The lead asked
+which bit decides the free. Both bits are live, for different things:
+
+* **bit 1 (`0x2`) selects the array form** — read the cookie at `this-8`, sweep
+  `n` elements, and express both the free and the return value against the
+  BLOCK rather than against `this`.
+* **bit 0 (`0x1`) is the free**, tested separately inside *both* branches
+  (`TEST SIL,0x1` / `TEST DL,0x1`).
+
+So `flags==2` destroys an array without freeing it and `flags==1` frees a single
+object: four combinations, four distinct behaviours, and the probe drives all
+four (§6.1).
+
+**Lane B2's twelve `??1` ports moving lane C2's filled count by exactly zero is
+correct arithmetic, not a measurement error.** The `??1` is the *callee*; slot 0
+holds the `??_E` *thunk*. This lane registers the thunks, and because lane B2
+already owns the callees, `ResolveAddr` reaches our code on both sides for all
+twelve (§4).
+
 
 ## 2. The correction: `??_E`, not `??_G`
 
@@ -89,6 +171,17 @@ have produced a function that, on any `delete[]` of a Runtime object:
 And it would have looked **completely correct in every scalar `delete`**, which
 is the overwhelming majority of calls. A latent, allocator-corrupting defect
 behind a green probe is the exact failure shape this project has paid for twice.
+
+Lane C2's independent read of four bodies — "identical apart from one
+RIP-relative `LEA` displacement and the `CALL` target" — holds **within the
+`Video::*Data` subfamily**, and only there: those twelve all have
+`sizeof(Class) == 0x10`, so the `MOV EDX,imm32` does not vary between them.
+Across all 37 it varies from `0x8` to `0x188`, and **22 of the 37 have no `CALL`
+in the scalar branch at all** — they inline the destructor instead. Which is why
+"four of thirty-six, keep verifying per address" was the right caution, and why
+the verification here is mechanical rather than a sample:
+`tools/rt_deleting_dtor_verify.py` re-derives all 37 rows from the DLL's machine
+code (§6.2).
 
 Two further sub-shape facts, both checked per address rather than assumed:
 
