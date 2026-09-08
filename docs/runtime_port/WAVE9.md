@@ -439,6 +439,67 @@ REAL defect rather than a synthetic one — is the tutorial-1 cell **while `SetV
 still broken**. Lane N's fix removes exactly that defect. Run the detector BEFORE the fix
 lands, or the instrument reaches cutover having never been seen to fire on anything real.
 
+### Finding 3 — the family is ENUMERATED, and retail HARD-FAULTS where our port guards
+
+Lane N, 2026-09-08, `6b45035`. Source + Ghidra only.
+
+**Five trees** the scheduler (`*(gameWorld+0x118)`) keeps per posted work item, each with
+its insert, its erase (`0x1400F8E30` — the function that faulted) and the KEY the erase
+uses:
+
+| # | Tree | Erase key |
+|---|---|---|
+| 1 | `sched+0x10` primary AVL | `*(workObj+0x24)`, **RE-READ at erase** |
+| 2 | `sched+0x30` id map | `taskIdx` (parameter) |
+| 3 | `sched+0x40..` 14 category subtrees | `taskIdx` |
+| 4 | `sched+0x120` profession buckets | **never erased — by design, in both implementations** |
+| 5 | `bucket+0x08` inner id tree | `slot50(workObj)`, **RE-READ at erase** |
+
+**No path in this family frees a still-linked node.** Every free in 1/2/3/5 goes through
+`ca60`/`a6e0`, which unlink first — verified line by line including the two-child
+in-order-predecessor splice. The one bulk free that does NOT unlink (`e320`) is used here
+in exactly one place, on `WS_cb50`'s own stack temporary, and every call site passes a null
+subtree so it never runs.
+
+**So it cannot be a free-without-unlink. It must be an ERASE THAT NO-OPS while the destroy
+after it proceeds** — and rows 1 and 5 are the only two that can, because they are the only
+two whose key is re-read out of the work object at erase time. `8e30` step 5 (vtable
+`+0x48`, `+0x40`, `DeletePtr` on the task IBP, `ca60` on `sched+0x30`) runs
+**UNCONDITIONALLY**, with no dependence on step 4 having found anything. A drifted key
+therefore leaves a bucket entry whose payload is freed one instruction later. That the key
+CAN drift is not speculation: `CitizenAI_WorkScheduler_Rekey` exists solely to move an item
+between buckets when a building changes profession.
+
+**⚠️ RETAIL HARD-FAULTS WHERE OUR PORT SILENTLY GUARDS.** Retail `0x1400F8F5C`-`0x1400F8F5E`
+is `xor ecx,ecx / mov rdx,[rcx+0x8]` — a read of address `0x8` — on **both** the empty-tree
+and the not-found exits of the bucket search. Retail asserts that a work's own slot-10 key
+always names an existing bucket and **dies immediately if it does not**. Our port has
+`if (node != nullptr)` and carries on. **This port has been running in a state retail
+treats as impossible, and nothing has ever checked.** The asymmetry matters: retail DOES
+tolerate the ENTRY being absent from a bucket that exists, so only the missing-BUCKET case
+is retail-fatal. **The guard was LEFT IN** — deleting it would move the crash, not fix it —
+but note this inverts the standing rule: the usual failure is *fixing a faithful crash with
+a null check*; here a null check has been **masking** one.
+
+**`BANISHED_WORKSCHED_PROBE=1`** (behaviour-unchanged) counts per `8e30` call and reports at
+exit: `unfiled` / `entryNotFound` / `bucketNotFound` / `bucketRootNull`. **Falsifiable both
+ways** — if all three non-healthy counters come back ZERO on a stress run, Finding 3 is NOT
+this mechanism and the enumeration has ELIMINATED the whole family rather than found the
+culprit.
+
+**Eliminated with evidence, not merely unexamined:** work-id reuse (ids are monotonic,
+wrapping at `0x7FFFFFFE`, so a stale `workComp+0x28` cannot alias a live item in 1,200
+frames — and the id-map lookup IS the liveness test); teardown ordering
+(`EntityList::Shutdown` runs before `m_game` is freed, so the scheduler is alive
+throughout); `TreeNodeFree_2ce60` and the tutorial tree; `ca60`'s AVL erase;
+`abi_retslot_audit` clean.
+
+**Slot/offset audit — one hit, in a COMMENT rather than code.** All five walkers of the
+`0x30` node agree (lesser `+0x18`, greater `+0x20`), but `WorkComponent_CheckWorkSlot`'s
+header labelled the two children **backwards** while its code was correct. Corrected: in a
+family that has now paid three times for exactly this confusion, a comment contradicting
+its own code and its four siblings is the next mix-up waiting to happen.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
