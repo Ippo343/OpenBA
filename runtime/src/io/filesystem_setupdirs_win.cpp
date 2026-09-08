@@ -494,23 +494,38 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // second time. Retail reads only +0x18/+0x19 out of `this` and writes only
     // +0x00/+0x08/+0x10, so a scratch object is a complete stand-in.
     //
-    // It is SKIPPED unless the DLL's OWN Configuration::_singleton is
-    // populated. That is not caution, it is a correctness condition: retail's
-    // body dereferences `[0x1801fc6f8]` directly, and once the mint points our
-    // RT_DATA_SLOT at OUR storage the DLL's copy stays null while ours is
-    // fine. Replaying then would fault inside the ORACLE and read as a port
-    // defect — the exact failure shape
-    // reference_recheck_must_match_its_own_proof.md is about.
+    // THE PART THAT IS EASY TO GET WRONG, AND WAS. Retail's body dereferences
+    // `[0x1801fc6f8]` — the DLL's OWN copy of Configuration::_singleton —
+    // directly. That symbol IS minted (rt_data_mint_tables.inc:1561), so our
+    // ported constructor writes OUR storage and the DLL's copy stays NULL
+    // forever. A replay guarded on "is our slot populated" would therefore
+    // always say yes and always fault INSIDE THE ORACLE, reading as a port
+    // defect; a replay guarded on "is the DLL's copy populated" would be safe
+    // but would NEVER FIRE, which is the same as having no oracle while
+    // looking like having one (reference_recheck_must_match_its_own_proof.md).
+    //
+    // So the guard reads the DLL's slot RAW, and then LENDS it our pointer for
+    // the duration of the replay and puts it back. That is a write into the
+    // DLL's .data and it is deliberate and bounded: retail's SetupDirectories
+    // only ever READS that pointer (a map find and two enum dwords), this
+    // function runs exactly once per process on the single-threaded boot path
+    // at Engine::Startup step 3, and the slot is restored on every exit from
+    // the block. It is the difference between an oracle and a decoration.
     if (rt_diff_on__) {
         void** dllSlot = static_cast<void**>(
-            ResolveExportRaw("?_singleton@Configuration@System@@0PEAV12@EA"));
-        if (dllSlot != nullptr && *dllSlot != nullptr) {
+            ResolveExportRaw("?_singleton@Configuration@System@@0PEAV12@EA"));  // RT_RAW_OK
+        if (dllSlot != nullptr && cfg != nullptr) {
+            void* const saved = *dllSlot;
+            *dllSlot = cfg;
+
             FileSystem scratch;
             std::memset(&scratch, 0, sizeof(scratch));
             scratch.existsInPackfileGate = self->existsInPackfileGate;
             scratch.platformExistsGate   = self->platformExistsGate;
             RtOriginal<SetupDirectoriesFn>(
                 "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(&scratch);
+
+            *dllSlot = saved;
 
             const bool equal =
                 SameText(self->sourceDirectory.data, scratch.sourceDirectory.data) &&
@@ -530,9 +545,10 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
             RtString_ReleaseInline(&scratch.dataDirectory);
             RtString_ReleaseInline(&scratch.sourceDirectory);
         } else {
-            // No replay possible. Say what we DID compute, and check the one
-            // post-condition that holds unconditionally: all three fields are
-            // non-null and end in a delimiter.
+            // No DLL at all (cutover), or no Configuration to lend. Say what we
+            // DID compute, and check the one post-condition that holds
+            // unconditionally: all three fields are non-null and end in a
+            // delimiter.
             const char* s = self->sourceDirectory.data;
             const char* d = self->dataDirectory.data;
             const char* p = self->packDirectory.data;
@@ -545,7 +561,7 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
             std::snprintf(a, sizeof(a), "src=%s | dat=%s | pkg=%s",
                           s ? s : "(null)", d ? d : "(null)", p ? p : "(null)");
             RT_DIFF_SHADOW(endsSep(s) && endsSep(d) && endsSep(p), a,
-                           "no replay: the DLL's Configuration::_singleton is null");
+                           "no replay: no DLL slot to lend Configuration to");
         }
         RT_DIFF_WORK(true);
     }
