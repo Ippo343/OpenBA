@@ -36,6 +36,8 @@ String*     RtSystem_WideString_AsUTF8(const WideString* self, String* ret);
 WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src);
 // ??0WideString@System@@QEAA@PEB_W@Z              0x18000a6e0
 WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src);
+// ??0WideString@System@@QEAA@PEBD@Z               0x1800cb110  (Wave 9 lane PLAT)
+WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src);
 // ??1WideString@System@@QEAA@XZ                   0x18000a730
 void        RtSystem_WideString_Dtor(WideString* self);
 // ?StrLength@WideString@System@@SAHPEB_W@Z        0x1800cab20

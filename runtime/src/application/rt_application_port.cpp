@@ -60,5 +60,18 @@ void RtApplicationPortInit() {
         n += RtApplicationMessageCallbacksRegister();
     }
 
+    // Wave 9 lane PLAT: the PlatformStartup family and the WindowProc that one
+    // of them installs. CROSS-NAMESPACE ON PURPOSE — Achievement, Object and
+    // Engine each contribute one two-instruction body, and what the five share
+    // is the export NAME and the cutover boot path, not a namespace (the shape
+    // lane X's singleton_ctors.cpp established).
+    //
+    // `?PlatformStartup@Application@1@AEAA_NXZ` is the live cutover wall:
+    // engine_lifecycle.cpp:638 calls it and a null there is EXEC-of-0.
+    if (RtWaveEnabled("BANISHED_RT_PLAT")) {
+        extern int RtApplicationPlatformStartupRegister();
+        n += RtApplicationPlatformStartupRegister();
+    }
+
     printf("[RtPort] Application: %d exports registered\n", n);
 }
