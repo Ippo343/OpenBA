@@ -2353,3 +2353,57 @@ four ported bodies, while the cutover boot shows exactly why the row matters.
 
 **17 distinct `[RtUnresolved]` names**, unchanged in count from attempts 20/21 but
 not in content — PLAT's three are gone. `Registry: 1617 registered, 21 stubs hit`.
+
+---
+
+## OPEN DIVERGENCE: our VEH fail-fasts where retail DELIBERATELY suppresses its own handler
+
+Found by lane EVM reading `EnumerateVideoModes`, confirmed against our tree by
+the integrator. **This is on our side, not in any port**, and it is recorded here
+rather than fixed in passing because the fix changes crash behaviour
+process-wide.
+
+**What retail does.** Around the plugin's virtual call (`CreateDeviceData` →
+slot 1), `EnumerateVideoModes` sets `?_disableHandler@Debug@System@@0_NA`
+(**ordinal 4781, `0x1801fc708`**) to 1, wraps the call in an SEH region, and
+clears it after. Retail is **positively expecting a video driver to fault there
+and intending to survive it.**
+
+**What we do.** `standalone/main.cpp:1607`:
+
+```cpp
+SetUnhandledExceptionFilter(CrashHandler);
+AddVectoredExceptionHandler(1, FirstChanceFailFast);
+```
+
+The `1` is *first in the chain*, and **vectored handlers run before SEH**. So a
+faulting driver enumeration reaches `FirstChanceFailFast` **before retail's SEH
+region ever sees it** — a hiccup retail survives becomes a crash dump and a dead
+process under us.
+
+**A comment above those lines invites the wrong reading**, and is worth correcting
+whenever someone touches the file:
+
+> `// 1. Install crash handler — only catches second-chance exceptions`
+> `//    so first-chance AVs absorbed by Banished's SEH chains stay quiet.`
+
+That describes `SetUnhandledExceptionFilter` on the **next** line. It does **not**
+describe the vectored handler installed on the line after, which is
+first-chance by construction.
+
+**Nothing in our tree reads the flag.** Grepped `_disableHandler` and
+`0x1801fc708` across `standalone/`, `runtime/`, `engine/` and `code/` at
+`e26b422`: the only occurrence anywhere is prose.
+
+**AND IT IS A CUTOVER GAP, NOT ONLY A BEHAVIOURAL ONE.** `_disableHandler` is
+exported DATA and **is not in `rt_data_mint_tables.inc`**. A ported
+`EnumerateVideoModes` must write it, and with the DLL absent there is no storage
+behind it. This is lane VIDL's trap exactly — **`rt_mint_gen.py` mints what the
+tree REFERENCES**, and nothing references this yet, so **the generator must be
+re-run after the port lands** or the write goes nowhere. VIDL hit the identical
+shape with seven `_typeInfo` globals: without regenerating, its port would have
+moved `unsatisfied` by +7 and closed nothing.
+
+**Deliberately NOT bundled into the video lane.** `main.cpp` is contended, and a
+change to first-chance crash handling deserves its own before/after rather than
+riding in on a video port. Open item.
