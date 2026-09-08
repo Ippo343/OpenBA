@@ -1680,6 +1680,33 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### Attempt 17: THE LADDER MOVES — the boot is now INSIDE `ReadPackfile`
+
+`?ReadPackfile@PackageFile@IO@@` landed (lane PKG3), and with it the whole
+`LoadPackages` chain that attempts 12–16 died on. Coverage **74.1%**.
+
+```
+#6 RtIo_FileSystem_LoadPackages
+#5 RtIo_PackageFile_ReadPackfile              <- attempts 15/16 died BEFORE this
+#4 RtIO::ArraySetSizeFill
+#3 rtcoll::RtColl_ArraySetSizeFill_1800298f0
+#2 rtcoll::SetSizeCore
+#1 rtcoll::DestroyPkgEntryRange +0x??          <- EXEC of 0
+```
+
+`?ReadPackfile@` is gone from the residue list entirely. The last line before the
+crash is `[AutoStart] ENABLED`, and the boot is executing **our** transcription of a
+1,864-instruction function.
+
+**The new wall is an unregistered BY-ADDRESS door — the same class as attempt 13.**
+`rtcoll::DestroyPkgEntryRange` (`array.cpp:757`) forwards to `0x180026b50`, the
+packfile-entry destroy helper, which `tools/addr_door_audit.py` lists as
+unregistered. With no DLL it resolves to nothing and the call executes address 0.
+
+That is a one-address rung, and it is the *fourth* time this wave that the wall has
+turned out to be a door with no name at the call site — the failure class no
+name-based instrument can see.
+
 ### Attempt 16: NO MOVEMENT, and that is the correct result
 
 Between attempts 15 and 16 the tree gained lane PKG2's rungs 2 and 3 (the
