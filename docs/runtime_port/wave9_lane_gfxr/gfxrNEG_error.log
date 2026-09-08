@@ -1,0 +1,95 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001f3066c0000, wrapper=00007ff62d202ee4)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001f306840000, wrapper=00007ff62d20308e)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[ElemTid] registered 21/21 element type-id slots
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff62d18e6fa body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529c8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=000001f306850000, 17-byte patch)
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=000001f306860000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=000001f306870000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=000001f306860000 External::Load=000001f306870000 (recursive CS, target-resolution=RAW)
+[AutoStart] AUTOQUIT ENABLED (BANISHED_AUTOQUIT="1") — will click Quit after 60 menu frames
+[Tornado] ParticleComponent type-id global 0x1401c4720 = 0xF42F66FC (ok)
+[Lane4TypeId] 30/30 slot(s) filled, 0 empty
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c42c0
+[CITID] c70e8(CitizenAI) reg=0000000000000000 val=1392079038 | c7158(Citizen) reg=00007ff62d942fa4 val=2704017556 | c42c0(Happiness) reg=0000000000000000 val=709961609
+[TradeTid] TradeComponent=2459092736 TradeDescription=2350935396 ValueDescription=3341444357 ComponentDescription=2598635996 BoatComponent=1147571899
+[ElemTid] HelpButtonElem/ButtonElement     slot=00000001401514f8 typeInfo=00007ffcafcca938 id=1393606052
+[ElemTid] ImageElement                     slot=0000000140151500 typeInfo=00007ffcafccac48 id=893464662
+[ElemTid] TextElement                      slot=0000000140151508 typeInfo=00007ffcafccaee8 id=438357726
+[ElemTid] TableElement                     slot=0000000140151510 typeInfo=00007ffcafccae78 id=3348628233
+[ElemTid] LabelElement                     slot=0000000140151668 typeInfo=00007ffcafcca040 id=1334204089
+[ElemTid] HelpComboElem/ComboElement       slot=0000000140151690 typeInfo=00007ffcafccaa50 id=3545820999
+[ElemTid] ToolbarElement/CheckElement      slot=00000001401516a8 typeInfo=00007ffcafcca9a8 id=272235987
+[ElemTid] SpinnerElement(=NumberElement)   slot=00000001401516c8 typeInfo=00007ffcafccacb8 id=475271278
+[ElemTid] SliderElement (the REAL one)     slot=00000001401516d0 typeInfo=00007ffcafcca350 id=3664215698
+[ElemTid] HelpFirstElem/ScrollElement      slot=00000001401517e8 typeInfo=00007ffcafccad98 id=476774394
+[ElemTid] HelpDocTextElem                  slot=00000001401517f0 typeInfo=00007ffcafcc9ef0 id=289499821
+[ElemTid] HelpContainerElem                slot=00000001401517f8 typeInfo=00007ffcafcc9dd8 id=3444093259
+[ElemTid] NumberEditElement                slot=0000000140151cb0 typeInfo=00007ffcafcca190 id=631391588
+[ElemTid] SliderElement(=SpinnerElement)   slot=0000000140151cf0 typeInfo=00007ffcafcca3c0 id=644357809
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ffcafccab30 id=2370443687
+[ElemTid] ProgressElement                  slot=00000001401515b8 typeInfo=00007ffcafccad28 id=1281602850
+[ElemTid] RibbonElement                    slot=0000000140151720 typeInfo=00007ffcafcca2e0 id=2193694001
+[ElemTid] BorderElement                    slot=0000000140151a58 typeInfo=00007ffcafcca8c8 id=3875203924
+[ElemTid] EditElement                      slot=0000000140151b50 typeInfo=00007ffcafcc9f60 id=6894048
+[ElemTid] GraphElement                     slot=0000000140151dd8 typeInfo=00007ffcafcc9fd0 id=3839563932
+[ElemTid] TabElement                       slot=0000000140151de0 typeInfo=00007ffcafcca468 id=2123353554
+[TrackerTypeId] 0x1401c4b10 = 2570797389 (0x993B414D)
+[OrchardTypeId] 0x1401c46e8 = 3940668927 (0xEAE1D5FF)
+[OrchardTypeId] 0x1401c46b0 = 2843843441 (0xA9819B71)
+[MarketTypeId] 0x1401c44f0 = 1284470327 (0x4C8F7637)
+[MarketTypeId] 0x1401c4528 = 3142036116 (0xBB47AA94)
+[MarketTypeId] 0x1401c7ee8 = 4120633425 (0xF59BE051)
+[FoodTypeId] 0x1401c43a0 HerbalistComponent    = 3390714787 (0xCA1A33A3)
+[FoodTypeId] 0x1401c43d8 HerbalistDescription  = 4158245638 (0xF7D9CB06)
+[FoodTypeId] 0x1401c7510 CropFieldComponent    = 2748109570 (0xA3CCD302)
+[FoodTypeId] 0x1401c7548 CropFieldDescription  = 1222696611 (0x48E0DEA3)
+[FoodTypeId] 0x1401c7660 FishingComponent      = 2644177521 (0x9D9AF271)
+[FoodTypeId] 0x1401c7698 FishingDescription    = 627382911 (0x25651A7F)
+[FoodTypeId] 0x1401c7890 HuntComponent         = 2898427812 (0xACC27FA4)
+[FoodTypeId] 0x1401c78c8 HuntDescription       = 4273867873 (0xFEBE0C61)
+[FoodTypeId] 8/8 slot(s) filled, 0 empty
+[TutorialTypeId] 0x1401C6240 FinishTutorialGoal = 1089248897 (0x40EC9E81)
+[TutorialTypeId] 0x1401C6278 FinishTutorialInstance = 171997278 (0x0A40785E)
+[TutorialTypeId] 0x1401C6668 TutorialInstance = 3760546994 (0xE02564B2)
+[TutorialTypeId] 0x1401C5A98 Profession = 3983740233 (0xED730D49)
+[GrowthTypeId] 0x1401c77b0 = 1845779407 (0x6E045BCF)
+[ClearAreaTypeId] 0x1401c71c8 = 252740659 | 0x1401c7200 = 2607357058
+[GameSettings] Load: LastTerrain=0 LastMapSize=0 LastClimate=0 LastStart=2 LastDisaster=0 (UIScale=0 AutosaveInterval=0)
+[GameSettings] Load: StatusIconEnable=1 (settings+0xC) -- 0 hides EVERY status icon (citizen health, building warnings); it is the Options checkbox, persisted as GameStatusIconEnable under HKCU/Software/Shining Rock Software LLC/Banished
+[BootState] RUNNING (Engine::Startup returned at 2s)
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a73f88 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a73f88 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a41c00 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a41c00 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a41c00 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001f308a41c00 =====
+[FrameLimiter] ceiling = 216.0 FPS (4.630 ms/frame) [refresh+headroom], hi-res timer=yes. External limiters (vsync/G-Sync/RTSS) at or below refresh are never affected.
+[PerfX] master=0 animCull=0 geomXfLastOnly=0 iconLastOnly=0 ambientThrottle=0 treeSnapshot=0 particleCull=0 pickCull=0 geomCull=0 iconCull=0 animBatchCulled=0 animBatchAll=0 terrainSidecar=0 margin=6.0 (build default 0)
+[AutoStart] menu settled (mainMenu=000001f308a41c98) — injecting Quit click
+[GameSettings] Save: LastTerrain=0 LastMapSize=0 LastClimate=0 LastStart=2 LastDisaster=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 0 registry-aware resolves happened before RuntimePortInit() finished. The early-snapshot port-bypass class is NOT LIVE on this path.
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=0
+[ResLoad] census: FindOrLoad=11497 External::Load=4768
+[ReadGuard] census: Read=0
