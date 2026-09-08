@@ -2497,3 +2497,54 @@ ported exports (one verified on 22,595 live differential calls, 0 divergences)
 moved `unsatisfied` 118 → 118 and UNREGISTERED 14 → 14. A port cannot remove a
 name from a set it was never in. Use the runtime `[RtUnresolved]` residue plus
 the mint-wall prediction.
+
+### UPDATE at park time — lane EVM finished its code; the runs are the first job next session
+
+`wave9/lane-evm` is **`12cd7df`** (base `e26b422`, 6 files, +1454), committed in
+**two deliberate stages** so the chain below the wall is usable on its own:
+
+```
+1ad3785  stage 1: GetDLLForInterface + InitializeInterfaces
+12cd7df  stage 2: EnumerateVideoModes + 2 introsorts + 2 small-range passes + swap
+```
+
+**All eight bodies are written and building. NOTHING IS MEASURED.** The lane
+requested a 25-minute window for five runs and was told to stand down because the
+session was ending, not because the request was wrong — **those five runs are the
+first job next session**, and a lane kill switch (`BANISHED_RT_EVM=0`) was added
+so the baseline is the **same binary one flag apart** rather than a rebuild.
+
+**Predictions are registered before measurement** (committed under
+`docs/runtime_port/evidence/lane_evm/`). Two are worth quoting because they are
+the falsifiable ones:
+
+* **Residue set-diff: −1 `?EnumerateVideoModes@…`, +1
+  `?_disableHandler@Debug@System@@0_NA`, NET COUNT CHANGE ZERO.** This is the
+  cleanest instance this wave has produced of **why a count is worthless**:
+  "residue unchanged" would be *true* and would hide two moves. It also confirms
+  the mint gap recorded above — this lane is the **first asker** for
+  `_disableHandler`, so **`tools/rt_mint_gen.py` must be re-run before those
+  runs** or the new row is a write to nothing at cutover.
+* **Negative control: `differing == discriminating`, exactly** — the control
+  substitutes an ascending insertion sort, which differs from descending on
+  precisely the cases holding two or more distinct keys. **Falsifiable both
+  ways**: fewer means it is not firing everywhere it must, more means the
+  distinct-key count is wrong.
+
+**A transcription defect the lane caught in itself before any run, worth
+recording because of HOW it was caught:** the introsort's second equal-run walk
+was first written as unconditional, when retail reaches it **only** when the
+first walk ran out of room (`j <= pivot`), never when it stopped on a
+non-equivalent element. That produces a plausible wrong permutation and no
+crash — invisible to anything but a permutation oracle. It was caught by checking
+against **lane COLL's already-verified transcription of the same template**
+(`0x1800264a0`) rather than against the author's own reading. That is the
+concrete argument for grepping for an existing port before writing a new one.
+
+**`runtime/src/video/companion_data.cpp:362` carries a stale comment** claiming
+`0x180010760` "is NOT registered, so this call reaches the shipped DLL" — lane
+VID2 registered it at `device_startup.cpp:873`. The code is correct regardless
+(`ResolveAddr` consults the registry first), so this is a comment fix, not a bug.
+**It is the FIFTH wrong "unported/unregistered" comment found this wave.** Comments
+asserting a symbol is unexported or unregistered have been wrong every single
+time they were checked — treat them as leads, never as facts.
