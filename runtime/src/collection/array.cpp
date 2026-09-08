@@ -35,6 +35,10 @@
 //      displacements"; the displacements differ but they resolve to the same
 //      four addresses. So J1 has NO parameters at all — not even a stride. One
 //      body, eleven registrations, nothing to get wrong per instantiation.
+//      (WAVE 9 LANE UIF: make that TWELVE registrations. A twelfth address,
+//      0x180037240, was added below with the same byte-level evidence; the
+//      "no parameters at all" conclusion is unchanged and is what lets one
+//      body serve the extra address for free.)
 //
 // J3 — the ALGORITHM is one algorithm, but "16 instantiations parameterized by
 //      stride / alignment / element-assign" is WRONG about the SIGNATURE, and
@@ -772,6 +776,21 @@ J1_ENTRY(18005fc20)   // Graphics:    Scene's Array<Node>
 J1_ENTRY(1800737f0)   // Picking:     Scene+0x08, Array<int>
 J1_ENTRY(1800739e0)   // Picking:     Scene+0x18, Array<Cell>  (also the AddMesh scratch)
 J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
+// WAVE 9 LANE UIF, 2026-09-08 — THE TWELFTH ADDRESS. Lane D's survey found
+// eleven; there are twelve. 0x180037240 is `UI::Element::_children`'s
+// `~Array<Element*>`, the call at 0x1801161f7 in `??1Element@UI@@UEAA@XZ` on
+// `this+0xa0`. It was invisible to the survey because nothing in our tree
+// called it until this lane ported that destructor.
+//
+// It is the SAME BODY, and that is a byte-level claim, not an eyeball one:
+// 0x180037240 and 0x180033960 were compared over all 115 bytes and differ at
+// exactly eleven offsets (39,40, 60,61, 71,72, 76,77,78, 86,87) — every one of
+// them inside a RIP-relative displacement or a CALL rel32, and every one
+// resolving to the same four absolute operands the J1 note above pins
+// (0x1801fc718, 0x18014b390, 0x1800c6c00, 0x18014b388). Same instructions,
+// same immediates, same targets, so the "no parameters at all, not even a
+// stride" conclusion covers it unchanged and one body still serves them all.
+J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*>
 
 #undef J1_ENTRY
 
@@ -865,6 +884,8 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x1800737f0, (void*)&RtColl_ArrayDtor_1800737f0);
     RegisterRuntimeAddr(0x1800739e0, (void*)&RtColl_ArrayDtor_1800739e0);
     RegisterRuntimeAddr(0x180073bb0, (void*)&RtColl_ArrayDtor_180073bb0);
+    // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
+    RegisterRuntimeAddr(0x180037240, (void*)&RtColl_ArrayDtor_180037240);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);

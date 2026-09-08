@@ -11,7 +11,10 @@
 //   | Export (short form)             | Retail      | Ord  | Ported | Oracle  |
 //   |---------------------------------|-------------|------|--------|---------|
 //   | ??0Element (ctor)               | 0x180115e50 |  171 | yes    | build   |
-//   | ??1Element (dtor)               | 0x1801161a0 |  584 | NO     | —       |
+//   | ??1Element (dtor)               | 0x1801161a0 |  584 | yes    | none    |
+//     ^ Wave 9 lane UIF. `none` is the literal oracle disposition and is
+//       argued for at the body; the "TWO HOLD-BACKS" section below is the
+//       ORIGINAL Wave 7 text, kept because reason (b) still stands.
 //   | ?AddChild@                      | 0x180115df0 | 1537 | yes    | shadow  |
 //   | ?Child@                         | 0x180035540 | 1693 | yes    | replay  |
 //   | ?ChildCount@                    | 0x180035530 | 1695 | yes    | replay  |
@@ -23,7 +26,8 @@
 //   | ?GetPaddedSize@                 | 0x180115f10 | 2830 | yes    | outputs |
 //   | ?GetUserData@                   | 0x180115550 | 2997 | yes    | replay  |
 //   | ?Hide@                          | 0x180035830 | 3056 | yes    | replay  |
-//   | ?RemoveChildren@                | 0x180115570 | 3552 | NO     | —       |
+//   | ?RemoveChildren@                | 0x180115570 | 3552 | yes    | none    |
+//     ^ Wave 9 lane B3, in runtime/src/ui/widgets_layout.cpp, NOT this file.
 //   | ?SetElementId@                  | 0x180115820 | 3875 | yes    | replay  |
 //   | ?SetFlagsOnOff@                 | 0x180116160 | 3883 | yes    | replay  |
 //   | ?SetName@                       | 0x1801154f0 | 3927 | yes    | shadow  |
@@ -61,9 +65,15 @@
 //     because every ported body is a pure function of the object's fields.
 //   * The two functions that would have made this dangerous — the dtor and
 //     `RemoveChildren`, which DESTROY objects — are held back (see below).
+//     WAVE 9: BOTH HAVE SINCE LANDED. `RemoveChildren` in lane B3, the dtor in
+//     lane UIF. The section below is preserved as the Wave 7 record, and its
+//     reason (b) for the dtor — "no oracle" — is still true of the port that
+//     now exists; what changed is that a cutover with no DLL makes the
+//     alternative a NULL CALL rather than a fallback. Read §0 of
+//     docs/runtime_port/WAVE9_LANE_UIF.md before trusting reason (a).
 //
 // ---------------------------------------------------------------------------
-// THE TWO HOLD-BACKS
+// THE TWO HOLD-BACKS  (WAVE 7 RECORD — BOTH NOW LANDED, see the note above)
 // ---------------------------------------------------------------------------
 // `??1Element@UI@@UEAA@XZ` (0x1801161a0). Held back for two independent
 // reasons, either of which is sufficient:
@@ -161,9 +171,22 @@ const char* const kSetOffsets   = "?SetOffsets@ContainerElement@UI@@QEAAXHH@Z";
 //    another engine function that a sibling wave may have ported: our body
 //    should then use the port, exactly as every other one of our call sites
 //    does. That is what Wave 6 lane A did with Math::Matrix::Inverse.
-//  * ResolveAddr(Module::Runtime, addr) — "always the DLL". Used for the three
-//    Collection::Array helpers, which are header-only template instantiations
-//    with NO exported symbol, and for nothing else.
+//  * ResolveAddr(Module::Runtime, addr) — "the address door". Used for the
+//    Collection::Array helpers and the other unexported internals, which are
+//    header-only template instantiations with NO exported symbol to ask for.
+//
+//    WAVE 9 LANE UIF CORRECTION: this bullet used to read "always the DLL",
+//    and that has been FALSE for the whole runtime port. Read the
+//    implementation — standalone/resolve_standalone.cpp:471 — `ResolveAddr`
+//    consults `RtAddrReg()` BEFORE it touches the module handle and before it
+//    applies the ASLR delta, so an address another lane has registered comes
+//    back as OUR code (reference_resolveaddr_consults_port_registry_first.md,
+//    and lane K's runtime/src/object/deleting_dtor.cpp says the same thing in
+//    its own words). The correction matters here rather than being pedantic:
+//    `??1Element` below reaches RemoveChildren, ~Array and ~Internal through
+//    this door precisely BECAUSE it lands on the ports, which is what lets the
+//    destructor close its cutover row instead of moving it one frame deeper.
+//    Believing the old sentence would have made that port look useless.
 //
 // Every one of these is looked up ONCE and cached. RtOriginal / ResolveExport
 // are GetProcAddress and cost like a syscall — two of them in the body of
@@ -1230,12 +1253,186 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 // `RuntimePortInit()` (standalone/main.cpp:1614 then :1626). So those slots
 // pick this port up too, without this file touching them. CHECKED, because a
 // slot filled BEFORE the port registered would have kept the DLL pointer and
-// quietly halved the lane. 0x1401518e0 keeps the DLL's dtor, which is correct:
-// the dtor is held back.
+// quietly halved the lane. (WAVE 9 LANE UIF: this used to end "0x1401518e0
+// keeps the DLL's dtor, which is correct: the dtor is held back." The dtor is
+// no longer held back, so that slot now picks up `RtUi_Element_Dtor` by the
+// same after-the-fact ResolveExport the other four use — no change needed
+// here, but the sentence had to go rather than stay and be wrong.)
 //
 // The kill switch is BANISHED_RT_UIELEMENT=0, applied by
 // runtime/src/ui/rt_ui_port.cpp before this function is called.
 // ============================================================================
+
+// ============================================================================
+// ??1Element@UI@@UEAA@XZ  retail 0x1801161a0  ord 584   (WAVE 9 LANE UIF)
+// ============================================================================
+//
+// WHY THE WAVE 7 HOLD-BACK NO LONGER STANDS. It rested on two reasons, and
+// BOTH were re-read rather than assumed (reference_holdback_blockers_are_stale
+// _check_them_first.md — three stated blockers in one session turned out to be
+// facts the tree already had):
+//
+//   (a) "NOTHING IN OUR TREE CALLS IT." That was true of DIRECT callers and is
+//       still true of them. It is no longer the whole picture, because it was
+//       a statement about our C++ call graph and the thing that reaches this
+//       function is a VTABLE SLOT. `??_7Element@UI@@6B@` slot 0 is not `??1`
+//       and never was — it is the VECTOR deleting destructor
+//       `??_EElement@UI@@UEAAPEAXI@Z` at 0x180035c10 — and Wave 9 lane K
+//       ported all 37 of those slot-0 bodies. 0x180035c10 was disassembled for
+//       this lane: it reaches `??1Element` at 0x1801161a0 on BOTH branches
+//       (`LEA R9,[0x1801161a0]` into the array iterator at 0x180035c28, and
+//       `CALL 0x1801161a0` in the scalar branch at 0x180035c61). Lane K calls
+//       `~Class` by ADDRESS through ResolveAddr, which consults the port
+//       registry first, so the registration below is what makes that edge land
+//       in our code. Until it did, lane K's ported slot 0 called into the DLL —
+//       and with the DLL absent, into NULL. That is the shape the brief warned
+//       about: a null reached through a LIVE MINTED VTABLE, faulting far from
+//       its cause.
+//
+//   (b) "It is the most destructive function in the class and it has no
+//       oracle." Still exactly true, and nothing below pretends otherwise —
+//       see THE ORACLE QUESTION. What changed is only that (a) turned this
+//       from an optional port into a cutover blocker, so the choice is no
+//       longer "unverified port vs. hold-back" but "unverified port vs. a null
+//       call". The Wave 2 allocator verdict that an unverified destroying port
+//       is worse than a hold-back assumed a working DLL underneath it. There
+//       is none after cutover.
+//
+// THE BODY, read from the disassembly at 0x1801161a0 and not from Ghidra's C
+// (reference_ghidra_c_output_vs_disassembly.md):
+//
+//     this->_vtable = &??_7Element@UI@@6B@;         // 0x180156160
+//     RemoveChildren(this);                         // 0x180115570
+//     if (this->_border != 0 && this->_border != 0) // yes, retail tests twice
+//         this->_border->vtbl[0](this->_border, 1); //   scalar deleting dtor
+//         this->_border = nullptr;
+//     ~Array<Element*>(&this->_children);           // 0x180037240, this+0xa0
+//     <release this->_toolTipString>                // +0x58
+//     <release this->_name>                         // +0x10
+//     JMP ~Internal(this);                          // 0x1800bfdb0, TAIL call
+//
+// THE DOUBLED NULL TEST ON `_border` IS REPRODUCED. Retail emits both
+// `CMP qword ptr [RBX+0xb0],0x0` (0x1801161c5) and `TEST RCX,RCX` (0x1801161d6)
+// on the same loaded value. It is redundant and it is kept: this is a
+// byte-faithful port and "tidying" a test out of a destructor is how a
+// difference gets introduced that nothing then looks for.
+//
+// EVERY CALLEE IS SATISFIED ON OUR SIDE — which is the whole admission test
+// (a port only CLOSES a cutover row if it does not merely move it one frame
+// deeper). Checked one at a time, not assumed:
+//   * 0x180115570 RemoveChildren  — PORTED, Wave 9 lane B3, widgets_layout.cpp
+//   * slot 0 on `_border`         — PORTED, Wave 9 lane K's deleting-dtor family
+//   * 0x180037240 ~Array<Element*> — PORTED BY THIS LANE as the twelfth address
+//                                    of lane Q's J1 family; see the byte-level
+//                                    argument in runtime/src/collection/array.cpp
+//   * 0x1800c7ad0 MemFree         — PORTED, lane Q
+//   * 0x1800bfdb0 ~Internal       — PORTED, Wave 3, runtime/src/object/internal.cpp
+// So this row closes rather than relocating.
+//
+// THE TAIL CALL TO ~Internal IS LOAD-BEARING AND IS NOT OPTIONAL. 0x1800bfdb0
+// is the InternalFactory swap-remove that
+// reference_internalfactory_swapremove_wild_write.md is about: an Element freed
+// without it leaves a stale handle-table entry that a later swap-remove writes
+// through. Reached here by ADDRESS, exactly where retail reaches it, so
+// whichever variant internal.cpp has live (plain or shadowed) is what runs.
+//
+// THE ORACLE QUESTION — THERE IS NO ORACLE, AND THIS PORT SHIPS WITHOUT ONE.
+// Stated plainly because a quiet site reads as a pass
+// (reference_uncalled_port_is_not_verified.md). A replay here would not be a
+// comparison but a SECOND DESTRUCTION: it would destroy every child again
+// through slot 0, decrement two String refcounts our body may already have
+// taken to zero and FREED, free the child array again, and run the handle
+// swap-remove twice on a handle that no longer exists. Any one of those is
+// heap corruption; the last is this project's worst failure family. So this is
+// a NO-ORACLE PORT in the exact disposition Wave 9 lane M established and lane
+// Z reused four rows over in runtime/src/ui/userinterface.cpp: a real body,
+// registered, with NO call into the shipped body at all.
+//
+// WHAT THE INSTRUMENT DOES AND DOES NOT SAY. `RT_DIFF_WORK` below reports, in a
+// BANISHED_RT_DIFF=1 run while the DLL is still present, how many calls got
+// past the two release guards and actually freed something — so a dead port is
+// distinguishable from a live one. Note that this site will print `calls=0`:
+// `calls` is bumped by RtDiffReport, and there is no comparison to report. The
+// `worked=` column is the whole liveness signal here, and it is a LIVENESS
+// instrument, not a correctness one. Nothing in this file is evidence that the
+// body is right; the evidence is the disassembly transcribed above.
+void RtUi_Element_Dtor(Element* self) {
+    RT_DIFF_BEGIN("UI::Element::~Element");
+    bool didWork = false;
+
+    // Retail's vtable restamp. Resolved by name so our objects and the DLL's
+    // carry the identical pointer (the argument at the top of this file).
+    if (void* vt = ElementVTable()) self->_vtable = vt;
+
+    // 0x180115570 RemoveChildren, reached BY ADDRESS. ResolveAddr consults the
+    // port registry first (reference_resolveaddr_consults_port_registry_first
+    // .md), so this lands on lane B3's port, not the DLL.
+    {
+        using Fn = void (*)(void*);
+        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180115570));
+        if (fn) fn(self);
+    }
+
+    // The border element, destroyed through ITS OWN slot 0 with flag 1 —
+    // scalar delete. Not `??1Element`: slot 0 is `??_E`, and picking the wrong
+    // one of the three spellings resolves null behind a guard
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    if (self->_border != nullptr) {
+        void* border = self->_border;
+        if (border != nullptr) {           // retail's second, redundant test
+            using DeletingDtorFn = void* (*)(void*, unsigned);
+            void** vtbl = *reinterpret_cast<void***>(border);
+            reinterpret_cast<DeletingDtorFn>(vtbl[0])(border, 1u);
+            didWork = true;
+        }
+        self->_border = nullptr;
+    }
+
+    // ~Array<Element*> on this+0xa0, by ADDRESS so it lands on lane Q's J1 body
+    // (the twelfth address, registered by this lane).
+    {
+        using Fn = void* (*)(void*);
+        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180037240));
+        if (fn) fn(&self->_children);
+    }
+
+    // The two System::String releases, in retail's order (+0x58 then +0x10) and
+    // with retail's asymmetry: on the FREEING branch the field is left holding
+    // `data - 8`, a dangling pointer; only the SHARING branch nulls it. Both
+    // reproduced — see runtime/types/system/String.h, "RETAIL'S RELEASE IDIOM,
+    // AND WHY IT MUST BE COPIED EXACTLY".
+    if (char* p = reinterpret_cast<char*>(self->_toolTipString)) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            self->_toolTipString = p - 8;
+            MemFreeFn freeFn = MemFree();
+            if (freeFn) freeFn(self->_toolTipString);
+            didWork = true;
+        } else {
+            self->_toolTipString = nullptr;
+        }
+    }
+    if (char* p = reinterpret_cast<char*>(self->_name)) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            self->_name = p - 8;
+            MemFreeFn freeFn = MemFree();
+            if (freeFn) freeFn(self->_name);
+            didWork = true;
+        } else {
+            self->_name = nullptr;
+        }
+    }
+
+    RT_DIFF_WORK(didWork);
+
+    // 0x1800bfdb0 ~Internal — a TAIL CALL in retail, a normal call here. That
+    // is the one deliberate departure: it costs a stack frame and changes
+    // nothing the object can observe.
+    {
+        using Fn = void (*)(void*);
+        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800bfdb0));
+        if (fn) fn(self);
+    }
+}
 
 int RtUiElementRegister() {
     int count = 0;
@@ -1312,9 +1509,11 @@ int RtUiElementRegister() {
     VerifyBorderThunk(&drawThunkSite,
                       "?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z", 0xb0, 0x30);
 
-    // HELD BACK, with reasons at the top of this file:
-    //   ??1Element@UI@@UEAA@XZ          0x1801161a0  (no live caller + no oracle)
-    //   ?RemoveChildren@Element@UI@@QEAAXXZ 0x180115570  (destroys children)
+    // WAVE 9 LANE UIF: both Wave 7 hold-backs are now landed. RemoveChildren
+    // went in with Wave 9 lane B3 (runtime/src/ui/widgets_layout.cpp); the
+    // destructor is directly below.
+    RegisterRuntimeExport("??1Element@UI@@UEAA@XZ", (void*)&RtUi_Element_Dtor); ++count;
+    RegisterRuntimeAddr(0x1801161a0, (void*)&RtUi_Element_Dtor);
 
     return count;
 }
