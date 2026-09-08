@@ -11,10 +11,10 @@
 //
 //   | Export                              | Retail      | Ord  | Ported | Oracle        |
 //   |-------------------------------------|-------------|------|--------|---------------|
-//   | ??0Engine@0@QEAA@PEAX@Z             | 0x1800dbf00 |  174 | NO     | — allocator   |
-//   | ??1Engine@0@QEAA@XZ                 | 0x1800dbec0 |  586 | NO     | — allocator   |
-//   | ?Startup@Engine@1@QEAAIPEBDII_N@Z   | 0x1800db8a0 | 4094 | NO     | — allocator   |
-//   | ?Shutdown@Engine@1@QEAAXXZ          | 0x1800db4f0 | 4047 | NO     | — allocator   |
+//   | ??0Engine@0@QEAA@PEAX@Z             | 0x1800dbf00 |  174 | LANE ENG (Wave 9) |
+//   | ??1Engine@0@QEAA@XZ                 | 0x1800dbec0 |  586 | LANE ENG (Wave 9) |
+//   | ?Startup@Engine@1@QEAAIPEBDII_N@Z   | 0x1800db8a0 | 4094 | LANE ENG (Wave 9) |
+//   | ?Shutdown@Engine@1@QEAAXXZ          | 0x1800db4f0 | 4047 | LANE ENG (Wave 9) |
 //   | ??0MainLoop@Engine@@QEAA@PEAV11@@Z  | 0x1800dd6b0 |  263 | yes    | shadow        |
 //   | ??1MainLoop@Engine@@QEAA@XZ         | 0x1800dd640 |  627 | yes    | shadow        |
 //   | ?SetNextLoop@MainLoop@Engine@@...   | 0x1800dd7a0 | 3929 | yes    | replay        |
@@ -89,15 +89,20 @@
 // are null", and no gate row covered that because no NAME is involved.
 //
 // ---------------------------------------------------------------------------
-// WHY THE FOUR `Engine::Engine` MEMBERS ARE HELD BACK
+// WHY THE FOUR `Engine::Engine` MEMBERS WERE HELD BACK -- AND NO LONGER ARE
 // ---------------------------------------------------------------------------
-// `Engine::Engine` embeds `System::MemoryAllocator` at offset 0 — proven in
-// runtime/types/engine/Engine.h, not taken on faith from PLAN §4.3 risk 2 —
-// and the allocator port carries a NO-GO verdict (WAVE2_ALLOCATOR.md: its
-// shadow proof has never executed, and an unmeasured port is not a port).
+// SUPERSEDED 2026-09-08 by Wave 9 lane ENG. All four are ported, in
+// runtime/src/engine/engine_lifecycle.cpp. This section is kept because the
+// facts it established are still the facts; only the verdict changed.
 //
-// WAVE8.md §3 anticipates that the ctor and dtor fall to this. What the
-// disassembly adds is that `Startup` and `Shutdown` fall to it too, which was
+// `Engine::Engine` embeds `System::MemoryAllocator` at offset 0 -- proven in
+// runtime/types/engine/Engine.h, not taken on faith from PLAN 4.3 risk 2 --
+// and at the time the allocator port carried a NO-GO verdict
+// (WAVE2_ALLOCATOR.md: its shadow proof had never executed, and an unmeasured
+// port is not a port).
+//
+// WAVE8.md 3 anticipates that the ctor and dtor fall to this. What the
+// disassembly added is that `Startup` and `Shutdown` fall to it too, which was
 // NOT anticipated:
 //
 //   Startup  0x1800db8d9: this->_allocator.minRangeSize = (u64)arg2 << 20;
@@ -106,19 +111,22 @@
 //            0x1800db905: CALL 0x1800c7690     <- the allocator's own init
 //   Shutdown 0x1800db87a: CALL 0x1800c75b0     <- the allocator's own shutdown
 //
-// Both bodies therefore sit *inside* the object the NO-GO covers, on the one
-// path where getting it wrong destroys the heap the whole process allocates
-// from. And neither has an oracle: replay is invalid by construction (running
-// both would start the engine twice / free every subsystem twice), and a
-// shadow would have to replicate the allocator state the NO-GO says we may
-// not replicate.
+// Those five lines are exactly `MemoryAllocator::Startup` / `::Shutdown`
+// inlined -- same operations, same order, same error string -- which is what
+// let lane ENG port them by CALLING the ported allocator rather than
+// re-deriving them. Wave 9 lanes E/E2/E3 discharged the NO-GO and lane E4
+// armed the allocator at cutover, where our allocator is the only one in the
+// process. Neither body has a differential oracle, and lane ENG says so
+// plainly instead of manufacturing one.
 //
 // One consequence worth stating because CLAUDE.md's "Launcher Dialog" section
 // and standalone/main.cpp's HarnessGuardUnattendedBoot depend on it: the
 // registry arming bit is written from `Engine+0x6f0` by the first four
-// instructions of `Engine::Shutdown`, not by `Engine::Startup`. Holding both
-// back leaves that behaviour bit-for-bit as retail, so no unattended run in
-// this project changes. See runtime/types/engine/Engine.h for the four stores.
+// instructions of `Engine::Shutdown`, not by `Engine::Startup`. Lane ENG's
+// port keeps that store bit-for-bit -- and note game_main.cpp does not call
+// Engine::Shutdown at all, so on this project's runs the bit still travels
+// through ShutdownEngineStaged exactly as before. See
+// runtime/types/engine/Engine.h for the four stores.
 //
 // ---------------------------------------------------------------------------
 // WHY `MainLoop::Run` IS HELD BACK
@@ -653,11 +661,15 @@ int RtEngineCoreRegister() {
     RegisterRuntimeExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z", (void*)&RtEngine_MainLoop_SetNextLoop); ++n;
     RegisterRuntimeAddr(0x1800dd7a0, (void*)&RtEngine_MainLoop_SetNextLoop);
 
-    // DELIBERATELY ABSENT — see the holdback sections in the banner:
-    //   ??0Engine@0@QEAA@PEAX@Z              0x1800dbf00  allocator, NO-GO
-    //   ??1Engine@0@QEAA@XZ                  0x1800dbec0  allocator, NO-GO
-    //   ?Startup@Engine@1@QEAAIPEBDII_N@Z    0x1800db8a0  allocator, NO-GO
-    //   ?Shutdown@Engine@1@QEAAXXZ           0x1800db4f0  allocator, NO-GO
+    // MOVED to runtime/src/engine/engine_lifecycle.cpp (Wave 9 lane ENG), which
+    // registers all four. The "allocator, NO-GO" reason that used to stand here
+    // was discharged by Wave 9 lanes E/E2/E3/E4:
+    //   ??0Engine@0@QEAA@PEAX@Z              0x1800dbf00
+    //   ??1Engine@0@QEAA@XZ                  0x1800dbec0
+    //   ?Startup@Engine@1@QEAAIPEBDII_N@Z    0x1800db8a0
+    //   ?Shutdown@Engine@1@QEAAXXZ           0x1800db4f0
+    //
+    // DELIBERATELY ABSENT -- see the holdback sections in the banner:
     //   ?Run@MainLoop@Engine@@…              0x1800dd3c0  no oracle, kills the run
     //   ?OnVideoError@MainLoop@Engine@@…     0x1800dc5e0  needs a detour
     //   ?OnVideoRestart@MainLoop@Engine@@…   0x1800dc3b0  needs a detour

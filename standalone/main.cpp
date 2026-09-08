@@ -1867,6 +1867,10 @@ static bool Init() {
 // ============================================================
 // Entry point
 // ============================================================
+// Wave 9 lane ENG (runtime/src/engine/engine_lifecycle.cpp). A linkage
+// specification is not allowed at block scope, so it is declared here.
+extern "C" void RtEngineLifecycleSummary();
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Redirect stdout/stderr to log files.
     //
@@ -1945,6 +1949,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     RtDiffSummary();
+    // Wave 9 lane ENG: did Engine::Engine's ctor / Startup / dtor / Shutdown
+    // actually RUN? Each executes at most once per process, so the diff
+    // harness's divergences= column says nothing on its own; this is the
+    // effectiveness control. Always on -- it prints only if one of them ran.
+    RtEngineLifecycleSummary();
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.
