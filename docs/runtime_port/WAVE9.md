@@ -253,6 +253,28 @@ ours), not chosen.
 | **F. Retire the §2.2 patches — AND the fallback idiom, 166 sites** — **FALLBACK HALF DONE 2026-09-07 (0 sites); §2.2 TRIAGED, ALL CARRIED, see [WAVE9_LANE_F.md](WAVE9_LANE_F.md) — and PLAN §2.2 A is WRONG that `filename_runtime_hook.cpp` is only diagnostics: `InstallFindOrLoadWatch()` is default-on and is the menu-crash fix** | The four byte-patch files, the crash handler's Runtime instruction offsets (§2.2 C, kept and narrowed by Wave 3), the `MessageBoxW` IAT swap, and the direct layout reads in §2.2 B. **Plus a countable item this table did not have until Wave 9 lane D measured it: all 166 `ResolveExport(...); if (!x) ResolveAddr(Module::Runtime, ...)` fallback branches must be DELETED before lane G.** With the DLL gone, no `ResolveExport` can succeed, so every one of the 166 becomes the live path *simultaneously* and jumps at an address in a module that is not mapped. The replacement for the audit is not another tool — it is leaving nothing to audit. | Each one deleted, not carried; `resolve_fallback_audit.py` reports 0 sites |
 | **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. **Nothing here may run for the first time on cutover day** — every gate below needs the DLL to compare against and stops working the moment it is gone. | The PLAN §5 box |
 
+### ⚠️ Reading the residue gate AFTER lane C2 (2026-09-08)
+
+**"An empty `[RtResidue]` list is the cutover gate" no longer means what it says on an
+ordinary run.** Lane C2 (`8b7d9ae`) moved **57 DATA reads from the RAW door to the
+port-aware door**, which moves them from `[RtRawResidue]` to `[RtResidue]`. That is the
+CORRECT direction — a deliberate bypass becoming a measurable request — but:
+
+* a residue run now shows **~57 new `[RtResidue]` rows, and that is EXPECTED, not a
+  regression**. They are exactly the exported DATA the mint carries;
+* **they only disappear once the mint is REGISTERED** (`BANISHED_RT_MINT=1`), which is a
+  cutover-day setting. So the residue gate cannot be evaluated to empty on a
+  DLL-present run for these symbols, and a reader who expects empty will read a
+  correct state as a failure;
+* the corresponding rows in lane V's 104-row table were verdicted as raw-door
+  requests and **are no longer raw-door requests**.
+
+**Also: any "ports" number derived from `runtime_census.py` in this document is a
+FLOOR.** The census cannot list a port registered by ADDRESS that no resolve site asks
+for — which is exactly the twelve `??_G` deleting-destructor thunks, reached only by the
+minted vtable itself, and a minted vtable is not a resolve site. The mint finds them at
+runtime through `RtPortLookupAddr`. **Check the DELTAS, not the absolutes.**
+
 ### The PRE-CUTOVER GATE CHECKLIST — run and RECORD each while the DLL still exists
 
 Every one of these compares against the shipped DLL. After lane G there is nothing to
