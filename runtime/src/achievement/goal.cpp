@@ -631,7 +631,14 @@ int RtAchGoalRegister() {
     RegisterRuntimeExport("?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z", (void*)&RtAch_GoalInstance_Update); ++n;
     RegisterRuntimeAddr(0x18009f010, (void*)&RtAch_GoalInstance_Update);
 
-    printf("[RtPort] Achievement::Goal: %d/15 exports registered "
-           "(Goal::Serialize + GoalInstance::Persist held back -- see WAVE5_LANE_A.md)\n", n);
+    // Counts THIS file's registrations only. Goal::Serialize and
+    // GoalInstance::Persist are the other two of the 15 and are registered by
+    // goal_serialize.cpp (Wave 9 lane P) under this same BANISHED_RT_GOAL switch.
+    // This line used to say they were "held back -- see WAVE5_LANE_A.md", which
+    // stayed in the log after they were ported: a banner asserting a function is
+    // held back while it is registered is the same invisible-to-review defect as
+    // a comment contradicting its code.
+    printf("[RtPort] Achievement::Goal: %d/15 exports registered here "
+           "(+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)\n", n);
     return n;
 }

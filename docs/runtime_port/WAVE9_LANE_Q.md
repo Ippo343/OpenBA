@@ -318,6 +318,49 @@ compared EQUAL. The comparator is broken, so the green result above is worthless
 Wave 8.5's negative control found a defect in the **probe**, not the port. This one is aimed at
 the same place.
 
+## 3.4a A defect the probe HAD, and the rule it produced
+
+Fixed 2026-09-07 after the integration run. Recorded rather than quietly patched, because the
+lesson is about diagnostics, not about arrays.
+
+The first draft passed a **stack-local `rtcoll::Site`** from inside the probe's per-case loop
+into `SetSizeCore`. `RtDiffRegister` keeps the **pointer** in `rt_diff.cpp`'s `g_sites[]` and
+re-reads it at `RtDiffSummary()` time, so all 16 × 9 = **144 of them were dangling** by then.
+The summary did not print rubbish; it printed
+
+```
+[RtDiff] ==== 144 of 416 sites were CORRUPTED — a stray write hit the harness's own statics ====
+```
+
+which is **the loudest diagnostic this harness has and names this project's worst failure
+family** (`reference_internalfactory_swapremove_wild_write.md`,
+`reference_load_wild_write_high_dword_7fc.md`). It cost the integrator most of an escalation.
+
+**The tell, worth writing down because it generalises:** all 144 rows showed the *same*
+address, the *same* name pointer and the *same* impossible counters, and that address was on
+the **stack**. *N identical rows is one dangling pointer read N times, not N corrupted
+statics* — corruption from a stray write is scattered, not uniform. The A/B settled it in one
+run: without `BANISHED_RT_ARRAY_PROBE`, 271 sites and no corruption; with it, 416 and 144.
+
+**The fix is that the probe registers nothing at all.** `SetSizeCore` and `ArrayDtorSited` now
+accept a NULL `site` meaning "run the body, touch nothing in the diff registry", and the probe
+passes NULL. A file-scope site would have fixed the dangling pointer and still been wrong: the
+probe has its own counters, its `Compare()` is strictly stronger than the live checks, and its
+traffic does not belong in a registry that reports on the *live* run.
+
+**Two facts about `rt_diff.cpp` that this surfaced**, checked and worth carrying forward:
+
+* Registration is an **unsynchronised** `g_sites[g_siteCount++]`. Anything registering sites in
+  bulk at runtime is racing it.
+* It is bounds-checked against `kMaxSites = 1024` by **silently dropping** anything past the
+  cap. 416 observed sites is not near it and 27 static sites from this lane cannot move it —
+  but 144 dynamic registrations per run were headed that way, and a silent overflow there would
+  look exactly like corruption too.
+
+**The rule, now stated in both source files:** *a `RtDiffSite` must have static storage
+duration.* A harness that cries wild-write for a benign cause is worse than one that says
+nothing.
+
 ## 3.5 Live instrumentation — a coverage counter, stated as such
 
 Each of the 27 addresses owns its own `RtDiffSite`, so the `RtDiff` summary reports `calls=`
@@ -479,5 +522,7 @@ the old claim was load-bearing for a reader and a future revert of this lane mus
 4. **If something breaks, bisect with the two env vars** (`BANISHED_RT_ARRAY_NONTRIVIAL=0`
    first — it is 3 of 27 and carries all the element semantics — then
    `BANISHED_RT_COLLECTION=0`).
-5. `-fsyntax-only` is clean at `-Wall -Wextra` on both new files. **They have never been
-   compiled into an object, linked, or executed.**
+5. **The probe no longer registers anything with `rt_diff.cpp`** (§3.4a). A run with
+   `BANISHED_RT_ARRAY_PROBE` set should now report the same site count as one without it, and
+   **no `CORRUPTED` line**. That is the check that the fix landed; the probe's own
+   `[RtArrayProbe]` lines are unchanged.

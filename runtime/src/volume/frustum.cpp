@@ -361,6 +361,18 @@ static constexpr float kMinusTwo = -2.0f;
 Matrix* RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroToOneDepth) {
     RT_DIFF_BEGIN("Volume::Frustum::Projection");
 
+    // Input snapshot for the oracle, taken before `ret` is touched. The hidden
+    // return slot is a caller-chosen buffer and MAY overlap `self`:
+    // runtime/src/graphics/renderer.cpp:290 passes `&self->frustum` and
+    // `&self->projection`, two members of the same Camera. They do not overlap
+    // today, but "two members of one object" is one layout change away from
+    // doing so, and the cost of being wrong is a phantom divergence that reads
+    // exactly like a port defect — which is what Math::Transform::AsTransform3
+    // paid 901 of before the aliasing at gameupdateloop.cpp:1496 was found.
+    // Snapshot, and the question stops mattering.
+    Frustum selfSnapshot{};
+    if (rt_diff_on__) selfSnapshot = *self;
+
     const float nearDist = self->planes[0].w;
     const float farDist  = -self->planes[1].w;
     float xLo, xHi, zLo, zHi;
@@ -425,7 +437,7 @@ Matrix* RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroT
     if (rt_diff_on__) {
         Matrix theirs{};
         RtOriginal<Matrix* (*)(const Frustum*, Matrix*, bool)>(
-            "?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z")(self, &theirs, zeroToOneDepth);
+            "?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z")(&selfSnapshot, &theirs, zeroToOneDepth);
         RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
     }
     return ret;

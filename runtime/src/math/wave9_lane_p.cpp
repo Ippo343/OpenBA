@@ -89,6 +89,16 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
                                    const Quaternion* other, const Scalar* t) {
     RT_DIFF_BEGIN("Math::Quaternion::Lerp");
 
+    // Input snapshots for the oracle, taken before a single byte of `ret` is
+    // written. `ret` is a hidden return slot the caller chose and it is allowed
+    // to alias `self` or `other`; retail tolerates that because it reads every
+    // input into registers before its first store, and so does the body below.
+    // The ORACLE is what cannot tolerate it: running the shipped body on `self`
+    // AFTER we have written `ret` feeds it corrupted input.
+    Quaternion selfSnap{}, otherSnap{};
+    Scalar     tSnap{};
+    if (rt_diff_on__) { selfSnap = *self; otherSnap = *other; tSnap = *t; }
+
     const float ax = self->x,  ay = self->y,  az = self->z,  aw = self->w;
     const float bx = other->x, by = other->y, bz = other->z, bw = other->w;
 
@@ -118,6 +128,10 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
     const float len = RtLibm::Sqrt(len2);          // CALL 0x180128110 (sqrtf)
     const float inv = RtMathConst::kOne / len;     // DIVSS XMM10,XMM0
 
+    // ALIASING: the snapshots above are taken BEFORE these stores, because `ret`
+    // may be the same buffer as `self` or `other`. See the block comment on
+    // AsTransform3 below — this is the same trap, and it cost 901 phantom
+    // divergences there before it was understood.
     ret->x = rx * inv;
     ret->y = ry * inv;
     ret->z = rz * inv;
@@ -128,7 +142,7 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
         RtOriginal<Quaternion* (*)(const Quaternion*, Quaternion*, const Quaternion*,
                                    const Scalar*)>(
             "?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(
-                self, &theirs, other, t);
+                &selfSnap, &theirs, &otherSnap, &tSnap);
         RT_DIFF_BYTES(ret, &theirs, sizeof(Quaternion));
     }
     return ret;   // retail returns the hidden slot in RAX
@@ -158,6 +172,40 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
 Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
     RT_DIFF_BEGIN("Math::Transform::AsTransform3");
 
+    // *** `ret` CAN BE THE SAME BUFFER AS `self`, AND AT LEAST ONE CALL SITE
+    // *** RELIES ON IT. code/Game/Game/gameupdateloop.cpp:1496, the per-frame
+    // camera update:
+    //
+    //     uint8_t transform3[44];
+    //     void* result = fn_PlayerController_CalcTransform(playerCtrl, transform3);
+    //     void* t3     = fn_Transform_AsTransform3(result, transform3);
+    //
+    // `result` IS `transform3` (a hidden-return-slot call handing its own out
+    // buffer back in RAX), so `self == ret` exactly.
+    //
+    // THE PORT IS SAFE: AsMatrix reads every field of `self` into `m` before the
+    // first store to `ret`, which is precisely why retail is safe too — its
+    // scratch matrix at RSP+0x20 is fully populated by the CALL at 0x18001fcff
+    // before the twelve MOVSS stores at 0x18001fd5b onward.
+    //
+    // THE ORACLE WAS NOT, and this cost 901 divergences in ~8,650 calls (a stable
+    // ~10.4% across two runs, libm-independent) that read exactly like a port
+    // defect. Running the shipped body on `self` AFTER we have written `ret` — the
+    // same memory — hands it input we just destroyed, so `theirs` is garbage and
+    // `ours` is correct. The snapshot below is taken before any store, and the
+    // shipped body is run on THAT.
+    //
+    // GENERAL RULE, because this is not specific to AsTransform3: a differential
+    // oracle for an out-parameter function must run the original on a SNAPSHOT of
+    // the inputs, not on the live ones, whenever the out-parameter is a
+    // caller-chosen buffer. rt_diff.h already says "never let the original write
+    // into live state"; this is the mirror image — never let OUR write reach the
+    // original's input. Sibling of
+    // reference_oracle_must_not_compare_unwritten_bytes.md: a harness defect that
+    // presents as a catastrophic port defect.
+    Transform selfSnapshot{};
+    if (rt_diff_on__) selfSnapshot = *self;
+
     Matrix m;
     CallAsMatrix(self, &m);
 
@@ -169,7 +217,7 @@ Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret
     if (rt_diff_on__) {
         Transform3 theirs{};
         RtOriginal<Transform3* (*)(const Transform*, Transform3*)>(
-            "?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ")(self, &theirs);
+            "?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ")(&selfSnapshot, &theirs);
         RT_DIFF_BYTES(ret, &theirs, sizeof(Transform3));
     }
     return ret;

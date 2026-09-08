@@ -1492,7 +1492,16 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         // Step 6: Camera transform update
         TRACE("[GameUpdateLoop::Update] updating camera transform...\n");
         {
-            uint8_t transform3[44]; // Transform3 scratch space
+            // Math::Transform3 is 0x30 = 48 bytes (static_assert in
+            // runtime/types/math/Math.h:118), and retail's AsTransform3
+            // (0x18001fcd0) writes twelve MOVSS stores covering ret+0x00..0x2f.
+            // This buffer was declared [44] until Wave 9, so every frame wrote
+            // FOUR BYTES PAST THE END of a stack buffer. Line 2281 of this same
+            // file already had it right at [48]; this was a plain typo, not a
+            // layout disagreement. Found by lane P while diagnosing an
+            // AsTransform3 divergence that turned out to be an oracle defect --
+            // the overflow is older and unrelated to that port.
+            uint8_t transform3[48]; // Transform3 scratch space (0x30 bytes)
             void* playerCtrl = self->m_playerController;
             void* result = fn_PlayerController_CalcTransform(playerCtrl, transform3);
             // AsTransform3 on the result, then SetCameraToWorld

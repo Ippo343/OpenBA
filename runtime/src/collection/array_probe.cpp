@@ -334,12 +334,29 @@ void RunTarget(const Target& t, Mode mode) {
         const bool willFill   = !isNoop && n > k.oldSize;
         const bool willFree   = willAlloc && k.capacity > 0;
 
-        rtcoll::Site sink = { { "probe", 0, 0, false, false }, t.addr };
+        // NULL site: the probe registers NOTHING with rt_diff.cpp.
+        //
+        // The first draft passed a stack-local `rtcoll::Site` here. RtDiffRegister
+        // keeps the POINTER and re-reads it at summary time, so all 16 x 9 = 144
+        // of them were dangling by then -- and the summary reported them as
+        // "144 of 416 sites were CORRUPTED -- a stray write hit the harness's own
+        // statics", the loudest diagnostic this harness has, for a benign cause.
+        // (The tell was that all 144 rows showed the SAME address, and that the
+        // address was on the STACK: 144 identical rows is one dangling pointer
+        // read 144 times, not 144 corrupted statics.)
+        //
+        // A file-scope site would fix the dangling pointer and still be wrong
+        // here: the probe has its own cases/did-work/mismatches counters, its
+        // Compare() is strictly stronger than SetSizeCore's live checks, and its
+        // traffic does not belong in a registry that reports on the LIVE run.
+        // rt_diff.cpp's registration is also unsynchronised and silently drops
+        // past kMaxSites = 1024, so bulk runtime registration is a bad habit
+        // regardless.
         const uint8_t* fillArg = (t.arity == 3) ? fill : nullptr;
         // Retail writes the new tail iff a fill was passed or the spec has a
         // default `init`; see Compare().
         const bool tailWritten = (fillArg != nullptr) || (spec->init != nullptr);
-        rtcoll::SetSizeCore(&ours.hdr, n, fillArg, spec, &sink);
+        rtcoll::SetSizeCore(&ours.hdr, n, fillArg, spec, /*site=*/nullptr);
         RunShipped(t, &theirs.hdr, n, fill);
 
         char why[192] = { 0 };

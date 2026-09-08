@@ -43,6 +43,12 @@ struct ArraySpec {
 };
 
 // One diff site per REGISTERED ADDRESS. See array.cpp's "Live instrumentation".
+//
+// *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister stores the
+// POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles
+// and the summary reports it as "sites were CORRUPTED -- a stray write hit the
+// harness's own statics". The probe's first draft did exactly that 144 times;
+// the full account is in array.cpp above SetSizeCore.
 struct Site { RtDiffSite d; uintptr_t addr; };
 
 // The allocator boundary (by address; see array.cpp's banner and the lane E
@@ -65,6 +71,8 @@ void  MemFree(void* p);
 extern bool g_probePending;
 
 // The two ported bodies.
+// `site` may be NULL, which means "run the body, touch nothing in the diff
+// registry". The probe passes NULL.
 void* ArrayDtorImpl(ArrayHdr* a);
 void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
                   const ArraySpec* spec, Site* site);

@@ -385,6 +385,72 @@ lane's verification leans on them:
   executes at the call site.
 * The one place where the distinction bites is `ThreadFunc`, handled in §4 above.
 
+## DEFECT FOUND AND FIXED: `AsTransform3`'s 901 divergences were the ORACLE, not the port
+
+The integration run reported `Math::Transform::AsTransform3 calls=8649 divergences=901` — a
+stable ~10.4%, identical (901) under `BANISHED_RT_LIBM=dll`, so not rounding. **The cause is an
+aliasing defect in the diff harness this lane wrote, not in the ported arithmetic.**
+
+**Which bytes differ, and why it was never the arithmetic.** Working backwards rather than
+guessing:
+
+1. `AsTransform3` is `AsMatrix()` plus twelve pure float copies. The copy mapping was re-checked
+   store by store against `0x18001fcd0`: `ret+0x00/04/08 <- m[0..2]`, `+0x0c/10/14 <- m[4..6]`,
+   `+0x18/1c/20 <- m[8..10]`, `+0x24/28/2c <- m[12..14]`. Correct.
+2. `Math::Transform::AsMatrix` (`0x18001e5f0`) was disassembled in full for the first time —
+   Wave 1 ported it but this lane had never read the bytes. **It matches our port term for term
+   and association order for association order**, all 16 floats written. Its own diff site
+   reports 0 divergences.
+3. So a correct matrix passed through a correct copy produced a "wrong" answer. That is
+   impossible, which means the disagreement was not between the two implementations but
+   between the two *inputs*.
+
+**The aliasing, at a real call site.** `code/Game/Game/gameupdateloop.cpp:1496`, the per-frame
+camera update:
+
+```c
+uint8_t transform3[44];
+void* result = fn_PlayerController_CalcTransform(playerCtrl, transform3);  // returns transform3
+void* t3     = fn_Transform_AsTransform3(result, transform3);              // self == ret
+```
+
+`result` **is** `transform3` — a hidden-return-slot call handing its own out buffer back in RAX
+— so `self` and `ret` are the same memory.
+
+* **The port is correct under that aliasing.** `AsMatrix` reads every field of `self` into `m`
+  before the first store to `ret`, which is exactly why retail is safe too: its scratch matrix
+  at `RSP+0x20` is fully populated by the `CALL` at `0x18001fcff` before the twelve `MOVSS`
+  stores from `0x18001fd5b`.
+* **The oracle was not.** It wrote `ret` first and *then* ran the shipped body on `self` — the
+  same memory it had just overwritten. `theirs` was computed from destroyed input. `ours` was
+  right all along, and one call site out of four accounts for a stable ~10% of calls.
+
+**Fix:** snapshot the inputs before any store and run the shipped body on the snapshot. Applied
+to `AsTransform3`, and pre-emptively to `Quaternion::Lerp` (`ret` may alias `self`/`other`) and
+`Frustum::Projection` (`renderer.cpp:290` passes two members of one `Camera`; they do not
+overlap today, but snapshotting makes the question stop mattering).
+
+**The general rule, which is the reusable part:** a differential oracle for an out-parameter
+function must run the original on a **snapshot of the inputs**, not on the live ones, whenever
+the out-parameter is a caller-chosen buffer. `rt_diff.h` already says "never let the original
+write into live state"; this is the mirror image — **never let OUR write reach the original's
+input.** It is the sibling of `reference_oracle_must_not_compare_unwritten_bytes.md`: a harness
+defect that presents as a catastrophic port defect, and it would have been "fixed" by
+deregistering a correct port.
+
+**On the over-comparison question, asked and answered:** the "all 48 bytes written by both
+sides" claim is **confirmed** from the disassembly — twelve `MOVSS` stores covering exactly
+`0x00..0x2f`, no gaps. So the oracle was not over-comparing unwritten bytes; the true defect
+count is neither smaller nor larger, it is **zero on the port side**.
+
+### A separate, pre-existing defect found on the way
+
+`gameupdateloop.cpp:1496` declares `uint8_t transform3[44]`, but `Transform3` is **48 bytes**
+(`sizeof` static-asserted at `0x30`). Retail's `AsTransform3` writes `ret+0x24/28/2c`, so **four
+bytes go past the end of that stack buffer, every frame**. This is exe-port code, predates this
+lane, and is not caused by the port — flagged, not fixed, because it is outside lane P's scope
+and the owner should decide. `gameupdateloop_load.cpp:643` uses `uint8_t t3[64]` and is fine.
+
 ## Comments corrected at their source (PLAN §6 step 8)
 
 * `runtime/src/system/thread_win.cpp` banner — said ThreadFunc "is intentionally left as the
@@ -396,6 +462,10 @@ lane's verification leans on them:
   and false of the WRITE path, with the old claim kept in one line so a reader who meets it
   elsewhere recognises it.
 * `runtime/src/volume/volume_port_init.cpp` — the "11 exports (Frustum x5)" banner is now 12/x6.
+* `runtime/src/achievement/goal.cpp:635` — the `[RtPort]` banner printed "Goal::Serialize +
+  GoalInstance::Persist held back -- see WAVE5_LANE_A.md" **after both were registered**. A
+  banner asserting a function is held back while it is registered is the same
+  invisible-to-review defect as a comment contradicting its code. Now prints the true split.
 * `runtime/src/graphics/renderer.cpp:135` said Projection "is NOT ported by Wave 1 … so today
   this always lands in the DLL". Corrected — the mechanism it describes (`ResolveExport`,
   which consults the port registry first) is unchanged and is exactly how the call site now

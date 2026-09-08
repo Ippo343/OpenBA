@@ -499,6 +499,27 @@ const ArraySpec kSpec_StringExt = {               // 0x180061480
 // one before the old one is freed.
 // ============================================================================
 
+// *** A Site MUST HAVE STATIC STORAGE DURATION. ***
+// RtDiffRegister stores the POINTER in rt_diff.cpp's `g_sites[]` and reads it
+// back at RtDiffSummary() time, so a Site on the stack is a dangling pointer by
+// the time the summary runs. It does not merely print rubbish: the summary's
+// plausibility check reports it as "sites were CORRUPTED -- a stray write hit
+// the harness's own statics", which is this project's most alarming diagnostic
+// and names its worst failure family. The first draft of the probe passed a
+// LOCAL Site from inside its per-case loop, and 16 targets x 9 cases produced
+// 144 registrations of one stack address and one such line. A harness that
+// cries wild-write for a benign cause is worse than one that says nothing.
+//
+// Every Site in this file is therefore a file-scope object, one per registered
+// address, and SetSizeCore/ArrayDtorSited accept a NULL site for callers that
+// want the body without the instrumentation.
+//
+// Two related facts about rt_diff.cpp, worth knowing before adding sites in
+// bulk: registration is an UNSYNCHRONISED `g_sites[g_siteCount++]`, and it is
+// bounds-checked against kMaxSites = 1024 by silently dropping anything past
+// the cap. 27 static sites from this lane is not near it; 144 dynamic ones per
+// run would have been on the way there.
+//
 // `struct Site { RtDiffSite d; uintptr_t addr; }` is declared in
 // array_internal.h. The RtDiff macros want a `rt_diff_site__` in lexical scope
 // and these sites are chosen at runtime, so the bodies below call
@@ -525,9 +546,12 @@ inline void ProbeGate() {
     g_probeRunning = false;
 }
 
+// `site` may be NULL, and the probe passes NULL. See the "A Site must have
+// static storage duration" note above: a null site means "do the work, touch
+// nothing in the diff registry".
 void ArrayDtorSited(ArrayHdr* a, Site* site) {
     ProbeGate();
-    if (!RtDiffEnabled()) { ArrayDtorImpl(a); return; }
+    if (!site || !RtDiffEnabled()) { ArrayDtorImpl(a); return; }
 
     RtDiffRegister(&site->d);
     // Ours writes, and the post-state is the whole observable effect on the
@@ -549,6 +573,10 @@ void ArrayDtorSited(ArrayHdr* a, Site* site) {
 void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
                  const ArraySpec* spec, Site* site) {
     ProbeGate();
+    // NULL `site` = no diff-registry traffic at all. The probe passes NULL, both
+    // because its own comparator is strictly stronger than the live checks below
+    // and because a probe-owned site would have to be a static per case.
+    const bool diff = (site != nullptr) && RtDiffEnabled();
     const uint32_t stride = spec->stride;
 
     const int32_t oldSizeI = a->_size;
@@ -558,7 +586,7 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
         // summary can tell "entered" from "did work" — a shadow placed after an
         // early return makes calls= mean the wrong thing
         // (reference_probe_needs_an_effectiveness_control.md).
-        if (RtDiffEnabled()) {
+        if (diff) {
             RtDiffRegister(&site->d);
             RtDiffReport(&site->d, true, "noop(n==size)", "noop(n==size)");
         }
@@ -594,7 +622,7 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // old buffer is not freed yet. This does NOT re-derive our own rule — it
     // compares against the source data — but it only means anything when the
     // element assignment is a pure byte copy, so `byteCopy` gates it.
-    if (RtDiffEnabled() && realloced && old && spec->byteCopy) {
+    if (diff && realloced && old && spec->byteCopy) {
         RtDiffRegister(&site->d);
         const int64_t n = (oldSize < newSize ? oldSize : newSize) * stride;
         const bool ok = (n <= 0) || std::memcmp(a->_data, old, static_cast<size_t>(n)) == 0;
@@ -615,7 +643,7 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // Header algebra. WEAK BY CONSTRUCTION (it restates the rule this function
     // implements) and kept for its coverage value: a non-zero calls= on this
     // site is what says the address was reached at all.
-    if (RtDiffEnabled()) {
+    if (diff) {
         RtDiffRegister(&site->d);
         int32_t wantCap = oldCap;
         if (newSize > oldCap) {
