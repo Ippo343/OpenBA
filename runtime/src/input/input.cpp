@@ -46,6 +46,17 @@ extern void RtIo_Persistence_SetBool(void* self, const char* section, const char
 // faults on a null `_singleton` at +0x640 (lane PKG2). The first RegisterInput
 // call is provably safe because the caller is itself about to allocate a node.
 extern "C" void RtCollectionSetAvlE24ProbeMaybeRun();
+// Wave 9 lane ENGIO. Runs at most once, and only when
+// BANISHED_RT_INPUTUPD_PROBE=1. Hooked from KeyMap::GetValue rather than
+// from the function it verifies, because Input::Device::Update has NO
+// CALLER in this tree -- the live per-frame call is a near call inside the
+// DLL's held-back MainLoop::Run, which no registration can intercept, so a
+// hook inside the port can never fire (the first version of this lane put
+// it there and measured nothing). KeyMap::GetValue is a gameplay-path
+// function measured at calls=9000 on the autostart route, which is late
+// enough that Application::_singleton and Input::Configuration::_singleton
+// are both published.
+extern "C" void RtInputDeviceUpdateProbeMaybeRun();
 
 namespace {
 
@@ -457,6 +468,7 @@ int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int
 // through a null-based pointer, exactly like retail's RAX==0 path.
 int16_t RtInput_KeyMap_GetValue(const void* self, int32_t deviceCtx, int32_t id) {
     RT_DIFF_BEGIN("Input::KeyMap::GetValue");
+    RtInputDeviceUpdateProbeMaybeRun();  // no-op unless BANISHED_RT_INPUTUPD_PROBE=1
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     uint8_t* deviceSingleton = DeviceSingleton();

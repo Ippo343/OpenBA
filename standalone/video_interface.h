@@ -12,3 +12,12 @@ void InstallVideoInterfacePrefill();
 
 // True once our function pointers are actually on the Device singleton.
 bool VideoInterfacePrefilled();
+
+// Wave 9 lane ENGIO. Stamp our DX11 CreateDeviceData/GetDeviceName into the
+// Device's interface slot directly, without the detour.
+//
+// At cutover the detour cannot be installed (there is no Runtime body to patch)
+// and this becomes the ONLY way the slot is ever filled: whoever ports
+// Video::Device::InitializeInterfaces (0x1800F79F0) must call it. Until then it
+// is unused and InstallVideoInterfacePrefill is the live path.
+void VideoInterfaceFillDx11Slot(void* device);

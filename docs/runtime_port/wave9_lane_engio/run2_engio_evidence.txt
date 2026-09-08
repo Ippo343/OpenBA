@@ -1,0 +1,33 @@
+[RtDiff] site[22] @00007ff7f20599c0 = Wave9X::Input::Device::ctor
+[RtDiff] site[130] @00007ff7f205b840 = Input::KeyMap::Load
+[RtDiff] site[169] @00007ff7f205b240 = Input::KeyMap::ClearAll
+[RtDiff] site[170] @00007ff7f205b300 = Input::KeyMap::RegisterInput
+[RtDiff] site[434] @00007ff7f205b440 = Input::KeyMap::Pressed
+[RtDiff] site[435] @00007ff7f205b400 = Input::KeyMap::GetValue
+[RtDiff] site[436] @00007ff7f205b780 = Input::Device::Update
+[RtDiff] site[437] @00007ff7f205b700 = Input::Device::PlatformGetKeyboardState
+[RtDiff] site[438] @00007ff7f205b6c0 = Input::Device::UpdateState
+[RtDiff] site[439] @00007ff7f205b740 = Input::Device::PlatformGetMouseState
+[RtDiff] site[440] @00007ff7f205b7c0 = Input::Device::PlatformUpdate
+[InputUpd] negative-control-2 CAUGHT at +0x0727 (keyboard State block index 4) ours=0x00 theirs=0x01
+[InputUpd] cases=32 mismatches=0 unsound=0 ambient-retries=0 (legacy=8 directinput=24 getstate-fail=8)
+[InputUpd] effectiveness: pressedEdges=200 releasedEdges=225 repeatFires=38 holdAdvances=315 negativeAxis=48 index104Lit=2 acquireSpins=36 wheel-=6 wheel+=6 comTraps=0
+[InputUpd] negative-controls: comparator=CAUGHT subject=CAUGHT
+[RtDiff] site[505] @00007ff7f205b880 = Input::KeyMap::Save
+[RtDiff] ==== 511 sites, 16432235 calls, 1 divergences in 1 sites ====
+[RtDiff]   Wave9X::Input::Device::ctor                      calls=2          worked=1          divergences=0
+[RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+[RtDiff]   Input::KeyMap::Load                              calls=2          worked=1          divergences=0
+[RtDiff]   Input::KeyMap::ClearAll                          calls=1          worked=?          divergences=0
+[RtDiff]   Input::KeyMap::RegisterInput                     calls=50         worked=?          divergences=0
+[RtDiff]   Input::KeyMap::Pressed                           calls=10956      worked=?          divergences=0
+[RtDiff]   Input::KeyMap::GetValue                          calls=9000       worked=?          divergences=0
+[RtDiff]   Input::Device::Update                            calls=184        worked=184        divergences=0
+[RtDiff]   Input::Device::PlatformGetKeyboardState          calls=184        worked=152        divergences=0
+[RtDiff]   Input::Device::UpdateState                       calls=371        worked=195        divergences=0
+[RtDiff]   Input::Device::PlatformGetMouseState             calls=184        worked=152        divergences=0
+[RtDiff]   Input::Device::PlatformUpdate                    calls=184        worked=0          divergences=0
+[RtDiff]   Input::KeyMap::Save                              calls=1          worked=1          divergences=0
+[RtDiff] ==== did-work: 719601 calls did work across 109 declaring sites; 402 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+[RtPort] Input: 30 exports registered (lane INPUT: +2 KeyMap doors, +5 Set<E24> AVL addresses; lane ENGIO: +4 Device::Update bodies)
+  Input::Device::Update     = 00007ff7f1ee56e2

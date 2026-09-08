@@ -117,20 +117,43 @@ static_assert(offsetof(BindingNode, height)  == 0x32, "");
 //                                    (0x1098 + 0xD*0x18 == 0x11D0), pinned by
 //                                    `EnableMouseClipping` (0x1800e1780).
 //
-// `State` (0x18 bytes): only +0x04/+0x06/+0x07 are evidenced; the rest is
-// zeroed by ResetState but never read by any ported const accessor, so it is
-// left as opaque padding rather than guessed.
+// `State` (0x18 bytes). Wave 8 lane D could evidence only +0x04/+0x06/+0x07
+// from the const accessors and left the rest opaque. Wave 9 lane ENGIO ported
+// `Device::UpdateState` (0x1800E0FC0 — the body `Device::Update` calls twice),
+// which WRITES every field of this record and so names three more. Each offset
+// below cites the store that pins it; all six appear in the 4x-unrolled body
+// AND again in its scalar tail, which agree instruction for instruction.
+//
+//   +0x00 float normalized   1800e11f0  MOVSS [RCX+R10-0x4],XMM0
+//                            == (float)value / 32767.0f
+//   +0x04 int16 value        1800e1229  MOV   word [RCX+R10],AX
+//   +0x06 bool  pressed      1800e1208  MOV   byte [RCX+R10+0x2],AL
+//   +0x07 bool  released     1800e1221  MOV   byte [RCX+R10+0x3],AL
+//   +0x08 bool  repeat       1800e123f  MOV   byte [RCX+R10+0x4],SIL   and
+//                            1800e138b  MOV   byte [RCX+R10+0x4],1
+//   +0x10 int64 holdTicks    1800e136b  ADD   qword [RCX+R10+0xc],RAX
+//
+// +0x09..+0x0F and the bytes past +0x17 are still not written by anything read
+// so far; they stay padding rather than being guessed
+// (reference_never_written_needs_by_whom.md). Note that `Device::Update`'s two
+// scratch-buffer zeroing loops deliberately do NOT cover +0x08..+0x0F — see
+// the comment on `ZeroScratch` in input_device_update.cpp.
 struct State {
-    uint8_t  _unknown00[4];  // +0x00..+0x03 — zeroed by ResetState, unread by any ported fn
+    float    normalized;     // +0x00 — value / 32767.0f, written by UpdateState
     int16_t  value;          // +0x04 — axis/analog value (Device::GetValue)
     bool     pressed;        // +0x06 — Device::Pressed
     bool     released;       // +0x07 — Device::Released
-    uint8_t  _unknown08[16]; // +0x08..+0x17 — zeroed by ResetState, unread by any ported fn
+    bool     repeat;         // +0x08 — key-repeat pulse for this frame
+    uint8_t  _unknown09[7];  // +0x09..+0x0F — never written by any body read so far
+    int64_t  holdTicks;      // +0x10 — accumulated hold time, in System::Time ticks
 };
 static_assert(sizeof(State) == 0x18, "State must be 0x18");
-static_assert(offsetof(State, value)    == 0x04, "");
-static_assert(offsetof(State, pressed)  == 0x06, "");
-static_assert(offsetof(State, released) == 0x07, "");
+static_assert(offsetof(State, normalized) == 0x00, "");
+static_assert(offsetof(State, value)      == 0x04, "");
+static_assert(offsetof(State, pressed)    == 0x06, "");
+static_assert(offsetof(State, released)   == 0x07, "");
+static_assert(offsetof(State, repeat)     == 0x08, "");
+static_assert(offsetof(State, holdTicks)  == 0x10, "");
 
 constexpr int kJoystickCount       = 4;
 constexpr int kJoystickInputCount  = 0x12;  // 18
@@ -158,6 +181,40 @@ constexpr int kMouseClippingOffset = 0x11D0;
 // clip follows the window's focus. NOT a DirectInput field — nothing in this
 // range is (see the block comment in runtime/src/input/input_win.cpp).
 constexpr int kHasFocusOffset      = 0x11F0;
+
+// The rest of the tail, pinned by Wave 9 lane ENGIO from
+// `Device::PlatformGetKeyboardState` (0x1800E1C60) and
+// `Device::PlatformGetMouseState` (0x1800E1E10). These are the fields WAVE9.md
+// row 16 called "DirectInput8 COM pointers past Device+0x11D0 (unmapped)".
+// There are exactly TWO COM pointers and three plain int32s, and only TWO
+// methods of the COM interface are ever used — so the region was never as
+// unbounded as that row implies.
+//
+//   +0x11E0  IDirectInputDevice8*  keyboard   1800e1d15 MOV RCX,[RCX+0x11e0]
+//   +0x11E8  IDirectInputDevice8*  mouse      1800e1f81 MOV RCX,[RCX+0x11e8]
+//   +0x11F4  int32 wheelAccum   (legacy path only)  1800e1f27 MOV ECX,[RSI+0x11f4]
+//   +0x11F8  int32 lastCursorX  (legacy path only)  1800e1e98 MOV [RSI+0x11f8],EAX
+//   +0x11FC  int32 lastCursorY  (legacy path only)  1800e1e9e MOV [RSI+0x11fc],EDX
+//
+// The two COM slots used, and NO others, in either poller:
+//   [vtbl+0x38]  IDirectInputDevice8::Acquire
+//   [vtbl+0x48]  IDirectInputDevice8::GetDeviceState
+// Those are COM vtable indices 7 and 9, which is where `IDirectInputDevice8W`
+// puts Acquire and GetDeviceState — an independent confirmation that these two
+// pointers really are DirectInput devices rather than something else that
+// happens to live at the end of the object.
+constexpr int kKeyboardComOffset   = 0x11E0;
+constexpr int kMouseComOffset      = 0x11E8;
+constexpr int kWheelAccumOffset    = 0x11F4;
+constexpr int kLastCursorXOffset   = 0x11F8;
+constexpr int kLastCursorYOffset   = 0x11FC;
+
+// The smallest size containing every field any ported body touches. This is
+// NOT `sizeof(Input::Device)`: nothing read so far establishes an upper bound,
+// so it is a LOWER BOUND, and the probe's byte comparison over it is SILENT
+// about anything past it — the same limit lane M records for the
+// released-pointer detector, stated here rather than left to be discovered.
+constexpr int kDeviceMappedSize    = 0x1200;
 
 static_assert(kJoystickCount * kJoystickStride == kKeyboardOffset,
               "joystick block must exactly fill [0, keyboard)");
