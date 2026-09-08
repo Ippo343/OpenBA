@@ -677,9 +677,43 @@ tree-wide (that is the design); narrowing to *the same file doing both* — the 
 `thread_win.cpp:142`), all checked at body level, **none recurses**, none in the conversion
 set.
 
-⏳ **THE LIVE PROOF IS PREPARED AND STILL OWED** — it needs the directory. Three cells; pass
-is `[RtResolve] 0 misses` **AND** matching `[RtDiff]` totals **including the site count**,
-since a matching `divergences=0` over a different denominator proves nothing.
+**✅ LIVE PROOF PASSED 2026-09-08** (lane H, `43c0235`, treatment stamp `01:46:22`; self-evidencing
+— treatment emits `[RtResolve]`/`[RtResolveEarly]`, prefixes no earlier binary can produce, control
+emits neither). **10 runs, 325,855,883 diffed calls on the treatment, 0 divergences, `[RtResolve]
+0 misses` on all six treatment runs.** H3 stress ran clean (129.2M calls, 0-byte crash log). All 26
+converted data slots and 64 `RT_EXPORT_ONCE` sites resolved every time, so the retry path was never
+taken and **the conversion is inert while the DLL answers** — which is exactly what it had to prove.
+Denominator re-measured against the new tip: `417/143/1015 → 391/169/1016`, identical to §4, so lane
+N added no doors and the doc needed no correction.
+
+⚠️ **THE LANE'S OWN PASS CONDITION WAS NOT MEASURABLE, and it caught that before reading anything
+into it.** It had specified "the `[RtDiff]` SITE COUNT must match a reverted-build control". Treatment
+331 vs control 329 — a mismatch. It then **ran the control against ITSELF: 329 / 331 / 329.** *The
+same binary, same cell.* The count is **nondeterministic ±2**, so **no pair of single runs could ever
+satisfy that criterion, not even two of the identical binary.** Strict-sounding and unusable — the
+shape this wave has caught five times in other tools and now once in its own.
+**Replacement: compare the SET, not the count.** It survives the noise AND names the offender —
+diffing two control runs immediately identified the ±2 as `Math::Transform::Identity()` and
+`Video::Context::SetInverseScale`. Stable core (∩ of 2 runs) 329 both sides, union (∪) 331 both sides,
+**byte-identical sets, `diff` empty on both**; the deeper Save9 cell 354 sites on both binaries,
+identical set.
+➡️ **Handed on: the two flaky sites make ANY cross-build site-count comparison noisy by ±2. Anyone
+reading a 2-site delta as signal will chase nothing. Compare sets.**
+
+**✅ THE EARLY-SNAPSHOT CLASS IS MEASURED NOT-LIVE ON THESE PATHS.** Identical on all three cells:
+**3 early registry-aware resolves, 0 of 3 registered now → ZERO live bypasses.** The design is what
+makes that meaningful — the counter **re-queries the registry at summary**, separating "resolved
+early" (common, mostly harmless) from "resolved early AND thereby missed a port that exists" (the
+actual defect). All three are structural: `InstallAllocatorLock()` and `InstallFreeLock()` run before
+`RuntimePortInit()` **by design** and have no port to miss while `BANISHED_RT_ALLOC` is off, and
+`?_singleton@Factory@Object@@` is resolved from inside a `*PortInit()` body — port-init code resolving
+during port-init is early **by construction**. Nothing fixed; there was nothing to fix.
+**`ResolveExportRaw` is deliberately NOT hooked** — that door is *supposed* to reach the shipped body,
+so an early raw resolve is not a bypass, and hooking it would have inflated the count with 212
+`RT_ORIGINAL_ONCE` sites correct by design.
+⚠️ **Two limits, stated so the number is not over-read:** the counter sees only the three
+registry-aware doors, and **"not live on these three paths" is not "not live anywhere"** — the class
+stays OPEN with no instrument beyond this counter.
 
 ### ⛔ NEW LIVE DEFECT CLASS: the EARLY SNAPSHOT — "frozen → retry" does NOT fix it
 
