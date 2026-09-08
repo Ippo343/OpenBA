@@ -298,6 +298,10 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace RtIO {
 
+// Wave 9 lane PKG2's accessor sweep, defined in package_file.cpp. Called from
+// LoadPackages' tail inside the diff guard — see the comment at the call site.
+void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
+
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtMemAlloc;
@@ -839,6 +843,15 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                        (self->packfileCount == 0) == (self->packfiles == nullptr),
                        ours, desc);
         RT_DIFF_WORK(self->packfileCount != 0);
+
+        // Wave 9 lane PKG2. This is the one moment in the process where every
+        // mounted PackageFile is reachable AND fully populated, so it is the
+        // only place lane PKG2's twenty leaf accessors can get real inputs
+        // instead of reporting calls=0 (reference_uncalled_port_is_not_verified.md).
+        // Inside the diff guard on purpose: it is an oracle driver, not work,
+        // and a normal run must not pay for it. Declared here rather than in a
+        // header because it is one symbol used at one site.
+        RtIo_PackageFile_SweepProbe(self);
     }
 }
 
