@@ -21,6 +21,11 @@ extern int RtInputWinRegister();  // input_win.cpp
 // Wave 9 lane IOA: Input::KeyMap::Load — its own .cpp because it is the one
 // KeyMap member that reaches into IO::Persistence's settings map.
 extern int RtInputKeyMapLoadRegister();  // keymap_load.cpp
+// Wave 9 lane ENG: Input::Configuration::Startup + the unexported Load it
+// calls — Engine::Startup step 14, whose whole closure is now ported (lane
+// IOA's KeyMap::Load was the last piece). Its own switch because it is on the
+// process's single boot path.
+extern int RtInputConfigStartupRegister();  // input_config_startup.cpp
 
 void RtInputPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_INPUT")) {
@@ -30,5 +35,6 @@ void RtInputPortInit() {
     int n = RtInputRegister();
     n += RtInputWinRegister();
     n += RtInputKeyMapLoadRegister();
+    if (RtWaveEnabled("BANISHED_RT_INPUTCFGSTART")) n += RtInputConfigStartupRegister();
     printf("[RtPort] Input: %d exports registered\n", n);
 }

@@ -55,6 +55,9 @@ extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
 // giving up lane D's five read-only accessors.
 extern int RtIoFileSystemStartupRegister();  // filesystem_startup.cpp (lane ENG)
+// Wave 9 lane ENG, iteration 3. Engine::Startup step 4. Own switch, own file,
+// same reasoning as the row above.
+extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane ENG)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -67,5 +70,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
+    if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
