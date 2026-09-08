@@ -541,3 +541,287 @@ be widened, because the next one will not be as lucky.
 4. `Engine::MainLoop::~MainLoop` will run our `~Context` at shutdown. If the
    process faults on exit rather than at the walls above, suspect this port
    first — it is the only thing this lane put on a live path.
+
+---
+---
+
+# PHASE 2 — `?PlatformStartup@Device@Video@@` CLOSES
+
+Re-tasked by the integrator after attempt 15: with `?ReadPackfile@` owned by lane
+PKG2, the wall behind it is `PlatformStartup`, which this lane's phase 1
+identified by measurement (`g_startupFailAt == 11`). **It is closed, with its
+whole transitive closure.** Commit `070b546` on `wave9/lane-vid2`, on top of
+`abef0bc`.
+
+## P1. The result, in one table
+
+| | before (`abef0bc`) | after (`070b546`) |
+|---|---|---|
+| `unsatisfied_export_scan` | **139** of 836 | **135** of 839 |
+| listed unsatisfied names | 136 | 132 |
+| `runtime_census` TOTAL | 980 called / **711** ported / 72.6 % | 983 called / **720** ported / **73.2 %** |
+| `runtime_census` Video | 138 / **96** / 69.6 % | 139 / **101** / 72.7 % |
+| `runtime_census` Application | 12 / **6** / 50.0 % | 13 / **8** / 61.5 % |
+| `runtime_census` internal | 94 / **65** | 95 / **67** |
+| `addr_door_audit` UNREGISTERED | **44** | **43** |
+| `rawdoor_audit` | 545 sites, **0** UNGUARDED-CALL | 551 sites, **0** UNGUARDED-CALL |
+| `port_bypass_audit` NAME | 456 sites, **0** bypass | 459 sites, **0** bypass |
+| `export_name_audit` | 1 known placeholder | 1 known placeholder |
+
+**Set-diff on the unsatisfied list — four removed, NOTHING added:**
+
+```
+REMOVED  ?PlatformStartup@Device@Video@@AEAA_NXZ
+REMOVED  ?PlatformShutdown@Device@Video@@AEAAXXZ
+REMOVED  ?Startup@Device@Video@@QEAA_NXZ          (a one-instruction JMP thunk)
+REMOVED  ?Shutdown@Device@Video@@QEAAXXZ          (likewise)
+ADDED    (none)
+```
+
+The denominator moves 836 → 839: three names this lane resolves that nothing
+previously asked for (`?_singleton@Application@1@`, and the two
+`Application::*MessageCallback` exports the probe reaches raw). All three are
+satisfied, which is why the ADDED list is empty.
+
+## P2. The closure was counted before any body was written
+
+Lane PICK's rule, applied. `PlatformStartup`'s closure is **21 bodies**:
+
+**11 exports** — `PlatformStartup` · `Startup` · `PlatformShutdown` · `Shutdown` ·
+`ValidateConfiguration` (the NO-ARGUMENT one, ord 4533) · `CreateVideoInterface` ·
+`SizeWindow` · `MoveWindow` · `GetDefaultResolution` ·
+`Application::RegisterMessageCallback` · `Application::UnregisterMessageCallback`
+
+**12 unexported addresses** — the four `Collection::Set` AVL bodies
+(`0x18000adc0` retrace, `0x18000b040`/`0x18000b170` rotations, `0x18000aba0`
+erase), the Set node allocator (`0x18000a5b0`), and the seven
+`Collection::Array` helpers `ValidateConfiguration` drives (`0x18000fcd0`,
+`0x180010830`, `0x180010cf0`, `0x18000fbf0`, `0x180010760`, `0x180008b00`,
+`0x180009560`).
+
+| | doors before | doors after |
+|---|---|---|
+| **Four-row lane (rejected)** | 4 unsatisfied names | 17 new UNREGISTERED address doors |
+| **Twenty-one-body lane (shipped)** | 4 unsatisfied names | **0 new doors**; the census moved 44 → 43 |
+
+**The blocker's own closure did NOT explode, and that was checked rather than
+assumed.** Both AVL rotations are LEAVES — `disassemble_function(filter_mnemonics="CALL,RET")`
+returns one `RET` and no `CALL` for each — and the retrace and erase call only
+each other plus two allocator entry points attempt 14 already registered.
+
+Files: `runtime/src/collection/set_avl.{h,cpp}`,
+`runtime/src/application/message_callbacks.cpp`,
+`runtime/src/video/device_startup.cpp`, `…_win.cpp`, plus two probes.
+Kill switches `BANISHED_RT_SETAVL`, `BANISHED_RT_APPMSGCB`,
+`BANISHED_RT_VIDDEVSTART`.
+
+## P3. Three recorded blockers re-checked, and all three were false
+
+The integrator asked for the same re-check discipline phase 1 applied. All three
+came from `WAVE9_LANE_VID.md` and all three were read against the disassembly
+rather than inherited:
+
+1. **"`CreateVideoInterface` LoadLibrary's a plugin DLL."** False. `0x1800f7930`
+   is thirty instructions and contains no import call at all. It tests three
+   ALREADY-POPULATED pointers in `Device::dllSlots[idx]` (+0xb0/+0xb8/+0xc0) and
+   calls the slot's `createDeviceData`. The `LoadLibraryW` is in
+   `InitializeInterfaces` (`0x1800f79f0`), which `EnumerateVideoModes` drives and
+   which `standalone/video_interface.cpp` already detours — the run log confirms
+   it: `[VideoInterface] DX11 slot pre-filled … Runtime will not LoadLibrary`.
+2. **"the PRIVATE no-argument `ValidateConfiguration`."** False. Exported,
+   `?ValidateConfiguration@Device@Video@@QEAA_NXZ`, **ordinal 4533**. Wave 6
+   lane B ported the eight-argument overload at ordinal **4532** — adjacent
+   ordinal, different function, exactly the confusion
+   `reference_ghidra_mcp_address_param_silently_ignored.md` exists for.
+3. **"nothing in our tree starts the video device."** Stale. `Engine::Startup` is
+   ported (lane ENG) and `engine_lifecycle.cpp:719` **is** that call.
+
+The fifth Set helper was also re-checked: `0x180009c30` is already registered,
+and this file relies only on its shared contract (ignore arg 1, free arg 2)
+because — reported, not fixed — **it is registered THREE times**, by
+`allocator.cpp:1429`, `linkedlist.cpp:298` and `modification.cpp:913`. Last
+binding wins, so two are dead code and which survives depends on init order.
+All three bodies agree today. Deciding the owner is not this lane's call.
+
+## P4. Verification
+
+Every number below comes from a run **gated on an identity line this build
+emits**, taken under `tools/game_dir_lock.sh`, on exe md5 `4314282d…` verified
+identical before and after:
+
+```
+[LaneVID2] identity: device_startup.cpp built Sep  8 2026 10:36:07
+```
+
+### The AVL: lockstep, 65 steps
+
+```
+[SetAvl] steps=65 mismatches=0 parent-linkage-bad=0
+[SetAvl] effectiveness: depthAfter24Ascending=5 (a spine would be 24)
+         rootChanged=6 erases=15 finalCount=35 dupCount=49
+[SetAvl] negative-controls: signed-descent=CAUGHT  shape-sensitivity=CAUGHT
+```
+
+Two private Sets over a shared script, ours through the ported bodies and theirs
+through `ResolveExportRaw`, **compared after every operation**. Lockstep is not
+belt-and-braces here: **AVL defects cancel.** A rotation wrong in one direction
+and wrong again in the other yields the same key set and frequently the same
+final shape, so one comparison at the end reports green on a tree that was wrong
+throughout. The fingerprint carries shape (which side of its parent each node
+hangs off), balance and height, and parent linkage is walked separately because
+a fingerprint built from `left`/`right` cannot see a wrong `parent` — which is
+exactly what a mis-transcribed rotation produces and what breaks the *next*
+retrace.
+
+`depthAfter24Ascending=5` is the effectiveness control and it cannot be
+satisfied by noise: 24 ascending inserts build a 24-deep spine unless rotations
+actually ran. The population also carries a descending block, a zig-zag block
+(the only path through the pre-rotation predicates at `0x18000ae40`/`0x18000ae74`),
+ids above `0x7FFFFFFF` (the descent is UNSIGNED — `JC`, not `JL`), a duplicate
+insert that must not move the count, an absent erase, and erases chosen to hit
+all three cases of `0x18000aba0` including **case 3 with `s != z->left`** — the
+PREDECESSOR splice a successor-splice misreading would get wrong while still
+producing a valid tree.
+
+### `ValidateConfiguration`: 19 cases over a synthetic adapter graph
+
+```
+[VidCfg] cases=19 mismatches=0 return-value-mismatches=0
+[VidCfg] effectiveness (all measured on THEIRS): defaultRes=1 msReset=1
+         filterClamp=2 detailClamp=2 refreshFallback=2 indexClamp=4
+[VidCfg] negative-control=CAUGHT
+```
+
+**Every effectiveness counter is measured on THEIRS**, so none can be satisfied
+by our port agreeing with itself. All six are non-zero. The comparison is
+field-by-field, and the two copied arrays are compared **by content** — they
+hold independent allocations by construction, so comparing `_data` would fail
+100% of calls. `_capacity` *is* compared, because it is the growth rule's output
+and the reason `GrowFor` is transcribed rather than simplified.
+
+The negative control corrupts our `shadowScalar` cap from 2 to 3 — the
+`shaderDetail` cap, one line above it in the disassembly, and the exact
+copy-paste this function invites.
+
+### The real result: live exercise, in order
+
+With these registered, `Engine::Startup`'s `RT_EXPORT_ONCE` resolves **our**
+`PlatformStartup`. The log shows the whole path:
+
+```
+[VidCfg] …                                   <- top of OUR PlatformStartup
+[BootTime]   DX11 CreateDevice: entry
+[BootTime]   DX11 D3D11CreateDevice
+[BootTime]   DX11 swapchain + color/depth buffers
+[SetAvl] …                                   <- only reachable from
+                                                RegisterMessageCallback, i.e.
+                                                PlatformStartup's SUCCESS path
+[GameMain] Engine::Startup returned 1
+```
+
+`[SetAvl]` firing is the load-bearing line: it is called from
+`RtApp_RegisterMessageCallback`, which `PlatformStartup` reaches **only** after
+`CreateVideoInterface` succeeded and `DeviceData::Create` returned true. So our
+`ValidateConfiguration`, our `CreateVideoInterface`, our retry loop and our
+message-callback insert all ran, against a real D3D11 device and swap chain.
+16,145,527 diffed calls, 1 divergence (the pre-existing
+`Object::Factory::Startup [probe, not diffable]`), empty crash log, exit 0.
+
+`PlatformStartup` and `PlatformShutdown` have **no probe and cannot have one**:
+they create and destroy the one D3D11 device, so ours-then-theirs makes a second
+swap chain against a window that already has one. Live exercise is what they
+get, and a wrong transcription there does not report a divergence — it fails to
+render.
+
+## P5. Transcription findings worth carrying
+
+* **The retry loop is not a for-loop.** It starts at the configured interface
+  index clamped by an **unsigned** compare (`CMP EBX,2 / CMOVA EBX,1` — a
+  *negative* configured index is above 2 unsigned and becomes **1**, not 0),
+  walks **downward**, and wraps to 2 at −1. From index 1 the order is **1, 0, 2**
+  — not 1, 2, 0. A three-byte stack array records what has been tried.
+* **`ValidateConfiguration`'s result is checked once and ignored once.** Fatal
+  on the first call, discarded inside the loop (`0x1800f82f9`).
+* **The refresh-rate fallback divides.** No exact match falls back to the first
+  entry whose **integer ratio** matches, so 60000/1001 (→59) and 60/1 (→60) do
+  NOT match while 120000/1001 and 119/1 both reduce to 119 and DO. Retail's
+  arithmetic; ours picks the same surprising entry.
+* **Two unguarded indexes**, both retail's: `multisampleData[msIdx]` is not
+  bounds-checked, and the second-pass mode lookup can index with −1. Left
+  unguarded per CLAUDE.md.
+* **`ValidateConfiguration` walks the mode list TWICE** — once against the
+  requested size, once against the clamped size — and recomputes the adapter
+  pointer in between. A single pass agrees whenever the first lookup hits, which
+  is every case a well-formed adapter reaches.
+* **`MoveWindow` bails on `showCmd == 0x20000000`**, which is not a documented
+  `SW_` value. Reproduced as the literal retail compares rather than "corrected".
+* **`0x18000a5b0` never reads RCX**, and `RegisterMessageCallback` never sets it
+  — a register neither set by the caller nor read by the callee is not a
+  parameter (`reference_read_the_callee_before_holding_back_on_an_arg.md`).
+* **The Set element's `+0x04` padding carries caller stack**: the node allocator
+  copies two qwords and `RegisterMessageCallback` writes only the leading DWORD.
+  Reproduced, and excluded from the probe's comparison.
+
+## P6. One instrument artefact I caused and fixed
+
+`tools/port_bypass_audit.py` classified my probe's `ResolveExportRaw` calls as
+**BYPASS=2** on a live path, because it recognises oracle machinery by the
+*enclosing function's name* (`ORACLE_FN_WORDS`) and mine was called
+`LoadShipped`. Renamed to `ProbeLoadShippedBodies` — not to game the checker, but
+because the checker's rule is right and the name was wrong. Two local
+`ResolveExportRaw` re-declarations also counted as raw-door *sites*
+(`UNRESOLVED-NAME`); removed in favour of `rt_port.h`'s. Both audits are back to
+**0 BYPASS, 0 UNRESOLVED-NAME, 0 UNGUARDED-CALL**.
+
+## P7. Still open, and the integrator's `AssignConstants` question answered
+
+**`?AssignConstants@Context@Video@@AEAAXXZ` (0x1800ef3d0, 1975 instructions) is
+MECHANICAL — a small lane, not a dedicated wave — but it is not a slot either,
+and it must not be taken first.** Evidence rather than a guess:
+
+* It is a **~20-row table**, not 1975 lines of distinct logic: 20
+  `?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z` calls,
+  each preceded by two `?Set@String@System@@` calls and followed by the inlined
+  refcounted `System::String` release. That inlined release, repeated ~40 times,
+  is where the 75 `String::Set` and 104 `MemFree` calls come from — the same
+  four-instruction pattern this lane already transcribed for `~ConstantBuffer`.
+* The literals are **plain and fully recoverable**. `0x180158508` onward reads
+  `float2` / `texelSize` / `float4` / `fogColor` / `float3` / `lightColor` …:
+  45 distinct strings across 76 references, i.e. (typeName, constantName) pairs.
+* **`?Set@String@System@@QEAAXPEBD@Z` is already ported** (Wave 2,
+  `runtime/src/system/string.cpp`).
+
+**The ordering constraint is the actual answer.** Two dependencies are unported
+and both belong to `Video::ConstantBuffer`, not to `Context`:
+`?AddConstant@ConstantBuffer@Video@@…` (0x1800eec40) and
+`?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ` (0x1800ef010). So the sequence
+is **ConstantBuffer → AssignConstants → the `Context` ctor → `CreateVideoContext`**,
+and taking `AssignConstants` first would relocate two nulls rather than remove
+any.
+
+**And one warning for whoever takes it.** The risk is not the control flow, it
+is the 45 string literals: a mistyped shader-constant NAME is a parameter that
+silently never binds, with no oracle short of a rendering comparison. Dump the
+`.rdata` region and transcribe it mechanically; do not retype it. That is the
+same class of hazard as
+`reference_crt_coefficients_must_be_lifted_not_retyped.md`.
+
+Also still open from phase 1 and unchanged: `?CreateVideoContext@MainLoop@Engine@@`
+(now a NAMED door, §4), and `?OnVideoError@`/`?OnVideoRestart@` (WAVE9.md's
+group-D **STUB** disposition re-checked and standing; lane VID's thunks already
+degrade them to a logged no-op).
+
+## P8. Falsifiable predictions
+
+1. The next DLL-less boot will **not** stop at `?PlatformStartup@Device@Video@@`,
+   and `Engine::Startup` will not return 0 with `g_startupFailAt == 11`. If it
+   does, check `[RtPort] Video:` moved to 118 and that
+   `BANISHED_RT_VIDDEVSTART` is not 0.
+2. None of the four removed names will appear in `BANISHED_RT_STRICT`'s residue.
+3. `?RegisterMessageCallback@Application@1@…` and
+   `?UnregisterMessageCallback@Application@1@QEAAXI@Z` will drop out of
+   `dx11/src/devicedata.cpp`'s unsatisfied import rows — **two of seventeen**.
+   That table is all-or-nothing, so this does NOT make it resolve; fifteen
+   remain and any claim that the renderer is cutover-ready is still refuted.
+4. If the boot instead faults inside `Video::Context`'s constructor, that is
+   §P7's chain and is expected, not a regression from this lane.

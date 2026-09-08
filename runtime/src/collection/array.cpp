@@ -133,6 +133,10 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
+// Wave 9 lane VID2 — the Collection::Set AVL probe's arming hook. Declared at
+// file scope because `extern "C"` cannot appear inside a function body.
+extern "C" void RtCollectionSetAvlProbeArm(bool on);
+
 namespace rtcoll {
 
 // The 16-byte container header (aliased in array_internal.h). sizeof(Array<T>)
@@ -1297,6 +1301,21 @@ void RtCollectionPortInit() {
     // Collection namespace's one init hook.
     extern int RtCollLinkedListRegister();
     RtCollLinkedListRegister();
+
+    // Wave 9 lane VID2: the four unexported Collection::Set AVL bodies
+    // (retrace, both rotations, erase). Same reasoning as the linked list —
+    // this is the Collection namespace's one init hook. They are the recorded
+    // blocker for Video::Device::PlatformStartup; see
+    // runtime/src/collection/set_avl.cpp and docs/runtime_port/WAVE9_LANE_VID2.md.
+    if (RtWaveEnabled("BANISHED_RT_SETAVL")) {
+        extern int RtCollectionSetAvlRegister();
+        const int setAvl = RtCollectionSetAvlRegister();
+        // Armed, not run — the probe allocates. It self-schedules on the first
+        // call into Application::RegisterMessageCallback.
+        const char* p = std::getenv("BANISHED_RT_SETAVL_PROBE");
+        RtCollectionSetAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
+        std::printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
+    }
 
     // ARM the probe rather than running it. It runs on the first call into any
     // entry point above, because at THIS moment the DLL's MemoryAllocator is

@@ -163,7 +163,20 @@ struct Device {
     int32_t           backBufferWidth;     // +0x04  ApplyChangedSettings writes; RenderBuffer::Create reads
     int32_t           backBufferHeight;    // +0x08  ApplyChangedSettings writes; RenderBuffer::Create reads
     int32_t           displayModeIndex;    // +0x0C  ApplyChangedSettings writes on a width/height match
-    uint8_t           gap10[0x10];         // +0x10..+0x1F  ctor zeroes +0x10..+0x17 and +0x14..+0x1B; unread by this lane
+    // +0x10..+0x1B named by Wave 9 lane VID2 from
+    // ?ValidateConfiguration@Device@Video@@QEAA_NXZ (0x1800f8830), the only
+    // writer of all three; it writes them together at 0x1800f8b23..0x1800f8b32:
+    //     [this+0x14] = adapter->field2C            (0x1800f8b26)
+    //     [this+0x18] = adapter->field30            (0x1800f8b2c)
+    //     [this+0x0c] = the matched display-mode index   (0x1800f8b2f)
+    //     [this+0x10] = the matched refresh-rate index   (0x1800f8b32)
+    // The two adapter fields are the ones ??0Adapter@ initialises to -1 and
+    // whose meaning is still unrecovered (see Adapter::field2C / field30
+    // above). Naming them here records WHERE they land, not what they mean.
+    int32_t           refreshRateIndex;    // +0x10  index into the chosen mode's refresh list, or -1
+    int32_t           adapterField2C;      // +0x14  copied verbatim from Adapter+0x2C
+    int32_t           adapterField30;      // +0x18  copied verbatim from Adapter+0x30
+    int32_t           gap1C;               // +0x1C  ctor-zeroed; no writer found
     DisplayMode*      modeData;            // +0x20  Array<DisplayMode>::_data      (ApplyChangedSettings)
     int32_t           modeCount;           // +0x28  Array<DisplayMode>::_size      (ApplyChangedSettings)
     int32_t           modeCapacity;        // +0x2C  Array<DisplayMode>::_capacity  (inferred from the Array shape)
@@ -195,6 +208,9 @@ static_assert(offsetof(Device, type) == 0x00, "Device::type");
 static_assert(offsetof(Device, backBufferWidth) == 0x04, "Device::backBufferWidth");
 static_assert(offsetof(Device, backBufferHeight) == 0x08, "Device::backBufferHeight");
 static_assert(offsetof(Device, displayModeIndex) == 0x0C, "Device::displayModeIndex");
+static_assert(offsetof(Device, refreshRateIndex) == 0x10, "Device::refreshRateIndex");
+static_assert(offsetof(Device, adapterField2C)   == 0x14, "Device::adapterField2C");
+static_assert(offsetof(Device, adapterField30)   == 0x18, "Device::adapterField30");
 static_assert(offsetof(Device, modeData) == 0x20, "Device::modeData");
 static_assert(offsetof(Device, modeCount) == 0x28, "Device::modeCount");
 static_assert(offsetof(Device, modeCapacity) == 0x2C, "Device::modeCapacity");
