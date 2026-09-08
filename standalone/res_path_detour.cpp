@@ -65,6 +65,35 @@ bool     g_installed    = false;
 // immediately as a diff storm, which is the thing this detour exists to run.
 constexpr size_t kPrologueBytes = 16;
 
+// ---------------------------------------------------------------------------
+// The SECOND target, added by the follow-on rung: `ExternalFactory::Find`
+// (0x1800be0e0). Same argument as above, one level down the same call chain —
+// its only caller anywhere is retail's `FindOrLoad` at 0x1800bf366, by direct
+// rel32 CALL, so registration alone leaves it with zero callers.
+//
+// TWELVE bytes, and the boundary was counted in Ghidra rather than assumed:
+//     1800be0e0  40 55           PUSH RBP        (2)
+//     1800be0e2  53              PUSH RBX        (1)
+//     1800be0e3  56              PUSH RSI        (1)
+//     1800be0e4  57              PUSH RDI        (1)
+//     1800be0e5  48 8B EC        MOV RBP,RSP     (3)
+//     1800be0e8  48 83 EC 38     SUB RSP,0x38    (4)
+//     1800be0ec  ...             MOV [RBP-0x18],-2   <-- exactly +12
+// 2+1+1+1+3+4 = 12, which is the installer's minimum and lands clean.
+//
+// `MOV RBP,RSP` IS an RSP capture, and it is NOT the hazardous kind. The
+// installer corrects `MOV RAX,RSP` / `MOV R11,RSP` because those capture the
+// caller's RSP to address arguments, and a CALL into the trampoline shifts it
+// by 8. Here the capture happens AFTER four pushes and RBP is used only to
+// address this function's own frame and its caller's home space, both of which
+// the trampoline reproduces correctly when it is CALLed normally. Written down
+// because "the installer handles RSP captures" is not the same statement as
+// "this RSP capture is safe", and only the second one is true by inspection.
+constexpr size_t kFindPrologueBytes = 12;
+
+RtDetour g_findDetour = {};
+bool     g_findInstalled = false;
+
 }  // namespace
 
 extern "C" bool RtResPathInstallDetour(void* ourFn) {
@@ -91,4 +120,27 @@ extern "C" bool RtResPathInstallDetour(void* ourFn) {
 // would resolve to our own code.
 extern "C" void* RtResPathTrampoline() {
     return g_installed ? g_expandDetour.trampoline : nullptr;
+}
+
+extern "C" bool RtResFindInstallDetour(void* ourFn) {
+    if (g_findInstalled) return true;
+    if (!ourFn) return false;
+
+    if (!InstallRuntimeDetour("Object::ExternalFactory::Find[port]",
+                              0x1800be0e0, ourFn, &g_findDetour,
+                              kFindPrologueBytes)) {
+        std::fprintf(stderr, "[ResFind] detour FAILED -- the DLL is untouched and the "
+                             "port keeps its zero callers\n");
+        std::fflush(stderr);
+        return false;
+    }
+    g_findInstalled = true;
+    std::fprintf(stderr, "[ResFind] DETOUR INSTALLED at 0x1800be0e0 -- retail's "
+                         "FindOrLoad now looks up through the port\n");
+    std::fflush(stderr);
+    return true;
+}
+
+extern "C" void* RtResFindTrampoline() {
+    return g_findInstalled ? g_findDetour.trampoline : nullptr;
 }

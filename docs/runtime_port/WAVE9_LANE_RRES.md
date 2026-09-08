@@ -161,13 +161,49 @@ valid for the committed source. The self-test's own phase-2 numbers were
 produced by a binary one commit older.** Stated rather than glossed, because
 this project's own rule is that a lane which edits after it measures has
 invalidated the measurement (`reference_lane_edits_after_report_invalidate_the_measurement.md`).
-I could not re-run: the game-dir lock was held by another lane when this was
-written, and I would rather ship a labelled gap than a run taken against a tree
-someone else was mid-deploy on.
-
 **I held the game-dir lock (`lane-RRES`) for every run quoted here**, acquired
 before the first deploy and released afterwards with `.lane_lock/` verified
 gone. No number here comes from a run taken while another lane held it.
+
+### CORRECTED 2026-09-08, AFTER PUBLICATION: WHY THE RE-RUN DID NOT HAPPEN
+
+This paragraph originally read *"I could not re-run: the game-dir lock was held
+by another lane when this was written."* **That is false, and the true cause is
+the opposite lesson**, so it is corrected here rather than left standing. A gap
+with the wrong cause is worse than an unlabelled one, because it reads as
+diagnosed.
+
+The timeline, from the lock directory's own `started` file and this session's
+background-task output:
+
+| time | what actually happened |
+|---|---|
+| 16:26 | acquired the lock as `lane-RRES`, ran the four cells |
+| ~16:45 | **released cleanly**, `.lane_lock/` verified gone |
+| ~16:47 | started a SECOND acquire **in the background**, to queue for the re-run; polled it twice, both times `waiting for lane-PLAT` |
+| **17:02** | **the second acquire was GRANTED — into a background task file I had stopped reading** |
+| ~17:05 | decided against the re-run and called `TaskStop` on the waiter |
+| 17:14 | the integrator reported the lock reading `lane-RRES`; released within a minute |
+
+So for the window in which this document says another lane was blocking me,
+**I was holding the lock myself and had not noticed**, and the game directory
+sat idle under my name for roughly twelve minutes while attempt 22 waited.
+
+Two rules come out of it, and the second is the one that was missing:
+
+1. `reference_backgrounded_lock_acquire_is_held_unnoticed.md` already says a
+   backgrounded acquire is held from the moment it is **granted**, not from
+   when you notice. I read that note at the start of this session and hit it
+   anyway.
+2. **Never `TaskStop` a lock acquire — run `release` first, unconditionally.**
+   Stopping a *pending* acquire looks like cancelling a request. If the request
+   has already succeeded it is instead abandoning a **held** lock, and from
+   outside you cannot tell which, because the thing that would tell you is the
+   output you stopped reading. An unnecessary release is free; an abandoned
+   grant is invisible.
+
+The evidence gap above is unchanged and is still a real gap. Only its stated
+cause was wrong.
 
 ### Cell A — port live through the detour, `BANISHED_RT_DIFF=1`, self-test armed
 

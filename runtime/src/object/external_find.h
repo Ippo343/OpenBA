@@ -1,0 +1,46 @@
+#pragma once
+// ============================================================================
+// runtime/src/object/external_find.h — Wave 9 lane RRES, follow-on rung
+//   `ExternalFactory::Find`, the private cache lookup.
+// ============================================================================
+//
+// One body, one file, one Register function — the rule rt_object_port.cpp
+// states at the top, so no two lanes ever edit the same source.
+//
+// It is NOT folded into external_path_win.cpp for a concrete reason rather than
+// tidiness: that file needs <windows.h> for `GetFileAttributesW` and carries a
+// `_win` suffix because of it. This body needs nothing platform-specific, and
+// putting it there would drag a portable function behind the platform seam
+// (PLAN.md §4.1 decision 1).
+// ============================================================================
+
+#include <cstdint>
+
+#include "../../types/object/External.h"
+#include "../../types/system/Filename.h"
+
+namespace RtObject {
+
+using RtSystem::Filename;
+
+// ?Find@ExternalFactory@Object@@AEAAPEAVExternal@2@AEBVFilename@System@@@Z
+//                                                     retail 0x1800be0e0, ord 2336
+// RCX = this, RDX = path. Returns the cached External*, or null on a miss.
+External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* path);
+
+// The effectiveness control. `hits` and `misses` are the two outcomes of the
+// tree descent; `identDefaulted` is the ":resource" arm. A run in which
+// `identDefaulted` stays 0 has not exercised the only interesting branch in the
+// function, and the report must say so rather than report `calls` and stop
+// (rt_diff.h, lane M: a large `calls` is not coverage).
+struct FindCounters {
+    uint64_t calls;
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t identDefaulted;
+    uint64_t identPresent;
+    uint64_t divergent;      // pointer disagreements vs the shipped body
+};
+extern FindCounters g_fc;
+
+}  // namespace RtObject

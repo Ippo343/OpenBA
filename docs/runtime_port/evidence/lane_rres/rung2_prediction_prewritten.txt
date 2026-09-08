@@ -1,0 +1,48 @@
+LANE RRES FOLLOW-ON RUNG (ExternalFactory::Find, 0x1800be0e0)
+DOOR SET-DIFF PREDICTION, written BEFORE the instruments were run.
+
+Base for the diff: e447a7c (the integrator's merge of lane RRES).
+Tree under test: wave9/lane-rres2 working tree, built rc=0.
+
+The previous rung got this wrong in the optimistic direction and the set-diff
+caught it. The lesson was "a port cannot remove a name from a set the name was
+never in", so this time the prediction is derived from THAT rule rather than
+from the number of bodies ported.
+
+1. unsatisfied_export_scan
+     names with neither port nor mint      117 -> 117   (no change)
+     of those, outside a diff guard        114 -> 114   (no change)
+     SET-DIFF                              CLOSED 0, OPENED 0
+   WHY: `?Find@ExternalFactory@Object@@AEAA...` is not resolved through a door
+   anywhere in our source today -- nothing of ours calls it -- so porting it
+   cannot remove it from a list it is not on. And this file opens no new name
+   door: the only reach into the shipped body is the detour trampoline, and the
+   installer resolves its target RAW inside standalone/runtime_detour.cpp,
+   which is not a new site in my code.
+     The one number that MAY move is the "distinct names resolved through a
+   door" total (855), if the scanner counts my RegisterRuntimeExport literal.
+   It did move by +1 on the previous rung for exactly that reason.
+
+2. addr_door_audit
+     by-address call sites                 unchanged
+     distinct addresses                    unchanged  (no new address door)
+     registered addresses                  +1         (0x1800be0e0)
+     UNREGISTERED                          unchanged
+
+3. port_bypass_audit                       unchanged in every bucket
+   WHY: no new ResolveAddr(Module::Runtime, ...) and no new ResolveRuntimeRaw
+   site. The previous rung's +2 UNPORTED came from the self-test's PushPath /
+   PopPath raw doors; this rung has no self-test of that shape.
+
+4. rawdoor_audit                           sites unchanged, UNGUARDED-CALL 0
+
+5. detour_target_audit                     clean
+
+6. runtime_census.py, Object row           191 / 50 / 30, unchanged
+   WHY: the `ported` column counts against the `called` column, and Find is not
+   in the called set for the same reason it is not on list 1.
+
+STANDING INSTRUCTION TO MYSELF: if any of 1-6 moves other than as predicted,
+STOP and find out why before writing a word of the report. A surprise in a
+prediction this mechanical means the model of the instrument is wrong, and the
+instrument is what the cutover gate is read from.

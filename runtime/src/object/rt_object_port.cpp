@@ -36,6 +36,7 @@ extern int RtObjectInternalRegister();     // internal.cpp      (lane B)
 extern int RtObjectExternalRegister();     // external.cpp      (lane C)
 extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
 extern int RtObjectExternalPathRegister(); // external_path_win.cpp (Wave 9 lane RRES)
+extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane RRES)
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -57,5 +58,10 @@ void RtObjectPortInit() {
     // state, and BANISHED_RT_RESPATH=0 A/Bs the four doors on their own.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESPATH"))
         n += RtObjectExternalPathRegister();
+    // Wave 9 lane RRES follow-on: the private cache lookup the path half
+    // feeds. Its own switch, so the one door can be A/B'd against the four
+    // above without turning the whole class off.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESFIND"))
+        n += RtObjectExternalFindRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
