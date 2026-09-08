@@ -20,6 +20,8 @@
 //   BANISHED_RT_FSSTARTUP=0     ... just FileSystem::Startup       (lane ENG)
 //   BANISHED_RT_PERSSTARTUP=0   ... just Persistence::Startup      (lane ENG)
 //   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
+//   BANISHED_RT_FSDIRS=0        ... just SetupDirectories + friends (lane FS)
+//   BANISHED_RT_PKG=0           ... just LoadPackages + friends     (lane PKG)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -73,6 +75,14 @@ extern int RtIoPersistenceRegistryRegister(); // persistence_registry_win.cpp (l
 // lane's System half (WideString and the three System leaves) in
 // rt_system_port.cpp — one variable removes the whole lane.
 extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (lane FS)
+// Wave 9 lane PKG: FileSystem::LoadPackages + ClosePackages + GetPackDirectory
+// + PackageFile::GetFileName — the row immediately behind lane FS's
+// SetupDirectories, and the LAST call in FileSystem::Startup. Own switch, own
+// file, same reasoning as the rows above: it is on the process's single boot
+// path and the integrator must be able to A/B it alone. It is also the first
+// port in this tree that MOUNTS THE GAME'S PACKAGE FILES, so taking it out is
+// the fastest way to tell a packaging fault from a FileSystem fault.
+extern int RtIoFileSystemPackagesRegister(); // filesystem_packages.cpp (lane PKG)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -88,5 +98,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_REGREAD"))     n += RtIoPersistenceRegistryRegister();
     if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
+    if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
