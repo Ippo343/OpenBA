@@ -33,7 +33,7 @@ address,GUARDED-FALLBACK,code/Game/Dialog/autosavedialog.cpp,47,0x180113730,?Sto
 address,GUARDED-FALLBACK,code/Game/Dialog/autosavedialog.cpp,51,0x1801137c0,?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z,
 address,GUARDED-FALLBACK,code/Game/Game/game_main.cpp,164,0x1800dbf00,??0Engine@0@QEAA@PEAX@Z,
 address,GUARDED-FALLBACK,code/Game/Game/game_main.cpp,170,0x1800dbec0,??1Engine@0@QEAA@XZ,
-address,GUARDED-FALLBACK,code/Game/Game/gameupdateloop.cpp,3245,0x1800dddb0,??1UpdateLoop@Engine@@UEAA@XZ,
+address,GUARDED-FALLBACK,code/Game/Game/gameupdateloop.cpp,3254,0x1800dddb0,??1UpdateLoop@Engine@@UEAA@XZ,
 address,GUARDED-FALLBACK,code/Game/Game/weather_particles.cpp,69,0x1800a41c0,??1Geometry@Graphics@@UEAA@XZ,
 address,GUARDED-FALLBACK,code/Game/Game/weather_particles.cpp,74,0x1800c8000,?RandFloatTol@Random@System@@QEAAMXZ,
 address,GUARDED-FALLBACK,code/Game/Game/weather_sim.cpp,108,0x1800c8000,?RandFloatTol@Random@System@@QEAAMXZ,
@@ -212,22 +212,23 @@ address,NO-EXPORT,runtime/src/achievement/achievement_manager.cpp,211,0x18000397
 address,NO-EXPORT,runtime/src/achievement/achievement_manager.cpp,234,0x180004890,,
 address,NO-EXPORT,runtime/src/achievement/goal_serialize.cpp,130,0x1800042a0,,
 address,NO-EXPORT,runtime/src/achievement/goal_serialize.cpp,136,0x180005dc0,,
-address,NO-EXPORT,runtime/src/audio/audio.cpp,605,0x180051390,,
-address,NO-EXPORT,runtime/src/audio/audio.cpp,607,0x180052640,,
-address,NO-EXPORT,runtime/src/audio/audio.cpp,948,0x180050d30,,
-address,NO-EXPORT,runtime/src/audio/audio.cpp,950,0x180051d80,,
-address,NO-EXPORT,runtime/src/collection/array.cpp,357,0x180004220,,
-address,NO-EXPORT,runtime/src/collection/array.cpp,362,0x1800059e0,,
-address,NO-EXPORT,runtime/src/collection/array.cpp,369,0x180051650,,
-address,NO-EXPORT,runtime/src/collection/array.cpp,374,0x180052110,,
-address,NO-EXPORT,runtime/src/collection/array.cpp,422,0x180005930,,
+address,NO-EXPORT,runtime/src/audio/audio.cpp,611,0x180051390,,
+address,NO-EXPORT,runtime/src/audio/audio.cpp,613,0x180052640,,
+address,NO-EXPORT,runtime/src/audio/audio.cpp,962,0x180050d30,,
+address,NO-EXPORT,runtime/src/audio/audio.cpp,964,0x180051d80,,
+address,NO-EXPORT,runtime/src/collection/array.cpp,374,0x180004220,,
+address,NO-EXPORT,runtime/src/collection/array.cpp,379,0x1800059e0,,
+address,NO-EXPORT,runtime/src/collection/array.cpp,386,0x180051650,,
+address,NO-EXPORT,runtime/src/collection/array.cpp,391,0x180052110,,
+address,NO-EXPORT,runtime/src/collection/array.cpp,439,0x180005930,,
+address,NO-EXPORT,runtime/src/collection/array_destroy_probe.cpp,432,0x180003970,,
 address,NO-EXPORT,runtime/src/engine/engine.cpp,443,0x180033a40,,
 address,NO-EXPORT,runtime/src/engine/engine.cpp,445,0x180033960,,
 address,NO-EXPORT,runtime/src/engine/engine.cpp,447,0x180033880,,
 address,NO-EXPORT,runtime/src/engine/loops.cpp,222,0x180010ab0,,
 address,NO-EXPORT,runtime/src/engine/loops.cpp,230,0x180010110,,
 address,NO-EXPORT,runtime/src/engine/loops.cpp,245,0x18007a0d0,,
-address,NO-EXPORT,runtime/src/graphics/animation.cpp,358,0x18005bf60,,
+address,NO-EXPORT,runtime/src/graphics/animation.cpp,362,0x18005bf60,,
 address,NO-EXPORT,runtime/src/graphics/renderer.cpp,189,0x18001c9e0,,
 address,NO-EXPORT,runtime/src/graphics/renderer.cpp,199,0x18001c8c0,,
 address,NO-EXPORT,runtime/src/graphics/renderer.cpp,207,0x18001c7e0,,
@@ -265,9 +266,10 @@ address,NO-EXPORT,runtime/src/picking/scene.cpp,276,0x18007b6d0,,
 address,NO-EXPORT,runtime/src/system/thread_win.cpp,152,0x18007fbfc,,
 address,NO-EXPORT,runtime/src/ui/element.cpp,250,0x180076900,,
 address,NO-EXPORT,runtime/src/ui/sprite.cpp,475,0x180004e30,,
-address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,125,0x18002fea0,,
-address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,133,0x1800764c0,,
-address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,141,0x1800416d0,,
+address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,126,0x18002fea0,,
+address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,134,0x1800764c0,,
+address,NO-EXPORT,runtime/src/ui/widgets_layout.cpp,142,0x1800416d0,,
+address,NO-EXPORT,runtime/src/video/companion_data.cpp,385,0x180010760,,
 address,UNPORTED,code/Game/Component/growthcomponent.cpp,91,0x1800c0290,?CheckPtr@InternalBasePtr@Object@@IEBAXXZ,
 address,UNPORTED,code/Game/Component/herdcomponent.cpp,79,0x1800c0290,?CheckPtr@InternalBasePtr@Object@@IEBAXXZ,
 address,UNPORTED,code/Game/Component/interactcomponent.cpp,98,0x1800c0290,?CheckPtr@InternalBasePtr@Object@@IEBAXXZ,
@@ -349,17 +351,26 @@ address,UNPORTED,standalone/main.cpp,1029,0x1801fe7a0,?_singleton@Configuration@
 address,UNPORTED,standalone/main.cpp,1354,0x1801fe7a8,?_singleton@Device@Video@@0PEAV12@EA,
 address,UNPORTED,standalone/reg_mods.cpp,99,0x1801fc6b0,?_singleton@Modification@IO@@2PEAV12@EA,
 address,UNPORTED,standalone/scene_watch.cpp,401,0x180100f20,?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z,
+name,OK-ALLOWLIST,runtime/src/picking/scene.cpp,718,DiffScratchScene,??0Scene@Picking@@QEAA@XZ,DiffScratchScene(); its only caller (picking/scene.cpp:794) is inside if (rt_diff_on__)
+name,OK-ALLOWLIST,runtime/src/ui/dialog.cpp,600,RtUiDialogInstance_StopTimer,?StopTimer@DialogInstance@UI@@QEAAXH@Z,"guarded by if (diffThisCall), a local set from rt_diff_on__"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,875,RtUi_Element_Hide,?Hide@Element@UI@@QEAAX_N@Z,guarded by if (replay.copy); ReplayGuard (element.cpp:329) leaves copy null unless rt_diff_on__
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,887,RtUi_Element_SetElementId,?SetElementId@Element@UI@@QEAAXH@Z,"ReplayGuard, as element.cpp:875"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,910,RtUi_Element_SetFlagsOnOff,?SetFlagsOnOff@Element@UI@@QEAAXII@Z,"ReplayGuard, as element.cpp:875"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,983,RtUi_Element_SetNeedsSizeCalc,?SetNeedsSizeCalc@Element@UI@@QEAAXXZ,"ReplayGuard, as element.cpp:875"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,1011,RtUi_Element_SetPadding,?SetPadding@Element@UI@@QEAAXHHHH@Z,"ReplayGuard, as element.cpp:875"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,1069,RtUi_Element_SetToolTip,?SetToolTip@Element@UI@@QEAAXVString@2@@Z,"ReplayGuard, as element.cpp:875"
+name,OK-ALLOWLIST,runtime/src/ui/element.cpp,1128,RtUi_Element_SetUserData,?SetUserData@Element@UI@@QEAAXPEAVBase@Object@@@Z,"ReplayGuard, as element.cpp:875"
 name,OK-DATA,runtime/src/achievement/goal.cpp,114,BaseVtable,??_7Base@Object@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/achievement/goal.cpp,118,ExternalVtable,??_7External@Object@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/achievement/goal.cpp,122,GoalVtable,??_7Goal@Achievement@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/achievement/goal.cpp,126,GoalInstanceVtable,??_7GoalInstance@Achievement@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/achievement/goal.cpp,169,GoalInstanceTypeInfo,?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A,"exported data, no body to port"
-name,OK-DATA,runtime/src/audio/audio.cpp,722,AudioDeviceSingleton,?_singleton@Device@Audio@@0PEAV12@EA,"exported data, no body to port"
+name,OK-DATA,runtime/src/audio/audio.cpp,728,AudioDeviceSingleton,?_singleton@Device@Audio@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/engine/engine.cpp,201,MainLoopSingletonSlot,?_singleton@MainLoop@Engine@@1PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/engine/engine.cpp,210,VideoDeviceSingletonSlot,?_singleton@Device@Video@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/engine/engine.cpp,217,SecondsPerTick,?_secondsPerTick@Timer@System@@0NA,"exported data, no body to port"
-name,OK-DATA,runtime/src/graphics/mesh.cpp,262,RtVtable,,fn name: vtable
-name,OK-DATA,runtime/src/graphics/mesh.cpp,290,RtAnimationManager,?_singleton@AnimationManager@Graphics@@0PEAV12@EA,"exported data, no body to port"
+name,OK-DATA,runtime/src/graphics/mesh.cpp,268,RtVtable,,fn name: vtable
+name,OK-DATA,runtime/src/graphics/mesh.cpp,296,RtAnimationManager,?_singleton@AnimationManager@Graphics@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/input/input.cpp,95,DeviceSingleton,?_singleton@Device@Input@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/input/input.cpp,591,RtInput_Configuration_Load,?_singleton@Persistence@IO@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/input/input.cpp,619,RtInput_Configuration_Save,?_singleton@Persistence@IO@@0PEAV12@EA,"exported data, no body to port"
@@ -377,34 +388,303 @@ name,OK-DATA,runtime/src/save/saveload.cpp,143,RtDataExport,,fn name: dataexport
 name,OK-DATA,runtime/src/system/allocator.cpp,649,SingletonSlot,?_singleton@MemoryAllocator@System@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/system/thread_win.cpp,126,RtSystemThreadVftable,??_7Thread@System@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/ui/dialog.cpp,896,RtUiDialogRegister,??_7DialogController@UI@@6B@,"exported data, no body to port"
-name,OK-DATA,runtime/src/video/buffers.cpp,88,ImageBufferVtable,??_7ImageBuffer@Video@@6B@,"exported data, no body to port"
-name,OK-DATA,runtime/src/video/buffers.cpp,92,ImageBufferDataVtable,??_7ImageBufferData@Video@@6B@,"exported data, no body to port"
-name,OK-DATA,runtime/src/video/buffers.cpp,101,DeviceSingletonPtr,?_singleton@Device@Video@@0PEAV12@EA,"exported data, no body to port"
-name,OK-DATA,runtime/src/video/buffers.cpp,105,ConfigurationSingletonPtr,?_singleton@Configuration@Video@@0PEAV12@EA,"exported data, no body to port"
-name,OK-DATA,runtime/src/video/buffers.cpp,180,Video_ImageBuffer_Dtor,??_7CompiledExternal@Object@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/buffers.cpp,90,ImageBufferVtable,??_7ImageBuffer@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/buffers.cpp,94,ImageBufferDataVtable,??_7ImageBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/buffers.cpp,103,DeviceSingletonPtr,?_singleton@Device@Video@@0PEAV12@EA,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/buffers.cpp,107,ConfigurationSingletonPtr,?_singleton@Configuration@Video@@0PEAV12@EA,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/buffers.cpp,182,Video_ImageBuffer_Dtor,??_7CompiledExternal@Object@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,121,Vt_RenderBufferData,??_7RenderBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,122,Vt_VideoProgramData,??_7VideoProgramData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,123,Vt_RenderStateData,??_7RenderStateData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,124,Vt_PixelProgramData,??_7PixelProgramData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,125,Vt_VertexProgramData,??_7VertexProgramData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,126,Vt_VertexLayoutData,??_7VertexLayoutData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,127,Vt_VertexBufferData,??_7VertexBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,128,Vt_IndexBufferData,??_7IndexBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,129,Vt_ConstantBufferData,??_7ConstantBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,130,Vt_ImageBufferData,??_7ImageBufferData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,131,Vt_ContextData,??_7ContextData@Video@@6B@,"exported data, no body to port"
+name,OK-DATA,runtime/src/video/companion_data.cpp,132,Vt_DeviceData,??_7DeviceData@Video@@6B@,"exported data, no body to port"
 name,OK-DATA,runtime/src/video/device.cpp,125,DeviceSingletonSlot,?_singleton@Device@Video@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/video/device.cpp,130,ConfigSingletonSlot,?_singleton@Configuration@Video@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/video/device.cpp,135,PersistenceSingletonSlot,?_singleton@Persistence@IO@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,runtime/src/video/device.cpp,535,Video_RenderStateData_Dtor,??_7RenderStateData@Video@@6B@,"exported data, no body to port"
 name,OK-DATA,standalone/rt_orphan_probe.cpp,793,ProbeInputDevice,?_singleton@Device@Input@@0PEAV12@EA,"exported data, no body to port"
 name,OK-DATA,standalone/rt_orphan_probe.cpp,969,ProbeUpdateLoopIsRunning,?_singleton@MainLoop@Engine@@1PEAV12@EA,"exported data, no body to port"
+name,OK-DELEGATING,runtime/src/ui/widgets_layout.cpp,550,DocumentTextElement_GetLink,?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z,"this port's body IS a call to the DLL under its own name -- a cutover row, not a bypass"
+name,OK-DELEGATING,runtime/src/ui/widgets_layout.cpp,741,GraphElement_RemoveGraphs,?RemoveGraphs@GraphElement@UI@@QEAAXXZ,"this port's body IS a call to the DLL under its own name -- a cutover row, not a bypass"
 name,OK-ORACLE,runtime/src/achievement/achievement_manager.cpp,540,AchievementStringGetter,,RtDiffReport
+name,OK-ORACLE,runtime/src/achievement/achievement_manager.cpp,1010,RtAch_Achievement_Ctor,??0Achievement@0@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,208,RtAch_Goal_Ctor,??0Goal@Achievement@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,329,RtAch_GoalList_GetGoalCount,?GetGoalCount@GoalList@Achievement@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,354,RtAch_GoalList_GetGoal,?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,376,RtAch_GoalInstance_GetGoal,?GetGoal@GoalInstance@Achievement@@QEBA?AV?$ExternalPtr@VGoal@Achievement@@@Object@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,404,RtAch_Goal_GetInstanceType,?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,434,RtAch_Goal_GetText,?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,456,RtAch_GoalInstance_IsMet,?IsMet@GoalInstance@Achievement@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/achievement/goal.cpp,464,RtAch_GoalInstance_HasFailed,?HasFailed@GoalInstance@Achievement@@QEBA_NXZ,inside a diff guard
 name,OK-ORACLE,runtime/src/achievement/goal_serialize.cpp,272,RtAch_Goal_Serialize,?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z,RtSaveTrace::
 name,OK-ORACLE,runtime/src/achievement/goal_serialize.cpp,280,RtAch_Goal_Serialize,?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z,RtSaveTrace::
 name,OK-ORACLE,runtime/src/achievement/goal_serialize.cpp,333,RtAch_GoalInstance_Persist,?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z,RtSaveTrace::
 name,OK-ORACLE,runtime/src/achievement/goal_serialize.cpp,341,RtAch_GoalInstance_Persist,?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z,RtSaveTrace::
-name,OK-ORACLE,runtime/src/audio/audio.cpp,1126,RtAudio_Scene_SerializeTraceProbe,?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z,RtSaveTrace::
+name,OK-ORACLE,runtime/src/application/application.cpp,41,RtApp_IsPaused,?IsPaused@Application@1@QEAA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/application/application.cpp,72,RtApp_Quit,?Quit@Application@1@QEAAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,227,RtAudio_Scene_AddEmitter,?GetEmitterCount@Scene@Audio@@QEBAHI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,289,RtAudio_Scene_RemoveEmitter,?GetEmitterCount@Scene@Audio@@QEBAHI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,332,RtAudio_Scene_GetEmitterCount,?GetEmitterCount@Scene@Audio@@QEBAHI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,350,RtAudio_Scene_IsEffectPlaying,?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,409,RtAudio_Scene_PlayEffect,?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,506,RtAudio_Configuration_Save,?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/audio/audio.cpp,1140,RtAudio_Scene_SerializeTraceProbe,?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z,RtSaveTrace::
+name,OK-ORACLE,runtime/src/engine/engine.cpp,263,RtEngine_MainLoop_SetNextLoop,?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/engine/loops.cpp,532,RtEngine_UpdateLoop_Ctor,??0UpdateLoop@Engine@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/engine/loops.cpp,607,RtEngine_UpdateLoop_IsRunning,?IsRunning@UpdateLoop@Engine@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/engine/loops.cpp,629,RtEngine_LoaderLoop_Ctor,??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/engine/loops.cpp,716,RtEngine_DialogLoopT_Ctor,??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/engine/loops.cpp,857,RtEngine_DialogLoaderLoopT_Ctor,??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,249,RtGraphics_AnimationEvent_Ctor,??0AnimationEvent@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,419,RtGraphics_Particle_Ctor,??0Particle@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,481,RtGraphics_ParticleInstance_Ctor,??0ParticleInstance@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,551,RtGraphics_ParticleInstance_Update,?Update@ParticleInstance@Graphics@@QEAA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,596,RtGraphics_ParticleInstance_IncrementInstanceIndex,?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/animation.cpp,643,RtGraphics_ParticleSystemInstance_Ctor,??0ParticleSystemInstance@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,395,RtGraphics_GraphicsMesh_GetNodeIndexFromName,?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,443,RtGraphics_MeshInstance_IsAnimating,?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,600,RtGraphics_MeshInstance_GetNodeToWorld,?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,644,RtGraphics_MeshInstance_RootAnimationOffset,?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,796,RtGraphics_MeshInstance_UpdateHierarchy,?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,1093,RtGraphics_MeshInstance_Ctor,??0MeshInstance@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,1272,RtGraphics_EdgeMesh_TriangleVertex_Ctor,??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,1310,RtGraphics_EdgeMesh_EdgeVertex_Ctor,??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/mesh.cpp,1574,RtGraphics_EdgeMeshInstance_Ctor,??0EdgeMeshInstance@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,307,RtGraphics_Camera_SetFrustum,?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,334,RtGraphics_Camera_Ctor,??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,351,RtGraphics_Camera_SetCameraToWorld,?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,377,RtGraphics_Camera_SnapCameraToWorld,?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,400,RtGraphics_Camera_GetFrustum,?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,441,RtGraphics_Renderer_Ctor,??0Renderer@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,489,RtGraphics_Renderer_GetCullCamera,?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,506,RtGraphics_Renderer_GetShader,?GetShader@Renderer@Graphics@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,585,RtGraphics_MaterialInstance_Ctor,??0MaterialInstance@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/renderer.cpp,607,RtGraphics_MaterialInstance_SetMaterial,?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,582,RtGraphics_Geometry_Ctor,??0Geometry@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,741,RtGraphics_Geometry_SetTransform,?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,988,RtGraphics_Geometry_Clean,?Clean@Geometry@Graphics@@UEAA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1039,RtGraphics_Geometry_SetBounds,?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1073,RtGraphics_Geometry_GetTransform,?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1116,RtGraphics_Geometry_GetSubTransform,?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1178,RtGraphics_Geometry_GetInstanceTransform,?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1216,RtGraphics_Geometry_SetSharedInstanceData,?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1252,RtGraphics_Scene_Ctor,??0Scene@Graphics@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/graphics/scene.cpp,1314,RtGraphics_Scene_Ctor,??1Scene@Graphics@@QEAA@XZ,inside a diff guard
 name,OK-ORACLE,runtime/src/input/input.cpp,315,RtInput_KeyMap_RegisterInput,?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z,rt_diff_on__
 name,OK-ORACLE,runtime/src/input/input.cpp,317,RtInput_KeyMap_RegisterInput,?GetInputForId@KeyMap@Input@@QEBAHHH@Z,rt_diff_on__
 name,OK-ORACLE,runtime/src/input/input.cpp,319,RtInput_KeyMap_RegisterInput,?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z,rt_diff_on__
-name,OK-ORACLE,runtime/src/io/serializer.cpp,167,VerifyBody,,memcmp
-name,OK-ORACLE,runtime/src/io/serializer.cpp,544,RtIoSerializerRegister,,Verify
+name,OK-ORACLE,runtime/src/input/input.cpp,355,RtInput_KeyMap_GetDeviceForId,?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,373,RtInput_KeyMap_GetInputForId,?GetInputForId@KeyMap@Input@@QEBAHHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,403,RtInput_KeyMap_GetIdForDeviceInput,?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,438,RtInput_KeyMap_GetValue,?GetValue@KeyMap@Input@@QEBAFHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,468,RtInput_KeyMap_Pressed,?Pressed@KeyMap@Input@@QEBA_NHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,509,RtInput_Device_GetValue,?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,527,RtInput_Device_Pressed,?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/input/input.cpp,545,RtInput_Device_Released,?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/compressedstream.cpp,235,RtIo_CompressedMemoryStream_Ctor,??0CompressedMemoryStream@IO@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/compressedstream.cpp,263,RtIo_CompressedMemoryStream_Ctor,??1CompressedMemoryStream@IO@@UEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem.cpp,149,RtIo_FileSystem_Exists,?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem.cpp,180,RtIo_FileSystem_GetDataDirectory,?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem.cpp,209,RtIo_FileSystem_GetSourceDirectory,?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem.cpp,284,RtIo_FileSystem_GetPackfileId,?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem.cpp,317,RtIo_Modification_Find,?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/filesystem_win.cpp,162,RtIo_FileSystem_GetSaveDirectory,?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/persistence.cpp,136,RtIo_Persistence_GetInt,?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/persistence.cpp,169,RtIo_Persistence_GetBool,?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/persistence.cpp,216,RtIo_Persistence_SetInt,?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/persistence.cpp,253,RtIo_Persistence_SetBool,?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/io/persistence.cpp,284,RtIo_Persistence_GetSavePath,?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/serializer.cpp,175,VerifyBody,,Verify
+name,OK-ORACLE,runtime/src/io/serializer.cpp,363,RtSerializer_GetVersion,?GetVersion@Serializer@IO@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/serializer.cpp,384,RtSerializer_GetEncoding,?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/io/serializer.cpp,564,RtIoSerializerRegister,,Verify
+name,OK-ORACLE,runtime/src/math/transform.cpp,75,RtMath_Quaternion_Ctor4,??0Quaternion@Math@@QEAA@MMMM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,97,RtMath_Transform_CtorDefault,??0Transform@Math@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,114,RtMath_Transform_CtorCopy,??0Transform@Math@@QEAA@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,134,RtMath_Transform_Assign,??4Transform@Math@@QEAAAEAV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,150,RtMath_Transform3_CtorCopy,??0Transform3@Math@@QEAA@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,175,RtMath_Transform2_Ctor,??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,206,RtMath_Matrix_MulMatrix,??DMatrix@Math@@QEBA?AV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,230,RtMath_Matrix_MulVector4,??DMatrix@Math@@QEBA?AVVector4@1@AEBV21@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,255,RtMath_Transform2_MulTransform2,??DTransform2@Math@@QEBA?AV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,274,RtMath_Transform2_MulVector2,??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,294,RtMath_Transform3_MulVector3,??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,341,RtMath_Transform_AsMatrix,?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,365,RtMath_Transform3_AsMatrix,?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,408,RtMath_Transform_Inverse,?Inverse@Transform@Math@@QEBA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,443,RtMath_Transform3_Inverse,?Inverse@Transform3@Math@@QEBA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,475,RtMath_Quaternion_MulQuaternion,??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,501,RtMath_Quaternion_Rotate,?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,522,RtMath_Transform3_Rotate,?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,540,RtMath_Matrix_Identity,?Identity@Matrix@Math@@SA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,562,RtMath_Transform_Identity,?Identity@Transform@Math@@SA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,581,RtMath_Transform3_Identity,?Identity@Transform3@Math@@SA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,606,RtMath_Transform2_FromYawOffset,?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,636,RtMath_Quaternion_FromYawPitch,?FromYawPitch@Quaternion@Math@@SA?AV12@AEBVScalar@2@0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,666,RtMath_Transform_FromYawPitchOffset,?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,708,RtMath_Quaternion_CtorBasis,??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,775,RtMath_Transform_FromDirection,?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,802,RtMath_Transform_FromLookAt,?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,903,RtMath_Transform_MulVector3,??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/transform.cpp,956,RtMath_Transform_MulTransform,??DTransform@Math@@QEBA?AV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/math/vector.cpp,52,RtMath_Scalar_Abs,?Abs@Scalar@Math@@QEBA?AV12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/object/internal.cpp,322,RtObject_InternalBasePtr_Ctor,??0InternalBasePtr@Object@@QEAA@XZ,inside a diff guard
 name,OK-ORACLE,runtime/src/object/internal.cpp,921,RtObject_InternalBasePtr_SerializeTraceProbe,?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z,RtSaveTrace::
+name,OK-ORACLE,runtime/src/object/type_system.cpp,187,RtObject_Base_IsA,?IsA@Base@Object@@QEBA_NI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/object/type_system.cpp,242,RtObject_Base_IsDerivedFrom,?IsDerivedFrom@Base@Object@@QEBA_NI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/object/type_system.cpp,275,RtObject_Factory_GetTypeIdFromName,?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/object/type_system.cpp,436,RtObject_BaseTypeInfo_Ctor,??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,450,RtPicking_Scene_Ctor,??0Scene@Picking@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,501,RtPicking_Scene_Ctor,??1Scene@Picking@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,571,RtPicking_Scene_GetUserData,?GetUserData@Scene@Picking@@QEBAPEAXI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,600,RtPicking_PickingMesh_Vertices,?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,644,RtPicking_Scene_SetMeshUserData,?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,680,RtPicking_Scene_SetTransform,?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,797,RtPicking_Scene_AddMesh,?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,837,RtPicking_Scene_AddMesh,?RemoveMesh@Scene@Picking@@QEAAXI@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,1033,RtPicking_Scene_Intersect,?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/picking/scene.cpp,1204,RtPicking_Scene_Intersect,?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,262,RtSave_SaveLoad_Ctor,??0SaveLoad@Save@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,309,RtSave_SaveLoad_GetOperation,?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,327,RtSave_SaveLoad_GetSaveCount,?GetSaveCount@SaveLoad@Save@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,355,RtSave_SaveLoad_GetSaveInfo,?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,377,RtSave_SaveLoad_GetSaveState,?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,406,RtSave_SaveLoad_SetOperation,?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,426,RtSave_SaveLoad_SetMinOperationTime,?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,457,RtSave_SaveLoad_SetSaveSprite,?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,512,RtSave_SaveLoad_SetSaveName,?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,614,RtSave_SaveLoad_CheckMod,?CheckMod@SaveLoad@Save@@QEBAHHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,695,RtSave_SavedState_Ctor,??0SavedState@Save@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,769,RtSave_SavedState_Store,?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/save/saveload.cpp,811,RtSave_SavedState_Retrieve,?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z,inside a diff guard
 name,OK-ORACLE,runtime/src/system/allocator.cpp,950,FindPatchedPrologue,?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z,memcmp
 name,OK-ORACLE,runtime/src/system/allocator.cpp,951,FindPatchedPrologue,?Free@MemoryAllocator@System@@QEAAXPEAX@Z,memcmp
+name,OK-ORACLE,runtime/src/system/string.cpp,597,RtSystem_String_ToFloat,?ToFloat@String@System@@SAMPEBD@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/system/value_types.cpp,124,RtSystem_Random_CtorSeed,??0Random@System@@QEAA@I@Z,inside a diff guard
 name,OK-ORACLE,runtime/src/ui/dialog.cpp,371,VerifyDispatchLoop,,RtDiffEnabled
 name,OK-ORACLE,runtime/src/ui/dialog.cpp,404,VerifyDtorThunk,,RtDiffEnabled
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,440,RtUiDialogInstance_GetRoot,?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,474,RtUiDialogInstance_GetController,?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,491,RtUiDialogInstance_FindElement,?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,505,RtUiDialogInstance_FindElementType,?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,526,RtUiDialogInstance_SetFlagsOnOff,?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,695,RtUiDialog_GetTemplate,?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,712,RtUiDialogController_GetContainer,?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,779,RtUiElementDescription_Ctor,??0ElementDescription@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/dialog.cpp,792,RtUiElementDescription_GetFileVersion,?GetFileVersion@ElementDescription@UI@@UEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,518,RtUi_Element_Ctor,??0Element@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,597,RtUi_Element_Child,?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,609,RtUi_Element_ChildCount,?ChildCount@Element@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,686,RtUi_Element_FindElement,?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,718,RtUi_Element_FindElementType,?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,771,RtUi_Element_GetAlignedPosition,?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,836,RtUi_Element_GetPaddedSize,?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,852,RtUi_Element_GetUserData,?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/element.cpp,1189,RtUi_ContainerElement_SetOffsets,?SetOffsets@ContainerElement@UI@@QEAAXHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,191,RtUi_Sprite_DefaultCtor,??0Sprite@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,217,RtUi_Sprite_CtorByName,??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,236,RtUi_Sprite_CtorByIndex,??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,253,RtUi_Sprite_IsValid,?IsValid@Sprite@UI@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,273,RtUi_Sprite_Width,?Width@Sprite@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,290,RtUi_Sprite_Height,?Height@Sprite@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,335,RtUi_SpriteSheet_Ctor,??0SpriteSheet@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,355,RtUi_SpriteSheet_GetSpriteCount,?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,391,RtUi_SpriteSheet_GetUVs,?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,430,RtUi_SpriteSheet_SetSpriteInfo,?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,500,RtUi_SpriteSheet_AddSpriteInfo,?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,536,RtUi_StringTable_GetCount,?GetCount@StringTable@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,563,RtUi_StringTable_GetText_Index,?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,587,RtUi_StringTable_GetText_Key,?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,612,RtUi_UIString_DefaultCtor,??0String@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,639,RtUi_UIString_CtorByName,??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,658,RtUi_UIString_CtorByIndex,??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,675,RtUi_UIString_IsValid,?IsValid@String@UI@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/sprite.cpp,693,RtUi_UIString_ToSystemString,??BString@UI@@QEBA?AV0System@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,362,RtUi_UserInterface_Ctor,??0UserInterface@UI@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,385,RtUi_UserInterface_GetAddDialogCount,?GetAddDialogCount@UserInterface@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,406,RtUi_UserInterface_GetFirstDialog,?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@V?$InternalPtr@VDialogInstance@UI@@@Object@@UDefaultAllocator@Collection@@@Collection@@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,440,RtUi_UserInterface_PausesGame,?PausesGame@UserInterface@UI@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,506,RtUi_UserInterface_GetFirstContainedDialog,?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,528,RtUi_UserInterface_EndSpriteCapture,?EndSpriteCapture@UserInterface@UI@@QEAAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,563,RtUi_UserInterface_SetFullscreenFade,?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/userinterface.cpp,588,RtUi_UserInterface_SetFullscreenFadeSprite,?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,240,RtUi_SpinnerElement_GetMaxValue,?GetMaxValue@SpinnerElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,252,RtUi_SpinnerElement_GetValue,?GetValue@SpinnerElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,264,RtUi_SpinnerElement_IsActive,?IsActive@SpinnerElement@UI@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,284,RtUi_SpinnerElement_SetElementId,?SetElementId@SpinnerElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,299,RtUi_SpinnerElement_SetIncrement,?SetIncrement@SpinnerElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,322,RtUi_SpinnerElement_SetMinMax,?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,338,RtUi_SpinnerElement_SetValue,?SetValue@SpinnerElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,354,RtUi_ComboElement_GetCurrentItem,?GetCurrentItem@ComboElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,365,RtUi_ComboElement_GetItemCount,?GetItemCount@ComboElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,376,RtUi_ComboElement_GetItemData,?GetItemData@ComboElement@UI@@QEBAPEAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,392,RtUi_NumberEditElement_GetValue,?GetValue@NumberEditElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,412,RtUi_NumberEditElement_SetMinMax,?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,437,RtUi_NumberElement_SetValueInt,?SetValue@NumberElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,458,RtUi_NumberElement_SetValueFloat,?SetValue@NumberElement@UI@@QEAAXM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,539,RtUi_RadioElement_SetActiveRadio,?SetActiveRadio@RadioElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,558,RtUi_ProgressElement_SetMaximumValue,?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_input.cpp,573,RtUi_ProgressElement_SetCurrentValue,?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,167,TableElement_GetColumnCount,?GetColumnCount@TableElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,175,TableElement_GetRowCount,?GetRowCount@TableElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,262,TableElement_SetSize,?SetSize@TableElement@UI@@QEAAXHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,297,ImageElement_GetSprite,?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,316,ImageElement_SetRotation,?SetRotation@ImageElement@UI@@QEAAXM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,360,ImageElement_SetSprite,?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,401,ImageElement_SetWidthHeight,?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,429,LabelElement_GetSprite,?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,464,LabelElement_SetSprite,?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,591,DocumentTextElement_SetText_UiString,?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,660,TabElement_SetActiveTab,?SetActiveTab@TabElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,670,PageElement_GetActivePage,?GetActivePage@PageElement@UI@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/ui/widgets_layout.cpp,709,PageElement_SetActivePage,?SetActivePage@PageElement@UI@@QEAAXH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/utility/perlin.cpp,220,RtUtility_PerlinNoise_Generate,?Generate@PerlinNoise@Utility@@QEBAMMM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,208,Video_ImageBuffer_Width,?Width@ImageBuffer@Video@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,229,Video_ImageBuffer_Height,?Height@ImageBuffer@Video@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,237,Video_ImageBuffer_GetLevelCount,?GetLevelCount@ImageBuffer@Video@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,245,Video_ImageBuffer_IsCompressed,?IsCompressed@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,253,Video_ImageBuffer_IsDepthBuffer,?IsDepthBuffer@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,261,Video_ImageBuffer_IsDynamic,?IsDynamic@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,269,Video_ImageBuffer_IsGenerated,?IsGenerated@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,277,Video_ImageBuffer_IsRenderBuffer,?IsRenderBuffer@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/buffers.cpp,285,Video_ImageBuffer_IsRendered,?IsRendered@ImageBuffer@Video@@QEBA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/companion_data.cpp,346,Video_DisplayMode_Ctor,??0DisplayMode@Device@Video@@QEAA@HH@Z,inside a diff guard
 name,OK-ORACLE,runtime/src/video/context.cpp,299,VerifyThunk,,RtDiffEnabled
+name,OK-ORACLE,runtime/src/video/context.cpp,396,RtVideo_Context_SetColor,?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,417,RtVideo_Context_SetInverseScale,?SetInverseScale@Context@Video@@QEAAXMMMM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,437,RtVideo_Context_SetTime,?SetTime@Context@Video@@QEAAXM@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,475,RtVideo_Context_SetFog,?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,495,RtVideo_Context_SetViewport,?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,515,RtVideo_Context_SetImageBuffer,?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,537,RtVideo_Context_SetVertexBuffer,?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,554,RtVideo_Context_SetRenderBuffer,?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,572,RtVideo_Context_SetDefaultRenderBuffer,?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,596,RtVideo_Context_SetTransform,?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,625,RtVideo_Context_SetCamera,?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,738,RtVideo_Context_Reset,?Reset@Context@Video@@QEAAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,765,RtVideo_Context_AddVertex,?AddVertex@Context@Video@@QEAAXPEBX@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/context.cpp,785,RtVideo_Context_AddVertices,?AddVertices@Context@Video@@QEAAXHPEBX@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,151,Video_Device_GetInterfaceCount,?GetInterfaceCount@Device@Video@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,171,Video_Device_GetInterface,?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,182,Video_Device_GetMultisampleModeCount,?GetMultisampleModeCount@Device@Video@@QEBAHXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,199,Video_Device_IsMultisampleModeSupported,?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,338,Video_Device_ValidateConfiguration,?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,408,Video_Device_ApplyChangedSettings,?ApplyChangedSettings@Device@Video@@QEAA_NXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,502,Video_RenderBuffer_Create,?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,541,Video_RenderStateData_Dtor,??1RenderStateData@Video@@UEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,647,Video_Configuration_Save,?Set@Persistence@IO@@QEAAXPEBD0_N@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,650,Video_Configuration_Save,?Set@Persistence@IO@@QEAAXPEBD0H@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/video/device.cpp,705,Video_Configuration_Save,?Save@Configuration@Video@@QEAAXXZ,inside a diff guard
+name,OK-ORACLE,runtime/src/volume/box.cpp,29,RtVolume_Box_Ctor,??0Box@Volume@@QEAA@XZ,inside a diff guard
+name,OK-ORACLE,runtime/src/volume/box.cpp,42,RtVolume_Box_Assign,??4Box@Volume@@QEAAAEAV01@AEBV01@@Z,inside a diff guard
+name,OK-ORACLE,runtime/src/volume/rectangle.cpp,23,RtVolume_Rectangle_Ctor,??0Rectangle@Volume@@QEAA@XZ,inside a diff guard
 name,OK-ORACLE,standalone/rt_orphan_probe.cpp,90,ProbeVector2NormalizeWithMag,?IsRunning@UpdateLoop@Engine@@QEBA_NXZ,memcmp
 name,OK-ORACLE,standalone/rt_orphan_probe.cpp,479,ProbeAudioScene,,InstallRuntimeDetour
 name,OK-ORACLE,standalone/rt_orphan_probe.cpp,802,ProbeInputDevice,?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z,fn name: probe
@@ -415,6 +695,14 @@ name,OK-ORACLE,standalone/rt_orphan_probe.cpp,959,ProbeUpdateLoopIsRunning,?IsRu
 name,OK-ORACLE,standalone/rt_selftest.cpp,106,RtSelfTest,??0Random@System@@QEAA@XZ,RtDiffEnabled
 name,OK-ORACLE,standalone/rt_selftest.cpp,107,RtSelfTest,?Rand@Random@System@@QEAAII@Z,RtDiffEnabled
 name,OK-ORACLE,standalone/runtime_detour.cpp,665,InstallRuntimeDetourExport,,fn name: detour
+name,OK-RESOLVE-ONLY,runtime/src/audio/audio.cpp,840,RtAudio_Scene_StopEffect,?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/audio/audio.cpp,970,RtAudio_Scene_StopEffect3D,?GetEmitterCount@Scene@Audio@@QEBAHI@Z,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/audio/audio.cpp,1045,RtAudio_Scene_StopAll,?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/io/serializer.cpp,331,RT_SER_SCALAR,?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/io/serializer.cpp,356,RtSerializer_GetVersion,?GetVersion@Serializer@IO@@QEBAHXZ,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/io/serializer.cpp,377,RtSerializer_GetEncoding,?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/io/serializer.cpp,438,RtSerializer_Ctor,??0Serializer@IO@@QEAA@AEAVStream@1@H@Z,"pointer stored, not called here"
+name,OK-RESOLVE-ONLY,runtime/src/io/serializer.cpp,508,RtSerializer_Dtor,??1Serializer@IO@@QEAA@XZ,"pointer stored, not called here"
 name,OK-UNPORTED,runtime/src/graphics/animation.cpp,189,RtFrameIndexSlot,?_frameIndex@ParticleInstance@Graphics@@1HA,not ported; raw == non-raw today
 name,OK-UNPORTED,runtime/src/ui/dialog.cpp,897,RtUiDialogRegister,??1Internal@Object@@UEAA@XZ,not ported; raw == non-raw today
 name,OK-UNPORTED,runtime/src/ui/widgets_input.cpp,134,StringToInteger,?ToInteger@String@System@@SAHPEBD@Z,not ported; raw == non-raw today

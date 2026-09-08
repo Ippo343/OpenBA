@@ -543,10 +543,10 @@ void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index)
     // ourselves so the diff call is refcount-neutral.
     char scratch[8] = {};
     using Fn = void* (*)(const void*, void*, int32_t);
-    if (rt_diff_on__)   // call inside the guard; see ImageElement_GetSprite above.
-                        // This one also took a STRING REFERENCE on every ordinary
-                        // run, released a few lines below only when rt_diff_on__.
-    {
+    // Call inside the guard; see ImageElement_GetSprite above. This one also took
+    // a STRING REFERENCE on every ordinary run, released a few lines below only
+    // when rt_diff_on__ -- so the leak was silent and permanent.
+    if (rt_diff_on__) {
         RT_ORIGINAL_ONCE(Fn, "?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z")(self, scratch, index);
     }
     void* theirsPtr = *reinterpret_cast<void**>(scratch);

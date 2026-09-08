@@ -191,6 +191,28 @@ RAW_SITE = re.compile(r"Resolve(?:ExportRaw|OrdinalRaw)\s*\(\s*")
 # per-site guard analysis; see the module docstring for why skipping them was a
 # defect rather than a simplification.
 RAW_MACRO = re.compile(r"RT_ORIGINAL_ONCE\s*\(|RtOriginal\s*<")
+# `RegisterRuntimeExport("<mangled>", (void*)&Target)` -> Target, so a port that
+# calls the very name it is registered under can be told apart from one that
+# calls a sibling. UI::GraphElement::RemoveGraphs is the former: its whole body
+# is a call to the DLL's RemoveGraphs, so switching it to ResolveExport would
+# recurse into itself. That is not a bypass to fix here -- it is a port that
+# never really replaced anything, and a cutover row of its own.
+REG_TARGET = re.compile(
+    r'RegisterRuntimeExport\s*\(\s*"((?:[^"\\]|\\.)+)"\s*,\s*'
+    r'\(\s*void\s*\*\s*\)\s*&\s*([A-Za-z_][\w:]*)', re.S)
+
+
+def registered_targets(census):
+    out = {}
+    for path in census.iter_sources():
+        try:
+            text = census.strip_comments(
+                open(path, encoding="utf-8", errors="replace").read())
+        except OSError:
+            continue
+        for m in REG_TARGET.finditer(text):
+            out[m.group(1)] = m.group(2).split("::")[-1]
+    return out
 # The resolver itself and the two headers that DECLARE these entry points.
 RESOLVER_FILES = {"runtime/funcs/rt_port.h", "standalone/resolve.h",
                   "standalone/resolve_standalone.cpp"}
@@ -308,6 +330,7 @@ def sweep_macro_door(census, ported_names):
     Duplicating it here would give the project two checkers that disagree.
     """
     rd = load_rawdoor()
+    targets = registered_targets(census)
     rows = []
     for path in rd.walk(REPO):
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
@@ -320,7 +343,7 @@ def sweep_macro_door(census, ported_names):
         except OSError:
             continue
         consts = {m.group(1): m.group(2) for m in NAME_CONST.finditer(text)}
-        for (line, guarded, _called, names, code) in fs.all_sites:
+        for (line, guarded, called, names, code) in fs.all_sites:
             if not RAW_MACRO.search(code):
                 continue          # the direct door, already swept above
             cand = [n for n in names if n.startswith("?")]
@@ -335,15 +358,35 @@ def sweep_macro_door(census, ported_names):
             fn, _body = enclosing_function(census.strip_comments(text),
                                            sum(len(l) + 1 for l in
                                                text.split("\n")[:line - 1]))
+            body = _body
             if key in rd.ALLOWLIST:
-                rows.append(("OK-ALLOWLIST", rel, line, fn, hit[0],
-                             rd.ALLOWLIST[key]))
+                v, why = "OK-ALLOWLIST", rd.ALLOWLIST[key]
             elif guarded:
-                rows.append(("OK-ORACLE", rel, line, fn, hit[0], "inside a diff guard"))
+                v, why = "OK-ORACLE", "inside a diff guard"
+            elif not called:
+                # LANE V'S DISTINCTION, and it is the whole rule here: storing
+                # the pointer outside a guard is harmless, CALLING outside one is
+                # not. `?IsEffectPlaying` looks identical to the two real defects
+                # at a glance and only the presence of an argument list after the
+                # resolve tells them apart. rawdoor_audit computes that bit; a
+                # resolve-only line is left to its own call site, which this loop
+                # sees separately.
+                v, why = "OK-RESOLVE-ONLY", "pointer stored, not called here"
+            elif targets.get(hit[0]) == fn:
+                # The port IS this function, so ResolveExport would call itself.
+                v, why = "OK-DELEGATING", ("this port's body IS a call to the DLL "
+                                           "under its own name -- a cutover row, "
+                                           "not a bypass")
+            elif "g_portOn" in body:
+                # The `if (!g_portOn)` arm: the port declined to register, so
+                # reaching the shipped body is the POINT. Null-checked since
+                # Wave 9 lane R -- see runtime/src/io/serializer.cpp.
+                v, why = "OK-PORT-OFF", "the !g_portOn fallback arm"
             elif any(w in fn.lower() for w in ORACLE_FN_WORDS):
-                rows.append(("OK-ORACLE", rel, line, fn, hit[0], "oracle fn name"))
+                v, why = "OK-ORACLE", "oracle fn name"
             else:
-                rows.append(("BYPASS", rel, line, fn, hit[0], "live path"))
+                v, why = "BYPASS", "live path"
+            rows.append((v, rel, line, fn, hit[0], why))
     return rows
 
 
