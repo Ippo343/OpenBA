@@ -707,6 +707,64 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // RCX,[RAX+RAX*2]; SHL RCX,3`), align 8 (`MOV EDX,0x8`), both read from the
 // body. Distinct from every spec above on BOTH the element size and the tail
 // init, so unlike kSpec_U64ZeroA4 there was no lookalike to be tempted by.
+// WAVE 9 LANE PKG2 rung 4c-ii - 0x1800298f0, the packfile ENTRY array.
+// Element is 16 bytes: a System::Filename at +0x00, then two int32 at +0x08
+// (offset) and +0x0c (size) -- the PackageFileEntry already in
+// runtime/types/io/FileSystem.h, whose stride and field offsets this body
+// independently confirms (SHL RCX,0x4, MOV EDX,0x8, and the two dword copies at
+// 1800299c3/1800299c9).
+//
+// *** THIS ALMOST REUSED kSpec_StringExt, AND THAT WOULD HAVE BEEN A DEFECT. ***
+// AssignStringExt is byte-for-byte what this element needs for its first eight
+// bytes -- null the slot, adopt, increment the refcount -- and then copies the
+// remaining eight verbatim, which is exactly the two dwords. Every visible
+// property matches. But the element assign here is a CALL to 0x1800067d0,
+// ??0Filename@System@@QEAA@AEBV01@@Z, and that function does one thing
+// AssignStringExt does not: it ends with TWO calls to
+// Filename::AdjustDelimiters (0x18000682a and 0x180006832). Reusing the
+// lookalike would have left every packfile entry name with its separators
+// unnormalised -- forward slashes never rewritten to backslashes -- which
+// breaks lookup for any entry that uses them and breaks NOTHING otherwise, so
+// it would have passed a green run.
+//
+// Third time this family has offered a wrong answer by resemblance, and the
+// first where the difference was not an immediate but a TRAILING CALL. The
+// assign below therefore delegates to the ported copy ctor rather than
+// reimplementing its String half.
+void AssignPkgEntry(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(void*, const void*);
+    static Fn ctor = nullptr;            // cache a hit, retry a miss
+    if (!ctor) ctor = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800067d0));
+    ctor(d, s);                                                    // 1800299bd
+    *reinterpret_cast<uint32_t*>(d + 0x8) =
+        *reinterpret_cast<const uint32_t*>(s + 0x8);               // 1800299c3
+    *reinterpret_cast<uint32_t*>(d + 0xc) =
+        *reinterpret_cast<const uint32_t*>(s + 0xc);               // 1800299c9
+}
+
+// The range destructor 0x1800298f0 calls on BOTH arms -- after a realloc
+// (180029a0e, over the whole old array) and on a SHRINK with no realloc
+// (180029a68, over the tail only). A different function from
+// DestroyStringExt's 0x180005930 and DestroyStringRange's 0x180011010, which is
+// the other half of why this element needs its own spec.
+void DestroyPkgEntryRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180026b50));
+    fn(ignoredThis, base, count);
+}
+
+// NO SEED ZEROS, and that is read out of the callee rather than copied from the
+// sibling spec: 0x1800067d0's FIRST action is `MOV qword ptr [RBX],0`
+// (1800067f0), and the read at 1800067f3 reads back the zero it just wrote. It
+// never reads uninitialised memory, so there is nothing for a seed to protect.
+const ArraySpec kSpec_PkgEntry = {                // 0x1800298f0  Array<Entry>
+    "Array<IO::PackageFile::Entry>", 0x10, 8, &AssignPkgEntry, nullptr,
+    &DestroyPkgEntryRange, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
 const ArraySpec kSpec_Window = {                  // 0x180024c10  Array<Window>
     "Array<CompressedStream::Window>", 0x18, 8, &Assign18, &InitWindow, nullptr,
     true, 0, 0, 0, 0, 0, 0 };
@@ -1225,6 +1283,7 @@ J3_ENTRY3(18007a0d0, kSpec_Fill8Z)      // Engine:   the dialog pending-list pus
 J3_ENTRY3(180024fe0, kSpec_Fill8)       // UI:       ComboElement::_userData  (+0x108)
 J3_ENTRY3(18004bfc0, kSpec_Fill16)      // UI:       ComboElement::_sprites   (+0xf8)
 J3_ENTRY3(180048fe0, kSpec_Fill8Z)      // UI:       RadioElement::_checkBoxes(+0xc0)
+J3_ENTRY3(1800298f0, kSpec_PkgEntry)    // IO:       PackageFile's entry array [NON-TRIVIAL]
 J3_ENTRY3(180034860, kSpec_StringRef)   // UI:       ComboElement::_strings   (+0xe8) [NON-TRIVIAL]
 J3_ENTRY3(1800417d0, kSpec_GraphSeries) // UI:       GraphElement::_graphs    (+0xf0) [NON-TRIVIAL]
 
@@ -1328,6 +1387,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
     RegisterRuntimeAddr(0x180024c10, (void*)&RtColl_ArraySetSize_180024c10);  // PKG2 4b-ii
+    RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
