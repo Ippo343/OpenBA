@@ -205,6 +205,9 @@ Pass conditions:
    lane's conversion and does not pass or fail it. Zero scopes the early-snapshot class as
    theoretical on that path; non-zero is a finding to hand on.
 
+_Superseded by §7: the runs were taken on 2026-09-08. Condition 2 as written turned out
+not to be measurable and was replaced with a set comparison — §7.3-7.4._
+
 There is no negative control to design here: the conversion is not a measurement, it is a
 behaviour change whose claim is "nothing changed". The falsifier is condition 2's denominator.
 
@@ -309,3 +312,168 @@ and not set.
 * **§5 above** — early-snapshot port bypass, a live defect class needing its own lane.
 * **The allocator is READY TO ARM AND IS NOT ARMED.** Nothing in this lane changes that; the
   decision is the wave lead's and has not been made.
+
+---
+
+## 7. RESULTS — 2026-09-08. The conversion is PROVED INERT, and my pass condition was not measurable
+
+Ten runs. **The live proof passes** — but not on the criterion I wrote, because that criterion
+turned out to be unmeasurable at the sample size it assumed. That is the main finding of this
+section and it is recorded before the numbers.
+
+### 7.1 Provenance
+
+| | |
+|---|---|
+| treatment | built from tip `57da6a1`, **stamp 2026-09-08 01:46:22** |
+| control | the same tip with lane H's two commits (`8055bf7`, `57da6a1`) `git revert`ed in a detached worktree, **stamp 01:51:01** |
+
+Self-evidencing, not just the stamp: the treatment emits two prefixes **no earlier binary in
+this project can produce**, and the control — correctly — emits neither (`grep -c RtResolve` = 0):
+
+```
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 3 early registry-aware resolve(s), 3 distinct site(s). ...
+```
+
+### 7.2 The denominator, re-measured against the new tip
+
+Lane N landed between the write-up and the run, so the before/after pair was re-taken rather
+than quoted from §4 (quoting a stale before-column against a fresh after-column would
+attribute lane N's landings to my conversions):
+
+```
+BEFORE (tip minus lane H's two commits):  FROZEN=417  RETRY=143  DIRECT=1015  doors=1575
+AFTER  (tip):                             FROZEN=391  RETRY=169  DIRECT=1016  doors=1576
+```
+
+**Identical to §4.** Lane N added no resolve doors, so §4 needs no correction. Re-measured
+rather than assumed.
+
+### 7.3 My pass condition could not be met by ANY pair of runs — including two of the same binary
+
+I specified: the `[RtDiff] ==== N sites, M calls, D divergences ====` line must match a control
+with the conversion reverted, **N compared and not just D**. The lead held me to it. It came
+back:
+
+```
+treatment h1  331 sites          control c1  329 sites
+```
+
+A mismatch. Before reading anything into it I ran the control **again, same binary, same
+cell** — the repeatability control I should have specified in the first place:
+
+```
+control c1  329 sites      control c1b  331 sites      control c1c  329 sites
+```
+
+**The same binary gives 329, 331, 329.** The site count is nondeterministic ±2, so no pair of
+single runs can satisfy the criterion — not even two runs of the identical binary. As written
+it was strict-sounding and unusable, which is the shape this wave has caught five times in
+other people's criteria and once, now, in mine.
+
+### 7.4 The replacement is stronger: compare the SET, not the count
+
+An `RT_DIFF_BEGIN` site registers when its function is first *entered*, so the count is a
+function of which code paths a run happened to take. The **set** is comparable, and a
+difference names itself. Diffing the two control runs immediately identified the ±2:
+
+```
+Math::Transform::Identity()
+Video::Context::SetInverseScale
+```
+
+Two runs per binary then give a stable core (intersection) and a full population (union):
+
+| | treatment | control | verdict |
+|---|---:|---:|---|
+| stable core (∩ of 2 runs) | 329 | 329 | **byte-identical set** |
+| union (∪ of 2 runs) | 331 | 331 | **byte-identical set** |
+| flaky sites | the same 2 | the same 2 | same on both binaries |
+
+`diff` output on both comparisons: empty. And the deeper cell agrees on a single pair — H2
+(`AUTOLOAD=Save9`) came back **354 sites on both binaries with an identical set**.
+
+That is a better instrument than the one I asked for: it discriminates, it survives the noise,
+and when it fails it hands you the site name instead of an integer.
+
+### 7.5 Every run
+
+| run | binary | cell | sites | diffed calls | divergences | `[RtResolve]` misses |
+|---|---|---|---:|---:|---:|---:|
+| h1 | treatment | autostart | 331 | 29,843,927 | **0** | **0** |
+| h2 | treatment | `AUTOLOAD=Save9` | 354 | 54,570,583 | **0** | **0** |
+| h3 | treatment | stress 1500f | 369 | 129,181,750 | **0** | **0** |
+| t1a | treatment | autostart | 329 | 29,005,207 | **0** | **0** |
+| t1b | treatment | autostart | 331 | 28,866,618 | **0** | **0** |
+| t2 | treatment | `AUTOLOAD=Save9` | 354 | 54,387,798 | **0** | **0** |
+| c1 | control | autostart | 329 | 28,766,912 | 0 | n/a |
+| c1b | control | autostart | 331 | 29,179,135 | 0 | n/a |
+| c1c | control | autostart | 329 | 28,864,194 | 0 | n/a |
+| c2 | control | `AUTOLOAD=Save9` | 354 | 54,435,389 | 0 | n/a |
+
+**325,855,883 diffed calls on the treatment binary, 0 divergences, 0 resolve misses.** H3 did
+not hit the known teardown crash (`standalone_crash.log` 0 bytes), so no re-run was needed.
+
+### 7.6 VERDICT
+
+| condition | result |
+|---|---|
+| `[RtResolve]` misses = 0 on every treatment run | **PASS** (6 of 6) |
+| `[RtDiff]` site **set** matches the control | **PASS** — core and union identical on H1, identical on H2 |
+| `[RtDiff]` site **count** matches the control | **not measurable** — ±2 on the same binary; superseded by the set comparison |
+| divergences = 0 | **PASS** (10 of 10 runs) |
+| boot reaches gameplay | **PASS** on all cells |
+
+**90 sites moved out of the frozen class and nothing observable changed.** `0 misses` is the
+direct evidence: every one of the 26 converted data slots and 64 `RT_EXPORT_ONCE` sites
+resolved its symbol on every run, so the retry path was never taken and the conversion is
+inert while the DLL answers — which is exactly the property that made this lane verifiable
+today instead of on cutover day.
+
+## 8. `[RtResolveEarly]` — the early-snapshot class is NOT LIVE on these paths
+
+Identical on all three cells:
+
+```
+[RtResolveEarly] 3 early registry-aware resolve(s), 3 distinct site(s).
+[RtResolveEarly]   benign  caller=…f1a8  addr 0x1800c6e60
+[RtResolveEarly]   benign  caller=…f5a5  addr 0x1800c6c00
+[RtResolveEarly]   benign  caller=…db21  "?_singleton@Factory@Object@@0PEAV12@EA"
+[RtResolveEarly] 0 of 3 are registered now -- those are the candidates.
+```
+
+**Three early resolves, zero of them registered now, so zero live bypasses.** All three are
+structural rather than accidental:
+
+1. `0x1800c6e60` = `MemoryAllocator::Allocate`, resolved by `InstallAllocatorLock()`. It runs
+   before `RuntimePortInit()` **by design** — lane E moved it there so the lock owns the
+   prologues before the allocator swap can contend for them (WAVE9_LANE_E3.md §1). `Allocate`
+   is not registered because `BANISHED_RT_ALLOC` is off, so there is no port to miss.
+2. `0x1800c6c00` = `MemoryAllocator::Free`, `InstallFreeLock()`. Same.
+3. `?_singleton@Factory@Object@@` — resolved from inside a `*PortInit()` body
+   (`runtime/src/object/external.cpp:673`, which assigns `g_pFactorySingleton` immediately
+   before its `RegisterRuntimeExport` calls). Port-init code resolving while port-init runs is
+   early *by construction* and unavoidable. It is exported DATA that nothing registers, and
+   the tree's other site for the same name (`runtime/src/object/type_system.cpp:66`) already
+   uses the retry form.
+
+So on the autostart, save-load and stress paths the class is **theoretical**, and can be
+scoped that way. Two limits on that conclusion, stated rather than buried: the instrument sees
+only the three **registry-aware** doors (`ResolveExportRaw` is deliberately excluded — it is
+*supposed* to reach the shipped body), and "not live on these three paths" is not "not live
+anywhere". Nothing was fixed; there was nothing to fix.
+
+## 9. Handed on
+
+* **`Math::Transform::Identity()` and `Video::Context::SetInverseScale` enter on some runs and
+  not others**, on both binaries, in the same cell. Not this lane's and not a defect on its
+  face — but it means **any** future comparison of `[RtDiff]` site counts across builds is
+  noisy by ±2, and anyone reading a 2-site delta as signal will be chasing nothing. Compare
+  sets.
+* **§5's early-snapshot class stays open as a class**, measured-not-live on three paths. It
+  still has no instrument outside this counter, and the counter only covers registry-aware
+  doors.
+* Unchanged and belonging to no lane: WAVE9_LANE_E2.md §5.2 and §5.3 (gate step 4).
+* **`BANISHED_RT_ALLOC` was unset in all ten runs. The allocator remains READY TO ARM AND NOT
+  ARMED.**
