@@ -445,3 +445,110 @@ exports and fourteen addresses, and this file's three exports and eight
 addresses. The registration is called from `RtIoModificationRegister()` rather
 than from `rt_io_port.cpp` deliberately: an A/B switch that disables half a
 cluster is not a control. It sits under `BANISHED_RT_IO`.
+
+---
+
+## 10. `?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z` — DECLINED
+
+`0x1800bb9d0`, ordinal 3614, **173 instructions**. The lane's second assignment.
+Lane FNHOOK declined it and re-checked its blocker; the brief said to treat that
+as real but **re-derive it independently**, because three "stale blockers" have
+dissolved this wave. Re-derived, and it holds — for **two** reasons, either of
+which is sufficient on its own.
+
+### Reason 1 — `IO::TextFileStream` really is absent, and it is a whole class
+
+Not a helper. `Runtime-x64.dll`'s export directory, read with `pefile`, carries
+**sixteen** `TextFileStream` symbols:
+
+```
+0x18002b8b0  440 ??0TextFileStream@IO@@QEAA@AEBV01@@Z
+0x1800ba340  441 ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z   <- SaveText calls this
+0x1800ba530  442 ??0TextFileStream@IO@@QEAA@XZ
+0x1800ba490  701 ??1TextFileStream@IO@@UEAA@XZ
+0x18002b990 1236 ??4TextFileStream@IO@@QEAAAEAV01@AEBV01@@Z
+0x180155980 1516 ??_7TextFileStream@IO@@6B@                            <- THE VTABLE
+0x1800ba940 1884 ?Create@   0x1800bac30 2536 ?GetCurrentPos@
+0x1800ba270 2821 ?GetObjectName@   0x1800ba260 2822 ?GetObjectType@
+0x1800ba250 2823 ?GetObjectVersion@   0x1800ba8e0 2907 ?GetSize@
+0x1800ba640 3308 ?Open@     0x1800ba900 3457 ?Read@
+0x1800babd0 3858 ?SetCurrentPos@   0x1800ba280 3930 ?SetObject@
+0x1800ba9f0 4556 ?Write@
+```
+
+Tree-wide, `TextFileStream` appears in **four comments and nothing else**
+(`runtime/src/object/external.cpp:46`, `runtime/types/object/External.h:85`,
+`:256`, `runtime/src/io/save_trace.h:10`). No type, no port, no registration —
+FNHOOK's finding, reproduced by an independent grep.
+
+**And the vtable is NOT minted.** `standalone/rt_data_mint_tables.inc` mentions
+`??_7TextFileStream@IO@@6B@` exactly twice (lines 1285 and 1371) and in both
+places as an *adjacency bound* for a different vtable:
+
+```
+{ "??_7Visitor@IO@@6B@", 0x1801558b0ull, 26, …, "adjacent-export:??_7TextFileStream@IO@@6B@" }
+```
+
+That is the mint generator using `0x180155980` to work out where `Visitor`'s
+vtable ENDS. `TextFileStream`'s own vtable has no row. This matters more than
+the missing bodies, and it is why "port the constructor and stub the rest" is
+not an option: **SaveText stack-constructs the stream and then hands it to the
+subject's own virtual `Serialize`** (`CALL qword ptr [RAX + 0x28]` at
+`0x1800bbb12`), and that Serialize drives the stream through its virtuals —
+`Write`, `GetCurrentPos`, `SetCurrentPos`. A port of SaveText alone builds an
+object with a null vtable pointer and vcalls it. That is attempt 14 exactly:
+`[RtResolve] MISS -> NULL`, then VCALL-of-0 on an all-zero object.
+
+`SaveText`'s closure also includes `IO::FileStream::Create` (`0x1800aa8f0`),
+which nothing in `runtime/`, `standalone/` or `code/` mentions either, and
+`?CloseFile@FileSystem@IO@@` (`0x1800accc0`) — the same row §6 declines.
+
+### Reason 2 — there is NO DRIVER, so a port would report `calls=0`
+
+Independent of the dependency. `SaveText` has exactly **one** caller in the
+whole tree:
+
+```
+code/Game/Dialog/spritecaptureui.cpp:219   fn_External_SaveText(pending, pathFilename, filenameRsc);
+```
+
+— `SpriteCaptureUI::OnCreate`, the sprite-capture **dev tool**, reached only
+when a user drags a capture box in that dialog and the pending capture's
+`saveFrameCount` reaches 1. No harness in this project opens that dialog:
+`BANISHED_AUTOMENU_*` drives the front-end menu buttons and
+`BANISHED_PAUSEMENU_*` the in-game menu, and neither has a token for it.
+
+The audit agrees. `SaveText`'s only door site tree-wide is
+
+```
+?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z   engine/funcs/engine_funcs.cpp:3889
+```
+
+which is a **resolve-and-store at startup**, not a call. It is one of the
+"merely resolved" symbols the brief distinguishes from the wall RefreshList
+was, and porting it moves the DLL-less boot forward by nothing.
+
+So a port would be verified by a green `calls=0` line — precisely
+`reference_uncalled_port_is_not_verified.md`.
+
+### What building it would cost, and what would make it honest
+
+Stated so the next lane can price it rather than rediscover it:
+
+* **~17 rows**: the 16 `TextFileStream` exports plus `IO::FileStream::Create`,
+  and a **mint row for `??_7TextFileStream@IO@@6B@`** — which needs the vtable's
+  slot count established first (the generator currently only knows the address
+  as `Visitor`'s upper bound).
+* **A synthetic subject, not a fake.** `reference_synthetic_subject_beats_a_fake.md`
+  applies and the answer is favourable here: `Write`/`Read`/`SetCurrentPos` over
+  a temp file are **replayable**, so the honest oracle is a probe that writes a
+  known object through ours and through the shipped stream into two files and
+  compares the bytes — a real differential, not a shadow. That is the same
+  "a Serialize on the WRITE path IS replayable" argument
+  `reference_write_path_serialize_is_replayable.md` records, and it means this
+  class is *well* placed for verification once someone owns it.
+* It is `IO::Stream`'s subtree, which is lane IOA/FS territory, not this lane's.
+
+**RefreshList was the deliverable that mattered and it is done. SaveText is
+declined on a blocker measured today, not inherited: the class is absent, its
+vtable is unminted, and nothing in this project can call the function.**
