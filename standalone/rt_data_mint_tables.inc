@@ -3,7 +3,7 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 54 vtables, 46 BaseTypeInfo, 38 storage symbols.
+// Counts: 54 vtables, 104 BaseTypeInfo, 38 storage symbols.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -1374,7 +1374,7 @@ static RtMintVtable kMintVtables[] = {
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
 // the DLL; `next` is deliberately NOT copied (it reads 0x0 on disk and is
 // built by running constructors) and is rebuilt from OUR init order.
-static RtObject::BaseTypeInfo kTypeInfoStorage[46];
+static RtObject::BaseTypeInfo kTypeInfoStorage[104];
 RT_MINT_TI_TRAP(0,0)
 RT_MINT_TI_TRAP(0,1)
 RT_MINT_TI_TRAP(1,0)
@@ -1467,6 +1467,122 @@ RT_MINT_TI_TRAP(44,0)
 RT_MINT_TI_TRAP(44,1)
 RT_MINT_TI_TRAP(45,0)
 RT_MINT_TI_TRAP(45,1)
+RT_MINT_TI_TRAP(46,0)
+RT_MINT_TI_TRAP(46,1)
+RT_MINT_TI_TRAP(47,0)
+RT_MINT_TI_TRAP(47,1)
+RT_MINT_TI_TRAP(48,0)
+RT_MINT_TI_TRAP(48,1)
+RT_MINT_TI_TRAP(49,0)
+RT_MINT_TI_TRAP(49,1)
+RT_MINT_TI_TRAP(50,0)
+RT_MINT_TI_TRAP(50,1)
+RT_MINT_TI_TRAP(51,0)
+RT_MINT_TI_TRAP(51,1)
+RT_MINT_TI_TRAP(52,0)
+RT_MINT_TI_TRAP(52,1)
+RT_MINT_TI_TRAP(53,0)
+RT_MINT_TI_TRAP(53,1)
+RT_MINT_TI_TRAP(54,0)
+RT_MINT_TI_TRAP(54,1)
+RT_MINT_TI_TRAP(55,0)
+RT_MINT_TI_TRAP(55,1)
+RT_MINT_TI_TRAP(56,0)
+RT_MINT_TI_TRAP(56,1)
+RT_MINT_TI_TRAP(57,0)
+RT_MINT_TI_TRAP(57,1)
+RT_MINT_TI_TRAP(58,0)
+RT_MINT_TI_TRAP(58,1)
+RT_MINT_TI_TRAP(59,0)
+RT_MINT_TI_TRAP(59,1)
+RT_MINT_TI_TRAP(60,0)
+RT_MINT_TI_TRAP(60,1)
+RT_MINT_TI_TRAP(61,0)
+RT_MINT_TI_TRAP(61,1)
+RT_MINT_TI_TRAP(62,0)
+RT_MINT_TI_TRAP(62,1)
+RT_MINT_TI_TRAP(63,0)
+RT_MINT_TI_TRAP(63,1)
+RT_MINT_TI_TRAP(64,0)
+RT_MINT_TI_TRAP(64,1)
+RT_MINT_TI_TRAP(65,0)
+RT_MINT_TI_TRAP(65,1)
+RT_MINT_TI_TRAP(66,0)
+RT_MINT_TI_TRAP(66,1)
+RT_MINT_TI_TRAP(67,0)
+RT_MINT_TI_TRAP(67,1)
+RT_MINT_TI_TRAP(68,0)
+RT_MINT_TI_TRAP(68,1)
+RT_MINT_TI_TRAP(69,0)
+RT_MINT_TI_TRAP(69,1)
+RT_MINT_TI_TRAP(70,0)
+RT_MINT_TI_TRAP(70,1)
+RT_MINT_TI_TRAP(71,0)
+RT_MINT_TI_TRAP(71,1)
+RT_MINT_TI_TRAP(72,0)
+RT_MINT_TI_TRAP(72,1)
+RT_MINT_TI_TRAP(73,0)
+RT_MINT_TI_TRAP(73,1)
+RT_MINT_TI_TRAP(74,0)
+RT_MINT_TI_TRAP(74,1)
+RT_MINT_TI_TRAP(75,0)
+RT_MINT_TI_TRAP(75,1)
+RT_MINT_TI_TRAP(76,0)
+RT_MINT_TI_TRAP(76,1)
+RT_MINT_TI_TRAP(77,0)
+RT_MINT_TI_TRAP(77,1)
+RT_MINT_TI_TRAP(78,0)
+RT_MINT_TI_TRAP(78,1)
+RT_MINT_TI_TRAP(79,0)
+RT_MINT_TI_TRAP(79,1)
+RT_MINT_TI_TRAP(80,0)
+RT_MINT_TI_TRAP(80,1)
+RT_MINT_TI_TRAP(81,0)
+RT_MINT_TI_TRAP(81,1)
+RT_MINT_TI_TRAP(82,0)
+RT_MINT_TI_TRAP(82,1)
+RT_MINT_TI_TRAP(83,0)
+RT_MINT_TI_TRAP(83,1)
+RT_MINT_TI_TRAP(84,0)
+RT_MINT_TI_TRAP(84,1)
+RT_MINT_TI_TRAP(85,0)
+RT_MINT_TI_TRAP(85,1)
+RT_MINT_TI_TRAP(86,0)
+RT_MINT_TI_TRAP(86,1)
+RT_MINT_TI_TRAP(87,0)
+RT_MINT_TI_TRAP(87,1)
+RT_MINT_TI_TRAP(88,0)
+RT_MINT_TI_TRAP(88,1)
+RT_MINT_TI_TRAP(89,0)
+RT_MINT_TI_TRAP(89,1)
+RT_MINT_TI_TRAP(90,0)
+RT_MINT_TI_TRAP(90,1)
+RT_MINT_TI_TRAP(91,0)
+RT_MINT_TI_TRAP(91,1)
+RT_MINT_TI_TRAP(92,0)
+RT_MINT_TI_TRAP(92,1)
+RT_MINT_TI_TRAP(93,0)
+RT_MINT_TI_TRAP(93,1)
+RT_MINT_TI_TRAP(94,0)
+RT_MINT_TI_TRAP(94,1)
+RT_MINT_TI_TRAP(95,0)
+RT_MINT_TI_TRAP(95,1)
+RT_MINT_TI_TRAP(96,0)
+RT_MINT_TI_TRAP(96,1)
+RT_MINT_TI_TRAP(97,0)
+RT_MINT_TI_TRAP(97,1)
+RT_MINT_TI_TRAP(98,0)
+RT_MINT_TI_TRAP(98,1)
+RT_MINT_TI_TRAP(99,0)
+RT_MINT_TI_TRAP(99,1)
+RT_MINT_TI_TRAP(100,0)
+RT_MINT_TI_TRAP(100,1)
+RT_MINT_TI_TRAP(101,0)
+RT_MINT_TI_TRAP(101,1)
+RT_MINT_TI_TRAP(102,0)
+RT_MINT_TI_TRAP(102,1)
+RT_MINT_TI_TRAP(103,0)
+RT_MINT_TI_TRAP(103,1)
 static RtMintTypeInfo kMintTypeInfos[] = {
     { "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", 0x1801f9898ull, &kTypeInfoStorage[0],
       "Achievement", "Object::External", nullptr,
@@ -1476,182 +1592,414 @@ static RtMintTypeInfo kMintTypeInfos[] = {
       "AchievementInstance", "Object::Internal", nullptr,
       "?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x1800018b0ull, &RtMintTiTrapStub_1_0,
       "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_1_1 },
-    { "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9978ull, &kTypeInfoStorage[2],
+    { "?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9c88ull, &kTypeInfoStorage[2],
+      "AnimatedImageDescription", "ImageDescription", nullptr,
+      "?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ", 0x1800367c0ull, &RtMintTiTrapStub_2_0,
+      "?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036840ull, &RtMintTiTrapStub_2_1 },
+    { "?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9cc0ull, &kTypeInfoStorage[3],
+      "AnimatedImageElement", "ImageElement", nullptr,
+      "?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ", 0x180036ba0ull, &RtMintTiTrapStub_3_0,
+      "?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036c20ull, &RtMintTiTrapStub_3_1 },
+    { "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9978ull, &kTypeInfoStorage[4],
       "AnimationEvent", "Object::External", nullptr,
-      "?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ", 0x180011700ull, &RtMintTiTrapStub_2_0,
-      "?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011710ull, &RtMintTiTrapStub_2_1 },
-    { "?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A", 0x1801f9c50ull, &kTypeInfoStorage[3],
+      "?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ", 0x180011700ull, &RtMintTiTrapStub_4_0,
+      "?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011710ull, &RtMintTiTrapStub_4_1 },
+    { "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa6d0ull, &kTypeInfoStorage[5],
+      "AnimationGroup", "Object::External", nullptr,
+      "?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ", 0x180016400ull, &RtMintTiTrapStub_5_0,
+      "?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800164d0ull, &RtMintTiTrapStub_5_1 },
+    { "?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A", 0x1801f9c50ull, &kTypeInfoStorage[6],
       "Base", nullptr, nullptr,
-      nullptr, 0x0ull, &RtMintTiTrapStub_3_0,
-      nullptr, 0x0ull, &RtMintTiTrapStub_3_1 },
-    { "?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa8c8ull, &kTypeInfoStorage[4],
+      nullptr, 0x0ull, &RtMintTiTrapStub_6_0,
+      nullptr, 0x0ull, &RtMintTiTrapStub_6_1 },
+    { "?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa890ull, &kTypeInfoStorage[7],
+      "BorderDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ", 0x180040ad0ull, &RtMintTiTrapStub_7_0,
+      "?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180040b50ull, &RtMintTiTrapStub_7_1 },
+    { "?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa8c8ull, &kTypeInfoStorage[8],
       "BorderElement", "Element", nullptr,
-      "?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ", 0x1800411a0ull, &RtMintTiTrapStub_4_0,
-      "?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180041220ull, &RtMintTiTrapStub_4_1 },
-    { "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa938ull, &kTypeInfoStorage[5],
+      "?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ", 0x1800411a0ull, &RtMintTiTrapStub_8_0,
+      "?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180041220ull, &RtMintTiTrapStub_8_1 },
+    { "?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa900ull, &kTypeInfoStorage[9],
+      "ButtonDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ", 0x180047f20ull, &RtMintTiTrapStub_9_0,
+      "?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180047fa0ull, &RtMintTiTrapStub_9_1 },
+    { "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa938ull, &kTypeInfoStorage[10],
       "ButtonElement", "Element", nullptr,
-      "?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ", 0x180048350ull, &RtMintTiTrapStub_5_0,
-      "?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800483f0ull, &RtMintTiTrapStub_5_1 },
-    { "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa9a8ull, &kTypeInfoStorage[6],
+      "?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ", 0x180048350ull, &RtMintTiTrapStub_10_0,
+      "?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800483f0ull, &RtMintTiTrapStub_10_1 },
+    { "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9cf8ull, &kTypeInfoStorage[11],
+      "CharacterSet", "Object::External", nullptr,
+      "?CreateNewObject@CharacterSet@UI@@SAPEAVBase@Object@@XZ", 0x180037540ull, &RtMintTiTrapStub_11_0,
+      "?CreateInPlaceObject@CharacterSet@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800375f0ull, &RtMintTiTrapStub_11_1 },
+    { "?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa970ull, &kTypeInfoStorage[12],
+      "CheckDescription", "ButtonDescription", nullptr,
+      "?CreateNewObject@CheckDescription@UI@@SAPEAVBase@Object@@XZ", 0x180048770ull, &RtMintTiTrapStub_12_0,
+      "?CreateInPlaceObject@CheckDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180048800ull, &RtMintTiTrapStub_12_1 },
+    { "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa9a8ull, &kTypeInfoStorage[13],
       "CheckElement", "ButtonElement", nullptr,
-      "?CreateNewObject@CheckElement@UI@@SAPEAVBase@Object@@XZ", 0x180048b70ull, &RtMintTiTrapStub_6_0,
-      "?CreateInPlaceObject@CheckElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180048c20ull, &RtMintTiTrapStub_6_1 },
-    { "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9d68ull, &kTypeInfoStorage[7],
+      "?CreateNewObject@CheckElement@UI@@SAPEAVBase@Object@@XZ", 0x180048b70ull, &RtMintTiTrapStub_13_0,
+      "?CreateInPlaceObject@CheckElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180048c20ull, &RtMintTiTrapStub_13_1 },
+    { "?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9d30ull, &kTypeInfoStorage[14],
+      "ClipRegionDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ", 0x180037a80ull, &RtMintTiTrapStub_14_0,
+      "?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180037b80ull, &RtMintTiTrapStub_14_1 },
+    { "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9d68ull, &kTypeInfoStorage[15],
       "ClipRegionElement", "Element", nullptr,
-      "?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ", 0x180038060ull, &RtMintTiTrapStub_7_0,
-      "?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180038110ull, &RtMintTiTrapStub_7_1 },
-    { "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faa50ull, &kTypeInfoStorage[8],
+      "?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ", 0x180038060ull, &RtMintTiTrapStub_15_0,
+      "?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180038110ull, &RtMintTiTrapStub_15_1 },
+    { "?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa7e8ull, &kTypeInfoStorage[16],
+      "CollisionMesh", "Object::External", nullptr,
+      "?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ", 0x180065060ull, &RtMintTiTrapStub_16_0,
+      "?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180065130ull, &RtMintTiTrapStub_16_1 },
+    { "?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faa18ull, &kTypeInfoStorage[17],
+      "ComboDescription", "ButtonDescription", nullptr,
+      "?CreateNewObject@ComboDescription@UI@@SAPEAVBase@Object@@XZ", 0x180074bd0ull, &RtMintTiTrapStub_17_0,
+      "?CreateInPlaceObject@ComboDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180074c70ull, &RtMintTiTrapStub_17_1 },
+    { "?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa9e0ull, &kTypeInfoStorage[18],
+      "ComboDialog", "DialogInstance", nullptr,
+      "?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ", 0x180074850ull, &RtMintTiTrapStub_18_0,
+      "?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800748f0ull, &RtMintTiTrapStub_18_1 },
+    { "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faa50ull, &kTypeInfoStorage[19],
       "ComboElement", "ButtonElement", nullptr,
-      "?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ", 0x180075020ull, &RtMintTiTrapStub_8_0,
-      "?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800750a0ull, &RtMintTiTrapStub_8_1 },
-    { "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", 0x1801f9b00ull, &kTypeInfoStorage[9],
+      "?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ", 0x180075020ull, &RtMintTiTrapStub_19_0,
+      "?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800750a0ull, &RtMintTiTrapStub_19_1 },
+    { "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", 0x1801f9b00ull, &kTypeInfoStorage[20],
       "CompiledExternal", "External", nullptr,
-      "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, &RtMintTiTrapStub_9_0,
-      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, &RtMintTiTrapStub_9_1 },
-    { "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9dd8ull, &kTypeInfoStorage[10],
+      "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, &RtMintTiTrapStub_20_0,
+      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, &RtMintTiTrapStub_20_1 },
+    { "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9da0ull, &kTypeInfoStorage[21],
+      "ContainerDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ", 0x1800399c0ull, &RtMintTiTrapStub_21_0,
+      "?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180039a40ull, &RtMintTiTrapStub_21_1 },
+    { "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9dd8ull, &kTypeInfoStorage[22],
       "ContainerElement", "Element", nullptr,
-      "?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ", 0x180039db0ull, &RtMintTiTrapStub_10_0,
-      "?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180039e50ull, &RtMintTiTrapStub_10_1 },
-    { "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801faa88ull, &kTypeInfoStorage[11],
+      "?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ", 0x180039db0ull, &RtMintTiTrapStub_22_0,
+      "?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180039e50ull, &RtMintTiTrapStub_22_1 },
+    { "?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9e10ull, &kTypeInfoStorage[23],
+      "Cursor", "Object::External", nullptr,
+      "?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ", 0x18003b070ull, &RtMintTiTrapStub_23_0,
+      "?CreateInPlaceObject@Cursor@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003b120ull, &RtMintTiTrapStub_23_1 },
+    { "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801faa88ull, &kTypeInfoStorage[24],
       "Dialog", "Object::External", nullptr,
-      "?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ", 0x180038530ull, &RtMintTiTrapStub_11_0,
-      "?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180038610ull, &RtMintTiTrapStub_11_1 },
-    { "?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9e48ull, &kTypeInfoStorage[12],
+      "?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ", 0x180038530ull, &RtMintTiTrapStub_24_0,
+      "?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180038610ull, &RtMintTiTrapStub_24_1 },
+    { "?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9e48ull, &kTypeInfoStorage[25],
       "DialogController", "Object::Internal", nullptr,
-      "?CreateNewObject@DialogController@UI@@SAPEAVBase@Object@@XZ", 0x18003b6e0ull, &RtMintTiTrapStub_12_0,
-      "?CreateInPlaceObject@DialogController@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003b6f0ull, &RtMintTiTrapStub_12_1 },
-    { "?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A", 0x1801faac0ull, &kTypeInfoStorage[13],
+      "?CreateNewObject@DialogController@UI@@SAPEAVBase@Object@@XZ", 0x18003b6e0ull, &RtMintTiTrapStub_25_0,
+      "?CreateInPlaceObject@DialogController@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003b6f0ull, &RtMintTiTrapStub_25_1 },
+    { "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9e80ull, &kTypeInfoStorage[26],
+      "DialogControllerConfig", "Object::External", nullptr,
+      "?CreateNewObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@XZ", 0x18003b480ull, &RtMintTiTrapStub_26_0,
+      "?CreateInPlaceObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003b490ull, &RtMintTiTrapStub_26_1 },
+    { "?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A", 0x1801faac0ull, &kTypeInfoStorage[27],
       "DialogInstance", "Object::Internal", nullptr,
-      "?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ", 0x1800454f0ull, &RtMintTiTrapStub_13_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_13_1 },
-    { "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9ef0ull, &kTypeInfoStorage[14],
+      "?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ", 0x1800454f0ull, &RtMintTiTrapStub_27_0,
+      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_27_1 },
+    { "?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9eb8ull, &kTypeInfoStorage[28],
+      "DocumentTextDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ", 0x18003b9f0ull, &RtMintTiTrapStub_28_0,
+      "?CreateInPlaceObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003ba70ull, &RtMintTiTrapStub_28_1 },
+    { "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9ef0ull, &kTypeInfoStorage[29],
       "DocumentTextElement", "Element", nullptr,
-      "?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ", 0x18003bf40ull, &RtMintTiTrapStub_14_0,
-      "?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003bfc0ull, &RtMintTiTrapStub_14_1 },
-    { "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f99b0ull, &kTypeInfoStorage[15],
+      "?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ", 0x18003bf40ull, &RtMintTiTrapStub_29_0,
+      "?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003bfc0ull, &RtMintTiTrapStub_29_1 },
+    { "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f99b0ull, &kTypeInfoStorage[30],
       "EdgeMesh", "Object::External", nullptr,
-      "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, &RtMintTiTrapStub_15_0,
-      "?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012e00ull, &RtMintTiTrapStub_15_1 },
-    { "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9f60ull, &kTypeInfoStorage[16],
+      "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, &RtMintTiTrapStub_30_0,
+      "?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012e00ull, &RtMintTiTrapStub_30_1 },
+    { "?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9f28ull, &kTypeInfoStorage[31],
+      "EditDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ", 0x18003f7c0ull, &RtMintTiTrapStub_31_0,
+      "?CreateInPlaceObject@EditDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003f840ull, &RtMintTiTrapStub_31_1 },
+    { "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9f60ull, &kTypeInfoStorage[32],
       "EditElement", "Element", nullptr,
-      "?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ", 0x18003fbd0ull, &RtMintTiTrapStub_16_0,
-      "?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003fc50ull, &RtMintTiTrapStub_16_1 },
-    { "?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A", 0x1801fab30ull, &kTypeInfoStorage[17],
+      "?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ", 0x18003fbd0ull, &RtMintTiTrapStub_32_0,
+      "?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003fc50ull, &RtMintTiTrapStub_32_1 },
+    { "?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A", 0x1801fab30ull, &kTypeInfoStorage[33],
       "Element", "Object::Internal", nullptr,
-      "?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ", 0x180035450ull, &RtMintTiTrapStub_17_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_17_1 },
-    { "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faaf8ull, &kTypeInfoStorage[18],
+      "?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ", 0x180035450ull, &RtMintTiTrapStub_33_0,
+      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_33_1 },
+    { "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faaf8ull, &kTypeInfoStorage[34],
       "ElementDescription", "Object::External", nullptr,
-      "?CreateNewObject@ElementDescription@UI@@SAPEAVBase@Object@@XZ", 0x180035100ull, &RtMintTiTrapStub_18_0,
-      "?CreateInPlaceObject@ElementDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180035110ull, &RtMintTiTrapStub_18_1 },
-    { "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", 0x1801f9b38ull, &kTypeInfoStorage[19],
+      "?CreateNewObject@ElementDescription@UI@@SAPEAVBase@Object@@XZ", 0x180035100ull, &RtMintTiTrapStub_34_0,
+      "?CreateInPlaceObject@ElementDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180035110ull, &RtMintTiTrapStub_34_1 },
+    { "?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9ba8ull, &kTypeInfoStorage[35],
+      "ExtensionCompiler", "Base", nullptr,
+      "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, &RtMintTiTrapStub_35_0,
+      "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, &RtMintTiTrapStub_35_1 },
+    { "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", 0x1801f9b38ull, &kTypeInfoStorage[36],
       "External", "Base", nullptr,
-      "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, &RtMintTiTrapStub_19_0,
-      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, &RtMintTiTrapStub_19_1 },
-    { "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", 0x1801f9be0ull, &kTypeInfoStorage[20],
+      "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, &RtMintTiTrapStub_36_0,
+      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, &RtMintTiTrapStub_36_1 },
+    { "?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9b70ull, &kTypeInfoStorage[37],
+      "ExternalCompiler", "Base", nullptr,
+      "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, &RtMintTiTrapStub_37_0,
+      "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, &RtMintTiTrapStub_37_1 },
+    { "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", 0x1801f9be0ull, &kTypeInfoStorage[38],
       "ExternalList", "Object::External", nullptr,
-      "?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ", 0x180007460ull, &RtMintTiTrapStub_20_0,
-      "?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z", 0x180007510ull, &RtMintTiTrapStub_20_1 },
-    { "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a20ull, &kTypeInfoStorage[21],
+      "?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ", 0x180007460ull, &RtMintTiTrapStub_38_0,
+      "?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z", 0x180007510ull, &RtMintTiTrapStub_38_1 },
+    { "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A", 0x1801fab68ull, &kTypeInfoStorage[39],
+      "Font", "Object::External", nullptr,
+      "?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ", 0x180031ab0ull, &RtMintTiTrapStub_39_0,
+      "?CreateInPlaceObject@Font@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180031ba0ull, &RtMintTiTrapStub_39_1 },
+    { "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f99e8ull, &kTypeInfoStorage[40],
+      "FrameCopyImageBuffer", "GeneratedImageBuffer", nullptr,
+      "?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001f0a0ull, &RtMintTiTrapStub_40_0,
+      "?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001f120ull, &RtMintTiTrapStub_40_1 },
+    { "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a20ull, &kTypeInfoStorage[41],
       "GeneratedImageBuffer", "Video::ImageBuffer", nullptr,
-      "?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001edf0ull, &RtMintTiTrapStub_21_0,
-      "?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ee00ull, &RtMintTiTrapStub_21_1 },
-    { "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9908ull, &kTypeInfoStorage[22],
+      "?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001edf0ull, &RtMintTiTrapStub_41_0,
+      "?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ee00ull, &RtMintTiTrapStub_41_1 },
+    { "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9908ull, &kTypeInfoStorage[42],
       "Goal", "Object::External", nullptr,
-      "?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ", 0x180001b70ull, &RtMintTiTrapStub_22_0,
-      "?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z", 0x180001b80ull, &RtMintTiTrapStub_22_1 },
-    { "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9940ull, &kTypeInfoStorage[23],
+      "?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ", 0x180001b70ull, &RtMintTiTrapStub_42_0,
+      "?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z", 0x180001b80ull, &RtMintTiTrapStub_42_1 },
+    { "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9940ull, &kTypeInfoStorage[43],
       "GoalInstance", "Object::Internal", nullptr,
-      "?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x180001f50ull, &RtMintTiTrapStub_23_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_23_1 },
-    { "?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9fd0ull, &kTypeInfoStorage[24],
+      "?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x180001f50ull, &RtMintTiTrapStub_43_0,
+      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_43_1 },
+    { "?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9f98ull, &kTypeInfoStorage[44],
+      "GraphDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ", 0x180040180ull, &RtMintTiTrapStub_44_0,
+      "?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180040200ull, &RtMintTiTrapStub_44_1 },
+    { "?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9fd0ull, &kTypeInfoStorage[45],
       "GraphElement", "Element", nullptr,
-      "?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ", 0x180040550ull, &RtMintTiTrapStub_24_0,
-      "?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800405d0ull, &RtMintTiTrapStub_24_1 },
-    { "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa708ull, &kTypeInfoStorage[25],
+      "?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ", 0x180040550ull, &RtMintTiTrapStub_45_0,
+      "?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800405d0ull, &RtMintTiTrapStub_45_1 },
+    { "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa708ull, &kTypeInfoStorage[46],
       "GraphicsMesh", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012480ull, &RtMintTiTrapStub_25_0,
-      "?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012500ull, &RtMintTiTrapStub_25_1 },
-    { "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa548ull, &kTypeInfoStorage[26],
+      "?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012480ull, &RtMintTiTrapStub_46_0,
+      "?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012500ull, &RtMintTiTrapStub_46_1 },
+    { "?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faba0ull, &kTypeInfoStorage[47],
+      "GroupDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@GroupDescription@UI@@SAPEAVBase@Object@@XZ", 0x180046750ull, &RtMintTiTrapStub_47_0,
+      "?CreateInPlaceObject@GroupDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180046840ull, &RtMintTiTrapStub_47_1 },
+    { "?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fabd8ull, &kTypeInfoStorage[48],
+      "GroupElement", "Element", nullptr,
+      "?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ", 0x180046ca0ull, &RtMintTiTrapStub_48_0,
+      "?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180046d30ull, &RtMintTiTrapStub_48_1 },
+    { "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa548ull, &kTypeInfoStorage[49],
       "ImageBuffer", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ", 0x18001e9f0ull, &RtMintTiTrapStub_26_0,
-      "?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18001ea70ull, &RtMintTiTrapStub_26_1 },
-    { "?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fac48ull, &kTypeInfoStorage[27],
+      "?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ", 0x18001e9f0ull, &RtMintTiTrapStub_49_0,
+      "?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18001ea70ull, &RtMintTiTrapStub_49_1 },
+    { "?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fac10ull, &kTypeInfoStorage[50],
+      "ImageDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ", 0x180035dc0ull, &RtMintTiTrapStub_50_0,
+      "?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180035eb0ull, &RtMintTiTrapStub_50_1 },
+    { "?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fac48ull, &kTypeInfoStorage[51],
       "ImageElement", "Element", nullptr,
-      "?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ", 0x1800363a0ull, &RtMintTiTrapStub_27_0,
-      "?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036450ull, &RtMintTiTrapStub_27_1 },
-    { "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A", 0x1801f9c18ull, &kTypeInfoStorage[28],
+      "?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ", 0x1800363a0ull, &RtMintTiTrapStub_51_0,
+      "?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036450ull, &RtMintTiTrapStub_51_1 },
+    { "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A", 0x1801f9c18ull, &kTypeInfoStorage[52],
       "Internal", "Base", nullptr,
-      "?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ", 0x18002fc80ull, &RtMintTiTrapStub_28_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_28_1 },
-    { "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa040ull, &kTypeInfoStorage[29],
+      "?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ", 0x18002fc80ull, &RtMintTiTrapStub_52_0,
+      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_52_1 },
+    { "?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa008ull, &kTypeInfoStorage[53],
+      "LabelDescription", "TextDescription", nullptr,
+      "?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ", 0x1800424a0ull, &RtMintTiTrapStub_53_0,
+      "?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042520ull, &RtMintTiTrapStub_53_1 },
+    { "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa040ull, &kTypeInfoStorage[54],
       "LabelElement", "TextElement", nullptr,
-      "?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ", 0x1800428e0ull, &RtMintTiTrapStub_29_0,
-      "?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042960ull, &RtMintTiTrapStub_29_1 },
-    { "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa740ull, &kTypeInfoStorage[30],
+      "?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ", 0x1800428e0ull, &RtMintTiTrapStub_54_0,
+      "?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042960ull, &RtMintTiTrapStub_54_1 },
+    { "?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa078ull, &kTypeInfoStorage[55],
+      "LayoutDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ", 0x180042e30ull, &RtMintTiTrapStub_55_0,
+      "?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042f20ull, &RtMintTiTrapStub_55_1 },
+    { "?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa0b0ull, &kTypeInfoStorage[56],
+      "LayoutElement", "Element", nullptr,
+      "?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ", 0x180043380ull, &RtMintTiTrapStub_56_0,
+      "?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180043420ull, &RtMintTiTrapStub_56_1 },
+    { "?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa0e8ull, &kTypeInfoStorage[57],
+      "ListDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ", 0x180044c90ull, &RtMintTiTrapStub_57_0,
+      "?CreateInPlaceObject@ListDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180044d10ull, &RtMintTiTrapStub_57_1 },
+    { "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa120ull, &kTypeInfoStorage[58],
+      "ListElement", "Element", nullptr,
+      "?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ", 0x180045080ull, &RtMintTiTrapStub_58_0,
+      "?CreateInPlaceObject@ListElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180045100ull, &RtMintTiTrapStub_58_1 },
+    { "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa740ull, &kTypeInfoStorage[59],
       "Material", "Object::External", nullptr,
-      "?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ", 0x1800119c0ull, &RtMintTiTrapStub_30_0,
-      "?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011a70ull, &RtMintTiTrapStub_30_1 },
-    { "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa778ull, &kTypeInfoStorage[31],
+      "?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ", 0x1800119c0ull, &RtMintTiTrapStub_59_0,
+      "?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011a70ull, &RtMintTiTrapStub_59_1 },
+    { "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa778ull, &kTypeInfoStorage[60],
       "MaterialInstance", "Object::External", nullptr,
-      "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, &RtMintTiTrapStub_31_0,
-      "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, &RtMintTiTrapStub_31_1 },
-    { "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa190ull, &kTypeInfoStorage[32],
+      "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, &RtMintTiTrapStub_60_0,
+      "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, &RtMintTiTrapStub_60_1 },
+    { "?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fac80ull, &kTypeInfoStorage[61],
+      "NumberDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004a330ull, &RtMintTiTrapStub_61_0,
+      "?CreateInPlaceObject@NumberDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004a420ull, &RtMintTiTrapStub_61_1 },
+    { "?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa158ull, &kTypeInfoStorage[62],
+      "NumberEditDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@NumberEditDescription@UI@@SAPEAVBase@Object@@XZ", 0x180045f80ull, &RtMintTiTrapStub_62_0,
+      "?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180046000ull, &RtMintTiTrapStub_62_1 },
+    { "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa190ull, &kTypeInfoStorage[63],
       "NumberEditElement", "EditElement", nullptr,
-      "?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ", 0x180046340ull, &RtMintTiTrapStub_32_0,
-      "?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800463e0ull, &RtMintTiTrapStub_32_1 },
-    { "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801facb8ull, &kTypeInfoStorage[33],
+      "?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ", 0x180046340ull, &RtMintTiTrapStub_63_0,
+      "?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800463e0ull, &RtMintTiTrapStub_63_1 },
+    { "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801facb8ull, &kTypeInfoStorage[64],
       "NumberElement", "Element", nullptr,
-      "?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ", 0x18004a910ull, &RtMintTiTrapStub_33_0,
-      "?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004a990ull, &RtMintTiTrapStub_33_1 },
-    { "?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A", 0x1801f9ac8ull, &kTypeInfoStorage[34],
+      "?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ", 0x18004a910ull, &RtMintTiTrapStub_64_0,
+      "?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004a990ull, &RtMintTiTrapStub_64_1 },
+    { "?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A", 0x1801f9ac8ull, &kTypeInfoStorage[65],
       "PackageFile", "Object::External", nullptr,
-      "?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ", 0x180025240ull, &RtMintTiTrapStub_34_0,
-      "?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z", 0x1800252c0ull, &RtMintTiTrapStub_34_1 },
-    { "?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa7b0ull, &kTypeInfoStorage[35],
+      "?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ", 0x180025240ull, &RtMintTiTrapStub_65_0,
+      "?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z", 0x1800252c0ull, &RtMintTiTrapStub_65_1 },
+    { "?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa1c8ull, &kTypeInfoStorage[66],
+      "PageDescription", "GroupDescription", nullptr,
+      "?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ", 0x180046fd0ull, &RtMintTiTrapStub_66_0,
+      "?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180047050ull, &RtMintTiTrapStub_66_1 },
+    { "?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa200ull, &kTypeInfoStorage[67],
+      "PageElement", "GroupElement", nullptr,
+      "?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ", 0x180047360ull, &RtMintTiTrapStub_67_0,
+      "?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180047400ull, &RtMintTiTrapStub_67_1 },
+    { "?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa7b0ull, &kTypeInfoStorage[68],
       "Particle", "Object::External", nullptr,
-      "?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ", 0x18001ff40ull, &RtMintTiTrapStub_35_0,
-      "?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ff50ull, &RtMintTiTrapStub_35_1 },
-    { "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fad28ull, &kTypeInfoStorage[36],
+      "?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ", 0x18001ff40ull, &RtMintTiTrapStub_68_0,
+      "?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ff50ull, &RtMintTiTrapStub_68_1 },
+    { "?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a58ull, &kTypeInfoStorage[69],
+      "ParticleSystem", "Particle", nullptr,
+      "?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ", 0x1800204d0ull, &RtMintTiTrapStub_69_0,
+      "?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180020550ull, &RtMintTiTrapStub_69_1 },
+    { "?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A", 0x1801faf20ull, &kTypeInfoStorage[70],
+      "PickingMesh", "Object::External", nullptr,
+      "?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ", 0x180071ba0ull, &RtMintTiTrapStub_70_0,
+      "?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z", 0x180071c60ull, &RtMintTiTrapStub_70_1 },
+    { "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa580ull, &kTypeInfoStorage[71],
+      "PixelProgram", "ShaderProgram", nullptr,
+      "?CreateNewObject@PixelProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e9d0ull, &RtMintTiTrapStub_71_0,
+      "?CreateInPlaceObject@PixelProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004ea50ull, &RtMintTiTrapStub_71_1 },
+    { "?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A", 0x1801fa858ull, &kTypeInfoStorage[72],
+      "PointList", "Object::External", nullptr,
+      "?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ", 0x180070f30ull, &RtMintTiTrapStub_72_0,
+      "?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z", 0x180070ff0ull, &RtMintTiTrapStub_72_1 },
+    { "?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801facf0ull, &kTypeInfoStorage[73],
+      "ProgressDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ", 0x180077860ull, &RtMintTiTrapStub_73_0,
+      "?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800778e0ull, &RtMintTiTrapStub_73_1 },
+    { "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fad28ull, &kTypeInfoStorage[74],
       "ProgressElement", "Element", nullptr,
-      "?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ", 0x180077e30ull, &RtMintTiTrapStub_36_0,
-      "?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180077eb0ull, &RtMintTiTrapStub_36_1 },
-    { "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa2e0ull, &kTypeInfoStorage[37],
+      "?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ", 0x180077e30ull, &RtMintTiTrapStub_74_0,
+      "?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180077eb0ull, &RtMintTiTrapStub_74_1 },
+    { "?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa238ull, &kTypeInfoStorage[75],
+      "RadioDescription", "GroupDescription", nullptr,
+      "?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ", 0x180047760ull, &RtMintTiTrapStub_75_0,
+      "?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800477e0ull, &RtMintTiTrapStub_75_1 },
+    { "?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa270ull, &kTypeInfoStorage[76],
+      "RadioElement", "GroupElement", nullptr,
+      "?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ", 0x180047af0ull, &RtMintTiTrapStub_76_0,
+      "?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180047ba0ull, &RtMintTiTrapStub_76_1 },
+    { "?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a90ull, &kTypeInfoStorage[77],
+      "ReflectionImageBuffer", "GeneratedImageBuffer", nullptr,
+      "?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x1800222c0ull, &RtMintTiTrapStub_77_0,
+      "?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180022370ull, &RtMintTiTrapStub_77_1 },
+    { "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5f0ull, &kTypeInfoStorage[78],
+      "RenderState", "Object::External", nullptr,
+      "?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ", 0x18004b660ull, &RtMintTiTrapStub_78_0,
+      "?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004b6e0ull, &RtMintTiTrapStub_78_1 },
+    { "?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa2a8ull, &kTypeInfoStorage[79],
+      "RibbonDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ", 0x180044220ull, &RtMintTiTrapStub_79_0,
+      "?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180044310ull, &RtMintTiTrapStub_79_1 },
+    { "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa2e0ull, &kTypeInfoStorage[80],
       "RibbonElement", "Element", nullptr,
-      "?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ", 0x1800447d0ull, &RtMintTiTrapStub_37_0,
-      "?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180044880ull, &RtMintTiTrapStub_37_1 },
-    { "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fad98ull, &kTypeInfoStorage[38],
+      "?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ", 0x1800447d0ull, &RtMintTiTrapStub_80_0,
+      "?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180044880ull, &RtMintTiTrapStub_80_1 },
+    { "?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fad60ull, &kTypeInfoStorage[81],
+      "ScrollDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ", 0x18003a210ull, &RtMintTiTrapStub_81_0,
+      "?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003a290ull, &RtMintTiTrapStub_81_1 },
+    { "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fad98ull, &kTypeInfoStorage[82],
       "ScrollElement", "Element", nullptr,
-      "?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ", 0x18003a940ull, &RtMintTiTrapStub_38_0,
-      "?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003a9c0ull, &RtMintTiTrapStub_38_1 },
-    { "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa350ull, &kTypeInfoStorage[39],
+      "?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ", 0x18003a940ull, &RtMintTiTrapStub_82_0,
+      "?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003a9c0ull, &RtMintTiTrapStub_82_1 },
+    { "?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa628ull, &kTypeInfoStorage[83],
+      "ShaderProgram", "Object::CompiledExternal", nullptr,
+      "?CreateNewObject@ShaderProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e0d0ull, &RtMintTiTrapStub_83_0,
+      "?CreateInPlaceObject@ShaderProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e0e0ull, &RtMintTiTrapStub_83_1 },
+    { "?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa318ull, &kTypeInfoStorage[84],
+      "SliderDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ", 0x180049840ull, &RtMintTiTrapStub_84_0,
+      "?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800498c0ull, &RtMintTiTrapStub_84_1 },
+    { "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa350ull, &kTypeInfoStorage[85],
       "SliderElement", "Element", nullptr,
-      "?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ", 0x180049e10ull, &RtMintTiTrapStub_39_0,
-      "?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180049e90ull, &RtMintTiTrapStub_39_1 },
-    { "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3c0ull, &kTypeInfoStorage[40],
+      "?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ", 0x180049e10ull, &RtMintTiTrapStub_85_0,
+      "?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180049e90ull, &RtMintTiTrapStub_85_1 },
+    { "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa4d8ull, &kTypeInfoStorage[86],
+      "SoundBuffer", "Object::CompiledExternal", nullptr,
+      "?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ", 0x18000b9a0ull, &RtMintTiTrapStub_86_0,
+      "?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x18000ba90ull, &RtMintTiTrapStub_86_1 },
+    { "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa510ull, &kTypeInfoStorage[87],
+      "SoundEffect", "Object::External", nullptr,
+      "?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ", 0x180050430ull, &RtMintTiTrapStub_87_0,
+      "?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x1800504f0ull, &RtMintTiTrapStub_87_1 },
+    { "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa388ull, &kTypeInfoStorage[88],
+      "SpinnerDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004ae50ull, &RtMintTiTrapStub_88_0,
+      "?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004aed0ull, &RtMintTiTrapStub_88_1 },
+    { "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3c0ull, &kTypeInfoStorage[89],
       "SpinnerElement", "Element", nullptr,
-      "?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ", 0x18004b200ull, &RtMintTiTrapStub_40_0,
-      "?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004b290ull, &RtMintTiTrapStub_40_1 },
-    { "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A", 0x1801fadd0ull, &kTypeInfoStorage[41],
+      "?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ", 0x18004b200ull, &RtMintTiTrapStub_89_0,
+      "?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004b290ull, &RtMintTiTrapStub_89_1 },
+    { "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3f8ull, &kTypeInfoStorage[90],
+      "SpriteCapture", "Object::External", nullptr,
+      "?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ", 0x18003c900ull, &RtMintTiTrapStub_90_0,
+      "?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003c9c0ull, &RtMintTiTrapStub_90_1 },
+    { "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A", 0x1801fadd0ull, &kTypeInfoStorage[91],
       "SpriteSheet", "Object::External", nullptr,
-      "?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ", 0x180002f40ull, &RtMintTiTrapStub_41_0,
-      "?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180003000ull, &RtMintTiTrapStub_41_1 },
-    { "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae08ull, &kTypeInfoStorage[42],
+      "?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ", 0x180002f40ull, &RtMintTiTrapStub_91_0,
+      "?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180003000ull, &RtMintTiTrapStub_91_1 },
+    { "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae08ull, &kTypeInfoStorage[92],
       "StringTable", "Object::External", nullptr,
-      "?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ", 0x180002280ull, &RtMintTiTrapStub_42_0,
-      "?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180002330ull, &RtMintTiTrapStub_42_1 },
-    { "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa468ull, &kTypeInfoStorage[43],
+      "?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ", 0x180002280ull, &RtMintTiTrapStub_92_0,
+      "?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180002330ull, &RtMintTiTrapStub_92_1 },
+    { "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa820ull, &kTypeInfoStorage[93],
+      "Surface", "Object::External", nullptr,
+      "?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ", 0x180064b60ull, &RtMintTiTrapStub_93_0,
+      "?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180064c10ull, &RtMintTiTrapStub_93_1 },
+    { "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa430ull, &kTypeInfoStorage[94],
+      "TabDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004c2e0ull, &RtMintTiTrapStub_94_0,
+      "?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c360ull, &RtMintTiTrapStub_94_1 },
+    { "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa468ull, &kTypeInfoStorage[95],
       "TabElement", "Element", nullptr,
-      "?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ", 0x18004c7f0ull, &RtMintTiTrapStub_43_0,
-      "?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c870ull, &RtMintTiTrapStub_43_1 },
-    { "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae78ull, &kTypeInfoStorage[44],
+      "?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ", 0x18004c7f0ull, &RtMintTiTrapStub_95_0,
+      "?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c870ull, &RtMintTiTrapStub_95_1 },
+    { "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae40ull, &kTypeInfoStorage[96],
+      "TableDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ", 0x180078fc0ull, &RtMintTiTrapStub_96_0,
+      "?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079040ull, &RtMintTiTrapStub_96_1 },
+    { "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae78ull, &kTypeInfoStorage[97],
       "TableElement", "Element", nullptr,
-      "?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ", 0x1800793c0ull, &RtMintTiTrapStub_44_0,
-      "?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079440ull, &RtMintTiTrapStub_44_1 },
-    { "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faee8ull, &kTypeInfoStorage[45],
+      "?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ", 0x1800793c0ull, &RtMintTiTrapStub_97_0,
+      "?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079440ull, &RtMintTiTrapStub_97_1 },
+    { "?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faeb0ull, &kTypeInfoStorage[98],
+      "TextDescription", "ElementDescription", nullptr,
+      "?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ", 0x180041bc0ull, &RtMintTiTrapStub_98_0,
+      "?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180041c40ull, &RtMintTiTrapStub_98_1 },
+    { "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faee8ull, &kTypeInfoStorage[99],
       "TextElement", "Element", nullptr,
-      "?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ", 0x180041fe0ull, &RtMintTiTrapStub_45_0,
-      "?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042060ull, &RtMintTiTrapStub_45_1 },
+      "?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ", 0x180041fe0ull, &RtMintTiTrapStub_99_0,
+      "?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042060ull, &RtMintTiTrapStub_99_1 },
+    { "?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa4a0ull, &kTypeInfoStorage[100],
+      "ToolTipDialog", "UI::DialogInstance", nullptr,
+      "?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ", 0x18004d0b0ull, &RtMintTiTrapStub_100_0,
+      "?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004d140ull, &RtMintTiTrapStub_100_1 },
+    { "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa660ull, &kTypeInfoStorage[101],
+      "VertexLayout", "Object::CompiledExternal", nullptr,
+      "?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ", 0x18004ddc0ull, &RtMintTiTrapStub_101_0,
+      "?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004de40ull, &RtMintTiTrapStub_101_1 },
+    { "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa698ull, &kTypeInfoStorage[102],
+      "VertexProgram", "ShaderProgram", nullptr,
+      "?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e650ull, &RtMintTiTrapStub_102_0,
+      "?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e6d0ull, &RtMintTiTrapStub_102_1 },
+    { "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5b8ull, &kTypeInfoStorage[103],
+      "VideoProgram", "Object::External", nullptr,
+      "?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004ed40ull, &RtMintTiTrapStub_103_0,
+      "?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004edc0ull, &RtMintTiTrapStub_103_1 },
 };
 
 // ---- Plain storage: the singleton pointers plus the ten other exported

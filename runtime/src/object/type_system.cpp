@@ -41,6 +41,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_port.h"
@@ -673,6 +674,49 @@ void FactoryStartupRun(FactorySet* self) {
         setInsert(self, &it, &rec.typeId, &rec);
     }
 
+    // ---- Survey (lane TYPE, 2026-09-08): BANISHED_RT_TYPE_SURVEY=1 --------
+    //
+    // A READ-ONLY pre-pass over the tree pass 1 just built. It resolves every
+    // parentName exactly as pass 2 will and reports the ones that miss --
+    // ALL of them, which is the one thing the faithful fault cannot tell you,
+    // because the fault stops at the first.
+    //
+    // It writes nothing and is skipped entirely unless the env var is set, so
+    // pass 2 below is bit-identical with the var unset. Its EFFECTIVENESS
+    // control is the `withParent` count: a survey reporting 0 missing out of 0
+    // parents resolved has proved nothing, and says so on its own line.
+    if (const char* sv = std::getenv("BANISHED_RT_TYPE_SURVEY")) {
+      if (sv[0] && sv[0] != '0') {
+        int chain = 0, withParent = 0, missing = 0;
+        for (TypeNode* n2 = LeftMost(self->root); n2; n2 = Successor(n2)) {
+            ++chain;
+            BaseTypeInfo* const bi = n2->value.info;
+            if (!bi->parentName) continue;
+            ++withParent;
+            const uint32_t pid = TypeNameCRC(bi->parentName);
+            TypeNode* q = self->root;
+            while (q) {
+                if (pid < q->key)      q = q->left;
+                else if (q->key < pid) q = q->right;
+                else                   break;
+            }
+            if (!q) {
+                ++missing;
+                std::printf("[RtTypeSurvey] MISSING PARENT: type \"%s\" "
+                            "(id 0x%08X) names parent \"%s\" (id 0x%08X)\n",
+                            bi->name ? bi->name : "(null)",
+                            n2->value.typeId, bi->parentName, pid);
+            }
+        }
+        std::printf("[RtTypeSurvey build LANETYPE-A2] %d nodes in tree, %d with a parentName, "
+                    "%d parentName(s) UNRESOLVED%s\n",
+                    chain, withParent, missing,
+                    withParent == 0 ? "  (NO PARENTS RESOLVED -- this survey "
+                                      "proved nothing)" : "");
+        std::fflush(stdout);
+      }
+    }
+
     // ---- Pass 2: link parents, fill children ------------------------------
     for (TypeNode* node = LeftMost(self->root); node; node = Successor(node)) {
         BaseTypeInfo* const info = node->value.info;
@@ -696,6 +740,21 @@ void FactoryStartupRun(FactorySet* self) {
         // arithmetic rather than `(char*)p + 8` only because null pointer
         // arithmetic is UB in C++ and this must be the LEA, not whatever the
         // optimiser concludes from a UB premise.
+        // NOT A GUARD (lane TYPE, 2026-09-08). The deref below is unchanged
+        // and still faults; this only puts a NAME on the fault before it
+        // happens. "READ of 0x0000000000000028 in FactoryStartupRun" with no
+        // name is the entire cost of the faithful LEA, and one printf buys it
+        // back without altering a single subsequent instruction's inputs.
+        if (!p) {
+            std::printf("[RtPort] Factory::Startup: type \"%s\" (id 0x%08X) names "
+                        "parent \"%s\" (id 0x%08X), which is NOT in the type "
+                        "chain. The faithful LEA below yields (TypeRecord*)8 "
+                        "and the next read faults at 0x28 -- as retail does.\n",
+                        info->name ? info->name : "(null)", node->value.typeId,
+                        parentName, parentId);
+            std::fflush(stdout);
+        }
+
         TypeRecord* const parentRec =
             reinterpret_cast<TypeRecord*>(reinterpret_cast<uintptr_t>(p) + 8);
         node->value.parent = parentRec;

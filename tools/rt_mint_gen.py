@@ -547,6 +547,50 @@ def main():
         for sym, cls in closure_added:
             print("      %s   (??_7%s@@6B@)" % (sym, cls))
 
+    # ---- CLOSURE 2: THE REFLECTION CHAIN IS NOT A SUBSET ------------------
+    # (Wave 9 lane TYPE, 2026-09-08. Third instance of the same blind spot.)
+    #
+    # Both rules above answer "which symbols does something in this tree READ".
+    # `?_typeInfo@` rows are not read by a consumer at all in the case that
+    # matters: every one of them is a static whose CONSTRUCTOR head-inserts it
+    # into `?_firstTypeInfo@`, and Object::Factory::Startup then walks that one
+    # chain and resolves each entry's `parentName` BY NAME against it. So a
+    # BaseTypeInfo earns its place by EXISTING in the DLL, and any subset of the
+    # chain is a chain retail does not have.
+    #
+    # MEASURED, not argued. With the DLL loaded the tree is 415 nodes / 413
+    # parentNames / 0 unresolved; at cutover with 46 minted it was 357 / 355 /
+    # 4, and the four were the four exe types deriving from
+    # UI::DialogControllerConfig — whose `?_typeInfo@` the DLL DOES export
+    # (0x1801f9e80) and which no source file in this tree names as a literal and
+    # no minted vtable reads, so both rules above were blind to it by
+    # construction. 415 - 357 = 58 = 104 exported ?_typeInfo@ - 46 minted, so
+    # this rule closes the gap exactly and by identity, not by luck.
+    #
+    # Note this does NOT drag in a factory: the fields come off the DLL's own
+    # .data image, and an unported factoryFn gets the same trap stub every other
+    # minted BaseTypeInfo's does — a type nothing constructs never calls it.
+    chain_added = []
+    have_ti2 = {d[0] for d in data_syms if d[0]}
+    for sym in sorted(n for n in by_name if n.startswith("?_typeInfo@")):
+        if sym in have_ti2:
+            continue
+        rva = by_name[sym]
+        if section_of(rva) == ".text":
+            errors.append(f"{sym}: exported ?_typeInfo@ lives in .text — that is "
+                          f"not a BaseTypeInfo static and the chain rule must "
+                          f"not mint it")
+            continue
+        data_syms.append((sym, "chain-closure", rva,
+                          "in the DLL's ?_firstTypeInfo@ chain"))
+        have_ti2.add(sym)
+        chain_added.append(sym)
+    if chain_added:
+        print("  chain closure: +%d BaseTypeInfo that exist in the DLL's "
+              "reflection chain but nothing in this tree names" % len(chain_added))
+        for sym in chain_added:
+            print("      " + sym)
+
     data_syms.sort(key=lambda d: (d[0] or "", d[2]))
 
     # ---- the construction sweep (see find_crt_init_table) -------------------
@@ -820,7 +864,8 @@ def main():
     print(f"  typeinfo   {len(typeinfos):3d}")
     print(f"  crt init   {len(inits):3d} initialisers; {len(ctor_of)} of the exported "
           f"DATA symbols are CONSTRUCTED at load "
-          f"({sum(1 for s in storage if s['ctor'])} storage + {len(typeinfos)} BaseTypeInfo)")
+          f"({sum(1 for s in storage if s['ctor'])} storage + {len(typeinfos)} BaseTypeInfo"
+          f" + {sum(1 for v in vtables if v['va'] in ctor_of)} vtable)")
     print(f"  storage    {len(storage):3d}  ({total} bytes; "
           f"{sum(1 for s in storage if (s['symbol'] or '').startswith('?_singleton@'))} singletons, "
           f"{sum(1 for s in storage if not (s['symbol'] or '').startswith('?_singleton@'))} other .data statics)")
