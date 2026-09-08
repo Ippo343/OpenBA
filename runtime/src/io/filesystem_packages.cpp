@@ -340,7 +340,7 @@ void RtIo_FileInfoAssignProbe();
 // the only thing that notices.
 namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
 namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream_probe.cpp)
-namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }
+namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }  // rung 4b-iii
 namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe.cpp)
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
