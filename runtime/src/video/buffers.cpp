@@ -77,6 +77,15 @@ PlatformConstructFn VertexBufferPlatformConstruct() {
 PlatformDestructFn VertexBufferPlatformDestruct() {
     return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ");
 }
+// Wave 9 lane GFX2 — the FOURTH member of this family. RT_ORIGINAL_ONCE (the
+// shipped body) because these two are used as the diff oracle's "theirs", never
+// as a dependency call.
+PlatformConstructFn RenderBufferPlatformConstruct() {
+    return RT_ORIGINAL_ONCE(PlatformConstructFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ");
+}
+PlatformDestructFn RenderBufferPlatformDestruct() {
+    return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ");
+}
 
 // Object::External::~External — the base class ImageBuffer's dtor tail-calls
 // after this lane's own body finishes. Wave 3 (Object) territory, not this
@@ -145,6 +154,15 @@ void** IndexBufferFirstBuffer() {
 void** VertexBufferFirstBuffer() {
     static void** p = reinterpret_cast<void**>(
         ResolveExport("?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA"));
+    return p;
+}
+// Wave 9 lane GFX2. Minted (standalone/rt_data_mint_tables.inc, 0x1801fe790,
+// 8 bytes) and already read PORT-AWARE by runtime/src/video/dynamic_resources.cpp
+// so our linkage and lane VID's walkers agree on ONE list on both sides of the
+// cutover.
+void** RenderBufferFirstRenderBuffer() {
+    static void** p = reinterpret_cast<void**>(
+        ResolveExport("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA"));
     return p;
 }
 
@@ -249,6 +267,13 @@ void CountBranch(RtDiffSite* site, bool taken) {
 
 constexpr ListLinks kImageLinks  = { 0x50, 0x58 };
 constexpr ListLinks kBufferLinks = { 0x10, 0x18 };
+// Wave 9 lane GFX2. Read off 0x1800f4381..0x1800f43bd: retail loads the tail as
+// `[head + 0x20]` and writes `this + 0x18 = head`, which is ListLink's
+// `prev = 0x20` / `next = 0x18`. Independently cross-checked against the class's
+// own list WALKER: dynamic_resources.cpp records that all four walkers step the
+// `prev` field (ImageBuffer +0x58, Index/Vertex +0x18, RenderBuffer +0x20), and
+// +0x20 is exactly what this assignment calls `prev`.
+constexpr ListLinks kRenderLinks = { 0x18, 0x20 };
 
 // The five words a Link or an Unlink can write, captured so the diff oracle can
 // restore the pre-state and replay the retail body over it. Everything outside
@@ -758,6 +783,8 @@ RtDiffSite g_probeIdxLink   = { "Video::IndexBuffer::PlatformConstruct[PROBE:fir
 RtDiffSite g_probeIdxUnlink = { "Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
 RtDiffSite g_probeVtxLink   = { "Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]", 0, 0, false, false };
 RtDiffSite g_probeVtxUnlink = { "Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
+RtDiffSite g_probeRbLink    = { "Video::RenderBuffer::PlatformConstruct[PROBE:first-in-list]", 0, 0, false, false };
+RtDiffSite g_probeRbUnlink  = { "Video::RenderBuffer::PlatformDestruct[PROBE:list-emptied]", 0, 0, false, false };
 
 const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface,
                                    &ImageBufferPlatformConstruct,  &ImageBufferPlatformDestruct,
@@ -768,12 +795,24 @@ const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBuffer
 const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer,
                                    &VertexBufferPlatformConstruct, &VertexBufferPlatformDestruct,
                                    &g_probeVtxLink, &g_probeVtxUnlink };
+// Wave 9 lane GFX2. Slot 0x98 == dx11::DeviceData vtable index 19, which
+// dx11/src/devicedata.cpp registers as Factory_RenderBufferData — so this
+// dispatch lands in this project on both sides of the port, exactly as the other
+// three do. `nullAfterRelease = false`: 0x1800f4400 releases the companion at
+// +0x28 and leaves the freed pointer there, the ImageBuffer asymmetry, not the
+// Index/Vertex one.
+const BufferClass kRenderClass = { 0x98, 0x28, false, kRenderLinks, &RenderBufferFirstRenderBuffer,
+                                   &RenderBufferPlatformConstruct, &RenderBufferPlatformDestruct,
+                                   &g_probeRbLink, &g_probeRbUnlink };
 
 // The descriptors' offsets are the structs', bound here so a header change
 // breaks the build rather than silently mis-linking.
 static_assert(offsetof(ImageBuffer, platformData)  == 0x60, "kImageClass.companionOff");
 static_assert(offsetof(IndexBuffer, platformData)  == 0x08, "kIndexClass.companionOff");
 static_assert(offsetof(VertexBuffer, platformData) == 0x08, "kVertexClass.companionOff");
+static_assert(offsetof(RtVideo::RenderBuffer, platformData) == 0x28, "kRenderClass.companionOff");
+static_assert(offsetof(RtVideo::RenderBuffer, next) == 0x18, "kRenderLinks.next");
+static_assert(offsetof(RtVideo::RenderBuffer, prev) == 0x20, "kRenderLinks.prev");
 
 // ============================================================================
 // THE EMPTY-LIST PROBE — the branch cutover takes FIRST
@@ -1199,6 +1238,113 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
 }
 
 // ============================================================================
+// Wave 9 lane GFX2 — Video::RenderBuffer::Platform{Construct,Destruct}
+//
+//   0x1800f4320  ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ   ord 3341
+//   0x1800f4400  ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ    ord 3369
+//
+// The FOURTH instantiation of the family above, and the only one Wave 9 lane W
+// left out. Both names were verified present in the shipped export table before
+// this was written (tools/pe_exports.py against the shipped
+// C:/GOG Games/Banished/Runtime-x64.dll) and both disassemblies were transcribed instruction for
+// instruction against `PlatformConstructBody` / `PlatformDestructBody`; the
+// bodies agree with the other three with no exception at all, which is why this
+// adds a descriptor and two wrappers rather than any new logic.
+//
+// WHY IT IS HERE AND NOT LEFT ON THE DLL. `Graphics::SunLight`'s constructor
+// (0x1801081f0, below in runtime/src/graphics/sunlight.cpp) and its `Set`
+// rebuild paths both call these two by ADDRESS. Wave 9 lane GFX declined the
+// SunLight pair with exactly this as the blocker — "?PlatformConstruct@
+// RenderBuffer@Video@@ and ?PlatformDestruct@ are exported and UNPORTED", and
+// its recommended order was to land these two first so that porting SunLight
+// closes a row rather than moving it one frame deeper. That is what this is.
+//
+// The oracle is the SAME restore-and-replay the other three use, plus the
+// empty-list probe, whose FIRST-IN-LIST branch matters more here than for any
+// of the other three: at cutover the mint owns `_firstRenderBuffer` and it
+// starts NULL, and the SunLight ctor builds the very first RenderBuffer in the
+// process.
+// ============================================================================
+
+void Video_RenderBuffer_PlatformConstruct(RtVideo::RenderBuffer* self) {
+    RT_DIFF_BEGIN("Video::RenderBuffer::PlatformConstruct");
+    void** first = RenderBufferFirstRenderBuffer();
+
+    LinkState pre{};
+    void* preCompanion = nullptr;
+    if (rt_diff_on__) {
+        pre = CaptureLinks(self, first, kRenderLinks);
+        preCompanion = self->platformData;
+    }
+
+    static RtDiffSite brFirst = { "Video::RenderBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
+    static RtDiffSite brAppend = { "Video::RenderBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
+    const LinkBranch br = PlatformConstructBody(self, 0x98, offsetof(RtVideo::RenderBuffer, platformData),
+                                                first, kRenderLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
+        CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
+
+    if (rt_diff_on__) {
+        static bool probed = false;
+        ProbeOnce(kRenderClass, probed);
+    }
+
+    if (rt_diff_on__) {
+        LinkState ours = ReadLinksAt(self, first, kRenderLinks, pre);
+        ReleaseCompanion(self->platformData);
+        self->platformData = preCompanion;
+        RestoreLinks(self, first, kRenderLinks, pre);
+        RenderBufferPlatformConstruct()(self);
+        LinkState theirs = ReadLinksAt(self, first, kRenderLinks, pre);
+        char a[128], b[128];
+        DescribeLinks(a, sizeof(a), ours);
+        DescribeLinks(b, sizeof(b), theirs);
+        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
+    }
+}
+
+void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
+    RT_DIFF_BEGIN("Video::RenderBuffer::PlatformDestruct");
+    void** first = RenderBufferFirstRenderBuffer();
+
+    LinkState pre{};
+    if (rt_diff_on__)
+        pre = CaptureLinks(self, first, kRenderLinks);
+
+    static RtDiffSite brNone = { "Video::RenderBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
+    static RtDiffSite brUn = { "Video::RenderBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
+    static RtDiffSite brEmpty = { "Video::RenderBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
+    const UnlinkBranch br = PlatformDestructBody(self, offsetof(RtVideo::RenderBuffer, platformData),
+                                                 /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
+        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
+        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
+    }
+
+    if (rt_diff_on__) {
+        LinkState ours = ReadLinksAt(self, first, kRenderLinks, pre);
+        RestoreLinks(self, first, kRenderLinks, pre);
+        // Retail leaves the freed companion pointer at +0x28 (it does NOT null
+        // it — the ImageBuffer asymmetry). Null it so retail's own
+        // `if (pc != nullptr)` skips a second release of memory ours already
+        // freed, then put the dangling value back so the post-state this
+        // function leaves is byte-identical to retail's.
+        void* dangling = self->platformData;
+        self->platformData = nullptr;
+        RenderBufferPlatformDestruct()(self);
+        LinkState theirs = ReadLinksAt(self, first, kRenderLinks, pre);
+        self->platformData = dangling;
+        char a[128], b[128];
+        DescribeLinks(a, sizeof(a), ours);
+        DescribeLinks(b, sizeof(b), theirs);
+        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
+    }
+}
+
+// ============================================================================
 // Video::IndexBuffer / Video::VertexBuffer — ctors zero the two owned fields
 // then hand off to PlatformConstruct (out of scope — see the resolvers
 // above). Create/Set are pure trampolines into the platform buffer object at
@@ -1416,6 +1562,17 @@ int RtVideoBuffersRegister() {
     RegisterRuntimeExport("?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ",
                           (void*)&Video_VertexBuffer_PlatformDestruct);
     RegisterRuntimeAddr(0x1800f58c0, (void*)&Video_VertexBuffer_PlatformDestruct);
+    n++;
+
+    // ---- Wave 9 lane GFX2: the fourth pair ----
+    RegisterRuntimeExport("?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ",
+                          (void*)&Video_RenderBuffer_PlatformConstruct);
+    RegisterRuntimeAddr(0x1800f4320, (void*)&Video_RenderBuffer_PlatformConstruct);
+    n++;
+
+    RegisterRuntimeExport("?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ",
+                          (void*)&Video_RenderBuffer_PlatformDestruct);
+    RegisterRuntimeAddr(0x1800f4400, (void*)&Video_RenderBuffer_PlatformDestruct);
     n++;
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.
