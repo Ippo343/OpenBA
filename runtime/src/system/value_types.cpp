@@ -95,6 +95,22 @@ uint32_t RandImpl(Random* self) {
 template <typename T, typename Fn, typename... Args>
 void RtDiffRandomShadow(RtDiffSite* site, Random* self, const Random& before,
                          const char* mangled, T ours, Args... args) {
+    // Guard the helper ITSELF, not just its six call sites.  Every caller today
+    // wraps this in `if (rt_diff_on__)` and the comment above says so -- but
+    // that invariant lives in six places and a seventh caller only has to
+    // forget once.  What it would cost is not a wasted comparison: the
+    // RtOriginal below is the RAW door, so an unguarded call is a live
+    // cross-DLL call into retail on an ordinary run, and a call through NULL
+    // once Runtime-x64.dll is gone.  That is precisely the shape lane V2 found
+    // escaped in GraphElement::RemoveGraphs, which had sat between
+    // RT_DIFF_BEGIN and RT_DIFF_SCALAR calling retail every frame.
+    //
+    // rt_diff_on__ is a macro-local of RT_DIFF_BEGIN and is not in scope here;
+    // RtDiffEnabled() is the same predicate.  rawdoor_audit.py recognises this
+    // early-out as a guard (its diff_only_fn_depth idiom), which it cannot do
+    // for a guard that lives in the CALLER.
+    if (!RtDiffEnabled()) return;
+
     Random scratch = before;
     T theirs = RtOriginal<Fn>(mangled)(&scratch, args...);
     bool eq = (ours == theirs) && std::memcmp(self, &scratch, sizeof(Random)) == 0;
