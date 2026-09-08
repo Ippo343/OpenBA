@@ -4033,14 +4033,44 @@ extern fn_Element_Draw_t fn_Element_Draw;
 typedef void (*fn_SpriteContext_AddLine_t)(void* self, void* sprite, int x1, int y1, int x2, int y2, uint32_t color);
 extern fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine;
 
-// UI::SpriteContext::SetScissor(this, x, y, w, h) — 4-param overload
+// UI::SpriteContext::SetScissor(this, RET SLOT, x, y, w, h) — 4-param overload
 // Called via exe dispatch table at 0x140151900
-typedef void (*fn_SpriteContext_SetScissor4_t)(void* self, int x, int y, int w, int h);
+//
+// *** THE SECOND PARAMETER IS THE HIDDEN RETURN SLOT AND IT IS NOT OPTIONAL. ***
+// Both overloads return `Video::Viewport` BY VALUE, which under the MSVC x64
+// ABI is not a register return: the caller passes a pointer to a 16-byte slot
+// it owns, and for a member function that pointer is the SECOND argument, in
+// RDX, after `this`. A typedef that omits it is a WILD WRITE that still returns
+// the right answer — the callee writes 16 bytes through whatever happened to be
+// in RDX and hands that same address back in RAX, so a caller that only reads
+// the result looks correct while unrelated memory is gone. Here it would have
+// written through a sign-extended `int`.
+//
+// Settled from the shipped bytes, not from the mangled name (Runtime-x64.dll):
+//   0x18011d010  MOV RBX,RDX   ; the 4-int overload saves arg 2 …
+//   0x18011d03d  MOV RAX,RBX   ; … and returns it
+//   0x18011d050  MOV RDI,RDX   ; the Viewport overload saves arg 2 …
+//   0x18011d1c6  MOV RAX,RDI   ; … and returns it
+// and independently: the 4-int overload's frame is `PUSH RBX; SUB RSP,0x30` and
+// it reads its 5th and 6th arguments at RSP+0x60 / RSP+0x68 — caller-frame +0x28
+// and +0x30, i.e. the FIFTH stack slot. Four register arguments precede `w`:
+// this, the slot, x, y.
+//
+// Both of these were declared without the slot until WAVE 9 LANE FLUSH. Nothing
+// called them (code/Game/Component/frustumoutlineelement.cpp:184 declares its
+// own correct typedefs and says why), so the defect was LATENT — but two
+// correctly named, wrongly shaped pointers sitting beside a correct one are a
+// trap for the next reader, and `tools/abi_retslot_audit.py` scans this file.
+// The same defect shipped live for a whole wave as `fn_Math_Transform3_Identity`.
+typedef void* (*fn_SpriteContext_SetScissor4_t)(void* self, void* retSlot,
+                                                int x, int y, int w, int h);
 extern fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4;
 
-// UI::SpriteContext::SetScissor(this, Viewport*) — restore-from-viewport overload
+// UI::SpriteContext::SetScissor(this, RET SLOT, Viewport*) — restore overload
 // Called via exe dispatch table at 0x140151910
-typedef void (*fn_SpriteContext_SetScissorVP_t)(void* self, void* viewport);
+// The slot is the same hazard; see the block above.
+typedef void* (*fn_SpriteContext_SetScissorVP_t)(void* self, void* retSlot,
+                                                 const void* viewport);
 extern fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP;
 
 // FrustumOutlineElement frustum-to-screen projection helper (exe function)

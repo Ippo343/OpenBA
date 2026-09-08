@@ -621,6 +621,15 @@ int RtUiSpriteContextRegister() {
     RegisterRuntimeAddr(0x18011c890, (void*)&RtUi_SpriteContext_AddSpriteDraw); ++n;
     RegisterRuntimeAddr(0x18011c6a0, (void*)&RtUi_SpriteContext_FlushDeferred); ++n;
 
+    // WAVE 9 LANE FLUSH. `Flush` (0x18011ba40) was this file's ONE opened
+    // address door -- the per-frame call every body above makes and the reason
+    // ~11,400 of their live executions carried no differential evidence. It is
+    // ported in runtime/src/ui/spritecontext_flush.cpp and registered from
+    // there. After this line `TheFlush()` above resolves to OUR body, so the
+    // door is closed rather than merely documented.
+    extern int RtUiSpriteContextFlushRegister();
+    n += RtUiSpriteContextFlushRegister();
+
     // The driven probe (runtime/src/ui/spritecontext_probe.cpp). Must run AFTER
     // the registrations above, because it drives `AddLine`, which reaches
     // `AddSpriteDraw` through `ResolveAddr` — with the port unregistered that
