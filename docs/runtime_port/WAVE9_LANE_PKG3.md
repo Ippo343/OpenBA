@@ -219,6 +219,15 @@ Four packages, **23,933 entries**, every offset / size / name compared, plus all
 metadata, both arrays' contents and the FileInfo. Read the `calls=` column: it is
 4, not 0 — the site executed and the comparison ran.
 
+**Re-measured from the committed tree.** Between the `final` run and the
+commit, `git stash push/pop` (used to measure the census on both sides, §97)
+touched the two source files' mtimes -- which is exactly the shape of
+`reference_lane_edits_after_report_invalidate_the_measurement.md`, where a wave's
+closing numbers were taken on an exe older than its sources. Rather than assert
+the content was unchanged, the exe was REBUILT from the committed tree and the
+run repeated: run `confirm`, identity gate OK, `calls=4 worked=4 divergences=0`,
+identical census line. The reported numbers are from a build of what is committed.
+
 The only divergence anywhere in that run is
 `Object::Factory::Startup [probe, not diffable]`, which is not this lane's and
 was already flagged in §5.
