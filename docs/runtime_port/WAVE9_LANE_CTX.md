@@ -213,6 +213,28 @@ that guard is load-bearing rather than decorative, and 2 of 127,646
 Logs: `docs/runtime_port/wave9_lane_ctx/run_debug.txt` and `run_rtdiff.txt`,
 copied out under `tools/game_dir_lock.sh acquire lane-CTX` before release.
 
+### The measurement predates the last two commits, and here is the exact gap
+
+`reference_lane_edits_after_report_invalidate_the_measurement.md` is about
+precisely this: Wave 8's closing numbers were measured on a build whose sources
+had already moved. The run above is from the build stamped `Sep 8 2026 13:11:07`
+in its own identity line, and two commits landed after it. **Every line they
+changed in a compiled source is a comment**, which is checkable rather than
+asserted:
+
+```
+$ git diff a9b5cbc HEAD -- runtime/src/video/context_bind.cpp \
+    | grep -E "^[+-]" | grep -vE "^[+-][+-]" | grep -vE "^[+-]\s*//" | grep -vE "^[+-]\s*$"
+(no output)
+```
+
+`git diff a9b5cbc HEAD --stat` names only `WAVE9_LANE_CTX.md` and
+`context_bind.cpp`, and the filter above shows the second contains no
+non-comment change. `Context.h` and `rt_video_port.cpp` were also comment-only
+and were already inside the measured build. Re-run the probe
+(`BANISHED_RT_CTXBIND_PROBE=1`) on any later build before quoting these numbers
+against a tree that has moved further than that.
+
 ---
 
 ## 5. Facts recovered — `Context.h`'s dirty mask is now complete
