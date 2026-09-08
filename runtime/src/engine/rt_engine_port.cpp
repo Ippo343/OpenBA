@@ -13,13 +13,14 @@
 //
 // What is NOT here, and why, since a reader will come looking for it:
 //
-//   * Engine::Engine's ctor, dtor, Startup and Shutdown are HELD BACK. The
-//     MemoryAllocator is embedded at offset 0 of Engine::Engine
-//     (GetMemoryAllocator is a bare `MOV RAX,RCX; RET`) and the allocator port
-//     carries a NO-GO verdict (docs/runtime_port/WAVE2_ALLOCATOR.md). Lane B
-//     found the NO-GO reaches two functions further than PLAN.md predicted:
-//     Startup writes three allocator fields directly and Shutdown calls the
-//     allocator's own shutdown. See WAVE8_LANE_B.md.
+//   * Engine::Engine's ctor, dtor, Startup and Shutdown are NO LONGER held
+//     back. Wave 8 lane B held them on the allocator NO-GO
+//     (docs/runtime_port/WAVE2_ALLOCATOR.md); Wave 9 lanes E/E2/E3 discharged
+//     that verdict and lane E4 armed the allocator at cutover, so the reason
+//     is stale. They live in engine_lifecycle.cpp (lane ENG) and are what
+//     cutover boot attempts 04-06 died on. Read WAVE9_LANE_ENG.md before
+//     touching them: Engine::Startup is the ONLY place in the process an arena
+//     is ever created, and Engine::Shutdown has calls=0 and is unverified.
 //   * MainLoop::OnVideoError / OnVideoRestart are HELD BACK, and they are the
 //     first functions in this whole port with a genuine DETOUR requirement:
 //     each has exactly one internal caller — the static thunks the MainLoop
@@ -36,21 +37,34 @@
 #include <cstdio>
 #include "../../funcs/rt_port.h"
 
-extern int RtEngineLoopsRegister();   // loops.cpp  (lane A) — 12
-extern int RtEngineCoreRegister();    // engine.cpp (lane B) — 3
+extern int RtEngineLoopsRegister();     // loops.cpp            (lane A)  — 12
+extern int RtEngineCoreRegister();      // engine.cpp           (lane B)  — 3
+extern int RtEngineLifecycleRegister(); // engine_lifecycle.cpp (lane ENG) — 8
 
 void RtEnginePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ENGINE")) {
         printf("[RtPort] BANISHED_RT_ENGINE=0 -- Engine namespace port disabled\n");
         return;
     }
-    int loops = 0, core = 0;
+    int loops = 0, core = 0, life = 0;
     if (RtWaveEnabled("BANISHED_RT_ENGINELOOP")) loops = RtEngineLoopsRegister();
     if (RtWaveEnabled("BANISHED_RT_ENGINECORE")) core  = RtEngineCoreRegister();
+    // Wave 9 lane ENG. Kept as its OWN switch rather than folded into
+    // ENGINECORE: these four are the first ports in this project that sit on
+    // the process's one boot path, and the integrator needs to be able to A/B
+    // them without also giving up MainLoop's ctor/dtor. It must also be turned
+    // OFF for any allocator-shadow run -- RtAllocShadowInstall arms by
+    // detouring the DLL's Engine::Startup, and our port never executes those
+    // bytes, so the shadow would report skipped_pre_startup and call the run
+    // INVALID. See docs/runtime_port/WAVE9_LANE_ENG.md §5.
+    if (RtWaveEnabled("BANISHED_RT_ENGINELIFE")) life = RtEngineLifecycleRegister();
     printf("[RtPort]   Engine loop family (lane A): %d exports registered "
            "(LoadResources held back -- no oracle, see WAVE8_LANE_A.md)\n", loops);
     printf("[RtPort]   Engine::Engine + MainLoop (lane B): %d exports registered "
-           "(8 held back: 4 allocator NO-GO, 2 detour-required, Run, _singleton -- "
+           "(3 held back: 2 detour-required + Run, plus _singleton which is DATA -- "
            "see WAVE8_LANE_B.md)\n", core);
-    printf("[RtPort] Engine: %d exports registered\n", loops + core);
+    printf("[RtPort]   Engine lifecycle (lane ENG): %d exports registered "
+           "(ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, "
+           "calls=0 by construction -- see WAVE9_LANE_ENG.md)\n", life);
+    printf("[RtPort] Engine: %d exports registered\n", loops + core + life);
 }
