@@ -302,6 +302,35 @@ def enclosing_function(text, pos):
     return name, body
 
 
+# A resolve is a PRESENCE PROBE when its own statement compares it to null and
+# never calls it. Statement bounds, not a line window: the tree routinely puts
+# the mangled name on a continuation line.
+# A resolve is a PRESENCE PROBE when ITS OWN closing paren is followed by a
+# comparison against null. Anchored to THIS resolve, not to the statement:
+# the first version tested the whole statement, so in
+#     return Raw("A") != nullptr || Raw("B") != nullptr;
+# ONE comparison classified BOTH resolves, and the perturbation control
+# that should have caught a mis-classification came back green. It would
+# also have read `Raw("A")(x) != nullptr` -- an actual CALL -- as a probe.
+_PROBE_CMP = re.compile(r"\s*(?:!=|==)\s*(?:nullptr|NULL|0)\b")
+
+
+def _is_presence_probe(text, pos):
+    """True if the resolve starting at `pos` is compared to null, not called."""
+    i = text.find("(", pos)
+    if i < 0:
+        return False
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == "(":
+            depth += 1
+        elif text[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return bool(_PROBE_CMP.match(text, j + 1))
+    return False   # unbalanced: fail CLOSED
+
+
 def sweep_name_door(census, ported_names):
     rows = []
     for path in census.iter_sources():
@@ -338,6 +367,20 @@ def sweep_name_door(census, ported_names):
                 verdict, why = "OK-DATA", "exported data, no body to port"
             elif name not in ported_names:
                 verdict, why = "OK-UNPORTED", "not ported; raw == non-raw today"
+            elif _is_presence_probe(text, m.start()):
+                # A raw resolve whose result is COMPARED TO NULL and never
+                # called is asking "is the DLL mapped?", not calling the DLL.
+                # It is the one shape that must use the raw door: consulting
+                # the port registry would answer with OUR OWN registration and
+                # the probe would say "present" with the DLL long gone.
+                #
+                # Classified STRUCTURALLY, and it fails CLOSED -- only an
+                # explicit comparison against nullptr/NULL/0 in the same
+                # statement earns this, anything else stays BYPASS. Exempting
+                # these two by NAME would have been the easy fix and the wrong
+                # one; teaching a checker to ignore a shape is how it stops
+                # finding that shape.
+                verdict, why = "OK-PROBE", "compared to null, never called"
             else:
                 verdict = "OK-ORACLE" if gate else "BYPASS"
                 why = gate or "live path"
