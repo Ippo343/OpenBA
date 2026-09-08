@@ -311,6 +311,94 @@ in the main tree at the time. The `[RtResidue]` set came back **byte-identical**
 20:54 run: 303 rows, same members. The residue is a property of the source, which is what
 lane 0 measured independently on its own two passes.
 
+## Round 2b — the NAME door, asked for after the address door closed
+
+`ResolveExportRaw(name)` is a second opening onto the same defect. It takes the
+mangled name and **skips the port registry on purpose**, so `RT_ORIGINAL_ONCE`,
+`RtOriginal` and body-byte checks can reach the shipped implementation. Correct
+there; a silent bypass anywhere else. Lane P met it porting
+`System::Thread::ThreadFunc` — leave the `Thread` ctor raw and "the port
+registers, the census counts it, and every thread still runs the DLL's body".
+
+`tools/port_bypass_audit.py` now sweeps that door too: **75 direct
+`ResolveExportRaw` / `ResolveOrdinalRaw` sites**, classified
+
+| Verdict | n | Meaning |
+|---|---|---|
+| OK-DATA | 39 | `??_7…`, `?_singleton@…`, `?_typeInfo@…` — no body exists to port; lane C mints these |
+| OK-ORACLE | 27 | inside a diff guard, a save-trace guard, a probe, a self-test, a detour installer, or a `memcmp` body check |
+| OK-UNPORTED | 7 | we have not ported that name, so raw and non-raw reach the same DLL function |
+| **BYPASS** | **2** | a ported function on a live path |
+
+`RT_ORIGINAL_ONCE` (268 sites) and `RtOriginal<>` (182) are deliberately **not**
+swept: both are oracle machinery by definition, and sweeping them would bury two
+findings under 450 rows that are correct by construction. What they leave behind
+is a *live* `RtOriginal` returning null at cutover — a different question
+(the raw-residue verdict list), and not this lane's today.
+
+### The two, and why the first one is the best kind of finding
+
+* **`runtime/src/object/internal.cpp:126` `RandomRand`.** Its own comment says
+  *"Resolved through the ORDINARY seam, not RtOriginal … whichever
+  implementation is armed is the right one to be in this path."* **The code did
+  the opposite.** A comment stating the correct intent above code doing the
+  reverse is invisible to review by construction — the reader checks the comment
+  against what it claims, not against the token three lines down.
+* **`runtime/src/ui/widgets_input.cpp:108` `IsDerivedFrom`.** Every `FirstChildAs`
+  lookup in that file ran the DLL's body while Wave 3's port sat registered and
+  unreached.
+
+Both now `ResolveExport`. Audit: **0 bypasses on both doors, exit 0.**
+
+### The classifier's own numbers: 4 → 20 → 2, and both bugs failed OPEN
+
+Worth writing down, because the lead predicted the shape and the cause is not
+what either of us guessed:
+
+* **4** — two of them were save-trace probes whose `extern "C"` definition a
+  start-of-line-anchored regex could not see, so no enclosing function was found,
+  so no gate was found, so "live path".
+* **20** — relaxing that regex introduced a `` written into a **non-raw** Python
+  string, i.e. a literal 0x08 BACKSPACE at the head of the pattern. It matched
+  nothing, ever. *Every* site then reported no enclosing function and 20 read as
+  BYPASS. The tell was that the enclosing-function column printed `?` on every
+  row — a column that is uniformly empty is a broken extractor, not a fact.
+* **2** — the two that were hand-verified before the tool agreed with them.
+
+Both bugs over-reported. That is the direction a checker must fail in, and it is
+the reason the count is quoted only after reading every row: a sample of both OK
+categories was hand-checked too (`input.cpp`'s `if (rt_diff_on__)` reader trio,
+`audio.cpp`'s `RtSaveTrace::Enabled()` probe, `allocator.cpp`'s `memcmp` prologue
+check, `goal_serialize.cpp`'s in-situ Compare, `rt_orphan_probe.cpp`'s ours-vs-theirs).
+
+### What the run does and does NOT prove
+
+Measured on a pinned worktree of `9ee16e1` (built 21:19, deployed 21:19), clean
+exit: `[RtResidue]` **284**, `[RtRawResidue]` **76**.
+
+**Neither of the two fixed sites executes in this cell, and the report would be
+wrong to imply otherwise.** Their names appear in *neither* block, before or
+after. The reasons are checkable:
+
+* `RandomRand`'s only caller is `RtObject_Internal_Ctor`, which is registered
+  **inside `internal.cpp`'s `if (table)` block** — WAVE3's opt-in handle-table
+  NO-GO tier, off by default. It cannot run in a default build.
+* `IsDerivedFrom` serves `FirstChildAs`, used by the Spinner/Slider/Progress
+  accessors; nothing in an autostart gameplay run drives those widgets.
+
+So the evidence for these two is the checker plus the code, exactly as for
+`growthcomponent` and `scene.cpp` in round 2a. What the run *does* prove is that
+the change breaks nothing: clean exit, no crash log, and no new residue row.
+
+**And a number that is NOT mine.** `[RtResidue]` went 303 → 284. Only **1** of
+that is attributable to lane R (in the raw block: `raw:?ThreadFunc@…`, and that
+one is lane P's). The other 19 rows are lane Q/P's `814166a`, which landed
+between my two commits — the `Collection::Array` cluster (`0x18007a0d0`,
+`0x18001c750` and 12 more `addr:` rows), `Goal::Serialize`, `GoalInstance::Persist`
+and `Frustum::Projection`, plus 2 new `addr:` rows their ports depend on.
+Attribution here is by *diffing the sets*, not by reading the totals; the totals
+would have credited this lane with someone else's wave.
+
 ## Files
 
 Changed: `code/Game/Component/growthcomponent.cpp`, `code/Game/Component/herdcomponent.cpp`,
