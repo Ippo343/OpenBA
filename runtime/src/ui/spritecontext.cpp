@@ -567,12 +567,21 @@ void* RtUi_SpriteContext_SetScissor_Ints(void* selfRaw, void* retRaw,
     // Whether the inner call will take its early-out is decided by exactly the
     // predicate the inner body uses, so it can be evaluated here WITHOUT
     // calling anything — which is what makes the replay below safe.
-    const float scale = self->_scale;
-    const bool changed = !(ScaleDown(x, scale) == self->_scissorX &&
-                           ScaleDown(y, scale) == self->_scissorY &&
-                           ScaleDown(w, scale) == self->_scissorW &&
-                           ScaleDown(h, scale) == self->_scissorH);
-    RT_DIFF_WORK(changed);
+    //
+    // Computed ONLY when diffing. This forwarder is on the per-frame UI path,
+    // retail's body is nine instructions of stack packing, and duplicating the
+    // inner body's four divides and four compares on every shipped call would
+    // be a real cost paid for a measurement nobody is taking
+    // (rt_diff.h: with BANISHED_RT_DIFF unset the macros must cost nothing).
+    bool changed = false;
+    if (rt_diff_on__) {
+        const float scale = self->_scale;
+        changed = !(ScaleDown(x, scale) == self->_scissorX &&
+                    ScaleDown(y, scale) == self->_scissorY &&
+                    ScaleDown(w, scale) == self->_scissorW &&
+                    ScaleDown(h, scale) == self->_scissorH);
+        RT_DIFF_WORK(changed);
+    }
 
     RtUi_SpriteContext_SetScissor_Viewport(self, retRaw, &v);
 
