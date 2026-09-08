@@ -786,6 +786,57 @@ half**; and because of result 1 **a hardware write watchpoint only has to cover 
 1,200 frames of sim** — which makes `standalone/hw_watch.cpp` cheap in a way it was not this
 morning.
 
+### The two menu crashes — DISPOSITIONED, plus a boot-path blocker on no gate row
+
+Lane M, 2026-09-08, source + disassembly.
+
+**4(a) Goals — NOT A DEFECT, NOT REACHABLE, NOT A CUTOVER BLOCKER.** Retail derefs it
+unguarded too: `0x1400698ba: MOV RAX,[0x1401c3dd8]; MOV RAX,[RAX+0x150]` — two MOVs, one `*`
+in C, exactly what `goaldialog.cpp:98` writes, and retail's own `MainMenuDialog::OnCommand`
+dispatches id 10 straight to `GoalDialog_Ctor` with **no world check**. **Our port is
+faithful including the missing guard**, so a null check here would be the forbidden fix.
+Retail's protection is not a guard — **the button does not exist**: `MainMenu.rsc` places
+seven buttons and `buttonGoal`, though *defined* as a `ButtonDescription`, appears in **no
+`_elements` list anywhere in the shipped resource tree**, `Pause.rsc` included. Only
+`BANISHED_AUTOMENU_BUTTON=10` produces it, by injecting the `OnCommand` directly.
+⚠️ **Correction to a closed claim:** `project_achievements_menu_two_defects.md` records
+"ACHIEVEMENTS + GOALS BUTTONS CLOSED". Achievements is real (`buttonAchievement` is placed,
+`menus_btn8` clean). **The Goals half wired a case for a button that is never placed** — not
+a defect in the closure, but *a claim broader than its evidence*.
+
+**4(b) Mods — the CRASH is harness misuse; the EMPTY LIST is real and open.** `GetMod`
+(`0x18000da80`) is four instructions and cannot fail (`MOVSXD; SHL 7; ADD [RCX+8]; RET`), so
+`RAX=0x80` **proves a valid singleton holding an EMPTY array, not a null one** — `GetCount`
+returned 0 without faulting, which a null `this` could not do. Retail's UI never raises a
+click for a row that does not exist, so guarding it would mask nothing. `Loader::Load`'s
+`RefreshList` guard was checked against retail instruction by instruction
+(`0x1800dc07d`-`0x1800dc0ad`) and **our port is equivalent** — retail's extra `TEST DL,DL`
+branches are implied by the outer `CMP DL,AL; JZ`. So the empty list is not that port.
+**Reachable at cutover: crash NO, empty list YES — every boot.** Cell needed:
+`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=p,101,m6`, reading
+`RefreshList`/`SetupFileSystem`/`pkm` in the RAW log (the archived cells cannot answer it —
+the distillation dropped the `[ModProbe]` lines).
+
+**⛔ 4(c) A CUTOVER BLOCKER ON NO GATE ROW — and it is a CLASS.** Verified independently.
+`rt_data_mint_tables.inc:1470` mints `?_singleton@Modification@IO@@2PEAV12@EA` with
+**`ctorInit = nullptr`**. `MintConstructedStatics()` skips every row with no `ctorInit`, so at
+cutover it is **8 zeroed bytes nothing ever writes** — while `RegisterMintedData()` registers
+every storage row **by export name** (`rt_data_mint.cpp:559`), so `ResolveExport` returns OUR
+storage instead of the DLL's. `ModificationSingleton()` returns `*p` = **null**, and
+`RtEngine_Loader_Load` — registered at `0x1800dc050`, **ON THE BOOT PATH** — dereferences it.
+**It cannot bite today**: the mint only registers under `BANISHED_RT_MINT=1`, which is
+cutover-only, so no run we have done could have caught it and none we can do will, until the
+day it matters.
+**Why it is a class:** a storage row is safe only if something WRITES it after cutover —
+(a) a CRT initialiser we reproduce (**3 of 31 rows**), (b) a PORTED function that writes the
+slot as retail does, or (c) **nothing, in which case it is zero forever**. Lane E3 found an
+instance of (c) independently — `?_singleton@MemoryAllocator`, whose `Construct` does
+`if (slot) *slot = self` so the write is **skipped without a word**. **Two independent
+instances, from two lanes, by two routes.** Enumeration assigned to lane C2: name the writer
+for all 31 rows and classify each. **The shadow may already show this** — a row printing
+`DLL=WRITTEN` but `minted=zero` at EXIT is exactly a category-(c) candidate, and that data is
+in a report already read.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
