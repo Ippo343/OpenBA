@@ -391,6 +391,26 @@ extern "C" void RtAllocShadowSummary() {
                 ourRanges, g_shadowSelf->rangeCount,
                 (unsigned long long)(ourReserved >> 20),
                 (unsigned long long)(g_shadowSelf->totalReserved >> 20));
+    // EFFECTIVENESS CONTROL for a growth cell (lane E3). `ranges=N` above says
+    // where the replica ENDED; these say what the growth path actually DID.
+    // A cell run to close WAVE9_LANE_E2.md §5.1 is only evidence if grow>0 and
+    // tableCopy>0 — the latter needs a THIRD range, because rangeCapacity goes
+    // 0 -> 2 -> 4 and only the 2->4 step takes the memcpy+release branch.
+    {
+        uint64_t grow = 0, tableCopy = 0, crossRange = 0;
+        RtAllocShadowGrowth(&grow, &tableCopy, &crossRange);
+        fprintf(stderr, "[RtAllocShadow] GROWTH grow=%llu tableCopy=%llu crossRange=%llu\n",
+                (unsigned long long)grow, (unsigned long long)tableCopy,
+                (unsigned long long)crossRange);
+        if (grow == 0)
+            fprintf(stderr, "[RtAllocShadow] grow=0 — the arena-growth path did NOT run in "
+                            "this cell. Whatever `divergences` says, this run is not "
+                            "evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).\n");
+        else if (tableCopy == 0)
+            fprintf(stderr, "[RtAllocShadow] tableCopy=0 — a second range was created but "
+                            "ExpandMemoryRangeTable's copy-and-release branch never ran. "
+                            "That needs a THIRD range; shrink BANISHED_ARENA_MB further.\n");
+    }
     fprintf(stderr,
             "[RtAllocShadow] SUMMARY armed=%d observed=%llu divergences=%llu "
             "skipped_pre_startup=%llu other_allocator=%llu "

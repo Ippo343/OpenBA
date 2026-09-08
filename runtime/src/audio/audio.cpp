@@ -77,6 +77,7 @@
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../io/save_trace.h"                 // Wave 9 lane S
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
+#include "../../funcs/rt_diff.h"              // Wave 9 lane W: the [branch:] counters
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -525,6 +526,27 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
     }
     if (!early)
         ours = firstFree;
+
+    // EFFECTIVENESS CONTROL. `calls=` on the port says only that the body ran.
+    // This function has three outcomes and they exercise different code: the
+    // early -1 is the ONLY path that reaches the distance test and the reuse
+    // window (i.e. the only one that touches SoundEffect+0x20/+0x28 for real),
+    // and "no free slot" is the 4096-iteration boundary. A green summary made
+    // entirely of the first-free case would leave the arithmetic this port was
+    // written for completely unverified -- the SetValueInt shape.
+    if (rt_diff_on__) {
+        static RtDiffSite brReuse = { "Audio::Scene::FindFree3DEffect[branch:reuse-hit, -1 -- the ONLY path through the distance+window test]", 0, 0, false, false };
+        static RtDiffSite brFree  = { "Audio::Scene::FindFree3DEffect[branch:free-slot returned]", 0, 0, false, false };
+        static RtDiffSite brFull  = { "Audio::Scene::FindFree3DEffect[branch:table FULL, -1 after 4096]", 0, 0, false, false };
+        // Register FIRST and unconditionally: RtDiffReport does not register
+        // (rt_diff.cpp:82), so "report if taken, register if not" prints only the
+        // branches that never ran -- exactly inverted. See buffers.cpp's
+        // CountBranch for the full note.
+        RtDiffRegister(&brReuse); RtDiffRegister(&brFree); RtDiffRegister(&brFull);
+        if (early)               RtDiffReport(&brReuse, true, "taken", "taken");
+        if (!early && ours >= 0) RtDiffReport(&brFree,  true, "taken", "taken");
+        if (!early && ours < 0)  RtDiffReport(&brFull,  true, "taken", "taken");
+    }
 
     if (rt_diff_on__) {
         // Pure: nothing above wrote anything, so theirs sees byte-identical

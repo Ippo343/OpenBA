@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 
 // Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
@@ -435,8 +436,35 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     printf("[GameMain] Engine constructed.\n");
 
     StallDebug::Mark("Init() -> RunGameMain entry + Engine ctor");
-    printf("[GameMain] Engine::Startup(cmdLine=%p, 0x200, 0, false)...\n", (void*)cmdLine);
-    unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, 0x200, 0, false);
+
+    // ------------------------------------------------------------------
+    // Arena size. arg2 of Engine::Startup is MemoryAllocator::minRangeSize in
+    // MEGABYTES (0x1800db8d9: SHL RAX,0x14; MOV [RCX+0x10],RAX) and arg3 is
+    // maxTotalSize, 0 meaning unlimited. Retail's 0x200 = a single 512 MB
+    // reservation, which is more than any town we can build ever fills — so
+    // the allocator's arena-GROWTH path (a second MemoryRange, the range-table
+    // realloc-and-copy, every multi-range scan) never executes, and 12.75M
+    // shadow-verified operations said nothing about it (WAVE9_LANE_E2.md 5.1).
+    //
+    // BANISHED_ARENA_MB shrinks it so ordinary play overflows the first range.
+    // It is a HARNESS KNOB for the allocator shadow oracle, not a tuning
+    // parameter: unset (the default, and every normal run) the call below is
+    // byte-identical to what it has always been. Clamped so a typo cannot make
+    // the engine unbootable.
+    unsigned arenaMB = 0x200;
+    if (const char* e = std::getenv("BANISHED_ARENA_MB")) {
+        unsigned long v = std::strtoul(e, nullptr, 0);
+        if (v >= 4 && v <= 4096) {
+            arenaMB = static_cast<unsigned>(v);
+            printf("[GameMain] BANISHED_ARENA_MB=%u — allocator minRangeSize overridden "
+                   "(retail is 512). Arena growth is EXPECTED in this run.\n", arenaMB);
+        } else {
+            printf("[GameMain] BANISHED_ARENA_MB=%s out of range [4,4096] — ignored, "
+                   "using 512\n", e);
+        }
+    }
+    printf("[GameMain] Engine::Startup(cmdLine=%p, %u, 0, false)...\n", (void*)cmdLine, arenaMB);
+    unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, arenaMB, 0, false);
     // Engine::Startup somehow disconnects stdout/stderr from the log files
     // that WinMain freopen()'d (cause TBD — Engine::Startup itself doesn't call
     // AllocConsole/FreeConsole/SetStdHandle/freopen per Ghidra). Re-redirect

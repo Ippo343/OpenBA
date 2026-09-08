@@ -314,3 +314,8 @@ extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences);
 // no mapped replica pointer. Either one non-zero invalidates the run.
 extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped);
 extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved);
+// Arena-growth effectiveness control: how many times the growth path actually
+// ran, how many of those took ExpandMemoryRangeTable's copy-and-release branch,
+// and how many comparisons landed outside range 0. See WAVE9_LANE_E3.md.
+extern "C" void RtAllocShadowGrowth(uint64_t* grow, uint64_t* tableCopy,
+                                    uint64_t* crossRange);
