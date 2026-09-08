@@ -1693,6 +1693,48 @@ The open question underneath #6 is now answered EMPIRICALLY rather than asserted
 name registered twice — and says explicitly that if no duplicate exists, the shortfall IS
 a lost insert and must not be dismissed.
 
+### Two rules about ORACLES, from lane PICK — both found AFTER a PASS
+
+Lane PICK's grid probe returned `comparisons=45 mismatches=0`, every effectiveness
+counter non-zero, no GAP line, and both negative controls firing. It then interrogated
+its own pass and found two holes. Both generalise.
+
+**1. An oracle observing a result only through a LOSSY TRANSFORM is blind to everything
+the transform discards.** The grid comparison could not verify the float bodies at all:
+`BoxTransform`'s output reaches it only through `(int)(f * invCellSize)`, and that
+truncation swallows any error smaller than one cell. **A 1-ULP AABB error would have
+sailed through green.** The fix was a direct bitwise comparison on the float bodies' own
+inputs — 57 cases, tolerance zero, off-axis and non-normalised rotations.
+
+The general form, which applies well beyond Picking: a float checked through a quantiser
+or a comparison-to-threshold, a decompressor checked on its output bytes but not its
+stream cursor or checksum state, a serialiser checked on the file but not the object.
+Ask what your comparison point *cannot see*.
+
+**2. Compare in LOCKSTEP, not at the end.** The script now applies each of 17 indexed
+steps to both subjects and compares immediately, instead of running each subject to
+completion and comparing once. *"A defect that cancels out — push a link on the free list
+in the wrong order, pop it back in the wrong order — compares equal at the end while
+every query in between saw a different grid."* An oracle whose only observation point is
+the end state cannot distinguish "never wrong" from "wrong, then wrong again".
+
+### The advisory lock nobody was told about
+
+`tools/game_dir_lock.sh` was written mid-session, after contention had already cost three
+lanes their runs. It was then broadcast only to the lanes the integrator happened to be
+replying to — so lane PICK was **clobbered twice inside a window it held**, by lanes that
+had never heard of the lock. Its first run produced a plausible, complete log from the
+pre-lane build.
+
+**An advisory lock introduced mid-flight protects nobody until every participant is told,
+and the failure is silent for anyone whose acceptance test is the on-disk md5.** Three
+lanes independently converged on the same fix: **gate on an identity line that only your
+build emits, read out of the run's own log** (`[RtPort] Picking: 9 exports + 19 grid
+addresses registered`, `[RtPort] IO: N exports registered`, a lane-specific registration
+count). The md5 tells you which exe is on disk at the moment you look; the log line tells
+you which exe *ran*. Derive the expected string from your own build each time — lane
+PICK's changed the moment its registrations grew.
+
 ### Two more rules the lanes paid for
 
 **A family found by a caller-driven survey is bounded BELOW, not above** (lane UIC). Lane
