@@ -122,6 +122,13 @@ the two reads into one. The port keeps them separate.
 
 ### 2.3 `KeyMap::Load` — closed because every callee is *ported*, not merely exported
 
+> **Narrowed after the coordinator's base-commit message (see §8).** The
+> sentence "every callee is satisfied" was too strong and is corrected in
+> §2.3.1 below. The five callees *retail's body* has are all satisfied, which is
+> what makes the row closable; our body reaches one more door than retail's
+> does.
+
+
 Filtered to `CALL`, `Load`'s call list is five distinct targets:
 
 ```
@@ -160,6 +167,36 @@ The key is `"Input" + (description + suffix)` where suffix is `""` for slot 0 an
 `"Alt"` for slot 1 — two nested `String::Format("%s%s", …)` calls, so the
 "Input" prefix lands *before* the suffix, not around it. Literals read out of
 .rdata at 0x1801551F0/F4/F8 and 0x180155200.
+
+#### 2.3.1 The door our body adds that retail's does not
+
+Our body builds and releases `System::String`s through the tree's ported helpers
+rather than through inlined assembly. Both `RtSystem_String_Format` and
+`RtSystem::RtString_ReleaseInline` end in `RtMemFree`
+(`runtime/src/system/string.cpp`), which resolves with
+`RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z")`.
+**`RtOriginal` is the RAW door** — it calls `ResolveExportRaw`, which skips the
+port registry by design. `MemFree` *is* ported (`allocator.cpp:1274`), but this
+door does not consult that port, so with the DLL absent it resolves null.
+
+This is a **tree-wide row, not a `KeyMap::Load` one**. Every landed String-using
+port on the boot path goes through the same door — including
+`IO::Persistence::Get(int&)`/`Get(bool&)`, which call the identical
+`RtString_ReleaseInline`. It is `string.cpp`'s deliberate allocator seam
+("strings cross the DLL boundary constantly, so both sides must use the same
+heap") and belongs to the allocator lane.
+
+So the precise claim is: **`?Load@KeyMap@Input@@QEAAXXZ` stops being a null
+symbol**, and the boot can still stop one frame deeper inside our own String
+release — at a door it would have reached through `Persistence` anyway. The same
+narrowing applies to nothing else in this lane: the other three ported bodies
+allocate nothing and touch no `System::String`.
+
+Noted in passing, not this lane's to fix: `port_bypass_audit.py --all` reports
+`?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` as *"not ported; raw == non-raw
+today"* while `allocator.cpp:1272` registers it. That is the
+gated-registration blind spot `reference_census_counted_gated_and_missed_dx11.md`
+records, showing up in a second tool.
 
 ---
 
@@ -307,7 +344,14 @@ More precisely, and each of these is falsifiable on its own:
    `PlatformUpdate` every frame while `EnableMouseClipping` runs only on a
    settings change. **`Update` is the higher-value next pickup in this cluster**,
    and it now needs three helpers rather than four.
-4. `?FindOrLoad@ExternalFactory@Object@@…` will still be a null call, and
+4. `?Load@KeyMap@Input@@QEAAXXZ` will not appear as a null symbol, **but the
+   boot may still stop inside our String release** at
+   `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` reached through
+   `string.cpp`'s raw `RtOriginal` door (§2.3.1). If it does, the crash will
+   name `RtMemFree`, not `KeyMap::Load`, and the fix belongs in `string.cpp`'s
+   allocator seam. It will happen through `IO::Persistence::Get` first if
+   anything reads a setting before the key map loads.
+5. `?FindOrLoad@ExternalFactory@Object@@…` will still be a null call, and
    porting it alone will NOT remove that — it will replace one null with up to
    six (`Add`, `Load@External`, `ExpandRelativePath`, `GetPathExtension`,
    `GetPathDirectory`, `operator+`). Refuted if a `FindOrLoad` port alone
@@ -336,3 +380,45 @@ More precisely, and each of these is falsifiable on its own:
 * Offsets +0x04, +0x1C of `AudioChannel` and everything in `Audio::Device`
   outside {channels, +0xA50, +0xA88, +0xAA0+idx*0x20} are unmodelled gaps, not
   padding that has been proven empty.
+
+---
+
+## 8. Base-commit check (coordinator's message, after the first report)
+
+**Checked, and this lane hit the same trap the other two did.** The worktree was
+created at `965361d` — three waves stale, no `docs/runtime_port/` directory at
+all and an old `CLAUDE.md`. It was caught in this lane's first four tool calls
+(`ls docs/runtime_port/` failed) and `git reset --hard wave/upgrade-path-complete`
+was run **before any analysis**, landing on `d382e12`. Every fact in this
+document was read from that tree. `git merge-base --is-ancestor d382e12 HEAD`
+confirms it; the lane commit sits directly on `d382e12`.
+
+The three landed findings, checked against this lane's work:
+
+1. **Allocator arms with the DLL absent** — no target here was held back on
+   allocator grounds, so nothing changes. It does bear on §2.3.1: the remaining
+   String-release exposure is `string.cpp`'s **raw door**, which skips the port
+   registry, so an armed allocator does not by itself close it.
+2. **`ResolveAddr(Module::Runtime, …)` consults the port registry FIRST** —
+   this lane wrote no comment claiming otherwise and calls `ResolveAddr` zero
+   times. The one comment that could have been *read* that way
+   (`input_win.cpp`) has been rewritten to state the mechanism explicitly: the
+   address door reaches the DLL exactly when the address is UNREGISTERED.
+3. **Register by name AND address** — all four rows are registered both ways
+   (`input_win.cpp:180/182`, `keymap_load.cpp:279/280`,
+   `audio_device.cpp:282/284` and `:286/288`). `Input::Device::PlatformUpdate`
+   is address-only because it has **no mangled export in either the retail or
+   the profile build** — verified against the export directory with `pefile`,
+   not assumed. That is the correct handling of a genuinely unexported helper,
+   not lane B3's defect.
+
+**What the re-check changed in this lane's own conclusions**: §2.3's claim that
+"every callee is satisfied" for `KeyMap::Load` was too strong. Corrected in
+§2.3.1 and in prediction 4 of §6. The row still closes as a symbol; the
+narrowing is about what the boot can still stop on one frame deeper. Nothing in
+§1, §2.1, §2.2, §3 or §4 changed — those rest on DLL bytes and on audit runs
+made against `d382e12`.
+
+Also noted: `docs/runtime_port/WAVE9_LANE_Z.md` does not exist. This lane used
+lane Z's triage rule as stated in its own brief and did not go looking for the
+file, so nothing here depended on its absence.

@@ -174,9 +174,18 @@ void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
 
 int RtInputWinRegister() {
     int n = 0;
-    // Registered under the name AND the address: engine_funcs.cpp reaches this
-    // by name (engine_funcs.cpp:3950), but port_bypass_audit.py's ADDRESS door
-    // exists because a ResolveAddr caller would otherwise still land on the DLL.
+    // Registered under the name AND the address. engine_funcs.cpp reaches this
+    // by name (engine_funcs.cpp:3950); the address registration is what makes
+    // `ResolveAddr(Module::Runtime, 0x1800E1780)` reach us too.
+    //
+    // To be exact about which door does what, because this project has
+    // re-learned it more than once: `ResolveAddr(Module::Runtime, …)` is NOT
+    // "always the DLL" — it consults the port registry FIRST and only then the
+    // module handle (standalone/resolve_standalone.cpp:471). So the address
+    // door lands on the DLL exactly when the address is UNREGISTERED. Wave 9
+    // lane UIF found a function registered by name only, which made every
+    // by-address caller fall through silently; registering both is the fix,
+    // and it is why both lines are here rather than just the first.
     RegisterRuntimeExport("?EnableMouseClipping@Device@Input@@QEAAX_N@Z",
                           (void*)&RtInput_Device_EnableMouseClipping);
     RegisterRuntimeAddr(0x1800e1780, (void*)&RtInput_Device_EnableMouseClipping); ++n;

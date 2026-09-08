@@ -27,6 +27,30 @@
 //                about the same address and calls std::strtol; so does this.
 //   [0x18014B390] / [0x18014B388]  Enter/LeaveCriticalSection. KERNEL32.
 //
+// ONE THING THAT LIST DOES NOT COVER, and the claim has to be narrowed to say
+// so. Those five are the callees RETAIL's body has. OUR body reaches two more,
+// because it builds and releases `System::String`s through the tree's ported
+// helpers rather than through inlined assembly: `RtSystem_String_Format` and
+// `RtSystem::RtString_ReleaseInline` both end in `RtMemFree`
+// (runtime/src/system/string.cpp), which resolves with
+// `RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z")` — and
+// `RtOriginal` is the RAW door: it calls `ResolveExportRaw`, which SKIPS the
+// port registry by design and reads the DLL's export table. `MemFree` IS ported
+// (allocator.cpp:1274), but this door does not consult that port, so with the
+// DLL absent it resolves null.
+//
+// That is a TREE-WIDE row and not a KeyMap::Load one: every landed String-using
+// port on the boot path goes through the same door, including
+// `IO::Persistence::Get(int&)` / `Get(bool&)`, which call the identical
+// `RtString_ReleaseInline`. It is `string.cpp`'s allocator seam — deliberate,
+// documented there ("strings cross the DLL boundary constantly, so both sides
+// must use the same heap"), and owned by the allocator lane, not this one.
+//
+// So the precise claim is: `?Load@KeyMap@Input@@QEAAXXZ` stops being a null
+// SYMBOL, and the boot can still stop one frame deeper inside our own String
+// release — at a door it would have stopped at through Persistence anyway.
+// "Every callee is satisfied" would have been the wrong sentence.
+//
 // NOT ONE unexported Runtime function, and not one unported exported one. The
 // Persistence lookup is INLINED in retail — there is no call to `Map_Find`
 // (0x18002ACE0) here — so writing that walk out is both the faithful thing and
