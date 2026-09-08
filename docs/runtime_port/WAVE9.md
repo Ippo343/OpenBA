@@ -1208,6 +1208,42 @@ Audits on this tip: `rawdoor` **483 sites / 0 UNGUARDED-CALL / 34 DEFERRED**, `p
 **ADDRESS 201 / 0, NAME 411 / 0**, `rt_data_door` **PASS, 3 `RT_RAW_OK`, 0 UNCLASSIFIED**,
 census **849 called / 616 ported / 72.6%**.
 
+### Cutover attempt 11 -- THE WALL MOVED, and lane FS's prediction was 4-for-4
+
+Merged lane FS (`SetupDirectories` + 11 callees) plus lanes BOOT2, OBJ2 and VID2.
+Attempt 11, exe stamp `2026-09-08 08:02`:
+
+| lane FS predicted | observed |
+|---|---|
+| symbol `?LoadPackages@FileSystem@IO@@` | ✅ `[RtUnresolved] ?LoadPackages@FileSystem@IO@@QEAAXXZ` |
+| enclosing `RtIo_FileSystem_Startup` | ✅ `RtIo_FileSystem_Startup` |
+| offset LARGER than `+0x55` | ✅ **`+0x140`** (attempt 09 was `+0x55`) |
+| stack depth STAYS PUT | ✅ caller still `RtEngine_Engine_Startup +0x22C`, same depth |
+
+**This prediction deliberately broke the previous two iterations' pattern** (both had
+the frame moving down), so it was a real risk rather than an extrapolation, and it
+named the falsifier in advance: a frame moving *down* would have meant
+`SetupDirectories` faulted internally. It did not.
+
+**`SetupDirectories` ran to completion, and the crash dump proves it independently of
+the symbol name.** The faulting object's `this[+0x18] = 0x101` — that is the packfile
+gate lane FS documented (`??0FileSystem` writes `0x100`; `Startup` sets the low byte
+only AFTER `SetupDirectories` returns). And `this[+0x00]` points at a buffer holding
+`C:\GOG Gamesesource\`, a path `SetupDirectories` built. Two independent
+confirmations that the row closed.
+
+**⚠️ A lane FS holdback is now STALE BY DESIGN.** It declined `ExistsInPackfile`
+because the packfile gate is 0 — true at `SetupDirectories` time. By `LoadPackages`
+the same gate reads 1, and `LoadPackages` opens with
+`CMP byte ptr [RCX+0x18],0x0 / JZ <ret>`, so the whole body is live. Whoever takes
+`LoadPackages` must re-derive that holdback rather than inherit it.
+
+`?LoadPackages@FileSystem@IO@@QEAAXXZ` is retail `0x1800ab460`, ord 3209, ~300
+instructions: two array-growth loops over the package list, a BST insert per entry
+keyed on name, and ten-odd callees. It takes the allocator lock directly
+(`?_singleton@MemoryAllocator@System@@` at `0x1801fc718`, `+0x640`, through the
+dispatch slots at `0x18014b390` / `0x18014b388`).
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
