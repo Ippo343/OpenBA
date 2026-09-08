@@ -46,10 +46,34 @@
 //                         PUSH RBX/RDI/R12/R14/R15; SUB RSP,0x20   -> 13 bytes
 //   Free     0x1800c6c00: 48 85 D2 | 0F 84 4F 02 00 00 | 48 8B C4
 //                         TEST RDX,RDX; JZ Free+0x258; MOV RAX,RSP -> 12 bytes
-//   Startup  0x1800c7620: 40 53 | 48 83 EC 50 | 48 C1 E2 14 | 49 C1 E0 14
-//                         PUSH RBX; SUB RSP,0x50; SHL RDX,0x14; SHL R8,0x14
-//                                                                  -> 14 bytes
-// All three boundaries counted from the disassembly, not from Ghidra's C.
+// Both boundaries counted from the disassembly, not from Ghidra's C.
+//
+// ---------------------------------------------------------------------------
+// THE ARMING TRIGGER IS Engine::Engine::Startup, NOT MemoryAllocator::Startup
+// ---------------------------------------------------------------------------
+// Wave 9 lane E2 took the first shadow measurement and it came back
+// `armed=0 observed=0 skipped_pre_startup=1788875`. The driver was waiting on
+// ?Startup@MemoryAllocator@System@@QEAA_N_K0@Z (0x1800c7620), and that function
+// is NEVER CALLED in the shipped game. Proved two independent ways over the
+// shipped binaries, not inferred:
+//
+//   * a full rel32 scan of Runtime-x64.dll's .text for CALL/JMP to 0x1800c7620
+//     finds ZERO sites. (The same scan finds 3 for AddNewMemoryRange, 348 for
+//     Allocate, 1 for the ctor — so the scan works.)
+//   * Application-x64.exe's PE import table carries exactly two MemoryAllocator
+//     symbols: MemAlloc and MemFree. Startup is not among them.
+//
+// MSVC INLINED it into ?Startup@Engine@1@QEAAIPEBDII_N@Z (0x1800db8a0). That
+// body writes minRangeMB<<20 to +0x10 and maxTotalMB<<20 to +0x18, reads the
+// page size out of GetSystemInfo into +0x668, and then calls AddNewMemoryRange
+// at 0x1800db905 — the inlined copy of Startup, instruction for instruction.
+// It is the only place the arena is ever created.
+//
+//   Engine::Startup 0x1800db8a0: 48 8B C4 | 55 | 48 8B EC | 48 83 EC 60 |
+//                                48 C7 45 C0 FE FF FF FF          -> 19 bytes
+//     MOV RAX,RSP is an RSP capture; InstallDetour detects and corrects it.
+//     RCX=this (the Engine, whose offset 0 IS the MemoryAllocator),
+//     RDX=name, R8D=minRangeMB, R9D=maxTotalMB, stack=bool. Returns unsigned.
 // ============================================================================
 
 #include <windows.h>
@@ -131,37 +155,72 @@ uint64_t         g_shadowSkipped = 0;       // observations dropped (see below)
 uint64_t         g_shadowOther   = 0;       // calls on a different allocator
 RtDetour         g_startupDetour = {};
 
-typedef bool (*StartupFn)(MemoryAllocator* self, uint64_t minMB, uint64_t maxMB);
+typedef unsigned (*EngineStartupFn)(void* self, const char* name, unsigned minMB,
+                                    unsigned maxMB, bool noConfigure);
 
-// Observe-only Startup. Retail's body shifts both args by 20 itself, so the
-// values arriving here are MEGABYTES, which is exactly what RtAllocShadowStartup
-// wants. Run theirs first so the real arena exists before the replica is built
-// (the replica reserves from the same platform seam and must not race it).
-bool ShadowStartup(MemoryAllocator* self, uint64_t minMB, uint64_t maxMB) {
-    StartupFn orig = reinterpret_cast<StartupFn>(g_startupDetour.trampoline);
-    const bool ok = orig(self, minMB, maxMB);
+// Observe-only Engine::Startup — the function that INLINES
+// MemoryAllocator::Startup (see the header comment; the exported one has no
+// callers). `self` is the Engine, and the MemoryAllocator is embedded at its
+// offset 0, so the same pointer is both.
+//
+// ARM BEFORE CALLING THE ORIGINAL. Lane E2's second measurement armed after it
+// and read `live=12765 bytes=906440 ranges=1` at that point with 17,017 calls
+// already skipped: Engine::Startup does not merely start the allocator, it
+// boots the whole engine, and ~12.8k of the process's allocations happen inside
+// it, AFTER the inlined MemoryAllocator::Startup at 0x1800db905. Arming on the
+// way out therefore starts the replica from a state the real arena had long
+// left, and every one of the 1,684,998 comparisons diverged for that reason and
+// that reason alone — a harness defect that reads exactly like a catastrophic
+// port defect (reference_probe_needs_an_effectiveness_control.md).
+//
+// Entry to Engine::Startup is the one virgin instant: the arena cannot predate
+// it, because AddNewMemoryRange divides by self->pageSize and the ctor leaves
+// pageSize at 0 (allocator.cpp Construct) — the first allocation before Startup
+// would divide by zero. So the invariant asserted below (rangeCount==0 &&
+// allocCount==0 && nothing skipped) is not a hope; it is structural, and if it
+// ever fails the run is declared INVALID instead of measured.
+unsigned ShadowStartup(void* selfv, const char* name, unsigned minMB,
+                       unsigned maxMB, bool noConfigure) {
+    EngineStartupFn orig = reinterpret_cast<EngineStartupFn>(g_startupDetour.trampoline);
+    MemoryAllocator* self = static_cast<MemoryAllocator*>(selfv);
 
-    if (ok && g_shadowSelf == nullptr) {
-        g_shadowSelf = self;
-        if (!RtAllocShadowStartup(minMB, maxMB)) {
-            fprintf(stderr, "[RtAllocShadow] replica arena failed to arm — "
-                            "shadow DISABLED for this run\n");
-            g_shadowSelf = nullptr;
-            g_shadowOn   = false;
+    if (g_shadowSelf == nullptr) {
+        // EFFECTIVENESS CONTROL, at the one instant it means anything.
+        fprintf(stderr, "[RtAllocShadow] Engine::Startup ENTRY (min=%uMB max=%uMB): "
+                        "real arena live=%d bytes=%lld ranges=%d, skipped so far=%llu\n",
+                minMB, maxMB, self->allocCount, (long long)self->allocatedBytes,
+                self->rangeCount, (unsigned long long)g_shadowSkipped);
+        if (self->rangeCount != 0 || self->allocCount != 0 ||
+            self->allocatedBytes != 0 || g_shadowSkipped != 0) {
+            fprintf(stderr, "[RtAllocShadow] REFUSING to arm: the arena is ALREADY "
+                            "LIVE at Engine::Startup entry. The replica could only "
+                            "start from a state the real arena has left, so every "
+                            "comparison would diverge for a harness reason. This run "
+                            "is INVALID, not clean.\n");
+            g_shadowOn = false;
         } else {
-            fprintf(stderr, "[RtAllocShadow] observing MemoryAllocator %p "
-                            "(min=%lluMB max=%lluMB)\n", (void*)self,
-                    (unsigned long long)minMB, (unsigned long long)maxMB);
+            g_shadowSelf = self;
+            if (!RtAllocShadowStartup(minMB, maxMB)) {
+                fprintf(stderr, "[RtAllocShadow] replica arena failed to arm — "
+                                "shadow DISABLED for this run\n");
+                g_shadowSelf = nullptr;
+                g_shadowOn   = false;
+            } else {
+                fprintf(stderr, "[RtAllocShadow] observing MemoryAllocator %p "
+                                "(min=%uMB max=%uMB)\n", (void*)self, minMB, maxMB);
+            }
         }
         fflush(stderr);
-    } else if (ok && self != g_shadowSelf) {
+    } else if (self != g_shadowSelf) {
         // A SECOND allocator was started. Replaying its traffic into the one
         // replica would desynchronise it; say so rather than produce numbers.
         fprintf(stderr, "[RtAllocShadow] WARNING: a second MemoryAllocator (%p) "
                         "was started; its traffic is NOT observed\n", (void*)self);
         fflush(stderr);
     }
-    return ok;
+    // The replica is armed and virgin; NOW run the real body, so every
+    // allocation Engine::Startup itself performs is observed.
+    return orig(selfv, name, minMB, maxMB, noConfigure);
 }
 
 // Called from AllocateLocked/FreeLocked, INSIDE the allocator critical section.
@@ -287,10 +346,13 @@ extern "C" bool RtAllocShadowInstall() {
         return false;
     }
 
-    if (!InstallRuntimeDetour("MemoryAllocator::Startup[shadow]", 0x1800c7620,
+    // Engine::Startup, NOT MemoryAllocator::Startup — the latter has no callers
+    // anywhere in the process. See the header comment for the proof.
+    if (!InstallRuntimeDetour("Engine::Startup[allocshadow]", 0x1800db8a0,
                               reinterpret_cast<void*>(&ShadowStartup),
-                              &g_startupDetour, 14)) {
-        fprintf(stderr, "[RtAllocShadow] could not detour Startup (0x1800c7620) — not arming\n");
+                              &g_startupDetour, 19)) {
+        fprintf(stderr, "[RtAllocShadow] could not detour Engine::Startup "
+                        "(0x1800db8a0) — not arming\n");
         fflush(stderr);
         return false;
     }
@@ -299,7 +361,7 @@ extern "C" bool RtAllocShadowInstall() {
     g_allocShadowOnFree  = &ShadowOnFree;
     g_shadowOn = true;
     fprintf(stderr, "[RtAllocShadow] observe-only driver armed; waiting for "
-                    "MemoryAllocator::Startup\n");
+                    "Engine::Startup (which INLINES MemoryAllocator::Startup)\n");
     fflush(stderr);
     return true;
 }
@@ -318,6 +380,17 @@ extern "C" void RtAllocShadowSummary() {
     uint64_t calls = 0, divergences = 0, mapFull = 0, freeUnmapped = 0;
     RtAllocShadowReport(&calls, &divergences);
     RtAllocShadowHealth(&mapFull, &freeUnmapped);
+    // COVERAGE CONTROL: did the arena-growth path (AddNewMemoryRange ->
+    // ExpandMemoryRangeTable) run at all, and did it agree? divergences=0 over
+    // a path never taken is the Wave 1 defect #4 trap one level down.
+    int ourRanges = 0; uint64_t ourReserved = 0;
+    RtAllocShadowCoverage(&ourRanges, &ourReserved);
+    if (g_shadowSelf)
+        fprintf(stderr, "[RtAllocShadow] COVERAGE ranges ours=%d theirs=%d  "
+                        "reserved ours=%lluMB theirs=%lluMB\n",
+                ourRanges, g_shadowSelf->rangeCount,
+                (unsigned long long)(ourReserved >> 20),
+                (unsigned long long)(g_shadowSelf->totalReserved >> 20));
     fprintf(stderr,
             "[RtAllocShadow] SUMMARY armed=%d observed=%llu divergences=%llu "
             "skipped_pre_startup=%llu other_allocator=%llu "

@@ -317,6 +317,16 @@ the DLL does not use. That is the atomicity guarantee, and it is enforced in cod
 
 ## 5. Go / no-go on the atomic swap
 
+> **SUPERSEDED 2026-09-07 by [WAVE9_LANE_E2.md](WAVE9_LANE_E2.md).** Gate step 2's
+> measurement has now been taken: 12,750,873 replayed operations, 0 divergences, all
+> health counters zero, and a negative control proved to go red. The "port has never
+> executed a single instruction" line below is CLOSED. Two things below are also wrong
+> and are corrected there: `MemoryAllocator::Startup` (§3) is **never called** — MSVC
+> inlined it into `Engine::Startup` — and the `minBin` negative control step 2
+> prescribes **cannot fail**, because `LinkFreeTag` overwrites it before the first
+> comparison. One new gap is open: the arena-growth path never executed (ranges=1).
+> The verdict below is kept verbatim as the record of what was believed at Wave 2.
+
 ### VERDICT: NO-GO today. GO-able, and less dangerous than PLAN.md assumed.
 
 **The reason it is less dangerous is worth stating plainly, because it changes the

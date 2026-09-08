@@ -757,26 +757,77 @@ inline size_t ShadowHash(void* p) {
 // that has nothing to do with the port -- and the design's own "a divergence
 // can never recover" property then turns one harness hiccup into a wall of
 // red. Count both so a run can be told apart from a defect.
-uint64_t g_shadowMapFull    = 0;   // insert found no free slot in 64 probes
+uint64_t g_shadowMapFull    = 0;   // insert found no free slot at all
 uint64_t g_shadowFreeUnmapped = 0; // Free arrived for a pointer we never mapped
 
+// Negative-control switches — see RtAllocShadowStartup. Off unless the env var
+// asks for them; they exist to prove the oracle can fail.
+bool g_shadowNegCtlMinBin = false;
+bool g_shadowNegCtlSize   = false;
+
+// LINEAR PROBING WITH BACKWARD-SHIFT DELETION (Knuth 6.4 algorithm R).
+//
+// Wave 9 lane E2. The first version emptied a slot by writing nullptr, which is
+// the classic open-addressing defect: nullptr is also the probe terminator, so
+// deleting an entry TRUNCATES the probe chain of every key that collided into a
+// later slot. Those keys then become unfindable and their Free is dropped, and
+// because a dropped Free makes the replica keep a block the real arena released,
+// the two desynchronise by exactly one and — by this design's own "a divergence
+// never recovers" property — every subsequent comparison is red.
+//
+// That is exactly what the second measurement showed: free_unmapped=207 and
+// then 1,765,043 "divergences" whose first instance was a drift of ONE
+// (ours live=13702 vs theirs live=13701) while the range offsets, which are the
+// thing that actually proves the port, agreed to the byte. A harness bug wearing
+// a catastrophic port defect's clothes.
+//
+// Backward-shift deletion keeps the no-tombstone invariant: after erasing slot
+// i, later entries whose home slot is not cyclically inside (i, j] are shifted
+// back so no chain is ever broken. No tombstones means the table cannot silt up
+// over a run's ~900k insert/erase pairs either, which a tombstone scheme would.
+void ShadowMapErase(size_t i) {
+    const size_t mask = kShadowSlots - 1;
+    size_t j = i;
+    for (;;) {
+        g_shadowMap[i].theirs = nullptr;
+        g_shadowMap[i].ours   = nullptr;
+        for (;;) {
+            j = (j + 1) & mask;
+            if (g_shadowMap[j].theirs == nullptr) return;   // chain ends: done
+            const size_t h = ShadowHash(g_shadowMap[j].theirs) & mask;
+            // Can g_shadowMap[j] move back to i? Only if its home slot h does
+            // NOT lie cyclically within (i, j].
+            const bool inside = (i <= j) ? (i < h && h <= j) : (i < h || h <= j);
+            if (!inside) break;
+        }
+        g_shadowMap[i] = g_shadowMap[j];
+        i = j;
+    }
+}
+
 void ShadowMapInsert(void* theirs, void* ours) {
-    if (!g_shadowMap) return;
-    size_t i = ShadowHash(theirs) & (kShadowSlots - 1);
-    for (size_t probe = 0; probe < 64; probe++) {
-        ShadowEntry& e = g_shadowMap[(i + probe) & (kShadowSlots - 1)];
+    if (!g_shadowMap || theirs == nullptr) return;   // nullptr is the empty marker
+    const size_t mask = kShadowSlots - 1;
+    size_t i = ShadowHash(theirs) & mask;
+    for (size_t probe = 0; probe < kShadowSlots; probe++) {
+        ShadowEntry& e = g_shadowMap[(i + probe) & mask];
         if (e.theirs == nullptr || e.theirs == theirs) { e.theirs = theirs; e.ours = ours; return; }
     }
-    g_shadowMapFull++;
+    g_shadowMapFull++;   // table genuinely full — impossible at this load factor
 }
 
 void* ShadowMapTake(void* theirs) {
-    if (!g_shadowMap) return nullptr;
-    size_t i = ShadowHash(theirs) & (kShadowSlots - 1);
-    for (size_t probe = 0; probe < 64; probe++) {
-        ShadowEntry& e = g_shadowMap[(i + probe) & (kShadowSlots - 1)];
-        if (e.theirs == theirs) { void* o = e.ours; e.theirs = nullptr; e.ours = nullptr; return o; }
-        if (e.theirs == nullptr) return nullptr;
+    if (!g_shadowMap || theirs == nullptr) return nullptr;
+    const size_t mask = kShadowSlots - 1;
+    size_t i = ShadowHash(theirs) & mask;
+    for (size_t probe = 0; probe < kShadowSlots; probe++) {
+        const size_t s = (i + probe) & mask;
+        if (g_shadowMap[s].theirs == nullptr) return nullptr;   // not present
+        if (g_shadowMap[s].theirs == theirs) {
+            void* o = g_shadowMap[s].ours;
+            ShadowMapErase(s);
+            return o;
+        }
     }
     return nullptr;
 }
@@ -810,6 +861,27 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
     // Construct WITHOUT touching the real _singleton slot.
     std::memset(&g_shadow, 0, sizeof(g_shadow));
     g_shadow.minBin = 0xbf;
+
+    // ---- NEGATIVE CONTROL (Wave 9 lane E2) --------------------------------
+    // A probe that has never reported a divergence has not been shown to be
+    // ABLE to. BANISHED_RT_ALLOC_SHADOW_NEGCTL deliberately breaks the replica
+    // and the run must go red; if it does not, the green runs mean nothing.
+    // Two modes, because the predicate has two independent halves and a
+    // control that only exercises one is not a control for the other
+    // (reference_shadow_predicate_must_name_its_failing_term.md):
+    //   minbin — start the replica's search floor one bin low. Fires the
+    //            COUNTER half (minBin/allocCount/freeTagCount/allocatedBytes).
+    //   size   — inflate every 100,000th replica request by 8 bytes. Fires the
+    //            GEOMETRY half (rangeIndex, offsetWithinRange), which is the
+    //            term that actually proves the allocator's placement logic, and
+    //            which no counter perturbation can reach.
+    if (const char* nc = getenv("BANISHED_RT_ALLOC_SHADOW_NEGCTL")) {
+        if (nc[0] == 'm') { g_shadowNegCtlMinBin = true; g_shadow.minBin = 0xbe; }
+        else if (nc[0] == 's') { g_shadowNegCtlSize = true; }
+        fprintf(stderr, "[RtAllocShadow] NEGATIVE CONTROL ACTIVE (%s) — this run is "
+                        "REQUIRED to go red; a clean result here invalidates every "
+                        "other run.\n", nc);
+    }
     g_plat.lockInit(g_shadow.lock);
     g_shadow.pageSize = 0;
 
@@ -832,7 +904,9 @@ extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
     RT_DIFF_BEGIN("System::MemoryAllocator::Allocate [shadow]");
     if (!g_shadowArmed) return;
 
-    void* ours = rtalloc::Allocate(&g_shadow, size, align);
+    uint64_t reqSize = size;
+    if (g_shadowNegCtlSize && (g_shadowCalls % 100000) == 99999) reqSize = size + 8;
+    void* ours = rtalloc::Allocate(&g_shadow, reqSize, align);
     ShadowMapInsert(theirs, ours);
     g_shadowCalls++;
 
@@ -892,6 +966,17 @@ extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences) {
 
 // Harness-health counters, distinct from port divergences. A non-zero value in
 // either means the MEASUREMENT is compromised, not that the port is wrong.
+// COVERAGE CONTROL. `divergences=0` over N calls says nothing about the paths
+// those N calls never took. The arena-growth path (AddNewMemoryRange ->
+// ExpandMemoryRangeTable -> a second MemoryRange) runs at most a handful of
+// times per run and is the one that would silently never execute. Reporting the
+// replica's final range count and reserved bytes beside the real allocator's
+// says whether it ran at all, and whether it agreed.
+extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved) {
+    if (ranges)   *ranges   = g_shadow.rangeCount;
+    if (reserved) *reserved = g_shadow.totalReserved;
+}
+
 extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped) {
     if (mapFull) *mapFull = g_shadowMapFull;
     if (freeUnmapped) *freeUnmapped = g_shadowFreeUnmapped;
