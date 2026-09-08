@@ -127,18 +127,43 @@
 //       The .pkg format parser itself. This is a lane, not a tail-end.
 //   ?CloseFile@FileSystem@IO@@…           0x1800accc0  ord 1726
 //   FUN_180008340 (recursive index-node free)          0x180008340
+//       ***PORTED 2026-09-08 by Wave 9 lane COLL*** (avl_trees.cpp). Note it
+//       releases exactly ONE element slot (the key String) and NOT the second:
+//       here that slot is the packed {packIndex,fileIndex} qword, and the same
+//       body serves other instantiations, so a symmetric release would corrupt
+//       the heap on the first call.
 //   FUN_180025a80 → FUN_180025c70 (BST insert)         0x180025a80
+//       ***PORTED 2026-09-08 by Wave 9 lane COLL***
+//       (runtime/src/collection/avl_trees.cpp, group D), together with
+//       0x180008520, 0x180008840 and 0x180025e10. The prediction below is
+//       exactly right and is worth keeping: it IS the insert twin of the config
+//       map's find, comparator and null-key asymmetries included, and it IS
+//       keyed with _stricmp rather than the signed strcmp. It is also a full
+//       AVL insert, not a plain BST one — 0x180025e10 is a rebalancing
+//       retrace and the node carries a balance and a height.
 //       …which in turn needs FUN_180008520 (node alloc) and FUN_180025e10
 //       (the rebalance). Structurally the insert twin of the config map's find
 //       that runtime/src/system/configuration.cpp already ports, comparator and
 //       null-key asymmetries included — but keyed with _stricmp (see below),
 //       not the signed-char strcmp that file uses.
 //   FUN_1800264a0 (the packfile sort)                  0x1800264a0  110 instrs
-//       Documented in full at its call site below. NOT ported on purpose, and
-//       the reason is stated there rather than hidden: it is an introsort with
-//       no oracle available in this lane, and a plausible-looking replacement
-//       would change tie-breaking silently.
+//       ***PORTED 2026-09-08 by Wave 9 lane COLL***
+//       (runtime/src/collection/introsort.cpp). The objection recorded here and
+//       at the call site was correct and is what the port had to answer, not a
+//       reason not to do it: an oracle DOES exist, because the shipped body is
+//       a LEAF (no CALL instructions) and a sort is a pure permutation of a
+//       caller-owned buffer. A bare LoadLibrary harness ran both over 784,000
+//       tie-heavy cases and compared the PERMUTATION, not the sortedness:
+//       0 differences, with a stable-sort negative control caught in 7,571 of
+//       7,800 cases. The tie rule the comment feared is one instruction:
+//       `CMOVG`, not `CMOVGE`, so among equal keys the EARLIEST position wins.
+//       The order is DESCENDING.
 //   FUN_18007eefc / FUN_18007eec0 (_stricmp)           0x18007eefc
+//       ***PORTED 2026-09-08 by Wave 9 lane COLL***
+//       (runtime/src/crt/msvc_stricmp.cpp). The warning below is confirmed and
+//       QUANTIFIED: a signed-byte lowering comparison disagrees in SIGN with
+//       this one in 169,849 of 400,000 randomised high-byte pairs, so a shared
+//       "TreeStrCmp" really would be wrong for one of the two trees.
 //       The CRT's own copy. 0x18007eec0 is `__ascii_stricmp`: it lowers only
 //       'A'-'Z' and compares the bytes UNSIGNED (`MOVZX`). Worth writing down
 //       because it is the MIRROR IMAGE of the trap configuration.cpp records:
@@ -592,6 +617,11 @@ extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
 // paragraph above as "these callees are dead"; read it as "these callees are
 // dead on iteration 12's boot".
 //
+// UPDATE 2026-09-08 (Wave 9 lane COLL): two of those three callees — the
+// recursive node free at 0x180008340 and, via LoadPackages, the BST insert —
+// are now PORTED, so the mods-remount path no longer dies with a name; it
+// runs. CloseFile and the deleting destructor are unchanged.
+//
 // ORACLE: none, and it is not close. It frees everything it touches; running it
 // twice is a double free, and there is no scratch stand-in because the objects
 // it destroys are the process's real packages.
@@ -637,8 +667,10 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
 
     PackfileIndexNode* const root = self->packfileIndexRoot;
     if (root != nullptr) {
-        // FUN_180008340(&tree, node) — the recursive subtree free, unexported
-        // and UNPORTED (§4). Retail passes `this+0x40`, the tree object, as its
+        // FUN_180008340(&tree, node) — the recursive subtree free,
+        // unexported and PORTED 2026-09-08
+        // (runtime/src/collection/avl_trees.cpp); reached through the same
+        // port-aware door, unchanged. Retail passes `this+0x40`, the tree object, as its
         // first argument and the child as its second, and calls it once per
         // child of the root; the root itself is unwound inline below.
         using TreeFreeFn = void (*)(void*, PackfileIndexNode*);
@@ -750,17 +782,38 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     // the SMALLER key). The third argument retail passes at the call site
     // (`LEA R8,[RBP+0x48]`) is DEAD: the callee never reads R8.
     //
-    // DELIBERATELY NOT PORTED, and the reason is worth stating rather than
-    // burying. It is 110 instructions of introsort with an explicit 62-entry
-    // pending-range stack, median-of-3 and two partition scans, and every
-    // PackageFile arrives here with the SAME +0x70 (the constructor seeds
-    // 0x2710 and only ReadPackfile changes it). A tie-heavy population is
-    // exactly where an unstable sort's exact swap sequence decides the answer,
-    // and that answer decides which package owns a colliding path in LOOP 3.
-    // A "clean" std::sort here would compile, run, and silently pick different
-    // winners. With no run and no oracle available in this lane, transcribing
-    // it would be an unverified guess at a precedence rule, so it goes through
-    // the address door and is named in §4 for whoever ports it with a harness.
+    // ***PORTED 2026-09-08*** — runtime/src/collection/introsort.cpp.
+    //
+    // The paragraph this replaces said, correctly: "It is 110 instructions of
+    // introsort with an explicit 62-entry pending-range stack, median-of-3 and
+    // two partition scans, and every PackageFile arrives here with the SAME
+    // +0x70 (the constructor seeds 0x2710 and only ReadPackfile changes it). A
+    // tie-heavy population is exactly where an unstable sort's exact swap
+    // sequence decides the answer, and that answer decides which package owns a
+    // colliding path in LOOP 3. A 'clean' std::sort here would compile, run,
+    // and silently pick different winners. With no run and no oracle available
+    // in this lane, transcribing it would be an unverified guess at a
+    // precedence rule."
+    //
+    // Every clause of that stands. What changed is the last one: an oracle DOES
+    // exist. The shipped body is a LEAF — `filter_mnemonics="CALL"` returns
+    // nothing — so it needs no allocator, no engine and no boot, and a sort is
+    // a pure permutation of a caller-owned buffer, so it replays. A bare
+    // LoadLibrary harness ran ours and the shipped body over 784,000 cases
+    // (key domains 1/2/3/5/17/1000/random, sizes 1..300, 112,000 of them
+    // ALL-TIES) and compared the PERMUTATION rather than the sortedness:
+    // **0 differences**. A stable sort by the same key — correctly descending,
+    // differing only in tie order — was caught in 7,571 of 7,800 cases, so the
+    // comparison is demonstrably sensitive to exactly the defect feared.
+    //
+    // THE DIVISION OF LABOUR IS WORTH KEEPING: the live boot call verifies that
+    // the REGISTRATION is reached; the harness verifies the BODY. Four
+    // all-equal packages never leave the n<=8 path, so on the live call alone
+    // the partition, pivot-fixup and equal-run counters all read 0 and a green
+    // run would be vacuous.
+    //
+    // The call below is UNCHANGED: it still goes through the port-aware address
+    // door, which now resolves to ours.
     if (self->packfileCount > 1) {
         using SortFn = void (*)(PackageFileView**, int32_t);
         static SortFn sortFn =
@@ -815,7 +868,9 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                     ++kept;
                 }
             } else {
-                // FUN_180025a80(&tree, &out, &key, &value) — UNPORTED (§4).
+                // FUN_180025a80(&tree, &out, &key, &value) — PORTED 2026-09-08
+                // (runtime/src/collection/avl_trees.cpp group D); reached
+                // through the same port-aware door, unchanged.
                 // RCX is `this+0x40`, the {root,count} tree object; RDX is a
                 // scratch out-slot retail never reads afterwards.
                 using BstInsertFn = void* (*)(void*, PackfileIndexNode**,
@@ -929,6 +984,10 @@ int RtIoFileSystemPackagesRegister() {
     //   ??0PackageFile@IO@@QEAA@XZ             0x1800b4440  ord  289    48 instrs
     //   ?ReadPackfile@PackageFile@IO@@QEAA_N…  0x1800b46b0  ord 3461  6,597 bytes
     //   ?CloseFile@FileSystem@IO@@QEAAX…       0x1800accc0  ord 1726
+    // ALL FOUR OF THE FOLLOWING ARE NOW PORTED (Wave 9 lane COLL, 2026-09-08)
+    // and reach OUR bodies through the same doors — the registry is consulted
+    // first, so no edit was needed here. Kept listed because this block's job is
+    // to name what this row exposes, not only what is missing:
     //   FUN_1800264a0 (packfile sort)          0x1800264a0             110 instrs
     //   FUN_180025a80 (BST insert)             0x180025a80
     //   FUN_180008340 (index-node free)        0x180008340

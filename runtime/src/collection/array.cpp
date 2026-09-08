@@ -136,6 +136,9 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // Wave 9 lane VID2 — the Collection::Set AVL probe's arming hook. Declared at
 // file scope because `extern "C"` cannot appear inside a function body.
 extern "C" void RtCollectionSetAvlProbeArm(bool on);
+// Wave 9 lane COLL — the keyed Set/Map probe's arming hook. Same file-scope
+// reason: `extern "C"` cannot appear inside a function body.
+void RtCollectionAvlProbeArm(bool on);
 
 namespace rtcoll {
 
@@ -384,9 +387,22 @@ void InitIdentityTransform(uint8_t* d) {
 // parameterized by (stride, offset-list). The three `ResolveAddr` calls below
 // therefore reach OUR bodies now, not the DLL's — the registry is consulted
 // first — and this file's `destroy` fields are satisfied without leaving the
-// port. The two COPY-ASSIGN rows (0x180004220 and 0x180051650) are unchanged
-// and are still the DLL's; 0x180051650 calls Audio's 0x180050d30 and is gated
-// with the Wave 8 Audio holdbacks.
+// port.
+//
+// *** CORRECTED AGAIN 2026-09-08 BY WAVE 9 LANE COLL. ONE OF THE TWO REMAINING
+// ROWS IS GONE AND THE REASON GIVEN FOR HOLDING IT WAS WRONG. *** 0x180051650
+// is PORTED (runtime/src/collection/introsort.cpp) and so is the callee this
+// comment described as an Audio holdback: **0x180050d30 is not Audio-specific
+// at all**, it is a plain `Collection::Array<16-byte POD>::operator=` — the
+// same body lane UIW ported at 0x18001cdf0, with stride 0x10, ALIGN 4 (not 8,
+// and not 0x10; that immediate is the whole difference and this family has now
+// produced several near-misses that turned on one) and dtor 0x180051d80, which
+// this file already registers at line ~1343. Its only other callee is MemAlloc.
+// It was ALSO a separate unregistered address door in its own right, at
+// runtime/src/audio/audio.cpp:1114, and that row closes too.
+//
+// 0x180004220 (the 0x38-byte SpriteSheet element copy-assign) IS still the
+// DLL's and is the last row of this cluster.
 //
 // The two ResolveAddr sites stay written exactly as they are: they resolve
 // lazily, on first USE rather than at init, so they pick up lane D2's
@@ -1457,6 +1473,34 @@ void RtCollectionPortInit() {
         const char* p = std::getenv("BANISHED_RT_SETAVL_PROBE");
         RtCollectionSetAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
         std::printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
+    }
+
+    // Wave 9 lane COLL: the keyed Collection::Set/Map INSERT side (the three
+    // trees our tree reaches by address), the recursive subtree free, the
+    // packfile introsort and the last two element copy-assigns. Called from
+    // here because this is the Collection namespace's one init hook, the same
+    // reasoning as the linked list and lane VID2's AVL primitives above.
+    //
+    // It registers SIX addresses to lane VID2's bodies (the sibling retraces
+    // and rotations, byte-verified equal against the shipped DLL); those are
+    // distinct addresses, not a duplicate registration of one.
+    if (RtWaveEnabled("BANISHED_RT_AVLTREES")) {
+        extern int RtCollectionAvlTreesRegister();
+        extern int RtCollectionSortRegister();
+        const int avl  = RtCollectionAvlTreesRegister();
+        const int sort = RtCollectionSortRegister();
+        // The CRT `_stricmp` / `__ascii_stricmp` the packfile descent compares
+        // with. Registered from here rather than a new init because it has no
+        // other owner and four live callers already reach it by address; see
+        // runtime/src/crt/msvc_stricmp.cpp for why it is not std::strcasecmp.
+        extern int  RtCrtStrICmpRegister();
+        extern void RtCrtStrICmpCheckLocaleFlag();
+        const int icmp = RtCrtStrICmpRegister();
+        RtCrtStrICmpCheckLocaleFlag();
+        const char* p = std::getenv("BANISHED_RT_AVLTREES_PROBE");
+        RtCollectionAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
+        std::printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
+                    "%d + %d + %d addresses registered\n", avl, sort, icmp);
     }
 
     // ARM the probe rather than running it. It runs on the first call into any

@@ -176,10 +176,27 @@ static_assert(sizeof(TypeRecord)                  == 0x28, "sizeof(TypeRecord)")
 //   +0x38 left   — taken when key > wanted
 //   +0x40 right  — taken when key < wanted
 //
-// GUESS, NOT MEASURED: `balance` at +0x48 and the node's total size. Nothing
-// in lane A's scope reads either — we never insert, rebalance or free a node —
-// so they are recorded for the next reader rather than relied upon. Do not
-// allocate one of these from this declaration.
+// MEASURED 2026-09-08 by Wave 9 lane COLL, which DOES insert, rebalance and
+// free these nodes. Both facts lane A recorded as guesses are now pinned by an
+// instruction, and one of them was WRONG AS SPELLED:
+//
+//   sizeof == 0x50   0x180008440 `MOV EDX,0x50 / LEA R8D,[RDX-0x48]`
+//                    -> Allocate(0x50, align 8)
+//   +0x48 is TWO 16-BIT FIELDS, not one int32:
+//                    0x180030540 `CMP word ptr [RDX+0x48],-1 / JGE`  -> a
+//                        SIGNED 16-bit BALANCE at +0x48
+//                    0x180030540 `MOVZX ...,word ptr [RAX+0x4a] / INC` -> a
+//                        16-bit HEIGHT at +0x4a
+//                    0x1800087c0 `MOV dword ptr [RDI+0x48],ESI` zeroes BOTH in
+//                        one dword store, which is why an int32 view of +0x48
+//                        looked right for as long as nobody rebalanced.
+//
+// The declaration below keeps `int32_t balance` so every existing reader still
+// compiles; runtime/src/collection/avl_trees.cpp reads the two words through
+// Balance50()/Height50() at the raw offsets. The old spelling is left visible
+// here rather than silently replaced, so a reader who meets it elsewhere
+// recognises it. It is now safe to allocate one of these from this declaration
+// (sizeof is asserted against 0x50 in avl_trees.cpp).
 // ============================================================
 struct TypeNode {
     uint32_t    key;      // +0x00  duplicate of value.typeId; asserted equal
