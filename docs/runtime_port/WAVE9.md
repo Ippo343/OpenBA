@@ -986,6 +986,33 @@ high dword.**
 bracket OFF on the SAME binary. Crash ⇒ heisenbug; clean ⇒ the merge fixed it, which would be
 worth more than the hunt.
 
+### LANE G IS AN ITERATION, NOT A TERMINAL COMMIT — reframed 2026-09-08
+
+Lane C2, ranking the 14 tier-1 rows: *"What I cannot establish statically is the ORDER of
+first deref among the 14 — which row a first cutover boot hits first. Each has a reader on a
+known-executing path, but that comes from where the reader lives, not an observed sequence."*
+
+**That is the category that argues for a CONTROLLED FIRST CUTOVER BOOT** — expect to fail,
+read the crash address, fix one row, repeat — **rather than more analysis.**
+
+This reframes lane G. It had been treated as a single terminal commit gated behind perfect
+prior analysis. It is better understood as a **reversible diagnostic that can be run
+repeatedly**:
+
+* **Rename `Runtime-x64.dll` aside, boot with `BANISHED_RT_MINT=1`, read where it dies, restore the DLL.**
+* Fully reversible — nothing is deleted, and the DLL is restored after every attempt.
+* It answers the ONE question static analysis cannot: the ORDER in which the missing pieces
+  are actually reached.
+* Each failure names one row, which is fixed and the boot repeated. The distance travelled
+  per attempt is the progress metric.
+* **`LoadLibrary` is only removed once a boot survives to gameplay** — that commit stops
+  being an act of faith and becomes a recording of something already observed.
+
+⚠️ **What this does NOT license:** it is a diagnostic, not the cutover. The pre-cutover gates
+still had to be recorded first *because their instruments die* — that reasoning is unchanged,
+and every one of them is now recorded. What the DLL-absent boot adds is the reachability
+ordering that no instrument on this side of the cutover can produce.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
