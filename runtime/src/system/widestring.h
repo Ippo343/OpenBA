@@ -34,5 +34,11 @@ void        RtSystem_WideString_Set(WideString* self, const wchar_t* src);
 String*     RtSystem_WideString_AsUTF8(const WideString* self, String* ret);
 // ??0WideString@System@@QEAA@AEBVString@1@@Z      0x1800cab50
 WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src);
+// ??0WideString@System@@QEAA@PEB_W@Z              0x18000a6e0
+WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src);
+// ??1WideString@System@@QEAA@XZ                   0x18000a730
+void        RtSystem_WideString_Dtor(WideString* self);
+// ?StrLength@WideString@System@@SAHPEB_W@Z        0x1800cab20
+int         RtSystem_WideString_StrLength(const wchar_t* s);
 
 }  // namespace RtSystem

@@ -452,6 +452,48 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
     return self;
 }
 
+// ============================================================================
+// The three rows dx11 has been asking for and nobody was answering
+// ============================================================================
+// `tools/runtime_census.py` names `dx11/src/devicedata.cpp` as the CALLER of
+// four WideString exports, and before this lane all four had `ported=0`.
+// AsUTF8 is closed above because GetRootDirectory needed it; these three were
+// found by reading the census AFTER the port rather than before, and they are
+// on the DEVICE-ENUMERATION path — DeviceData::EnumerateInterfaces turns each
+// adapter's UTF-16 Description into a String — which runs at Video startup on
+// every boot. Leaving them would have closed one wall and left three null
+// calls a few frames behind it.
+//
+// All three are small enough to quote in full, and all three were read from
+// the DISASSEMBLY: retail dereferences `this` and `src` unguarded in every one
+// of them, and so does this port.
+
+// ??0WideString@System@@QEAA@PEB_W@Z                       retail 0x18000a6e0
+// `this->data = 0; Set(this, src);` and nothing else — eight instructions.
+WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src) {
+    self->data = nullptr;
+    RtSystem_WideString_Set(self, src);
+    return self;
+}
+
+// ??1WideString@System@@QEAA@XZ                            retail 0x18000a730
+// Byte-for-byte the String release idiom, asymmetry included: the freeing
+// branch leaves `data - 8` in the object (`ADD qword [RCX],-8` then a TAIL JMP
+// to MemFree), the sharing branch nulls it.
+void RtSystem_WideString_Dtor(WideString* self) {
+    WideReleaseInline(self);
+}
+
+// ?StrLength@WideString@System@@SAHPEB_W@Z                 retail 0x1800cab20
+// wcslen, and NOT null-tolerant: retail's first instruction after the zeroing
+// XOR is `CMP word ptr [RCX],AX`, an unguarded load. Kept unguarded — a null
+// here is an upstream fault to find, not one to paper over.
+int RtSystem_WideString_StrLength(const wchar_t* s) {
+    int n = 0;
+    while (s[n] != 0) ++n;
+    return n;
+}
+
 }  // namespace RtSystem
 
 // ============================================================================
@@ -472,6 +514,13 @@ int RtSystemWideStringRegister() {
                           (void*)&RtSystem_WideString_AsUTF8); ++n;
     RegisterRuntimeExport("??0WideString@System@@QEAA@AEBVString@1@@Z",
                           (void*)&RtSystem_WideString_CtorFromString); ++n;
+    // The three dx11/src/devicedata.cpp has been asking for since Wave 6.
+    RegisterRuntimeExport("??0WideString@System@@QEAA@PEB_W@Z",
+                          (void*)&RtSystem_WideString_CtorFromWide); ++n;
+    RegisterRuntimeExport("??1WideString@System@@QEAA@XZ",
+                          (void*)&RtSystem_WideString_Dtor); ++n;
+    RegisterRuntimeExport("?StrLength@WideString@System@@SAHPEB_W@Z",
+                          (void*)&RtSystem_WideString_StrLength); ++n;
 
     // The same four by address. dx11/src/devicedata.cpp reaches WideString
     // through the exe's OWN dispatch slots and its own resolver door, and this
@@ -480,13 +529,14 @@ int RtSystemWideStringRegister() {
     RegisterRuntimeAddr(0x1800caf40, (void*)&RtSystem_WideString_Set);
     RegisterRuntimeAddr(0x1800cacd0, (void*)&RtSystem_WideString_AsUTF8);
     RegisterRuntimeAddr(0x1800cab50, (void*)&RtSystem_WideString_CtorFromString);
+    RegisterRuntimeAddr(0x18000a6e0, (void*)&RtSystem_WideString_CtorFromWide);
+    RegisterRuntimeAddr(0x18000a730, (void*)&RtSystem_WideString_Dtor);
+    RegisterRuntimeAddr(0x1800cab20, (void*)&RtSystem_WideString_StrLength);
 
-    // DELIBERATELY ABSENT — the rest of the class (28 exports). Nothing on any
-    // path this project executes calls them, and porting a ctor without its
-    // dtor is how a lane ends up with a half-owned type. ??1WideString
-    // (0x18000a730) is NOT registered: it is the plain release idiom and the
-    // DLL's own copy is correct, but at cutover it is a hole this lane names
-    // rather than closes — see WAVE9_LANE_FS.md §"declined".
+    // DELIBERATELY ABSENT — the other 21 exports of the class. NOTHING in
+    // code/, engine/, runtime/, standalone/ or dx11/ names any of them; the
+    // census's caller column is the check, and it lists exactly the four
+    // dx11 rows plus this lane's three, all of which are now closed.
     std::printf("[RtPort]   System::WideString: %d exports registered\n", n);
     return n;
 }
