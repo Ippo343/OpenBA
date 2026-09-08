@@ -119,6 +119,10 @@
 // of them. Sprite.h is for ComboElement::UpdateText's 16-byte sprite copy.
 #include "../../types/ui/TextElement.h"
 #include "../../types/ui/Sprite.h"
+// WAVE 9 LANE UIW2 PART 2. The String primitives the two newly ported
+// address-door bodies call as ordinary C++ rather than through a door:
+// RtString_StrCompare, RtString_ReleaseInline and RtSystem_String_Assign.
+#include "../system/string.h"
 
 using UI::Element;
 using UI::SpinnerElement;
@@ -214,30 +218,99 @@ EditSetTextFn EditElementSetText() {
     return fn;
 }
 
-// NumberElement's OWN `CacheText`, retail 0x1801189f0 — an unexported private
-// helper, disambiguated from `TextElement::CacheText` (0x18011ec10, a
-// DIFFERENT function used by SliderElement/ProgressElement's held-back
-// exports) by checking `get_xrefs_to` on both: only NumberElement::SetValue's
-// two bodies call 0x1801189f0. Called by address, per this project's standing
-// convention for internal, non-exported Runtime functions (e.g.
-// runtime/src/achievement/goal.cpp).
-using CacheTextFn = void (*)(void*);
-CacheTextFn NumberElementCacheText() {
-    static CacheTextFn fn = reinterpret_cast<CacheTextFn>(ResolveAddr(Module::Runtime, 0x1801189f0));
-    return fn;
-}
+// ---------------------------------------------------------------------------
+// WAVE 9 LANE UIW2, PART 2 — two of the tree's unregistered ADDRESS doors, both
+// in this file, both now PORTED rather than resolved.
+// ---------------------------------------------------------------------------
+//
+// An unregistered address door is the WORST failure shape at cutover: no
+// `[RtUnresolved]` line, no named residue row, just a call through null. The
+// integrator's triage named three of them in this cluster; two were these, at
+// what were lines 220 and 232 of this file.
+//
+// *** BOTH SITES WERE JUSTIFIED BY A COMMENT THAT WAS FACTUALLY WRONG, AND THE
+// WRONGNESS IS WHY THEY WERE ADDRESS DOORS AT ALL. *** The old text said
+// 0x1801189f0 was "an unexported private helper" and that for 0x18003ffe0
+// "neither showed up as an exported mangled name in this lane's pefile check".
+// Re-run against the shipped export directory, 2026-09-08, both ARE exported:
+//
+//     0x1801189f0  ?CacheText@NumberElement@UI@@AEAAXXZ      ord 1679
+//     0x18003ffe0  ??9String@System@@QEBA_NAEBV01@@Z         ord 1290
+//     0x1800da130  ?AddTab@TabElement@UI@@QEAA?AV…@Z         ord 1589  (declined, see the lane doc)
+//
+// `AEAA` means PRIVATE, not unexported — this DLL exports its private members,
+// which is exactly why `?CacheText@TextElement@UI@@AEAAXXZ` a few lines above
+// resolves by NAME and works. A private method and an unexported one look the
+// same in a decompiler and are not the same thing in an export table.
+//
+// This is the same defect as the `?_typeInfo@` finding in
+// docs/runtime_port/WAVE9_LANE_UIW2.md §3: an address door on a symbol with a
+// perfectly good name, protected from review by a comment asserting it has
+// none. Neither site is converted to a name door — a converted door on an
+// UNPORTED symbol only changes which list it prints in
+// (reference_converting_a_door_is_not_satisfying_it.md). Both are PORTED, so
+// the door closes rather than moves.
 
-// `?operator!=@String@System@@` (0x18003ffe0) and the static `MemFree`
-// (0x1800c7ad0) EditElement::SetText itself calls. Used only by
-// RtUi_EditElement_SetText, which is a NO-ORACLE port (WAVE7_LANE_D.md §5) —
-// these are resolved by address for the same non-exported-internal reason as
-// CacheText above (neither showed up as an exported mangled name in this
-// lane's pefile check).
+// ?CacheText@NumberElement@UI@@AEAAXXZ (0x1801189f0) — PORTED below as
+// RtUi_NumberElement_CacheText. Both NumberElement::SetValue bodies call it.
+// This forwarder keeps the name the two call sites already use.
+void RtUi_NumberElement_CacheText(void* self);
+using CacheTextFn = void (*)(void*);
+inline CacheTextFn NumberElementCacheText() { return &RtUi_NumberElement_CacheText; }
+
+// ??9String@System@@QEBA_NAEBV01@@Z (0x18003ffe0) — System::String::operator!=,
+// PORTED below as StringNotEqualImpl. Its only consumer tree-wide is
+// RtUi_EditElement_SetText in this file.
+//
+// REGISTERED under both doors, and not counted in the UI tally. The body
+// belongs to `System`, and runtime/src/system/string.cpp is where it should
+// eventually live -- see the registration comment for the hand-over note and
+// for why leaving it unregistered was measured and rejected. Deleting the DOOR
+// is what closes the cutover hole, and that is done either way.
+
+
+
+bool StringNotEqualImpl(const void* lhs, const void* rhs);
 using StringNotEqualFn = bool (*)(const void*, const void*);
-StringNotEqualFn StringNotEqual() {
-    static StringNotEqualFn fn = reinterpret_cast<StringNotEqualFn>(ResolveAddr(Module::Runtime, 0x18003ffe0));
-    return fn;
-}
+inline StringNotEqualFn StringNotEqual() { return &StringNotEqualImpl; }
+
+// The TRUE size of a UI::NumberElement, and it is NOT `sizeof(NumberElement)`.
+//
+// `runtime/types/ui/NumberElement.h` says in its own text that the object is
+// **0xE8** bytes — `CreateNewObject` (0x18004a910) calls
+// `MemoryAllocator::Allocate(_singleton, 0xE8, 8)` — and that an earlier 0xE0
+// struct made the DLL's `CacheText` read `+0xE0`, the `_showSign` byte, off the
+// end of a stack replay and choose its format string from garbage. **The struct
+// in that header was never widened**: its last member is `_floatValue` at
+// +0xDC, so `sizeof(NumberElement)` is still 0xE0 and using it for the replay
+// below would re-create exactly that defect, in exactly that function.
+//
+// This lane does NOT widen the header — adding trailing padding to a shared
+// binary-compatible struct mid-wave is a change other lanes would inherit
+// without asking for it. It uses the documented size here and asserts the
+// relationship, so if the header is ever widened this constant is checked
+// against it rather than silently diverging.
+constexpr size_t kNumberElementTrueSize = 0xE8;
+static_assert(sizeof(NumberElement) <= kNumberElementTrueSize,
+              "NumberElement grew past the 0xE8 CreateNewObject allocates");
+}  // namespace  (reopened immediately below)
+
+// `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) — PORTED in Wave 2 and
+// registered by address in runtime/src/system/string.cpp, but NOT exposed by
+// runtime/src/system/string.h (no caller outside that file needed it until
+// now). Declared locally rather than by editing that lane's header, exactly as
+// runtime/src/io/filesystem_win.cpp:70-82 already does and for the same stated
+// reason. This declaration must stay identical to string.cpp's definition.
+namespace RtSystem {
+String* RtSystem_String_Format(String* ret, const char* fmt, ...);   // 0x1800c9730
+}  // namespace RtSystem
+
+namespace {
+
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0) — the static free
+// EditElement::SetText itself calls. Resolved by ADDRESS, and that address IS
+// registered (the Wave 2 allocator port), so this is not one of the doors
+// lane UIW2 had to close.
 using MemFreeFn = void (*)(void*);
 MemFreeFn MemFreeStatic() {
     // Retry a miss rather than caching it — at cutover this address arrives
@@ -1628,6 +1701,180 @@ void RtUiW2SelfTest() {
     }
 }
 
+
+// ============================================================================
+// WAVE 9 LANE UIW2, PART 2 — the two address doors, ported
+// ============================================================================
+// Both live in the file's anonymous namespace, which is where their forward
+// declarations sit; the registration below takes their address from the same
+// translation unit.
+namespace {
+
+// ---- ??9String@System@@QEBA_NAEBV01@@Z  0x18003ffe0 -----------------------
+//
+// `System::String::operator!=`. Retail inlines `operator==` and negates it, and
+// the listing shows that shape twice over (`SETZ AL / TEST AL,AL / SETZ AL`):
+//
+//     lenA = a ? a[-2] : 0                       0x18003ffe6-0x18003fff5
+//     lenB = b ? b[-2] : 0                       0x18003fff7-0x180040005
+//     if (lenA != lenB)      equal = false       0x18004000b JZ / 0x18004000d
+//     else if (!a || lenA==0) equal = true       0x18004001a, 0x18004001f
+//     else equal = StrCompare(a, b) == 0         0x180040024
+//     return !equal
+//
+// Note the asymmetry, which is retail's and is preserved: the "both empty"
+// shortcut tests only `a`. It is reachable only when the two LENGTHS already
+// agree, so a null `b` there necessarily has length 0 too and the answer is the
+// same — but the instruction that would have tested `b` does not exist, and a
+// port that adds it is not this function.
+//
+// ZERO DOORS. `RtString_StrCompare` (runtime/src/system/string.h) is our own
+// ported body, called directly as C++ — no ResolveAddr, no ResolveExport, and
+// therefore nothing left to resolve at cutover. That is what closes the hole:
+// the door is DELETED, not moved.
+//
+// AND IT HAS A REAL DIFFERENTIAL ORACLE — the only one in this lane. The
+// function is PURE: it reads two Strings, allocates nothing, mutates nothing.
+// So the shipped body can simply be called on the same two arguments and the
+// two booleans compared. Everything else this lane touched ends in a refcount
+// swap and could not be diffed at all (WAVE9_LANE_UIW2.md §4); this one can,
+// so it is.
+bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
+    RT_DIFF_BEGIN("System::String::operator!= [ported by lane UIW2 to close address door 0x18003ffe0]");
+
+    const char* a = *static_cast<const char* const*>(lhsRaw);
+    const char* b = *static_cast<const char* const*>(rhsRaw);
+
+    const int32_t lenA = a ? RtSystem::StringLength(a) : 0;
+    const int32_t lenB = b ? RtSystem::StringLength(b) : 0;
+
+    bool equal;
+    if (lenA != lenB) {
+        equal = false;
+    } else if (a == nullptr || lenA == 0) {
+        equal = true;                       // 0x180040039: MOV AL,1
+    } else {
+        equal = (RtSystem::RtString_StrCompare(a, b) == 0);
+    }
+    const bool ours = !equal;
+
+    if (rt_diff_on__) {
+        using Fn = bool (*)(const void*, const void*);
+        RT_DIFF_SCALAR(ours,
+                       RT_ORIGINAL_ONCE(Fn, "??9String@System@@QEBA_NAEBV01@@Z")(lhsRaw, rhsRaw));
+    }
+    // DID-WORK here means "reached the byte compare", i.e. both operands were
+    // non-empty and the same length. Every other path is decided by the lengths
+    // alone, and a run where that counter stays 0 has exercised none of
+    // StrCompare — which is the half that can be wrong.
+    RT_DIFF_WORK(lenA == lenB && a != nullptr && lenA != 0);
+    return ours;
+}
+
+// ---- ?CacheText@NumberElement@UI@@AEAAXXZ  0x1801189f0 --------------------
+//
+// NumberElement's OWN CacheText — a DIFFERENT function from
+// `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10), which the two setters
+// earlier in this file call. Both NumberElement::SetValue bodies call this one.
+//
+// It formats the live half of the tagged union into the owning refcounted
+// System::String at +0xD0:
+//
+//     mode == 0 : Format(&tmp, _showSign ? "%+i"   : "%i",   _intValue)
+//     mode != 0 : Format(&tmp, _showSign ? "%+.2f" : "%.2f", (double)_floatValue)
+//     _cachedText = tmp;   // retail's INLINED String::operator=
+//     release(tmp)
+//
+// The four format literals are the DLL's own `.rdata` at 0x180159144 ("%+i"),
+// 0x180154848 ("%i"), 0x180159148 ("%+.2f") and 0x180159150 ("%.2f"), read out
+// with read_memory and matching the table `runtime/types/ui/NumberElement.h`
+// already carries. They are transcribed as C string literals rather than read
+// through `ResolveAddr`: a function's own string constants are part of the
+// function, and resolving them would have opened FOUR new .data doors to close
+// one code door — the exact "porting can grow the cutover surface" trap.
+//
+// The float branch passes the value as a DOUBLE. Retail's `CVTPS2PD XMM2,XMM2`
+// then `MOVQ R8,XMM2` sets BOTH the integer register and the matching XMM for
+// argument 3, which is what the Microsoft x64 ABI requires of a variadic float
+// and is easy to miss when only the `MOVQ` is read. Passing a `double` through
+// a variadic C++ call reproduces it; passing a `float` would not.
+//
+// `RtSystem_String_Format` (0x1800c9730) is OUR ported body — string.cpp
+// registers it — so this is an ordinary C++ call and carries none of the
+// cross-toolchain MSVC-variadic risk Wave 7 lane D held NumberEditElement::
+// SetValue back for. ZERO NEW DOORS: Format, StrCompare, ReleaseInline and
+// Assign are all reached as C++.
+//
+// *** THE ORACLE IS A REDIRECTED REPLAY, and it is a real one. ***
+// The body swaps a refcounted pointer, so a naive replay would run the
+// acquire/release twice on one live string — the trap this lane declined
+// everywhere else. The way out is the `?StopTimer@` pattern from
+// runtime/src/ui/dialog.cpp: copy the object, REPOINT the copy's owning field
+// at null so the shipped body allocates its own buffer and can never touch
+// ours, run both, and compare the two formatted payloads. The scratch's string
+// is released immediately afterwards, so the diff leaks nothing.
+//
+// The scratch is `sizeof(NumberElement)` = 0xE8 (CreateNewObject 0x18004a910
+// allocates 0xE8). NumberElement.h records that an earlier 0xE0 struct made the
+// DLL's CacheText read `+0xE0` — the `_showSign` byte — off the end of a stack
+// replay and pick its format string from garbage. That is precisely this
+// function, and it is why the size is asserted here rather than assumed.
+void RtUi_NumberElement_CacheText(void* selfRaw) {
+    RT_DIFF_BEGIN("UI::NumberElement::CacheText [redirected replay: the copy's _cachedText is nulled]");
+
+    auto* self = static_cast<uint8_t*>(selfRaw);
+    auto* cached = reinterpret_cast<RtSystem::String*>(self + 0xd0);
+
+    // The oracle's scratch, built BEFORE our body runs.
+    alignas(16) uint8_t scratch[kNumberElementTrueSize];
+    if (rt_diff_on__) {
+        std::memcpy(scratch, self, kNumberElementTrueSize);
+        *reinterpret_cast<char**>(scratch + 0xd0) = nullptr;   // the redirect
+    }
+
+    RtSystem::String tmp{nullptr};
+    const int32_t mode      = *reinterpret_cast<const int32_t*>(self + 0xc8);
+    const bool    showSign  = *reinterpret_cast<const uint8_t*>(self + 0xe0) != 0;
+    if (mode == 0) {
+        const int32_t v = *reinterpret_cast<const int32_t*>(self + 0xd8);
+        RtSystem_String_Format(&tmp, showSign ? "%+i" : "%i", v);
+    } else {
+        const float f = *reinterpret_cast<const float*>(self + 0xdc);
+        RtSystem_String_Format(&tmp, showSign ? "%+.2f" : "%.2f", static_cast<double>(f));
+    }
+
+    const bool didWork = (cached->data != tmp.data);
+    RtSystem::RtSystem_String_Assign(cached, &tmp);   // retail's inlined operator=
+    RtSystem::RtString_ReleaseInline(&tmp);
+
+    if (rt_diff_on__) {
+        using Fn = void (*)(void*);
+        RT_ORIGINAL_ONCE(Fn, "?CacheText@NumberElement@UI@@AEAAXXZ")(scratch);
+        auto* theirs = reinterpret_cast<RtSystem::String*>(scratch + 0xd0);
+
+        // Compare the TEXT, not the pointer: the two sides allocated separate
+        // buffers by construction, so comparing addresses would fail 100% of
+        // calls and read as a catastrophic port
+        // (reference_oracle_must_not_compare_unwritten_bytes.md, the same
+        // mistake one hat over).
+        const char* o = cached->data;
+        const char* t = theirs->data;
+        bool same;
+        if (o == nullptr || t == nullptr) {
+            same = (o == t);
+        } else {
+            same = (RtSystem::StringLength(o) == RtSystem::StringLength(t)) &&
+                   RtSystem::RtString_StrCompare(o, t) == 0;
+        }
+        RT_DIFF_SHADOW(same, o ? o : "(null)", t ? t : "(null)");
+        RtSystem::RtString_ReleaseInline(theirs);     // the scratch owns it; free it
+    }
+
+    RT_DIFF_WORK(didWork);
+}
+
+}  // namespace
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -1733,6 +1980,39 @@ int RtUiWidgetsInRegister() {
     // "UpdateText@ComboElement". Address only, and deliberately NOT counted in
     // `count`, which is the number of EXPORTS this lane registers.
     RegisterRuntimeAddr(0x180112180, (void*)&RtUi_ComboElement_UpdateText);
+
+    // WAVE 9 LANE UIW2, PART 2 — one of the two unregistered ADDRESS doors this
+    // lane closed. Registered under NAME and ADDRESS, the usual pair.
+    //
+    // `?CacheText@NumberElement@UI@@AEAAXXZ` is `AEAA` — PRIVATE, and exported
+    // anyway (ord 1679). The comment that used to sit at this function's
+    // accessor called it "unexported" and that is why it was an address door.
+    RegisterRuntimeExport("?CacheText@NumberElement@UI@@AEAAXXZ",
+                          (void*)&RtUi_NumberElement_CacheText); ++count;
+    RegisterRuntimeAddr(0x1801189f0, (void*)&RtUi_NumberElement_CacheText);
+    // `??9String@System@@QEBA_NAEBV01@@Z` (0x18003ffe0), ported above as
+    // StringNotEqualImpl. Registered under BOTH doors and NOT counted: `count`
+    // is this lane file's tally of UI exports and this one is a System symbol.
+    //
+    // Leaving it unregistered was the first plan, on the grounds that
+    // runtime/src/system/string.cpp owns that namespace. The measurement said
+    // otherwise: with the registration absent, the oracle's own
+    // RT_ORIGINAL_ONCE spelling shows up in tools/unsatisfied_export_scan.py as
+    // an unsatisfied name (harmlessly — it is inside a diff guard and is
+    // compiled out at cutover — but it is still a ported body reachable through
+    // neither door). An unregistered port is how `?RemoveChildren@Element@UI@@`
+    // became the tree's only address-door bypass; the convention exists for
+    // that reason and is followed here.
+    //
+    // FOR WHOEVER PORTS `System::String` NEXT: this registration is the one to
+    // grep for before writing a second body
+    // (reference_grep_for_the_port_before_writing_it.md). Move the body to
+    // string.cpp and delete these two lines rather than adding a second
+    // binding — a duplicate registration is last-binding-wins and silently
+    // makes one of the two dead code.
+    RegisterRuntimeExport("??9String@System@@QEBA_NAEBV01@@Z",
+                          (void*)&StringNotEqualImpl);
+    RegisterRuntimeAddr(0x18003ffe0, (void*)&StringNotEqualImpl);
 
     // The arithmetic control for the three bodies above. No-ops unless the diff
     // harness is on; prints ALIVE or BROKEN, never nothing.
