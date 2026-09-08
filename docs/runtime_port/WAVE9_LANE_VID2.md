@@ -1083,3 +1083,154 @@ both controls CAUGHT.
    for as long as `AssignConstants` is called only from the ctor. A future
    report that shows them non-zero means something is re-running
    `AssignConstants` after the device is up, which retail never does.
+
+---
+
+# Phase 4 — the Context ctor and CreateVideoContext: the chain closes
+
+Tasking: take the last two links, and pick the oracle before writing a body.
+Landed as `28e127d`.
+
+## R1. The oracle decision, and the phase-3 claim it overturned
+
+§Q6 said the ctor "makes seven `CALL [RAX+0x58]` virtual calls on a real
+`Video::Device`, so the synthetic-subject trick that made `AssignConstants`
+verifiable does not carry over". **Reading the bodies showed that is wrong, and
+it was wrong in the direction that would have cost the most.** Not one of those
+calls is on the Device. Every one of them is
+
+```
+factory = device->+0x100;                               // backend DeviceData
+buf->+0x40 = factory ? factory->vtbl[11](factory, buf) : nullptr;
+```
+
+— a companion factory hanging off the Device, and it is **null-checked**. So is
+the single `[RAX+0x48]` (slot 9) that makes the Context's own companion. The
+only UNGUARDED virtual calls in the whole function are the three
+`buf->+0x08->vtbl[1](…)` after each dynamic buffer and the two
+`img->+0x60->vtbl[1|2]()` in the default-render-buffer branch — and every one of
+those sits behind an **argument-value** guard the caller controls.
+
+**Chosen: a synthetic subject in two configurations. Rejected: a live
+`BANISHED_RT_VIDCONSTBUF` A/B**, because it can only report "did it boot" —
+precisely the executed-but-undiffed state — and cannot compare one field of the
+object under construction.
+
+| | shape | what it covers |
+|---|---|---|
+| A | `(zeroedDevice, 0, 0, 0, callerRenderBuffer)` | seven inlined ConstantBuffer ctors, four zero-fills, four memsets, AssignConstants, the whole field map. No allocation, no backend. |
+| B | `(realDevice, 0x800000, 0x400000, 0x100000, nullptr)` | the LIVE shape `CreateVideoContext` passes: three dynamic buffers, the default RenderBuffer, both default ImageBuffers, every companion path. |
+
+```
+[CtxCtor] A (no device, sizes 0, caller render buffer): mismatches=0
+[CtxCtor] A effectiveness (on THEIRS): null-companion buffers=7/7
+[CtxCtor] A negative-controls: matrix-tail=CAUGHT buffer-scalar=CAUGHT
+[CtxCtor] B (live shape 0x800000/0x400000/0x100000, no render buffer): mismatches=0
+[CtxCtor] B effectiveness: companions minted ours=14 theirs=14
+[CtxCtor] B companion slots called: ours=0x0e theirs=0x0e
+[CtxCtor] B factory   slots called: ours=0x83e00 theirs=0x83e00
+[CtxCtor] B negative-control (default colour image): CAUGHT
+```
+
+## R2. The fake had to SHRINK, not grow — and the measurement said so
+
+Configuration B's first version swapped a zeroed 0x400-byte device into the
+singleton slot. It died in ntdll on a `WRITE of 0x24`, from `RtVideoDeviceLock`
+← `Video_VertexBuffer_PlatformConstruct`. **So the ctor's real dependency on a
+Device is not the virtual calls at all**: `PlatformConstruct` links each dynamic
+buffer into a device-wide list under a `CRITICAL_SECTION` that lives inside the
+Device, and a zeroed Device is not an initialised lock.
+
+B now keeps the **real Device singleton** — real lock, real list — and borrows
+exactly one field, `device->+0x100`, which is still null this early in
+`PlatformStartup`. Restored afterwards. This is lane PKG2's pattern in a new
+place: the route becomes available one rung later, and the answer was a smaller
+fake in a real object rather than a bigger fake.
+
+## R3. Three times the probe guessed a slot set and was wrong
+
+* Round 1 implemented 2 of the companion vtable's slots → `EXEC-of-0`.
+* Round 2 implemented 16 of the factory's → died reading **past** the array,
+  because the RenderBuffer companion lives beyond slot 12.
+* Round 3: both tables are 64 slots wide, every entry implemented and recording
+  its index, and the probe **prints the observed set**.
+
+That last change is what turns a crash into evidence: both sides call companion
+slots `0x0e` and factory slots `0x83e00`, so the comparison covers the interface
+retail actually uses rather than the one I predicted. **A fake that implements
+only the slots you predicted is a fake that decides the answer.**
+
+## R4. The four "Array fills" are not Array fills
+
+Checked by BODY, per the coordinator's instruction. No data/size/capacity, no
+allocator, no element type — four plain zero-fill constructors:
+
+| address | fills | at | is |
+|---|---|---|---|
+| 0x180053730 | 0xd0 bytes | +0x328 | two 4x4 float matrices + 10 pointers |
+| 0x180053840 | **51** x 0x40 | +0x418 | `bones[51]` |
+| 0x1800538b0 | **52** x 0x40 | +0x10d8 | `transform[52]` |
+| 0x180053920 | 0x1a0 bytes | +0x1dd8 | |
+
+The middle two differ in **one immediate** — `MOV EDX,0x32` against
+`MOV EDX,0x33` — and because the loop is `DEC EDX … JNS` they run 51 and 52
+times, **not 50 and 51**. Confirmed twice over: the fills tile the Context
+exactly (0x418 + 51·0x40 == 0x10d8, the next fill's own address; 0x10d8 +
+52·0x40 == 0x1dd8), and the counts match `bones[51]` and
+`Format("transform[%i]", 52)` recovered independently in phase 3.
+
+The same trap one rung over, also checked by body: `0x180011640`, `0x18001e910`
+and `0x18001f2e0` are the same nineteen instructions and differ **only in an
+alignment immediate** — align 4 for the first, align 8 for the other two.
+
+## R5. The audit grew, then shrank — with the set-diff for both halves
+
+Porting by name made the ctor ASK for six names it had never asked for. The
+first measurement went **841/134/131 → 844/136/133**: `-1` for
+`?CreateVideoContext@` (satisfied at last, exactly as §Q8 predicted) but `+3`
+new. The set-diff named all three, and every one was actionable:
+
+* `??3Context@Video@@SAXPEAX@Z` was **already ported and exported**, but
+  `context_lifecycle.cpp` had bound it by **address only**. It sat that way for
+  three phases because nothing in the tree had ever asked for it by name. **An
+  exported symbol with a port needs BOTH doors, not whichever one its first
+  caller happened to use.** Now bound by both.
+* `??2ImageBuffer@` and `??2RenderBuffer@` were genuine new debt — and are
+  two-line `MemAlloc(n, 8)` bodies, so they are ported here rather than left.
+
+Final: **844 doors / 133 unsatisfied / 130 outside a guard**, and the set-diff
+against the pre-change tree is a **pure removal** of `?CreateVideoContext@` with
+nothing added. `port_bypass_audit`: **0 bypasses on both doors**; the address
+door 273 → 275, both new sites ADDR-REGISTERED, no new UNPORTED.
+
+## R6. Facts recovered, for whoever touches Video::Context next
+
+* `sizeof(Video::Context) == 0x2168` — `CreateVideoContext` allocates exactly
+  that, and the existing header already asserted it.
+* The seven ConstantBuffer offsets are **not** in declaration order, and the
+  bone buffer is reached as `ADD R15,0x2008` then `MOV RCX,R15` — which reads
+  like `this` and would put the bone buffer over the Context header.
+* The inlined ConstantBuffer ctor writes `+0x18` as a **byte** and `+0x1c` as an
+  **unaligned qword**, so **`+0x19`..`+0x1b` are never written by anyone**. An
+  oracle must not compare them.
+* `?EndConstants@` takes an int it never reads; one call site passes `0xcc0` and
+  the other passes nothing at all.
+* The ctor reads the Device **singleton** for its own companion even though it
+  has a Device in a register. Kept — normalising it to the argument would be a
+  silent change.
+
+## R7. Predictions
+
+1. The chain `ConstantBuffer → AssignConstants → Context ctor →
+   CreateVideoContext` is closed, so a DLL-less boot will no longer stop in this
+   cluster. **New predicted fault site: `?PlatformStartup@Context@Video@@` or
+   the first `Context` method the frame loop calls** — the Context is now
+   BUILT by us but nothing that USES it is ported.
+2. `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` will not reappear in
+   `BANISHED_RT_STRICT`'s residue.
+3. Configuration B's `factory slots called` mask (`0x83e00`) is a claim about
+   the backend interface, not just about this port. If a later change to `dx11/`
+   makes the two sides' masks differ, the port is not what changed.
+4. `[CtxCtor] B` will SKIP, not fail, if it is ever run before a
+   `Video::Device` singleton exists — it says so rather than faking a device,
+   because a fake device has no usable lock (§R2).

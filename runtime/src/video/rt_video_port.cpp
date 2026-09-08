@@ -33,6 +33,8 @@ extern "C" void RtVideoContextLifecycleProbe();
 extern "C" void RtVideoDeviceStartupProbeArm(bool on);  // device_startup_probe.cpp
 extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
 extern "C" void RtVideoAssignConstantsProbeArm(bool on);  // constant_buffer.cpp
+extern int      RtVideoContextCtorRegister();             // context_ctor.cpp
+extern "C" void RtVideoContextCtorProbeArm(bool on);     // context_ctor.cpp
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -76,6 +78,14 @@ void RtVideoPortInit() {
         // it here faults inside the DLL's MemAlloc. Measured, not assumed.
         const char* ap = std::getenv("BANISHED_RT_ASSIGNCONST_PROBE");
         RtVideoAssignConstantsProbeArm(ap && *ap && std::strcmp(ap, "0") != 0);
+    }
+    // Wave 9 lane VID2 phase 4: the Context ctor and CreateVideoContext. Its
+    // probe is armed here and RUN from the top of PlatformStartup for the same
+    // allocator reason as the two above.
+    if (RtWaveEnabled("BANISHED_RT_VIDCTXCTOR")) {
+        n += RtVideoContextCtorRegister();
+        const char* cp = std::getenv("BANISHED_RT_CTXCTOR_PROBE");
+        RtVideoContextCtorProbeArm(cp && *cp && std::strcmp(cp, "0") != 0);
     }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();
