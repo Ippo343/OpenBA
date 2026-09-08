@@ -121,7 +121,18 @@ void DumpRuntimeRegistry();
 // ResolveAddr(Module::Runtime) that MISSES the port registry and falls through
 // to the shipped DLL is recorded, with the return address of whoever asked.
 // `DumpRuntimeResidue()` then prints one `[RtResidue]` line per distinct miss.
-// An empty residue list over the full harness matrix is the real cutover gate.
+//
+// The three *Raw* doors below are ALSO recorded, in a second population printed
+// as `[RtRawResidue]` (keys prefixed "raw:" / "rawaddr:" / "raword:"). They
+// bypass the port registry deliberately, so they are not "unported symbols" --
+// but they ARE requests the process makes of the DLL, and until 2026-09-07 they
+// were invisible here, which made an empty `[RtResidue]` list look like proof of
+// something it did not prove (lane D's example: 0x18007fbfc, the DLL's own
+// _beginthreadex, on the path of every System::Thread, in no residue run).
+//
+// So the gate is: `[RtResidue]` empty AND every `[RtRawResidue]` line carrying a
+// written per-site verdict -- oracle-only (dies with the oracle) or a real
+// dependency that must be replaced.
 //
 // LOG-ONLY BY DESIGN. It does not null the result or hand back a trap stub:
 // a large share of the misses are exported DATA (`?_singleton@...`, `??_7...`

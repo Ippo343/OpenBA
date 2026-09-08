@@ -1,0 +1,419 @@
+# Wave 9 lane 0 -- RAW-DOOR residue: 104 distinct requests that reached
+# Runtime-x64.dll through ResolveExportRaw / ResolveOrdinalRaw / ResolveRuntimeRaw,
+# across the same 9 harness runs as wave9_residue_union.txt (2026-09-07, pinned
+# builds: debug 20:36:53, perf 20:42:40, commit 357221a + the strict-mode change
+# that produced this file).
+#
+# These doors BYPASS the port registry BY DESIGN (standalone/resolve.h): the diff
+# oracle, detour trampolines, RT_ORIGINAL_ONCE and the registration-time
+# VerifyBody checks must reach the SHIPPED code even when a port is registered.
+# Until 2026-09-07 they were invisible to BANISHED_RT_STRICT, which is why the
+# port-residue list alone was never the cutover gate it was described as.
+# Found by lane D (rawaddr:0x18007fbfc, the DLL's own _beginthreadex, on the path
+# of every System::Thread, in NO residue run).
+#
+# tag= the disposition each row still needs:
+#   PORT-RESIDUE-TOO  the same symbol is also an unported port-registry miss;
+#                     porting it fixes both doors at once.
+#   PORTED-BODY-CALLS-SHIPPED  we HAVE ported this, and our own body still asks
+#                     the DLL for the original -- an oracle/VerifyBody call, or a
+#                     live RtOriginal. At cutover the raw resolve returns null:
+#                     harmless if it is only evaluated under BANISHED_RT_DIFF,
+#                     fatal if it is on a normal path. Decide per call site.
+#   CENSUS-BLIND      not in tools/runtime_census.py's list at all: the name is
+#                     passed to a wrapper (RtOriginal<T>(m), RtVtable(name),
+#                     VerifyBody(name,...)), so the literal is not at the
+#                     ResolveExportRaw call site the regex looks for.
+#
+# count= is the max over the 9 runs of the number of RESOLVES, not calls.
+#
+raw:??0CompressedStream@IO@@QEAA@XZ
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039c9f8  void* (*RtOriginal<void* (*)(void*)>(char const*))(void*)+0x runtime/src/achievement/../../funcs/rt_port.h:75
+raw:??0Geometry@Graphics@@QEAA@XZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401dcb26  RtGraphics_MeshInstance_Ctor(void*)+0x116                    runtime/src/graphics/mesh.cpp:218
+raw:??0MemoryStream@IO@@QEAA@XZ
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039c9f8  void* (*RtOriginal<void* (*)(void*)>(char const*))(void*)+0x runtime/src/achievement/../../funcs/rt_port.h:75
+raw:??0Serializer@IO@@QEAA@AEAVStream@1@H@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d68e6  (anonymous namespace)::VerifyBody(char const*, unsigned char runtime/src/io/serializer.cpp:167
+    <-perf  0x1401ea7fa  RtIoSerializerRegister()+0xea                                runtime/src/io/serializer.cpp:168
+raw:??1CompressedStream@IO@@UEAA@XZ
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+raw:??1External@Object@@UEAA@XZ
+    cells=8 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140209d53  Video_ImageBuffer_Dtor(ImageBuffer*)+0x113                   runtime/src/video/buffers.cpp:76
+raw:??1Geometry@Graphics@@UEAA@XZ
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401db603  RtGraphics_MeshInstance_Dtor(void*)+0x173                    runtime/src/graphics/mesh.cpp:224
+raw:??1Internal@Object@@UEAA@XZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402f3af9  RtUiDialogRegister()+0x39c                                   runtime/src/ui/dialog.cpp:897
+    <-perf  0x1401fded8  RtUiDialogRegister()+0x298                                   runtime/src/ui/dialog.cpp:896
+raw:??1MemoryStream@IO@@UEAA@XZ
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+raw:??1Serializer@IO@@QEAA@XZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d68e6  (anonymous namespace)::VerifyBody(char const*, unsigned char runtime/src/io/serializer.cpp:167
+    <-perf  0x1401ea839  RtIoSerializerRegister()+0x129                               runtime/src/io/serializer.cpp:168
+raw:??4String@System@@QEAAAEAV01@AEBV01@@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039ca18  void* (*RtOriginal<void* (*)(void*, void const*)>(char const runtime/src/engine/../../funcs/rt_port.h:75
+    <-perf  0x140207d0f  (anonymous namespace)::TextElement_SetParameter(void*, int,  runtime/src/ui/widgets_layout.cpp:107
+raw:??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039c8b8  void* (*RtOriginal<void* (*)(void const*, void*, void const* runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401da9da  RtGraphics_MeshInstance_UpdateHierarchy(void*)+0x38a         runtime/src/graphics/mesh.cpp:238
+raw:??HSystem@@YA?AVString@0@AEBV10@0@Z
+    cells=1 [save9] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039c678  RtSystem::String* (*RtOriginal<RtSystem::String* (*)(RtSyste runtime/src/save/../../funcs/rt_port.h:75
+raw:??YString@System@@QEAA?AV01@PEBD@Z
+    cells=1 [modsmenu] count=7  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402f19a7  (anonymous namespace)::StrSlot* (*RtOriginal<(anonymous name runtime/src/system/../../funcs/rt_port.h:75
+raw:??_7Base@Object@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=3  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402b9048  .text+0x48                                                   runtime/src/achievement/goal.cpp:104
+    <-perf  0x1401d262a  RtAch_Goal_Ctor(RtAchievement::Goal*)+0xba                   runtime/src/achievement/goal.cpp:104
+raw:??_7CompiledExternal@Object@@6B@
+    cells=8 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x140302957  Video_ImageBuffer_Dtor(ImageBuffer*)+0xd8                    runtime/src/video/buffers.cpp:180
+    <-perf  0x140209d84  Video_ImageBuffer_Dtor(ImageBuffer*)+0x144                   runtime/src/video/buffers.cpp:180
+raw:??_7CompressedMemoryStream@IO@@6B@
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402d1288  .text+0x48                                                   runtime/src/io/compressedstream.cpp:146
+raw:??_7DialogController@UI@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402f3b0b  RtUiDialogRegister()+0x3ae                                   runtime/src/ui/dialog.cpp:895
+    <-perf  0x1401fdee7  RtUiDialogRegister()+0x2a7                                   runtime/src/ui/dialog.cpp:896
+raw:??_7EdgeMesh@Graphics@@6B@
+    cells=1 [stress] count=1  tag=CENSUS-BLIND
+    <-perf  0x1401d997f  (anonymous namespace)::RtEdgeMeshVtable()+0x3f               runtime/src/graphics/mesh.cpp:273
+raw:??_7EdgeMeshInstance@Graphics@@6B@
+    cells=1 [stress] count=1  tag=CENSUS-BLIND
+    <-perf  0x1401d990f  .text+0x3f                                                   runtime/src/graphics/mesh.cpp:269
+raw:??_7External@Object@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=3  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402b90d9  (anonymous namespace)::ExternalVtable()+0x48                 runtime/src/achievement/goal.cpp:108
+    <-perf  0x1401d26bb  RtAch_Goal_Ctor(RtAchievement::Goal*)+0x14b                  runtime/src/achievement/goal.cpp:108
+raw:??_7Goal@Achievement@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402b916a  (anonymous namespace)::GoalVtable()+0x48                     runtime/src/achievement/goal.cpp:112
+    <-perf  0x1401d1adf  .text+0x3f                                                   runtime/src/achievement/goal.cpp:112
+raw:??_7GoalInstance@Achievement@@6B@
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402b91fb  (anonymous namespace)::GoalInstanceVtable()+0x48             runtime/src/achievement/goal.cpp:116
+    <-perf  0x1401d1b4f  (anonymous namespace)::GoalInstanceVtable()+0x3f             runtime/src/achievement/goal.cpp:116
+raw:??_7ImageBuffer@Video@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x140302507  (anonymous namespace)::ImageBufferVtable()+0x48              runtime/src/video/buffers.cpp:88
+    <-perf  0x1402089ef  (anonymous namespace)::ImageBufferVtable()+0x3f              runtime/src/video/buffers.cpp:88
+raw:??_7ImageBufferData@Video@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x140302598  (anonymous namespace)::ImageBufferDataVtable()+0x48          runtime/src/video/buffers.cpp:92
+    <-perf  0x140208b47  Video_ImageBufferData_Dtor(ImageBufferData*)+0x47            runtime/src/video/buffers.cpp:92
+raw:??_7MeshInstance@Graphics@@6B@
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402c3a07  (anonymous namespace)::RtVtable(char const*)+0x18            runtime/src/graphics/mesh.cpp:262
+    <-perf  0x1401d99ef  (anonymous namespace)::RtMeshInstanceVtable()+0x3f           runtime/src/graphics/mesh.cpp:265
+raw:??_7RenderStateData@Video@@6B@
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x140308058  Video_RenderStateData_Dtor(void*)+0x6f                       runtime/src/video/device.cpp:535
+    <-perf  0x14020c23f  Video_RenderStateData_Dtor(void*)+0x5f                       runtime/src/video/device.cpp:535
+raw:??_7Thread@System@@6B@
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402efd1c  RtSystemThreadVftable()+0x48                                 runtime/src/system/thread_win.cpp:115
+    <-perf  0x1401fb41f  RtSystemThreadVftable()+0x3f                                 runtime/src/system/thread_win.cpp:115
+raw:?AdjustDelimiters@Filename@System@@AEAAXXZ
+    cells=1 [save9] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039e038  void (*RtOriginal<void (*)(RtSystem::String*)>(char const*)) runtime/src/save/../../funcs/rt_port.h:75
+raw:?CacheText@TextElement@UI@@AEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140207bf7  (anonymous namespace)::RtTextElementCacheText(void*)+0x47    runtime/src/ui/widgets_layout.cpp:94
+raw:?DateAsString@DateTime@System@@QEBA?AVString@2@XZ
+    cells=1 [save9] count=12  tag=CENSUS-BLIND
+    <-debug 0x1402f1911  (anonymous namespace)::StrSlot* (*RtOriginal<(anonymous name runtime/src/system/../../funcs/rt_port.h:75
+raw:?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z
+    cells=2 [gameplay_pause stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402be12b  RtAudio_Scene_PlayEffect3D(void*, unsigned long long, int, T audio.cpp:?
+    <-perf  0x1401d5deb  RtAudio_Scene_PlayEffect3D(void*, unsigned long long, int, T runtime/src/audio/audio.cpp:439
+raw:?Format@String@System@@SA?AV12@PEBDZZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=14  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402f1989  (anonymous namespace)::StrSlot* (*RtOriginal<(anonymous name runtime/src/system/../../funcs/rt_port.h:75
+    <-perf  0x1401fc504  RtSystem_Configuration_CurrentVersion((anonymous namespace): runtime/src/system/value_types.cpp:370
+raw:?FormatParamCount@String@System@@SAHPEBD@Z
+    cells=6 [gameplay_pause tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039d0f8  int (*RtOriginal<int (*)(char const*)>(char const*))(char co runtime/src/system/../../funcs/rt_port.h:75
+    <-perf  0x1401fa85b  RtSystem::RtSystem_String_FormatIndexed(RtSystem::String*, c runtime/src/system/string.cpp:709
+raw:?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z
+    cells=6 [gameplay_pause tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039c678  RtSystem::String* (*RtOriginal<RtSystem::String* (*)(RtSyste runtime/src/save/../../funcs/rt_port.h:75
+    <-perf  0x1401fa98c  RtSystem::RtSystem_String_FormatIndexed(RtSystem::String*, c runtime/src/system/string.cpp:734
+raw:?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ
+    cells=1 [save9] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039c638  RtSystem::String* (*RtOriginal<RtSystem::String* (*)(void co runtime/src/save/../../funcs/rt_port.h:75
+raw:?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d68e6  (anonymous namespace)::VerifyBody(char const*, unsigned char runtime/src/io/serializer.cpp:167
+    <-perf  0x1401ea7cf  RtIoSerializerRegister()+0xbf                                runtime/src/io/serializer.cpp:168
+raw:?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039d158  int (*RtOriginal<int (*)(void const*, void const*)>(char con runtime/src/io/../../funcs/rt_port.h:75
+    <-perf  0x14020187b  RtUi_UIString_CtorByName(void*, unsigned long long, void con runtime/src/ui/sprite.cpp:620
+raw:?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ
+    cells=5 [tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x14039c898  void* (*RtOriginal<void* (*)(void const*, void*)>(char const runtime/src/io/../../funcs/rt_port.h:75
+    <-perf  0x14020747f  (anonymous namespace)::ImageElement_GetSprite(void const*, v runtime/src/ui/widgets_layout.cpp:286
+raw:?GetVersion@Serializer@IO@@QEBAHXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?IsDerivedFrom@Base@Object@@QEBA_NI@Z
+    cells=1 [stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-perf  0x140205a03  RtUi_SpinnerElement_SetElementId(UI::SpinnerElement*, int)+0 runtime/src/ui/widgets_input.cpp:108
+raw:?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402bd113  RtAudio_Scene_StopAll(void*)+0x1b3                           audio.cpp:?
+    <-perf  0x1401d5539  RtAudio_Scene_StopAll(void*)+0x189                           runtime/src/audio/audio.cpp:1024
+raw:?IsPaused@Scene@Audio@@QEBA_NH@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402bc94e  RtAudio_Scene_Pause(void*, int, bool)+0x17e                  audio.cpp:?
+    <-perf  0x1401d40ae  RtAudio_Scene_Pause(void*, int, bool)+0x17e                  runtime/src/audio/audio.cpp:911
+raw:?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORT-RESIDUE-TOO
+    <-debug 0x14039cb18  void* (*RtOriginal<void* (*)(unsigned long long, int)>(char  runtime/src/object/../../funcs/rt_port.h:75
+    <-perf  0x1401f9c2c  RtSystem::RtString_SetLength(RtSystem::String*, int)+0x8c    runtime/src/system/string.cpp:69
+raw:?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=3  tag=PORT-RESIDUE-TOO
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401f9c44  RtSystem::RtString_SetLength(RtSystem::String*, int)+0xa4    runtime/src/system/string.cpp:75
+raw:?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039ce98  bool (*RtOriginal<bool (*)(void*, void*, int)>(char const*)) runtime/src/io/../../funcs/rt_port.h:75
+raw:?Open@MemoryStream@IO@@QEAA_NH@Z
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039ce18  bool (*RtOriginal<bool (*)(RtIo::MemoryStream*, int)>(char c runtime/src/save/../../funcs/rt_port.h:75
+raw:?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039c5d8  RtObject::Internal* (*RtOriginal<RtObject::Internal* (*)(RtO runtime/src/object/../../funcs/rt_port.h:75
+raw:?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140209ecf  Video_ImageBuffer_Ctor(ImageBuffer*)+0xdf                    runtime/src/video/buffers.cpp:54
+raw:?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140209b6f  Video_IndexBuffer_Ctor(IndexBuffer*)+0x5f                    runtime/src/video/buffers.cpp:60
+raw:?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140209a3f  Video_VertexBuffer_Ctor(VertexBuffer*)+0x5f                  runtime/src/video/buffers.cpp:66
+raw:?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ
+    cells=8 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x140209d13  Video_ImageBuffer_Dtor(ImageBuffer*)+0xd3                    runtime/src/video/buffers.cpp:57
+raw:?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTime@System@@2M_N@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e178  void (*RtOriginal<void (*)(void*, RtGraphics::ExternalPtr, i runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401dbe5b  RtGraphics_MeshInstance_PlayAnimation(void*, RtGraphics::Ext runtime/src/graphics/mesh.cpp:234
+raw:?Release@String@System@@AEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=14  tag=CENSUS-BLIND
+    <-debug 0x1402f194d  void (*RtOriginal<void (*)((anonymous namespace)::StrSlot*)> runtime/src/system/../../funcs/rt_port.h:75
+    <-perf  0x1401fb9eb  RtSystem_Configuration_CurrentBuildId((anonymous namespace): runtime/src/system/value_types.cpp:334
+raw:?RemoveChildren@Element@UI@@QEAAXXZ
+    cells=1 [save9] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+raw:?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039e0f8  void (*RtOriginal<void (*)(void*)>(char const*))(void*)+0x18 runtime/src/graphics/../../funcs/rt_port.h:75
+    <-perf  0x1401dc413  RtGraphics_MeshInstance_SetMesh(void*, RtGraphics::ExternalP runtime/src/graphics/mesh.cpp:231
+raw:?SecondsToTicks@Timer@System@@SA_JM@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=CENSUS-BLIND
+    <-debug 0x14039e318  long long (*RtOriginal<long long (*)(float)>(char const*))(f runtime/src/engine/../../funcs/rt_port.h:75
+    <-perf  0x1401fc46f  RtSystem_Time_Ctor(Time*, float)+0x5f                        runtime/src/system/value_types.cpp:245
+raw:?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402d8f85  RtIoSerializerRegister()+0x51                                runtime/src/io/serializer.cpp:544
+    <-perf  0x1401ea760  RtIoSerializerRegister()+0x50                                runtime/src/io/serializer.cpp:148
+raw:?Set@Persistence@IO@@QEAAXPEBD0H@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402bbff3  RtAudio_Configuration_Save(void*)+0x1c3                      audio.cpp:?
+    <-perf  0x1401d4963  RtAudio_Configuration_Save(void*)+0x1c3                      runtime/src/audio/audio.cpp:491
+raw:?Set@String@System@@QEAAXPEBD@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORTED-BODY-CALLS-SHIPPED
+    <-debug 0x1402f196b  void (*RtOriginal<void (*)((anonymous namespace)::StrSlot*,  runtime/src/system/../../funcs/rt_port.h:75
+    <-perf  0x1401fb9dc  RtSystem_Configuration_CurrentBuildId((anonymous namespace): runtime/src/system/../../funcs/rt_port.h:74
+raw:?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z
+    cells=1 [stress] count=1  tag=PORTED-BODY-CALLS-SHIPPED
+    <-perf  0x1401dcf13  RtGraphics_EdgeMeshInstance_SetMesh(void*, RtGraphics::Exter runtime/src/graphics/mesh.cpp:227
+raw:?SetValue@NumberEditElement@UI@@QEAAXH@Z
+    cells=1 [stress] count=1  tag=PORT-RESIDUE-TOO
+    <-perf  0x1402043cf  (anonymous namespace)::RealNumberEditElementSetValue()+0x3f  runtime/src/ui/widgets_input.cpp:145
+raw:?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=CENSUS-BLIND
+    <-debug 0x1402bca1f  ReleasePlatformChannels(RtAudio::Scene*, unsigned int, bool) audio.cpp:?
+    <-perf  0x1401d3cf1  ReleasePlatformChannels(RtAudio::Scene*, unsigned int, bool) runtime/src/audio/audio.cpp:735
+raw:?ThreadFunc@Thread@System@@CAIPEAX@Z
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402efdad  RtSystemThreadFunc()+0x48                                    runtime/src/system/thread_win.cpp:120
+    <-perf  0x1401fb583  RtSystem_Thread_Ctor(System::Thread*, unsigned int)+0x133    runtime/src/system/thread_win.cpp:120
+raw:?TicksToSeconds@Timer@System@@SAM_J@Z
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=CENSUS-BLIND
+    <-debug 0x14039cf38  float (*RtOriginal<float (*)(long long)>(char const*))(long  runtime/src/engine/../../funcs/rt_port.h:75
+    <-perf  0x1401fc3d7  RtSystem_Time_AsSeconds(Time const*)+0x47                    runtime/src/system/value_types.cpp:255
+raw:?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ
+    cells=1 [save9] count=12  tag=CENSUS-BLIND
+    <-debug 0x1402f1911  (anonymous namespace)::StrSlot* (*RtOriginal<(anonymous name runtime/src/system/../../funcs/rt_port.h:75
+raw:?ToInteger@String@System@@SAHPEBD@Z
+    cells=2 [gameplay_pause stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402fc797  (anonymous namespace)::StringToInteger()+0x48                runtime/src/ui/widgets_input.cpp:130
+    <-perf  0x14020435f  (anonymous namespace)::StringToInteger()+0x3f                runtime/src/ui/widgets_input.cpp:130
+raw:?UpdateList@SaveLoad@Save@@QEAAXXZ
+    cells=1 [save9] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039dd38  void (*RtOriginal<void (*)(RtSave::SaveLoad*)>(char const*)) runtime/src/save/../../funcs/rt_port.h:75
+raw:?UpdateLoad@SaveLoad@Save@@QEAAXXZ
+    cells=1 [save9] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039dd38  void (*RtOriginal<void (*)(RtSave::SaveLoad*)>(char const*)) runtime/src/save/../../funcs/rt_port.h:75
+raw:?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ
+    cells=4 [tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=CENSUS-BLIND
+    <-debug 0x14039dd38  void (*RtOriginal<void (*)(RtSave::SaveLoad*)>(char const*)) runtime/src/save/../../funcs/rt_port.h:75
+raw:?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402e1383  RtObject::(anonymous namespace)::ResolveGlobals()+0x23       runtime/src/object/type_system.cpp:64
+    <-perf  0x1401f16e6  RtObject::RtObject_BaseTypeInfo_Ctor(RtObject::BaseTypeInfo* runtime/src/object/type_system.cpp:67
+raw:?_frameIndex@ParticleInstance@Graphics@@1HA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402c1c27  (anonymous namespace)::RtFrameIndexSlot()+0x48               runtime/src/graphics/animation.cpp:189
+    <-perf  0x1401d883f  (anonymous namespace)::RtFrameIndexSlot()+0x3f               runtime/src/graphics/animation.cpp:189
+raw:?_secondsPerTick@Timer@System@@0NA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402be5ea  (anonymous namespace)::SecondsPerTick()+0x48                 runtime/src/engine/engine.cpp:217
+    <-perf  0x1401d617f  .text+0x3f                                                   runtime/src/engine/engine.cpp:217
+raw:?_singleton@AnimationManager@Graphics@@0PEAV12@EA
+    cells=6 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402c3d2a  (anonymous namespace)::RtAnimationManager()+0x48             runtime/src/graphics/mesh.cpp:290
+    <-perf  0x1401da2df  (anonymous namespace)::RtInstancedPoolSlot(RtGraphics::MeshI runtime/src/graphics/mesh.cpp:290
+raw:?_singleton@Configuration@Video@@0PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORT-RESIDUE-TOO
+    <-debug 0x1403026ba  (anonymous namespace)::ConfigurationSingletonPtr()+0x48      runtime/src/video/buffers.cpp:105
+    <-perf  0x140208acf  (anonymous namespace)::ConfigurationSingletonPtr()+0x3f      runtime/src/video/buffers.cpp:105
+raw:?_singleton@Device@Audio@@0PEAV12@EA
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402bca63  ReleasePlatformChannels(RtAudio::Scene*, unsigned int, bool) audio.cpp:?
+    <-perf  0x1401d3d43  ReleasePlatformChannels(RtAudio::Scene*, unsigned int, bool) runtime/src/audio/audio.cpp:715
+raw:?_singleton@Device@Input@@0PEAV12@EA
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402cee2d  (anonymous namespace)::DeviceSingleton()+0x48                runtime/src/input/input.cpp:95
+    <-perf  0x1401e36ef  (anonymous namespace)::DeviceSingleton()+0x4f                runtime/src/input/input.cpp:95
+raw:?_singleton@Device@Video@@0PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=3  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402be559  (anonymous namespace)::VideoDeviceSingletonSlot()+0x48       runtime/src/engine/engine.cpp:210
+    <-perf  0x1401d67eb  RtEngine_MainLoop_Ctor+0x2bb                                 runtime/src/engine/engine.cpp:210
+raw:?_singleton@Factory@Object@@0PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=2  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402df551  RtObjectExternalRegister()+0x17                              runtime/src/object/external.cpp:673
+    <-perf  0x1401ef704  RtObjectExternalRegister()+0x54                              runtime/src/object/external.cpp:678
+raw:?_singleton@FileSystem@IO@@0PEAV12@EA
+    cells=1 [save9] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402e972d  void** (anonymous namespace)::RtDataExport<void*>(char const runtime/src/save/saveload.cpp:144
+raw:?_singleton@InternalFactory@Object@@0PEAV12@EA
+    cells=5 [save9 tutorial1 tutorial01 tutorial2 tutorial3] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402df8e7  RtObject::(anonymous namespace)::Factory()+0x23              runtime/src/object/internal.cpp:140
+raw:?_singleton@MainLoop@Engine@@1PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402be4c8  .text+0x48                                                   runtime/src/engine/engine.cpp:201
+    <-perf  0x1401d61ef  (anonymous namespace)::MainLoopSingletonSlot()+0x3f          runtime/src/engine/engine.cpp:201
+raw:?_singleton@Modification@IO@@2PEAV12@EA
+    cells=1 [save9] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402e974b  unsigned char** (anonymous namespace)::RtDataExport<unsigned runtime/src/save/saveload.cpp:144
+raw:?_singleton@Persistence@IO@@0PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=4  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402e974b  unsigned char** (anonymous namespace)::RtDataExport<unsigned runtime/src/save/saveload.cpp:144
+    <-perf  0x1401f4f4f  RtSave_SaveLoad_Update(RtSave::SaveLoad*, long long const*)+ runtime/src/save/saveload.cpp:159
+raw:?_singleton@SaveLoad@Save@@0PEAV12@EA
+    cells=9 [menu gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 modsmenu stress] count=1  tag=PORT-RESIDUE-TOO
+    <-debug 0x1402e970f  RtSave::SaveLoad** (anonymous namespace)::RtDataExport<RtSav runtime/src/save/saveload.cpp:144
+    <-perf  0x1401f4daf  SaveLoad_CtorLogic(RtSave::SaveLoad*)+0xdf                   runtime/src/save/saveload.cpp:147
+raw:?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A
+    cells=2 [gameplay_pause stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402b9481  (anonymous namespace)::GoalInstanceTypeInfo()+0x48           runtime/src/achievement/goal.cpp:159
+    <-perf  0x1401d20f7  RtAch_Goal_GetInstanceType(RtAchievement::Goal const*, void* runtime/src/achievement/goal.cpp:159
+rawaddr:0x18007fbfc
+    cells=7 [gameplay_pause save9 tutorial1 tutorial01 tutorial2 tutorial3 stress] count=1  tag=PORT-RESIDUE-TOO(unported, name door never used)
+    <-debug 0x1402efe41  RtDllBeginThreadEx()+0x4b                                    runtime/src/system/thread_win.cpp:129
+    <-perf  0x1401fb546  RtSystem_Thread_Ctor(System::Thread*, unsigned int)+0xf6     runtime/src/system/thread_win.cpp:129

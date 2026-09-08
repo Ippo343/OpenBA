@@ -493,16 +493,43 @@ static void RecordRawResidue(const char* mangled_name, uintptr_t ghidra_addr,
 void DumpRuntimeResidue() {
     if (!RtStrictEnabled()) return;
     const std::map<std::string, ResidueEntry>& m = RtResidue();
+    // Two populations, counted apart (see RecordRawResidue): a PORT-REGISTRY
+    // MISS is a symbol we have not taken over; a RAW hit is a site that asked
+    // for the shipped code on purpose. Both must be empty or accounted for
+    // before the DLL can go, and only the first is "unported".
+    size_t raw = 0;
+    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
+         it != m.end(); ++it) {
+        const std::string& k = it->first;
+        if (k.compare(0, 4, "raw:") == 0 || k.compare(0, 8, "rawaddr:") == 0 ||
+            k.compare(0, 7, "raword:") == 0) raw++;
+    }
     fprintf(stderr,
             "[RtResidue] ==== %zu distinct requests still fell through to "
-            "Runtime-x64.dll ====\n", m.size());
+            "Runtime-x64.dll ====\n", m.size() - raw);
     // Sorted (std::map) so two runs diff cleanly, same contract as [RtCensus].
     for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
          it != m.end(); ++it) {
+        const std::string& k = it->first;
+        if (k.compare(0, 4, "raw:") == 0 || k.compare(0, 8, "rawaddr:") == 0 ||
+            k.compare(0, 7, "raword:") == 0) continue;
         fprintf(stderr, "[RtResidue] %-8llu %-16p %s\n",
-                it->second.count, it->second.firstCaller, it->first.c_str());
+                it->second.count, it->second.firstCaller, k.c_str());
     }
-    fprintf(stderr, "[RtResidue] ==== end (0 means the DLL can be removed) ====\n");
+    fprintf(stderr, "[RtResidue] ==== end (0 means no symbol is missing) ====\n");
+    fprintf(stderr,
+            "[RtRawResidue] ==== %zu distinct requests took a *Raw* door "
+            "(ResolveExportRaw / ResolveOrdinalRaw / ResolveRuntimeRaw) ====\n", raw);
+    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
+         it != m.end(); ++it) {
+        const std::string& k = it->first;
+        if (k.compare(0, 4, "raw:") != 0 && k.compare(0, 8, "rawaddr:") != 0 &&
+            k.compare(0, 7, "raword:") != 0) continue;
+        fprintf(stderr, "[RtRawResidue] %-8llu %-16p %s\n",
+                it->second.count, it->second.firstCaller, k.c_str());
+    }
+    fprintf(stderr, "[RtRawResidue] ==== end (these BYPASS the port registry by "
+                    "design; each needs a per-site cutover verdict) ====\n");
     fflush(stderr);
 }
 
