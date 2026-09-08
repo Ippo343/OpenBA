@@ -723,6 +723,254 @@ void DescribeLinks(char* buf, size_t n, const LinkState& s) {
                   s.first, s.selfNext, s.selfPrev, s.neighbourA, s.neighbourB);
 }
 
+// ============================================================================
+// THE PER-CLASS DESCRIPTOR — one literal, used by the port AND by the probe
+// ============================================================================
+//
+// The six ports differ only in four values: the companion-factory slot on
+// DeviceData's vtable, the offset the companion is stored at, the two link
+// offsets, and whether the destructor nulls the companion field afterwards.
+// They were originally spelled out at each of the six call sites.
+//
+// They are now a single `BufferClass` literal per class, because Wave 9 lane W's
+// execution report left `Video::{Index,Vertex}Buffer::PlatformDestruct`
+// UNVERIFIED with the note "the shared body is verified 10x through ImageBuffer
+// and the link offsets 10x each through the construct siblings, but THE
+// COMPOSITION is unproved" — the composition being exactly this argument tuple.
+// A tuple that appears once, and that the empty-list probe below runs, cannot
+// disagree with itself. That is what turns "unproved composition" into "proved
+// by the probe" rather than leaving two ports registered and untested.
+struct BufferClass {
+    size_t      vtSlot;            // DeviceData vtable slot of the companion factory
+    size_t      companionOff;      // where the companion pointer is stored
+    bool        nullAfterRelease;  // Index/Vertex null it; ImageBuffer does not
+    ListLinks   links;
+    void**    (*head)();           // the exported class-static list head
+    PlatformConstructFn (*theirCtor)();
+    PlatformDestructFn  (*theirDtor)();
+    RtDiffSite* siteLink;          // [PROBE:first-in-list]
+    RtDiffSite* siteUnlink;        // [PROBE:list-emptied]
+};
+
+RtDiffSite g_probeImgLink   = { "Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]",  0, 0, false, false };
+RtDiffSite g_probeImgUnlink = { "Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]",    0, 0, false, false };
+RtDiffSite g_probeIdxLink   = { "Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]",  0, 0, false, false };
+RtDiffSite g_probeIdxUnlink = { "Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
+RtDiffSite g_probeVtxLink   = { "Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]", 0, 0, false, false };
+RtDiffSite g_probeVtxUnlink = { "Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
+
+const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface,
+                                   &ImageBufferPlatformConstruct,  &ImageBufferPlatformDestruct,
+                                   &g_probeImgLink, &g_probeImgUnlink };
+const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBufferFirstBuffer,
+                                   &IndexBufferPlatformConstruct,  &IndexBufferPlatformDestruct,
+                                   &g_probeIdxLink, &g_probeIdxUnlink };
+const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer,
+                                   &VertexBufferPlatformConstruct, &VertexBufferPlatformDestruct,
+                                   &g_probeVtxLink, &g_probeVtxUnlink };
+
+// The descriptors' offsets are the structs', bound here so a header change
+// breaks the build rather than silently mis-linking.
+static_assert(offsetof(ImageBuffer, platformData)  == 0x60, "kImageClass.companionOff");
+static_assert(offsetof(IndexBuffer, platformData)  == 0x08, "kIndexClass.companionOff");
+static_assert(offsetof(VertexBuffer, platformData) == 0x08, "kVertexClass.companionOff");
+
+// ============================================================================
+// THE EMPTY-LIST PROBE — the branch cutover takes FIRST
+// ============================================================================
+//
+// WHAT IT CLOSES. Lane W's execution report (WAVE9_LANE_W.md §9 finding 2)
+// measured `ListLink`'s **first-in-list** branch and `ListUnlink`'s
+// **list-emptied** branch at calls=0 in all four harness cells, for all three
+// classes: 31 construct calls all took `appended`, 10 destruct calls all took
+// `unlinked`. The cause is structural, not luck — no detour is installed on
+// these six, so the DLL's own constructors never reach our ports, and by the
+// time ours runs the shipped `Video::Device` startup has already put objects on
+// those lists. **At cutover that inverts**: the mint owns the three heads, they
+// start NULL, and every construct in the process is ours, so the FIRST buffer
+// the renderer builds takes the branch that has never been compared against
+// retail — on the first frame, with no retail body left to compare against.
+//
+// WHY A PRIVATE HEAD DOES NOT WORK, checked rather than assumed. Our side takes
+// its head by pointer (`void** first`), so a private head would cost us nothing.
+// The SHIPPED body does not: `?PlatformConstruct@ImageBuffer@Video@@` reads
+// `_firstSurface` RIP-relative, hardcoded. A private head therefore gives
+// ours-against-ours, which is not an oracle. The synthetic-subject lesson still
+// applies and IS applied — the SUBJECT is synthetic, a scratch node, and no live
+// object's fields are ever written — but the HEAD has to be the real one,
+// briefly.
+//
+// WHY BORROWING THE REAL HEAD IS SAFE. This is the fact that made the probe
+// buildable rather than impossible, and it was read out of the shipped bodies
+// rather than assumed: every other reader of these lists inside the DLL takes
+// the SAME Device lock, with the same recursion idiom, before touching the head:
+//
+//   ?RecreateDynamic@ImageBuffer@Video@@SAXXZ   0x1800f2d90
+//   ?ReleaseDynamic@ImageBuffer@Video@@SAXXZ    0x1800f2e80
+//   ... and the Index / Vertex / RenderBuffer twins at 0x1800f3500 / 0x1800f35d0,
+//       0x1800f5660 / 0x1800f5730, 0x1800f4030 / 0x1800f40c0
+//
+// each opening with `EnterCriticalSection(Device::_singleton + 0x60)`. Holding
+// that lock for the whole probe therefore excludes every DLL walker. Better:
+// both walkers open with `if (_firstSurface != nullptr)` and skip their loop
+// entirely, so a NULL head is a state the shipped code is already written for
+// rather than one this probe invents.
+//
+// The window is bounded — head nulled and restored inside one lock acquisition,
+// no live object touched, saved head put back before the lock is released.
+//
+// WHAT IS COMPARED, per class, on an EMPTY list:
+//   1. OURS runs the full `PlatformConstructBody` on a zeroed scratch node.
+//   2. Ours' companion is released and the head re-nulled, so THEIRS starts from
+//      an identical state — the same rewind the live oracle does.
+//   3. THEIRS' shipped `PlatformConstruct` runs on a re-zeroed scratch node.
+//   4. The three link words are compared, plus OUR branch tag  -> FIRST-IN-LIST.
+//   5. From theirs' resulting single-element list, OURS' full
+//      `PlatformDestructBody` runs; its result is captured; the state is
+//      restored and the companion field nulled so theirs' own
+//      `if (companion != nullptr)` guard skips a second release of memory ours
+//      already freed; THEIRS' shipped `PlatformDestruct` runs.
+//   6. The three link words are compared, plus our branch tag -> LIST-EMPTIED.
+//
+// Exactly one companion is created and released per side, by the same code that
+// does it on the live path.
+//
+// AND IT CLOSES THE OTHER OPEN ITEM. Step 5 calls `PlatformDestructBody` through
+// the shared descriptor for ALL THREE classes — including the two whose
+// registered ports have no caller anywhere in the process
+// (`Video::{Index,Vertex}Buffer::PlatformDestruct`, never entered in any of the
+// four cells). Those two now execute against the shipped body with the same
+// argument tuple their registered ports use, and their `nullAfterRelease = true`
+// asymmetry — the one line where they differ from ImageBuffer in the shipped
+// bytes — is exercised here and nowhere else in the process.
+//
+// COST AND BLAST RADIUS. Once per class per process, only when
+// `BANISHED_RT_DIFF` is on; `BANISHED_RT_EMPTYLIST_PROBE=0` disables it. Fired
+// from the first diffed `PlatformConstruct` of each class, which guarantees
+// `Video::Device` and its DeviceData exist — a probe run before that would
+// compare two null companions and prove less than it appears to.
+// ============================================================================
+
+bool ProbeNegativeControl();
+
+void ProbeEmptyList(const BufferClass& C) {
+    void** first = C.head();
+    if (first == nullptr)
+        return;   // head unresolved: nothing to borrow and nothing to prove
+
+    alignas(16) uint8_t node[0x80];
+
+    RtVideoDeviceLock(DeviceSingletonPtr());
+    void* const savedHead = *first;
+
+    // ---- 1. FIRST-IN-LIST -------------------------------------------------
+    *first = nullptr;
+    std::memset(node, 0, sizeof(node));
+    const LinkBranch br = PlatformConstructBody(node, C.vtSlot, C.companionOff, first, C.links);
+    void* oursHead = *first;
+    void* oursNext = *LinkField(node, C.links.next);
+    void* const oursPrev = *LinkField(node, C.links.prev);
+    if (ProbeNegativeControl())
+        oursNext = static_cast<uint8_t*>(oursNext) + 8;   // must make the probe go RED
+    ReleaseCompanion(*LinkField(node, C.companionOff));
+
+    *first = nullptr;
+    std::memset(node, 0, sizeof(node));
+    C.theirCtor()(node);
+    void* const theirsHead = *first;
+    void* const theirsNext = *LinkField(node, C.links.next);
+    void* const theirsPrev = *LinkField(node, C.links.prev);
+
+    {
+        const bool eq = oursHead == theirsHead && oursNext == theirsNext &&
+                        oursPrev == theirsPrev && br == LinkBranch::FirstInList;
+        char a[192], b[192];
+        std::snprintf(a, sizeof(a), "head=%p next=%p prev=%p branch=%s",
+                      oursHead, oursNext, oursPrev,
+                      br == LinkBranch::FirstInList ? "first-in-list" : "APPENDED(WRONG)");
+        std::snprintf(b, sizeof(b), "head=%p next=%p prev=%p", theirsHead, theirsNext, theirsPrev);
+        RtDiffRegister(C.siteLink);
+        RtDiffReport(C.siteLink, eq, a, b);
+    }
+
+    // ---- 2. LIST-EMPTIED --------------------------------------------------
+    // State here is THEIRS': head == node and the node's links point at itself.
+    // Snapshot it so ours and theirs both unlink from the identical
+    // single-element list.
+    void* const sHead = *first;
+    void* const sNext = *LinkField(node, C.links.next);
+    void* const sPrev = *LinkField(node, C.links.prev);
+
+    const UnlinkBranch ubr = PlatformDestructBody(node, C.companionOff,
+                                                  C.nullAfterRelease, first, C.links);
+    void* const oursHead2 = *first;
+    void* oursNext2 = *LinkField(node, C.links.next);
+    void* const oursPrev2 = *LinkField(node, C.links.prev);
+    if (ProbeNegativeControl())
+        oursNext2 = static_cast<uint8_t*>(oursNext2) + 8;
+
+    *first = sHead;
+    *LinkField(node, C.links.next) = sNext;
+    *LinkField(node, C.links.prev) = sPrev;
+    // The companion was released by OUR destruct body just above. Null the field
+    // so theirs' own guard skips a second release of freed memory. ImageBuffer's
+    // shipped destructor does not null it itself, which is why this is explicit.
+    *LinkField(node, C.companionOff) = nullptr;
+
+    C.theirDtor()(node);
+    void* const theirsHead2 = *first;
+    void* const theirsNext2 = *LinkField(node, C.links.next);
+    void* const theirsPrev2 = *LinkField(node, C.links.prev);
+
+    {
+        const bool eq = oursHead2 == theirsHead2 && oursNext2 == theirsNext2 &&
+                        oursPrev2 == theirsPrev2 && ubr == UnlinkBranch::ListEmptied;
+        char a[192], b[192];
+        std::snprintf(a, sizeof(a), "head=%p next=%p prev=%p branch=%s",
+                      oursHead2, oursNext2, oursPrev2,
+                      ubr == UnlinkBranch::ListEmptied ? "list-emptied"
+                      : ubr == UnlinkBranch::Unlinked  ? "UNLINKED(WRONG)"
+                                                       : "NOT-LINKED(WRONG)");
+        std::snprintf(b, sizeof(b), "head=%p next=%p prev=%p", theirsHead2, theirsNext2, theirsPrev2);
+        RtDiffRegister(C.siteUnlink);
+        RtDiffReport(C.siteUnlink, eq, a, b);
+    }
+
+    // ---- restore ----------------------------------------------------------
+    *first = savedHead;
+    RtVideoDeviceUnlock(DeviceSingletonPtr());
+}
+
+bool ProbeEnabled() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_RT_EMPTYLIST_PROBE");
+        s = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return s != 0;
+}
+
+// NEGATIVE CONTROL. `BANISHED_RT_EMPTYLIST_PROBE=neg` perturbs OUR link by one
+// word before the comparison, so a run can show the probe going RED. Without it
+// a green result cannot be distinguished from a probe that compares nothing --
+// which is the defect this lane already found once in its own branch counter.
+bool ProbeNegativeControl() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_RT_EMPTYLIST_PROBE");
+        s = (e && std::strcmp(e, "neg") == 0) ? 1 : 0;
+    }
+    return s != 0;
+}
+
+void ProbeOnce(const BufferClass& C, bool& done) {
+    if (done || !ProbeEnabled()) return;
+    done = true;   // set BEFORE running: the probe calls the ported bodies, and
+                   // a re-entry would recurse into itself.
+    ProbeEmptyList(C);
+}
+
+
 }  // namespace
 
 void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
@@ -742,6 +990,14 @@ void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
     if (rt_diff_on__) {
         CountBranch(&brFirst,  br == LinkBranch::FirstInList);
         CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
+
+    // The empty-list probe, once. Fired from HERE rather than from init because
+    // this is the earliest point at which Video::Device and its DeviceData are
+    // guaranteed to exist -- see ProbeEmptyList's header.
+    if (rt_diff_on__) {
+        static bool probed = false;
+        ProbeOnce(kImageClass, probed);
     }
 
     if (rt_diff_on__) {
@@ -815,6 +1071,14 @@ void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
         CountBranch(&brAppend, br == LinkBranch::Appended);
     }
 
+    // The empty-list probe, once. Fired from HERE rather than from init because
+    // this is the earliest point at which Video::Device and its DeviceData are
+    // guaranteed to exist -- see ProbeEmptyList's header.
+    if (rt_diff_on__) {
+        static bool probed = false;
+        ProbeOnce(kIndexClass, probed);
+    }
+
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
         ReleaseCompanion(self->platformData);
@@ -879,6 +1143,14 @@ void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self) {
     if (rt_diff_on__) {
         CountBranch(&brFirst,  br == LinkBranch::FirstInList);
         CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
+
+    // The empty-list probe, once. Fired from HERE rather than from init because
+    // this is the earliest point at which Video::Device and its DeviceData are
+    // guaranteed to exist -- see ProbeEmptyList's header.
+    if (rt_diff_on__) {
+        static bool probed = false;
+        ProbeOnce(kVertexClass, probed);
     }
 
     if (rt_diff_on__) {

@@ -383,14 +383,14 @@ Two specific things to watch that a clean summary would hide:
   so at cutover this is a null call before the first save and the first load can do any work. It
   is no longer "two rows handed over"; it is a save/load-blocking gap with a known cause and no
   current mechanism.
-* **The two branches cutover takes FIRST** (§9 finding 2) — `ListLink[first-in-list]` and
-  `ListUnlink[list-emptied]`, `calls=0` in all four cells for all three classes, because the DLL's
-  own constructors never reach our ports and its lists are never empty by the time ours run. At
-  cutover they start empty and that branch runs immediately. The probe that would close it is
-  sketched in §9 and deliberately not built.
-* **`Video::{Index,Vertex}Buffer::PlatformDestruct`** (§9 finding 1) — registered, never entered
-  in any cell, no caller in our tree or reachable in the DLL. Verified only through their shared
-  body and their construct-side siblings; the composition is unproved.
+* ~~**The two branches cutover takes FIRST**~~ and ~~**`Video::{Index,Vertex}Buffer::PlatformDestruct`**~~
+  — **BOTH CLOSED BY §10's empty-list probe, pending one run.** They had one answer: a probe that
+  borrows the real list head under the Device lock (safe, because every DLL walker takes that same
+  lock and skips a null head) and drives a synthetic scratch node through construct-then-destruct
+  on an empty list, for all three classes, through a shared per-class descriptor. It reaches
+  `first-in-list` and `list-emptied`, and it is the only execution the two zero-caller ports get.
+  **Still needs the three runs in §10** — the probe is written and compiles, and an unrun probe
+  proves exactly as much as an unrun port.
 * **Row 19/20's real content is "port `System::WideString`"** — six exported members, none
   ported, none minted. Filed as a lane, not as two rows.
 * **`?UpdateSave` and `?UpdateDelete`** — two more arms of rows 23-25's switch, in no verdict
@@ -480,6 +480,11 @@ and is the single line where the Index/Vertex pair differs from ImageBuffer in t
 **Do not read their absence as agreement.** Per
 `reference_uncalled_port_is_not_verified.md` they are registered, counted, and unproved.
 
+> **CLOSED BY §10, pending a run.** The empty-list probe calls `PlatformDestructBody` through a
+> shared per-class descriptor for all three classes, so these two now execute against the shipped
+> body with the same argument tuple their registered ports use — and their `nullAfterRelease =
+> true` asymmetry is exercised there and nowhere else in the process.
+
 ### ⚠️ FINDING 2 — the branch cutover will take FIRST is the one never executed
 
 `ListLink`'s **first-in-list** branch is `calls=0` in all four cells, across all three classes,
@@ -498,11 +503,12 @@ never been compared against retail.** It is three stores and it is transcribed f
 decompile as the branch that is verified 31 times, but that is a structural argument, not a
 measurement, and this row must not be reported as fully covered.
 
-The oracle that would close it exists in principle — save the real list head, null it, run ours
-and theirs against a scratch node under the Device lock, restore — but it mutates the live global
-list that the DLL's own `ImageBuffer::RecreateDynamic`/`ReleaseDynamic` walk from the device-reset
-path, which is exactly the structure under test. **Deliberately not built while holding the
-directory with another lane queued behind**; it wants its own review.
+> **BUILT — see §10.** The concern that stopped it here (that it mutates the live list the DLL's
+> `RecreateDynamic`/`ReleaseDynamic` walk) dissolved on reading those walkers: **all ten of them
+> take the same Device lock before touching the head, and all of them skip their loop entirely
+> when the head is null.** So the borrow is excluded from every DLL walker by a lock the shipped
+> code already relies on, over a state it is already written for. §10 has the design, the safety
+> argument, the negative control and the three cells.
 
 ### ⚠️ FINDING 3 — the `IO::Encoding` blocker is on the SAVE **and** LOAD critical path, measured
 
@@ -555,3 +561,128 @@ Audits re-run after every source change and unmoved from §7: **rawdoor 472 site
 UNGUARDED-CALL · port_bypass ADDRESS 189/0, NAME 398/0, 582 ported names, 0 unseen ·
 rt_data_door exit 0**. Full autoload-cell log kept as
 `docs/runtime_port/wave9_laneW_run_autoload.txt`.
+
+---
+
+## 10. The empty-list oracle — BUILT, and it closes both open findings at once
+
+§9 finding 2 said the branch cutover takes first has never been compared against retail, and
+that the oracle "mutates the live global list the DLL's `RecreateDynamic` walks", so it was not
+built while holding the directory. **It is built now.** §9 finding 1 —
+`Video::{Index,Vertex}Buffer::PlatformDestruct` registered with zero callers anywhere — is
+closed by the same probe, because the two problems have one answer.
+
+### Angle 1, checked rather than assumed: a fully private head does NOT work
+
+Our side takes its head **by pointer** (`PlatformConstructBody(..., void** first, ...)`), so a
+private head would cost us nothing and would reach `first-in-list` on the first call. The shipped
+side does not: `?PlatformConstruct@ImageBuffer@Video@@` reads `_firstSurface` **RIP-relative and
+hardcoded**. A private head therefore produces ours-against-ours, which is not an oracle — it is
+the `RT_DIFF_SHADOW`-over-a-prediction shape `rt_diff.h` warns about in as many words.
+
+So the synthetic-subject lesson is applied where it actually reaches:
+**the SUBJECT is synthetic — a zeroed scratch node; no live object's fields are ever written —
+and only the HEAD is borrowed, briefly.**
+
+### Why borrowing the real head is SAFE — the fact that made this buildable
+
+Read out of the shipped bodies, not assumed. Every other reader of these lists inside the DLL
+takes the **same Device lock**, with the same recursion idiom, before touching the head:
+
+| Walker | Address | First instruction block |
+|---|---|---|
+| `?RecreateDynamic@ImageBuffer@Video@@SAXXZ` | 0x1800f2d90 | `EnterCriticalSection(Device::_singleton + 0x60)` |
+| `?ReleaseDynamic@ImageBuffer@Video@@SAXXZ` | 0x1800f2e80 | same |
+| `?{Recreate,Release}Dynamic@IndexBuffer` | 0x1800f3500 / 0x1800f35d0 | same |
+| `?{Recreate,Release}Dynamic@VertexBuffer` | 0x1800f5660 / 0x1800f5730 | same |
+| `?{Recreate,Release}Dynamic@RenderBuffer` | 0x1800f4030 / 0x1800f40c0 | same |
+
+Holding that lock for the whole probe excludes every DLL walker. And better than exclusion:
+**both walkers open with `if (_firstSurface != nullptr)` and skip their loop entirely**, so a
+null head is a state the shipped code is already written for, not one this probe invents. The
+window is one lock acquisition, no live object is touched, and the saved head is written back
+before the lock is released.
+
+The second hazard — the scratch node handed to the dx11 companion factory — was checked the same
+way. `Factory_{Image,Index,Vertex}BufferData` (`dx11/src/devicedata.cpp:1967/1997/2008`)
+**allocate, store the owner pointer, and null every D3D field. They do not read a single field of
+the owner and create no D3D resource.** A zeroed scratch node is therefore safe on both sides,
+and the deleting destructor that releases it releases only null pointers.
+
+### What it compares, per class, on an empty list
+
+1. OURS runs the full `PlatformConstructBody` on a zeroed scratch node.
+2. Ours' companion is released and the head re-nulled — the same rewind the live oracle does — so
+   theirs starts from an identical state.
+3. THEIRS' shipped `PlatformConstruct` runs on a re-zeroed scratch node.
+4. Compare the three link words **and our branch tag** → `[PROBE:first-in-list]`.
+5. From theirs' resulting single-element list, OURS' full `PlatformDestructBody` runs; its result
+   is captured; the state is restored and the companion field nulled so theirs' own
+   `if (companion != nullptr)` skips a second release of memory ours already freed; THEIRS'
+   shipped `PlatformDestruct` runs.
+6. Compare again → `[PROBE:list-emptied]`.
+
+Exactly one companion is created and released per side, by the same code that does it live.
+
+### It closes finding 1 too — and the mechanism is a shared literal, not a coincidence
+
+The six ports differed only in four values (companion-factory vtable slot, companion offset, the
+two link offsets, and whether the destructor nulls the companion afterwards), previously spelled
+out at each of the six call sites. They are now **one `BufferClass` literal per class**, used by
+the port *and* by the probe.
+
+That is the direct answer to §9 finding 1's "the shared body is verified 10× through ImageBuffer
+and the link offsets 10× each through the construct siblings, but **the composition** is
+unproved": the composition *is* the argument tuple, a tuple that appears once cannot disagree
+with itself, and the probe runs it. Step 5 executes `PlatformDestructBody` through that
+descriptor **for all three classes**, so the two ports that no cell ever entered now execute
+against the shipped body — and their `nullAfterRelease = true` asymmetry, the single line where
+they differ from ImageBuffer in the shipped bytes, is exercised here and **nowhere else in the
+process**.
+
+### Negative control
+
+`BANISHED_RT_EMPTYLIST_PROBE=neg` perturbs OUR captured `next` link by one word before each
+comparison, so the probe **must** go red. Without it, a green result cannot be told apart from a
+probe that compares nothing — which is not hypothetical for this lane: §9 records its own branch
+counter reading exactly inverted for a whole run. `BANISHED_RT_EMPTYLIST_PROBE=0` disables the
+probe entirely.
+
+### Cost, blast radius, and what it does not do
+
+Once per class per process, only under `BANISHED_RT_DIFF`. Fired from the first diffed
+`PlatformConstruct` of each class, which is the earliest point where `Video::Device` and its
+`DeviceData` are guaranteed to exist — a probe fired from init would compare two null companions
+and prove less than it appears to. `ProbeOnce` sets its `done` flag *before* running, so a
+re-entry cannot recurse.
+
+It does **not** verify a multi-element list beyond two nodes, and it does not verify the
+`NotLinked` early-out of `ListUnlink` (still `calls=0`; that branch fires only on an object
+destroyed twice or never constructed, which retail's own callers never do).
+
+### Cells needed — no new ones
+
+**Any cell that already runs with `BANISHED_RT_DIFF=1` and builds a buffer**, i.e. the autostart
+cell §9 already used. Three runs would settle it completely:
+
+| Run | Env | Must show |
+|---|---|---|
+| 1 | `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1` + pause-menu Quit | all **six** `[PROBE:...]` sites `calls=1 divergences=0`, and the existing 9 sites unchanged |
+| 2 | same + `BANISHED_RT_EMPTYLIST_PROBE=neg` | the **negative control**: all six `[PROBE:...]` sites `divergences=1`. If any stays 0 the probe compares nothing and run 1 proves nothing |
+| 3 | same + `BANISHED_RT_EMPTYLIST_PROBE=0` | the probe is absent from the summary and the 9 live sites are byte-identical to §9's numbers — i.e. the probe has no effect on the live list |
+
+Run 3 is the one that matters for the "did you corrupt the live list" question, and it is cheap:
+the live `[branch:appended]` / `[branch:unlinked]` counts must come back at exactly 6/4/4 and
+4 for the autostart cell.
+
+### If it had turned out to be impossible — the cutover-day test, kept on the record
+
+Recorded because the coordinator asked for it and because a future reader should not have to
+re-derive it if the probe is ever removed. With no retail body to compare against, the only
+remaining check is a **structural invariant asserted on the live list at runtime**: after the
+first `PlatformConstruct` of a process, `*head != nullptr && head->next == head && head->prev ==
+head`, and after the last `PlatformDestruct`, `*head == nullptr`. That is a self-consistency
+check, not an oracle — it would catch a null or self-inconsistent head and would **not** catch
+our link order being the mirror of retail's, which is precisely the failure this probe does
+catch. That gap is the reason to run the probe before lane G rather than to rely on the smoke
+test after it.
