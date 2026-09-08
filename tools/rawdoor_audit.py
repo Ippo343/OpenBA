@@ -120,6 +120,15 @@ ALLOWLIST = {
          'RT_SER_SCALAR / RT_SER_ARRAY macro definitions (two sites, identical '
          'text); each expansion is the !g_portOn fallback, which IS a real '
          'dependency and is tracked as its own residue row'},
+    'runtime/src/io/package_file.cpp':
+        {'RtOriginal<StrGetterFn>(mangled)(self, &theirs);':
+         'ReplayStringGetter is a HELPER, and this scanner is lexical -- it '
+         'cannot follow a call into another function. All three of its callers '
+         '(GetName/GetAuthor/GetDescription, package_file.cpp:601/613/625) '
+         'invoke it inside `if (rt_diff_on__) {`, verified by reading each. The '
+         'mangled name is a PARAMETER, so the site is also invisible to any '
+         'name-based check. Re-verify these three call sites if the helper gains '
+         'a fourth caller'},
     'runtime/src/ui/dialog.cpp':
         {'RT_ORIGINAL_ONCE(StopTimerFn, kStopTimer)(shadow, id);':
          'guarded by if (diffThisCall), a local set from rt_diff_on__'},
@@ -384,6 +393,22 @@ def scan(path):
 
         code = line
 
+        # A BRACE PAIR THAT OPENS AND CLOSES ON ONE LINE IS NOT A SCOPE.
+        #
+        # Lane GFX2 found this and lane PKG2 was bitten by it. `diff_only_fn_depth`
+        # is cleared by any '}' that returns the depth to the guarded function's
+        # body level -- including the closing brace of a one-line aggregate
+        # initialiser:
+        #
+        #     void* compression[1] = { nullptr };     // <-- cancelled the guard
+        #     RT_ORIGINAL_ONCE(CompressionCtorFn, "??0Compression@...")(compression);
+        #
+        # so a function that early-returns unless RtDiffEnabled() had its
+        # remaining raw doors reported as UNGUARDED-CALL. The braces belong to an
+        # initialiser, not a block, and they net to zero on the line -- so strip
+        # balanced same-line pairs before the depth walk sees them. Nested and
+        # multi-line braces are untouched, and the file-level brace-balance check
+        # below still runs on the real structure.
         if EARLY_OUT.search(code) and diff_only_fn_depth is None:
             diff_only_fn_depth = depth
 
@@ -435,7 +460,17 @@ def scan(path):
                 while guard_depths and guard_depths[-1] > depth - 1:
                     guard_depths.pop()
                 depth -= 1
-                if diff_only_fn_depth is not None and depth <= diff_only_fn_depth:
+                # STRICTLY LESS THAN, not <=. diff_only_fn_depth is the depth
+                # INSIDE the guarded function's body, so `depth <= ...` cleared
+                # the guard on the closing brace of any inner block -- a for
+                # loop, an if, or a one-line aggregate initialiser -- and every
+                # raw door after the first inner block in a function that
+                # early-returns on !RtDiffEnabled() was reported UNGUARDED-CALL.
+                # Lane GFX2 reported the symptom (it blamed same-line braces,
+                # which is one instance of it) and lane PKG2 was bitten by it;
+                # both worked around it rather than in it. Only the function's
+                # OWN closing brace takes depth below the body level.
+                if diff_only_fn_depth is not None and depth < diff_only_fn_depth:
                     diff_only_fn_depth = None
         # a one-line `if (rt_diff_on__) foo();` guards only its own line
         if opened_guard:
