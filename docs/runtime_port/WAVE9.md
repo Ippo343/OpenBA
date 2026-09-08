@@ -331,6 +331,55 @@ Three mechanisms to make the rule enforceable rather than remembered (lane M bui
    `widgets_input.cpp` lines 53-58" into a self-reporting harness.
 3. **A DID-WORK counter** beside `calls=`, so a site cannot look covered on early-outs.
 
+### `Picking::Scene::Intersect` — MECHANISM FOUND: a MOVED TERM (a real port defect)
+
+Lane N, 2026-09-08. The one non-harness divergence the matrix produced is a **genuine port
+defect**, and it is the kind the port's own no-tolerance comment exists to catch.
+
+Retail pulls the ray ORIGIN into sub-mesh local space by adding the inverse transform's
+**TRANSLATION LAST** — a single `addss` against a register already holding the fully
+accumulated rotated sum. `0x180124B56`-`0x180124BB4`, three times, identically:
+
+```
+movss xmm0,[rbp-0x58] / addss xmm0,xmm3   -> local.x
+movss xmm0,[rbp-0x54] / addss xmm0,xmm2   -> local.y
+movss xmm0,[rbp-0x50] / addss xmm0,xmm7   -> local.z
+```
+
+`localOx` had that shape. **`localOy` and `localOz` did NOT** — they read `t + a + b + c`,
+which in C is `(((t+a)+b)+c)`: **the translation folded in FIRST** and the rotated terms
+accumulated on top of it. One moved term, in two of three components. Fixed by
+parenthesising the rotated part so the translation is added last, with the instruction
+evidence and a *"do not simplify this"* note in the comment.
+
+**Why it hid, and why the rate story now coheres:** a moved term only changes the ROUNDED
+result where the translation and the rotated part **nearly cancel** — a small region of one
+mesh. So it is invisible on essentially every ray, and a real-ray run casts only a handful
+through that region. That is exactly why it presented as 1-in-23,654 and as "1 of 4 stress
+runs", and why **a clean re-run was never going to exonerate it**.
+
+**The diagnostic that cracked it — CONTIGUITY.** Scaled to 244,824 rays / 29,867 hits the
+effect became deterministic: **21 divergences**, all on entity id=0, all from one ring
+origin, and **the diverging targets form CONTIGUOUS PATCHES of the target grid, not
+scattered points.** A contiguous patch is a region of one *surface*, which says the cause
+is arithmetic specific to a VALUE RANGE rather than a random rounding coincidence — and
+that is what sent lane N back to the local-space transform instead of the triangle test.
+`p.x` on those rays is 41.31 / 41.50 / 41.68 / 41.87 — the same values as all three
+real-ray observations.
+
+Both controls had to be REPAIRED before the fixture was usable: `hits=` killed two useless
+ray sets, and the **1-ULP negative control fires at 7,520 of 7,536 hits** where the
+association control it replaced fired at **0 of 525** and was underpowered rather than
+informative.
+
+⏳ **VERIFICATION IN FLIGHT** on exe `2026-09-08 00:54:19`: the same 244,824-ray sweep,
+predicted **21 → 0 with `hits=` unchanged at 29,867**. Closing on a deterministic repro
+with a working negative control, not on a lucky clean run.
+
+⚠️ **Caveat not buried:** the TRANSLATION PLACEMENT is proven for all three components, but
+retail's `xmm7` chain for `localOz`'s *interior* rotated-sum order has **not** been fully
+traced. `localOy`'s was (`((A-B)+C)+D`, port matches).
+
 ### `Picking::Scene::Intersect` — QUANTIFIED, and one claim WITHDRAWN
 
 Lane N, 2026-09-08. **Reproduced a THIRD time on a clean `921eb23` tree with the lane's
