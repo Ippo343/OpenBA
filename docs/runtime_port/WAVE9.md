@@ -1390,6 +1390,65 @@ move and IO stayed 37/55 despite four `RegisterRuntimeExport` calls, for the sam
 reason lane OBJ2's did not: the literal `ResolveExport(` door cannot see
 `RT_EXPORT_ONCE`. Measured at 113 live names in `6a0d360`.
 
+### The ladder finally has an EFFECTIVENESS CONTROL, and it passed exactly
+
+Every rung so far has been "the fault moved, therefore the port worked" — which is an
+inference, not a measurement. Lane PKG supplied the control with its prediction and it
+was run:
+
+| run | switch | fault | stack |
+|---|---|---|---|
+| attempt 12 | `BANISHED_RT_PKG` **on** | `?FindFiles@` | `#1 RtIo_FileSystem_LoadPackages +0x111` / `#2 ..._Startup +0x140` |
+| attempt 12-AB | `BANISHED_RT_PKG=0` | `?LoadPackages@` | `#1 RtIo_FileSystem_Startup +0x140` |
+
+**Same binary, one environment variable, and the wall moves back exactly one rung** —
+the extra frame disappears and `+0x140` returns from being a caller to being the
+faulting site. So the advance is caused by the port and by nothing else that changed
+between builds. Cheap, decisive, and it should be run on every future rung: a kill
+switch that restores the PREVIOUS rung's exact fault is the strongest cheap evidence a
+port did the work attributed to it.
+
+### Lane PKG's prediction: 4 for 4, with a falsifier LADDER
+
+| predicted | observed |
+|---|---|
+| symbol `?FindFiles@FileSystem@IO@@` (0x1800ad7a0, ord 2350) | ✅ |
+| enclosing `RtIo_FileSystem_LoadPackages` — **"a symbol that does not exist in the binary today"** | ✅ |
+| frame moves **DOWN** one level | ✅ `#1/#2/#3` exactly as listed |
+| offset small-ish within #1 (FindFiles is ~11% into a 430-instruction body) | ✅ `+0x111` |
+
+What made it better than lane FS's equally-correct call is that it ranked **four
+falsifiers by sharpness** and gave each a free tell — including the one that would have
+been *more* interesting than the prediction: "no fault at all" split into *gate byte 0,
+body skipped* (`calls=1`, shadow absent) versus *body ran and mounted nothing*
+(`calls=1` plus a shadow printing `pkgs=0`). A prediction that tells you how to read
+its own failure is worth more than one that is merely right.
+
+### ⚠️ "Invisible to the census" is NOT "a null call at cutover"
+
+Lane PKG re-measured the census defect from its own tip: **168 `RT_EXPORT_ONCE` /
+`RT_DATA_SLOT` names, 119 invisible** (the integrator's 113 plus 6 net new from this
+lane), 53 of them in `engine_lifecycle.cpp` — **more than a third of the whole defect
+in one file** — and 27 reachable from `runtime/src/io/` alone, which is why IO reads
+37/55 and did not move despite four new registrations.
+
+**But the lane also drew the distinction the number invites you to skip:** a name with
+no literal `ResolveExport(` spelling is invisible to the census, and that is a
+*denominator* defect. It is only a **live hole** if it ALSO has no port and no mint
+entry. Lane PKG's own four are now ported and still invisible. The two questions have
+different instruments and different answers:
+
+| question | instrument | current answer |
+|---|---|---|
+| what does our tree depend on? (denominator) | `runtime_census.py` `called` | understated by ~119 |
+| what will be NULL when the DLL goes? | `unsatisfied_export_scan.py` | 151 names, 148 with a live site |
+
+Conflating them would inflate the cutover work list by every name a lane has already
+closed. Both `?ExistsInPackfile@` and `?PlatformExists@` appear on **both** lists,
+which is exactly why they are dangerous: invisible to the census, satisfied-looking to
+the raw-door and bypass audits, and null at cutover. **Three instruments blind to the
+same two symbols.**
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
