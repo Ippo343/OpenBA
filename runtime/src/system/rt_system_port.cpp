@@ -32,6 +32,11 @@ extern int RtSystemValueRegister();       // value_types.cpp
 extern int RtSystemThreadRegister();      // thread_win.cpp
 extern int RtSystemTimerRegister();       // timer.cpp  (Wave 9 lane B3)
 extern int RtSystemAllocatorRegister();   // allocator.cpp
+// Wave 9 lane ENG, iteration 2. System::Configuration::SetCommandLine plus the
+// unexported string-keyed BST find its map and IO::FileSystem both walk. Its
+// own switch because it is on the process's single boot path (Engine::Startup
+// step 2), so it must be A/B-able on its own.
+extern int RtSystemConfigurationRegister();  // configuration.cpp (lane ENG)
 
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
@@ -44,6 +49,7 @@ void RtSystemPortInit() {
     if (RtWaveEnabled("BANISHED_RT_VALUE"))    n += RtSystemValueRegister();
     if (RtWaveEnabled("BANISHED_RT_THREAD"))   n += RtSystemThreadRegister();
     if (RtWaveEnabled("BANISHED_RT_TIMER"))    n += RtSystemTimerRegister();
+    if (RtWaveEnabled("BANISHED_RT_CONFIG"))   n += RtSystemConfigurationRegister();
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)
