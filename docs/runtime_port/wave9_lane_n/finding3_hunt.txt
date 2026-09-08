@@ -1,0 +1,4 @@
+== run 1 rc=3
+   [WorkSchedProbe] TALLY  8e30calls=220  unfiled=220  entryNotFound=0  bucketNotFound=0  bucketRootNull=0  ==> INVARIANT HELD on every call: no erase no-opped, so the erase-no-op mechanism is NOT Finding 3 and the scheduler family is eliminated
+   [ObjAudit] post-entitylist: count=738 bad=0 (freed-while-registered so far: 0)
+== CRASHED on run 1 — archiving

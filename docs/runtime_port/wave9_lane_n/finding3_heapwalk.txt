@@ -1,0 +1,3 @@
+== run 1 rc=3
+   [REDZONE-DUMP] 'shutdown-enter': allocator=000000894a9fef80 ranges=00000279ab450000 cnt=1
+== CRASHED on run 1 — archiving

@@ -8,7 +8,7 @@ that only the shipped DLL's presence makes visible.
 |---|---|
 | **1** — `UI::NumberElement::SetValueInt` diverges on tutorials 1-3 | **CLOSED.** An ORACLE defect, diagnosed by lane M and FIXED here: the two `NumberElement` setters and `NumberEditElement::SetMinMax` are now NO-ORACLE ports. Layout corrected: `+0xD0` is an owning refcounted `System::String` and the object is **0xE8** bytes, not 0xE0. |
 | **2** — `Picking::Scene::Intersect` diverges on the stress route | **CLOSED, and it was a REAL PORT DEFECT.** A moved term: the inverse transform's translation was folded into `localOy`/`localOz` FIRST instead of added LAST. Fixed and proved on a deterministic 244,824-ray repro — 21 divergences -> 0 with the denominator unchanged, and a negative control that fires at 7,520/7,536. |
-| **3** — intermittent shutdown crash | **REPRODUCED 4x and RE-CHARACTERISED; the missing erase NOT found.** Two corrections to what was recorded: the arithmetic (a small integer over a pointer's LOW half, not a decremented boundary tag) and, more importantly, the **stack** — symbolized with `nm` it is the WorkComponent task-cleanup path, not a tutorial tree through `TreeNodeFree`. It is a stale BST link to a freed-and-reused node. |
+| **3** — intermittent shutdown crash | **REPRODUCED 4x, RE-CHARACTERISED, family ENUMERATED; culprit NOT confirmed.** Two corrections to the record: the arithmetic (a small integer over a pointer's LOW half, not a decremented boundary tag) and the **stack** — symbolized with `nm` it is the WorkComponent task-cleanup path, not a tutorial tree through `TreeNodeFree`. Every free/erase pair in the family is now tabulated; no path frees a still-linked node, so the leak must be an erase that no-ops while the destroy after it proceeds. One candidate identified, instrumented with a falsifiable probe, **not** yet measured. Also found: retail *hard-faults* where our port silently guards. |
 
 ---
 
@@ -463,7 +463,7 @@ diverging ray prints its own `(start, dir, maxDist)`.
 
 ---
 
-## Finding 3 — reproduced, arithmetic corrected, writer not found
+## Finding 3 — reproduced, stack corrected, free/erase family enumerated, culprit not confirmed
 
 ### The correction, which supersedes what was recorded
 
@@ -553,22 +553,227 @@ removing entities while `RegisterWorkSlot` looks the citizen's id back up in the
 trees (`s_fn_CitizenAI_8e30(gameWorld+0x118, key)`, `workcomponent.cpp:310`), so a node an earlier
 teardown step freed can still be linked.
 
-### Not found, and not guessed
+### THE FREE/ERASE ENUMERATION (source + disassembly, no runs)
 
-The erase that should have happened. `tools/abi_retslot_audit.py` is clean (0 suspicious of 48
-by-value-returning exports), so the hidden-return-slot family is not it; and
-`TreeNodeFree_2ce60`, which lane M's reading implicated, was checked against retail 0x14002CE60
-instruction by instruction and is faithful — its node layout is confirmed by the node
-copy-constructor at 0x14002CEB0 (`+0x00` key, `+0x08`/`+0x10` sub-tree {root,count}, `+0x18`
-parent, `+0x20`/`+0x28` children, `+0x30` int32) — so the "one free routine, two node layouts"
-family is not it either. Both of those are now eliminated rather than merely unexamined.
+Per `reference_workarea_bst_bad_entry.md`'s closing rule — *ask what should have ERASED an
+entry before asking what WROTE it* — here is every tree the work scheduler
+(`*(gameWorld+0x118)`) maintains for a posted work item, with its insert, its erase, and the
+key each uses. Insert is `CitizenAI_WorkScheduler_Insert` (retail 0x1400F88A0); erase is
+`ActCt_TaskCleanup_8e30` (retail 0x1400F8E30), which is the function that faulted.
 
-**Reproduced (4 times in ~9 stress-route runs), stack symbolized, mechanism characterised, the
-missing erase not identified.** Per CLAUDE.md it is not to be closed with a null check on the
-child link: the tree is linking to a dead node, and a guard at the read would hide that while
-leaving the dangling link. The next step is to find which teardown step frees a task/work node
-without removing it from the `taskMgr+0x30` and `taskMgr+0x40..` trees — the same question, in the
-same subsystem, that `reference_workarea_bst_bad_entry.md` answered once already.
+| # | Tree | Node | Inserted by | Erased by | **Key used at erase** |
+|---|---|---|---|---|---|
+| 1 | `sched+0x10` primary AVL (queue order) | 0x28 | 88a0, inline | 8e30 step 3 via `a6e0` | `*(workObj+0x24)` — the work's PRIORITY, re-read at erase |
+| 2 | `sched+0x30` id map | 0x30 | 88a0 via `9a40` | 8e30 step 5 via `ca60` | `taskIdx` (the parameter) |
+| 3 | `sched+0x40 + i*0x10`, i<14 — category sub-trees | 0x30 | 88a0, inline, per `code` bit | 8e30 step 2 via `ca60`, all 14 unconditionally | `taskIdx` |
+| 4 | `sched+0x120` profession buckets | 0x38 | 88a0 via `cb50`→`ccf0` | **never erased — buckets are created and never removed** | — |
+| 5 | `bucket+0x08` inner id tree | 0x30 | 88a0, inline | 8e30 step 4 via `ca60`; also `Rekey` step 4 via `ca60` | `slot50(workObj)` to find the bucket, then `taskIdx` |
+
+Every free of a node in 1, 2, 3 and 5 goes through `ca60`/`a6e0`, which unlink before they
+free — checked line by line in `WorkCellBST_Remove_ca60`
+(`code/Game/Work/work_base_cellbst.cpp:171`), including the two-child in-order-predecessor
+splice. The only bulk free (`e320`, which frees a subtree WITHOUT unlinking it from a
+parent) is used in this family in exactly one place — `WS_cb50` freeing its own stack
+temporary's deep copy — and every call site in our tree passes a null subtree, so it never
+runs. **No free path in this family frees a node that is still linked.**
+
+**So the leak is not a free-without-unlink. It is an ERASE THAT SILENTLY DOES NOTHING while
+the destroy that follows it happens anyway.** Rows 1 and 5 are the exposed ones, because
+they are the only two whose erase key is **re-read out of the work object at erase time**
+rather than passed in:
+
+* Row 5: step 4 finds the bucket by `slot50(workObj)` — the work's own "which profession can
+  do this" getter. Step 5 then runs `owner vtable +0x48`, `+0x40`, `DeletePtr(task+0x8)` and
+  `ca60(sched+0x30, task)` **unconditionally, with no dependence on step 4 having found
+  anything.** If the key has drifted since the post filed it, the entry stays in the old
+  bucket and its payload becomes a freed work object one instruction later.
+* Row 1 has the same shape with `*(workObj+0x24)`.
+
+That the key CAN drift is not speculation — `CitizenAI_WorkScheduler_Rekey` exists solely to
+move an item between buckets when a building changes profession, and it is called from
+exactly two sites (0x14012F520 demolition/upgrade → Builder, 0x14012F670 completion → natural
+profession). Any other change of a work's profession key, or any read of `slot50` through a
+component that teardown has already freed, leaves the entry filed under a key nobody will
+look under again.
+
+### RETAIL DOES NOT TOLERATE HALF OF THAT, AND THIS PORT DOES
+
+Retail 0x1400F8F2D-0x1400F8F5E, read this lane:
+
+```
+1400f8f2d  mov  rcx,[r14+0x120]     ; bucket tree root
+1400f8f34  test rcx,rcx / je f8f5c  ; empty          -->
+1400f8f40  ...search by slot50 key...
+1400f8f5a  jne  f8f40               ; not found, falls through -->
+1400f8f5c  xor  ecx,ecx             ;   rcx = 0
+1400f8f5e  mov  rdx,[rcx+0x8]       ;   *** READ OF ADDRESS 0x8 — a hard fault ***
+```
+
+**Retail asserts that a work's own slot-10 key always names an existing bucket, and dies
+immediately and loudly if it does not.** Our port has an `if (node != nullptr)` guard there
+and continues. Note the asymmetry, which matters: retail *does* tolerate the entry being
+absent from a bucket that exists (`test rdx,rdx / je f8f90`), so only the missing-BUCKET case
+is retail-fatal.
+
+That guard should **not** simply be deleted — per CLAUDE.md, removing it would move the crash
+rather than fix it, and the deref is faithful only in the sense that retail relies on an
+invariant we may be breaking upstream. What was missing is that **nobody has ever measured
+whether the invariant holds in our build.** A probe now does, and changes no behaviour:
+
+`BANISHED_WORKSCHED_PROBE=1` (`code/Game/Action/action_base_complete.cpp`) counts, per 8e30
+call, and reports at exit:
+
+| counter | meaning |
+|---|---|
+| `unfiled` | healthy — the entry was found and erased |
+| `entryNotFound` | retail-tolerated, but **this is the dangling-entry event**: step 5 destroys the work object anyway |
+| `bucketNotFound` | **retail would have FAULTED at 0x1400f8f5e** |
+| `bucketRootNull` | same |
+
+The prediction this makes is falsifiable: **if `entryNotFound` and both fatal counters are
+zero across a stress run, Finding 3 is NOT this mechanism** and the enumeration above has
+eliminated the whole family rather than found the culprit. That is a result either way, and
+it needs one run.
+
+### Eliminated, with the evidence
+
+* **Work-id reuse.** `CitizenAI_WorkScheduler_Insert` allocates ids from a monotonic counter
+  that wraps only at 0x7FFFFFFE (`sched[0] += 1; id = sched[0];`). `workComp+0x28` is never
+  reset when work completes — so a component does carry a stale id forever, and `ead0`'s
+  id-map lookup is the engine's liveness test — but with no realistic reuse inside a
+  1,200-frame run, a stale id cannot alias someone else's live item.
+* **Teardown ordering.** `GameUpdateLoop_Shutdown` calls `EntityList::Shutdown`
+  (`gameupdateloop.cpp:2933`) *before* the "free/destroy all subsystems" block that destroys
+  `m_game`, so the scheduler is alive for the whole mark pass. The scheduler is not being
+  dereferenced after its own destruction.
+* **`TreeNodeFree_2ce60` / the tutorial tree**, which lane M's symbolization implicated:
+  checked instruction by instruction against retail 0x14002CE60 and faithful, and not on the
+  real stack anyway.
+* **`ca60`'s AVL erase**, including its two-child predecessor splice: no path frees a node
+  while a link to it survives.
+* **The child-offset family.** All five walkers of the 0x30 node layout agree: lesser child
+  at +0x18, greater at +0x20. One *comment* disagreed — `WorkComponent_CheckWorkSlot`'s
+  header labelled them the wrong way round while its code was correct — and that is corrected
+  here, because this family has now paid three times for a child-offset or slot mix-up.
+* **`abi_retslot_audit.py`**: clean, 0 suspicious of 48 by-value-returning exports.
+
+### MEASURED, on runs that actually crashed
+
+Everything above this point was reasoning. This section is measurement, and three of its four
+results are negative — recorded with the same weight a hit would have had.
+
+**1. THE CRASH IS ORACLE-INDEPENDENT.** The stress cell was run with `BANISHED_RT_DIFF`
+**unset** (exe 2026-09-08 01:29:23) and faulted anyway: `rc=3`, ACCESS_VIOLATION. Finding 3 is a
+real defect in the port, not an artifact of the diff harness. The intermittency is unchanged at
+roughly 4 runs in 10, so the oracle is not what makes it fire either.
+
+**2. THE SCHEDULER ERASE FAMILY IS ELIMINATED — on a crashing run.** The probe's tally, from the
+run that died:
+
+```
+[WorkSchedProbe] TALLY 8e30calls=136 unfiled=135 entryNotFound=0 bucketNotFound=0 bucketRootNull=0
+```
+
+135 of 136 calls found their entry and erased it; the 136th is the call that faulted mid-walk.
+**Not one call reached either state retail 0x1400f8f5e would have faulted on, and not one erase
+no-opped.** The mechanism this lane derived from source — a drifted key leaving an entry behind
+while step 5 destroys the object anyway — **does not occur**. The enumeration ruled the family
+out rather than finding the culprit, which is what it was built to be able to say.
+
+**3. THE INTERNALFACTORY HANDLE TABLE IS CLEAN THROUGH TEARDOWN.** `ObjAudit`'s only scan point
+was inside `Update`, so the table had **never** been checked during teardown; checkpoints were
+added bracketing `EntityList::Shutdown`. On the crashing run: `shutdown-enter: count=92492 bad=0`,
+`freed-while-registered total=0`. So mode (A) of `Object/internal_factory_audit.h` — *"the next
+~Internal writes `*(int*)(freedPtr+0x08) = idx`, a 4-byte store into a reused block"*, which has
+exactly this crash's signature — **did not happen**.
+
+**4. THE DISCRIMINATING RESULT: THE HEAP IS CLEAN WHEN TEARDOWN BEGINS.** Two readings were
+equally consistent with the evidence — *one latent wild write laid down during the sim, with a
+moving victim*, versus *faults created by teardown itself*. They differ in one observable, so
+`RedzoneAlloc_HeapDump` (which walks the engine allocator's boundary tags and works on a fully
+native run) was called at `shutdown-enter`. On the crashing run:
+
+```
+[REDZONE-DUMP] 'shutdown-enter': ... no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact
+```
+
+**The heap is intact when teardown starts and corrupt by the time it faults.** That rules out the
+latent-sim-write reading. The corruption is produced *by the teardown cascade*, in the window
+between the 135th and 136th `8e30` call.
+
+### A CORRECTION I OWE LANE M
+
+Earlier this lane reported, on one symbolized crash, that lane M's stack
+(`Tutorial_Dtor_f8ff0 → TreeNodeFree`) was wrong and that "only the first frame survives."
+**That was itself wrong, and it was wrong because it generalised from a single sample.** A later
+crash captured here symbolizes to exactly lane M's path:
+
+```
+GameUpdateLoop_Shutdown +0x615 -> Tutorial_Dtor_f8ff0 +0x330
+  -> TreeNodeFree_2df90 (recursive: +0x50 / +0x5f / +0x7f / +0x5f)
+```
+
+(`2df90`, not `2ce60` — same recursive-free shape, a sibling function.) Lane M's reading was
+right about this fault. **There are at least THREE distinct faulting stacks on this route**, and
+they must not be assumed to be one defect:
+
+| # | Stack | Corrupt value |
+|---|---|---|
+| A | `EntityList_Shutdown +0x104` (mark loop) → `WorkComponent::OnRemove` → `RegisterWorkSlot` → `ActCt_TaskCleanup_8e30`, faulting on `int k = *e` in step 4's entry walk | `{low = 2 or 0x22, high = that run's heap prefix}` |
+| B | `EntityList_Shutdown +0x22e` (drain loop) → `RemoveEntity` → `ComponentEntity_Dtor` → `DtorBody` → `InternalBasePtr::DeletePtr` → `Inert_ScalarDtor` → `MemFree` → `FreeLocked` | boundary tag `0x0000000200000010` |
+| C | `Tutorial_Dtor_f8ff0 +0x330` → recursive `TreeNodeFree_2df90` | node ptr `0x0000000200000020` |
+
+A and C are both **a pointer whose low dword was overwritten with a small integer** — for A the
+high half is provably that run's heap prefix (`0x279`, matching `RSI=0x279AD63A7B0`). B is a
+boundary tag, and `0x200000010` is *not* a valid tag: the allocator stores the block size in the
+low 41 bits (`blkBytes = (tag & 0x1ffffffffff) * 4`, `redzone_alloc.cpp:867`), so a 16-byte block
+would tag as `4`, not `0x200000010`. So all three are genuine corruption, not misread metadata,
+and the "free-block tag" reading this lane briefly entertained is **wrong and withdrawn**.
+
+### A DEFECT IN THIS LANE'S OWN PROBE, AND THE RULE IT PRODUCED
+
+The probe's first version registered its tally with `atexit`. The crash handler ends in
+`ExitProcess`, which skips `atexit` entirely — so on the one run where the probe fired, it printed
+its `ARMED` line and then **nothing at all**, and the all-counters-zero outcome would have been
+indistinguishable from *"the probe is not in this binary."*
+
+**A diagnostic whose output is destroyed by the event it diagnoses is not a diagnostic.** Both
+tallies now print from the crash handler as well, beside `VideoDX11::Dx11SeamReport()`, which had
+been doing exactly this since Wave 6 for exactly this reason. The `ARMED` line is what exposed it:
+without a startup marker the silence would have been read as a clean pass.
+
+### Where it stands
+
+**Reproduced (7 times now), oracle-independence proved, the heap proved clean at teardown entry,
+the scheduler family and the handle table both eliminated by measurement on crashing runs, the
+victim located to a single instruction — and the WRITER not found.**
+
+What is honestly open: the writer. Three separate hypotheses have now been *measured and
+eliminated* rather than argued away, the search space is much smaller, and the next tool is
+named below — but nothing here identifies the code that stores the small integer.
+
+The remaining candidate the evidence points at is a write performed *during the teardown
+cascade* that lands on a live pointer's low half. Since the victim address differs every run, the
+tool for it is a **hardware write watchpoint** (`standalone/hw_watch.cpp` exists for exactly this)
+armed on the bucket's inner-root slot at the moment it is written, which names the writer directly
+instead of inferring it from the victim. That is a build this lane did not make.
+
+Two things worth carrying forward for whoever does:
+* the fault is **not** latent from the sim (result 4), so the watchpoint only needs to cover
+  teardown, which is a few hundred milliseconds rather than 1,200 frames;
+* stacks A and C are the same shape (a pointer's low dword replaced by a small integer) while B
+  is a boundary tag, so **B may well be a different defect** — the coordinator's warning against
+  assuming one root cause is not resolved here, and this lane's data does not settle it.
+
+Per CLAUDE.md this is not to be closed with a null check on the child link, and the existing
+`if (node != nullptr)` guard was deliberately **left in place**: retail's unguarded deref there
+is load-bearing, so deleting the guard would only move the crash to a different line without
+restoring retail's behaviour. The upstream question — what makes the key drift — stays open.
+
+Note also the corollary for cutover: **row 4's buckets are never erased at all**, by either
+implementation. That is retail's design, not a defect, but it means the profession-bucket tree
+only ever grows, and any lane that mints or serialises this structure should know it.
 
 **It is also a verification blocker, and that has now bitten this lane directly:** the merged-tree
 confirmation run below produced its `[PickSweep]` line and then died at shutdown, so it has **no

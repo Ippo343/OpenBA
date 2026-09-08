@@ -1,0 +1,62 @@
+== rt_run[laneN_hunt1] exe stamp: 2026-09-08 01:33:19.248228800 -0400
+== rt_run[laneN_hunt1] exited rc=3 after 45s
+-- crash log --
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff708b19b5e
+RAX=0000000200000020 RCX=0000000200000000 RDX=0000000000000020 RBX=0000004D121FF580
+RBP=0000004D121FF2D0 RSI=0000021F0D35A7B0 RDI=0000021F0AECEF98 R8 =0000004D121FF998
+R9 =0000004D121FF580 R10=0000021F10FA6238 R11=00003FFFFFFFFFFF R12=0000021F0AEC8640
+RIP=00007FF708B19B5E RSP=0000004D121FF2B0
+Module:    reimpl-x64.exe + 0x1B9B5E  (base=00007ff708960000)
+Fault: READ of 0000000200000020
+Registry: 1618 registered, 72 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=0000004d121ff580 ranges=0000021f0b2c0000 cnt=1
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact (corruption may be in the high-bit prev links or a bucket head)
+Stack trace:
+  #0  reimpl-x64.exe         + 0x1B9B5E    (RIP=00007FF708B19B5E RSP=0000004D121FF2B0)
+  #1  reimpl-x64.exe         + 0x1B9B6D    (RIP=00007FF708B19B6D RSP=0000004D121FF2E0)
+  #2  reimpl-x64.exe         + 0x1B9B8D    (RIP=00007FF708B19B8D RSP=0000004D121FF310)
+  #3  reimpl-x64.exe         + 0x1B9B6D    (RIP=00007FF708B19B6D RSP=0000004D121FF340)
+  #4  reimpl-x64.exe         + 0x1BAA31    (RIP=00007FF708B1AA31 RSP=0000004D121FF370)
+  #5  reimpl-x64.exe         + 0x1AF239    (RIP=00007FF708B0F239 RSP=0000004D121FF400)
+  #6  Runtime-x64.dll        + 0xDD4CA     (RIP=00007FFCA878D4CA RSP=0000004D121FF4E0)
+  #7  reimpl-x64.exe         + 0x1A7727    (RIP=00007FF708B07727 RSP=0000004D121FF510)
+  #8  reimpl-x64.exe         + 0x346A64    (RIP=00007FF708CA6A64 RSP=0000004D121FFD60)
+  #9  reimpl-x64.exe         + 0x12EE      (RIP=00007FF7089612EE RSP=0000004D121FFDB0)
+  #10 reimpl-x64.exe         + 0x13E6      (RIP=00007FF7089613E6 RSP=0000004D121FFE00)
+  #11 KERNEL32.DLL           + 0x17374     (RIP=00007FFCF90B7374 RSP=0000004D121FFE30)
+  #12 ntdll.dll              + 0x4CC91     (RIP=00007FFCF9E3CC91 RSP=0000004D121FFE60)
+=== END CRASH ===
+-- runtime port lines --
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::String: 22 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::Filename: 11 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] System: 70 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Object::Internal: 6 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   External: 11 exports (Clean/FindOrLoad/SerializeReferenceTable/SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Object: 23 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedMemoryStream: 8 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO::Persistence: 5/7 exports registered (ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem/Modification: 6 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO: 41 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement: 36 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Save: 15 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Picking: 9 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 27 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video: 88 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Graphics: 60 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI widgets(layout): 21 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI: 104 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Engine loop family (lane A): 12 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (8 held back: 4 allocator NO-GO, 2 detour-required, Run, _singleton -- see WAVE8_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Engine: 15 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Audio: 20 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Input: 16 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Application: 5 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Utility: 1 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] runtime registry: 580 exports, 422 addrs, 2 ordinals

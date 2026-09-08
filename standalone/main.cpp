@@ -31,6 +31,11 @@
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetDetourInstaller
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
+#include "Object/internal_factory_audit.h"   // ObjAudit::ReportLeaks from the crash handler
+
+// Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
+// Declared here rather than in a header: it has exactly one caller, the crash handler.
+extern "C" void WorkSchedProbe_Report();
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -638,6 +643,14 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // session that dies on the way out is exactly the one whose "did any
     // shipped renderer code run?" answer is worth having.
     VideoDX11::Dx11SeamReport();
+
+    // Same reasoning, and Wave 9 lane N paid for it: the work-scheduler probe
+    // built to diagnose the TEARDOWN crash registered its tally with atexit, so
+    // the one run where it fired printed nothing at all. A diagnostic whose
+    // output is destroyed by the event it diagnoses is not a diagnostic. Both of
+    // these are no-ops unless their own env var is set.
+    WorkSchedProbe_Report();
+    ObjAudit::ReportLeaks("CrashHandler");
 
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();

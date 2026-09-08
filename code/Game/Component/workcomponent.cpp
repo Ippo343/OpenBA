@@ -250,8 +250,18 @@ static void EnsureWorkSlotHelpers() {
 // Reimpl of FUN_14012ead0 (check whether this work slot is occupied:
 //   BST lookup keyed by workId (+0x28) in the world work-slot tree)
 // ============================================================
-// Tree at *(g_pGameWorldSingleton+0x118) + 0x30. Node ints: key @+0, value-ptr @+0x08,
-// greater-child @+0x18, lesser-child @+0x20.
+// Tree at *(g_pGameWorldSingleton+0x118) + 0x30. Node: key @+0x00, value IBP @+0x08,
+// parent @+0x10, **LESSER child @+0x18, GREATER child @+0x20**, balance @+0x28 (0x30 bytes).
+//
+// The two child labels above were SWAPPED in this comment until Wave 9 lane N. The CODE
+// was and is correct — it descends to +0x20 when the node's key is below the target — but
+// the label was the wrong way round, and every other walker of this same node layout
+// (CitizenAI_WorkScheduler_Rekey and _Insert in citizenai_work_scheduler.cpp,
+// ActCt_TaskCleanup_8e30 steps 1/2/4 in action_base_complete.cpp,
+// WorkComponent_RegisterWorkSlot just below) documents it correctly as lesser@+0x18.
+// Left uncorrected in a family that has now paid THREE TIMES for a child-offset or
+// slot mix-up (reference_workarea_bst_bad_entry.md), a comment that contradicts its own
+// code and its four siblings is a defect waiting for the next reader.
 bool WorkComponent_CheckWorkSlot(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
