@@ -1,0 +1,22 @@
+CELL C -- registered but NOT detoured. Proves the detour is the only route to coverage: the port reports zero calls.
+run tag: EV_nodetour   (lane RRES, 2026-09-08)
+
+---- [ResPath] lines, stdout -------------------------------------
+39:[ResPath] registered 4 doors + 4 addresses (detour=off negctl=0)
+2533:[ResPath] counters: expand=0 empty=0 | ident def/present=0/0 | fname stack/present=0/0 | stack empty/nonempty=0/0
+2534:[ResPath] counters: hit pkg=0 attrProbe/hit=0/0 retry=0 notFound=0 | tail ident/none=0/0
+2535:[ResPath] counters: ext calls=0 ok=0 nodata=0 nodot=0 emptyAfterDot=0 colonTrim=0
+
+---- [ResPath] / [RtDetour] lines, stderr ------------------------
+(none)
+
+---- the two RtDiff sites ----------------------------------------
+(none)
+
+---- Object namespace registration count -------------------------
+40:[RtPort] Object: 44 exports registered
+
+---- run outcome -------------------------------------------------
+C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/089e6eb4-d9a8-48f5-98e7-171093dfa7c0/scratchpad/EV_nodetour_error.log:887:[GUL::Load] EXIT — world built: game=000001f53eeda580 ui=000001f53eed9b68 entityList=000001f53eed9a78 scene=000001f53eeda990 sun=000001f53eddea98
+C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/089e6eb4-d9a8-48f5-98e7-171093dfa7c0/scratchpad/EV_nodetour_error.log:1638:[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
+crash log bytes: 0
