@@ -442,3 +442,64 @@ flagged for three live-path `String::Release` bypasses).
 directory before the next cell deletes them, then prints the summary line and **every** site
 whose `divergences` is non-zero. Its `grep` has no `tail`, for the reason recorded at the bottom
 of `rt_run.sh`.
+
+---
+
+## The prefix-replay sweep (handed to lane N)
+
+Finding 1's defect is not "one function was ported carelessly". The rule it broke is written in
+`widgets_input.cpp`'s own header, lines 53-58, by the lane that then broke it two hundred lines
+lower. **A rule that exists and is not mechanically enforced gets violated**, so the useful
+deliverable is the sweep and the enforcement, not the two fixes.
+
+**164 `RT_DIFF_BYTES` prefix-replay sites across 29 files.** Filtering to bodies that both
+memcpy a scratch copy *and* reach a string / refcount / allocation name leaves **nine**, and the
+matrix's own `calls=` column then splits them sharply:
+
+| Prefix-replay body | max `calls` across the WHOLE matrix | Read |
+|---|---:|---|
+| `RtUi_NumberElement_SetValueInt` | 12,896 (10 did work) | **THE FINDING.** |
+| `RtUi_NumberElement_SetValueFloat` | **NEVER REGISTERED** | Identical body, same `CacheText`, same hazard. **Silent only because nothing calls it.** Fix with `SetValueInt`. |
+| `RtUi_NumberEditElement_SetMinMax` | **NEVER REGISTERED** | **Top priority after the two above.** Its replay shares `base._text`, and `RealNumberEditElementSetValue()` swaps that refcounted pointer — the same mechanism, with *zero* coverage to have caught it. |
+| `DocumentTextElement_SetText_UiString` | **NEVER REGISTERED** | Reads SAFE on inspection: `UI::String` is argued POD/non-refcounted, and the body undoes its write so retail runs on the true pre-call state. Its neighbour even hand-decrements `theirs`'s refcount and frees it — that lane understood the hazard. Verify, do not assume. |
+| `RtUi_Element_Ctor` | **NEVER REGISTERED** (under this name) | Check how it is registered before concluding anything. |
+| `RtUi_SpinnerElement_SetMinMax` | 4 | Reaches the same `NumberEditElement` SetValue path. 4 calls is not coverage — check how many DID WORK. |
+| `RtUiElementDescription_Ctor` | 2 | Same. |
+| `RtUi_Element_SetToolTip` | 10 | Uses `ReplayGuard`; the field is a POD `UIString`. Lowest concern. |
+| `RtGraphics_MeshInstance_UpdateHierarchy` | 48,742 | Heavily exercised and clean; the alloc/free hits are almost certainly incidental. |
+
+**Three of the nine are never called anywhere in the matrix, and two of those three share
+Finding 1's exact mechanism.** Their zero-divergence status is worth nothing — it is
+`reference_uncalled_port_is_not_verified.md` sitting directly on top of the defect the matrix
+just found.
+
+### Making the rule checkable — three layers, cheapest first
+
+1. **The order-inversion control is already a whole-tree detector, and it needs no new tool.**
+   Running the DLL's body FIRST on the scratch is a one-flag change to the replay macro. On the
+   first body it was tried against it crashed in 20 seconds, inside the allocator, with the
+   diverging value's own digits in a free block. A `BANISHED_RT_DIFF_INVERT=1` pass over the
+   harness matrix would surface every body that double-manages an allocation, by crashing on it,
+   with no reasoning and no per-function argument required. **This is the highest
+   value-per-hour item in this section.**
+2. **A runtime assert that detects the shape rather than the symptom.** Before running the
+   original on the scratch, walk the scratch for qwords that are heap pointers; after our body
+   has run, check whether any of them now addresses a block whose `{length, refcount}` header at
+   `[-8]` reads zero — i.e. the replay is about to hand retail a pointer into memory we already
+   released. Name the function and abort. This turns "someone must remember lines 53-58" into a
+   self-reporting harness.
+3. **A static candidate list**, exactly the nine above. It has `port_bypass_audit.py`'s known
+   blind spot — it cannot follow a call into a callee, so `CacheText` is only visible because it
+   is named at the call site — so it yields **candidates needing a written disposition each**,
+   in lane V's style, not verdicts. Nine out of 164 is a tractable list; a checker that returns
+   0 here would be lying.
+
+### One change to `RT_DIFF` that would have made this visible on day one
+
+Every diff site reports `calls=`, which counts calls **entered**. Finding 1 was invisible for a
+wave because 12,886 of 12,896 calls took an early-out and compared identical, so the site looked
+richly exercised. **A site should report how many calls DID WORK as well as how many were
+entered.** `reference_probe_needs_an_effectiveness_control.md` already says this about probes;
+the argument here is that it belongs in the oracle itself, because "10 of 12,896 calls did
+anything at all" is the number that turned a mysterious rare divergence into a structural
+one-line answer.

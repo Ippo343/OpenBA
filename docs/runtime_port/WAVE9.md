@@ -253,6 +253,55 @@ ours), not chosen.
 | **F. Retire the §2.2 patches — AND the fallback idiom, 166 sites** — **FALLBACK HALF DONE 2026-09-07 (0 sites); §2.2 TRIAGED, ALL CARRIED, see [WAVE9_LANE_F.md](WAVE9_LANE_F.md) — and PLAN §2.2 A is WRONG that `filename_runtime_hook.cpp` is only diagnostics: `InstallFindOrLoadWatch()` is default-on and is the menu-crash fix** | The four byte-patch files, the crash handler's Runtime instruction offsets (§2.2 C, kept and narrowed by Wave 3), the `MessageBoxW` IAT swap, and the direct layout reads in §2.2 B. **Plus a countable item this table did not have until Wave 9 lane D measured it: all 166 `ResolveExport(...); if (!x) ResolveAddr(Module::Runtime, ...)` fallback branches must be DELETED before lane G.** With the DLL gone, no `ResolveExport` can succeed, so every one of the 166 becomes the live path *simultaneously* and jumps at an address in a module that is not mapped. The replacement for the audit is not another tool — it is leaving nothing to audit. | Each one deleted, not carried; `resolve_fallback_audit.py` reports 0 sites |
 | **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. **Nothing here may run for the first time on cutover day** — every gate below needs the DLL to compare against and stops working the moment it is gone. | The PLAN §5 box |
 
+### The prefix-replay hazard is a CLASS, and `calls=` hid it — lane M sweep, 2026-09-08
+
+Finding 1 (`NumberElement::SetValueInt`) is not one bad oracle. **164 `RT_DIFF_BYTES`
+prefix-replay sites across 29 files**; filtering to bodies that both memcpy a scratch AND
+reach a string/refcount/alloc name leaves **nine**. The matrix's own `calls=` column then
+splits them, and the split is the finding:
+
+| Prefix-replay body | max `calls` across the whole matrix | Read |
+|---|---:|---|
+| `NumberElement::SetValueInt` | 12,896 (**only 10 did work**) | Finding 1 |
+| `NumberElement::SetValueFloat` | **NEVER REGISTERED** | **the SAME bug** — identical body, same `CacheText`, same hazard. Silent only because nothing calls it |
+| `NumberEditElement::SetMinMax` | **NEVER REGISTERED** | **top priority.** Its replay shares `base._text`, and `RealNumberEditElementSetValue()` swaps that refcounted pointer — same mechanism, **zero coverage to have caught it** |
+| `DocumentTextElement_SetText_UiString` | NEVER REGISTERED | reads SAFE (`UI::String` argued POD, and it undoes its write) — **verify, do not assume** |
+| `Element::Element` (ctor) | never registered under that name | check the registration before concluding |
+| `SpinnerElement::SetMinMax` | 4 | reaches the same path; **4 calls is not coverage** — check how many DID WORK |
+| `ElementDescription` ctor | 2 | same |
+| `Element::SetToolTip` | 10 | `ReplayGuard`, POD `UIString`. Lowest concern |
+| `MeshInstance::UpdateHierarchy` | 48,742 | heavily exercised, clean |
+
+**Three of the nine are never called anywhere in the matrix, and two of those three share
+Finding 1's exact mechanism.** Their zero-divergence status is worth nothing — it is
+`reference_uncalled_port_is_not_verified.md` sitting directly on top of the defect the
+matrix just found.
+
+These are **CANDIDATES NEEDING A WRITTEN DISPOSITION EACH**, not verdicts. A static
+checker would have `port_bypass_audit.py`'s exact blind spot — it cannot follow a call
+into a callee, so `CacheText` is visible only where it happens to be named at the call
+site. **A checker reporting 0 here would be lying.**
+
+**And the reason it hid for a wave: `calls=` counts calls ENTERED, not calls that DID
+WORK.** 12,886 of 12,896 took an unchanged-value early-out and compared identical, so the
+site looked richly covered while carrying **ten** real comparisons. `calls=0` reading as
+clean is the known trap; **a LARGE `calls=` reading as coverage is the same trap one level
+up.**
+
+Three mechanisms to make the rule enforceable rather than remembered (lane M building
+1-3, source-only):
+
+1. **`BANISHED_RT_DIFF_INVERT=1`** — run the DLL's body FIRST on the scratch. A one-flag
+   change to the replay macro. On the first body tried it crashed in 20 seconds inside the
+   allocator with the diverging value's digits in a free block. It surfaces every body
+   that double-manages an allocation **by crashing on it** — no checker to maintain, and
+   it tests the SHAPE not the symptom, so it finds the ones nobody suspected.
+2. **A runtime assert** — before replaying, walk the scratch for heap pointers; after our
+   body runs, check whether any now addresses a block whose `{length, refcount}` header at
+   `[-8]` reads zero. Name the function and abort. This converts "someone must remember
+   `widgets_input.cpp` lines 53-58" into a self-reporting harness.
+3. **A DID-WORK counter** beside `calls=`, so a site cannot look covered on early-outs.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
