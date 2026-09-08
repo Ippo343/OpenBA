@@ -87,6 +87,21 @@ void RegisterRuntimeExport(const char* mangled_name, void* our_fn);
 void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
 void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn);
 
+// Residue-free port-registry queries (Wave 9 lane C2, the DATA mint).
+//
+// "Is this symbol ported, and to what address" — WITHOUT the fallback to the
+// DLL and WITHOUT recording a BANISHED_RT_STRICT residue entry. Returns our
+// registered function, or nullptr if nothing is registered under that key.
+//
+// The mint's shadow check asks this about ~250 symbols on every pass. Asking
+// through ResolveExport instead would have manufactured several hundred
+// `[RtResidue]` lines and destroyed the one measurement the cutover gate
+// depends on — the same shape of self-inflicted signal as
+// reference_truncated_tool_output_manufactures_calls_zero.md. Anything that
+// wants to INSPECT the registry rather than call through it belongs here.
+void* RtPortLookupExport(const char* mangled_name);
+void* RtPortLookupAddr(uintptr_t ghidra_addr);
+
 // Original-DLL resolution, bypassing the port registry. Always the shipped code.
 void*     ResolveExportRaw(const char* mangled_name);
 void*     ResolveOrdinalRaw(uint16_t ordinal);

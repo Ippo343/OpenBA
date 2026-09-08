@@ -1875,6 +1875,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     DumpRuntimeRegistry();
     // Cutover residue (BANISHED_RT_STRICT=1): what still asked the DLL.
     DumpRuntimeResidue();
+    // Wave 9 lane C2: the minted-DATA shadow check (BANISHED_RT_MINT_SHADOW=1).
+    // Run a SECOND time here, at exit, on purpose: the init-phase pass sees the
+    // DLL's singletons before anything has written them, and which of the 28
+    // storage symbols the process actually populates is ground truth that
+    // disappears with the DLL.
+    { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     RtDiffSummary();
     RtAllocShadowSummary();
     // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).

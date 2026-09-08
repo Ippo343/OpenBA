@@ -6,6 +6,7 @@
 
 #include "resolve.h"
 #include "../runtime/funcs/rt_port.h"
+#include "rt_data_mint.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -315,6 +316,14 @@ void RuntimePortInit() {
     // point in the init order rather than in the middle of it.
     RtCollectionPortInit();   // Wave 9: Collection (lane Q)
 
+    // Wave 9 lane C2: mint the 70 exported DATA symbols (28 vtables, 14
+    // BaseTypeInfo, 28 storage). AFTER every *_PortInit() above, because a
+    // vtable slot is filled with our port only if that port is registered by
+    // now — anything registered later stays a trap until the next run.
+    // Minting allocates and fills; it does not register anything unless
+    // BANISHED_RT_MINT=1. See standalone/rt_data_mint.h.
+    RtDataMintInit();
+
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.
     RuntimeRegistryStats st = GetRuntimeRegistryStats();
@@ -557,6 +566,24 @@ static void* ResolveOrdinalRawImpl(uint16_t ordinal) {
     return reinterpret_cast<void*>(
         GetProcAddress(g_modules[1].handle, MAKEINTRESOURCEA(ordinal))
     );
+}
+
+// ---- Residue-free registry queries (Wave 9 lane C2) -----------------------
+// See the comment in resolve.h. These deliberately do NOT fall through to the
+// DLL and do NOT record residue: they answer "is this ported", not "give me
+// something callable".
+void* RtPortLookupExport(const char* mangled_name) {
+    if (!mangled_name || !RtPortEnabled()) return nullptr;
+    auto& reg = RtExportReg();
+    auto it = reg.find(mangled_name);
+    return it == reg.end() ? nullptr : it->second;
+}
+
+void* RtPortLookupAddr(uintptr_t ghidra_addr) {
+    if (!ghidra_addr || !RtPortEnabled()) return nullptr;
+    auto& reg = RtAddrReg();
+    auto it = reg.find(ghidra_addr);
+    return it == reg.end() ? nullptr : it->second;
 }
 
 void* ResolveExportRaw(const char* mangled_name) {
