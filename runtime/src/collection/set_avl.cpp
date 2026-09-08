@@ -56,19 +56,27 @@
 // corrupt the free list. `runtime/src/system/allocator.cpp` registers
 // `FreeLockedIgnoringSelf` for exactly that reason.
 //
-// ⚠ RE-CHECKED, AND IT IS REGISTERED THREE TIMES. `allocator.cpp:1429`,
-// `runtime/src/collection/linkedlist.cpp:298` and
-// `runtime/src/io/modification.cpp:913` each call
+// ⚠ THIS LANE FOUND IT REGISTERED THREE TIMES — and that is now FIXED.
+// `allocator.cpp`, `runtime/src/collection/linkedlist.cpp` and
+// `runtime/src/io/modification.cpp` each called
 // `RegisterRuntimeAddr(0x180009c30, …)` with a different body. The registry's
-// last binding wins, so two of the three are dead code and which one survives
-// depends on init order — the SHADOWED-registration hazard
-// `tools/dispatch_slot_map.py --check` reports for the exe's import table, here
-// in the runtime registry where nothing checks for it. All three bodies are
-// "Free with an ignored first argument" so the behaviour is the same today;
-// this lane did not touch it, and it is reported rather than quietly
-// deduplicated because deciding which owner keeps it is not this lane's call.
-// This file relies only on the SHARED contract (ignore arg 1, free arg 2), so
-// it is correct whichever of the three wins.
+// last binding wins, so two of the three were dead code and which one survived
+// depended on init order — the SHADOWED-registration hazard
+// `tools/dispatch_slot_map.py --check` reports for the exe's import table,
+// occurring here in the runtime registry where nothing checks for it. All three
+// bodies are "Free with an ignored first argument", so nothing was broken; the
+// hazard was that a future edit to any one of them would have taken effect, or
+// not, depending on link order, silently.
+//
+// RESOLVED by the integrator: `runtime/src/system/allocator.cpp` is the SINGLE
+// owner (the body is an allocator wrapper) and registers it UNCONDITIONALLY from
+// `RtSystemPortInit`, outside every wave switch — unconditional because the two
+// registrations it replaced were unconditional, and because the door has live
+// callers on the DLL-present path as well as at cutover. The other two files
+// keep their bodies for their own direct calls and register nothing.
+//
+// This file relies only on the SHARED contract (ignore arg 1, free arg 2), so it
+// was correct before the fix and is correct after it.
 //
 // ORACLE
 // ------

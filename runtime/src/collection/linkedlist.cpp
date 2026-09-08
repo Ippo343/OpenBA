@@ -295,7 +295,14 @@ int RtCollLinkedListRegister() {
     if (!RtWaveEnabled("BANISHED_RT_LINKEDLIST")) return 0;
 
     int n = 0;
-    RegisterRuntimeAddr(0x180009c30, (void*)&RtColl_FreeLocked_180009c30);        ++n;
+    // 0x180009c30 is NOT registered here any more. It was registered by THREE
+    // files (this one, io/modification.cpp, system/allocator.cpp), the registry's
+    // last binding won, and which body survived depended on init order -- lane
+    // VID2 found it. runtime/src/system/allocator.cpp is now the single owner and
+    // registers it UNCONDITIONALLY from RtSystemPortInit, so this file's callers
+    // still reach a correct body. RtColl_FreeLocked_180009c30 is kept because
+    // MergeSortSplice below calls it DIRECTLY (line ~282), which is why removing
+    // the registration changes nothing here.
     RegisterRuntimeAddr(0x180032750, (void*)&RtColl_LinkedListNewNode_180032750); ++n;
     RegisterRuntimeAddr(0x18007a010, (void*)&RtColl_LinkedListRemove_18007a010);  ++n;
     return n;

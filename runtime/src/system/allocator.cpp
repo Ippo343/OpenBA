@@ -1416,17 +1416,59 @@ void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
     rtalloc::MemFree(p);
 }
 
+// ============================================================================
+// 0x180009c30 -- ONE owner, unconditional. The SHADOWED-REGISTRATION fix.
+// ============================================================================
+//
+// Wave 9 lane VID2 re-checked this address and found it registered THREE times,
+// each with a different body:
+//
+//     runtime/src/system/allocator.cpp        (mine, cutover-only)
+//     runtime/src/collection/linkedlist.cpp   (gated on BANISHED_RT_LINKEDLIST)
+//     runtime/src/io/modification.cpp         (lane MOD)
+//
+// The registry's LAST BINDING WINS, so two of the three were dead code and
+// which one survived depended on init order. All three bodies are "Free with an
+// ignored first argument", so nothing was broken today -- but this is exactly
+// the SHADOWED hazard `tools/dispatch_slot_map.py --check` reports for the exe's
+// import table, occurring here in the runtime registry where NOTHING checks for
+// it. A future edit to any one of the three would have changed behaviour or not
+// depending on link order, silently.
+//
+// Consolidated to one owner. This file owns it because the body is an allocator
+// wrapper, and it is registered UNCONDITIONALLY rather than from
+// RegisterAllocatorAddresses() for two reasons:
+//
+//   * RegisterAllocatorAddresses runs only on the CUTOVER path, and this door
+//     has live callers on the DLL-present path too (Graphics::RemoveGlobalObject,
+//     Input::KeyMap::ClearAll, the LinkedList node free, the Set node free).
+//   * The two registrations being removed were unconditional, so anything less
+//     would be a behaviour change dressed up as a cleanup.
+//
+// THE SIGNATURE TRAP, restated because removing two copies removes two copies of
+// the warning: it takes TWO parameters and IGNORES THE FIRST. Registering the
+// one-argument `?MemFree@` here would free the ignored `this`, leak the buffer,
+// and put a block the allocator never handed out onto the free list -- with no
+// fault at the call site.
+void RegisterAllocatorSharedAddressesImpl() {
+    RegisterRuntimeAddr(0x180009c30, reinterpret_cast<void*>(&FreeLockedIgnoringSelf));
+}
+
 int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry) {
     RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&rtalloc::MemAlloc));
     RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&rtalloc::MemFree));
     RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
     RegisterRuntimeAddr(0x1800c6c00, freeEntry);
-    // Wave 9 lane GFX2: a HARD cutover dependency, not a watch-list row. It is
-    // unexported (so no name-based instrument can see it) and has a live,
-    // non-diff-guarded caller in a ported body -- Graphics::RemoveGlobalObject
-    // -- so with the DLL absent it is a call through null on the first scene
-    // teardown. See the signature trap above.
-    RegisterRuntimeAddr(0x180009c30, reinterpret_cast<void*>(&FreeLockedIgnoringSelf));
-    return 5;
+    // 0x180009c30 is NOT registered here -- see
+    // RegisterAllocatorSharedAddressesImpl() above for why it has to be
+    // unconditional and why it has exactly one owner.
+    return 4;
 }
 }  // namespace
+
+// The one unconditional registration. Called from RtSystemPortInit() regardless
+// of whether the allocator port is armed -- see the banner on
+// RegisterAllocatorSharedAddressesImpl().
+extern "C" void RtSystemAllocatorRegisterSharedAddresses() {
+    RegisterAllocatorSharedAddressesImpl();
+}

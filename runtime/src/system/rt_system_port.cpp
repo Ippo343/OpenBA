@@ -65,11 +65,24 @@ extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
 extern int RtSystemCompressionRegister();      // compression.cpp    (lane PKG2)
 namespace RtSystem { void RtSystem_CompressionProbe(); }
 
+// allocator.cpp -- the single owner of the 0x180009c30 registration; see the
+// comment at the call site in RtSystemPortInit below.
+extern "C" void RtSystemAllocatorRegisterSharedAddresses();
+
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
         printf("[RtPort] BANISHED_RT_SYSTEM=0 -- System namespace port disabled\n");
         return;
     }
+    // UNCONDITIONAL, and deliberately outside every wave switch. 0x180009c30 --
+    // the allocator-lock Free wrapper -- was registered THREE times by three
+    // different lanes, each with its own body; the registry's last binding wins,
+    // so two were dead code and which one survived depended on init order. Lane
+    // VID2 found it. Consolidated to one owner in allocator.cpp; it is not
+    // gated because the two registrations it replaces were not gated either, and
+    // because its callers span the DLL-present path as well as cutover.
+    RtSystemAllocatorRegisterSharedAddresses();
+
     int n = 0;
     if (RtWaveEnabled("BANISHED_RT_STRING"))   n += RtSystemStringRegister();
     if (RtWaveEnabled("BANISHED_RT_FILENAME")) n += RtSystemFilenameRegister();

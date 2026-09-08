@@ -910,7 +910,13 @@ int RtIoModificationRegister() {
     RegisterRuntimeAddr(0x1800104f0, (void*)&RtColl_SetCloneSubtree_1800104f0);
     RegisterRuntimeAddr(0x180010470, (void*)&RtColl_SetDestroySubtree_180010470);
     RegisterRuntimeAddr(0x180010570, (void*)&RtColl_SetNodeNew_180010570);
-    RegisterRuntimeAddr(0x180009c30, (void*)&RtColl_SetNodeFree_180009c30);
+    // 0x180009c30 is NOT registered here any more -- it was registered by three
+    // files at once (this one, collection/linkedlist.cpp, system/allocator.cpp)
+    // and the registry's last binding won, so two bodies were dead code and
+    // which one survived depended on init order. Lane VID2 found it;
+    // runtime/src/system/allocator.cpp is the single owner and registers it
+    // unconditionally. RtColl_SetNodeFree_180009c30 is retained for this file's
+    // own direct calls.
 
     printf("[RtPort]   IO::Modification (lane MOD): %d exports + 14 addresses\n", n);
     return n;
