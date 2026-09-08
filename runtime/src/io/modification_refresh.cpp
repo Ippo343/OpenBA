@@ -508,12 +508,20 @@ extern "C" int RtCrt_ParseInt10_18007f034(const char* s) {
 //
 // Never-cache-a-null, per attempt 14: a caller that runs before the owning
 // lane's registration must not freeze a null in for the life of the process.
-template <typename Fn>
-static Fn RtAddr(Fn& cache, uintptr_t addr) {
-    if (cache == nullptr)
-        cache = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr));
-    return cache;
-}
+//
+// EACH OF THE SEVENTEEN IS SPELLED OUT WITH ITS LITERAL AT THE CALL SITE, and
+// that verbosity is deliberate. The first draft of this file routed all
+// seventeen through a two-line template, `RtAddr(cache, 0x1800b4540)`, which
+// reads better and is INVISIBLE to tools/addr_door_audit.py -- the audit
+// matches the literal text `ResolveAddr(Module::Runtime, 0x`, so seventeen new
+// by-address doors moved its `by-address call sites` column by ZERO and its
+// `distinct addresses` column by ZERO. Three of those doors are UNREGISTERED
+// (the declined rows in the banner), and the instrument whose entire job is to
+// find unregistered by-address doors could not see them.
+// reference_literal_grep_blind_to_variables.md is the fourth recorded instance
+// of exactly this; the tool even prints its own blind-spot count, and the
+// wrapper form pushed TWO more sites into it. A door the census cannot see is
+// worse than a verbose one.
 
 using FnStringSet        = void*    (*)(void*, const char*);            // 0x1800c95d0
 using FnStringFormat     = void*    (*)(void*, const char*, ...);       // 0x1800c9730
@@ -739,33 +747,50 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     ModArray found = { nullptr, 0, 0 };
     Filename pattern; pattern.data = nullptr;
 
-    fnStringSet = RtAddr(fnStringSet, 0x1800c95d0);
+    if (fnStringSet == nullptr) fnStringSet = reinterpret_cast<decltype(fnStringSet)>(
+        ResolveAddr(Module::Runtime, 0x1800c95d0));
     fnStringSet(&pattern, "*.pkm");                              // 0x1801557f0
 
     Filename packDir;
-    fnGetPackDirectory = RtAddr(fnGetPackDirectory, 0x180007c10);
+    if (fnGetPackDirectory == nullptr) fnGetPackDirectory = reinterpret_cast<decltype(fnGetPackDirectory)>(
+        ResolveAddr(Module::Runtime, 0x180007c10));
     fnGetPackDirectory(fs, &packDir);
 
-    fnFindFiles = RtAddr(fnFindFiles, 0x1800ad7a0);
+    if (fnFindFiles == nullptr) fnFindFiles = reinterpret_cast<decltype(fnFindFiles)>(
+        ResolveAddr(Module::Runtime, 0x1800ad7a0));
     fnFindFiles(fs, &packDir, &pattern, false, &found);
 
     ReleaseInto(&packDir.data);                                  // 0x1800af6b4
     ReleaseInto(&pattern.data);                                  // 0x1800af6ef
 
-    fnPkgCtor         = RtAddr(fnPkgCtor,         0x1800b4440);
-    fnPkgDtor         = RtAddr(fnPkgDtor,         0x1800b4540);
-    fnReadPackfile    = RtAddr(fnReadPackfile,    0x1800b46b0);
-    fnGetName         = RtAddr(fnGetName,         0x180025310);
-    fnGetAuthor       = RtAddr(fnGetAuthor,       0x180025350);
-    fnGetDescription  = RtAddr(fnGetDescription,  0x180025390);
-    fnGetFileName     = RtAddr(fnGetFileName,     0x180025450);
-    fnCloseFile       = RtAddr(fnCloseFile,       0x1800accc0);
-    fnMapFind         = RtAddr(fnMapFind,         0x18002ace0);
-    fnGetPathFilename = RtAddr(fnGetPathFilename, 0x1800c6740);
-    fnStrICmp         = RtAddr(fnStrICmp,         0x18007eefc);
-    fnStringFormat    = RtAddr(fnStringFormat,    0x1800c9730);
-    fnFilesFill       = RtAddr(fnFilesFill,       0x180026880);
-    fnModSort         = RtAddr(fnModSort,         0x180028760);
+    if (fnPkgCtor == nullptr) fnPkgCtor = reinterpret_cast<decltype(fnPkgCtor)>(
+        ResolveAddr(Module::Runtime, 0x1800b4440));
+    if (fnPkgDtor == nullptr) fnPkgDtor = reinterpret_cast<decltype(fnPkgDtor)>(
+        ResolveAddr(Module::Runtime, 0x1800b4540));
+    if (fnReadPackfile == nullptr) fnReadPackfile = reinterpret_cast<decltype(fnReadPackfile)>(
+        ResolveAddr(Module::Runtime, 0x1800b46b0));
+    if (fnGetName == nullptr) fnGetName = reinterpret_cast<decltype(fnGetName)>(
+        ResolveAddr(Module::Runtime, 0x180025310));
+    if (fnGetAuthor == nullptr) fnGetAuthor = reinterpret_cast<decltype(fnGetAuthor)>(
+        ResolveAddr(Module::Runtime, 0x180025350));
+    if (fnGetDescription == nullptr) fnGetDescription = reinterpret_cast<decltype(fnGetDescription)>(
+        ResolveAddr(Module::Runtime, 0x180025390));
+    if (fnGetFileName == nullptr) fnGetFileName = reinterpret_cast<decltype(fnGetFileName)>(
+        ResolveAddr(Module::Runtime, 0x180025450));
+    if (fnCloseFile == nullptr) fnCloseFile = reinterpret_cast<decltype(fnCloseFile)>(
+        ResolveAddr(Module::Runtime, 0x1800accc0));
+    if (fnMapFind == nullptr) fnMapFind = reinterpret_cast<decltype(fnMapFind)>(
+        ResolveAddr(Module::Runtime, 0x18002ace0));
+    if (fnGetPathFilename == nullptr) fnGetPathFilename = reinterpret_cast<decltype(fnGetPathFilename)>(
+        ResolveAddr(Module::Runtime, 0x1800c6740));
+    if (fnStrICmp == nullptr) fnStrICmp = reinterpret_cast<decltype(fnStrICmp)>(
+        ResolveAddr(Module::Runtime, 0x18007eefc));
+    if (fnStringFormat == nullptr) fnStringFormat = reinterpret_cast<decltype(fnStringFormat)>(
+        ResolveAddr(Module::Runtime, 0x1800c9730));
+    if (fnFilesFill == nullptr) fnFilesFill = reinterpret_cast<decltype(fnFilesFill)>(
+        ResolveAddr(Module::Runtime, 0x180026880));
+    if (fnModSort == nullptr) fnModSort = reinterpret_cast<decltype(fnModSort)>(
+        ResolveAddr(Module::Runtime, 0x180028760));
 
     // -----------------------------------------------------------------------
     // LOOP 1 — one iteration per .pkm found (0x1800af790 .. 0x1800b019f)
