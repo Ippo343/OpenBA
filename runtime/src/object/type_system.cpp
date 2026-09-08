@@ -1053,9 +1053,32 @@ bool RtObject_Factory_Startup(void* factory) {
         for (TypeNode* n = LeftMost(static_cast<FactorySet*>(factory)->root);
              n && nodes < 100000; n = Successor(n)) ++nodes;
 
+        // *** THE `theirs=` SIDE HERE IS NOT A MEASUREMENT OF RETAIL. ***
+        //
+        // This site runs no DLL body -- it is a self-check on OUR result, and
+        // the second string is a CONSTRUCTED EXPECTATION (`chain, chain`). It
+        // was previously formatted exactly like the measured side, so the
+        // report read
+        //
+        //     ours=chain=416 nodes=415   theirs=chain=416 nodes=416
+        //
+        // which any reader would take as "retail's tree has 416 nodes and ours
+        // has 415" -- a port defect. It says nothing of the kind: the 416 is
+        // this line's own assumption that nodes==chain, restated. Wave 9 lane
+        // UIC read it the natural way and reported a false divergence onward to
+        // another lane, which is a fair reading of a badly labelled instrument,
+        // not a mistake on its part.
+        //
+        // reference_recheck_must_match_its_own_proof.md is exactly this shape: a
+        // check whose "expected" side is true by construction. The fix is to
+        // stop dressing an assertion up as a comparison. The genuine question --
+        // whether the shortfall is a lost insert or two entries sharing a key --
+        // is answered empirically by ReportKeyCollisions() in the probe above,
+        // which names the colliding types instead of asserting anything.
         char a[96], b[96];
         std::snprintf(a, sizeof(a), "chain=%d nodes=%d badCrc=%d", chain, nodes, mismatched);
-        std::snprintf(b, sizeof(b), "chain=%d nodes=%d badCrc=0", chain, chain);
+        std::snprintf(b, sizeof(b),
+                      "EXPECTED (no DLL run): nodes==chain==%d, badCrc==0", chain);
         RtDiffReport(&rt_diff_site__, chain > 0 && nodes == chain && mismatched == 0, a, b);
     }
 
