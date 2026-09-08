@@ -69,6 +69,19 @@ NON_READ = {"RegisterRuntimeExport", "RegisterRuntimeAddr", "RegisterRuntimeOrdi
 
 # A literal preceded by `IDENT(` or `IDENT<...>(`, possibly across whitespace.
 CALL_BEFORE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^<>()]*>)?\s*\(\s*$')
+# ...and the same call with the literal as a LATER argument, which is how
+# RT_DATA_SLOT(T, "name") spells it. Without this every RT_DATA_SLOT read
+# fell through to "(not a call)" and landed in UNCLASSIFIED -- the count went
+# 3 -> 10 across three lanes purely because more code started using the
+# port-aware door correctly. A lane reported it rather than silencing it with
+# an RT_RAW_OK, which would have asserted "oracle-only read that dies with the
+# oracle" and been false.
+#
+# The preceding-argument text may not contain parens or quotes, so a nested
+# call like foo(bar(), "sym") does NOT match and stays UNCLASSIFIED: this
+# fails CLOSED, which is the direction a door audit must fail in.
+CALL_BEFORE_ARG = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^<>()]*>)?\s*\([^()"]*,\s*$')
 # `static const char kName[] = "..."` / `constexpr const char* kName = "..."`
 CONST_DECL = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[\s*\])?\s*=\s*$')
 MANGLED = re.compile(r'"((?:\?\?_7|\?_)[^"]{4,})"')
@@ -135,6 +148,23 @@ def discover_wrappers(files, doors):
     for rel, path in files:
         lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
         for i, line in enumerate(lines):
+            # A MACRO door. RT_DATA_SLOT(T, MANGLED) forwards MANGLED into
+            # RtResolveCached, but it is a #define rather than a function AND its
+            # const char* is the SECOND parameter -- so the function-shaped scan
+            # below misses it twice over. Classified the way this tool classifies
+            # everything else: by READING ITS DEFINITION, never by adding a name
+            # to a list. A wrapper nobody remembered is precisely what this
+            # function exists to catch.
+            md = re.match(r'\s*#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(', line)
+            if md:
+                name = md.group(1)
+                if name not in RAW_DOORS and name not in PORT_DOORS:
+                    window = "\\n".join(lines[i:i + 8])
+                    for door in doors:
+                        if door + "(" in window:
+                            found[name] = (rel, i + 1, door)
+                            break
+                continue
             m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*const\s+char\s*\*', line)
             if not m:
                 continue
@@ -175,7 +205,19 @@ def main():
     minted = minted_symbols(args.tables)
     files = list(source_files())
     wrappers = discover_wrappers(files, RAW_DOORS)
+    # FIXED POINT, not one pass. A wrapper can forward into another wrapper:
+    # RT_DATA_SLOT -> RtResolveCached -> ResolveExport. A single pass sees only
+    # the innermost hop, so every RT_DATA_SLOT read was reported UNCLASSIFIED --
+    # 63 of them, all correct code going through the port-aware door. Iterating
+    # until nothing new appears costs nothing and removes a whole class of
+    # false "triage this" rows. It cannot loop forever: `found` only grows and
+    # the name set is finite.
     port_wrappers = discover_wrappers(files, PORT_DOORS)
+    while True:
+        grown = discover_wrappers(files, PORT_DOORS | set(port_wrappers))
+        if set(grown) <= set(port_wrappers):
+            break
+        port_wrappers.update(grown)
     # A wrapper that reaches BOTH is raw: the raw path is the one that returns
     # NULL at cutover.
     for k in wrappers:
@@ -193,7 +235,7 @@ def main():
             head = text[:m.start()]
             line = head.count("\n") + 1
             prefix = head[-160:]
-            call = CALL_BEFORE.search(prefix)
+            call = CALL_BEFORE.search(prefix) or CALL_BEFORE_ARG.search(prefix)
             if call:
                 sites.append((sym, rel, line, call.group(1)))
                 continue
