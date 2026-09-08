@@ -298,6 +298,17 @@ and none is a `RegisterRuntimeAddr`. The blocker stands unchanged. Porting `Draw
 would move the residue row from a named export to an unexported internal, which is a
 *worse* row — the census cannot report a name for it.
 
+> **CORRECTED 2026-09-08 by lane GFXR (integration `d1e8cde`).** The verdict above
+> stands; the SHAPE does not. Nobody had run the five addresses through the
+> **export table**. **Four of the five are ordinary named exports** —
+> `Renderer::Reset`, `Renderer::AddScene`, `Renderer::BeginDrawGroup`,
+> `Scene::AddCulledDrawItems`. Only `0x180062d60` is unexported. So this is not
+> five anonymous bodies but **one unnamed body behind four portable exports**,
+> which makes it a specifiable `Graphics::Renderer` class lane rather than a wall.
+> The grep above was sound and its conclusion is unchanged — a grep of the source
+> tree simply cannot tell an unexported internal from an export nobody has ported
+> yet, and that distinction is what decides whether the row is scopeable.
+
 ### 6.2 `MaterialInstance::BuildParameters` (`0x1801033e0`)
 Lane F and lane GFX declined on `Graphics::Material` being a class no lane has laid out.
 **Checked:** `runtime/types/graphics/Material.h` exists but pins only
@@ -316,7 +327,9 @@ lane GFX's argument map, which is correct and complete.
 ### 6.4 `MeshInstance::Serialize` (`0x1800ff680`)
 Twenty instructions, and genuinely tempting — on the WRITE path a `Serialize` is a pure
 read that replays into two sinks. Declined on three unported callees. **Checked:**
-`0x1800fe250` (serialize the mesh handle), `0x18005cc60` (`Array::SetCount`) and
+`0x1800fe250` (serialize the mesh handle — **see the correction below; this is an
+export, `?Serialize@AnimationState@Graphics@@`, not an unnamed internal**),
+`0x18005cc60` (`Array::SetCount`) and
 `0x18005d4a0` (serialize N array elements) appear nowhere in the tree — in particular
 lane Q's Collection array work did not pick up the two array-**serialisation** bodies. The
 blocker stands, and this one is the save/load stream: a serializer that consumes the wrong
@@ -324,6 +337,24 @@ byte count does not fail where it is wrong, it desyncs and surfaces on an unrela
 It should go to a lane that runs a save/load round trip, and that lane must use **retail's**
 `IO::Encoding` vtable offsets, not the profile build's
 (`reference_encoding_vtable_offsets_differ_between_builds.md`).
+
+> **CORRECTED 2026-09-08 by lane GFXR (integration `d1e8cde`).** `0x1800fe250` is
+> **`?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z`, an export** —
+> not the unnamed "serialize the mesh handle" internal recorded above. The other
+> two (`0x18005cc60`, `0x18005d4a0`) are confirmed unexported and absent exactly
+> as written, so the blocker stands. Same lesson as §6.1: a grep of the source
+> tree cannot distinguish an unexported internal from an export nobody has ported
+> yet, and only the export table can. Run it before recording a callee as unnamed.
+>
+> **A related blocker recorded ELSEWHERE is WIDER than written, which is the
+> dangerous direction.** `AnimationManager::Update` is not blocked on one unported
+> callee: `AnimationState::Update` itself calls **six** more
+> (`CopyInstancedToUnique`, `UpdateRootOnly`, `UpdateNodes`, `ApplyEvents`, plus
+> `0x18005aa30` and `0x18005b1e0`, the last two unexported), and none of the seven
+> is in the tree. Taking it as one function would trade one named residue row for
+> seven, two of them unnamed — the `KeyMap::RegisterInput` effect
+> (`reference_porting_can_grow_the_cutover_surface.md`). It is a
+> `Graphics::AnimationState` class lane.
 
 ---
 
