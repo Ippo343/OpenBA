@@ -144,12 +144,35 @@ static_assert(offsetof(MapNode, right) == 0x20, "0x18002ad8d: MOV R8,[R8+0x20]")
 // The disassembly's shape is preserved: a first-byte fast path, then a walk
 // that stops at the first mismatch OR at either terminator, then ONE signed
 // difference taken at the index the walk stopped on.
+//
+// THE INDEX IS THE WHOLE FUNCTION, and the first version of this got it wrong
+// by one (integrator, 2026-09-08). Retail increments RDX BEFORE the comparison
+// that decides whether to loop:
+//
+//   ad18:  TEST CL,CL                    ; a[i] == 0 ?      -> stop AT i
+//          CMP  byte [RAX],0             ; b[i] == 0 ?      -> stop AT i
+//          MOVZX ECX,[R11+RAX+1]         ; c = a[i+1]
+//          INC  RAX / INC RDX            ; i <- i+1   <<<<< BEFORE the compare
+//          CMP  CL,byte [RAX]            ; a[i] vs b[i]
+//          JZ   ad18                     ; equal -> loop
+//   ad31:  result = (signed)a[RDX] - (signed)b[RDX]
+//
+// so the loop EXITS ON A MISMATCH WITH RDX ALREADY POINTING AT IT. The earlier
+// version tested `a[i+1] == b[i+1]` in the while condition and incremented only
+// inside the body, so on the exiting (mismatching) comparison it never
+// incremented and returned `a[i] - b[i]` at an index where the two bytes were
+// known EQUAL. It therefore returned 0 for every pair of distinct strings that
+// share a first byte -- which is every key in a settings map, since they are all
+// prefixed by their section name.
+//
+// That made the find a "return the first node whose key starts with the same
+// letter" — see the caller below for what it cost.
 int TreeStrCmp(const char* a, const char* b) {
     size_t i = 0;
     if (a[0] == b[0]) {
-        while (a[i] != '\0' && b[i] != '\0' && a[i + 1] == b[i + 1]) {
+        while (a[i] != '\0' && b[i] != '\0') {
             ++i;
-            if (a[i] == '\0' || b[i] == '\0') break;
+            if (a[i] != b[i]) break;
         }
     }
     return static_cast<int>(static_cast<signed char>(a[i])) -
