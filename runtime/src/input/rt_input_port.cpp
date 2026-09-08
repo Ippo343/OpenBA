@@ -38,6 +38,13 @@ extern int RtInputKeyMapSaveRegister();     // keymap_save.cpp
 // instantiation, but they are registered HERE because Input::KeyMap is their
 // only caller in our tree today and this is the switch that governs it.
 extern int RtCollectionSetAvlE24Register();       // collection/set_avl_e24.cpp
+// Wave 9 lane ENGIO: Input::Device::Update (0x1800E1490) and the three
+// unexported bodies it calls -- UpdateState (0x1800E0FC0),
+// PlatformGetKeyboardState (0x1800E1C60) and PlatformGetMouseState
+// (0x1800E1E10). The fourth helper, PlatformUpdate, was already lane IOA's.
+// This is WAVE9.md row 16, the row two earlier lanes sized and declined.
+extern int RtInputDeviceUpdateRegister();         // input_device_update.cpp
+extern "C" void RtInputDeviceUpdateProbeArm(bool on);
 extern "C" void RtCollectionSetAvlE24ProbeArm(bool on);
 
 void RtInputPortInit() {
@@ -52,14 +59,20 @@ void RtInputPortInit() {
     n += RtInputKeyMapSaveRegister();
     const int avl = RtCollectionSetAvlE24Register();
     n += avl;
+    const int upd = RtInputDeviceUpdateRegister();
+    n += upd;
 
     const char* p = std::getenv("BANISHED_RT_SETAVL24_PROBE");
     RtCollectionSetAvlE24ProbeArm(p && *p && std::strcmp(p, "0") != 0);
+
+    const char* q = std::getenv("BANISHED_RT_INPUTUPD_PROBE");
+    RtInputDeviceUpdateProbeArm(q && *q && std::strcmp(q, "0") != 0);
 
     // The identity line this lane gates its runs on. `tools/game_dir_lock.sh`
     // is advisory and six lanes were running when this landed: the on-disk md5
     // says which exe is on disk, not which one RAN, so the acceptance test is a
     // string only this build emits, read out of the run's own log.
     printf("[RtPort] Input: %d exports registered (lane INPUT: +2 KeyMap doors, "
-           "+%d Set<E24> AVL addresses)\n", n, avl);
+           "+%d Set<E24> AVL addresses; lane ENGIO: +%d Device::Update bodies)\n",
+           n, avl, upd);
 }

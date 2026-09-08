@@ -69,6 +69,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 
+// Wave 9 lane ENGIO: `Device::Update` (input_device_update.cpp) ends in this
+// body exactly as retail's `JMP 0x1800E2130` does, so it is no longer
+// file-local. It is still NOT exported and still gets no
+// `RegisterRuntimeExport`; making it a direct C++ call rather than a
+// ResolveAddr-on-Module::Runtime hop for 0x1800E2130 is what keeps this lane's
+// by-address door count unmoved (WAVE9.md, "porting a function can GROW the
+// cutover surface").
+extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr);
+
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -105,6 +114,16 @@ namespace {
 // the time any focus message or mouse-clipping toggle can arrive. A null check
 // would not restore the behaviour, it would skip it. If this ever faults, the
 // upstream fact to fix is that our Application was never given its HWND.
+void Device_PlatformUpdate(void* selfPtr);
+
+}  // namespace
+
+extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr) {
+    Device_PlatformUpdate(selfPtr);
+}
+
+namespace {
+
 void Device_PlatformUpdate(void* selfPtr) {
     RT_DIFF_BEGIN("Input::Device::PlatformUpdate");
 
