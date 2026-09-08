@@ -1234,3 +1234,137 @@ Unchanged and unmoved, deliberately: `LoadPackages` still stops at the
 `ReadPackfile` call. Within 4b, the next thing to touch is `MemoryStream`'s
 ctor + five virtuals, because every other item in the rung needs them to be
 diffable.
+
+---
+
+# Rung 4b-ii (part 1) — `IO::MemoryStream` is complete
+
+## 41. Sequencing by what the oracle needs, not by the call graph
+
+Stated explicitly, since the integrator asked for it to be on the record.
+
+`CompressedStream::Open` reads its header and block directory **through** a
+Stream, and in `ReadPackfile` that Stream is a `MemoryStream` over the
+freshly-read file header. An oracle that runs ours and theirs side by side would
+therefore have one of them advancing a cursor the other cannot see — so **`Open`
+is not diffable until the stream it reads through is ours on both sides.** The
+call graph says `Open` first; the oracle says `MemoryStream` first, and the
+oracle wins. That is the same rule the whole bottom-up decomposition rests on:
+a rung is ready when it can be *verified*, not when its callee list is short.
+
+## 42. Ported (4b-ii): six virtual bodies
+
+`runtime/src/io/memory_stream.cpp`, switch `BANISHED_RT_MEMSTREAM`.
+
+| symbol | addr | note |
+|---|---|---|
+| `?Read@MemoryStream@IO@@UEAA_NHPEAX@Z` | `0x1800ae950` | |
+| `?Write@MemoryStream@IO@@UEAA_NHPEBX@Z` | `0x1800ae8f0` | |
+| `?SetCurrentPos@MemoryStream@IO@@UEAA_NH@Z` | `0x1800ae9b0` | 3 instructions |
+| `?GetCurrentPos@MemoryStream@IO@@UEBAIXZ` | `0x1800ae9c0` | `UEBAI` → **unsigned** |
+| `?GetSize@MemoryStream@IO@@UEBAIXZ` | `0x1800ae9d0` | `UEBAI` → **unsigned** |
+| `?Close@MemoryStream@IO@@UEAAXXZ` | `0x1800ae9e0` | slot 7, a **bare RET** |
+
+All six names verified against the shipped export table first. The layout needed
+no derivation at all — `Stream.h` already carried it, disassembly-pinned.
+
+**Three transcriptions that a cleanup would break:**
+
+1. **The bound check in `Read`/`Write` is 32-bit and signed.** Retail sign-extends
+   cursor and count to 64 bits (`MOVSXD`) and then *narrows again* for the test:
+   `LEA EAX,[RCX+RDI*1]` is a 32-bit add and `CMP EAX,[RBX+0x28]; JG` a 32-bit
+   signed compare. Writing it in 64-bit changes behaviour for a sum that
+   overflows int32 — retail's **wraps** and then compares small. The offset
+   arithmetic that follows really is 64-bit, so the two widths are transcribed
+   separately rather than unified.
+2. **`SetCurrentPos` has no bounds check at all.** A seek past the end succeeds;
+   the following `Read` is what fails. A port that "helpfully" validated would
+   move which of the two calls reports the error.
+3. **`Write` does not grow the buffer.** Past `_size` it fails rather than
+   reallocating.
+
+**No inline replay in any of the six.** `RT_DIFF_SCALAR` runs the shipped body a
+second time on the same object — exactly wrong for four of these, because they
+mutate `_cursor`: a replay would advance it twice and manufacture a divergence
+in a correct port. The bodies only declare that they did work; verification
+lives in the probe.
+
+## 43. The oracle
+
+`memory_stream_probe.cpp`. Each side gets its **own** stream over its **own**
+copy of the same buffer, stepped in lockstep with the full state compared after
+**every** call. Compared: return value, `_cursor`, `_size`, and the bytes — and
+for `Write` the **destination buffer**, because a `Write` that returns true and
+copies nothing is otherwise indistinguishable from a correct one.
+
+The stream is built by hand rather than through the constructor: the six bodies
+touch only `_data`/`_cursor`/`_size`, and building it by hand keeps the probe
+from depending on a constructor this rung does not own.
+
+The corpus **straddles the 32-bit signed compare** the port refuses to clean up:
+chunks summing to exactly `_size` (must succeed), one byte more (must fail), and
+a seek past the end followed by a read (seek succeeds, read fails).
+
+**Effectiveness control counts outcomes, not calls.** Each bulk body has two —
+the copy and the refusal — and a corpus that only ever succeeds leaves the bound
+check unentered while reporting green.
+
+### Result (run `ms1`, identity gate OK)
+
+```
+[MemStream] lockstep probe: 16 calls (copied=12 refused=3 seeks=2 getters=2)
+            -- identical on return, _cursor, _size and every byte
+[RtDiff] ==== 321 sites, 1171789 calls, 1 divergences in 1 sites ====
+```
+
+All four outcomes non-zero. The one divergence is the pre-existing
+`Object::Factory::Startup`. Audits: `port_bypass_audit` **0 on both doors**;
+`export_name_audit` 1 phantom, the pre-existing `?_singleton@`.
+
+## 44. The correction: the ctor and dtor were ALREADY PORTED, by lane W
+
+I had written, and nearly committed, that `MemoryStream`'s constructor and
+destructor were "4b-ii's next step". **They are lane W's, and they already
+exist**:
+
+* `0x1800ae710` `??0MemoryStream@IO@@QEAA@XZ` → `RtIo_MemoryStream_Ctor`
+* `0x1800ae890` `??1MemoryStream@IO@@UEAA@XZ` → `RtIo_MemoryStream_Dtor`
+
+both in `runtime/src/io/compressedstream.cpp`.
+
+**What caught it was the run's own diff table**, which listed four
+`IO::MemoryStream::~MemoryStream` sites that this file never declared. Not
+review, not planning — the instrument.
+
+So: **with the six bodies above, `IO::MemoryStream` is complete across the two
+lanes.** That is a better outcome than the plan predicted, and it shrinks 4b-ii.
+
+This is the *same* transport failure as 4b-i's `Stream.h` finding, twice in one
+rung. The rule earned there needs a sibling:
+
+> Grep the types header before opening the PE — **and grep for the port before
+> planning to write it.**
+
+## 45. One blocker that is lane W's, not this rung's
+
+Lane W's ctor allocates an `IO::Encoding` carrying vtable `0x1801554a8`, whose
+five slots are all unexported `.text` internals that mint as **named traps**.
+Construction no longer calls through null, but the first *virtual* call on that
+Encoding still traps at cutover. **Nothing in the six bodies above touches the
+Encoding**, so this rung neither fixes nor worsens it — recorded so the
+completeness claim in §44 is not read as more than it is.
+
+## 46. What is left in 4b, and the next predicted fault site
+
+Remaining, in oracle order: `0x1800aa020` (window array init) and `0x180024d70`
+(`Array<Header>::SetSize`), then `CompressedStream::Open` `0x1800aa560`, its
+ctor `0x1800aa3d0` (also lane W's — **check before writing**),
+`~CompressedStream` `0x1800a9560` and `0x1800a9ee0`.
+
+Predicted fault site is unchanged and deliberately so: `LoadPackages` still
+stops at the `ReadPackfile` call, and nothing in 4b moves it. Within 4b the next
+touch is `0x180024d70`, because `Open` cannot be diffed without it either.
+
+**Still open from 4b-i**: the two `Array::SetSize` instantiations
+(`0x180029510`, `0x180029630`) remain **registered but never called**, and are
+verified by the run in which 4c first reaches them — not before.
