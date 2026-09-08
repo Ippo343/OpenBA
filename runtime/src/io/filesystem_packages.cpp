@@ -301,6 +301,8 @@ namespace RtIO {
 // Wave 9 lane PKG2's accessor sweep, defined in package_file.cpp. Called from
 // LoadPackages' tail inside the diff guard — see the comment at the call site.
 void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
+// Lane PKG2 rung 3's lockstep probe (filesystem_openfile_probe.cpp).
+void RtIo_FileSystemOpenFileProbe(const FileSystem* fs);
 }  // namespace RtIO
 // Lane PKG2 rung 2's lockstep probe (compressed_stream_probe.cpp). It lives in
 // `RtIo`, not `RtIO`: the tree carries BOTH spellings — runtime/types/io/Stream.h
@@ -880,6 +882,11 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // null. This is the first point on the boot path where the heap is
         // provably live.
         RtIo::RtIo_CompressedStreamReadProbe();
+
+        // Rung 3's probe. It needs the packfile INDEX populated, which is what
+        // the loops above just built -- this is the earliest point in the
+        // process where an OpenFile of a packed name can succeed at all.
+        RtIo_FileSystemOpenFileProbe(self);
     }
 }
 

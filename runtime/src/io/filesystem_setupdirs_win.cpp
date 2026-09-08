@@ -159,31 +159,18 @@ using RtSystem::RtSystem_WideString_CtorFromString;
 using RtSystem::RtSystem_WideString_Set;
 using RtSystem::RtSystem_WideString_AsUTF8;
 
-// ---------------------------------------------------------------------------
-// IO::FileSystem::FileInfo — only what these two bodies touch
-// ---------------------------------------------------------------------------
-// Sized and pinned from ?OpenFile@FileSystem@IO@@'s own stack initialisation
-// (0x1800ac8b3-0x1800ac8da), which writes, relative to the struct base:
-//   +0x00 dword -1   +0x08 qword 0   +0x10 dword 0
-//   +0x18 qword -1   +0x20 String 0  +0x28 String 0
-// SetupDirectories reads +0x00 as the "did it open" handle
-// (`CMP dword [fi],-1`) and the DWORD at +0x08 as the byte size
-// (`MOV EDI,dword [fi+8]`), and destroys the two Strings in REVERSE order
-// (+0x28 then +0x20) at 0x1800abef2/0x1800abf23.
-struct FileInfo {
-    int32_t  handle;      // +0x00 — -1 means "not open"
-    int32_t  _pad04;
-    uint64_t size;        // +0x08 — read as a DWORD by SetupDirectories
-    int32_t  _unk10;      // +0x10
-    int32_t  _pad14;
-    int64_t  _unk18;      // +0x18 — initialised to -1
-    String   _name0;      // +0x20
-    String   _name1;      // +0x28
-};
-static_assert(sizeof(FileInfo) == 0x30, "FileInfo is 0x30 bytes (OpenFile's frame)");
-static_assert(offsetof(FileInfo, size)   == 0x08, "SetupDirectories: MOV EDI,[fi+8]");
-static_assert(offsetof(FileInfo, _name0) == 0x20, "OpenFile: MOV [RBP-0x10],0");
-static_assert(offsetof(FileInfo, _name1) == 0x28, "OpenFile: MOV [RBP-0x8],0");
+// IO::FileSystem::FileInfo now lives in runtime/types/io/FileSystem.h.
+// It moved there when Wave 9 lane PKG2 rung 3 needed it in a second
+// translation unit -- two namespace-scope definitions with different
+// members would have been a silent ODR violation, not a compile error.
+//
+// ONE FIELD WAS CORRECTED IN THE MOVE, and this file's own reader is why
+// nothing broke: +0x08 was modelled here as a `uint64_t size`, and it is
+// two dwords -- `size` at +0x08 and a READ CURSOR at +0x0C that ReadFile
+// advances. The only use below is
+// `static_cast<int>(static_cast<uint32_t>(fi.size))`, which takes the low
+// dword and so happened to be right. The header carries the three
+// independent instructions that settle it.
 
 namespace {
 
