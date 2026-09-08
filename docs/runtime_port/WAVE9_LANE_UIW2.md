@@ -791,36 +791,75 @@ wrong, and the ones no integer call touches. `BANISHED_DEBUG_PANEL` is the probe
 `debugui.cpp`'s `numFPS` plus the two `SetValueFloat` sites (`numFrameMS`,
 `numTotalMS`) change every frame by construction, so they cannot all early-out.
 
-### 9d. AN EXE-SIDE GAP FOUND BY ACCIDENT: `StatusBarUI` IS DEAD CODE
+### 9d. RETRACTED: `StatusBarUI` IS NOT DEAD CODE — IT REGISTERS, AND BOTH CHECKS LOOKED THE WRONG WAY
 
-Chasing the `SetValueInt` zero turned up something larger than the question.
+**This section originally claimed `code/Game/Dialog/statusbarui.cpp` is fully
+reimplemented and nothing registers it. That is false.** The integrator checked
+it before acting on it, and the retraction is left in place of the claim rather
+than deleted, because *how* two careful checks both missed it is the reusable
+part.
 
-**`code/Game/Dialog/statusbarui.cpp` is fully reimplemented and nothing
-registers it.** The file documents the retail vtable at exe `0x14015d810` and the
-three slots it fills —
+`statusbarui.cpp` registers on its last two lines:
+
+```cpp
+REGISTER_TYPE(StatusBarUI, "UI::DialogController",
+              &statusbarui_sa::Factory, &statusbarui_sa::InPlace);
+```
+
+`REGISTER_TYPE` expands to a **static-initializer** `Object::FactoryRegistration`
+in an anonymous namespace. **A standalone promotion never registers the retail
+vtable address** — it mints its own `g_vt` and publishes it through
+`Factory`/`InPlace`. The address `0x14015d810` was never going to appear in
+`standalone/`, in this file or in a correct one.
+
+**Confirmed at the binary level, which is the strongest evidence available and
+the reason this is a retraction rather than a counter-argument.** The linked
+`reimpl-x64.exe` contains
 
 ```
-+0x28 (idx5)  0x14007a3d0  element discovery   -> StatusBarUI_Draw
-+0x38 (idx7)  0x1400798d0  full stats refresh  -> StatusBarUI_Startup
-+0x48 (idx9)  0x14007a3a0  status-icon click   -> StatusBarUI_OnRemove
+00000001404497f0 t _GLOBAL__sub_I__Z16StatusBarUI_DrawP11StatusBarUI
+0000000140155cc0 T _Z16StatusBarUI_DrawP11StatusBarUI
+0000000140156800 T _Z19StatusBarUI_StartupP11StatusBarUI
 ```
 
-— and there is **no `RegisterExeAddr` and no vtable array for any of them**.
-`StatusBarUI_Startup`, the full stats refresh, owns **all 15**
-`fn_NumberElement_SetValueInt` call sites (year, temperature, wood, stone, iron,
-tools, firewood, food, herbs). It never executes, on any route. That accounts for
-both zeros without implicating this lane's ports at all.
+— the TU's static initializer, i.e. the registration, is linked in and runs at
+startup. `code/Game/*/*.cpp` is a `wildcard` in the Makefile, so the file was
+never excluded from the build.
 
-**It is the same shape as the half-registered `Array<8>::SetSize` lane UID found
-earlier the same day, one level up:** there a *body* existed with no
-registration; here an entire *dialog* does.
+**WHY THE DOUBLE-CHECK DID NOT SAVE IT.** This section explicitly distrusted a
+class-name grep and re-checked *by symbol* — `StatusBarUI_Startup`, `_Draw`,
+`_OnRemove`, `W_Refresh`, `W_OnUpdate`, `W_Setup`, "six symbols, zero references
+outside their own file". That was the right instinct and it produced the same
+wrong answer, because **both checks asked the same question**: is there a
+reference *from outside this file*? Static-initializer registration is a
+reference *inside* the file. Two independent-looking checks that share a hidden
+premise are one check. Cf.
+[[reference-same-tool-both-sides-is-not-enough]].
 
-**How it was checked matters.** A grep for the class-name string `StatusBarUI`
-finds nothing, but a grep for a class-name string is precisely the blindness this
-project has paid for repeatedly — so it was re-checked **by symbol**:
-`StatusBarUI_Startup`, `StatusBarUI_Draw`, `StatusBarUI_OnRemove`, `W_Refresh`,
-`W_OnUpdate`, `W_Setup` — **six symbols, zero references outside their own
-file**. Same answer, arrived at a way that could have disagreed.
+**THE MEASURED TELL THAT THE TEST WAS WRONG, NOT THE TREE.** 54 dialogs in
+`code/Game/Dialog/` use `REGISTER_TYPE`, and **exactly zero** define a
+`Factory()` without one. Only **50 of the 105** retail vtable addresses those
+files document appear anywhere in `standalone/`. A registration test that
+condemns half a mature corpus is measuring the wrong thing — **when a check
+flags a large fraction of a mature tree, suspect the check first.**
+
+**THE SWEEP THAT DOES WORK**, and its result: a dialog `.cpp` defining
+`void* Factory()` with no `REGISTER_TYPE` anywhere in it — a constructed vtable
+with no publisher. Run across `code/Game/Dialog/` it returns **empty**. There is
+no second instance of the half-registered pattern here, and the exe-side sweep
+this section called for is **closed negative**.
+
+**WHAT THIS COSTS, and it is not nothing.** §9d was the *explanation* for the two
+`SetValueInt` zeros — "it never executes, on any route, and that accounts for
+both zeros without implicating this lane's ports". **That explanation is now
+void, and the zeros are unexplained again.** `StatusBarUI_Startup` owns all 15
+`fn_NumberElement_SetValueInt` call sites and its registration is live, so
+"never registered" (cause 2 in the `calls=0` taxonomy) is ruled out and the
+remaining causes — never reached on this route, or reached down a branch the
+oracle does not cover — are the open ones. §9e's prediction below may still come
+out `calls=0`, but **its stated reason is gone**, so a `calls=0` there must not
+be read as confirming it. Cf.
+[[reference-calls-zero-can-mean-always-took-the-uncovered-branch]].
 
 ### 9e. A FALSIFIABLE PREDICTION, left standing so it can fail
 
