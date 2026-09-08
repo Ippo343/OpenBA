@@ -2851,8 +2851,21 @@ bool EngineFuncsInit() {
     fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
         ResolveExport("?FindCheckBoxes@RadioElement@UI@@QEAAXXZ"));
     if (!fn_RadioElement_FindCheckBoxes) {
+        // 0x180047c00, NOT 0x1800d5750. FindCheckBoxes is an OVERLOAD SET and this
+        // fallback named the wrong member of it until 2026-09-07:
+        //   0x180047c00  ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ          public, 0 args
+        //   0x1800d5750  ?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@...  private, 1 arg
+        // The typedef here is void(*)(void* self) and the one caller
+        // (code/Game/Dialog/toolbardialog.cpp) passes only `self`, so the old
+        // address would NOT have faulted — it is a genuine entry point. It would
+        // have RUN the private sibling with whatever the caller happened to leave
+        // in RDX, read as an InternalPtr<Element>, and done radio-group tree
+        // surgery with it (reference_serialize_lazy_resolve_and_wrong_slot.md).
+        // That is why "is the fallback address an entry point" is not a sufficient
+        // check: it has to be the entry point of THIS EXACT MANGLED NAME, which is
+        // what tools/resolve_fallback_audit.py compares.
         fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
-            ResolveAddr(Module::Runtime, 0x1800d5750));
+            ResolveAddr(Module::Runtime, 0x180047c00));
     }
     // FUN_140100270: Find dialog by controller type
     fn_FindDialogByControllerType = reinterpret_cast<fn_FindDialogByControllerType_t>(
@@ -3140,8 +3153,13 @@ bool EngineFuncsInit() {
     fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
         ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
     if (!fn_External_GetPath) {
+        // 0x180006250, NOT 0x18006a3e0. The old address was mid-body of
+        // FUN_18006a390 (+0x50) — a jump into the middle of an unrelated function.
+        // ?GetPath@External@Object@@ really lives at 0x180006250 (15 instructions,
+        // verified against the shipped export directory). No port registers this
+        // name today, so the fallback is one phantom mangling away from live.
         fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
-            ResolveAddr(Module::Runtime, 0x18006a3e0));
+            ResolveAddr(Module::Runtime, 0x180006250));
     }
     fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
         ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));

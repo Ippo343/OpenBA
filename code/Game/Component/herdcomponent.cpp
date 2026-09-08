@@ -77,8 +77,11 @@ static void EnsureHelpers() {
 
     s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         ResolveAddr(Module::Runtime, 0x1800c0290));
+    // BY NAME (retail 0x1800c7d40): RandFloat is a Wave 2 port
+    // (runtime/src/system/value_types.cpp:405) and ResolveAddr consults the
+    // ADDRESS registry only, so asking by address went around it into the DLL.
     s_fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(
-        ResolveAddr(Module::Runtime, 0x1800c7d40));
+        ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
 
     s_fn_CheckFood = reinterpret_cast<fn_CheckFood_t>(
         ResolveAddr(Module::Exe, 0x140053f20));

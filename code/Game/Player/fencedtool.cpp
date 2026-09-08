@@ -366,16 +366,22 @@ static void EnsureCalcCostHelpers() {
             ResolveAddr(Module::Exe, 0x14009f3e0));
         s_fn_FencedTool_AnchorCalc = reinterpret_cast<fn_FencedTool_AnchorCalc_t>(
             ResolveAddr(Module::Exe, 0x1400dbf90));
+        // No by-address fallback on either of these two, deliberately. Both names
+        // are REGISTERED PORTS (runtime/src/math/rt_math_port.cpp:32,51, Wave 1)
+        // and ResolveExport consults the port registry before the DLL, so the
+        // only way to reach a fallback is for the Wave 1 registration itself to
+        // be gone — at which point a null (both call sites are guarded) is a far
+        // better failure than a jump to an address. The two that used to be here
+        // were 0x18008f530 and 0x18008f880, and neither is a function at all:
+        // they are mid-body of FUN_18008f38c (+0x1a4 and +0x4f4), while
+        // ?Abs@Scalar@Math@@ lives at 0x1800646b0 and ??0Vector3@Math@@QEAA@MMM@Z
+        // at 0x1800152d0. They are deleted rather than corrected because a
+        // fallback that cannot fire without the port being deleted is dead weight
+        // that must go before cutover anyway (WAVE9.md lane F, 166 sites).
         s_fn_ScalarAbs = reinterpret_cast<fn_ScalarAbs_t>(
             ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));
-        if (!s_fn_ScalarAbs)
-            s_fn_ScalarAbs = reinterpret_cast<fn_ScalarAbs_t>(
-                ResolveAddr(Module::Runtime, 0x18008f530));
         s_fn_Vector3_Ctor_local = reinterpret_cast<fn_Vector3_Ctor_local_t>(
             ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
-        if (!s_fn_Vector3_Ctor_local)
-            s_fn_Vector3_Ctor_local = reinterpret_cast<fn_Vector3_Ctor_local_t>(
-                ResolveAddr(Module::Runtime, 0x18008f880));
     }
 }
 

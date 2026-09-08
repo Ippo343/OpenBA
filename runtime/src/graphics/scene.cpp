@@ -260,9 +260,15 @@ Quaternion* RtQuaternionLerp(const Quaternion* from, Quaternion* ret,
 }
 
 // Math::Transform::AsMatrix — retail 0x18001e5f0. HIDDEN RETURN SLOT in RDX.
+// Asked BY NAME: Wave 1 ported AsMatrix (runtime/src/math/transform.cpp:982) and
+// ResolveAddr consults the ADDRESS registry only, so the by-address form this
+// line used until 2026-09-07 sent every Graphics::Scene transform through the
+// shipped DLL instead of our own port — one port bypassing another inside
+// runtime/.
 Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
     using Fn = Matrix* (*)(const Transform*, Matrix*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001e5f0));
+    static Fn fn = reinterpret_cast<Fn>(
+        ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
     return fn(xf, ret);
 }
 

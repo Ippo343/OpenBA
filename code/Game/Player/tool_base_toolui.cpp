@@ -52,9 +52,10 @@
 
 namespace {
 
-// Slot 0 inner dtor RVA (== fn_DialogInstance_Dtor; used only as a fallback when the
-// canonical export ptr is null). The dtor slot is exercised safely; see ToolUI_Dtor.
-constexpr uintptr_t kRVA_Dtor          = 0x1b800e;
+// (There used to be a `kRVA_Dtor = 0x1b800e` here, used as an else-arm fallback in
+// ToolUI_Dtor when fn_DialogInstance_Dtor was null. It was deleted 2026-09-07: that
+// RVA lands in .rdata, not on a function -- ??1DialogInstance@UI@@UEAA@XZ is at
+// 0x180114d40 -- so the "fallback" was a call into read-only data. See ToolUI_Dtor.)
 
 // ⚠️ The base DialogInstance virtuals (slots 1..9) are resolved by EXPORT NAME, NOT by
 // a hardcoded Runtime RVA. The original version of this file derived RVAs (0x1bf5c2,
@@ -88,14 +89,17 @@ constexpr const char* kSym_OnSerSettings  = "?OnSerializeSettings@DialogInstance
 // OnElementEvent on the Microsoft x64 ABI — a real bug, not just a signature mismatch.)
 void* ToolUI_Dtor(void* self, uint32_t flags) {
     if (!self) return self;
-    if (fn_DialogInstance_Dtor) {
-        fn_DialogInstance_Dtor(self);
-    } else {
-        typedef void (*dtor_t)(void*);
-        dtor_t d = reinterpret_cast<dtor_t>(
-            ResolveAddr(Module::Runtime, 0x180000000 + kRVA_Dtor));
-        if (d) d(self);
-    }
+    // Guard and SKIP on null, which is what all 20 other dialog slot-0 wrappers in
+    // code/Game/Dialog/ do with this same pointer -- `if (fn_DialogInstance_Dtor)
+    // fn_DialogInstance_Dtor(self);` and nothing else. This site was the only one
+    // with an else arm, and its address (0x180000000 + 0x1b800e) pointed into
+    // .rdata, so the one case it existed for would have executed read-only data.
+    // Deleted rather than corrected to 0x180114d40: fn_DialogInstance_Dtor is
+    // assigned in exactly one place (engine/funcs/engine_funcs.cpp:1837), which
+    // already carries its own -- correct -- 0x180114d40 fallback, so a second copy
+    // here can only fire when that one has already failed, and would then be one
+    // more of the 166 by-address branches lane F has to delete before cutover.
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;
 }

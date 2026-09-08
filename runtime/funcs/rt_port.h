@@ -41,6 +41,18 @@ void  RegisterRuntimeExport(const char* mangled_name, void* our_fn);
 void  RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
 void  RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn);
 void* ResolveExportRaw(const char* mangled_name);
+// The PORT-REGISTRY-AWARE resolver — checks our registrations first and only
+// then the shipped DLL. Note the difference from ResolveExportRaw above, which
+// deliberately skips the registry for the diff oracle: this is the one to use
+// when runtime/ code wants to CALL a function, so that a port of it is reached.
+//
+// Declared here 2026-09-07 (Wave 9 lane R) because the runtime tree had no
+// port-aware name resolver at all, and that absence had a cost:
+// runtime/src/graphics/scene.cpp reached Math::Transform::AsMatrix by ADDRESS,
+// which consults only the address registry and so walked past our own Wave 1
+// port of it into the DLL — a port bypassing a port inside runtime/. See
+// tools/port_bypass_audit.py.
+void* ResolveExport(const char* mangled_name);
 
 // Per-wave kill switch: BANISHED_RT_<NAME>=0 leaves the wave unregistered, so
 // every call goes to the DLL exactly as before. Checked once, at init.

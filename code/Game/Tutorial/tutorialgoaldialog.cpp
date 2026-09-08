@@ -36,9 +36,17 @@ static void EnsureResolved() {
     if (!fn_External_External)
         fn_External_External = (fn_External_External_t)ResolveAddr(Module::Runtime, 0x1800bc9c0);
 
-    // IO::Serializer (Runtime DLL)
-    s_fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveAddr(Module::Runtime, 0x1800b9960);
-    s_fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveAddr(Module::Runtime, 0x1800b99b0);
+    // IO::Serializer — BY NAME (retail 0x1800b9960 / 0x1800b99b0).
+    // Both are ported (runtime/src/io/serializer.cpp:636-637). ResolveAddr
+    // consults the ADDRESS registry only, so the by-address form these two lines
+    // used until 2026-09-07 walked past the port into the shipped DLL — live in
+    // all nine of lane 0's residue cells, invisible to BANISHED_RT_DIFF, and
+    // counted as ported by the census. Only the name reaches the port, and only
+    // the name survives cutover.
+    s_fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport(
+        "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
+    s_fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport(
+        "??1Serializer@IO@@QEAA@XZ");
 }
 
 // ============================================================

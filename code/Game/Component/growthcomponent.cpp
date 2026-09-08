@@ -1022,9 +1022,23 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
 
     uint32_t range = s_fn_VariantRange ? s_fn_VariantRange(variantTarget, (int)variantSeed) : 0;
     uint32_t roll2 = 0;
-    // System::Random::Rand(this, range) — resolve once.
+    // System::Random::Rand(this, range) — resolve once, BY NAME.
+    //
+    // This asked by ADDRESS for 0x1800c7cf0 until 2026-09-07, and that was wrong
+    // twice over. Retail's call site (FUN_14011fba0 at 0x14011fe2c) is
+    // `CALL [0x1401512e8]`, an import slot that dispatch_slot_map resolves to
+    // ?Rand@Random@System@@QEAAII@Z = 0x1800c8040. 0x1800c7cf0 is
+    // ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z, which dereferences
+    // RDX as a Serializer ([RDX+8] -> vtable -> +0x98) — so the old code would
+    // have faulted on the first spawn that reached it, using `range` as an
+    // object pointer. Nothing caught it because this line never executed in any
+    // of lane 0's nine residue cells.
+    // Asking by NAME also reaches our Wave 2 port (runtime/src/system/
+    // value_types.cpp:403); ResolveAddr consults the ADDRESS registry only, so
+    // the by-address form went around the port into the DLL.
     typedef uint32_t (*fn_Rand_t)(void* self, uint32_t n);
-    static fn_Rand_t s_fn_Rand = reinterpret_cast<fn_Rand_t>(ResolveAddr(Module::Runtime, 0x1800c7cf0));
+    static fn_Rand_t s_fn_Rand =
+        reinterpret_cast<fn_Rand_t>(ResolveExport("?Rand@Random@System@@QEAAII@Z"));
     if (s_fn_Rand) roll2 = s_fn_Rand(rng, range);
     if (s_fn_SetVariant) s_fn_SetVariant(variantWrite, variantSeed, (short)roll2);
 

@@ -202,7 +202,23 @@ def find_sites(root="."):
             # `if (x == nullptr)` and an `else` arm; allow a `d.` / `p->`
             # qualifier on the target (dx11/src/renderstatedata.cpp:322 is
             # `if (!d.baseDtor)` and IS a real fallback).
-            win = " ".join(x.strip() for x in lines[max(0, s - 6):i + 1])
+            # The guard sits within a few lines above the statement -- but count
+            # only CODE lines. A comment block between the `if` and the
+            # ResolveAddr used to push the guard out of a fixed 6-line window, and
+            # the site then vanished from this audit ENTIRELY rather than being
+            # reported: 166 sites silently became 165. Wave 9 lane R hit that with
+            # its own explanatory comment while fixing defect 1, which is the worst
+            # possible way to find it -- documenting a fallback deleted it from the
+            # checker. A site this script drops is indistinguishable from a site
+            # someone fixed, so blank and comment-only lines do not count toward
+            # the window.
+            win_src, j = [], i
+            while j >= 0 and len(win_src) < 7:
+                t = lines[j].strip()
+                if t and not t.startswith("//"):
+                    win_src.append(t)
+                j -= 1
+            win = " ".join(reversed(win_src))
             q = r"(?:[A-Za-z_]\w*\s*(?:\.|->)\s*)?" + re.escape(base)
             guarded = (re.search(r"if\s*\(\s*!\s*" + q + r"\s*\)", win)
                        or re.search(r"if\s*\(\s*" + q + r"\s*==\s*(nullptr|NULL|0)\s*\)", win)
