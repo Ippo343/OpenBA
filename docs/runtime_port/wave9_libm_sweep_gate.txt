@@ -1,0 +1,95 @@
+ccache g++ -std=c++17 -O2 -DMSVC_LIBM_COVERAGE -Iruntime/src/crt tools/libm_probe/sweep.cpp \
+    runtime/src/crt/msvc_libm.cpp -o tools/libm_probe/sweep.exe
+tools/libm_probe/sweep.exe 
+
+--- PORT (runtime/src/crt/msvc_libm.cpp) ---
+sqrtf    n=66846758     diff=0           BIT-EXACT
+sinf     n=352059430    diff=0           BIT-EXACT
+cosf     n=352059430    diff=0           BIT-EXACT
+atan2f   n=360695204    diff=0           BIT-EXACT
+powf     n=361426788    diff=0           BIT-EXACT
+
+=== EFFECTIVENESS CONTROL (branch entries counted inside the port) ===
+sqrtf:
+  sqrtHardware           33423384
+  sqrtNegative           33423368
+  sqrtNaN                4
+  sqrtPosInf             1
+  sqrtNegInf             1
+sinf:
+  sinSmallPoly           61630519
+  sinCubicTerm           1572864
+  sinIdentity            29884426
+  sinNegArg              129485803
+  sinCodyWaite           230373623
+  sinExtendedSplit       6698212
+  sinPayneHanek          28597992
+  sinReducedTiny         0
+  sinReducedSmall        35900
+  sinFullSinSeries       120792204
+  sinFullCosSeries       138143511
+  sinQuadrantNegate      129485809
+cosf:
+  cosSmall               93087809
+  cosNegArg              129485803
+  cosCodyWaite           230373623
+  cosExtendedSplit       6698212
+  cosPayneHanek          28597992
+  cosReducedTiny         0
+  cosReducedSmall        35900
+  cosFullSinSeries       138143511
+  cosFullCosSeries       213880013
+  cosQuadrantNegate      145771183
+__rem_pio2:
+  remPio2                57195984
+  remPio2RoundUp         28597942
+  remPio2ExtraLimb       28860172
+trig non-finite:
+  trigNaN                8
+  trigInf                4
+atan2f:
+  atanTablePath          11124924
+  atanPolyPath           25142748
+  atanTinyRatio          25836168
+  atanSwap               35266803
+  atanNegX               35266654
+  atanSubnormal          7741491
+  atanPlainDivide        57745575
+  atanRatioHuge          145080714
+  atanRatioZero          15482948
+  atanNearPi             72540258
+  atanBothInf            4
+  atanZeroY              68
+  atanZeroXNegY          18
+  atanNanX               152
+  atanNanY               136
+powf:
+  powCore                23293102
+  powOverflow            14460110
+  powUnderflow           14228921
+  powExpZero             1212
+  powExpOne              697494
+  powExpTiny             68239311
+  powExpHuge             136478854
+  powNegBase             180363796
+  powNegBaseOddInt       1089388
+  powNegBaseEvenInt      2134436
+  powNegBaseNonInt       104026228
+  powBaseOne             1194
+  powBaseZero            70
+  powBaseMinusOne        396
+  powBaseInfNan          210
+
+=== NEGATIVE CONTROL ===
+
+--- NEGATIVE CONTROL: MinGW/UCRT libm ---
+sqrtf    n=522278       diff=0           BIT-EXACT
+sinf     n=522278       diff=171593      (32.854725%) maxUlp=2139095040  worst x=0x7f800000 y=0x00000000 ours=0x7fc00000 dll=0xffc00000
+cosf     n=522278       diff=171631      (32.862001%) maxUlp=2139095040  worst x=0x7f800000 y=0x00000000 ours=0x7fc00000 dll=0xffc00000
+atan2f   n=162724       diff=12          (0.007374%) maxUlp=2143289344  worst x=0x7fa00000 y=0xffa00000 ours=0x7fe00000 dll=0xffe00000
+powf     n=894308       diff=364         (0.040702%) maxUlp=2139095040  worst x=0xffc00000 y=0x7fc00000 ours=0xffc00000 dll=0x7fc00000
+
+Negative control OK: 4 of 5 functions differ under MinGW's libm,
+so the sweep can see a last-bit defect when one is present.
+
+=== VERDICT: port BIT-EXACT on all five ===

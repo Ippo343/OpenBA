@@ -251,7 +251,21 @@ ours), not chosen.
 | **D. The 57 unnamed internals** | **The known-hard one.** PLAN §4.3 risk 4 records the `FUN_` pool as MEASURED AND UNSOLVED and CLOSED TO AUTOMATION: all three levers (hash/fuzzy, string anchors, call-graph) run to a fixed point at 2% touched, 9 names proposed, none verified, and no PDB exists. 57 is a far smaller target than the pool, and each has a call site that says what it is used for — that is the lever, not the name. | Each one either ported, or proved unreachable by lane 0 |
 | **E. Allocator** | Arm `BANISHED_RT_ALLOC`, revisit the NO-GO, and take the heap. Includes `Engine::Startup`'s three direct field writes and `Shutdown`. | `sa-stress` clean under `BANISHED_REDZONE=watch` |
 | **F. Retire the §2.2 patches — AND the fallback idiom, 166 sites** | The four byte-patch files, the crash handler's Runtime instruction offsets (§2.2 C, kept and narrowed by Wave 3), the `MessageBoxW` IAT swap, and the direct layout reads in §2.2 B. **Plus a countable item this table did not have until Wave 9 lane D measured it: all 166 `ResolveExport(...); if (!x) ResolveAddr(Module::Runtime, ...)` fallback branches must be DELETED before lane G.** With the DLL gone, no `ResolveExport` can succeed, so every one of the 166 becomes the live path *simultaneously* and jumps at an address in a module that is not mapped. The replacement for the audit is not another tool — it is leaving nothing to audit. | Each one deleted, not carried; `resolve_fallback_audit.py` reports 0 sites |
-| **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. | The PLAN §5 box |
+| **G. Remove `LoadLibrary`** | The actual cutover. Delete the DLL from the game directory and boot. **Nothing here may run for the first time on cutover day** — every gate below needs the DLL to compare against and stops working the moment it is gone. | The PLAN §5 box |
+
+### The PRE-CUTOVER GATE CHECKLIST — run and RECORD each while the DLL still exists
+
+Every one of these compares against the shipped DLL. After lane G there is nothing to
+compare against, so a gate not recorded before cutover can never be recorded at all.
+
+| Gate | Command | Status |
+|---|---|---|
+| **libm bit-exactness** | `mingw32-make libm-sweep` — exits non-zero on any divergence AND on a negative control that finds nothing | **PASSED 2026-09-07, recorded in `wave9_libm_sweep_gate.txt`**: 1,493,087,610 comparisons, 0 differing bits on all five; negative control fires on 4 of 5 (`sqrtf` reporting 0 for the control too is a TRUE result — the retail body is a bare `sqrtss` and IEEE sqrt is correctly rounded) |
+| **Differential oracle, full matrix** | `BANISHED_RT_DIFF=1` across the harness cells | Gameplay route clean 2026-09-07: 266 sites, 29,456,785 calls, **0 divergences in 0 sites**; negative control `BANISHED_RT_LIBM=std` puts 92 divergences back in the same 2 sites, so a clean run means the ports work and not that the oracle stopped working. Other cells NOT yet run at zero. |
+| **Minted `??_7` vs the DLL's exported vtables** | lane C2's byte-for-byte shadow check | NOT RUN |
+| **Allocator shadow** | `BANISHED_RT_DIFF=1 BANISHED_RT_ALLOC_SHADOW=1` on `sa-run` + `sa-stress` + autoload, plus a deliberate perturbation that must go red | NOT RUN — lane E's GO gate step 2 |
+| **`[RtRawResidue]` verdicts** | every row ORACLE-ONLY / REAL DEPENDENCY / DATA READ / DEAD | IN PROGRESS (lane V) — 104 rows |
+| **`resolve_fallback_audit.py` reports 0 SITES** | not 0 defects — 0 **sites** | NOT MET: 163 remain. All 163 must be DELETED before lane G (see lane F) |
 | **H. Perf gate** | The deferred +7.7% breach. The user deferred it at the Wave 4 boundary explicitly *to this stage*. With the DLL gone the seam's `GetProcAddress`/registry indirection can be compiled out entirely, which is the main reason it was deferred here. Three runs minimum — `reference_one_perf_run_cannot_resolve_the_gate.md`. | ≤5% over the recorded baseline |
 
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
