@@ -182,9 +182,14 @@ RESOLVER_FILES = {"runtime/funcs/rt_port.h", "standalone/resolve.h",
 DATA_PREFIXES = ("??_7", "?_singleton@", "?_typeInfo@", "?_first", "?_seconds")
 # Markers that make an enclosing function oracle machinery rather than a live path.
 ORACLE_MARKERS = ("rt_diff_on__", "RtSaveTrace::", "RtDiffEnabled", "RT_DIFF",
-                  "memcmp", "RtOriginal", "InstallRuntimeDetour")
+                  "RtDiffReport", "Verify", "memcmp", "RtOriginal",
+                  "InstallRuntimeDetour")
 ORACLE_FN_WORDS = ("verify", "probe", "selftest", "prologue", "trace", "detour",
                    "original", "shadow")
+# A thin accessor whose whole job is to hand back exported DATA -- `RtVtable`,
+# `RtDataExport<T>`, `…SingletonSlot`. Its argument is the caller's literal, so
+# the name is not visible here; the function's own name is what says "data".
+DATA_FN_WORDS = ("vtable", "singleton", "typeinfo", "dataexport", "slot")
 NAME_CONST = re.compile(
     r'\b(?:static\s+)?(?:const|constexpr)\s+char\s*\*\s*(?:const\s+)?'
     r'([A-Za-z_]\w*)\s*(?:\[\])?\s*=\s*"((?:[^"\\]|\\.)*)"')
@@ -194,7 +199,7 @@ NAME_CONST = re.compile(
 # two save-trace probes classify as BYPASS in this script's first run, exactly
 # the "your first number will be too big" failure. A lambda cannot match: `](…)`
 # has no name character before the paren.
-FN_DEF = re.compile(r"([A-Za-z_]\w*)\s*\([^;{}]*\)\s*"
+FN_DEF = re.compile(r"\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*"
                     r"(?:const\s*)?(?:noexcept\s*)?\{")
 NOT_A_FN = {"if", "for", "while", "switch", "catch", "return", "sizeof", "do"}
 
@@ -255,7 +260,9 @@ def sweep_name_door(census, ported_names):
                 # in a loop). Inside oracle machinery that is expected and needs
                 # no verdict; anywhere else it is a row a HUMAN must read, which
                 # is why it is reported rather than assumed benign.
+                dw = next((w for w in DATA_FN_WORDS if w in fn.lower()), "")
                 verdict, why = (("OK-ORACLE", gate) if gate
+                                else ("OK-DATA", "fn name: " + dw) if dw
                                 else ("UNRESOLVED-NAME", "name not a literal"))
             elif name.startswith(DATA_PREFIXES):
                 verdict, why = "OK-DATA", "exported data, no body to port"

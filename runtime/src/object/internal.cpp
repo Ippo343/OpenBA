@@ -123,7 +123,13 @@ void MemFree(void* p) {
 // armed is the right one to be in this path.
 uint32_t RandomRand(void* random) {
     if (!g_rand) {
-        g_rand = reinterpret_cast<RandFn>(ResolveExportRaw("?Rand@Random@System@@QEAAIXZ"));
+        // ResolveExport, NOT ResolveExportRaw: the comment above states the
+        // intent ("whichever implementation is armed is the right one") and the
+        // code did the opposite until 2026-09-07 (Wave 9 lane R). Raw is
+        // GetProcAddress and skips the port registry by design, so this path ran
+        // the DLL's Rand on every Internal id while the census counted ours as
+        // ported. Found by tools/port_bypass_audit.py's name-door sweep.
+        g_rand = reinterpret_cast<RandFn>(ResolveExport("?Rand@Random@System@@QEAAIXZ"));
     }
     return g_rand(random);
 }

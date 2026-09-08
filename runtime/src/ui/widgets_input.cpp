@@ -86,7 +86,7 @@ using UI::ProgressElement;
 using UI::kElementFlagNeedsSizeCalc;
 
 // ----------------------------------------------------------------------------
-// ResolveAddr / ResolveExportRaw, forward-declared rather than pulled in from
+// ResolveAddr / ResolveExport, forward-declared rather than pulled in from
 // standalone/resolve.h — same reasoning rt_port.h gives for declaring
 // RegisterRuntimeExport locally (windows.h leakage; PLAN §4.1 platform
 // neutrality). These declarations must stay byte-identical to resolve.h's.
@@ -104,8 +104,12 @@ namespace {
 // Every "first child" lookup below uses it exactly as retail does.
 using IsDerivedFromFn = bool (*)(void* self, unsigned typeId);
 IsDerivedFromFn IsDerivedFrom() {
+    // ResolveExport, NOT ResolveExportRaw (changed 2026-09-07, Wave 9 lane R).
+    // Raw skips the port registry on purpose, for the diff oracle; on a LIVE
+    // path it means every "first child" lookup in this file ran the DLL's body
+    // while Wave 3's port of IsDerivedFrom sat registered and unreached.
     static IsDerivedFromFn fn = reinterpret_cast<IsDerivedFromFn>(
-        ResolveExportRaw("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
+        ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
     return fn;
 }
 
