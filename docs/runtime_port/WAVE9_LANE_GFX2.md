@@ -378,6 +378,21 @@ delta is this lane's and not another lane's.
 | … set-diff on the 146/144 | — | **CLOSED 2:** `??0SunLight@Graphics@@QEAA@XZ`, `?Set@SunLight@Graphics@@…`. **NEW 0.** |
 | `tools/rawdoor_audit.py` | 501 sites, **0 UNGUARDED-CALL**, 36 DEFERRED-CALL | 506 sites, **0**, 36 |
 | `tools/port_bypass_audit.py` ADDRESS door | 209 sites, **0** reach an already-ported fn; ADDR-REGISTERED 33, DETOURED 3, GUARDED-FALLBACK 1, NO-EXPORT 96, UNPORTED 76 | 209 sites, **0**; GUARDED-FALLBACK **1 -> 4**, NO-EXPORT **96 -> 93**, the other three unchanged. That shift is entirely the §7 change: three of the eight `static Fn fn = ...` sites now read `if (!fn) fn = ...`, which the audit classifies as a guarded fallback rather than a bare no-export call. No site moved into or out of BYPASS. |
+
+> **CORRECTED 2026-09-08 (2794eaf), by the integrator, not by this lane.** The
+> `GUARDED-FALLBACK 1 -> 4` above is an ARTEFACT READ AS A RESULT, and the
+> attribution to this lane's §7 change is wrong. `resolve_fallback_audit`'s
+> lookback paired a fallback with any `<name> = ResolveExport(...)` in the
+> preceding 40 RAW lines, **without stopping at a function boundary** -- and
+> every forwarder in this tree names its local `fn`, so it matched across
+> functions by construction. Lane GFX3 found it; measuring it tree-wide showed
+> ALL THIRTEEN of the tool's pairings were cross-function bleed (one name
+> against three different addresses in a single file, in three separate files).
+> The GUARDED-FALLBACK bucket is empty after the fix, and the `if (!fn) fn = ...`
+> sites this lane created are `static Fn fn = nullptr` lazy caches with no
+> `ResolveExport` primary -- they were never this tool's subject. Nothing about
+> this lane's ports changes; only the row above was never evidence.
+
 | … NAME door | 429 raw-door sites, **0 BYPASS** on a live path | 434 sites, **0** |
 | … by-name cross-check | 670 ported names / 417 raw-door statements / **0** the parser missed | 675 / 422 / **0** |
 | `tools/export_name_audit.py` | 662 names, 1 not in the DLL (`?_singleton@...`, a prose ellipsis in `rt_resolve_cache.cpp:8`) | 665 names, the **same 1** |

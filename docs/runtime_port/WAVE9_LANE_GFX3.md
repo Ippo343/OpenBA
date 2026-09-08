@@ -418,6 +418,23 @@ three rows were never fallbacks. Reported here, not fixed: a shared instrument
 should be fixed by one owner in one commit, and reaching for the ALLOWLIST is how
 a checker gets talked out of a true finding.
 
+**RESOLVED 2026-09-08 in `2794eaf` by the integrator.** The lookback now
+breaks on a `}` in column 0 and skips comment-only lines. This lane's diagnosis
+held tree-wide and the extent was larger than it could see from one file:
+**all 13 of the tool's pairings were cross-function bleed**, not just
+`scene.cpp`'s three. The tell was in the output all along and had been read past
+for weeks -- one name paired against several DIFFERENT addresses in a single
+file (`?Update@UserInterface@UI@@` x3 in `loops.cpp`,
+`?SetText@EditElement@UI@@` x3 in `widgets_input.cpp` including `MemFree`'s
+address, `?MemFree@` x2 in `renderer.cpp`).
+
+Because the fixed count is **zero**, it was proved rather than argued: a
+synthetic control file with a genuine same-function pair, the same shape with a
+deliberately mismatched address, and a cross-function split. Fixed lookback
+2 found / 1 WRONG-ADDRESS; OLD lookback on the same file 3 found /
+2 WRONG-ADDRESS, reproducing this lane's artefact verbatim. Reporting rather
+than allowlisting was the right call and is why the count is honest now.
+
 ---
 
 ## 8. What this lane could NOT verify — stated, not buried
