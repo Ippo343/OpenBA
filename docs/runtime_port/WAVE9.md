@@ -2160,3 +2160,89 @@ Not S. Waves 6 (113 fns) and 7 (101 fns) were sized L and XL. Wave 9 is **319 it
 allocator, the `FUN_` pool, the data exports and the holdbacks — **with the diff oracle
 switched off partway through.** Call it XL with a hard ordering constraint, and expect lane D
 to be the one that decides the schedule.
+
+---
+
+## THE CUTOVER WALLS ARE PREDICTABLE IN ADVANCE — 172 minted slots that can only trap
+
+Every attempt so far has discovered its wall by *hitting* it: boot, crash, read
+`standalone_crash.log`, name the symbol, port it, boot again. That is one wall per
+run, and each run costs a game-dir lock window on a contended lock.
+
+**The wall set is computable from the tree without booting at all.** A minted
+vtable slot is
+
+```
+{ "?Serialize@BinaryWriter@IO@@UEAAXAEAHPEBD@Z", 0x1800a8fd0ull, RT_MINT_NAMED },
+```
+
+carrying **both** a mangled name and a Runtime address. With the DLL present the
+name resolves out of the export table. **With the DLL absent there is no export
+table**, so the slot survives only if that address or name has a ported body
+registered in our tree; otherwise it holds its per-slot trap
+(`RT_MINT_TRAP(v,s)`) and a call through it names itself.
+
+`tools/mint_wall_predict.py` joins the 311 `RT_MINT_NAMED` rows against every
+literal `RegisterRuntimeExport` / `RegisterRuntimeAddr` in `runtime/`,
+`standalone/`, `engine/` and `code/`. At `071864f`:
+
+| | count |
+|---|---:|
+| `RT_MINT_NAMED` rows | 311 |
+| registered by name or address — **survive cutover** | 80 |
+| address mentioned in the tree but not literally registered — **needs a human** | 59 |
+| **no registration and no mention — TRAP IF CALLED** | **172** |
+
+**THE 172 IS AN UPPER BOUND, NEVER A LOWER ONE, AND THE TOOL SAYS SO IN ITS OWN
+DOCSTRING.** It matches literal registrations only, so a registration spelled
+through a variable or a named constant is invisible to it — the same blind spot
+`runtime_census.py` has had five times. **A row it clears is genuinely clear; a
+row it flags may still be registered.** Re-check a row before porting it: this
+project has three times had a lane port something the tree already had, and a
+duplicate registration is last-binding-wins, which silently makes one body dead
+code.
+
+**Validated against a known positive rather than trusted for reporting a
+plausible number.** Lane ENC-2 ported `?Serialize@BinaryWriter@IO@@` at
+`0x1800a8fb0` and `0x1800a8fd0`; both are present in the mint table and both come
+back **CLEARED**. An instrument that flagged everything would have produced a
+similar-looking headline.
+
+### The set is not 172 problems — it is a handful of families
+
+```
+25  Visitor@IO             8  SpriteSheet@UI          7  ImageBuffer@Video
+23  BinaryReader@IO        8  EdgeMesh@Graphics       7  DialogController@UI
+22  BinaryWriter@IO        7  ParticleInstance@Gfx    6  MeshInstance@Graphics
+                           7  MaterialInstance@Gfx    6  LoaderLoop@Engine
+```
+
+**The top three are 70 of the 172 and are ONE family**: the IO scalar-
+serialization dispatch, one tiny body per scalar type in reader/writer/visitor
+variants. Lane ENC-2 has already ported two of them, so the shape, the
+registration mechanism and the framing conventions are established in-tree; and
+lane GFXD independently traced `0x1800a88d0` / `0x1800a8fd0` as the `rw_vtbl`
+slot at `+0xa0` (`kScalarInt`) reached from `Serialize@MeshInstance`, so the
+family is load-bearing rather than busywork. **Dispatched as lane SERIAL.**
+
+The write path also has a real oracle: **a write-path `Serialize` is replayable**
+— drive our body and the shipped body against the same input and byte-compare the
+stream. This project recorded "no oracle possible" for four `Serialize` ports
+across three waves before noticing that.
+
+### Why this changes the shape of the remaining work
+
+The static export scan has been treated informally as the cutover gate. **It is
+not one, and this wave measured that.** Merging lanes GFXD and RRES together — 8
+exported bodies, one verified on 22,595 live differential calls with 0
+divergences — moved `addr_door` UNREGISTERED 14 → 14, unsatisfied names 118 →
+118, outside-a-diff-guard 115 → 115, names resolved 861 → 862. **Two headline
+instruments flat for a full round of real work**, because they list names *our
+source* resolves through a door and nothing of ours called those bodies before.
+A port cannot remove a name from a set it was never in.
+
+So the honest gate is the pair: the **runtime `[RtUnresolved]` residue from an
+actual DLL-less boot** (what the boot path really touches) and this **mint-wall
+prediction** (what it would touch if it got further). The first is exact and
+narrow; the second is broad and an upper bound. Neither alone is the gate, and
+the static export scan is neither.
