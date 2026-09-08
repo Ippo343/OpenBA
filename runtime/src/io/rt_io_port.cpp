@@ -83,6 +83,14 @@ extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (la
 // port in this tree that MOUNTS THE GAME'S PACKAGE FILES, so taking it out is
 // the fastest way to tell a packaging fault from a FileSystem fault.
 extern int RtIoFileSystemPackagesRegister(); // filesystem_packages.cpp (lane PKG)
+// Wave 9 lane FIND: FileSystem::FindFiles — the row lane PKG's LoadPackages
+// exposed — plus the TWO NULL DOORS under the already-ported FileSystem::Exists
+// (ExistsInPackfile and PlatformExists). Own switch for the reason above and
+// one more: the two Exists arms are NOT on the LoadPackages path, they are on
+// EVERY path once FileSystem::Startup sets the packfile gate, so an A/B that
+// removed them together with lane PKG would confound two very different
+// blast radii.
+extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FIND)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -99,5 +107,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_REGREAD"))     n += RtIoPersistenceRegistryRegister();
     if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
+    if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
