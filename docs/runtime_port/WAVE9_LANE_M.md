@@ -503,3 +503,94 @@ entered.** `reference_probe_needs_an_effectiveness_control.md` already says this
 the argument here is that it belongs in the oracle itself, because "10 of 12,896 calls did
 anything at all" is the number that turned a mysterious rare divergence into a structural
 one-line answer.
+
+---
+
+## The instruments (built by lane M, source only — READY TO RUN, never run)
+
+Three changes to `runtime/funcs/rt_diff.{h,cpp}` plus one probe installer in
+`standalone/main.cpp`. **Nothing here has been executed**: lane N held the game directory, so
+this is compiled-but-unrun code. It is syntax-checked, not measured — treat the first run as the
+measurement, and read `[RtDiff] released-pointer detector self-test:` before believing any
+result from it.
+
+**Verified: `-fsyntax-only` across all 46 translation units that use the oracle, 0 failures**,
+with **zero edits to any port**. The four new `RtDiffSite` fields are APPENDED, and every one of
+the ~170 sites initialises the struct as `= { NAME, 0, 0, false, false }`, which
+value-initialises the rest. That property is load-bearing and is commented in the header: do not
+reorder those fields.
+
+### 1. The released-pointer detector — zero adoption cost, runs everywhere immediately
+
+Inside `RtDiffReportBytes`, before it names the first differing byte. When the two buffers
+differ it walks them 8 bytes at a time and reports the one case that matters:
+
+* the same slot holds a **different** pointer on each side, **and**
+* the side the **DLL's body** ran on points at a block whose `{length, refcount}` header at
+  `[-8]` reads `{0,0}` — released, **and**
+* our side points at a live one.
+
+All three together are Finding 1's exact signature. Any two of them are not: a slot that merely
+differs is an ordinary divergence, and a released block on *both* sides is not evidence the
+replay caused it. It prints as a **HARNESS DEFECT, explicitly not a port defect**, and says in
+the message not to exclude the bytes.
+
+**This is the instrument that needs no per-site adoption**, so it covers all ~170 sites the
+moment it runs — including the ones nobody suspects, which is the actual goal.
+
+**It has a positive AND a negative control, and they run automatically.** Its only natural
+positive control is `NumberElement::SetValueInt` on tutorials 1-3 — which *disappears the moment
+lane N fixes it*, leaving a detector that cannot tell "nothing is wrong" from "I stopped
+working". So `RtDiffDetectorSelfTest()` builds a synthetic pair that IS the defect and a pair
+that is NOT, requires the detector to fire on the first and stay silent on the second, and
+prints `ALIVE` or `*** BROKEN — its silence means NOTHING ***` on the first byte comparison of
+every run. If the readable-memory probe was never installed it says so and states plainly that
+its silence means nothing.
+
+### 2. `BANISHED_RT_DIFF_INVERT=1` — and an honest correction to my own proposal
+
+I told the lead this was "a one-flag change to the replay macro". **That was wrong and I withdraw
+it.** There is no replay macro: the ordering of ours-then-theirs lives inside each site's
+hand-written body, and no change to `RT_DIFF_BYTES` alone can reorder them. INVERT therefore
+ships as an **opt-in macro pair** (`RT_DIFF_REPLAY_PRE` / `RT_DIFF_REPLAY_POST`) that a site
+adopts by wrapping its single `RT_ORIGINAL_ONCE` call — about two lines. Off by default, free
+when off, and `RtDiffInvertArm()` logs the site name and flushes **before** the original is
+called, so a crash names its own function instead of starting a bisection.
+
+**No site adopts it yet**, deliberately: the nine candidates are lane N's, and three of them are
+not even registered. So `BANISHED_RT_DIFF_INVERT=1` is currently a **no-op**, and scheduling a
+sweep on it today would measure nothing — the classic `calls=0`-reads-as-clean shape, which is
+why it is said here in as many words.
+
+**The intended workflow is the pair, not either alone:** the detector sweeps the whole tree with
+no edits and *names* suspect sites; INVERT is then applied to what it names, as the escalation
+that turns a quiet byte difference into an immediate, attributable crash. Measured on Finding 1,
+that escalation took twenty seconds and put the diverging call's own input (`"272"`) inside a
+block already on the free list.
+
+### 3. The did-work counter
+
+`RT_DIFF_WORK(expr)`, one line per site next to the early-out guard, and a `worked=` column in
+the summary. **An undeclared site prints `worked=?`, never `worked=0` and never a blank** — a
+blank column reads as "fine", and the whole point is that an undeclared site's coverage is
+UNKNOWN. The summary adds a rollup naming how many sites have not declared.
+
+`worked=` sits **before** `divergences=` on the per-site line on purpose: this project's tooling
+(and `tools/rt_matrix_cell.sh`) matches `divergences=<n>` at end of line to pick out dirty sites,
+and moving it would silently break that the way a `tail -80` once broke the whole report.
+
+Why it matters, in one sentence: **`calls` counts calls ENTERED, and a large `calls` is not
+coverage** — Finding 1 sat behind `calls=12896` on a site where ten calls did anything at all,
+which is `calls=0`-reads-as-clean one level up. It would also immediately reclassify
+`SpinnerElement::SetMinMax` (4 calls) and `ElementDescription`'s ctor (2) as the non-coverage
+they probably are.
+
+### What to run first, when the directory frees up
+
+1. Any cell, any route, and read the **self-test line**. If it does not say `ALIVE`, nothing else
+   in the run means anything.
+2. The tutorial-1 cell, which still contains the known defect: the detector should fire on
+   `UI::NumberElement::SetValueInt` and print `*** HARNESS DEFECT ***`. **That is the acceptance
+   test for the whole instrument**, and it expires as soon as lane N lands the fix — so run it
+   before, not after.
+3. Then the full matrix, for the tree-wide list of sites nobody suspected.

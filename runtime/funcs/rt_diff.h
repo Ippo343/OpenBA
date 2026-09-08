@@ -49,12 +49,40 @@
 bool RtDiffEnabled();
 
 // One comparison site. Static per call site; holds the counters.
+//
+// The four fields after `linked` were added by Wave 9 lane M and are appended
+// DELIBERATELY: every one of the ~170 sites in the tree initialises this with
+// `= { NAME, 0, 0, false, false }`, and C++ value-initialises the remaining
+// members of an aggregate, so the whole instrument arrives with ZERO edits to
+// any port. Do not reorder these.
 struct RtDiffSite {
     const char* name;
     uint64_t    calls;
     uint64_t    divergences;
     bool        reported;   // first divergence has been logged with a stack
     bool        linked;     // present in the summary list
+
+    // ---- THE DID-WORK COUNTER (lane M) ------------------------------------
+    // `calls` counts calls ENTERED, and a large `calls` is NOT coverage. Wave 9
+    // lane M's Finding 1 hid behind `calls=12896` on a site where only TEN
+    // calls did anything at all: the other 12,886 took the port's
+    // unchanged-value early-out, compared identical, and made the site look
+    // richly exercised while carrying ten real comparisons. That is the same
+    // failure as `calls=0`-reads-as-clean, one level up.
+    //
+    // A site declares how many of its calls actually did work with
+    // RT_DIFF_WORK(expr). Sites that never declare it print `worked=?` in the
+    // summary rather than `worked=0` or nothing at all — an undeclared site is
+    // an UNKNOWN, and printing the unknown is the point (a blank column would
+    // read as "fine", which is the trap this exists to close).
+    uint64_t    worked;
+    bool        workDeclared;
+
+    // ---- THE RELEASED-POINTER DETECTOR (lane M) ---------------------------
+    // Counts calls where the scratch the DLL's body ran on was found holding a
+    // pointer into a block our body had already released. This is a finding
+    // about the HARNESS, never about the port. See RtDiffReportBytes.
+    uint64_t    freedPtrHits;
 };
 
 // Register a site (idempotent) so it appears in the summary even with 0 calls.
@@ -69,6 +97,79 @@ void RtDiffReportBytes(RtDiffSite* site, const void* ours, const void* theirs, s
 
 // Print per-site totals. Called at shutdown; safe to call any time.
 void RtDiffSummary();
+
+// ---- Wave 9 lane M: the three instruments ---------------------------------
+//
+// Background: WAVE9_LANE_M.md Finding 1. `UI::NumberElement::SetValueInt` was
+// prefix-replayed — memcpy a scratch, run ours on the live object, run the
+// DLL's body on the scratch, compare — even though it swaps a REFCOUNTED
+// string through `CacheText`. The scratch shares the entry pointer, so our
+// body released the buffer and the DLL's body was then handed a pointer into
+// it. `widgets_input.cpp` lines 53-58 forbid exactly that, in prose, written by
+// the lane that then did it two hundred lines lower. A rule that exists and is
+// not mechanically enforced gets violated; these three make it checkable.
+
+// (1) Did-work declaration. One line per site, next to the early-out:
+//         RT_DIFF_WORK(didWork);
+// See the RtDiffSite comment for why an undeclared site prints `worked=?`.
+void RtDiffNoteWork(RtDiffSite* site, bool didWork);
+
+// (2) BANISHED_RT_DIFF_INVERT=1 — run the DLL's body FIRST, on the scratch,
+// before ours touches the live object. OFF by default and free when off.
+//
+// WHY IT FINDS THINGS THE NORMAL ORDER CANNOT: with ours first, a body that
+// double-manages an allocation usually just leaves the scratch holding a stale
+// pointer and reports a quiet byte difference. With theirs first, the DLL
+// releases the buffer and OUR body then releases it again — and the allocator's
+// free list is corrupted immediately, at the call, in the function that caused
+// it. Measured on Finding 1: the inverted run died inside the Runtime allocator
+// in twenty seconds with `"272"`, the diverging call's own input, sitting in a
+// block already on the free list.
+//
+// A CRASH UNDER INVERT IS A FINDING ABOUT THE HARNESS, NOT A PORT DEFECT.
+// The shipped order is what hides the defect; inverting only stops hiding it.
+// RtDiffInvertArm() logs the site name BEFORE the original is called, so a
+// crash names its own function instead of starting a bisection.
+bool RtDiffInvertReplay();
+void RtDiffInvertArm(RtDiffSite* site);
+
+// (3) The released-pointer detector needs to know whether an address can be
+// read before it dereferences it. rt_diff.cpp stays free of windows.h (PLAN
+// §4.1 platform neutrality), so the probe is INSTALLED by the platform layer.
+// Until it is installed the detector is silently skipped — fail-safe, because a
+// detector that faults is worse than a detector that is absent.
+void RtDiffSetReadableProbe(bool (*fn)(const void* p, size_t n));
+
+// ---- Macros ---------------------------------------------------------------
+
+// Declare how many of this site's calls actually did work. `EXPR` is the port's
+// own verdict — normally the bool it already computed for its early-out guard.
+#define RT_DIFF_WORK(EXPR)                                                     \
+    do {                                                                       \
+        if (rt_diff_on__) RtDiffNoteWork(&rt_diff_site__, (EXPR));             \
+    } while (0)
+
+// The prefix-replay pair, for sites that want INVERT coverage.
+//
+// ADOPTION IS PER SITE AND IT IS NOT ZERO-COST TO ADD — see WAVE9_LANE_M.md.
+// The ordering of "ours" and "theirs" lives inside each hand-written body, so
+// no change to RT_DIFF_BYTES alone can reorder them. A site adopts by wrapping
+// its single `RT_ORIGINAL_ONCE(...)` call:
+//
+//     RT_DIFF_REPLAY_PRE  { RT_ORIGINAL_ONCE(Fn, kName)(&replay, value); }
+//     ... our body, unchanged ...
+//     RT_DIFF_REPLAY_POST { RT_ORIGINAL_ONCE(Fn, kName)(&replay, value); }
+//     RT_DIFF_BYTES(self, &replay, sizeof(T));
+//
+// Exactly one of the two blocks runs. PRE runs only under INVERT; POST runs
+// only when not inverted, which is the shipped behaviour and is what every
+// unconverted site already does.
+#define RT_DIFF_REPLAY_PRE                                                     \
+    if (rt_diff_on__ && RtDiffInvertReplay() &&                                \
+        (RtDiffInvertArm(&rt_diff_site__), true))
+
+#define RT_DIFF_REPLAY_POST                                                    \
+    if (rt_diff_on__ && !RtDiffInvertReplay())
 
 // ---- Macros ---------------------------------------------------------------
 
