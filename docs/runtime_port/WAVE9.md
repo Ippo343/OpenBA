@@ -1680,6 +1680,27 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### Attempt 18: `ReadPackfile` RETURNS — the wall is the packfile sort
+
+Lane DESTROY ported `0x180026b50` (attempt 17's fault address). The boot now runs
+`ReadPackfile` **to completion** and comes back up into `LoadPackages`:
+
+```
+attempt 15/16   LoadPackages +0x1BA    ?ReadPackfile@ missing
+attempt 17      inside ReadPackfile    DestroyPkgEntryRange -> EXEC of 0
+attempt 18      LoadPackages +0x274    RCX = packfiles, RDX = 4  -> EXEC of 0
+```
+
+`RDX = 4` is `packfileCount` — the four packages lane PKG3 measured. The fault is the
+sort at **`0x1800264a0`** (`filesystem_packages.cpp:767`), an unregistered by-address
+door. **Fifth consecutive wall that is a door with no name at the call site**, and
+`[RtUnresolved]` gained **nothing** between attempts 17 and 18 — a name-based instrument
+would have reported no change at all across a rung that moved the boot forward twice.
+
+That file's own comment already anticipated this lane: *"A clean `std::sort` here would
+compile, run, and silently pick different winners… transcribing it would be an unverified
+guess at a precedence rule."* Owned by lane COLL.
+
 ### Attempt 17: THE LADDER MOVES — the boot is now INSIDE `ReadPackfile`
 
 `?ReadPackfile@PackageFile@IO@@` landed (lane PKG3), and with it the whole
