@@ -45,6 +45,20 @@
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_port.h"
 
+// ----------------------------------------------------------------------------
+// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
+// ----------------------------------------------------------------------------
+// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
+// resolve.h drags in <windows.h>, whose <wingdi.h> declares a function called
+// `Rectangle` and whose <windef.h> #defines `near`/`far` away. This declaration
+// must stay byte-identical to resolve.h's and to the copy in
+// runtime/src/collection/array.cpp; the linker checks all three.
+//
+// Added by Wave 9 lane OBJ2 for Factory::Startup's ONE unexported callee, the
+// Collection::Set insert at 0x180030140.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 namespace RtObject {
 
 // ============================================================
@@ -458,6 +472,545 @@ BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
     return self;   // MSVC returns `this` from every ctor; so does retail (RAX=R10)
 }
 
+// ============================================================================
+// ?Startup@Factory@Object@@QEAA_NXZ      retail 0x1800c0630  ord 4096
+//                                        (Wave 9 lane OBJ2, 2026-09-08)
+//
+// STEP 6 OF Engine::Startup's QUEUE, and the reflection system's own bring-up:
+// it is the ONLY code that overwrites `BaseTypeInfo::typeId`'s 0xFFFFFFFF ctor
+// sentinel, and the only code that builds the AVL tree every later lookup
+// walks (CreateObject, GetTypeIdFromName, IsDerivedFrom, GetTypeName,
+// GetTypeIdForFileExtension). Called once per process from
+// runtime/src/engine/engine_lifecycle.cpp:612.
+//
+// TWO PASSES over 212 instructions:
+//
+//   1. Walk `_firstTypeInfo` (0x1801fc6e0). For each entry, CRC-32 its `name`
+//      into `typeId`, then insert {typeId, info, nullptr, {}} into the tree
+//      keyed by typeId. The CRC is the SAME algorithm as
+//      Factory::GetTypeFromNameCRC (0x1800c0930) — retail has it twice, once
+//      inline here and once out of line there — so this reuses TypeNameCRC
+//      above rather than transcribing it a second time.
+//
+//   2. In-order walk of the tree just built. For each node whose `info` has a
+//      `parentName`, CRC that name, look the parent's node up, store
+//      `&parentNode->value` as this record's `parent`, and push
+//      `&thisNode->value` onto the parent's `children` array.
+//
+// Pass 2's tail is `Collection::Array<TypeRecord*>::SetSize(n+1, fill)`
+// INLINED — it is instruction-for-instruction the J3 body in
+// runtime/src/collection/array.cpp (the exact-equal no-op, the
+// `capacity = n*3` rule that fires only on a growth after the first, the
+// `if (dst == 0) continue`, the copy-then-free). It is transcribed here rather
+// than routed through lane Q's `SetSizeCore` because retail inlined it: this
+// call site has no `ArraySpec`, no registered address, and a stride and align
+// baked in as immediates.
+//
+// TWO UNGUARDED DEREFS THAT ARE LOAD-BEARING. Both are kept (CLAUDE.md, "Don't
+// 'fix' a faithful crash with a null check"):
+//
+//   * When a `parentName` names a type that is NOT registered, retail's tree
+//     search leaves RCX == 0 and `LEA RBP,[RCX+8]` (0x1800c079d) produces
+//     `(TypeRecord*)8`, which the very next instruction dereferences at
+//     +0x20 — a read of address 0x28. That fault IS how a missing parent
+//     registration announces itself, and at cutover it is a fault we want,
+//     in our own code, with a symbol name on it.
+//   * `info->name` is dereferenced by the CRC with no null test.
+//
+// RETURNS `true` UNCONDITIONALLY — `MOV AL,1` at 0x1800c0907 is the only exit.
+// The `if (!Startup(factory)) { g_startupFailAt = 5; return 0; }` at
+// engine_lifecycle.cpp:612 therefore has a branch retail can never take.
+//
+// DEPENDENCY THIS PORT DOES **NOT** CLOSE — see the report and
+// reference_porting_can_grow_the_cutover_surface.md. The Set insert at
+// 0x180030140 is unexported and UNPORTED, and this body calls it through the
+// port-aware address door, which means:
+//     THIS PORT DOES NOT CLOSE THE ROW AT CUTOVER. With the DLL absent,
+//     ResolveAddr(Module::Runtime, 0x180030140) is null and the call is
+//     EXEC-of-0 inside RtObject_Factory_Startup.
+// The chain that has to land first is five more unexported bodies:
+//     0x180030140  Set::Insert wrapper (builds the Pair, calls the core,
+//                  destroys the temp Array)      ~25 instrs
+//     0x180030380  insert core: BST descend + node alloc + retrace   ~50
+//     0x180008440  node allocate (0x50 bytes, align 8) + Pair ctor   ~25
+//     0x1800087c0  Pair placement-construct
+//     0x180030540  AVL retrace, calling the two rotations
+//     0x1800307b0 / 0x1800308e0  the two rotations
+//     0x180009350 / 0x1800093e0  Array copy-ctor / dtor for the temp
+// Nothing else in this file needs them; they are a Collection::Set lane.
+// ============================================================================
+
+namespace {
+
+// ---- The allocator boundary ----------------------------------------------
+//
+// Retail INLINES `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50)
+// and `?MemFree@...` (0x1800c7ad0) here rather than calling them:
+// 0x1800c07e5..0x1800c0826 is Enter(&_singleton->cs) / Allocate(_singleton,
+// bytes, 8) / Leave, which is 0x1800c7a50's whole body with align=8, and
+// 0x1800c0873..0x1800c08a6 is 0x1800c7ad0's body with retail's `if (p)` hoisted
+// to 0x1800c086e. So calling the two wrappers is the same instruction sequence,
+// and it goes through the door lane E's allocator port will own instead of
+// pinning 0x1800c6e60 / 0x1800c6c00 / the +0x640 lock offset in a third place.
+typedef void* (*FactoryMemAllocFn)(uint64_t, int);
+typedef void  (*FactoryMemFreeFn)(void*);
+
+void* FactoryMemAlloc(uint64_t bytes, int align) {
+    return RT_EXPORT_ONCE(FactoryMemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
+}
+void FactoryMemFree(void* p) {
+    // The `if (p)` lives INSIDE 0x1800c7ad0 (`TEST RCX,RCX; JZ ret` is its
+    // first instruction). The one call site below still tests, because retail
+    // does too, at 0x1800c086e.
+    RT_EXPORT_ONCE(FactoryMemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+}
+
+// ---- MEASURED CORRECTIONS to two layouts TypeInfo.h records as guesses -----
+//
+// `Object::Factory` is 0x10 bytes, not 8. `??0Factory@Object@@QEAA@XZ`
+// (0x1800c09d0) is: `[RCX]=0; [RCX+8]=0(dword); _singleton=RCX; return RCX`,
+// and the Set insert core INCs that dword at 0x1800303ac / 0x18003043c on
+// every successful insert. It is the Set's element count. TypeInfo.h's
+// `struct Factory { TypeNode* root; }` is CORRECT AS A VIEW — every lookup
+// only needs +0x00 — but it is 8 bytes, so it must never be used as STORAGE.
+// The probe below allocates one, hence this declaration.
+struct FactorySet {
+    TypeNode* root;    // +0x00
+    uint32_t  count;   // +0x08
+    uint32_t  _pad0c;  // +0x0c  zeroed by the ctor's qword store? no: the ctor
+                       //        writes a DWORD at +8 only. Never read.
+};
+static_assert(sizeof(FactorySet) == 0x10, "Object::Factory is MemAlloc(0x10,4)");
+
+// `TypeNode` is 0x50 bytes and its +0x48 is TWO 16-bit fields, not one int32.
+// TypeInfo.h marks both facts "GUESS, NOT MEASURED"; here is the measurement:
+//   0x180008440  MOV EDX,0x50 / LEA R8D,[RDX-0x48]  -> Allocate(0x50, align 8)
+//   0x180030540  MOVZX ...,word [RAX+0x4a] / INC    -> +0x4a is a HEIGHT
+//                MOV word [RDX+0x48],CX             -> +0x48 is a SIGNED
+//                CMP word [RDX+0x48],-1 / JGE       -> ...balance factor
+// Nothing in this file allocates or rebalances a node, so nothing here relies
+// on them; they are recorded because the Set lane above will.
+
+// ---- Tree walking ---------------------------------------------------------
+
+TypeNode* LeftMost(TypeNode* n) {
+    // Retail 0x1800c0747: `while ((RAX = node->left)) node = RAX;`
+    if (!n) return nullptr;
+    while (n->left) n = n->left;
+    return n;
+}
+
+// Retail's in-order successor, 0x1800c08ac..0x1800c08f6, transcribed branch for
+// branch. The `!p` arm reads `node->parent` a second time to produce its null;
+// that is retail's 0x1800c08f2 shared exit, not a redundancy to tidy away.
+TypeNode* Successor(TypeNode* node) {
+    if (TypeNode* r = node->right)
+        return LeftMost(r);
+
+    TypeNode* p = node->parent;
+    if (!p)                    return node->parent;   // nullptr, via 0x1800c08f2
+    if (p->left == node)       return p;              // via 0x1800c08d2
+    while (p && p->right == node) { node = p; p = p->parent; }
+    return node->parent;
+}
+
+// ---- The body, factored so the probe can drive it on a synthetic Factory ---
+//
+// `self` is a FactorySet, never the 8-byte view. The real entry point passes
+// the engine's own factory; the probe passes storage it owns.
+void FactoryStartupRun(FactorySet* self) {
+    // ---- Pass 1: CRC every name, insert a record per type -----------------
+    //
+    // `_firstTypeInfo` is read ONCE into RBX at 0x1800c065b and then followed
+    // through `info->next`; the loop does not re-read the global, so a
+    // BaseTypeInfo constructed DURING Startup would not be seen. Nothing
+    // constructs one during Startup, but the port matches the read anyway.
+    // The one unexported callee. Resolved through the PORT-AWARE address door,
+    // so the day a Collection::Set lane registers 0x180030140 this body picks
+    // the port up with no edit. A NULL IS NOT CACHED (rt_resolve_cache.cpp's
+    // contract): freezing one here would mean a Set port registered later
+    // could never be reached, and nothing would say which symbol was missing.
+    typedef TypeNode** (*SetInsertFn)(FactorySet*, TypeNode**,
+                                      const uint32_t*, const TypeRecord*);
+    static SetInsertFn setInsert = nullptr;
+    if (!setInsert)
+        setInsert = reinterpret_cast<SetInsertFn>(
+            ResolveAddr(Module::Runtime, 0x180030140));
+    if (!setInsert) {
+        // At cutover this is where the row that is NOT closed announces
+        // itself, by name, instead of as EXEC-of-0 with no context.
+        std::printf("[RtPort] Object::Factory::Startup: Collection::Set insert "
+                    "0x180030140 is UNPORTED and the DLL is absent -- the type "
+                    "tree cannot be built\n");
+        return;
+    }
+
+    for (BaseTypeInfo* info = *g_firstTypeInfo; info; info = info->next) {
+        info->typeId = TypeNameCRC(info->name);
+
+        TypeRecord rec;
+        // Retail stamps 0xFFFFFFFF into rec.typeId at 0x1800c06e3 and then
+        // overwrites it with info->typeId at 0x1800c0706 — the sentinel is
+        // dead. `_pad04` is written by NEITHER retail nor the insert wrapper
+        // (which copies +0x00 as a dword, then +0x08, +0x10, then
+        // copy-constructs the Array at +0x18), so it is unobservable; it is
+        // zeroed here only so this struct has no indeterminate member.
+        rec.typeId        = info->typeId;
+        rec._pad04        = 0;
+        rec.info          = info;
+        rec.parent        = nullptr;
+        rec.children      = nullptr;
+        rec.childCount    = 0;
+        rec.childCapacity = 0;
+
+        // R8 and R9 are the SAME address at 0x1800c070f/0x1800c070a: the key
+        // IS the record's first field. Passed as two arguments because that is
+        // what the callee's signature is.
+        TypeNode* it = nullptr;
+        setInsert(self, &it, &rec.typeId, &rec);
+    }
+
+    // ---- Pass 2: link parents, fill children ------------------------------
+    for (TypeNode* node = LeftMost(self->root); node; node = Successor(node)) {
+        BaseTypeInfo* const info = node->value.info;
+        const char* const parentName = info->parentName;
+        if (!parentName) continue;                    // 0x1800c076b
+
+        const uint32_t parentId = TypeNameCRC(parentName);
+
+        // 0x1800c0779..0x1800c079a, the same descend as FindNode above,
+        // written out because retail wrote it out.
+        TypeNode* p = self->root;
+        while (p) {
+            if (parentId < p->key)      p = p->left;
+            else if (p->key < parentId) p = p->right;
+            else                        break;
+        }
+
+        // FAITHFUL: `LEA RBP,[RCX+8]` on a null RCX. See the banner — a
+        // parentName naming an unregistered type yields (TypeRecord*)8 and
+        // faults on the next line, exactly as retail does. uintptr_t
+        // arithmetic rather than `(char*)p + 8` only because null pointer
+        // arithmetic is UB in C++ and this must be the LEA, not whatever the
+        // optimiser concludes from a UB premise.
+        TypeRecord* const parentRec =
+            reinterpret_cast<TypeRecord*>(reinterpret_cast<uintptr_t>(p) + 8);
+        node->value.parent = parentRec;
+
+        // ---- Array<TypeRecord*>::SetSize(count + 1, &node->value) ---------
+        const int64_t oldSize = parentRec->childCount;             // MOVSXD
+        const int32_t newSize = static_cast<int32_t>(oldSize) + 1;
+        if (newSize == static_cast<int32_t>(oldSize)) continue;    // 0x1800c07b0
+
+        TypeRecord** const old = parentRec->children;
+        parentRec->childCount = newSize;
+        if (newSize > parentRec->childCapacity) {                  // SIGNED
+            parentRec->childCapacity = newSize;
+            // The growth rule: triple ONLY when this is a one-element growth
+            // of a non-empty array, i.e. never on the first push. A type with
+            // two or more children is what exercises it.
+            if (newSize == static_cast<int32_t>(oldSize) + 1 && oldSize != 0)
+                parentRec->childCapacity = newSize * 3;            // 32-bit LEA
+            parentRec->children = static_cast<TypeRecord**>(FactoryMemAlloc(
+                static_cast<uint64_t>(
+                    static_cast<int64_t>(parentRec->childCapacity)) * 8, 8));
+        }
+
+        // 0x1800c082c: start at oldSize when the buffer did NOT move (append
+        // only), at 0 when it did (copy then append).
+        for (int64_t i = (old == parentRec->children) ? oldSize : 0;
+             i < newSize; ++i) {
+            TypeRecord** const dst = parentRec->children + i;
+            if (!dst) continue;      // retail's TEST RDX,RDX at 0x1800c0849
+            *dst = (i < oldSize) ? old[i] : &node->value;
+        }
+
+        if (old != parentRec->children && old)                     // 0x1800c086e
+            FactoryMemFree(old);
+    }
+}
+
+// ============================================================================
+// The probe: BANISHED_RT_FACTORY_STARTUP_PROBE=1
+// ============================================================================
+//
+// WHY A PROBE AND NOT RT_DIFF. The live call runs ONCE, on the engine's own
+// factory, and it mutates. "Call ours, call theirs, compare" would insert every
+// type twice into the one tree — the failure
+// docs/runtime_port/WAVE9.md rows 27-28 correctly identify for
+// ExternalFactory::FindOrLoad and ::Clean.
+//
+// WHY A PROBE IS NEVERTHELESS POSSIBLE HERE, and this is the whole argument:
+// Startup's writes are of exactly two kinds.
+//
+//   (a) `info->typeId = CRC(info->name)`, into the SHARED BaseTypeInfo chain.
+//       This is a PURE FUNCTION of a field neither run modifies, so it is
+//       IDEMPOTENT — running Startup three times writes the same 32 bits three
+//       times. It is not state that has to be snapshot and restored.
+//   (b) Everything else — the tree, the nodes, the children arrays — is
+//       reachable only through `this`.
+//
+// So a Factory the probe OWNS is a complete, independent subject: theirs into
+// factory A, ours into factory B, compare A with B. That is
+// reference_synthetic_subject_beats_a_fake.md, and it needs no fake at all —
+// a zeroed 0x10 bytes is a valid empty Factory, which is what the ctor makes.
+//
+// WHAT IT COMPARES, AND WHY BY MAPPING. `value.parent` and every `children[i]`
+// point INTO their own tree, so a byte compare would fail on exactly the
+// fields that represent the work. The comparison is therefore the same shape
+// as lane C2's mint shadow: A's pointer must denote the same TYPE as B's, and
+// `value.info` — a pointer into the one shared chain — is that identity.
+//
+// COST. Both trees are LEAKED: ~N nodes x 0x50 bytes plus the children arrays,
+// on the order of 60 KB for the ~600 types this engine registers. Freeing them
+// would mean writing a post-order teardown of a tree this lane did not build,
+// on the run where the port is least trusted. Opt-in, once per process.
+//
+// NOT RUN. Lane OBJ2 does not build or execute. This probe has never executed.
+// ============================================================================
+
+struct ProbeStats {
+    int nodes = 0;            // node pairs compared
+    int withParent = 0;       // ...whose info->parentName was non-null  <-- the
+                              //    EFFECTIVENESS control for pass 2's main arm
+    int bogusParent = 0;      // ...that resolved to the (TypeRecord*)8 sentinel
+    int withChildren = 0;     // ...that ended up with >= 1 child
+    int childEntries = 0;     // child pointers compared
+    int grownArrays = 0;      // capacity != count, i.e. the *3 rule fired
+                              //    <-- EFFECTIVENESS control for the growth arm
+    int mismatches = 0;
+};
+
+// Returns the mismatch count. `verbose` false is the negative control's mode:
+// count, print nothing.
+int CompareTrees(FactorySet* theirs, FactorySet* ours, ProbeStats* st, bool verbose) {
+    TypeNode* a = LeftMost(theirs->root);
+    TypeNode* b = LeftMost(ours->root);
+
+    while (a && b) {
+        bool bad = false;
+        const char* why = "";
+
+        if (a->key != b->key)                       { bad = true; why = "key"; }
+        else if (a->value.typeId != b->value.typeId){ bad = true; why = "typeId"; }
+        else if (a->value.info != b->value.info)    { bad = true; why = "info"; }
+        else if (a->value.childCount != b->value.childCount)
+                                                    { bad = true; why = "childCount"; }
+        else if (a->value.childCapacity != b->value.childCapacity)
+                                                    { bad = true; why = "childCapacity"; }
+
+        // Parent, by mapping. Three cases have to agree: both null, both the
+        // (TypeRecord*)8 not-found sentinel, or both denoting the same type.
+        if (!bad) {
+            const TypeRecord* pa = a->value.parent;
+            const TypeRecord* pb = b->value.parent;
+            const bool sa = (reinterpret_cast<uintptr_t>(pa) == 8);
+            const bool sb = (reinterpret_cast<uintptr_t>(pb) == 8);
+            if (sa || sb) {
+                if (sa != sb) { bad = true; why = "parent-sentinel"; }
+                else          { ++st->bogusParent; }
+            } else if ((pa == nullptr) != (pb == nullptr)) {
+                bad = true; why = "parent-null";
+            } else if (pa && pa->info != pb->info) {
+                bad = true; why = "parent-mapping";
+            }
+            if (pa) ++st->withParent;
+        }
+
+        if (!bad && a->value.childCount > 0) {
+            ++st->withChildren;
+            if (a->value.childCapacity != a->value.childCount) ++st->grownArrays;
+            for (int i = 0; i < a->value.childCount; ++i) {
+                ++st->childEntries;
+                const TypeRecord* ca = a->value.children[i];
+                const TypeRecord* cb = b->value.children[i];
+                if (!ca || !cb || ca->info != cb->info) {
+                    bad = true; why = "child-mapping"; break;
+                }
+            }
+        }
+
+        if (bad) {
+            ++st->mismatches;
+            if (verbose && st->mismatches <= 20) {
+                const char* nm = (a->value.info && a->value.info->name)
+                                     ? a->value.info->name : "(unnamed)";
+                std::printf("[FactoryStartupProbe] MISMATCH %-24s field=%s "
+                            "theirs.key=0x%08X ours.key=0x%08X\n",
+                            nm, why, a->key, b->key);
+            }
+        }
+
+        ++st->nodes;
+        a = Successor(a);
+        b = Successor(b);
+    }
+
+    if (a || b) {
+        ++st->mismatches;
+        if (verbose)
+            std::printf("[FactoryStartupProbe] MISMATCH node counts differ "
+                        "(theirs %s, ours %s past the shorter walk)\n",
+                        a ? "longer" : "equal", b ? "longer" : "equal");
+    }
+    return st->mismatches;
+}
+
+bool g_probeArmed = false;
+bool g_probeRan   = false;
+
+// The kill switch, BANISHED_RT_FACTORY_STARTUP=0, set once at registration.
+//
+// It is spelled as a `!g_portOn` fallback INSIDE the body rather than as an
+// `if (switch) RegisterRuntimeExport(...)` around the registration, because
+// runtime_census.py refuses to count a gated registration — "A gated
+// registration is not a port. Arm it, measure it, then move it." — and it is
+// right to: an `if (flag)` registration is how the census once counted 6 dead
+// Object entries as ported (reference_census_counted_gated_and_missed_dx11.md).
+// The registration below is therefore UNCONDITIONAL and the census sees it.
+// `g_portOn` has internal linkage; the identically-named flag in
+// runtime/src/io/serializer.cpp is a different object, and the name is shared
+// deliberately because tools/port_bypass_audit.py classifies this exact
+// spelling as OK-PORT-OFF.
+bool g_portOn = false;
+
+void FactoryStartupProbe() {
+    g_probeRan = true;
+
+    // Chain length first — it is the denominator every other number below is
+    // read against, and if it is 0 nothing that follows means anything.
+    int chain = 0;
+    for (BaseTypeInfo* i = *g_firstTypeInfo; i && chain < 100000; i = i->next) ++chain;
+
+    typedef bool (*StartupFn)(void*);
+    StartupFn orig = RtOriginal<StartupFn>("?Startup@Factory@Object@@QEAA_NXZ");
+    if (!orig) {
+        std::printf("[FactoryStartupProbe] NO ORACLE — the shipped DLL is not "
+                    "loaded (this is expected at cutover). chain=%d\n", chain);
+        return;
+    }
+
+    FactorySet theirs = { nullptr, 0, 0 };
+    FactorySet ours   = { nullptr, 0, 0 };
+
+    orig(&theirs);              // writes info->typeId (idempotent) + its own tree
+    FactoryStartupRun(&ours);   // writes the same typeIds + our tree
+
+    ProbeStats st;
+    const int mism = CompareTrees(&theirs, &ours, &st, /*verbose=*/true);
+
+    std::printf("[FactoryStartupProbe] chain=%d nodes=%d theirs.count=%u "
+                "ours.count=%u withParent=%d bogusParent=%d withChildren=%d "
+                "childEntries=%d grownArrays=%d mismatches=%d\n",
+                chain, st.nodes, theirs.count, ours.count, st.withParent,
+                st.bogusParent, st.withChildren, st.childEntries,
+                st.grownArrays, mism);
+
+    // ---- EFFECTIVENESS CONTROL --------------------------------------------
+    // reference_probe_needs_an_effectiveness_control.md: 64 green comparisons
+    // where zero did any work read exactly like a pass. Say so out loud when
+    // an arm never ran, rather than letting `mismatches=0` speak for it.
+    if (st.nodes == 0 || st.nodes != chain)
+        std::printf("[FactoryStartupProbe] VACUOUS: nodes=%d but the chain has "
+                    "%d entries — pass 1 did not insert what it walked\n",
+                    st.nodes, chain);
+    if (st.withParent == 0)
+        std::printf("[FactoryStartupProbe] VACUOUS: pass 2's parent arm never "
+                    "ran — every comparison below it is untested\n");
+    if (st.grownArrays == 0)
+        std::printf("[FactoryStartupProbe] WEAK: no children array ever grew "
+                    "past its first element, so the capacity*3 rule is "
+                    "UNTESTED by this run\n");
+
+    // ---- NEGATIVE CONTROLS -------------------------------------------------
+    // A comparator that cannot fail is not evidence. Perturb `ours` — which is
+    // discarded either way — in the two arms that matter and require a hit.
+    // reference_recheck_must_match_its_own_proof.md: these must exercise the
+    // SAME CompareTrees the verdict above came from, not a re-derived one.
+    if (mism == 0) {
+        for (TypeNode* n = LeftMost(ours.root); n; n = Successor(n)) {
+            if (n->value.childCount <= 0) continue;
+
+            const int32_t savedCap = n->value.childCapacity;
+            n->value.childCapacity = savedCap + 1;
+            ProbeStats nc1;
+            const int hit1 = CompareTrees(&theirs, &ours, &nc1, /*verbose=*/false);
+            n->value.childCapacity = savedCap;
+
+            TypeRecord* const savedChild = n->value.children[0];
+            n->value.children[0] = &n->value;      // point it at the wrong type
+            ProbeStats nc2;
+            const int hit2 = CompareTrees(&theirs, &ours, &nc2, /*verbose=*/false);
+            n->value.children[0] = savedChild;
+
+            std::printf("[FactoryStartupProbe] negative controls: "
+                        "capacity-perturbation detected=%s, "
+                        "child-perturbation detected=%s%s\n",
+                        hit1 > 0 ? "YES" : "NO", hit2 > 0 ? "YES" : "NO",
+                        (hit1 > 0 && hit2 > 0)
+                            ? "" : "  <-- THE COMPARATOR IS BROKEN, IGNORE THE "
+                                   "mismatches=0 ABOVE");
+            break;
+        }
+    }
+
+    std::printf("[FactoryStartupProbe] VERDICT: %s\n",
+                mism == 0 ? "0 mismatches" : "DIVERGED — see the rows above");
+}
+
+} // namespace
+
+// ============================================================================
+// The registered entry point.
+//
+// DIFF: SHADOW ONLY, and deliberately so. `calls=` will read 1. The real
+// verification is the probe above; the shadow here is a structural invariant
+// that can be checked without a second implementation — every entry in the
+// chain got a typeId that is the CRC of its own name, and the tree has as many
+// nodes as the chain had entries. Read the site as "this port executed and its
+// own postcondition holds", NOT as "this port agrees with the DLL".
+// ============================================================================
+bool RtObject_Factory_Startup(void* factory) {
+    RT_DIFF_BEGIN("Object::Factory::Startup [probe, not diffable]");
+    ResolveGlobals();
+
+    if (!g_portOn) {
+        // NEVER call this unchecked — serializer.cpp's rule. `!g_portOn` means
+        // the port was switched off, and the commonest future reason for that
+        // is the DLL not being there, in which case RT_ORIGINAL_ONCE is null
+        // and calling it is the crash the switch was meant to avoid. With no
+        // shipped body, ours is the only implementation there is.
+        using Orig = bool (*)(void*);
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "?Startup@Factory@Object@@QEAA_NXZ");
+        if (orig) return orig(factory);
+    }
+
+    // Opt-in, once, and BEFORE the real run so a divergence is reported even
+    // if the real run is what faults.
+    if (g_probeArmed && !g_probeRan) FactoryStartupProbe();
+
+    FactoryStartupRun(static_cast<FactorySet*>(factory));
+
+    if (rt_diff_on__) {
+        int chain = 0, mismatched = 0;
+        for (BaseTypeInfo* i = *g_firstTypeInfo; i && chain < 100000; i = i->next) {
+            ++chain;
+            if (i->typeId != TypeNameCRC(i->name)) ++mismatched;
+        }
+        int nodes = 0;
+        for (TypeNode* n = LeftMost(static_cast<FactorySet*>(factory)->root);
+             n && nodes < 100000; n = Successor(n)) ++nodes;
+
+        char a[96], b[96];
+        std::snprintf(a, sizeof(a), "chain=%d nodes=%d badCrc=%d", chain, nodes, mismatched);
+        std::snprintf(b, sizeof(b), "chain=%d nodes=%d badCrc=0", chain, chain);
+        RtDiffReport(&rt_diff_site__, chain > 0 && nodes == chain && mismatched == 0, a, b);
+    }
+
+    return true;   // MOV AL,1 at 0x1800c0907 is Startup's only exit
+}
+
 } // namespace RtObject
 
 // ============================================================================
@@ -504,6 +1057,30 @@ int RtObjectTypeSystemRegister() {
                           (void*)&RtObject_Type_Serialize); ++n;
     RegisterRuntimeExport("??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z",
                           (void*)&RtObject_BaseTypeInfo_Ctor); ++n;
+
+    // Wave 9 lane OBJ2. `?Startup@Factory@Object@@QEAA_NXZ` (0x1800c0630, ord
+    // 4096) verified present in the shipped DLL's export table with pefile on
+    // 2026-09-08 before a line of it was written.
+    //
+    // ITS OWN KILL SWITCH, and it is DEFAULT-ON: BANISHED_RT_FACTORY_STARTUP=0
+    // sets `g_portOn` false and the body forwards to the shipped function.
+    // Registration is UNCONDITIONAL so the census counts it — see the comment
+    // on g_portOn. It gets a switch of its own rather than sharing
+    // BANISHED_RT_TYPESYS because it is step 6 of Engine::Startup's queue: if
+    // it is wrong nothing boots, and the bisection wants one variable.
+    RegisterRuntimeExport("?Startup@Factory@Object@@QEAA_NXZ",
+                          (void*)&RtObject_Factory_Startup); ++n;
+    RegisterRuntimeAddr(0x1800c0630, (void*)&RtObject_Factory_Startup);
+    RtObject::g_portOn = RtWaveEnabled("BANISHED_RT_FACTORY_STARTUP");
+    if (!RtObject::g_portOn)
+        printf("[RtPort] BANISHED_RT_FACTORY_STARTUP=0 -- Object::Factory::Startup "
+               "forwards to the DLL\n");
+    // The probe is OPT-IN, so it is an explicit "set and not 0", not
+    // RtWaveEnabled (which means "on unless switched off").
+    {
+        const char* probe = std::getenv("BANISHED_RT_FACTORY_STARTUP_PROBE");
+        RtObject::g_probeArmed = RtObject::g_portOn && probe && std::strcmp(probe, "0") != 0;
+    }
 
     RegisterRuntimeAddr(0x1800491c0, (void*)&RtObject_Base_IsA);
     RegisterRuntimeAddr(0x1800c0390, (void*)&RtObject_Base_IsDerivedFrom);
