@@ -54,7 +54,10 @@ extern const DestroySpec kD_InnerArr3_1f0;   // 0x18001c8c0's inlined eh_vector 
 
 // ---- BODY B rows ----
 extern const DestroySpec kD_Str_08;          // 0x180011010
-extern const DestroySpec kD_Str_10;          // 0x180005930
+extern const DestroySpec kD_Str_10;          // 0x180005930 AND 0x180026b50
+                                             // (two addresses, one body — the
+                                             // listings are tabulated side by
+                                             // side in array_destroy.cpp)
 extern const DestroySpec kD_Str_48;          // 0x180014a40
 extern const DestroySpec kD_Str_18;          // 0x180034440
 extern const DestroySpec kD_Str2_38;         // 0x1800059e0

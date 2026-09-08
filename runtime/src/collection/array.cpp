@@ -748,9 +748,31 @@ void AssignPkgEntry(uint8_t* d, const uint8_t* s) {
 
 // The range destructor 0x1800298f0 calls on BOTH arms -- after a realloc
 // (180029a0e, over the whole old array) and on a SHRINK with no realloc
-// (180029a68, over the tail only). A different function from
-// DestroyStringExt's 0x180005930 and DestroyStringRange's 0x180011010, which is
-// the other half of why this element needs its own spec.
+// (180029a68, over the tail only).
+//
+// *** WAVE 9 LANE DESTROY, 2026-09-08: 0x180026b50 IS NOW PORTED, and the
+// sentence that used to stand here was half right in a way that mattered. ***
+// It said this was "a different function from DestroyStringExt's 0x180005930
+// and DestroyStringRange's 0x180011010". That is true of the ADDRESS -- three
+// distinct entry points -- and it is FALSE of the BODY: 0x180026b50 and
+// 0x180005930 differ only in an alignment NOP and a duplicated store into this
+// function's own SEH scope slot, neither of which any caller can observe. Both
+// listings are tabulated side by side above the B_ENTRY block in
+// array_destroy.cpp, which is where the claim is made from the disassembly
+// rather than from resemblance, and where the probe row that tests it against
+// the SHIPPED 0x180026b50 is named.
+//
+// So the element DOES still need its own ArraySpec -- because of the ASSIGN
+// (0x1800067d0's two trailing Filename::AdjustDelimiters calls, the third
+// near-miss this family produced) -- but it does NOT need its own DestroySpec.
+// The two halves of "why kSpec_PkgEntry exists" have different answers and were
+// being carried as one.
+//
+// This still forwards by ADDRESS, deliberately: ResolveAddr consults the port
+// registry first, so it now reaches array_destroy.cpp's
+// RtColl_DestroyStrings_180026b50 with the DLL present or absent, and the
+// address stays spelled as a literal here so tools/addr_door_audit.py and
+// tools/runtime_census.py can both still see the edge.
 void DestroyPkgEntryRange(void* ignoredThis, uint8_t* base, int count) {
     using Fn = void (*)(void*, uint8_t*, int);
     static Fn fn = nullptr;
@@ -983,6 +1005,47 @@ void ArrayDtorSited(ArrayHdr* a, Site* site) {
     RtDiffReport(&site->d, ok, ours, theirs);
 }
 
+// ---------------------------------------------------------------------------
+// WAVE 9 LANE DESTROY — arm coverage for kSpec_PkgEntry's destroy step
+// ---------------------------------------------------------------------------
+// 0x180026b50 is called from TWO different branches of 0x1800298f0 and a run
+// that only ever took one of them has verified one of them. Nothing OUTSIDE
+// this function can tell the two apart -- the callee is handed (base, count) in
+// both cases, and `base == old` vs `base == old + newSize*stride` is not
+// distinguishable at the callee when newSize is 0. So the count is taken HERE,
+// at the branch itself (WAVE9.md "count branches taken INSIDE the function
+// under test, not proxies observed from outside it").
+//
+// One Site per ARM, so the RtDiff summary's per-site `calls=` IS the arm count
+// -- the same idiom array_destroy.cpp uses to get per-ADDRESS counts out of one
+// shared body. Both Sites carry the entry-point address they lead to so a
+// summary line names something greppable.
+//
+// Scoped to kSpec_PkgEntry on purpose. A generic version would add a Site pair
+// per spec or, worse, sum every spec's arms into one pair and report a number
+// that is true of nothing. This lane's subject is one spec; when another spec
+// needs arm coverage it gets its own pair, not a widened predicate here.
+Site g_pkgArmRealloc = { { "kSpec_PkgEntry destroy arm: REALLOC (0x180029a0e -> 0x180026b50)",
+                           0, 0, false, false }, 0x180026b50 };
+Site g_pkgArmShrink  = { { "kSpec_PkgEntry destroy arm: SHRINK-TAIL (0x180029a68 -> 0x180026b50)",
+                           0, 0, false, false }, 0x180026b50 };
+
+static void NotePkgEntryDestroyArm(const ArraySpec* spec, bool reallocArm, int count) {
+    if (spec != &kSpec_PkgEntry || !RtDiffEnabled()) return;
+    Site* s = reallocArm ? &g_pkgArmRealloc : &g_pkgArmShrink;
+    RtDiffRegister(&s->d);
+    // Not a comparison and it does not pretend to be one: the predicate is the
+    // one thing the branch itself guarantees (retail never calls the destroy
+    // with count <= 0 from either arm -- the realloc arm passes oldSize, which
+    // is 0 only when there was nothing to destroy, and the shrink arm passes
+    // oldSize-newSize under `oldSize > newSize`). The VALUE of this Site is
+    // `calls=`, and it is labelled so nobody reads it as an oracle.
+    char ours[96];
+    std::snprintf(ours, sizeof(ours), "arm=%s n=%d",
+                  reallocArm ? "realloc" : "shrink-tail", count);
+    RtDiffReport(&s->d, count >= 0, ours, "coverage only (n >= 0)");
+}
+
 // The core. `fill` non-null selects the three-argument form; otherwise the
 // spec's `init` (which may itself be null) supplies the new tail.
 void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
@@ -1048,9 +1111,13 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     }
 
     if (realloced) {
-        if (spec->destroy) spec->destroy(nullptr, old, oldSizeI);
+        if (spec->destroy) {
+            NotePkgEntryDestroyArm(spec, /*reallocArm=*/true, oldSizeI);
+            spec->destroy(nullptr, old, oldSizeI);
+        }
         MemFree(old);                             // null-guarded inside 0x1800c7ad0
     } else if (spec->destroy && oldSizeI > newSize) {
+        NotePkgEntryDestroyArm(spec, /*reallocArm=*/false, oldSizeI - newSize);
         spec->destroy(nullptr, old + static_cast<int64_t>(newSize) * stride,
                       oldSizeI - newSize);
     }

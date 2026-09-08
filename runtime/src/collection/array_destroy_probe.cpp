@@ -119,6 +119,10 @@ namespace {
 int g_cases = 0, g_mismatch = 0, g_didWork = 0;
 int g_freed = 0, g_decremented = 0, g_reachedZero = 0, g_survived = 0;
 int g_negRun = 0, g_negCaught = 0;
+// Wave 9 lane DESTROY: 0x1800298f0's shrink-tail arm, counted separately from
+// g_cases because it is the arm with NO live population and a reader has to be
+// able to see it went above zero.
+int g_shrinkArm = 0, g_shrinkElems = 0;
 
 void Fail(const char* what, const char* detail) {
     ++g_mismatch;
@@ -409,7 +413,7 @@ void RunB(const char* label, const DestroySpec* s, uintptr_t shippedAddr,
     // as NULL does not mean the block survived: the SWAPPED negative body frees
     // the block and then stores NULL, so a cleanup keyed on the classification
     // would double-free every refcount-1 slot the moment the negative control
-    // ran � a harness manufacturing its own crash, which is the failure
+    // ran � a harness manufacturing its own crash, which is the failure
     // reference_longjmp_unwind_runs_retail_cleanup.md is about.
     //
     // It is keyed on the SEED instead, which is knowable before either body
@@ -422,6 +426,207 @@ void RunB(const char* label, const DestroySpec* s, uintptr_t shippedAddr,
     }
     MemFree(ours.buf);    MemFree(ours.blocks);
     MemFree(theirs.buf);  MemFree(theirs.blocks);
+}
+
+// ===========================================================================
+// WAVE 9 LANE DESTROY — 0x1800298f0's SHRINK-TAIL arm, end to end
+// ===========================================================================
+//
+// WHY THIS EXISTS AND WHAT IT IS NOT.
+//
+// 0x180026b50 is reached from TWO branches of `SetSizeCore`: the realloc arm
+// (retail 0x180029a0e, whole old array) and the shrink-with-no-realloc arm
+// (0x180029a68, tail only). A live boot drives the FIRST one 16 times and the
+// SECOND one ZERO times, because `ReadPackfile` only ever grows the entry
+// array. Reporting "the port is verified" off a run in which one of its two
+// call sites never fired would be exactly the coverage claim
+// reference_probe_needs_an_effectiveness_control.md warns about, so the arm
+// with no live population gets driven here instead.
+//
+// This is NOT a second test of the destroy body — RunB above already replays
+// that against the shipped 0x180026b50. What this adds is the CALL SHAPE: the
+// shrink arm hands the helper `old + newSize*stride` and `oldSize - newSize`,
+// i.e. a base that is not the buffer start and a count that is not the size,
+// and a transcription that got either wrong would destroy the wrong elements
+// while still being a correct destroy of *something*.
+//
+// THE SHRINK ARM NEEDS NO ELEMENT ASSIGN, which is what makes it cheap and
+// makes the comparison total. With `newSize < oldSize` and no realloc,
+// SetSizeCore's copy/fill loop runs from `oldSize` to `newSize` and therefore
+// never executes: no `AssignPkgEntry`, no `System::Filename` copy ctor, no
+// MemAlloc. Every byte of the subject is either seeded by us or written by the
+// destroy, so unlike the realloc arm there is no uninitialised tail to exclude
+// (reference_oracle_must_not_compare_unwritten_bytes.md) and the buffers can be
+// compared whole.
+//
+// TWO INDEPENDENTLY BUILT SUBJECTS, COMPARED AFTER EACH STEP. A destroy frees
+// memory, so an ours-then-theirs replay on one subject double-frees. The two
+// are built by the same seeding code from the same schedule and then driven by
+// OUR SetSizeCore and by the SHIPPED 0x1800298f0 respectively.
+// The WRONG shrink arm, for the negative control. Identical to SetSizeCore's
+// shrink limb in every respect except the BASE handed to the helper: it
+// destroys the first `oldSize - newSize` elements instead of the last ones.
+// Chosen over "destroy nothing" because the frees still balance and every
+// refcount in the buffer still moves — a comparator that merely counted frees,
+// or that only looked at the tail, would pass it.
+void DestroyHeadNotTail(ArrayHdr* a, int newSize) {
+    const int oldSize = a->_size;
+    a->_size = newSize;
+    if (oldSize <= newSize) return;
+    kSpec_PkgEntry.destroy(nullptr, a->_data, oldSize - newSize);
+}
+
+void RunShrinkArm(int oldSize, int newSize, bool negative) {
+    using Fn = void (*)(void*, int);
+    Fn shipped = reinterpret_cast<Fn>(ResolveRuntimeRaw(0x1800298f0));
+    if (!shipped) {
+        std::fprintf(stderr, "[RtArrayDestroyProbe] SKIP shrink-arm: "
+                             "no shipped 0x1800298f0\n");
+        return;
+    }
+    const uint32_t stride = kSpec_PkgEntry.stride;
+
+    // Same seeding rotation BuildB uses, so all three of Body B's arms
+    // (refcount reaches zero / survives / slot already NULL) appear in the
+    // destroyed tail AND in the retained head.
+    StrBlock* blkO = static_cast<StrBlock*>(MemAlloc(sizeof(StrBlock) * oldSize, 8));
+    StrBlock* blkT = static_cast<StrBlock*>(MemAlloc(sizeof(StrBlock) * oldSize, 8));
+    uint8_t* bufO = static_cast<uint8_t*>(MemAlloc(static_cast<uint64_t>(oldSize) * stride, 8));
+    uint8_t* bufT = static_cast<uint8_t*>(MemAlloc(static_cast<uint64_t>(oldSize) * stride, 8));
+    for (int i = 0; i < oldSize; ++i) {
+        uint8_t* eO = bufO + static_cast<size_t>(i) * stride;
+        uint8_t* eT = bufT + static_cast<size_t>(i) * stride;
+        // The two int32 in the element tail: distinct per element, so a wrong
+        // BASE shows up as a surviving element whose tail moved.
+        for (uint32_t o = 0; o < stride; ++o) {
+            eO[o] = static_cast<uint8_t>(0x31 + i * 7 + o);
+            eT[o] = eO[o];
+        }
+        const int which = i % 3;
+        if (which == 2) {
+            blkO[i].base = blkT[i].base = nullptr;
+            blkO[i].str  = blkT[i].str  = nullptr;
+            *reinterpret_cast<void**>(eO) = nullptr;
+            *reinterpret_cast<void**>(eT) = nullptr;
+        } else {
+            blkO[i] = MakeString(which == 0 ? 1 : 3);
+            blkT[i] = MakeString(which == 0 ? 1 : 3);
+            *reinterpret_cast<void**>(eO) = blkO[i].str;
+            *reinterpret_cast<void**>(eT) = blkT[i].str;
+        }
+    }
+
+    ArrayHdr aO = { bufO, oldSize, oldSize };     // cap == size: no realloc
+    ArrayHdr aT = { bufT, oldSize, oldSize };
+
+    ++g_cases;
+    if (oldSize > newSize) {
+        ++g_didWork;
+        if (!negative) { ++g_shrinkArm; g_shrinkElems += oldSize - newSize; }
+    }
+
+    if (negative) {
+        // The wrong body for this arm, and it is wrong in the way a
+        // transcription actually goes wrong: destroy the HEAD instead of the
+        // TAIL. Same helper, same count, wrong base. Every refcount in the
+        // buffer still changes, so a comparator that only counted frees would
+        // pass it.
+        ++g_negRun;
+        DestroyHeadNotTail(&aO, newSize);
+    } else {
+        SetSizeCore(&aO, newSize, nullptr, &kSpec_PkgEntry, nullptr);
+    }
+    shipped(&aT, newSize);
+
+    bool bad = false;
+    char d[224];
+    d[0] = '\0';
+
+    if (aO._data != bufO || aT._data != bufT) {
+        // Neither side may reallocate: cap == size and newSize < size.
+        bad = true;
+        std::snprintf(d, sizeof(d), "shrink %d->%d REALLOCATED (ours=%d theirs=%d)",
+                      oldSize, newSize, aO._data != bufO, aT._data != bufT);
+    }
+    if (!bad && (aO._size != aT._size || aO._capacity != aT._capacity)) {
+        bad = true;
+        std::snprintf(d, sizeof(d), "shrink %d->%d header ours={%d,%d} theirs={%d,%d}",
+                      oldSize, newSize, aO._size, aO._capacity, aT._size, aT._capacity);
+    }
+    // Every byte of the WHOLE buffer, retained head and destroyed tail alike.
+    // The head is the half that catches a wrong base: destroy the head instead
+    // of the tail and elements 0..newSize-1 stop matching while the frees still
+    // balance.
+    if (!bad) {
+        for (size_t off = 0; off < static_cast<size_t>(oldSize) * stride && !bad; ++off) {
+            if (bufO[off] == bufT[off]) continue;
+            // The freed-arm slot holds `str - 8`, which is a different address
+            // on each side by construction. Compare those slots by CLASS, not
+            // by value.
+            const size_t elem = off / stride, inElem = off % stride;
+            if (inElem < 8) {
+                void* vo = *reinterpret_cast<void**>(bufO + elem * stride);
+                void* vt = *reinterpret_cast<void**>(bufT + elem * stride);
+                const int co = vo == nullptr ? 0 : vo == blkO[elem].base ? 1
+                             : vo == blkO[elem].str ? 2 : 3;
+                const int ct = vt == nullptr ? 0 : vt == blkT[elem].base ? 1
+                             : vt == blkT[elem].str ? 2 : 3;
+                if (co == ct && co != 3) { off = elem * stride + 7; continue; }
+                bad = true;
+                std::snprintf(d, sizeof(d),
+                              "shrink %d->%d elem %zu slot class ours=%d theirs=%d "
+                              "(0=NULL 1=block-base 2=unchanged 3=UNKNOWN)",
+                              oldSize, newSize, elem, co, ct);
+                continue;
+            }
+            bad = true;
+            std::snprintf(d, sizeof(d),
+                          "shrink %d->%d elem %zu +0x%zx tail byte ours=%02x theirs=%02x",
+                          oldSize, newSize, elem, inElem, bufO[off], bufT[off]);
+        }
+    }
+    // Refcounts of the blocks that must have SURVIVED (the i%3==1 seed, rc 3).
+    // Skipped by SEED, never by post-state — see the cleanup note in RunB.
+    if (!bad) {
+        for (int i = 0; i < oldSize && !bad; ++i) {
+            if (i % 3 != 1) continue;
+            const int32_t ro = *reinterpret_cast<int32_t*>(blkO[i].str - 4);
+            const int32_t rt = *reinterpret_cast<int32_t*>(blkT[i].str - 4);
+            if (ro == rt) continue;
+            bad = true;
+            std::snprintf(d, sizeof(d), "shrink %d->%d elem %d refcount ours=%d theirs=%d",
+                          oldSize, newSize, i, ro, rt);
+        }
+    }
+
+    if (negative) {
+        if (bad) ++g_negCaught;
+        else Fail("shrink-arm", "NEGATIVE control compared EQUAL (head destroyed, not tail)");
+    } else if (bad) {
+        Fail("shrink-arm", d);
+    }
+
+    // Cleanup keyed on the SEED and on which elements EACH SIDE'S body was
+    // given to destroy — never on the post-state, which the negative body
+    // deliberately falsifies.
+    //
+    // *** THE TWO SIDES NEED TWO PREDICATES, AND SHARING ONE IS A DOUBLE FREE.
+    // *** The first draft of this loop used `negative ? head : tail` for both
+    // sides. It is right for OURS and wrong for THEIRS: the shipped body always
+    // destroys the TAIL, so under the negative control every refcount-1 block
+    // in theirs' tail was freed by the shipped body and freed again here. It
+    // did not fault in the probe — it faulted three frames later inside the
+    // DLL allocator's own free, on the next unrelated allocation, which reads
+    // exactly like a port defect in whatever ran next. A harness manufacturing
+    // its own crash (reference_longjmp_unwind_runs_retail_cleanup.md).
+    for (int i = 0; i < oldSize; ++i) {
+        const bool ourDestroyed   = negative ? (i < oldSize - newSize) : (i >= newSize);
+        const bool theirDestroyed = (i >= newSize);       // shipped: always the tail
+        const bool bodyFrees = (i % 3 == 0);              // the refcount-1 seed
+        if (blkO[i].base && !(ourDestroyed   && bodyFrees)) MemFree(blkO[i].base);
+        if (blkT[i].base && !(theirDestroyed && bodyFrees)) MemFree(blkT[i].base);
+    }
+    MemFree(bufO); MemFree(bufT); MemFree(blkO); MemFree(blkT);
 }
 
 // ===========================================================================
@@ -535,6 +740,11 @@ void RtCollectionDestroyProbeRun() {
         RunB("0x180014a40", &kD_Str_48,  0x180014a40, n, false);
         RunB("0x180034440", &kD_Str_18,  0x180034440, n, false);
         RunB("0x1800059e0", &kD_Str2_38, 0x1800059e0, n, false);
+        // WAVE 9 LANE DESTROY. The SHIPPED body compared against is
+        // 0x180026b50 itself, NOT 0x180005930 — the two are claimed to be one
+        // body in array_destroy.cpp and a probe that replayed the other would
+        // be assuming exactly the thing under test.
+        RunB("0x180026b50", &kD_Str_10,  0x180026b50, n, false);
     }
 
     // ---- 0x180003970 -------------------------------------------------------
@@ -549,6 +759,15 @@ void RtCollectionDestroyProbeRun() {
     RunAssign(4, 8, 8, false);
     RunAssign(9, 3, 4, false);
 
+    // ---- WAVE 9 LANE DESTROY: 0x1800298f0's shrink-tail arm ----------------
+    // The arm a live boot never takes. Sizes chosen so the destroyed tail
+    // contains at least one of each seed (freed / survived / already-NULL) and
+    // so does the retained head — 9->3 leaves head {rc1, rc3, NULL} and tail
+    // {rc1, rc3, NULL, rc1, rc3, NULL}.
+    RunShrinkArm(9, 3, false);
+    RunShrinkArm(4, 1, false);
+    RunShrinkArm(3, 0, false);      // the whole array, still via the shrink arm
+
     const int mismatchesBeforeNeg = g_mismatch;
 
     if (neg) {
@@ -556,6 +775,11 @@ void RtCollectionDestroyProbeRun() {
         RunA("NEG:0x18005bce0", &kD_InnerArr3_48, 0x18005bce0, 3, 4, true);
         RunB("NEG:0x180034440", &kD_Str_18,  0x180034440, 6, true);
         RunB("NEG:0x1800059e0", &kD_Str2_38, 0x1800059e0, 4, true);
+        // The comparator must be shown to be able to FAIL on this address too:
+        // a negative control run only against a sibling address proves the
+        // comparator works, not that this row is wired to it.
+        RunB("NEG:0x180026b50", &kD_Str_10,  0x180026b50, 5, true);
+        RunShrinkArm(9, 3, true);
         RunAssign(5, 0, 0, true);
     }
 
@@ -565,6 +789,19 @@ void RtCollectionDestroyProbeRun() {
                  "reached-zero=%d survived=%d\n",
                  g_cases, g_didWork, mismatchesBeforeNeg,
                  g_freed, g_decremented, g_reachedZero, g_survived);
+
+    std::fprintf(stderr,
+                 "[RtArrayDestroyProbe] 0x1800298f0 SHRINK-TAIL arm: %d cases, "
+                 "%d elements destroyed via base=old+newSize*stride\n"
+                 "[RtArrayDestroyProbe] (the REALLOC arm has a live population "
+                 "-- see the two kSpec_PkgEntry arm sites in the RtDiff summary)\n",
+                 g_shrinkArm, g_shrinkElems);
+    if (g_shrinkArm == 0) {
+        std::fprintf(stderr,
+            "[RtArrayDestroyProbe] *** 0x180026b50's SHRINK-TAIL call site was "
+            "NEVER DRIVEN.\nOne of its two call sites is unverified and the "
+            "green line above does not cover it. ***\n");
+    }
 
     if (g_didWork == 0) {
         std::fprintf(stderr,

@@ -487,6 +487,66 @@ A_ENTRY(1800419b0, kD_InnerArr_18)    // UI: GraphElement::_graphs, the nested p
 B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSpec_StringExt
 B_ENTRY(1800059e0, kD_Str2_38)        // SpriteSheet's 0x38 entry — lane Q's kSpec_Sprite38
 B_ENTRY(180011010, kD_Str_08)         // UI: ComboElement::_strings — lane UIW's kSpec_StringRef
+B_ENTRY(180026b50, kD_Str_10)         // IO::PackageFile::Entry — lane Q's kSpec_PkgEntry
+
+// ---------------------------------------------------------------------------
+// 0x180026b50 — WAVE 9 LANE DESTROY, and why it shares kD_Str_10 WITHOUT this
+// being the fifth near-miss-by-resemblance this family has produced
+// ---------------------------------------------------------------------------
+// This address is the CUTOVER WALL of attempt 17: `ReadPackfile` -> the
+// `Array<IO::PackageFile::Entry>` SetSize at 0x1800298f0 -> `SetSizeCore` ->
+// `DestroyPkgEntryRange`, which forwarded here BY ADDRESS. Unexported and
+// unregistered, so with the DLL absent the call executed address 0.
+//
+// array.cpp's row for kSpec_PkgEntry said this was "a different function from
+// DestroyStringExt's 0x180005930", and that sentence was doing two jobs at
+// once. It is true of the ADDRESS and it is false of the BODY, and only the
+// first was ever checked. Both listings, read out of Runtime-x64.dll for this
+// commit rather than inferred from each other:
+//
+//   0x180026b50                              0x180005930
+//   TEST R8D,R8D / JLE ret                   TEST R8D,R8D / JLE ret
+//   MOV [RSP+8],RCX      ; spilled, never    MOV [RSP+8],RCX      ; ... read
+//   PUSH RSI/RDI/R14 ; SUB RSP,0x30          PUSH RSI/RDI/R14 ; SUB RSP,0x30
+//   MOV [RSP+0x20],-2   ; SEH state          MOV [RSP+0x20],-2
+//   MOV RBX,RDX ; MOVSXD RSI,R8D             MOV RBX,RDX ; MOVSXD RSI,R8D
+//   XOR R14D,R14D                            XOR R14D,R14D
+//   NOP dword [RAX+RAX]  ; 14-byte align     (no padding)
+//   MOV [RSP+0x50],RBX   ; *** TWICE ***     MOV [RSP+0x50],RBX   ; once
+//   MOV [RSP+0x50],RBX
+//   MOV RAX,[RBX] / TEST / JZ next           MOV RAX,[RBX] / TEST / JZ next
+//   DEC [RAX-4] / CMP [RAX-4],0 / JNZ        (identical)
+//   ADD qword [RBX],-8 / MOV RBP,[RBX] / JZ  (identical)
+//   Enter / Free(_singleton,RBP) / Leave     (identical)
+//   MOV [RBX],R14        ; the shared arm    (identical)
+//   ADD RBX,0x10 / DEC RSI / JNZ loop        ADD RBX,0x10 / DEC RSI / JNZ loop
+//
+// The ONLY two differences are an alignment `NOP` and a DUPLICATED store of RBX
+// into the SEH scope slot at [RSP+0x50] — MSVC emitting the frame-variable
+// update once per inlined scope. Neither is observable: [RSP+0x50] is this
+// function's own frame, written and never read. Every store to the SUBJECT,
+// every branch, every immediate, the stride (`ADD RBX,0x10`) and the single
+// offset (bare `[RBX]`, i.e. +0x00) agree.
+//
+// So this IS Body B with kD_Str_10, and the reason that is allowed to be said
+// here is that the sentence is a conclusion from the listing above and not from
+// the fact that the two are alike. The four near-misses this family has already
+// produced (an alignment immediate, a missing SHL, a TRAILING CALL to
+// Filename::AdjustDelimiters, and a 0x32/0x33 that meant 51 vs 52) all hid in
+// exactly the columns tabulated above, which is why they are tabulated rather
+// than summarised. The probe compares against the SHIPPED 0x180026b50 — not
+// against 0x180005930 — so the claim is also tested against the right body.
+//
+// The trailing-call trap in particular does NOT recur here: this listing's only
+// CALLs are the allocator's Enter / Free / Leave, the same three 0x180005930
+// makes, and there is nothing after the loop but the epilogue.
+//
+// NOT a new spec row, and that is the load-bearing negative: `kD_Str_10` is
+// (stride 0x10, offs {0x00}) and this body computes those two numbers itself.
+// The ELEMENT is IO::PackageFile::Entry — System::Filename at +0x00, int32
+// offset at +0x08, int32 size at +0x0c — so the two dwords in the tail are
+// exactly the eight bytes Body B does not touch, and the `if (isSlot)` skip in
+// the probe's byte-for-byte check (step 3) covers them.
 
 #undef B_ENTRY
 
@@ -827,6 +887,10 @@ void RtCollectionDestroyPortInit() {
     // above the A_ENTRY block.
     RegisterRuntimeAddr(0x1800419b0, (void*)&RtColl_DestroyInner_1800419b0);
     RegisterRuntimeAddr(0x180011010, (void*)&RtColl_DestroyStrings_180011010);
+    // Wave 9 lane DESTROY: the packfile-entry range destroy. array.cpp's
+    // kSpec_PkgEntry reaches it by address from ReadPackfile's SetSize, and it
+    // was the attempt-17 cutover wall (an EXEC of 0 with the DLL absent).
+    RegisterRuntimeAddr(0x180026b50, (void*)&RtColl_DestroyStrings_180026b50);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that
@@ -862,4 +926,19 @@ void RtCollectionDestroyPortInit() {
     //   0x180010110  — the other J4. See the note above RtColl_ArrayAssign.
 
     rtcoll::g_dprobePending = RtCollectionDestroyProbeArmed();
+
+    // A LANE-OWNED IDENTITY MARKER (the idiom lane PKG2 established in
+    // package_file.cpp). This lane's gate for "the exe that RAN is the one I
+    // built" is a grep of the run's OWN log for the line below, not an md5 of
+    // what is on disk when I look -- four lanes this wave measured a build that
+    // was not the one under test.
+    //
+    // It names 0x180026b50 explicitly rather than printing a COUNT of this
+    // file's registrations, for PKG2's reason one level down: a count changes
+    // whenever any other lane adds a row to this same init, so it would fire
+    // falsely on a good run and silently pass on a bad one where two changes
+    // cancelled. The address is what this lane landed, so the address is what
+    // the gate keys on.
+    std::printf("[RtPort]   Collection::Array destroy (lane DESTROY): "
+                "0x180026b50 registered, built " __DATE__ " " __TIME__ "\n");
 }

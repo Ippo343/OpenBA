@@ -119,6 +119,12 @@ extern const ArraySpec kSpec_StringExt;   // 0x180061480   NON-TRIVIAL
 extern const ArraySpec kSpec_StringRef;   // 0x180034860   NON-TRIVIAL
 extern const ArraySpec kSpec_GraphSeries; // 0x1800417d0   NON-TRIVIAL
 
+// Wave 9 lane DESTROY. Declared here so array_destroy_probe.cpp can drive
+// SetSizeCore's SHRINK-TAIL arm for this spec: a live boot only ever GROWS the
+// packfile entry array, so that arm has zero live coverage and the probe is the
+// only place it gets driven at all.
+extern const ArraySpec kSpec_PkgEntry;    // 0x1800298f0   NON-TRIVIAL
+
 }  // namespace rtcoll
 
 // Runs the synthetic-subject replay probe. Driven by rtcoll::g_probePending —
