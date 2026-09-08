@@ -318,6 +318,36 @@ Three mechanisms to make the rule enforceable rather than remembered (lane M bui
    `widgets_input.cpp` lines 53-58" into a self-reporting harness.
 3. **A DID-WORK counter** beside `calls=`, so a site cannot look covered on early-outs.
 
+### The released-pointer detector is a FLOOR — how to read a clean sweep
+
+Lane M, `f9b8d36`. **A clean detector sweep means "no site of the shape it can see"** —
+the same sentence the `port_bypass_audit.py` gate row carries, for the same reason.
+**The detector alone MUST NOT close a gate row.** Three measured limits:
+
+1. **It only looks INSIDE the compared byte range, and that range is a LOWER BOUND.**
+   `widgets_input.cpp`'s own header says `sizeof(OurStruct)` is a lower bound on the real
+   retail object, so the oracle "is silent about anything past it". Finding 1 was
+   catchable *only because* `+0xd0` falls inside `sizeof(NumberElement)` = `0xE0`.
+   **`TextElement`'s cached-text pointer at `+0xf8` does not.** A released pointer parked
+   past the boundary is invisible to the detector for precisely the reason it is
+   invisible to `RT_DIFF_BYTES`.
+2. **It needs the two sides to DIFFER.** If our body releases a buffer and the DLL's body
+   reallocates into the same address — likely, since it is the block just freed — nothing
+   differs and the detector never runs. Finding 1's own data shows that recycling
+   happening one call later.
+3. **It knows ONE header convention**, `{length, refcount}` at `[-8]`. A refcounted object
+   with a different header, or a released non-string allocation, reads as ordinary memory.
+
+The two mitigations are the **self-test** (proves it can still fire) and **INVERT** (needs
+no difference and no header convention — it just corrupts the heap and crashes, in the
+function that did it). That is the argument for adopting INVERT at whatever the detector
+names.
+
+**⏳ ORDERING, and it expires:** the detector's acceptance test — watching it fire on a
+REAL defect rather than a synthetic one — is the tutorial-1 cell **while `SetValueInt` is
+still broken**. Lane N's fix removes exactly that defect. Run the detector BEFORE the fix
+lands, or the instrument reaches cutover having never been seen to fire on anything real.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
