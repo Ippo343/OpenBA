@@ -183,6 +183,78 @@ static void Ensure8e30() {
     s_a6e0 = reinterpret_cast<fn_BstRemove_t>(ResolveAddr(Module::Exe, 0x14001a6e0));
     s_8e30Init = true;
 }
+
+// ---------------------------------------------------------------------------
+// WAVE 9 LANE N — THE PROFESSION-BUCKET INVARIANT PROBE (Finding 3)
+// ---------------------------------------------------------------------------
+// Step 4 unfiles this task from the profession bucket named by the work object's
+// OWN vtable slot 10 (+0x50) key, read at REMOVAL time. Step 5 then destroys the
+// work object UNCONDITIONALLY. So if the key has drifted since the insert filed
+// it (CitizenAI_WorkScheduler_Insert, 0x1400f88a0, files under the same slot-10
+// key read at POST time), step 4 silently unfiles nothing and step 5 destroys the
+// object anyway — leaving a bucket entry whose payload is a freed work object.
+// That is the "freed without being erased" shape lane N's crash has.
+//
+// *** RETAIL DOES NOT TOLERATE ONE HALF OF THAT, AND THIS PORT DOES. ***
+// Retail 0x1400F8F2D-0x1400F8F5E:
+//     mov  rcx,[r14+0x120]      ; bucket tree root
+//     test rcx,rcx / je  f8f5c  ; empty  ->
+//     ...search...
+//     jne  f8f40                ; not found falls through ->
+//   f8f5c: xor  ecx,ecx         ;   rcx = 0
+//   f8f5e: mov  rdx,[rcx+0x8]   ;   *** READ OF ADDRESS 0x8 — a hard fault ***
+// i.e. retail ASSERTS that the work's own slot-10 key always names an existing
+// bucket, and dies immediately and loudly if it does not. Our port has an
+// `if (node != nullptr)` guard there and continues. That guard is not wrong to
+// have — removing it would only move the crash — but it converts retail's
+// immediate failure into a silent one, and nothing has ever measured whether the
+// condition occurs. Note the asymmetry: retail DOES tolerate the entry not being
+// present inside a bucket that exists (`test rdx,rdx / je f8f90`), so only the
+// missing-BUCKET case is retail-fatal.
+//
+// This probe changes no behaviour. It counts, per outcome, and reports at exit:
+//   bucketRootNull / bucketNotFound  — retail would have FAULTED here
+//   entryNotFound                    — retail-tolerated, but this is exactly the
+//                                      call that leaves a dangling bucket entry,
+//                                      because step 5 destroys the object anyway
+//   unfiled                          — the healthy path
+// A run with entryNotFound == 0 and both fatal counters 0 says the invariant
+// holds and Finding 3 is NOT this mechanism. Enable with BANISHED_WORKSCHED_PROBE=1.
+// ---------------------------------------------------------------------------
+static int  s_wsProbe = -1;
+static bool WsProbeOn() {
+    if (s_wsProbe < 0) {
+        const char* e = std::getenv("BANISHED_WORKSCHED_PROBE");
+        s_wsProbe = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return s_wsProbe == 1;
+}
+static unsigned long long s_wsCalls        = 0;
+static unsigned long long s_wsBucketNull   = 0;   // retail-fatal
+static unsigned long long s_wsBucketMissed = 0;   // retail-fatal
+static unsigned long long s_wsEntryMissed  = 0;   // dangling-entry event
+static unsigned long long s_wsUnfiled      = 0;   // healthy
+static bool s_wsReportArmed = false;
+static void WsProbeReport() {
+    std::fprintf(stderr,
+        "[WorkSchedProbe] 8e30 calls=%llu  unfiled=%llu  entryNotFound=%llu  "
+        "bucketNotFound=%llu  bucketRootNull=%llu   "
+        "(the last two are cases retail 0x1400f8f5e would have FAULTED on; "
+        "entryNotFound leaves a bucket entry whose work object step 5 then destroys)\n",
+        s_wsCalls, s_wsUnfiled, s_wsEntryMissed, s_wsBucketMissed, s_wsBucketNull);
+    std::fflush(stderr);
+}
+static void WsProbeNote(unsigned long long* counter, const char* what,
+                        int taskIdx, unsigned long long key) {
+    if (!WsProbeOn()) return;
+    if (!s_wsReportArmed) { s_wsReportArmed = true; std::atexit(&WsProbeReport); }
+    *counter += 1;
+    if (*counter <= 8) {
+        std::fprintf(stderr, "[WorkSchedProbe] %s: taskIdx=%d slot50key=0x%llx\n",
+                     what, taskIdx, key);
+        std::fflush(stderr);
+    }
+}
 } // namespace
 
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
@@ -256,7 +328,9 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         uint64_t* keyPtr = vf50(owner, &keyTmp);
 
         // Walk the +0x120 BST (value@+0, left@+0x20, right@+0x28; entry list at node+0x8).
+        if (WsProbeOn()) s_wsCalls += 1;
         uint64_t* node = *reinterpret_cast<uint64_t**>(self + 0x120);
+        const bool rootWasNull = (node == nullptr);
         if (node != nullptr) {
             while (true) {
                 uint64_t v = *node;
@@ -271,10 +345,20 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
             }
         }
 
+        // PROBE ONLY — see the block above Ensure8e30. Retail faults here instead
+        // of taking either of these two branches; nothing else changes.
+        if (node == nullptr)
+            WsProbeNote(rootWasNull ? &s_wsBucketNull : &s_wsBucketMissed,
+                        rootWasNull ? "bucket tree EMPTY (retail would fault)"
+                                    : "bucket NOT FOUND for the work's own slot50 key "
+                                      "(retail would fault)",
+                        taskIdx, keyPtr ? *keyPtr : 0);
+
         if (node != nullptr) {
             // entry sub-BST rooted at node[1] (node+0x8); key compared against taskIdx.
             int* e = reinterpret_cast<int*>(node[1]);
             void* entryTreeOwner = reinterpret_cast<void*>(node + 1);  // node+0x8
+            bool unfiled = false;
             while (e != nullptr) {
                 int k = *e;
                 if (taskIdx < k) {
@@ -283,9 +367,18 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
                     e = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(e) + 0x20);
                 } else {
                     if (s_ca60) s_ca60(entryTreeOwner, e);
+                    unfiled = true;
                     break;
                 }
             }
+            // PROBE ONLY. Retail tolerates this branch, but step 5 below destroys the
+            // work object regardless, so every one of these leaves a bucket entry
+            // pointing at freed memory — the shape of lane N's Finding 3.
+            if (unfiled) { if (WsProbeOn()) s_wsUnfiled += 1; }
+            else WsProbeNote(&s_wsEntryMissed,
+                             "entry NOT in its bucket — step 5 will destroy the work "
+                             "object anyway, leaving a dangling bucket entry",
+                             taskIdx, keyPtr ? *keyPtr : 0);
         }
     }
 
