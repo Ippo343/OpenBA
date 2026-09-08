@@ -941,6 +941,51 @@ storage is correct" is the likely disposition and should be written down **as on
 **REACHABILITY IS NOT YET RANKED** — a null singleton that nothing reads is not a crash, and
 which of the 23 are touched on the boot path is what decides whether this blocks lane G.
 
+### The teardown crash is NOT a pre-cutover gate item — reclassified 2026-09-08
+
+**Every other row on the checklist is there because its INSTRUMENT DIES AT CUTOVER**, so an
+unrecorded result can never be recorded again. The teardown crash is the exception, and lane
+N is what proved it: **it is ORACLE-INDEPENDENT — it reproduces with `BANISHED_RT_DIFF`
+unset.** It needs no comparison against the shipped body, no residue census, no shadow. So it
+is exactly as huntable the day after cutover as today, arguably more so since lane G removes
+a variable. **It is a real open defect that must be fixed; it does NOT gate lane G**, and
+holding the cutover for it would be holding it for the one item that loses nothing by
+waiting.
+
+**Lane N's answer to "will you name the writer": NO — and the reason IS the result.**
+
+**⚠️ THE INSTRUMENT SUPPRESSES THE FAULT.** A silent, shim-independent boundary-tag scan
+called between teardown steps (`BANISHED_TEARDOWN_BRACKET=16`) gave **10 of 10 stress runs
+clean, zero faults**, against a prior rate of ~4 in 10 — **p ≈ 0.006. Suppression, not
+luck.** A fault that vanishes under a purely READ-ONLY timing perturbation is
+timing-dependent, which points at a **RACE** rather than a straight-line logic error — and
+would explain the intermittency, the three different victims, and the same small-integer
+shape landing sometimes on a pointer's low half and sometimes on a tag's HIGH half. *Stated
+as the best-supported direction, explicitly NOT as a claim.* **The next person will otherwise
+build the same bracket and conclude the bug is fixed.**
+
+**WHY DR0-DR3 CANNOT BE USED HERE** (write this down so nobody rediscovers it): a hardware
+watchpoint needs an ADDRESS, and **this victim's address is not knowable until after it has
+been written** — a different block, bucket and heap offset every run. The `entitylist.cpp`
+precedent (arm after first detection, catch the re-write) **does not transfer**, because that
+victim was re-corrupted on later frames while this one faults **immediately on first use**.
+The arm-on-detection path was built anyway (`BANISHED_WSWATCH`) and never got the chance to
+fire.
+
+**THE STRONGEST LEAD ANYONE HAS HAD, and it is a SOURCE hunt needing no directory:** the
+tag-case decode is not `{size, 2}`. Verified arithmetically on the last crash —
+`fault address == RBX + (tag & 0x1ffffffffff)*4` exactly — so the **LOW** dword is a
+legitimate size field and it is the **HIGH** dword that took the 2, making that variant
+**a 4-BYTE STORE AT `tag+4`**. That is precisely the
+`reference_load_wild_write_high_dword_7fc` family: **a String/IBP release doing `dec [p-4]`
+on a pointer that is not a refcounted String buffer, where `p-4` IS the preceding block's tag
+high dword.**
+
+**A control is in flight that distinguishes two readings producing identical evidence:**
+*"my instrument suppresses it"* vs *"the lanes E/H merge fixed it"* — six runs with the
+bracket OFF on the SAME binary. Crash ⇒ heisenbug; clean ⇒ the merge fixed it, which would be
+worth more than the hunt.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
