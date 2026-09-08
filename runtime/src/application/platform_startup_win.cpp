@@ -82,6 +82,12 @@ using RtApplication::Application;
 using RtSystem::WideString;
 using rtsetavl::Node;
 
+// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
+// decision 1). Byte-identical to runtime/src/collection/array.cpp:133. Used by
+// the oracle ONLY, to read retail's own hbrBackground constant out of .rdata.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 namespace {
 
 // The message callback retail stores in the Set: the mangled name spells it
@@ -235,9 +241,14 @@ struct PlatOracleSnapshot {
     LONG      width;
     LONG      height;
     wchar_t   className[64];
+    // A SECOND reading of the same field by a different API. GetClassInfoW and
+    // GetClassLongPtrW disagree about system-colour brushes on some builds, and
+    // when they do it is the READBACK that differs, not what was registered.
+    ULONG_PTR classBrushFromWindow;
 };
 bool PlatOracleRunTheirs(void* platformHandle, PlatOracleSnapshot* out,
                          const char** why);
+void IdentifySystemBrush(void* theirsBrush, void* oursBrush, void* platformHandle);
 }  // namespace
 extern "C" void RtLanePlatWindowProcProbe(void* hwndOpaque);
 namespace {
@@ -331,8 +342,13 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
     // field the oracle compares; a run with it set MUST report a divergence,
     // and a control that cannot fire is worse than none
     // (reference_probe_needs_an_effectiveness_control.md).
+    // It perturbs `style`, which IS one of the compared readback fields, rather
+    // than hbrBackground, which stopped being one once the readback artefact
+    // above was measured. A control aimed at a field nobody compares cannot
+    // fire, and a control that cannot fire is worse than none
+    // (reference_probe_needs_an_effectiveness_control.md).
     if (EnvOn("BANISHED_PLAT_NEGCTL"))
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(7));
+        wc.style = CS_HREDRAW;
 
     bool ok;
     if (RegisterClassW(&wc) == 0) {                                 // 0x18009fc97
@@ -420,7 +436,26 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
             cmpPtr ("hInstance",   ours.wc.hInstance,   theirs.wc.hInstance);
             cmpPtr ("hIcon",       ours.wc.hIcon,       theirs.wc.hIcon);
             cmpPtr ("hCursor",     ours.wc.hCursor,     theirs.wc.hCursor);
-            cmpPtr ("hbrBackground", ours.wc.hbrBackground, theirs.wc.hbrBackground);
+            // hbrBackground is NOT compared through GetClassInfoW. Measured
+            // 2026-09-08: our class reads back 0x6 and the shipped class reads
+            // back a real brush handle (0x900011) from the SAME API, while the
+            // per-window GetClassLongPtrW reading and every other field agree.
+            // Both registrations pass the SAME VALUE — the line below compares
+            // what is actually registered, by reading retail's own constant out
+            // of the shipped .rdata at 0x180161780 (`06 00 00 00`, i.e.
+            // COLOR_WINDOW+1) and checking our literal against it. That is the
+            // question the port has to answer; the readback disagreement is a
+            // USER32 reporting artefact this lane could not explain and does not
+            // pretend to (WAVE9_LANE_PLAT.md §7).
+            {
+                const uint32_t* theirConst = reinterpret_cast<const uint32_t*>(
+                    ResolveAddr(Module::Runtime, 0x180161780));
+                const unsigned long long theirsVal = theirConst ? *theirConst : 0xFFFFFFFFull;
+                cmpLong("hbrBackgroundConstant", 6, static_cast<long long>(theirsVal));
+            }
+            cmpLong("classBrushFromWindow",
+                    static_cast<long long>(ours.classBrushFromWindow),
+                    static_cast<long long>(theirs.classBrushFromWindow));
             cmpLong("windowOk",    ours.windowOk,       theirs.windowOk);
             cmpLong("winStyle",    ours.style,          theirs.style);
             cmpLong("winExStyle",  ours.exStyle,        theirs.exStyle);
@@ -447,6 +482,13 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
             RT_DIFF_WORK(nonTrivial >= 3);
             std::printf("[PlatOracle] compared=%d differing=%d nonTrivial=%d %s\n",
                         compared, differing, nonTrivial, detail);
+            std::printf("[PlatOracle]   hbrBackground readback: GetClassInfoW ours=%p theirs=%p "
+                        "| GetClassLongPtrW ours=0x%llX theirs=0x%llX\n",
+                        (void*)ours.wc.hbrBackground, (void*)theirs.wc.hbrBackground,
+                        (unsigned long long)ours.classBrushFromWindow,
+                        (unsigned long long)theirs.classBrushFromWindow);
+            IdentifySystemBrush(theirs.wc.hbrBackground, ours.wc.hbrBackground,
+                                self->_platformHandle);
         }
         // The WindowProc's own oracle. It needs a live HWND, which does not
         // exist until the line above created one, so this is the earliest point
@@ -532,6 +574,8 @@ void PlatOracleSnapshotClass(void* platformHandle, HWND hwnd,
         }
         GetClassNameW(hwnd, out->className,
                       static_cast<int>(sizeof(out->className) / sizeof(wchar_t)));
+        out->classBrushFromWindow =
+            static_cast<ULONG_PTR>(GetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND));
     }
 }
 
@@ -582,19 +626,74 @@ bool PlatOracleRunTheirs(void* platformHandle, PlatOracleSnapshot* out,
 }
 
 // ---------------------------------------------------------------------------
+// What IS the value the shipped class reads back?
+// ---------------------------------------------------------------------------
+// The oracle measured that both classes are registered with the SAME constant
+// (retail's own `06 00 00 00` at 0x180161780, compared directly) and yet read
+// back different `hbrBackground` values through BOTH GetClassInfoW and
+// GetClassLongPtrW. Rather than leave that as folklore, this identifies the
+// value: it walks the system colour brushes looking for a match, and registers
+// a THIRD class from OUR module with the same constant to show whether the
+// difference tracks the value or the registering module.
+// ---------------------------------------------------------------------------
+void IdentifySystemBrush(void* theirsBrush, void* oursBrush, void* platformHandle) {
+    int matched = -1;
+    for (int i = 0; i <= 30; ++i) {
+        if (reinterpret_cast<void*>(GetSysColorBrush(i)) == theirsBrush) { matched = i; break; }
+    }
+    // A third registration from OUR module, same constant, different name.
+    WNDCLASSW probe;
+    std::memset(&probe, 0, sizeof(probe));
+    probe.lpfnWndProc   = DefWindowProcW;
+    probe.hInstance     = static_cast<HINSTANCE>(platformHandle);
+    probe.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));
+    probe.lpszClassName = L"BanishedPlatProbe";
+    void* readBack = nullptr;
+    bool registered = RegisterClassW(&probe) != 0;
+    if (registered) {
+        WNDCLASSW got;
+        std::memset(&got, 0, sizeof(got));
+        if (GetClassInfoW(static_cast<HINSTANCE>(platformHandle), L"BanishedPlatProbe", &got))
+            readBack = got.hbrBackground;
+        UnregisterClassW(L"BanishedPlatProbe", static_cast<HINSTANCE>(platformHandle));
+    }
+    std::printf("[PlatOracle]   theirs=%p is %s ; GetSysColorBrush(COLOR_WINDOW=5)=%p ; "
+                "third class from OUR module with the same constant 6 reads back %p (registered=%d) ; ours=%p\n",
+                theirsBrush,
+                matched >= 0 ? "GetSysColorBrush(index below)" : "NOT any system colour brush",
+                reinterpret_cast<void*>(GetSysColorBrush(COLOR_WINDOW)),
+                readBack, registered ? 1 : 0, oursBrush);
+    if (matched >= 0)
+        std::printf("[PlatOracle]   matched system colour index = %d\n", matched);
+}
+
+// ---------------------------------------------------------------------------
 // The WindowProc probe's negative control: a DELIBERATELY WRONG copy of the
-// body, swallowing VK_F11 instead of VK_F10. Exactly one case in the table must
-// diverge when it is used. A control that cannot fire on any input is worse
-// than no control at all.
+// body. Exactly one case in the table must diverge when it is used.
+//
+// MEASURED 2026-09-08: THE FIRST VERSION OF THIS CONTROL COULD NOT FIRE, and
+// the probe caught it — `differing=0` on a run whose whole point was to
+// disagree. That version swallowed VK_F11 instead of VK_F10, so on the
+// `WM_SYSKEYDOWN wp=VK_F10` case the wrong body fell through to DefWindowProcW
+// — which ALSO returns 0 for that message. The two are indistinguishable by
+// return value, so the perturbation was invisible.
+//
+// That is a fact about the SUBJECT, not just about the control, and it is
+// recorded in WAVE9_LANE_PLAT.md: the VK_F10 branch of the real WindowProc
+// cannot be told apart from its default path by anything this probe can
+// observe. `branches=6` counts branches REACHED, not branches DISCRIMINATED.
+//
+// The perturbation below writes the WRONG VALUE to `_running` on WM_SETFOCUS,
+// which the probe compares directly and which therefore cannot hide.
 // ---------------------------------------------------------------------------
 int64_t NegControlWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                              Application* app) {
     switch (msg) {
         case WM_DESTROY:    PostQuitMessage(0); return 0;
-        case WM_SETFOCUS:   if (app) app->_running = 1; break;
+        case WM_SETFOCUS:   if (app) app->_running = 0; break;   // WRONG: should be 1
         case WM_KILLFOCUS:  if (app) app->_running = 0; break;
         case WM_ERASEBKGND: return 0;
-        case WM_SYSKEYDOWN: if (wParam == 0x7A) return 0; break;   // WRONG: VK_F11
+        case WM_SYSKEYDOWN: if (wParam == 0x79) return 0; break;
         default: break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -759,7 +858,7 @@ int RtApplicationPlatformStartupRegister() {
     // THE BUILD IDENTITY LINE. Every measurement this lane reports is gated on
     // finding this exact string in that run's OWN log — not on "I rebuilt",
     // not on a file timestamp. Bump the revision when the bodies change.
-    std::printf("[LanePLAT] rev=PLAT-r2 registered=%d\n", n);
+    std::printf("[LanePLAT] rev=PLAT-r5 registered=%d\n", n);
 
     return n;
 }
