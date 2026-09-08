@@ -123,6 +123,35 @@
 //
 // 0x100 and 0x2000 and 0x8000 are inside `Reset`'s 0x1fe00 but no lane-A
 // function names them; they are NOT guessed here.
+//
+// ---------------------------------------------------------------------------
+// WAVE 9 LANE CTX — the three unnamed bits, from the CONSUMER
+// ---------------------------------------------------------------------------
+// The setters could not name 0x100 / 0x2000 / 0x8000 because a setter only ORs
+// a bit; the bit's MEANING lives in the one function that consumes the whole
+// mask, `?BindResources@Context@Video@@AEAAXXZ` (0x1800ef060). Reading its arms
+// closes all three, and corrects a fourth entry above:
+//
+//   0x00000100  VIDEO program      ?SetVideoProgram@         0x18001a040
+//               and Context+0x200 is that program POINTER, not staging — see
+//               the note on `_pixelConstantStaging` below.
+//   0x00002000  LIGHT constants    the buffer at +0x2098, uploading +0x1dd8
+//                                  len 0x1a0, which is `?SetLight@`'s block.
+//   0x00008000  MATERIAL constants the buffer at +0x298, uploading +0x208
+//                                  len 0x40.
+//   0x00001000  is listed above as "material constants". By the buffer it
+//               actually feeds it is the INSTANCE constants: BindResources
+//               uploads +0x3f8 len 0x20 (`_inverseScale` and `_color`) into
+//               the buffer at +0x1fc0, which this header already calls
+//               `_instanceConstants`. The enum name `kDirtyMaterialConstants`
+//               is left as it is — three lanes include this header — but it is
+//               MISLEADING and runtime/src/video/context_bind.cpp does not use
+//               it. `kDirtyMaterialConstants` is 0x8000, if it is ever renamed.
+//
+// BindResources also settles what +0x20 and +0x24 are for: its transform arm
+// fires on `(dirty & 0x4000) || (int32)+0x20 > 0 || (int32)+0x24 > 0`, and its
+// final clear is a QWORD store over BOTH. So `_unknown0024` is a live counter
+// with the same sign convention as `_transformCount`, not padding.
 // ============================================================================
 
 #include <cstddef>
@@ -234,6 +263,15 @@ struct Context {
     // calls; ?SetFog@ writes a second copy of the fog colour at +0x258, and
     // ?SetLight@ / ?SetMaterialParameter@ / ?SetUserPosition@ (all outside
     // lane A) own the rest. Not decomposed here because lane A cannot prove it.
+    //
+    // *** WAVE 9 LANE CTX: THE FIRST EIGHT BYTES OF THIS ARRAY ARE A POINTER.
+    // *** Context+0x200 is `_videoProgram` — `?SetVideoProgram@Context@Video@@`
+    // (0x18001a040) compares it against its argument, ORs 0x100 into the dirty
+    // mask and stores it, and `?BindResources@` dereferences it twice. The
+    // STAGING is 0x208..0x297, which is exactly the two ranges Reset memsets
+    // and exactly the two ranges BindResources uploads. The member is left
+    // undivided so no other lane's offsets move; anything reading +0x200
+    // through this array is reading a pointer, not constant data.
     uint8_t  _pixelConstantStaging[0x98];               // 0x0200
 
     ConstantBufferOpaque _materialConstants;            // 0x0298
