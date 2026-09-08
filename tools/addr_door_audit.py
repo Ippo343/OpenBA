@@ -50,6 +50,85 @@ REG_LIT = re.compile(r"RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)")
 REG_ANY = re.compile(r"RegisterRuntimeAddr\s*\(")
 
 
+def strip_comments_and_strings(text):
+    """Blank out C/C++ comments and string/char literals, preserving offsets.
+
+    ADDED 2026-09-08 by Wave 9 lane ADDR, because the scan had no notion of a
+    comment and therefore MANUFACTURED a door. `engine/funcs/engine_funcs.cpp`
+    around line 3200 contains, inside a comment block that exists precisely to
+    explain that the code was DELETED:
+
+        //     ResolveAddr(Module::Runtime, 0x18006f330)   // "might be in exe"
+
+    The scan matched that prose and reported 0x18006f330 as a live, unregistered
+    by-address door. It is not a door at all -- there is no call. That is one of
+    16 rows on the watch list, i.e. 6% of the wave's remaining address surface
+    was an artefact of the instrument, and it pointed a lane at an address the
+    comment itself identifies as 0x90 bytes INSIDE the body of an unrelated
+    internal (FUN_18006f2a0), which is the worst thing to send someone to port.
+
+    This is the same family as reference_documenting_a_check_can_delete_it.md,
+    inverted: there, adding a comment DELETED a real check from a scanner; here,
+    a comment INVENTED a defect. Either way the lesson is that a scanner reading
+    source as flat text sees prose and code as the same thing.
+
+    Every character of a comment or literal is replaced with a space and every
+    newline is kept, so line numbers and columns are byte-for-byte unchanged and
+    the caller's line-based reporting needs no adjustment.
+
+    String and char literals are blanked for the same reason: an address in a
+    log-format string or a doc string is prose too. No registration or call can
+    live inside a literal, so nothing real is lost.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if c == "/" and nxt == "/":
+            while i < n and text[i] != "\n":
+                out.append(" ")
+                i += 1
+        elif c == "/" and nxt == "*":
+            out.append("  ")
+            i += 2
+            while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
+                out.append("\n" if text[i] == "\n" else " ")
+                i += 1
+            out.append("  ")
+            i += 2
+        elif c in ('"', "'"):
+            # Find the closing quote, but NEVER past the end of this line. An
+            # unmatched quote in source that this scanner does not model (a
+            # digit separator like 1'000, an apostrophe surviving in a macro)
+            # would otherwise swallow the remainder of the FILE and silently
+            # delete every real door below it -- a scanner failing open in the
+            # direction that hides work is exactly the failure being fixed here.
+            quote = c
+            eol = text.find("\n", i)
+            if eol == -1:
+                eol = n
+            j, closed = i + 1, False
+            while j < eol:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == quote:
+                    closed = True
+                    break
+                j += 1
+            if not closed:
+                out.append(c)          # not a literal after all; keep it
+                i += 1
+                continue
+            out.append(" " * (j - i + 1))
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def scan():
     calls, regs, nonlit = {}, set(), []
     reg_nonlit = []
@@ -63,6 +142,7 @@ def scan():
                     text = open(path, encoding="utf-8", errors="replace").read()
                 except OSError:
                     continue
+                text = strip_comments_and_strings(text)
                 for lineno, line in enumerate(text.splitlines(), 1):
                     lit = list(CALL_LIT.finditer(line))
                     for m in lit:
