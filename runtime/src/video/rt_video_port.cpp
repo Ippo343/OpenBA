@@ -31,6 +31,7 @@ extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 
 extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
 extern "C" void RtVideoContextLifecycleProbe();
 extern "C" void RtVideoDeviceStartupProbeArm(bool on);  // device_startup_probe.cpp
+extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -58,6 +59,14 @@ void RtVideoPortInit() {
         // PlatformStartup, which is the first moment the allocator is live.
         const char* dp = std::getenv("BANISHED_RT_VIDDEVSTART_PROBE");
         RtVideoDeviceStartupProbeArm(dp && *dp && std::strcmp(dp, "0") != 0);
+    }
+    // Wave 9 lane VID2 phase 3: Video::ConstantBuffer, the first link in the
+    // chain to CreateVideoContext. The literal self-check runs here because it
+    // only reads the DLL's .rdata — no allocation, no ordering hazard.
+    if (RtWaveEnabled("BANISHED_RT_VIDCONSTBUF")) {
+        extern int RtVideoConstantBufferRegister();
+        n += RtVideoConstantBufferRegister();
+        RtVideoShaderConstantsVerify();
     }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();
