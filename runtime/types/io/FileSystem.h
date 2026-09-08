@@ -53,16 +53,51 @@ static_assert(offsetof(PackfileIndexNode, right) == 0x20,
 // offset below is pinned by the instruction that reads or writes it, and every
 // one of them was also seen being INITIALISED by ??0PackageFile@IO@@QEAA@XZ
 // (0x1800b4440), which is the independent second pin.
+// Wave 9 lane PKG2 adds the eight fields the class's own accessors read. Each
+// is pinned by the one-instruction body that reads it — every accessor named
+// below is `MOV EAX,[RCX+off] ; RET` or the String AddRef idiom, so the offset
+// is the whole function and there is nothing to misread.
 struct PackageFileView {
     void*    _vtable;              // +0x00 — ??_7PackageFile@IO@@6B@, 0x180155700
-    uint8_t  _unknown08[0x70 - 0x08];
+    uint8_t  _unknown08[0x40 - 0x08];
+    // +0x40/+0x48/+0x50 — three System::String fields, each returned by a
+    // getter that AddRefs rather than copies:
+    //   ?GetName@        0x18002532a `MOV RAX,qword ptr [RCX+0x40]`
+    //   ?GetAuthor@      0x18002536a `MOV RAX,qword ptr [RCX+0x48]`
+    //   ?GetDescription@ 0x1800253aa `MOV RAX,qword ptr [RCX+0x50]`
+    // The destructor (0x1800b4540) releases +0x40..+0x60 with the inlined
+    // refcount idiom, which is the independent second pin on all three.
+    RtSystem::String name;         // +0x40
+    RtSystem::String author;       // +0x48
+    RtSystem::String description;  // +0x50
+    uint8_t  _unknown58[0x68 - 0x58];
+    int32_t  version;              // +0x68 — ?GetVersion@     0x1800253d0
+    int32_t  userVersion;          // +0x6C — ?GetUserVersion@ 0x1800253e0
     // +0x70 — the SORT KEY, and the only field the packfile sort compares.
     // 0x1800264a0 is an introsort over `PackageFile*` whose entire comparator is
     // `MOV EAX,[RAX+0x70] ; CMP dword ptr [RCX+0x70],EAX`, and the constructor
     // seeds it with the qword 0x2710 (10000) — so an unread packfile sorts to a
     // fixed default and ReadPackfile is what makes one package outrank another.
-    uint64_t priority;
-    uint8_t  _unknown78[0xA8 - 0x78];
+    //
+    // Lane PKG modelled this as a `uint64_t` because the constructor's store is
+    // one qword. It is TWO dwords: `?GetPriority@` (0x1800254e0) reads the low
+    // half and `?GetPlatform@` (0x1800253f0) reads `[RCX+0x74]`, the high half.
+    // The qword store therefore seeds priority=0x2710 AND platform=0. Splitting
+    // it changes no offset and no static_assert; nothing in the tree read the
+    // field as a qword (checked by grep before the change).
+    int32_t  priority;             // +0x70 — ?GetPriority@ 0x1800254e0
+    int32_t  platform;             // +0x74 — ?GetPlatform@ 0x1800253f0
+    // +0x78/+0x7C — the icon dimensions, and the ONLY two fields in this struct
+    // the constructor does NOT initialise: its store list jumps 0x70 -> 0x80.
+    // That is not an omission in the transcription, it is retail leaving them
+    // to ReadPackfile, and it is why the constructor's byte oracle must not
+    // compare them (reference_oracle_must_not_compare_unwritten_bytes.md).
+    int32_t  iconWidth;            // +0x78 — ?GetIconWidth@  0x180025510
+    int32_t  iconHeight;           // +0x7C — ?GetIconHeight@ 0x180025520
+    uint8_t  _unknown80[0xA8 - 0x80];
+    // +0xA8 — the package CRC, which is ALSO the packfile id. Two exported
+    // readers hit the same four bytes: ?GetCRC@ (0x180025500) and
+    // FileSystem::GetPackfileId (0x1800ab050). They are the same field, not two.
     uint32_t packfileId;           // +0xA8
     // +0xAC — the OVERRIDE flag, born 1 in the constructor
     // (`MOV byte ptr [RCX+0xac],0x1` at 0x1800b44dc). LoadPackages' index pass
@@ -81,8 +116,39 @@ struct PackageFileView {
     void*    entries;
     int32_t  entryCount;
 };
+// One entry of the +0xB0 table. Stride 16, pinned three independent ways:
+// GetFileName's `SHL RDX,0x4`, GetFileOffset's `[RAX + R8*8 + 0x8]` after
+// `ADD R8,R8` (= index*16 + 8) and GetFileSize's `+ 0xc` (= index*16 + 12).
+struct PackageFileEntry {
+    RtSystem::String name;         // +0x00 — the Filename GetFileName AddRefs
+    uint32_t         offset;       // +0x08 — ?GetFileOffset@ 0x1800254c0
+    uint32_t         size;         // +0x0C — ?GetFileSize@   0x1800254a0
+};
+static_assert(sizeof(PackageFileEntry) == 16,
+              "GetFileName 0x180025470: `SHL RDX,0x4` is the stride");
+static_assert(offsetof(PackageFileEntry, offset) == 0x08,
+              "GetFileOffset 0x1800254cd: `MOV EAX,dword ptr [RAX + R8*0x8 + 0x8]`");
+static_assert(offsetof(PackageFileEntry, size)   == 0x0C,
+              "GetFileSize 0x1800254ad: `MOV EAX,dword ptr [RAX + R8*0x8 + 0xc]`");
+
+static_assert(offsetof(PackageFileView, name)        == 0x40,
+              "GetName 0x18002532a: `MOV RAX,qword ptr [RCX+0x40]`");
+static_assert(offsetof(PackageFileView, author)      == 0x48,
+              "GetAuthor 0x18002536a: `MOV RAX,qword ptr [RCX+0x48]`");
+static_assert(offsetof(PackageFileView, description) == 0x50,
+              "GetDescription 0x1800253aa: `MOV RAX,qword ptr [RCX+0x50]`");
+static_assert(offsetof(PackageFileView, version)     == 0x68,
+              "GetVersion 0x1800253d0: `MOV EAX,dword ptr [RCX+0x68]`");
+static_assert(offsetof(PackageFileView, userVersion) == 0x6C,
+              "GetUserVersion 0x1800253e0: `MOV EAX,dword ptr [RCX+0x6c]`");
 static_assert(offsetof(PackageFileView, priority)   == 0x70,
               "sort 0x1800264a0: `CMP dword ptr [RCX+0x70],EAX` is its whole comparator");
+static_assert(offsetof(PackageFileView, platform)   == 0x74,
+              "GetPlatform 0x1800253f0: `MOV EAX,dword ptr [RCX+0x74]`");
+static_assert(offsetof(PackageFileView, iconWidth)  == 0x78,
+              "GetIconWidth 0x180025510: `MOV EAX,dword ptr [RCX+0x78]`");
+static_assert(offsetof(PackageFileView, iconHeight) == 0x7C,
+              "GetIconHeight 0x180025520: `MOV EAX,dword ptr [RCX+0x7c]`");
 static_assert(offsetof(PackageFileView, packfileId) == 0xA8,
               "GetPackfileId 0x1800ab050: `*(uint*)(pkg + 0xa8)` on the resolved match");
 static_assert(offsetof(PackageFileView, overridable) == 0xAC,

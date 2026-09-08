@@ -91,6 +91,14 @@ extern int RtIoFileSystemPackagesRegister(); // filesystem_packages.cpp (lane PK
 // removed them together with lane PKG would confound two very different
 // blast radii.
 extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FIND)
+// Wave 9 lane PKG2: IO::PackageFile — the constructor lane PKG's LoadPackages
+// dies on (attempt 14), plus the class's twenty leaf accessors. Own switch for
+// the same reason as the rows above, and one more that is specific to this
+// file: the constructor is the ONLY row on the boot path, and the other twenty
+// are exercised only by a probe. If the boot regresses, BANISHED_RT_PKG2=0
+// removes both halves; if the probe is the problem, it is already gated on the
+// diff harness and a normal run does not run it.
+extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -108,5 +116,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
     if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
+    if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
