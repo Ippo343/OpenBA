@@ -655,6 +655,25 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
         RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(theirsScratch);
     }
 
+    // EFFECTIVENESS CONTROL, on the LIVE object rather than the scratch. The
+    // scratch pair is deliberately constructed so both frees always run, which
+    // is what makes the A/B comparison meaningful -- but it says nothing about
+    // whether the live stream this call is actually destroying was ever opened.
+    // A run where every live call had _ownsData == false would report the same
+    // green number over a branch the real objects never take.
+    if (rt_diff_on__) {
+        static RtDiffSite brOwned = { "IO::MemoryStream::~MemoryStream[live:owned buffer freed]", 0, 0, false, false };
+        static RtDiffSite brNoBuf = { "IO::MemoryStream::~MemoryStream[live:no owned buffer -- that free unexercised]", 0, 0, false, false };
+        static RtDiffSite brEnc   = { "IO::MemoryStream::~MemoryStream[live:encoding freed]", 0, 0, false, false };
+        // Register FIRST and unconditionally -- RtDiffReport does not register
+        // (rt_diff.cpp:82). See buffers.cpp's CountBranch for why that matters.
+        RtDiffRegister(&brOwned); RtDiffRegister(&brNoBuf); RtDiffRegister(&brEnc);
+        const bool owned = self->ownsData && self->data != nullptr;
+        if (owned)               RtDiffReport(&brOwned, true, "taken", "taken");
+        if (!owned)              RtDiffReport(&brNoBuf, true, "taken", "taken");
+        if (self->base.encoding) RtDiffReport(&brEnc,   true, "taken", "taken");
+    }
+
     MemoryStreamDtorBody(self);
 
     if (rt_diff_on__) {
