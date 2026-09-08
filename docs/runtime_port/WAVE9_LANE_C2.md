@@ -95,35 +95,68 @@ it on every run (`find_crt_init_table` + `scan_ctor_refs`):
   in the mint's set. Every hit was cross-checked against Ghidra's own xrefs;
   there were no false positives.
 
-**Result, all 81 symbols swept — 17 are constructed at load:**
+**Result, all 107 symbols swept — 37 are constructed at load:**
 
 | Symbol(s) | Initialiser | Disposition |
 |---|---|---|
 | the 14 `?_typeInfo@` | one each | Already reproduced by `MintTypeInfos()`. Every one of the 14 is constructed — a **positive control**: the generator fails if any `BaseTypeInfo` turns out *not* to be, because that would mean the sweep is broken rather than that the type is special. |
 | `?_firstTypeInfo@BaseTypeInfo@Object@@` | 104 of the 106 | The chain head, head-inserted by each `BaseTypeInfo` ctor. Reproduced by our own chain (§6). |
-| `?_loader@LoaderLoop@Engine@@` | `0x180148fe0`, one | **Implemented**, see below. |
+| `?_loader@LoaderLoop@Engine@@` | `0x180148fe0`, one | **Implemented** — `ConstructLoader()`. |
+| `?_rng@Particle@Graphics@@` | `0x180149650`, one | **Implemented** — `ConstructParticleRng()`. Missed by the first sweep; see below. |
 | everything else — all 18 singletons, all 46 vtables, the other 8 `.data` statics | none | Plain storage. Zeroed bytes are faithful. |
 
-### `?_rng@Particle@Graphics@@` needs NO constructor — my own earlier claim was wrong
+### `?_rng@Particle@Graphics@@` IS constructed — and this section said the opposite for a day
 
-Round 3's report listed `_rng` beside `_loader` as needing a constructor "or it
-returns zeros forever". **The sweep disproves it, and the reasoning behind the
-original claim was backwards.** `_rng` is referenced by no CRT initialiser at
-all (confirmed twice: this scan, and Ghidra's xrefs to `0x1801fe7f0`, which show
-only reads and writes from `Particle::Update` and `SetParticle`). Retail never
-seeds it. The inlined `Rand()` in `Particle::Update` calls
-`?NextGroup@Random@System@@AEAAXXZ` (`0x1800c7dd0`) when `index == 0`, and
-NextGroup is a pure MT19937 twist with **no seeding path** — an all-zero state
-twists to an all-zero state.
+Round 3 listed `_rng` beside `_loader` as needing a constructor. Round 4 said
+the sweep had disproved that and zeroed storage was faithful. **Round 4 was
+wrong, and the mint's own shadow report is what caught it.**
 
-So the shipped DLL runs `Graphics::Particle`'s generator from an unseeded,
-all-zero MT19937. **Our zeroed mint is exactly faithful, and adding a seed
-would BE the divergence.** Nobody should "fix" this later; the note is carried
-in `EXTRA_SIZES` next to the size so it is read at the point of temptation.
+The report prints, per storage symbol, whether each side has written anything.
+It showed `?_rng@Particle@Graphics@@  DLL=WRITTEN` **at `phase=init`** — a
+2500-byte BSS object with content before any game code could have touched it.
+A boolean cannot say *what* was written, so the check now prints the offset of
+the first non-zero byte, and a re-run answered it:
 
-This is the same shape as `reference_oracle_must_not_compare_unwritten_bytes.md`
-one level up: the question was not "what should this value be" but "who writes
-it", and the answer was nobody.
+```
+FIRST-NONZERO ?_rng...: DLL byte +0x4 = f0 8c 9f 6a 16 94 f6 f9   (phase=init, index still 0)
+FIRST-NONZERO ?_rng...: DLL byte +0x0 = 81 01 00 00 29 d4 60 70   (phase=exit, index = 0x181 draws)
+```
+
+`+0x00` zero and `+0x04` onward populated is a **seeded MT19937 with a fresh
+index** — exactly what a constructor leaves behind. Ghidra names the writer:
+CRT initialiser **`0x180149650`**, decompiled:
+
+```c
+mt[0] = (uint32)_time64(NULL);
+for (i = 1; i < 0x270; ++i)
+    mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i;   // MT19937 init_genrand
+```
+
+**Why the sweep missed it, and the fix.** The scan matched an initialiser's
+rip-relative references against each symbol's **base address**. That
+initialiser never mentions the base — it writes `mt[0]` at `+0x04` and walks
+upward — so `_rng` looked untouched. A constructor referencing a *field* rather
+than the base is ordinary, and `scan_ctor_refs` now matches anywhere inside
+`[base, base+size)`. With that fix the generator **refused to emit** until the
+constructor existed, which is the gate doing its job.
+
+**The seed is time-derived, so the value cannot and need not match retail** —
+two runs of the *shipped* DLL do not match each other. Answering the question
+directly: there is no constant to reproduce, and a mismatch here is not a
+defect. **Seeding at all is not optional**, though: `NextGroup` (`0x1800c7dd0`)
+is a pure twist with no seeding path, so an all-zero state twists to all-zero
+forever and every `Graphics::Particle` draw would silently return 0 — plausible
+numbers, no crash, nothing a test would catch. Reproduced by
+`ConstructParticleRng()`, transcribed from the initialiser above; `index` at
+`+0x00` is deliberately left zero, as retail leaves it.
+
+**What this cost and what it bought.** A day of a wrong statement in a doc and
+a commit message — and the correction came from the weaker of the two
+mechanisms. The `.CRT$XC` sweep is the precise instrument and it was wrong; the
+liveness line is a one-bit observation and it was right. That is the argument
+for keeping cheap redundant observations in a report even when a better
+instrument exists, and it is why the shadow now prints the offset rather than
+the bit.
 
 ### `?_loader@LoaderLoop@Engine@@` — implemented
 

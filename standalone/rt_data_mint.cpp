@@ -42,6 +42,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 // ============================================================
 // Descriptors — the shapes tools/rt_mint_gen.py emits.
@@ -431,6 +432,40 @@ static bool ConstructLoader(const RtMintStorage& s) {
     return true;
 }
 
+// FUN_180149650, the initialiser that seeds ?_rng@Particle@Graphics@@,
+// transcribed:
+//
+//     mt[0] = (uint32)_time64(NULL);
+//     for (i = 1; i < 0x270; ++i)
+//         mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i;
+//
+// i.e. MT19937's standard init_genrand, seeded from the WALL CLOCK. Two
+// consequences, both worth stating because this lane got them wrong in both
+// directions before measuring:
+//
+//  * The VALUE cannot match retail's and does not need to. The seed is
+//    time(), so two runs of the SHIPPED DLL do not match each other either.
+//    Nobody should later "fix" a mismatch here.
+//  * Seeding at all is NOT optional. An all-zero MT19937 twists to an all-zero
+//    state forever (NextGroup, 0x1800c7dd0, is a pure twist with no seeding
+//    path), so zeroed storage would make every Graphics::Particle draw return
+//    0 -- plausible numbers, no crash, no symptom a test would catch.
+//
+// `index` at +0x00 is deliberately NOT written: retail leaves it zero from BSS,
+// which is what forces the first Rand() to regenerate.
+static bool ConstructParticleRng(const RtMintStorage& s) {
+    if (s.size < 4 + 624 * 4) {
+        fprintf(stderr, "[RtMint] CANNOT construct %s: minted storage is %u bytes, "
+                        "MT19937 needs %u\n", s.symbol, s.size, 4u + 624u * 4u);
+        return false;
+    }
+    unsigned int* mt = (unsigned int*)((char*)s.storage + 4);   // +0x04 .. +0x9c4
+    mt[0] = (unsigned int)time(nullptr);
+    for (unsigned int i = 1; i < 624; ++i)
+        mt[i] = 0x6c078965u * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i;
+    return true;
+}
+
 static int g_constructed = 0;
 
 static void MintConstructedStatics() {
@@ -442,6 +477,8 @@ static void MintConstructedStatics() {
             ++g_constructed;              // MintTypeInfos() already built it
         } else if (strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
             if (ConstructLoader(s)) ++g_constructed;
+        } else if (strcmp(s.symbol, "?_rng@Particle@Graphics@@1VRandom@System@@A") == 0) {
+            if (ConstructParticleRng(s)) ++g_constructed;
         } else {
             // Unreachable via the generator, which refuses to emit an
             // unhandled ctorInit. Kept because "unreachable" is exactly the
@@ -736,14 +773,33 @@ void RtDataMintShadowReport(const char* phase) {
             printf("[RtMintShadow] MISMATCH %s: exported at %p, harvest says %p\n",
                    s.symbol, (void*)dll, DllAddr(s.dllVa));
         }
+        // WHERE the first non-zero byte is, not just whether there is one.
+        // "DLL=WRITTEN" on a 2500-byte object says nothing about WHAT was
+        // written: a live MT19937 state and one stray byte 2000 bytes in look
+        // identical. Lane C2's claim that Particle::_rng is never seeded is
+        // exactly the kind of statement that boolean cannot check, so the
+        // offset is reported for anything bigger than a pointer.
         bool dllLive = false;
+        unsigned dllFirst = 0;
         for (unsigned b = 0; b < s.size; ++b)
-            if (((unsigned char*)dll)[b]) { dllLive = true; break; }
+            if (((unsigned char*)dll)[b]) { dllLive = true; dllFirst = b; break; }
         bool mineLive = false;
         for (unsigned b = 0; b < s.size; ++b)
             if (((unsigned char*)s.storage)[b]) { mineLive = true; break; }
         if (dllLive) ++live; else ++dead;
         if (mineLive) ++ourNonZero;
+        if (s.size > 8 && dllLive) {
+            const unsigned char* d = (const unsigned char*)dll;
+            printf("[RtMintShadow]   FIRST-NONZERO %s: DLL byte +0x%x = %02x %02x %02x %02x "
+                   "%02x %02x %02x %02x\n", s.symbol, dllFirst,
+                   d[dllFirst], dllFirst + 1 < s.size ? d[dllFirst + 1] : 0,
+                   dllFirst + 2 < s.size ? d[dllFirst + 2] : 0,
+                   dllFirst + 3 < s.size ? d[dllFirst + 3] : 0,
+                   dllFirst + 4 < s.size ? d[dllFirst + 4] : 0,
+                   dllFirst + 5 < s.size ? d[dllFirst + 5] : 0,
+                   dllFirst + 6 < s.size ? d[dllFirst + 6] : 0,
+                   dllFirst + 7 < s.size ? d[dllFirst + 7] : 0);
+        }
         printf("[RtMintShadow] storage %-52s %2u bytes  DLL=%s  minted=%s  ctor=%s  (%s)\n",
                s.symbol, s.size, dllLive ? "WRITTEN" : "still zero",
                mineLive ? "written" : "zero",

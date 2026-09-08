@@ -78,21 +78,25 @@ OUT = os.path.join(REPO, "standalone", "rt_data_mint_tables.inc")
 #                         exactly 56 bytes.
 #   System::Random  2500  runtime/types/system/Value.h (static_assert)
 #
-# THESE TWO ARE OBJECTS, NOT SCALARS -- and only ONE of them is constructed.
-# Both are BSS in the file, which is all a file-based harvest can see, so this
-# lane first assumed both needed a constructor at cutover. The .CRT$XC sweep
-# (find_crt_init_table below) settled it against the DLL's own initialiser
-# array instead of against a guess:
+# THESE TWO ARE OBJECTS, NOT SCALARS, and BOTH are constructed at load.
+# Both are BSS in the file, which is all a file-based harvest can see, so the
+# file cannot tell you which. The .CRT$XC sweep (find_crt_init_table below)
+# answers it against the DLL's own initialiser array:
 #
 #   _loader  IS constructed, by exactly one initialiser (0x180148fe0): Thread
 #            ctor with a 256 KB stack, then the Loader vtable at +0x00, then
 #            _loop = 0. Reproduced by ConstructLoader().
-#   _rng     is NOT constructed by anything. Retail never seeds it: the
-#            inlined Rand() in Particle::Update calls NextGroup() when index
-#            is 0, and NextGroup (0x1800c7dd0) is a pure twist with no seeding
-#            path. The shipped DLL runs Particle's generator from an all-zero
-#            MT19937 state. Zeroed storage is therefore EXACTLY faithful, and
-#            adding a seed would be the divergence -- do not "fix" it.
+#   _rng     IS constructed too, by initialiser 0x180149650, and this file
+#            said the opposite for a day. The base-address-only version of the
+#            sweep missed it because that initialiser never mentions the
+#            object's base: it writes mt[0] at +0x04 and walks upward. The
+#            mint's own shadow report is what caught it -- "DLL=WRITTEN" on a
+#            2500-byte BSS object at process init, before any game code could
+#            have touched it. It seeds MT19937 with `(uint32)_time64(NULL)`,
+#            so the VALUE cannot and need not match retail's; what matters is
+#            that it is seeded at all, because an all-zero MT19937 twists to
+#            all-zero forever and Particle's every draw would silently be 0.
+#            Reproduced by ConstructParticleRng().
 
 # The one CRT trap that appears as a vtable slot. Named by Ghidra
 # (get_function_by_address at 0x18007ec28 -> "_purecall"); its decompile is the
@@ -105,7 +109,7 @@ KNOWN_INTERNAL_THUNKS = {
 
 EXTRA_SIZES = {
     "?_loader@LoaderLoop@Engine@@1VLoader@2@A": (0x38, "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()"),
-    "?_rng@Particle@Graphics@@1VRandom@System@@A": (2500, "System::Random OBJECT (MT19937), NEVER SEEDED by retail — zeroed IS faithful"),
+    "?_rng@Particle@Graphics@@1VRandom@System@@A": (2500, "System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650"),
     "?_frameIndex@ParticleInstance@Graphics@@1HA": (4, "int"),
     "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA": (1, "bool"),
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA": (8, "BaseTypeInfo* — head of the reflection chain"),
@@ -138,6 +142,9 @@ KNOWN_CTORS = {
         "MintTypeInfos() — head of our own BaseTypeInfo chain",
     "?_loader@LoaderLoop@Engine@@1VLoader@2@A":
         "MintConstructedStatics() — Thread ctor + Loader vtable + _loop=0",
+    "?_rng@Particle@Graphics@@1VRandom@System@@A":
+        "ConstructParticleRng() - MT19937 init_genrand seeded from time(), "
+        "transcribed from initialiser 0x180149650",
 }
 
 
@@ -174,8 +181,17 @@ def find_crt_init_table(pe, ib, text, rdata):
     return cand[0]
 
 
-def scan_ctor_refs(pe, ib, inits, targets):
+def scan_ctor_refs(pe, ib, inits, extents):
     """target VA -> [initialiser VAs that reference it].
+
+    `extents` maps a symbol's base VA to its SIZE, and a hit anywhere inside
+    [base, base+size) counts. Matching the base alone is not enough and the
+    difference was a wrong conclusion published for a day: the initialiser that
+    seeds ?_rng@Particle@Graphics@@ (0x180149650) never mentions the object's
+    base -- it writes mt[0] at +0x04 and walks upward -- so a base-only scan
+    reported the object as "not constructed", and lane C2 wrote that zeroed
+    storage was faithful for it. A constructor referencing a FIELD rather than
+    the base is ordinary; the scan has to allow for it.
 
     Each initialiser is tiny (~0x70 bytes) and reaches its static through a
     rip-relative displacement. Rather than disassemble, every 4-byte window is
@@ -184,6 +200,14 @@ def scan_ctor_refs(pe, ib, inits, targets):
     hit this produced was confirmed against Ghidra's own xrefs.
     """
     hits = {}
+    import bisect as _b
+    bases = sorted(extents)
+    ends = [b + extents[b] for b in bases]
+
+    def owner(addr):
+        i = _b.bisect_right(bases, addr) - 1
+        return bases[i] if i >= 0 and addr < ends[i] else None
+
     bounds = [(inits[i], inits[i + 1] if i + 1 < len(inits) else inits[i] + 0x70)
               for i in range(len(inits))]
     for start, end in bounds:
@@ -191,8 +215,9 @@ def scan_ctor_refs(pe, ib, inits, targets):
         for o in range(0, len(b) - 4):
             disp = int.from_bytes(b[o:o + 4], "little", signed=True)
             t = start + o + 4 + disp
-            if t in targets:
-                hits.setdefault(t, set()).add(start)
+            base = owner(t)
+            if base is not None:
+                hits.setdefault(base, set()).add(start)
     return {k: sorted(v) for k, v in hits.items()}
 
 
@@ -370,8 +395,6 @@ def main():
 
     # ---- the construction sweep (see find_crt_init_table) -------------------
     inits = find_crt_init_table(pe, ib, secs_text, secs_rdata)
-    ctor_of = scan_ctor_refs(pe, ib, inits,
-                             {ib + rva for _s, _n, rva, _c in data_syms})
 
     # The harvest, keyed for cross-checking only. Slots first, then typeinfo.
     harvest_slots = {}      # (symbol, index) -> target VA
@@ -435,6 +458,20 @@ def main():
         if hn and hn != n:
             errors.append(f"{sym}: harvest has {hn} slots, this decode has {n}")
         vtables.append({"symbol": sym, "va": ib + rva, "slots": slots, "proof": proof})
+
+    # ---- the construction sweep, now that every symbol's EXTENT is known ---
+    # A constructor may reference any field, not the base (see scan_ctor_refs),
+    # so the scan needs sizes: a vtable is slots*8, a BaseTypeInfo is 0x38, and
+    # a storage symbol's size is the one EXTRA_SIZES / the singleton rule gives.
+    extents = {v["va"]: len(v["slots"]) * 8 for v in vtables}
+    for sym, _ns, rva, _c in data_syms:
+        if sym.startswith("?_typeInfo@"):
+            extents[ib + rva] = 0x38
+        elif sym.startswith("?_singleton@"):
+            extents[ib + rva] = 8
+        elif sym in EXTRA_SIZES:
+            extents[ib + rva] = EXTRA_SIZES[sym][0]
+    ctor_of = scan_ctor_refs(pe, ib, inits, extents)
 
     # ---- typeinfo (Object::BaseTypeInfo, 0x38) -----------------------------
     def cstr_at(va):

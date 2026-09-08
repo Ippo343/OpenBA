@@ -1405,7 +1405,7 @@ static RtMintStorage kMintStorage[] = {
     { "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", 0x1801fc6e0ull, 8, &kStorageBytes[16], "BaseTypeInfo* — head of the reflection chain", "0x1801477b0 (+103 more)" },
     { "?_frameIndex@ParticleInstance@Graphics@@1HA", 0x1801fe77cull, 4, &kStorageBytes[32], "int", nullptr },
     { "?_loader@LoaderLoop@Engine@@1VLoader@2@A", 0x1801fe7b8ull, 56, &kStorageBytes[48], "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()", "0x180148fe0" },
-    { "?_rng@Particle@Graphics@@1VRandom@System@@A", 0x1801fe7f0ull, 2500, &kStorageBytes[112], "System::Random OBJECT (MT19937), NEVER SEEDED by retail — zeroed IS faithful", nullptr },
+    { "?_rng@Particle@Graphics@@1VRandom@System@@A", 0x1801fe7f0ull, 2500, &kStorageBytes[112], "System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650", "0x180149650" },
     { "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", 0x1801fc70bull, 1, &kStorageBytes[2624], "bool", nullptr },
     { "?_secondsPerTick@Timer@System@@0NA", 0x1801fe728ull, 8, &kStorageBytes[2640], "double", nullptr },
     { "?_singleton@AchievementManager@Achievement@@0PEAV12@EA", 0x1801fc670ull, 8, &kStorageBytes[2656], "singleton pointer", nullptr },
