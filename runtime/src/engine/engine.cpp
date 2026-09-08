@@ -199,7 +199,7 @@ using SecToTicksFn = int64_t (*)(float);
 // See "HOW THE DEPENDENCIES ARE RESOLVED" above.
 MainLoop** MainLoopSingletonSlot() {
     static MainLoop** p = reinterpret_cast<MainLoop**>(
-        ResolveExportRaw("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
+        ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
     return p;
 }
 
@@ -208,7 +208,7 @@ MainLoop** MainLoopSingletonSlot() {
 // setter `Video::Device::SetVideoErrorFuncs` (0x1800fd860); retail inlines it.
 void** VideoDeviceSingletonSlot() {
     static void** p = reinterpret_cast<void**>(
-        ResolveExportRaw("?_singleton@Device@Video@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
     return p;
 }
 

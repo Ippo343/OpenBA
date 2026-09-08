@@ -790,6 +790,8 @@ void ProbeInputDevice() {
     const char* kReleased = "?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z";
 
     void** slot = reinterpret_cast<void**>(
+        // bodies; the whole probe dies with the oracle at cutover.
+        // RT_RAW_OK: probe code -- reads the DLL's own singleton to exercise the shipped
         ResolveExportRaw("?_singleton@Device@Input@@0PEAV12@EA"));
     void* device = slot ? *slot : nullptr;
     if (!device) {
@@ -966,6 +968,7 @@ void ProbeUpdateLoopIsRunning() {
     }
 
     void** slot = reinterpret_cast<void**>(
+        // RT_RAW_OK: probe code -- see the note at the Input::Device probe above.
         ResolveExportRaw("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
     uint8_t* mainLoop = slot ? reinterpret_cast<uint8_t*>(*slot) : nullptr;
     if (!mainLoop) {

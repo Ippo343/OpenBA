@@ -53,6 +53,7 @@ USAGE
 """
 import argparse
 import ast
+import re
 import bisect
 import csv
 import os
@@ -195,6 +196,80 @@ def scan_ctor_refs(pe, ib, inits, targets):
     return {k: sorted(v) for k, v in hits.items()}
 
 
+# Files whose mentions of a DATA symbol must NOT be treated as evidence that
+# the tree needs it: the mint's own generated table and machinery name every
+# symbol by construction, so including them would be circular.
+SCAN_SKIP = ("standalone/rt_data_mint_tables.inc", "standalone/rt_data_mint.cpp",
+             "standalone/rt_data_mint.h")
+SCAN_DIRS = ("code", "runtime", "standalone", "engine", "dx11")
+DATA_LITERAL = re.compile(r'"((?:\?\?_7|\?_)[^"]{4,})"')
+
+
+def strip_comments(text):
+    """Drop // and /* */ comments before scanning.
+
+    Not cosmetic: this tree DOCUMENTS mangled names heavily -- a mangled name
+    in a comment is a note about a symbol, not a dependency on it. Without this,
+    code/Game/Work/marketwork.cpp's comment about ?_typeInfo@TableElement would
+    have minted a BaseTypeInfo nothing reads, and the count would overstate the
+    cutover surface in exactly the direction this lane has been correcting it
+    downward for.
+    """
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':                      # keep string literals intact
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
+def scan_source_for_data_symbols(repo):
+    """Every exported-DATA-shaped mangled name that appears as a LITERAL in the
+    tree, wherever it appears.
+
+    This exists because the census cannot see all of them. `runtime_census.py`
+    recognises a resolve only when the literal sits directly inside
+    `ResolveExport(...)` / `ResolveExportRaw(...)` (RE_EXPORT requires the quote
+    immediately after the paren), so three shapes are invisible to it:
+
+        RtVtable("??_7MeshInstance@Graphics@@6B@")     a wrapper
+        ResolveExportRaw(kFrameIndexData)             a named constant
+        ResolveExport(s.mangled)                      a table walked in a loop
+
+    All three are live in this tree, and all three are exactly the symbols a
+    cutover needs minted -- the last one is standalone/reg_element_typeids.cpp,
+    21 UI ?_typeInfo@ symbols whose own header comment says "a partial table
+    costs one crash per missing entry". Scanning for the literal finds them
+    regardless of the door they go through.
+    """
+    out = {}
+    for d in SCAN_DIRS:
+        for root, _dirs, files in os.walk(os.path.join(repo, d)):
+            for f in files:
+                if not f.endswith((".cpp", ".h", ".inc")):
+                    continue
+                path = os.path.join(root, f)
+                rel = os.path.relpath(path, repo).replace(os.sep, "/")
+                if rel in SCAN_SKIP:
+                    continue
+                text = strip_comments(open(path, encoding="utf-8",
+                                           errors="replace").read())
+                for m in DATA_LITERAL.finditer(text):
+                    out.setdefault(m.group(1), set()).add(rel)
+    return out
+
+
 def run_census(csv_path):
     """Run tools/runtime_census.py and return its unported 'export' rows.
 
@@ -270,6 +345,21 @@ def main():
         if rva is None or section_of(rva) == ".text":
             continue
         data_syms.append((row["key"], row["namespace"], rva, row.get("callers", "")))
+    # The census is a superset of what runs but a SUBSET of what is referenced:
+    # it cannot see a symbol reached through a wrapper, a named constant or a
+    # table walked in a loop. Union in the source scan, which sees all three.
+    census_syms = {d[0] for d in data_syms}
+    scanned = scan_source_for_data_symbols(REPO)
+    scan_added = []
+    for sym, where in sorted(scanned.items()):
+        if sym in census_syms:
+            continue
+        rva = by_name.get(sym)
+        if rva is None or section_of(rva) == ".text":
+            continue          # not an exported DATA symbol; a comment or a code export
+        data_syms.append((sym, "scan", rva, ";".join(sorted(where))))
+        scan_added.append((sym, sorted(where)[0]))
+
     for sym, why in EXTRA_VTABLES.items():
         rva = by_name.get(sym)
         if rva is None:
@@ -506,6 +596,10 @@ def main():
 
     open(args.out, "w", encoding="utf-8", newline="\n").write("\n".join(o) + "\n")
     print(f"wrote {args.out}")
+    print(f"  scan       +{len(scan_added)} exported DATA symbols the CENSUS CANNOT SEE "
+          f"(wrapper / named constant / table loop)")
+    for sym, where in scan_added:
+        print(f"                {sym}   [{where}]")
     print(f"  census     {len(unported)} unported exports -> {len(data_syms)} exported DATA "
           f"({checked} rows cross-checked against the round-1 harvest, 0 disagreements)")
     print(f"  vtables    {len(vtables):3d}  ({sum(len(v['slots']) for v in vtables)} slots, "

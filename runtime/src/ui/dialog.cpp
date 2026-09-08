@@ -893,6 +893,8 @@ int RtUiDialogRegister() {
                            "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
                            RtUI::kControllerVtblOnElementEvent);
         VerifyDtorThunk(&sDtor, "??1DialogController@UI@@UEAA@XZ",
+                        // thunk bytes, so it must see the shipped vtable and dies with the oracle.
+                        // RT_RAW_OK: an ORACLE read -- VerifyDtorThunk compares the DLL's own
                         ResolveExportRaw("??_7DialogController@UI@@6B@"),
                         ResolveExportRaw("??1Internal@Object@@UEAA@XZ"));
     }

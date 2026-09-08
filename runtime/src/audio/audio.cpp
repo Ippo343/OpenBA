@@ -497,7 +497,7 @@ void RtAudio_Configuration_Save(void* selfPtr) {
     using SetIntFn = void (*)(void*, const char*, const char*, int);
     using GetIntFn = bool (*)(void*, const char*, const char*, int*);
     void** persistenceSingleton = reinterpret_cast<void**>(
-        RtOriginal<void**>("?_singleton@Persistence@IO@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
 
     // RT_EXPORT_ONCE: IO::Persistence::Set(int) is ported (io/persistence.cpp:311).
@@ -540,7 +540,7 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 
     using GetIntFn = bool (*)(void*, const char*, const char*, int*);
     void** persistenceSingleton = reinterpret_cast<void**>(
-        RtOriginal<void**>("?_singleton@Persistence@IO@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
     auto getFn = RT_EXPORT_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");   // ported
 
@@ -737,7 +737,7 @@ static void* AudioDeviceSingleton() {
     // symbol: the export address IS the pointer slot, so this is one deref,
     // matching retail's `MOV RBX,qword ptr [0x1801fe760]`.
     static void** slot = reinterpret_cast<void**>(
-        ResolveExportRaw("?_singleton@Device@Audio@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Device@Audio@@0PEAV12@EA"));
     return slot ? *slot : nullptr;
 }
 

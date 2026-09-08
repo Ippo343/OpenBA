@@ -111,19 +111,19 @@ namespace {
 // object built here is byte-identical to one built by the DLL and dispatches
 // into the DLL for every slot this lane did not port.
 void* BaseVtable() {
-    static void* p = ResolveExportRaw("??_7Base@Object@@6B@");           // 0x180154788
+    static void* p = ResolveExport("??_7Base@Object@@6B@");           // 0x180154788
     return p;
 }
 void* ExternalVtable() {
-    static void* p = ResolveExportRaw("??_7External@Object@@6B@");       // 0x1801547a0
+    static void* p = ResolveExport("??_7External@Object@@6B@");       // 0x1801547a0
     return p;
 }
 void* GoalVtable() {
-    static void* p = ResolveExportRaw("??_7Goal@Achievement@@6B@");      // 0x1801546b0
+    static void* p = ResolveExport("??_7Goal@Achievement@@6B@");      // 0x1801546b0
     return p;
 }
 void* GoalInstanceVtable() {
-    static void* p = ResolveExportRaw("??_7GoalInstance@Achievement@@6B@"); // 0x180154678
+    static void* p = ResolveExport("??_7GoalInstance@Achievement@@6B@"); // 0x180154678
     return p;
 }
 
@@ -166,7 +166,7 @@ void CallExternalDtor(void* self) {
 // GoalList::Initialize must ask the factory to create for this goal.)
 const uint32_t* GoalInstanceTypeInfo() {
     static const uint32_t* p = static_cast<const uint32_t*>(
-        ResolveExportRaw("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A"));
+        ResolveExport("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A"));
     return p;
 }
 

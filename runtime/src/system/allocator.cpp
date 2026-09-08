@@ -646,7 +646,7 @@ void Destruct(MemoryAllocator* self) {
 // --- the _singleton slot ---------------------------------------------------
 MemoryAllocator** SingletonSlot() {
     static MemoryAllocator** slot = reinterpret_cast<MemoryAllocator**>(
-        ResolveExportRaw("?_singleton@MemoryAllocator@System@@0PEAV12@EA"));
+        ResolveExport("?_singleton@MemoryAllocator@System@@0PEAV12@EA"));
     return slot;
 }
 

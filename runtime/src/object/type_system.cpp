@@ -62,11 +62,11 @@ Factory**      g_factorySingleton = nullptr;// ?_singleton@Factory@Object@@0PEAV
 void ResolveGlobals() {
     if (!g_firstTypeInfo) {
         g_firstTypeInfo = reinterpret_cast<BaseTypeInfo**>(
-            ResolveExportRaw("?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA"));
+            ResolveExport("?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA"));
     }
     if (!g_factorySingleton) {
         g_factorySingleton = reinterpret_cast<Factory**>(
-            ResolveExportRaw("?_singleton@Factory@Object@@0PEAV12@EA"));
+            ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
     }
 }
 

@@ -151,9 +151,14 @@ void MemFree(void* p) {
 // other way produces a name the DLL does not contain, which resolves to NULL
 // in silence — the phantom-name family this project has now been bitten by
 // twice (reference_resolveexport_phantom_names.md).
+// ResolveExport, not ResolveExportRaw: see the note above. Both are the same
+// GetProcAddress while the DLL is loaded (which is what makes "GetProcAddress
+// resolves data exports" observable here at all), but only ResolveExport
+// consults the Wave 9 port registry, where these singletons' storage lives
+// after cutover. Audited by tools/rt_data_door_audit.py.
 template <typename T>
 T* RtDataExport(const char* mangled) {
-    return reinterpret_cast<T*>(ResolveExportRaw(mangled));
+    return reinterpret_cast<T*>(ResolveExport(mangled));
 }
 
 SaveLoad** SaveLoadSingletonSlot() {

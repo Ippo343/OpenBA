@@ -87,11 +87,11 @@ MemFreeFn MemFree() {
 // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is the same family of bug
 // this guards against getting backwards).
 void* ImageBufferVtable() {
-    static void* v = ResolveExportRaw("??_7ImageBuffer@Video@@6B@");
+    static void* v = ResolveExport("??_7ImageBuffer@Video@@6B@");
     return v;
 }
 void* ImageBufferDataVtable() {
-    static void* v = ResolveExportRaw("??_7ImageBufferData@Video@@6B@");
+    static void* v = ResolveExport("??_7ImageBufferData@Video@@6B@");
     return v;
 }
 
@@ -100,11 +100,11 @@ void* ImageBufferDataVtable() {
 // read verbatim by Width()/Height(); lane B owns Video::Device's own body,
 // not these two field reads.
 void** DeviceSingletonPtr() {
-    static void** p = reinterpret_cast<void**>(ResolveExportRaw("?_singleton@Device@Video@@0PEAV12@EA"));
+    static void** p = reinterpret_cast<void**>(ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
     return p;
 }
 void** ConfigurationSingletonPtr() {
-    static void** p = reinterpret_cast<void**>(ResolveExportRaw("?_singleton@Configuration@Video@@0PEAV12@EA"));
+    static void** p = reinterpret_cast<void**>(ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA"));
     return p;
 }
 
@@ -179,7 +179,7 @@ void Video_ImageBuffer_Dtor(ImageBuffer* self) {
     // ~CompiledExternal takes a body beyond the vtable stamp retail performs
     // here); the observable effect is entirely the vtable write plus the
     // External base dtor below.
-    static void* compiledExternalVtable = ResolveExportRaw("??_7CompiledExternal@Object@@6B@");
+    static void* compiledExternalVtable = ResolveExport("??_7CompiledExternal@Object@@6B@");
     self->vtable = compiledExternalVtable;
     ObjectExternalDtor()(self);
 }

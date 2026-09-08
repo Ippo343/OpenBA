@@ -123,7 +123,7 @@ void RtSystem_CriticalSection_Unlock(CriticalSection* self) {
 // 0x180155f20 — slot 0 _purecall, slot 1 OnCompleted), used AS-IS and never
 // reimplemented, for the reasons in the file banner.
 static void* RtSystemThreadVftable() {
-    static void* v = ResolveExportRaw("??_7Thread@System@@6B@");
+    static void* v = ResolveExport("??_7Thread@System@@6B@");
     return v;
 }
 

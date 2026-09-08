@@ -118,18 +118,18 @@ using CompanionDtorFn = void  (*)(void*);
 //
 // The accessors follow buffers.cpp's existing ImageBufferDataVtable() idiom.
 // ----------------------------------------------------------------------------
-void* Vt_RenderBufferData()   { static void* v = ResolveExportRaw("??_7RenderBufferData@Video@@6B@");   return v; }
-void* Vt_VideoProgramData()   { static void* v = ResolveExportRaw("??_7VideoProgramData@Video@@6B@");   return v; }
-void* Vt_RenderStateData()    { static void* v = ResolveExportRaw("??_7RenderStateData@Video@@6B@");    return v; }
-void* Vt_PixelProgramData()   { static void* v = ResolveExportRaw("??_7PixelProgramData@Video@@6B@");   return v; }
-void* Vt_VertexProgramData()  { static void* v = ResolveExportRaw("??_7VertexProgramData@Video@@6B@");  return v; }
-void* Vt_VertexLayoutData()   { static void* v = ResolveExportRaw("??_7VertexLayoutData@Video@@6B@");   return v; }
-void* Vt_VertexBufferData()   { static void* v = ResolveExportRaw("??_7VertexBufferData@Video@@6B@");   return v; }
-void* Vt_IndexBufferData()    { static void* v = ResolveExportRaw("??_7IndexBufferData@Video@@6B@");    return v; }
-void* Vt_ConstantBufferData() { static void* v = ResolveExportRaw("??_7ConstantBufferData@Video@@6B@"); return v; }
-void* Vt_ImageBufferData()    { static void* v = ResolveExportRaw("??_7ImageBufferData@Video@@6B@");    return v; }
-void* Vt_ContextData()        { static void* v = ResolveExportRaw("??_7ContextData@Video@@6B@");        return v; }
-void* Vt_DeviceData()         { static void* v = ResolveExportRaw("??_7DeviceData@Video@@6B@");         return v; }
+void* Vt_RenderBufferData()   { static void* v = ResolveExport("??_7RenderBufferData@Video@@6B@");   return v; }
+void* Vt_VideoProgramData()   { static void* v = ResolveExport("??_7VideoProgramData@Video@@6B@");   return v; }
+void* Vt_RenderStateData()    { static void* v = ResolveExport("??_7RenderStateData@Video@@6B@");    return v; }
+void* Vt_PixelProgramData()   { static void* v = ResolveExport("??_7PixelProgramData@Video@@6B@");   return v; }
+void* Vt_VertexProgramData()  { static void* v = ResolveExport("??_7VertexProgramData@Video@@6B@");  return v; }
+void* Vt_VertexLayoutData()   { static void* v = ResolveExport("??_7VertexLayoutData@Video@@6B@");   return v; }
+void* Vt_VertexBufferData()   { static void* v = ResolveExport("??_7VertexBufferData@Video@@6B@");   return v; }
+void* Vt_IndexBufferData()    { static void* v = ResolveExport("??_7IndexBufferData@Video@@6B@");    return v; }
+void* Vt_ConstantBufferData() { static void* v = ResolveExport("??_7ConstantBufferData@Video@@6B@"); return v; }
+void* Vt_ImageBufferData()    { static void* v = ResolveExport("??_7ImageBufferData@Video@@6B@");    return v; }
+void* Vt_ContextData()        { static void* v = ResolveExport("??_7ContextData@Video@@6B@");        return v; }
+void* Vt_DeviceData()         { static void* v = ResolveExport("??_7DeviceData@Video@@6B@");         return v; }
 
 }  // namespace
 

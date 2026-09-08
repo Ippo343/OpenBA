@@ -144,7 +144,7 @@ void*             g_vtblBase      = nullptr;
 InternalFactory* Factory() {
     if (!g_ppFactory)
         g_ppFactory = reinterpret_cast<InternalFactory**>(
-            ResolveExportRaw("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
+            ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
     return g_ppFactory ? *g_ppFactory : nullptr;
 }
 
@@ -152,11 +152,11 @@ InternalFactory* Factory() {
 // are used as values, not dereferenced. Verified against the .rdata dump in
 // Internal.h: 0x180154720 holds 0x180006440, the scalar deleting destructor.
 void* VtblInternal() {
-    if (!g_vtblInternal) g_vtblInternal = ResolveExportRaw("??_7Internal@Object@@6B@");
+    if (!g_vtblInternal) g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
     return g_vtblInternal;
 }
 void* VtblBase() {
-    if (!g_vtblBase) g_vtblBase = ResolveExportRaw("??_7Base@Object@@6B@");
+    if (!g_vtblBase) g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
     return g_vtblBase;
 }
 

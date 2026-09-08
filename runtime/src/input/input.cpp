@@ -92,7 +92,7 @@ BindingNode* Successor(BindingNode* n) {
 // engine_funcs.cpp's own g_pInputDeviceSingleton.
 uint8_t* DeviceSingleton() {
     static uint8_t** slot = reinterpret_cast<uint8_t**>(
-        ResolveExportRaw("?_singleton@Device@Input@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Device@Input@@0PEAV12@EA"));
     return slot ? *slot : nullptr;
 }
 
@@ -588,7 +588,7 @@ void RtInput_Configuration_Load(void* self) {
     keyMapLoad(cfg->keyMap);
 
     static uint8_t** persistenceSlot = reinterpret_cast<uint8_t**>(
-        ResolveExportRaw("?_singleton@Persistence@IO@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSlot ? *persistenceSlot : nullptr;
 
     bool mouseClipping = cfg->mouseClipping, legacy = cfg->legacy, mouseDisplay = cfg->mouseDisplay;
@@ -616,7 +616,7 @@ void RtInput_Configuration_Save(void* self) {
     keyMapSave(cfg->keyMap);
 
     static uint8_t** persistenceSlot = reinterpret_cast<uint8_t**>(
-        ResolveExportRaw("?_singleton@Persistence@IO@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSlot ? *persistenceSlot : nullptr;
 
     RtIo_Persistence_SetBool(persistence, "Input", "MouseClipping", cfg->mouseClipping);

@@ -265,7 +265,16 @@ BufferPlatformCtorFn RtIndexBufferPlatformCtor() {
 // here: these classes are not subclassed anywhere in our tree, our ctor is the
 // ONLY writer of slot 0, and every virtual the DLL then dispatches is a DLL
 // body this lane did not port.
-void* RtVtable(const char* mangled) { return ResolveExportRaw(mangled); }
+// PORT-AWARE, and it must be. This helper feeds the vtable a ported ctor
+// stamps into slot 0. ResolveExportRaw is GetProcAddress: at cutover it returns
+// NULL for a symbol the Wave 9 mint carries correctly just as much as for one
+// it has never heard of, so a raw door here writes a NULL vtable into every
+// object of these classes and the first virtual call is an EXEC-of-0.
+// ResolveExport checks the port registry first and falls through to the same
+// GetProcAddress, so while the DLL is loaded and the mint unregistered this is
+// the identical pointer -- the change is a no-op today and a crash avoided at
+// cutover. Audited by tools/rt_data_door_audit.py.
+void* RtVtable(const char* mangled) { return ResolveExport(mangled); }
 
 void* RtMeshInstanceVtable() {
     static void* v = RtVtable("??_7MeshInstance@Graphics@@6B@");        // 0x180154dc0
@@ -293,7 +302,7 @@ void* RtObjectExternalVtable() {
 // pose pool through it.
 void* RtAnimationManager() {
     static void** slot = reinterpret_cast<void**>(
-        ResolveExportRaw("?_singleton@AnimationManager@Graphics@@0PEAV12@EA"));
+        ResolveExport("?_singleton@AnimationManager@Graphics@@0PEAV12@EA"));
     return slot ? *slot : nullptr;
 }
 

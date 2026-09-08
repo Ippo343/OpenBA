@@ -160,11 +160,11 @@ static ResourceSet::Node* ResourceSetSuccessor(ResourceSet::Node* n) {
 // same reason Thread's was — the port does not replace any virtual, it only has
 // to write the address retail writes.
 static void* VtableExternal() {
-    static void* v = ResolveExportRaw("??_7External@Object@@6B@");   // 0x1801547a0
+    static void* v = ResolveExport("??_7External@Object@@6B@");   // 0x1801547a0
     return v;
 }
 static void* VtableBase() {
-    static void* v = ResolveExportRaw("??_7Base@Object@@6B@");       // 0x180154788
+    static void* v = ResolveExport("??_7Base@Object@@6B@");       // 0x180154788
     return v;
 }
 
@@ -671,7 +671,7 @@ int RtObjectExternalRegister() {
     // Lane A owns the accessor; resolved by name here so this lane does not
     // hardcode a second copy of the address.
     g_pFactorySingleton =
-        reinterpret_cast<void**>(ResolveExportRaw("?_singleton@Factory@Object@@0PEAV12@EA"));
+        reinterpret_cast<void**>(ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
 
     int n = 0;
 

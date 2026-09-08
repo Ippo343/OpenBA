@@ -122,17 +122,17 @@ constexpr const char* kGetDefaultResolution     = "?GetDefaultResolution@Device@
 // registered — or can register — a data slot before cutover.
 Device** DeviceSingletonSlot() {
     static Device** p = reinterpret_cast<Device**>(
-        ResolveExportRaw("?_singleton@Device@Video@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
     return p;
 }
 Configuration** ConfigSingletonSlot() {
     static Configuration** p = reinterpret_cast<Configuration**>(
-        ResolveExportRaw("?_singleton@Configuration@Video@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA"));
     return p;
 }
 void** PersistenceSingletonSlot() {
     static void** p = reinterpret_cast<void**>(
-        ResolveExportRaw("?_singleton@Persistence@IO@@0PEAV12@EA"));
+        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     return p;
 }
 
@@ -545,7 +545,7 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
 void Video_RenderStateData_Dtor(void* self) {
     RT_DIFF_BEGIN("Video::RenderStateData::~RenderStateData");
 
-    static void* vtable = ResolveExportRaw("??_7RenderStateData@Video@@6B@");
+    static void* vtable = ResolveExport("??_7RenderStateData@Video@@6B@");
     *reinterpret_cast<void**>(self) = vtable;
 
     if (rt_diff_on__) {

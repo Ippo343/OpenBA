@@ -186,7 +186,7 @@ AnimationManager** RtAnimMgrSingletonSlot() {
 // project has elsewhere found to resolve NULL -- checked present in the
 // export table before this file was written).
 int* RtFrameIndexSlot() {
-    static int* p = reinterpret_cast<int*>(ResolveExportRaw(kFrameIndexData));
+    static int* p = reinterpret_cast<int*>(ResolveExport(kFrameIndexData));
     return p;
 }
 

@@ -159,11 +159,11 @@ using StreamVFn   = void (*)(void*);          // vtable slot 7, Close()
 // The three exported vtable data symbols. Resolved once each; the value is the
 // address the retail ctor/dtor store, i.e. slot 0, not the RTTI word before it.
 const void* VtblCompressedMemoryStream() {
-    static const void* v = ResolveExportRaw("??_7CompressedMemoryStream@IO@@6B@");
+    static const void* v = ResolveExport("??_7CompressedMemoryStream@IO@@6B@");
     return v;
 }
 const void* VtblStream() {
-    static const void* v = ResolveExportRaw("??_7Stream@IO@@6B@");
+    static const void* v = ResolveExport("??_7Stream@IO@@6B@");
     return v;
 }
 
