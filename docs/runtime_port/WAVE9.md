@@ -2426,7 +2426,7 @@ attempt can **set-diff against it rather than against a recollection**.
 ### PICK UP FIRST — three items, in this order
 
 **1. `wave9/lane-evm` — the EnumerateVideoModes chain. WIP, not verified.**
-Scoped at **seven inseparable bodies** (the wall, `InitializeInterfaces`,
+Scoped at **eight inseparable bodies** (the wall, `InitializeInterfaces`,
 `GetDLLForInterface`, two introsorts and their two small-range passes); four are
 reached **by address**, so any one left unported is a null the moment the DLL is
 gone. Three things established that are expensive to re-derive and are the
@@ -2500,7 +2500,7 @@ the mint-wall prediction.
 
 ### UPDATE at park time — lane EVM finished its code; the runs are the first job next session
 
-`wave9/lane-evm` is **`12cd7df`** (base `e26b422`, 6 files, +1454), committed in
+`wave9/lane-evm` is **`4575012`** (base `e26b422`, 8 files, +1765), committed in
 **two deliberate stages** so the chain below the wall is usable on its own:
 
 ```
@@ -2583,3 +2583,55 @@ and if a comparison indicts a large fraction of a mature tree, suspect the
 comparison first. Copy candidates to the scratchpad and hash *there* — hashing
 out of a worktree the harness may re-point has already silently hashed the wrong
 tree's files once this session.
+
+### CORRECTIONS to the park notes above, from lane EVM's sign-off
+
+**`wave9/lane-evm` final tip is `4575012`** (4 commits on `e26b422`, 8 files,
++1765). Two things above were written from a stale view and are corrected here
+rather than silently edited, because the stale numbers were committed:
+
+* **It is EIGHT bodies, not seven.** The eighth is the out-of-lined `DisplayMode`
+  **swap at `0x1800584c0`** — the introsort `CALL`s it from the three median-of-3
+  sites and *inlines* the same operation in the partition and the small-range
+  pass. The table in `WAVE9_LANE_EVM.md` is authoritative, not the count above.
+* **Stages 1 and 2 read like finished work and are not.** The WIP marker is on
+  stage 3. **Nothing in this lane is measured.** The lane flagged its own commit
+  framing as the risk here — if `1ad3785` / `12cd7df` look landed at merge time,
+  that is framing, not status.
+
+**The pre-registration is provable, not merely asserted.** `EVM_PREDICTIONS.md`
+was relocated into `docs/runtime_port/evidence/lane_evm/` with the **blob hash
+unchanged across the move** (`61e1161a5619f498f75d8d3b82b90fa5cadc46dd` before and
+after), so the committed bytes are demonstrably the text written before any
+measurement. That is the property that makes a pre-registration worth anything.
+
+### TWO GAPS THE LANE NAMED ITSELF — read these before quoting any of its numbers
+
+1. **`tools/rt_mint_gen.py` was deliberately NOT re-run.** This lane is the first
+   thing in the tree to reference `?_disableHandler@Debug@System@@0_NA` (ord 4781),
+   which is not in the mint tables, so **without regenerating, the port's write
+   goes nowhere at cutover.** It was left undone because regeneration rewrites
+   `standalone/rt_data_mint_tables.inc` — a contended file lane TYPE regenerated
+   this wave — and the result could not be verified without a run. **Item 1 of the
+   lane doc's ordered next-steps.**
+2. **The sort probe has a hole, and a green from it as committed would be weaker
+   than it looks.** Its corpus draws only *plausible* refresh rates, so it never
+   generates `denominator == 0`, `0/0`, or **equal numerators with differing
+   denominators** — precisely the inputs where the transcribed (buggy) comparator
+   and a "corrected" one diverge. Widen the corpus before running. **Item 2.**
+
+**Why the `DIVSS` pair must be kept, in its final and correct form:** the
+justification is *not* `CVTDQ2PS` rounding above 2²⁴ (true but thin). At
+`den == 0` the divisions yield ±∞/NaN, which makes `COMISS` **unordered**, so
+`JA`/`CMOVA` are **not** taken where an integer compare would branch — and an
+unordered comparator inside an introsort can drive the partition somewhere no
+total order would. All five comparison sites are quoted with addresses in the
+lane doc.
+
+**And the transferable half of the transcription defect**, in the lane's own
+framing: the useful part is not that the error was made, but that **re-reading
+its own work would never have caught it.** It was found only by going to look for
+whether that introsort template had already been transcribed, and then comparing
+against what was found. **Grepping for an existing port is usually justified as
+avoiding duplicate work; here it caught a wrong permutation that would never have
+crashed.**
