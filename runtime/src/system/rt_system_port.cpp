@@ -37,6 +37,15 @@ extern int RtSystemAllocatorRegister();   // allocator.cpp
 // own switch because it is on the process's single boot path (Engine::Startup
 // step 2), so it must be A/B-able on its own.
 extern int RtSystemConfigurationRegister();  // configuration.cpp (lane ENG)
+// Wave 9 lane ENG, iteration 3. System::Error::SetText + String::StrAppend --
+// the diagnostic every remaining Engine::Startup failure needs (game_main.cpp
+// reads _errorString to say WHICH step bombed).
+//
+// ⛔ ITS OWN SWITCH IS LOAD-BEARING, NOT COSMETIC. rt_data_mint_tables.inc:1538
+// mints ?_errorString@Error@System@@ as EIGHT BYTES when the buffer is 0x2000,
+// so at cutover the first SetText call overflows kStorageBytes. Hold this with
+// BANISHED_RT_ERROR=0 until that row is widened. See runtime/src/system/error.cpp §2.
+extern int RtSystemErrorRegister();          // error.cpp (lane ENG)
 
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
@@ -50,6 +59,7 @@ void RtSystemPortInit() {
     if (RtWaveEnabled("BANISHED_RT_THREAD"))   n += RtSystemThreadRegister();
     if (RtWaveEnabled("BANISHED_RT_TIMER"))    n += RtSystemTimerRegister();
     if (RtWaveEnabled("BANISHED_RT_CONFIG"))   n += RtSystemConfigurationRegister();
+    if (RtWaveEnabled("BANISHED_RT_ERROR"))    n += RtSystemErrorRegister();
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)

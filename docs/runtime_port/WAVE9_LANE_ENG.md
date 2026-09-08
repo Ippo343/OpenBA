@@ -542,3 +542,194 @@ No run of any kind. The `Timer` fix is reasoned from the disassembly and the cra
 **it is the first thing attempt 09 should read**, because a wrong `RT_DATA_SLOT` target
 would leave the DLL's `.data` zero and reproduce the identical crash. `Engine::Shutdown`
 remains `calls=0` and unverified (§5). `SetText` is identified, not ported.
+
+---
+---
+
+# Lane ENG, iteration 3 — three more rows, one of them complete, and a bypass I created and caught
+
+2026-09-08, on **`12901b6`** (attempt 09's tip; `git log --oneline -1` confirms iterations 1
+and 2 are merged in). **Source only**; `-fsyntax-only` in BOTH debug and release
+(`-DBANISHED_STRIP_LOGS -include log_strip.h`), plus a real `-c` + `nm` on each new file.
+**No new Win32 API and no new import library.** Nothing under `runtime/src/io/filesystem*`
+was touched — lane FS owns `SetupDirectories` and `LoadPackages`.
+
+## 16. What landed
+
+| # | export | retail | ord | instrs | closes? |
+|--:|---|---|--:|--:|---|
+| 14 | `?Startup@Configuration@Input@@QEAA_NXZ` | 0x1800e0d30 | 4085 | 43 | **COMPLETELY** |
+| 14 | (unexported) `Input::Configuration::Load` | 0x1800e0c80 | — | 25 | — |
+| 4 | `?Startup@Persistence@IO@@QEAA_NXZ` | 0x1800b7ee0 | 4103 | 45 | exposes 1 |
+| — | `?SetText@Error@System@@SAXPEBD_N@Z` | 0x1800c5fa0 | 3982 | 54 | diagnostic |
+| — | `?StrAppend@String@System@@SAPEADPEADHPEBD@Z` | 0x1800c9020 | 4113 | 44 | — |
+
+All five names checked against the export directory with pefile first. Switches:
+`BANISHED_RT_INPUTCFGSTART=0`, `BANISHED_RT_PERSSTARTUP=0`, `BANISHED_RT_ERROR=0`.
+
+### 16.1 Step 14 closes COMPLETELY — because I re-checked a two-iteration-old list
+
+`Input::Configuration::Startup` + its unexported `Load` have exactly three callees, and
+**all three are already ported**: `MemAlloc` (lane E), `?Load@KeyMap@Input@@QEAAXXZ`
+(**lane IOA**, `keymap_load.cpp:303`) and `?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z`
+(Wave 4 lane C, `persistence.cpp:309`). `KeyMap::Load` was UNPORTED when iteration 1
+enumerated the queue; lane IOA landed it since. **Re-checking the stated blocker rather than
+trusting my own two-iteration-old list is what turned this from "closes and exposes one row"
+into "closes"** — the lesson this wave keeps paying for, in the cheap direction for once.
+
+The four registry literals were read out of the DLL with `read_memory`, not retyped from
+`runtime/types/input/Input.h`: 0x180155200 `Input`, 0x180157d30 `MouseClipping`,
+0x180157d40 `Legacy`, 0x180157d48 `MouseDisplay`. They agree with the header.
+
+### 16.2 Step 4 closes and exposes exactly one named row
+
+`Persistence::Startup` moves the fault to **`?ReadSettings@Persistence@IO@@QEAAXXZ`**
+(0x1800b84b0, ord 3462, 256 instructions — the registry reader), with
+`?GetSaveDirectory@FileSystem@IO@@` (lane FS's class) behind it. Both are reached BY NAME, so
+each arrives as one `[RtUnresolved]` line rather than an anonymous EXEC-of-0.
+
+The one line a tidy rewrite would drop is retail's self-assignment guard at 0x1800b7f17
+(`CMP RCX,[RAX]; JZ skip`): without it, assigning the string to itself would release the
+buffer and then AddRef freed memory.
+
+## 17. `SetText` — ported, and it comes with a ⛔ that gates arming it
+
+Taken, on the coordinator's argument: `game_main.cpp:482-497` reads `_errorString` to say
+WHICH of the sixteen `Engine::Startup` steps failed, and there are a dozen faults left.
+
+**But `standalone/rt_data_mint_tables.inc:1538` mints `?_errorString@Error@System@@0PADA` as
+EIGHT BYTES, and the buffer is 0x2000.** The generator was misled by the mangling — MSVC
+decays a `static char[N]` member to `PAD` (`char *`) — and the disassembly is unambiguous:
+
+```
+0x1800c5fba  LEA RBP,[0x1801fc720]              ; the ADDRESS, not a pointer load
+0x1800c5fc1  MOV EDI,0x2000                     ; the capacity passed to StrAppend
+0x1800c5fd4  CMP byte ptr [0x1801fc720],CL      ; byte 0 OF THE BUFFER
+0x1800c6034  MOV byte ptr [RAX+RBP*1-1],0       ; a store at RBP + room - 1
+```
+
+**With that row as it stands, the first `SetText` after cutover writes up to 8192 bytes into
+an 8-byte slot and scribbles over every minted row after `kStorageBytes[16]`.** Fix is one
+row in lane C2's file: size `8` → `0x2000`, kind `"char*"` → a byte buffer. Until it lands,
+**hold this file with `BANISHED_RT_ERROR=0`** — that switch exists for this and nothing else.
+DLL-present is unaffected (the slot is the DLL's own 0x2000 buffer). I did not edit the mint
+table: widening a row shifts every `kStorageBytes` offset after it, which is the generator's
+business, and a shared table edited by two lanes mid-wave is how denominators rot.
+
+`StrAppend` gets a **real differential oracle** — it is a pure function of (dst, capacity,
+src) — with the input buffer snapshotted BEFORE our write, because `dst` is both input and
+output (`reference_oracle_must_snapshot_aliased_inputs.md`). Two details preserved that a
+rewrite loses: it returns `dst` on the no-room path and `dst + strlen(dst)` otherwise, and
+0x18008a290 is **memmove, not memcpy** (its prologue at 0x18008a2a0 computes `RDX - RCX` and
+branches to a backward copy at 0x18008a5fa).
+
+## 18. ⚠️ MY OWN PORT CREATED A LIVE BYPASS, AND THE CHECKER CAUGHT IT IN THE SAME COMMIT
+
+Registering `?SetText@` turned `runtime/src/system/allocator.cpp:128` from `OK-UNPORTED` into
+a real bypass — `FatalOutOfMemory` held a `RtOriginal<>` raw door on it, correct while
+nothing was ported, a registry-bypassing call to the DLL the moment something was:
+
+```
+BYPASS   runtime/src/system/allocator.cpp:128  (in FatalOutOfMemory)
+    ?SetText@Error@System@@SAXPEBD_N@Z   [live path]
+```
+
+Fixed in the same commit: that one door is now `ResolveExport`. **`?Display@Error@System@@`
+on the next line stays a raw door on purpose** — it has no port, and converting a door on a
+symbol with no port changes only which residue list it prints in
+(`reference_converting_a_door_is_not_satisfying_it.md`).
+
+This is worth recording as a rule, because it is the mirror of §10's: **porting a symbol can
+CREATE a bypass at a raw door that was correct until that moment.** The door does not change;
+the world around it does. `tools/port_bypass_audit.py` is the only instrument that sees it,
+and it only sees it if you run it AFTER the registration — which is why the before/after
+discipline is not bookkeeping.
+
+## 19. `Engine::Shutdown` — declined again, now with a measurement rather than a shrug
+
+Asked: is there a cheap way to exercise it? **There is a cheap way and it is harmful, so no.**
+A lane-X-style probe on a zeroed `Engine` would take every `if (ptr)` false and execute only
+the two unconditional tails — about 4 of 225 instructions — and one of them is
+`CoUninitialize()` (0x1800db88b), which on a thread that called `CoInitializeEx` exactly once
+tears COM down for the process; the other is `MemoryAllocator::Shutdown` on a zeroed
+allocator, i.e. `VirtualFree(nullptr)`. **2 % coverage for a process-wide side effect.** The
+honest banner stays, and `[RtEngineLife]` keeps saying `shutdown=0` out loud.
+
+## 20. Does the harness ever pass a command line? — no, and here is the search
+
+`?ParseCommand@` goes live the moment anything does. Every launch site in the repo:
+
+| site | command |
+|---|---|
+| `Makefile:241, 247, 257, 261` | `start reimpl-x64.exe` |
+| `tools/rt_run.sh:39` | `env "$@" ./reimpl-x64.exe` — `"$@"` is `VAR=value` env, not argv |
+| `tools/stress_run.sh:94` | `./reimpl-x64.exe` |
+
+**No argument anywhere**, and every knob in this project is an environment variable. One
+limit I cannot check from here: `.vscode/launch.json` is not present in the worktree, so if a
+debug configuration sets `"args"`, that run would enter `ParseCommand`. Worth one `grep` by
+someone with the file.
+
+## 21. Audits — both denominators, base `12901b6`
+
+| audit | BEFORE | AFTER |
+|---|---|---|
+| `rawdoor_audit.py` | **483** sites, 0 UNGUARDED-CALL, 34 DEFERRED-CALL | **483**, 0, 34 — *unchanged* |
+| `port_bypass_audit.py`, ADDRESS door | **200** sites, 0 reach a ported fn; ADDR-REG=33 DETOUR=3 NO-EXPORT=87 UNPORTED=77 | **201**, **0**; 33 / 3 / **88** / 77 |
+| … NAME door | **410** raw-door sites, **0** bypass | **411**, **0** — *via 1, see §18* |
+| … BY-NAME cross-check | **643** ported names, 399 statements, **0** missed | **647** (+4), 400, **0** |
+| `rt_data_door_audit.py` | PASS; 3 `RT_RAW_OK`; **10** UNCLASSIFIED | PASS; 3; **12** |
+| `runtime_census.py` TOTAL | 4632 / **849** called / **615** ported / 72.4 % | 4632 / **849** / **616** / **72.6 %** |
+| … System / Input | 58 / — | **59** / **18 of 22 (81.8 %)** |
+| … ports with no caller | **71 exports, 69 addrs** | **74, 72** |
+
+* **UNCLASSIFIED 10 → 12** is exactly `error.cpp:112` and `:115`, the two `RT_DATA_SLOT`
+  reads of `?_errorString@` and `?_stopApplication@` — the same `via (not a call)` shape as
+  the ten already there. The verdict line is unchanged: **PASS**.
+* **`ported` +1 for 5 registrations** — §7.2's blind spot again (`RT_EXPORT_ONCE` is
+  invisible to the census's `called` column), and the **+3 "ports with no caller"** rows are
+  the same fact from the other side. Triaged: `?StrAppend@` is called by `SetText` in the
+  same file (a direct C++ sibling call, the accepted `WAVE8_5.md` §2 category);
+  `?Startup@Persistence@IO@@` and `?Startup@Configuration@Input@@` are called on EVERY boot
+  from `RtEngine_Engine_Startup` through `RT_EXPORT_ONCE`, which the census cannot see.
+
+## 22. Falsifiable predictions for attempt 10
+
+**DLL-PRESENT:** unchanged, `exit=0`, `GameMain returned 0`. Four new `[RtDiff]` sites
+(`System::Error::SetText`, `System::String::StrAppend`, `IO::Persistence::Startup`,
+`Input::Configuration::Startup` + `Input::Configuration::Load`), each `calls>=1
+divergences=0`. **`StrAppend` is the one to watch** — it has a true byte-for-byte oracle
+against the shipped body, so a non-zero `divergences` there is a real port defect, not a
+shadow's opinion. If `SetText` reports `calls=0`, nothing failed, which is the good outcome.
+
+**DLL-LESS**, with lane FS's `SetupDirectories` **NOT yet landed** (i.e. attempt 10 run
+today): **unchanged from attempt 09** — the fault is still
+`[RtUnresolved] ?SetupDirectories@FileSystem@IO@@QEAAXXZ`, EXEC-of-0 inside
+`RtIo_FileSystem_Startup`. **None of this iteration's five ports is on the path to that
+fault** and I predict no movement in distance travelled. That is the expected result, not a
+failure: these rows are paid forward.
+
+**DLL-LESS, once lane FS lands** — this is the prediction that matters, and it names the
+symbol, the enclosing function and the frame direction:
+
+1. `Engine::Startup` step 4 runs. `?Startup@Persistence@IO@@` is now ours, so the fault is
+   **`[RtUnresolved] ?ReadSettings@Persistence@IO@@QEAAXXZ`**, EXEC-of-0, enclosing function
+   **`RtIo_Persistence_Startup`**, and the frame moves **DOWN** again (`RtEngine_Engine_Startup`
+   → `RtIo_Persistence_Startup` → fault), exactly as `RtIo_FileSystem_Startup` did in attempt
+   09. If the fault is instead inside `RtEngine_Engine_Startup` itself, step 4's port did not
+   register — check `BANISHED_RT_PERSSTARTUP`.
+2. After `ReadSettings`, step 5 is `?RefreshList@Modification@IO@@QEAAXXZ` (0x1800af5f0,
+   **934 instructions**), then step 6 `?Startup@Factory@Object@@QEAA_NXZ` (0x1800c0630, 212).
+   **Step 14 will not fault at all** — §16.1.
+
+**Mint rows still owed** (unchanged plus one): `?_singleton@Engine@1@`,
+`?_singleton@Configuration@System@@`, `?_hideDisplay@Error@System@@`,
+`?_systemSecondsPerTick@Timer@System@@0NA`, and now `?_stopApplication@Error@System@@0_NA`
+(not in the table at all). Plus the ⛔ **size fix** for `?_errorString@` in §17, which is a
+correctness bug rather than a missing row.
+
+## 23. What I could not verify this iteration
+
+No run. `StrAppend`'s oracle is written but has never executed. The `_errorString` mint-size
+defect is read out of the table and the disassembly, not observed as a corruption — it cannot
+be, because `SetText` has never run at cutover. `Engine::Shutdown` is still `calls=0`.

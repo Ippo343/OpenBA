@@ -119,13 +119,30 @@ inline uint64_t& Node(uint8_t* freeTag)      { return *reinterpret_cast<uint64_t
 // store the shadow oracle can compare.
 uint64_t g_largestRequestedSize = 0;
 
-// Retail's fatal path. Resolved lazily from the DLL while it is still loaded;
-// after cutover this becomes our own Error class.
+// Retail's fatal path. This comment used to end "after cutover this becomes our
+// own Error class" -- Wave 9 lane ENG, iteration 3, is when that happened, and
+// the door had to change with it.
+//
+// `?SetText@` now goes through the PORT-AWARE `ResolveExport`. It was
+// `RtOriginal<>` (GetProcAddress, registry-bypassing), which was correct while
+// nothing was ported and became a live BYPASS the moment
+// runtime/src/system/error.cpp registered the name -- caught by
+// tools/port_bypass_audit.py in the same commit that created it
+// (`BYPASS ... allocator.cpp:128 ?SetText@Error@System@@ [live path]`), which is
+// exactly the class reference_bypassed_port_needs_a_source_checker.md exists for.
+//
+// `?Display@` STAYS a raw door on purpose. It has no port
+// (error.cpp declines it: nothing on any path this wave reaches calls it, since
+// Engine::Startup only ever passes stopApplication=false). Converting a door on
+// a symbol with NO port changes only which residue list it prints in
+// (reference_converting_a_door_is_not_satisfying_it.md) -- it would still be
+// null at cutover, and the `if (display)` below already handles that.
 typedef void (*ErrorSetTextFn)(const char* text, bool stopApplication);
 typedef void (*ErrorDisplayFn)();
 
 void FatalOutOfMemory(const char* text, bool stopApplication) {
-    ErrorSetTextFn setText = RtOriginal<ErrorSetTextFn>("?SetText@Error@System@@SAXPEBD_N@Z");
+    ErrorSetTextFn setText =
+        reinterpret_cast<ErrorSetTextFn>(ResolveExport("?SetText@Error@System@@SAXPEBD_N@Z"));
     ErrorDisplayFn display = RtOriginal<ErrorDisplayFn>("?Display@Error@System@@SAXXZ");
     if (setText) setText(text, stopApplication);
     if (stopApplication && display) display();
