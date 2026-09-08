@@ -1,0 +1,202 @@
+// ============================================================================
+// runtime/src/io/compressed_stream_open.cpp — Wave 9 lane PKG2, rung 4b-iii
+// ============================================================================
+//
+// ?SetWindowCount@CompressedStream@IO@@  0x1800aa020   (52 instructions)
+// ?Open@CompressedStream@IO@@            0x1800aa560
+//
+// These are the last two bodies between `ReadPackfile` and a mounted package.
+// `Open` is the one `ReadPackfile` calls at 0x1800b4864, as
+// `cms.CompressedStream::Open(&cms.memoryStream, n)` — one object, two halves
+// (§48).
+//
+// Both are read-path, both stand entirely on ports: SetWindowCount's
+// Array<Window>::SetSize (0x180024c10) and Array<Header>::SetSize (0x180024d70)
+// landed earlier in this rung, GetAvailableWindow (0x1800a9980) in rung 2, and
+// the two Stream virtuals Open dispatches through are MemoryStream's Read and
+// GetSize, ported in 4b-ii.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/io/Stream.h"
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+namespace RtIo {
+
+extern "C" int RtIo_CompressedStream_GetAvailableWindow(CompressedStream*);
+
+namespace {
+
+// The static `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50).
+// Retail INLINES its three steps here — Enter(cs), Alloc(_singleton, size,
+// align), Leave(cs) — but 0x1800c7a50 IS exactly those three steps, and it is
+// lane E's port, so this resolves to our allocator rather than the DLL's.
+void* MemAlloc(uint64_t bytes, int align) {
+    using Fn = void* (*)(uint64_t, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    return fn(bytes, align);
+}
+
+// Lane Q's Array<Window>::SetSize and Array<Header>::SetSize, both registered by
+// this rung. Reached by address: neither has an exported name.
+void ArraySetSize(uintptr_t addr, void* arr, int n) {
+    using Fn = void (*)(void*, int);
+    Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr));
+    fn(arr, n);
+}
+
+// A Stream virtual, called through the OBJECT's vtable exactly as retail does.
+// Not shortcut to our MemoryStream bodies: the source is a Stream* and its
+// dynamic type is the caller's business, not ours.
+inline void* const* VTable(const Stream* s) {
+    return *reinterpret_cast<void* const* const*>(s);
+}
+
+typedef bool     (*StreamReadFn)(Stream*, int32_t, void*);
+typedef uint32_t (*StreamGetSizeFn)(const Stream*);
+
+}  // namespace
+
+// ============================================================================
+// ?SetWindowCount@CompressedStream@IO@@                      retail 0x1800aa020
+// ============================================================================
+// Grow the window table, give every window a fresh zeroed 32 KB buffer, then
+// pick the active window.
+//
+// TWO TRANSCRIPTIONS THAT LOOK LIKE REDUNDANCY AND ARE NOT:
+//
+//  1. Retail RE-READS `this->windowData` from the object on every iteration
+//     (`MOV RCX,[R15+0x30]` at 1800aa0a0 AND again at 1800aa0a9) rather than
+//     caching the base. Reproduced. It is observationally identical here
+//     because nothing in the loop can move the array, but caching it would be a
+//     change to what the code DOES, and this lane does not make those silently.
+//  2. It stores the new buffer into the window and then RELOADS IT FROM THE
+//     WINDOW to hand to memset (1800aa0b5), instead of reusing the register it
+//     just stored. Also reproduced, for the same reason.
+//
+// The 0x8000 window size and the 0x18 stride are retail's, and both agree with
+// runtime/types/io/Stream.h — a useful independent check on rung 2's layout
+// rather than a restatement of it, since that header was pinned from the
+// CONSTRUCTOR and this is a different function.
+extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n) {
+    RT_DIFF_BEGIN("IO::CompressedStream::SetWindowCount");
+
+    ArraySetSize(0x180024c10, &self->windowData, n);      // 1800aa04e
+
+    for (int32_t i = 0; i < n; ++i) {                     // 1800aa056/aa0c6
+        void* const buf = MemAlloc(kCompressedStreamWindowSize, 4);   // 1800aa08f
+        uint8_t* windows = static_cast<uint8_t*>(self->windowData);   // 1800aa0a0
+        *reinterpret_cast<void**>(windows + i * 0x18 + 0x10) = buf;   // 1800aa0a4
+        windows = static_cast<uint8_t*>(self->windowData);            // 1800aa0a9
+        void* const reloaded =
+            *reinterpret_cast<void**>(windows + i * 0x18 + 0x10);     // 1800aa0b5
+        std::memset(reloaded, 0, kCompressedStreamWindowSize);        // 1800aa0ba
+    }
+
+    self->activeWindow = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800aa0cb/0d0
+
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// ?Open@CompressedStream@IO@@                                retail 0x1800aa560
+// ============================================================================
+// Read the block directory off `src` and validate it against the source length.
+//
+// THE TWO BOUND TESTS HAVE DIFFERENT SIGNEDNESS, and it is not decoration:
+//
+//   * `CMP RBP,0x4; JNC` (1800aa595) is UNSIGNED — a negative GetSize, once
+//     sign-extended, is a huge unsigned value and PASSES this test.
+//   * `LEA EAX,[RDX*0x8]; CMP EAX,EBP; JG` (1800aa5cb) is SIGNED and 32-BIT —
+//     a blockCount large enough to overflow `blockCount * 8` wraps negative and
+//     PASSES this one too.
+//
+// Both are transcribed as retail spells them. Making either "safe" would reject
+// inputs retail accepts, and this function's whole job is to decide whether a
+// packfile header is well-formed.
+//
+// The final `total == len` is the real integrity check, and the per-entry term
+// is a 16-bit field read at +0x04 of each 8-byte header with a fallback to the
+// one at +0x06 when it is zero — a compressed-size / raw-size pair, where zero
+// in the first means "stored uncompressed".
+extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
+                                           int32_t windowCount) {
+    RT_DIFF_BEGIN("IO::CompressedStream::Open");
+
+    self->source     = src;                               // 1800aa572
+    self->base.direction = 0;                             // 1800aa57c  (+0x08)
+
+    RtIo_CompressedStream_SetWindowCount(self, windowCount);   // 1800aa583
+
+    void* const* svt = VTable(self->source);               // 1800aa588/58c
+    const int64_t len = static_cast<int32_t>(
+        reinterpret_cast<StreamGetSizeFn>(svt[6])(self->source));   // 1800aa58f MOVSXD
+
+    if (static_cast<uint64_t>(len) < 4u) {                 // 1800aa595 CMP/JNC (UNSIGNED)
+        RT_DIFF_WORK(true);
+        return false;                                      // 1800aa59b
+    }
+
+    int32_t blockCount = 0;
+    reinterpret_cast<StreamReadFn>(VTable(src)[3])(src, 4, &blockCount);  // 1800aa5bd
+
+    if (static_cast<int32_t>(blockCount * 8) >
+        static_cast<int32_t>(len)) {                       // 1800aa5cb CMP/JG (SIGNED, 32-bit)
+        RT_DIFF_WORK(true);
+        return false;
+    }
+
+    ArraySetSize(0x180024d70, &self->headerData, blockCount);   // 1800aa5d8
+
+    reinterpret_cast<StreamReadFn>(VTable(src)[3])(
+        src, self->headerSize * 8, self->headerData);      // 1800aa5ed
+
+    int32_t total = 4 + blockCount * 8;                    // 1800aa5f7 LEA
+    const uint8_t* e = static_cast<const uint8_t*>(self->headerData) + 4;  // 1800aa609
+    for (int32_t i = 0; i < self->headerSize; ++i) {       // 1800aa5fe..aa628
+        uint16_t w = *reinterpret_cast<const uint16_t*>(e);        // 1800aa610
+        if (w == 0) w = *reinterpret_cast<const uint16_t*>(e + 2); // 1800aa618
+        total += w;                                        // 1800aa623
+        e += 8;                                            // 1800aa61f
+    }
+
+    const bool ok = (total == static_cast<int32_t>(len));  // 1800aa634 SETZ
+    RT_DIFF_WORK(true);
+    return ok;
+}
+
+}  // namespace RtIo
+
+// ============================================================================
+// Registration
+// ============================================================================
+int RtIoCompressedStreamOpenRegister() {
+    using namespace RtIo;
+    int n = 0;
+
+    RegisterRuntimeExport(// NOT `AEAAXH@Z`. I wrote the PRIVATE spelling first, from the
+    // assumption that a helper like this would be private; the export
+    // table says PUBLIC (`QEAA`). A name the DLL does not contain resolves
+    // NULL silently and forever behind the ResolveAddr fallback
+    // (reference_resolveexport_phantom_names), so this was checked before
+    // the line was believed, not after.
+                          "?SetWindowCount@CompressedStream@IO@@QEAAXH@Z",
+                          (void*)&RtIo_CompressedStream_SetWindowCount); ++n;
+    RegisterRuntimeAddr(0x1800aa020, (void*)&RtIo_CompressedStream_SetWindowCount);
+
+    RegisterRuntimeExport("?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
+                          (void*)&RtIo_CompressedStream_Open); ++n;
+    RegisterRuntimeAddr(0x1800aa560, (void*)&RtIo_CompressedStream_Open);
+
+    std::printf("[RtPort]   IO::CompressedStream SetWindowCount/Open "
+                "(lane PKG2 rung 4b-iii): %d exports registered\n", n);
+    return n;
+}

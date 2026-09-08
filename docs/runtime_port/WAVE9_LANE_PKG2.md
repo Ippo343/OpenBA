@@ -1745,3 +1745,125 @@ three of its array dtors unconditionally, so they executed.
 
 Next predicted fault site unchanged: `LoadPackages` stops at the `ReadPackfile`
 call.
+
+---
+
+# Rung 4b-iii (part 2) — 4b CLOSES: `SetWindowCount`, `Open`, and the oracle that was promised
+
+## 63. Ported
+
+`runtime/src/io/compressed_stream_open.cpp`, switch `BANISHED_RT_CSOPEN`.
+
+| symbol | addr |
+|---|---|
+| `?SetWindowCount@CompressedStream@IO@@QEAAXH@Z` | `0x1800aa020` |
+| `?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z` | `0x1800aa560` |
+
+**A phantom name was caught before it shipped.** I wrote
+`?SetWindowCount@CompressedStream@IO@@**AEAA**XH@Z` — the PRIVATE spelling, from
+the assumption that a helper like this would be private. The export table says
+**`QEAA`**, public. A name the DLL does not contain resolves NULL silently and
+forever behind the `ResolveAddr` fallback, and the port would have registered,
+been counted, and never run. Caught because the names are checked *before* the
+line is believed, not after.
+
+### Transcriptions worth naming
+
+**`Open`'s two bound tests have different signedness, and both are load-bearing:**
+
+* `CMP RBP,0x4; JNC` (`1800aa595`) is **unsigned** — a negative `GetSize`,
+  sign-extended, becomes huge and *passes*.
+* `LEA EAX,[RDX*0x8]; CMP EAX,EBP; JG` (`1800aa5cb`) is **signed and 32-bit** —
+  a `blockCount` big enough to overflow `blockCount * 8` wraps negative and also
+  *passes*.
+
+Both are spelled as retail spells them. "Fixing" either would reject inputs
+retail accepts, in the one function whose entire job is deciding whether a
+packfile header is well-formed.
+
+**`SetWindowCount` re-reads `windowData` from the object twice per iteration**,
+and reloads the buffer pointer from the window it just stored it into, rather
+than reusing registers. Reproduced; observationally identical here, but caching
+it would change what the code does.
+
+Its `0x8000` and `0x18` agree with `Stream.h` — a genuine independent check,
+since that header was pinned from the **constructor** and this is a different
+function.
+
+## 64. The oracle arrived with the port, exactly as promised
+
+`compressed_stream_open_probe.cpp`. Two independently built `CompressedStream`s,
+driven in lockstep through three phases with state compared before the next runs:
+`SetWindowCount` (window array, header, `activeWindow`), `Open` (return,
+`headerSize`, source cursor, directory bytes), then **`Release`** — the phase
+that could not exist in part 1.
+
+```
+[CSOpen] lockstep probe: windows=3 opens=4 (accepted=1 rejected=3) releases=6
+         -- identical on the window array, the block directory and all nine
+            fields Release resets
+[RtDiff] ==== 333 sites, 1191480 calls, 1 divergences in 1 sites ====
+```
+
+The single divergence is the pre-existing `Object::Factory::Startup`.
+`port_bypass_audit` 0 on both doors; `export_name_audit` 1 phantom, the
+pre-existing `?_singleton@`.
+
+**`Release` and `~CompressedStream` are no longer executed-but-undiffed.** That
+category was opened in part 1 with a stated route out, and this is that route
+arriving. All nine fields `Release` resets are now compared against the shipped
+body, including `activeWindow` returning to **-1** rather than 0.
+
+The `+0x0c..+0x0f` exclusion is applied, and the doc says **why it is not a
+tolerance**: it is derived from the tail init at `0x180024c10`, which writes
+`+0x00`, an unaligned qword at `+0x04..+0x0b`, and `+0x10`, and never those four
+bytes. If retail ever wrote them the exclusion would be a defect. A tolerance
+that began life as a failing comparison is indistinguishable later from one that
+was reasoned, and only one of the two is sound.
+
+## 65. The probe was wrong first, and the way it was wrong is worth keeping
+
+The first run reported `DIVERGED on 'header directory bytes'`. **It was the
+probe, not the port.** Case 1 declared 64 blocks — a 512-byte directory — in a
+512-byte image buffer, so `Open` read the last entry off the end of the array.
+Two separate stack images have different neighbours, so the comparison failed on
+bytes **neither side owned**.
+
+That is `reference_oracle_must_not_compare_unwritten_bytes` in a form I had not
+seen: not comparing bytes nobody *wrote*, but comparing bytes read from past the
+end of the input. And it was camouflaged — it surfaced as `rejected=1`, which
+reads like a reject path being properly exercised.
+
+The rebuilt corpus sizes the image to the largest directory any case declares,
+and makes each rejection genuine and non-overrunning:
+
+| case | shape | rejected by |
+|---|---|---|
+| 0 | well-formed | — (accepted) |
+| 1 | `blockCount*8 > len`, image small | the **second** test, before any read |
+| 2 | `len < 4` | the **first** test |
+| 3 | valid shape, one size field corrupted | the **sum loop** — the only case that exercises per-entry accumulation on a reject |
+
+`accepted=1 rejected=3` with all four paths distinct.
+
+## 66. 4b is closed. What is left, and where the ladder stands
+
+**Closed in 4b**: `MemoryStream`'s six virtuals; `Array` instantiations
+`0x180029510`, `0x180029630`, `0x180024d70`, `0x180024c10` and dtors
+`0x1800249c0`, `0x1800248e0`; `Release`; `~CompressedStream`; `SetWindowCount`;
+`Open`. Plus the two risks (`SetFilePointer`, slot 7) resolved as non-blockers.
+
+**Deferred with a stated reason**: `Commit` + `CompressWindow` — write-path, not
+on `ReadPackfile`'s read path, and porting `Commit` alone would only move the
+null a frame deeper.
+
+**Registered-but-uncalled is still four** (`0x180029510`, `0x180029630`,
+`0x180024d70`, `0x180024c10`). Note `0x180024d70` and `0x180024c10` were
+*exercised by the probe* this run — but through our own `Open`, not from
+`ReadPackfile`, so I am NOT closing them: the loop closes when the real caller
+reaches them, and I will report any that stay unreached as a corpus finding.
+
+**Next is 4c — `ReadPackfile` itself**, and every callee it has is now ported.
+Predicted fault site is unchanged right up until it lands: `LoadPackages` stops
+at the `ReadPackfile` call. I will take the three-way split if the transcription
+wants it and say so rather than force one commit.
