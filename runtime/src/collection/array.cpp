@@ -669,6 +669,18 @@ const ArraySpec kSpec_I32 = {                     // 0x18002fea0  Array<int32>
 const ArraySpec kSpec_U64Zero = {                 // 0x180008ff0  Array<Time>
     "Array<Time>", 8, 8, &Assign8, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// WAVE 9 LANE PKG2 rung 4b-ii — 0x180024d70, Array<CompressedStream::Header>.
+// A NEW SPEC, and the reason is one field. Byte-similarity puts it closest to
+// kSpec_U64Zero (first difference at 88 of 352), and U64Zero agrees on element
+// size 8, on Assign8 and on InitZero8 — it disagrees ONLY on the ALIGNMENT
+// handed to MemAlloc: 0x180008ff0 is `MOV EDX,0x8`, 0x180024d70 is
+// `MOV EDX,0x4`, checked in the disassembly of both. Reusing U64Zero because it
+// "looks like" this one would have passed a wrong alignment to the allocator on
+// every packfile block directory. Similarity is corroboration, not evidence.
+const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
+    "Array<CompressedStream::Header>", 8, 4, &Assign8, &InitZero8, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_PtrZero = {                 // 0x180008d60, 0x1800764c0
     "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1133,6 +1145,9 @@ J3_ENTRY2(180051390, kSpec_EffectSlot)  // Audio:       Array<EffectSlot>  [NON-
 // similarity is the CORROBORATION, not the evidence.
 J3_ENTRY2(180029510, kSpec_I32)         // IO:          Array<int32>, tail UNINITIALISED
 J3_ENTRY2(180029630, kSpec_Bool)        // IO:          Array<bool>,  tail UNINITIALISED
+// Rung 4b-ii: the packfile block directory. 8-byte elements, tail ZEROED
+// (`MOV [RDX],R10` with R10 == 0), but align 4 — see kSpec_U64ZeroA4 above.
+J3_ENTRY2(180024d70, kSpec_U64ZeroA4)   // IO:          Array<CompressedStream::Header>
 
 #undef J3_ENTRY2
 
@@ -1269,6 +1284,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
+    RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);

@@ -1463,3 +1463,94 @@ because `Open` cannot be diffed without both.
 **Still open, still not counted**: 4b-i's two `Array::SetSize` instantiations
 (`0x180029510`, `0x180029630`) remain **registered but never called** — to be
 closed explicitly in the run where 4c first reaches them.
+
+---
+
+# Rung 4b-ii (part 3) — `Array<Header>::SetSize`, and an alignment that similarity got wrong
+
+## 51. `0x180024d70` needed a NEW spec, and the difference is one field
+
+`Array<CompressedStream::Header>::SetSize` — the block directory `Open`
+allocates. It joins lane Q's two-argument family as its **tenth** member, but
+**not** on an existing spec.
+
+Byte-similarity puts it closest to `kSpec_U64Zero` (first difference at 88 of
+352), and `kSpec_U64Zero` agrees on **element size 8**, on **`Assign8`** and on
+**`InitZero8`**. It disagrees on exactly one field:
+
+| | element size | **alignment** | assign | tail |
+|---|---|---|---|---|
+| `0x180008ff0` (`kSpec_U64Zero`) | 8 (`SHL RCX,3`) | **8** (`MOV EDX,0x8`) | `Assign8` | zeroed |
+| `0x180024d70` (this one) | 8 (`SHL RCX,3`) | **4** (`MOV EDX,0x4`) | `Assign8` | zeroed (`MOV [RDX],R10`, R10==0) |
+
+Both `MOV EDX` values were read out of the disassembly of both functions, not
+inferred. Reusing `kSpec_U64Zero` because it "looks like" this one would have
+passed **a wrong alignment to `MemAlloc` on every packfile block directory** —
+and it would have passed every functional test, because over-alignment is
+invisible until something depends on the allocator's boundary tags.
+
+This is the second time in two rungs that this family has tried to give a wrong
+answer by resemblance, and the second time the *only* thing separating the right
+spec from the plausible one was a single immediate. `kSpec_U64ZeroA4` is
+therefore named for what distinguishes it, not for its element type.
+
+Run `ar2`: `321 sites, 1189763 calls, 1 divergence` (the pre-existing
+`Object::Factory::Startup`); rungs 3, 4a and 4b-ii probes all still green.
+
+**Like its two siblings from 4b-i, this registration is NOT yet verified** — it
+is reachable only from `Open`, which is still the shipped body. Three
+`Array::SetSize` instantiations are now registered-but-uncalled and all three
+close in the run where 4c first reaches them.
+
+## 52. `SetWindowCount` reads clean, and reveals one more layer
+
+`0x1800aa020`, 52 instructions:
+
+```
+Array<Window>::SetSize(this+0x30, n);              // 0x180024c10
+for (i = 0; i < n; ++i) {
+    EnterCriticalSection(allocator + 0x640);
+    buf = MemoryAllocator::Alloc(allocator, 0x8000, 4);   // 0x1800c6e60
+    LeaveCriticalSection(allocator + 0x640);
+    windows[i]._buffer(+0x10) = buf;                       // stride 0x18
+    memset(buf, 0, 0x8000);                                // 0x1800881b0
+}
+this->_activeWindow(+0x20) = GetAvailableWindow(this);     // 0x1800a9980 — PORTED, rung 2
+```
+
+`0x8000` is `kCompressedStreamWindowSize` and `0x18` the `Window` stride, both
+already in `Stream.h` — the body agrees with the header on both, which is a
+useful independent check on rung 2's layout.
+
+But it needs **`0x180024c10`, an ELEVENTH `Array::SetSize`** —
+`Array<Window>`, and its shape is already read: `LEA RCX,[RAX+RAX*2]; SHL RCX,3`
+is element size **0x18**, `MOV EDX,0x8` is align **8**, and the copy is three
+qword moves. Its tail behaviour is the one field still to read.
+
+## 53. Where I stopped, and why
+
+The chain `Open → SetWindowCount → Array<Window>::SetSize` revealed its next
+layer *while I was reading it*, which is the third time in this rung that a
+"remaining item" has turned out to have its own substrate. That is not a
+surprise to be pushed through; it is the decomposition telling me where the next
+boundary is.
+
+Landed and verified here: `kSpec_U64ZeroA4` and the `0x180024d70`
+instantiation, on a clean run.
+
+Not started, and deliberately: `SetWindowCount`, `Open`, `Commit` and
+`~CompressedStream`. `Open` cannot be diffed until `SetWindowCount` is ours, and
+`SetWindowCount` cannot be ported until `0x180024c10` is — so writing any of the
+three now would mean writing them without an oracle, which is the one thing this
+lane has consistently refused to do.
+
+**The next unit of work is exact and small**: read `0x180024c10`'s tail
+behaviour, add its spec and entry, port `SetWindowCount` (52 instructions),
+then `Open` (~50) with a lockstep probe over a real packfile header — at which
+point `Commit` and `~CompressedStream`, lane W's two rows, close in the same
+file.
+
+## 54. Next predicted fault site
+
+Unchanged: `LoadPackages` still stops at the `ReadPackfile` call. Nothing in 4b
+moves it, and attempt 17 is correctly still held for 4c.
