@@ -14,6 +14,10 @@
 
 extern int RtAudioSceneRegister();          // audio.cpp
 extern int RtAudioConfigurationRegister();  // audio.cpp
+// Wave 9 lane IOA: Audio::Device::Update + ::FreeChannelPlatform. Their own
+// .cpp because they need <windows.h> for the Device+0xA50 critical section and
+// audio.cpp must stay free of it (PLAN.md §4.1 decision 1).
+extern int RtAudioDeviceRegister();         // audio_device.cpp
 
 void RtAudioPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
@@ -23,6 +27,7 @@ void RtAudioPortInit() {
     int n = 0;
     n += RtAudioSceneRegister();
     n += RtAudioConfigurationRegister();
+    n += RtAudioDeviceRegister();
     // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9
     // lane W adding Scene::FindFree3DEffect made "20/22" arithmetic that no
     // longer resolves against the three-held-back / one-phantom / one-data
