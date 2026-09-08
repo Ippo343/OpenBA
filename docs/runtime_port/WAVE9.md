@@ -884,6 +884,63 @@ unchanged, `BaseTypeInfo` **165**, MISMATCH/suspects/absent **0**, plus a new li
 is the static 30-of-30 coverage table plus one map insert per row. **Do not read the next
 clean shadow run as having proved it.**
 
+### ⛔ 25 of 32 MINTED STORAGE ROWS ARE A NULL DEREF ON FIRST BOOT — lane C2, `e3c5c88`
+
+`tools/rt_mint_writer_audit.py` scans the DLL's `.text` for rip-relative stores landing
+inside a minted row, attributes each to its containing function, and cross-references the
+census. **All 32 rows, enumerated, not sampled:**
+
+| | count |
+|---|--:|
+| **(a)** reproduced CRT ctor | 3 — `_firstTypeInfo`, `_loader`, `_rng` |
+| **(b)** a PORTED writer | 4 — `_frameIndex`, `AnimationManager`, `MainLoop`, `SaveLoad` |
+| **(c)** writer exists, NOT ported → **zero forever** | **23** |
+| **(?)** no writer found at all | **2** — `?_errorString`, `?_systemInitialTick` |
+
+`Modification` and `MemoryAllocator` — found independently by two lanes from two directions —
+are two of the 23. The four (b) rows were verified **by reading our ports**, not by trusting
+a census flag.
+
+**⛔ MY PROPOSED SHORTCUT WAS WRONG, and the lane showed why.** I suggested the shadow's
+`DLL=WRITTEN` + `minted=zero` at exit would flag category (c). It cannot: **with the mint
+unregistered — every run we can do — a PORTED writer (b) and an UNPORTED writer (c) both
+write the DLL's copy and leave ours zero. Indistinguishable BY CONSTRUCTION.** The recorded
+"23 written by the DLL / 3 of ours" is a **superset containing every (b)**: it flags ~25 rows
+and localises none. So this class was **not** visible in a report we had both read — what was
+visible was a superset with no discriminating power. **The discriminator is static** — who
+writes the slot, and is that writer ours — which is why this is a tool and not a log line.
+What the shadow line *does* prove is narrower: which rows get written **at all** on a route.
+Necessary, not sufficient.
+
+**Both controls caught something, and both in the DANGEROUS direction (toward false safety):**
+* **Negative control** — 17 store sites for 9 symbols read independently from Ghidra's xrefs
+  and re-checked every run, with the tool refusing to report if the byte scan cannot
+  reproduce them. It immediately caught the scan missing **`FF 05` (`INC dword [rip+d32]`)** —
+  how `_frameIndex` is written: **incremented, never assigned**, so a store-only scan called
+  it unwritten. **A false (c).**
+* **Attribution** — nearest-preceding-export credited `??0Scene@Picking@@`, a *ported*
+  function, with the CRT initialisers' writes to `_firstTypeInfo`/`_loader`/`_rng`, moving
+  rows from (c) into (b) and **hiding the bug**. `.pdata` was the obvious fix and was
+  **REJECTED WITH A MEASUREMENT** rather than adopted because it sounded authoritative:
+  6,045 entries that skip frame-less leaf functions, so `??0BaseTypeInfo`'s own store falls
+  outside every range and the row loses its real writer — the same dangerous direction. The
+  initialiser array is exact, so it is carved out by address instead.
+
+**DISPOSITION, adopted as wording: PORT THE WRITER, WITH THE SINGLETON WRITE AS A NAMED
+ACCEPTANCE CRITERION.** Almost all 23 are "the writer is a ctor nobody has ported yet", and
+those objects must be constructed by someone after cutover regardless — so the port is needed
+anyway. What the enumeration adds is that **the port must also write the singleton**; a port
+that forgets reproduces lane E3's silent skip exactly. This is the one place where a
+normally-complete port is still wrong.
+
+**Open:** the three `Timer` rows may already be covered (lane B3 ported `Timer` and owns that
+storage; they appear here because the DLL's `Timer::Startup`/`PlatformStartup` are not
+registered) — confirm with B3 rather than double-fixing. The two (?) rows need a **decision,
+not a port**: Ghidra also finds no write for `?_errorString`, so "dead after cutover, zeroed
+storage is correct" is the likely disposition and should be written down **as one**.
+**REACHABILITY IS NOT YET RANKED** — a null singleton that nothing reads is not a crash, and
+which of the 23 are touched on the boot path is what decides whether this blocks lane G.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
