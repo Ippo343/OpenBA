@@ -2548,3 +2548,38 @@ VID2 registered it at `device_startup.cpp:873`. The code is correct regardless
 **It is the FIFTH wrong "unported/unregistered" comment found this wave.** Comments
 asserting a symbol is unexported or unregistered have been wrong every single
 time they were checked — treat them as leads, never as facts.
+
+### FINAL park state — branch tips, and one lane rescued from an uncommitted worktree
+
+```
+wave/upgrade-path-complete   <this commit>   integration
+wave9/lane-evm               4575012         8 bodies + predictions, UNMEASURED
+wave9/lane-serial            fc430e6         RESCUED WIP, unverified, not the author's own commit
+wave9/lane-rres2             b9da0b7         Find ported, BLOCKED on a name collision
+```
+
+**Lane SERIAL's work was rescued from its worktree, not committed by its author.**
+It hit a session limit with its branch tip still at its own base and a complete
+lane's worth of work uncommitted: the port (`serialize_family.cpp`), its probe,
+two tools, its predictions, and two registration edits — **1,745 lines**. That is
+now on its own branch, **never on the integration branch**, and the commit says in
+its first line that it is WIP, unverified and not the author's choice. **Re-derive
+its "+2 census movement" before trusting any of it** — that finding died with the
+session and the prediction file is what makes it recoverable.
+
+**THE RESCUE'S OWN MEASUREMENT WAS WRONG THE FIRST TIME**, in the shape this wave
+keeps paying for: comparing the worktree's raw bytes against the stored blobs
+reported **1835 MODIFIED files**. The worktree holds CRLF, the object store holds
+LF. Verified rather than assumed — LF-normalising one file reproduced its stored
+blob sha exactly. The true answer was **5 new and 2 modified**. *A broken
+comparison does not look broken; it looks like a big finding, and it buries the
+real rows* — the same failure lane VIDL hit when a hand-set
+`GIT_DIR`/`GIT_WORK_TREE` emitted hundreds of bogus `M` lines and hid the four
+that mattered.
+
+**Rule that came out of it, cheap and general:** when comparing a Windows
+worktree against stored objects, **normalise line endings before you compare**,
+and if a comparison indicts a large fraction of a mature tree, suspect the
+comparison first. Copy candidates to the scratchpad and hash *there* — hashing
+out of a worktree the harness may re-point has already silently hashed the wrong
+tree's files once this session.
