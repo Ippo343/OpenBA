@@ -116,7 +116,9 @@ void RtVideoPortInit() {
     // standalone/video_interface.cpp has been asking for in writing since
     // lane ENGIO -- it is the only thing that fills the DX11 slot once the
     // detour cannot exist.
-    {
+    // ONE switch for the whole lane, so the cutover-residue set-diff can be
+    // taken with the SAME BINARY one flag apart rather than against a rebuild.
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
         extern int RtVideoInterfacesRegister();
         n += RtVideoInterfacesRegister();
     }
@@ -125,7 +127,7 @@ void RtVideoPortInit() {
     // EnumerateVideoModes runs over the enumerated tree, plus their two
     // small-range passes and the DisplayMode deep swap. ADDRESSES ONLY --
     // none of the five is exported in either build.
-    {
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
         extern int RtVideoModeSortRegister();
         const int sorts = RtVideoModeSortRegister();
         printf("[LaneEVM] mode/refresh sort addresses registered=%d\n", sorts);
@@ -133,7 +135,7 @@ void RtVideoPortInit() {
 
     // Wave 9 lane EVM: attempt 22's wall itself. Registered AFTER the two
     // blocks above, because its body calls both of them.
-    {
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
         extern int RtVideoEnumerateModesRegister();
         n += RtVideoEnumerateModesRegister();
     }
