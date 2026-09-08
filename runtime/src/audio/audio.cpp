@@ -488,7 +488,8 @@ void RtAudio_Configuration_Save(void* selfPtr) {
         RtOriginal<void**>("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
 
-    auto setFn = RT_ORIGINAL_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z");
+    // RT_EXPORT_ONCE: IO::Persistence::Set(int) is ported (io/persistence.cpp:311).
+    auto setFn = RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z");
     if (persistence) {
         setFn(persistence, "Audio", "UIVolume",      self->uiVolume);
         setFn(persistence, "Audio", "MusicVolume",   self->musicVolume);
@@ -497,6 +498,11 @@ void RtAudio_Configuration_Save(void* selfPtr) {
     }
 
     if (rt_diff_on__ && persistence) {
+        // RT_ORIGINAL_ONCE here, deliberately, and RT_EXPORT_ONCE on the setFn above.
+        // This is the "our writer, their readers" shape: the write is the work and
+        // must go through our port, the readback is the ORACLE and is worth more
+        // when it is the DLL's own reader. Ours-writes/ours-reads would agree with
+        // itself. Inside the diff guard, so it costs a normal run nothing.
         auto getFn = RT_ORIGINAL_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");
         int v0 = 0, v1 = 0, v2 = 0, v3 = 0;
         bool ok = getFn(persistence, "Audio", "UIVolume", &v0) && v0 == self->uiVolume
@@ -524,7 +530,7 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
     void** persistenceSingleton = reinterpret_cast<void**>(
         RtOriginal<void**>("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
-    auto getFn = RT_ORIGINAL_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");
+    auto getFn = RT_EXPORT_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");   // ported
 
     // Retail leaves the field untouched (whatever the ctor/last value set) when
     // the key is not found — Get(int)'s own contract, which this reproduces by
@@ -915,7 +921,15 @@ void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
     // shape of reference_uncalled_port_is_not_verified.md and would have been
     // read as a dead port. `calls=` has to mean "entered".
     using IsPausedFn = bool (*)(void*, int32_t);
-    bool theirs = RT_ORIGINAL_ONCE(IsPausedFn, "?IsPaused@Scene@Audio@@QEBA_NH@Z")(self, soundType);
+    // The CALL is inside the guard, not just the resolve (Wave 9 lane R,
+    // 2026-09-07). It used to sit outside it, so an ordinary run -- one with
+    // BANISHED_RT_DIFF unset -- paid a cross-DLL call whose result it then threw
+    // away, and at cutover it becomes a call through a null pointer. Storing the
+    // pointer outside a guard is harmless; CALLING outside one is not.
+    bool theirs = false;
+    if (rt_diff_on__) {
+        theirs = RT_ORIGINAL_ONCE(IsPausedFn, "?IsPaused@Scene@Audio@@QEBA_NH@Z")(self, soundType);
+    }
     RT_DIFF_SHADOW(theirs == paused,
                    alreadyThere ? (paused ? "paused (early-out)" : "unpaused (early-out)")
                                 : (paused ? "paused" : "unpaused"),

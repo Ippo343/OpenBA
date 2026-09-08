@@ -163,12 +163,23 @@ bool DecodeForwarderSlot(const void* fn, int* outSlot) {
 }
 
 // Exact prologue compare, for the three members that are not tail-jumps.
-bool VerifyBody(const char* mangled, const uint8_t* expect, size_t n) {
+//
+// THREE outcomes, not two (Wave 9 lane R, 2026-09-07). "Did not resolve" is not
+// evidence that anything is wrong with the port -- with Runtime-x64.dll gone it
+// is the NORMAL state, and the two-valued version of this function is what let
+// a missing DLL read as "the layout is wrong, disable the port". See the note
+// above RtIoSerializerRegister.
+enum class VerifyResult { kMatch, kDiffers, kUnresolved };
+
+VerifyResult VerifyBody(const char* mangled, const uint8_t* expect, size_t n) {
     const void* fn = ResolveExportRaw(mangled);
-    return fn && std::memcmp(fn, expect, n) == 0;
+    if (!fn) return VerifyResult::kUnresolved;
+    return std::memcmp(fn, expect, n) == 0 ? VerifyResult::kMatch
+                                           : VerifyResult::kDiffers;
 }
 
 int  g_verifyFailures = 0;
+int  g_verifyUnresolved = 0;
 void VerifyFailed(const char* what, const char* detail) {
     ++g_verifyFailures;
     printf("[RtIO/Serializer] VERIFY FAILED: %s -- %s\n", what, detail);
@@ -220,8 +231,8 @@ inline void* RwSlot(const ReaderWriter* rw, int byteOffset) {
         RT_DIFF_BEGIN(LABEL);                                                  \
         if (!g_portOn) {                                                       \
             using Orig = void (*)(Serializer*, T*, const char*);               \
-            RT_ORIGINAL_ONCE(Orig, MANGLED)(self, v, name);                    \
-            return;                                                            \
+            Orig orig__ = RT_ORIGINAL_ONCE(Orig, MANGLED);                     \
+            if (orig__) { orig__(self, v, name); return; }                      \
         }                                                                      \
         ReaderWriter* rw = self->readerWriter;                                 \
         void* target = RwSlot(rw, SLOT);                                       \
@@ -236,8 +247,8 @@ inline void* RwSlot(const ReaderWriter* rw, int byteOffset) {
         RT_DIFF_BEGIN(LABEL);                                                  \
         if (!g_portOn) {                                                       \
             using Orig = void (*)(Serializer*, int, T*, const char*);          \
-            RT_ORIGINAL_ONCE(Orig, MANGLED)(self, n, d, name);                 \
-            return;                                                            \
+            Orig orig__ = RT_ORIGINAL_ONCE(Orig, MANGLED);                     \
+            if (orig__) { orig__(self, n, d, name); return; }                   \
         }                                                                      \
         ReaderWriter* rw = self->readerWriter;                                 \
         void* target = RwSlot(rw, SLOT);                                       \
@@ -310,9 +321,15 @@ RT_SER_ARRAY(RtSerializer_Serialize_FloatArr,  float,    rw_vtbl::kArrayFloat,
 void RtSerializer_SerializeBytes(Serializer* self, int size, void* ptr, const char* name) {
     RT_DIFF_BEGIN("IO::Serializer::SerializeBytes");
     if (!g_portOn) {
+            // NEVER call this unchecked. `!g_portOn` means the port declined to
+            // register, and the commonest future reason for that is that the DLL
+            // is not there -- in which case RT_ORIGINAL_ONCE is null and calling
+            // it is the crash this whole guard was supposed to prevent. If the
+            // shipped body is absent, our body is the only implementation there
+            // is, so fall through to it.
         using Orig = void (*)(Serializer*, int, void*, const char*);
-        RT_ORIGINAL_ONCE(Orig, "?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z")(self, size, ptr, name);
-        return;
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z");
+        if (orig) { orig(self, size, ptr, name); return; }
     }
     ReaderWriter* rw = self->readerWriter;
     void* target = RwSlot(rw, rw_vtbl::kSerializeBytes);
@@ -336,7 +353,8 @@ int RtSerializer_GetVersion(Serializer* self) {
     RT_DIFF_BEGIN("IO::Serializer::GetVersion");
     if (!g_portOn) {
         using Orig = int (*)(Serializer*);
-        return RT_ORIGINAL_ONCE(Orig, "?GetVersion@Serializer@IO@@QEBAHXZ")(self);
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "?GetVersion@Serializer@IO@@QEBAHXZ");
+        if (orig) return orig(self);   // else fall through: see RT_SER_SCALAR
     }
     ReaderWriter* rw = self->readerWriter;
     using Fn = int (*)(ReaderWriter*);
@@ -356,7 +374,8 @@ const Encoding* RtSerializer_GetEncoding(Serializer* self) {
     RT_DIFF_BEGIN("IO::Serializer::GetEncoding");
     if (!g_portOn) {
         using Orig = const Encoding* (*)(Serializer*);
-        return RT_ORIGINAL_ONCE(Orig, "?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ")(self);
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ");
+        if (orig) return orig(self);   // else fall through: see RT_SER_SCALAR
     }
     const Encoding* ours = self->stream->encoding;
     using Orig = const Encoding* (*)(Serializer*);
@@ -416,7 +435,8 @@ Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
     RT_DIFF_BEGIN("IO::Serializer::Serializer(Stream&,int)");
     if (!g_portOn) {
         using Orig = Serializer* (*)(Serializer*, Stream*, int);
-        return RT_ORIGINAL_ONCE(Orig, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(self, stream, version);
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
+        if (orig) return orig(self, stream, version);   // else fall through
     }
 
     self->stream = stream;
@@ -485,8 +505,8 @@ void RtSerializer_Dtor(Serializer* self) {
     RT_DIFF_BEGIN("IO::Serializer::~Serializer [not diffable]");
     if (!g_portOn) {
         using Orig = void (*)(Serializer*);
-        RT_ORIGINAL_ONCE(Orig, "??1Serializer@IO@@QEAA@XZ")(self);
-        return;
+        Orig orig = RT_ORIGINAL_ONCE(Orig, "??1Serializer@IO@@QEAA@XZ");
+        if (orig) { orig(self); return; }   // else fall through
     }
     ReaderWriter* rw = self->readerWriter;
     RT_DIFF_SHADOW(true, "executed", "[no oracle: deletes the ReaderWriter]");
@@ -543,7 +563,10 @@ int RtIoSerializerRegister() {
     for (int i = 0; i < kForwarderCount; ++i) {
         const void* fn = ResolveExportRaw(kForwarders[i].mangled);
         int slot = -1;
-        if (!DecodeForwarderSlot(fn, &slot)) {
+        if (!fn) {
+            // Nothing to compare against. NOT a failure -- see the block below.
+            ++g_verifyUnresolved;
+        } else if (!DecodeForwarderSlot(fn, &slot)) {
             VerifyFailed(kForwarders[i].mangled, "not the 3-instruction tail-jump forwarder");
         } else if (slot != kForwarders[i].slot) {
             char detail[96];
@@ -560,9 +583,11 @@ int RtIoSerializerRegister() {
         0x48, 0x8B, 0x40, 0x10,       // MOV RAX,[RAX+0x10]
         0xC3                          // RET
     };
-    if (!VerifyBody("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ",
-                    kGetEncodingBody, sizeof(kGetEncodingBody)))
-        VerifyFailed("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ", "body bytes differ");
+    switch (VerifyBody("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ", kGetEncodingBody, sizeof(kGetEncodingBody))) {
+        case VerifyResult::kMatch:      break;
+        case VerifyResult::kDiffers:    VerifyFailed("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ", "body bytes differ"); break;
+        case VerifyResult::kUnresolved: ++g_verifyUnresolved; break;
+    }
 
     static const uint8_t kCtorBody[52] = {
         0x40, 0x53,                               // PUSH RBX
@@ -581,8 +606,11 @@ int RtIoSerializerRegister() {
         0x48, 0x83, 0xC4, 0x20,                   // ADD RSP,0x20
         0x5B, 0xC3                                // POP RBX ; RET
     };
-    if (!VerifyBody("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z", kCtorBody, sizeof(kCtorBody)))
-        VerifyFailed("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z", "body bytes differ");
+    switch (VerifyBody("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z", kCtorBody, sizeof(kCtorBody))) {
+        case VerifyResult::kMatch:      break;
+        case VerifyResult::kDiffers:    VerifyFailed("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z", "body bytes differ"); break;
+        case VerifyResult::kUnresolved: ++g_verifyUnresolved; break;
+    }
 
     static const uint8_t kDtorBody[22] = {
         0x48, 0x8B, 0x49, 0x08,                   // MOV RCX,[RCX+8]
@@ -593,15 +621,42 @@ int RtIoSerializerRegister() {
         0x48, 0xFF, 0x20,                         // JMP [RAX]
         0xF3, 0xC3                                // REP RET
     };
-    if (!VerifyBody("??1Serializer@IO@@QEAA@XZ", kDtorBody, sizeof(kDtorBody)))
-        VerifyFailed("??1Serializer@IO@@QEAA@XZ", "body bytes differ");
+    switch (VerifyBody("??1Serializer@IO@@QEAA@XZ", kDtorBody, sizeof(kDtorBody))) {
+        case VerifyResult::kMatch:      break;
+        case VerifyResult::kDiffers:    VerifyFailed("??1Serializer@IO@@QEAA@XZ", "body bytes differ"); break;
+        case VerifyResult::kUnresolved: ++g_verifyUnresolved; break;
+    }
 
+    // WHAT THIS CHECK IS FOR, AND WHAT IT MUST NOT DO
+    //
+    // It is a development-time assertion about LAYOUT: that the shipped DLL's
+    // forwarders really do tail-jump the ReaderWriter vtable slots this port
+    // assumes. A wrong slot desyncs the save stream silently, so refusing to
+    // register is the right answer to a MISMATCH.
+    //
+    // It is not a check on whether the DLL exists. Until 2026-09-07 it could not
+    // tell those apart: with Runtime-x64.dll gone, every ResolveExportRaw returns
+    // null, every check "failed", g_portOn went false, and all 22 bodies fell
+    // back to RT_ORIGINAL_ONCE -- i.e. a call through a null pointer on the
+    // save/load path. A verified, landed port disabling itself at exactly the
+    // moment the thing it guards against disappears. It was fail-closed against
+    // the wrong hazard.
+    //
+    // So: UNRESOLVED means "cannot verify", never "assume broken". A MISMATCH is
+    // still a refusal, because that is a real, checkable statement about layout.
     if (g_verifyFailures != 0) {
         printf("[RtIO/Serializer] %d verification failure(s) -- IO::Serializer stays on the DLL. "
                     "A wrong ReaderWriter vtable slot desyncs the save stream silently, so this is "
                     "a refusal, not a warning.\n", g_verifyFailures);
         g_portOn = false;
         return 0;
+    }
+    if (g_verifyUnresolved != 0) {
+        printf("[RtIO/Serializer] %d of %d structural checks could not run (the symbol did not "
+               "resolve). Registering ANYWAY: with no shipped body to compare against there is "
+               "nothing to verify, and refusing here would leave the fallback path -- which is "
+               "that same absent DLL -- as the only implementation.\n",
+               g_verifyUnresolved, kForwarderCount + 3);
     }
 
     // Registered with the mangled name spelled out LITERALLY at each call, not

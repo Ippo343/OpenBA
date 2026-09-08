@@ -94,12 +94,24 @@ call site whose name we have ported, and classifies it:
   BYPASS        the name is ported and the site is a live call path. Fix it by
                 switching to `ResolveExport`.
 
-`RT_ORIGINAL_ONCE` (268 sites) and `RtOriginal<>` (182) are NOT swept: both are
-oracle machinery by definition, documented as such in `runtime/funcs/rt_port.h`,
-and sweeping them would bury the four-or-so real findings under 450 rows that are
-correct by construction. What they DO leave behind is a live `RtOriginal` that
-returns null once the DLL is gone; that is the raw-residue verdict list, which is
-a different question from "is this port bypassed".
+`RT_ORIGINAL_ONCE` and `RtOriginal<>` ARE swept, since 2026-09-07 -- and the
+first version of this script was wrong to skip them. It reasoned that they are
+oracle machinery "by definition", which is true of the macro and false of nine
+call sites: `??DQuaternion`, `??0Geometry`, `??1Geometry`, `??1External`,
+`??4String`, `??HSystem`, `??YString`, `?Set@String` and `?AdjustDelimiters` were
+all reached through `RT_ORIGINAL_ONCE` on ordinary live paths, every one of them
+ported. Wave 1 proved `??DQuaternion` bit-exact and `MeshInstance::UpdateHierarchy`
+had been running the DLL's copy ever since. **A door's documented purpose is not
+evidence about what goes through it**, and "by definition" was a reason not to
+look.
+
+What makes the sweep tractable is that the guard analysis comes from
+`tools/rawdoor_audit.py` (Wave 9 lane V) rather than from a fourth copy here: it
+already knows, per site, whether the raw door sits inside a diff guard, and it
+carries a 13-entry allowlist of indirect guards WITH the evidence for each. This
+script asks its own question -- "is the name one we have ported?" -- and combines
+the two. The fix at a flagged site is `RT_EXPORT_ONCE`, the port-registry twin of
+`RT_ORIGINAL_ONCE` added to `runtime/funcs/rt_port.h` for exactly this.
 
 **How the classification is paired, and its one honest limit.** The gate is looked
 for in the ENCLOSING FUNCTION's body, brace-matched — not in a fixed line window.
@@ -175,6 +187,10 @@ def guarded_fallback_sites():
 # --- the name door -----------------------------------------------------------
 
 RAW_SITE = re.compile(r"Resolve(?:ExportRaw|OrdinalRaw)\s*\(\s*")
+# The macro/template spellings of the same door. Swept via rawdoor_audit's
+# per-site guard analysis; see the module docstring for why skipping them was a
+# defect rather than a simplification.
+RAW_MACRO = re.compile(r"RT_ORIGINAL_ONCE\s*\(|RtOriginal\s*<")
 # The resolver itself and the two headers that DECLARE these entry points.
 RESOLVER_FILES = {"runtime/funcs/rt_port.h", "standalone/resolve.h",
                   "standalone/resolve_standalone.cpp"}
@@ -275,6 +291,62 @@ def sweep_name_door(census, ported_names):
     return rows
 
 
+def load_rawdoor():
+    spec = importlib.util.spec_from_file_location(
+        "rawdoor_audit", os.path.join(HERE, "rawdoor_audit.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def sweep_macro_door(census, ported_names):
+    """RT_ORIGINAL_ONCE / RtOriginal<> sites naming a function we have ported.
+
+    The guard bit and the allowlist come from tools/rawdoor_audit.py, which owns
+    that analysis (brace-tracked diff guards, RT_DIFF_* argument lists spanning
+    lines, and 13 hand-verified indirect guards each carrying its evidence).
+    Duplicating it here would give the project two checkers that disagree.
+    """
+    rd = load_rawdoor()
+    rows = []
+    for path in rd.walk(REPO):
+        rel = os.path.relpath(path, REPO).replace(os.sep, "/")
+        fs = rd.scan(path)
+        if fs.error:
+            rows.append(("UNSCANNABLE", rel, 0, "", "", fs.error))
+            continue
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        consts = {m.group(1): m.group(2) for m in NAME_CONST.finditer(text)}
+        for (line, guarded, _called, names, code) in fs.all_sites:
+            if not RAW_MACRO.search(code):
+                continue          # the direct door, already swept above
+            cand = [n for n in names if n.startswith("?")]
+            if not cand:
+                for ident in re.findall(r"\b(k[A-Z]\w*)\b", code):
+                    if ident in consts:
+                        cand.append(consts[ident])
+            hit = [n for n in cand if n in ported_names]
+            if not hit:
+                continue
+            key = "%s:%d" % (rel, line)
+            fn, _body = enclosing_function(census.strip_comments(text),
+                                           sum(len(l) + 1 for l in
+                                               text.split("\n")[:line - 1]))
+            if key in rd.ALLOWLIST:
+                rows.append(("OK-ALLOWLIST", rel, line, fn, hit[0],
+                             rd.ALLOWLIST[key]))
+            elif guarded:
+                rows.append(("OK-ORACLE", rel, line, fn, hit[0], "inside a diff guard"))
+            elif any(w in fn.lower() for w in ORACLE_FN_WORDS):
+                rows.append(("OK-ORACLE", rel, line, fn, hit[0], "oracle fn name"))
+            else:
+                rows.append(("BYPASS", rel, line, fn, hit[0], "live path"))
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -320,9 +392,11 @@ def main():
 
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
     name_rows = sweep_name_door(census, ported_names)
+    name_rows += sweep_macro_door(census, ported_names)
     name_rows.sort(key=lambda r: (r[0], r[1], r[2]))
     bad = [r for r in rows if r[0] == "BYPASS"]
-    name_bad = [r for r in name_rows if r[0] in ("BYPASS", "UNRESOLVED-NAME")]
+    name_bad = [r for r in name_rows
+                if r[0] in ("BYPASS", "UNRESOLVED-NAME", "UNSCANNABLE")]
 
     if args.csv:
         with open(args.csv, "w", newline="", encoding="utf-8") as fh:
@@ -352,12 +426,14 @@ def main():
             print("      %s   %s" % (addr, name or "(not exported)"))
 
         print()
-        print("NAME door: %d direct ResolveExportRaw/ResolveOrdinalRaw sites; "
-              "%d are a ported function on a live path"
+        print("NAME door: %d raw-door sites (direct ResolveExportRaw plus the "
+              "RT_ORIGINAL_ONCE / RtOriginal<> spellings); %d are a ported function "
+              "on a live path"
               % (len(name_rows), len([r for r in name_rows if r[0] == "BYPASS"])))
         print("  " + tally(name_rows))
         for verdict, rel, line, fn, name, why in name_rows:
-            if verdict not in ("BYPASS", "UNRESOLVED-NAME") and not args.all:
+            if (verdict not in ("BYPASS", "UNRESOLVED-NAME", "UNSCANNABLE")
+                    and not args.all):
                 continue
             print("  %-16s %s:%d  (in %s)" % (verdict, rel, line, fn or "?"))
             print("      %s   [%s]" % (name or "(name not a literal)", why))

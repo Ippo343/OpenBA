@@ -200,7 +200,11 @@ int* RtFrameIndexSlot() {
 // ============================================================================
 using GeometryCtorFn = void* (*)(void*);
 void RtGeometryCtor(void* self) {
-    RT_ORIGINAL_ONCE(GeometryCtorFn, kGeometryCtor)(self);
+    // RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE (Wave 9 lane R): Graphics::Geometry's
+    // ctor IS ported (runtime/src/graphics/geometry.cpp), and the raw door reached
+    // the DLL's body regardless. Raw is for oracles; a dependency goes through the
+    // port registry.
+    RT_EXPORT_ONCE(GeometryCtorFn, kGeometryCtor)(self);
 }
 
 // Graphics::Geometry::SetBounds(const Volume::Box&) -- retail 0x180015700,
@@ -208,7 +212,7 @@ void RtGeometryCtor(void* self) {
 // export from ParticleInstance::Update below, exactly as retail does.
 using SetBoundsFn = void (*)(void*, const void*);
 void RtGeometrySetBounds(void* self, const void* box) {
-    RT_ORIGINAL_ONCE(SetBoundsFn, kSetBounds)(self, box);
+    RT_EXPORT_ONCE(SetBoundsFn, kSetBounds)(self, box);   // ported; see RtGeometryCtor
 }
 
 }  // namespace
@@ -271,7 +275,7 @@ extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
 
     self->vtable = RtAnimationEventVtable();
     typedef void (*ExternalDtorFn)(AnimationEvent*);
-    RT_ORIGINAL_ONCE(ExternalDtorFn, kExternalDtor)(self);
+    RT_EXPORT_ONCE(ExternalDtorFn, kExternalDtor)(self);   // ported; see RtGeometryCtor
 
     if (rt_diff_on__) {
         RT_DIFF_SHADOW(true, "vtable stamped, External::~External delegated (structural)",

@@ -567,7 +567,9 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
                      "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
         FileSystemSingleton(), &dataDir);
     String joined{};
-    RT_ORIGINAL_ONCE(ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
+    // RT_EXPORT_ONCE: System::String::operator+ and Filename::AdjustDelimiters are
+    // both PORTED (string.cpp:931, filename.cpp:446); raw skipped both ports.
+    RT_EXPORT_ONCE(ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
         &joined, &dataDir, reinterpret_cast<const String*>(&mod->path));
 
     // Retail adopts the concatenation's buffer into a fresh slot (with an
@@ -578,7 +580,7 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
         work.data = joined.data;
         *reinterpret_cast<int*>(work.data - 4) += 1;
     }
-    RT_ORIGINAL_ONCE(AdjustDelimsFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&work);
+    RT_EXPORT_ONCE(AdjustDelimsFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&work);
 
     // Linear scan of IO::Modification: count at +0x10, array base at +0x8,
     // stride 0x80, the entry's path String at +0x58. Length first, then

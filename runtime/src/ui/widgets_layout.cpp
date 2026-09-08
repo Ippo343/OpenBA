@@ -104,7 +104,8 @@ void RtTabElementUpdateContainers(void* self) {
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
 void RtStringAssign(void* self, const void* other) {
     using Fn = void* (*)(void*, const void*);
-    RT_ORIGINAL_ONCE(Fn, "??4String@System@@QEAAAEAV01@AEBV01@@Z")(self, other);
+    // RT_EXPORT_ONCE (Wave 9 lane R): String::operator= is ported; raw bypassed it.
+    RT_EXPORT_ONCE(Fn, "??4String@System@@QEAAAEAV01@AEBV01@@Z")(self, other);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
@@ -285,9 +286,16 @@ void* ImageElement_GetSprite(const void* self, void* retval) {
     const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
     r[0] = *reinterpret_cast<const uint64_t*>(s + 0xC0);
     r[1] = *reinterpret_cast<const uint64_t*>(s + 0xC8);
-    char scratch[16];
+    char scratch[16] = {};
     using Fn = void* (*)(const void*, void*);
-    RT_ORIGINAL_ONCE(Fn, "?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
+    // The CALL is inside the guard, not just the resolve (Wave 9 lane R,
+    // 2026-09-07). It used to sit outside it, so an ordinary run -- one with
+    // BANISHED_RT_DIFF unset -- paid a cross-DLL call whose result it then threw
+    // away, and at cutover it becomes a call through a null pointer. Storing the
+    // pointer outside a guard is harmless; CALLING outside one is not.
+    if (rt_diff_on__) {
+        RT_ORIGINAL_ONCE(Fn, "?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
+    }
     RT_DIFF_BYTES(r, scratch, 16);
     return retval;
 }
@@ -415,9 +423,11 @@ void* LabelElement_GetSprite(const void* self, void* retval) {
     const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
     r[0] = *reinterpret_cast<const uint64_t*>(s + 0x100);
     r[1] = *reinterpret_cast<const uint64_t*>(s + 0x108);
-    char scratch[16];
+    char scratch[16] = {};
     using Fn = void* (*)(const void*, void*);
-    RT_ORIGINAL_ONCE(Fn, "?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
+    if (rt_diff_on__) {   // call inside the guard; see ImageElement_GetSprite above
+        RT_ORIGINAL_ONCE(Fn, "?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
+    }
     RT_DIFF_BYTES(r, scratch, 16);
     return retval;
 }
@@ -533,7 +543,12 @@ void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index)
     // ourselves so the diff call is refcount-neutral.
     char scratch[8] = {};
     using Fn = void* (*)(const void*, void*, int32_t);
-    RT_ORIGINAL_ONCE(Fn, "?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z")(self, scratch, index);
+    if (rt_diff_on__)   // call inside the guard; see ImageElement_GetSprite above.
+                        // This one also took a STRING REFERENCE on every ordinary
+                        // run, released a few lines below only when rt_diff_on__.
+    {
+        RT_ORIGINAL_ONCE(Fn, "?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z")(self, scratch, index);
+    }
     void* theirsPtr = *reinterpret_cast<void**>(scratch);
     RT_DIFF_SCALAR(entryStr, theirsPtr);
     if (rt_diff_on__ && theirsPtr) {

@@ -214,14 +214,20 @@ typedef void  (*AnimPlayFn)(void* animState, ExternalPtr group, int index,
 typedef void* (*QuatMulFn)(const void* self, void* ret, const void* other);
 typedef void* (*QuatRotateFn)(const void* self, void* ret, const void* vec);
 
+// RT_EXPORT_ONCE on the four below, not RT_ORIGINAL_ONCE (Wave 9 lane R,
+// 2026-09-07). All four names are PORTED, and the raw door skips the port
+// registry by design -- so MeshInstance::UpdateHierarchy was running the DLL's
+// Quaternion::operator* on every node of every model, while Wave 1's port of it
+// sat registered, bit-exact over millions of diffed calls, and unreached.
+// Raw belongs in an oracle; a dependency belongs on the seam.
 GeometryCtorFn RtGeometryCtor() {
-    return RT_ORIGINAL_ONCE(GeometryCtorFn, "??0Geometry@Graphics@@QEAA@XZ");
+    return RT_EXPORT_ONCE(GeometryCtorFn, "??0Geometry@Graphics@@QEAA@XZ");
 }
 GeometryCopyCtorFn RtGeometryCopyCtor() {
     return RT_ORIGINAL_ONCE(GeometryCopyCtorFn, "??0Geometry@Graphics@@QEAA@AEBV01@@Z");
 }
 GeometryDtorFn RtGeometryDtor() {
-    return RT_ORIGINAL_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
+    return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
 }
 GeometrySetBoundsFn RtGeometrySetBounds() {
     return RT_ORIGINAL_ONCE(GeometrySetBoundsFn,
@@ -235,10 +241,10 @@ AnimPlayFn RtAnimPlay() {
         "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTime@System@@2M_N@Z");
 }
 QuatMulFn RtQuatMul() {
-    return RT_ORIGINAL_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
+    return RT_EXPORT_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
 }
 QuatRotateFn RtQuatRotate() {
-    return RT_ORIGINAL_ONCE(QuatRotateFn, "?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z");
+    return RT_EXPORT_ONCE(QuatRotateFn, "?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z");
 }
 
 // Video buffer platform constructors, called eight times by EdgeMesh's ctor.

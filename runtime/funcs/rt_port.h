@@ -98,6 +98,23 @@ inline Fn RtOriginal(const char* mangled) {
 // `float(*)(const char*)` contains a comma the preprocessor would split on.
 #define RT_ORIGINAL_ONCE(Fn, MANGLED)                                              ([]() -> Fn {                                                                      static Fn rt_once__ = RtOriginal<Fn>(MANGLED);                                 return rt_once__;                                                          }())
 
+// A DEPENDENCY a ported body calls, resolved through the PORT REGISTRY and
+// cached, i.e. RT_ORIGINAL_ONCE's shape with ResolveExport instead of
+// ResolveExportRaw. Use this whenever the call is part of the work, and
+// RT_ORIGINAL_ONCE only when the point is to reach the SHIPPED body (an oracle).
+//
+//   using QuatMulFn = void* (*)(const void*, void*, const void*);
+//   return RT_EXPORT_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
+//
+// It exists because the tree had no cheap port-aware spelling, so nine live
+// dependency call sites reached for RT_ORIGINAL_ONCE -- correctly worried about
+// GetProcAddress cost (reference_rtoriginal_is_getprocaddress.md), and thereby
+// bypassing our own ports. Wave 1 proved ??DQuaternion bit-exact and
+// MeshInstance::UpdateHierarchy had been running the DLL's copy ever since.
+// Same caching contract as RT_ORIGINAL_ONCE: one static per call site, Fn must
+// be a typedef'd name.
+#define RT_EXPORT_ONCE(Fn, MANGLED)                                                ([]() -> Fn {                                                                      static Fn rt_export_once__ = reinterpret_cast<Fn>(ResolveExport(MANGLED));         return rt_export_once__;                                                   }())
+
 // ---- Wave init entry points ------------------------------------------------
 void RtMathPortInit();     // runtime/src/math/
 void RtVolumePortInit();   // runtime/src/volume/
@@ -125,3 +142,15 @@ void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
 // call sites in the other waves, and running it last keeps that one effect at
 // one point in the init order.
 void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q
+// Wave 9 lane D2. The same header-only cluster one level deeper: ~Array for
+// non-trivially-destructible T (lane D's J2/J2b), the eleven per-element
+// destroy helpers those bodies call -- which turned out to be THREE bodies --
+// and Array<T*>::operator=. 18 addresses.
+//
+// It must run AFTER RtCollectionPortInit(), for one reason only: the probe it
+// arms drives lane Q's ArrayDtorImpl, and arming a probe before the code it
+// probes is registered is a hazard nobody needs. The REGISTRATIONS themselves
+// are order-independent -- array.cpp reaches this file's three shared helper
+// addresses through function-local `static Fn fn = ResolveAddr(...)`, which
+// initialises on first USE (a real Array call) and not at init.
+void RtCollectionDestroyPortInit();  // runtime/src/collection/ -- Wave 9 lane D2

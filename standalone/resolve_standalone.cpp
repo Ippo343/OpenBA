@@ -315,9 +315,12 @@ void RuntimePortInit() {
     // them redirects all of those to us, so it happens at one identifiable
     // point in the init order rather than in the middle of it.
     RtCollectionPortInit();   // Wave 9: Collection (lane Q)
+    RtCollectionDestroyPortInit();  // Wave 9: Collection destroy half (lane D2)
 
-    // Wave 9 lane C2: mint the 70 exported DATA symbols (28 vtables, 14
-    // BaseTypeInfo, 28 storage). AFTER every *_PortInit() above, because a
+    // Wave 9 lane C2: mint the exported DATA symbols (??_7 vtables,
+    // BaseTypeInfo, singletons and the other .data statics -- the count is a
+    // moving target, see WAVE9_LANE_C2.md). AFTER every *_PortInit() above,
+    // because a
     // vtable slot is filled with our port only if that port is registered by
     // now — anything registered later stays a trap until the next run.
     // Minting allocates and fills; it does not register anything unless

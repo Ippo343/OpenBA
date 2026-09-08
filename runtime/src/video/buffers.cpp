@@ -73,7 +73,9 @@ PlatformDestructFn VertexBufferPlatformDestruct() {
 // after this lane's own body finishes. Wave 3 (Object) territory, not this
 // lane's; called through.
 DtorFn ObjectExternalDtor() {
-    return RT_ORIGINAL_ONCE(DtorFn, "??1External@Object@@UEAA@XZ");
+    // RT_EXPORT_ONCE (Wave 9 lane R): ~External is ported (object/external.cpp:680)
+    // and this is a dependency call, not an oracle.
+    return RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ");
 }
 
 MemFreeFn MemFree() {

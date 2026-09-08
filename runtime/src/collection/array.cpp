@@ -336,6 +336,23 @@ void InitIdentityTransform(uint8_t* d) {
 //   0x180052110   destroy-range for the same
 //   0x180005930   destroy-range for the 0x10-byte {String*, ExternalPtr}
 //
+// *** CORRECTED 2026-09-07 BY WAVE 9 LANE D2. *** THREE OF THOSE FIVE ROWS NO
+// LONGER EXIST: 0x1800059e0, 0x180052110 and 0x180005930 are ported and
+// registered by runtime/src/collection/array_destroy.cpp, which found that all
+// eleven of this cluster's per-element DESTROY helpers are three bodies
+// parameterized by (stride, offset-list). The three `ResolveAddr` calls below
+// therefore reach OUR bodies now, not the DLL's — the registry is consulted
+// first — and this file's `destroy` fields are satisfied without leaving the
+// port. The two COPY-ASSIGN rows (0x180004220 and 0x180051650) are unchanged
+// and are still the DLL's; 0x180051650 calls Audio's 0x180050d30 and is gated
+// with the Wave 8 Audio holdbacks.
+//
+// The two ResolveAddr sites stay written exactly as they are: they resolve
+// lazily, on first USE rather than at init, so they pick up lane D2's
+// registrations with no ordering requirement between the two inits, and
+// spelling the address as a literal is what keeps tools/runtime_census.py able
+// to see the edge.
+//
 // This tier has its own kill switch, `BANISHED_RT_ARRAY_NONTRIVIAL=0`, so an
 // integration run can A/B the thirteen safe instantiations against these three
 // without disarming the whole lane.
@@ -466,6 +483,20 @@ const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
     "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0 };
 
 // --- the non-trivial three --------------------------------------------------
+// *** OPEN, filed by Wave 9 lane D2 2026-09-07: this row's unwritten window is
+// WRONG, and it is wrong in the direction that fails 100% of comparisons. ***
+// Lane D2 disassembled 0x180004220 (the `Assign38Call` target) and found it
+// writes +0x00..+0x33 and stops: the element is 0x38 bytes, so **+0x34..+0x37
+// is never written by the ASSIGN**. This row says `unwrittenLo = unwrittenHi =
+// 0`, i.e. "no such window". It has not bitten because this lane's probe seeds
+// all-zero elements, so those four bytes agree by accident.
+//
+// NOT changed by lane D2, because `unwritten*` is documented in
+// array_internal.h as the window retail's DEFAULT (init) arm leaves alone and
+// this window is on the ASSIGN arm — widening that meaning from another lane,
+// with no way to run this probe, is how an oracle quietly stops comparing bytes
+// it should compare. It is lane Q's call whether to widen the field or add a
+// second window. See docs/runtime_port/WAVE9_LANE_D2.md.
 const ArraySpec kSpec_Sprite38 = {                // 0x180004e30
     "Array<SpriteEntry:0x38>", 0x38, 8, &Assign38Call, nullptr, &Destroy38, false, 0, 0 };
 

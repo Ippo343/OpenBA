@@ -304,8 +304,10 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     StrSlot timeStr{};
     RtOriginal<SubStringFn>("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
 
+    // RT_EXPORT_ONCE: String::Format is ported (string.cpp), and bare RtOriginal is
+    // GetProcAddress on every call as well as a port bypass.
     using FormatFn = StrSlot*(*)(StrSlot*, const char*, const char*, const char*);
-    RtOriginal<FormatFn>("?Format@String@System@@SA?AV12@PEBDZZ")(
+    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
         ret, "%s %s", static_cast<const char*>(dateStr.p), static_cast<const char*>(timeStr.p));
 
     using ReleaseFn = void(*)(StrSlot*);
@@ -326,7 +328,7 @@ StrSlot* RtSystem_Configuration_CurrentBuildId(StrSlot* ret) {
     };
 
     using SetFn = void(*)(StrSlot*, const char*);
-    SetFn set = RtOriginal<SetFn>("?Set@String@System@@QEAAXPEBD@Z");
+    SetFn set = RT_EXPORT_ONCE(SetFn, "?Set@String@System@@QEAAXPEBD@Z");   // ported
     using ReleaseFn = void(*)(StrSlot*);
     ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
 
@@ -367,7 +369,7 @@ StrSlot* RtSystem_Configuration_CurrentVersion(StrSlot* ret);  // fwd, defined b
 // readability -- content verified byte-for-byte against inspect_memory.
 StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version, bool detailed) {
     using FormatFn = StrSlot*(*)(StrSlot*, const char*, uint32_t, uint32_t, uint32_t);
-    RtOriginal<FormatFn>("?Format@String@System@@SA?AV12@PEBDZZ")(
+    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
         ret, "%i.%i.%i", version >> 24, (version >> 16) & 0xffu, (version >> 8) & 0xffu);
 
     const char* text = nullptr;
@@ -381,7 +383,7 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
 
     using OpAppendFn = StrSlot*(*)(StrSlot*, StrSlot*, const char*);
     StrSlot tmp{};
-    RtOriginal<OpAppendFn>("??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);
+    RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
     RtOriginal<void(*)(StrSlot*)>("?Release@String@System@@AEAAXXZ")(&tmp);
     return ret;
 }
