@@ -1635,3 +1635,113 @@ distinction as similarity-versus-evidence in §51.
 
 Unchanged: `LoadPackages` stops at the `ReadPackfile` call. Nothing in 4b moves
 it; attempt 17 remains correctly held for 4c.
+
+---
+
+# Rung 4b-iii (part 1) — lane W's two rows close, and they are LIVE
+
+## 58. `Release` and `~CompressedStream` — ported, and actually executing
+
+`runtime/src/io/compressed_stream_release.cpp`, switch `BANISHED_RT_CSRELEASE`.
+Both mangled names verified against the shipped export table first.
+
+| symbol | addr |
+|---|---|
+| `?Release@CompressedStream@IO@@QEAAXXZ` | `0x1800aa100` |
+| `??1CompressedStream@IO@@UEAA@XZ` | `0x1800aa650` |
+
+Plus two `J1_ENTRY` array-dtor lines in lane Q's family (`0x1800249c0`,
+`0x1800248e0` — the `+0x40` and `+0x30` members `~CompressedStream` destroys).
+Neither is byte-identical to the already-ported `0x180024aa0` it calls at `+0x50`
+(first difference at byte 39 of 256 for both), so they get their own entries
+rather than a shared registration.
+
+**These are lane W's rows, closed by this lane**, and billed that way.
+
+### They ran, and the count proves the path
+
+Run `rel1`: `326 sites, 1188115 calls, 1 divergence` (the pre-existing
+`Object::Factory::Startup`), clean shutdown, empty crash log.
+
+```
+IO::CompressedStream::~CompressedStream            calls=0   worked=6
+IO::CompressedStream::Release                      calls=0   worked=6
+IO::CompressedMemoryStream::~CompressedMemoryStream calls=6   worked=?   <-- lane W's
+```
+
+**6 against 6.** Lane W's ported `~CompressedMemoryStream` tail-jumps into
+`~CompressedStream`, and the counts match exactly — so this is not a
+registered-but-uncalled port, it is a live one on the real teardown path, and
+the live blocker is genuinely closed rather than merely filled in.
+
+(Reading the columns: `calls` counts replay-diffed entries, `worked` counts
+`RT_DIFF_WORK`. A body with no inline replay reports `calls=0 worked=N`, which
+is what all six MemoryStream bodies do too. `worked=0` would have been the
+alarming reading, not `calls=0`.)
+
+## 59. What these two are NOT verified by, stated plainly
+
+**There is no differential oracle on either.** They ran six times without
+crashing, the allocator raised nothing, and the process shut down clean — but
+nothing compared them against the shipped bodies.
+
+The reason is structural, not laziness: both **free memory**. Replaying the
+shipped body over the same object double-frees it, and there is no snapshot that
+makes that safe. This is the same wall the copy ctor and `operator=` hit in rung
+4a, where the answer was a constructed probe — and here that probe needs two
+independently built `CompressedStream`s, which needs `SetWindowCount`, which is
+not ported yet.
+
+**So `Release`'s oracle becomes possible in the same rung that ports
+`SetWindowCount`, and I will build it there rather than declare these two done.**
+Recorded as executed-but-undiffed, which is a weaker claim than every other port
+this lane has landed and should not be counted with them.
+
+## 60. A third confirmation of §48, for free
+
+`~CompressedStream` stamps vtable **`0x180155640`**, not the `0x180155560` that
+`ReadPackfile` stamps onto its stack object. Had those been one object, one of
+the two stamps would have to be wrong. `0x180155560` is
+`CompressedMemoryStream`'s table and `0x180155640` is `CompressedStream`'s —
+independent of both the destructor-size argument and the frame arithmetic.
+
+`Release`'s field accesses are likewise an independent check on `Stream.h`'s
+`CompressedStream` layout: it walks `+0x50/+0x58`, `+0x30/+0x38` (stride `0x18`,
+buffer at `+0x10`), `+0x40/+0x48`, `+0x60`, and resets `+0x1c`, `+0x20`, `+0x28`.
+Every one agrees with a header that was pinned from the **constructor** — two
+different functions, same answer.
+
+## 61. `Commit` is NOT a two-body job — it opens onto `CompressWindow`
+
+Prioritising `Commit` and `~CompressedStream` as the live pair was right, but
+they are not symmetrical. `~CompressedStream` closed. **`Commit` did not, and
+the reason is a dependency I had not surfaced:**
+
+`?Commit@CompressedStream@IO@@` (`0x1800a9ee0`) calls
+**`?CompressWindow@CompressedStream@IO@@` (`0x1800a9810`) at `0x1800a9f11`** —
+which is unported, and is **this lane's own rung-2 named blocker**, declined
+there as write-path-only.
+
+So porting `Commit` today would move the null one frame deeper, not remove it:
+a ported `Commit` calling an unported `CompressWindow` is exactly
+`reference_converting_a_door_is_not_satisfying_it`. `Commit` is a **three**-body
+job — `Commit` + `CompressWindow` + `Commit`'s own oracle — and `CompressWindow`
+is a compressor, not a mover of fields.
+
+I have not started it, and I would rather flag that than land a `Commit` that
+looks closed. It is also **not on the `ReadPackfile` read path**: `ReadPackfile`
+never calls `Commit`, so this does not block 4c.
+
+## 62. Remaining, and the next fault site
+
+Left in 4b-iii: `SetWindowCount` (52, decoded), `Open` (~50, decoded), and the
+`Release` oracle that becomes possible with them. Deferred with a stated reason:
+`Commit` + `CompressWindow`, which are write-path and do not block 4c.
+
+**Registered-but-uncalled is still four** (`0x180029510`, `0x180029630`,
+`0x180024d70`, `0x180024c10`) — the two `J1_ENTRY` dtors added here are NOT
+added to that list, because `~CompressedStream` ran six times and calls all
+three of its array dtors unconditionally, so they executed.
+
+Next predicted fault site unchanged: `LoadPackages` stops at the `ReadPackfile`
+call.

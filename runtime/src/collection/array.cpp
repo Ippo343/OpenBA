@@ -1110,6 +1110,15 @@ J1_ENTRY(180024aa0)   // UI:          ComboElement::_userData (+0x108)
 // wrong reads as a finding about the subject.)
 J1_ENTRY(180009460)   // UI:          reached from ?AddController@DialogInstance@ 0x18011363f
 J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance@ 0x180113649
+// WAVE 9 LANE PKG2 rung 4b-iii — the two array dtors ?~CompressedStream@IO@@
+// (0x1800aa650) calls on its own members, at +0x40 and +0x30. NOT byte-identical
+// to the already-ported 0x180024aa0 it calls at +0x50 (first difference at byte
+// 39 of 256 for both), so they get their own entries rather than a shared
+// registration — the same discipline the SetSize family forced twice this rung.
+// ~Array for a trivially-destructible T frees _data and zeroes the header, so
+// the element size that differs between them does not reach the body.
+J1_ENTRY(1800249c0)   // IO:          CompressedStream::_headers (+0x40), Array<Header>
+J1_ENTRY(1800248e0)   // IO:          CompressedStream::_windows (+0x30), Array<Window>
 
 #undef J1_ENTRY
 
@@ -1296,6 +1305,8 @@ void RtCollectionPortInit() {
     // exercised (calls=6, matching its three teardown helpers exactly).
     RegisterRuntimeAddr(0x180037310, (void*)&RtColl_ArrayDtor_180037310);
     RegisterRuntimeAddr(0x180024aa0, (void*)&RtColl_ArrayDtor_180024aa0);
+    RegisterRuntimeAddr(0x1800249c0, (void*)&RtColl_ArrayDtor_1800249c0);  // PKG2 4b-iii
+    RegisterRuntimeAddr(0x1800248e0, (void*)&RtColl_ArrayDtor_1800248e0);  // PKG2 4b-iii
     // Lane UIC's pair is NOT reached from our tree yet -- registered ahead of
     // its caller (?AddController@DialogInstance@) so whoever ports that does
     // not have to rediscover them. An address with no caller reports calls=0
