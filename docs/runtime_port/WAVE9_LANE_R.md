@@ -399,6 +399,155 @@ and `Frustum::Projection`, plus 2 new `addr:` rows their ports depend on.
 Attribution here is by *diffing the sets*, not by reading the totals; the totals
 would have credited this lane with someone else's wave.
 
+## Round 3 - the Serializer self-disable, 13 raw-door bypasses, 4 escaped guards
+
+Three defect sets from lane V's verdict pass, all in the raw door.
+
+### 1. `IO::Serializer` disabled itself at cutover
+
+`RtIoSerializerRegister` verified all 22 manglings **structurally, on every run**,
+not under `BANISHED_RT_DIFF`. With the DLL gone: every `ResolveExportRaw` returns
+null -> every check "fails" -> `g_portOn = false` -> all 22 bodies take the
+`if (!g_portOn)` arm -> `RT_ORIGINAL_ONCE(...)` -> **a call through a null pointer
+on the save/load path.** A verified, landed, counted-as-done port destroyed by its
+own safety check at the moment the hazard it guarded against disappeared.
+
+It was **fail-closed against the wrong hazard**: a wrong ReaderWriter vtable slot
+and a missing DLL were indistinguishable to it, and it treated both as "disable the
+port".
+
+Fixed as steered, with the reasoning in the source rather than only here:
+
+* `VerifyBody` now returns **three** outcomes - `kMatch` / `kDiffers` /
+  `kUnresolved` - and the forwarder loop counts an unresolvable symbol separately.
+  **Unresolved means "cannot verify", never "assume broken".** A real MISMATCH
+  still refuses to register, because that is a checkable statement about layout and
+  a silent save desync is this project's most-cited failure mode.
+* Independently of the gate, **no `!g_portOn` arm calls an unchecked pointer any
+  more**: each takes the shipped body only if it resolved, and otherwise falls
+  through to our own. That failure mode deserved removing whatever the gate
+  decides, because "the port declined to register" and "there is no DLL" can
+  coincide.
+
+Measured with the DLL present: `[RtIO/Serializer] 22 exports registered, all 22
+retail bodies verified` - the happy path is unchanged. **The DLL-absent branch is
+not exercised by any run this lane can make**; it is proved by reading, and lane G
+is what will execute it. Saying so is the point of this paragraph.
+
+### 2. Thirteen raw-door bypasses - the lead's nine, plus four of the same shape
+
+`??0Geometry`, `??1Geometry`, `?SetBounds@Geometry`, `??1External` (x2),
+`??DQuaternion`, `?Rotate@Quaternion`, `??4String`, `??HSystem`, `??YString`,
+`?Set@String`, `?Format@String` (x2), `?AdjustDelimiters`, `?Set@Persistence`,
+`?Get@Persistence` - all ported, all reached through `RT_ORIGINAL_ONCE` or bare
+`RtOriginal` on ordinary live paths. Wave 1 proved `??DQuaternion` bit-exact and
+`MeshInstance::UpdateHierarchy` had been running the DLL's copy on every node of
+every model ever since.
+
+**The root cause is a missing spelling, not carelessness.** Every one of these
+sites reached for `RT_ORIGINAL_ONCE` while correctly worrying about
+`GetProcAddress` cost (`reference_rtoriginal_is_getprocaddress.md`, 5.6 points of
+sim time) - it was the only *cached* form the tree offered. `RT_EXPORT_ONCE`
+(`runtime/funcs/rt_port.h`) is now its port-registry twin, so the right thing is as
+cheap to write as the wrong one.
+
+One conversion was deliberately **not** made, and the contrast is worth keeping:
+`Audio::Configuration::Save`'s readback shadow still uses `RT_ORIGINAL_ONCE` while
+the `Set` beside it is now `RT_EXPORT_ONCE`. The write is the work and must go
+through our port; the readback is the ORACLE and is worth more as the DLL's own
+reader - ours-writes/ours-reads would agree with itself.
+
+### 3. Four escaped guards, costing a live run today
+
+`audio.cpp`'s `IsPaused` and `widgets_layout`'s `ImageElement::GetSprite`,
+`LabelElement::GetSprite` and `DocumentTextElement::GetLink` **called** the DLL
+unconditionally and used the result only inside the next line's `RT_DIFF_*` macro:
+a discarded cross-DLL call on every ordinary run, and a null call at cutover. The
+`GetLink` one also **took a String reference on every run** and released it only
+when `rt_diff_on__` - a silent, permanent leak. All four calls are now inside the
+guard.
+
+Lane V's distinction is now encoded rather than restated: `?IsEffectPlaying` looks
+identical at a glance but only STORES the pointer outside the guard.
+**Resolve-outside-guard is harmless; call-outside-guard is fatal.**
+
+### The checker grew instead of a third manual pass
+
+`port_bypass_audit.py` now sweeps `RT_ORIGINAL_ONCE` and `RtOriginal<>` too - and
+**skipping them in round 2b was a defect, not a simplification.** The reasoning
+then was that they are oracle machinery "by definition", which is true of the macro
+and false of nine call sites. *A door's documented purpose is not evidence about
+what goes through it*, and "by definition" was a reason not to look.
+
+The guard analysis is **imported from lane V's `tools/rawdoor_audit.py`** rather
+than re-derived, so the two tools cannot drift apart. Three new verdicts carry the
+distinctions that take the answer from 12 to 0 without an allowlist:
+
+| Verdict | What it means |
+|---|---|
+| `OK-RESOLVE-ONLY` | lane V's rule: the pointer is stored, not called, on this line |
+| `OK-PORT-OFF` | the `!g_portOn` arm - reaching the shipped body is the point there |
+| `OK-DELEGATING` | the port's body IS a call to the DLL under its **own** registered name (`GraphElement::RemoveGraphs`), so `ResolveExport` would recurse. A cutover row, not a bypass - and a port that never replaced anything |
+
+**And the checker immediately earned its keep.** Re-run after another lane's ports
+landed, it flagged **two new bypasses that no edit of mine created**:
+`Timer::SecondsToTicks` and `TicksToSeconds` in `engine/loops.cpp`. Both were
+UNPORTED when that file was written - so raw and non-raw reached the same body and
+the choice was purely about `GetProcAddress` cost, with a paragraph of comment
+saying so. **Another lane porting them turned those two lines into port bypasses
+with nothing in that file changing.** Both converted. This is the argument for the
+checker over any amount of manual sweeping: the defect can be created by a commit
+somewhere else entirely.
+
+### Measured - and this time the effect is visible in the numbers
+
+Pinned worktree of `0b88d2a`, built 22:33, deployed 22:34, clean exit both runs.
+
+**`[RtRawResidue]` lost exactly nine rows, and every one is this lane's:**
+
+```
+raw:??0Geometry@Graphics    raw:??1Geometry@Graphics   raw:??1External@Object
+raw:??4String@System        raw:??DQuaternion@Math     raw:?Format@String@System
+raw:?Set@String@System      raw:?Set@Persistence@IO    raw:?IsPaused@Scene@Audio
+```
+
+Eight are conversions that now reach the port; the ninth (`?IsPaused`) is the
+escaped guard, which an ordinary run no longer calls at all. The ten rows the raw
+block *gained* are `??_7*Data@Video` vtables from lane C2's mint - not mine.
+
+**No converted name appears in `[RtResidue]` either.** That matters: a conversion
+that missed the registry would file there under its mangled name. Checked all
+eighteen names against both lists - zero hits in either.
+
+**The ports are now on the live path and correct**, `BANISHED_RT_DIFF=1`, same
+route:
+
+```
+Math::Quaternion::operator*(const Quaternion&)   calls=70633   divergences=0
+Graphics::Geometry::Geometry()                   calls=30967   divergences=0
+Graphics::Geometry::~Geometry()                  calls=15227   divergences=0
+Math::Quaternion::Rotate(const Vector3&)         calls=14715   divergences=0
+IO::Persistence::Set(int)                        calls=29      divergences=0
+```
+
+Whole run: **306 sites, 29,061,317 calls, 0 divergences in 0 sites.** Note that
+even the Wave 1 one-ULP sin/cos family is at zero this run - that is lane L's libm
+port, not this lane's doing, and it is the first run in nine waves with a genuinely
+empty divergence column.
+
+Gates after round 3: `port_bypass_audit` **0 on both doors**, `rawdoor_audit`
+**49 -> 31 UNGUARDED-CALL**, `resolve_fallback_audit` 163/0, `export_name_audit` 0
+phantoms, `dispatch_slot_map --check` 0 mismatches, census **843 called / 586
+ported / 69.5%** (the ported jump is other lanes').
+
+### A note on authorship, recorded rather than tidied away
+
+Every source edit in round 3 is lane R's, but they were swept into commit `59ca871`
+by another lane committing with `git add -A` while this lane was mid-edit. The
+history therefore attributes them elsewhere. Nothing was lost and nothing needs
+rewriting; it is recorded because a reader tracing the Serializer fix to its commit
+message would otherwise be reading about `Array` destroy helpers.
+
 ## Files
 
 Changed: `code/Game/Component/growthcomponent.cpp`, `code/Game/Component/herdcomponent.cpp`,

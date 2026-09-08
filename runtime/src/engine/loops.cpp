@@ -362,10 +362,11 @@ void StringAcquire(RtSystem::String* dst, const RtSystem::String* src) {
 // RT_EXPORT_ONCE since 2026-09-07 (Wave 9 lane R), and the reason is a good
 // advertisement for running the checker after every landing: both names were
 // UNPORTED when the paragraph above was written, so raw and non-raw reached the
-// same DLL body and the choice was purely about GetProcAddress cost. Another
-// lane has since PORTED both -- and at that instant these two lines became port
-// bypasses, with nothing in this file changing. RT_EXPORT_ONCE keeps the caching
-// the paragraph above argues for and reaches whichever implementation is armed.
+// same DLL body and the choice was purely about GetProcAddress cost. Wave 9
+// lane B3 has since PORTED both (runtime/src/system/timer.cpp) -- and at that
+// instant these two lines would have become port bypasses, with nothing in this
+// file changing. RT_EXPORT_ONCE keeps the caching the paragraph above argues
+// for and reaches whichever implementation is armed.
 int64_t SecondsToTicks(float seconds) {
     return RT_EXPORT_ONCE(SecondsToTicksFn, "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
 }
@@ -825,11 +826,17 @@ extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* tim
     rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
 
     if (rt_diff_on__) {
-        // Both sides of this comparison call the DLL, so what it actually
-        // checks is that OUR composition is the one retail inlined: same two
-        // conversions, same order, float in between. A port that dropped the
-        // float narrowing, or applied the conversions the other way round,
-        // fails here on the first tick count that does not round-trip.
+        // What this checks is that OUR composition is the one retail
+        // inlined: same two conversions, same order, float in between. A port
+        // that dropped the float narrowing, or applied the conversions the
+        // other way round, fails here on the first tick count that does not
+        // round-trip.
+        //
+        // Until Wave 9 lane B3 ported System::Timer, both sides of this
+        // comparison called the DLL and only the COMPOSITION was under test.
+        // Now the left side (`rounded`, via the RT_EXPORT_ONCE helpers above)
+        // runs our Timer and the right side is still the shipped body, so this
+        // site tests the composition AND the two conversions at once.
         const int64_t theirs = RT_ORIGINAL_ONCE(SecondsToTicksFn,
                                     "?SecondsToTicks@Timer@System@@SA_JM@Z")(
                                RT_ORIGINAL_ONCE(TicksToSecondsFn,
