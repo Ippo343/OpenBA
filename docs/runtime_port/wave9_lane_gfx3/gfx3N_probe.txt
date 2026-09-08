@@ -1,0 +1,12 @@
+[GfxGridProbe] MISMATCH step=neg:00:init term=levelOffsets[i] ours=5460 theirs=5461
+[GfxGridProbe] MISMATCH step=neg:14:add-reuse term=returned node id ours=3 theirs=2
+[GfxGridProbe] MISMATCH step=neg:13:remove-lone term=cellHeads[i] ours=2 theirs=-1
+[GfxGridProbe] MISMATCH step=neg:10:unthread+thread term=cellHeads[i] ours=2 theirs=0
+[GfxGridProbe] MISMATCH step=neg:17:reindex-all term=node._cell ours=12698 theirs=16863
+[GfxGridProbe] comparisons=77 mismatches=0
+[GfxGridProbe] work: addAppend=7 addReuse=3 threadEmpty=7 threadRing=4
+[GfxGridProbe] work: unthreadHead=1 unthreadMiddle=2 unthreadEmptied=1
+[GfxGridProbe] work: reindexFirst=10 reindexMoved=1 reindexNoop=8 levels=4 maxRing=4
+[GfxGridProbe] freeGlobals: post-state clean, reclamation agrees (blocks reclaimed ours=3 theirs=3)
+[GfxGridProbe] negative controls: 6/6 flagged  (every body's comparator proven able to fail)
+[GfxGridProbe] PASS -- every ported grid body agreed with the shipped one

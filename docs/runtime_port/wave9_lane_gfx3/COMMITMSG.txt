@@ -1,0 +1,75 @@
+WAVE 9 LANE GFX3: the five Graphics::Scene grid doors close, and the chain is CIRCULAR
+
+The five unregistered by-address doors lane GFX2 proved were HARD cutover
+dependencies -- unexported, so invisible to every name-based instrument, and each
+with a live non-diff-guarded caller in a ported body -- are ported and
+registered:
+
+  0x18005e4a0  GridInit      Scene::Scene
+  0x18005e5e0  GridAdd       Scene::AddObject
+  0x18005f090  GridUnthread  Scene::RemoveObject
+  0x18005ee30  GridReindex   Scene::Clean          (per frame)
+  0x18005f1f0  FreeGlobals   Scene::~Scene
+
+Closure counted BEFORE writing: 0x18005f4b0 (GridThread, on no census list
+because nothing outside the DLL calls it) and 0x18005fb00 (Array<Scene::Node>
+SetSize, added to lane Q's SetSizeCore family as kSpec_Node18 rather than
+copied). 0x18002fea0 was already lane Q's; 0x180009c30 was already lane COLL's,
+found by a second grep after the first was silently truncated. So: 5 doors in,
+7 bodies written, 0 new doors out. addr_door_audit set-diff 5 CLOSED / 0 NEW,
+UNREGISTERED 42 -> 37.
+
+THE FACT THAT DECIDES ALL SIX BODIES: a cell's chain is CIRCULAR, not
+null-terminated. 0x18005f4b0's empty-cell arm writes _next = _prev = id, and
+that is the only reading under which GridUnthread's unconditional splice stores
+are not a write sixteen bytes in front of the node buffer, and under which its
+SECOND head fix is live rather than dead. A null-terminated reading makes that
+fix dead code -- the missing-erase shape that cost this project a teardown hang
+and an IsA execute crash. The lane's third negative control is that exact defect.
+
+kSpec_Node18 is NOT kSpec_Window: they agree on stride, alignment and the assign
+and differ only in that 0x18005fb00's loop has no else arm at all. Fifth time
+this family has offered a wrong answer by resemblance.
+
+ORACLE: a lockstep synthetic-subject probe. Two Scenes, ours vs the shipped
+bodies reached through ResolveRuntimeRaw, 18 steps, the whole scene compared
+after EVERY step. Population built to separate the arms: a four-node ring, four
+quadtree levels, a moving and a non-moving re-index, a non-empty free list.
+
+  gfx3P2  comparisons=19 mismatches=0, no GAP line
+          addAppend=7 addReuse=3 threadEmpty=7 threadRing=4
+          unthreadHead=1 unthreadMiddle=2 unthreadEmptied=1
+          reindexMoved=1 reindexNoop=8 levels=4 maxRing=4
+          497 sites, 17,058,326 calls, every live site divergences=0
+  gfx3N   negative controls 6/6 flagged -- ONE PER PORTED BODY
+          501 sites, 17,509,389 calls
+
+Both runs gated on an identity line only this build emits, read out of the run's
+own log. The one whole-run divergence is another lane's pre-existing
+Object::Factory::Startup probe row.
+
+TWO FINDINGS THE RUNS PRODUCED:
+
+* The FreeGlobals harness MANUFACTURED ITS OWN DIVERGENCE. Its reclamation check
+  ran ours, then theirs, then measured both -- and the LIFO free list handed
+  theirs' blocks back first, reporting ours=0 theirs=3 on a correct port. The two
+  halves are serialised now and read 3/3. Its summary line also printed
+  "post-state MISMATCH" for a reclamation failure; the two verdicts are separate.
+
+* The x/y-swap negative control fired at step 17, not at step 9 where the
+  re-index moves an object -- because that object moves DIAGONALLY, so gx == gy
+  and the swap is invisible. A population of diagonal positions would have left
+  it green with every counter healthy.
+
+TOOL FINDING, reported not fixed: port_bypass_audit's GUARDED-FALLBACK went
+4 -> 3 because NINE LINES OF COMMENT pushed a primary out of
+resolve_fallback_audit's 40-line raw-line lookback. All three of this file's
+"guarded fallbacks" were false positives -- the lookback pairs on a BARE
+IDENTIFIER across function boundaries, and every forwarder here names its local
+`fn`. WAVE9_LANE_GFX2.md's 1 -> 4 was the same artefact read as a result.
+
+Kill switch BANISHED_RT_GFXGRID=0 puts all five back on the DLL.
+Doc: docs/runtime_port/WAVE9_LANE_GFX3.md
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Rwy2Y2nmdBvnTQ9cfcG3vK

@@ -1,0 +1,1704 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001d88fa40000, wrapper=00007ff7995ada84)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001d88fa50000, wrapper=00007ff7995adc2e)
+[RtMathTransform] registered 30 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
+[RtDiff] site[0] @00007ff79968c740 = Video::Context::Clear[slot]
+[RtDiff] site[1] @00007ff79968c780 = Video::Context::DrawIndexed[slot]
+[RtDiff] site[2] @00007ff79968c7c0 = Video::Context::GetMaxDynamicInstances[slot]
+[RtDiff] site[3] @00007ff79968c800 = Video::Context::BeginVertices[slot]
+[RtDiff] site[4] @00007ff79968c840 = Video::Context::EndVertices[slot]
+[RtDiff] site[5] @00007ff79968c880 = Video::Context::BeginIndexedVertices[slot]
+[RtDiff] site[6] @00007ff79968c8c0 = Video::Context::EndIndexedVertices[slot]
+[RtDiff] site[7] @00007ff79968c900 = Video::Context::BeginInstancedIndexedVertices[slot]
+[RtDiff] site[8] @00007ff79968c940 = Video::Context::EndInstancedIndexedVertices[slot]
+[RtDiff] site[9] @00007ff799689b20 = UI::Element::ComputeLayout[thunk]
+[RtDiff] site[10] @00007ff799689b60 = UI::Element::Draw[thunk]
+[RtDiff] site[11] @00007ff7996894e0 = UI::DialogInstance::OnUpdateLayout[shape]
+[RtDiff] site[12] @00007ff799689520 = UI::DialogInstance::OnUpdate[shape]
+[RtDiff] site[13] @00007ff799689560 = UI::DialogInstance::OnElementEvent[shape]
+[RtDiff] site[14] @00007ff7996895a0 = UI::DialogController::~DialogController[shape]
+[RtDiff] site[15] @00007ff799683500 = Wave9X::System::MemoryAllocator::ctor
+[RtDiff] site[16] @00007ff799683540 = Wave9X::IO::Modification::ctor
+[RtDiff] site[17] @00007ff799683580 = Wave9X::Object::Factory::ctor
+[RtDiff] site[18] @00007ff7996835c0 = Wave9X::Object::ExternalFactory::ctor
+[RtDiff] site[19] @00007ff799683600 = Wave9X::IO::FileSystem::ctor
+[RtDiff] site[20] @00007ff799683640 = Wave9X::Video::Configuration::ctor
+[RtDiff] site[21] @00007ff799683680 = Wave9X::Input::Device::ctor
+[RtDiff] site[22] @00007ff7996836c0 = Wave9X::Input::Configuration::ctor
+[RtDiff] site[23] @00007ff799683700 = Wave9X::Audio::Configuration::ctor
+[RtDiff] site[24] @00007ff799683740 = Wave9X::Application::Application::ctor
+[RtDiff] site[25] @00007ff799683780 = Wave9X::Video::Device::ctor(type=0)
+[RtDiff] site[26] @00007ff7996837c0 = Wave9X::Video::Device::ctor(type=1, must NOT publish)
+[RtDiff] site[27] @00007ff799683800 = Wave9X::Object::InternalFactory::ctor
+[ElemTid] registered 21/21 element type-id slots
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff7995502ba body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529c8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=000001d88fa60000, 17-byte patch)
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=000001d88fa70000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=000001d88fa80000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=000001d88fa70000 External::Load=000001d88fa80000 (recursive CS)
+[RtDiff] site[28] @00007ff799688220 = Object::BaseTypeInfo::BaseTypeInfo
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[RtDiff] site[29] @00007ff799683100 = Engine::Engine::Engine
+[RtDiff] site[30] @00007ff799683180 = Engine::Engine::Startup
+[RtDiff] site[31] @00007ff799688980 = System::Configuration::SetCommandLine
+[RtDiff] site[32] @00007ff799685fc0 = IO::FileSystem::Startup
+[RtDiff] site[33] @00007ff799685f80 = IO::FileSystem::SetupDirectories
+[RtDiff] site[34] @00007ff799685f40 = IO::FileSystem::GetRootDirectory
+[RtDiff] site[35] @00007ff7996890e0 = System::WideString::Set
+[RtDiff] site[36] @00007ff799689120 = System::WideString::AsUTF8
+[RtDiff] site[37] @00007ff799688b00 = System::Filename::GetPathDirectory
+[RtDiff] site[38] @00007ff799688d00 = System::String::SubString
+[RtDiff] site[39] @00007ff799688c00 = System::operator+(String,char*)
+[RtDiff] site[40] @00007ff799689160 = System::WideString::ctor(String)
+[RtDiff] site[41] @00007ff799688b40 = System::Configuration::GetPlatformName
+[RtDiff] site[42] @00007ff799688b80 = System::Configuration::GetBuildName
+[RtDiff] site[43] @00007ff799688bc0 = System::operator+(String,String)
+[RtDiff] site[44] @00007ff799685f00 = IO::FileSystem::LoadPackages
+[RtDiff] site[45] @00007ff799685ec0 = IO::FileSystem::ClosePackages
+[RtDiff] site[46] @00007ff799685e40 = IO::FileSystem::GetPackDirectory
+[RtDiff] site[47] @00007ff799685c00 = IO::FileSystem::FindFiles
+[RtArrayProbe] ==== Collection::Array synthetic-subject replay, mode=neg ====
+[RtArrayProbe] 0x180004890 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x18001bf50 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x18001c750 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x18001c9e0 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x180033960 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x180033a40 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x180051d80 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x18005fc20 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x1800737f0 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x1800739e0 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x180073bb0 ~Array                       cases=3 did-work=2 mismatches=0
+[RtArrayProbe] 0x180008b90 Array<bool>                  arity=2 stride=0x1   align=1  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x180008d60 Array<InternalPtr>           arity=2 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x180008ff0 Array<Time>                  arity=2 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18002fea0 Array<int32>                 arity=2 stride=0x4   align=4  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x180059140 Array<Transform>             arity=2 stride=0x1c  align=4  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x1800764c0 Array<InternalPtr>           arity=2 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18007b960 Array<int32>(-1)             arity=1 stride=0x4   align=4  cases=9 did-work=9 mismatches=0
+[RtArrayProbe] 0x18001f990 Array<ptr>                   arity=3 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x180023830 Array<uint32>                arity=3 stride=0x4   align=4  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18004f790 Array<callback16>            arity=3 stride=0x10  align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18004f8e0 Array<callback16>            arity=3 stride=0x10  align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x180076900 Array<InternalPtr>(fill)     arity=3 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18007a0d0 Array<InternalPtr>(fill)     arity=3 stride=0x8   align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] 0x18005fb00 Array<Graphics::Scene::Node> arity=3 stride=0x18  align=8  cases=9 did-work=8 mismatches=0
+[RtDiff] site[48] @00007ff799682f00 = SpriteSheet elem operator= @0x180004220
+[RtDiff] site[49] @00007ff799682cc0 = Collection::Array elem-destroy(String) @0x1800059e0
+[RtArrayProbe] 0x180004e30 Array<SpriteEntry:0x38>      arity=3 stride=0x38  align=8  cases=9 did-work=8 mismatches=0
+[RtDiff] site[50] @00007ff799682c00 = Collection::Array elem-destroy(inner Array) @0x180052110
+[RtArrayProbe] 0x180051390 Array<EffectSlot:0x40>       arity=2 stride=0x40  align=8  cases=9 did-work=8 mismatches=0
+[RtDiff] site[51] @00007ff799682c80 = Collection::Array elem-destroy(String) @0x180005930
+[RtArrayProbe] 0x180061480 Array<{String*,ExternalPtr}> arity=3 stride=0x10  align=8  cases=9 did-work=8 mismatches=0
+[RtArrayProbe] ==== 186 comparisons, 0 mismatches ====
+[RtArrayProbe] EFFECTIVENESS: 170 of 186 comparisons changed something (realloc 89, copy-loop 54, fill-loop 105, free 76; 16 were the n==size early return)
+[RtArrayProbe] UNWRITTEN WINDOWS: 8 excluded windows verified as genuinely unwritten, 0 turned out to be written
+[RtArrayProbe] NEGATIVE CONTROL: the wrong body was flagged in 16 of 153 cases
+[RtDiff] site[52] @00007ff799685b40 = Collection::Array<Filename>::SetSize @0x180026880
+[RtDiff] site[53] @00007ff799686340 = IO::PackageFile::PackageFile
+[RtDiff] site[54] @00007ff799686880 = IO::PackageFile::ReadPackfile
+[RtDiff] site[55] @00007ff799685e00 = IO::FileSystem::OpenFile
+[RtDiff] site[56] @00007ff799685d80 = IO::FileSystem::PlatformOpenFile
+[RtDiff] site[57] @00007ff799685d00 = IO::FileSystem::FileInfo::operator=
+[RtDiff] site[58] @00007ff799685dc0 = IO::FileSystem::ReadFile
+[RtDiff] site[59] @00007ff7996859c0 = IO::CompressedStream::CompressedStream
+[RtDiff] site[60] @00007ff799685980 = IO::MemoryStream::MemoryStream
+[RtDiff] site[61] @00007ff799685480 = IO::CompressedStream::Open
+[RtDiff] site[62] @00007ff799685440 = IO::CompressedStream::SetWindowCount
+[RtDiff] site[63] @00007ff7996827c0 = Collection::Array::SetSize @0x180024c10
+[RtDiff] site[64] @00007ff799685540 = IO::CompressedStream::GetAvailableWindow
+[RtDiff] site[65] @00007ff799682780 = Collection::Array::SetSize @0x180024d70
+[RtDiff] site[66] @00007ff799685600 = IO::CompressedStream::Read
+[RtDiff] site[67] @00007ff7996855c0 = IO::CompressedStream::SetWindow
+[RtDiff] site[68] @00007ff799685580 = IO::CompressedStream::DecompressFromSource
+[RtDiff] site[69] @00007ff799688940 = System::Compression::Decompress
+[RtDiff] site[70] @00007ff799682700 = Collection::Array::SetSize @0x180029510
+[RtDiff] site[71] @00007ff799682740 = Collection::Array::SetSize @0x180029630
+[RtDiff] site[72] @00007ff799682ac0 = Collection::Array::SetSize @0x1800298f0
+[RtDiff] site[73] @00007ff799685700 = IO::CompressedMemoryStream::~CompressedMemoryStream
+[RtDiff] site[74] @00007ff799685880 = IO::MemoryStream::~MemoryStream
+[RtDiff] site[75] @00007ff7996858c0 = IO::MemoryStream::~MemoryStream[live:owned buffer freed]
+[RtDiff] site[76] @00007ff799685900 = IO::MemoryStream::~MemoryStream[live:no owned buffer -- that free unexercised]
+[RtDiff] site[77] @00007ff799685940 = IO::MemoryStream::~MemoryStream[live:encoding freed]
+[RtDiff] site[78] @00007ff799685680 = IO::CompressedStream::~CompressedStream
+[RtDiff] site[79] @00007ff799685640 = IO::CompressedStream::Release
+[RtDiff] site[80] @00007ff7996823c0 = Collection::Array::~Array @0x180024aa0
+[RtDiff] site[81] @00007ff799682480 = Collection::Array::~Array @0x1800249c0
+[RtDiff] site[82] @00007ff7996824c0 = Collection::Array::~Array @0x1800248e0
+[RtDiff] site[83] @00007ff799685e80 = IO::PackageFile::GetFileName
+[RtDiff] site[84] @00007ff799686380 = IO::PackageFile::Construct
+[RtDiff] site[85] @00007ff7996863c0 = IO::PackageFile::Type
+[RtDiff] site[86] @00007ff799686400 = IO::PackageFile::TypeId
+[RtDiff] site[87] @00007ff799686440 = IO::PackageFile::TypeName
+[RtDiff] site[88] @00007ff799686480 = IO::PackageFile::GetFileVersion
+[RtDiff] site[89] @00007ff7996864c0 = IO::PackageFile::Compile
+[RtDiff] site[90] @00007ff799686500 = IO::PackageFile::GetName
+[RtDiff] site[91] @00007ff799686540 = IO::PackageFile::GetAuthor
+[RtDiff] site[92] @00007ff799686580 = IO::PackageFile::GetDescription
+[RtDiff] site[93] @00007ff7996865c0 = IO::PackageFile::GetVersion
+[RtDiff] site[94] @00007ff799686600 = IO::PackageFile::GetUserVersion
+[RtDiff] site[95] @00007ff799686640 = IO::PackageFile::GetPlatform
+[RtDiff] site[96] @00007ff799686680 = IO::PackageFile::GetPriority
+[RtDiff] site[97] @00007ff799686700 = IO::PackageFile::GetCRC
+[RtDiff] site[98] @00007ff7996867c0 = IO::PackageFile::CanOverride
+[RtDiff] site[99] @00007ff799686740 = IO::PackageFile::GetIconWidth
+[RtDiff] site[100] @00007ff799686780 = IO::PackageFile::GetIconHeight
+[RtDiff] site[101] @00007ff7996866c0 = IO::PackageFile::GetFileCount
+[RtDiff] site[102] @00007ff799686800 = IO::PackageFile::GetFileSize
+[RtDiff] site[103] @00007ff799686840 = IO::PackageFile::GetFileOffset
+[RtDiff] site[104] @00007ff799685500 = IO::CompressedStream::ReadPath [lockstep probe]
+[RtDiff] site[105] @00007ff799685c40 = IO::FileSystem::OpenFile/ReadFile [lockstep probe]
+[RtDiff] site[106] @00007ff799685d40 = IO::PackageFile::GetFileInfo
+[RtDiff] site[107] @00007ff799685cc0 = IO::FileSystem::FileInfo::FileInfo(const&)
+[RtDiff] site[108] @00007ff799685c80 = IO::FileSystem::FileInfo::operator= [probe]
+[RtDiff] site[109] @00007ff7996861c0 = IO::MemoryStream [probe]
+[RtDiff] site[110] @00007ff799686040 = IO::MemoryStream::Read
+[RtDiff] site[111] @00007ff7996860c0 = IO::MemoryStream::SetCurrentPos
+[RtDiff] site[112] @00007ff799686080 = IO::MemoryStream::Write
+[RtDiff] site[113] @00007ff799686100 = IO::MemoryStream::GetCurrentPos
+[RtDiff] site[114] @00007ff799686140 = IO::MemoryStream::GetSize
+[RtDiff] site[115] @00007ff7996854c0 = IO::CompressedStream SetWindowCount/Open/Release [probe]
+[RtDiff] site[116] @00007ff799686a80 = IO::Persistence::Startup
+[RtDiff] site[117] @00007ff799686a40 = IO::Persistence::ReadSettings
+[RtDiff] site[118] @00007ff799686a00 = IO::Registry::Registry(const char*)
+[RtDiff] site[119] @00007ff799686000 = IO::FileSystem::GetSaveDirectory
+[RtDiff] site[120] @00007ff799688260 = Object::Factory::Startup [probe, not diffable]
+[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+[RtDiff] site[121] @00007ff79968cc00 = Video::Configuration::Startup
+[RtDiff] site[122] @00007ff7996868c0 = IO::Persistence::Get(int&)
+[RtDiff] site[123] @00007ff799686900 = IO::Persistence::Get(bool&)
+[RtDiff] site[124] @00007ff79968bf20 = Video::DeviceData::DeviceData
+[RtDiff] site[125] @00007ff79968c320 = Video::Device::DisplayMode::DisplayMode
+[RtDiff] site[126] @00007ff79968c360 = Video::Device::DisplayMode::~DisplayMode
+[RtDiff] site[127] @00007ff79968c1a0 = Video::DeviceData::~DeviceData
+[RtDiff] site[128] @00007ff799681e40 = Audio::Configuration::Startup
+[RtDiff] site[129] @00007ff799685340 = Input::Configuration::Startup
+[RtDiff] site[130] @00007ff799685300 = Input::Configuration::Load
+[RtDiff] site[131] @00007ff799685400 = Input::KeyMap::Load
+[RtDiff] site[132] @00007ff79968ca40 = Video::Device::GetMultisampleModeCount
+[RtDiff] site[133] @00007ff79968ca80 = Video::Device::IsMultisampleModeSupported
+[Tornado] ParticleComponent type-id global 0x1401c4720 = 0xF42F66FC (ok)
+[Lane4TypeId] 30/30 slot(s) filled, 0 empty
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c42c0
+[CITID] c70e8(CitizenAI) reg=0000000000000000 val=1392079038 | c7158(Citizen) reg=00007ff799a6c804 val=2704017556 | c42c0(Happiness) reg=0000000000000000 val=709961609
+[TradeTid] TradeComponent=2459092736 TradeDescription=2350935396 ValueDescription=3341444357 ComponentDescription=2598635996 BoatComponent=1147571899
+[ElemTid] HelpButtonElem/ButtonElement     slot=00000001401514f8 typeInfo=00007ffcafcca938 id=1393606052
+[ElemTid] ImageElement                     slot=0000000140151500 typeInfo=00007ffcafccac48 id=893464662
+[ElemTid] TextElement                      slot=0000000140151508 typeInfo=00007ffcafccaee8 id=438357726
+[ElemTid] TableElement                     slot=0000000140151510 typeInfo=00007ffcafccae78 id=3348628233
+[ElemTid] LabelElement                     slot=0000000140151668 typeInfo=00007ffcafcca040 id=1334204089
+[ElemTid] HelpComboElem/ComboElement       slot=0000000140151690 typeInfo=00007ffcafccaa50 id=3545820999
+[ElemTid] ToolbarElement/CheckElement      slot=00000001401516a8 typeInfo=00007ffcafcca9a8 id=272235987
+[ElemTid] SpinnerElement(=NumberElement)   slot=00000001401516c8 typeInfo=00007ffcafccacb8 id=475271278
+[ElemTid] SliderElement (the REAL one)     slot=00000001401516d0 typeInfo=00007ffcafcca350 id=3664215698
+[ElemTid] HelpFirstElem/ScrollElement      slot=00000001401517e8 typeInfo=00007ffcafccad98 id=476774394
+[ElemTid] HelpDocTextElem                  slot=00000001401517f0 typeInfo=00007ffcafcc9ef0 id=289499821
+[ElemTid] HelpContainerElem                slot=00000001401517f8 typeInfo=00007ffcafcc9dd8 id=3444093259
+[ElemTid] NumberEditElement                slot=0000000140151cb0 typeInfo=00007ffcafcca190 id=631391588
+[ElemTid] SliderElement(=SpinnerElement)   slot=0000000140151cf0 typeInfo=00007ffcafcca3c0 id=644357809
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ffcafccab30 id=2370443687
+[ElemTid] ProgressElement                  slot=00000001401515b8 typeInfo=00007ffcafccad28 id=1281602850
+[ElemTid] RibbonElement                    slot=0000000140151720 typeInfo=00007ffcafcca2e0 id=2193694001
+[ElemTid] BorderElement                    slot=0000000140151a58 typeInfo=00007ffcafcca8c8 id=3875203924
+[ElemTid] EditElement                      slot=0000000140151b50 typeInfo=00007ffcafcc9f60 id=6894048
+[ElemTid] GraphElement                     slot=0000000140151dd8 typeInfo=00007ffcafcc9fd0 id=3839563932
+[ElemTid] TabElement                       slot=0000000140151de0 typeInfo=00007ffcafcca468 id=2123353554
+[TrackerTypeId] 0x1401c4b10 = 2570797389 (0x993B414D)
+[OrchardTypeId] 0x1401c46e8 = 3940668927 (0xEAE1D5FF)
+[OrchardTypeId] 0x1401c46b0 = 2843843441 (0xA9819B71)
+[MarketTypeId] 0x1401c44f0 = 1284470327 (0x4C8F7637)
+[MarketTypeId] 0x1401c4528 = 3142036116 (0xBB47AA94)
+[MarketTypeId] 0x1401c7ee8 = 4120633425 (0xF59BE051)
+[FoodTypeId] 0x1401c43a0 HerbalistComponent    = 3390714787 (0xCA1A33A3)
+[FoodTypeId] 0x1401c43d8 HerbalistDescription  = 4158245638 (0xF7D9CB06)
+[FoodTypeId] 0x1401c7510 CropFieldComponent    = 2748109570 (0xA3CCD302)
+[FoodTypeId] 0x1401c7548 CropFieldDescription  = 1222696611 (0x48E0DEA3)
+[FoodTypeId] 0x1401c7660 FishingComponent      = 2644177521 (0x9D9AF271)
+[FoodTypeId] 0x1401c7698 FishingDescription    = 627382911 (0x25651A7F)
+[FoodTypeId] 0x1401c7890 HuntComponent         = 2898427812 (0xACC27FA4)
+[FoodTypeId] 0x1401c78c8 HuntDescription       = 4273867873 (0xFEBE0C61)
+[FoodTypeId] 8/8 slot(s) filled, 0 empty
+[TutorialTypeId] 0x1401C6240 FinishTutorialGoal = 1089248897 (0x40EC9E81)
+[TutorialTypeId] 0x1401C6278 FinishTutorialInstance = 171997278 (0x0A40785E)
+[TutorialTypeId] 0x1401C6668 TutorialInstance = 3760546994 (0xE02564B2)
+[TutorialTypeId] 0x1401C5A98 Profession = 3983740233 (0xED730D49)
+[GrowthTypeId] 0x1401c77b0 = 1845779407 (0x6E045BCF)
+[ClearAreaTypeId] 0x1401c71c8 = 252740659 | 0x1401c7200 = 2607357058
+[RtDiff] site[134] @00007ff799681640 = Achievement::Goal::Goal
+[RtDiff] site[135] @00007ff799683080 = Engine::MainLoop::MainLoop
+[RtDiff] site[136] @00007ff79968be60 = Video::ConstantBufferData::ConstantBufferData
+[RtDiff] site[137] @00007ff79968bee0 = Video::ContextData::ContextData
+[RtDiff] site[138] @00007ff79968b760 = Video::VertexBuffer::PlatformConstruct
+[RtDiff] site[139] @00007ff79968bde0 = Video::VertexBufferData::VertexBufferData
+[RtDiff] site[140] @00007ff79968b7a0 = Video::VertexBuffer::PlatformConstruct[branch:first-in-list]
+[RtDiff] site[141] @00007ff79968b7e0 = Video::VertexBuffer::PlatformConstruct[branch:appended]
+[RtDiff] site[142] @00007ff79968c0a0 = Video::VertexBufferData::~VertexBufferData
+[RtDiff] site[143] @00007ff79968b2e0 = Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]
+[RtDiff] site[144] @00007ff79968b320 = Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
+[RtDiff] site[145] @00007ff79968b5a0 = Video::IndexBuffer::PlatformConstruct
+[RtDiff] site[146] @00007ff79968be20 = Video::IndexBufferData::IndexBufferData
+[RtDiff] site[147] @00007ff79968b5e0 = Video::IndexBuffer::PlatformConstruct[branch:first-in-list]
+[RtDiff] site[148] @00007ff79968b620 = Video::IndexBuffer::PlatformConstruct[branch:appended]
+[RtDiff] site[149] @00007ff79968c0e0 = Video::IndexBufferData::~IndexBufferData
+[RtDiff] site[150] @00007ff79968b260 = Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]
+[RtDiff] site[151] @00007ff79968b2a0 = Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
+[RtDiff] site[152] @00007ff79968b920 = Video::RenderBuffer::PlatformConstruct
+[RtDiff] site[153] @00007ff79968bc60 = Video::RenderBufferData::RenderBufferData
+[RtDiff] site[154] @00007ff79968b960 = Video::RenderBuffer::PlatformConstruct[branch:first-in-list]
+[RtDiff] site[155] @00007ff79968b9a0 = Video::RenderBuffer::PlatformConstruct[branch:appended]
+[RtDiff] site[156] @00007ff79968bf60 = Video::RenderBufferData::~RenderBufferData
+[RtDiff] site[157] @00007ff79968b360 = Video::RenderBuffer::PlatformConstruct[PROBE:first-in-list]
+[RtDiff] site[158] @00007ff79968b3a0 = Video::RenderBuffer::PlatformDestruct[PROBE:list-emptied]
+[RtDiff] site[159] @00007ff79968aea0 = Video::ImageBuffer::ImageBuffer
+[RtDiff] site[160] @00007ff79968b3e0 = Video::ImageBuffer::PlatformConstruct
+[RtDiff] site[161] @00007ff79968bea0 = Video::ImageBufferData::ImageBufferData
+[RtDiff] site[162] @00007ff79968b420 = Video::ImageBuffer::PlatformConstruct[branch:first-in-list]
+[RtDiff] site[163] @00007ff79968b460 = Video::ImageBuffer::PlatformConstruct[branch:appended]
+[RtDiff] site[164] @00007ff79968b060 = Video::ImageBuffer::IsGenerated
+[RtDiff] site[165] @00007ff79968b0e0 = Video::ImageBuffer::IsRendered
+[RtDiff] site[166] @00007ff79968b1e0 = Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]
+[RtDiff] site[167] @00007ff79968b220 = Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]
+[RtDiff] site[168] @00007ff79968cb40 = Video::RenderBuffer::Create
+[RtDiff] site[169] @00007ff799689ba0 = UI::Sprite::Sprite()
+[RtDiff] site[170] @00007ff799684f00 = Input::KeyMap::ClearAll
+[RtDiff] site[171] @00007ff799684fc0 = Input::KeyMap::RegisterInput
+[RtDiff] site[172] @00007ff799688160 = Object::Factory::GetTypeIdFromName
+[RtDiff] site[173] @00007ff799688120 = Object::Base::IsDerivedFrom
+[RtDiff] site[174] @00007ff79968bca0 = Video::VideoProgramData::VideoProgramData
+[RtDiff] site[175] @00007ff79968bda0 = Video::VertexLayoutData::VertexLayoutData
+[RtDiff] site[176] @00007ff79968bd60 = Video::VertexProgramData::VertexProgramData
+[RtDiff] site[177] @00007ff79968bd20 = Video::PixelProgramData::PixelProgramData
+[RtDiff] site[178] @00007ff79968bce0 = Video::RenderStateData::RenderStateData
+[RtDiff] site[179] @00007ff79968aee0 = Video::ImageBuffer::Width
+[RtDiff] site[180] @00007ff79968af20 = Video::ImageBuffer::Height
+[RtDiff] site[181] @00007ff79968afa0 = Video::ImageBuffer::IsCompressed
+[RtDiff] site[182] @00007ff79968af60 = Video::ImageBuffer::GetLevelCount
+[RtDiff] site[183] @00007ff79968afe0 = Video::ImageBuffer::IsDepthBuffer
+[RtDiff] site[184] @00007ff79968b0a0 = Video::ImageBuffer::IsRenderBuffer
+[RtDiff] site[185] @00007ff799689be0 = UI::Sprite::Sprite(sheet,name)
+[GameSettings] Load: LastTerrain=0 LastMapSize=0 LastClimate=0 LastStart=2 LastDisaster=0 (UIScale=0 AutosaveInterval=0)
+[GameSettings] Load: StatusIconEnable=1 (settings+0xC) -- 0 hides EVERY status icon (citizen health, building warnings); it is the Options checkbox, persisted as GameStatusIconEnable under HKCU/Software/Shining Rock Software LLC/Banished
+[RtDiff] site[186] @00007ff799683340 = Engine::DialogLoopT::ctor
+[RtDiff] site[187] @00007ff79968a0e0 = UI::UserInterface::UserInterface
+[RtDiff] site[188] @00007ff799688ea0 = Timer::SecondsToTicks
+[RtDiff] site[189] @00007ff799683440 = Engine::DialogLoaderLoopT::ctor
+[RtDiff] site[190] @00007ff799683480 = Engine::DialogLoaderLoopT::Load
+[BootState] RUNNING (Engine::Startup returned at 1s)
+[RtDiff] site[191] @00007ff7996832c0 = Engine::LoaderLoop::ctor
+[RtDiff] site[192] @00007ff799683300 = Engine::Loader::Load
+[RtDiff] site[193] @00007ff799686fe0 = IO::Serializer::Serializer(Stream&,int)
+[RtDiff] site[194] @00007ff799686c20 = IO::Serializer::Serialize(int&)
+[RtDiff] site[195] @00007ff799686ae0 = IO::Serializer::Serialize(bool&)
+[RtDiff] site[196] @00007ff799687da0 = Object::ExternalFactory::Find
+[RtDiff] site[197] @00007ff799688ac0 = System::Filename::GetPathIdentifer
+[RtDiff] site[198] @00007ff799687020 = IO::Serializer::~Serializer [not diffable]
+[RtDiff] site[199] @00007ff799686fa0 = IO::Serializer::GetEncoding
+[RtDiff] site[200] @00007ff799687d60 = Object::ExternalFactory::IsReferenceModeEnabled
+[RtDiff] site[201] @00007ff7996881e0 = Object::Type::Serialize [not diffable]
+[RtDiff] site[202] @00007ff799686ca0 = IO::Serializer::Serialize(float&)
+[RtDiff] site[203] @00007ff799686f20 = IO::Serializer::SerializeBytes
+[RtDiff] site[204] @00007ff799687aa0 = Math::Vector3::FromYawPitch
+[RtDiff] site[205] @00007ff799688c80 = System::String::operator==(char*)
+[RtDiff] site[206] @00007ff799686f60 = IO::Serializer::GetVersion
+[RtDiff] site[207] @00007ff799683840 = Graphics::AnimationEvent::AnimationEvent()
+[RtDiff] site[208] @00007ff799686ee0 = IO::Serializer::Serialize(n,float*)
+[RtDiff] site[209] @00007ff799681580 = Achievement::Achievement::ctor
+[RtDiff] site[210] @00007ff7996815c0 = Achievement::Achievement::GetFileVersion
+[RtDiff] site[211] @00007ff799683040 = Engine::MainLoop::SetNextLoop
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891cc4da0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891cc4da0 =====
+[RtDiff] site[212] @00007ff7996834c0 = Engine::DialogLoaderLoopT::Startup
+[RtDiff] site[213] @00007ff799687f60 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+[RtDiff] site[214] @00007ff799689220 = UI::DialogInstance::FindElement
+[RtDiff] site[215] @00007ff7996896e0 = UI::Element::FindElement
+[RtDiff] site[216] @00007ff7996829c0 = Collection::Array::SetSize @0x18007a0d0
+[RtDiff] site[217] @00007ff79968a2a0 = UI::UserInterface::SetFullscreenFadeSprite
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891c92a60 =====
+[RtDiff] site[218] @00007ff79968a260 = UI::UserInterface::SetFullscreenFade
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891c92a60 =====
+[RtDiff] site[219] @00007ff79968c580 = Video::Context::SetRenderBuffer
+[RtDiff] site[220] @00007ff79968c4c0 = Video::Context::SetViewport
+[RtDiff] site[221] @00007ff79968c260 = Video::VertexBuffer::Lock
+[RtDiff] site[222] @00007ff79968c2a0 = Video::VertexBuffer::Unlock
+[RtDiff] site[223] @00007ff79968c540 = Video::Context::SetVertexBuffer
+[RtDiff] site[224] @00007ff79968c2e0 = Video::ConstantBuffer::Bind
+[RtDiff] site[225] @00007ff799688fa0 = System::Random::Rand(uint)
+[RtDiff] site[226] @00007ff7996870a0 = Math::Transform::Transform()
+[RtDiff] site[227] @00007ff799687560 = Math::Transform3::Identity()
+[RtDiff] site[228] @00007ff79968cf60 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+[RtDiff] site[229] @00007ff799683fc0 = Graphics::Camera::Camera
+[RtDiff] site[230] @00007ff799683f80 = Graphics::Camera::SetFrustum
+[RtDiff] site[231] @00007ff79968d0e0 = Volume::Frustum::Projection
+[RtDiff] site[232] @00007ff7996871e0 = Math::Matrix::operator*(const Matrix&)
+[RtDiff] site[233] @00007ff799684280 = Graphics::Geometry::Geometry()
+[RtDiff] site[234] @00007ff79968bb20 = Video::VertexBuffer::VertexBuffer
+[RtDiff] site[235] @00007ff79968bae0 = Video::IndexBuffer::IndexBuffer
+[RtDiff] site[236] @00007ff799686e20 = IO::Serializer::Serialize(n,ushort*)
+[RtDiff] site[237] @00007ff79968bbe0 = Video::VertexBuffer::Create
+[RtDiff] site[238] @00007ff79968bc20 = Video::VertexBuffer::Set
+[RtDiff] site[239] @00007ff79968bb60 = Video::IndexBuffer::Create
+[RtDiff] site[240] @00007ff79968bba0 = Video::IndexBuffer::Set
+[RtDiff] site[241] @00007ff799686de0 = IO::Serializer::Serialize(n,short*)
+[RtDiff] site[242] @00007ff799686da0 = IO::Serializer::Serialize(n,uchar*)
+[RtDiff] site[243] @00007ff799686b60 = IO::Serializer::Serialize(uchar&)
+[RtDiff] site[244] @00007ff799686e60 = IO::Serializer::Serialize(n,int*)
+[RtDiff] site[245] @00007ff79968b1a0 = Video::ImageBuffer::Create
+[RtDiff] site[246] @00007ff79968b120 = Video::ImageBuffer::CopyToTexture
+[RtDiff] site[247] @00007ff79968b020 = Video::ImageBuffer::IsDynamic
+[RtDiff] site[248] @00007ff799687d20 = Object::External::GetPath
+[RtDiff] site[249] @00007ff799686c60 = IO::Serializer::Serialize(uint&)
+[RtDiff] site[250] @00007ff7996840c0 = Graphics::Renderer::Renderer
+[RtDiff] site[251] @00007ff799684580 = Graphics::Scene::Scene()
+[RtDiff] site[252] @00007ff799684740 = Graphics::Scene grid init (0x18005e4a0)
+[RtDiff] site[253] @00007ff799682600 = Collection::Array::SetSize @0x18002fea0
+[RtDiff] site[254] @00007ff799684780 = Graphics::Scene grid add (0x18005e5e0)
+[RtDiff] site[255] @00007ff799682b80 = Collection::Array::SetSize @0x18005fb00
+[RtDiff] site[256] @00007ff799684940 = Graphics::Scene grid reindex (0x18005ee30)
+[RtDiff] site[257] @00007ff799684880 = Graphics::Scene grid thread (0x18005f4b0)
+[RtDiff] site[258] @00007ff7996848c0 = Graphics::Scene grid thread[branch:cell was empty]
+[RtDiff] site[259] @00007ff799684980 = Graphics::Scene grid reindex[branch:first threading]
+[RtDiff] site[260] @00007ff799684900 = Graphics::Scene grid thread[branch:appended to ring]
+[RtDiff] site[261] @00007ff799684a00 = Graphics::Scene grid reindex[branch:same cell, early out]
+[RtDiff] site[262] @00007ff7996847c0 = Graphics::Scene grid unthread (0x18005f090)
+[RtDiff] site[263] @00007ff7996849c0 = Graphics::Scene grid reindex[branch:moved cell]
+[RtDiff] site[264] @00007ff799684800 = Graphics::Scene grid unthread[branch:was cell head]
+[RtDiff] site[265] @00007ff799684840 = Graphics::Scene grid unthread[branch:cell emptied]
+[RtDiff] site[266] @00007ff799684a40 = Graphics::Scene free globals (0x18005f1f0)
+[RtDiff] site[267] @00007ff799684c00 = Graphics::SunLight::SunLight
+[RtDiff] site[268] @00007ff799684c40 = Graphics::SunLight::SunLight[branch:colour-target built, DEAD while DeviceData slot 6 is `xor al,al;ret`]
+[RtDiff] site[269] @00007ff799684c80 = Graphics::SunLight::SunLight[branch:bounds differed -> written]
+[RtDiff] site[270] @00007ff799684cc0 = Graphics::SunLight::SunLight[branch:bounds already equal -> skipped]
+[RtDiff] site[271] @00007ff799684d40 = Graphics::SunLight::SunLight[PROBE:object fields, ours vs shipped]
+[RtDiff] site[272] @00007ff799684d80 = Graphics::SunLight::SunLight[PROBE:depth-target Create tuple, ours vs shipped]
+[RtDiff] site[273] @00007ff799684dc0 = Graphics::SunLight::SunLight[PROBE:_firstRenderBuffer restored by each dtor]
+[RtDiff] site[274] @00007ff799684d00 = Graphics::SunLight::~SunLight
+[RtDiff] site[275] @00007ff7996842c0 = Graphics::Geometry::~Geometry()
+[RtDiff] site[276] @00007ff7996820c0 = Collection::Array::~Array @0x18001bf50
+[RtDiff] site[277] @00007ff799683cc0 = Graphics::MeshInstance::MeshInstance()
+[RtDiff] site[278] @00007ff799683c40 = Graphics::MeshInstance::SetMesh
+[RtDiff] site[279] @00007ff799683bc0 = Graphics::MeshInstance::UpdateHierarchy
+[RtDiff] site[280] @00007ff799684680 = Graphics::Scene::AddGlobalObject
+[RtDiff] site[281] @00007ff799687620 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+[RtDiff] site[282] @00007ff799684340 = Graphics::Geometry::SetTransform
+[RtDiff] site[283] @00007ff799683a80 = Graphics::GraphicsMesh::GetMaterialList
+[RtDiff] site[284] @00007ff799683c00 = Graphics::MeshInstance::SetMaterialInstance
+[RtDiff] site[285] @00007ff799684600 = Graphics::Scene::AddObject
+[RtDiff] site[286] @00007ff799687420 = Math::Quaternion::operator*(const Quaternion&)
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891c92a60 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d891c92a60 =====
+[RtDiff] site[287] @00007ff799688ee0 = Timer::TicksToSeconds
+[RtDiff] site[288] @00007ff799683a40 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
+[RtDiff] site[289] @00007ff79968aae0 = UI::ImageElement::SetRotation
+[RtDiff] site[290] @00007ff799683380 = Engine::DialogLoopT::Load
+[RtDiff] site[291] @00007ff799688500 = Save::SaveLoad::SaveLoad
+[RtDiff] site[292] @00007ff7996833c0 = Engine::DialogLoopT::Startup
+[RtDiff] site[293] @00007ff799689860 = UI::Element::SetElementId
+[RtDiff] site[294] @00007ff79968a2e0 = UI::UserInterface::AddDialog
+[RtDiff] site[295] @00007ff799688e00 = System::String::Release [no oracle: mutates a shared refcount]
+[RtDiff] site[296] @00007ff79968a360 = UI::UserInterface::SetCursor
+[RtDiff] site[297] @00007ff79968b160 = Video::ImageBuffer::CopyFromTexture
+[RtDiff] site[298] @00007ff79968a3a0 = UI::UserInterface::EnableCursor
+[RtDiff] site[299] @00007ff799681c80 = Audio::Scene::PlayEffect
+[RtDiff] site[300] @00007ff799688780 = Save::SaveLoad::Update [shadow]
+[RtDiff] site[301] @00007ff7996876e0 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+[RtDiff] site[302] @00007ff7996876a0 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+[RtDiff] site[303] @00007ff799687660 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+[RtDiff] site[304] @00007ff799687ca0 = Math::Transform::AsTransform3
+[RtDiff] site[305] @00007ff799687320 = Math::Transform::AsMatrix()
+[RtDiff] site[306] @00007ff799684000 = Graphics::Camera::SetCameraToWorld
+[RtDiff] site[307] @00007ff799683a00 = Graphics::ParticleInstance::IncrementInstanceIndex
+[RtDiff] site[308] @00007ff799684700 = Graphics::Scene::Clean
+[RtDiff] site[309] @00007ff799684400 = Graphics::Geometry::Clean
+[RtDiff] site[310] @00007ff799682040 = Audio::Device::Update
+[RtDiff] site[311] @00007ff799683400 = Engine::DialogLoopT::Update[time]
+[FrameLimiter] ceiling = 216.0 FPS (4.630 ms/frame) [refresh+headroom], hi-res timer=yes. External limiters (vsync/G-Sync/RTSS) at or below refresh are never affected.
+[RtDiff] site[312] @00007ff799684b00 = Graphics::SunLight::Set
+[RtDiff] site[313] @00007ff799684b40 = Graphics::SunLight::Set[branch:build-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`]
+[RtDiff] site[314] @00007ff799684b80 = Graphics::SunLight::Set[branch:drop-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`]
+[RtDiff] site[315] @00007ff79968c480 = Video::Context::SetFog
+[RtDiff] site[316] @00007ff799684140 = Graphics::Renderer::GetCullCamera
+[RtDiff] site[317] @00007ff799687160 = Math::Transform3::Transform3(const Transform3&)
+[RtDiff] site[318] @00007ff799684480 = Graphics::Geometry::GetTransform
+[RtDiff] site[319] @00007ff7996873a0 = Math::Transform::Inverse()
+[RtDiff] site[320] @00007ff799684080 = Graphics::Camera::GetFrustum
+[RtDiff] site[321] @00007ff79968cfe0 = Volume::Frustum::operator*(Transform3)
+[PerfX] master=0 animCull=0 geomXfLastOnly=0 iconLastOnly=0 ambientThrottle=0 treeSnapshot=0 particleCull=0 pickCull=0 geomCull=0 iconCull=0 animBatchCulled=0 animBatchAll=0 terrainSidecar=0 margin=6.0 (build default 0)
+[RtDiff] site[322] @00007ff79968d020 = Volume::Frustum::Contains
+[RtDiff] site[323] @00007ff799684ec0 = Graphics::Renderer::AddDrawItem
+[RtDiff] site[324] @00007ff799684180 = Graphics::Renderer::GetShader
+[RtDiff] site[325] @00007ff799684e80 = Graphics::MaterialInstance::RenderTextures
+[RtDiff] site[326] @00007ff799684e40 = Graphics::InterpolatedState<Transform>::Lerp
+[RtDiff] site[327] @00007ff799684e00 = Math::Transform::Lerp
+[RtDiff] site[328] @00007ff799687c60 = Math::Quaternion::Lerp
+[RtDiff] site[329] @00007ff79968c600 = Video::Context::SetTransform
+[RtDiff] site[330] @00007ff79968c3c0 = Video::Context::SetColor
+[RtDiff] site[331] @00007ff79968c500 = Video::Context::SetImageBuffer
+[RtDiff] site[332] @00007ff79968c1e0 = Video::IndexBuffer::Lock
+[RtDiff] site[333] @00007ff79968c220 = Video::IndexBuffer::Unlock
+[AutoStart] menu settled (mainMenu=000001d891c92af8) — injecting New Game click
+[GameContainer] +0x00 'Game/Achievement/AchievementList.rsc' -> 000001d891cc1740
+[GameContainer] +0x08 'Game/Scenario/ScenarioList.rsc' -> 000001d892118d20
+[GameContainer] +0x10 'Game/Climate/ClimateList.rsc' -> 000001d8922266f0
+[GameContainer] +0x18 'Game/StartCondition/StartConditions.rsc' -> 000001d891cc5c40
+[GameContainer] +0x20 'Game/Terrain/TerrainList.rsc' -> 000001d89264ce58
+[RtDiff] site[334] @00007ff7996814c0 = Achievement::AchievementManager::SetAchievements
+[RtDiff] site[335] @00007ff7996825c0 = Collection::Array::SetSize @0x180008ff0
+[RtDiff] site[336] @00007ff799682540 = Collection::Array::SetSize @0x180008b90
+[RtDiff] site[337] @00007ff799681140 = Achievement::AchievementManager::GetAchievementCount
+[GameContainer] AchievementManager::SetAchievements(mgr=000001d891c7a400, list=000001d891cc1740) -> count=36
+[RtDiff] site[338] @00007ff799687ea0 = Object::ExternalList::GetResourceCount
+[RtDiff] site[339] @00007ff799689fe0 = UI::String::String(table,name)
+[RtDiff] site[340] @00007ff799689f20 = UI::StringTable::GetIndexFromName
+[RtDiff] site[341] @00007ff79968a0a0 = UI::String::operator System::String()
+[RtDiff] site[342] @00007ff799689ee0 = UI::StringTable::GetText(int)
+[RtDiff] site[343] @00007ff79968a6e0 = UI::ComboElement::AddItem [no oracle: appends + bumps a refcount]
+[RtDiff] site[344] @00007ff799682d00 = Collection::Array elem-destroy(String) @0x180011010
+[RtDiff] site[345] @00007ff799682b00 = Collection::Array::SetSize @0x180034860
+[RtDiff] site[346] @00007ff799682a40 = Collection::Array::SetSize @0x18004bfc0
+[RtDiff] site[347] @00007ff799682a00 = Collection::Array::SetSize @0x180024fe0
+[NewGameDialog] town name generated: "Sectionvillo" (maxLen=12)
+[RtDiff] site[348] @00007ff79968a860 = UI::EditElement::SetText
+[RtDiff] site[349] @00007ff79968a420 = UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element]
+[NewGameDialog] BANISHED_SEED unset -> world seed RANDOMISED to 573398701
+[NewGameDialog] startCondition[0] name="HardName" visible=1
+[NewGameDialog] startCondition[1] name="MediumName" visible=1
+[NewGameDialog] startCondition[2] name="EasyName" visible=1
+[NewGameDialog] start condition FORCED to [2] (want="easy")
+[RtDiff] site[350] @00007ff79968a660 = UI::ComboElement::GetItemCount
+[NewGameDialog] comboCondition items=3 selected=2
+[NewGameDialog] comboTerrain items=2 selected=0
+[NewGameDialog] comboTerrainSize items=3 selected=0
+[NewGameDialog] comboClimate items=3 selected=0
+[NewGameDialog] comboDisaster items=2 selected=0
+[AutoStart] NewGameDialog ready (self=000001d89314ad00) — injecting Start click (buttonOk)
+[NewGameDialog::OnEvent] self=000001d89314ad00 type=0x12 data=2
+[RtDiff] site[351] @00007ff79968a6a0 = UI::ComboElement::GetItemData
+[NewGameDialog] difficulty override -> listIdx=2 (0=Hard 1=Medium 2=Easy) mapGen=000001d8923ca200
+[RtDiff] site[352] @00007ff79968a760 = UI::NumberEditElement::GetValue
+[RtDiff] site[353] @00007ff799688e40 = System::String::ToInteger
+[NewGameDialog::StartGame] picks: condition[2]="EasyName" terrain[0]="Valleys" size=0 climate[0]="Mild" disaster[0]=ON seed=573398701 -> worldFlags=0x00
+[StartNewGame] ENTER worldSetup=000001d891c92af8 seed=573398701 size=0 disastersOff=0 scenarioIdx=-1 saved=0000000000000000 GameUpdateLoop_Vtable=00007ff79968db80
+[RtDiff] site[354] @00007ff799683200 = Engine::UpdateLoop::ctor
+[StartNewGame] loops built game=000001d89310ec00 dl=000001d89310ed68 outer=000001d89310f900; ws+0xC0(loop)=000001d891cc4198 ws+0xB8(engine)=0000000000000000 -> SetDialogLoaderNextLoop(loop)
+[StartNewGame] EXIT — next loop set, transition pending
+[AutoStart] sequence fired — new-game transition queued; driver done
+[FrameLimiter] fps=139.5 (cap=216.0)
+[MenuDLT::Update] STAGE C entry: pendingLoop=000001d89310f900 fade settled (rate=0) -> MainLoop::SetNextLoop
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d89310ed68 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001d89310ed68 =====
+[RtDiff] site[355] @00007ff799683940 = Graphics::Particle::Particle()
+[Tornado/particle] Factory -> 000001d89323d408 (slots 1/2/3/5/6/7/8/9 installed; the instance swirl runs on slot 1)
+[Tornado/particle] Serialize read: +0x48=20.00 +0x4c=75.00 +0x50=26.00 +0x54=30.00 +0x70=30.00 (ctor defaults were 4.00/20.00/5.00/45.00/30.00)
+[RtDiff] site[356] @00007ff7996893a0 = UI::ElementDescription::ctor
+[RtDiff] site[357] @00007ff7996893e0 = UI::ElementDescription::GetFileVersion
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14001c3c0
+[GUL::Load] build owner = tid=35828 for loop=000001d89310ec00
+[GUL::Load] resolves: RandSeed=00007ff79956b916 Picking=00007ff79955454c UI=00007ff79957a221 Anim=00007ff799515278 SaveLoad=00007ff79955edc5 RandFull=00007ff79956b9f2
+[GUL::Load] ENTER self=000001d89310ec00 seed=573398701 mapSize=0 climateGen=000001d8923c92e8 terrainGen=000001d89264c920 saved=0000000000000000
+[GUL::DiseaseList] gw+0xa8=000001d8931907c8 (loaded=000001d8931907c8 isExternalList=1 diseases=12)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::ProfList] gw+0xb0=000001d893195318 defaultProf(+0x30)=000001d891df3608 profRef2(+0x38)=000001d891df3950
+[GUL::UIMat] gw+0xb8=000001d893141c90 (loaded=000001d893141c90 isMaterial=1)
+[GUL::Help] gw+0xa0=000001d89334d258 (loaded=000001d89334d258 isExternalList=1 topics=66)
+[RtDiff] site[358] @00007ff799688f20 = System::Random::Random(uint)
+[RtDiff] site[359] @00007ff7996882c0 = Picking::Scene::Scene()
+[RtDiff] site[360] @00007ff799682bc0 = Collection::Array::SetSize(10000,-1) @0x18007b960
+[RtDiff] site[361] @00007ff799688f60 = System::Random::Rand
+[GUL::Weather] Environment.rsc envRes=000001d89323cf38 weatherDescCount=2
+[RtDiff] site[362] @00007ff7996838c0 = Graphics::AnimationManager::AnimationManager()
+[GUL::SkyMesh] built skyMesh=000001d89322d3b8 meshRes=000001d892b1e040 (SetMesh=00007ff799517d8c TimeCtor=00007ff79956c099)
+[GUL::Load] step29 event StringTables: events=000001d89323a540 seasons=000001d8922777e0 (tid=3224705508)
+[RtDiff] site[363] @00007ff799681480 = Achievement::AchievementManager::SetEventHandler
+[GUL::Load] step30 AchievementManager::SetEventHandler (mgr=000001d891c7a400 handler=EventLog_OnAchievementAwarded)
+[RtDiff] site[364] @00007ff799681500 = Achievement::AchievementManager::Reset
+[RtDiff] site[365] @00007ff799682580 = Collection::Array::SetSize @0x180008d60
+[RtDiff] site[366] @00007ff799681800 = Achievement::Goal::GetInstanceType
+[RtDiff] site[367] @00007ff7996816c0 = Achievement::GoalInstance::GoalInstance
+[GUL::Load] step30b AchievementManager::Reset(mgr=000001d891c7a400) -> instances=36
+[worldgen] resolves: RandSeed=00007ff79956b916 PerlinCtor=00007ff7995817f2 PerlinGen=00007ff7995818d3 RandTol=00007ff79956bee9
+[worldgen] BuildTerrain ENTER wg=000001d893117350 gen=000001d89264c920 sizeIdx=0 seed=573398701 sizeTable=000001d89264ca90 dim=256
+[RtDiff] site[368] @00007ff7996890a0 = System::Random::RandTol
+[RtDiff] site[369] @00007ff79968ae60 = Utility::PerlinNoise::Generate
+[GUL::Load] redundant dispatch for loop=000001d89310ec00 tid=19372 — rejected (loop already owned/built by the first dispatcher)
+[worldgen] coastline resolves: RandFloatTol=00007ff79956bdcf Rand1=00007ff79956baba Rand2=00007ff79956bbaf Vec2Norm=00007ff799446fe7(->00007ff799446ee9) Vec2Len=00007ff799446f8f Vec2LenSq=00007ff799446fbb
+[RtDiff] site[370] @00007ff799689060 = System::Random::RandFloatTol
+[RtDiff] site[371] @00007ff799687920 = Math::Vector2::Length
+[RtDiff] site[372] @00007ff7996879a0 = Math::Vector2::Normalize
+[RtDiff] site[373] @00007ff799687960 = Math::Vector2::LengthSquared
+[worldgen] ranges resolves: Rand2=00007ff79956bbaf RandFloatTol=00007ff79956bdcf Vec2NormByVal=00007ff79954b4a3 Rand1=00007ff79956baba RandFloat=00007ff79956bcc8
+[RtDiff] site[374] @00007ff799688fe0 = System::Random::Rand(int,int)
+[RtDiff] site[375] @00007ff799689020 = System::Random::RandFloat
+[RtDiff] site[376] @00007ff799689ea0 = UI::StringTable::GetCount()
+[RtDiff] site[377] @00007ff79968a020 = UI::String::String(table,index)
+[water_contour] built: bodies(+0x1c8)=4 featRanges(+0x1d8)=0 verts(+0x1a8)=11125 idx(+0x1b8)=53304 VB=000001d893117588 IB=000001d8931175b0 (phase2=1)
+[worldgen::river] feature polylines: 4/4 path(s) copied, 2052 point(s) total
+[worldgen::river] halfWidth table (4 path(s)):  [0]=4.00(bank 6.00)  [1]=1.50(bank 3.50)  [2]=1.50(bank 3.50)  [3]=1.50(bank 3.50)
+[worldgen] BuildTerrain EXIT — wg=000001d893117350 dimX2=512 edge=513 hm16=000001d893404688 mat1=000001d891c059c8 blendTex=000001d893b896d8
+[worldgen]   waterMatA(+0x150)=000001d8923e3f88 waterMatB(+0x158)=000001d8923e3cc0 overlayVB(+0x160)=000000000002b750 overlayCntA(+0x1c8)=4 overlayCntB(+0x1d8)=0
+[TownMgr] coarse cell index sized: dim=256 coarse=32 buckets=1024 base=000001d893201bc0 (FireWork water search indexes this; a null base faults at coarseCell*0x10)
+[PfSeed] pathfinder seeded @ game+0x68 = 000001d893205bc8 (dim=256, cells=65536, ASYNC worker-thread mode)
+[RegionSeed] region map built: graph@000001d89322f730 coarseDim=32 regionNodes=729 pairCache=000001d8935e40f0
+[startTown::DIAG]   camPos = (16.50, 31.50, 0.00)
+[startTown::spawn] pools: simple(+0x98)=1 bldg(+0x88)=8 resource(+0x78)=3 citizenFam(+0x68)=6
+[startTown::spawn] fns: CreateEntity=00007ff7993d5b57 Register=00007ff7993d679c IBPCtor=00007ff799550168 MemAlloc=00007ffcafb96e60 ExtFactory=000001d891c77588
+[startTown::probe] citizenRef(+0x48) gen=0 tmpl=000001d8922ae6b0 name="Template\Citizen.rsc"
+[startTown::probe] resource(+0x70) gen=0 tmpl=000001d89321e508 name="Template\NaturalResourceRock.rsc"
+[startTown::probe] structure(+0x80) gen=0 tmpl=000001d891f99180 name="Template\StorageBarn.rsc"
+[startTown::probe] simple(+0x90) gen=0 tmpl=000001d89321d4d8 name="Template\PopulationDeer.rsc"
+[RtDiff] site[378] @00007ff7996881a0 = Object::Factory::CreateObject
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529b0
+[WPCCensus] #1 wpc=000001d8935e49b8 ctor-defaults APPLIED (+0x40=000001d8935e49b8 +0x50=1)
+[RtDiff] site[379] @00007ff799689d60 = UI::SpriteSheet::GetSpriteCount()
+[RtDiff] site[380] @00007ff799684440 = Graphics::Geometry::SetBounds
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152970
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140022480
+[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch (retail 0x14012b640, Tick useAlt=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140164520
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140162920
+[startTown::struct] [0] complete-model variantIdx=0 modelVariant=0 (subCount=3 groups=1)  [retail frame 0 + instant-build path]
+[RtDiff] site[381] @00007ff7996871a0 = Math::Transform2::Transform2(const Scalar&, const Vector2&)
+[RtDiff] site[382] @00007ff7996875a0 = Math::Transform2::FromYawOffset(const Scalar&, const Vector2&)
+[RtDiff] site[383] @00007ff799687260 = Math::Transform2::operator*(const Transform2&)
+[RtDiff] site[384] @00007ff7996872a0 = Math::Transform2::operator*(const Vector2&)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c23d0
+[ModelComponent::OnAdded] self=000001d8935e42d0 scene=000001d89322d338 modelVariant=0 sceneObjId=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c72e8
+[RtDiff] site[385] @00007ff799688440 = Picking::Scene::AddMesh
+[RtDiff] site[386] @00007ff799682640 = Collection::Array::SetSize @0x180059140
+[RtDiff] site[387] @00007ff7996822c0 = Collection::Array::~Array @0x1800739e0
+[PickMesh] AddMesh entity=000001d8935e4130 mesh=000001d891f9a140 userData=000001d8935e4130 -> meshId=0 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,15.50,40.00,0.00 | footprint=(141,164 5x8) => cellFromXform=(143.5,168.0)
+[RtDiff] site[388] @00007ff799681c40 = Audio::Scene::FindEffect3D
+[RtDiff] site[389] @00007ff799681dc0 = Audio::Scene::PlayEffect3D
+[RtDiff] site[390] @00007ff799681ac0 = Audio::Scene::AddEmitter
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935e49b8 key(+0x48)=0x0 roster(+0x60)=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140089470
+[DestroyWorkers] f520 re-seat wpc=000001d8935e49b8: builderKey=1d891df3950 capacity=4 roster=0 (buildComp=000001d8935e4938) workComp=000001d8935e4640 workId(+0x28)=-1 -> nothing in flight to re-key
+[RtDiff] site[391] @00007ff799684640 = Graphics::Scene::RemoveObject
+[RtDiff] site[392] @00007ff799682880 = Collection::Array::SetSize @0x180023830
+[RtDiff] site[393] @00007ff799688480 = Picking::Scene::RemoveMesh
+[ModelComponent::OnAdded] self=000001d8935e42d0 scene=000001d89322d338 modelVariant=2 sceneObjId=0
+[PickMesh] AddMesh entity=000001d8935e4130 mesh=000001d891f9cca0 userData=000001d8935e4130 -> meshId=0 | variant=(0,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,15.50,40.00,0.00 | footprint=(141,164 5x8) => cellFromXform=(143.5,168.0)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935e49b8 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [0] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=60 (no fallback needed)
+[startTown::pickmap] marked 30 cells (10 free, 0 road) @ (141,164) 5x8 rot=90 shape=yes entity=000001d8935e4130 mc=000001d8935e4220
+[PickMesh] AddMesh entity=000001d8935e4130 mesh=000001d891f9cca0 userData=000001d8935e4130 -> meshId=0 | variant=(0,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,15.50,40.00,0.00 | footprint=(141,164 5x8) => cellFromXform=(143.5,168.0)
+[startTown::struct] [0] tmpl=000001d891f99180 tile=(141,164) fp=5x8 rot=90 map=000001d8935e4220
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c22d0
+[startTown::struct] [1] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=-1 (no fallback needed)
+[startTown::pickmap] marked 24 cells (0 free, 0 road) @ (147,165) 4x6 rot=0 shape=NONE(blanket) entity=000001d8935edc18 mc=000001d8935edd00
+[startTown::struct] [1] tmpl=000001d891f99130 tile=(147,165) fp=4x6 rot=0 map=000001d8935edd00
+[WPCCensus] #2 wpc=000001d8935eeaa8 ctor-defaults APPLIED (+0x40=000001d8935eeaa8 +0x50=1)
+[RtDiff] site[394] @00007ff799683ac0 = Graphics::GraphicsMesh::GetNodeIndexFromName
+[startTown::struct] [2] complete-model variantIdx=5 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=000001d8935ee3c0 scene=000001d89322d338 modelVariant=0 sceneObjId=1
+[PickMesh] AddMesh entity=000001d8935e4c90 mesh=000001d89235d6b0 userData=000001d8935e4c90 -> meshId=1 | variant=(5,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,11.00,38.50,0.00 | footprint=(137,164 4x5) => cellFromXform=(139.0,166.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935eeaa8 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935eeaa8: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935eeb18) workComp=000001d8935ee800 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=000001d8935ee3c0 scene=000001d89322d338 modelVariant=2 sceneObjId=1
+[PickMesh] AddMesh entity=000001d8935e4c90 mesh=000001d89234fd60 userData=000001d8935e4c90 -> meshId=1 | variant=(5,2) xform[0..6]=-0.00,-0.00,-0.00,1.00,11.00,38.50,0.00 | footprint=(137,164 4x5) => cellFromXform=(139.0,166.5)
+[TownRegistry] RegisterResidence ibp=1d8935e4c90 townMgr=000001d89322c640 count 0 -> 1 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935eec08 entityIBP=1d8935e4c90 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935eeaa8 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [2] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #0 captured, ownerIBP=1d8935e4c90)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (137,164) 4x5 rot=0 shape=yes entity=000001d8935e4c90 mc=000001d8935ee310
+[PickMesh] AddMesh entity=000001d8935e4c90 mesh=000001d89234fd60 userData=000001d8935e4c90 -> meshId=1 | variant=(5,2) xform[0..6]=-0.00,-0.00,-0.00,1.00,11.00,38.50,0.00 | footprint=(137,164 4x5) => cellFromXform=(139.0,166.5)
+[startTown::struct] [2] tmpl=000001d892362f80 tile=(137,164) fp=4x5 rot=0 map=000001d8935ee310
+[WPCCensus] #3 wpc=000001d8935ef6c8 ctor-defaults APPLIED (+0x40=000001d8935ef6c8 +0x50=1)
+[startTown::struct] [3] complete-model variantIdx=4 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=000001d8935efc10 scene=000001d89322d338 modelVariant=0 sceneObjId=2
+[PickMesh] AddMesh entity=000001d8935ef0e8 mesh=000001d892359ab0 userData=000001d8935ef0e8 -> meshId=2 | variant=(4,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,34.00,0.00 | footprint=(132,160 5x4) => cellFromXform=(134.5,162.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935ef6c8 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935ef6c8: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935ef738) workComp=000001d8935ef420 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=000001d8935efc10 scene=000001d89322d338 modelVariant=2 sceneObjId=2
+[PickMesh] AddMesh entity=000001d8935ef0e8 mesh=000001d89235cbf8 userData=000001d8935ef0e8 -> meshId=2 | variant=(4,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,34.00,0.00 | footprint=(132,160 5x4) => cellFromXform=(134.5,162.0)
+[TownRegistry] RegisterResidence ibp=1d8935ef0e8 townMgr=000001d89322c640 count 1 -> 2 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935f0268 entityIBP=1d8935ef0e8 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935ef6c8 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [3] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #1 captured, ownerIBP=1d8935ef0e8)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (132,160) 5x4 rot=90 shape=yes entity=000001d8935ef0e8 mc=000001d8935eec70
+[PickMesh] AddMesh entity=000001d8935ef0e8 mesh=000001d89235cbf8 userData=000001d8935ef0e8 -> meshId=2 | variant=(4,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,34.00,0.00 | footprint=(132,160 5x4) => cellFromXform=(134.5,162.0)
+[startTown::struct] [3] tmpl=000001d892362f80 tile=(132,160) fp=5x4 rot=90 map=000001d8935eec70
+[WPCCensus] #4 wpc=000001d8935f0718 ctor-defaults APPLIED (+0x40=000001d8935f0718 +0x50=1)
+[startTown::struct] [4] complete-model variantIdx=1 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=000001d8935f30e8 scene=000001d89322d338 modelVariant=0 sceneObjId=3
+[PickMesh] AddMesh entity=000001d8935f2dd8 mesh=000001d8922fd320 userData=000001d8935f2dd8 -> meshId=3 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,29.00,0.00 | footprint=(132,155 5x4) => cellFromXform=(134.5,157.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935f0718 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935f0718: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935f0788) workComp=000001d8935f34a8 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=000001d8935f30e8 scene=000001d89322d338 modelVariant=2 sceneObjId=3
+[PickMesh] AddMesh entity=000001d8935f2dd8 mesh=000001d8923019e0 userData=000001d8935f2dd8 -> meshId=3 | variant=(1,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,29.00,0.00 | footprint=(132,155 5x4) => cellFromXform=(134.5,157.0)
+[TownRegistry] RegisterResidence ibp=1d8935f2dd8 townMgr=000001d89322c640 count 2 -> 3 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935f0878 entityIBP=1d8935f2dd8 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935f0718 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [4] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #2 captured, ownerIBP=1d8935f2dd8)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (132,155) 5x4 rot=90 shape=yes entity=000001d8935f2dd8 mc=000001d8935f0530
+[PickMesh] AddMesh entity=000001d8935f2dd8 mesh=000001d8923019e0 userData=000001d8935f2dd8 -> meshId=3 | variant=(1,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,6.50,29.00,0.00 | footprint=(132,155 5x4) => cellFromXform=(134.5,157.0)
+[startTown::struct] [4] tmpl=000001d892362f80 tile=(132,155) fp=5x4 rot=90 map=000001d8935f0530
+[WPCCensus] #5 wpc=000001d8935f3de0 ctor-defaults APPLIED (+0x40=000001d8935f3de0 +0x50=1)
+[startTown::struct] [5] complete-model variantIdx=4 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=000001d8935f4638 scene=000001d89322d338 modelVariant=0 sceneObjId=4
+[PickMesh] AddMesh entity=000001d8935f4548 mesh=000001d892359ab0 userData=000001d8935f4548 -> meshId=4 | variant=(4,0) xform[0..6]=0.00,-0.00,-1.00,-0.00,11.00,24.50,0.00 | footprint=(137,150 4x5) => cellFromXform=(139.0,152.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935f3de0 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935f3de0: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935f3e50) workComp=000001d8935f3b38 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=000001d8935f4638 scene=000001d89322d338 modelVariant=2 sceneObjId=4
+[PickMesh] AddMesh entity=000001d8935f4548 mesh=000001d89235cbf8 userData=000001d8935f4548 -> meshId=4 | variant=(4,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,11.00,24.50,0.00 | footprint=(137,150 4x5) => cellFromXform=(139.0,152.5)
+[TownRegistry] RegisterResidence ibp=1d8935f4548 townMgr=000001d89322c640 count 3 -> 4 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935f3f40 entityIBP=1d8935f4548 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935f3de0 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [5] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #3 captured, ownerIBP=1d8935f4548)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (137,150) 4x5 rot=180 shape=yes entity=000001d8935f4548 mc=000001d8935f08e0
+[PickMesh] AddMesh entity=000001d8935f4548 mesh=000001d89235cbf8 userData=000001d8935f4548 -> meshId=4 | variant=(4,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,11.00,24.50,0.00 | footprint=(137,150 4x5) => cellFromXform=(139.0,152.5)
+[startTown::struct] [5] tmpl=000001d892362f80 tile=(137,150) fp=4x5 rot=180 map=000001d8935f08e0
+[WPCCensus] #6 wpc=000001d8935f5048 ctor-defaults APPLIED (+0x40=000001d8935f5048 +0x50=1)
+[startTown::struct] [6] complete-model variantIdx=5 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[PickMesh] AddMesh entity=000001d8935f5700 mesh=000001d89235d6b0 userData=000001d8935f5700 -> meshId=5 | variant=(5,0) xform[0..6]=0.00,-0.00,-1.00,-0.00,16.00,24.50,0.00 | footprint=(142,150 4x5) => cellFromXform=(144.0,152.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935f5048 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935f5048: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935f50b8) workComp=000001d8935f4da0 workId(+0x28)=-1 -> nothing in flight to re-key
+[PickMesh] AddMesh entity=000001d8935f5700 mesh=000001d89234fd60 userData=000001d8935f5700 -> meshId=5 | variant=(5,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,16.00,24.50,0.00 | footprint=(142,150 4x5) => cellFromXform=(144.0,152.5)
+[TownRegistry] RegisterResidence ibp=1d8935f5700 townMgr=000001d89322c640 count 4 -> 5 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935f51a8 entityIBP=1d8935f5700 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935f5048 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [6] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #4 captured, ownerIBP=1d8935f5700)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (142,150) 4x5 rot=180 shape=yes entity=000001d8935f5700 mc=000001d8935f3fa8
+[PickMesh] AddMesh entity=000001d8935f5700 mesh=000001d89234fd60 userData=000001d8935f5700 -> meshId=5 | variant=(5,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,16.00,24.50,0.00 | footprint=(142,150 4x5) => cellFromXform=(144.0,152.5)
+[startTown::struct] [6] tmpl=000001d892362f80 tile=(142,150) fp=4x5 rot=180 map=000001d8935f3fa8
+[WPCCensus] #7 wpc=000001d8935f5340 ctor-defaults APPLIED (+0x40=000001d8935f5340 +0x50=1)
+[startTown::struct] [7] complete-model variantIdx=5 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[PickMesh] AddMesh entity=000001d8935f5c60 mesh=000001d89235d6b0 userData=000001d8935f5c60 -> meshId=6 | variant=(5,0) xform[0..6]=0.00,-0.00,-0.71,-0.71,20.50,29.00,0.00 | footprint=(146,155 5x4) => cellFromXform=(148.5,157.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000001d8935f5340 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=000001d8935f5340: builderKey=1d891df3950 capacity=2 roster=0 (buildComp=000001d8935f53b0) workComp=000001d8935ef370 workId(+0x28)=-1 -> nothing in flight to re-key
+[PickMesh] AddMesh entity=000001d8935f5c60 mesh=000001d89234fd60 userData=000001d8935f5c60 -> meshId=6 | variant=(5,2) xform[0..6]=0.00,-0.00,-0.71,-0.71,20.50,29.00,0.00 | footprint=(146,155 5x4) => cellFromXform=(148.5,157.0)
+[TownRegistry] RegisterResidence ibp=1d8935f5c60 townMgr=000001d89322c640 count 5 -> 6 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=000001d8935f35e8 entityIBP=1d8935f5c60 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000001d8935f5340 key(+0x48)=0x1d891df3950 roster(+0x60)=0
+[startTown::struct] [7] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #5 captured, ownerIBP=1d8935f5c60)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (146,155) 5x4 rot=270 shape=yes entity=000001d8935f5c60 mc=000001d8935ee230
+[PickMesh] AddMesh entity=000001d8935f5c60 mesh=000001d89234fd60 userData=000001d8935f5c60 -> meshId=6 | variant=(5,2) xform[0..6]=0.00,-0.00,-0.71,-0.71,20.50,29.00,0.00 | footprint=(146,155 5x4) => cellFromXform=(148.5,157.0)
+[startTown::struct] [7] tmpl=000001d892362f80 tile=(146,155) fp=5x4 rot=270 map=000001d8935ee230
+[startTown::spawn] structures: spawned 8; entityList count 0 -> 8
+[startTown::citizen] spawn path = hand-rolled SpawnOneCitizen (BANISHED_LIVE_FOUNDING_SPAWN), familyLinks=0
+[startTown::citizen] variant model=000001d8935eeee0 variantIdx=0
+[startTown::citizen] spawnpos model=000001d8935eeee0 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(16.3,33.0,0.0) transform.pos=(16.3,33.0,0.0)
+[PickMesh] AddMesh entity=000001d8935f3770 mesh=000001d8922ac1d0 userData=000001d8935f3770 -> meshId=7 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.28,33.01,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.3,161.0)
+[startTown::citizen] name='Darencer' female=0
+[startTown::citizen] colorscale citizen=000001d893107190 mesh=000001d8935eeee0 same=1 colour=5 scale=1.00 age=2.47 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d8935e53d8 capacity(+0x38)=100
+[startTown::citizen] variant model=000001d893107900 variantIdx=1
+[startTown::citizen] spawnpos model=000001d893107900 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(14.9,33.4,0.0) transform.pos=(14.9,33.4,0.0)
+[PickMesh] AddMesh entity=000001d8935e54f8 mesh=000001d8922ac1d0 userData=000001d8935e54f8 -> meshId=8 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.87,33.39,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.9,161.4)
+[startTown::citizen] name='Tenise' female=1
+[startTown::citizen] colorscale citizen=000001d893107cb8 mesh=000001d893107900 same=1 colour=6 scale=1.00 age=3.92 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d8935e5618 capacity(+0x38)=100
+[startTown::citizen] variant model=000001d893b40818 variantIdx=1
+[startTown::citizen] spawnpos model=000001d893b40818 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(16.2,34.3,0.0) transform.pos=(16.2,34.3,0.0)
+[PickMesh] AddMesh entity=000001d893108158 mesh=000001d8922ac1d0 userData=000001d893108158 -> meshId=9 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.19,34.27,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.2,162.3)
+[startTown::citizen] name='Opher' female=1
+[startTown::citizen] colorscale citizen=000001d893b40ce0 mesh=000001d893b40818 same=1 colour=6 scale=0.66 age=0.74 thresh=2.00 (child)
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d893b40c98 capacity(+0x38)=100
+[startTown::citizen] variant model=000001d893b415c0 variantIdx=0
+[startTown::citizen] spawnpos model=000001d893b415c0 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(13.8,33.0,0.0) transform.pos=(13.8,33.0,0.0)
+[PickMesh] AddMesh entity=000001d893b41528 mesh=000001d8922ac1d0 userData=000001d893b41528 -> meshId=10 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,13.78,32.99,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(141.8,161.0)
+[startTown::citizen] name='Derrel' female=0
+[startTown::citizen] colorscale citizen=000001d893b41a88 mesh=000001d893b415c0 same=1 colour=1 scale=0.66 age=1.36 thresh=2.00 (child)
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d893b41a40 capacity(+0x38)=100
+[startTown::citizen] variant model=000001d893b423b8 variantIdx=1
+[startTown::citizen] spawnpos model=000001d893b423b8 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(14.3,32.6,0.0) transform.pos=(14.3,32.6,0.0)
+[PickMesh] AddMesh entity=000001d893b42320 mesh=000001d8922ac1d0 userData=000001d893b42320 -> meshId=11 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.27,32.55,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.3,160.6)
+[startTown::citizen] name='Lellamae' female=1
+[startTown::citizen] colorscale citizen=000001d893b42880 mesh=000001d893b423b8 same=1 colour=7 scale=0.66 age=0.35 thresh=2.00 (child)
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d893b42838 capacity(+0x38)=100
+[startTown::citizen] family[0] educated=1 maxKids=3 kids=3 spouseLink=0 ringKids=0
+[startTown::citizen] variant model=000001d893b431b0 variantIdx=0
+[startTown::citizen] spawnpos model=000001d893b431b0 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(14.8,33.3,0.0) transform.pos=(14.8,33.3,0.0)
+[PickMesh] AddMesh entity=000001d893b43118 mesh=000001d8922ac1d0 userData=000001d893b43118 -> meshId=12 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.83,33.29,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.8,161.3)
+[startTown::citizen] name='Lowellie' female=0
+[startTown::citizen] colorscale citizen=000001d893b43678 mesh=000001d893b431b0 same=1 colour=1 scale=1.00 age=3.68 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=000001d893b43630 capacity(+0x38)=100
+[startTown::citizen] variant model=000001d893b43fa8 variantIdx=1
+[startTown::citizen] spawnpos model=000001d893b43fa8 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(16.8,28.8,0.0) transform.pos=(16.8,28.8,0.0)
+[PickMesh] AddMesh entity=000001d893b43f10 mesh=000001d8922ac1d0 userData=000001d893b43f10 -> meshId=13 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.83,28.84,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.8,156.8)
+[startTown::citizen] name='Louelle' female=1
+[startTown::citizen] colorscale citizen=000001d893b44470 mesh=000001d893b43fa8 same=1 colour=5 scale=1.00 age=2.85 thresh=2.00
+[startTown::citizen] variant model=000001d893b45060 variantIdx=0
+[startTown::citizen] spawnpos model=000001d893b45060 base=(16.5,31.5,0.0) jitter=3.00 -> pos=(17.0,33.7,0.0) transform.pos=(17.0,33.7,0.0)
+[PickMesh] AddMesh entity=000001d893108078 mesh=000001d8922ac1d0 userData=000001d893108078 -> meshId=14 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,17.04,33.70,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(145.0,161.7)
+[startTown::citizen] name='Ollis' female=0
+[startTown::citizen] colorscale citizen=000001d893b45528 mesh=000001d893b45060 same=1 colour=2 scale=0.66 age=0.42 thresh=2.00 (child)
+[startTown::citizen] variant model=000001d893b45e08 variantIdx=1
+[PickMesh] AddMesh entity=000001d893b45d70 mesh=000001d8922ac1d0 userData=000001d893b45d70 -> meshId=15 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.03,31.01,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.0,159.0)
+[startTown::citizen] name='Essee' female=1
+[startTown::citizen] colorscale citizen=000001d893b462d0 mesh=000001d893b45e08 same=1 colour=3 scale=0.66 age=0.18 thresh=2.00 (child)
+[startTown::citizen] variant model=000001d893b46c00 variantIdx=0
+[PickMesh] AddMesh entity=000001d893b46b68 mesh=000001d8922ac1d0 userData=000001d893b46b68 -> meshId=16 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.97,33.54,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(145.0,161.5)
+[startTown::citizen] name='Erico' female=0
+[startTown::citizen] colorscale citizen=000001d893b470c8 mesh=000001d893b46c00 same=1 colour=3 scale=0.66 age=1.62 thresh=2.00 (child)
+[startTown::citizen] family[1] educated=1 maxKids=3 kids=3 spouseLink=0 ringKids=0
+[startTown::citizen] variant model=000001d893b479f8 variantIdx=0
+[PickMesh] AddMesh entity=000001d893b47960 mesh=000001d8922ac1d0 userData=000001d893b47960 -> meshId=17 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.93,33.52,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.9,161.5)
+[startTown::citizen] name='Killip' female=0
+[startTown::citizen] colorscale citizen=000001d893b47ec0 mesh=000001d893b479f8 same=1 colour=5 scale=1.00 age=2.87 thresh=2.00
+[startTown::citizen] variant model=000001d893b487f0 variantIdx=1
+[PickMesh] AddMesh entity=000001d893b48758 mesh=000001d8922ac1d0 userData=000001d893b48758 -> meshId=18 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,15.73,33.50,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(143.7,161.5)
+[startTown::citizen] name='Latany' female=1
+[startTown::citizen] colorscale citizen=000001d893b48cb8 mesh=000001d893b487f0 same=1 colour=6 scale=1.00 age=3.20 thresh=2.00
+[PickMesh] AddMesh entity=000001d8935f54f8 mesh=000001d8922ac1d0 userData=000001d8935f54f8 -> meshId=19 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,19.36,31.63,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(147.4,159.6)
+[startTown::citizen] family[2] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[PickMesh] AddMesh entity=000001d893b4a4c8 mesh=000001d8922ac1d0 userData=000001d893b4a4c8 -> meshId=20 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.50,32.26,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.5,160.3)
+[PickMesh] AddMesh entity=000001d8935f5f18 mesh=000001d8922ac1d0 userData=000001d8935f5f18 -> meshId=21 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.44,30.52,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.4,158.5)
+[PickMesh] AddMesh entity=000001d8935ef1a0 mesh=000001d8922ac1d0 userData=000001d8935ef1a0 -> meshId=22 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.97,33.41,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(143.0,161.4)
+[PickMesh] AddMesh entity=000001d8935f0ff8 mesh=000001d8922ac1d0 userData=000001d8935f0ff8 -> meshId=23 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,17.26,33.68,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(145.3,161.7)
+[PickMesh] AddMesh entity=000001d893b4f278 mesh=000001d8922ac1d0 userData=000001d893b4f278 -> meshId=24 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.59,32.75,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.6,160.7)
+[startTown::citizen] family[3] educated=1 maxKids=3 kids=3 spouseLink=0 ringKids=0
+[PickMesh] AddMesh entity=000001d893b50020 mesh=000001d8922ac1d0 userData=000001d893b50020 -> meshId=25 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,15.83,29.33,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(143.8,157.3)
+[PickMesh] AddMesh entity=000001d893b50dc8 mesh=000001d8922ac1d0 userData=000001d893b50dc8 -> meshId=26 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,13.73,32.30,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(141.7,160.3)
+[PickMesh] AddMesh entity=000001d893b51b70 mesh=000001d8922ac1d0 userData=000001d893b51b70 -> meshId=27 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,18.83,29.82,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(146.8,157.8)
+[PickMesh] AddMesh entity=000001d893b52918 mesh=000001d8922ac1d0 userData=000001d893b52918 -> meshId=28 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.16,32.74,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.2,160.7)
+[PickMesh] AddMesh entity=000001d893b44ed0 mesh=000001d8922ac1d0 userData=000001d893b44ed0 -> meshId=29 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,19.50,32.70,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(147.5,160.7)
+[startTown::citizen] family[4] educated=1 maxKids=3 kids=3 spouseLink=0 ringKids=0
+[PickMesh] AddMesh entity=000001d893b54b98 mesh=000001d8922ac1d0 userData=000001d893b54b98 -> meshId=30 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,14.54,32.47,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(142.5,160.5)
+[PickMesh] AddMesh entity=000001d893b55940 mesh=000001d8922ac1d0 userData=000001d893b55940 -> meshId=31 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.12,28.62,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.1,156.6)
+[PickMesh] AddMesh entity=000001d893b56738 mesh=000001d8922ac1d0 userData=000001d893b56738 -> meshId=32 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,16.34,32.95,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(144.3,161.0)
+[PickMesh] AddMesh entity=000001d893b57530 mesh=000001d8922ac1d0 userData=000001d893b57530 -> meshId=33 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,17.67,32.75,0.00 | footprint=(-1,-1 -1x-1) => cellFromXform=(145.7,160.7)
+[startTown::citizen] family[5] educated=1 maxKids=3 kids=2 spouseLink=0 ringKids=0
+[startTown::housing] families=6 capturedHouses=6 tidCitizen=2704017556
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a08
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a10
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a18
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a20
+[RtDiff] site[395] @00007ff799683b40 = Graphics::MeshInstance::GetNodeToWorld
+[startTown::housing] family[0] -> house#0 (IBP=1d8935e4c90): housed 5/5 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=5 slots=1 occupantCap(desc+0x24)=5  <-- FULL: this household can never have a child; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[1] -> house#1 (IBP=1d8935ef0e8): housed 5/5 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=5 slots=1 occupantCap(desc+0x24)=5  <-- FULL: this household can never have a child; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[2] -> house#2 (IBP=1d8935f2dd8): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[3] -> house#3 (IBP=1d8935f4548): housed 5/5 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=5 slots=1 occupantCap(desc+0x24)=5  <-- FULL: this household can never have a child; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[4] -> house#4 (IBP=1d8935f5700): housed 5/5 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=5 slots=1 occupantCap(desc+0x24)=5  <-- FULL: this household can never have a child; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[5] -> house#5 (IBP=1d8935f5c60): housed 4/4 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=4 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::spawn] citizens: spawned 27; entityList count 8 -> 35
+[startTown::laborer] seeded Laborer on 12/12 adults (of 27 citizens, laborerKey=0x1d891df3608)
+[startTown::registry] registered 0 founding citizens into townMgr+0xa0 (27 already registered by the OnAdd broadcast)
+[startTown::res] begin [0] name="Template\NaturalResourceRock.rsc"
+[startTown::res] [0] variants:has=0 count=0 thr=0.000 denom=1 (scatter div=3.00 thr=0.625 dens=0.350)
+[startTown::res] [0] tmpl=000001d89321e508 desc=000001d89321ebc0 thr=0.625 dens=0.350 h[0.00,0.25) slope>=0.99 -> 1242 zoneSkips=1
+[startTown::res] begin [1] name="Template\NaturalResourceOre.rsc"
+[startTown::res] [1] variants:has=0 count=0 thr=0.000 denom=1 (scatter div=5.00 thr=0.650 dens=0.400)
+[startTown::res] [1] tmpl=000001d89321e400 desc=000001d89321e7b8 thr=0.650 dens=0.400 h[0.00,1.00) slope>=0.75 -> 621 zoneSkips=0
+[startTown::res] begin [2] name="Template\NaturalResourceTree.rsc"
+[startTown::res] [2] variants:has=1 count=3 thr=0.500 denom=5 (scatter div=30.00 thr=0.350 dens=0.400)
+[startTown::res]   spawnComp[1] sc=000001d89350c368 desc=000001d891ed94d8 entries=5 array=000001d891eb5cb8
+[startTown::res]   spawnComp[2] sc=000001d89350c718 desc=000001d891ed94d8 entries=5 array=000001d891eb5cb8
+[startTown::res]   spawnComp[3] sc=000001d89350cac8 desc=000001d891ed94d8 entries=5 array=000001d891eb5cb8
+[startTown::res] [2] tmpl=000001d891e8f500 desc=000001d891eb6198 thr=0.350 dens=0.400 h[0.00,1.00) slope>=0.75 -> 8999 zoneSkips=0
+[startTown::res] SpawnComponent carriers: 8999 of 10862 scattered resources have one, 8999 of those have a non-empty SpawnDescription (tid(SpawnComponent)=556532549)
+[DoSpawnCensus:worldgen-seed] calls=42270 -> CREATED=375 | bail: noWorld=0 worldBit=0 noTemplate=0 densityRoll=41479 offMap=0 cannotPlace=76 tileTaken=340 allocFailed=0 listClosed=0
+[dc20Census:worldgen-seed] evictions=99 skipSceneTeardown=0 noParticipatingComp=0
+[startTown::spawn] resources: spawned 10862; entityList count 35 -> 11272
+[startTown::env] emitters=255 ambient=256(chunk=16) global=1 (paths=4, emitterTmpl=000001d89323b1f0 ambTmpl=000001d89323b230 envTmpl=000001d89323b460)
+[startTown::spawn] environment: spawned 512; entityList count 11272 -> 11784
+[startTown::spawn] simple[0] tmpl=000001d89321d4d8
+[Herd] PopulationComponent::Startup: self=000001d894a35280 mapDim=256 habDim=32 cells=1024 herdDim=4 herds=16 template=000001d89321f188
+[RtDiff] site[396] @00007ff799683c80 = Graphics::MeshInstance::PlayAnimation
+[AnimalUpd] MoveTo: self=000001d894a40f50 dest=(-84.83, -75.43, 0.12) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a432b0 dest=(-25.51, -63.73, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a471e0 dest=(-21.12, -71.38, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a4bc48 dest=(43.81, -81.75, 0.15) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a506d0 dest=(84.24, -85.88, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a52918 dest=(79.36, -89.80, 0.01) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a581f8 dest=(-60.61, -6.27, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a5c478 dest=(-60.64, -2.25, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a5dde8 dest=(-4.63, -6.86, 0.44) attempts=6
+[AnimalUpd] MoveTo: self=000001d894a609f0 dest=(-4.43, -10.86, 0.46) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a62380 dest=(106.19, -56.76, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a63220 dest=(107.65, -53.88, 0.07) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a67270 dest=(-106.84, 32.59, 0.41) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a694a8 dest=(-104.29, 23.48, 0.04) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a6adc0 dest=(-15.80, 49.20, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a6bc60 dest=(-20.51, 52.45, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a6cb28 dest=(-19.26, 56.26, -0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a6ed28 dest=(-15.62, 51.20, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a71a80 dest=(53.48, 20.81, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a73c80 dest=(64.44, 16.36, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a75558 dest=(52.41, 15.26, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a763d8 dest=(57.44, 15.71, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a77d00 dest=(89.86, 4.35, 0.01) attempts=1
+[AnimalUpd] MoveTo: self=000001d894a78bc8 dest=(97.53, 10.89, 0.01) attempts=1
+[Herd] PopulationComponent::Startup: 16/16 herd entities created
+[startTown::spawn] simple pool: spawned 1 entities; entityList count 11784 -> 11910
+[RtDiff] site[397] @00007ff799687be0 = Math::Vector3::NormalizeWithMag
+[RtDiff] site[398] @00007ff799687ae0 = Math::Vector3::Heading
+[Pasture] livestock 000001d894a8d790 joined the free-roaming pool (now 1)
+[Pasture] livestock 000001d894a8f030 joined the free-roaming pool (now 2)
+[Pasture] livestock 000001d894a90908 joined the free-roaming pool (now 3)
+[Pasture] livestock 000001d894a90f40 joined the free-roaming pool (now 4)
+[Pasture] livestock 000001d894a927e0 joined the free-roaming pool (now 5)
+[Pasture] livestock 000001d894a932f8 joined the free-roaming pool (now 6)
+[Pasture] livestock 000001d894a93e10 joined the free-roaming pool (now 7)
+[Pasture] livestock 000001d894a944e0 joined the free-roaming pool (now 8)
+[StartHerd] spawned 8/8 livestock from template 000001d8920aaf88 at (16.5,31.5) radius=4.0
+[AgriSeed] available-agriculture seeded: plants=2 trees=2 livestock=1; townMgr+0x120 count 0 -> 5
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935ee7b8 CLAMPED fuel seed 400 -> 192 units (cap=1000, food takes 130, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935ee7b8 residents=5 reqPerResident=25 threshold=125 seeded=130 -> GetResourceCount(res)=130 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935ef3d8 CLAMPED fuel seed 400 -> 192 units (cap=1000, food takes 130, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935ef3d8 residents=5 reqPerResident=25 threshold=125 seeded=130 -> GetResourceCount(res)=130 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935f3460 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935f3460 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935f3af0 CLAMPED fuel seed 400 -> 192 units (cap=1000, food takes 130, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935f3af0 residents=5 reqPerResident=25 threshold=125 seeded=130 -> GetResourceCount(res)=130 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935f4d58 CLAMPED fuel seed 400 -> 192 units (cap=1000, food takes 130, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935f4d58 residents=5 reqPerResident=25 threshold=125 seeded=130 -> GetResourceCount(res)=130 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=000001d8935ef328 CLAMPED fuel seed 400 -> 199 units (cap=1000, food takes 104, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=000001d8935ef328 residents=4 reqPerResident=25 threshold=100 seeded=104 -> GetResourceCount(res)=104 (SUFFICIENT: no Gather)
+[startTown::housing] seeded food into 6/6 houses (8 units each, edibleTmpl=1d89320b1c0 flags=0x22)
+[startTown::housing] seeded FIREWOOD STAND-IN into 6/6 houses (400 units each, fuelTmpl=1d891e6d930 flags=0xc0)
+[startTown::DIAG] mapGen(loop+0x40)=000001d8923ca200 game=000001d89322cf28 worldGeom=000001d893117350 playerCtrl=000001d89322c308
+[startTown::DIAG]   mapGen+0x3c(townSize)=13
+[startTown::DIAG]   pools: a0=000001d8923ca740 a8(cnt)=7 | b0=000001d8923ca950 b8(cnt)=8 | c0=000001d8923cabd8 c8(cnt)=8 | d0=000001d8923cae68 d8(cnt)=3 | e0=2 e4=2 e8=1
+[startTown::DIAG]   *game(dim)=256  tileGrid(*(game+0x80))=000001d893680830  cnt=65536
+[startTown::DIAG]   tiles: buildable(2)=30620 shore(7)=2362 deepWater(8)=2486 mtnLo(10)=5807 mtnHi(6)=23742
+[startTown::DIAG]   worldGeom+0xc0(dim)=512
+[startTown::DIAG]   height@(0,0) = -2.027
+[startTown::DIAG]   height@(-100,0) = 3.395
+[startTown::DIAG]   height@(100,100) = 5.406
+[startTown::DIAG]   height@(-120,-120) = 9.871
+[RtDiff] site[399] @00007ff799681f40 = Audio::Scene::Pause
+[GUL::Load] EXIT — world built: game=000001d89322cf28 ui=000001d89322c510 entityList=000001d89322c420 scene=000001d89322d338 sun=000001d8931175d8
+[HUD-DIAG] Startup CALLED self=000001d89310ec00 m_game=000001d89322cf28 m_userInterface=000001d89322c510 m_resourceList(+0x08)=000001d893118268
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401026a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140101ee0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400938d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c4138
+[Startup] SetupUIRefs: fn=00007ff7993896ac uiScale=0.000 sndButtonDown=000001d8923cb080 sndAlert=000001d8923cb030
+[RtDiff] site[400] @00007ff799687e60 = Object::ExternalFactory::FindNext
+[HUD-DIAG] probe: m_resourceList=000001d893118268 Find=00007ff79954f3b9 FilenameCtor=00007ff799566765 Dtor=00007ff799566898 DialogTypeId=00007ff7998bf460(val=1338773611) ToolbarCtor=00007ff7993a8c01 UI_AddDialog=00007ff79957af2e IsDerivedFrom=00007ff7994eac6c
+[RtDiff] site[401] @00007ff799687ee0 = Object::ExternalList::Find
+[HUD-DIAG] ExternalList::Find("Dialog/Toolbar.rsc") -> foundBase=000001d893187470
+[HUD] ToolbarStandalone_Init: vtable=00007ff79967eb00 [+18 Persist=00007ff79956ea61 +38 OnUpdate=00007ff79956f6bd +48 OnSerSet=00007ff79956ea70] Toolbar=3386704242 ToolbarDesc=2234433627 Button=1393606052 Image=893464662 Check=272235987 Text=438357726
+[HUD] Toolbar: foundBase=000001d893187470 dialogRes=000001d893187470 Ctor=00007ff7993a8c01 UI=000001d89322c510
+[RtDiff] site[402] @00007ff799689320 = UI::Dialog::GetTemplate
+[RtDiff] site[403] @00007ff7996898e0 = UI::Element::SetName
+[RtDiff] site[404] @00007ff799689a20 = UI::Element::SetUserData
+[RtDiff] site[405] @00007ff7996899a0 = UI::Element::SetToolTip
+[RtDiff] site[406] @00007ff7996898a0 = UI::Element::SetFlagsOnOff
+[RtDiff] site[407] @00007ff7996896a0 = UI::Element::ChildCount
+[RtDiff] site[408] @00007ff799689660 = UI::Element::Child
+[RtDiff] site[409] @00007ff799689c60 = UI::Sprite::IsValid()
+[RtDiff] site[410] @00007ff79968ab20 = UI::ImageElement::SetSprite
+[RtDiff] site[411] @00007ff79968a920 = UI::RadioElement::FindCheckBoxes()
+[RtDiff] site[412] @00007ff79968a8e0 = UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses]
+[RtDiff] site[413] @00007ff799682a80 = Collection::Array::SetSize @0x180048fe0
+[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=000001d89310ee60 itemCount(+0xD8)=10 buttonCount(+0xC8)=10 speedCount(+0x100)=6
+[HUD] EventNotify: foundBase=000001d89318ae90 dialogRes=000001d89318ae90 parentToolbar=000001d89310ee60
+[HUD] EventNotify ribbon CONSTRUCTED + added to UI: 000001d89310f760
+[Tools]   bridge node: CreateBridge=2272509727 -> BridgeTool=2765355081
+[Tools]   fenced node: CreateFenced=2515727256 -> FencedTool=3195986552
+[Tools]   drag node: CreateDrag=3893769075 -> DragPlacementTool=3938475504
+[Tools] BuildToolModeTree: entityUI=000001d89322d168 Tool=3890306084 ToolSetting=2850067769 node{CreatePlaced=4107504200 -> PlacementTool=4034384576} node{0 -> EditTool=3849818301} node{CreateRemoval=2744517967 -> RemovalTool=2865193925} node{CreatePath=4097193310 -> PathTool=1385140268} node{CreateRoad=1479859256 -> RoadTool=2419301037} count=8
+[ToolHarness] disabled (BANISHED_TOOL_HARNESS unset)
+[PauseMenu] ENABLED - open at frame 900, click id=6 90 frames later
+[PauseMenu] new world 000001d89310ec00 at frame 1 - rearmed
+[OrchardDiag] disabled (BANISHED_ORCHARD_DIAG unset)
+[CropStart] disabled (BANISHED_CROPFIELD_FORCE_START unset)
+[OrchardForceStart] disabled (BANISHED_ORCHARD_FORCE_START unset)
+[OrchardWorkers] disabled (BANISHED_ORCHARD_WORKERS unset)
+[FoodWorkers] disabled (BANISHED_FOOD_WORKERS unset)
+[OrchardCut] disabled (BANISHED_ORCHARD_CUT unset)
+[RtDiff] site[414] @00007ff79968a1a0 = UI::UserInterface::PausesGame
+[RtDiff] site[415] @00007ff79968a160 = UI::UserInterface::GetFirstDialog
+[RtDiff] site[416] @00007ff799683d40 = Graphics::MeshInstance::~MeshInstance
+[RtDiff] site[417] @00007ff799683b80 = Graphics::MeshInstance::RootAnimationOffset
+[RtDiff] site[418] @00007ff799687120 = Math::Transform::operator=(const Transform&)
+[RtDiff] site[419] @00007ff7996870e0 = Math::Transform::Transform(const Transform&)
+[RtDiff] site[420] @00007ff799688400 = Picking::Scene::SetTransform
+[RtDiff] site[421] @00007ff799683b00 = Graphics::MeshInstance::IsAnimating
+[RtDiff] site[422] @00007ff799687860 = Math::Vector2::Dot
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151718
+[Plague] BOOT: careMult(desc+0x128)=2.0000 healerProf(desc+0x30)=000001d892063030 maxHealth(+0x70)=10.000 durBase(+0x94)=1.000 durSpread(+0x98)=0.500 immunityMonths(+0x9c)=12.000 diseaseList(gw+0xa8)=000001d8931907c8 tidDisease=461933471
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=27 try=1. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[Plague] ROLL-INPUTS citizen=000001d893107190 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.933258 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[RtDiff] site[423] @00007ff799687720 = Math::Transform::operator*(const Vector3&)
+[RtDiff] site[424] @00007ff799687460 = Math::Quaternion::Rotate(const Vector3&)
+[SetupAgeMesh] citizen=000001d893107190 scale=1.00 colour=5 age=2.47 thresh=2.00 state208=0
+[HSR2] residence=1d8935eec08 occupied=1 perOcc=8.0 have=192 -> sufficient
+[Plague] ROLL-INPUTS citizen=000001d893107cb8 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.156242 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=000001d893107cb8 scale=1.00 colour=6 age=3.92 thresh=2.00 state208=0
+[HSR2] residence=1d8935eec08 occupied=1 perOcc=8.0 have=192 -> sufficient
+[Plague] ROLL-INPUTS citizen=000001d893b40ce0 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.314820 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=000001d893b40ce0 scale=0.66 colour=6 age=0.74 thresh=2.00 state208=0
+[HSR2] residence=1d8935eec08 occupied=1 perOcc=8.0 have=192 -> sufficient
+[Plague] ROLL-INPUTS citizen=000001d893b41a88 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.805069 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=000001d893b41a88 scale=0.66 colour=1 age=1.36 thresh=2.00 state208=0
+[HSR2] residence=1d8935eec08 occupied=1 perOcc=8.0 have=192 -> sufficient
+[Plague] ROLL-INPUTS citizen=000001d893b42880 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.672849 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=000001d893b42880 scale=0.66 colour=7 age=0.35 thresh=2.00 state208=0
+[HSR2] residence=1d8935eec08 occupied=1 perOcc=8.0 have=192 -> sufficient
+[Plague] ROLL-INPUTS citizen=000001d893b43678 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.530448 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=000001d893b43678 scale=1.00 colour=1 age=3.68 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0268 occupied=1 perOcc=8.0 have=192 -> sufficient
+[SetupAgeMesh] citizen=000001d893b44470 scale=1.00 colour=5 age=2.85 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0268 occupied=1 perOcc=8.0 have=192 -> sufficient
+[SetupAgeMesh] citizen=000001d893b45528 scale=0.66 colour=2 age=0.42 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0268 occupied=1 perOcc=8.0 have=192 -> sufficient
+[SetupAgeMesh] citizen=000001d893b462d0 scale=0.66 colour=3 age=0.18 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0268 occupied=1 perOcc=8.0 have=192 -> sufficient
+[SetupAgeMesh] citizen=000001d893b470c8 scale=0.66 colour=3 age=1.62 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0268 occupied=1 perOcc=8.0 have=192 -> sufficient
+[SetupAgeMesh] citizen=000001d893b47ec0 scale=1.00 colour=5 age=2.87 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0878 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=000001d893b48cb8 scale=1.00 colour=6 age=3.20 thresh=2.00 state208=0
+[HSR2] residence=1d8935f0878 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=000001d893b49c30 scale=0.66 colour=0 age=0.04 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b4aa28 scale=1.00 colour=7 age=2.97 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b4bae0 scale=1.00 colour=7 age=2.53 thresh=2.00 state208=0
+[RtDiff] site[425] @00007ff799681cc0 = Audio::Scene::FindFree3DEffect
+[RtDiff] site[426] @00007ff799681d00 = Audio::Scene::FindFree3DEffect[branch:reuse-hit, -1 -- the ONLY path through the distance+window test]
+[RtDiff] site[427] @00007ff799681d40 = Audio::Scene::FindFree3DEffect[branch:free-slot returned]
+[RtDiff] site[428] @00007ff799681d80 = Audio::Scene::FindFree3DEffect[branch:table FULL, -1 after 4096]
+[RtDiff] site[429] @00007ff799681540 = Achievement::AchievementManager::Update
+[RtDiff] site[430] @00007ff799681440 = Achievement::AchievementInstance::Update
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151428
+[RtDiff] site[431] @00007ff799681280 = Achievement::AchievementInstance::IsMet
+[RtDiff] site[432] @00007ff799681c00 = Audio::Scene::IsEffectPlaying
+[MusicPlayer] MusicTracks.rsc -> 000001d89323fa10 tracks=15
+[MusicPlayer] PLAY track=11/15 ext=1d8931ee078 scene=000001d8931183d0 -> handle=2560
+[RtDiff] site[433] @00007ff799689960 = UI::Element::SetPadding
+[RtDiff] site[434] @00007ff799685100 = Input::KeyMap::Pressed
+[RtDiff] site[435] @00007ff7996850c0 = Input::KeyMap::GetValue
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401517a8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152750
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151dd0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151758
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400fcc90
+[AudioScene] windFactor(camera dist)=25.000
+[EntityCensus] frame=1 entities=11819
+[Vitals] frame=1 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=15 ibp238=27 ibp248=0
+[RtDiff] site[436] @00007ff79968c440 = Video::Context::SetTime
+[RtDiff] site[437] @00007ff7996846c0 = Graphics::Scene::RemoveGlobalObject
+[RtDiff] site[438] @00007ff79968cfa0 = Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D)
+[RtDiff] site[439] @00007ff7996875e0 = Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&)
+[RtDiff] site[440] @00007ff799684040 = Graphics::Camera::SnapCameraToWorld
+[RtDiff] site[441] @00007ff799687360 = Math::Transform3::AsMatrix()
+[RtDiff] site[442] @00007ff79968c640 = Video::Context::SetCamera
+[RtDiff] site[443] @00007ff79968c5c0 = Video::Context::SetDefaultRenderBuffer
+[RtDiff] site[444] @00007ff79968b4a0 = Video::ImageBuffer::PlatformDestruct
+[RtDiff] site[445] @00007ff79968b4e0 = Video::ImageBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]
+[RtDiff] site[446] @00007ff79968b520 = Video::ImageBuffer::PlatformDestruct[branch:unlinked]
+[RtDiff] site[447] @00007ff79968b560 = Video::ImageBuffer::PlatformDestruct[branch:list-emptied]
+[RtDiff] site[448] @00007ff79968c680 = Video::Context::Reset
+[RtDiff] site[449] @00007ff7996845c0 = Graphics::Scene::~Scene()
+[RtDiff] site[450] @00007ff799682100 = Collection::Array::~Array @0x18001c750
+[RtDiff] site[451] @00007ff799682240 = Collection::Array::~Array @0x18005fc20
+[RtDiff] site[452] @00007ff799684100 = Graphics::Renderer::~Renderer
+[RtDiff] site[453] @00007ff799682140 = Collection::Array::~Array @0x18001c9e0
+[RtDiff] site[454] @00007ff799682ec0 = Collection::Array::~Array(eh_vector) @0x18001c8c0
+[RtDiff] site[455] @00007ff799682d80 = Collection::Array::~Array(+elem) @0x18001c7e0
+[SetupAgeMesh] citizen=000001d893b4ddb0 scale=0.66 colour=0 age=0.60 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b4ea30 scale=0.66 colour=1 age=0.33 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b4f7d8 scale=0.66 colour=4 age=1.92 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b50580 scale=1.00 colour=2 age=3.66 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b51328 scale=1.00 colour=4 age=2.43 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b520d0 scale=0.66 colour=0 age=0.94 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b52e78 scale=0.66 colour=6 age=1.88 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b54350 scale=0.66 colour=6 age=0.92 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001d893b550f8 scale=1.00 colour=1 age=3.34 thresh=2.00 state208=0
+[RtDiff] site[456] @00007ff799687a60 = Math::Vector3::Dot
+[RtDiff] site[457] @00007ff799681900 = Achievement::GoalList::AreGoalsMetExcept
+[RtDiff] site[458] @00007ff799681940 = Achievement::GoalInstance::Update
+[AudioScene] windFactor(camera dist)=25.000
+[EntityCensus] frame=2 entities=11819
+[Vitals] frame=2 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=27 ibp238=27 ibp248=0
+[AudioScene] windFactor(camera dist)=25.000
+[EntityCensus] frame=5 entities=11819
+[Vitals] frame=5 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=27 ibp238=27 ibp248=0
+[EntityCensus] frame=10 entities=11819
+[Vitals] frame=10 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=27 ibp238=27 ibp248=0
+[EntityCensus] frame=30 entities=11819
+[Vitals] frame=30 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=27 ibp238=27 ibp248=0
+[RtDiff] site[459] @00007ff799681b80 = Audio::Scene::SetEmitterVolume
+[EntityCensus] frame=60 entities=11819
+[Vitals] frame=60 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=27 busy=27 ibp238=27 ibp248=0
+[EntityCensus] frame=120 entities=11819
+[Vitals] frame=120 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.1 max=0.1  thirst mean=0.1 max=0.1  char=27 busy=27 ibp238=27 ibp248=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c5fe0
+[EntityCensus] frame=240 entities=11819
+[Vitals] frame=240 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=27 busy=27 ibp238=27 ibp248=0
+[Plague] CENSUS rolls=4000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=27 try=5000. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[EntityCensus] frame=480 entities=11819
+[Vitals] frame=480 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.2 max=0.2  thirst mean=0.3 max=0.3  char=27 busy=27 ibp238=27 ibp248=0
+[PlayAnimGuard] target=000001d893b52918 vtable=00007ff79967ec60 factIdx=800 gen=0x34ef9c96 (live)
+[PlayAnimGuard] target=000001d893b48758 vtable=00007ff79967ec60 factIdx=710 gen=0x513e7640 (live)
+[PlayAnimGuard] target=000001d893b47960 vtable=00007ff79967ec60 factIdx=701 gen=0x2b8f6697 (live)
+[Plague] CENSUS rolls=8000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PlayAnimGuard] target=000001d893b42320 vtable=00007ff79967ec60 factIdx=647 gen=0xcc73188b (live)
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=27 try=10000. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[PlayAnimGuard] target=000001d893b50dc8 vtable=00007ff79967ec60 factIdx=782 gen=0x6f5d3030 (live)
+[PlayAnimGuard] target=000001d893b57530 vtable=00007ff79967ec60 factIdx=845 gen=0x99d80264 (live)
+[PlayAnimGuard] target=000001d893108158 vtable=00007ff79967ec60 factIdx=629 gen=0xeddab520 (live)
+[PlayAnimGuard] target=000001d8935f0ff8 vtable=00007ff79967ec60 factIdx=755 gen=0x676bf08d (live)
+[PlayAnimGuard] target=000001d893108078 vtable=00007ff79967ec60 factIdx=674 gen=0xdf8e2b2b (live)
+[PlayAnimGuard] target=000001d893b41528 vtable=00007ff79967ec60 factIdx=638 gen=0x6e502dbd (live)
+[Plague] CENSUS rolls=12000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PlayAnimGuard] target=000001d893b43118 vtable=00007ff79967ec60 factIdx=656 gen=0x87d9da24 (live)
+[PlayAnimGuard] target=000001d893b54b98 vtable=00007ff79967ec60 factIdx=818 gen=0x02fa703e (live)
+[PlayAnimGuard] target=000001d8935f54f8 vtable=00007ff79967ec60 factIdx=719 gen=0x89fc1f3a (live)
+[PlayAnimGuard] target=000001d8935ef1a0 vtable=00007ff79967ec60 factIdx=746 gen=0xc790385d (live)
+[PlayAnimGuard] target=000001d893b4f278 vtable=00007ff79967ec60 factIdx=764 gen=0x48675c97 (live)
+[HerdUpd] calls=1 noPop=0 noCfg=0 fired=0 | herd=000001d894a88ad0 members=6 timer=14282762 interval=3600000000 cfgMin=12.000
+[PlayAnimGuard] target=000001d8935f5f18 vtable=00007ff79967ec60 factIdx=737 gen=0xa583c8bf (live)
+[PlayAnimGuard] target=000001d893b44ed0 vtable=00007ff79967ec60 factIdx=809 gen=0x9e875a99 (live)
+[PlayAnimGuard] target=000001d893b56738 vtable=00007ff79967ec60 factIdx=836 gen=0xee22f7bd (live)
+[PlayAnimGuard] target=000001d893b4a4c8 vtable=00007ff79967ec60 factIdx=728 gen=0x92fddee0 (live)
+[EntityCensus] frame=900 entities=11819
+[Vitals] frame=900 citizens=27  age mean=1.88 max=3.92 (maxAge[0]=102.47)  hunger mean=0.4 max=0.4  thirst mean=0.5 max=0.6  char=27 busy=27 ibp238=27 ibp248=0
+[PauseMenu] frame 901 - opening (entityUI=000001d89322d168 ui=000001d89322c510 pausesGame=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140161f10
+[PauseMenu] pause dialog=000001d8945428e8 vtable=00007ff79967e5e0 (UI array index=1 of 2) pausesGame=0
+[PauseMenu] frame 991 - dialog=000001d8945428e8 vtable=00007ff79967e5e0 (was 00007ff79967e5e0) UI array index=-1 of 0 pausesGame=1
+[PauseMenu] dispatching OnCommand(msg=0x12, id=6)
+[RtDiff] site[460] @00007ff7996819c0 = Application::Application::Quit
+[PauseMenu] OnCommand returned
+[RtDiff] site[461] @00007ff799681fc0 = Audio::Scene::StopAll
+[GUL::Teardown] resolved: e320=00007ff7994e67a2 14c30=00007ff7994e6734 14b00=00007ff7994750a5 markRemoval=00007ff799246580 removeEntity=00007ff7993d9664
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935eec08
+[Unassign] #1 citizen=000001d893107190 oldWp=1d8935e4c90 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #2 citizen=000001d893b41a88 oldWp=1d8935e4c90 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #3 citizen=000001d893b40ce0 oldWp=1d8935e4c90 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #4 citizen=000001d893b42880 oldWp=1d8935e4c90 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #5 citizen=000001d893107cb8 oldWp=1d8935e4c90 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935f0268
+[Unassign] #6 citizen=000001d893b45528 oldWp=1d8935ef0e8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #7 citizen=000001d893b470c8 oldWp=1d8935ef0e8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #8 citizen=000001d893b43678 oldWp=1d8935ef0e8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #9 citizen=000001d893b44470 oldWp=1d8935ef0e8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #10 citizen=000001d893b462d0 oldWp=1d8935ef0e8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935f0878
+[Unassign] #11 citizen=000001d893b47ec0 oldWp=1d8935f2dd8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #12 citizen=000001d893b49c30 oldWp=1d8935f2dd8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #13 citizen=000001d893b48cb8 oldWp=1d8935f2dd8 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935f3f40
+[Unassign] #14 citizen=000001d893b4ddb0 oldWp=1d8935f4548 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #15 citizen=000001d893b4f7d8 oldWp=1d8935f4548 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #16 citizen=000001d893b4aa28 oldWp=1d8935f4548 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #17 citizen=000001d893b4bae0 oldWp=1d8935f4548 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #18 citizen=000001d893b4ea30 oldWp=1d8935f4548 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935f51a8
+[Unassign] #19 citizen=000001d893b50580 oldWp=1d8935f5700 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #20 citizen=000001d893b52e78 oldWp=1d8935f5700 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #21 citizen=000001d893b520d0 oldWp=1d8935f5700 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #22 citizen=000001d893b54350 oldWp=1d8935f5700 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #23 citizen=000001d893b51328 oldWp=1d8935f5700 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001d8935f35e8
+[Unassign] #24 citizen=000001d893b550f8 oldWp=1d8935f5c60 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[Unassign] #25 citizen=000001d893b56c98 oldWp=1d8935f5c60 slot 0->-1 caller=00007ff79933280e (static 0x1400f280e)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151550
+[RtDiff] site[462] @00007ff7996891e0 = UI::DialogInstance::GetController
+[NomadDlgWalk] #1 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #2 visited=4 closed=0 (no open panel bound to the removed entity)
+[RtDiff] site[463] @00007ff799688d80 = System::String::FormatParamCount
+[RtDiff] site[464] @00007ff799688dc0 = System::String::FormatParamList
+[NomadDlgWalk] #3 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #4 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #5 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #6 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #7 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #8 visited=4 closed=0 (no open panel bound to the removed entity)
+[WildAnimalRm] calls=1 noHerd=0 herd=000001d894a831b8 members 8 -> 7
+[WildAnimalRm] calls=11 noHerd=0 herd=000001d894a88ad0 members 3 -> 2
+[WildAnimalRm] calls=21 noHerd=0 herd=000001d894a7fff8 members 4 -> 3
+[WildAnimalRm] calls=31 noHerd=0 herd=000001d894a77050 members 6 -> 5
+[WildAnimalRm] calls=41 noHerd=0 herd=000001d894a70400 members 5 -> 4
+[WildAnimalRm] calls=51 noHerd=0 herd=000001d894a6aae0 members 1 -> 0
+[WildAnimalRm] calls=61 noHerd=0 herd=000001d894a620c8 members 2 -> 1
+[WildAnimalRm] calls=71 noHerd=0 herd=000001d894a57548 members 5 -> 4
+[WildAnimalRm] calls=81 noHerd=0 herd=000001d894a38360 members 7 -> 6
+[WildAnimalRm] calls=91 noHerd=0 herd=000001d894a42fd0 members 6 -> 5
+[WildAnimalRm] calls=101 noHerd=0 herd=000001d894a4b968 members 3 -> 2
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015ef18
+[RtDiff] site[465] @00007ff799688300 = Picking::Scene::~Scene()
+[RtDiff] site[466] @00007ff799682e40 = Collection::Array::~Array(+elem) @0x180073c90
+[RtDiff] site[467] @00007ff799682300 = Collection::Array::~Array @0x180073bb0
+[RtDiff] site[468] @00007ff799682280 = Collection::Array::~Array @0x1800737f0
+[RtDiff] site[469] @00007ff799683900 = Graphics::AnimationManager::~AnimationManager()
+[RtDiff] site[470] @00007ff799682e80 = Collection::Array::~Array(+nested elem) @0x18005bf60
+[RtDiff] site[471] @00007ff799683240 = Engine::UpdateLoop::dtor
+[RtDiff] site[472] @00007ff799689420 = UI::ElementDescription::~ElementDescription
+[RtDiff] site[473] @00007ff79968bfe0 = Video::PixelProgramData::~PixelProgramData
+[RtDiff] site[474] @00007ff79968c020 = Video::VertexProgramData::~VertexProgramData
+[RtDiff] site[475] @00007ff79968bfa0 = Video::VideoProgramData::~VideoProgramData
+[RtDiff] site[476] @00007ff79968cb80 = Video::RenderStateData::~RenderStateData
+[RtDiff] site[477] @00007ff79968c060 = Video::VertexLayoutData::~VertexLayoutData
+[RtDiff] site[478] @00007ff799682d40 = Collection::Array::~Array(+elem) @0x180010ab0
+[RtDiff] site[479] @00007ff799686940 = IO::Persistence::Set(int)
+[RtDiff] site[480] @00007ff799686980 = IO::Persistence::Set(bool)
+[GameSettings] Save: LastTerrain=0 LastMapSize=0 LastClimate=0 LastStart=2 LastDisaster=0
+[RtDiff] site[481] @00007ff7996830c0 = Engine::MainLoop::~MainLoop
+[RtDiff] site[482] @00007ff79968c160 = Video::ContextData::~ContextData
+[RtDiff] site[483] @00007ff79968b820 = Video::VertexBuffer::PlatformDestruct
+[RtDiff] site[484] @00007ff79968b860 = Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]
+[RtDiff] site[485] @00007ff79968b8a0 = Video::VertexBuffer::PlatformDestruct[branch:unlinked]
+[RtDiff] site[486] @00007ff79968b8e0 = Video::VertexBuffer::PlatformDestruct[branch:list-emptied]
+[RtDiff] site[487] @00007ff79968b660 = Video::IndexBuffer::PlatformDestruct
+[RtDiff] site[488] @00007ff79968b6a0 = Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]
+[RtDiff] site[489] @00007ff79968b6e0 = Video::IndexBuffer::PlatformDestruct[branch:unlinked]
+[RtDiff] site[490] @00007ff79968b720 = Video::IndexBuffer::PlatformDestruct[branch:list-emptied]
+[RtDiff] site[491] @00007ff79968c120 = Video::ConstantBufferData::~ConstantBufferData
+[RtDiff] site[492] @00007ff7996821c0 = Collection::Array::~Array @0x180033a40
+[RtDiff] site[493] @00007ff799682180 = Collection::Array::~Array @0x180033960
+[RtDiff] site[494] @00007ff799682dc0 = Collection::Array::~Array(+elem) @0x180033880
+[RtDiff] site[495] @00007ff799681700 = Achievement::GoalInstance::~GoalInstance
+[RtDiff] site[496] @00007ff7996852c0 = Input::Configuration::Save
+[RtDiff] site[497] @00007ff799681e00 = Audio::Configuration::Save
+[RtDiff] site[498] @00007ff79968cbc0 = Video::Configuration::Save
+[RtDiff] site[499] @00007ff799686300 = IO::Modification::SaveList
+[RtDiff] site[500] @00007ff799683140 = Engine::Engine::~Engine
+[RtDiff] ==== 501 sites, 17509389 calls, 1 divergences in 1 sites ====
+[RtDiff]   Video::Context::Clear[slot]                      calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::DrawIndexed[slot]                calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::GetMaxDynamicInstances[slot]     calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::BeginVertices[slot]              calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::EndVertices[slot]                calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::BeginIndexedVertices[slot]       calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::EndIndexedVertices[slot]         calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::BeginInstancedIndexedVertices[slot] calls=1          worked=?          divergences=0
+[RtDiff]   Video::Context::EndInstancedIndexedVertices[slot] calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdateLayout[shape]        calls=1          worked=?          divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdate[shape]              calls=1          worked=?          divergences=0
+[RtDiff]   UI::DialogInstance::OnElementEvent[shape]        calls=1          worked=?          divergences=0
+[RtDiff]   UI::DialogController::~DialogController[shape]   calls=1          worked=?          divergences=0
+[RtDiff]   Wave9X::System::MemoryAllocator::ctor            calls=3          worked=1          divergences=0
+[RtDiff]   Wave9X::IO::Modification::ctor                   calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Object::Factory::ctor                    calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Object::ExternalFactory::ctor            calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::IO::FileSystem::ctor                     calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Video::Configuration::ctor               calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Input::Device::ctor                      calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Input::Configuration::ctor               calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Audio::Configuration::ctor               calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Application::Application::ctor           calls=2          worked=1          divergences=0
+[RtDiff]   Wave9X::Video::Device::ctor(type=0)              calls=3          worked=1          divergences=0
+[RtDiff]   Wave9X::Video::Device::ctor(type=1, must NOT publish) calls=1          worked=1          divergences=0
+[RtDiff]   Wave9X::Object::InternalFactory::ctor            calls=3          worked=1          divergences=0
+[RtDiff]   Object::BaseTypeInfo::BaseTypeInfo               calls=312        worked=?          divergences=0
+[RtDiff]   Engine::Engine::Engine                           calls=1          worked=1          divergences=0
+[RtDiff]   Engine::Engine::Startup                          calls=1          worked=1          divergences=0
+[RtDiff]   System::Configuration::SetCommandLine            calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::Startup                          calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::SetupDirectories                 calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::GetRootDirectory                 calls=1          worked=1          divergences=0
+[RtDiff]   System::WideString::Set                          calls=306        worked=306        divergences=0
+[RtDiff]   System::WideString::AsUTF8                       calls=306        worked=306        divergences=0
+[RtDiff]   System::Filename::GetPathDirectory               calls=1          worked=1          divergences=0
+[RtDiff]   System::String::SubString                        calls=203        worked=?          divergences=0
+[RtDiff]   System::operator+(String,char*)                  calls=524        worked=?          divergences=0
+[RtDiff]   System::WideString::ctor(String)                 calls=10         worked=10         divergences=0
+[RtDiff]   System::Configuration::GetPlatformName           calls=1          worked=1          divergences=0
+[RtDiff]   System::Configuration::GetBuildName              calls=1          worked=1          divergences=0
+[RtDiff]   System::operator+(String,String)                 calls=205        worked=?          divergences=0
+[RtDiff]   IO::FileSystem::LoadPackages                     calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::ClosePackages                    calls=2          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::GetPackDirectory                 calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::FindFiles                        calls=1          worked=1          divergences=0
+[RtDiff]   SpriteSheet elem operator= @0x180004220          calls=102        worked=?          divergences=0
+[RtDiff]   Collection::Array elem-destroy(String) @0x1800059e0 calls=14         worked=?          divergences=0
+[RtDiff]   Collection::Array elem-destroy(inner Array) @0x180052110 calls=14         worked=?          divergences=0
+[RtDiff]   Collection::Array elem-destroy(String) @0x180005930 calls=14         worked=?          divergences=0
+[RtDiff]   Collection::Array<Filename>::SetSize @0x180026880 calls=4          worked=?          divergences=0
+[RtDiff]   IO::PackageFile::PackageFile                     calls=9          worked=9          divergences=0
+[RtDiff]   IO::PackageFile::ReadPackfile                    calls=4          worked=4          divergences=0
+[RtDiff]   IO::FileSystem::OpenFile                         calls=0          worked=12         divergences=0
+[RtDiff]   IO::FileSystem::PlatformOpenFile                 calls=0          worked=7          divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::operator=              calls=19         worked=19         divergences=0
+[RtDiff]   IO::FileSystem::ReadFile                         calls=0          worked=51         divergences=0
+[RtDiff]   IO::CompressedStream::CompressedStream           calls=14         worked=?          divergences=0
+[RtDiff]   IO::MemoryStream::MemoryStream                   calls=12         worked=?          divergences=0
+[RtDiff]   IO::CompressedStream::Open                       calls=0          worked=12         divergences=0
+[RtDiff]   IO::CompressedStream::SetWindowCount             calls=0          worked=14         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024c10          calls=14         worked=?          divergences=0
+[RtDiff]   IO::CompressedStream::GetAvailableWindow         calls=46         worked=46         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024d70          calls=8          worked=?          divergences=0
+[RtDiff]   IO::CompressedStream::Read                       calls=0          worked=23641      divergences=0
+[RtDiff]   IO::CompressedStream::SetWindow                  calls=0          worked=35         divergences=0
+[RtDiff]   IO::CompressedStream::DecompressFromSource       calls=32         worked=32         divergences=0
+[RtDiff]   System::Compression::Decompress                  calls=209        worked=169        divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180029510          calls=4          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180029630          calls=4          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x1800298f0          calls=5848       worked=?          divergences=0
+[RtDiff]   IO::CompressedMemoryStream::~CompressedMemoryStream calls=10         worked=?          divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream                  calls=10         worked=?          divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:owned buffer freed] calls=0          worked=?          divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:no owned buffer -- that free unexercised] calls=10         worked=?          divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:encoding freed] calls=10         worked=?          divergences=0
+[RtDiff]   IO::CompressedStream::~CompressedStream          calls=0          worked=10         divergences=0
+[RtDiff]   IO::CompressedStream::Release                    calls=0          worked=20         divergences=0
+[RtDiff]   Collection::Array::~Array @0x180024aa0           calls=10         worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800249c0           calls=10         worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800248e0           calls=10         worked=?          divergences=0
+[RtDiff]   IO::PackageFile::GetFileName                     calls=5841       worked=5841       divergences=0
+[RtDiff]   IO::PackageFile::Construct                       calls=2          worked=1          divergences=0
+[RtDiff]   IO::PackageFile::Type                            calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::TypeId                          calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::TypeName                        calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetFileVersion                  calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::Compile                         calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetName                         calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetAuthor                       calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetDescription                  calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetVersion                      calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetUserVersion                  calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetPlatform                     calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetPriority                     calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetCRC                          calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::CanOverride                     calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetIconWidth                    calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetIconHeight                   calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetFileCount                    calls=4          worked=4          divergences=0
+[RtDiff]   IO::PackageFile::GetFileSize                     calls=5836       worked=5836       divergences=0
+[RtDiff]   IO::PackageFile::GetFileOffset                   calls=5836       worked=5836       divergences=0
+[RtDiff]   IO::CompressedStream::ReadPath [lockstep probe]  calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::OpenFile/ReadFile [lockstep probe] calls=1          worked=1          divergences=0
+[RtDiff]   IO::PackageFile::GetFileInfo                     calls=15         worked=15         divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::FileInfo(const&)       calls=15         worked=15         divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::operator= [probe]      calls=1          worked=1          divergences=0
+[RtDiff]   IO::MemoryStream [probe]                         calls=1          worked=1          divergences=0
+[RtDiff]   IO::MemoryStream::Read                           calls=0          worked=14         divergences=0
+[RtDiff]   IO::MemoryStream::SetCurrentPos                  calls=0          worked=6          divergences=0
+[RtDiff]   IO::MemoryStream::Write                          calls=0          worked=12         divergences=0
+[RtDiff]   IO::MemoryStream::GetCurrentPos                  calls=0          worked=2          divergences=0
+[RtDiff]   IO::MemoryStream::GetSize                        calls=0          worked=2          divergences=0
+[RtDiff]   IO::CompressedStream SetWindowCount/Open/Release [probe] calls=1          worked=1          divergences=0
+[RtDiff]   IO::Persistence::Startup                         calls=1          worked=1          divergences=0
+[RtDiff]   IO::Persistence::ReadSettings                    calls=1          worked=1          divergences=0
+[RtDiff]   IO::Registry::Registry(const char*)              calls=1          worked=1          divergences=0
+[RtDiff]   IO::FileSystem::GetSaveDirectory                 calls=1          worked=?          divergences=0
+[RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+[RtDiff]   Video::Configuration::Startup                    calls=1          worked=?          divergences=0
+[RtDiff]   IO::Persistence::Get(int&)                       calls=29         worked=?          divergences=0
+[RtDiff]   IO::Persistence::Get(bool&)                      calls=12         worked=?          divergences=0
+[RtDiff]   Video::DeviceData::DeviceData                    calls=2          worked=?          divergences=0
+[RtDiff]   Video::Device::DisplayMode::DisplayMode          calls=490        worked=?          divergences=0
+[RtDiff]   Video::Device::DisplayMode::~DisplayMode         calls=491        worked=?          divergences=0
+[RtDiff]   Video::DeviceData::~DeviceData                   calls=2          worked=?          divergences=0
+[RtDiff]   Audio::Configuration::Startup                    calls=1          worked=?          divergences=0
+[RtDiff]   Input::Configuration::Startup                    calls=1          worked=1          divergences=0
+[RtDiff]   Input::Configuration::Load                       calls=1          worked=1          divergences=0
+[RtDiff]   Input::KeyMap::Load                              calls=2          worked=1          divergences=0
+[RtDiff]   Video::Device::GetMultisampleModeCount           calls=2          worked=?          divergences=0
+[RtDiff]   Video::Device::IsMultisampleModeSupported        calls=2          worked=?          divergences=0
+[RtDiff]   Achievement::Goal::Goal                          calls=139        worked=?          divergences=0
+[RtDiff]   Engine::MainLoop::MainLoop                       calls=1          worked=?          divergences=0
+[RtDiff]   Video::ConstantBufferData::ConstantBufferData    calls=7          worked=?          divergences=0
+[RtDiff]   Video::ContextData::ContextData                  calls=1          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct           calls=6          worked=?          divergences=0
+[RtDiff]   Video::VertexBufferData::VertexBufferData        calls=1168       worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[branch:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[branch:appended] calls=5          worked=?          divergences=0
+[RtDiff]   Video::VertexBufferData::~VertexBufferData       calls=80         worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets] calls=1          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct            calls=5          worked=?          divergences=0
+[RtDiff]   Video::IndexBufferData::IndexBufferData          calls=1166       worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[branch:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[branch:appended] calls=4          worked=?          divergences=0
+[RtDiff]   Video::IndexBufferData::~IndexBufferData         calls=78         worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets] calls=1          worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct           calls=4          worked=?          divergences=0
+[RtDiff]   Video::RenderBufferData::RenderBufferData        calls=15         worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[branch:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[branch:appended] calls=3          worked=?          divergences=0
+[RtDiff]   Video::RenderBufferData::~RenderBufferData       calls=11         worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct[PROBE:list-emptied] calls=1          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::ImageBuffer                  calls=11         worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct            calls=11         worked=?          divergences=0
+[RtDiff]   Video::ImageBufferData::ImageBufferData          calls=425        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[branch:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[branch:appended] calls=10         worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsGenerated                  calls=874        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsRendered                   calls=867        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied] calls=1          worked=?          divergences=0
+[RtDiff]   Video::RenderBuffer::Create                      calls=5          worked=?          divergences=0
+[RtDiff]   UI::Sprite::Sprite()                             calls=2          worked=?          divergences=0
+[RtDiff]   Input::KeyMap::ClearAll                          calls=1          worked=?          divergences=0
+[RtDiff]   Input::KeyMap::RegisterInput                     calls=50         worked=?          divergences=0
+[RtDiff]   Object::Factory::GetTypeIdFromName               calls=38         worked=?          divergences=0
+[RtDiff]   Object::Base::IsDerivedFrom                      calls=369194     worked=?          divergences=0
+[RtDiff]   Video::VideoProgramData::VideoProgramData        calls=66         worked=?          divergences=0
+[RtDiff]   Video::VertexLayoutData::VertexLayoutData        calls=19         worked=?          divergences=0
+[RtDiff]   Video::VertexProgramData::VertexProgramData      calls=30         worked=?          divergences=0
+[RtDiff]   Video::PixelProgramData::PixelProgramData        calls=37         worked=?          divergences=0
+[RtDiff]   Video::RenderStateData::RenderStateData          calls=24         worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::Width                        calls=409        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::Height                       calls=409        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsCompressed                 calls=6338       worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::GetLevelCount                calls=3550       worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsDepthBuffer                calls=418        worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsRenderBuffer               calls=407        worked=?          divergences=0
+[RtDiff]   UI::Sprite::Sprite(sheet,name)                   calls=20         worked=?          divergences=0
+[RtDiff]   Engine::DialogLoopT::ctor                        calls=1          worked=?          divergences=0
+[RtDiff]   UI::UserInterface::UserInterface                 calls=9          worked=?          divergences=0
+[RtDiff]   Timer::SecondsToTicks                            calls=65282      worked=?          divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::ctor                  calls=3          worked=?          divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::Load                  calls=6          worked=?          divergences=0
+[RtDiff]   Engine::LoaderLoop::ctor                         calls=3          worked=?          divergences=0
+[RtDiff]   Engine::Loader::Load                             calls=6          worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serializer(Stream&,int)          calls=3633       worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(int&)                  calls=11869      worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(bool&)                 calls=12679      worked=?          divergences=0
+[RtDiff]   Object::ExternalFactory::Find                    calls=606        worked=?          divergences=0
+[RtDiff]   System::Filename::GetPathIdentifer               calls=619        worked=?          divergences=0
+[RtDiff]   IO::Serializer::~Serializer [not diffable]       calls=3633       worked=?          divergences=0
+[RtDiff]   IO::Serializer::GetEncoding                      calls=10400      worked=?          divergences=0
+[RtDiff]   Object::ExternalFactory::IsReferenceModeEnabled  calls=6251       worked=?          divergences=0
+[RtDiff]   Object::Type::Serialize [not diffable]           calls=606        worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(float&)                calls=3594       worked=?          divergences=0
+[RtDiff]   IO::Serializer::SerializeBytes                   calls=27770      worked=?          divergences=0
+[RtDiff]   Math::Vector3::FromYawPitch                      calls=3771       worked=?          divergences=0
+[RtDiff]   System::String::operator==(char*)                calls=531        worked=?          divergences=0
+[RtDiff]   IO::Serializer::GetVersion                       calls=566        worked=?          divergences=0
+[RtDiff]   Graphics::AnimationEvent::AnimationEvent()       calls=10         worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,float*)              calls=5          worked=?          divergences=0
+[RtDiff]   Achievement::Achievement::ctor                   calls=4          worked=?          divergences=0
+[RtDiff]   Achievement::Achievement::GetFileVersion         calls=4          worked=?          divergences=0
+[RtDiff]   Engine::MainLoop::SetNextLoop                    calls=9          worked=?          divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::Startup               calls=3          worked=?          divergences=0
+[RtDiff]   Object::InternalBasePtr::InternalBasePtr(Internal*) calls=378823     worked=?          divergences=0
+[RtDiff]   UI::DialogInstance::FindElement                  calls=51         worked=?          divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=63         worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18007a0d0          calls=13         worked=?          divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFadeSprite       calls=5          worked=?          divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFade             calls=14         worked=?          divergences=0
+[RtDiff]   Video::Context::SetRenderBuffer                  calls=3400       worked=?          divergences=0
+[RtDiff]   Video::Context::SetViewport                      calls=3399       worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::Lock                        calls=57618      worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::Unlock                      calls=57618      worked=?          divergences=0
+[RtDiff]   Video::Context::SetVertexBuffer                  calls=218478     worked=?          divergences=0
+[RtDiff]   Video::ConstantBuffer::Bind                      calls=553766     worked=?          divergences=0
+[RtDiff]   System::Random::Rand(uint)                       calls=8024537    worked=?          divergences=0
+[RtDiff]   Math::Transform::Transform()                     calls=11391      worked=?          divergences=0
+[RtDiff]   Math::Transform3::Identity()                     calls=3          worked=?          divergences=0
+[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=2489       worked=?          divergences=0
+[RtDiff]   Graphics::Camera::Camera                         calls=4          worked=?          divergences=0
+[RtDiff]   Graphics::Camera::SetFrustum                     calls=2490       worked=?          divergences=0
+[RtDiff]   Volume::Frustum::Projection                      calls=2490       worked=?          divergences=0
+[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=4804       worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::Geometry()                   calls=24288      worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::VertexBuffer                calls=4          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::IndexBuffer                  calls=4          worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,ushort*)             calls=237        worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::Create                      calls=4          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::Set                         calls=834        worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::Create                       calls=4          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::Set                          calls=2          worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,short*)              calls=101408     worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,uchar*)              calls=50708      worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(uchar&)                calls=26844      worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,int*)                calls=5          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::Create                       calls=6          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::CopyToTexture                calls=5          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::IsDynamic                    calls=5          worked=?          divergences=0
+[RtDiff]   Object::External::GetPath                        calls=2855       worked=?          divergences=0
+[RtDiff]   IO::Serializer::Serialize(uint&)                 calls=127997     worked=?          divergences=0
+[RtDiff]   Graphics::Renderer::Renderer                     calls=3          worked=?          divergences=0
+[RtDiff]   Graphics::Scene::Scene()                         calls=3          worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid init (0x18005e4a0)          calls=0          worked=9          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18002fea0          calls=139        worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid add (0x18005e5e0)           calls=0          worked=24265      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18005fb00          calls=24179      worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid reindex (0x18005ee30)       calls=0          worked=24327      divergences=0
+[RtDiff]   Graphics::Scene grid thread (0x18005f4b0)        calls=0          worked=24334      divergences=0
+[RtDiff]   Graphics::Scene grid thread[branch:cell was empty] calls=642        worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:first threading] calls=24266      worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid thread[branch:appended to ring] calls=23692      worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:same cell, early out] calls=94598      worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid unthread (0x18005f090)      calls=0          worked=11502      divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:moved cell]  calls=61         worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid unthread[branch:was cell head] calls=11198      worked=?          divergences=0
+[RtDiff]   Graphics::Scene grid unthread[branch:cell emptied] calls=198        worked=?          divergences=0
+[RtDiff]   Graphics::Scene free globals (0x18005f1f0)       calls=0          worked=1          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight                     calls=3          worked=3          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:colour-target built, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:bounds differed -> written] calls=3          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:bounds already equal -> skipped] calls=0          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:object fields, ours vs shipped] calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:depth-target Create tuple, ours vs shipped] calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:_firstRenderBuffer restored by each dtor] calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::~SunLight                    calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::~Geometry()                  calls=11389      worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001bf50           calls=11389      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::MeshInstance()           calls=24087      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMesh                  calls=33180      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::UpdateHierarchy          calls=33180      worked=?          divergences=0
+[RtDiff]   Graphics::Scene::AddGlobalObject                 calls=10         worked=?          divergences=0
+[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=37723      worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::SetTransform                 calls=178854     worked=?          divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetMaterialList          calls=12673      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMaterialInstance      calls=15154      worked=?          divergences=0
+[RtDiff]   Graphics::Scene::AddObject                       calls=24224      worked=?          divergences=0
+[RtDiff]   Math::Quaternion::operator*(const Quaternion&)   calls=60298      worked=?          divergences=0
+[RtDiff]   Timer::TicksToSeconds                            calls=45100      worked=?          divergences=0
+[RtDiff]   Graphics::ParticleSystemInstance::ParticleSystemInstance() calls=126        worked=?          divergences=0
+[RtDiff]   UI::ImageElement::SetRotation                    calls=579        worked=?          divergences=0
+[RtDiff]   Engine::DialogLoopT::Load                        calls=2          worked=?          divergences=0
+[RtDiff]   Save::SaveLoad::SaveLoad                         calls=2          worked=?          divergences=0
+[RtDiff]   Engine::DialogLoopT::Startup                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=38         worked=?          divergences=0
+[RtDiff]   UI::UserInterface::AddDialog                     calls=0          worked=6          divergences=0
+[RtDiff]   System::String::Release [no oracle: mutates a shared refcount] calls=3          worked=?          divergences=0
+[RtDiff]   UI::UserInterface::SetCursor                     calls=0          worked=994        divergences=0
+[RtDiff]   Video::ImageBuffer::CopyFromTexture              calls=4          worked=?          divergences=0
+[RtDiff]   UI::UserInterface::EnableCursor                  calls=0          worked=2          divergences=0
+[RtDiff]   Audio::Scene::PlayEffect                         calls=2          worked=?          divergences=0
+[RtDiff]   Save::SaveLoad::Update [shadow]                  calls=1069       worked=?          divergences=0
+[RtDiff]   Math::Transform::FromLookAt(const Vector3&, const Vector3&) calls=980        worked=?          divergences=0
+[RtDiff]   Math::Transform::FromDirection(const Vector3&, const Vector3&) calls=980        worked=?          divergences=0
+[RtDiff]   Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&) calls=980        worked=?          divergences=0
+[RtDiff]   Math::Transform::AsTransform3                    calls=32813      worked=?          divergences=0
+[RtDiff]   Math::Transform::AsMatrix()                      calls=229041     worked=?          divergences=0
+[RtDiff]   Graphics::Camera::SetCameraToWorld               calls=979        worked=?          divergences=0
+[RtDiff]   Graphics::ParticleInstance::IncrementInstanceIndex calls=77         worked=?          divergences=0
+[RtDiff]   Graphics::Scene::Clean                           calls=1070       worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::Clean                        calls=4          worked=?          divergences=0
+[RtDiff]   Audio::Device::Update                            calls=77         worked=0          divergences=0
+[RtDiff]   Engine::DialogLoopT::Update[time]                calls=77         worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::Set                          calls=2486       worked=2486       divergences=0
+[RtDiff]   Graphics::SunLight::Set[branch:build-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          worked=?          divergences=0
+[RtDiff]   Graphics::SunLight::Set[branch:drop-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          worked=?          divergences=0
+[RtDiff]   Video::Context::SetFog                           calls=2486       worked=?          divergences=0
+[RtDiff]   Graphics::Renderer::GetCullCamera                calls=7455       worked=?          divergences=0
+[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=7455       worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::GetTransform                 calls=7455       worked=?          divergences=0
+[RtDiff]   Math::Transform::Inverse()                       calls=7455       worked=?          divergences=0
+[RtDiff]   Graphics::Camera::GetFrustum                     calls=7455       worked=?          divergences=0
+[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=14910      worked=?          divergences=0
+[RtDiff]   Volume::Frustum::Contains                        calls=2189384    worked=?          divergences=0
+[RtDiff]   Graphics::Renderer::AddDrawItem                  calls=196228     worked=196228     divergences=0
+[RtDiff]   Graphics::Renderer::GetShader                    calls=7455       worked=?          divergences=0
+[RtDiff]   Graphics::MaterialInstance::RenderTextures       calls=0          worked=10460      divergences=0
+[RtDiff]   Graphics::InterpolatedState<Transform>::Lerp     calls=196228     worked=?          divergences=0
+[RtDiff]   Math::Transform::Lerp                            calls=196228     worked=?          divergences=0
+[RtDiff]   Math::Quaternion::Lerp                           calls=196228     worked=?          divergences=0
+[RtDiff]   Video::Context::SetTransform                     calls=196228     worked=?          divergences=0
+[RtDiff]   Video::Context::SetColor                         calls=196228     worked=?          divergences=0
+[RtDiff]   Video::Context::SetImageBuffer                   calls=180223     worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::Lock                         calls=50059      worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::Unlock                       calls=50059      worked=?          divergences=0
+[RtDiff]   Achievement::AchievementManager::SetAchievements calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008ff0          calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008b90          calls=1          worked=?          divergences=0
+[RtDiff]   Achievement::AchievementManager::GetAchievementCount calls=1          worked=?          divergences=0
+[RtDiff]   Object::ExternalList::GetResourceCount           calls=15         worked=?          divergences=0
+[RtDiff]   UI::String::String(table,name)                   calls=28         worked=?          divergences=0
+[RtDiff]   UI::StringTable::GetIndexFromName                calls=28         worked=?          divergences=0
+[RtDiff]   UI::String::operator System::String()            calls=17         worked=?          divergences=0
+[RtDiff]   UI::StringTable::GetText(int)                    calls=67         worked=?          divergences=0
+[RtDiff]   UI::ComboElement::AddItem [no oracle: appends + bumps a refcount] calls=8          worked=?          divergences=0
+[RtDiff]   Collection::Array elem-destroy(String) @0x180011010 calls=6          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180034860          calls=8          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18004bfc0          calls=11         worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024fe0          calls=11         worked=?          divergences=0
+[RtDiff]   UI::EditElement::SetText                         calls=0          worked=?          divergences=0
+[RtDiff]   UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element] calls=1          worked=?          divergences=0
+[RtDiff]   UI::ComboElement::GetItemCount                   calls=5          worked=?          divergences=0
+[RtDiff]   UI::ComboElement::GetItemData                    calls=3          worked=?          divergences=0
+[RtDiff]   UI::NumberEditElement::GetValue                  calls=1          worked=?          divergences=0
+[RtDiff]   System::String::ToInteger                        calls=1          worked=?          divergences=0
+[RtDiff]   Engine::UpdateLoop::ctor                         calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::Particle::Particle()                   calls=1          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=2          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          worked=?          divergences=0
+[RtDiff]   System::Random::Random(uint)                     calls=2          worked=?          divergences=0
+[RtDiff]   Picking::Scene::Scene()                          calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize(10000,-1) @0x18007b960 calls=2          worked=?          divergences=0
+[RtDiff]   System::Random::Rand                             calls=2          worked=?          divergences=0
+[RtDiff]   Graphics::AnimationManager::AnimationManager()   calls=1          worked=?          divergences=0
+[RtDiff]   Achievement::AchievementManager::SetEventHandler calls=2          worked=?          divergences=0
+[RtDiff]   Achievement::AchievementManager::Reset           calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008d60          calls=1          worked=?          divergences=0
+[RtDiff]   Achievement::Goal::GetInstanceType               calls=125        worked=?          divergences=0
+[RtDiff]   Achievement::GoalInstance::GoalInstance          calls=9          worked=?          divergences=0
+[RtDiff]   System::Random::RandTol                          calls=1608       worked=?          divergences=0
+[RtDiff]   Utility::PerlinNoise::Generate                   calls=992266     worked=?          divergences=0
+[RtDiff]   System::Random::RandFloatTol                     calls=63995      worked=?          divergences=0
+[RtDiff]   Math::Vector2::Length                            calls=1020       worked=?          divergences=0
+[RtDiff]   Math::Vector2::Normalize                         calls=64652      worked=?          divergences=0
+[RtDiff]   Math::Vector2::LengthSquared                     calls=385536     worked=?          divergences=0
+[RtDiff]   System::Random::Rand(int,int)                    calls=37         worked=?          divergences=0
+[RtDiff]   System::Random::RandFloat                        calls=144220     worked=?          divergences=0
+[RtDiff]   UI::StringTable::GetCount()                      calls=4          worked=?          divergences=0
+[RtDiff]   UI::String::String(table,index)                  calls=4          worked=?          divergences=0
+[RtDiff]   Object::Factory::CreateObject                    calls=53702      worked=?          divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteCount()                calls=35         worked=?          divergences=0
+[RtDiff]   Graphics::Geometry::SetBounds                    calls=35         worked=?          divergences=0
+[RtDiff]   Math::Transform2::Transform2(const Scalar&, const Vector2&) calls=16         worked=?          divergences=0
+[RtDiff]   Math::Transform2::FromYawOffset(const Scalar&, const Vector2&) calls=8          worked=?          divergences=0
+[RtDiff]   Math::Transform2::operator*(const Transform2&)   calls=40         worked=?          divergences=0
+[RtDiff]   Math::Transform2::operator*(const Vector2&)      calls=768        worked=?          divergences=0
+[RtDiff]   Picking::Scene::AddMesh                          calls=48         worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180059140          calls=48         worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800739e0           calls=50         worked=?          divergences=0
+[RtDiff]   Audio::Scene::FindEffect3D                       calls=781        worked=?          divergences=0
+[RtDiff]   Audio::Scene::PlayEffect3D                       calls=273        worked=?          divergences=0
+[RtDiff]   Audio::Scene::AddEmitter                         calls=781        worked=?          divergences=0
+[RtDiff]   Graphics::Scene::RemoveObject                    calls=11425      worked=?          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180023830          calls=11433      worked=?          divergences=0
+[RtDiff]   Picking::Scene::RemoveMesh                       calls=48         worked=?          divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetNodeIndexFromName     calls=12         worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::GetNodeToWorld           calls=6          worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::PlayAnimation            calls=379        worked=?          divergences=0
+[RtDiff]   Math::Vector3::NormalizeWithMag                  calls=9726       worked=?          divergences=0
+[RtDiff]   Math::Vector3::Heading                           calls=4855       worked=?          divergences=0
+[RtDiff]   Audio::Scene::Pause                              calls=3          worked=?          divergences=0
+[RtDiff]   Object::ExternalFactory::FindNext                calls=95         worked=?          divergences=0
+[RtDiff]   Object::ExternalList::Find                       calls=3          worked=?          divergences=0
+[RtDiff]   UI::Dialog::GetTemplate                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         worked=?          divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         worked=?          divergences=0
+[RtDiff]   UI::Sprite::IsValid()                            calls=59         worked=?          divergences=0
+[RtDiff]   UI::ImageElement::SetSprite                      calls=38         worked=?          divergences=0
+[RtDiff]   UI::RadioElement::FindCheckBoxes()               calls=0          worked=1          divergences=0
+[RtDiff]   UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses] calls=73         worked=9          divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180048fe0          calls=11         worked=?          divergences=0
+[RtDiff]   UI::UserInterface::PausesGame                    calls=6628       worked=?          divergences=0
+[RtDiff]   UI::UserInterface::GetFirstDialog                calls=28         worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::~MeshInstance            calls=11388      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::RootAnimationOffset      calls=129744     worked=?          divergences=0
+[RtDiff]   Math::Transform::operator=(const Transform&)     calls=129744     worked=?          divergences=0
+[RtDiff]   Math::Transform::Transform(const Transform&)     calls=24327      worked=?          divergences=0
+[RtDiff]   Picking::Scene::SetTransform                     calls=24327      worked=?          divergences=0
+[RtDiff]   Graphics::MeshInstance::IsAnimating              calls=129755     worked=?          divergences=0
+[RtDiff]   Math::Vector2::Dot                               calls=103        worked=?          divergences=0
+[RtDiff]   Math::Transform::operator*(const Vector3&)       calls=15162      worked=?          divergences=0
+[RtDiff]   Math::Quaternion::Rotate(const Vector3&)         calls=15162      worked=?          divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect                   calls=4          worked=?          divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:reuse-hit, -1 -- the ONLY path through the distance+window test] calls=0          worked=?          divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:free-slot returned] calls=4          worked=?          divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:table FULL, -1 after 4096] calls=0          worked=?          divergences=0
+[RtDiff]   Achievement::AchievementManager::Update          calls=901        worked=?          divergences=0
+[RtDiff]   Achievement::AchievementInstance::Update         calls=901        worked=?          divergences=0
+[RtDiff]   Achievement::AchievementInstance::IsMet          calls=901        worked=?          divergences=0
+[RtDiff]   Audio::Scene::IsEffectPlaying                    calls=992        worked=?          divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=992        worked=?          divergences=0
+[RtDiff]   Input::KeyMap::Pressed                           calls=11014      worked=?          divergences=0
+[RtDiff]   Input::KeyMap::GetValue                          calls=9000       worked=?          divergences=0
+[RtDiff]   Video::Context::SetTime                          calls=2313       worked=?          divergences=0
+[RtDiff]   Graphics::Scene::RemoveGlobalObject              calls=7          worked=?          divergences=0
+[RtDiff]   Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D) calls=1          worked=?          divergences=0
+[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::Camera::SnapCameraToWorld              calls=1          worked=?          divergences=0
+[RtDiff]   Math::Transform3::AsMatrix()                     calls=2314       worked=?          divergences=0
+[RtDiff]   Video::Context::SetCamera                        calls=2314       worked=?          divergences=0
+[RtDiff]   Video::Context::SetDefaultRenderBuffer           calls=2          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct             calls=4          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:unlinked] calls=4          worked=?          divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:list-emptied] calls=0          worked=?          divergences=0
+[RtDiff]   Video::Context::Reset                            calls=1          worked=?          divergences=0
+[RtDiff]   Graphics::Scene::~Scene()                        calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001c750           calls=8          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x18005fc20           calls=2          worked=?          divergences=0
+[RtDiff]   Graphics::Renderer::~Renderer                    calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001c9e0           calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(eh_vector) @0x18001c8c0 calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x18001c7e0    calls=2          worked=?          divergences=0
+[RtDiff]   Math::Vector3::Dot                               calls=359704     worked=?          divergences=0
+[RtDiff]   Achievement::GoalList::AreGoalsMetExcept         calls=259        worked=?          divergences=0
+[RtDiff]   Achievement::GoalInstance::Update                calls=259        worked=?          divergences=0
+[RtDiff]   Audio::Scene::SetEmitterVolume                   calls=13848      worked=?          divergences=0
+[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
+[RtDiff]   Audio::Scene::StopAll                            calls=1          worked=?          divergences=0
+[RtDiff]   UI::DialogInstance::GetController                calls=108        worked=?          divergences=0
+[RtDiff]   System::String::FormatParamCount                 calls=25         worked=?          divergences=0
+[RtDiff]   System::String::FormatParamList                  calls=25         worked=?          divergences=0
+[RtDiff]   Picking::Scene::~Scene()                         calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180073c90    calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x180073bb0           calls=2          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800737f0           calls=2          worked=?          divergences=0
+[RtDiff]   Graphics::AnimationManager::~AnimationManager()  calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(+nested elem) @0x18005bf60 calls=1          worked=?          divergences=0
+[RtDiff]   Engine::UpdateLoop::dtor                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          worked=0          divergences=0
+[RtDiff]   Video::PixelProgramData::~PixelProgramData       calls=4          worked=?          divergences=0
+[RtDiff]   Video::VertexProgramData::~VertexProgramData     calls=4          worked=?          divergences=0
+[RtDiff]   Video::VideoProgramData::~VideoProgramData       calls=5          worked=?          divergences=0
+[RtDiff]   Video::RenderStateData::~RenderStateData         calls=2          worked=?          divergences=0
+[RtDiff]   Video::VertexLayoutData::~VertexLayoutData       calls=3          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180010ab0    calls=1          worked=?          divergences=0
+[RtDiff]   IO::Persistence::Set(int)                        calls=29         worked=?          divergences=0
+[RtDiff]   IO::Persistence::Set(bool)                       calls=12         worked=?          divergences=0
+[RtDiff]   Engine::MainLoop::~MainLoop                      calls=1          worked=?          divergences=0
+[RtDiff]   Video::ContextData::~ContextData                 calls=1          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct            calls=2          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:unlinked] calls=2          worked=?          divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:list-emptied] calls=0          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct             calls=1          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:unlinked] calls=1          worked=?          divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:list-emptied] calls=0          worked=?          divergences=0
+[RtDiff]   Video::ConstantBufferData::~ConstantBufferData   calls=7          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x180033a40           calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array @0x180033960           calls=1          worked=?          divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180033880    calls=1          worked=?          divergences=0
+[RtDiff]   Achievement::GoalInstance::~GoalInstance         calls=9          worked=?          divergences=0
+[RtDiff]   Input::Configuration::Save                       calls=1          worked=?          divergences=0
+[RtDiff]   Audio::Configuration::Save                       calls=1          worked=?          divergences=0
+[RtDiff]   Video::Configuration::Save                       calls=1          worked=?          divergences=0
+[RtDiff]   IO::Modification::SaveList                       calls=0          worked=?          divergences=0
+[RtDiff]   Engine::Engine::~Engine                          calls=1          worked=1          divergences=0
+[RtDiff] ==== did-work: 337016 calls did work across 101 declaring sites; 400 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 2 early registry-aware resolve(s), 2 distinct site(s). A site is a LIVE BYPASS only if the symbol is registered NOW and the site caches; the caller address names it (nm against reimpl-x64.exe, base 0x140000000).
+[RtResolveEarly]   benign    caller=00007ff7995ae048  addr 0x1800c6e60
+[RtResolveEarly]   benign    caller=00007ff7995ae445  addr 0x1800c6c00
+[RtResolveEarly] 0 of 2 are registered now -- those are the candidates. Do NOT fix them here; name them and hand them on.
