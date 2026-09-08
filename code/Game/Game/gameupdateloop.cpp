@@ -2841,6 +2841,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 // ============================================================
 
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.cpp
+extern "C" void RedzoneAlloc_HeapDump(const char* tag);   // standalone/redzone_alloc.cpp
 extern "C"
 void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
@@ -2928,10 +2929,50 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     }
     TRACE("[GameUpdateLoop::Shutdown] citizen housing done\n");
 
+    // [OBJAUDIT] Wave 9 lane N, Finding 3. The periodic scan above only runs from
+    // Update, so the handle table has NEVER been checked during teardown — which is
+    // the only place the intermittent allocator fault fires. Mode (A) in
+    // Object/internal_factory_audit.h ("register without unregister": the next
+    // ~Internal swap-removes a freed object and writes `*(int*)(freedPtr+0x08) = idx`,
+    // a 4-byte store into a reused block) has exactly the signature of that fault —
+    // a small integer landing on half of something live. Bracketing EntityList's
+    // shutdown separates "the table was already corrupt when teardown started" from
+    // "teardown corrupted it", which no run so far can tell apart.
+    if (ObjAudit::Enabled()) {
+        ObjAudit::Scan("shutdown-enter");
+        ObjAudit::ReportLeaks("shutdown-enter");
+    }
+
+    // [BANISHED_TEARDOWN_HEAPWALK] Wave 9 lane N, Finding 3 — THE TEST THAT
+    // SEPARATES THE TWO HYPOTHESES. Three different stacks have now been recorded
+    // for this fault, and "one wild write during the sim with a moving victim" and
+    // "several independent teardown-order faults" are both consistent with that.
+    // They differ in one observable: whether the heap is ALREADY corrupt when
+    // teardown begins. RedzoneAlloc_HeapDump walks the engine allocator's boundary
+    // tags and works on a fully native run, so bracketing teardown with it answers
+    // the question directly instead of inferring it from which victim died.
+    //   corrupt at shutdown-enter  => ONE latent wild write, laid down during the
+    //                                 sim; the three stacks are three victims.
+    //   clean here, corrupt later  => teardown itself creates it, and the stacks
+    //                                 are candidates for genuinely separate bugs.
+    {
+        const char* hw = std::getenv("BANISHED_TEARDOWN_HEAPWALK");
+        if (hw && *hw && hw[0] != '0') RedzoneAlloc_HeapDump("shutdown-enter");
+    }
+
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
     fn_EntityList_Shutdown(self->m_entityList);
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
+
+    if (ObjAudit::Enabled()) {
+        ObjAudit::Scan("post-entitylist");
+        ObjAudit::ReportLeaks("post-entitylist");
+    }
+    {
+        const char* hw = std::getenv("BANISHED_TEARDOWN_HEAPWALK");
+        if (hw && *hw && hw[0] != '0') RedzoneAlloc_HeapDump("post-entitylist");
+    }
 
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");

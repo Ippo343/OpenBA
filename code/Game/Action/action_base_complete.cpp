@@ -221,11 +221,27 @@ static void Ensure8e30() {
 // A run with entryNotFound == 0 and both fatal counters 0 says the invariant
 // holds and Finding 3 is NOT this mechanism. Enable with BANISHED_WORKSCHED_PROBE=1.
 // ---------------------------------------------------------------------------
+// A ZERO RESULT MUST PRINT A ZERO, NOT NOTHING. The first version of this probe
+// armed its exit report from inside WsProbeNote, so the all-counters-zero
+// outcome — the single most useful thing it can say, "the erase never no-ops,
+// this whole family is eliminated" — would have produced SILENCE, which is
+// indistinguishable from "the probe is not in this binary". That is the
+// absence-read-as-a-result trap the project has been burned by repeatedly. The
+// report is now armed by WsProbeOn() itself, on the first call, and the enable
+// line is printed there too so the binary self-evidences even if 8e30 never runs.
 static int  s_wsProbe = -1;
+static void WsProbeReport();
 static bool WsProbeOn() {
     if (s_wsProbe < 0) {
         const char* e = std::getenv("BANISHED_WORKSCHED_PROBE");
         s_wsProbe = (e && *e && e[0] != '0') ? 1 : 0;
+        if (s_wsProbe == 1) {
+            std::fprintf(stderr, "[WorkSchedProbe] ARMED (lane N, Finding 3) — counting "
+                                 "profession-bucket erase outcomes in ActCt_TaskCleanup_8e30; "
+                                 "a tally prints at exit even if every counter is zero\n");
+            std::fflush(stderr);
+            std::atexit(&WsProbeReport);
+        }
     }
     return s_wsProbe == 1;
 }
@@ -234,20 +250,30 @@ static unsigned long long s_wsBucketNull   = 0;   // retail-fatal
 static unsigned long long s_wsBucketMissed = 0;   // retail-fatal
 static unsigned long long s_wsEntryMissed  = 0;   // dangling-entry event
 static unsigned long long s_wsUnfiled      = 0;   // healthy
-static bool s_wsReportArmed = false;
+static bool s_wsReported = false;
 static void WsProbeReport() {
+    if (s_wsProbe != 1 || s_wsReported) return;   // idempotent: atexit AND the crash handler
+    s_wsReported = true;
+    const unsigned long long bad = s_wsEntryMissed + s_wsBucketMissed + s_wsBucketNull;
     std::fprintf(stderr,
-        "[WorkSchedProbe] 8e30 calls=%llu  unfiled=%llu  entryNotFound=%llu  "
-        "bucketNotFound=%llu  bucketRootNull=%llu   "
-        "(the last two are cases retail 0x1400f8f5e would have FAULTED on; "
-        "entryNotFound leaves a bucket entry whose work object step 5 then destroys)\n",
-        s_wsCalls, s_wsUnfiled, s_wsEntryMissed, s_wsBucketMissed, s_wsBucketNull);
+        "[WorkSchedProbe] TALLY  8e30calls=%llu  unfiled=%llu  entryNotFound=%llu  "
+        "bucketNotFound=%llu  bucketRootNull=%llu  ==> %s\n",
+        s_wsCalls, s_wsUnfiled, s_wsEntryMissed, s_wsBucketMissed, s_wsBucketNull,
+        s_wsCalls == 0
+            ? "8e30 NEVER RAN — this cell says NOTHING about the invariant"
+            : (bad == 0
+                ? "INVARIANT HELD on every call: no erase no-opped, so the "
+                  "erase-no-op mechanism is NOT Finding 3 and the scheduler family "
+                  "is eliminated"
+                : "INVARIANT BROKEN — see the per-occurrence lines above; "
+                  "bucketNotFound/bucketRootNull are cases retail 0x1400f8f5e would "
+                  "have FAULTED on, entryNotFound leaves a bucket entry whose work "
+                  "object step 5 destroys anyway"));
     std::fflush(stderr);
 }
 static void WsProbeNote(unsigned long long* counter, const char* what,
                         int taskIdx, unsigned long long key) {
     if (!WsProbeOn()) return;
-    if (!s_wsReportArmed) { s_wsReportArmed = true; std::atexit(&WsProbeReport); }
     *counter += 1;
     if (*counter <= 8) {
         std::fprintf(stderr, "[WorkSchedProbe] %s: taskIdx=%d slot50key=0x%llx\n",
@@ -256,6 +282,10 @@ static void WsProbeNote(unsigned long long* counter, const char* what,
     }
 }
 } // namespace
+
+// Reachable from standalone/main.cpp's crash handler, which runs after the
+// teardown fault this probe exists to diagnose — see the note there.
+extern "C" void WorkSchedProbe_Report() { WsProbeReport(); }
 
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     Ensure8e30();

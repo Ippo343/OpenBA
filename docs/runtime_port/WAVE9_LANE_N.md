@@ -657,14 +657,114 @@ it needs one run.
   here, because this family has now paid three times for a child-offset or slot mix-up.
 * **`abi_retslot_audit.py`**: clean, 0 suspicious of 48 by-value-returning exports.
 
-**Reproduced (4 times in ~9 stress-route runs), stack symbolized, the free/erase family fully
-enumerated, one candidate mechanism identified and instrumented, the culprit NOT confirmed.**
+### MEASURED, on runs that actually crashed
 
-What is honestly open: the enumeration shows no path in this family frees a node while a link
-to it survives, so the leak must come from an erase that no-ops while the destroy after it
-proceeds — and rows 1 and 5 above are the only two that can do that. Whether either actually
-occurs is unmeasured, which is precisely what the probe is for. It is a hypothesis with a
-falsifiable prediction, not a conclusion.
+Everything above this point was reasoning. This section is measurement, and three of its four
+results are negative — recorded with the same weight a hit would have had.
+
+**1. THE CRASH IS ORACLE-INDEPENDENT.** The stress cell was run with `BANISHED_RT_DIFF`
+**unset** (exe 2026-09-08 01:29:23) and faulted anyway: `rc=3`, ACCESS_VIOLATION. Finding 3 is a
+real defect in the port, not an artifact of the diff harness. The intermittency is unchanged at
+roughly 4 runs in 10, so the oracle is not what makes it fire either.
+
+**2. THE SCHEDULER ERASE FAMILY IS ELIMINATED — on a crashing run.** The probe's tally, from the
+run that died:
+
+```
+[WorkSchedProbe] TALLY 8e30calls=136 unfiled=135 entryNotFound=0 bucketNotFound=0 bucketRootNull=0
+```
+
+135 of 136 calls found their entry and erased it; the 136th is the call that faulted mid-walk.
+**Not one call reached either state retail 0x1400f8f5e would have faulted on, and not one erase
+no-opped.** The mechanism this lane derived from source — a drifted key leaving an entry behind
+while step 5 destroys the object anyway — **does not occur**. The enumeration ruled the family
+out rather than finding the culprit, which is what it was built to be able to say.
+
+**3. THE INTERNALFACTORY HANDLE TABLE IS CLEAN THROUGH TEARDOWN.** `ObjAudit`'s only scan point
+was inside `Update`, so the table had **never** been checked during teardown; checkpoints were
+added bracketing `EntityList::Shutdown`. On the crashing run: `shutdown-enter: count=92492 bad=0`,
+`freed-while-registered total=0`. So mode (A) of `Object/internal_factory_audit.h` — *"the next
+~Internal writes `*(int*)(freedPtr+0x08) = idx`, a 4-byte store into a reused block"*, which has
+exactly this crash's signature — **did not happen**.
+
+**4. THE DISCRIMINATING RESULT: THE HEAP IS CLEAN WHEN TEARDOWN BEGINS.** Two readings were
+equally consistent with the evidence — *one latent wild write laid down during the sim, with a
+moving victim*, versus *faults created by teardown itself*. They differ in one observable, so
+`RedzoneAlloc_HeapDump` (which walks the engine allocator's boundary tags and works on a fully
+native run) was called at `shutdown-enter`. On the crashing run:
+
+```
+[REDZONE-DUMP] 'shutdown-enter': ... no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact
+```
+
+**The heap is intact when teardown starts and corrupt by the time it faults.** That rules out the
+latent-sim-write reading. The corruption is produced *by the teardown cascade*, in the window
+between the 135th and 136th `8e30` call.
+
+### A CORRECTION I OWE LANE M
+
+Earlier this lane reported, on one symbolized crash, that lane M's stack
+(`Tutorial_Dtor_f8ff0 → TreeNodeFree`) was wrong and that "only the first frame survives."
+**That was itself wrong, and it was wrong because it generalised from a single sample.** A later
+crash captured here symbolizes to exactly lane M's path:
+
+```
+GameUpdateLoop_Shutdown +0x615 -> Tutorial_Dtor_f8ff0 +0x330
+  -> TreeNodeFree_2df90 (recursive: +0x50 / +0x5f / +0x7f / +0x5f)
+```
+
+(`2df90`, not `2ce60` — same recursive-free shape, a sibling function.) Lane M's reading was
+right about this fault. **There are at least THREE distinct faulting stacks on this route**, and
+they must not be assumed to be one defect:
+
+| # | Stack | Corrupt value |
+|---|---|---|
+| A | `EntityList_Shutdown +0x104` (mark loop) → `WorkComponent::OnRemove` → `RegisterWorkSlot` → `ActCt_TaskCleanup_8e30`, faulting on `int k = *e` in step 4's entry walk | `{low = 2 or 0x22, high = that run's heap prefix}` |
+| B | `EntityList_Shutdown +0x22e` (drain loop) → `RemoveEntity` → `ComponentEntity_Dtor` → `DtorBody` → `InternalBasePtr::DeletePtr` → `Inert_ScalarDtor` → `MemFree` → `FreeLocked` | boundary tag `0x0000000200000010` |
+| C | `Tutorial_Dtor_f8ff0 +0x330` → recursive `TreeNodeFree_2df90` | node ptr `0x0000000200000020` |
+
+A and C are both **a pointer whose low dword was overwritten with a small integer** — for A the
+high half is provably that run's heap prefix (`0x279`, matching `RSI=0x279AD63A7B0`). B is a
+boundary tag, and `0x200000010` is *not* a valid tag: the allocator stores the block size in the
+low 41 bits (`blkBytes = (tag & 0x1ffffffffff) * 4`, `redzone_alloc.cpp:867`), so a 16-byte block
+would tag as `4`, not `0x200000010`. So all three are genuine corruption, not misread metadata,
+and the "free-block tag" reading this lane briefly entertained is **wrong and withdrawn**.
+
+### A DEFECT IN THIS LANE'S OWN PROBE, AND THE RULE IT PRODUCED
+
+The probe's first version registered its tally with `atexit`. The crash handler ends in
+`ExitProcess`, which skips `atexit` entirely — so on the one run where the probe fired, it printed
+its `ARMED` line and then **nothing at all**, and the all-counters-zero outcome would have been
+indistinguishable from *"the probe is not in this binary."*
+
+**A diagnostic whose output is destroyed by the event it diagnoses is not a diagnostic.** Both
+tallies now print from the crash handler as well, beside `VideoDX11::Dx11SeamReport()`, which had
+been doing exactly this since Wave 6 for exactly this reason. The `ARMED` line is what exposed it:
+without a startup marker the silence would have been read as a clean pass.
+
+### Where it stands
+
+**Reproduced (7 times now), oracle-independence proved, the heap proved clean at teardown entry,
+the scheduler family and the handle table both eliminated by measurement on crashing runs, the
+victim located to a single instruction — and the WRITER not found.**
+
+What is honestly open: the writer. Three separate hypotheses have now been *measured and
+eliminated* rather than argued away, the search space is much smaller, and the next tool is
+named below — but nothing here identifies the code that stores the small integer.
+
+The remaining candidate the evidence points at is a write performed *during the teardown
+cascade* that lands on a live pointer's low half. Since the victim address differs every run, the
+tool for it is a **hardware write watchpoint** (`standalone/hw_watch.cpp` exists for exactly this)
+armed on the bucket's inner-root slot at the moment it is written, which names the writer directly
+instead of inferring it from the victim. That is a build this lane did not make.
+
+Two things worth carrying forward for whoever does:
+* the fault is **not** latent from the sim (result 4), so the watchpoint only needs to cover
+  teardown, which is a few hundred milliseconds rather than 1,200 frames;
+* stacks A and C are the same shape (a pointer's low dword replaced by a small integer) while B
+  is a boundary tag, so **B may well be a different defect** — the coordinator's warning against
+  assuming one root cause is not resolved here, and this lane's data does not settle it.
 
 Per CLAUDE.md this is not to be closed with a null check on the child link, and the existing
 `if (node != nullptr)` guard was deliberately **left in place**: retail's unguarded deref there
