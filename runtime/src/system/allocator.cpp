@@ -1394,11 +1394,39 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // At cutover neither reason applies: there is no DLL to detour and no prologue
 // for allocator_lock to have patched (it prints "could not resolve" and stands
 // down, which is the correct behaviour and was never the wall).
+// 0x180009c30 -- the allocator-lock Free wrapper, and a TRAP worth spelling out
+//
+// Retail's body is `if (p) { Enter; Free(_singleton, p); Leave; }` -- byte for
+// byte the `?MemFree@` static registered above -- but its SIGNATURE is not the
+// same. It takes TWO parameters and ignores the first: retail's
+// RemoveGlobalObject tail-calls it passing `this` in RCX and the pointer in RDX
+// (see runtime/src/graphics/scene.cpp:238, `RtFreeLocked(void*, void*)`).
+//
+// So registering `rtalloc::MemFree` here -- which is what "it is exactly the
+// MemFree static" invites -- would be silently, catastrophically wrong. Our
+// MemFree reads its one argument from RCX, which at this call site holds the
+// IGNORED `this`. It would free an object pointer instead of the buffer, leave
+// the buffer leaked, and corrupt the free list with a block the allocator never
+// handed out. Nothing would fault at the call; the damage would surface
+// arbitrarily later in an unrelated allocation.
+//
+// The shim costs one instruction of shuffle and makes the ABI difference
+// explicit instead of load-bearing-and-invisible.
+void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
+    rtalloc::MemFree(p);
+}
+
 int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry) {
     RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&rtalloc::MemAlloc));
     RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&rtalloc::MemFree));
     RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
     RegisterRuntimeAddr(0x1800c6c00, freeEntry);
-    return 4;
+    // Wave 9 lane GFX2: a HARD cutover dependency, not a watch-list row. It is
+    // unexported (so no name-based instrument can see it) and has a live,
+    // non-diff-guarded caller in a ported body -- Graphics::RemoveGlobalObject
+    // -- so with the DLL absent it is a call through null on the first scene
+    // teardown. See the signature trap above.
+    RegisterRuntimeAddr(0x180009c30, reinterpret_cast<void*>(&FreeLockedIgnoringSelf));
+    return 5;
 }
 }  // namespace
