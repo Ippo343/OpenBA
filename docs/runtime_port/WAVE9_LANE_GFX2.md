@@ -436,7 +436,12 @@ or even "check the md5" rule:
 1. **The on-disk md5 says which exe is on disk when you look, not which exe ran.** The
    acceptance test that works is an **identity line emitted by this build alone, read out
    of the run's own log**. Ours is the SunLight branch-site name containing the literal
-   `xor al,al;ret`; `.lane_tmp/run.sh` VOIDs the run if it is absent. Both runs above
+   `xor al,al;ret`. This lane's scratch wrapper (not committed — it was a
+   throwaway around `tools/game_dir_lock.sh` + `tools/rt_run.sh`) VOIDed the run
+   outright if that line was absent, which is the behaviour worth copying into
+   `rt_run.sh` itself: **a per-lane identity gate belongs in the shared runner, not
+   in six private wrappers, because the lanes that skip it are the ones that get
+   clobbered.** Both runs above
    passed that gate.
 2. **`cp` can fail while an md5 check still passes**, because the previous deploy of the
    same exe is still in place ("Device or resource busy" happened twice here). The copy
