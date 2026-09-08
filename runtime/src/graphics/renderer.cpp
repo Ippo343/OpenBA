@@ -132,8 +132,12 @@ const char* const kSetMaterial =
 
 // Volume::Frustum::Projection(bool) -> Math::Matrix BY VALUE.
 // Retail 0x1800f9dc0, ordinal 3435. Hidden return slot in RDX after `this`.
-// NOT ported by Wave 1 (Volume ported only the 12 functions our tree calls, and
-// no exe call site asks for Projection), so today this always lands in the DLL.
+// PORTED by Wave 9 lane P (runtime/src/volume/frustum.cpp), so this resolve now
+// lands in our own code and this call site is the ONLY thing that exercises it.
+// Wave 1 skipped it — "Volume ported only the 12 functions our tree calls, and
+// no exe call site asks for Projection" — which was true and is what this
+// comment said until 2026-09-07. ResolveExport is unchanged and still correct:
+// it consults the port registry first, which is how it finds the port.
 Matrix* RtFrustumProjection(const Frustum* self, Matrix* ret, bool zeroToOneDepth) {
     using Fn = Matrix* (*)(const Frustum*, Matrix*, bool);
     static Fn fn = reinterpret_cast<Fn>(
@@ -178,6 +182,8 @@ void RtMemFree(void* p) {
 // Array<T>::~Array for a trivially destructible T: Free(_data) under the
 // allocator lock, then zero the {_data, _size, _capacity} triple. Retail
 // 0x18001c9e0 — the Renderer dtor's first callee, on `_drawables`.
+// WAVE 9 LANE Q: registered, so this reaches our ~Array. The two dtors below
+// (0x18001c8c0, 0x18001c7e0) are lane D's J2b/J2 and are still the DLL's.
 void RtArrayDtorTrivial(void* arrayTriple) {
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c9e0));
@@ -202,6 +208,12 @@ void RtArrayDtorSceneEntries(void* arrayTriple) {
     fn(arrayTriple);
 }
 
+// WAVE 9 LANE Q: 0x180061480 is registered (kSpec_StringExt), one of the three
+// NON-TRIVIAL element types in that lane -- the `INC dword ptr [*element - 4]`
+// refcount bump described below is reproduced literally in the port, and the old
+// buffer's element release still goes to retail's 0x180005930 by address.
+// Disarm on its own with BANISHED_RT_ARRAY_NONTRIVIAL=0.
+//
 // Array<{String, ExternalPtr}>::SetSize(n, fillValue). Retail 0x180061480: grows
 // (capacity*3 on a by-one append from non-empty), copy-CONSTRUCTS the tail from
 // `fillValue` — bumping the String refcount at `*element - 4` — releases the old

@@ -311,3 +311,122 @@ Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Vector3* ret, 
     }
     return ret;
 }
+
+// ============================================================================
+// Math::Matrix Volume::Frustum::Projection(bool) const
+// ?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z   retail 0x1800f9dc0
+//
+// Wave 9, lane P (tier 0). Member, struct return: RCX = this, RDX = hidden
+// return slot, R8B = the bool. Adds the sixth and last Frustum member our tree
+// asks for, so `Volume::Frustum` is now COMPLETE (§4.1 decision 5, class
+// atomicity).
+//
+// NO NEW LANE-D ROWS: retail's body calls NOTHING — no helper, no libm, no
+// global. It is the cheapest dependency profile in the whole of lane B's
+// inventory and that is why it was picked first.
+//
+// WHAT IT COMPUTES. The four near-plane spans are the SAME four values
+// `GetCorners` and `GetScreenDirection` derive, so this shares NearSpan() with
+// them rather than re-deriving the division; the disassembly at 0x1800f9e0b
+// (orthographic) and 0x1800f9e2b (perspective) is instruction-for-instruction
+// the same shape as 0x1800f9850's, down to the sign of each term.
+//
+// Then it fills a 4x4. The two modes and the bool give four fills, and the bool
+// only ever changes the DEPTH column (m[10]/m[14]) — never x or z:
+//
+//   orthographic, flag : m10 = -1/(f-n)          m14 = -n/(f-n)
+//   orthographic,      : m10 = -2/(f-n)          m14 = -(f+n)/(f-n)
+//   perspective,  flag : m10 = -f/(f-n)          m14 = -n*f/(f-n)
+//   perspective,       : m10 = -(f+n)/(f-n)      m14 = -2*n*f/(f-n)
+//
+// i.e. `flag` selects a [0,-1] depth range and its absence the [-1,+1] one —
+// which is what runtime/src/graphics/renderer.cpp already calls the parameter
+// (`zeroToOneDepth`), and the arithmetic agrees, so that name is kept.
+//
+// The .rdata constants are the ones Math.h already tabulates (1.0 @ 0x18016169c,
+// 2.0 @ 0x1801616d8, -1.0 @ 0x18016175c, the -0.0f sign mask @ 0x1801617c0),
+// plus -2.0 @ 0x180161768, which no earlier wave needed; it is declared beside
+// the body rather than added to the shared table for one user.
+//
+// ORACLE: full 64-byte compare against the shipped body run into a private
+// scratch. Every one of the 16 floats is written on every one of the four
+// paths — checked store by store — so there is no unwritten-byte trap
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+// ============================================================================
+
+// 0x180161768. Only Projection uses it, so it stays local rather than joining
+// RtMathConst.
+static constexpr float kMinusTwo = -2.0f;
+
+Matrix* RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroToOneDepth) {
+    RT_DIFF_BEGIN("Volume::Frustum::Projection");
+
+    const float nearDist = self->planes[0].w;
+    const float farDist  = -self->planes[1].w;
+    float xLo, xHi, zLo, zHi;
+    NearSpan(*self, nearDist, xLo, xHi, zLo, zHi);
+
+    // Retail computes both denominators as (hi - lo) in x and (lo - hi) in z.
+    // The z one really is that way round — 0x1800f9ea2 `SUBSS XMM3,XMM10` with
+    // XMM3 = zLo and XMM10 = zHi — and it is what flips the z axis.
+    const float dx    = xHi - xLo;
+    const float dz    = zLo - zHi;
+    const float depth = farDist - nearDist;
+
+    float* m = ret->m;
+    m[4] = 0.0f;                                        // 0x1800f9e8b, both modes
+
+    if (self->isOrthographic) {
+        m[8]  = 0.0f;
+        m[9]  = 0.0f;
+        m[12] = -(xHi + xLo) / dx;
+        m[13] = -(zHi + zLo) / dz;
+        if (zeroToOneDepth) {
+            m[10] = RtMathConst::kMinusOne / depth;
+            m[14] = -nearDist / depth;
+        } else {
+            m[10] = kMinusTwo / depth;
+            m[14] = -(farDist + nearDist) / depth;
+        }
+        m[11] = 0.0f;
+        m[15] = RtMathConst::kOne;
+        m[0]  = RtMathConst::kTwo / dx;
+        m[5]  = RtMathConst::kTwo / dz;
+    } else {
+        m[12] = 0.0f;
+        m[13] = 0.0f;
+        // `near * 2` is formed ONCE and divided twice (0x1800f9fb3 then two
+        // DIVSS), so both m[0] and m[5] share the same rounded numerator.
+        const float near2 = nearDist * RtMathConst::kTwo;
+        if (zeroToOneDepth) {
+            m[10] = -farDist / depth;
+            m[14] = nearDist * -farDist / depth;
+        } else {
+            m[10] = -(farDist + nearDist) / depth;
+            m[14] = nearDist * (farDist * kMinusTwo) / depth;
+        }
+        m[8]  = (xHi + xLo) / dx;
+        m[9]  = (zHi + zLo) / dz;
+        m[11] = RtMathConst::kMinusOne;
+        m[15] = 0.0f;
+        m[0]  = near2 / dx;
+        m[5]  = near2 / dz;
+    }
+
+    // The common tail, 0x1800fa0c9..0x1800fa0dd — five zeros shared by all four
+    // paths. m[4] was already stored above, before the branch, exactly as retail
+    // does it.
+    m[1] = 0.0f;
+    m[6] = 0.0f;
+    m[2] = 0.0f;
+    m[3] = 0.0f;
+    m[7] = 0.0f;
+
+    if (rt_diff_on__) {
+        Matrix theirs{};
+        RtOriginal<Matrix* (*)(const Frustum*, Matrix*, bool)>(
+            "?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z")(self, &theirs, zeroToOneDepth);
+        RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
+    }
+    return ret;
+}

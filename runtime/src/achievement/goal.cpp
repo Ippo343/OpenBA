@@ -2,14 +2,24 @@
 // runtime/src/achievement/goal.cpp — Wave 5 lane A — Achievement::Goal /
 //                                    GoalInstance / GoalList
 // ============================================================================
-// Ports 13 of the 15 REAL exports in this family that our tree calls. The two
-// held back are the two that move a stream cursor — `Goal::Serialize` and
-// `GoalInstance::Persist` — because no oracle can run both implementations
-// without double-consuming the stream, and a desync there is exactly the defect
-// class that has cost this project the most (see reg_goal.cpp's own comment on
-// slot 0x140152868, and reference_slot3_wrapper_must_resolve_first.md). Both
-// stay on the DLL. Full reasoning, plus their complete reversed bodies so a
-// later lane does not have to redo the work: docs/runtime_port/WAVE5_LANE_A.md.
+// Ports 13 of the 15 REAL exports in this family that our tree calls.
+//
+// *** THE TWO HOLDBACKS ARE NO LONGER HELD BACK — see goal_serialize.cpp. ***
+// This banner used to end here saying that `Goal::Serialize` and
+// `GoalInstance::Persist` "stay on the DLL", because no oracle could run both
+// implementations without double-consuming the stream. That was true of the
+// READ path and was believed of both. Wave 9 lane S showed it is false on the
+// WRITE path — a write-path Serialize is a pure read of the object, so it
+// replays into two independent synthetic sinks — and Wave 9 lane P ported both
+// against that oracle (runtime/src/achievement/goal_serialize.cpp, which also
+// records the two new lane-D rows the ports create).
+//
+// The desync WORRY behind the old note stands and is why those two bodies are
+// commented field by field: a wrong record order or count there is the silent
+// save corruption this project has paid for repeatedly (see reg_goal.cpp's own
+// comment on slot 0x140152868, and reference_slot3_wrapper_must_resolve_first.md).
+// Their reversed bodies are in docs/runtime_port/WAVE5_LANE_A.md, and Wave 9's
+// reading of the same bytes agrees with them.
 //
 // *** THE BRIEF'S "20 EXPORTS" ARE NOT 20. Four of the names do not exist. ***
 // `??1Goal@Achievement@@QEAA@XZ`, `??1GoalInstance@Achievement@@QEAA@XZ`,
@@ -561,7 +571,11 @@ void RtAch_GoalInstance_Update(GoalInstance* self, const void* time, const void*
 // ============================================================================
 // `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` (0x18009ee20) and
 // `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` (0x18009ef70) are
-// DELIBERATELY ABSENT — see the file banner and WAVE5_LANE_A.md §4.
+// absent HERE but no longer absent from the build: Wave 9 lane P registers both
+// from runtime/src/achievement/goal_serialize.cpp, under this same
+// BANISHED_RT_GOAL switch. They live in their own file only so that two lanes
+// never edit one file, not because they are still held back — the "DELIBERATELY
+// ABSENT, see WAVE5_LANE_A.md §4" this line used to say is superseded.
 //
 // Both the exported NAME and the retail ADDRESS are registered for every port.
 // Registering only the name would leave `ResolveAddr(Module::Runtime, ...)`

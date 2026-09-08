@@ -99,6 +99,14 @@ namespace {
 // three allocate through System::MemoryAllocator::_singleton, which is the
 // same one heap our exe uses, so calling the DLL's copy is not a heap split.
 //
+// *** WAVE 9 LANE Q, 2026-09-07: ALL THREE ARE NOW REGISTERED PORTS ***
+// (runtime/src/collection/array.cpp), so these calls no longer reach the DLL's
+// copies. The heap is unchanged -- lane Q's SetSize allocates through the same
+// exported MemAlloc/MemFree, by address -- so the "not a heap split" argument
+// still holds; only "calling the DLL's copy" is out of date. Lane Q re-read all
+// three bodies and confirms the bool/8-byte asymmetry noted below; the port
+// keeps it, and its oracle does not compare the tail 0x180008b90 never writes.
+//
 //   0x180008b90  Array<bool>::SetSize     — 1-byte elements, MemAlloc(n, 1)
 //   0x180008ff0  Array<Time>::SetSize     — 8-byte, MemAlloc(n*8, 8), zero-fills new tail
 //   0x180008d60  Array<InternalPtr>::SetSize — 8-byte, same, with the InternalPtr
@@ -216,6 +224,7 @@ ExternalDtorFn ExternalDtor() {
 }
 
 // ---- Collection::Array<ExternalPtr<Goal>>::~Array - retail 0x180004890 -----
+// Registered by Wave 9 lane Q; this reaches our ~Array, not the DLL's.
 // Not exported. Frees the buffer under the allocator lock, then zeroes the
 // {_data} qword and the {_size,_capacity} qword - so capacity is cleared too,
 // unlike the exe-side SubArrayDeepCopy case PLAN.md 1.2 item 15 records.

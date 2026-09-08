@@ -37,13 +37,14 @@
 //   non-issue here specifically because we point at the DLL's own object
 //   instead of cloning it.
 //
-//   The worker thread's entry point is intentionally left as the DLL's own
-//   ?ThreadFunc@Thread@System@@CAIPEAX@Z (resolved by address, not ported —
-//   it is not one of the 8 exports in scope). It only touches the layout we
-//   already reproduce exactly (+0x00 vtable, +0x08 runFlags, +0x10/0x18/0x20/
-//   0x28 handles), so running the real one guarantees the worker's virtual
-//   dispatch (slot 0 = work, slot 1 = OnCompleted) behaves identically to
-//   retail regardless of which ctor built the object.
+//   The worker thread's entry point WAS intentionally left as the DLL's own
+//   ?ThreadFunc@Thread@System@@CAIPEAX@Z, on the grounds that it was not one of
+//   the 8 exports in scope. **Wave 9 lane P ports it** (bottom of this file),
+//   and the ctor below now asks for it BY NAME through the port-aware resolver,
+//   so it gets ours when System is enabled and the DLL's under
+//   BANISHED_RT_THREAD=0. The old reasoning stays true of the LAYOUT — it only
+//   touches +0x00 vtable, +0x08 runFlags, +0x10/0x18/0x20/0x28 handles, all of
+//   which this header reproduces exactly — which is what made it safe to port.
 //
 //   CRT OWNERSHIP: the ctor calls the DLL's OWN _beginthreadex (0x18007fbfc),
 //   resolved by raw address via ResolveRuntimeRaw, not MinGW/UCRT's. ThreadFunc
@@ -67,6 +68,8 @@
 #include "../../types/system/Thread.h"
 #include "../../funcs/rt_port.h"
 
+#include <cstdio>
+
 #include <windows.h>
 
 using System::CriticalSection;
@@ -80,6 +83,15 @@ using System::Thread;
 // this file already includes <windows.h> for its own reasons, but the
 // declaration is kept local rather than assuming resolve.h stays includable).
 uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
+
+// OPT-IN, unlike RtWaveEnabled(): absent env means OFF. RtWaveEnabled is a kill
+// switch and defaults to true when unset, which is the wrong polarity for a
+// diagnostic. Read once into a function-local static — cheap, and getenv is
+// process-cached anyway (standalone/env_cache.h).
+static bool RtWaveTraceOn(const char* envName) {
+    const char* e = std::getenv(envName);
+    return e && *e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
+}
 
 // ---- System::CriticalSection -----------------------------------------------
 
@@ -108,16 +120,27 @@ void RtSystem_CriticalSection_Unlock(CriticalSection* self) {
 // ---- System::Thread ---------------------------------------------------------
 
 // The DLL's own base vtable (??_7Thread@System@@6B@, a real PE export at
-// 0x180155f20 — slot 0 _purecall, slot 1 OnCompleted) and its own ThreadFunc
-// (?ThreadFunc@Thread@System@@CAIPEAX@Z, 0x1800ca440), resolved once. Both are
-// used AS-IS, never reimplemented, for the reasons in the file banner.
+// 0x180155f20 — slot 0 _purecall, slot 1 OnCompleted), used AS-IS and never
+// reimplemented, for the reasons in the file banner.
 static void* RtSystemThreadVftable() {
     static void* v = ResolveExportRaw("??_7Thread@System@@6B@");
     return v;
 }
+
+// The worker entry point. Asked for BY NAME through the PORT-AWARE resolver, so
+// this hands back our own RtSystem_Thread_ThreadFunc (below) once
+// RtSystemThreadRegister has run, and the shipped 0x1800ca440 under
+// BANISHED_RT_THREAD=0. That is deliberate and is the only A/B this function
+// gets: it cannot be diffed (see the DIFF HARNESS note in the banner), so
+// "boot with the port, boot without it, compare behaviour" is the oracle.
+//
+// It was ResolveExportRaw until Wave 9 lane P. Leaving it raw after porting
+// would have been the port-bypass defect in its purest form — the port
+// registered, the census counting it, and the DLL's body still the one every
+// thread in the process actually runs.
 static unsigned(__stdcall* RtSystemThreadFunc())(void*) {
     using Fn = unsigned(__stdcall*)(void*);
-    static Fn f = reinterpret_cast<Fn>(ResolveExportRaw("?ThreadFunc@Thread@System@@CAIPEAX@Z"));
+    static Fn f = reinterpret_cast<Fn>(ResolveExport("?ThreadFunc@Thread@System@@CAIPEAX@Z"));
     return f;
 }
 
@@ -176,6 +199,131 @@ void RtSystem_Thread_WaitForFinish(Thread* self) {
     WaitForSingleObject(reinterpret_cast<HANDLE>(self->hFinished), INFINITE);
 }
 
+// ============================================================================
+// unsigned int System::Thread::ThreadFunc(void*)      retail 0x1800ca440
+// ?ThreadFunc@Thread@System@@CAIPEAX@Z
+//
+// Wave 9, lane P (tier 0). The worker body every System::Thread runs — the last
+// unported member of the class, so System::Thread is now COMPLETE (§4.1
+// decision 5).
+//
+// NO NEW LANE-D ROWS. Its only callees are Win32: WaitForMultipleObjects
+// through the DLL's IAT slot 0x18014b358 and SetEvent through 0x18014b368. We
+// call kernel32 directly, which is the same function — the IAT slot is where
+// the DLL's loader wrote kernel32's address, not a Runtime internal.
+//
+// STRUCTURE, from the bytes:
+//
+//   handles[2] = { self->hStart, self->hStop };   // filled ONCE, before the
+//                                                 // loop, and REUSED by the
+//                                                 // second wait (RSP+0x20 is
+//                                                 // never rewritten)
+//   r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+//   while (r == 0) {                              // TEST EAX,EAX / JNZ
+//       self->runFlags |= 1;                      // OR [RBX+8],1
+//       self->vtable[0](self);                    // the work call
+//       self->vtable[1](self);                    // OnCompleted — NOTE the
+//                                                 // vtable is RELOADED at
+//                                                 // 0x1800ca48c, so a work
+//                                                 // call that re-stamps the
+//                                                 // vtable is honoured
+//       h = self->hFinished;                      // loaded BEFORE the AND
+//       self->runFlags &= ~1;
+//       SetEvent(h);
+//       r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+//   }
+//   return (r == 1) ? 0 : 0xFFFFFFFF;             // CMP EAX,1 / CMOVZ
+//
+// The return value distinguishes an orderly stop (index 1 == hStop, the
+// destructor's signal) from anything else — abandoned, failed or timed out —
+// which all report -1. Nothing in the DLL reads it; it lands in the thread's
+// exit code.
+//
+// ORACLE: NONE, by construction, and this function is the reason the file
+// banner's "DIFF HARNESS: none of these 8" paragraph exists at all. It blocks
+// on kernel objects and dispatches into caller-supplied virtual work; running
+// it twice would run the work twice and drain the events. The A/B is
+// BANISHED_RT_THREAD=0 (see RtSystemThreadFunc above), and the observable is
+// coarse but real: the async pathfinder and the game-teardown worker are
+// System::Thread subclasses, so a wrong ThreadFunc is a hang or a dead
+// pathfinder, not a subtle drift.
+//
+// *** IT ALSO HAS NO `calls=` COLUMN, AND THAT NEEDED FIXING SEPARATELY. ***
+//
+// RT_DIFF_BEGIN is not usable here and the reason is not squeamishness:
+// runtime/funcs/rt_diff.cpp has NO synchronisation at all — a bare
+// `RtDiffSite* g_sites[]`, a bare `g_siteCount++`, bare `site->calls++`. This
+// body runs on a WORKER THREAD, so a diff site inside it would be a data race
+// in every thread the game creates, and the counter it produced could not be
+// trusted anyway.
+//
+// So the port carries the witness below instead. This matters because of the
+// exact hat `reference_uncalled_port_is_not_verified.md` describes: the residue
+// census shows `?ThreadFunc@Thread@System@@CAIPEAX@Z` being RESOLVED, and
+// resolved is not called. An eagerly-resolved name appears whether or not
+// anything ever calls through the pointer. Without a witness, this port would
+// land looking fine and be entirely unexercised, which is how a wrong
+// Quaternion::operator* survived the whole of Wave 1.
+//
+// BANISHED_RT_THREADFUNC_TRACE=1 prints ONE line the first time each worker
+// dispatches work, naming the Thread object and its vtable — which identifies
+// the subclass, so the log says WHICH workers ran, not just that some did.
+// Bounded by the number of threads (a handful), so it is cheap enough to leave
+// in, and `getenv` is process-cached (standalone/env_cache.h).
+//
+// **Zero lines under that variable means zero dispatches, and that is the
+// signal to read.** It is an EXECUTION WITNESS, not a correctness oracle;
+// nothing about it says the body is right, only that it ran.
+//
+// The second line it can print is a real measurement rather than a tautology:
+// retail RELOADS the vtable between slot 0 and slot 1 (0x1800ca48c), and
+// whether that reload ever observes a different pointer decides whether a port
+// that cached it would be wrong. If the line never appears, the reload is dead
+// in practice and we know it; if it appears, our fidelity to it is load-bearing.
+// ============================================================================
+unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
+    Thread* self = static_cast<Thread*>(param);
+
+    const bool trace = RtWaveTraceOn("BANISHED_RT_THREADFUNC_TRACE");
+    bool announced = false;        // per-thread: this frame is one worker
+    bool reloadReported = false;
+
+    HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
+                          reinterpret_cast<HANDLE>(self->hStop) };
+
+    unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    while (r == 0) {
+        using WorkFn = void (*)(Thread*);
+
+        void** vt = static_cast<void**>(self->vtable);
+        if (trace && !announced) {
+            announced = true;
+            std::fprintf(stderr,
+                         "[RtThreadFunc] PORT DISPATCHED work: thread=%lu self=%p vtable=%p\n",
+                         GetCurrentThreadId(), (void*)self, (void*)vt);
+        }
+        self->runFlags |= 1u;
+        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work
+
+        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does
+        if (trace && !reloadReported && vtAfter != vt) {
+            reloadReported = true;
+            std::fprintf(stderr,
+                         "[RtThreadFunc] vtable RELOAD IS LOAD-BEARING: thread=%lu %p -> %p "
+                         "(a port that cached the vtable would call the wrong OnCompleted)\n",
+                         GetCurrentThreadId(), (void*)vt, (void*)vtAfter);
+        }
+        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted
+
+        HANDLE finished = reinterpret_cast<HANDLE>(self->hFinished);
+        self->runFlags &= ~1u;
+        SetEvent(finished);
+
+        r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    }
+    return (r == 1) ? 0u : 0xFFFFFFFFu;
+}
+
 // ---- Registration ------------------------------------------------------------
 
 int RtSystemThreadRegister() {
@@ -189,6 +337,14 @@ int RtSystemThreadRegister() {
     RegisterRuntimeExport("??1Thread@System@@QEAA@XZ", (void*)&RtSystem_Thread_Dtor); ++n;
     RegisterRuntimeExport("?Start@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_Start); ++n;
     RegisterRuntimeExport("?WaitForFinish@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_WaitForFinish); ++n;
+
+    // Wave 9 lane P. Registered by ADDRESS as well as by name: the ctor above
+    // asks by name, but the DLL's own ??0Thread ctor (still live for any Thread
+    // the DLL builds itself) hands 0x1800ca440 to _beginthreadex, and Wave 3's
+    // seam only redirects a call that goes through a resolver. Registering the
+    // address costs nothing and means a future by-address caller lands on us.
+    RegisterRuntimeExport("?ThreadFunc@Thread@System@@CAIPEAX@Z", (void*)&RtSystem_Thread_ThreadFunc); ++n;
+    RegisterRuntimeAddr(0x1800ca440, (void*)&RtSystem_Thread_ThreadFunc);
 
     return n;
 }

@@ -116,6 +116,10 @@ void RtMemFree(void* p) {
 // Collection::Array<int32_t>::SetSize -- retail 0x18002fea0. Not exported (a
 // header-only template instantiation, per runtime/types/collection/
 // Collection.h); resolved by address like scene.cpp's RtArrayU32SetSize.
+// WAVE 9 LANE Q: 0x18002fea0 and 0x1800764c0 below are both registered ports
+// now, so these reach our SetSize. Note 0x18002fea0 is one of the TWO
+// instantiations that leave the new tail UNINITIALISED (its `else` arm is
+// empty) -- the port keeps that, and an oracle must not compare it.
 void RtArrayInt32SetSize(void* arrayHeader, int32_t n) {
     using Fn = void (*)(void*, int32_t);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002fea0));

@@ -18,6 +18,11 @@
 
 extern int RtAchGoalRegister();       // goal.cpp                (lane A)
 extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
+// Wave 9 lane P — goal_serialize.cpp. Gated by BANISHED_RT_GOAL with goal.cpp,
+// not by a switch of its own: class atomicity (PLAN §4.1 decision 5) means the
+// two stream members must flip together with the ctors/dtors that build the
+// objects they serialize.
+extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
 
 void RtAchievementPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ACHIEVEMENT")) {
@@ -25,7 +30,10 @@ void RtAchievementPortInit() {
         return;
     }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_GOAL"))   n += RtAchGoalRegister();
+    if (RtWaveEnabled("BANISHED_RT_GOAL")) {
+        n += RtAchGoalRegister();
+        n += RtAchGoalSerializeRegister();
+    }
     if (RtWaveEnabled("BANISHED_RT_ACHMGR")) n += RtAchManagerRegister();
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }

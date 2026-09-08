@@ -36,6 +36,8 @@ Frustum* RtVolume_Frustum_MulTransform3(const Frustum* self, Frustum* ret, const
 unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsigned int mask);
 void     RtVolume_Frustum_GetCorners(const Frustum* self, Vector3* out);
 Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Vector3* ret, float u, float v);
+// Wave 9 lane P — the sixth and last Frustum member our tree asks for.
+Matrix*  RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroToOneDepth);
 
 void RtVolumePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VOLUME")) {
@@ -62,6 +64,11 @@ void RtVolumePortInit() {
                            (void*)&RtVolume_Frustum_GetCorners);
     RegisterRuntimeExport("?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z",
                            (void*)&RtVolume_Frustum_GetScreenDirection);
+    // Wave 9 lane P. Registered by NAME only: the one in-tree caller,
+    // runtime/src/graphics/renderer.cpp's RtFrustumProjection, already goes
+    // through ResolveExport, and no site reaches it by address.
+    RegisterRuntimeExport("?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z",
+                           (void*)&RtVolume_Frustum_Projection);
 
-    printf("[RtVolume] 11 exports registered (Box x5, Rectangle x1, Frustum x5)\n");
+    printf("[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)\n");
 }

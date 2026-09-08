@@ -3,6 +3,18 @@
 Prep pass, 2026-09-07. **No porting was done this round** — per the lane brief, this is
 inventory and sequencing only. Read `docs/runtime_port/WAVE9.md` and `PLAN.md` §4/§6 first.
 
+**CORRECTION, 2026-09-07 (same day, lane reopened by a defect lane P found):** the original
+version of this report's `ghidra-exact` column contained a systematic tool-usage bug, not
+estimation noise. See §3a below for the mechanism, and §0/§3/§5 for what changed. The short
+version: `get_function_metrics`'s `address` parameter does not work in this bridge — it silently
+has no effect rather than erroring — and this program's Ghidra symbol table has many functions
+sharing the same short, unqualified name (e.g. 185 distinct functions named `Serialize`). Calling
+`get_function_metrics(function_name="Serialize", address=0x18009ee20)` therefore does not verify
+that the function AT that address is named `Serialize`; it silently returns metrics for **some**
+function named `Serialize`, which need not be the intended one. **3 of the 13 spot-checked
+functions were measured this way and were wrong; a 4th is downgraded to unverified.** All four are
+corrected below and in the CSV.
+
 ## 0. The exact count, reconciled
 
 Input: `docs/runtime_port/wave9_unported_20260907.txt`, "Called but not ported (320)".
@@ -54,11 +66,15 @@ Size split across all 194 (bucketed by instruction count; see §3 on how sizes w
 
 | Bucket | Count |
 |---|---|
-| Trivial (<20 instr) | 77 |
-| Small (<80 instr) | 58 |
-| Medium (<250 instr) | 37 |
+| Trivial (<20 instr) | 75 |
+| Small (<80 instr) | 59 |
+| Medium (<250 instr) | 38 |
 | Large (≥250 instr) | 17 |
 | Unknown (4 ordinals, 1 last-export-in-DLL) | 5 |
+
+(Updated after the §3a correction: `Quaternion::Lerp` moved small→medium at its corrected 85
+instructions; `Goal::Serialize` and `GoalInstance::Persist` stayed in `small` at their corrected
+33/34 instructions.)
 
 ## 2. Full inventory
 
@@ -72,36 +88,78 @@ entry, or a call site expecting the port).
 
 ### Sizing method, and why most of it is an estimate
 
-Ghidra MCP (`get_function_metrics`) was reachable and accurate — confirmed against
-`Runtime-x64.dll`, image base `0x180000000` — but at ~194 functions, an exact per-function pass
-was not affordable this round; the task brief explicitly allows the pefile-RVA-delta fallback in
-that case, so that is what backs most of the CSV. **13 functions were spot-checked exactly** via
-Ghidra (`get_function_metrics` by name, falling back to address via `get_function_by_address` when
-Ghidra's own symbol wasn't yet the qualified name) to validate the fallback:
+Ghidra MCP was reachable, but **`get_function_metrics(function_name=...)` is only trustworthy when
+that name is unique in the program** — see §3a. At ~194 functions, an exact per-function pass was
+not affordable this round; the task brief explicitly allows the pefile-RVA-delta fallback, so that
+backs most of the CSV. **13 functions were spot-checked; all 13 have now been re-verified** (not a
+sample — the full set that carries a `ghidra-exact` value), either by confirming the function name
+is unique in this program (8 of them), or, where it was not, by re-measuring with
+`disassemble_function` at the address-confirmed-correct location (5 of them: `Lerp`,
+`Goal::Serialize`, `GoalInstance::Persist`, `GoalList::Initialize` — all now correct — and
+`SaveLoad::Draw`, downgraded to unverified because "Draw" has 44 collisions and no independent
+re-measurement was done for it this pass):
 
-| Function | Exact instrs | RVA-delta estimate said | Agreement |
-|---|---|---|---|
-| `InternalBasePtr::CheckPtr` | 1 | trivial (16B) | match |
-| `Quaternion::Lerp` | 8 | **medium (400B)** | **overshoot, ~50x** |
-| `Goal::Serialize` | 3 | **small (144B)** | **overshoot, ~50x** |
-| `Thread::ThreadFunc` | 42 | small (160B) | match |
-| `Transform::AsTransform3` | 47 | small (256B) | match |
-| `GoalInstance::Persist` | 78 | small (144B) | close |
-| `AchievementManager::ReadAchievements` | 68 | small (272B) | match |
-| `GoalList::Initialize` | 112 | medium (400B) | match |
-| `Frustum::Projection` | 171 | medium (848B) | match |
-| `Persistence::ReadSettings` | 256 | medium (1072B) | borderline |
-| `SaveLoad::Draw` | 349 | large (3232B) | match |
-| `ImageBuffer::SaveImageToFile` | 359 | large (1360B) | match |
-| `Persistence::WriteSettings` | 538 | large (2080B) | match |
+| Function | Exact instrs | Provenance | RVA-delta estimate said | Agreement |
+|---|---|---|---|---|
+| `InternalBasePtr::CheckPtr` | 1 | exact-verified (unique name) | trivial (16B) | match |
+| `Quaternion::Lerp` | **85** (was wrongly 8) | exact-verified (re-measured by address) | medium (400B) | match |
+| `Goal::Serialize` | **33** (was wrongly 3) | exact-verified (re-measured by address) | small (144B) | close |
+| `Thread::ThreadFunc` | 42 | exact-verified (unique name) | small (160B) | match |
+| `Transform::AsTransform3` | 47 | exact-verified (unique name) | small (256B) | match |
+| `GoalInstance::Persist` | **34** (was wrongly 78) | exact-verified (re-measured by address) | small (144B) | close |
+| `AchievementManager::ReadAchievements` | 68 | exact-verified (unique name) | small (272B) | match |
+| `GoalList::Initialize` | 112 | exact-verified (cross-checked by address against 3 candidates — unchanged) | medium (400B) | match |
+| `Frustum::Projection` | 171 | exact-verified (unique name) | medium (848B) | match |
+| `Persistence::ReadSettings` | 256 | exact-verified (unique name) | medium (1072B) | borderline |
+| `SaveLoad::Draw` | **unverified** (was wrongly-confident 349; "Draw" has 44 name-collisions) | exact-unverified | large (3232B) | body range 3215B (`get_function_by_address`, address-keyed and reliable) agrees on bucket |
+| `ImageBuffer::SaveImageToFile` | 359 | exact-verified (unique name) | large (1360B) | match |
+| `Persistence::WriteSettings` | 538 | exact-verified (unique name) | large (2080B) | match |
 
-**11 of 13 land in the right bucket; 2 (`Lerp`, `Goal::Serialize`) are badly overestimated** —
-both are genuinely tiny (one-line delegations) but sit next to a gap before the next named export,
-so the RVA delta counts dead/unexported space as if it belonged to the function. **Treat every
-"small" or below RVA-delta bucket as a plausible "actually trivial"; the medium/large distinction,
-which is the one that matters for sequencing, held up in every spot check.** A real per-function
-Ghidra pass is recommended before final commitment at the small-scale end, not before the wave
-overall.
+**Net after correction: of the 13, 9 were right the first time, 3 were wrong (`Lerp`, `Goal::Serialize`,
+`GoalInstance::Persist` — 23%), 1 is downgraded to unverified (`Draw`).** The RVA-delta estimate's
+own known weakness (§ below) is unrelated and separately confirmed: `Lerp` and `Goal::Serialize`
+are genuinely tiny (33-85 instructions) but the RVA delta still overshot medium/small because of a
+gap before the next named export — the estimate was never claiming exactness, only the mis-scoped
+`ghidra-exact` column was. **Treat every "small" or below RVA-delta bucket as a plausible "actually
+trivial"; the medium/large distinction, which is the one that matters for sequencing, held up in
+every spot check.** A real per-function Ghidra pass (by address, via `disassemble_function`, not by
+name) is recommended before final commitment at the small-scale end.
+
+### 3a. The mechanism (why the exact column was wrong)
+
+This program's Ghidra function table is **not** namespace-qualified for most functions — a method
+is just its bare name (`Projection`, `Serialize`, `Persist`, `Draw`, `Initialize`, ...), and the
+same bare name recurs across unrelated classes: `search_functions_enhanced("^Serialize$", regex)`
+found **185** matches, `^Draw$` found **44**, `^Lerp$` found **13**, `^Persist$` found **6**,
+`^Initialize$` found **3**. Only 8 of the 13 spot-checked names (`Projection`, `ThreadFunc`,
+`CheckPtr`, `SaveImageToFile`, `AsTransform3`, `ReadAchievements`, `ReadSettings`,
+`WriteSettings`) turned out to be unique in the whole program.
+
+`get_function_metrics` accepts either `function_name` or `address`. **`address` does not work in
+this bridge**: `get_function_metrics(address="0x18001d500")` returns `{"error": "Function not
+found: 0x18001d500"}` even though that address indisputably has a function (`get_function_by_address`
+confirms it, and that tool's `address` parameter DOES work correctly). When both `function_name`
+and `address` were passed together — which is what happened for the 5 ambiguous names above — the
+broken `address` parameter was silently dropped with no error, and the tool fell through to a
+**name-only** lookup, returning metrics for an unspecified one of the same-named candidates. This
+surfaced no error (a function named `Serialize` genuinely exists — it just wasn't the right one),
+which is why it went unnoticed: a swallowed failure that returns a confident, well-formed,
+wrong answer, the same shape as the census tool defects fixed elsewhere in Wave 9 today.
+
+Re-verification method: for each ambiguous name, `disassemble_function(address=...)` (which, like
+`get_function_by_address`, takes the address directly and does not go through name resolution) was
+used to read the actual bytes at the confirmed address and count instructions by hand. `Initialize`
+happened to have been measured correctly despite 3 candidates (its 112-instruction count reproduced
+exactly on re-disassembly) — there is no guarantee of that, it was checked, not assumed. `Draw` was
+not re-measured (44 candidates, no time this pass) and is left as an open item rather than guessed.
+
+**Callee claims made with `get_function_callees` have the identical exposure** — it is also a
+`name`-only lookup with no address disambiguation. Of the 8 functions callee-sampled in §4 (original
+report), only `Persist` used an ambiguous name (6 candidates) and it was wrong — see the correction
+in §4 below. The other 7 (`Projection`, `Initialize`, `ReadAchievements`, `ThreadFunc`,
+`SaveImageToFile`, `ReadSettings`, `WriteSettings`) are unique names and their callee lists stand
+(and `Initialize`'s single fixed-address callee, `0x180009d70`, is independently confirmed present
+in the re-disassembly, at instruction 14: `CALL 0x180009d70`).
 
 ### Class completion, method
 
@@ -138,44 +196,70 @@ Default is sound (`BANISHED_RT_DIFF`). Three categories of exception, applied to
 ## 4. Callee dependencies (sampled, not exhaustive)
 
 8 functions had their callees pulled via `get_function_callees` — enough to demonstrate the
-pattern WAVE9.md's "porting can grow the cutover surface" section describes, not a full sweep:
+pattern WAVE9.md's "porting can grow the cutover surface" section describes, not a full sweep.
+**One of the eight (`Persist`) was measured under an ambiguous name and was wrong; it is corrected
+here, and the false pairing it produced is retracted** (see §3a for the mechanism):
 
 - **`Volume::Frustum::Projection` and `System::Thread::ThreadFunc` have zero DLL-internal
   dependency** — `Projection` calls nothing at all; `ThreadFunc` calls only Win32
   `SetEvent`/`WaitForMultipleObjects`. These are the cleanest possible ports in the whole list.
-- **`Achievement::GoalList::Initialize` and `Achievement::GoalInstance::Persist` share an unnamed
-  internal, `FUN_180009d70`** — porting either one creates that lane-D row; porting the other is
-  then free. `Persist` also calls two *more* unnamed internals (`FUN_180006d10`, `FUN_180009fa0`)
-  not shared with anything sampled here, so despite being only 78 instructions it is a bigger
-  lane-D contributor than its size suggests.
+  (Unique names, unaffected by the mechanism in §3a.)
+- **RETRACTED: "`GoalList::Initialize` and `GoalInstance::Persist` share `FUN_180009d70`".**
+  Re-disassembly at the confirmed address shows `GoalInstance::Persist`'s only fixed-address
+  callee is **`0x180005dc0`**, not `FUN_180009d70` — the original callee note came from a
+  different, wrongly-resolved `Persist` (6 candidates share that name in this program).
+  `GoalList::Initialize`'s callee list is unaffected and stands (unique-name-adjacent: cross-checked
+  by direct re-disassembly, `CALL 0x180009d70` is present at instruction 14) — but see the
+  corrected hazard profile below; the shared-dependency framing that motivated pairing the two
+  functions in Tier 0 does not hold and they are no longer bundled.
+- **`GoalList::Initialize` (112 instr) is NOT a clean port** — Lane P's read, confirmed by
+  re-disassembly: it (1) builds N objects through a factory in a loop (vtable call `[RAX+0x48]`
+  per element), (2) on exit **frees the caller's array and NULLS it** (`CALL 0x1800c6c00` /Free/
+  then `MOV [R14],0` / `MOV [R14+8],0`) — a second (diff-oracle) call would see `count==0` and
+  destroy what the first call built while *reporting green*, the same early-out trap shape as
+  `Audio::Scene::Pause`, and (3) calls `MemoryAllocator::Free` directly under a critical section
+  (`CALL [0x18014b390]` / `[0x18014b388]` bracketing it). **Moved out of Tier 0 into a
+  single-shot-harness-required category** — naive ours-then-theirs diff is unsafe here.
+- **`GoalInstance::Persist` (34 instr, corrected from a wrongly-measured 78) has exactly ONE
+  fixed-address callee, `0x180005dc0`**, plus the same vtable-dispatch shape (`+0x18`/`+0x20`
+  branch, `+0x98`, trailing `+0x0`) as `Goal::Serialize` — consistent with both being real
+  save-path Encoding/Stream dispatches, not delegators.
 - **`IO::Persistence::WriteSettings`**, the largest sampled function (538 instructions, cyclomatic
   complexity 124), has **zero new unnamed internals** — every callee is a real Win32 registry API
   call or an already-exported/nameable helper (`Map_Find`, `Set`, `AsUTF8`). Big, but tractable.
-  `ReadSettings` (256 instr) has exactly one new internal, `FUN_18000f7d0`.
+  `ReadSettings` (256 instr) has exactly one new internal, `FUN_18000f7d0`. (Unique names.)
 - **`Video::ImageBuffer::SaveImageToFile`** (359 instr, screenshot save) creates **two** new
   lane-D rows (`FUN_180053da0`, `FUN_1800881b0`) among otherwise well-named callees — a case where
-  "it's just a screenshot" undersells the actual cost.
+  "it's just a screenshot" undersells the actual cost. (Unique name.)
 
-**Consequence for sequencing**: prefer `Projection`/`ThreadFunc`-shaped functions (self-contained)
-and treat any function whose callee list hasn't been checked as an unknown-cost item until it is.
+**Consequence for sequencing**: prefer `Projection`/`ThreadFunc`-shaped functions (self-contained,
+unique-named, independently confirmed) and treat any function whose callee list hasn't been
+checked — or was checked under a colliding name — as an unknown-cost item until it is re-verified
+by address.
 
 ## 5. Proposed port order
 
-**Tier 0 — port first, zero known hazard, cheapest verified profile** (do these to retire 6
-classes outright): `Volume::Frustum::Projection`, `System::Thread::ThreadFunc`,
-`Math::Quaternion::Lerp`, `Math::Transform::AsTransform3` (all ghidra-confirmed trivial/small,
-no unnamed-internal callees found), then the paired `Achievement::GoalList::Initialize` +
-`GoalInstance::Persist` (share one lane-D internal, so port together and pay for it once).
-`Achievement::Goal::Serialize` is genuinely 3 instructions per Ghidra but is a `Serialize` — use
-the lane-S technique, not a naive diff, even though it's tiny.
+**Tier 0 — port first, zero known hazard, cheapest re-verified profile** (CORRECTED — the pairing
+and one member of this tier were wrong, see §3a/§4): `Volume::Frustum::Projection`,
+`System::Thread::ThreadFunc` (both unique-named, zero DLL-internal callees, unaffected by the
+mechanism above). `Math::Quaternion::Lerp` and `Math::Transform::AsTransform3` are re-verified at
+85 and 47 instructions respectively (Lerp was originally misread as 8 — corrected) — still small,
+still no callee concerns, still Tier 0. **`Achievement::GoalList::Initialize` is REMOVED from Tier
+0** — it frees and nulls the caller's array on exit (Pause-shaped early-out trap) and needs a
+single-shot harness, not a naive diff; see §4. **The `GoalList::Initialize`/`GoalInstance::Persist`
+pairing is retracted** — they do not share a callee. `Achievement::Goal::Serialize` (33
+instructions, corrected from a misread 3) and `GoalInstance::Persist` (34 instructions, corrected
+from a misread 78) are both real save-path vtable dispatches, not delegators — use the lane-S
+technique for both, and they are cheap but not "zero hazard".
 
 **Tier 1 — near-complete classes (≤3 remaining), no WAVE9-inherited blocker.** 71 of 83 classes
 qualify; the highest-value ones by (completion% desc, size asc) are `UI::Element` (3 left of 23),
 `System::String` (2 of 15), `Object::InternalBasePtr` (1 of 7 — but see caution: that 1 is
 `CheckPtr`, a confirmed bare `RET` in every shipped build; registering a real one is a *perf*
 decision, not a correctness gap, per the project's standing note on this exact function),
-`Save::SaveLoad` (2 of 13, one of which — `Draw`, 349 instr — is a real rendering-path port, not
-cheap despite the class being 85% done), `Achievement::AchievementManager` (3 of 12),
+`Save::SaveLoad` (2 of 13, one of which — `Draw`, ~3.2KB body / instruction count UNVERIFIED, see
+§3a — is a real rendering-path port, not cheap despite the class being 85% done),
+`Achievement::AchievementManager` (3 of 12),
 `Graphics::MeshInstance` (3 of 13), `IO::Persistence` (2 of 7, sizes above), plus the ten
 single-function classes (`LoaderLoop`, `BaseTypeInfo`, `PerlinNoise`, `ImageBufferData`,
 `RenderStateData`, `Particle`, `TabElement`, and the four Video `*Data`/`Buffer` pairs at 60%).

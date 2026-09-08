@@ -307,6 +307,13 @@ void RuntimePortInit() {
     RtInputPortInit();        // Wave 8: Input (lane D)
     RtApplicationPortInit();  // Wave 8: Application (lane E)
     RtUtilityPortInit();      // Wave 8: Utility (lane E)
+    // LAST, deliberately. Wave 9 lane Q registers 27 ADDRESSES for the two
+    // header-only Collection::Array bodies (~Array and SetSize), and those
+    // addresses are already called by name-less ResolveAddr from graphics,
+    // picking, ui, audio, achievement, engine and engine/funcs. Registering
+    // them redirects all of those to us, so it happens at one identifiable
+    // point in the init order rather than in the middle of it.
+    RtCollectionPortInit();   // Wave 9: Collection (lane Q)
 
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.

@@ -15,6 +15,9 @@
 // Lane 2's half of Math (runtime/src/math/transform.cpp), registered here so
 // BANISHED_RT_MATH is the one switch for the whole namespace.
 extern void RtMathTransformRegister();
+// Wave 9 lane P (runtime/src/math/wave9_lane_p.cpp): Quaternion::Lerp and
+// Transform::AsTransform3, the two Math exports waves 1-8 left on the DLL.
+extern int RtMathWave9LanePRegister();
 
 void RtMathPortInit() {
     // Must run before the BANISHED_RT_MATH check below: Volume's ports use the
@@ -71,4 +74,7 @@ void RtMathPortInit() {
     printf("[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): %d exports registered\n", n);
 
     RtMathTransformRegister();  // Lane 2: Matrix/Quaternion/Transform/Transform2/Transform3
+
+    printf("[RtMathPortInit] Wave 9 lane P: %d exports registered (Quaternion::Lerp, "
+           "Transform::AsTransform3)\n", RtMathWave9LanePRegister());
 }

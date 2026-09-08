@@ -460,9 +460,17 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
     newEntry._pad34      = 0;
 
     // Delegate the array mechanics (grow-if-needed, copy-construct with
-    // refcount bump, free the old buffer) to retail's own unexported helper —
-    // Collection::Array<SpriteInfo>'s append-by-one body, byte-identical to
-    // the growth policy documented in runtime/types/collection/Collection.h.
+    // refcount bump, free the old buffer) to Collection::Array<SpriteInfo>'s
+    // append-by-one body, which follows the growth policy documented in
+    // runtime/types/collection/Collection.h.
+    //
+    // *** WAVE 9 LANE Q, 2026-09-07: this is no longer "retail's own unexported
+    // helper". *** 0x180004e30 is a registered port (kSpec_Sprite38 in
+    // runtime/src/collection/array.cpp), one of the three NON-TRIVIAL element
+    // types in that lane. It still calls retail's per-element copy-assign at
+    // 0x180004220 by address, so the ONE refcount bump the note above relies on
+    // is unchanged -- but the container algebra around it is ours now, and it
+    // can be disarmed on its own with BANISHED_RT_ARRAY_NONTRIVIAL=0.
     using GrowFn = void (*)(void* arrayDesc, int newCount, void* newElem);
     static GrowFn grow = reinterpret_cast<GrowFn>(ResolveAddr(Module::Runtime, 0x180004e30));
     grow(&self->m_sprites, oldCount + 1, &newEntry);

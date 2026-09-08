@@ -158,8 +158,16 @@ void RtCellHeadsInit(void* cellHeadsArray) {
 // Array<T>::~Array for a trivially-destructible T: Free(_data) under the
 // allocator lock, then zero {_data, _size, _capacity}. Retail has one COMDAT
 // per instantiation and the Scene dtor calls three of them plus one that also
-// destroys each element. All four are called here at their own addresses so
-// the ported dtor is the retail body and not a re-derivation of it.
+// destroys each element. All four are called here at their own addresses.
+//
+// *** WAVE 9 LANE Q, 2026-09-07: THREE OF THE FOUR NO LONGER REACH THE DLL. ***
+// 0x1800737f0, 0x1800739e0 and 0x180073bb0 are lane Q's J1 registrations
+// (runtime/src/collection/array.cpp) and ResolveAddr consults the port registry
+// first. So "the retail body and not a re-derivation of it" -- which is what
+// this comment said until lane Q landed -- is now true only of 0x180073c90, the
+// J2 element-destroying variant, which is still the DLL's. The other three ARE
+// a re-derivation, verified against the shipped bodies by the synthetic-subject
+// replay in runtime/src/collection/array_probe.cpp.
 void RtFreeArrayInt(void* a) {          // scene+0x08, Array<int>
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800737f0));
@@ -189,6 +197,9 @@ void RtFreeArrayEntry(void* a) {        // scene+0x48, Array<Entry> — this one
 // the triple being cleared is a dying local, so the effect is identical. It is
 // the Array<Cell> instantiation by origin, but every Array<T>::~Array for a
 // trivially-destructible T is byte-identical, and Math::Transform is one.
+// (Wave 9 lane Q re-read all eleven and confirms "byte-identical" in the strong
+// form: identical instructions AND identical resolved operands. This call now
+// lands in lane Q's port -- see the note on RtFreeArrayInt above.)
 void RtFreeScratchTransforms(void* a) {
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800739e0));

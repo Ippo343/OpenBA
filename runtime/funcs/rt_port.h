@@ -118,3 +118,10 @@ void RtAudioPortInit();       // runtime/src/audio/ — Wave 8 lane C
 void RtInputPortInit();       // runtime/src/input/ — Wave 8 lane D
 void RtApplicationPortInit(); // runtime/src/application/ — Wave 8 lane E
 void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
+// Wave 9 lane Q. Collection::Array<T> is header-only with NO exports in either
+// build, so this wave registers only ADDRESSES (RegisterRuntimeAddr) — 27 of
+// them for two bodies. It must run LAST of the wave inits: registering
+// 0x18007a0d0 and friends changes what ResolveAddr hands back at ~20 existing
+// call sites in the other waves, and running it last keeps that one effect at
+// one point in the init order.
+void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q

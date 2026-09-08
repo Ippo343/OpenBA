@@ -581,6 +581,13 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 //   0x180052640  the bulk element serialize
 // Neither is reimplemented here; both are shared Collection code whose own port
 // belongs to whoever ports Collection, not to Audio.
+// WAVE 9 LANE Q did that for the first of the two: 0x180051390 is now a
+// registered port (kSpec_EffectSlot in runtime/src/collection/array.cpp) and
+// still calls retail's per-element copy-assign 0x180051650 and destroy-range
+// 0x180052110 by address. 0x180052640 is untouched and still the DLL's.
+// One fact from that reading matters to this file: the EffectSlot default
+// element leaves bytes +0x2c..+0x2f UNWRITTEN, so a byte comparison of a
+// freshly grown _effects array must skip that window per element.
 //
 // ORACLE: the Wave 9 lane S save-stream A/B harness
 // (runtime/src/io/save_trace.h). There is no call-level replay for anything on

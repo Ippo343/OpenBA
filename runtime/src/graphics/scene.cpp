@@ -176,6 +176,9 @@ void* RtGeometryVtable() {
     return vt;
 }
 
+// Registered by Wave 9 lane Q (runtime/src/collection/array.cpp): this and the
+// stride-4 sibling below now reach our SetSize, not the DLL's.
+//
 // Array<Geometry*>::SetSize(n, &fill) — retail 0x18001f990, the stride-8
 // instantiation. Grows to n, copy-filling new slots from *fill, reallocating
 // through MemoryAllocator::MemAlloc under the allocator lock and freeing the
@@ -195,6 +198,8 @@ void RtArrayU32SetSize(void* arr, int n, const uint32_t* fill) {
     fn(arr, n, fill);
 }
 
+// Registered by Wave 9 lane Q, so this reaches our ~Array; see RtFreeArrayI32.
+//
 // Array<Geometry*>::~Array — retail 0x18001bf50. Free(_data) under the
 // allocator lock, then zero {_data, _size, _capacity}. ~Geometry's tail call.
 void RtFreeArrayPtr(void* arr) {
@@ -328,7 +333,15 @@ void RtSceneFreeGlobals(void* list) {
 // then zero the {data,size,capacity} triple. The node Array at +0x10 is freed by
 // FUN_18005fc20, a byte-identical body emitted for the Array<Node>
 // instantiation and reached by a tail JMP; both are called at their own
-// addresses so the ported dtor is retail's body and not a re-derivation of it.
+// addresses.
+//
+// *** WAVE 9 LANE Q, 2026-09-07: THIS NO LONGER REACHES THE DLL. ***
+// 0x18001c750 and 0x18005fc20 are lane Q's J1 registrations
+// (runtime/src/collection/array.cpp), so these two calls now execute OUR
+// Array<T>::~Array. The clause this comment used to end with -- "retail's body
+// and not a re-derivation of it" -- was true until lane Q landed and is not any
+// more. The re-derivation is verified against the shipped bodies by the
+// synthetic-subject replay in runtime/src/collection/array_probe.cpp.
 void RtFreeArrayI32(void* arr) {
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c750));

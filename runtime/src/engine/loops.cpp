@@ -237,6 +237,9 @@ ModArrayCopyFn ModArrayCopy() {
 // used by runtime/src/ui/element.cpp — the two addresses are not
 // interchangeable, and the Wave 2 collection header explains why (the node/copy
 // code is emitted per element type).
+// WAVE 9 LANE Q: both addresses are now registered ports
+// (runtime/src/collection/array.cpp), so this reaches our SetSize. They stay
+// separate registrations for exactly the reason above.
 ArraySetSizeFillFn ArraySetSizeFill() {
     static ArraySetSizeFillFn fn = reinterpret_cast<ArraySetSizeFillFn>(
         ResolveAddr(Module::Runtime, 0x18007a0d0));

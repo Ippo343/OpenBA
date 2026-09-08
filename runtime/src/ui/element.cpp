@@ -226,9 +226,16 @@ GetAlignedStaticFn GetAlignedStatic() {
 
 // Collection::Array<Element*>::SetSize(int, const T&). Header-only template:
 // NO export exists, so this is the one place this file uses
-// ResolveAddr(Module::Runtime, …). Safe here — and only here — because nothing
-// registers 0x180076900, so the port registry (consulted first, see
-// standalone/resolve_standalone.cpp:325) does not intercept it.
+// ResolveAddr(Module::Runtime, …).
+//
+// *** WAVE 9 LANE Q, 2026-09-07: 0x180076900 IS NOW REGISTERED. ***
+// This comment used to say "safe here -- and only here -- because nothing
+// registers 0x180076900, so the port registry (consulted first) does not
+// intercept it". It DOES intercept it now: lane Q registers this address in
+// runtime/src/collection/array.cpp, so this call reaches our SetSize. That is
+// the intended cutover behaviour, and the body is verified against the shipped
+// one by runtime/src/collection/array_probe.cpp -- but the old sentence was
+// load-bearing for a reader, so it is corrected here rather than deleted.
 //
 // This is the instantiation for 8-BYTE elements, and it is the exact address
 // AddChild itself calls; a different Array<T> gets a different copy of the
