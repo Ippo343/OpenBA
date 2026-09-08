@@ -133,6 +133,66 @@ const char* const kRemoveMesh   = "?RemoveMesh@Scene@Picking@@QEAAXI@Z";
 //   DAT_18016177c = 0xccbebc20 = -1.0e8f    (RtMathConst::kBigNeg)
 //   DAT_1801617c0 = 0x80000000              (sign-flip mask, i.e. unary minus)
 // ============================================================================
+// ============================================================================
+// WAVE 9 LANE N — THE DETERMINISTIC RAY FIXTURE FOR Picking::Scene::Intersect
+// ============================================================================
+// Lane M found 90 divergences over 20,868 calls in ONE stress run of FOUR, and
+// correctly refused to call the clean runs an exoneration: the call COUNTS
+// differ between runs (20,868 vs 22,668), so the runs are not the same runs.
+// `Picking::Scene::Intersect` is driven by where the ray is cast, which on the
+// stress route depends on the real mouse cursor, so a clean re-run only means
+// those rays were not cast — the calls=0-reads-as-clean failure
+// (reference_uncalled_port_is_not_verified.md) wearing a different costume.
+//
+// This fixture removes the cursor from the experiment. On the Nth real call it
+// casts a RAY SET BUILT FROM CONSTANTS over the live scene, through this very
+// function, so every ray is diffed by the ordinary oracle. Same seed, same
+// flags, same frame => the same rays, the same count, every run. That makes
+// the DENOMINATOR stable, which is the precondition for any verdict at all.
+//
+//   BANISHED_PICK_SWEEP=<n>       fire after the nth real Intersect call
+//   BANISHED_PICK_SWEEP_HALF=<f>  sweep half-extent in world units (default 60)
+//   BANISHED_PICK_SWEEP_STEP=<f>  spacing (default 6) => (2*half/step+1)^2 origins
+//   BANISHED_PICK_SWEEP_Z=<f>     ray origin height (default 200)
+//   BANISHED_PICK_SWEEP_DIST=<f>  maxDist (default 600)
+//   BANISHED_PICK_NEGCTL=1        NEGATIVE CONTROL, see below
+//
+// The five directions are near-vertical by design: the observed divergence had
+// outPos.x and .y BIT-IDENTICAL and only .z moved, by 3.8e-6 — which is what a
+// ~1-ULP difference in hitT does to a ray whose dir.z dominates (z moves by
+// delta, x by delta*dir.x, which stays inside one ULP of x ~ 41.5). Rays of
+// that shape are the ones worth casting.
+//
+// EFFECTIVENESS CONTROL: the summary prints `hits=`, not just `rays=`. A sweep
+// that hits nothing has tested nothing, however green it looks — the same
+// mistake as reading divergences= without calls=.
+//
+// NEGATIVE CONTROL: BANISHED_PICK_NEGCTL=1 moves ONE association in the hitT
+// expression — `(a + b + c)` becomes `(a + (b + c))` — which is precisely the
+// defect class the port's own no-tolerance comment is guarding against
+// ("anything less than bit-exact means a term was moved"). If the sweep comes
+// back green under the control, the fixture cannot fail and proves nothing;
+// lane E2 found exactly such a control this wave.
+// ============================================================================
+int PickSweepAfterCalls() {
+    static int n = -1;
+    if (n < 0) { const char* e = getenv("BANISHED_PICK_SWEEP"); n = e ? atoi(e) : 0; }
+    return n;
+}
+float PickSweepEnvF(const char* name, float dflt) {
+    const char* e = getenv(name);
+    return (e && *e) ? (float)atof(e) : dflt;
+}
+int PickNegCtl() {
+    static int on = -1;
+    if (on < 0) { const char* e = getenv("BANISHED_PICK_NEGCTL"); on = e ? atoi(e) : 0; }
+    return on;
+}
+RtDiffSite* g_pickIntersectSite = nullptr;
+bool        g_pickSweepRunning  = false;
+bool        g_pickSweepFired    = false;
+long long   g_pickRealCalls     = 0;
+
 const float kOne       =  1.0f;
 const float kCellSize  = 16.0f;
 const float kBigPos    =  1.0e8f;
@@ -983,9 +1043,116 @@ extern "C" void RtPicking_Scene_RemoveMesh(Scene* self, uint32_t id) {
 // ============================================================================
 extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* start,
                                          const Vector3* dir, const Scalar* maxDist,
+                                         Vector3* outPos, Vector3* outNormal);
+
+namespace {
+// The deterministic ray fixture; see the header block above kOne. Casts a ray
+// set built entirely from constants through the real Intersect, so the oracle
+// diffs each one and the denominator is identical on every run of the same
+// seed. Re-entrancy is blocked by g_pickSweepRunning, so the sweep's own calls
+// do not re-arm it.
+void RtPickingRunSweep(Scene* self) {
+    g_pickSweepRunning = true;
+
+    const float cx   = PickSweepEnvF("BANISHED_PICK_SWEEP_CX",    0.0f);
+    const float cy   = PickSweepEnvF("BANISHED_PICK_SWEEP_CY",    0.0f);
+    const float half = PickSweepEnvF("BANISHED_PICK_SWEEP_HALF", 60.0f);
+    const float step = PickSweepEnvF("BANISHED_PICK_SWEEP_STEP", 6.0f);
+    const float z0   = PickSweepEnvF("BANISHED_PICK_SWEEP_Z",   200.0f);
+    const float dist = PickSweepEnvF("BANISHED_PICK_SWEEP_DIST", 600.0f);
+
+    // CAMERA-SHAPED RAYS, not vertical drops. The first version of this fixture
+    // fired 2,205 straight-down rays and its effectiveness control said so —
+    // 8 hits. The second aimed them at the right place and got 525 hits and no
+    // divergences, which was still the wrong experiment: a real pick ray comes
+    // from an oblique camera, and the one diverging ray recorded on this route
+    // hit a face whose normal was (0.464, 0, 0.886) — 27.7 degrees off vertical.
+    // So the ray set is now an ORIGIN RING crossed with a TARGET GRID: 24
+    // origins on a hemisphere of radius `ringR` (3 elevations x 8 azimuths),
+    // each aimed at every point of the target grid. That is the shape of a
+    // camera pick, and it is still built entirely from constants.
+    static const float kElevCos[3] = { 0.86602539f, 0.70710678f, 0.5f };  // 30/45/60 deg
+    static const float kElevSin[3] = { 0.5f, 0.70710678f, 0.86602539f };
+    static const float kAzC[8] = { 1.0f, 0.70710678f, 0.0f, -0.70710678f,
+                                  -1.0f, -0.70710678f, 0.0f, 0.70710678f };
+    static const float kAzS[8] = { 0.0f, 0.70710678f, 1.0f, 0.70710678f,
+                                   0.0f, -0.70710678f, -1.0f, -0.70710678f };
+    const float ringR = PickSweepEnvF("BANISHED_PICK_SWEEP_RING", 60.0f);
+
+    long long rays = 0, hits = 0;
+    const unsigned long long divBefore =
+        g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
+    int printed = 0;
+
+    for (int d = 0; d < 24; ++d) {
+        const int el = d / 8, az = d % 8;
+        // Origin on the ring: horizontal offset ringR*cosElev, height ringR*sinElev.
+        const Vector3 org = { cx + ringR * kElevCos[el] * kAzC[az],
+                              cy + ringR * kElevCos[el] * kAzS[az],
+                              z0 + ringR * kElevSin[el] };
+        const int n = (int)(2.0f * half / step) + 1;
+        for (int iy = 0; iy < n; ++iy) {
+            for (int ix = 0; ix < n; ++ix) {
+                // Integer-stepped so the grid is identical bit for bit on every
+                // run; a `for (float x = -half; x <= half; x += step)` loop
+                // accumulates rounding and can even change its trip count.
+                const float x = cx - half + (float)ix * step;
+                const float y = cy - half + (float)iy * step;
+                const float vx = x - org.x, vy = y - org.y, vz = 0.0f - org.z;
+                const float vlen = RtSqrtf(vx * vx + vy * vy + vz * vz);
+                Vector3 dir   = { vx / vlen, vy / vlen, vz / vlen };
+                Vector3 start = org;
+                Scalar  md    = { dist };
+                Vector3 p = { 0.0f, 0.0f, 0.0f }, n = { 0.0f, 0.0f, 0.0f };
+                const unsigned long long before =
+                    g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
+                const int id = RtPicking_Scene_Intersect(self, &start, &dir, &md, &p, &n);
+                ++rays;
+                if (id >= 0) ++hits;
+                const unsigned long long after =
+                    g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
+                if (after != before && printed < 12) {
+                    ++printed;
+                    std::fprintf(stderr,
+                        "[PickSweep] DIVERGED ray#%lld dir=(%.9g,%.9g,%.9g) "
+                        "start=(%.9g,%.9g,%.9g) maxDist=%.9g id=%d "
+                        "ours p=(%.9g,%.9g,%.9g)\n",
+                        rays, dir.x, dir.y, dir.z, start.x, start.y, start.z,
+                        md.v, id, p.x, p.y, p.z);
+                }
+            }
+        }
+    }
+
+    const unsigned long long divAfter =
+        g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
+    // Self-evidencing output: only a binary built from THIS tree can print it.
+    std::fprintf(stderr,
+        "[PickSweep] fired after %lld real calls: rays=%lld hits=%lld "
+        "divergences=%llu c=(%.9g,%.9g) half=%.9g step=%.9g z=%.9g dist=%.9g negctl=%d\n",
+        g_pickRealCalls, rays, hits, divAfter - divBefore,
+        cx, cy, half, step, z0, dist, PickNegCtl());
+    std::fflush(stderr);
+
+    g_pickSweepRunning = false;
+}
+}  // namespace
+
+extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* start,
+                                         const Vector3* dir, const Scalar* maxDist,
                                          Vector3* outPos, Vector3* outNormal) {
     RT_DIFF_BEGIN("Picking::Scene::Intersect");
     Scene* self = const_cast<Scene*>(cself);
+
+    if (rt_diff_on__ && !g_pickSweepRunning) {
+        g_pickIntersectSite = &rt_diff_site__;
+        ++g_pickRealCalls;
+        const int arm = PickSweepAfterCalls();
+        if (arm > 0 && !g_pickSweepFired && g_pickRealCalls >= arm) {
+            g_pickSweepFired = true;
+            RtPickingRunSweep(self);
+        }
+    }
 
     Vector3 theirPos{}, theirNormal{};
     if (rt_diff_on__) { theirPos = *outPos; theirNormal = *outNormal; }
@@ -1077,12 +1244,29 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                 float c23 = (iqy * 0.0f - px * iqz) + iqw * py + pz * iqx;
                 float c19 = ((iqw * 0.0f - px * iqx) - py * iqy) - pz * iqz;
                 float c20 = ((px * iqy + iqz * 0.0f) - py * iqx) + iqw * pz;
+                // *** THE TRANSLATION IS ADDED LAST, TO THE FULLY ACCUMULATED
+                // ROTATED PART — Wave 9 lane N, and this was the Finding 2
+                // defect. Retail 0x180124B56-0x180124BB4 loads each translation
+                // component and performs exactly ONE `addss` against a register
+                // that already holds the whole rotated sum:
+                //     movss xmm0,[rbp-0x58] / addss xmm0,xmm3   -> local.x
+                //     movss xmm0,[rbp-0x54] / addss xmm0,xmm2   -> local.y
+                //     movss xmm0,[rbp-0x50] / addss xmm0,xmm7   -> local.z
+                // `localOx` already had that shape. `localOy` and `localOz` did
+                // NOT: they read `t + a + b + c`, i.e. ((((t+a)+b)+c) — the
+                // translation folded in FIRST and the remaining terms
+                // accumulated on top of it. That is one moved term, in two of
+                // three components, and it is invisible on almost every ray:
+                // it only changes the rounded result where `t` and the rotated
+                // part nearly cancel. Measured at 21 divergences in 29,867
+                // hitting rays before this change. The parenthesisation below
+                // is load-bearing; do not "simplify" it.
                 const float localOx = invX.translation.x +
                     ((c19 * niqx + iqw * c26 + c20 * niqy) - c23 * niqz);
                 const float localOy = invX.translation.y +
-                    (iqw * c23 - c20 * niqx) + c19 * niqy + c26 * niqz;
+                    (((iqw * c23 - c20 * niqx) + c19 * niqy) + c26 * niqz);
                 const float localOz = invX.translation.z +
-                    ((c23 * niqx + iqw * c20) - c26 * niqy) + c19 * niqz;
+                    ((((c23 * niqx + iqw * c20) - c26 * niqy) + c19 * niqz));
 
                 // ray DIRECTION into sub-mesh local space (rotation only)
                 px = dir->x; py = dir->y; pz = dir->z;
@@ -1132,8 +1316,49 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
 
                     if (0.0f < det && 0.0f <= u && u <= det && 0.0f <= v &&
                         v + u <= det) {
-                        const float hitT =
-                            (q20 * e2y + q23 * e2x + q32 * e2z) * (kOne / det);
+                        // Retail 0x180124ecc-0x180124ef1, read this lane:
+                        //   movss xmm0,[1.0f] / mulss xmm3,xmm9 / mulss xmm4,xmm11
+                        //   addss xmm3,xmm4 / divss xmm0,xmm10 / mulss xmm13,xmm12
+                        //   addss xmm3,xmm13 / mulss xmm3,xmm0
+                        // i.e. ((t1 + t2) + t3) * (1.0f / det) — which is what
+                        // `a + b + c` means in C. The port matches.
+                        float hitT = (q20 * e2y + q23 * e2x + q32 * e2z) * (kOne / det);
+
+                        // NEGATIVE CONTROLS, off by default. See the fixture
+                        // header above kOne for why there are TWO of them.
+                        //   =1  ONE-ULP BUMP of hitT. Cannot be absorbed by any
+                        //       geometry, and it is the EXACT magnitude of the
+                        //       real defect (lane N measured Δz = 2^-18 on all
+                        //       three observations, which is one ULP of hitT at
+                        //       these ranges). This is the control that decides
+                        //       whether the fixture can see the thing it hunts.
+                        //   =2  the association move `(a+b+c)` -> `(a+(b+c))`.
+                        //       Kept because it is the hypothesis under test,
+                        //       NOT because it is a valid control: at 525 hits
+                        //       it came back green, and an effect whose rate is
+                        //       1 in 23,654 is expected 0.02 times in 525. It
+                        //       is UNDERPOWERED, not disproved.
+                        const int negctl = PickNegCtl();
+                        if (negctl == 1) {
+                            uint32_t bits;
+                            std::memcpy(&bits, &hitT, 4);
+                            bits += 1;                       // next float up
+                            std::memcpy(&hitT, &bits, 4);
+                        } else if (negctl == 2) {
+                            hitT = (q20 * e2y + (q23 * e2x + q32 * e2z)) * (kOne / det);
+                        }
+                        // *** THE TIE-BREAK IS `<=`, AND IT MATCHES RETAIL. ***
+                        // Lane M's cheapest hypothesis for its Finding 2 was
+                        // that retail might use `<` here, so two coplanar
+                        // triangles with equal hitT would pick a different one.
+                        // TESTED against the disassembly by lane N and
+                        // DISPROVED — retail 0x180124ef5:
+                        //   comiss xmm3,xmm8(0.0) / jb  skip   => 0 <= hitT
+                        //   movss  xmm0,[rsp+0x28](bestT)
+                        //   comiss xmm0,xmm3      / jb  skip   => hitT <= bestT
+                        // Both comparisons are inclusive, in this order. The
+                        // port is byte-faithful here; the hypothesis must not
+                        // be recorded as the cause of anything.
                         if (0.0f <= hitT && hitT <= bestT) {
                             const float dz = dir->z, dy = dir->y;
                             const float sz = start->z, sy = start->y;
