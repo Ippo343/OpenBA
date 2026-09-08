@@ -247,6 +247,82 @@ reason, and reported separately by the audit: `dialog.cpp`'s `VerifyDtorThunk`
 (an oracle read of the DLL's own thunk bytes) and two `rt_orphan_probe.cpp`
 probes. All three die with the oracle.
 
+### The other half of the door: ADDRESS-keyed reads, and the unexported table head
+
+Round 5 fixed the reads that ask by NAME. Thirty sites in this tree ask for
+exported DATA by **address** instead — `ResolveAddr(Module::Runtime,
+0x1801fe7b8)` and friends — and `RegisterRuntimeExport` does not cover those.
+A mint registered under a name only would have been walked straight past by all
+thirty, which is the round-5 bug one door over.
+
+**The mint now registers BOTH doors** for every row: `RegisterRuntimeExport`
+when the symbol has a name, and `RegisterRuntimeAddr(dllVa, storage)` always.
+Coverage of those thirty sites, measured against the generated table:
+
+| | count |
+|---|--:|
+| non-`.text` addresses our tree resolves by address | 30 |
+| already a minted row's BASE address | 27 |
+| an INTERIOR field of a minted row (`_loader+0x08` runFlags, `_loader+0x28` hFinished, read by `engine/funcs/engine_funcs.cpp`) | 2 |
+| an unexported `.data` static with no minted row at all (`0x1801fc6d0`, `IO::Modification`'s loaded-DLL `HMODULE`, `FreeLibrary`'d by `game_main.cpp` at shutdown) | 1 |
+| **uncovered after this change** | **0** |
+
+An exact-match address registry does not cover an interior offset, so the two
+`_loader` fields are registered explicitly as aliases; a new interior read would
+need a row, which is why they are named in the code rather than derived.
+
+#### "Unexported" is not "unmintable" — the `IO` BinaryEncoding vtable
+
+`runtime/src/io/compressedstream.cpp` recorded `??0MemoryStream` and
+`??0CompressedStream` as blocked because the concrete encoding vtable they
+stamp — `0x1801554a8` — has *"no name for `ResolveExport` and no row the mint
+can carry, because the mint is keyed by exported symbol."* **The second half was
+false, and it was load-bearing on the cutover.** A vtable needs CONTENTS and an
+ADDRESS, not a name, and `RegisterRuntimeAddr` / `ResolveAddr(Module::Runtime,
+x)` is a door keyed on exactly that. It is now minted, with `symbol == nullptr`
+and everything else identical.
+
+Measured, not assumed:
+
+* **5 slots**, and the count is proved by the STRONGEST of the two proofs the
+  other 47 vtables use: the table ends *exactly* where
+  `??_7BinaryFileStream@IO@@6B@` begins. So the live re-check
+  (`7d25f9a`'s adjacency branch) re-checks the same half of the proof for this
+  row as for every other adjacency-proved row.
+* It is a table HEAD, not an interior: `0x180155488..0x1801554a0` are four
+  `_purecall` slots of the abstract base, and `0x1801554a8` is where the
+  concrete table starts — which the compressedstream.cpp comment had already
+  established by address.
+* **Five consumers in the DLL, not two.** `??0CompressedStream`,
+  `??0MemoryStream`, `??0BinaryFileStream`, `UserInterface::SaveAllSettings`
+  and `DialogInstance::OnOpened`. All five stamp it at `+0x00` of a
+  freshly-allocated object which then goes to `stream+0x10` — the identical
+  seven-instruction shape at every site.
+
+**What minting it does and does NOT do, stated plainly.** All five slot targets
+are unexported `.text` internals (`0x1800a81e0`, `0x1800a81d0`, `0x1800a81c0`,
+`0x1800a8120`, `0x1800a8080`) and none is ported, so all five slots mint as
+NAMED TRAPS. That converts the cutover failure from *stamping NULL and taking
+an EXEC-of-0 on first dispatch* into *a trap that names the vtable and the
+slot* — and, more usefully, it removes the stated reason `??0MemoryStream` and
+`??0CompressedStream` could not be ported. **Minting is enabling, not
+sufficient**: those two ctors are exported (`0x1800aa3d0`, `0x1800ae710`) and
+remain ordinary port work. Whether the five bodies also need porting depends on
+whether anything dispatches through the encoding on the save/load path; nothing
+in our tree does today, and if something does, the trap says which slot.
+
+Also worth recording: those two ctors are **absent from the census** even though
+our ported `CompressedMemoryStream` ctor calls them, because it reaches them
+through `RT_EXPORT_ONCE(...)` — a macro, and the census's `RE_EXPORT` needs the
+literal directly inside `ResolveExport(`. That is the fourth distinct shape of
+the census blind spot §3 opened with.
+
+**One limit on verification.** The address-door registration only executes under
+`BANISHED_RT_MINT=1`, which is cutover-only, so no shadow run exercises it. Its
+evidence is the static coverage table above (30 of 30) plus the fact that it is
+one map insert per row — not a measurement. Said explicitly so nobody reads the
+next clean shadow run as having proved it.
+
 ### The bigger half: 26 symbols the census cannot see
 
 Chasing the door turned up why those three vtables were missing from the mint at
@@ -668,6 +744,29 @@ The single `SHAPE-INFO` is `Loader::_loop` at `+0x30`: retail's `LoaderLoop`
 stores the loop it is loading there, and nothing hands OUR minted Loader a
 loop, so it stays null. Informational by construction, not a mismatch — and
 the reason the shape check has an INFO category at all.
+
+### PREDICTED for the next run — address-keyed mint (round 6)
+
+Recorded baseline to compare against: **437 slots / 47 vtables / 165
+`BaseTypeInfo` fields / 0 MISMATCH / 0 suspects / 0 absent, clean at both
+phases.** Measured on the generated table (same regex both sides, so the deltas
+are exact even where an absolute count is ambiguous):
+
+| | from | to | why |
+|---|--:|--:|---|
+| vtables | 47 | **48** | the unexported `0x1801554a8` |
+| ground-truth slot comparisons | 437 | **442** | +5 slots |
+| `minted from OUR code` | unchanged | **unchanged** | all 5 new slots are unported internals |
+| traps | +5 | **+5** | the same 5 |
+| `purecall` | unchanged | **unchanged** | none of the 5 is `_purecall` |
+| `BaseTypeInfo` field comparisons | 165 | **165** | no new types |
+| complete vtables | unchanged | **unchanged** | the new one has 5 traps |
+| storage rows | 30 | **31** | `0x1801fc6d0` |
+| MISMATCH / suspects / absent | 0 | **0** | must not move |
+| NEW line | — | `carried by ADDRESS   : 1 row(s)` | the one row with no exported name |
+
+A move anywhere else is unintended and should be treated as a finding, not as
+noise.
 
 **Any non-zero `MISMATCH`, `slot-count suspects` or `absent` is a real finding**
 and a run showing one should be treated as failed.

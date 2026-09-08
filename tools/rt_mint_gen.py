@@ -138,6 +138,30 @@ EXTRA_SIZES = {
 # census's `called` set -- and the moment we reproduce that construction (see
 # KNOWN_CTORS) we become its consumer. Lane C2's own instance of "porting grows
 # the cutover surface".
+# Vtables and statics that have NO EXPORTED NAME at all, carried by ADDRESS.
+#
+# "Unexported" was being read as "unmintable", and that assumption was
+# load-bearing on the cutover: runtime/src/io/compressedstream.cpp records
+# ??0MemoryStream and ??0CompressedStream as blocked because the concrete
+# BinaryEncoding vtable they stamp has "no name for ResolveExport and no row the
+# mint can carry". The second half is false. A vtable needs CONTENTS and an
+# ADDRESS, not a name, and RegisterRuntimeAddr / ResolveAddr(Module::Runtime, x)
+# is a door that keys on exactly that.
+EXTRA_VTABLES_BY_ADDR = {
+    0x1801554a8:
+        "IO BinaryEncoding vtable, 5 slots, UNEXPORTED. Stamped at +0x00 of a "
+        "heap object by ??0CompressedStream / ??0MemoryStream / "
+        "??0BinaryFileStream and by UserInterface::SaveAllSettings and "
+        "DialogInstance::OnOpened. Count proved by adjacency: it ends exactly "
+        "where ??_7BinaryFileStream@IO@@6B@ begins.",
+}
+
+# Unexported .data statics our tree reads BY ADDRESS. Same argument as above.
+EXTRA_STORAGE_BY_ADDR = {
+    0x1801fc6d0: (8, "IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - "
+                     "code/Game/Game/game_main.cpp FreeLibrary's it at shutdown"),
+}
+
 EXTRA_VTABLES = {
     "??_7Loader@Engine@@6B@":
         "stamped by the ?_loader construction; no other consumer exists",
@@ -384,7 +408,7 @@ def main():
     # The census is a superset of what runs but a SUBSET of what is referenced:
     # it cannot see a symbol reached through a wrapper, a named constant or a
     # table walked in a loop. Union in the source scan, which sees all three.
-    census_syms = {d[0] for d in data_syms}
+    census_syms = {d[0] for d in data_syms if d[0]}
     scanned = scan_source_for_data_symbols(REPO)
     scan_added = []
     for sym, where in sorted(scanned.items()):
@@ -396,13 +420,17 @@ def main():
         data_syms.append((sym, "scan", rva, ";".join(sorted(where))))
         scan_added.append((sym, sorted(where)[0]))
 
+    for va, why in list(EXTRA_VTABLES_BY_ADDR.items()) + list(
+            (k, v[1]) for k, v in EXTRA_STORAGE_BY_ADDR.items()):
+        data_syms.append((None, "byaddr", va - ib, "mint:" + why))
+
     for sym, why in EXTRA_VTABLES.items():
         rva = by_name.get(sym)
         if rva is None:
             errors.append(f"{sym}: EXTRA_VTABLES names a symbol the DLL does not export")
         elif all(sym != d[0] for d in data_syms):
             data_syms.append((sym, "Engine", rva, "mint:" + why))
-    data_syms.sort()
+    data_syms.sort(key=lambda d: (d[0] or "", d[2]))
 
     # ---- the construction sweep (see find_crt_init_table) -------------------
     inits = find_crt_init_table(pe, ib, secs_text, secs_rdata)
@@ -420,7 +448,10 @@ def main():
     # ---- vtables -----------------------------------------------------------
     vtables = []
     for sym, ns, rva, _consumers in data_syms:
-        if not sym.startswith("??_7"):
+        if sym is None:
+            if (ib + rva) not in EXTRA_VTABLES_BY_ADDR:
+                continue
+        elif not sym.startswith("??_7"):
             continue
         # Decode the slots straight out of the DLL. Bound: the next exported
         # symbol (a vtable is never longer than that), stopping early on a
@@ -476,7 +507,10 @@ def main():
     # a storage symbol's size is the one EXTRA_SIZES / the singleton rule gives.
     extents = {v["va"]: len(v["slots"]) * 8 for v in vtables}
     for sym, _ns, rva, _c in data_syms:
-        if sym.startswith("?_typeInfo@"):
+        if sym is None:
+            if (ib + rva) in EXTRA_STORAGE_BY_ADDR:
+                extents[ib + rva] = EXTRA_STORAGE_BY_ADDR[ib + rva][0]
+        elif sym.startswith("?_typeInfo@"):
             extents[ib + rva] = 0x38
         elif sym.startswith("?_singleton@"):
             extents[ib + rva] = 8
@@ -496,7 +530,7 @@ def main():
 
     typeinfos = []
     for sym, ns, rva, _consumers in data_syms:
-        if not sym.startswith("?_typeInfo@"):
+        if sym is None or not sym.startswith("?_typeInfo@"):
             continue
         raw = pe.get_data(rva, 0x38)
         if len(raw) != 0x38:
@@ -533,9 +567,14 @@ def main():
     # ---- storage: everything else in the exported-DATA set -----------------
     storage = []
     for sym, ns, rva, _consumers in data_syms:
-        if sym.startswith("??_7") or sym.startswith("?_typeInfo@"):
+        if sym is None:
+            if (ib + rva) not in EXTRA_STORAGE_BY_ADDR:
+                continue
+        elif sym.startswith("??_7") or sym.startswith("?_typeInfo@"):
             continue
-        if sym.startswith("?_singleton@"):
+        if sym is None:
+            size, note = EXTRA_STORAGE_BY_ADDR[ib + rva]
+        elif sym.startswith("?_singleton@"):
             size, note = 8, "singleton pointer"
         elif sym in EXTRA_SIZES:
             size, note = EXTRA_SIZES[sym]
@@ -556,7 +595,7 @@ def main():
                         "note": note, "namespace": ns,
                         "ctor": (hex(ctor[0]) + (f" (+{len(ctor)-1} more)" if len(ctor) > 1 else ""))
                                 if ctor else ""})
-    storage.sort(key=lambda s: s["symbol"])
+    storage.sort(key=lambda s: (s["symbol"] or "", s["va"]))
 
     if errors:
         print("REFUSING TO GENERATE — verification failed:", file=sys.stderr)
@@ -585,7 +624,7 @@ def main():
     w("")
 
     for vi, v in enumerate(vtables):
-        w(f"// {v['symbol']}  DLL {v['va']:#x}  {len(v['slots'])} slots  "
+        w(f"// {v['symbol'] or '(unexported, carried by address)'}  DLL {v['va']:#x}  {len(v['slots'])} slots  "
           f"[{v['proof']}]")
         w(f"static const RtMintVSlot kVSlots{vi}[] = {{")
         for (si, name, va, kind) in v["slots"]:
@@ -658,8 +697,8 @@ def main():
           f"DATA symbols are CONSTRUCTED at load "
           f"({sum(1 for s in storage if s['ctor'])} storage + {len(typeinfos)} BaseTypeInfo)")
     print(f"  storage    {len(storage):3d}  ({total} bytes; "
-          f"{sum(1 for s in storage if s['symbol'].startswith('?_singleton@'))} singletons, "
-          f"{sum(1 for s in storage if not s['symbol'].startswith('?_singleton@'))} other .data statics)")
+          f"{sum(1 for s in storage if (s['symbol'] or '').startswith('?_singleton@'))} singletons, "
+          f"{sum(1 for s in storage if not (s['symbol'] or '').startswith('?_singleton@'))} other .data statics)")
     return 0
 
 

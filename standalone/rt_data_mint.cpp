@@ -205,6 +205,25 @@ static void* DllAddr(unsigned long long ghidraVa) {
     return (void*)(uintptr_t)((intptr_t)(uintptr_t)ghidraVa + mi->delta);
 }
 
+// A printable name for a row that may have none. An UNEXPORTED table head is
+// carried by ADDRESS -- see EXTRA_VTABLES_BY_ADDR in tools/rt_mint_gen.py --
+// so every message has to cope with symbol == nullptr.
+static const char* SymLabel(const char* sym, unsigned long long va, char* buf, size_t n) {
+    if (sym) return sym;
+    snprintf(buf, n, "(unexported @0x%llx)", va);
+    return buf;
+}
+
+// The DLL's copy of a minted row, by name when it has one and by address when
+// it does not. The address form is not a weaker lookup -- it is the only one
+// that exists for a table the DLL does not export -- but it IS a weaker CHECK:
+// there is no export directory entry to cross-examine, so the "exported where
+// the harvest said" comparison is skipped and counted separately rather than
+// passing vacuously.
+static void* DllRowBase(const char* sym, unsigned long long va) {
+    return sym ? DllExport(sym) : DllAddr(va);
+}
+
 static bool DllContains(void* p) {
     const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
     if (!mi || !mi->handle || !p) return false;
@@ -473,20 +492,21 @@ static void MintConstructedStatics() {
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
         if (!s.ctorInit) continue;
-        if (strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
+        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
             ++g_constructed;              // MintTypeInfos() already built it
-        } else if (strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
+        } else if (s.symbol && strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
             if (ConstructLoader(s)) ++g_constructed;
-        } else if (strcmp(s.symbol, "?_rng@Particle@Graphics@@1VRandom@System@@A") == 0) {
+        } else if (s.symbol && strcmp(s.symbol, "?_rng@Particle@Graphics@@1VRandom@System@@A") == 0) {
             if (ConstructParticleRng(s)) ++g_constructed;
         } else {
             // Unreachable via the generator, which refuses to emit an
             // unhandled ctorInit. Kept because "unreachable" is exactly the
             // claim this project has learned not to trust.
+            char sbuf2[64];
             fprintf(stderr, "[RtMint] FATAL: %s is CONSTRUCTED by the DLL at %s and "
                             "nothing here reproduces it; zeroed storage would "
                             "silently differ from the loaded DLL.\n",
-                    s.symbol, s.ctorInit);
+                    SymLabel(s.symbol, s.dllVa, sbuf2, sizeof(sbuf2)), s.ctorInit);
             fflush(stderr);
             abort();
         }
@@ -509,7 +529,7 @@ static void MintStorage() {
         memset(s.storage, 0, s.size);
         // ?_firstTypeInfo@ is the head of the reflection chain. In the DLL it
         // is filled by static initialisers; ours is filled by MintTypeInfos.
-        if (strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
+        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
             *(RtObject::BaseTypeInfo**)s.storage = g_mintTypeInfoHead;
     }
 }
@@ -519,13 +539,47 @@ static void MintStorage() {
 // own singletons, so handing OUR callers a second, empty set of singletons
 // splits the process's state in half. Wired now, with the DLL present, so the
 // last commit of the wave is a flag flip and not new code.
+// BOTH DOORS, always. RegisterRuntimeExport only redirects a caller that asks
+// by NAME; 30 sites in this tree ask for exported DATA by ADDRESS instead
+// (`ResolveAddr(Module::Runtime, 0x1801fe7b8)` and friends), and those would
+// have walked straight past a mint registered under a name only -- the same
+// shape of miss as round 5's raw-door reads, one door over. Registering the
+// address costs one map insert per row and closes it.
+//
+// It is also the ONLY door for a row with no exported name at all.
 static void RegisterMintedData() {
-    for (int i = 0; i < kVtableCount; ++i)
-        RegisterRuntimeExport(kMintVtables[i].symbol, (void*)kMintVtables[i].table);
-    for (int i = 0; i < kTypeInfoCount; ++i)
-        RegisterRuntimeExport(kMintTypeInfos[i].symbol, (void*)kMintTypeInfos[i].storage);
-    for (int i = 0; i < kStorageCount; ++i)
-        RegisterRuntimeExport(kMintStorage[i].symbol, kMintStorage[i].storage);
+    int names = 0, addrs = 0;
+    for (int i = 0; i < kVtableCount; ++i) {
+        const RtMintVtable& v = kMintVtables[i];
+        if (v.symbol) { RegisterRuntimeExport(v.symbol, (void*)v.table); ++names; }
+        RegisterRuntimeAddr((uintptr_t)v.dllVa, (void*)v.table); ++addrs;
+    }
+    for (int i = 0; i < kTypeInfoCount; ++i) {
+        const RtMintTypeInfo& t = kMintTypeInfos[i];
+        if (t.symbol) { RegisterRuntimeExport(t.symbol, (void*)t.storage); ++names; }
+        RegisterRuntimeAddr((uintptr_t)t.dllVa, (void*)t.storage); ++addrs;
+    }
+    for (int i = 0; i < kStorageCount; ++i) {
+        const RtMintStorage& s = kMintStorage[i];
+        if (s.symbol) { RegisterRuntimeExport(s.symbol, s.storage); ++names; }
+        RegisterRuntimeAddr((uintptr_t)s.dllVa, s.storage); ++addrs;
+    }
+    // Interior fields our tree resolves by address. A minted object's BASE
+    // address is registered above, but `engine/funcs/engine_funcs.cpp` reads
+    // Loader::runFlags at _loader+0x08 and Loader::hFinished at +0x28 by their
+    // own addresses, and an exact-match address registry does not cover an
+    // interior offset. Registering the two it actually asks for is the whole
+    // fix; a new interior read would need a row here, which is why the audit
+    // reports them.
+    for (int i = 0; i < kStorageCount; ++i) {
+        const RtMintStorage& s = kMintStorage[i];
+        if (!s.symbol || strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") != 0)
+            continue;
+        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x08, (char*)s.storage + 0x08);
+        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x28, (char*)s.storage + 0x28);
+        addrs += 2;
+    }
+    printf("[RtMint] registered %d by name, %d by address\n", names, addrs);
 }
 
 void RtDataMintInit() {
@@ -615,26 +669,34 @@ void RtDataMintShadowReport(const char* phase) {
         return;
     }
 
-    int ground = 0, groundBad = 0;      // harvest vs the DLL's live table
+    int ground = 0, groundBad = 0, byAddrRows = 0;      // harvest vs the DLL's live table
     int ours = 0, oursBad = 0;          // our slot vs our registered port
     int traps = 0, sizeSuspect = 0, absent = 0;
 
     for (int vi = 0; vi < kVtableCount; ++vi) {
         const RtMintVtable& v = kMintVtables[vi];
-        void** dll = (void**)DllExport(v.symbol);
+        char lbuf[64];
+        const char* label = SymLabel(v.symbol, v.dllVa, lbuf, sizeof(lbuf));
+        void** dll = (void**)DllRowBase(v.symbol, v.dllVa);
         if (!dll) {
             ++absent;
             printf("[RtMintShadow] MISSING: %s is not in the DLL's export directory\n",
-                   v.symbol);
+                   label);
             continue;
         }
         // The DLL's exported table must sit where the harvest said it did. If
         // it does not, every slot VA below is being read from the wrong place
         // and the rest of this vtable's result is meaningless.
-        if ((void*)dll != DllAddr(v.dllVa)) {
+        //
+        // Only askable of a row that HAS an export. For an address-keyed row
+        // the two sides are the same computation, so the comparison would pass
+        // without doing any work -- counted, not performed.
+        if (!v.symbol) {
+            ++byAddrRows;
+        } else if ((void*)dll != DllAddr(v.dllVa)) {
             ++groundBad;
             printf("[RtMintShadow] MISMATCH %s: exported at %p, harvest says %p\n",
-                   v.symbol, (void*)dll, DllAddr(v.dllVa));
+                   label, (void*)dll, DllAddr(v.dllVa));
             continue;
         }
         for (int i = 0; i < v.slotCount; ++i) {
@@ -644,7 +706,7 @@ void RtDataMintShadowReport(const char* phase) {
             if (dll[i] != expect) {
                 ++groundBad;
                 printf("[RtMintShadow] MISMATCH %s slot %d: DLL holds %p, harvest "
-                       "recorded %p (%s)\n", v.symbol, i, dll[i], expect,
+                       "recorded %p (%s)\n", label, i, dll[i], expect,
                        s.dllName ? s.dllName : "unnamed");
             }
             void* mine = v.table[i];
@@ -657,7 +719,7 @@ void RtDataMintShadowReport(const char* phase) {
             if (mine != port || mine == dll[i]) {
                 ++oursBad;
                 printf("[RtMintShadow] MISMATCH %s slot %d: minted %p, port registry "
-                       "says %p%s\n", v.symbol, i, mine, port,
+                       "says %p%s\n", label, i, mine, port,
                        mine == dll[i] ? " — AND IT IS THE DLL'S OWN ADDRESS, which a "
                                         "minted slot must never hold" : "");
             }
@@ -692,12 +754,12 @@ void RtDataMintShadowReport(const char* phase) {
                 ++sizeSuspect;
                 printf("[RtMintShadow] SIZE SUSPECT %s: size proof names %s, which is "
                        "NOT exported - the proof cannot be re-checked\n",
-                       v.symbol, adj);
+                       label, adj);
             } else if (end > nextVt) {
                 ++sizeSuspect;
                 printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots, which runs %lld "
                        "qwords PAST %s - the table is too long\n",
-                       v.symbol, v.slotCount,
+                       label, v.slotCount,
                        (long long)(((char*)end - (char*)nextVt) / 8), adj);
             }
         } else {
@@ -767,11 +829,15 @@ void RtDataMintShadowReport(const char* phase) {
     int live = 0, dead = 0, ourNonZero = 0, shapeChecked = 0, shapeBad = 0, shapeInfo = 0;
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
-        void** dll = (void**)DllExport(s.symbol);
-        if (!dll) { ++absent; printf("[RtMintShadow] MISSING: %s is not exported\n", s.symbol); continue; }
-        if ((void*)dll != DllAddr(s.dllVa)) {
+        char sbuf[64];
+        const char* slabel = SymLabel(s.symbol, s.dllVa, sbuf, sizeof(sbuf));
+        void** dll = (void**)DllRowBase(s.symbol, s.dllVa);
+        if (!dll) { ++absent; printf("[RtMintShadow] MISSING: %s is not exported\n", slabel); continue; }
+        if (!s.symbol) {
+            ++byAddrRows;
+        } else if ((void*)dll != DllAddr(s.dllVa)) {
             printf("[RtMintShadow] MISMATCH %s: exported at %p, harvest says %p\n",
-                   s.symbol, (void*)dll, DllAddr(s.dllVa));
+                   slabel, (void*)dll, DllAddr(s.dllVa));
         }
         // WHERE the first non-zero byte is, not just whether there is one.
         // "DLL=WRITTEN" on a 2500-byte object says nothing about WHAT was
@@ -793,7 +859,7 @@ void RtDataMintShadowReport(const char* phase) {
         if (s.size > 8 && dllLive) {
             const unsigned char* d = (const unsigned char*)dll;
             printf("[RtMintShadow]   FIRST-NONZERO %s: DLL byte +0x%x = %02x %02x %02x %02x "
-                   "%02x %02x %02x %02x\n", s.symbol, dllFirst,
+                   "%02x %02x %02x %02x\n", slabel, dllFirst,
                    d[dllFirst], dllFirst + 1 < s.size ? d[dllFirst + 1] : 0,
                    dllFirst + 2 < s.size ? d[dllFirst + 2] : 0,
                    dllFirst + 3 < s.size ? d[dllFirst + 3] : 0,
@@ -803,7 +869,7 @@ void RtDataMintShadowReport(const char* phase) {
                    dllFirst + 7 < s.size ? d[dllFirst + 7] : 0);
         }
         printf("[RtMintShadow] storage %-52s %2u bytes  DLL=%s  minted=%s  ctor=%s  (%s)\n",
-               s.symbol, s.size, dllLive ? "WRITTEN" : "still zero",
+               slabel, s.size, dllLive ? "WRITTEN" : "still zero",
                mineLive ? "written" : "zero",
                s.ctorInit ? s.ctorInit : "none (plain BSS)", s.note);
 
@@ -841,7 +907,7 @@ void RtDataMintShadowReport(const char* phase) {
                     // MISMATCH at init and 1 at exit -- which is itself the
                     // evidence that the field is written after construction.
                     printf("[RtMintShadow]   %s %s +0x%02x: DLL %s, minted %s\n",
-                           atExit ? "SHAPE-INFO" : "SHAPE", s.symbol, k * 8,
+                           atExit ? "SHAPE-INFO" : "SHAPE", slabel, k * 8,
                            a ? "set" : "null", b ? "set" : "null");
                 }
             }
@@ -877,6 +943,9 @@ void RtDataMintShadowReport(const char* phase) {
            "%d SHAPE MISMATCH, %d SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build "
            "them]\n", g_constructed, ctorOwed, shapeChecked, shapeBad, shapeInfo);
     printf("[RtMintShadow] symbols absent from the DLL: %d\n", absent);
+    printf("[RtMintShadow] carried by ADDRESS   : %d row(s) with no exported name -- "
+           "the export-location cross-check does not apply to them and was not "
+           "counted as a pass\n", byAddrRows);
 
     if (ours == 0) {
         printf("[RtMintShadow] *** EFFECTIVENESS: ZERO slots were minted from our own\n"
