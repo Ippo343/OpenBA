@@ -18,6 +18,10 @@ extern void RtMathTransformRegister();
 // Wave 9 lane P (runtime/src/math/wave9_lane_p.cpp): Quaternion::Lerp and
 // Transform::AsTransform3, the two Math exports waves 1-8 left on the DLL.
 extern int RtMathWave9LanePRegister();
+// Wave 9 lane GFXR (runtime/src/math/wave9_lane_gfxr.cpp): Matrix::Inverse,
+// the last Math export on the residue list and an unsatisfied door inside our
+// own Video::Context::SetCamera.
+extern int RtMathWave9LaneGfxrRegister();
 
 void RtMathPortInit() {
     // Must run before the BANISHED_RT_MATH check below: Volume's ports use the
@@ -77,4 +81,6 @@ void RtMathPortInit() {
 
     printf("[RtMathPortInit] Wave 9 lane P: %d exports registered (Quaternion::Lerp, "
            "Transform::AsTransform3)\n", RtMathWave9LanePRegister());
+    printf("[RtMathPortInit] Wave 9 lane GFXR: %d exports registered (Matrix::Inverse)\n",
+           RtMathWave9LaneGfxrRegister());
 }

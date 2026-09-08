@@ -347,10 +347,15 @@ using MatrixInverseFn = MatrixRaw* (*)(const MatrixRaw* self, MatrixRaw* ret);
 using MatrixMulFn     = MatrixRaw* (*)(const MatrixRaw* self, MatrixRaw* ret,
                                        const MatrixRaw* rhs);
 
+// RT_EXPORT_ONCE, not `static Fn fn = ResolveExport(...)`. The plain static is
+// the FROZEN form lane E3 enumerated (~22 sites): the FIRST caller fixes the
+// answer for the process, so if this runs before RtMathPortInit() registers
+// Wave 9 lane GFXR's port of Inverse, the null — or the DLL's address — is
+// cached forever and nothing says which symbol was missing. RT_EXPORT_ONCE
+// caches a hit and RETRIES a miss, naming it once. Behaviour-identical while
+// the DLL answers, which is why it is a change that can be verified TODAY.
 MatrixInverseFn MatrixInverse() {
-    static MatrixInverseFn fn = reinterpret_cast<MatrixInverseFn>(
-        ResolveExport("?Inverse@Matrix@Math@@QEBA?AV12@XZ"));
-    return fn;
+    return RT_EXPORT_ONCE(MatrixInverseFn, "?Inverse@Matrix@Math@@QEBA?AV12@XZ");
 }
 MatrixMulFn MatrixMul() {
     static MatrixMulFn fn = reinterpret_cast<MatrixMulFn>(
