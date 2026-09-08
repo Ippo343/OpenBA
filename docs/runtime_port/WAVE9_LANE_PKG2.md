@@ -2221,3 +2221,105 @@ the version — is the one that was one-sided.
 ## 85. Next predicted fault site
 
 Unchanged: `LoadPackages` stops at the `ReadPackfile` call.
+
+---
+
+# Rung 4c-ii (part 4) — the entry loop, and an honest handover
+
+## 86. The entry loop, mapped
+
+```
+1800b5b25  // ELSE of the compressed-flag branch (the uncompressed default):
+           this+0x78 = 1;  this+0x7c = 1;
+           Array<int32>::SetSize(this+0x80, 1);      // 0x180029510
+           ((int32*)this->[0x80])[0] = 0xff000000;
+
+1800b5b6c  // merge point of BOTH arms
+           version = [RBP+0x18b0];
+           count   = [RBP-0x10];                     // read at the very top
+           if (count <= 0) goto 1800b6023;
+           entries = this + 0xb0;                    // R13 += 0xb0
+
+           for (i = count; i != 0; --i) {
+1800b5ba5      Read(&cms, 4, &nameLen);              // [RBP+0x18a0]
+               // ---- the SAME version if/else as the metadata block ----
+1800b5c25      Read(&cms, nameLen, [RBP+0x60]);      // RAW arm
+1800b5c98      JMP 1800b5de3;                        // ...jumps over the other
+1800b5c9d      // UTF-16 arm entry:
+1800b5ca7      Read(&cms, nameLen, [RBP+0x860]);
+1800b5d1c      end = buf + 2*nameLen;  decode/encode -> [RBP+0x60]
+1800b5de3  // merge
+1800b5de8      Read(&cms, 4, [RBP-0x10]);            // NOTE: reuses the count slot
+1800b5e5e      Read(&cms, 4, [RSP+0x3c]);
+1800b5ef3      SetLength([RSP+0x30], len);
+1800b5f2e      memcpy(tmp.data, [RBP+0x60], n);
+1800b5f42      AdjustDelimiters([RSP+0x30]);
+               ... assign tmp into the Filename at [RBP-0x20]
+1800b5f95      AdjustDelimiters([RBP-0x20]);         // twice, 5f95 and 5f9e
+1800b5fbe      Array<Entry>::SetSize(entries, n, /*fill=*/&[RBP-0x20]);  // 0x1800298f0
+               release the temps                     // 5fe2, 600e
+           }
+```
+
+**The version branch appears twice**, once in the metadata block and once per
+entry — and in the loop the arms are in the *opposite* order (raw first, jumping
+over UTF-16). Same selector, mirrored layout. §80-81's finding is therefore not
+a one-off: it is a property of the whole function.
+
+Also worth noting: the entry insert at `1800b5fbe` is **not** a bespoke
+"insert" — it is `Array<Entry>::SetSize(array, n, fill)`, the three-argument
+form, i.e. a push-back expressed as a resize-with-value. That is the body
+`kSpec_PkgEntry` was written for in 4c-ii part 1, and it confirms that spec was
+the right shape.
+
+## 87. What is still missing, precisely
+
+Two things, and they are the wiring rather than the shape:
+
+1. **The entry record's field assignment.** `[RBP-0x20]` is the 16-byte temp
+   handed to `SetSize` as the fill: a `Filename` at `-0x20`, then the offset and
+   size dwords. But the two values are read into `[RBP-0x10]` and `[RSP+0x3c]`,
+   and I have not read the instructions that move them into the temp. Guessing
+   which goes to `+0x8` and which to `+0xc` would be a coin flip on a field pair
+   whose swap produces a packfile index that is wrong in a way no green run
+   detects — the offsets and sizes would simply be exchanged.
+2. **The `n` passed to `SetSize` at `1800b5fbe`** — almost certainly
+   `currentSize + 1`, but "almost certainly" is not how this lane has written
+   anything.
+
+## 88. Handover, stated plainly
+
+I am not going to write the transcription in this session, and the reason is
+about me rather than about the code.
+
+Everything needed is now recorded — §68 (the `Read` collapse and why it is
+legal), §70 (`Commit` dead), §75 (every `Read` destination), §76 (the UTF-16
+over-read and its oracle consequence), §80-81 (the two string paths and their
+selector), §86 (the entry loop) — and the two gaps in §87 are each a single
+targeted read of a known address range.
+
+What I will not do is write ~700 lines of one-shot, all-or-nothing transcription
+with two guessed field assignments in it, at the end of a long session, into a
+function that cannot be partially landed or incrementally verified. That is the
+one shape of work this lane has consistently refused, and refusing it on my own
+output rather than only on the code's is the same judgement.
+
+The next pass starts with two reads (§87), then writes both arms of both
+branches against §75 and §86, then builds the oracle with the exclusions §76
+requires.
+
+## 89. The three standing items, pre-answered as far as they can be
+
+* **Coverage.** Two conditionals, and the report must name which arm the shipped
+  `.pkg` files take and state the other UNTESTED: the compressed flag (§72) and
+  the version check (§81), the latter now known to gate *both* the metadata
+  strings and the per-entry names.
+* **Registered-but-uncalled: five.** `0x180029510` is now known to be reached on
+  BOTH arms of the compressed flag (the else-arm at `1800b5b5a` calls it too), so
+  it should close regardless. `0x180029630` remains inside the compressed block
+  only, and is still the diagnostic: unreached means that flag was one-sided.
+* **Splitting.** Taken, and this is the boundary.
+
+## 90. Next predicted fault site
+
+Unchanged: `LoadPackages` stops at the `ReadPackfile` call.
