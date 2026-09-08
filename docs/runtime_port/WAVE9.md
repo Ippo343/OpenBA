@@ -1553,6 +1553,23 @@ Immediately above it in `standalone_error.log`:
 and the next virtual call on the zeroed object executes address 0. **The wall is the
 `IO::PackageFile` class.**
 
+> **CORRECTION (lane PKG2, `271ebb5`) — the two sentences above are wrong about the
+> mechanism, and the error is kept visible because it is easy to repeat.** This is **not**
+> a virtual call and no vtable is involved. `RAX=0`, `RCX=RDX=` the fresh 0xF0 block,
+> `RIP=0`: it is
+> `RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block)` called through
+> a **null function pointer**. The object read as all-zero because nothing had run on it
+> yet — not because a vtable was missing.
+>
+> A null call whose first argument is a freshly allocated block is INDISTINGUISHABLE from
+> a VCALL-of-0 in the register file: `this` points at plausible zeroed memory and `RIP`
+> is 0 either way. The two diagnoses send you to different places — "the vtable was never
+> installed" sends you hunting a mint row, "the function pointer was null" sends you to
+> the resolve. **The `[RtResolve] MISS` line above the dump is what actually names the
+> fault**, and the crash handler's own label is a guess it is not entitled to make.
+>
+> The conclusion (the wall is `IO::PackageFile`) was right; the reasoning was not.
+
 ### The surface is now BOUNDED: 43 symbols
 
 The boot no longer dies in the name-resolution phase — it clears `FileSystem::Startup`,
