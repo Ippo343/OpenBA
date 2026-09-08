@@ -850,7 +850,23 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
                 std::snprintf(d, sizeof d, "%s content differs (%d elems)", what, a);
             }
         };
-        if (eq) {
+        // *** +0x90 IS ONLY COMPARABLE WHEN IT WAS WRITTEN. *** The write above
+        // is guarded on `formatVersion >= 2` (0x1800b4d62, CMP 2 / JL), so for a
+        // format-1 packfile NEITHER body touches this field: `t` still holds the
+        // 0xCD scratch fill and `self` holds whatever was on the stack. Comparing
+        // it anyway reported 2-3 DIVERGENCEs per run the moment lane MOD's
+        // RefreshList went live and put a PackageFile on the stack — `theirs`
+        // constantly -842150451 (0xCDCDCDCD) against an `ours` that differed
+        // every run, which is the signature of comparing bytes neither side
+        // wrote (reference_oracle_must_not_compare_unwritten_bytes.md).
+        //
+        // The port was never wrong. §95 already makes exactly this exclusion for
+        // `_fileInfo._unk04`; it was applied to one unwritten field and not the
+        // other. Guarded on the SAME condition as the write rather than on a
+        // value test, so a format-2 packfile that legitimately writes 0 is still
+        // compared. Found by lane MOD, which reported it rather than editing
+        // another lane's file mid-wave.
+        if (eq && formatVersion >= 2) {
             int32_t a90 = ArrSize(self, 0x90), b90 = ArrSize(t, 0x90);
             if (a90 != b90) {
                 eq = false;
