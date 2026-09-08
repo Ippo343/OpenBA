@@ -281,3 +281,140 @@ the negative control is new, growth-specific, and powered conditionally on a cou
 reports.
 
 It is **not closed** — nothing here has executed. Closing it needs G1–G4 run and read.
+
+_Superseded by §7: G1–G4 ran on 2026-09-08 and §5.1 is CLOSED._
+
+---
+
+## 7. RESULTS — the cells ran 2026-09-08. §5.1 IS CLOSED.
+
+Exe `standalone/build/reimpl-x64.exe`, built from tip `a2515e1` (lane W merged), stamp
+**2026-09-08 01:19:24**, deployed 01:19:29. `-O0` debug.
+
+**Provenance is self-evidencing, not just the stamp.** Every cell's log carries two lines no
+earlier binary can emit — the older exe has `0x200` hardcoded in that format string:
+
+```
+[GameMain] BANISHED_ARENA_MB=16 — allocator minRangeSize overridden (retail is 512). Arena growth is EXPECTED in this run.
+[GameMain] Engine::Startup(cmdLine=…, 16, 0, false)...
+```
+
+`BANISHED_RT_ALLOC` was **unset in all four cells** (the shadow refuses to arm otherwise).
+All figures read from the raw `standalone_error.log`, never a tail.
+
+| | G1 autostart | G2 save load (Save9) | G3 stress 1500f | G4 `NEGCTL=grow` |
+|---|---:|---:|---:|---:|
+| `ranges ours` / `theirs` | **4 / 4** | **5 / 5** | **5 / 5** | 4 / 4 |
+| `reserved ours` / `theirs` | 64MB / 64MB | 80MB / 80MB | 80MB / 80MB | 64MB / 64MB |
+| `grow` | **3** | **4** | **4** | **3** |
+| `tableCopy` | **1** | **2** | **2** | 1 |
+| `crossRange` | **536,796** | **2,885,513** | **2,051,126** | 531,456 |
+| `observed` | 1,657,316 | 6,425,562 | 4,674,703 | 1,654,643 |
+| `divergences` | **0** | **0** | **0** | **1,172,233** |
+| `skipped_pre_startup` | 0 | 0 | 0 | 0 |
+| `other_allocator` | 0 | 0 | 0 | 0 |
+| `map_full` | 0 | 0 | 0 | 0 |
+| `free_unmapped` | 0 | 0 | 0 | 0 |
+
+**G1, G2, G3 PASS on every criterion**, including the corrected one: `ranges >= 3`, so
+`ExpandMemoryRangeTable`'s `oldCap != 0` branch — the `memcpy` of the live table **and** the
+`release` of the old one — actually executed. `tableCopy` follows the predicted schedule
+exactly: capacity 0→2 while arming, 2→4 at the third range (G1, `tableCopy=1`), 4→6 at the
+fifth (G2/G3, `tableCopy=2`). No cell had `grow=0`; none needed the 32/64 ladder.
+
+Total across the three clean cells: **12,757,581 shadowed operations, 0 divergences**, with
+the growth machinery exercised 11 times and 5.47M comparisons landing outside range 0.
+
+### G4 is a valid RED: `divergences > 0` AND `grow = 3`
+
+Caught at the **first Allocate-driven growth**, not later:
+
+```
+DIVERGENCE Allocate [shadow] call #263687
+  ours  =r1+0x0 live=44963 free=550 bytes=25407040 bin=4 nr=2 res=33558528
+  theirs=r1+0x0 live=44963 free=549 bytes=25407040 bin=4 nr=2 res=33554440
+```
+
+`res` differs by 4,088 on the very call that created range 1, while the geometry terms still
+agree — which is exactly what adding `totalReserved` to the tuple bought. Without it this
+would have gone unnoticed until the ranges desynchronised some thousands of allocations
+later. The oracle is demonstrably able to fail on the growth path specifically, on the same
+binary, one environment variable apart: **1,657,316 clean → 1,172,233 red.**
+
+### Route B was exercised too — and the MB-rounded COVERAGE line hides it
+
+`theirs res=33554440` = 2 × 16,777,216 **+ 8**. Range 1's size was `16 MB + 8`, i.e.
+`size = max(minRangeSize, want)` took the **`want`** branch: a single request larger than the
+range size, which a 512 MB arena can never produce. That is retail's own unperturbed number
+(only the replica is perturbed in G4), and G1 ran the same cell with `totalReserved` in the
+compared tuple and 0 divergences, so ours reproduced it byte for byte. Both routes to a new
+range — exhaustion and the oversized single request — are now covered.
+
+Worth recording for the next reader: `COVERAGE reserved` prints `>> 20`, so the `64MB` there
+was really `33554440 + …`. The MB rounding is cosmetic, but it did briefly read as "every
+range took the `minRangeSize` branch", which was wrong.
+
+## 8. Lane W's question, asked of the allocator
+
+*Is there a branch that only executes when OUR side owns the arena from empty, which no
+DLL-present run can reach?*
+
+**For the hot path, no — and that is structural, not luck.** The shadow replica **is** our
+side owning an arena from empty: `RtAllocShadowStartup` builds a virgin arena and our code is
+the only thing that ever touches it. So `Allocate`, `Free`, `AddNewMemoryRange`,
+`GetFreeTagForSize`, `LinkFreeTag`, `UnlinkFreeTag`, `CommitToPage`, `ReleaseToPage`,
+`SetPrevTagInfo` and **both** branches of `ExpandMemoryRangeTable` have all now run in
+exactly the configuration cutover creates. Lane W's failure class does not apply here.
+
+**Outside the hot path it applies exactly, and the first-executed function is the worst
+one.** Never executed by anything, ever: `Construct` (`??0`), `Destruct` (`??1`), `Startup`,
+`Shutdown`, `operator=`, and the exported member-shaped accessors. `Construct` is the one
+cutover runs first, and it has a concrete failure mode readable from source today:
+
+```cpp
+MemoryAllocator** SingletonSlot() {                       // allocator.cpp:647
+    static MemoryAllocator** slot = reinterpret_cast<MemoryAllocator**>(
+        ResolveExport("?_singleton@MemoryAllocator@System@@0PEAV12@EA"));
+    return slot;                                          // resolved ONCE, cached forever
+}
+void Construct(MemoryAllocator* self) { ...
+    if (MemoryAllocator** slot = SingletonSlot()) *slot = self;   // silently skipped if null
+}
+MemoryAllocator* Get() { ... return slot ? *slot : nullptr; }
+void* MemAlloc(uint64_t size, int align) {
+    MemoryAllocator* self = Get();
+    g_plat.lockEnter(self->lock);                         // faithful: NO null check
+```
+
+`?_singleton@MemoryAllocator@System@@0PEAV12@EA` is exported **data**, is item 334 of
+`wave9_unported_20260907.txt` (one of the 17 `?_singleton@...` entries), and **nothing in the
+tree mints it**. With the DLL gone, `ResolveExport` returns null, `Construct`'s write is
+skipped without a word, `Get()` returns null forever, and the first `MemAlloc` faults
+dereferencing `null + 0x640`.
+
+Two properties make it worse than an ordinary unported data symbol:
+
+1. **The null is cached in a function-local static.** Whoever calls `SingletonSlot()` first
+   fixes the answer for the process. Registering `_singleton` *after* that first call cannot
+   repair it — so the minting must be ordered before any allocator use, which at cutover
+   means before essentially anything.
+2. **It fails silently at the write and loudly somewhere else.** The `if (slot)` guard turns
+   a missing data symbol into a null deref several call frames away, in `MemAlloc`, with
+   nothing naming `_singleton`.
+
+Recommendation for whoever schedules the cutover: mint `_singleton` as real storage in
+`allocator.cpp` registered through `RegisterRuntimeExport` before `RuntimePortInit` returns,
+and make `SingletonSlot()` **refuse rather than cache a null** — a hard, named failure at the
+first call is worth far more than a null deref several frames later. Not done here: it is a
+cutover change, it cannot be verified while the DLL is present (the DLL's slot answers
+today), and this lane is scoped to the growth hole.
+
+## 9. Disposition
+
+**WAVE9_LANE_E2.md §5.1 is CLOSED.** The arena-growth path has executed, in three real cells,
+with the oracle proved able to fail on that path specifically.
+
+This was the allocator's last open item under gate step 2. **The allocator is READY TO ARM
+and IS NOT ARMED.** `BANISHED_RT_ALLOC` was unset in every cell here; arming is a separate
+decision and belongs to the wave lead. §5.2 (Shutdown/dtor/operator=/accessors) and §5.3 (the
+5% performance gate) remain open and are gate step 4's, not this lane's.
