@@ -64,15 +64,49 @@ MemAllocFn g_memAlloc = nullptr;
 MemFreeFn  g_memFree  = nullptr;
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// CUTOVER: the raw door has nothing behind it, so fall back to the PORT
+// ---------------------------------------------------------------------------
+// The choice of RtOriginal<>() over ResolveExport() above is deliberate and
+// still right WHILE THE DLL IS PRESENT: it pins both halves of every String
+// buffer to one heap, so a half-ported MemoryAllocator cannot free on our heap
+// something the DLL allocated. Lane IOA found the other half of that story.
+//
+// With Runtime-x64.dll ABSENT, RtOriginal<>() returns NULL and `g_memFree(p)`
+// is an EXEC-of-0 -- on a tree where ?MemFree@MemoryAllocator@System@@ IS
+// ported and registered (allocator.cpp:1274). The port exists and this door
+// refuses to use it. That is the MIRROR of the failure this wave has been
+// chasing (closing a raw door over a symbol with NO port); same file family,
+// opposite direction, and it is TREE-WIDE, not one lane's: every landed
+// String-using port on the boot path frees through here, IO::Persistence
+// included.
+//
+// The fix keeps the original guarantee EXACTLY. The raw door is still tried
+// first, so with the DLL present behaviour is byte-identical and the heap
+// cannot split. Only when the raw door yields null -- which means there is no
+// DLL heap to split with -- does it fall through to the registered port, which
+// is then the only allocator in the process. Registration is all-or-nothing
+// (RegisterAllocatorExports registers MemAlloc and MemFree together), so the
+// two halves can never disagree about whose heap they are on.
+
+
 void* RtMemAlloc(uint64_t size, int align) {
-    if (!g_memAlloc)
+    if (!g_memAlloc) {
         g_memAlloc = RtOriginal<MemAllocFn>("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
+        if (!g_memAlloc)   // DLL absent -- see the CUTOVER note above
+            g_memAlloc = reinterpret_cast<MemAllocFn>(
+                ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
+    }
     return g_memAlloc(size, align);
 }
 
 void RtMemFree(void* p) {
-    if (!g_memFree)
+    if (!g_memFree) {
         g_memFree = RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+        if (!g_memFree)    // DLL absent -- see the CUTOVER note above
+            g_memFree = reinterpret_cast<MemFreeFn>(
+                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+    }
     g_memFree(p);
 }
 

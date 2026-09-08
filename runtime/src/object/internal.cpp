@@ -135,6 +135,7 @@ void* MemAlloc(uint64_t bytes, int align) {
     if (!g_memAlloc) {
         g_memAlloc = RtOriginal<MemAllocFn>("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
         if (!g_memAlloc)   // no DLL: our port is the only heap there is
+                           // (same seam as system/string.cpp; see its CUTOVER note)
             g_memAlloc = reinterpret_cast<MemAllocFn>(
                 ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     }
