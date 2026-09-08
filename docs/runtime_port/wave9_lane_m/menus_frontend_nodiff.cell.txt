@@ -1,0 +1,44 @@
+########## CELL menus_frontend_nodiff ##########
+== rt_run[menus_frontend_nodiff] exe stamp: 2026-09-07 23:29:48.149381600 -0400
+== rt_run[menus_frontend_nodiff] exited rc=3 after 5s
+--- harness trace ---
+[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=7 after 60 menu frames and stop there
+[AutoStart] AUTOMENU_CLICKS queued: 1001,5001,d0,4001,101,m6
+[AutoStart] AUTOMENU_CLICKS: ModDialog=0000020145220b80 id=1001
+[AutoStart] menu settled (mainMenu=0000020143ca1cc0) - injecting click id=7
+[BootState] RUNNING (Engine::Startup returned at 1s)
+[ModDialog] LoadDialogResource('Dialog/Mod.rsc') -> 000002014523c290 (raw 000002014523c290)
+[ModDialog] opened + AddDialog'd (dlg=0000020145220b80 mods=0)
+--- RtDiff (COMPLETE, untruncated) ---
+--- crash ---
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff60569d6b8
+RAX=0000000000000080 RCX=0000020143BB0280 RDX=0000000000000001 RBX=00000000000003E9
+RBP=00000024693FEEF8 RSI=0000000000000012 RDI=0000020145220B80 R8 =0000000000000000
+R9 =00000000000003E9 R10=0000000000000000 R11=00000024693FEBB0 R12=00000024693FEE08
+RIP=00007FF60569D6B8 RSP=00000024693FED90
+Module:    reimpl-x64.exe + 0x13D6B8  (base=00007ff605560000)
+Fault: READ of 00000000000000d0
+Registry: 1618 registered, 21 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=00000024693ff140 ranges=0000020143ba0000 cnt=1
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact (corruption may be in the high-bit prev links or a bucket head)
+Stack trace:
+  #0  reimpl-x64.exe         + 0x13D6B8    (RIP=00007FF60569D6B8 RSP=00000024693FED90)
+  #1  reimpl-x64.exe         + 0x139625    (RIP=00007FF605699625 RSP=00000024693FEE60)
+  #2  reimpl-x64.exe         + 0x31D1CC    (RIP=00007FF60587D1CC RSP=00000024693FEEB0)
+  #3  reimpl-x64.exe         + 0x334F5C    (RIP=00007FF605894F5C RSP=00000024693FEF40)
+  #4  Runtime-x64.dll        + 0xDD08A     (RIP=00007FFCA264D08A RSP=00000024693FEFE0)
+  #5  Runtime-x64.dll        + 0xDD293     (RIP=00007FFCA264D293 RSP=00000024693FF010)
+  #6  Runtime-x64.dll        + 0xDD486     (RIP=00007FFCA264D486 RSP=00000024693FF0A0)
+  #7  reimpl-x64.exe         + 0x19BDBE    (RIP=00007FF6056FBDBE RSP=00000024693FF0D0)
+  #8  reimpl-x64.exe         + 0x332E83    (RIP=00007FF605892E83 RSP=00000024693FF920)
+  #9  reimpl-x64.exe         + 0x12EE      (RIP=00007FF6055612EE RSP=00000024693FF970)
+  #10 reimpl-x64.exe         + 0x13E6      (RIP=00007FF6055613E6 RSP=00000024693FF9C0)
+  #11 KERNEL32.DLL           + 0x17374     (RIP=00007FFCF90B7374 RSP=00000024693FF9F0)
+  #12 ntdll.dll              + 0x4CC91     (RIP=00007FFCF9E3CC91 RSP=00000024693FFA20)
+=== END CRASH ===
+

@@ -1,0 +1,212 @@
+########## CELL menus_frontend ##########
+== rt_run[menus_frontend] exe stamp: 2026-09-07 23:29:48.149381600 -0400
+== rt_run[menus_frontend] exited rc=3 after 5s
+--- harness trace ---
+[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=7 after 60 menu frames and stop there
+[AutoStart] AUTOMENU_CLICKS queued: 1001,5001,d0,4001,101,m8,m10,m6
+[AutoStart] AUTOMENU_CLICKS: ModDialog=0000023b19b381c8 id=1001
+[AutoStart] menu settled (mainMenu=0000023b186d1cc0) - injecting click id=7
+[BootState] RUNNING (Engine::Startup returned at 1s)
+[ModDialog] LoadDialogResource('Dialog/Mod.rsc') -> 0000023b19b53b60 (raw 0000023b19b53b60)
+[ModDialog] opened + AddDialog'd (dlg=0000023b19b381c8 mods=0)
+--- RtDiff (COMPLETE, untruncated) ---
+[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
+[RtDiff] site[0] @00007ff60594a560 = Video::Context::Clear[slot]
+[RtDiff] site[1] @00007ff60594a580 = Video::Context::DrawIndexed[slot]
+[RtDiff] site[2] @00007ff60594a5a0 = Video::Context::GetMaxDynamicInstances[slot]
+[RtDiff] site[3] @00007ff60594a5c0 = Video::Context::BeginVertices[slot]
+[RtDiff] site[4] @00007ff60594a5e0 = Video::Context::EndVertices[slot]
+[RtDiff] site[5] @00007ff60594a600 = Video::Context::BeginIndexedVertices[slot]
+[RtDiff] site[6] @00007ff60594a620 = Video::Context::EndIndexedVertices[slot]
+[RtDiff] site[7] @00007ff60594a640 = Video::Context::BeginInstancedIndexedVertices[slot]
+[RtDiff] site[8] @00007ff60594a660 = Video::Context::EndInstancedIndexedVertices[slot]
+[RtDiff] site[9] @00007ff605949540 = UI::Element::ComputeLayout[thunk]
+[RtDiff] site[10] @00007ff605949560 = UI::Element::Draw[thunk]
+[RtDiff] site[11] @00007ff605949260 = UI::DialogInstance::OnUpdateLayout[shape]
+[RtDiff] site[12] @00007ff605949280 = UI::DialogInstance::OnUpdate[shape]
+[RtDiff] site[13] @00007ff6059492a0 = UI::DialogInstance::OnElementEvent[shape]
+[RtDiff] site[14] @00007ff6059492c0 = UI::DialogController::~DialogController[shape]
+[RtDiff] site[15] @00007ff605948ac0 = Object::BaseTypeInfo::BaseTypeInfo
+[RtDiff] site[16] @00007ff60594a160 = Video::DeviceData::DeviceData
+[RtDiff] site[17] @00007ff605948e80 = System::operator+(String,String)
+[RtDiff] site[18] @00007ff605948ea0 = System::operator+(String,char*)
+[RtDiff] site[19] @00007ff60594a360 = Video::Device::DisplayMode::DisplayMode
+[RtDiff] site[20] @00007ff60594a380 = Video::Device::DisplayMode::~DisplayMode
+[RtDiff] site[21] @00007ff60594a2a0 = Video::DeviceData::~DeviceData
+[RtDiff] site[22] @00007ff60594a6c0 = Video::Device::GetMultisampleModeCount
+[RtDiff] site[23] @00007ff60594a6e0 = Video::Device::IsMultisampleModeSupported
+[RtDiff] site[24] @00007ff605946380 = Achievement::Goal::Goal
+[RtDiff] site[25] @00007ff6059471c0 = Engine::MainLoop::MainLoop
+[RtDiff] site[26] @00007ff60594a100 = Video::ConstantBufferData::ConstantBufferData
+[RtDiff] site[27] @00007ff60594a140 = Video::ContextData::ContextData
+[RtDiff] site[28] @00007ff60594a0c0 = Video::VertexBufferData::VertexBufferData
+[RtDiff] site[29] @00007ff60594a0e0 = Video::IndexBufferData::IndexBufferData
+[RtDiff] site[30] @00007ff60594a000 = Video::RenderBufferData::RenderBufferData
+[RtDiff] site[31] @00007ff60594a120 = Video::ImageBufferData::ImageBufferData
+[RtDiff] site[32] @00007ff605949580 = UI::Sprite::Sprite()
+[RtDiff] site[33] @00007ff605947b00 = Input::KeyMap::ClearAll
+[RtDiff] site[34] @00007ff605947b60 = Input::KeyMap::RegisterInput
+[RtDiff] site[35] @00007ff605948a60 = Object::Factory::GetTypeIdFromName
+[RtDiff] site[36] @00007ff605948a40 = Object::Base::IsDerivedFrom
+[RtDiff] site[37] @00007ff60594a020 = Video::VideoProgramData::VideoProgramData
+[RtDiff] site[38] @00007ff60594a0a0 = Video::VertexLayoutData::VertexLayoutData
+[RtDiff] site[39] @00007ff60594a080 = Video::VertexProgramData::VertexProgramData
+[RtDiff] site[40] @00007ff60594a060 = Video::PixelProgramData::PixelProgramData
+[RtDiff] site[41] @00007ff60594a040 = Video::RenderStateData::RenderStateData
+[RtDiff] site[42] @00007ff605949dc0 = Video::ImageBuffer::Width
+[RtDiff] site[43] @00007ff605949de0 = Video::ImageBuffer::Height
+[RtDiff] site[44] @00007ff605949e80 = Video::ImageBuffer::IsGenerated
+[RtDiff] site[45] @00007ff605949ec0 = Video::ImageBuffer::IsRendered
+[RtDiff] site[46] @00007ff605949e20 = Video::ImageBuffer::IsCompressed
+[RtDiff] site[47] @00007ff605949e00 = Video::ImageBuffer::GetLevelCount
+[RtDiff] site[48] @00007ff605949e40 = Video::ImageBuffer::IsDepthBuffer
+[RtDiff] site[49] @00007ff605949ea0 = Video::ImageBuffer::IsRenderBuffer
+[RtDiff] site[50] @00007ff6059495a0 = UI::Sprite::Sprite(sheet,name)
+[RtDiff] site[51] @00007ff605947e80 = IO::Persistence::Get(int&)
+[RtDiff] site[52] @00007ff605947ea0 = IO::Persistence::Get(bool&)
+[RtDiff] site[53] @00007ff6059472a0 = Engine::DialogLoopT::ctor
+[RtDiff] site[54] @00007ff605949820 = UI::UserInterface::UserInterface
+[RtDiff] site[55] @00007ff605949000 = Timer::SecondsToTicks
+[RtDiff] site[56] @00007ff605947320 = Engine::DialogLoaderLoopT::ctor
+[RtDiff] site[57] @00007ff605947340 = Engine::DialogLoaderLoopT::Load
+[RtDiff] site[58] @00007ff605947260 = Engine::LoaderLoop::ctor
+[RtDiff] site[59] @00007ff605947280 = Engine::Loader::Load
+[RtDiff] site[60] @00007ff6059481c0 = IO::Serializer::Serializer(Stream&,int)
+[RtDiff] site[61] @00007ff605947fe0 = IO::Serializer::Serialize(int&)
+[RtDiff] site[62] @00007ff605947f40 = IO::Serializer::Serialize(bool&)
+[RtDiff] site[63] @00007ff605948880 = Object::ExternalFactory::Find
+[RtDiff] site[64] @00007ff605948e60 = System::Filename::GetPathIdentifer
+[RtDiff] site[65] @00007ff6059481e0 = IO::Serializer::~Serializer [not diffable]
+[RtDiff] site[66] @00007ff6059481a0 = IO::Serializer::GetEncoding
+[RtDiff] site[67] @00007ff605948860 = Object::ExternalFactory::IsReferenceModeEnabled
+[RtDiff] site[68] @00007ff605948aa0 = Object::Type::Serialize [not diffable]
+[RtDiff] site[69] @00007ff605948020 = IO::Serializer::Serialize(float&)
+[RtDiff] site[70] @00007ff605948160 = IO::Serializer::SerializeBytes
+[RtDiff] site[71] @00007ff605948720 = Math::Vector3::FromYawPitch
+[RtDiff] site[72] @00007ff605948ee0 = System::String::operator==(char*)
+[RtDiff] site[73] @00007ff605948f20 = System::String::SubString
+[RtDiff] site[74] @00007ff605948180 = IO::Serializer::GetVersion
+[RtDiff] site[75] @00007ff605947380 = Graphics::AnimationEvent::AnimationEvent()
+[RtDiff] site[76] @00007ff605948140 = IO::Serializer::Serialize(n,float*)
+[RtDiff] site[77] @00007ff605946320 = Achievement::Achievement::ctor
+[RtDiff] site[78] @00007ff605946340 = Achievement::Achievement::GetFileVersion
+[RtDiff] site[79] @00007ff6059471a0 = Engine::MainLoop::SetNextLoop
+[RtDiff] site[80] @00007ff605947360 = Engine::DialogLoaderLoopT::Startup
+[RtDiff] site[81] @00007ff605948960 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+[RtDiff] site[82] @00007ff605949160 = UI::DialogInstance::FindElement
+[RtDiff] site[83] @00007ff605949360 = UI::Element::FindElement
+[RtDiff] site[84] @00007ff605946e20 = Collection::Array::SetSize @0x18007a0d0
+[RtDiff] site[85] @00007ff605949900 = UI::UserInterface::SetFullscreenFadeSprite
+[RtDiff] site[86] @00007ff6059498e0 = UI::UserInterface::SetFullscreenFade
+[RtDiff] site[87] @00007ff60594a480 = Video::Context::SetRenderBuffer
+[RtDiff] site[88] @00007ff60594a420 = Video::Context::SetViewport
+[RtDiff] site[89] @00007ff60594a300 = Video::VertexBuffer::Lock
+[RtDiff] site[90] @00007ff60594a320 = Video::VertexBuffer::Unlock
+[RtDiff] site[91] @00007ff60594a460 = Video::Context::SetVertexBuffer
+[RtDiff] site[92] @00007ff60594a340 = Video::ConstantBuffer::Bind
+[RtDiff] site[93] @00007ff605949080 = System::Random::Rand(uint)
+[RtDiff] site[94] @00007ff605948220 = Math::Transform::Transform()
+[RtDiff] site[95] @00007ff605948480 = Math::Transform3::Identity()
+[RtDiff] site[96] @00007ff60594a840 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+[RtDiff] site[97] @00007ff605947740 = Graphics::Camera::Camera
+[RtDiff] site[98] @00007ff605947720 = Graphics::Camera::SetFrustum
+[RtDiff] site[99] @00007ff60594a900 = Volume::Frustum::Projection
+[RtDiff] site[100] @00007ff6059482c0 = Math::Matrix::operator*(const Matrix&)
+[RtDiff] site[101] @00007ff6059478a0 = Graphics::Geometry::Geometry()
+[RtDiff] site[102] @00007ff605949f60 = Video::VertexBuffer::VertexBuffer
+[RtDiff] site[103] @00007ff605949f40 = Video::IndexBuffer::IndexBuffer
+[RtDiff] site[104] @00007ff6059480e0 = IO::Serializer::Serialize(n,ushort*)
+[RtDiff] site[105] @00007ff605949fc0 = Video::VertexBuffer::Create
+[RtDiff] site[106] @00007ff605949fe0 = Video::VertexBuffer::Set
+[RtDiff] site[107] @00007ff605949f80 = Video::IndexBuffer::Create
+[RtDiff] site[108] @00007ff605949fa0 = Video::IndexBuffer::Set
+[RtDiff] site[109] @00007ff6059480c0 = IO::Serializer::Serialize(n,short*)
+[RtDiff] site[110] @00007ff6059480a0 = IO::Serializer::Serialize(n,uchar*)
+[RtDiff] site[111] @00007ff605947f80 = IO::Serializer::Serialize(uchar&)
+[RtDiff] site[112] @00007ff605948100 = IO::Serializer::Serialize(n,int*)
+[RtDiff] site[113] @00007ff605949da0 = Video::ImageBuffer::ImageBuffer
+[RtDiff] site[114] @00007ff605949f20 = Video::ImageBuffer::Create
+[RtDiff] site[115] @00007ff605949ee0 = Video::ImageBuffer::CopyToTexture
+[RtDiff] site[116] @00007ff605949e60 = Video::ImageBuffer::IsDynamic
+[RtDiff] site[117] @00007ff605948840 = Object::External::GetPath
+[RtDiff] site[118] @00007ff605948000 = IO::Serializer::Serialize(uint&)
+[RtDiff] site[119] @00007ff6059477c0 = Graphics::Renderer::Renderer
+[RtDiff] site[120] @00007ff605947a20 = Graphics::Scene::Scene()
+[RtDiff] site[121] @00007ff6059475c0 = Graphics::MeshInstance::MeshInstance()
+[RtDiff] site[122] @00007ff605947580 = Graphics::MeshInstance::SetMesh
+[RtDiff] site[123] @00007ff605947540 = Graphics::MeshInstance::UpdateHierarchy
+[RtDiff] site[124] @00007ff605947aa0 = Graphics::Scene::AddGlobalObject
+[RtDiff] site[125] @00007ff6059484e0 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+[RtDiff] site[126] @00007ff605947900 = Graphics::Geometry::SetTransform
+[RtDiff] site[127] @00007ff6059474a0 = Graphics::GraphicsMesh::GetMaterialList
+[RtDiff] site[128] @00007ff605947560 = Graphics::MeshInstance::SetMaterialInstance
+[RtDiff] site[129] @00007ff605947a60 = Graphics::Scene::AddObject
+[RtDiff] site[130] @00007ff6059483e0 = Math::Quaternion::operator*(const Quaternion&)
+[RtDiff] site[131] @00007ff605949020 = Timer::TicksToSeconds
+[RtDiff] site[132] @00007ff605947480 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
+[RtDiff] site[133] @00007ff605949c00 = UI::ImageElement::SetRotation
+[RtDiff] site[134] @00007ff6059472c0 = Engine::DialogLoopT::Load
+[RtDiff] site[135] @00007ff605948c00 = Save::SaveLoad::SaveLoad
+[RtDiff] site[136] @00007ff6059472e0 = Engine::DialogLoopT::Startup
+[RtDiff] site[137] @00007ff605949420 = UI::Element::SetElementId
+[RtDiff] site[138] @00007ff605948fa0 = System::String::Release [no oracle: mutates a shared refcount]
+[RtDiff] site[139] @00007ff605949f00 = Video::ImageBuffer::CopyFromTexture
+[RtDiff] site[140] @00007ff6059466a0 = Audio::Scene::PlayEffect
+[RtDiff] site[141] @00007ff605948d40 = Save::SaveLoad::Update [shadow]
+[RtDiff] site[142] @00007ff605948540 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+[RtDiff] site[143] @00007ff605948520 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+[RtDiff] site[144] @00007ff605948500 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+[RtDiff] site[145] @00007ff605948820 = Math::Transform::AsTransform3
+[RtDiff] site[146] @00007ff605948360 = Math::Transform::AsMatrix()
+[RtDiff] site[147] @00007ff605947760 = Graphics::Camera::SetCameraToWorld
+[RtDiff] site[148] @00007ff605947460 = Graphics::ParticleInstance::IncrementInstanceIndex
+[RtDiff] site[149] @00007ff605947ae0 = Graphics::Scene::Clean
+[RtDiff] site[150] @00007ff605947960 = Graphics::Geometry::Clean
+[RtDiff] site[151] @00007ff605947300 = Engine::DialogLoopT::Update[time]
+[RtDiff] site[152] @00007ff60594a400 = Video::Context::SetFog
+[RtDiff] site[153] @00007ff605947800 = Graphics::Renderer::GetCullCamera
+[RtDiff] site[154] @00007ff605948280 = Math::Transform3::Transform3(const Transform3&)
+[RtDiff] site[155] @00007ff6059479a0 = Graphics::Geometry::GetTransform
+[RtDiff] site[156] @00007ff6059483a0 = Math::Transform::Inverse()
+[RtDiff] site[157] @00007ff6059477a0 = Graphics::Camera::GetFrustum
+[RtDiff] site[158] @00007ff60594a880 = Volume::Frustum::operator*(Transform3)
+[RtDiff] site[159] @00007ff60594a8a0 = Volume::Frustum::Contains
+[RtDiff] site[160] @00007ff605947820 = Graphics::Renderer::GetShader
+[RtDiff] site[161] @00007ff60594a4c0 = Video::Context::SetTransform
+[RtDiff] site[162] @00007ff60594a3a0 = Video::Context::SetColor
+[RtDiff] site[163] @00007ff60594a440 = Video::Context::SetImageBuffer
+[RtDiff] site[164] @00007ff60594a2c0 = Video::IndexBuffer::Lock
+[RtDiff] site[165] @00007ff60594a2e0 = Video::IndexBuffer::Unlock
+[RtDiff] site[166] @00007ff605949400 = UI::Element::Hide
+--- crash ---
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff60569d6b8
+RAX=0000000000000080 RCX=0000023B185E0280 RDX=0000000000000001 RBX=00000000000003E9
+RBP=000000975B3FF3B8 RSI=0000000000000012 RDI=0000023B19B381C8 R8 =0000000000000000
+R9 =00000000000003E9 R10=0000000000000000 R11=000000975B3FF070 R12=000000975B3FF2C8
+RIP=00007FF60569D6B8 RSP=000000975B3FF250
+Module:    reimpl-x64.exe + 0x13D6B8  (base=00007ff605560000)
+Fault: READ of 00000000000000d0
+Registry: 1618 registered, 21 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=000000975b3ff600 ranges=0000023b16600000 cnt=1
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact (corruption may be in the high-bit prev links or a bucket head)
+Stack trace:
+  #0  reimpl-x64.exe         + 0x13D6B8    (RIP=00007FF60569D6B8 RSP=000000975B3FF250)
+  #1  reimpl-x64.exe         + 0x139625    (RIP=00007FF605699625 RSP=000000975B3FF320)
+  #2  reimpl-x64.exe         + 0x31D1CC    (RIP=00007FF60587D1CC RSP=000000975B3FF370)
+  #3  reimpl-x64.exe         + 0x334F5C    (RIP=00007FF605894F5C RSP=000000975B3FF400)
+  #4  Runtime-x64.dll        + 0xDD08A     (RIP=00007FFCA878D08A RSP=000000975B3FF4A0)
+  #5  Runtime-x64.dll        + 0xDD293     (RIP=00007FFCA878D293 RSP=000000975B3FF4D0)
+  #6  Runtime-x64.dll        + 0xDD486     (RIP=00007FFCA878D486 RSP=000000975B3FF560)
+  #7  reimpl-x64.exe         + 0x19BDBE    (RIP=00007FF6056FBDBE RSP=000000975B3FF590)
+  #8  reimpl-x64.exe         + 0x332E83    (RIP=00007FF605892E83 RSP=000000975B3FFDE0)
+  #9  reimpl-x64.exe         + 0x12EE      (RIP=00007FF6055612EE RSP=000000975B3FFE30)
+  #10 reimpl-x64.exe         + 0x13E6      (RIP=00007FF6055613E6 RSP=000000975B3FFE80)
+  #11 KERNEL32.DLL           + 0x17374     (RIP=00007FFCF90B7374 RSP=000000975B3FFEB0)
+  #12 ntdll.dll              + 0x4CC91     (RIP=00007FFCF9E3CC91 RSP=000000975B3FFEE0)
+=== END CRASH ===
+
