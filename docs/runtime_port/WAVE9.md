@@ -1139,6 +1139,75 @@ compare against, so a gate not recorded before cutover can never be recorded at 
 | **`port_bypass_audit.py --by-name` reports 0 on BOTH doors** | a ported function reached through the wrong door is invisible to the census *and* to the diff oracle | **MET 2026-09-08** (`b3fc8b1`, lane H): **ADDRESS door 189 sites / 0; NAME door 437 sites / 0**; `--by-name` cross-check **573 ported names, 378 raw-door statements mention one, 0 the parser did not see** (non-zero exit if that is ever not 0). ⛔ **NOT CLOSED — a THIRD face found 2026-09-08 by lane W.** `--by-name` reports 0 while missing a LIVE-PATH bypass on `?SetBounds@Geometry`: the accessor **returns** the resolved pointer and the call is one frame out, so it classifies `OK-RESOLVE-ONLY`. Lane W found it by reading, not by the checker. **Treat every 0 from this gate as "none of the shape it can see".** The two faces below were closed; the class was not. What DID catch the follow-on regression was the audit's **DENOMINATOR moving**, not its verdict — converting the six `Platform*` names turned two more `mesh.cpp` accessors into bypasses with nothing in those files changing. Previously recorded: It read "0 means none of the shape it can see", and that was true: `called` meant *an argument list follows on this LINE*, so the accessor shape — resolve into a local, call it a statement later — classified `OK-RESOLVE-ONLY`. `value_types.cpp` held **three** live-path `String::Release` bypasses and the audit reported **one**. The classifier now follows the assignment target through the **brace-matched enclosing function** (never a line window). Proved against a known answer, not by the number moving: on a scratch snapshot of the exact tree where the three existed, same 364-site denominator, **OLD tools give BYPASS=1 and NEW give BYPASS=3** — kept as `tools/fixtures/bypass_value_types_before.cpp` under `--self-test`. A second defect fell out of the cross-check: mangled names were read from the door's own LINE, so a site whose name sits on a **continuation line** — the normal formatting here — got **no verdict at all**. 76 such sites; the population was 361 when it should have been **437**. None was a bypass, but they were counted as scanned while receiving no verdict. ⚠️ **Still re-run after every LANDING, not after every edit** — `--by-name` does not change that a correct raw call becomes a bypass when a DIFFERENT lane ports its name, with nothing in that file changing (`Timer::SecondsToTicks`/`TicksToSeconds` did exactly this). |
 | **H. Perf gate** | The deferred +7.7% breach. The user deferred it at the Wave 4 boundary explicitly *to this stage*. With the DLL gone the seam's `GetProcAddress`/registry indirection can be compiled out entirely, which is the main reason it was deferred here. Three runs minimum — `reference_one_perf_run_cannot_resolve_the_gate.md`. | ≤5% over the recorded baseline |
 
+### A LIVE DEFECT NO AUDIT COULD SEE, and the oracle that passed it 14 times a run
+
+Integrator, 2026-09-08, `c1e5e10`. The shared string-keyed BST find at `0x18002ace0` --
+used by `System::Configuration`, `IO::FileSystem::Startup`, `FileSystem::SetupDirectories`
+and `IO::Persistence` -- was ported with a one-index defect in the `strcmp` retail inlines
+inside it. `TreeStrCmp` returned **0 for every pair of distinct strings sharing a first
+byte**, which is every key in a settings map, because they are all prefixed by their
+section name. Zero feeds the find's two arms as "not less than" and "greater or equal",
+so the walk returned **the first node sharing a first byte**: asking for `GameLastStart`
+got back the node for `GameShowWeather`.
+
+Retail increments the index BEFORE the compare that decides whether to loop
+(`INC RDX` at `0x18002ad2a`, then `CMP CL,[RAX]`), so it exits with the index already on
+the mismatching byte. The port tested `a[i+1] == b[i+1]` in the `while` condition and
+incremented only in the body, so on the exiting comparison it never incremented and
+subtracted two bytes it had just proved equal.
+
+**Why four waves of oracles passed it: the population was uniform.** Thirteen of the
+fourteen `Game*` integers in the registry are `"0"`, and `strtol` of the wrong node's
+value (`"true"`) is also `0`. Ours and theirs agreed on 13 of 14 calls because every value
+in the population was the same value. It surfaced only once the registry held one non-zero
+one -- `GameLastStart=2`, written by our own autostart runs.
+
+**It was found by RUNNING.** The DLL-present cell moved 359 sites / 0 divergences to
+375 / 1. One A/B on the newest lane's kill switch (`BANISHED_RT_PERSSTARTUP=0`) reproduced
+it identically and cleared lane ENG. A probe printing the composed key beside the returned
+node made it a two-line diagnosis: `composed="GameLastStart" nodeKey="GameShowWeather"`.
+
+**Third live instance of the `ResolveAddr` registry rule.** `persistence.cpp` resolves
+`0x18002ace0` by address and its comment states it always asks the DLL so the lane can be
+judged standing alone -- but `configuration.cpp:287` registers a port at that address, so
+it had been calling ours since that port landed. A **Configuration** defect therefore
+surfaced as a **Persistence** divergence.
+
+Fix verified against a register-by-register transcription of `0x18002ad04..ad3d` over
+3,000,000 random pairs biased to long shared prefixes, 1,768,805 containing bytes `>= 0x80`
+(the signed/unsigned split the file's banner already warned about): **0 disagreements on
+the exact value**. Effectiveness control: the old version disagrees with that same
+transcription on **497,647** of those pairs. Live: **375 sites / 18,320,495 calls / 0
+divergences**, and `LastStart` now reads 2 where it read 0.
+
+### `_errorString` was minted at 8 bytes and is an 8 KB BUFFER -- `4a2d449`
+
+Found by lane ENG from the disassembly, before it ran. `?_errorString@Error@System@@0PADA`
+decodes as `char*`, so the generator gave it 8 bytes; `?SetText@` (`0x1800c5fa0`) does
+`LEA RBP,[0x1801fc720]` -- the address IS the buffer -- and carries capacity `0x2000`.
+**MSVC encodes a static `char buf[N]` data member as `PAD`, indistinguishable from a real
+pointer at the name level**, so the mangled suffix cannot be trusted for array statics.
+The first cutover `SetText` would have written 8 KB into an 8-byte slot, and `SetText` is
+the diagnostic path -- it fires exactly when something else has already gone wrong.
+
+Corroborated independently, because a size read off one function is one witness: **zero**
+of the DLL's exports fall inside `0x1801fc720+0x2000`, while the neighbours are packed a
+byte apart either side of it (`_disableHandler` `0x708`, `_hideDisplay` `0x709`,
+`_stopApplication` `0x70a`, `_rootOnlyUpdates` `0x70b`). An 8 KB hole in that density is a
+buffer, not luck. Also mints `?_stopApplication@Error@System@@0_NA` (ord 4818), absent
+entirely. Storage 37 -> 38 symbols, 3,136 -> 11,328 bytes, delta exactly `0x2000`.
+
+### Cutover attempt 10 -- the wall did NOT move, as predicted
+
+Same fault as attempt 09: `[RtUnresolved] ?SetupDirectories@FileSystem@IO@@QEAAXXZ`,
+EXEC-of-0, `VCALL-of-0` with a null vtable. Lane ENG predicted exactly this -- its five
+ports are all behind or beside that wall, not on it, so "no movement" was the falsifiable
+call and it held. Lane FS owns the wall.
+
+Audits on this tip: `rawdoor` **483 sites / 0 UNGUARDED-CALL / 34 DEFERRED**, `port_bypass`
+**ADDRESS 201 / 0, NAME 411 / 0**, `rt_data_door` **PASS, 3 `RT_RAW_OK`, 0 UNCLASSIFIED**,
+census **849 called / 616 ported / 72.6%**.
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
