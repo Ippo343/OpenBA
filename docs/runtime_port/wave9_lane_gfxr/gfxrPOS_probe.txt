@@ -1,0 +1,4 @@
+[InverseProbe] mode=POS cases=2240021 divergences=0 negFired=0
+[InverseProbe]   EFFECTIVENESS: dividePath=2239862 identityPath=159 nearSingular=2417 allFinite=2240021
+[InverseProbe]   sweep contiguity: longest run of ADJACENT differing steps = 0
+[RtMathPortInit] Wave 9 lane GFXR: 1 exports registered (Matrix::Inverse)
