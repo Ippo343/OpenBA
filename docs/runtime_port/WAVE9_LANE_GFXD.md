@@ -331,15 +331,70 @@ Re-checked, not re-read: there is still **no `struct Material` anywhere** under
 `MaterialInstance` (0x60) and its four entry structs and nothing else. The blocker
 stands and it still belongs to a lane paired with `Graphics::Material`.
 
-### 4.5 `?Serialize@MeshInstance@Graphics@@` (`0x1800ff680`) — DECLINED, unchanged
+### 4.5 `?Serialize@MeshInstance@Graphics@@` (`0x1800ff680`) — DECLINED, and the closure is one row WIDER than the record, not narrower
 
-GFXR's correction confirmed independently here: `0x1800fe250` **is**
-`?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z`, an export, and
-`0x18005cc60` / `0x18005d4a0` are confirmed unexported and absent. So the blocker is one
-exported callee that drags in the §4.6 `AnimationState` cluster plus two unexported
-array-**serialisation** internals. It should go to a lane that runs a save/load round
-trip, and that lane must use **retail's** `IO::Encoding` vtable offsets, not the profile
-build's.
+**RE-TAKEN AT THE INTEGRATION TIP `be75284`, not inherited.** The integrator asked for
+this specifically, on the grounds that lane ENC replaced two of the five traps on vtable
+`0x1801554a8` and that this bears on this row. The re-take says the decline stands, and
+it corrects the reason in two directions at once.
+
+The body, read again rather than copied:
+
+```
+this+0xd8  ->  CALL 0x1800fe250              ; AnimationState::Serialize
+int n = *(int*)(this + 0xd0);
+rw = serializer->[+0x08];  rw->vtable[+0xa0](rw, &n, nullptr)
+if (serializer->[+0x00]->[+0x08] == 0)       ; stream->direction == 0, i.e. READING
+    CALL 0x18005cc60(this+0xc8, n)           ; Array::SetCount
+CALL 0x18005d4a0(serializer, n, this->[+0xc8])
+```
+
+**CORRECTION 1 — `0x1801554a8` IS NOT THIS ROW'S VTABLE.** That vtable has **five
+slots** (`+0x00..+0x20`), and lane ENC's `CreateReader`/`CreateWriter` are slots 3 and 4
+of it. This row's virtual is at **`+0xa0`**, which does not exist in a five-slot table.
+The object at `serializer+0x08` is an **`IO::ReaderWriter`**, not an `IO::Encoding` —
+`runtime/types/io/Serializer.h:17` already flags exactly this confusion, noting that
+`engine/types/io_serializer.h` calls both `serializer+0x08` and `stream+0x10` an
+`Encoding*` and that **they are different classes**. So lane ENC's two new bodies are
+not on the vtable this row dispatches through.
+
+**Lane ENC's work IS relevant, but INDIRECTLY, and that is the more useful reading:**
+`Encoding::CreateReader`/`CreateWriter` are precisely what *produce* the `ReaderWriter`
+stored at `serializer+0x08`. Before lane ENC, that object could not be constructed at
+cutover at all. So ENC makes this row **reachable**; it does not make it **smaller**.
+
+**CORRECTION 2 — there is a FOURTH dependency nobody had counted.** The old record lists
+three callees. The virtual through `+0xa0` is a fourth, and it is unported:
+`+0xa0` is `rw_vtbl::kScalarInt`, `(int&, const char*)`, which the call site matches
+exactly (`LEA RDX,[RSP+0x30]` and `XOR R8D,R8D` — the value and a null name). Its two
+concrete bodies are `?Serialize@BinaryReader@IO@@UEAAXAEAHPEBD@Z` (`0x1800a88d0`, slot
+index 20 = `20 * 8` = `0xa0`) and the `BinaryWriter` twin (`0x1800a8fd0`). Both are
+**minted BY NAME only** in `standalone/rt_data_mint_tables.inc` and **neither body is
+ported** — grepped across `runtime/` and `standalone/` at `be75284`, zero hits outside
+the mint table. A name-minted slot resolves out of the DLL's export table, which is the
+one thing the cutover boot does not have.
+
+**The closure at `be75284`, measured:**
+
+| Dependency | Exported? | Ported at `be75284`? |
+|---|---|---|
+| `0x1800fe250` `?Serialize@AnimationState@Graphics@@` | yes | no — drags in the §4.6 `AnimationState` cluster |
+| `+0xa0` -> `0x1800a88d0` / `0x1800a8fd0` (`kScalarInt`) | yes | **no — minted by name, body absent** |
+| `0x18005cc60` `Array::SetCount` | no | no |
+| `0x18005d4a0` element-serialise loop | no | no |
+
+All three original addresses were re-grepped against `be75284` and returned **zero
+hits**, so nothing in the old record dissolved either. **Verdict unchanged, closure
++1 row.**
+
+Carrying forward for whoever takes it: the branch is `stream->direction == 0` meaning
+**reading** — `SetCount` runs on the READ path only, and the element loop runs on both.
+On the WRITE path this is a pure read and replays into two independent sinks, so
+`runtime/src/io/save_trace.{h,cpp}`'s emission-sequence oracle is the right instrument
+(`reference_write_path_serialize_is_replayable.md`). Compare the emission SEQUENCE, not
+bytes, and use **retail's** `rw_vtbl` offsets — the profile build puts the same three
+slots at `+0x90`/`+0xb0`/`+0xb8`
+(`reference_encoding_vtable_offsets_differ_between_builds.md`).
 
 ### 4.6 `?Update@AnimationManager@Graphics@@` (`0x1800fc240`) — DECLINED, explicitly, as GFXR asked
 
