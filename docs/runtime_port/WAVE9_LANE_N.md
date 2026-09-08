@@ -743,6 +743,96 @@ tallies now print from the crash handler as well, beside `VideoDX11::Dx11SeamRep
 been doing exactly this since Wave 6 for exactly this reason. The `ARMED` line is what exposed it:
 without a startup marker the silence would have been read as a clean pass.
 
+### THE WRITER HUNT — built, and it did not converge. Here is exactly why.
+
+**This section exists so nobody spends another session rediscovering these three things.**
+
+**1. WHY DR0-DR3 CANNOT BE USED ON THIS VICTIM.** A hardware watchpoint needs an *address*.
+This victim's address is not knowable until after it has been written: it is a different block, in
+a different profession bucket, at a different heap offset on every run. The precedent in
+`entitylist.cpp:498` — arm after the first detection and catch the *next* store — does **not**
+transfer, and its own comment says why it worked there: *"the same victim gets re-corrupted on
+later frames (observed three times on one node)"*. This victim is not re-corrupted; it faults
+immediately on first use. The arm-on-detection path was built anyway (`BANISHED_WSWATCH`, which
+validates the whole inner tree before any dereference and arms on the bad slot) and it never got
+the chance to fire: on the one crashing run under it, all 205 `8e30` calls completed and the fault
+was in a different stack.
+
+**2. THE BRACKET WAS THE RIGHT INSTRUMENT AND IT WENT QUIET.**
+`RedzoneAlloc_FindCorruptBlockNative()` (new, shim-independent, silent, returns the first corrupt
+block) is called after every *n* teardown steps by `BANISHED_TEARDOWN_BRACKET=n`, so the first
+step whose scan comes back dirty names the entity that wrote. It demonstrably works — it reports
+`heap at entry is clean` and then stays quiet. But:
+
+| binary | config | runs | faults |
+|---|---|---:|---:|
+| 02:05:47 | `WSWATCH=1`, no bracket | 1 | **1** |
+| 02:09:31 | `TEARDOWN_BRACKET=16` | 10 | **0** |
+| 02:09:31 | bracket **off** | 6 | **0** |
+
+**Sixteen consecutive clean runs on the current binary**, against a fault that had been arriving
+roughly 4 runs in 10 all evening.
+
+**3. WHAT THAT DOES AND DOES NOT MEAN — including a correction to this lane's own first reading.**
+The first reading reported upward was "my instrument suppresses it, p ≈ 0.006". **The control run
+refutes half of that and the p-value was overstated; both are corrected here.** The fault does not
+reproduce with the bracket *off* either, so it is not the scan's cost that silences it. And the
+p-value assumed a 40% rate measured across a *mix* of builds and env combinations — this lane
+never established a controlled baseline on one fixed binary, so no rigorous probability can be put
+on sixteen clean runs. It is strong, informal evidence and nothing more.
+
+What *is* solid:
+
+* **The lanes E/H merge did not fix it.** Build 02:05:47 already contained that merge and faulted
+  on its first run. That candidate is eliminated.
+* The only change between 02:05:47 and 02:09:31 is the bracket code itself — which performs **no
+  writes at all** and is inert when its env var is unset. It cannot be a fix. What it does change
+  is the code and stack layout of `EntityList_Shutdown_c3d30` and the timing of the cascade.
+* So the best-supported reading is a **layout- or timing-sensitive fault**, which is also the only
+  reading that comfortably explains the rest of the evidence: intermittency, three different
+  victims, and one write shape landing sometimes on a pointer's low half and sometimes on a
+  boundary tag's high half.
+
+**A RACE IS THE BEST-SUPPORTED DIRECTION, AND IT IS A DIRECTION, NOT A CLAIM.** A fault that moves
+under a purely read-only perturbation is timing-dependent; the engine runs worker threads and the
+allocator has its own critical section. This lane did not test it and is not asserting it.
+
+**DO NOT CONCLUDE FROM A QUIET BRACKET THAT THIS IS FIXED.** It is not fixed. Nothing was changed
+that could fix it.
+
+### THE STRONGEST REMAINING LEAD — and it needs no directory and no run
+
+The tag-corruption variant decodes exactly, and the decode changes what to look for.
+
+On the 02:05:47 fault: `RAX = RDX = 0x0000000200000014`, `RBX = 0x000001273918D110`, and the
+faulting read was at `0x0000012F3918D160`. The allocator advances by
+`blkBytes = (tag & 0x1ffffffffff) * 4` (`redzone_alloc.cpp:867`), and
+
+```
+0x1273918D110 + (0x200000014 * 4) = 0x1273918D110 + 0x800000050 = 0x12F3918D160   ← the fault address
+```
+
+exactly. So the allocator read that qword **as a tag**, and therefore:
+
+> **The LOW dword (`0x14` = a 0x50-byte block, `0x10` = 0x40, `0x20` = 0x80) is a LEGITIMATE size
+> field. It is the HIGH dword that was overwritten with 2. That variant is a 4-BYTE STORE AT
+> `tag+4`.**
+
+This lane's earlier "the tag reads `{size, 2}` and is therefore a free-block header" reading is
+**wrong and withdrawn** — a free block's tag would carry its size in the low 41 bits, which it
+does; nothing about it is a separate free header.
+
+A 4-byte store at `tag+4` is precisely the family of
+`reference_load_wild_write_high_dword_7fc.md`: **a `System::String` / `InternalBasePtr` release
+performing `dec [p-4]` on a pointer that is not a refcounted String buffer.** For a user pointer
+`p` whose boundary tag sits at `p-8`, `p-4` *is* that tag's high dword. That reference records the
+same mechanism being found and closed once already on the load path; this would be a second
+instance, on the teardown path.
+
+**That is a SOURCE hunt** — find release-idiom call sites reachable from the teardown cascade that
+can receive a non-String pointer — and it needs neither the game directory nor a run. It is the
+first thing the next lane should do.
+
 ### Where it stands
 
 **Reproduced (7 times now), oracle-independence proved, the heap proved clean at teardown entry,
@@ -754,10 +844,11 @@ eliminated* rather than argued away, the search space is much smaller, and the n
 named below — but nothing here identifies the code that stores the small integer.
 
 The remaining candidate the evidence points at is a write performed *during the teardown
-cascade* that lands on a live pointer's low half. Since the victim address differs every run, the
-tool for it is a **hardware write watchpoint** (`standalone/hw_watch.cpp` exists for exactly this)
-armed on the bucket's inner-root slot at the moment it is written, which names the writer directly
-instead of inferring it from the victim. That is a build this lane did not make.
+cascade* that lands on a live pointer's low half. The obvious tool — a **hardware write
+watchpoint** (`standalone/hw_watch.cpp` exists for exactly this) — was built and **does not
+apply here**; the section above records why, so that nobody rebuilds it. The instrument that
+*did* work is the per-step heap bracket, and its result is written up there too, including the
+correction to this lane's own first reading of it.
 
 Two things worth carrying forward for whoever does:
 * the fault is **not** latent from the sim (result 4), so the watchpoint only needs to cover

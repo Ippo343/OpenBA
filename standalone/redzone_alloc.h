@@ -51,6 +51,12 @@ int RedzoneAlloc_HeapCheck(const char* tag);
 // Does not abort, does not take the allocator lock.
 extern "C" void RedzoneAlloc_HeapDump(const char* tag);
 
+// Shim-INDEPENDENT, SILENT version of the same walk: returns the first corrupt
+// block (null when the heap is clean) and prints nothing, so it is cheap enough
+// to call after every step of a teardown loop and bracket the moment corruption
+// appears. See the comment on the definition (Wave 9 lane N, Finding 3).
+extern "C" void* RedzoneAlloc_FindCorruptBlockNative();
+
 // Free-list LINK validation at a code checkpoint. Aborts (exit 0x124) naming
 // the tag at the first corrupt forward link. Only active under BANISHED_REDZONE.
 extern "C" int RedzoneAlloc_CheckLinks(const char* tag);

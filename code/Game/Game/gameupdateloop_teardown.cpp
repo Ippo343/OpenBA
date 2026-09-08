@@ -30,7 +30,9 @@
 #include "address_registry.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <initializer_list>
+#include "redzone_alloc.h"   // RedzoneAlloc_FindCorruptBlockNative — Finding 3 bracket
 
 namespace {
 
@@ -233,11 +235,56 @@ extern "C" void IbpTree_Clear_2de90(void* hdrV) {
 // instead of file — see spawncomponent.cpp), marks every live entity for removal,
 // drains the pending-removal array, then removes whatever is left in the master
 // array until it is empty. The flag is cleared again on the way out.
+// [BANISHED_TEARDOWN_BRACKET] Wave 9 lane N, Finding 3. The heap is provably
+// intact at teardown entry and corrupt by the fault, so the store happens inside
+// this cascade. A hardware watchpoint cannot be armed on a victim whose address
+// is unknown until after it is written, so instead the boundary tags are scanned
+// after each step: the FIRST step whose scan comes back dirty is the step that
+// wrote, and it is named with the entity and its vtable. Off unless the env var
+// is set; the scan is a linear walk of the heap, so the interval is tunable.
+namespace {
+int  TeardownBracketEvery() {
+    static int n = -1;
+    if (n < 0) {
+        const char* e = std::getenv("BANISHED_TEARDOWN_BRACKET");
+        n = (e && *e && e[0] != '0') ? (std::atoi(e) > 0 ? std::atoi(e) : 1) : 0;
+    }
+    return n;
+}
+bool s_bracketFired = false;
+// Returns true once corruption has been reported (so the caller can stop).
+bool TeardownBracketCheck(const char* phase, int step, void* entity) {
+    if (s_bracketFired) return true;
+    void* bad = RedzoneAlloc_FindCorruptBlockNative();
+    if (!bad) return false;
+    s_bracketFired = true;
+    uint64_t vt = 0;
+    if (entity) vt = *reinterpret_cast<uint64_t*>(entity);
+    std::fprintf(stderr,
+        "[TeardownBracket] *** HEAP WENT CORRUPT *** phase=%s step=%d "
+        "corruptBlock=%p tag=0x%016llx | the step that just ran is the writer: "
+        "entity=%p entityVtable=0x%016llx\n",
+        phase, step, bad,
+        (unsigned long long)(bad ? *reinterpret_cast<uint64_t*>(bad) : 0),
+        entity, (unsigned long long)vt);
+    std::fflush(stderr);
+    RedzoneAlloc_HeapDump("TeardownBracket");
+    return true;
+}
+}  // namespace
+
 extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
     EnsureResolved();
     uint8_t* self = B(selfV);
 
     *(self + 0xE0) = 1;
+
+    const int bracket = TeardownBracketEvery();
+    if (bracket) {
+        std::fprintf(stderr, "[TeardownBracket] ARMED every %d step(s); heap at entry is %s\n",
+                     bracket, RedzoneAlloc_FindCorruptBlockNative() ? "ALREADY CORRUPT" : "clean");
+        std::fflush(stderr);
+    }
 
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
     for (int32_t i = 0; i < I32(self, 0x10); ++i) {
@@ -248,12 +295,16 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             if (s_markRemoval) s_markRemoval(P(slot, 0x00));
         }
+        if (bracket && (i % bracket) == 0) TeardownBracketCheck("mark", i, entity);
     }
+
+    if (bracket) TeardownBracketCheck("post-mark-loop", -1, nullptr);
 
     // Drain the pending-removal array (+0xD0 data / +0xD8 count).
     for (int32_t i = 0; i < I32(self, 0xD8); ++i) {
         void* ibp = *reinterpret_cast<void**>(B(P(self, 0xD0)) + (size_t)i * 8);
         if (s_removeEntity) s_removeEntity(selfV, &ibp);
+        if (bracket && (i % bracket) == 0) TeardownBracketCheck("drain", i, ibp);
     }
     MemFree(P(self, 0xD0));
     P(self, 0xD0) = nullptr;
@@ -261,10 +312,12 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
 
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
+    int sweep = 0;
     while (I32(self, 0x10) > 0) {
         if (!s_removeEntity) break;   // no body: bail rather than spin forever
         void* ibp = *reinterpret_cast<void**>(P(self, 0x08));
         s_removeEntity(selfV, &ibp);
+        if (bracket && (sweep++ % bracket) == 0) TeardownBracketCheck("sweep", sweep, ibp);
     }
 
     *(self + 0xE0) = 0;

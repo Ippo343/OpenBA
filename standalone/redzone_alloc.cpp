@@ -800,6 +800,42 @@ extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*)) {
     g_rzSink = sink;
 }
 
+// Shim-INDEPENDENT, SILENT boundary-tag scan. Same walk as RedzoneAlloc_HeapDump
+// but it prints nothing and returns the first corrupt block (null when clean), so
+// it can be called at high frequency to BRACKET the moment corruption appears.
+//
+// Wave 9 lane N, Finding 3: the heap is provably intact at teardown entry and
+// corrupt by the fault, so the store happens inside the teardown cascade. Calling
+// this after each entity removal narrows "somewhere in teardown" to one removal,
+// which is what names the writer — the debug registers cannot help while the
+// victim address is unknown until after it has been written.
+extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
+    if (!g_pMemAllocSingleton) return nullptr;
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    if (IsBadReadPtr(alloc, 0x18)) return nullptr;
+    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
+    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return nullptr;
+
+    for (int r = 0; r < rangeCnt; ++r) {
+        uint8_t* rng = ranges + (size_t)r * 0x18;
+        if (IsBadReadPtr(rng, 0x18)) continue;
+        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
+        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        if (!start || !end || end <= start) continue;
+        uint8_t* p = start;
+        int guard = 0;
+        while (p < end && ++guard < 4000000) {
+            if (IsBadReadPtr(p, 8)) return p;
+            uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
+            size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
+            if (blkBytes < 8 || p + blkBytes > end) return p;
+            p += blkBytes;
+        }
+    }
+    return nullptr;
+}
+
 extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     if (!g_pMemAllocSingleton) {
         RZOut("[REDZONE-DUMP] no allocator singleton\n"); fflush(stdout);
