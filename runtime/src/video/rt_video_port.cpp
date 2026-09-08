@@ -12,6 +12,10 @@
 //   BANISHED_RT_VIDDYNAMIC=0 ... just Device::{Lock,Unlock,Release/RecreateDynamic},
 //                            the eight class-static list walkers and
 //                            RenderBuffer::Recreate       (Wave 9 lane VID)
+//   BANISHED_RT_VIDCTXBIND=0 ... just Context::BindResources/BindTextures, the
+//                            two Context methods dx11/ calls once per draw
+//                                                        (Wave 9 lane CTX)
+//   BANISHED_RT_CTXBIND_PROBE=1 runs lane CTX's 37-case oracle at init.
 //
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
@@ -35,6 +39,8 @@ extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
 extern "C" void RtVideoAssignConstantsProbeArm(bool on);  // constant_buffer.cpp
 extern int      RtVideoContextCtorRegister();             // context_ctor.cpp
 extern "C" void RtVideoContextCtorProbeArm(bool on);     // context_ctor.cpp
+extern int      RtVideoContextBindRegister();            // context_bind.cpp (lane CTX)
+extern "C" void RtVideoContextBindProbe();               // context_bind.cpp (lane CTX)
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -86,6 +92,18 @@ void RtVideoPortInit() {
         n += RtVideoContextCtorRegister();
         const char* cp = std::getenv("BANISHED_RT_CTXCTOR_PROBE");
         RtVideoContextCtorProbeArm(cp && *cp && std::strcmp(cp, "0") != 0);
+    }
+    // Wave 9 lane CTX: ?BindResources@ / ?BindTextures@ — the two Context
+    // methods our OWN dx11/ backend calls back into, once per draw call. The
+    // probe allocates nothing (three .bss Contexts plus fixed fakes) and makes
+    // no call outside this file, so unlike the three above it can run right
+    // here; it does not need PlatformStartup's allocator.
+    if (RtWaveEnabled("BANISHED_RT_VIDCTXBIND")) {
+
+        n += RtVideoContextBindRegister();
+        const char* bp = std::getenv("BANISHED_RT_CTXBIND_PROBE");
+        if (bp && *bp && std::strcmp(bp, "0") != 0)
+            RtVideoContextBindProbe();
     }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();
