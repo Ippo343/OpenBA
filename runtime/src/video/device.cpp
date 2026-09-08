@@ -95,6 +95,22 @@ using RtVideo::RenderBuffer;
 // ----------------------------------------------------------------------------
 void* ResolveExport(const char* mangled_name);
 
+// ----------------------------------------------------------------------------
+// The two IO::Persistence readers, declared here rather than included.
+//
+// Wave 4 lane C's ports of ?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z (retail
+// 0x1800b81e0) and ?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z (0x1800b8290).
+// Video_Configuration_Startup calls them as C++ symbols; the same extern-here
+// shape runtime/src/input/input.cpp:38 already uses for the bool one, and for
+// the same reason — runtime/src/io/persistence.cpp exposes no header.
+//
+// CONTRACT THIS FILE DEPENDS ON: both write through `out` only on a hit and
+// leave the caller's value untouched on a miss. That is retail's behaviour and
+// it is what makes an absent registry key leave the ctor default in place.
+// ----------------------------------------------------------------------------
+extern bool RtIo_Persistence_GetInt (void* self, const char* section, const char* key, int*  out);
+extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
+
 namespace {
 
 // ---- Mangled names, spelled once ------------------------------------------
@@ -112,6 +128,7 @@ constexpr const char* kApplyChangedSettings     = "?ApplyChangedSettings@Device@
 constexpr const char* kRenderBufferCreate       = "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z";
 constexpr const char* kRenderStateDataDtor      = "??1RenderStateData@Video@@UEAA@XZ";
 constexpr const char* kConfigurationSave        = "?Save@Configuration@Video@@QEAAXXZ";
+constexpr const char* kConfigurationStartup     = "?Startup@Configuration@Video@@QEAA_NXZ";
 // NOT ported by this lane, only CALLED — see the banner above
 // ValidateConfigurationBody.
 constexpr const char* kGetDefaultResolution     = "?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z";
@@ -727,6 +744,135 @@ void Video_Configuration_Save(Configuration* self) {
 }
 
 // ============================================================================
+// bool Video::Configuration::Startup()
+// retail 0x1800f6680, ord 4087 — the exact INVERSE of Save above, and the
+// second of Engine::Startup's two Video::Configuration calls
+// (runtime/src/engine/engine_lifecycle.cpp:653, which is where the cutover
+// residue reports this name).
+//
+// Retail reads the SAME 18 keys, from the SAME "Video" section, in the SAME
+// order as Save writes them, so this body iterates `kSaveFields` rather than
+// carrying a second table. That is not a tidy-up: it makes the load/store
+// agreement compiler-enforced instead of comment-asserted, which is the one
+// property a table typed twice cannot have. The order was read off the
+// disassembly independently and then checked against kSaveFields entry by
+// entry — all 18 agree in key, type and offset.
+//
+// Every one of the 18 offsets is pinned a THIRD time, independently of both
+// this function and Save, by Configuration's own exported accessors at
+// 0x18000d5a0..0x18000d6c0 — sixteen-byte stubs that are each a single
+// `MOV EAX,[RCX+off]` / `MOVZX EAX,byte [RCX+off]`. They agree with
+// Device.h's struct on all 18. (They also name +0x42, which Device.h calls
+// `field42`: 0x18000d6c0 is ?HideWindow@Configuration@Video@@QEBA_NXZ. Startup
+// does not read it and Save does not write it, so it stays out of the table —
+// reported, not renamed, since Device.h is not this lane's file.)
+//
+// RETAIL INLINES the int reads rather than calling ?Get@Persistence@IO@@…AEAH:
+// String::Format("%s%s", section, key) -> Map_Find (0x18002ace0) -> on a hit,
+// atoi of the node's value (0x18007f034, which is a bare
+// `XOR EDX,EDX; LEA R8D,[RDX+0xa]; JMP strtol`). That is instruction-for-
+// instruction what the ported IO::Persistence::Get(int&) already does, so this
+// body calls the port. The bool reads are NOT inlined in retail — it makes a
+// real CALL to 0x1800b8290 — and that address is `RtIo_Persistence_GetBool`.
+// Both are called as C++ symbols, not through a resolver, for the reason lane
+// VID gives for ImageBuffer::Width: the dependency is then checked by the
+// oracle those functions already carry.
+//
+// FAITHFUL DETAILS:
+//  * A key that is ABSENT leaves the field at whatever the ctor put there.
+//    Retail achieves that by only storing inside the `if (node)`; ours by
+//    Get's documented contract of writing *out only on a hit. This is why the
+//    oracle below must RESTORE the object before replaying retail — see there.
+//  * The persistence singleton pointer is read and used UNGUARDED, as retail
+//    does (0x1800f66a3 `MOV RDI,[0x1801fc6b8]`, then `MOV RCX,RDI` into the
+//    find with no test). No null check is added.
+//  * The return value is unconditionally `true` (0x1800f6ce4 `MOV AL,0x1`).
+//    Nothing here can fail, including a completely empty registry.
+// ============================================================================
+bool Video_Configuration_Startup(Configuration* self) {
+    RT_DIFF_BEGIN("Video::Configuration::Startup");
+
+    void* persistence = *PersistenceSingletonSlot();
+
+    // Snapshot BEFORE any store: the input is also the output, and the oracle
+    // below has to hand retail the object in the state we were handed it in
+    // (reference_oracle_must_snapshot_aliased_inputs.md).
+    Configuration orig = *self;
+
+    int found = 0;
+    for (int i = 0; i < kSaveFieldCount; ++i) {
+        const SaveField& f = kSaveFields[i];
+        auto* field = reinterpret_cast<uint8_t*>(self) + f.offset;
+        if (f.isBool) {
+            bool v = (*field != 0);
+            if (RtIo_Persistence_GetBool(persistence, kSectionVideo, f.key, &v)) ++found;
+            *field = static_cast<uint8_t>(v ? 1 : 0);
+        } else {
+            int v = *reinterpret_cast<int32_t*>(field);
+            if (RtIo_Persistence_GetInt(persistence, kSectionVideo, f.key, &v)) ++found;
+            *reinterpret_cast<int32_t*>(field) = v;
+        }
+    }
+
+    if (rt_diff_on__) {
+        // A FULL replay oracle is available here and is NOT available for the
+        // sibling Save, because Startup mutates nothing outside `self`: the
+        // only heap traffic is the transient key String each Get formats and
+        // releases. Running retail a second time over the same registry is
+        // therefore free of side effects, which is exactly the property
+        // Input::Configuration::Load lacks (its KeyMap::Load mutates a live
+        // map, so that port could only self-check).
+        const Configuration ours = *self;
+        *self = orig;                       // hand retail OUR input, not our output
+        RtOriginal<bool (*)(Configuration*)>(kConfigurationStartup)(self);
+        const Configuration theirs = *self;
+        *self = ours;                       // our result is what survives the call
+
+        // Name the failing field. A predicate over 18 terms whose message can
+        // only say "not equal" is the shape
+        // reference_shadow_predicate_must_name_its_failing_term.md warns about.
+        bool equal = true;
+        char oursDesc[128], theirsDesc[128];
+        for (int i = 0; i < kSaveFieldCount && equal; ++i) {
+            const SaveField& f = kSaveFields[i];
+            const auto* o = reinterpret_cast<const uint8_t*>(&ours)   + f.offset;
+            const auto* t = reinterpret_cast<const uint8_t*>(&theirs) + f.offset;
+            if (f.isBool) {
+                if (*o != *t) {
+                    equal = false;
+                    std::snprintf(oursDesc,   sizeof(oursDesc),   "%s=%d", f.key, (int)*o);
+                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s=%d", f.key, (int)*t);
+                }
+            } else {
+                const int32_t ov = *reinterpret_cast<const int32_t*>(o);
+                const int32_t tv = *reinterpret_cast<const int32_t*>(t);
+                if (ov != tv) {
+                    equal = false;
+                    std::snprintf(oursDesc,   sizeof(oursDesc),   "%s=%d", f.key, (int)ov);
+                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s=%d", f.key, (int)tv);
+                }
+            }
+        }
+        if (equal) {
+            // EFFECTIVENESS CONTROL, printed on the PASSING path on purpose
+            // (reference_probe_needs_an_effectiveness_control.md). `found` is
+            // how many of the 18 keys the registry actually held. At found=0
+            // every field on both sides is still the ctor default and the
+            // comparison is VACUOUS — it would agree just as loudly with a
+            // body that did nothing at all. Read the number, not the verdict.
+            std::snprintf(oursDesc,   sizeof(oursDesc),
+                          "18 fields identical, found=%d/18%s", found,
+                          found == 0 ? " VACUOUS: registry held no Video keys" : "");
+            std::snprintf(theirsDesc, sizeof(theirsDesc),
+                          "18 fields identical, found=%d/18", found);
+        }
+        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
+    }
+
+    return true;   // 0x1800f6ce4: MOV AL,0x1 — unconditional
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 int RtVideoDeviceRegister() {
@@ -750,6 +896,15 @@ int RtVideoDeviceRegister() {
                           (void*)&Video_RenderStateData_Dtor); ++n;
     RegisterRuntimeExport("?Save@Configuration@Video@@QEAAXXZ",
                           (void*)&Video_Configuration_Save); ++n;
+
+    // Own kill switch, narrower than the file's BANISHED_RT_VIDDEVICE: this is
+    // the one function here that Engine::Startup calls on the BOOT path
+    // (engine_lifecycle.cpp:653), so it must be switchable without taking the
+    // other nine registrations down with it.
+    if (RtWaveEnabled("BANISHED_RT_VIDCONFIG")) {
+        RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
+                              (void*)&Video_Configuration_Startup); ++n;
+    }
 
     // Address door for the one call site that has an address FALLBACK:
     // dx11/src/renderstatedata.cpp:317-322. Not counted again — it is the same
