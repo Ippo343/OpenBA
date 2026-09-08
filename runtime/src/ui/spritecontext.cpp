@@ -621,5 +621,17 @@ int RtUiSpriteContextRegister() {
     RegisterRuntimeAddr(0x18011c890, (void*)&RtUi_SpriteContext_AddSpriteDraw); ++n;
     RegisterRuntimeAddr(0x18011c6a0, (void*)&RtUi_SpriteContext_FlushDeferred); ++n;
 
+    // The driven probe (runtime/src/ui/spritecontext_probe.cpp). Must run AFTER
+    // the registrations above, because it drives `AddLine`, which reaches
+    // `AddSpriteDraw` through `ResolveAddr` — with the port unregistered that
+    // would silently exercise the DLL's body on both sides and compare it
+    // against itself.
+    //
+    // It is a no-op unless BOTH `BANISHED_RT_DIFF` and
+    // `BANISHED_RT_SPRITECTX_PROBE` are set, and it prints its own contribution
+    // to every `calls=` counter so a reader can subtract it.
+    extern void RtUiSpriteContextProbe();
+    RtUiSpriteContextProbe();
+
     return n;
 }
