@@ -1,0 +1,18 @@
+CELL B -- BANISHED_RT_RESPATH=0. The A/B baseline: no [ResPath] line at all.
+run tag: EV_off   (lane RRES, 2026-09-08)
+
+---- [ResPath] lines, stdout -------------------------------------
+(none)
+
+---- [ResPath] / [RtDetour] lines, stderr ------------------------
+(none)
+
+---- the two RtDiff sites ----------------------------------------
+(none)
+
+---- Object namespace registration count -------------------------
+39:[RtPort] Object: 40 exports registered
+
+---- run outcome -------------------------------------------------
+C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/089e6eb4-d9a8-48f5-98e7-171093dfa7c0/scratchpad/EV_off_error.log:470:[GUL::Load] EXIT — world built: game=000001853a9db4e0 ui=000001853a9daac8 entityList=000001853a9da9d8 scene=000001853a9db8f0 sun=000001853a815e80
+crash log bytes: 0

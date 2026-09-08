@@ -1,0 +1,30 @@
+CELL A -- port live through the detour, RT_DIFF on, self-test armed.
+run tag: EV_diff   (lane RRES, 2026-09-08)
+
+---- [ResPath] lines, stdout -------------------------------------
+39:[ResPath] registered 4 doors + 4 addresses (detour=ON negctl=0)
+515:[ResPath] SELFTEST phase2 (synthetic path stack via retail PushPath): RAN, 63 cases, depth 0 -> 1 -> 0 | pushed "Dialog\StringTable.rsc:gameKeys" | packfile hits phase1/phase2 = 10/12
+516:[ResPath] SELFTEST branch coverage (script only): calls=161 earlyOutEmpty=0 pkgHit=22 ident def/present=63/98 fname stack/present=56/105 attrProbe=139 retry=139 ext nodot=56 emptyAfterDot=0 nodata=28 colonTrim=42
+517:[ResPath] SELFTEST -- 23 real comparisons, 0 mismatches
+518:[ResPath]   negative controls: 4 of 6 FIRED (ctl1 candidate '_'->'-': 0, ctl2 answer '.'->'!': 23, ctl3 found-branch dir/stackDir swap: 0, ctl4 drop ':'+ident: 15, ctl5 answer dir/file swap: 17, ctl6 default ident 'resources': 6)
+519:[ResPath]   *** 2 control(s) did NOT fire, and they are NOT reshaped until they do. What is MEASURED: phase 2 reached the found branch 12 times, so that branch DOES execute -- what is not demonstrated is an input on which either perturbation changes the OUTPUT. ctl3 swaps dir with stackDir, and every phase-2 case that reaches the found branch has an EMPTY dir (the query is ":<ident>"), so the swap is a no-op by construction. ctl1 perturbs the candidate, which can only change the answer where the found and not-found spellings differ. Neither is an effective control here: the code they touch is TRANSCRIBED, not differentially verified by this script. The 22.6k live comparisons cover it; this script does not.
+520:[ResPath]   VERDICT: PASS on the reachable controls; see the line above for the rest
+2543:[ResPath] counters: expand=22595 empty=0 | ident def/present=98/22497 | fname stack/present=0/22595 | stack empty/nonempty=22595/0
+2544:[ResPath] counters: hit pkg=22592 attrProbe/hit=3/0 retry=0 notFound=3 | tail ident/none=22595/0
+2545:[ResPath] counters: ext calls=22595 ok=22595 nodata=0 nodot=0 emptyAfterDot=0 colonTrim=22497
+
+---- [ResPath] / [RtDetour] lines, stderr ------------------------
+7:[RtDetour] Object::ExternalFactory::ExpandRelativePath[port]: 00007ffcafb8d360 -> 00007ff628505266 (trampoline 000002e6eb6f0000, 16 bytes displaced)
+8:[ResPath] DETOUR INSTALLED at 0x1800bd360 -- every retail caller of ExpandRelativePath now runs the port
+
+---- the two RtDiff sites ----------------------------------------
+1351:[RtDiff]   Object::ExternalFactory::ExpandRelativePath      calls=22595      worked=22595      divergences=0
+1352:[RtDiff]   System::Filename::GetPathExtension               calls=22595      worked=22595      divergences=0
+
+---- Object namespace registration count -------------------------
+40:[RtPort] Object: 44 exports registered
+
+---- run outcome -------------------------------------------------
+C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/089e6eb4-d9a8-48f5-98e7-171093dfa7c0/scratchpad/EV_diff_error.log:897:[GUL::Load] EXIT — world built: game=000002e6816ca300 ui=000002e6816c98e8 entityList=000002e6816c97f8 scene=000002e6816ca710 sun=000002e6815f1d18
+C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/089e6eb4-d9a8-48f5-98e7-171093dfa7c0/scratchpad/EV_diff_error.log:1659:[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
+crash log bytes: 0
