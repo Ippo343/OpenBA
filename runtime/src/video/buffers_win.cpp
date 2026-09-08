@@ -85,3 +85,55 @@ void RtVideoDeviceUnlock(void** deviceSingleton) {
         *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = 0xFFFFFFFFu;
     LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
 }
+
+// ============================================================================
+// The EXPORTED Video::Device::Lock / ::Unlock  (Wave 9 lane VID)
+//
+// Retail 0x18000ca90 / 0x18000cac0. These are NOT the two functions above with
+// a different spelling, and the difference is worth stating because getting it
+// wrong is invisible:
+//
+//   * the two above are the INLINE COPIES the PlatformConstruct/PlatformDestruct
+//     bodies carry, and they read `Device::_singleton` themselves;
+//   * these two are the exported members, and they operate on the `this` the
+//     caller passed. dx11/ calls them by name on a Device it already holds.
+//
+// The store ORDER also differs, and is preserved rather than normalised:
+//
+//   0x18000ca99  ADD RCX,0x60
+//   0x18000ca9d  CALL EnterCriticalSection
+//   0x18000caa3  CALL GetCurrentThreadId
+//   0x18000caa9  INC dword ptr [RBX+0x8c]        <-- depth FIRST
+//   0x18000caaf  MOV dword ptr [RBX+0x88],EAX    <-- then the owner id
+//
+// while the inline copy stores the owner first. Neither order is observable
+// from a single thread; both are transcribed as written, because "the compiler
+// would have reordered it anyway" is not a licence to reorder it for retail.
+//
+// Unlock takes no singleton re-read at all — RCX IS the object:
+//
+//   0x18000cac0  DEC dword ptr [RCX+0x8c]
+//   0x18000cac6  JNZ .leave
+//   0x18000cac8  MOV dword ptr [RCX+0x88],0xffffffff
+//   0x18000cad2  ADD RCX,0x60
+//   0x18000cad6  JMP LeaveCriticalSection
+//
+// Note the predicate: retail tests the ZF from the DEC (depth != 0), which is
+// the same as comparing the decremented value with zero. Reproduced as such.
+// ============================================================================
+void RtVideoDeviceLockThis(void* device) {
+    uint8_t* d = static_cast<uint8_t*>(device);
+    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
+    DWORD tid = GetCurrentThreadId();
+    *reinterpret_cast<int32_t*>(d + kDeviceDepthOffset) += 1;
+    *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = tid;
+}
+
+void RtVideoDeviceUnlockThis(void* device) {
+    uint8_t* d = static_cast<uint8_t*>(device);
+    int32_t* depth = reinterpret_cast<int32_t*>(d + kDeviceDepthOffset);
+    *depth -= 1;
+    if (*depth == 0)
+        *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = 0xFFFFFFFFu;
+    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
+}

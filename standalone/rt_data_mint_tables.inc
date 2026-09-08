@@ -1464,7 +1464,7 @@ static RtMintTypeInfo kMintTypeInfos[] = {
 // ---- Plain storage: the singleton pointers plus the ten other exported
 // .data statics. All are BSS in the DLL — written only at runtime — so
 // there is nothing to copy: minting one means OWNING the bytes.
-alignas(16) static unsigned char kStorageBytes[3056];  // one block, zero-initialised
+alignas(16) static unsigned char kStorageBytes[3072];  // one block, zero-initialised
 static const unsigned char kInit10[] = { 0x8d, 0xed, 0xb5, 0xa0, 0xf7, 0xc6, 0xb0, 0x3e };  // Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)
 static const unsigned char kInit31[] = { 0x40, 0x42, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00 };  // Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)
 static RtMintStorage kMintStorage[] = {
@@ -1473,6 +1473,11 @@ static RtMintStorage kMintStorage[] = {
     { "?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA", 0x1801fe788ull, 8, &kStorageBytes[32], "IndexBuffer* -- head of the live-index-buffer list", nullptr, nullptr, 0 },
     { "?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA", 0x1801fe798ull, 8, &kStorageBytes[48], "VertexBuffer* -- head of the live-vertex-buffer list", nullptr, nullptr, 0 },
     { "?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", 0x1801fe780ull, 8, &kStorageBytes[64], "ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct)", nullptr, nullptr, 0 },
+    // Wave 9 lane VID. WAVE6_LANE_B.md 2.4 called this head "a DLL-internal
+    // variable with no export"; it is exported (ord 4787), and it was the one
+    // sibling head this table lacked. Storage is the new 16-byte slot at the
+    // end of kStorageBytes, which grew 3056 -> 3072 for it.
+    { "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", 0x1801fe790ull, 8, &kStorageBytes[3056], "RenderBuffer* -- head of the live-render-buffer list (Video::RenderBuffer::{Recreate,Release}Dynamic)", nullptr, nullptr, 0 },
     { "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", 0x1801fc6e0ull, 8, &kStorageBytes[80], "BaseTypeInfo* — head of the reflection chain", "0x1801477b0 (+103 more)", nullptr, 0 },
     { "?_frameIndex@ParticleInstance@Graphics@@1HA", 0x1801fe77cull, 4, &kStorageBytes[96], "int", nullptr, nullptr, 0 },
     { "?_loader@LoaderLoop@Engine@@1VLoader@2@A", 0x1801fe7b8ull, 56, &kStorageBytes[112], "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()", "0x180148fe0", nullptr, 0 },

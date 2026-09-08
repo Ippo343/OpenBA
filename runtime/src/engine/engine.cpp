@@ -73,10 +73,20 @@
 // calls them. So a port of either member that registered the export and
 // stopped there would be dead code on the only path that reaches it, while
 // the diff oracle reported `calls=0 divergences=0` — exactly the failure
-// reference_uncalled_port_is_not_verified.md describes. Both are held back;
-// whoever ports them must install the detour, and lane B's ported ctor keeps
+// reference_uncalled_port_is_not_verified.md describes. Both are still held
+// back, now for a bigger reason: neither body's callees are ported, so a port
+// of either relocates ~17 nulls instead of removing any (sized in
+// docs/runtime_port/WAVE9_LANE_VID.md).
+//
+// ⚠️ THE REST OF THIS PARAGRAPH USED TO READ "lane B's ported ctor keeps
 // installing the DLL's OWN thunk addresses so that path stays entirely inside
-// the DLL until then.
+// the DLL until then." THAT WAS TRUE AND IT WAS A CUTOVER DEFECT. Wave 9 lane
+// VID changed it: the ctor now installs OUR OWN thunks
+// (`RtEngine_MainLoop_OnVideoError_static` / `…OnVideoRestart_static` below),
+// which reach the member through the port registry. The "needs a detour"
+// hold-back reason cannot survive cutover — there is no DLL body left to
+// detour past — but what replaces it is not "nothing", it is "the two stores
+// are null", and no gate row covered that because no NAME is involved.
 //
 // ---------------------------------------------------------------------------
 // WHY THE FOUR `Engine::Engine` MEMBERS ARE HELD BACK
@@ -322,6 +332,88 @@ extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) 
 // the four terms, and per
 // reference_shadow_predicate_must_name_its_failing_term.md the message below
 // names all four so a divergence says which one failed.
+// ============================================================================
+// The two static video callbacks — OUR equivalents of the shipped thunks
+// 0x1800dcd20 (`OnVideoError_static`) and 0x1800dc5c0 (`OnVideoRestart_static`),
+// Wave 9 lane VID.
+//
+// Each shipped thunk is two instructions:
+//
+//     MOV RCX, qword ptr [0x1801fe750]     ; MainLoop::_singleton
+//     JMP  <the member>
+//
+// and each is the ONLY thing in the process that ever calls its member
+// (get_xrefs_to on both members returns the export table, .pdata and this ctor,
+// nothing else). They are installed into `Video::Device` at +0x50 / +0x58 and
+// invoked by `dx11/src/contextdata.cpp`'s Present-failure path.
+//
+// WHY THIS IS A THUNK AND NOT A PORT OF THE MEMBERS. `MainLoop::OnVideoError`
+// (0x1800dc5e0) is ~250 instructions that build a `Collection::Array<int>` of
+// ten resource TYPE IDS read from ten unexported `.data` globals
+// (0x1801fa548, 0x1801fa698, 0x1801fa580, 0x1801fa5f0, 0x1801fa660,
+// 0x1801fa5b8, 0x1801f99b0, 0x1801fa708, 0x1801f9a90, 0x1801f99e8), walk the
+// `ExternalFactory` AVL tree once per id (0x1800be9d0), release each object
+// through a vtable slot, and destroy the `Video::Context`. Not one of its seven
+// internal callees is ported. `OnVideoRestart` (0x1800dc3b0) opens by calling
+// `CreateVideoContext`, which is itself unported and unexported. Porting either
+// would relocate 17 nulls rather than remove any, which is the shape lane Z's
+// triage rule exists to refuse; both are DECLINED with that evidence, and the
+// full sizing is in docs/runtime_port/WAVE9_LANE_VID.md.
+//
+// WHAT THESE THUNKS ARE WORTH ANYWAY. Before them, the only thing keeping the
+// device-lost path alive was the DLL's own code being reachable by address. Now
+// the pointer stored in the Device is ours, and it resolves the member through
+// the PORT REGISTRY every time it is missing — so the day someone ports
+// `?OnVideoError@MainLoop@Engine@@QEAAXXZ` the callback starts using it with no
+// edit here, and until then a DLL-less run prints ONE line naming the exact
+// missing member instead of silently skipping the notification.
+//
+// DEVIATION FROM RETAIL, STATED PLAINLY. Retail's thunk cannot fail: the member
+// is in the same image. Ours can, and when it does it logs and returns instead
+// of jumping to zero. That is not a null check papering over a faithful crash
+// (CLAUDE.md) — there is no upstream null to find, because our standalone
+// genuinely differs from retail here: the member does not exist in our process
+// at all once the DLL is gone.
+// ============================================================================
+namespace {
+
+using VideoCallbackFn = void (*)(void*);
+
+void CallVideoCallback(const char* mangled, VideoCallbackFn fn, const char* what,
+                       bool* once) {
+    void* singleton = *MainLoopSingletonSlot();   // MOV RCX,[0x1801fe750]
+    if (fn == nullptr) {
+        if (!*once) {
+            *once = true;
+            std::fprintf(stderr,
+                "[RtPort] Video::Device %s callback fired but %s is not "
+                "available (no port, and the Runtime DLL is absent). The "
+                "device-lost sweep ran; the engine-side Video::Context "
+                "resources were NOT rebuilt.\n", what, mangled);
+        }
+        return;
+    }
+    fn(singleton);                                // JMP <member>
+}
+
+}  // namespace
+
+extern "C" void RtEngine_MainLoop_OnVideoError_static() {
+    static bool warned = false;
+    CallVideoCallback("?OnVideoError@MainLoop@Engine@@QEAAXXZ",
+                      RT_EXPORT_ONCE(VideoCallbackFn,
+                                     "?OnVideoError@MainLoop@Engine@@QEAAXXZ"),
+                      "device-lost", &warned);
+}
+
+extern "C" void RtEngine_MainLoop_OnVideoRestart_static() {
+    static bool warned = false;
+    CallVideoCallback("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ",
+                      RT_EXPORT_ONCE(VideoCallbackFn,
+                                     "?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"),
+                      "device-restored", &warned);
+}
+
 extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     RT_DIFF_BEGIN("Engine::MainLoop::MainLoop");
 
@@ -359,14 +451,64 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     // Video::Device::SetVideoErrorFuncs(device, &OnVideoError_static,
     //                                   &OnVideoRestart_static), inlined by
     // retail into two stores.
+    //
+    // THESE STORE OUR OWN THUNKS, NOT THE DLL'S — Wave 9 lane VID.
+    // This line used to read
+    //     ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoError_static)
+    // and that was a live cutover defect. `ResolveAddr(Module::Runtime, …)`
+    // returns 0 when the module handle is null and nothing has registered the
+    // address (standalone/resolve_standalone.cpp:484), so with the DLL absent
+    // this ctor stored TWO NULLS into the live `Video::Device` at +0x50/+0x58 —
+    // an unported function reached by ADDRESS, which no residue list, no
+    // rawdoor row and no export-name audit reports, because there is no name
+    // involved at any point.
+    //
+    // What the nulls would have cost, measured rather than assumed:
+    // `dx11/src/contextdata.cpp:610-613` reads both slots and calls each
+    // `if (onLost)` / `if (onRestored)` — so the immediate consequence is a
+    // SILENTLY SKIPPED notification, not the EXEC-of-0 it looks like. That is
+    // worse in one respect and better in another: the device-lost path would
+    // release every GPU companion (`Device::ReleaseDynamic`, now ported next to
+    // this file) and never tell `Engine::MainLoop` to rebuild the engine-side
+    // `Video::Context` resource list, leaving the renderer holding stale
+    // handles with nothing in the log.
+    //
+    // The fix installs functions that exist unconditionally. Each is our own
+    // two-line equivalent of the shipped static thunk (0x1800dcd20 /
+    // 0x1800dc5c0 — `MOV RCX,[MainLoop::_singleton]; JMP <member>`), and each
+    // reaches the member through the PORT REGISTRY, so a later port of
+    // `?OnVideoError@MainLoop@Engine@@QEAAXXZ` is picked up with no further
+    // change here. See the two bodies above.
     uint8_t* device = static_cast<uint8_t*>(*VideoDeviceSingletonSlot());
     *reinterpret_cast<void**>(device + MainLoopAddr::DeviceErrorFuncSlot) =
-        reinterpret_cast<void*>(ResolveAddr(Module::Runtime,
-                                            MainLoopAddr::OnVideoError_static));
+        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoError_static);
     *reinterpret_cast<void**>(device + MainLoopAddr::DeviceRestartFuncSlot) =
-        reinterpret_cast<void*>(ResolveAddr(Module::Runtime,
-                                            MainLoopAddr::OnVideoRestart_static));
+        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoRestart_static);
 
+    // ⛔ KNOWN, UNFIXED CUTOVER NULL — Wave 9 lane VID, NOT this lane's row.
+    //
+    // `Engine::MainLoop::CreateVideoContext` (0x1800dd500) is unported and
+    // UNEXPORTED, so this `ResolveAddr` returns 0 with the DLL absent and the
+    // call below is an EXEC-of-0 on the BOOT path — earlier and harder than the
+    // two video-callback stores repaired above, and reported by no name-based
+    // instrument for the same reason they were not: there is no name here.
+    //
+    // Deliberately left as a faithful call rather than guarded. A guard would
+    // leave `MainLoop::_context` null and move the fault to whichever of the
+    // ~90 `Video::Context` call sites touches it first, which is strictly
+    // harder to diagnose than a VEH `EXEC-of-0` whose return address names this
+    // line. The fix is the port, not a check.
+    //
+    // The port is small and fully reversed: `if (_context) { ~Context; free; }`,
+    // take the allocator lock (`MemoryAllocator::_singleton + 0x640`), allocate
+    // 0x2168 bytes aligned 8 through 0x1800c6e60, drop the lock, and on success
+    // run `??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z`
+    // (0x1800f1820) with (Device::_singleton, 0x800000, 0x400000, 0x100000,
+    // nullptr). What blocks it is the two `Video::Context` lifecycle holdbacks
+    // in runtime/src/video/context.cpp §"WHAT STAYS IN THE DLL" — the ctor
+    // allocates five sub-objects the dtor later frees — plus the allocator's
+    // own NO-GO (WAVE2_ALLOCATOR.md). It needs the lane that owns those, not a
+    // bolt-on here.
     reinterpret_cast<VoidThisFn>(
         ResolveAddr(Module::Runtime, MainLoopAddr::CreateVideoContext))(self);
 
