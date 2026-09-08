@@ -21,6 +21,12 @@ every row below is dispositioned against that condition, not against which door 
 **Nothing is defaulted.** Where a row is not closed, the reason is a fact that was checked in
 this session, not an estimate of effort.
 
+**ALL FIVE CELLS RUN 2026-09-08 — §13.** Probe **PASSES** (six sites, `calls=1 divergences=0`),
+its **negative control FIRES** (all six at `divergences=1`, nothing else red), the probe is proved
+**not to perturb the live list**, and both new stream constructors are verified on the **save and
+the load** path. §9 findings **1 and 2 are CLOSED**. Every one of this lane's 11 ports and 1 door
+conversion now has an execution against the shipped body.
+
 **EXECUTED 2026-09-08 — §9.** Four cells, **0 divergences in 0 sites** in every one, no crash.
 **8 of the 9 ports ran**; the ninth pair has no caller anywhere and is named as unverified rather
 than reported clean. Two findings the runs produced that source alone could not: the list branch
@@ -394,8 +400,9 @@ Two specific things to watch that a clean summary would hide:
   lock and skips a null head) and drives a synthetic scratch node through construct-then-destruct
   on an empty list, for all three classes, through a shared per-class descriptor. It reaches
   `first-in-list` and `list-emptied`, and it is the only execution the two zero-caller ports get.
-  **Still needs the three runs in §10** — the probe is written and compiles, and an unrun probe
-  proves exactly as much as an unrun port.
+  **RUN AND PASSED — §13.** Cells A/B/C: six probe sites `calls=1 divergences=0`; the negative
+  control puts all six at `divergences=1` and nothing else; with the probe off the live branch
+  counters return to exactly 6/4/4 and 4 and the site SET differs by precisely those six.
 * **Row 19/20's real content is "port `System::WideString`"** — six exported members, none
   ported, none minted. Filed as a lane, not as two rows.
 * **`?UpdateSave` and `?UpdateDelete`** — two more arms of rows 23-25's switch, in no verdict
@@ -485,7 +492,7 @@ and is the single line where the Index/Vertex pair differs from ImageBuffer in t
 **Do not read their absence as agreement.** Per
 `reference_uncalled_port_is_not_verified.md` they are registered, counted, and unproved.
 
-> **CLOSED BY §10, pending a run.** The empty-list probe calls `PlatformDestructBody` through a
+> **CLOSED — §10 built it, §13 ran it (`calls=1 divergences=0`, control fires).** The probe calls `PlatformDestructBody` through a
 > shared per-class descriptor for all three classes, so these two now execute against the shipped
 > body with the same argument tuple their registered ports use — and their `nullAfterRelease =
 > true` asymmetry is exercised there and nowhere else in the process.
@@ -816,3 +823,139 @@ Handed over with the diagnosis and the exact line list.
 
 This is the hazard WAVE9.md's own bypass row states — *"re-run after every LANDING, not after
 every edit"* — landing on the gate rows themselves.
+
+---
+
+## 13. ALL FIVE CELLS RUN — the probe passes, its control fires, and the two ctors are verified
+
+Built from tip `766da7c` (lane X's 14 singleton ctors, its probe, and `BANISHED_RT_NO_DLL` all
+included). **Exe stamped 2026-09-08 03:14:04**, deployed 03:14:10; a `find` over
+`runtime/ code/ standalone/ engine/ dx11/` for anything newer than the exe returned **nothing**.
+
+**Self-evidencing line** — only a build containing this lane's round-2 work can emit it:
+
+```
+[RtPort]   IO::CompressedMemoryStream: 10 exports registered
+```
+
+That counter was 6 before lane W, 8 after round 1 (`Open@MemoryStream` + `~MemoryStream`), and
+**10** now (`??0MemoryStream` + `??0CompressedStream`).
+
+### The five cells, read from the raw log
+
+| Cell | Env | Sites | Calls | Divergences | crash.log |
+|---|---|---|---|---|---|
+| **A** | `RT_DIFF=1 AUTOSTART=1` + pause-menu Quit | 350 | 32,291,098 | **0 in 0 sites** | 0 bytes |
+| **B** | A + `BANISHED_RT_EMPTYLIST_PROBE=neg` | 350 | 32,117,578 | **6 in 6 sites** ← the control | 0 bytes |
+| **C** | A + `BANISHED_RT_EMPTYLIST_PROBE=0` | 344 | 31,889,910 | **0 in 0 sites** | 0 bytes |
+| **D** | `RT_DIFF=1 AUTOSTART=1 SAVE_TEST=900` | 374 | 38,561,750 | **0 in 0 sites** | 0 bytes |
+| **E** | `RT_DIFF=1 AUTOLOAD=Auto` | 365 | 16,519,268 | **0 in 0 sites** | 0 bytes |
+
+No cell hit the known teardown fault; all five produced a complete `[RtDiff]` report.
+`[RtResolveEarly]` reported **3** in both A and E — the baseline lane X restored it to, so nothing
+on this lane's path caches a data resolve early. The three named are
+`addr 0x1800c6e60` (`Allocate`), `addr 0x1800c6c00` (`Free`) and `?_singleton@Factory@Object@@`,
+all flagged `benign` and 0 of 3 registered.
+
+### A — the branch cutover takes FIRST is now compared against retail
+
+All six probe sites at **`calls=1 divergences=0`**:
+
+```
+Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]                        calls=1  divergences=0
+Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]                          calls=1  divergences=0
+Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]                        calls=1  divergences=0
+Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, …ONLY execution this port gets]  calls=1  divergences=0
+Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]                       calls=1  divergences=0
+Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, …ONLY execution this port gets] calls=1  divergences=0
+```
+
+**§9 finding 2 is CLOSED.** The first-in-list and list-emptied branches — `calls=0` in every
+harness cell because the DLL's own constructors never reach our ports — now have a direct
+comparison against the shipped bodies, on an empty list, for all three classes.
+
+**§9 finding 1 is CLOSED.** `Video::{Index,Vertex}Buffer::PlatformDestruct` had zero callers
+anywhere in the process. The probe is, as its site name says, the only execution either port gets
+— and it runs them through the shared `BufferClass` descriptor their registered ports use, so the
+composition is exercised rather than argued for.
+
+The nine live sites were unchanged: ImageBuffer construct 6 / destruct 4, Index 4, Vertex 4,
+`FindFree3DEffect` 4, `Geometry::SetBounds` 29 (30 in §9 — `SetBounds` is driven by the number of
+`EdgeMeshInstance`s the run builds and is not a fixed quantity).
+
+### B — the control fires, so A means something
+
+All six probe sites at **`divergences=1`**, and **no non-probe site diverged**. The +8 word
+perturbation is visible in the logged values, on both halves:
+
+```
+DIVERGENCE …PlatformConstruct[PROBE:first-in-list]  ours=head=…3b0 next=…3b8 prev=…3b0  theirs=head=…3b0 next=…3b0 prev=…3b0
+DIVERGENCE …PlatformDestruct[PROBE:list-emptied]    ours=head=0 next=0x8 prev=0        theirs=head=0 next=0 prev=0
+```
+
+This is the cell that makes A a result rather than a green line over nothing — the standard this
+lane set for itself after its own branch counter read inverted for a whole run (§9).
+
+It also incidentally confirms the transcription: retail's empty-list construct produces
+`head == node && node->next == node && node->prev == node`, a self-referential single-element
+circular list, which is what `ListLink`'s `FirstInList` branch was written to produce.
+
+### C — the probe does not touch the live list
+
+Probe disabled: **zero `[PROBE:…]` sites**, and the live branch counters back at **exactly**
+`ImageBuffer 6 / IndexBuffer 4 / VertexBuffer 4` appended and `ImageBuffer 4` unlinked — identical
+to A and to §9's original measurement.
+
+Compared as a **SET, not a count**, per the standing note that the site count is nondeterministic
+±2 on this harness:
+
+```
+set(A) \ set(C) = exactly the 6 [PROBE:…] sites
+set(C) \ set(A) = empty
+```
+
+350 − 344 = 6, and the six are named. So the borrow-the-head design costs exactly six sites and
+perturbs nothing — which is the answer to "did you corrupt the live list the DLL walks".
+
+### D and E — the two new constructors
+
+| | cell D (SAVE) | cell E (LOAD) |
+|---|---|---|
+| `IO::CompressedStream::CompressedStream` | **calls=1 divergences=0** | **calls=1 divergences=0** |
+| `IO::MemoryStream::MemoryStream` | **calls=1 divergences=0** | **calls=1 divergences=0** |
+
+Both reached on both paths, byte-compared against the shipped constructors built into a scratch
+buffer, with the gap masks §11 derived. The rest of the family came with them and stayed green:
+`CompressedMemoryStream` ctor/Create/Close/GetMemoryStream/dtor all `calls=1`,
+`MemoryStream::Open` `calls=1` (E), `~MemoryStream` `calls=1` (D and E) with the
+`live:owned buffer freed` and `live:encoding freed` branches taken and
+`live:no owned buffer` at 0.
+
+The save cell wrote a fresh `Auto.sav` and the load cell loaded **that** one, so the mods-off load
+hazard cannot be mistaken for a port defect.
+
+### What is still true after all this
+
+**§11's conversion finding is unchanged and this run does not soften it.** The two ctors are
+verified against retail *while the DLL is present*. At cutover the object they build carries a
+minted vtable whose slots 3 and 4 — `kCreateReader` / `kCreateWriter`, `FUN_1800a8120` and
+`FUN_1800a8080` — are still named traps, and every save and every load dispatches through them.
+Five green cells here do not change that; they establish that the constructors are right, not that
+a save works after cutover.
+
+### One thing this lane did not do, named
+
+Every lane-W site prints **`worked=?`** in the new did-work column: none declares
+`RT_DIFF_WORK(...)`. The information exists — that is exactly what the `[branch:…]` sites carry —
+but it is not in the column the summary aggregates, so lane W contributes 0 of the 13 declaring
+sites and 12 of the 337 undeclared. Mechanical to fix (one line per port next to the early-out)
+and deliberately **not** done between measurements. Recommended follow-up, together with a
+`BANISHED_RT_DIFF_INVERT=1` pass: that switch runs the DLL's body first on the scratch, and the
+double-managed-allocation failure it is built to catch is precisely the shape of this lane's
+`~MemoryStream` A/B and the two ctor scratch oracles.
+
+### Artifacts
+
+`docs/runtime_port/wave9_laneW_cellA_probe.txt` (cell A) and
+`docs/runtime_port/wave9_laneW_cellB_negcontrol.txt` (cell B, the control) are kept in full,
+because a probe result and the control that licenses it are worth nothing apart.
