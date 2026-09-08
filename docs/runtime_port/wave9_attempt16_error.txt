@@ -1,0 +1,63 @@
+[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED outcome and its location is the result.  See docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md
+[AllocLock] could not resolve Allocate (0x1800c6e60)
+[AllocLock] could not resolve Free (0x1800c6c00)
+[RtMathTransform] registered 30 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAllocSwap] cutover arm: no detour installed (no DLL, so no DLL-internal callers to redirect); ?Allocate@/?Free@ will be the composed stubs, which take the allocator CS at self+0x640.
+[RtUnresolved] ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ  (asked by 00007ff73678160e)
+[ElemTid] registered 21/21 element type-id slots
+[RtUnresolved] ?OnClosed@DialogInstance@UI@@UEAAXXZ  (asked by 00007ff73653a0dc)
+[RtUnresolved] ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z  (asked by 00007ff73674bc97)
+[RtUnresolved] ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z  (asked by 00007ff73674bcbb)
+[RtUnresolved] ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z  (asked by 00007ff73674bcdf)
+[RtUnresolved] ?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z  (asked by 00007ff73674bd4b)
+[RtUnresolved] ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z  (asked by 00007ff73674bdb7)
+[RtUnresolved] ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z  (asked by 00007ff73674c533)
+[RtUnresolved] ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z  (asked by 00007ff73674c9eb)
+[RtUnresolved] ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z  (asked by 00007ff73669e4f5)
+[RtUnresolved] ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z  (asked by 00007ff73669e5a5)
+[RtUnresolved] ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z  (asked by 00007ff73669e5bb)
+[RtUnresolved] ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z  (asked by 00007ff73669e5d1)
+[RtUnresolved] ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z  (asked by 00007ff73669e7e0)
+[RtUnresolved] ?Clean@ExternalFactory@Object@@QEAAXXZ  (asked by 00007ff73669e80c)
+[RtUnresolved] ?LoadResources@UpdateLoop@Engine@@QEAAXXZ  (asked by 00007ff73669e894)
+[RtUnresolved] ??1DialogInstance@UI@@UEAA@XZ  (asked by 00007ff73669ea2e)
+[RtUnresolved] ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z  (asked by 00007ff73669ec3b)
+[RtUnresolved] ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z  (asked by 00007ff73669eca9)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[RtUnresolved] ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z  (asked by 00007ff73669fb87)
+[RtUnresolved] ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z  (asked by 00007ff73669fbf8)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff7366f913a body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529c8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151880
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[RtUnresolved] ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z  (asked by 00007ff7366a2ab9)
+[RtUnresolved] ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z  (asked by 00007ff7366a3e3d)
+[RtUnresolved] ?WriteSettings@Persistence@IO@@QEBAXXZ  (asked by 00007ff7366a3fb6)
+[RtUnresolved] ?OnVideoError@MainLoop@Engine@@QEAAXXZ  (asked by 00007ff7366a407c)
+[RtUnresolved] ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ  (asked by 00007ff7366a4092)
+[RtUnresolved] ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z  (asked by 00007ff7366a41ef)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[VideoInterface] could not resolve Video::Device::InitializeInterfaces
+[FNHook] could not resolve ExternalFactory::FindOrLoad
+[FNHook] could not resolve External::Load
+[ResLoad] serialized: FindOrLoad=0000000000000000 External::Load=0000000000000000 (recursive CS)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[RtUnresolved] ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z  (asked by 00007ff7366a8405)
+[RtResolve] MISS "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z" -> NULL. Nothing has registered it and the shipped DLL does not export it (or is absent). The null is NOT cached; the next call will retry. If this is cutover, this symbol still needs minting.
+[REDZONE-DUMP] no allocator singleton

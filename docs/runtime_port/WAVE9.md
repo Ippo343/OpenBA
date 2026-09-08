@@ -1680,6 +1680,33 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### Attempt 16: NO MOVEMENT, and that is the correct result
+
+Between attempts 15 and 16 the tree gained lane PKG2's rungs 2 and 3 (the
+`CompressedStream` read path; `OpenFile`/`ReadFile`), lane VID2's `PlatformStartup`
+cluster, and the shadowed-registration fix. Coverage 72.6% → **73.4%**.
+
+The boot dies in **exactly the same place**:
+
+```
+attempt 15   RtIo_FileSystem_LoadPackages +0x1BA   ?ReadPackfile@ -> NULL
+attempt 16   RtIo_FileSystem_LoadPackages +0x1BA   ?ReadPackfile@ -> NULL
+```
+
+Byte-identical offset, same symbol. **This is what a correct decomposition looks like
+from the outside, and it must not be read as a stall.** Rungs 2 and 3 deliberately built
+the layers *beneath* `ReadPackfile` — the codec, the windowed stream, the file open and
+read. `ReadPackfile` itself is rung 4 and is not ported yet, so the ladder cannot advance
+until it is.
+
+What the unchanged fault site DOES measure is that none of that work broke anything on
+the boot path, which is not free information: three lanes' worth of ports landed between
+the two runs and the process reached the identical instruction.
+
+**Record a no-movement attempt as a result.** The temptation is to skip publishing it, or
+to go looking for a different rung to make the ladder move — both would be worse than the
+honest reading, and the second would abandon a decomposition that is working.
+
 ### THE EFFECTIVENESS CONTROL WAS WRONG TWICE, AND BOTH TIMES IT SAID PASS
 
 Lane PKG2's rung 2 (`CompressedStream` read path). The project already knows a probe
