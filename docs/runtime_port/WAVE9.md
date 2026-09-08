@@ -2407,3 +2407,93 @@ moved `unsatisfied` by +7 and closed nothing.
 **Deliberately NOT bundled into the video lane.** `main.cpp` is contended, and a
 change to first-chance crash handling deserves its own before/after rather than
 riding in on a video port. Open item.
+
+---
+
+## PARKED 2026-09-08 — state of the wave, and what to pick up first
+
+Integration branch `wave/upgrade-path-complete`. **Game dir left clean**:
+`Runtime-x64.dll` present, no `.absent`, no lock held, no stray `reimpl-x64.exe`.
+
+### Where the ladder is
+
+**Attempt 22** put the fault at `Engine::Startup +0x62B` (from `+0x338`), with
+**17 distinct `[RtUnresolved]` names**. The wall is
+`?EnumerateVideoModes@Device@Video@@QEAA_NXZ` (ord 2319, `0x1800f8610`).
+Evidence archived under `docs/runtime_port/evidence/attempt22/` so the next
+attempt can **set-diff against it rather than against a recollection**.
+
+### PICK UP FIRST — three items, in this order
+
+**1. `wave9/lane-evm` — the EnumerateVideoModes chain. WIP, not verified.**
+Scoped at **seven inseparable bodies** (the wall, `InitializeInterfaces`,
+`GetDLLForInterface`, two introsorts and their two small-range passes); four are
+reached **by address**, so any one left unported is a null the moment the DLL is
+gone. Three things established that are expensive to re-derive and are the
+reason to continue this lane rather than restart it:
+
+  * **A device-state oracle is NOT buildable.** The only regions the call changes
+    are a heap `_data` pointer (+0x40/+0x48/+0x4C) and an `HMODULE` plus two
+    `GetProcAddress` results (+0xb0..+0xf7) — the latter different *in kind*
+    between ours and theirs. Such an oracle is 100% mismatch on every byte either
+    side writes and 0% coverage of anything else. **The verification belongs on
+    the two sorts**, which are pure functions over POD arrays.
+  * **Retail's refresh-rate comparator has a real bug and must be transcribed.**
+    It divides *both* sides by `B.denominator` (`DIVSS XMM0,XMM1` reusing B's),
+    confirmed at all five comparison sites, so it effectively compares numerators.
+    Keep the float divisions: at `den == 0` they produce ±∞/NaN and `COMISS`
+    unordered, so they are **load-bearing, not redundant**, and the probe must
+    include `den == 0`, `0/0`, and equal-numerator/different-denominator cases.
+    **Anyone who "fixes" this changes user-visible video mode ordering.**
+  * Both sorts are MSVC **introsort, which is not stable** — the permutation of
+    equal-comparing elements is an artefact of the exact algorithm, so a clean
+    `std::sort` would differ undetectably. Lane COLL's
+    `runtime/src/collection/introsort.cpp` is the same template; reuse its idiom
+    and its permutation probe, but **verify the skeleton matches**.
+
+**2. `wave9/lane-rres2` (`b9da0b7`) — `ExternalFactory::Find` ported, NOT merged.**
+Source committed, builds, source-side set-diff done against a **pre-written**
+prediction that held on all six lines. **Two things block the merge**: it needs
+one game-dir window for its three cells, and the lane reported its overload names
+**collide with lane C's** (`Find` ord 2336 private / 2337 public are distinct
+overloads) and had not finished fixing that when its session ended. **Do not
+merge before the collision is resolved** — it would merge cleanly and be wrong.
+
+**3. `wave9/lane-serial` — the 70-slot IO serialize family. NOTHING COMMITTED**
+(tip is still its base). Its last signal was **"census moved +2 where I predicted
+flat, stopping to find out why"** — it honoured its own stopping condition and
+then ran out of budget, so *that finding exists nowhere*. Re-derive it before
+restarting the port: an instrument moving against a pre-registered prediction is
+the signal the whole practice exists to produce.
+
+### Smaller, well-specified follow-ups
+
+* **Three oracle-only address doors reach the DLL through `ResolveAddr`**, which
+  consults the port registry FIRST — so if anyone ports those addresses the
+  comparison becomes **true by construction** and emits the same green line:
+  `0x18014bc20` / `0x18014be30` (`input_platform_startup_win.cpp:444,446`) and
+  `0x180161780` (`platform_startup_win.cpp:452`). Convert to
+  `ResolveRuntimeRaw` (the house door — `array_destroy_probe.cpp` states the rule
+  in capitals; `external_set_probe.cpp:229` is the precedent) and confirm
+  `addr_door_audit` UNREGISTERED **17 → 14**.
+* **Our VEH vs `Debug::_disableHandler`** — see the divergence section above.
+  Deliberately not fixed: a crash handler that swallows access violations during
+  a port wave hides exactly the faults these lanes exist to find.
+* **`code/Game/Game/scenario.cpp:78`** resolves four Achievement addresses by
+  `ResolveAddr(Module::Runtime, …)` with no port behind them — null at cutover.
+
+### The two numbers to re-measure, and what they mean
+
+`tools/mint_slot_sweep.py` and `tools/mint_wall_predict.py` are **independent
+tools that reconcile in every bucket** (unported-by-name 231 both ways, purecall
+118, ported 120, unported 253). Of the 30 unique addresses in the
+"mentioned-but-not-registered" middle bucket, triage with a comment stripper
+found **0 non-literal registrations, 29 comment-only mentions, 1 live code use** —
+so the literal-only blind spot both tools declare **costs zero today**, verified
+two independent ways.
+
+**And the gate is a PAIR, not the static export scan.** Merging two lanes with 8
+ported exports (one verified on 22,595 live differential calls, 0 divergences)
+moved `unsatisfied` 118 → 118 and UNREGISTERED 14 → 14. A port cannot remove a
+name from a set it was never in. Use the runtime `[RtUnresolved]` residue plus
+the mint-wall prediction.
