@@ -314,6 +314,17 @@ int RtSystemConfigurationRegister() {
     //   ?ParseValue@Configuration@System@@CA…    0x1800c4930  ord 3311  (62 instrs)
     //   (unexported) the map insert              0x18002a090  -> 0x18002a170
     //       -> node alloc 0x18000f970, rebalance 0x18002a310 : a red-black
-    //          insert, a Collection lane's work, unreachable on our boots.
+    //          insert, a Collection lane's work.
+    //
+    //          CORRECTED 2026-09-08 by Wave 9 lane MOD: this line used to end
+    //          "unreachable on our boots", which is true of THIS FILE'S call
+    //          site (an empty command line, see the banner's §2) but NOT of the
+    //          address. persistence_registry_win.cpp:266 reaches the same
+    //          insert from ReadSettings, which every boot runs, and
+    //          persistence.cpp:59 wraps it as CallMapInsert. A reachability
+    //          claim belongs to a CALL SITE, not to an address -- the same
+    //          scope error reference_never_written_needs_by_whom.md records for
+    //          "never written", moved one level up. Whoever picks this row up
+    //          must not read "unreachable" and defer it. See WAVE9_LANE_MOD.md.
     return n;
 }
