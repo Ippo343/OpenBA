@@ -26,6 +26,8 @@
 #include "hw_watch.h"
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
+#include "rt_alloc_swap.h"
+#include "system/MemoryAllocator.h"   // RtSystemAllocatorSetDetourInstaller
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -1611,11 +1613,51 @@ static bool Init() {
     // 2b. Window-geometry trace — see InstallWindowTrace.
     InstallWindowTrace();
 
+    // 2b-i. Allocator ownership, in the ONE order that is safe.
+    //
+    //     These two patch MemoryAllocator::Allocate/Free to take the allocator's
+    //     critical section: Allocate takes no lock while Free does, and the
+    //     background Loader thread allocates concurrently with the main thread's
+    //     menu scene build -> free-list corruption -> intermittent heap crash.
+    //
+    //     THEY MUST INSTALL BEFORE RuntimePortInit(), and until 2026-09-07 they
+    //     did not. The ported allocator (BANISHED_RT_ALLOC=1) detours the SAME
+    //     two prologues, and with the old order it patched first, this file's
+    //     memcmp guard then refused, and the ported allocator ran with NO LOCK
+    //     AT ALL — announced by one refusal line in standalone_error.log.
+    //     Installed first there is exactly one sequence: the lock owns the
+    //     prologues, and the swap installer RETIRES it via
+    //     AllocatorLockRetireForPort() before detouring. See
+    //     docs/runtime_port/WAVE2_ALLOCATOR.md §4 and WAVE9_LANE_E.md.
+    //
+    //     Both only need ResolveInit (done at 2.), not the address registry.
+    InstallAllocatorLock();
+    InstallFreeLock();
+
+    //     The atomic-swap installer for the ported allocator. Handing it over
+    //     registers nothing by itself: RtSystemAllocatorRegister() calls it and
+    //     registers NOTHING AT ALL if it returns false, so a failed detour can
+    //     never leave the exports pointing at a port the DLL does not use.
+    //     Inert unless BANISHED_RT_ALLOC=1 arms the allocator port.
+    RtSystemAllocatorSetDetourInstaller(&RtAllocSwapInstall);
+
+    //     Observe-only shadow oracle for the same port: runs our body into a
+    //     private replica arena beside retail's real work and compares, without
+    //     taking the heap. No-op unless BANISHED_RT_DIFF=1 and
+    //     BANISHED_RT_ALLOC_SHADOW=1. This is the measurement that has to come
+    //     back clean before anyone sets BANISHED_RT_ALLOC.
+    RtAllocShadowInstall();
+
     // 2c. Runtime-x64.dll port registry (docs/runtime_port/PLAN.md §4.1).
     //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
     //     Runtime function pointers through ResolveExport/ResolveAddr, and a
     //     port registered after they run would be resolved by nobody.
     RuntimePortInit();
+    //     If the allocator swap took, repoint the ?Allocate@/?Free@ export
+    //     registrations at the composed (locked) stubs, so our own call sites
+    //     get the same critical section the DLL's detoured callers get. No-op
+    //     otherwise. See WAVE9_LANE_E.md "Correction 3".
+    RtAllocSwapPostRegister();
     //     Wave 0 acceptance test for the seam itself (BANISHED_RT_SELFTEST=1;
     //     no-op otherwise). Runs here because test 4 leaves a pass-through port
     //     registered, which only reaches EngineFuncsInit if it is in place
@@ -1673,18 +1715,6 @@ static bool Init() {
     //     RedzoneAlloc_ValidateAll() checkpoints, instead of crashing later in
     //     the allocator free-list. No-op unless the env var is set.
     RedzoneAlloc_Install();
-
-    // 4b. Make the Runtime engine allocator thread-safe. Allocate() takes no
-    //     lock while Free() does; the background Loader thread (achievement /
-    //     external load) allocates concurrently with the main thread's menu
-    //     scene build -> free-list corruption -> intermittent heap crash. The
-    //     detour funnels Allocate through the same CS Free uses. Env-gated by
-    //     BANISHED_ALLOC_LOCK (default on). See allocator_lock.cpp.
-    InstallAllocatorLock();
-    // 4b. Also lock the raw Free (0x1800c6c00) — it mutates the same free-list
-    //     with no CS, so a background-thread Free races the now-locked Allocate.
-    //     Closes the residual intermittent menu heap crash. See allocator_lock.cpp.
-    InstallFreeLock();
 
     // 4c. Diagnostic (session 3): interpose fn_Filename_Dtor to catch the
     //     System::String use-after-free that plants the bucket-12 free-list
@@ -1846,6 +1876,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Cutover residue (BANISHED_RT_STRICT=1): what still asked the DLL.
     DumpRuntimeResidue();
     RtDiffSummary();
+    RtAllocShadowSummary();
     // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
     RtSaveTraceSummary();
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }

@@ -33,6 +33,27 @@
 
 extern "C" void RedzoneAlloc_TeardownOp(const char* what);   // redzone_alloc.cpp
 
+// ---------------------------------------------------------------------------
+// Observe-only shadow hooks (standalone/rt_alloc_swap.cpp, Wave 9 lane E).
+// ---------------------------------------------------------------------------
+// Null unless the shadow driver arms them. They are called from inside
+// AllocateLocked/FreeLocked, i.e. WITH the allocator critical section held,
+// which is the whole reason the shadow rides here instead of installing a
+// second detour on the same two prologues: the replica must be mutated in the
+// same serialized order the real arena was. See the header comment of
+// rt_alloc_swap.cpp for why WAVE2_ALLOCATOR.md Â§3's literal reading is wrong.
+extern "C" {
+void (*g_allocShadowOnAlloc)(void* self, uint64_t size, uintptr_t align, void* result) = nullptr;
+void (*g_allocShadowOnFree)(void* self, void* ptr) = nullptr;
+}
+
+// Saved state for AllocatorLockRetireForPort(). The port's atomic swap must
+// RETIRE these patches, never coexist with them (WAVE2_ALLOCATOR.md Â§4).
+namespace {
+uintptr_t g_allocPatchAddr = 0;   uint8_t g_allocSaved[13];  bool g_allocPatched = false;
+uintptr_t g_freePatchAddr  = 0;   uint8_t g_freeSaved[12];   bool g_freePatched  = false;
+}
+
 namespace {
 
 typedef void* (*AllocFn)(void* self, uintptr_t size, uintptr_t align);
@@ -192,6 +213,13 @@ extern "C" int AllocStats_Lookup(void* userPtr, uint64_t* outSize, void** outCal
     return 0;
 }
 
+// Record one allocation / one free in the ALLOCSTATS tables. Exported so the
+// ported allocator's composed swap stub (standalone/rt_alloc_swap.cpp) can keep
+// this accounting alive after the lock patches are retired, instead of
+// reimplementing it. No-ops unless BANISHED_ALLOC_STATS is set.
+extern "C" void AllocStats_RecordAlloc(void* p, uint64_t size, void* caller);
+extern "C" void AllocStats_RecordFree(void* p);
+
 namespace {
 
 bool StatsOn() {
@@ -229,6 +257,7 @@ void* AllocateLocked(void* self, uintptr_t size, uintptr_t align) {
     EnterCriticalSection(cs);
     RedzoneAlloc_TeardownOp("teardown-alloc");
     void* r = g_origAllocate(self, size, align);
+    if (g_allocShadowOnAlloc) g_allocShadowOnAlloc(self, size, align, r);
     if (StatsOn()) {
         void* caller = __builtin_return_address(0);
         StatsRecordAlloc(r, size, caller);
@@ -277,10 +306,71 @@ void FreeLocked(void* self, void* ptr) {
     RedzoneAlloc_TeardownOp("teardown-free");
     if (StatsOn()) StatsRecordFree(ptr);
     g_origFreeBody(self, ptr);
+    if (g_allocShadowOnFree) g_allocShadowOnFree(self, ptr);
     LeaveCriticalSection(cs);
 }
 
 } // namespace
+
+// See the declarations above AllocStats_Lookup.
+extern "C" void AllocStats_RecordAlloc(void* p, uint64_t size, void* caller) {
+    if (!StatsOn()) return;
+    StatsRecordAlloc(p, size, caller);
+    if (g_bigThreshold && size >= g_bigThreshold) {
+        fprintf(stderr, "[ALLOCSTATS] BIG alloc %llu MB (%llu bytes) caller=%p -> %p\n",
+                (unsigned long long)(size >> 20), (unsigned long long)size, caller, p);
+        fflush(stderr);
+    }
+    StatsMaybeReport();
+}
+
+extern "C" void AllocStats_RecordFree(void* p) {
+    if (!StatsOn()) return;
+    StatsRecordFree(p);
+}
+
+// Remove both prologue patches and hand the two entry points back to retail.
+// Called by the atomic-swap installer before it detours the same addresses:
+// the two must never coexist (WAVE2_ALLOCATOR.md section 4). Returns true if
+// anything was actually retired.
+//
+// Safe here and nowhere else: this runs during single-threaded boot, before
+// Engine::Startup creates the loader thread, so no thread can be inside the
+// wrappers while their patches are removed.
+bool AllocatorLockRetireForPort() {
+    bool retired = false;
+    DWORD oldProtect = 0;
+    if (g_allocPatched && g_allocPatchAddr) {
+        if (VirtualProtect(reinterpret_cast<void*>(g_allocPatchAddr), sizeof(g_allocSaved),
+                           PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(reinterpret_cast<void*>(g_allocPatchAddr), g_allocSaved, sizeof(g_allocSaved));
+            VirtualProtect(reinterpret_cast<void*>(g_allocPatchAddr), sizeof(g_allocSaved),
+                           oldProtect, &oldProtect);
+            FlushInstructionCache(GetCurrentProcess(),
+                                  reinterpret_cast<void*>(g_allocPatchAddr), sizeof(g_allocSaved));
+            g_allocPatched = false;
+            retired = true;
+        }
+    }
+    if (g_freePatched && g_freePatchAddr) {
+        if (VirtualProtect(reinterpret_cast<void*>(g_freePatchAddr), sizeof(g_freeSaved),
+                           PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(reinterpret_cast<void*>(g_freePatchAddr), g_freeSaved, sizeof(g_freeSaved));
+            VirtualProtect(reinterpret_cast<void*>(g_freePatchAddr), sizeof(g_freeSaved),
+                           oldProtect, &oldProtect);
+            FlushInstructionCache(GetCurrentProcess(),
+                                  reinterpret_cast<void*>(g_freePatchAddr), sizeof(g_freeSaved));
+            g_freePatched = false;
+            retired = true;
+        }
+    }
+    if (retired) {
+        fprintf(stderr, "[AllocLock] patches RETIRED for the ported allocator "
+                "(Allocate=%d Free=%d)\n", g_allocPatched ? 0 : 1, g_freePatched ? 0 : 1);
+        fflush(stderr);
+    }
+    return retired;
+}
 
 bool InstallAllocatorLock() {
     if (LockDisabledByEnv()) {
@@ -323,6 +413,8 @@ bool InstallAllocatorLock() {
     memcpy(tramp + 19, &cont, 8);
     FlushInstructionCache(GetCurrentProcess(), tramp, 27);
     g_origAllocate = reinterpret_cast<AllocFn>(tramp);
+    memcpy(g_allocSaved, expected, sizeof(g_allocSaved));
+    g_allocPatchAddr = allocate;
 
     // Patch Allocate[0..12]: MOV RAX, imm64; JMP RAX; NOP  (13 bytes).
     uint8_t patch[13];
@@ -341,6 +433,7 @@ bool InstallAllocatorLock() {
     memcpy(reinterpret_cast<void*>(allocate), patch, 13);
     VirtualProtect(reinterpret_cast<void*>(allocate), 13, oldProtect, &oldProtect);
     FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(allocate), 13);
+    g_allocPatched = true;
 
     fprintf(stderr, "[AllocLock] MemoryAllocator::Allocate is now thread-safe "
             "(takes self+0x640, tramp=%p, wrapper=%p)\n",
@@ -395,6 +488,8 @@ bool InstallFreeLock() {
     memcpy(tramp + 9, &cont, 8);
     FlushInstructionCache(GetCurrentProcess(), tramp, 17);
     g_origFreeBody = reinterpret_cast<FreeFn>(tramp);
+    memcpy(g_freeSaved, expected, sizeof(g_freeSaved));
+    g_freePatchAddr = freeAddr;
 
     // Patch Free[0..11]: MOV RAX, &FreeLocked; JMP RAX  (12 bytes, RAX not an input).
     uint8_t patch[12];
@@ -412,6 +507,7 @@ bool InstallFreeLock() {
     memcpy(reinterpret_cast<void*>(freeAddr), patch, 12);
     VirtualProtect(reinterpret_cast<void*>(freeAddr), 12, oldProtect, &oldProtect);
     FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(freeAddr), 12);
+    g_freePatched = true;
 
     fprintf(stderr, "[AllocLock] MemoryAllocator::Free is now thread-safe "
             "(takes self+0x640, tramp=%p, wrapper=%p)\n",

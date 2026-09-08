@@ -310,3 +310,6 @@ extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
 extern "C" void RtAllocShadowFree(void* theirs,
                                   const rt::system::MemoryAllocator* theirSelf);
 extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences);
+// Harness health, NOT port correctness: replay-map overflow and frees that had
+// no mapped replica pointer. Either one non-zero invalidates the run.
+extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped);

@@ -752,6 +752,14 @@ inline size_t ShadowHash(void* p) {
     return static_cast<size_t>(x);
 }
 
+// PROBE DEFECT COUNTERS (Wave 9 lane E). A silently-dropped insert makes the
+// matching Free unreplayable, which desynchronises the replica for a reason
+// that has nothing to do with the port -- and the design's own "a divergence
+// can never recover" property then turns one harness hiccup into a wall of
+// red. Count both so a run can be told apart from a defect.
+uint64_t g_shadowMapFull    = 0;   // insert found no free slot in 64 probes
+uint64_t g_shadowFreeUnmapped = 0; // Free arrived for a pointer we never mapped
+
 void ShadowMapInsert(void* theirs, void* ours) {
     if (!g_shadowMap) return;
     size_t i = ShadowHash(theirs) & (kShadowSlots - 1);
@@ -759,6 +767,7 @@ void ShadowMapInsert(void* theirs, void* ours) {
         ShadowEntry& e = g_shadowMap[(i + probe) & (kShadowSlots - 1)];
         if (e.theirs == nullptr || e.theirs == theirs) { e.theirs = theirs; e.ours = ours; return; }
     }
+    g_shadowMapFull++;
 }
 
 void* ShadowMapTake(void* theirs) {
@@ -853,7 +862,10 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
     if (!g_shadowArmed || theirs == nullptr) return;
 
     void* ours = ShadowMapTake(theirs);
-    if (ours == nullptr) return;         // allocated before we armed; not comparable
+    if (ours == nullptr) {               // allocated before we armed, or the map
+        g_shadowFreeUnmapped++;          // dropped it -- either way, not comparable
+        return;
+    }
     rtalloc::Free(&g_shadow, ours);
     g_shadowCalls++;
 
@@ -876,6 +888,13 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
 extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences) {
     if (calls) *calls = g_shadowCalls;
     if (divergences) *divergences = g_shadowDivergences;
+}
+
+// Harness-health counters, distinct from port divergences. A non-zero value in
+// either means the MEASUREMENT is compromised, not that the port is wrong.
+extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped) {
+    if (mapFull) *mapFull = g_shadowMapFull;
+    if (freeUnmapped) *freeUnmapped = g_shadowFreeUnmapped;
 }
 
 // ============================================================================

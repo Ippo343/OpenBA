@@ -437,6 +437,14 @@ const ModuleInfo* GetModuleInfo(Module mod) {
     return &g_modules[static_cast<int>(mod)];
 }
 
+// One residue key -> one row. Shared by the port-registry doors below and by
+// the *Raw* doors, which use the "raw:" / "rawaddr:" prefixes.
+static void RecordResidueKey(const char* key, void* caller) {
+    ResidueEntry& e = RtResidue()[key];
+    if (e.count == 0) e.firstCaller = caller;
+    e.count++;
+}
+
 void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
                           uint16_t ordinal, void* caller) {
     if (!RtStrictEnabled()) return;
@@ -448,9 +456,38 @@ void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
     } else {
         snprintf(key, sizeof(key), "ord:%u", (unsigned)ordinal);
     }
-    ResidueEntry& e = RtResidue()[key];
-    if (e.count == 0) e.firstCaller = caller;
-    e.count++;
+    RecordResidueKey(key, caller);
+}
+
+// ---- The *Raw* doors --------------------------------------------------------
+// Added 2026-09-07 (wave 9 lane 0) after lane D found that ResolveRuntimeRaw was
+// invisible to strict mode: 0x18007fbfc is the DLL's own _beginthreadex, every
+// System::Thread in the process goes through it, and it appeared in NO residue
+// run. An absence produced by the instrument, read as a fact about the program
+// -- the same shape as reference_truncated_tool_output_manufactures_calls_zero.md.
+//
+// The Raw doors BYPASS the port registry BY DESIGN (resolve.h): the diff oracle,
+// the detour trampolines and RT_ORIGINAL_ONCE must reach the shipped code even
+// when a port is registered. So a raw hit is NOT the same kind of event as a
+// port-registry miss, and merging the two would make the port residue read as
+// permanently non-empty. They are recorded under their own "raw:" / "rawaddr:"
+// prefixes instead, counted separately, and reported in their own block.
+//
+// They are still cutover work: with the DLL gone, a raw resolve returns null,
+// and whether that is fatal or merely disables an oracle has to be decided per
+// call site. The dump says so rather than deciding it here.
+static void RecordRawResidue(const char* mangled_name, uintptr_t ghidra_addr,
+                             uint16_t ordinal, void* caller) {
+    if (!RtStrictEnabled()) return;
+    char key[512];
+    if (mangled_name) {
+        snprintf(key, sizeof(key), "raw:%s", mangled_name);
+    } else if (ghidra_addr) {
+        snprintf(key, sizeof(key), "rawaddr:0x%llx", (unsigned long long)ghidra_addr);
+    } else {
+        snprintf(key, sizeof(key), "raword:%u", (unsigned)ordinal);
+    }
+    RecordResidueKey(key, caller);
 }
 
 void DumpRuntimeResidue() {
@@ -469,21 +506,37 @@ void DumpRuntimeResidue() {
     fflush(stderr);
 }
 
-void* ResolveExportRaw(const char* mangled_name) {
+// The bodies, with no residue recording. ResolveExport / ResolveOrdinal call
+// THESE on their fall-through path: recording there as well would file every
+// port-registry miss twice, once under its own name and once under "raw:",
+// and the raw block is meant to name the sites that ask for the shipped code
+// DELIBERATELY.
+static void* ResolveExportRawImpl(const char* mangled_name) {
     if (!g_modules[1].handle || !mangled_name) return nullptr;
     return reinterpret_cast<void*>(
         GetProcAddress(g_modules[1].handle, mangled_name)
     );
 }
 
-void* ResolveOrdinalRaw(uint16_t ordinal) {
+static void* ResolveOrdinalRawImpl(uint16_t ordinal) {
     if (!g_modules[1].handle) return nullptr;
     return reinterpret_cast<void*>(
         GetProcAddress(g_modules[1].handle, MAKEINTRESOURCEA(ordinal))
     );
 }
 
+void* ResolveExportRaw(const char* mangled_name) {
+    RecordRawResidue(mangled_name, 0, 0, _ReturnAddress());
+    return ResolveExportRawImpl(mangled_name);
+}
+
+void* ResolveOrdinalRaw(uint16_t ordinal) {
+    RecordRawResidue(nullptr, 0, ordinal, _ReturnAddress());
+    return ResolveOrdinalRawImpl(ordinal);
+}
+
 uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr) {
+    RecordRawResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
     const ModuleInfo& mi = g_modules[static_cast<int>(Module::Runtime)];
     if (!mi.handle) return 0;
     return static_cast<uintptr_t>(
@@ -502,7 +555,7 @@ void* ResolveExport(const char* mangled_name) {
     }
     // Missed the port registry: this request is cutover residue.
     RecordRuntimeResidue(mangled_name, 0, 0, _ReturnAddress());
-    return ResolveExportRaw(mangled_name);
+    return ResolveExportRawImpl(mangled_name);
 }
 
 void* ResolveOrdinal(uint16_t ordinal) {
@@ -515,6 +568,6 @@ void* ResolveOrdinal(uint16_t ordinal) {
         }
     }
     RecordRuntimeResidue(nullptr, 0, ordinal, _ReturnAddress());
-    return ResolveOrdinalRaw(ordinal);
+    return ResolveOrdinalRawImpl(ordinal);
 }
 

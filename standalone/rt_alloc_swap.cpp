@@ -1,0 +1,342 @@
+// ============================================================================
+// standalone/rt_alloc_swap.cpp — System::MemoryAllocator: atomic swap + shadow
+// ============================================================================
+//
+// Wave 9 lane E. This is gate steps 2 and 3 of docs/runtime_port/WAVE2_ALLOCATOR.md
+// §5 — the code that makes MEASUREMENT possible. It does not flip the verdict;
+// it makes the run that could flip it runnable.
+//
+// Everything here is default OFF. A build with this file linked and no env var
+// set behaves exactly as the tree did before it existed.
+//
+// ---------------------------------------------------------------------------
+// WHY THE SHADOW DRIVER IS *NOT* A SECOND DETOUR (correction to §3)
+// ---------------------------------------------------------------------------
+// WAVE2_ALLOCATOR.md §3's "status" list asks for "a driver in standalone/ that
+// detours MemoryAllocator::Startup, Allocate and Free in observe-only mode".
+// Read literally that is broken, twice over, and by the doc's own §4:
+//
+//   * allocator_lock.cpp is DEFAULT-ON and already owns both prologues. A
+//     second detour on the same 13/12 bytes is precisely the hazard §4
+//     describes — whichever installs second either clobbers the first's saved
+//     trampoline bytes or is refused by its memcmp guard.
+//   * The replica must be mutated in the SAME serialized order as the real
+//     arena. The real arena is serialized by the critical section that
+//     allocator_lock's wrappers take. An observer outside that lock would
+//     replay two threads' allocations in an order the real allocator never
+//     saw, and the offsets would desynchronise for reasons that have nothing
+//     to do with the port.
+//
+// So the observer rides INSIDE allocator_lock's existing AllocateLocked /
+// FreeLocked wrappers, through two function pointers that are null unless this
+// file arms them. That is what §3's own next sentence — "this is the existing
+// allocator_lock.cpp shape with two extra calls" — actually describes. Only
+// Startup gets a real detour, because nobody else patches it.
+//
+// Consequence to state up front: the shadow REQUIRES the allocator lock. With
+// BANISHED_ALLOC_LOCK=0 there are no wrappers and the shadow observes nothing.
+// Arming refuses loudly in that case rather than reporting calls=0, which is
+// the Wave 1 defect #4 trap (a green summary over an empty measurement).
+//
+// ---------------------------------------------------------------------------
+// PROLOGUES (bytes read out of the shipped DLL with pefile, not from a
+// mnemonic listing — this build emits redundant REX prefixes)
+// ---------------------------------------------------------------------------
+//   Allocate 0x1800c6e60: 40 53 | 57 | 41 54 | 41 56 | 41 57 | 48 83 EC 20
+//                         PUSH RBX/RDI/R12/R14/R15; SUB RSP,0x20   -> 13 bytes
+//   Free     0x1800c6c00: 48 85 D2 | 0F 84 4F 02 00 00 | 48 8B C4
+//                         TEST RDX,RDX; JZ Free+0x258; MOV RAX,RSP -> 12 bytes
+//   Startup  0x1800c7620: 40 53 | 48 83 EC 50 | 48 C1 E2 14 | 49 C1 E0 14
+//                         PUSH RBX; SUB RSP,0x50; SHL RDX,0x14; SHL R8,0x14
+//                                                                  -> 14 bytes
+// All three boundaries counted from the disassembly, not from Ghidra's C.
+// ============================================================================
+
+#include <windows.h>
+
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+
+#include "rt_alloc_swap.h"
+#include "allocator_lock.h"
+#include "runtime_detour.h"
+#include "resolve.h"
+
+#include "system/MemoryAllocator.h"   // -Iruntime/types
+
+using rt::system::MemoryAllocator;
+
+// allocator_lock.cpp — the three behaviours the composed stub must keep, and
+// the two observer hooks the shadow driver rides on.
+extern "C" void RedzoneAlloc_TeardownOp(const char* what);      // redzone_alloc.cpp
+extern "C" void AllocStats_RecordAlloc(void* p, uint64_t size, void* caller);
+extern "C" void AllocStats_RecordFree(void* p);
+extern "C" void (*g_allocShadowOnAlloc)(void* self, uint64_t size, uintptr_t align, void* result);
+extern "C" void (*g_allocShadowOnFree)(void* self, void* ptr);
+
+namespace {
+
+typedef void* (*OurAllocateFn)(MemoryAllocator* self, uint64_t size, int align);
+typedef void  (*OurFreeFn)(MemoryAllocator* self, void* p);
+
+OurAllocateFn g_ourAllocate = nullptr;
+OurFreeFn     g_ourFree     = nullptr;
+bool          g_swapTaken   = false;
+
+inline LPCRITICAL_SECTION AllocCs(void* self) {
+    return reinterpret_cast<LPCRITICAL_SECTION>(
+        reinterpret_cast<uint8_t*>(self) + 0x640);   // MemoryAllocator::lock
+}
+
+// ---------------------------------------------------------------------------
+// The composed stubs. Lock + diagnostics + OUR body.
+//
+// The port itself stays byte-faithful and takes no lock, exactly as retail's
+// Allocate/Free do; the lock is the standalone's own correction (see
+// allocator_lock.h: Runtime-internal code calls the raw Free directly, which
+// races Allocate). Composing it here rather than inside the port keeps
+// runtime/src free of <windows.h> and free of non-retail behaviour.
+// ---------------------------------------------------------------------------
+void* SwapAllocate(MemoryAllocator* self, uint64_t size, uintptr_t align) {
+    LPCRITICAL_SECTION cs = AllocCs(self);
+    EnterCriticalSection(cs);
+    RedzoneAlloc_TeardownOp("teardown-alloc");
+    void* r = g_ourAllocate(self, size, static_cast<int>(align));
+    AllocStats_RecordAlloc(r, size, __builtin_return_address(0));
+    LeaveCriticalSection(cs);
+    return r;
+}
+
+void SwapFree(MemoryAllocator* self, void* p) {
+    if (!p) return;                       // retail's TEST RDX,RDX; JZ
+    LPCRITICAL_SECTION cs = AllocCs(self);
+    EnterCriticalSection(cs);
+    RedzoneAlloc_TeardownOp("teardown-free");
+    AllocStats_RecordFree(p);
+    g_ourFree(self, p);
+    LeaveCriticalSection(cs);
+}
+
+RtDetour g_allocDetour = {};
+RtDetour g_freeDetour  = {};
+
+// ---------------------------------------------------------------------------
+// Shadow driver state
+// ---------------------------------------------------------------------------
+bool             g_shadowOn      = false;   // env said yes AND we armed
+MemoryAllocator* g_shadowSelf    = nullptr; // the ONE allocator we observe
+uint64_t         g_shadowSkipped = 0;       // observations dropped (see below)
+uint64_t         g_shadowOther   = 0;       // calls on a different allocator
+RtDetour         g_startupDetour = {};
+
+typedef bool (*StartupFn)(MemoryAllocator* self, uint64_t minMB, uint64_t maxMB);
+
+// Observe-only Startup. Retail's body shifts both args by 20 itself, so the
+// values arriving here are MEGABYTES, which is exactly what RtAllocShadowStartup
+// wants. Run theirs first so the real arena exists before the replica is built
+// (the replica reserves from the same platform seam and must not race it).
+bool ShadowStartup(MemoryAllocator* self, uint64_t minMB, uint64_t maxMB) {
+    StartupFn orig = reinterpret_cast<StartupFn>(g_startupDetour.trampoline);
+    const bool ok = orig(self, minMB, maxMB);
+
+    if (ok && g_shadowSelf == nullptr) {
+        g_shadowSelf = self;
+        if (!RtAllocShadowStartup(minMB, maxMB)) {
+            fprintf(stderr, "[RtAllocShadow] replica arena failed to arm — "
+                            "shadow DISABLED for this run\n");
+            g_shadowSelf = nullptr;
+            g_shadowOn   = false;
+        } else {
+            fprintf(stderr, "[RtAllocShadow] observing MemoryAllocator %p "
+                            "(min=%lluMB max=%lluMB)\n", (void*)self,
+                    (unsigned long long)minMB, (unsigned long long)maxMB);
+        }
+        fflush(stderr);
+    } else if (ok && self != g_shadowSelf) {
+        // A SECOND allocator was started. Replaying its traffic into the one
+        // replica would desynchronise it; say so rather than produce numbers.
+        fprintf(stderr, "[RtAllocShadow] WARNING: a second MemoryAllocator (%p) "
+                        "was started; its traffic is NOT observed\n", (void*)self);
+        fflush(stderr);
+    }
+    return ok;
+}
+
+// Called from AllocateLocked/FreeLocked, INSIDE the allocator critical section.
+void ShadowOnAlloc(void* self, uint64_t size, uintptr_t align, void* result) {
+    if (self != g_shadowSelf) { if (g_shadowSelf) g_shadowOther++; else g_shadowSkipped++; return; }
+    RtAllocShadowAlloc(size, static_cast<int>(align), result,
+                       static_cast<const MemoryAllocator*>(self));
+}
+
+void ShadowOnFree(void* self, void* ptr) {
+    if (self != g_shadowSelf) { if (g_shadowSelf) g_shadowOther++; else g_shadowSkipped++; return; }
+    RtAllocShadowFree(ptr, static_cast<const MemoryAllocator*>(self));
+}
+
+bool EnvOn(const char* name) {
+    const char* e = getenv(name);
+    return e && e[0] && e[0] != '0' && e[0] != 'f' && e[0] != 'F';
+}
+
+}  // namespace
+
+// ============================================================================
+// The atomic swap installer
+// ============================================================================
+//
+// Contract (runtime/types/system/MemoryAllocator.h): return true only if BOTH
+// detours took. RtSystemAllocatorRegister() registers NOTHING when this returns
+// false, so a half-installed swap can never leave the exports pointing at a
+// port the DLL does not use. Both failure paths below therefore leave the DLL
+// byte-identical to how they found it.
+// ============================================================================
+extern "C" bool RtAllocSwapInstall(void* ourAllocate, void* ourFree) {
+    if (!ourAllocate || !ourFree) return false;
+    g_ourAllocate = reinterpret_cast<OurAllocateFn>(ourAllocate);
+    g_ourFree     = reinterpret_cast<OurFreeFn>(ourFree);
+
+    // Hazard A (PLAN.md §2.2, WAVE2_ALLOCATOR.md §4): RETIRE the allocator lock
+    // patches, do not carry them. Retiring restores retail's bytes, which is
+    // also what makes the InstallRuntimeDetour prologue checks below meaningful.
+    if (AllocatorLockRetireForPort())
+        fprintf(stderr, "[RtAllocSwap] retired the allocator_lock patches\n");
+
+    // The composed stubs take the critical section themselves, so nothing is
+    // lost by retiring — see SwapAllocate/SwapFree above.
+    static const uint8_t kAllocPrologue[13] = {
+        0x40,0x53,0x57,0x41,0x54,0x41,0x56,0x41,0x57,0x48,0x83,0xEC,0x20
+    };
+    static const uint8_t kFreePrologue[12] = {
+        0x48,0x85,0xD2, 0x0F,0x84,0x4F,0x02,0x00,0x00, 0x48,0x8B,0xC4
+    };
+
+    // No trampolines are used: our body REPLACES retail's, it does not wrap it.
+    if (!InstallRuntimeDetourChecked("MemoryAllocator::Allocate[port]", 0x1800c6e60,
+                                     reinterpret_cast<void*>(&SwapAllocate),
+                                     &g_allocDetour, 13,
+                                     kAllocPrologue, sizeof(kAllocPrologue))) {
+        fprintf(stderr, "[RtAllocSwap] Allocate detour FAILED — registering nothing\n");
+        fflush(stderr);
+        return false;
+    }
+    if (!InstallRuntimeDetourChecked("MemoryAllocator::Free[port]", 0x1800c6c00,
+                                     reinterpret_cast<void*>(&SwapFree),
+                                     &g_freeDetour, 12,
+                                     kFreePrologue, sizeof(kFreePrologue))) {
+        fprintf(stderr, "[RtAllocSwap] Free detour FAILED — rolling back Allocate, "
+                        "registering nothing\n");
+        RemoveDetour(&g_allocDetour);
+        fflush(stderr);
+        return false;
+    }
+
+    g_swapTaken = true;
+    fprintf(stderr, "[RtAllocSwap] ATOMIC SWAP INSTALLED — every Allocate/Free in the "
+                    "process now runs our port under the allocator CS\n");
+    fflush(stderr);
+    return true;
+}
+
+// ============================================================================
+// Post-registration fixup — see WAVE9_LANE_E.md "Correction 3"
+// ============================================================================
+// RtSystemAllocatorRegister() registers the RAW ported bodies for
+// ?Allocate@ / ?Free@. Those bodies are byte-faithful and therefore take no
+// lock. Retail's own callers reach the LOCKED composed stub through the detour;
+// ours would reach the unlocked body through the registry — two entry points to
+// one free list with different locking. Nothing in code/ resolves those two
+// names today (every consumer uses the MemAlloc/MemFree statics, which do lock),
+// so this is a latent trap rather than a live defect, and this closes it.
+extern "C" void RtAllocSwapPostRegister() {
+    if (!g_swapTaken) return;
+    RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z",
+                          reinterpret_cast<void*>(&SwapAllocate));
+    RegisterRuntimeExport("?Free@MemoryAllocator@System@@QEAAXPEAX@Z",
+                          reinterpret_cast<void*>(&SwapFree));
+    fprintf(stderr, "[RtAllocSwap] ?Allocate@/?Free@ registrations repointed at the "
+                    "composed (locked) stubs\n");
+    fflush(stderr);
+}
+
+// ============================================================================
+// The observe-only shadow driver
+// ============================================================================
+extern "C" bool RtAllocShadowInstall() {
+    if (!EnvOn("BANISHED_RT_DIFF") || !EnvOn("BANISHED_RT_ALLOC_SHADOW")) return false;
+
+    // The shadow rides inside allocator_lock's wrappers; without them it would
+    // observe nothing and report a clean calls=0, which is exactly the reading
+    // this wave must never produce.
+    {
+        const char* e = getenv("BANISHED_ALLOC_LOCK");
+        if (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) {
+            fprintf(stderr, "[RtAllocShadow] REFUSING to arm: BANISHED_ALLOC_LOCK=0 removes "
+                            "the wrappers the observer rides in. The shadow needs the lock "
+                            "installed (default on).\n");
+            fflush(stderr);
+            return false;
+        }
+    }
+    if (EnvOn("BANISHED_RT_ALLOC")) {
+        fprintf(stderr, "[RtAllocShadow] REFUSING to arm: BANISHED_RT_ALLOC=1 takes the heap. "
+                        "The shadow is the measurement that must come FIRST.\n");
+        fflush(stderr);
+        return false;
+    }
+
+    if (!InstallRuntimeDetour("MemoryAllocator::Startup[shadow]", 0x1800c7620,
+                              reinterpret_cast<void*>(&ShadowStartup),
+                              &g_startupDetour, 14)) {
+        fprintf(stderr, "[RtAllocShadow] could not detour Startup (0x1800c7620) — not arming\n");
+        fflush(stderr);
+        return false;
+    }
+
+    g_allocShadowOnAlloc = &ShadowOnAlloc;
+    g_allocShadowOnFree  = &ShadowOnFree;
+    g_shadowOn = true;
+    fprintf(stderr, "[RtAllocShadow] observe-only driver armed; waiting for "
+                    "MemoryAllocator::Startup\n");
+    fflush(stderr);
+    return true;
+}
+
+// ============================================================================
+// Summary — read this, not just the [RtDiff] divergences= column
+// ============================================================================
+// EFFECTIVENESS CONTROL (reference_probe_needs_an_effectiveness_control.md):
+// `observed` is how many calls actually reached the comparison. `skipped` is
+// how many arrived before Startup was seen — a non-zero value means the arena
+// was already live when we armed and the replica can never agree, so the run is
+// INVALID rather than clean. `other` counts traffic on a MemoryAllocator that
+// is not the one we replicate.
+extern "C" void RtAllocShadowSummary() {
+    if (!g_shadowOn && g_shadowSkipped == 0) return;
+    uint64_t calls = 0, divergences = 0, mapFull = 0, freeUnmapped = 0;
+    RtAllocShadowReport(&calls, &divergences);
+    RtAllocShadowHealth(&mapFull, &freeUnmapped);
+    fprintf(stderr,
+            "[RtAllocShadow] SUMMARY armed=%d observed=%llu divergences=%llu "
+            "skipped_pre_startup=%llu other_allocator=%llu "
+            "map_full=%llu free_unmapped=%llu\n",
+            g_shadowSelf ? 1 : 0,
+            (unsigned long long)calls, (unsigned long long)divergences,
+            (unsigned long long)g_shadowSkipped, (unsigned long long)g_shadowOther,
+            (unsigned long long)mapFull, (unsigned long long)freeUnmapped);
+    if (mapFull || freeUnmapped)
+        fprintf(stderr, "[RtAllocShadow] HARNESS DEFECT: map_full=%llu free_unmapped=%llu. "
+                        "Every divergence after the first of these is the replay map's "
+                        "fault, not the port's. Grow kShadowSlots and re-run.\n",
+                (unsigned long long)mapFull, (unsigned long long)freeUnmapped);
+    if (g_shadowOn && calls == 0)
+        fprintf(stderr, "[RtAllocShadow] observed=0 — this run MEASURED NOTHING. "
+                        "Do not read it as a pass.\n");
+    if (g_shadowSkipped)
+        fprintf(stderr, "[RtAllocShadow] skipped_pre_startup=%llu — the arena was live before "
+                        "the driver armed; this run is INVALID.\n",
+                (unsigned long long)g_shadowSkipped);
+    fflush(stderr);
+}

@@ -914,7 +914,7 @@ extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe() {
     auto theirs = reinterpret_cast<void (*)(void*, void*)>(
         ResolveExportRaw("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     if (!theirs) {
-        std::printf("[RtSaveTrace] SKIP InternalBasePtr::Serialize: shipped body unresolved\n");
+        printf("[RtSaveTrace] SKIP InternalBasePtr::Serialize: shipped body unresolved\n");
         return;
     }
     auto ours = reinterpret_cast<void (*)(void*, void*)>(&RtObject_InternalBasePtr_Serialize);

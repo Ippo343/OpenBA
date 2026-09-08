@@ -33,6 +33,9 @@ import os
 import re
 import sys
 
+# Set from --allow-degraded in main(); see load_export_addrs().
+ALLOW_DEGRADED = False
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCAN_DIRS = ["code", "engine", "runtime", "standalone", "dx11"]
 SKIP_DIR_NAMES = {"build", "build-og", "build-perf", "obj", ".git", "__pycache__", ".venv"}
@@ -161,15 +164,53 @@ def load_export_addrs():
     the address. Both directions corrupt the number this project treats as its
     authority over any agent's "all N ported" claim.
 
-    Returns {} if pefile or the DLL is unavailable, in which case the census
-    degrades to its old address-blind behaviour rather than failing.
+    FAILS LOUDLY if pefile or the DLL is unavailable.
+
+    It used to `return {}` and let the census "degrade to its old address-blind
+    behaviour rather than failing". That was wrong, and Wave 9 lane 0 measured
+    exactly how wrong: run under the project venv (which has pefile) the census
+    reports **830 called / 512 ported**; run under system Python 3.12 (which does
+    not) the SAME tree reports **1016 / 616**. Same command, same source, two
+    different authorities, no warning either time. It produced a wrong
+    intermediate finding inside lane 0's own work (57 phantom "census blind
+    spots") before the cause was found.
+
+    That is this project's most-repeated failure mode, and this function was an
+    instance of it: `reference_truncated_tool_output_manufactures_calls_zero.md`
+    (a `tail -80` faked sixteen sites disappearing) and WAVE9.md's three census
+    defects are the same shape -- a tool that answers when it cannot answer. The
+    census is the number this project treats as authority over any agent's "all N
+    ported" claim, so it must refuse to produce one it cannot stand behind.
+
+    `--allow-degraded` restores the old behaviour for the one case that deserves
+    it (a machine with no pefile that only wants the name-keyed rows), and says so
+    on stderr every time rather than silently.
     """
+    def _bail(why):
+        if ALLOW_DEGRADED:
+            sys.stderr.write(
+                "WARNING: census running DEGRADED (%s).\n"
+                "         Address-keyed rows are invisible; 'called' and 'ported'\n"
+                "         are BOTH understated and the namespace split is wrong.\n"
+                "         Do not publish this number.\n" % why)
+            return {}
+        sys.stderr.write(
+            "FATAL: %s\n"
+            "       The census cannot see functions our tree reaches by ADDRESS\n"
+            "       without it, which changes the answer materially -- measured\n"
+            "       830/512 (correct) vs 1016/616 (degraded) on the same tree.\n"
+            "       Run it with the project venv:\n"
+            "         tools/ghidra_mcp/.venv/Scripts/python.exe tools/runtime_census.py\n"
+            "       or pass --allow-degraded if you really want the partial view.\n"
+            % why)
+        sys.exit(2)
+
     try:
         import pefile
     except ImportError:
-        return {}
+        return _bail("pefile is not importable in this interpreter")
     if not os.path.exists(RUNTIME_DLL):
-        return {}
+        return _bail("the shipped DLL is missing: %s" % RUNTIME_DLL)
     try:
         pe = pefile.PE(RUNTIME_DLL, fast_load=True)
         pe.parse_data_directories(
@@ -179,9 +220,13 @@ def load_export_addrs():
         for e in pe.DIRECTORY_ENTRY_EXPORT.symbols:
             if e.name:
                 out[base + e.address] = e.name.decode("utf-8", "replace")
+        if not out:
+            return _bail("the DLL's export directory parsed EMPTY")
         return out
-    except Exception:
-        return {}
+    except SystemExit:
+        raise
+    except Exception as exc:
+        return _bail("reading the DLL's export directory failed: %r" % exc)
 
 
 def namespace_of(mangled):
@@ -482,7 +527,15 @@ def main():
     ap.add_argument("--unported", action="store_true",
                     help="list every called-but-not-ported function")
     ap.add_argument("--namespace", help="restrict the listings to one namespace")
+    ap.add_argument("--allow-degraded", action="store_true",
+                    help="proceed without pefile/the DLL. The address-keyed "
+                         "rows become invisible and BOTH numbers are "
+                         "understated -- the census says so on stderr. Do not "
+                         "publish a number produced this way.")
     args = ap.parse_args()
+
+    global ALLOW_DEGRADED
+    ALLOW_DEGRADED = args.allow_degraded
 
     d = scan()
 

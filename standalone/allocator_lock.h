@@ -26,3 +26,17 @@ bool InstallAllocatorLock();
 // BANISHED_ALLOC_LOCK (shared) and BANISHED_FREE_LOCK (free-lock-specific).
 bool InstallFreeLock();
 
+// Remove both prologue patches, handing MemoryAllocator::Allocate and ::Free
+// back to retail's own bytes. Returns true if anything was actually retired.
+//
+// This exists for ONE caller: the ported allocator's atomic-swap installer
+// (standalone/rt_alloc_swap.cpp), which detours the same two prologues. The
+// lock and the swap must never coexist -- whichever patches second either
+// clobbers the first's saved bytes or is refused by its guard, and both
+// outcomes end with an UNLOCKED free list (docs/runtime_port/WAVE2_ALLOCATOR.md
+// section 4). The swap's composed stubs take the same critical section, so
+// nothing is lost by retiring.
+//
+// Boot-time only: it does not synchronise with threads that may be inside the
+// wrappers. Call it before Engine::Startup creates the loader thread.
+bool AllocatorLockRetireForPort();
