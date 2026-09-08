@@ -472,6 +472,209 @@ RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
 // ============================================================================
 // Registration — called from RtIoPortInit() under BANISHED_RT_STREAM.
 // ============================================================================
+// ============================================================================
+// Wave 9 lane W — IO::MemoryStream::Open(int) and IO::MemoryStream::~MemoryStream
+//
+//   0x1800ae670  ?Open@MemoryStream@IO@@QEAA_NH@Z   ord 3305
+//   0x1800ae890  ??1MemoryStream@IO@@UEAA@XZ        ord 631
+//
+// Both are Wave 9 lane V rows: REAL DEPENDENCY (MIGRATED). Lane V2 moved their
+// call sites (saveload.cpp:832, compressedstream.cpp:330) from the raw door to
+// RT_EXPORT_ONCE, which is correct and NOT sufficient — with no port and no
+// mint entry `ResolveExport` misses the registry and falls through to
+// `ResolveExportRawImpl`, so the request only changed which residue list prints
+// it. These two close the row for real.
+//
+// THE THIRD MEMBER OF THE ROW, ??0MemoryStream, IS **NOT** PORTED HERE AND THE
+// REASON IS A FACT ABOUT THE BINARY, NOT AN ESTIMATE. Every concrete Stream
+// constructor in this family allocates an 8-byte IO::Encoding and stores ONE
+// pointer into it: the shared encoding vtable at **0x1801554a8** (see
+// RtIo_CompressedMemoryStream_Ctor's oracle, which already special-cases that
+// address). That address is **not an exported symbol** — checked against the
+// DLL's export directory BY ADDRESS, not by name pattern; 0x1801555b0
+// (??_7MemoryStream@IO@@6B@) is exported and 0x1801554a8 has no export at all,
+// and it is not merely the interior of a bigger table either: 0x180155488..
+// 0x1801554a0 are four _purecall slots belonging to the abstract base, so
+// 0x1801554a8 is where the CONCRETE encoding's table begins. A ported ctor must
+// obtain that pointer, and at cutover there is no name for `ResolveExport` to
+// take and no row the mint can carry, because the mint is keyed by exported
+// symbol. So ??0MemoryStream and ??0CompressedStream are blocked on EXTENDING
+// THE MINT TO UNEXPORTED VTABLES, or on identifying the concrete Encoding class
+// and rebuilding its table slot by slot — lane C2's shape of work, not a port.
+// Named rather than defaulted; see WAVE9_LANE_W.md.
+//
+// Neither function below touches the encoding's CONTENTS, only its address, so
+// neither inherits that blocker.
+// ============================================================================
+
+// The four fields ~MemoryStream and Open need, plus this class's own vtable.
+// ??_7MemoryStream@IO@@6B@ (0x1801555b0) is exported, so it goes through the
+// PORT-AWARE door for the reason mesh.cpp's RtVtable() records: the raw door is
+// GetProcAddress, which returns null at cutover for a symbol the mint carries
+// correctly just as much as for one it has never heard of.
+static const void* VtblMemoryStream() {
+    static const void* v = ResolveExport("??_7MemoryStream@IO@@6B@");
+    return v;
+}
+
+using MemAllocFn = void* (*)(uint64_t, int);
+using MemFreeFn  = void  (*)(void*);
+
+// ??1MemoryStream's body, factored out so the oracle below can run it on a
+// scratch object WITHOUT re-entering the diff guard. Calling the registered
+// entry point recursively would recurse forever — the same shape lane V2 caught
+// in widgets_layout.cpp's RemoveGraphs, where a blanket door conversion would
+// have made a function resolve to itself.
+static void MemoryStreamDtorBody(MemoryStream* self) {
+    self->base.vptr = VtblMemoryStream();
+    if (self->ownsData && self->data != nullptr)
+        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(self->data);
+    self->base.vptr = VtblStream();
+    if (self->base.encoding != nullptr)
+        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(self->base.encoding);
+}
+
+// ?Open@MemoryStream@IO@@QEAA_NH@Z — 0x1800ae670.
+//
+// Retail, in order: MemAlloc(size,4) -> +0x18; size -> +0x28; 0 -> +0x24
+// (_cursor); 0 -> +0x08 (_direction, i.e. READING); 1 -> +0x20 (_ownsData);
+// return true UNCONDITIONALLY — including when the allocation failed. That last
+// part is retail's and it is reproduced: a caller that trusts the `true` and
+// writes into a null buffer is retail's behaviour, and a guard here would be
+// the one CLAUDE.md warns against rather than a repair.
+//
+// The lock/Allocate/unlock trio the decompile shows inlined at this call site is
+// instruction-for-instruction `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`
+// (0x1800c7a50: EnterCriticalSection(_singleton+0x640); Allocate(_singleton, n,
+// align); LeaveCriticalSection) — compared, not assumed — so calling MemAlloc
+// through the port-aware door is both the faithful spelling and the one that
+// follows lane E's allocator when it arms.
+//
+// ORACLE: FULL, by replay into a scratch object. Open ALLOCATES, so running
+// theirs over the live object would leak the buffer ours just made and leave
+// the object pointing at a second one. Instead a scratch MemoryStream is built
+// with the DLL's own constructor, THEIR Open is run on it with the same size,
+// and every field the function writes except the buffer pointer is compared —
+// _size, _cursor, _direction, _ownsData, and the return value: all four
+// non-pointer stores. Two independent allocations cannot share an address, so
+// comparing _data would fail 100% of calls for a reason that is not a defect
+// (reference_oracle_must_not_compare_unwritten_bytes.md, from the other side).
+// The scratch is destroyed with the DLL's own destructor, so nothing leaks and
+// nothing live is touched. Every call reaching the guard does the comparison,
+// so `calls=` counts work rather than entry.
+extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
+    RT_DIFF_BEGIN("IO::MemoryStream::Open");
+
+    self->data = RT_EXPORT_ONCE(MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
+    self->size = static_cast<uint32_t>(size);
+    self->cursor = 0;
+    self->base.direction = 0;
+    self->ownsData = 1;
+
+    if (rt_diff_on__) {
+        alignas(16) unsigned char scratch[sizeof(MemoryStream)];
+        std::memset(scratch, 0, sizeof(scratch));
+        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(scratch);
+        MemoryStream* s = reinterpret_cast<MemoryStream*>(scratch);
+
+        using OpenFn = bool (*)(void*, int);
+        const bool theirsOk =
+            RT_ORIGINAL_ONCE(OpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(s, size);
+
+        const bool eq = theirsOk &&
+                        s->size == self->size &&
+                        s->cursor == self->cursor &&
+                        s->base.direction == self->base.direction &&
+                        s->ownsData == self->ownsData;
+        char a[160], b[160];
+        std::snprintf(a, sizeof(a), "ret=1 size=%u cursor=%u dir=%d owns=%u",
+                      self->size, self->cursor, self->base.direction, self->ownsData);
+        std::snprintf(b, sizeof(b), "ret=%d size=%u cursor=%u dir=%d owns=%u",
+                      theirsOk ? 1 : 0, s->size, s->cursor, s->base.direction, s->ownsData);
+        RT_DIFF_SHADOW(eq, a, b);
+
+        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(s);
+    }
+    return true;
+}
+
+// ??1MemoryStream@IO@@UEAA@XZ — 0x1800ae890.
+//
+// Retail, in order:
+//     vptr = &MemoryStream::_vftable_      // the MSVC "run the dtor under this
+//                                          // class's own vtable" idiom
+//     if (_ownsData && _data) MemFree(_data);
+//     vptr = &Stream::_vftable_            // the inlined ~Stream
+//     if (_encoding)          MemFree(_encoding);
+//
+// It writes exactly ONE field — the vptr, twice — and frees at most two blocks.
+// _data and _encoding are left holding freed pointers; retail does not null
+// them and neither does MemoryStreamDtorBody above. The object is dead, and
+// nulling would show up as a divergence against the shipped bytes for no gain.
+//
+// The two MemFree calls are the inlined `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
+// (0x1800c7ad0), whose whole body is `if (p) { lock; Free(_singleton,p); unlock; }`.
+// Retail reaches it through FUN_180006a10, a SECOND un-exported copy of those
+// same instructions — this file's comment at :313 already records that pair.
+// Calling the exported name is the same code and is the one lane E's allocator
+// port replaces.
+//
+// ORACLE: A/B ON TWO SCRATCH OBJECTS, and why it is not a replay is the point.
+// A destructor cannot be replayed: running theirs after ours double-frees both
+// blocks, and suppressing the frees (nulling _data and _encoding first, the way
+// this wave does for Video::ImageBuffer::PlatformDestruct) would leave nothing
+// to compare, because the only field either body writes is the vptr and it is
+// written unconditionally. So two identical scratch streams are built with the
+// DLL's constructor and OPENED with the DLL's Open — which sets _ownsData, so
+// the branch that actually matters runs on both sides. That is the
+// EFFECTIVENESS control, not decoration: without the Open, both bodies would
+// skip the first free and the comparison would be green over an untaken branch
+// (reference_probe_needs_an_effectiveness_control.md). Ours destroys one,
+// theirs destroys the other, and the post-states are compared on every byte
+// except the two heap pointers.
+//
+// WHAT THIS DOES NOT PROVE, stated rather than implied: that both bodies freed
+// the same blocks. Two frees per side are not observable from here. What IS
+// checked is the branch decision that selects them and the vptr sequence — the
+// two things a wrong destructor gets wrong, and the pair that
+// reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is about.
+extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
+    RT_DIFF_BEGIN("IO::MemoryStream::~MemoryStream");
+
+    alignas(16) unsigned char oursScratch[sizeof(MemoryStream)];
+    alignas(16) unsigned char theirsScratch[sizeof(MemoryStream)];
+    if (rt_diff_on__) {
+        using OpenFn = bool (*)(void*, int);
+        for (unsigned char* p : {oursScratch, theirsScratch}) {
+            std::memset(p, 0, sizeof(MemoryStream));
+            RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(p);
+            RT_ORIGINAL_ONCE(OpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(p, 64);
+        }
+        MemoryStreamDtorBody(reinterpret_cast<MemoryStream*>(oursScratch));
+        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(theirsScratch);
+    }
+
+    MemoryStreamDtorBody(self);
+
+    if (rt_diff_on__) {
+        unsigned char a[sizeof(MemoryStream)], b[sizeof(MemoryStream)];
+        std::memcpy(a, oursScratch, sizeof(a));
+        std::memcpy(b, theirsScratch, sizeof(b));
+        std::memset(a + 0x10, 0, 8);  std::memset(b + 0x10, 0, 8);   // _encoding
+        std::memset(a + 0x18, 0, 8);  std::memset(b + 0x18, 0, 8);   // _data
+        const bool eq = std::memcmp(a, b, sizeof(a)) == 0;
+        const MemoryStream* o = reinterpret_cast<const MemoryStream*>(oursScratch);
+        const MemoryStream* t = reinterpret_cast<const MemoryStream*>(theirsScratch);
+        char da[160], db[160];
+        std::snprintf(da, sizeof(da), "vptr=%p owns=%u cursor=%u size=%u",
+                      o->base.vptr, o->ownsData, o->cursor, o->size);
+        std::snprintf(db, sizeof(db), "vptr=%p owns=%u cursor=%u size=%u",
+                      t->base.vptr, t->ownsData, t->cursor, t->size);
+        RT_DIFF_SHADOW(eq, da, db);
+    }
+}
+
 // RegisterRuntimeExport flips every ResolveExport call site in our tree; the
 // paired RegisterRuntimeAddr covers anything that asks for the same function by
 // Ghidra address. No detour is installed: per the vtable-ownership argument at
@@ -504,6 +707,20 @@ int RtIoCompressedStreamRegister() {
     RegisterRuntimeExport("?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ",
                           (void*)&RtIo_CompressedMemoryStream_GetMemoryStream); ++n;
     RegisterRuntimeAddr(0x180024350, (void*)&RtIo_CompressedMemoryStream_GetMemoryStream);
+
+    // ---- Wave 9 lane W ----
+    RegisterRuntimeExport("?Open@MemoryStream@IO@@QEAA_NH@Z",
+                          (void*)&RtIo_MemoryStream_Open); ++n;
+    RegisterRuntimeAddr(0x1800ae670, (void*)&RtIo_MemoryStream_Open);
+
+    RegisterRuntimeExport("??1MemoryStream@IO@@UEAA@XZ",
+                          (void*)&RtIo_MemoryStream_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800ae890, (void*)&RtIo_MemoryStream_Dtor);
+    // NOTE: ??_7MemoryStream@IO@@6B@ slot 0 is the DELETING destructor thunk
+    // (0x1800242a0), NOT this body, so registering ??1 does not change what a
+    // virtual `delete` dispatches to. That is the same vtable-ownership
+    // argument this file makes at the top for CompressedMemoryStream, and it is
+    // why no detour is installed here either.
 
     printf("[RtPort]   IO::CompressedMemoryStream: %d exports registered "
            "(SAVE PATH ONLY -- a plain autostart session never reaches them; "
