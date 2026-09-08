@@ -1,0 +1,4 @@
+ccache g++ -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP -include standalone/env_cache.h -g -O0 -D_DEBUG -I. -Iengine/types -Iengine/funcs -Icode/Game -Iruntime/types -Iruntime/funcs -Idx11/types -Idx11/funcs -Istandalone -c runtime/src/io/modification.cpp -o standalone/build/obj/runtime__src__io__modification.o
+ccache g++ -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP -include standalone/env_cache.h -g -O0 -D_DEBUG -static-libgcc -static-libstdc++ -mwindows -o standalone/build/reimpl-x64.exe @standalone/build/link_objects.rsp -luser32 -ldbghelp -lshell32 -lole32
+Built standalone: standalone/build/reimpl-x64.exe
+-rwxr-xr-x 1 USPC 197121 28M Sep  8 14:51 standalone/build/reimpl-x64.exe

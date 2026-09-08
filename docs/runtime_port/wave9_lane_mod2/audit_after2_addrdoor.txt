@@ -1,0 +1,13 @@
+by-address call sites   312
+distinct addresses      212
+registered addresses    1194  (655 literal + 539 mint-supplied)
+UNREGISTERED            18
+(non-literal call sites 79, non-literal registrations 12 -- invisible to both halves; see --nonliteral)
+
+concentrations:
+    9  engine/funcs/engine_funcs.cpp
+    3  runtime/src/io/modification_refresh.cpp
+    2  runtime/src/achievement/goal_serialize.cpp
+    2  runtime/src/ui/widgets_input.cpp
+    1  runtime/src/audio/audio.cpp
+    1  code/Game/Game/game_main.cpp

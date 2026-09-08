@@ -1,0 +1,5 @@
+ADDRESS door: 334 ResolveAddr(Module::Runtime, 0x…) sites; 0 reach a function we have ALREADY ported by name
+  ADDR-REGISTERED=62  DETOURED=3  NO-EXPORT=163  SYMBOLIC-UNRESOLVED=13  UNPORTED=93
+
+NAME door: 477 raw-door sites (direct ResolveExportRaw plus the RT_ORIGINAL_ONCE / RtOriginal<> spellings); 0 are a ported function on a live path
+  OK-DATA=4  OK-DELEGATING=15  OK-ORACLE=439  OK-PORT-OFF=1  OK-PROBE=2  OK-RESOLVE-ONLY=12  OK-UNPORTED=4

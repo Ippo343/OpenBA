@@ -185,13 +185,13 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace RtIO {
 
-static void* ModMemAlloc(uint64_t bytes, int align) {
+void* ModMemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
     static Fn fn = nullptr;
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
     return fn(bytes, align);
 }
-static void ModMemFree(void* p) {
+void ModMemFree(void* p) {
     using Fn = void (*)(void*);
     static Fn fn = nullptr;
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
@@ -208,7 +208,7 @@ static inline int32_t& RefCount(char* s) {
 // it, so when src is null the destination is left NULL rather than left holding
 // the `d - 8` that the freeing branch of the release wrote. Reusing
 // RtString_AdoptInline here would have kept a dangling block base in the field.
-static void AssignShared(char** dst, char* src) {
+void AssignShared(char** dst, char* src) {
     char* cur = *dst;
     if (cur == src) return;
     if (cur != nullptr) {
@@ -874,6 +874,8 @@ void RtIo_Modification_SaveList(void* selfv) {
 // The mangled names are LITERALS, not constants: tools/runtime_census.py
 // matches `RegisterRuntimeExport("<literal>"` and cannot see through a named
 // constant (filesystem.cpp's banner has the full account).
+int RtIoModificationRefreshRegister();   // modification_refresh.cpp (lane MOD, 2nd pass)
+
 int RtIoModificationRegister() {
     int n = 0;
 
@@ -919,6 +921,12 @@ int RtIoModificationRegister() {
     // own direct calls.
 
     printf("[RtPort]   IO::Modification (lane MOD): %d exports + 14 addresses\n", n);
+
+    // The second lane-MOD pass: ?RefreshList@ and the seven rows its closure
+    // needed (modification_refresh.cpp). Called from here rather than from
+    // rt_io_port.cpp so the two passes share ONE kill switch, BANISHED_RT_MOD --
+    // an A/B that disables half a cluster is not a control.
+    n += RtIoModificationRefreshRegister();
     return n;
 }
 
