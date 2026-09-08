@@ -1107,3 +1107,130 @@ Predicted order from here:
    makes that is still unported, so rung 4b's first target.
 3. **`?CloseFile@FileSystem@IO@@`** — still deliberately out of scope, still the
    first teardown after a successful open.
+
+---
+
+# Rung 4b (part 1) — the two excavation risks are gone, and neither was a blocker
+
+## 36. Both risks resolved, and one of them the tree already knew
+
+The integrator flagged the unpinned vtable slot and the unidentified import as
+the two things most likely to turn 4b into an excavation. Neither did.
+
+**The import `[0x18014b0f0]` is `KERNEL32!SetFilePointer`** — read out of the PE
+import table with `pefile`, not guessed. Nothing to port; it is the seek before
+the header read.
+
+**The virtual call `CALL [RAX+0x38]` at `0x1800b6042` is `MemoryStream`'s slot 7,
+`0x1800ae9e0`, which is a bare `RET`.** So the call is a provable no-op at this
+site — but it is still transcribed as a virtual call, because that is what
+retail does and the object's dynamic type is only *provably* `MemoryStream`
+here.
+
+**How the slot was pinned, and the trap in the middle of it.** The receiver is
+the stack object at `[RBP-0x58]`, constructed by `0x1800ae710`
+(`MemoryStream::MemoryStream`). That constructor stores **two** vtables into the
+same slot:
+
+```
+1800ae72d: LEA RAX,[0x1801549a0]   ; the BASE (Stream) vtable
+1800ae734: MOV qword ptr [RCX],RAX
+...
+1800ae740: LEA RAX,[0x1801555b0]   ; the DERIVED (MemoryStream) vtable
+1800ae747: MOV qword ptr [RCX],RAX ; overwrites it
+```
+
+Slot 7 of the **base** vtable `0x1801549a0` is **null**; slot 7 of the derived
+`0x1801555b0` is `0x1800ae9e0`. Stopping at the first `LEA` — the natural thing
+to do, since it is the one that looks like "the vtable store" — yields
+"slot 7 is a null call", which is wrong and is exactly the shape of this
+project's three `Slot6`/`Slot7` mix-ups. The base vtable also has slots 2..6 all
+equal to one address, which reads like a plausible stub table and makes the
+wrong answer look self-consistent.
+
+**And then: `runtime/types/io/Stream.h:110` already says
+`[7] 0x1800ae9e0 Close   <-- +0x38`.** I derived it independently from the
+binary and only then found it written down. The independent derivation is worth
+keeping as corroboration, but the fact stands: this was another stale blocker
+that the tree could already answer
+(`reference_holdback_blockers_are_stale_check_them_first`). I should have grepped
+`Stream.h` before opening the PE.
+
+## 37. The two `Array::SetSize` bodies — a port, not just a registration
+
+The integrator's guess was half right. They *are* members of lane Q's family, but
+**neither is byte-identical to any member already registered**, so each needed
+its own entry rather than a bare `RegisterRuntimeAddr`. Both specs are read out
+of the bodies:
+
+| addr | evidence in the body | spec |
+|---|---|---|
+| `0x180029510` | `SHL RCX,0x2`, `MOV EDX,0x4`, `MOV EAX,[RSI+RCX*4]; MOV [RDX],EAX`; the copy loop `JGE`s past the tail | `kSpec_I32` (tail **uninitialised**) |
+| `0x180029630` | **no shift at all** (element size 1), `MOV EDX,0x1`, `MOVZX EAX,byte [RCX+RDI]; MOV [RDX],AL`; tail likewise skipped | `kSpec_Bool` (tail **uninitialised**) |
+
+Byte-similarity agrees (first difference at 93 and 89 — a shared ~90-byte
+prologue, then the element op) but that is the **corroboration, not the
+evidence**: the family is large and near-identical by construction, so "looks
+like member X" is precisely the reasoning that would pick the wrong spec.
+
+That brings lane Q's two-argument family to **nine**.
+
+## 38. These two registrations are NOT verified, and I will not claim they are
+
+Run `arr1` is clean — `315 sites, 1170772 calls, 1 divergence` (the pre-existing
+`Object::Factory::Startup`), rung 3's and rung 4a's probes still green — **but
+neither new site appears in the diff table at all, because neither was called.**
+
+They are reachable only from `ReadPackfile`, which is still the shipped body, and
+the DLL reaches its own copies by direct relative `CALL`; our registration
+redirects only *our* callers. So this is exactly
+`reference_uncalled_port_is_not_verified`: `divergences=0` here is a statement
+about zero calls.
+
+They will first execute when rung 4c's `ReadPackfile` calls them, and that is the
+run that verifies them. Recorded as an open item rather than a landed one.
+
+## 39. `CompressedStream::Open` has its own substrate — 4b is not one layer
+
+`0x1800aa560` disassembles to something short and readable:
+
+```
+this->_source(+0x28) = src;  this->+0x8 = 0;
+0x1800aa020(this, windowCount);              // window array init
+len = src->vtbl[6]/*GetSize*/(src);
+if ((unsigned)len < 4) return false;
+src->vtbl[3]/*Read*/(src, 4, &blockCount);
+if (blockCount * 8 > len) return false;
+Array<Header>::SetSize(this+0x40, blockCount);          // 0x180024d70
+src->vtbl[3](src, this->+0x48 * 8, this->+0x40);        // the block directory
+total = 4 + blockCount*8;
+for each 8-byte entry: w = word[0]; if (!w) w = word[2]; total += w;
+return total == len;                                     // a consistency check
+```
+
+But it stands on **two more unported bodies** — `0x1800aa020` (window array
+init) and `0x180024d70` (`Array<Header>::SetSize`) — plus five `MemoryStream`
+virtuals (`0x1800ae8f0` Write, `0x1800ae950` Read, `0x1800ae9b0` SetCurrentPos,
+`0x1800ae9c0` GetCurrentPos, `0x1800ae9d0` GetSize). `compressed_stream_read.cpp:472`
+already names the first two as `Open`'s dependencies and notes they are not on
+the read path, which is why rung 2 correctly left them alone.
+
+So 4b is itself two layers, and I am naming that rather than discovering it
+mid-port:
+
+* **4b-i (this commit)**: the two risks resolved, the two `Array::SetSize`
+  instantiations.
+* **4b-ii**: `MemoryStream` — its ctor, its five virtuals and slot 7 — then
+  `0x1800aa020`, `0x180024d70`, and only then `CompressedStream::Open`, its ctor,
+  `~CompressedStream` and `0x1800a9ee0`.
+
+`MemoryStream` first is not the order the call graph suggests, but it is the
+order the *oracle* needs: `Open` cannot be diffed at all until the stream it
+reads through is ours on both sides.
+
+## 40. Next predicted fault site
+
+Unchanged and unmoved, deliberately: `LoadPackages` still stops at the
+`ReadPackfile` call. Within 4b, the next thing to touch is `MemoryStream`'s
+ctor + five virtuals, because every other item in the rung needs them to be
+diffable.
