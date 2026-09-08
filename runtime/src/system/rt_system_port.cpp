@@ -56,6 +56,14 @@ extern int RtSystemErrorRegister();          // error.cpp (lane ENG)
 // run rather than bisecting five files.
 extern int RtSystemWideStringRegister();       // widestring.cpp     (lane FS)
 extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
+// Wave 9 lane PKG2 iteration 2: System::Compression::Decompress — the BOTTOM of
+// the ?ReadPackfile@ stack (docs/runtime_port/WAVE9_READPACKFILE_PLAN.md). It
+// lives in System rather than IO because that is its namespace, but it is
+// PackageFile work: it is the function that decodes every byte of every package
+// the game loads. Its own switch, because a defect here is silent wrong data
+// rather than a crash and the integrator must be able to remove exactly it.
+extern int RtSystemCompressionRegister();      // compression.cpp    (lane PKG2)
+namespace RtSystem { void RtSystem_CompressionProbe(); }
 
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
@@ -73,6 +81,13 @@ void RtSystemPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSDIRS")) {
         n += RtSystemWideStringRegister();
         n += RtSystemSetupDirHelpersRegister();
+    }
+    if (RtWaveEnabled("BANISHED_RT_COMPRESSION")) {
+        n += RtSystemCompressionRegister();
+        // The probe must run AFTER the registration: it drives our port through
+        // the same entry point a real caller would, so arming it first would
+        // measure the DLL. It no-ops unless the diff harness is on.
+        RtSystem::RtSystem_CompressionProbe();
     }
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
