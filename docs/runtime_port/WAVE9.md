@@ -1680,6 +1680,49 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### The OTHER half of the cutover surface: the 16 orphan ADDRESS doors, named
+
+Attempt 19 enumerated the NAME-door residue. The address door has no such
+luxury: **an unregistered address door prints no `[RtUnresolved]` line and no
+`[RtResolve] MISS` — it is a null call with no diagnosis.** That is exactly why
+these survived nineteen attempts while the name residue got listed for free.
+
+They are not anonymous, though. `RVA = addr - 0x180000000` against the shipped
+export directory names 9 of the 16 outright:
+
+| address | name | call site |
+|---|---|---|
+| `0x1800af5f0` | **`?RefreshList@Modification@IO@@`** (ord 3528) | `engine_funcs.cpp:3141` |
+| `0x1800dd3c0` | `?Run@MainLoop@Engine@@` (ord 3601) | `game_main.cpp:176` |
+| `0x180114870` | `??0DialogInstance@UI@@` ctor (ord 147) | `engine_funcs.cpp` |
+| `0x1801133b0` | `?AddController@DialogInstance@UI@@` (ord 1542) | `engine_funcs.cpp:2974` |
+| `0x180113470` | `?AddController@DialogInstance@UI@@` (ord 1541) | `engine_funcs.cpp:2977` |
+| `0x1800da130` | `?AddTab@TabElement@UI@@` (ord 1589) | `engine_funcs.cpp:2971` |
+| `0x1801189f0` | `?CacheText@NumberElement@UI@@` (ord 1679, **private**) | `widgets_input.cpp:220` |
+| `0x18003ffe0` | `??9String@System@@` (ord 1290) | `widgets_input.cpp:232` |
+| `0x1800c4930` / `0x1800c4a00` | `?ParseValue@` / `?ParseCommand@Configuration@System@@` | `engine_funcs.cpp:1729/1727` |
+
+**THE COORDINATION FINDING: `?RefreshList@Modification@IO@@` IS REACHED BY BOTH
+DOORS.** It is the symbol that killed attempt 19 by name, and `engine_funcs.cpp`
+also calls it by address. Closing only the name door would have left the address
+caller pointing at nothing — and *silently*, since only the name door reports.
+Lane MOD was told. Three more (`DialogInstance` ctor + both `AddController`) went
+to lane UID and three widget doors to lane UIW2, so each lane's closure count
+covers both doors rather than half of one.
+
+Seven addresses have **no export name at all**, including `0x1801fe7c0` and
+`0x1801fe7e0` — which are in **`.data`**, one and two 0x20-strides past the
+MainLoop singleton at `0x1801fe750`, so they are almost certainly mint rows
+rather than bodies. Those nine went to a new lane ADDR.
+
+Two standing cautions apply to every row above. **Registering an address is not
+automatically safe** — some slots are null ON PURPOSE so a dispatch-or-fallback
+path takes the fallback, and a few are read under the WRONG name and work only
+while null. And **porting `?Run@MainLoop@Engine@@` will GROW the surface**: lane
+CTX measured seven Wave 6 `Context` setters that have zero live callers only
+because they are reached by a direct near-JMP the registry cannot redirect from
+inside `MainLoop::Draw`, and they all go live at once when that side is ported.
+
 ### Attempt 19: THE BOOT NAMES ITS OWN REMAINING SURFACE — 27 symbols, and only ONE is reached
 
 Tip `fd30180` (lanes GFX3 + FNHOOK + COLL merged). Exe md5 `1cef3ae7…`, DLL renamed
