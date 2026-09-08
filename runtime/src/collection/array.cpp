@@ -1116,6 +1116,23 @@ J3_ENTRY2(18002fea0, kSpec_I32)         // Object/UI:   Array<int32>, tail UNINI
 J3_ENTRY2(180059140, kSpec_Transform)   // Picking:     Array<Transform>, 4x unrolled in retail
 J3_ENTRY2(1800764c0, kSpec_PtrZero)     // UI:          Array<InternalPtr<Element>>
 J3_ENTRY2(180051390, kSpec_EffectSlot)  // Audio:       Array<EffectSlot>  [NON-TRIVIAL]
+// WAVE 9 LANE PKG2 rung 4b, 2026-09-08 — two more two-argument instantiations,
+// both reached from IO::ReadPackfile (the packfile entry directory). The
+// integrator's guess that these would be a REGISTRATION rather than a port was
+// half right: they belong to this family, but neither is byte-identical to any
+// member already here, so each needs its own entry. The spec is read out of the
+// body, not inferred from the caller's element type:
+//   0x180029510  SHL RCX,0x2 / MOV EDX,0x4 / `MOV EAX,[RSI+RCX*4]; MOV [RDX],EAX`
+//                and the copy loop JGEs past the tail, so the tail is left
+//                UNINITIALISED: kSpec_I32, same as 0x18002fea0.
+//   0x180029630  NO shift at all (element size 1) / MOV EDX,0x1 / `MOVZX EAX,
+//                byte [RCX+RDI]; MOV [RDX],AL`, tail likewise UNINITIALISED:
+//                kSpec_Bool, same as 0x180008b90.
+// Byte-similarity agrees with both readings (first difference at 93 and 89
+// respectively, i.e. a shared ~90-byte prologue then the element op) — but the
+// similarity is the CORROBORATION, not the evidence.
+J3_ENTRY2(180029510, kSpec_I32)         // IO:          Array<int32>, tail UNINITIALISED
+J3_ENTRY2(180029630, kSpec_Bool)        // IO:          Array<bool>,  tail UNINITIALISED
 
 #undef J3_ENTRY2
 
@@ -1250,6 +1267,8 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
     RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
+    RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
+    RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
