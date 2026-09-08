@@ -1554,3 +1554,84 @@ file.
 
 Unchanged: `LoadPackages` still stops at the `ReadPackfile` call. Nothing in 4b
 moves it, and attempt 17 is correctly still held for 4c.
+
+---
+
+# Rung 4b-ii (part 4) — `Array<Window>` lands, and the chain BOTTOMS OUT
+
+## 55. `0x180024c10` — `Array<CompressedStream::Window>::SetSize`
+
+Element stride **0x18** (`LEA RCX,[RAX+RAX*2]; SHL RCX,3`), align **8**
+(`MOV EDX,0x8`), copy is three plain qword moves. Unlike `kSpec_U64ZeroA4` there
+was no lookalike to be tempted by: it differs from every existing spec on both
+the element size *and* the tail init.
+
+**Its tail init leaves four bytes unwritten, and that matters for any future
+oracle.** The `else` arm is exactly three stores:
+
+```
+MOV dword ptr [RCX],R11D       -> [d+0x00] = 0    (4 bytes)
+MOV qword ptr [RCX+0x4],-0x1   -> [d+0x04] = -1   (8 bytes, UNALIGNED, +0x04..+0x0b)
+MOV qword ptr [RCX+0x10],R11   -> [d+0x10] = 0    (8 bytes)
+```
+
+so **`+0x0c..+0x0f` is never written** even though the stride is `0x18`. Any
+oracle over a grown `Array<Window>` must exclude those four bytes or it compares
+memory neither side wrote — `reference_oracle_must_not_compare_unwritten_bytes`,
+recorded now rather than discovered later as a 100%-failure diff. The unaligned
+8-byte `-1` is retail's own, and is reproduced rather than split into two
+aligned stores.
+
+Run `aw1`: `321 sites, 1286502 calls, 1 divergence` (the pre-existing one).
+
+**The registered-but-uncalled count is now FOUR**, not three: `0x180029510`,
+`0x180029630`, `0x180024d70`, `0x180024c10`. All four are reachable only from
+`SetWindowCount` / `Open` / `ReadPackfile`, all still shipped bodies. They close
+together in the run where 4c first reaches them — and if any one of them is
+*still* not reached then, that is a finding about the corpus, not an oversight,
+and I will say so.
+
+## 56. THE DEPTH ANSWER: two more rungs, not ten
+
+The integrator asked for a remaining-depth estimate if the chain revealed a
+fourth layer. **It revealed one, and then it stopped** — every leaf now
+terminates in something already ported, in lane Q's framework, or in the CRT.
+The full closure, checked by grep and disassembly rather than estimated:
+
+| callee | reached from | status |
+|---|---|---|
+| `0x1800881b0` memset | `SetWindowCount` | **not a port** — already `std::memset` (`filesystem_setupdirs_win.cpp:381`) |
+| `0x180024c10` `Array<Window>::SetSize` | `SetWindowCount` | **PORTED, this commit** |
+| `0x1800a9980` `GetAvailableWindow` | `SetWindowCount` | **ported, rung 2** |
+| `0x180024d70` `Array<Header>::SetSize` | `Open` | **ported, part 3** |
+| `0x180024aa0` Array dtor | `~CompressedStream` | **already ported, lane Q** |
+| `0x1800a9810` `CompressWindow` | `Commit` | **already a KNOWN blocker** — named by this lane's own rung 2, write path only |
+| `0x1800aa100` `Release` | `Commit`, `~CompressedStream` | unported, small |
+| `0x1800249c0`, `0x1800248e0` | `~CompressedStream` | unported Array dtors — lane Q `J1_ENTRY` family, one line each if they match |
+
+**Nothing below this line is new depth.** So the remaining work is:
+
+* **Rung 4b-iii — seven bodies, one rung.** `SetWindowCount` (52),
+  `Open` (~50), `Release`, two `J1_ENTRY` array-dtor lines, `Commit` (88) and
+  `~CompressedStream`. The last two are lane W's rows, closed by this lane.
+* **Rung 4c — `ReadPackfile` itself** (1,864 instructions), which after 4b-iii
+  is a transcription with every callee ported.
+
+**Two more rungs.** My confidence is high on 4b-iii being one rung — every item
+is sized and its dependencies are closed — and moderate on 4c being one, because
+1,864 instructions may want splitting into the three pieces the plan already
+names. It is **not** three-to-ten more rungs, and I would not put a second lane
+on this chain: 4b-iii is a single file's worth of work whose pieces share one
+oracle, and splitting it across lanes would cost more in coordination than it
+saves.
+
+The honest caveat: my depth estimate was implicitly "one more layer" three times
+this rung and was wrong each time. What is different now is that the estimate is
+no longer an extrapolation — it is an enumerated closure, every leaf of which I
+have either grepped to an existing port or disassembled. That is the same
+distinction as similarity-versus-evidence in §51.
+
+## 57. Next predicted fault site
+
+Unchanged: `LoadPackages` stops at the `ReadPackfile` call. Nothing in 4b moves
+it; attempt 17 remains correctly held for 4c.

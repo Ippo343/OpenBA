@@ -317,6 +317,13 @@ void Assign1c(uint8_t* d, const uint8_t* s) {
         reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
 }
 
+// WAVE 9 LANE PKG2 rung 4b-ii — 0x180024c10, Array<CompressedStream::Window>.
+// The copy is three plain qword moves at +0x00, +0x08 and +0x10.
+void Assign18(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 3; ++k)
+        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
+}
+
 void InitZero8(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
 // 0x18007b960's `else` arm is `MOV dword ptr [RDX],0xffffffff`.
 void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
@@ -325,6 +332,24 @@ void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
 //   [d+0x0c] = 0x3f800000 (qword: 1.0f at +0x0c, 0 at +0x10)
 //   [d+0x14] = 0 (qword)
 // All 0x1c bytes are written, so there is no unwritten hole in this one.
+// 0x180024c10's `else` arm, an empty CompressedStream::Window. Three stores,
+// and TWO of them are worth spelling out:
+//   MOV dword ptr [RCX],R11D        -> [d+0x00] = 0   (4 bytes)
+//   MOV qword ptr [RCX+0x4],-0x1    -> [d+0x04] = -1  (8 bytes, UNALIGNED,
+//                                      covering +0x04..+0x0b)
+//   MOV qword ptr [RCX+0x10],R11    -> [d+0x10] = 0   (8 bytes)
+// So **+0x0c..+0x0f is NEVER WRITTEN** by the tail init, even though the
+// element stride is 0x18. Any oracle over a grown Array<Window> must exclude
+// those four bytes or it compares memory neither side wrote
+// (reference_oracle_must_not_compare_unwritten_bytes). The unaligned 8-byte -1
+// is retail's, not a transcription convenience — the same shape as
+// InitIdentityTransform's qword at +0x0c below.
+void InitWindow(uint8_t* d) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
+    *reinterpret_cast<int64_t*> (d + 0x04) = -1;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+}
+
 void InitIdentityTransform(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
     *reinterpret_cast<uint32_t*>(d + 0x08) = 0;
@@ -680,6 +705,15 @@ const ArraySpec kSpec_U64Zero = {                 // 0x180008ff0  Array<Time>
 const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
     "Array<CompressedStream::Header>", 8, 4, &Assign8, &InitZero8, nullptr, true,
     0, 0, 0, 0, 0, 0 };
+
+// 0x180024c10 — Array<CompressedStream::Window>, the window table
+// CompressedStream::SetWindowCount grows. Element stride 0x18 (`LEA
+// RCX,[RAX+RAX*2]; SHL RCX,3`), align 8 (`MOV EDX,0x8`), both read from the
+// body. Distinct from every spec above on BOTH the element size and the tail
+// init, so unlike kSpec_U64ZeroA4 there was no lookalike to be tempted by.
+const ArraySpec kSpec_Window = {                  // 0x180024c10  Array<Window>
+    "Array<CompressedStream::Window>", 0x18, 8, &Assign18, &InitWindow, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_PtrZero = {                 // 0x180008d60, 0x1800764c0
     "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
@@ -1148,6 +1182,7 @@ J3_ENTRY2(180029630, kSpec_Bool)        // IO:          Array<bool>,  tail UNINI
 // Rung 4b-ii: the packfile block directory. 8-byte elements, tail ZEROED
 // (`MOV [RDX],R10` with R10 == 0), but align 4 — see kSpec_U64ZeroA4 above.
 J3_ENTRY2(180024d70, kSpec_U64ZeroA4)   // IO:          Array<CompressedStream::Header>
+J3_ENTRY2(180024c10, kSpec_Window)      // IO:          Array<CompressedStream::Window>
 
 #undef J3_ENTRY2
 
@@ -1285,6 +1320,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
+    RegisterRuntimeAddr(0x180024c10, (void*)&RtColl_ArraySetSize_180024c10);  // PKG2 4b-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
