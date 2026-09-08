@@ -210,8 +210,26 @@ what the process *asks the DLL for*, not what it calls.
 # Addendum: the resolve-fallback audit (correction 3, generalised)
 
 Asked for after the main report, because correction 3 found four bad fallback addresses and
-established there is no formula to correct them with. Full table:
-**[wave9_resolve_fallbacks.csv](wave9_resolve_fallbacks.csv)** (166 rows).
+established there is no formula to correct them with.
+
+**Landed as a standing audit: `tools/resolve_fallback_audit.py`**, beside
+`export_name_audit.py`, `dispatch_slot_map.py --check` and `abi_retslot_audit.py`. It
+reproduces this table from source and exits non-zero on a defect, so it can gate:
+
+```
+tools/ghidra_mcp/.venv/Scripts/python.exe tools/resolve_fallback_audit.py
+    166 guarded ResolveExport->ResolveAddr fallbacks; 5 do NOT point at their own name
+    ... exit 1
+```
+
+**[wave9_resolve_fallbacks.csv](wave9_resolve_fallbacks.csv)** (166 rows) is now that
+script's `--csv` output rather than a hand-written table, so it cannot drift from the tree.
+The five defects are unchanged; the per-site notes stay here in prose.
+
+**The five source sites are deliberately NOT fixed in this round.** Lane 0 is mid-matrix and
+`engine/funcs/engine_funcs.cpp` is on the boot path; editing a resolve site now would
+invalidate a residue measurement for a defect that is provably dead today. Dead-but-latent
+waits one round.
 
 ## Result
 
@@ -285,12 +303,32 @@ These are three different decisions, and only the first is obvious:
 | 2 (`engine_funcs.cpp:3144`) | **CORRECT to `0x180006250`** | `?GetPath@External@Object@@…` is DLL-only today (no port registers it), so this fallback is one phantom-name away from live, and `GetPath` is 15 instructions — correcting it costs nothing. |
 | 1 (`engine_funcs.cpp:2855`) | **CORRECT to `0x180047c00`, and say so in a comment** | Deleting it is defensible too, but this is the one where a future reader most needs to find the note: `RadioElement::FindCheckBoxes` is an overload set, and the private 2-param sibling sits 0x8db50 away. Whichever way it goes, the record of *why* has to survive. |
 
+## The checker dies at cutover, and that is the point
+
+`tools/resolve_fallback_audit.py` answers its question by reading the shipped
+`Runtime-x64.dll`'s export directory. Lane G deletes that DLL. **On that day the audit stops
+working — at exactly the moment these fallbacks stop being dead.** With no DLL there is no
+`ResolveExport` that can succeed, so *every* fallback branch in the tree becomes the live
+path simultaneously, and 166 of them would start jumping at addresses in a module that is not
+mapped.
+
+So the replacement for this tool is not another tool. **It is that every one of these 166
+branches must be deleted before lane G**, leaving nothing to audit. That is a concrete,
+countable lane F/G item that was not on the list: not "retire the §2.2 patches" but "retire
+the fallback idiom", 166 sites. Until then the script gates, and if it is run with the DLL
+already gone it exits **2** and says which failure that is, rather than passing quietly —
+because a checker that returns 0 when it cannot check is how this project got here.
+
+This is the same shape as WAVE9.md §2: the verification budget has to be spent while the
+oracle exists. The fallback audit is one more mechanism on that list of things that die at
+cutover, and it belongs in that table.
+
 ## What should stop this recurring
 
-The audit is thirty lines of Python and needs no Ghidra: for each guarded
+The audit is a short script and needs no Ghidra: for each guarded
 `ResolveAddr(Module::Runtime, addr)` fallback, pull the mangled name assigned to the same
 target, look the name up in the shipped export directory with `pefile`, and compare addresses.
-It runs against the DLL on disk, so it works today and stops working the day the DLL is
+It runs against the DLL on disk (see the section above for what that means at cutover) and is
 removed — which argues for landing it as a `tools/` checker beside
 `tools/export_name_audit.py` and `tools/dispatch_slot_map.py --check` **before** lane G, not
 after. Both of those tools exist because the same class of defect was found by hand once and
