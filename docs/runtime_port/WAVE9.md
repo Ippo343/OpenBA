@@ -681,6 +681,35 @@ set.
 is `[RtResolve] 0 misses` **AND** matching `[RtDiff]` totals **including the site count**,
 since a matching `divergences=0` over a different denominator proves nothing.
 
+### ⛔ NEW LIVE DEFECT CLASS: the EARLY SNAPSHOT — "frozen → retry" does NOT fix it
+
+Lane H, 2026-09-08, flagged against its own work.
+
+**Retry only re-resolves a NULL. A non-null answer is still frozen.** So a site whose first
+call happens **before `RuntimePortInit()`** captures the DLL's address permanently and
+**bypasses a port registered afterwards**. That is the port-bypass defect
+(`reference_bypassed_port_needs_a_source_checker.md`) frozen in — and unlike everything else
+in this section it is **LIVE TODAY, not at cutover**.
+
+**Anyone reading "frozen → retry" as a fix for early snapshotting will be wrong.** The 90
+converted sites are protected against a *null* resolve, not against an *early* one.
+
+Why no existing instrument sees it: the site is spelled correctly, resolves through the
+right door, and `port_bypass_audit` finds nothing — **only the ORDERING is wrong**. A source
+checker cannot see it, and the diff oracle reports the port clean because our body never
+runs. It joins the list of things visible only to a runtime observation.
+
+**The material is the DIRECT bucket (1,016 sites) plus its ordering.** Needs its own lane and
+its own audit. **Suggested measurement, since the machinery now exists:** `RtResolveCached`
+already counts and names its misses — have it also record any resolve that happens **before
+`RuntimePortInit()` returns**, which converts "is this class live?" from an argument into a
+number, on an ordinary run, today.
+
+**Also carried forward, belonging to no current lane:** WAVE9_LANE_E2 §5.2 (the allocator's
+`Shutdown`, `~MemoryAllocator`, `operator=`, `GetAllocationSize`, `GetAllocatedSize`, `Get`
+— never exercised by the shadow) and §5.3 (the 5% `sim ms/iteration` gate, three runs per
+config on the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
