@@ -60,7 +60,10 @@ SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-t
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
-SA_LIBS = -luser32 -ldbghelp -lshell32
+# -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
+# CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
+# cannot see a missing import library at all -- this failed only at link.
+SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32
 SA_INCLUDES = -I. -Iengine/types -Iengine/funcs -Icode/Game \
               -Iruntime/types -Iruntime/funcs \
               -Idx11/types -Idx11/funcs -Istandalone
