@@ -741,6 +741,9 @@ void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval) {
     return retval;
 }
 
+// WAVE 9 LANE UIF — runtime/src/ui/spritecontext.cpp.
+extern int RtUiSpriteContextRegister();
+
 // ============================================================================
 int RtUiSpriteRegister() {
     int n = 0;
@@ -763,7 +766,19 @@ int RtUiSpriteRegister() {
     RegisterRuntimeExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z",
                           (void*)&RtUi_SpriteSheet_AddSpriteInfo); ++n;
 
-    // SpriteContext::AddLine / SetScissor x2 -- HELD BACK, see file header §.
+    // SpriteContext::AddLine / SetScissor x2 -- NO LONGER HELD BACK. Ported by
+    // WAVE 9 LANE UIF in runtime/src/ui/spritecontext.cpp, together with the
+    // two unexported internals they call. Registered from here rather than
+    // from a new slot in rt_ui_port.cpp because that file says, in its own
+    // header, not to edit it to add a lane -- SpriteContext is lane F's row and
+    // this keeps it there.
+    //
+    // The Wave 7 hold-back argument was about `Flush` (0x18011ba40), which
+    // submits into the live GPU vertex buffer and is STILL held back. See
+    // runtime/types/ui/SpriteContext.h for why that argument does not reach
+    // the three exports, and docs/runtime_port/WAVE9_LANE_UIF2.md for the
+    // cutover cost of the address door it leaves open.
+    n += RtUiSpriteContextRegister();
 
     RegisterRuntimeExport("?GetCount@StringTable@UI@@QEBAHXZ", (void*)&RtUi_StringTable_GetCount); ++n;
     RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z",
