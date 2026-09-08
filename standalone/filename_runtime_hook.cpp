@@ -48,6 +48,7 @@
 
 
 #include "resolve.h"
+#include "res_load_lock.h"
 
 #include <windows.h>
 #include <cstdint>
@@ -68,6 +69,46 @@ FilenameAssignFn g_origCtorStr = nullptr;  // trampoline -> real Filename(const 
 volatile LONG g_events   = 0;
 bool          g_abort    = false;
 int           g_maxEvents = 80;
+
+// --- EFFECTIVENESS CONTROL (Wave 9 lane FNHOOK) ----------------------------
+// "[FNHook] detoured X" says the bytes were written. It does NOT say the
+// wrapper ever ran, and for four of these the difference was invisible for
+// months: the installer was aiming at our own ported body, the byte guard
+// refused, and the only evidence was one "prologue mismatch" line in a 72KB
+// stderr log. These counters are incremented INSIDE each wrapper, so a zero
+// here means the detour is live but unreached — the distinction
+// reference_uncalled_port_is_not_verified.md exists for.
+volatile LONG g_hitDtor     = 0;
+volatile LONG g_hitAssign   = 0;
+volatile LONG g_hitAssignFn = 0;
+volatile LONG g_hitCtorStr  = 0;
+volatile LONG g_hitRead     = 0;
+volatile LONG g_hitFindOrLoad   = 0;
+volatile LONG g_hitExternalLoad = 0;
+
+void FnHookCensus();
+
+// Arm the exit census once, from whichever installer runs first. The three
+// installers are independently gated (BANISHED_FNHOOK / the ResLoad default-on
+// path / BANISHED_READ_GUARD), so any of them may be the only one that runs and
+// all three must be able to arm it.
+void FnHookCensusOnce() {
+    static bool s_armed = false;
+    if (s_armed) return;
+    s_armed = true;
+    atexit(&FnHookCensus);
+}
+
+void FnHookCensus() {
+    fprintf(stderr, "[FNHook] census: ~Filename=%ld operator=(String)=%ld "
+            "operator=(Filename)=%ld Filename(String)=%ld\n",
+            (long)g_hitDtor, (long)g_hitAssign,
+            (long)g_hitAssignFn, (long)g_hitCtorStr);
+    fprintf(stderr, "[ResLoad] census: FindOrLoad=%ld External::Load=%ld\n",
+            (long)g_hitFindOrLoad, (long)g_hitExternalLoad);
+    fprintf(stderr, "[ReadGuard] census: Read=%ld\n", (long)g_hitRead);
+    fflush(stderr);
+}
 
 // Resolve a code address to "module.dll+0xOFF" (names the Runtime caller).
 void LogModOff(const char* label, uint64_t addr) {
@@ -234,6 +275,7 @@ void ReportUAF(const char* op, void* str, int rc, void* caller) {
 
 // ~Filename wrapper: check the to-be-released String before delegating.
 void CheckedDtor(void* self) {
+    InterlockedIncrement(&g_hitDtor);
     if (self) {
         void* str = *reinterpret_cast<void**>(self);
         int rc = 0;
@@ -247,6 +289,7 @@ void CheckedDtor(void* self) {
 // operator= wrapper: the AddRef of src (inc) is the prime suspect (the +1 that
 // makes link-high-dword 1 -> +0x100000000). Also check dst's old String (dec).
 void* CheckedAssign(void* dst, const void* src) {
+    InterlockedIncrement(&g_hitAssign);
     void* caller = __builtin_return_address(0);
     if (dst) {
         void* dstStr = *reinterpret_cast<void**>(dst);
@@ -271,6 +314,7 @@ void* CheckedAssign(void* dst, const void* src) {
 // operator=(const Filename&) @ 0x180007d40 — same dec(dst-old)+inc(src) idiom
 // as operator=(String&); GetPath/GetPathForReferenceId assignments flow here.
 void* CheckedAssignFilename(void* dst, const void* src) {
+    InterlockedIncrement(&g_hitAssignFn);
     void* caller = __builtin_return_address(0);
     if (dst && src) {
         void* dstStr = *reinterpret_cast<void**>(dst);
@@ -296,6 +340,7 @@ void* CheckedAssignFilename(void* dst, const void* src) {
 // This is how GetPath/GetPathForReferenceId build the by-value Filename they
 // return — a prime AddRef-of-a-freed-path-String suspect.
 void* CheckedCtorFromString(void* dst, const void* src) {
+    InterlockedIncrement(&g_hitCtorStr);
     if (src) {
         void* srcStr = *reinterpret_cast<void* const*>(src);
         int rc = 0;
@@ -311,9 +356,17 @@ void* CheckedCtorFromString(void* dst, const void* src) {
 // (patchLen >= 12, must land on an instruction boundary) and build an
 // executable trampoline holding the original patchLen bytes + an absolute JMP
 // back to addr+patchLen. Returns the trampoline (the real body) or nullptr.
-void* DetourRuntimeFunc(uintptr_t addr, void* wrapper, int patchLen,
+//
+// TAKES THE GHIDRA ADDRESS and resolves it with ResolveRuntimeRaw — the door
+// that does NOT consult the port registry. See the block comment above
+// RuntimeDetourInstall in standalone/runtime_detour.h for why this resolve
+// moved inside: every caller used to hand in ResolveAddr(Module::Runtime, …),
+// which returns OUR body once a port registers at the same address, and the
+// prologue guard below then quietly refused to install anything.
+void* DetourRuntimeFunc(uintptr_t ghidraAddr, void* wrapper, int patchLen,
                         const uint8_t* expected, int expectedLen,
                         const char* name) {
+    uintptr_t addr = ResolveRuntimeRaw(ghidraAddr);
     if (!addr) {
         fprintf(stderr, "[FNHook] could not resolve %s\n", name);
         return nullptr;
@@ -383,6 +436,7 @@ extern "C" void InstallFilenameRuntimeHook() {
         int v = atoi(m);
         if (v > 0) g_maxEvents = v;
     }
+    FnHookCensusOnce();
     const char* dd = getenv("BANISHED_FNHOOK_DATADIR");
     g_watchDataDir = (dd && dd[0] && dd[0] != '0');
 
@@ -393,7 +447,7 @@ extern "C" void InstallFilenameRuntimeHook() {
         0x48,0xc7,0x44,0x24,0x20,0xfe,0xff,0xff,0xff
     };
     g_origDtor = reinterpret_cast<FilenameDtorFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x180006980),
+        0x180006980,
         reinterpret_cast<void*>(&CheckedDtor), 18,
         kDtorPrologue, sizeof(kDtorPrologue), "Filename::~Filename"));
 
@@ -403,7 +457,7 @@ extern "C" void InstallFilenameRuntimeHook() {
         0x48,0x89,0x5c,0x24,0x08, 0x57, 0x48,0x83,0xec,0x20, 0x48,0x8b,0x01
     };
     g_origAssign = reinterpret_cast<FilenameAssignFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x180006770),
+        0x180006770,
         reinterpret_cast<void*>(&CheckedAssign), 13,
         kAssignPrologue, sizeof(kAssignPrologue), "Filename::operator="));
 
@@ -414,7 +468,7 @@ extern "C" void InstallFilenameRuntimeHook() {
         0x48,0x89,0x74,0x24,0x18, 0x57, 0x48,0x83,0xec,0x20
     };
     g_origAssignFn = reinterpret_cast<FilenameAssignFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x180007d40),
+        0x180007d40,
         reinterpret_cast<void*>(&CheckedAssignFilename), 20,
         kAssignFnPrologue, sizeof(kAssignFnPrologue), "Filename::operator=(Filename)"));
 
@@ -425,7 +479,7 @@ extern "C" void InstallFilenameRuntimeHook() {
         0x48,0xc7,0x44,0x24,0x20,0xfe,0xff,0xff,0xff
     };
     g_origCtorStr = reinterpret_cast<FilenameAssignFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x1800067d0),
+        0x1800067d0,
         reinterpret_cast<void*>(&CheckedCtorFromString), 19,
         kCtorStrPrologue, sizeof(kCtorStrPrologue), "Filename(String&)"));
 
@@ -436,7 +490,10 @@ extern "C" void InstallFilenameRuntimeHook() {
     // null-check itself and the trampoline reproduces only push/sub/cookie then
     // jumps to MemFree+0x13. Only installed when the data-dir watch is on.
     if (g_watchDataDir) {
-        uintptr_t mf = ResolveAddr(Module::Runtime, 0x1800c7ad0);
+        // RAW, not ResolveAddr: 0x1800c7ad0 is a REGISTERED PORT today
+        // (runtime/src/system/allocator.cpp — rtalloc::MemFree), so the
+        // port-registry door would hand this installer our own body to patch.
+        uintptr_t mf = ResolveRuntimeRaw(0x1800c7ad0);
         static const uint8_t kMfPrologue[19] = {
             0x48,0x85,0xc9, 0x74,0x56, 0x57, 0x48,0x83,0xec,0x30,
             0x48,0xc7,0x44,0x24,0x20,0xfe,0xff,0xff,0xff
@@ -474,8 +531,8 @@ extern "C" void InstallFilenameRuntimeHook() {
         }
     }
 
-    fprintf(stderr, "[FNHook] installed (abort=%d maxEvents=%d) — watching "
-            "Runtime-internal Filename refcount UAF\n", (int)g_abort, g_maxEvents);
+    fprintf(stderr, "[FNHook] installed (abort=%d maxEvents=%d target-resolution=RAW) — "
+            "watching Runtime-internal Filename refcount UAF\n", (int)g_abort, g_maxEvents);
     fflush(stderr);
 }
 
@@ -512,7 +569,9 @@ typedef void* (*FindOrLoadFn)(void* self, void* fname);
 typedef void* (*ExternalLoadFn)(void* fname, void* ext);
 FindOrLoadFn     g_origFindOrLoad   = nullptr;
 ExternalLoadFn   g_origExternalLoad = nullptr;
-CRITICAL_SECTION g_resCS;  // shared recursive lock for FindOrLoad + External::Load
+// The lock moved to standalone/res_load_lock.{h,cpp} (Wave 9 lane FNHOOK) so
+// that a PORTED FindOrLoad can take the same one. Keeping it here made the fix
+// a property of the byte patch, and the byte patch does not exist at cutover.
 
 // BANISHED_FOL_TRACE=1: log every FindOrLoad/External::Load filename (capped) to
 // find non-terminating / looping loads. Default OFF (no behavior change). A
@@ -545,34 +604,41 @@ static inline void RecordFolName(void* fname) {
     if (p) { strncpy(g_lastFolName, p, sizeof(g_lastFolName) - 1); g_lastFolName[sizeof(g_lastFolName) - 1] = 0; }
 }
 
+// The manual acquire/release pair rather than ResLoadGuard: these wrappers are
+// entered from a byte patch on MSVC-compiled code, and PLAN.md §4.3 risk 5 says
+// to keep anything that could unwind out of that boundary. A destructor here
+// would be that.
 void* FindOrLoadWrapper(void* self, void* fname) {
-    EnterCriticalSection(&g_resCS);
+    InterlockedIncrement(&g_hitFindOrLoad);
+    ResLoadLockAcquire();
     FolTrace("FindOrLoad", fname);
     RecordFolName(fname);
     void* r = g_origFindOrLoad(self, fname);
-    LeaveCriticalSection(&g_resCS);
+    ResLoadLockRelease();
     return r;
 }
 
 void* ExternalLoadWrapper(void* fname, void* ext) {
-    EnterCriticalSection(&g_resCS);
+    InterlockedIncrement(&g_hitExternalLoad);
+    ResLoadLockAcquire();
     FolTrace("ExtLoad", fname);
     RecordFolName(fname);
     void* r = g_origExternalLoad(fname, ext);
-    LeaveCriticalSection(&g_resCS);
+    ResLoadLockRelease();
     return r;
 }
 
 extern "C" void InstallFindOrLoadWatch() {
     // The serialize lock is the menu-crash FIX — default ON (opt out with
-    // BANISHED_NO_FOL_LOCK=1).
-    const char* noLock = getenv("BANISHED_NO_FOL_LOCK");
-    if (noLock && noLock[0] && noLock[0] != '0') {
-        fprintf(stderr, "[ResLoad] BANISHED_NO_FOL_LOCK set — resource loader NOT serialized\n");
-        fflush(stderr);
-        return;
-    }
-    InitializeCriticalSection(&g_resCS);
+    // BANISHED_NO_FOL_LOCK=1). The LOCK ITSELF now lives in
+    // standalone/res_load_lock.cpp and initializes on first use; this function
+    // only installs the DLL-side half of it. That split is the point: with
+    // Runtime-x64.dll absent there is nothing to patch and this function does
+    // nothing, so a ported FindOrLoad/External::Load must take the lock in its
+    // own body or the serialization ceases to exist at cutover. See
+    // standalone/res_load_lock.h.
+    if (!ResLoadLockArmed()) return;   // the kill switch already logged itself
+    FnHookCensusOnce();
 
     // FindOrLoad @ 0x1800bf320 — 14-byte boundary: REX-prefixed push rbp
     // (40 55), push rbx/rsi/rdi (53 56 57), push r14 (41 56), mov rbp,rsp
@@ -582,7 +648,7 @@ extern "C" void InstallFindOrLoadWatch() {
         0x48,0x8b,0xec, 0x48,0x83,0xec,0x70
     };
     g_origFindOrLoad = reinterpret_cast<FindOrLoadFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x1800bf320),
+        0x1800bf320,
         reinterpret_cast<void*>(&FindOrLoadWrapper), 14,
         kFolPrologue, sizeof(kFolPrologue), "ExternalFactory::FindOrLoad"));
 
@@ -597,11 +663,12 @@ extern "C" void InstallFindOrLoadWatch() {
         0x48,0x8d,0x68,0xd8, 0x48,0x81,0xec,0x10,0x01,0x00,0x00
     };
     g_origExternalLoad = reinterpret_cast<ExternalLoadFn>(DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x1800bc620),
+        0x1800bc620,
         reinterpret_cast<void*>(&ExternalLoadWrapper), 18,
         kExtLoadPrologue, sizeof(kExtLoadPrologue), "External::Load"));
 
-    fprintf(stderr, "[ResLoad] serialized: FindOrLoad=%p External::Load=%p (recursive CS)\n",
+    fprintf(stderr, "[ResLoad] serialized: FindOrLoad=%p External::Load=%p "
+            "(recursive CS, target-resolution=RAW)\n",
             (void*)g_origFindOrLoad, (void*)g_origExternalLoad);
     fflush(stderr);
 }
@@ -628,6 +695,7 @@ static volatile LONG g_readGuardN  = 0;
 //   +0x1c int pos; +0x20 int windowIdx (*0x18 stride); +0x30 ptr winArray.
 //   window entry: +0x04 int winStart; +0x08 int winEnd; +0x10 char* winData.
 bool ReadGuardWrapper(void* self, int count, void* dst) {
+    InterlockedIncrement(&g_hitRead);
     while (true) {
         if (count < 1) return true;
         if (!g_setWindow || !g_setWindow(self, *(int*)((uint8_t*)self + 0x1c)))
@@ -667,8 +735,16 @@ extern "C" void InstallReadGuard() {
     const char* e = getenv("BANISHED_READ_GUARD");
     if (!e || !e[0] || e[0] == '0' || e[0] == 'f' || e[0] == 'F') return;
 
-    g_setWindow = reinterpret_cast<SetWindowFn>(
-        ResolveAddr(Module::Runtime, 0x1800a9aa0));  // IO::CompressedStream::SetWindow
+    // IO::CompressedStream::SetWindow. RAW, for the same reason as the Read
+    // target below: this guard REPLACES the DLL's Read body, and the only
+    // callers that reach the replacement are DLL-INTERNAL ones (our own callers
+    // go to the registered port at 0x1800aa780). Retail's Read calls retail's
+    // SetWindow, so the replacement calls the shipped one and the substitution
+    // stays confined to the one function it is instrumenting. 0x1800a9aa0 is a
+    // registered port too (compressed_stream_read.cpp:453), so ResolveAddr here
+    // would silently mix our SetWindow into a shipped call chain.
+    FnHookCensusOnce();
+    g_setWindow = reinterpret_cast<SetWindowFn>(ResolveRuntimeRaw(0x1800a9aa0));
 
     // Read @0x1800aa780 — 15-byte instruction boundary: mov[rsp+8],rbx;
     // mov[rsp+0x10],rbp; mov[rsp+0x18],rsi. We REPLACE the body (never call the
@@ -677,7 +753,7 @@ extern "C" void InstallReadGuard() {
         0x48,0x89,0x5c,0x24,0x08, 0x48,0x89,0x6c,0x24,0x10, 0x48,0x89,0x74,0x24,0x18
     };
     void* tramp = DetourRuntimeFunc(
-        ResolveAddr(Module::Runtime, 0x1800aa780),
+        0x1800aa780,
         reinterpret_cast<void*>(&ReadGuardWrapper), 15,
         kReadPrologue, sizeof(kReadPrologue), "CompressedStream::Read");
 

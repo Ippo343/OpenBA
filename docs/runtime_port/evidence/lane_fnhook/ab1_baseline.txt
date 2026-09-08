@@ -1,0 +1,11 @@
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=0000012d1c320000, 17-byte patch)
+[FNHook] Filename::~Filename prologue at 00007ff6dea82508 mismatch — refusing to patch
+[FNHook] Filename::operator= prologue at 00007ff6dea8252f mismatch — refusing to patch
+[FNHook] detoured Filename::operator=(Filename) @00007ffcafad7d40 (tramp=0000012d1c6e0000, 20-byte patch)
+[FNHook] Filename(String&) prologue at 00007ff6dea82474 mismatch — refusing to patch
+[FNHook] installed (abort=0 maxEvents=80) — watching Runtime-internal Filename refcount UAF
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=0000012d1c6f0000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=0000012d1c700000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=0000012d1c6f0000 External::Load=0000012d1c700000 (recursive CS)
+[FNHook] CompressedStream::Read prologue at 00007ff6dea4a857 mismatch — refusing to patch
+[ReadGuard] installed: Read=FAILED SetWindow=00007ff6dea4a413 (BANISHED_READ_GUARD)

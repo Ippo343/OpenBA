@@ -379,7 +379,12 @@ bool InstallAllocatorLock() {
         return true;  // intentional skip
     }
 
-    uintptr_t allocate = ResolveAddr(Module::Runtime, 0x1800c6e60);
+    // RAW, not ResolveAddr (Wave 9 lane FNHOOK, tools/detour_target_audit.py):
+    // this is a BYTE PATCH on the shipped body. 0x1800c6e60 is unported today,
+    // so the two doors agree — but the port registry is consulted FIRST, and the
+    // day lane E's allocator lands this would patch our own GCC prologue, fail
+    // the byte guard below, and disarm the allocator lock with one stderr line.
+    uintptr_t allocate = ResolveRuntimeRaw(0x1800c6e60);
     if (!allocate) {
         fprintf(stderr, "[AllocLock] could not resolve Allocate (0x1800c6e60)\n");
         fflush(stderr);
@@ -453,7 +458,8 @@ bool InstallFreeLock() {
         }
     }
 
-    uintptr_t freeAddr = ResolveAddr(Module::Runtime, 0x1800c6c00);
+    // RAW — same reason as Allocate above. See tools/detour_target_audit.py.
+    uintptr_t freeAddr = ResolveRuntimeRaw(0x1800c6c00);
     if (!freeAddr) {
         fprintf(stderr, "[AllocLock] could not resolve Free (0x1800c6c00)\n");
         fflush(stderr);

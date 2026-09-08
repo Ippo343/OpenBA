@@ -1,0 +1,7 @@
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=00000162cd6b0000, 17-byte patch)
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=00000162cd6c0000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=00000162cd6d0000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=00000162cd6c0000 External::Load=00000162cd6d0000 (recursive CS, target-resolution=RAW)
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=0
+[ResLoad] census: FindOrLoad=22585 External::Load=5686
+[ReadGuard] census: Read=0

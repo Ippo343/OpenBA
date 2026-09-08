@@ -720,6 +720,14 @@ def main():
             elif not name:
                 verdict = "NO-EXPORT"      # header-only template &c -- correct
             elif addr in ported_addrs:
+                # NOT A PASS FOR EVERY CALLER. This says "the site reaches our
+                # port", which is the success condition for an ordinary caller
+                # and the DEFECT for one that patches, trampolines to, or
+                # diff-tests against the shipped body -- those must use the
+                # *Raw* doors (standalone/resolve.h). Wave 9 lane FNHOOK found
+                # thirteen such sites, six of them aiming a byte patch at our
+                # own GCC prologue, while this audit correctly reported 0
+                # bypasses. tools/detour_target_audit.py owns that question.
                 verdict = "ADDR-REGISTERED"
             elif addr in detoured or name in detoured_names:
                 verdict = "DETOURED"
