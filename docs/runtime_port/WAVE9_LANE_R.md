@@ -250,6 +250,67 @@ so this cell does not reach either — the same fact that let the `growthcompone
 address survive. What is proved for those two is static: the address is now the one retail's
 own import slot names, and it goes through the port.
 
+## Which DOOR the fixed sites use — asked after the fact, answered by measurement
+
+`25f78a5` lit three previously dark resolve doors, and raised a fair question about this
+lane's own fix: a by-name resolve that goes through `ResolveExportRaw` is still a DLL
+request — it just files under `[RtRawResidue]` instead of `[RtResidue]`, so a clean
+`[RtResidue]` would be measuring the fix's bookkeeping rather than its effect. Lane 0 found
+**34 already-ported functions in exactly that state.**
+
+**They use `ResolveExport`, the lit port-aware door, and they HIT it.** Three independent
+lines of evidence, because the first two alone would not settle it:
+
+1. **Source.** `ResolveExport` (`standalone/resolve_standalone.cpp:581`) checks
+   `RtExportReg()` first and returns our function on a hit. On a MISS it calls
+   `RecordRuntimeResidue(name, …)` and then `ResolveExportRawImpl` — the *un-instrumented*
+   body. So a miss is visible, and it is visible in `[RtResidue]` under the **mangled name**,
+   never under `raw:`.
+2. **Measurement.** No name key for any of the five converted sites appears anywhere in the
+   303-row `[RtResidue]` list. Since a miss would have printed one, every one of them is a
+   port-registry hit. This is the same fact as "three `addr:` rows disappeared and nothing
+   was gained", read from the other side — and it is why the disappearance is evidence of a
+   HIT rather than merely of a changed spelling.
+3. **The `[RtRawResidue]` block, checked by name.** 77 rows this cell. Two of them are
+   `raw:??0Serializer@IO@@…` and `raw:??1Serializer@IO@@XZ`, count **1** each, both from
+   return address `…7286`. Symbolised against the exe (`nm`, load base `0x7ff79a7d0000`,
+   delta 0) that is **`VerifyBody+0x20`** — the registration-time structural check inside
+   `runtime/src/io/serializer.cpp`, i.e. lane 0's harmless category, **not** the tutorial
+   dialog. `?RandFloat@…`, `?Rand@…QEAAII@Z` and `?AsMatrix@Transform@Math@@` appear in
+   neither block.
+
+Raw block: `docs/runtime_port/wave9_laneR_rawresidue_gameplay.txt`.
+
+## The lazy-`static` timing hazard: real in principle, absent here, and left alone
+
+Both bypass sites cache in a function-local `static` inside an `EnsureResolved()` /
+`EnsureHelpers()`, so converting them changes *when* they resolve relative to
+`RuntimePortInit`, not only *which* registry answers. If either helper could run first, a
+by-name resolve would cache the DLL's function **forever** — the residue line would vanish
+and the port would still never run, which is a worse outcome than the bug.
+
+It cannot happen here, structurally and then measurably:
+
+* `RuntimePortInit()` is called at `standalone/main.cpp:1655`, **before** `EngineFuncsInit`
+  and before any game, dialog or component code exists. The two helpers hang off a tutorial
+  dialog's construction and a herd component's tick; neither can precede it.
+* And it did not happen: a pre-`RuntimePortInit` resolve would have been a registry MISS,
+  which prints the mangled name in `[RtResidue]`. No such row exists (evidence 2 above).
+
+So the caching scheme is **unchanged** — deliberately. Re-checking the cache or routing
+through a different path would be a behaviour change with no defect behind it, and a fresh
+`static` that provably resolves after `RuntimePortInit` is the same shape every other port
+call site in the tree uses.
+
+## Reproduced on a pinned build
+
+The numbers above were re-measured on a **clean worktree of `6dd6354`** (built 21:05,
+deployed 21:06), so that no other lane's in-flight edits could enter them —
+`runtime/src/collection/`, `rt_port.h` and `resolve_standalone.cpp` were all being modified
+in the main tree at the time. The `[RtResidue]` set came back **byte-identical** to the
+20:54 run: 303 rows, same members. The residue is a property of the source, which is what
+lane 0 measured independently on its own two passes.
+
 ## Files
 
 Changed: `code/Game/Component/growthcomponent.cpp`, `code/Game/Component/herdcomponent.cpp`,
@@ -258,7 +319,8 @@ Changed: `code/Game/Component/growthcomponent.cpp`, `code/Game/Component/herdcom
 `runtime/funcs/rt_port.h`, `runtime/src/graphics/scene.cpp`,
 `tools/resolve_fallback_audit.py`.
 Added: `tools/port_bypass_audit.py`, `docs/runtime_port/wave9_port_bypasses.csv`,
-`docs/runtime_port/wave9_laneR_residue_gameplay.txt`, this file.
+`docs/runtime_port/wave9_laneR_residue_gameplay.txt`,
+`docs/runtime_port/wave9_laneR_rawresidue_gameplay.txt`, this file.
 Regenerated: `docs/runtime_port/wave9_resolve_fallbacks.csv` (163 rows, all CORRECT).
 
 ## For lane F
