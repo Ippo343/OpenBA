@@ -1680,6 +1680,31 @@ is again the thing that names the fault. The three null slots visible in the vta
 That the object now carries a correctly minted vtable is itself the measurement that lane
 PKG2's constructor port works at cutover.
 
+### THE EFFECTIVENESS CONTROL WAS WRONG TWICE, AND BOTH TIMES IT SAID PASS
+
+Lane PKG2's rung 2 (`CompressedStream` read path). The project already knows a probe
+needs an effectiveness control. This is the next lesson down: **the control itself is
+code, it can be wrong, and when it is wrong it fails in the direction that says PASS.**
+
+| version | what it counted | why it was worthless |
+|---|---|---|
+| v1 | changes to `activeWindow` | `Open@CompressedMemoryStream` hardcodes **one** window, so the value is 0 forever. It reported "LRU unverified" on a run that evicted on **every block** |
+| v2 | reads that did not refill | dominated by the **fast path**. Said "LRU EXERCISED". **A false pass** |
+| v3 | branches *inside* `SetWindow` | correct — and it immediately exposed that the CORPUS was inadequate too: sequential reading never returns to a resident block, so `scanHit` was 0 at **any** window count. A third configuration (4 windows + a rewinding schedule) took it to 3 |
+
+Without v3, **three of the four bodies would have been "verified" by a green run that
+never entered their interesting branch.**
+
+The rule that generalises: **count branches taken INSIDE the function under test, not
+proxies observed from outside it.** Every outside proxy here was either structurally
+pinned (v1) or swamped by the common path (v2). And when the control finally works, it
+tells you about your CORPUS as well as your code — a control that cannot go to zero is
+not measuring coverage.
+
+Corollary, for anyone reading a dashboard: `Read` reports `calls=0 worked=225`.
+**`calls=0` means "no self-comparison", not "never ran"** — a lockstep probe is the
+oracle there, and the column that would normally be the alarm is structurally zero.
+
 ### SEVEN blind instruments in one session — and the rule they all share
 
 The eight-lane session found blind spots in seven separate measuring tools. They are not
