@@ -45,6 +45,12 @@
 #include "../../types/system/Filename.h"
 #include "../../src/system/string.h"
 
+// Declared locally rather than via standalone/resolve.h, which drags in
+// <windows.h> that PLAN §4.1 keeps out of runtime/src/. Must stay byte-identical
+// to resolve.h's; the linker checks the two against each other.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 namespace RtIO {
 
 using RtSystem::String;
@@ -53,6 +59,7 @@ using RtSystem::RtString_ReleaseInline;
 
 extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem*, FileInfo*, const Filename*);
 extern "C" bool      RtIo_FileSystem_ReadFile(FileSystem*, FileInfo*, int32_t, void*);
+extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);
 
 namespace {
 
@@ -246,6 +253,168 @@ void RtIo_FileSystemOpenFileProbe(const FileSystem* cfs) {
     std::printf("[OpenFile] NOT compared, and deliberately: winHandle (two opens of one "
                 "file differ by construction -- validity is compared instead) and +0x04 "
                 "(retail's own uninitialised stack, copied out by OpenFile).\n");
+}
+
+// ============================================================================
+// Rung 4's oracle for FileInfo::operator=                    retail 0x18000c200
+// ============================================================================
+// operator= is NOT reachable from the rung-3 corpus in every branch it has: the
+// only call site rung 3 exercises is PlatformOpenFile's "reset to blank", where
+// the destination's Filenames are always already null. That call site alone
+// would leave the release path, the self-assignment short-circuit and the
+// AddRef entirely unentered while the probe reported green -- the exact shape
+// of the effectiveness failure this lane hit twice in rung 2. So the branches
+// are DRIVEN here rather than waited for.
+//
+// The four cases are the four ways the String half can go, and each is a thing
+// a plausible paraphrase gets wrong:
+//
+//   [1] distinct buffers, dst refcount 2  -> release takes the SHARING branch
+//   [2] distinct buffers, dst refcount 1  -> release takes the FREEING branch
+//   [3] SAME buffer on both sides         -> must short-circuit; a naive
+//                                            release-then-adopt frees a live
+//                                            string here
+//   [4] src buffer null                   -> dst must end up null. This is the
+//                                            case that proves the store is
+//                                            unconditional: RtString_AdoptInline
+//                                            would skip it and leave the
+//                                            dangling `data - 8` behind.
+//
+// WHAT IS COMPARED IS STATE, NOT JUST THE RESULT (lane PICK's lossy-transform
+// rule): all six scalar fields including `cursor`, both name POINTERS, and --
+// the part pointer equality cannot see -- the REFCOUNT of every buffer
+// involved. A missing AddRef leaves the pointers identical and the refcounts
+// wrong, and only the second comparison catches it.
+//
+// Ours and theirs get two INDEPENDENT but identical pairs, because operator= is
+// an out-param function that destroys its destination
+// (reference_oracle_must_snapshot_aliased_inputs.md) -- one shared destination
+// would have ours overwrite what theirs was about to read.
+namespace {
+
+typedef FileInfo* (*AssignRawFn)(FileInfo*, const FileInfo*);
+
+// A String buffer built the way retail builds one: [len][refcount] then chars.
+char* MakeBuf(const char* text, int32_t refCount) {
+    String s; s.data = nullptr;
+    RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(&s, text);
+    if (s.data) RtSystem::StringRefCount(s.data) = refCount;
+    return s.data;
+}
+
+void BlankInfo(FileInfo* fi) {
+    std::memset(fi, 0, sizeof(FileInfo));
+    fi->handle = -1;
+}
+
+}  // namespace
+
+void RtIo_FileInfoAssignProbe() {
+    if (!RtDiffEnabled()) return;
+
+    RT_DIFF_BEGIN("IO::FileSystem::FileInfo::operator= [probe]");
+
+    AssignRawFn theirs = reinterpret_cast<AssignRawFn>(
+        ResolveAddr(Module::Runtime, 0x18000c200));
+    if (!theirs) {
+        // At cutover there is no shipped body to diff against. Say so rather
+        // than reporting a pass over zero comparisons.
+        std::printf("[Assign] probe SKIPPED: no shipped body at 0x18000c200 "
+                    "(this is expected once the DLL is gone).\n");
+        return;
+    }
+
+    int cases = 0, bad = 0, freed = 0, shared = 0, shortCircuit = 0, nulled = 0;
+    const char* firstBad = nullptr;
+
+    for (int c = 0; c < 4; ++c) {
+        // Two independent, identical pairs.
+        FileInfo dstA, dstB, srcA, srcB;
+        BlankInfo(&dstA); BlankInfo(&dstB); BlankInfo(&srcA); BlankInfo(&srcB);
+
+        dstA.handle = dstB.handle = 0x0300002A;
+        dstA.size   = dstB.size   = 1234;
+        dstA.cursor = dstB.cursor = 56;
+        dstA.baseOffset = dstB.baseOffset = 78;
+        dstA.winHandle  = dstB.winHandle  = 0;
+
+        srcA.handle = srcB.handle = -2;
+        srcA.size   = srcB.size   = 4321;
+        srcA.cursor = srcB.cursor = 9;
+        srcA.baseOffset = srcB.baseOffset = 11;
+        srcA.winHandle  = srcB.winHandle  = 0;
+
+        const int32_t dstRc = (c == 0) ? 2 : 1;
+        dstA._name0.data = MakeBuf("old/dst/name.rsc", dstRc);
+        dstB._name0.data = MakeBuf("old/dst/name.rsc", dstRc);
+
+        if (c == 2) {                       // [3] same buffer on both sides
+            srcA._name0.data = dstA._name0.data;
+            srcB._name0.data = dstB._name0.data;
+            ++shortCircuit;
+        } else if (c == 3) {                // [4] null source
+            srcA._name0.data = nullptr;
+            srcB._name0.data = nullptr;
+            ++nulled;
+        } else {
+            srcA._name0.data = MakeBuf("new/src/name.rsc", 1);
+            srcB._name0.data = MakeBuf("new/src/name.rsc", 1);
+            if (dstRc == 1) ++freed; else ++shared;
+        }
+
+        RtIo_FileInfo_Assign(&dstA, &srcA);
+        theirs(&dstB, &srcB);
+        ++cases;
+
+        const char* why = nullptr;
+        if (dstA.handle     != dstB.handle)     why = "handle";
+        else if (dstA._unk04!= dstB._unk04)     why = "+0x04";
+        else if (dstA.size  != dstB.size)       why = "size";
+        else if (dstA.cursor!= dstB.cursor)     why = "cursor";
+        else if (dstA.baseOffset != dstB.baseOffset) why = "baseOffset";
+        else if (dstA.winHandle  != dstB.winHandle)  why = "winHandle";
+        // Pointer IDENTITY, not contents: both sides must have adopted their own
+        // source's buffer (or null), never allocated a copy.
+        else if ((dstA._name0.data == nullptr) != (dstB._name0.data == nullptr))
+            why = "_name0 nullness";
+        else if (dstA._name0.data != nullptr &&
+                 dstA._name0.data != srcA._name0.data) why = "_name0 not adopted";
+        else if (dstB._name0.data != nullptr &&
+                 dstB._name0.data != srcB._name0.data) why = "_name0 not adopted (theirs)";
+        // The refcount is the half pointer equality cannot see.
+        else if (dstA._name0.data != nullptr &&
+                 RtSystem::StringRefCount(dstA._name0.data) !=
+                 RtSystem::StringRefCount(dstB._name0.data)) why = "_name0 refcount";
+        // +0x14 must be untouched by BOTH -- the field the copy ctor and
+        // operator= both skip, and the fourth proof of the layout.
+        else if (dstA._pad14 != dstB._pad14) why = "+0x14 (must be untouched)";
+
+        if (why && !firstBad) { firstBad = why; ++bad; }
+
+        RtString_ReleaseInline(&dstA._name0);
+        RtString_ReleaseInline(&dstB._name0);
+        if (c != 2) { RtString_ReleaseInline(&srcA._name0);
+                      RtString_ReleaseInline(&srcB._name0); }
+    }
+
+    // Effectiveness control: all FOUR String branches must have been driven.
+    // Counting `cases` alone would pass even if every case took the same path.
+    const bool covered = freed > 0 && shared > 0 && shortCircuit > 0 && nulled > 0;
+    const bool pass = (bad == 0) && covered;
+
+    char a[192], b[192];
+    std::snprintf(a, sizeof(a), "cases=%d freeing=%d sharing=%d shortCircuit=%d nullSrc=%d",
+                  cases, freed, shared, shortCircuit, nulled);
+    if (bad) std::snprintf(b, sizeof(b), "DIVERGED on '%s'", firstBad);
+    else if (!covered) std::snprintf(b, sizeof(b), "no divergence, but a BRANCH READS ZERO");
+    else std::snprintf(b, sizeof(b), "identical on all 6 scalars, +0x14, buffer identity "
+                                     "and refcount");
+    RT_DIFF_SHADOW(pass, a, b);
+    RT_DIFF_WORK(cases > 0);
+
+    std::printf("[Assign] operator= probe: %d cases (freeing=%d sharing=%d "
+                "shortCircuit=%d nullSrc=%d) -- %s\n",
+                cases, freed, shared, shortCircuit, nulled, b);
 }
 
 }  // namespace RtIO

@@ -210,13 +210,53 @@ Rung 3's cutover cost is **one** new address door, `0x18000c200`
 (`FileInfo::operator=`, unexported). `_stricmp` at `0x18007eefc` was already a shared
 blocker; this rung adds a caller, not a blocker.
 
-### Rung 4 — `ReadPackfile` itself
+### Rung 4a — `FileInfo::operator=` — **DONE AND MEASURED, lane PKG2 iteration 5**
 
-Only now is it a transcription onto verified primitives. Split it further if it still
-resists: the file-header read (the three raw `FileSystem::ReadFile` calls before the
-stream exists), the metadata block (~25 inlined `Read`s plus the `String::SetLength`
-traffic for name/author/description), and the entry directory (the `Filename` array and
-three `AdjustDelimiters` calls).
+`0x18000c200`, 61 instructions, unexported — rung 3's one named cutover blocker, called
+from inside our own `PlatformOpenFile`. `addr_door_audit.py` 44 → 43 UNREGISTERED.
+Probe drives all four String branches (freeing / sharing / short-circuit / null source)
+and compares refcounts, not just pointers: `4 cases (freeing=1 sharing=1 shortCircuit=1
+nullSrc=1) -- identical`. Details in `WAVE9_LANE_PKG2.md` §32-33.
+
+It is also a **fourth** independent proof of the corrected `FileInfo` layout: separate
+DWORD moves at `+0x08` and `+0x0C`, and `+0x14` skipped.
+
+### Rung 4b — the substrate `ReadPackfile` still stands on — **NEXT**
+
+The rung-4 premise ("only now is it a transcription onto verified primitives") **is
+confirmed**: `ReadPackfile`'s whole hot path — the ~25 inlined `CompressedStream::Read`s,
+which show up as a repeated `SetWindow` + `memcpy` pair — is ported by rungs 2 and 3,
+as are `MemAlloc`/`MemFree`, `String::SetLength`, `AdjustDelimiters` and `memcpy`.
+The complete callee map is in `WAVE9_LANE_PKG2.md` §34.
+
+What is left unported, and is therefore rung 4b:
+
+| callee | what | insns |
+|---|---|---|
+| `0x1800aa560` | `CompressedStream::Open` | — |
+| `0x1800aa3d0` | `CompressedStream` ctor | — |
+| `0x1800ae710` | `MemoryStream` ctor | — |
+| `0x1800a9560` | `~CompressedStream` | 40 |
+| `0x1800a9ee0` | stream window flush/release | 88 |
+| `0x180029510` / `0x180029630` | `Array<T>::Resize` variants | 67 / 65 |
+| `0x1800298f0` | `PackageFile` entry insert | 114 |
+| `[RAX+0x38]` @ `0x1800b6042` | a virtual call, vtable slot 7 | to pin |
+| `[0x18014b0f0]` @ `0x1800b47e3` | an import | to identify |
+
+The two `Array::Resize` bodies are probably lane Q's `Collection::Array` already and may
+cost only a registration.
+
+### Rung 4c — `ReadPackfile` itself
+
+1,864 instructions, in the three pieces this plan already named: the file-header read
+(the raw `FileSystem::ReadFile` calls before the stream exists), the metadata block
+(~25 inlined `Read`s plus the `String::SetLength` traffic for name/author/description),
+and the entry directory (the `Filename` array and three `AdjustDelimiters` calls).
+
+**Why 4 grew into 4a/4b/4c**: not because the dependencies turned out to be
+excavation — they did not — but because 1,864 instructions plus ~370 of new helper
+ports plus an unpinned vtable slot is more than one rung can carry with an oracle on
+each piece. The integrator explicitly left this door open; this is it being used.
 
 Oracle: `ReadPackfile` is **not** replayable in place — it mutates the `PackageFile` and
 allocates. But it *is* replayable onto a **second, freshly constructed `PackageFile`**,
