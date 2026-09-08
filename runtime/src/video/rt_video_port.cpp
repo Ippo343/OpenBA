@@ -9,6 +9,9 @@
 //   BANISHED_RT_VIDCOMPANION=0 ... just the twelve Video::*Data companion bases,
 //                            the buffer Lock/Unlock/Bind trampolines and
 //                            Device::DisplayMode          (Wave 9 lane B2)
+//   BANISHED_RT_VIDDYNAMIC=0 ... just Device::{Lock,Unlock,Release/RecreateDynamic},
+//                            the eight class-static list walkers and
+//                            RenderBuffer::Recreate       (Wave 9 lane VID)
 //
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
@@ -22,6 +25,7 @@ extern int RtVideoContextRegister();   // context.cpp  (lane A)
 extern int RtVideoDeviceRegister();    // device.cpp   (lane B)
 extern int RtVideoBuffersRegister();   // buffers.cpp  (lane C)
 extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
+extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -33,5 +37,6 @@ void RtVideoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_VIDDEVICE"))  n += RtVideoDeviceRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDBUFFERS")) n += RtVideoBuffersRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDCOMPANION")) n += RtVideoCompanionRegister();
+    if (RtWaveEnabled("BANISHED_RT_VIDDYNAMIC"))   n += RtVideoDynamicResourcesRegister();
     printf("[RtPort] Video: %d exports registered\n", n);
 }
