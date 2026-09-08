@@ -282,6 +282,73 @@ extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
     RtColl_FreeLocked_180009c30(list, n);
 }
 
+// ---- 0x1800325f0 — LinkedList::Clear(list) ---------------------------------
+//
+// WAVE 9 LANE UID. The fourth member of this family, and the one
+// `??1DialogInstance@UI@@` (0x180114d40) calls on its `_children` list at
+// 0x180114e5e. Retail, in full:
+//
+//     MOV R14,RCX / MOV RSI,[RCX]        ; n = list->head
+//     TEST RSI,RSI / JZ done
+//   loop:
+//     MOV RDI,[RSI+0x10]                 ; next = n->next  -- READ BEFORE THE FREE
+//     ... Enter ; Free(_singleton, RSI) ; Leave ...
+//     MOV RSI,RDI / TEST RDI,RDI / JNZ loop
+//   done:
+//     XOR EAX,EAX
+//     MOV [R14+0x8],RAX                  ; tail  = 0
+//     MOV [R14],RAX                      ; head  = 0
+//     MOV dword [R14+0x10],EAX           ; count = 0
+//
+// Three things a tidier rewrite would get wrong, all of them load-bearing:
+//
+//  * `next` IS READ BEFORE THE NODE IS FREED. Reading it after would be a
+//    use-after-free that works for exactly as long as the allocator does not
+//    reuse the block.
+//  * IT FREES NODES, NOT ELEMENTS. The element at node+0x00 is an
+//    `Object::InternalBasePtr`; no refcount and no destructor is touched here.
+//    Adding one would be a second release of a handle somebody else still owns
+//    — and for `_children` specifically the elements are child dialogs that
+//    `UI::UserInterface` owns, not the parent.
+//  * THE THREE STORES ARE UNCONDITIONAL — they happen on an already-empty list
+//    too — `count` is a DWORD store, and `_pad14` at +0x14 is NOT written.
+//
+// The inline lock+Free is the same instruction sequence as 0x1800c7ad0, by the
+// argument this file's header block already makes for 0x180009c30 and
+// 0x180032750, so it goes through the one ported allocator entry point rather
+// than a private third copy of the lock protocol.
+//
+// ORACLE: none, and none is possible — the same reason `Remove` has none. A
+// replay walks a chain whose every node has already been freed and frees each
+// one a second time. Two things stand in for it, and neither is dressed up as
+// more than it is:
+//   * `RT_DIFF_WORK` liveness — how many entered calls actually had a node to
+//     free. `calls=` will read 0 here because nothing is compared, so `worked=`
+//     is the whole signal (reference_uncalled_port_is_not_verified.md).
+//   * A SHAPE CHECK against the shipped bytes, `VerifyListClearShape` in
+//     runtime/src/ui/dialog.cpp, run beside the `??1DialogInstance` shape check.
+//     The entire failure surface of this body is four displacements — the
+//     `next` offset it walks and the three fields it zeroes — and all four are
+//     literal displacements in the shipped instruction stream, so all four are
+//     compared against the DLL while the DLL is still there.
+extern "C" void RtColl_LinkedListClear_1800325f0(void* listPtr) {
+    RT_DIFF_BEGIN("Collection::LinkedList::Clear(0x1800325f0)");
+
+    LlList* list = static_cast<LlList*>(listPtr);
+    LlNode* n    = list->head;
+    RT_DIFF_WORK(n != nullptr);
+
+    while (n) {
+        LlNode* next = n->next;   // read BEFORE the free — see above
+        MemFreeLocked(n);
+        n = next;
+    }
+
+    list->tail  = nullptr;
+    list->head  = nullptr;
+    list->count = 0;
+}
+
 // ============================================================================
 // Registration — BY ADDRESS ONLY
 // ============================================================================
@@ -305,5 +372,10 @@ int RtCollLinkedListRegister() {
     // the registration changes nothing here.
     RegisterRuntimeAddr(0x180032750, (void*)&RtColl_LinkedListNewNode_180032750); ++n;
     RegisterRuntimeAddr(0x18007a010, (void*)&RtColl_LinkedListRemove_18007a010);  ++n;
+    // WAVE 9 LANE UID — Clear. Unexported, so ADDRESS ONLY like the two above;
+    // verified absent from the shipped export directory with pefile BEFORE the body
+    // was written (reference_resolveexport_phantom_names.md). Its only caller today
+    // is `??1DialogInstance@UI@@`, which reaches it by address at 0x180114e5e.
+    RegisterRuntimeAddr(0x1800325f0, (void*)&RtColl_LinkedListClear_1800325f0);   ++n;
     return n;
 }

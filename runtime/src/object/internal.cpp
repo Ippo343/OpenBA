@@ -261,6 +261,32 @@ void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
         MemFree(old);
 }
 
+// ---- 0x18002fca0 — THE ADDRESS DOOR FOR THE BODY ABOVE ---------------------
+// WAVE 9 LANE UID. `ArrayPtrSetSize` has BEEN the port of FUN_18002fca0 since
+// Wave 3 — the comment above it says so — but nothing ever registered it at
+// that address, so `ResolveAddr(Module::Runtime, 0x18002fca0)` fell through to
+// the DLL and would be a null call at cutover
+// (reference_by_address_door_dies_at_cutover.md). Two lane docs recorded
+// 0x18002fca0 as an UNPORTED blocker of `??1DialogInstance@UI@@`
+// (WAVE9_LANE_UIF.md row 6, WAVE9_LANE_UIC.md §7); the body was already here.
+// That is reference_grep_for_the_port_before_writing_it.md read from the other
+// side: the miss was not a duplicate port, it was a HALF-REGISTERED one.
+//
+// Registered UNGATED, deliberately, and it is NOT part of the `table` tier:
+// this body is a container primitive that operates on whatever array its
+// caller hands it. It mutates the handle table only when the CALLER passes
+// `_singleton->_objects`, which only `~Internal` does — and that one stays
+// behind `table`. Registering the primitive therefore arms no handle-table
+// mutation of its own.
+//
+// It is unexported (checked against the shipped export directory with pefile),
+// so ADDRESS ONLY, and the void* signature is the shape every address caller
+// reaches it through. Element width is 8 and the type is erased in the callee,
+// so `Internal*` here is a name, not a constraint.
+extern "C" void RtObject_ArrayPtrSetSize_18002fca0(void* arrayPtr, int newSize) {
+    ArrayPtrSetSize(static_cast<Collection::Array<Internal*>*>(arrayPtr), newSize);
+}
+
 // FUN_18002fd90 — Array<Internal*>::Reserve(int n). Grows CAPACITY only: it
 // sets _size to n while it reallocates and restores the old _size on the way
 // out, and it returns immediately unless n is strictly greater than _size.
@@ -981,6 +1007,13 @@ int RtObjectInternalRegister() {
     RegisterRuntimeExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtObject_InternalBasePtr_Serialize); ++n;
     RegisterRuntimeAddr(0x1800c0180, (void*)&RtObject_InternalBasePtr_Serialize);
+
+    // ---- WAVE 9 LANE UID — the address door for FUN_18002fca0 --------------
+    // The body is ArrayPtrSetSize, ported since Wave 3 and never registered.
+    // Ungated for the reason spelled out at the adapter: it is a container
+    // primitive, not a handle-table mutator. Its first address caller is
+    // `??1DialogInstance@UI@@` (runtime/src/ui/dialog.cpp, lane UID).
+    RegisterRuntimeAddr(0x18002fca0, (void*)&RtObject_ArrayPtrSetSize_18002fca0); ++n;
 
     // ---- Tier 2: the real table ports. Opt-in, and MANDATORY at cutover. ----
     if (table) {
