@@ -121,6 +121,10 @@ extern int RtIoMemoryStreamRegister();        // memory_stream.cpp (lane PKG2)
 // LANE W'S ROWS. ~CompressedStream is a LIVE blocker today, not just at
 // cutover: lane W's ported ~CompressedMemoryStream tail-jumps into it.
 extern int RtIoCompressedStreamReleaseRegister();  // compressed_stream_release.cpp
+// Wave 9 lane PKG2 rung 4b-iii: the last two bodies between ReadPackfile and a
+// mounted package. Own switch -- Open is what decides whether a packfile header
+// is well-formed, so a boot regression must be attributable to exactly it.
+extern int RtIoCompressedStreamOpenRegister();     // compressed_stream_open.cpp
 namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
@@ -153,6 +157,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_OPENFILE"))    n += RtIoFileSystemOpenFileRegister();
     if (RtWaveEnabled("BANISHED_RT_MEMSTREAM"))   n += RtIoMemoryStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CSRELEASE"))   n += RtIoCompressedStreamReleaseRegister();
+    if (RtWaveEnabled("BANISHED_RT_CSOPEN"))      n += RtIoCompressedStreamOpenRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
