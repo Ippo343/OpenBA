@@ -625,6 +625,62 @@ mechanism yet.**
 → `TreeNodeFree`, disproved; lane N's `WorkComponent` task-cleanup, family now eliminated;
 and this drain-loop path). **It should not be assumed these are one defect.**
 
+### The frozen-cache class: 481 not 206, converted 90, live proof still OWED — lane H, `8055bf7`
+
+**The denominator was wrong in the dangerous direction.** The first pass said **206** frozen
+sites. `RT_ORIGINAL_ONCE` and `RT_EXPORT_ONCE` are **macros that manufacture this exact
+idiom**, and their 282 call sites contain no `ResolveExport(` text, so the tool saw none of
+them. Real population: **FROZEN 481 · RETRY 79 · DIRECT 1015 · 1,575 doors.** The 481 splits
+212 `RT_ORIGINAL_ONCE`, 64 `RT_EXPORT_ONCE`, 139 hand-rolled code, 40 hand-rolled `??_7`,
+**26 hand-rolled exported DATA**.
+*Fifth distinct form of the wrapper blind spot this wave: **a macro that manufactures an
+idiom is invisible to a checker keyed on that idiom's text.***
+
+**(1) The swallowing subclass is 26 sites, ENUMERATED not sampled** — all exported DATA
+(`?_singleton@`, `?_typeInfo@`), the only kind where a cached null is *swallowed* rather
+than dying loudly as EXEC-of-0. The earlier "3 of 4 checked" **both undercounted the
+population and overcounted its confidence**. Ranked by cutover execution order:
+**tier 1 is `?_singleton@MemoryAllocator` ALONE** (provably first — nothing can allocate
+before it); tier 2 the nine `Engine::Startup` singletons (Video::Device ×3,
+Video::Configuration ×2, IO::Persistence ×3, Input::Device, Audio::Device, Engine::MainLoop);
+tier 3 the eleven first-frame/first-load ones. Tiers 2-3 are marked APPROXIMATE.
+
+**(2) Converted with a NAMED REFUSAL.** New `RtResolveCached()` caches a **hit** (steady
+state is one plain load — no `GetProcAddress` in the hot path), **retries** a miss, and
+**names it once** with a counter. 26 sites → `RT_DATA_SLOT`; then **one edit to the
+`RT_EXPORT_ONCE` macro body moved 64 more that needed no touching**. **90 sites left the
+frozen class.**
+Also corrected a stale comment at `video/device.cpp:120` claiming the registry *"holds
+function redirections only, and nothing has registered — or can register — a data slot before
+cutover."* **Both halves false**, and left standing it would have argued a future reader out
+of lane C2's mint. **This lane and C2's are two halves of one repair: the mint is only
+reachable because these sites now retry.**
+
+**(3) Denominator, before and after** — the audit now counts the macro spellings, because
+otherwise a converted site **vanishes**, which reads exactly like a clean pass:
+```
+BEFORE (clean worktree at HEAD, same tool):  FROZEN=417  RETRY=143  DIRECT=1015  doors=1575
+AFTER  (working tree):                       FROZEN=391  RETRY=169  DIRECT=1016  doors=1576
+```
+FROZEN −26 / RETRY +26 = the conversions; DIRECT +1 / doors +1 = the helper's own resolve.
+**The tool CANNOT show the macro edit** — it keys on a spelling that did not change, only the
+contract behind it — so contract-level the move is **481 → 391**, said explicitly rather than
+letting the numbers imply the macro edit did nothing. Audit-vs-grep reconciles exactly:
+212 sites + 5 comment-only lines + 1 statement carrying two uses = grep's 218.
+
+**(4) Load-bearing nulls — `RT_ORIGINAL_ONCE` IS the `RemoveGraphs` equivalent, at 212
+sites.** It is the oracle door, registry-blind BY DESIGN; converting it would make every
+oracle compare ours against ours, then retry `GetProcAddress` against an absent module at
+cutover. **Left untouched.** Self-resolve candidates: 455 names are resolved-and-registered
+tree-wide (that is the design); narrowing to *the same file doing both* — the actual
+`RemoveGraphs` shape — leaves **3** (`loops.cpp:947`, `widgets_input.cpp:194`,
+`thread_win.cpp:142`), all checked at body level, **none recurses**, none in the conversion
+set.
+
+⏳ **THE LIVE PROOF IS PREPARED AND STILL OWED** — it needs the directory. Three cells; pass
+is `[RtResolve] 0 misses` **AND** matching `[RtDiff]` totals **including the site count**,
+since a matching `divergences=0` over a different denominator proves nothing.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
