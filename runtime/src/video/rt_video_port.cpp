@@ -121,5 +121,22 @@ void RtVideoPortInit() {
         n += RtVideoInterfacesRegister();
     }
 
+    // Wave 9 lane EVM: the two introsort instantiations
+    // EnumerateVideoModes runs over the enumerated tree, plus their two
+    // small-range passes and the DisplayMode deep swap. ADDRESSES ONLY --
+    // none of the five is exported in either build.
+    {
+        extern int RtVideoModeSortRegister();
+        const int sorts = RtVideoModeSortRegister();
+        printf("[LaneEVM] mode/refresh sort addresses registered=%d\n", sorts);
+    }
+
+    // Wave 9 lane EVM: attempt 22's wall itself. Registered AFTER the two
+    // blocks above, because its body calls both of them.
+    {
+        extern int RtVideoEnumerateModesRegister();
+        n += RtVideoEnumerateModesRegister();
+    }
+
     printf("[RtPort] Video: %d exports registered\n", n);
 }
