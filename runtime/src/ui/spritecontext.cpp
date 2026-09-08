@@ -186,23 +186,59 @@ typedef void (*CaptureAddSpriteFn)(void* capture, const void* sprite,
 typedef void (*ArrayAppendFn)(void* array, int newSize, const void* fill);
 typedef void (*ArrayClearFn)(void* array);
 
-// Resolve-and-cache that NEVER caches a null (rt_port.h's contract): a miss
-// during early boot must not freeze the answer for the process.
-template <typename Fn>
-inline Fn RtAddr(Fn& slot, uintptr_t addr) {
-    if (!slot) slot = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr));
-    return slot;
+// ---- the five resolvers ----------------------------------------------------
+// Each one spells its address as a LITERAL inside `ResolveAddr(Module::Runtime,
+// …)`, once, and that spelling is not a style choice — it is what keeps these
+// doors VISIBLE to `tools/addr_door_audit.py`, whose call-site half matches a
+// literal and nothing else.
+//
+// This file first routed all five through one `RtAddr(slot, addr)` template
+// helper. It was shorter, it compiled, and it made every door in the file
+// INVISIBLE to the audit: base and branch both reported `UNREGISTERED 16`
+// while the doors sat in the `non-literal call sites 77 -> 80` line nobody
+// reads. That is the fifth instance of the blind spot in
+// reference_literal_grep_blind_to_variables.md — an instrument that greps for
+// a literal cannot see the same fact spelled through a variable, and it never
+// announces the blindness. Rewritten so the cost this lane adds shows up in
+// the number the wave is steering by.
+//
+// Each caches, and NONE caches a null (rt_port.h's contract): a miss during
+// early boot must not freeze the answer for the process.
+
+// The batch drain. NOT PORTED — this is the lane's one per-frame address door.
+inline FlushFn TheFlush() {
+    static FlushFn f = nullptr;
+    if (!f) f = reinterpret_cast<FlushFn>(ResolveAddr(Module::Runtime, 0x18011ba40));
+    return f;
+}
+// UI::SpriteCapture — both reached only when `_spriteCapture` is non-null.
+inline CaptureAddScissorFn TheCaptureAddScissor() {
+    static CaptureAddScissorFn f = nullptr;
+    if (!f) f = reinterpret_cast<CaptureAddScissorFn>(ResolveAddr(Module::Runtime, 0x1800d8ef0));
+    return f;
+}
+inline CaptureAddSpriteFn TheCaptureAddSprite() {
+    static CaptureAddSpriteFn f = nullptr;
+    if (!f) f = reinterpret_cast<CaptureAddSpriteFn>(ResolveAddr(Module::Runtime, 0x1800d8b20));
+    return f;
+}
+// Array<UI::SpriteDraw> — both PORTED and registered, in
+// runtime/src/collection/array.cpp. They are still reached through
+// `ResolveAddr` rather than by a direct C++ call so that this file has ONE
+// resolution rule for every internal it calls, and so the registration keeps
+// living with the collection family.
+inline ArrayAppendFn TheArrayAppend() {
+    static ArrayAppendFn f = nullptr;
+    if (!f) f = reinterpret_cast<ArrayAppendFn>(ResolveAddr(Module::Runtime, 0x180078520));
+    return f;
+}
+inline ArrayClearFn TheArrayClear() {
+    static ArrayClearFn f = nullptr;
+    if (!f) f = reinterpret_cast<ArrayClearFn>(ResolveAddr(Module::Runtime, 0x1800783d0));
+    return f;
 }
 
-FlushFn             g_flush        = nullptr;
-CaptureAddScissorFn g_addScissor   = nullptr;
-CaptureAddSpriteFn  g_addSprite    = nullptr;
-ArrayAppendFn       g_arrayAppend  = nullptr;
-ArrayClearFn        g_arrayClear   = nullptr;
-
-inline void Flush(SpriteContext* self) {
-    RtAddr(g_flush, 0x18011ba40)(self);
-}
+inline void Flush(SpriteContext* self) { TheFlush()(self); }
 
 // ---- the two float helpers, kept honest ------------------------------------
 // Retail converts int -> float (CVTDQ2PS), divides or multiplies in SINGLE
@@ -254,7 +290,7 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
             Sprite s;
             s.spriteSheet = d->sheet;
             s.spriteIndex = d->spriteIndex;
-            RtAddr(g_addSprite, 0x1800d8b20)(capture, &s, d->x1, d->y1,
+            TheCaptureAddSprite()(capture, &s, d->x1, d->y1,
                                              d->x2, d->y2, d->rotation, d->color);
         }
     }
@@ -273,7 +309,7 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
     RT_DIFF_WORK(append);
 
     if (append) {
-        RtAddr(g_arrayAppend, 0x180078520)(&self->_draws, self->_draws._size + 1, d);
+        TheArrayAppend()(&self->_draws, self->_draws._size + 1, d);
         return;
     }
 
@@ -361,7 +397,7 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
     }
 
     Flush(self);
-    RtAddr(g_arrayClear, 0x1800783d0)(&self->_deferred);
+    TheArrayClear()(&self->_deferred);
 }
 
 // ---- 0x18011cbe0  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z -----
@@ -484,7 +520,7 @@ void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
         const int tw = *reinterpret_cast<const int32_t*>(target + 0x10);
         const int th = *reinterpret_cast<const int32_t*>(target + 0x14);
         const bool fullScreen = (nw == tw && nh == th);
-        RtAddr(g_addScissor, 0x1800d8ef0)(capture, v->x, v->y,
+        TheCaptureAddScissor()(capture, v->x, v->y,
                                           v->w + v->x, v->h + v->y, fullScreen);
     }
 
