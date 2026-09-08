@@ -1058,14 +1058,14 @@ Its complete call set, mapped against the tree:
 | `0x1800c9fc0` / `0x1800c9b60` | UTF decode / encode | known, `string.cpp` |
 | `0x18008a290` | CRT `memcpy` | `std::memcpy` is byte-faithful |
 | `0x180095060` | `__chkstk` (the `_alloca(0x8020)`) | known — rung 2 |
-| `0x1800aa3d0` / `0x1800aa560` | `CompressedStream` ctor / `Open` | pinned in `Stream.h`, **unported** |
-| `0x1800ae710` | `MemoryStream` ctor | pinned in `Stream.h`, **unported** |
-| `0x1800a9560` | `~CompressedStream` (40 insns) | **unported** |
-| `0x1800a9ee0` | stream window flush/release (88 insns) | **unported** |
+| `0x1800aa3d0` / `0x1800aa560` | `CompressedStream` ctor / `Open` | **CORRECTED in §48** — the ctor is already lane W's; and this row wrongly implied a stack object separate from the MemoryStream below. They are ONE `CompressedMemoryStream`. |
+| `0x1800ae710` | `MemoryStream` ctor | **CORRECTED in §48** — already lane W's, and it constructs the `+0x68` half of the SAME object as the row above. |
+| `0x1800a9560` | `~CompressedMemoryStream` (NOT `~CompressedStream` — **corrected in §48**) | **already ported** |
+| `0x1800a9ee0` | `?Commit@CompressedStream@IO@@` (88 insns) | **unported, and already LIVE** — see §49 |
 | `0x180029510` / `0x180029630` | `Array<T>::Resize` variants (67 / 65) | **unported** |
 | `0x1800298f0` | `PackageFile` entry insert (114) | **unported** |
-| `[RAX+0x38]` @ `0x1800b6042` | a **virtual** call, vtable slot 7 | needs the slot pinned |
-| `[0x18014b0f0]` @ `0x1800b47e3` | an import | needs identifying |
+| `[RAX+0x38]` @ `0x1800b6042` | `MemoryStream::Close`, slot 7 | **PORTED, rung 4b-ii** — a bare `RET` |
+| `[0x18014b0f0]` @ `0x1800b47e3` | `KERNEL32!SetFilePointer` | identified, rung 4b-i |
 
 **The repeated `SetWindow` + `memcpy` pair appears ~25 times** — that is exactly
 the inlined `CompressedStream::Read` I predicted in the decomposition, and both
@@ -1368,3 +1368,98 @@ touch is `0x180024d70`, because `Open` cannot be diffed without it either.
 **Still open from 4b-i**: the two `Array::SetSize` instantiations
 (`0x180029510`, `0x180029630`) remain **registered but never called**, and are
 verified by the run in which 4c first reaches them — not before.
+
+---
+
+# Rung 4b-ii (part 2) — a structural correction to my own §34, and 4b's real remainder
+
+## 47. The rule caught three more before they cost anything
+
+Applied to all six remaining 4b items **before** touching any of them, per the
+rule 4b-i and 4b-ii part 1 earned. Three of the six were already ported:
+
+| addr | what | status |
+|---|---|---|
+| `0x1800aa3d0` | `??0CompressedStream` | **already ported** — lane W, `compressedstream.cpp:957` |
+| `0x1800a9560` | `~CompressedMemoryStream` | **already ported** — `compressedstream.cpp:932` |
+| `0x1800ae710` | `??0MemoryStream` | **already ported** — lane W (found in part 1) |
+
+Nothing was written for any of them. That is the rule working *before* the cost,
+rather than the instrument catching it after.
+
+## 48. THE CORRECTION: `ReadPackfile` builds ONE `CompressedMemoryStream`, not two objects
+
+My §34 callee map listed `0x1800aa3d0` (`CompressedStream` ctor) and
+`0x1800ae710` (`MemoryStream` ctor) as constructing **two separate stack
+objects**. **That is wrong, and it changes 4c's shape.**
+
+What made me look: the tree labels `0x1800a9560` as `~CompressedMemoryStream`
+(sizeof `0x98`), but `ReadPackfile` calls it at `0x1800b6054` on `[RSP+0x40]` —
+the object it built with the *`CompressedStream`* ctor, which is `0x68` bytes.
+Calling a `0x98`-byte destructor on a `0x68`-byte object would be a defect in
+either retail or the tree's label, so one of my readings had to be wrong.
+
+**Mine was.** The disassembly settles it two ways:
+
+1. `~CompressedMemoryStream` at `0x1800a9560` works on `RBX + 0x68` — it calls
+   slot 7 there, stamps `0x1801555b0` (the `MemoryStream` vtable), frees `_data`
+   if `_ownsData`, stamps `0x1801549a0` (the `Stream` vtable), frees the
+   Encoding, and then **tail-jumps to `0x1800aa650`**, which is the real
+   `~CompressedStream`. That is precisely a `CompressedMemoryStream`:
+   `CompressedStream` at `+0x00`, `MemoryStream` at `+0x68`.
+2. The frame arithmetic proves the two stack slots are that one object.
+   `ReadPackfile`'s prologue is `LEA RBP,[RSP-0x1860]` **before**
+   `SUB RSP,0x1960`, so **`RBP = RSP + 0x100`**, and therefore
+   **`RBP - 0x58` == `RSP + 0xA8` == `(RSP + 0x40) + 0x68`.**
+
+MSVC simply addressed the two halves of one object through two different base
+registers, and I read them as two objects. Consequences, all of which make 4c
+*simpler*:
+
+* The destructor `ReadPackfile` calls is the **already-ported**
+  `~CompressedMemoryStream`. `~CompressedStream` (`0x1800aa650`) is reached only
+  through its tail-jump, never directly from `ReadPackfile`.
+* The virtual `CALL [RAX+0x38]` at `0x1800b6042` is `MemoryStream::Close` on
+  **this object's own `MemoryStream` half** — the bare `RET` ported in part 1.
+* `CALL 0x1800aa560` at `0x1800b4864` is
+  `cms.CompressedStream::Open(&cms.memoryStream, n)` — the same shape
+  `compressedstream.cpp:382` already describes for
+  `?Open@CompressedMemoryStream@IO@@`.
+
+**The lesson is not "read more carefully".** Two stack slots addressed off
+different base registers look like two objects *by construction*, and nothing in
+the call list contradicts it. What contradicted it was a **type-size
+disagreement** — a `0x98` destructor on a `0x68` object — surfaced by the tree's
+own label. Cross-checking a callee's label against the size of what it is called
+on is a cheap, mechanical check that this lane will now do on every by-address
+call to a destructor.
+
+## 49. 4b's real remainder — five items, and one is ALREADY a live blocker
+
+| addr | what | insns | note |
+|---|---|---|---|
+| `0x1800aa020` | `CompressedStream::SetWindowCount` | 52 | unported |
+| `0x180024d70` | `Array<Header>::SetSize` | — | unported; another member of lane Q's family |
+| `0x1800aa560` | `CompressedStream::Open` | ~50 | unported; needs the two above |
+| `0x1800a9ee0` | `?Commit@CompressedStream@IO@@` | 88 | **unported AND ALREADY LIVE** |
+| `0x1800aa650` | `~CompressedStream` | — | unported; reached by the ported CMS dtor's tail-jump |
+
+**`Commit` is not a new 4b cost — it is an existing cutover blocker this rung
+merely found.** Lane W's *ported* `~CompressedMemoryStream` reaches it through
+`RT_EXPORT_ONCE(..., "?Commit@CompressedStream@IO@@QEAAXXZ")` at
+`compressedstream.cpp:327` and `:429`, and there is no port behind that name. So
+a ported body already calls a name that resolves to the shipped DLL today and to
+nothing at cutover — `reference_converting_a_door_is_not_satisfying_it`, exactly.
+`~CompressedStream` at `0x1800aa650` is in the same position via the tail-jump.
+Both are named here so they are attributed to the right lane rather than
+appearing as 4b overhead.
+
+## 50. Next predicted fault site
+
+Unchanged: `LoadPackages` still stops at the `ReadPackfile` call, and nothing in
+4b moves it. Within 4b the next touch is `0x180024d70` then `0x1800aa020`,
+because `Open` cannot be diffed without both.
+
+**Still open, still not counted**: 4b-i's two `Array::SetSize` instantiations
+(`0x180029510`, `0x180029630`) remain **registered but never called** — to be
+closed explicitly in the run where 4c first reaches them.
