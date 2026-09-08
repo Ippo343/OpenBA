@@ -23,7 +23,15 @@ void RtAudioPortInit() {
     int n = 0;
     n += RtAudioSceneRegister();
     n += RtAudioConfigurationRegister();
-    printf("[RtPort] Audio: %d/22 exports registered "
-           "(3 held back, 1 phantom name fixed, 1 data export -- WAVE8_LANE_C.md for "
-           "Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5)\n", n);
+    // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9
+    // lane W adding Scene::FindFree3DEffect made "20/22" arithmetic that no
+    // longer resolves against the three-held-back / one-phantom / one-data
+    // breakdown beside it. Dropping it rather than bumping it: a count of what
+    // registered is a fact this line can state, and a denominator that has to be
+    // re-derived every time a lane lands is a comment on its way to becoming a
+    // lie (commit e9d81d9 is this project fixing three of those).
+    printf("[RtPort] Audio: %d exports registered "
+           "(WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four "
+           "that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the "
+           "held-back set is listed in audio.cpp, not counted here)\n", n);
 }

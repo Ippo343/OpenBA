@@ -26,7 +26,7 @@
 // held-back function (SaveImageToFile — see its own comment).
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
+#include "../../funcs/rt_diff.h"   // RtDiffSite/RtDiffReport for the [branch:] counters
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100
@@ -180,33 +180,69 @@ inline void** LinkField(void* self, size_t off) {
     return reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
 }
 
-void ListLink(void* self, void** first, ListLinks L) {
+// Returns the branch taken, so the caller can COUNT it. `calls=` on the port
+// itself only says the body was entered; a green summary over six calls that
+// all took the same branch leaves the other one unexercised, which is the
+// SetValueInt trap (12,896 calls, ten of which did any work). See the
+// [branch:...] sites in the RtDiff summary.
+enum class LinkBranch { FirstInList, Appended };
+
+LinkBranch ListLink(void* self, void** first, ListLinks L) {
     if (*first == nullptr) {
         *first = self;
         *LinkField(self, L.next) = self;
         *LinkField(self, L.prev) = self;
+        return LinkBranch::FirstInList;
     } else {
         void* tail = *LinkField(*first, L.prev);
         *LinkField(self, L.prev) = tail;
         *LinkField(self, L.next) = *first;
         *LinkField(tail, L.next) = self;
         *LinkField(*LinkField(self, L.next), L.prev) = self;
+        return LinkBranch::Appended;
     }
 }
 
-void ListUnlink(void* self, void** first, ListLinks L) {
+// NotLinked is a genuine EARLY-OUT: both bodies do nothing at all, so the
+// comparison that follows is vacuous and a call that took it must not be
+// counted as a call that verified anything.
+enum class UnlinkBranch { NotLinked, Unlinked, ListEmptied };
+
+UnlinkBranch ListUnlink(void* self, void** first, ListLinks L) {
     void* prev = *LinkField(self, L.prev);
     void* next = *LinkField(self, L.next);
     if (prev == nullptr || next == nullptr)
-        return;
+        return UnlinkBranch::NotLinked;
     if (*first == self)
         *first = next;
     *LinkField(prev, L.next) = next;
     *LinkField(next, L.prev) = prev;
     *LinkField(self, L.prev) = nullptr;
     *LinkField(self, L.next) = nullptr;
-    if (*first == self)
+    if (*first == self) {
         *first = nullptr;
+        return UnlinkBranch::ListEmptied;
+    }
+    return UnlinkBranch::Unlinked;
+}
+
+// Count one branch as a zero-divergence "call" on its own RtDiffSite, so it
+// appears in the ordinary summary next to the port it belongs to. Using the
+// existing machinery rather than a private counter means the number is printed
+// by the same code that prints every other number in that report.
+// REGISTER UNCONDITIONALLY, then report. The first version of this was
+//     if (taken) RtDiffReport(...); else RtDiffRegister(...);
+// on the theory that the report would register the site for us. `RtDiffReport`
+// does NOT register (rt_diff.cpp:82 — it only bumps `calls`), so an
+// ALWAYS-taken branch never entered the site list and never printed, while a
+// NEVER-taken one printed `calls=0`. The output was exactly inverted: the
+// branches that did all the work were the invisible ones. Recorded rather than
+// silently fixed, because it is the probe-defect shape
+// reference_probe_needs_an_effectiveness_control.md warns about — a
+// coverage instrument that is itself wrong reads as coverage.
+void CountBranch(RtDiffSite* site, bool taken) {
+    RtDiffRegister(site);
+    if (taken) RtDiffReport(site, true, "taken", "taken");
 }
 
 constexpr ListLinks kImageLinks  = { 0x50, 0x58 };
@@ -653,28 +689,31 @@ namespace {
 
 // One body, three instantiations. `vtSlot == kNoCompanion` is not used; every
 // caller passes a real slot.
-void PlatformConstructBody(void* self, size_t vtSlot, size_t companionOff,
-                           void** first, ListLinks L) {
+LinkBranch PlatformConstructBody(void* self, size_t vtSlot, size_t companionOff,
+                                 void** first, ListLinks L) {
     *LinkField(self, companionOff) = MakeCompanion(self, vtSlot);
     RtVideoDeviceLock(DeviceSingletonPtr());
-    ListLink(self, first, L);
+    const LinkBranch br = ListLink(self, first, L);
     RtVideoDeviceUnlock(DeviceSingletonPtr());
+    return br;
 }
 
 // `nullCompanionAfterRelease` is the ONE place the three classes differ:
 // Index/VertexBuffer write `this+8 = 0` after releasing, ImageBuffer leaves the
 // freed pointer at +0x60 in place. That asymmetry is in the shipped bytes of
 // all three and is reproduced rather than tidied.
-void PlatformDestructBody(void* self, size_t companionOff, bool nullCompanionAfterRelease,
-                          void** first, ListLinks L) {
+UnlinkBranch PlatformDestructBody(void* self, size_t companionOff,
+                                  bool nullCompanionAfterRelease,
+                                  void** first, ListLinks L) {
     void* companion = *LinkField(self, companionOff);
     if (companion != nullptr)
         ReleaseCompanion(companion);
     if (nullCompanionAfterRelease)
         *LinkField(self, companionOff) = nullptr;
     RtVideoDeviceLock(DeviceSingletonPtr());
-    ListUnlink(self, first, L);
+    const UnlinkBranch br = ListUnlink(self, first, L);
     RtVideoDeviceUnlock(DeviceSingletonPtr());
+    return br;
 }
 
 void DescribeLinks(char* buf, size_t n, const LinkState& s) {
@@ -695,7 +734,13 @@ void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
         preCompanion = self->platformData;
     }
 
-    PlatformConstructBody(self, 0x50, offsetof(ImageBuffer, platformData), first, kImageLinks);
+    static RtDiffSite brFirst = { "Video::ImageBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
+    static RtDiffSite brAppend = { "Video::ImageBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
+    const LinkBranch br = PlatformConstructBody(self, 0x50, offsetof(ImageBuffer, platformData), first, kImageLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
+        CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kImageLinks, pre);
@@ -719,8 +764,16 @@ void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self) {
     if (rt_diff_on__)
         pre = CaptureLinks(self, first, kImageLinks);
 
-    PlatformDestructBody(self, offsetof(ImageBuffer, platformData),
-                         /*nullCompanionAfterRelease=*/false, first, kImageLinks);
+    static RtDiffSite brNone = { "Video::ImageBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
+    static RtDiffSite brUn = { "Video::ImageBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
+    static RtDiffSite brEmpty = { "Video::ImageBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
+    const UnlinkBranch br = PlatformDestructBody(self, offsetof(ImageBuffer, platformData),
+                                                 /*nullCompanionAfterRelease=*/false, first, kImageLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
+        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
+        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kImageLinks, pre);
@@ -752,7 +805,13 @@ void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
         preCompanion = self->platformData;
     }
 
-    PlatformConstructBody(self, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
+    static RtDiffSite brFirst = { "Video::IndexBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
+    static RtDiffSite brAppend = { "Video::IndexBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
+    const LinkBranch br = PlatformConstructBody(self, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
+        CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
@@ -776,8 +835,16 @@ void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self) {
     if (rt_diff_on__)
         pre = CaptureLinks(self, first, kBufferLinks);
 
-    PlatformDestructBody(self, offsetof(IndexBuffer, platformData),
-                         /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    static RtDiffSite brNone = { "Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
+    static RtDiffSite brUn = { "Video::IndexBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
+    static RtDiffSite brEmpty = { "Video::IndexBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
+    const UnlinkBranch br = PlatformDestructBody(self, offsetof(IndexBuffer, platformData),
+                                                 /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
+        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
+        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
@@ -804,7 +871,13 @@ void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self) {
         preCompanion = self->platformData;
     }
 
-    PlatformConstructBody(self, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
+    static RtDiffSite brFirst = { "Video::VertexBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
+    static RtDiffSite brAppend = { "Video::VertexBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
+    const LinkBranch br = PlatformConstructBody(self, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
+        CountBranch(&brAppend, br == LinkBranch::Appended);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
@@ -828,8 +901,16 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
     if (rt_diff_on__)
         pre = CaptureLinks(self, first, kBufferLinks);
 
-    PlatformDestructBody(self, offsetof(VertexBuffer, platformData),
-                         /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    static RtDiffSite brNone = { "Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
+    static RtDiffSite brUn = { "Video::VertexBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
+    static RtDiffSite brEmpty = { "Video::VertexBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
+    const UnlinkBranch br = PlatformDestructBody(self, offsetof(VertexBuffer, platformData),
+                                                 /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    if (rt_diff_on__) {
+        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
+        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
+        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
+    }
 
     if (rt_diff_on__) {
         LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);

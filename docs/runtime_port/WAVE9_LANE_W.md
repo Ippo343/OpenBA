@@ -21,6 +21,12 @@ every row below is dispositioned against that condition, not against which door 
 **Nothing is defaulted.** Where a row is not closed, the reason is a fact that was checked in
 this session, not an estimate of effort.
 
+**EXECUTED 2026-09-08 — §9.** Four cells, **0 divergences in 0 sites** in every one, no crash.
+**8 of the 9 ports ran**; the ninth pair has no caller anywhere and is named as unverified rather
+than reported clean. Two findings the runs produced that source alone could not: the list branch
+**cutover will take first is the only one never executed**, and the `IO::Encoding` blocker of §4
+is **measured live on both the save and the load critical path**.
+
 ---
 
 ## 0. The finding this lane adds: 25 is a floor, and the mechanism is structural
@@ -334,10 +340,13 @@ lists the numbers the re-run must produce: *"ground-truth 315 → 429, BaseTypeI
 `suspects / absent / MISMATCH` still all 0. A recorded gate result is only valid for the artifact
 it measured, and so is a recorded gate *prediction*.
 
-### What needs a run — nothing here has been executed
+### What needed a run — **DONE, see §9**
 
-I did not build or launch (laneM-matrix owns the directory). **Nine ports and three door
-conversions have never executed.** The cell that would settle them:
+*Written before the directory was available; kept because the predictions in it are what §9
+checks against.* At the time: nine ports and three door conversions had never executed. The
+cells named here were then run, and §9 records the result — including two predictions that
+held (`FindFree3DEffect` needed a positional sound; the MemoryStream pair is save-path only)
+and one that did not (autostart reached `FindFree3DEffect` on its own). The cells:
 
 * `BANISHED_RT_DIFF=1` on **`sa-run` (autostart)** — covers the six `Platform{Construct,Destruct}`
   bodies (every buffer and surface the renderer builds) and `Geometry::SetBounds` through
@@ -369,7 +378,19 @@ Two specific things to watch that a clean summary would hide:
   `?UpdateLoad` at 987) are save-path and want their own lane.
 * **Rows 12 and 14** — blocked on §4's unexported vtable. This needs a *decision*, not effort:
   either the mint grows a mechanism for unexported tables, or the concrete `IO::Encoding` class
-  is identified and its table rebuilt.
+  is identified and its table rebuilt. **PROMOTED TO THE LANE'S TOP ITEM BY §9 FINDING 3**: the
+  runs measure the enclosing ported constructor at `calls=1` on BOTH the save and the load path,
+  so at cutover this is a null call before the first save and the first load can do any work. It
+  is no longer "two rows handed over"; it is a save/load-blocking gap with a known cause and no
+  current mechanism.
+* **The two branches cutover takes FIRST** (§9 finding 2) — `ListLink[first-in-list]` and
+  `ListUnlink[list-emptied]`, `calls=0` in all four cells for all three classes, because the DLL's
+  own constructors never reach our ports and its lists are never empty by the time ours run. At
+  cutover they start empty and that branch runs immediately. The probe that would close it is
+  sketched in §9 and deliberately not built.
+* **`Video::{Index,Vertex}Buffer::PlatformDestruct`** (§9 finding 1) — registered, never entered
+  in any cell, no caller in our tree or reachable in the DLL. Verified only through their shared
+  body and their construct-side siblings; the composition is unproved.
 * **Row 19/20's real content is "port `System::WideString`"** — six exported members, none
   ported, none minted. Filed as a lane, not as two rows.
 * **`?UpdateSave` and `?UpdateDelete`** — two more arms of rows 23-25's switch, in no verdict
@@ -380,3 +401,157 @@ Two specific things to watch that a clean summary would hide:
   `OK-RESOLVE-ONLY` sites remain; six were read by hand here and are genuinely oracle-only, three
   in `audio.cpp` were not re-read. The fix is to follow a returned pointer to its callers, which
   is a change to the tool and not to any port.
+
+---
+
+## 9. EXECUTED — four cells, 2026-09-08
+
+Section 7 said "nothing here has been executed". That is no longer true, and this section
+replaces it. The directory was released to this lane after lane N finished; four runs, one
+build per source change, each with the exe stamp and the source-mtime check quoted below.
+
+**Build provenance.** Fresh object dir (the worktree had none), `standalone-debug`, exe stamped
+**2026-09-08 01:12:38**, deployed 01:12; a `find` over `runtime/ code/ standalone/ engine/ dx11/`
+for anything newer than the exe returned **nothing** on every build. Stronger than the stamp, the
+binary is **self-evidencing** — three registration banners can only be emitted by code that
+contains this lane's work:
+
+```
+[RtPort]   IO::CompressedMemoryStream: 8 exports registered    (was 6 — +Open@MemoryStream, +~MemoryStream)
+[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 27 exports registered   (was 21 — +6)
+```
+
+### Results
+
+**Every cell: 0 divergences in 0 sites. No crash in any of the four** (`standalone_crash.log`
+0 bytes each time; the intermittent WorkComponent teardown fault did not fire).
+
+| Cell | Sites | Calls | Divergences |
+|---|---|---|---|
+| autostart → pause-menu Quit | 319 | 31,882,125 | **0 in 0 sites** |
+| autostart, with branch counters | 324 | 32,025,561 | **0 in 0 sites** |
+| autostart + `BANISHED_SAVE_TEST=900` (SAVE) | 353 | 37,436,400 | **0 in 0 sites** |
+| `BANISHED_AUTOLOAD=Auto` (LOAD) | 344 | 16,143,510 | **0 in 0 sites** |
+
+The save cell wrote a fresh 7.26 MB `Auto.sav` at 01:13, and the load cell loaded **that** save —
+deliberately, so the mods-off/mods-on load hazard
+(`reference_mods_off_breaks_save_loading.md`) could not be confused with a port defect. The
+pre-existing `Auto.sav` is preserved as `Auto.sav.pre_laneW`.
+
+### Per-site `calls=`, with the branch each call took
+
+| Port | autostart | save | load | branch coverage |
+|---|---|---|---|---|
+| `Video::ImageBuffer::PlatformConstruct` | 6 | 6 | 5 | appended 6/6/5 · **first-in-list 0/0/0** |
+| `Video::IndexBuffer::PlatformConstruct` | 4 | 4 | 6 | appended 4/4/6 · **first-in-list 0/0/0** |
+| `Video::VertexBuffer::PlatformConstruct` | 4 | 4 | 6 | appended 4/4/6 · **first-in-list 0/0/0** |
+| `Video::ImageBuffer::PlatformDestruct` | 4 | 4 | 2 | unlinked 4/4/2 · early-out 0 · **list-emptied 0/0/0** |
+| `Video::IndexBuffer::PlatformDestruct` | — | — | — | **NEVER ENTERED — see below** |
+| `Video::VertexBuffer::PlatformDestruct` | — | — | — | **NEVER ENTERED — see below** |
+| `Audio::Scene::FindFree3DEffect` | 4 | 4 | — | free-slot 4/4 · **reuse-hit 0** · table-full 0 |
+| `IO::MemoryStream::Open` | — | — | **1** | no branches |
+| `IO::MemoryStream::~MemoryStream` | — | 1 | 1 | owned-buffer freed 1/1 · encoding freed 1/1 · no-buffer 0 |
+| `Graphics::Geometry::SetBounds` (door conversion) | 30 | 32 | 1 | — |
+
+`Geometry::SetBounds` at 30/32/1 is the **conversion proved live**: before it, every one of those
+calls went to the DLL and our registered, diffed Wave 6 body was unreached.
+
+`FindFree3DEffect` was reached in the plain autostart cell, which lane V's 2-of-9 measurement did
+not predict — so it is verified without needing a bespoke positional-sound cell.
+
+### ⚠️ FINDING 1 — two ports have ZERO callers anywhere, in any cell
+
+`Video::IndexBuffer::PlatformDestruct` and `Video::VertexBuffer::PlatformDestruct` **never
+appear in any of the four `[RtDiff]` site lists at all** — not `calls=0`, but never registered,
+i.e. never entered. This is stated as a finding, not a footnote.
+
+It is **expected and was predicted** (§3): those two were ported for symmetry precisely because
+lane V had excluded them for having a defined-but-never-called resolver. Their only callers would
+be `~IndexBuffer` / `~VertexBuffer`, which are unported, and no detour is installed, so the DLL's
+own internal destructors do not reach our bodies either.
+
+What *is* verified about them, and it is not nothing: they share `PlatformDestructBody` with
+`ImageBuffer::PlatformDestruct` (10 verified calls, `unlinked` branch taken all 10 times), and
+their class-specific parameters are verified from the other side — `kBufferLinks`
+(`+0x10`/`+0x18`) is exercised 10 and 10 times by their own `PlatformConstruct` siblings. The
+composition is what is unverified: the `nullCompanionAfterRelease=true` flag, which is one store,
+and is the single line where the Index/Vertex pair differs from ImageBuffer in the shipped bytes.
+
+**Do not read their absence as agreement.** Per
+`reference_uncalled_port_is_not_verified.md` they are registered, counted, and unproved.
+
+### ⚠️ FINDING 2 — the branch cutover will take FIRST is the one never executed
+
+`ListLink`'s **first-in-list** branch is `calls=0` in all four cells, across all three classes,
+and `ListUnlink`'s **list-emptied** branch likewise. Every one of the 31 verified construct calls
+took `appended`; every one of the 10 verified destruct calls took `unlinked`.
+
+The cause is structural and it matters: **the DLL's own internal constructors never reach our
+ports** — no detour is installed on these six — so by the time our first call runs, the shipped
+`Video::Device` startup has already put surfaces and buffers on those lists and `*first` is never
+null. Our 31 calls are only the ones that came from *our* code.
+
+**At cutover that inverts completely.** The mint owns `?_firstSurface@ImageBuffer@Video@@` and the
+two `?_firstBuffer@` heads, they start at null, and every construct in the process is ours — so
+**the very first buffer the renderer builds takes the branch that has never been executed and
+never been compared against retail.** It is three stores and it is transcribed from the same
+decompile as the branch that is verified 31 times, but that is a structural argument, not a
+measurement, and this row must not be reported as fully covered.
+
+The oracle that would close it exists in principle — save the real list head, null it, run ours
+and theirs against a scratch node under the Device lock, restore — but it mutates the live global
+list that the DLL's own `ImageBuffer::RecreateDynamic`/`ReleaseDynamic` walk from the device-reset
+path, which is exactly the structure under test. **Deliberately not built while holding the
+directory with another lane queued behind**; it wants its own review.
+
+### ⚠️ FINDING 3 — the `IO::Encoding` blocker is on the SAVE **and** LOAD critical path, measured
+
+§4 handed `??0MemoryStream` and `??0CompressedStream` over as blocked on the unexported encoding
+vtable at 0x1801554a8. The runs upgrade that from a tidiness item to a **cutover blocker with
+measured reachability**:
+
+* SAVE cell: `IO::CompressedMemoryStream::CompressedMemoryStream calls=1`.
+* LOAD cell: same, `calls=1`, plus `CompressedMemoryStream::Open`, `MemoryStream::Open`,
+  `Close`, `GetMemoryStream` and both destructors, all `calls=1`.
+
+That ported constructor's first two statements are
+`RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")` and
+`RT_EXPORT_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")` (`compressedstream.cpp:205,207`). Both
+names are unported and unminted, so at cutover `ResolveExport` misses and returns null.
+
+> **Measured consequence: with the DLL removed, the first save and the first load each call
+> through null inside `RtIo_CompressedMemoryStream_Ctor`, before either can do any work.** Not
+> inferred from a source sweep — observed as `calls=1` on the enclosing port in two different
+> cells.
+
+And it cannot be closed by porting harder: the encoding vtable has no exported name for
+`ResolveExport` to take and no row the mint can carry. **This is the highest-priority item this
+lane hands over**, and it is a mint-mechanism decision, not a porting slot.
+
+### A defect found in this lane's own probe, kept on the record
+
+The first branch-counting pass reported the exact opposite of the truth. `CountBranch` was
+written as `if (taken) RtDiffReport(...); else RtDiffRegister(...)` on the assumption that
+reporting registers the site. **`RtDiffReport` does not register** (`rt_diff.cpp:82` — it only
+bumps `calls`), so an *always-taken* branch never entered the site list and never printed, while a
+*never-taken* one printed `calls=0`. Run 2 therefore showed `[branch:first-in-list] calls=0` and
+no `[branch:appended]` line at all, which reads like "neither branch ran".
+
+The data was still recoverable by arithmetic — a missing site whose sibling reads 0 must have
+taken every one of the port's calls — and run 3 with the fix confirmed it exactly
+(`appended` = 4/4/6, matching each port's own `calls=`). Recorded rather than quietly fixed
+because it is the shape `reference_probe_needs_an_effectiveness_control.md` names: **a coverage
+instrument that is itself wrong reads as coverage.**
+
+### Housekeeping
+
+`rt_audio_port.cpp`'s banner said `Audio: %d/22 exports registered (3 held back, 1 phantom name
+fixed, 1 data export)`. Adding `FindFree3DEffect` made `20/22` arithmetic that no longer resolves
+against that breakdown. The hardcoded denominator is dropped rather than bumped — a denominator
+that must be re-derived every time a lane lands is a comment on its way to becoming a lie, which
+is what `e9d81d9` was cleaning up.
+
+Audits re-run after every source change and unmoved from §7: **rawdoor 472 sites / 0
+UNGUARDED-CALL · port_bypass ADDRESS 189/0, NAME 398/0, 582 ported names, 0 unseen ·
+rt_data_door exit 0**. Full autoload-cell log kept as
+`docs/runtime_port/wave9_laneW_run_autoload.txt`.
