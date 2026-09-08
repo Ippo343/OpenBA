@@ -291,11 +291,27 @@ up.**
 Three mechanisms to make the rule enforceable rather than remembered (lane M building
 1-3, source-only):
 
-1. **`BANISHED_RT_DIFF_INVERT=1`** — run the DLL's body FIRST on the scratch. A one-flag
-   change to the replay macro. On the first body tried it crashed in 20 seconds inside the
-   allocator with the diverging value's digits in a free block. It surfaces every body
-   that double-manages an allocation **by crashing on it** — no checker to maintain, and
-   it tests the SHAPE not the symptom, so it finds the ones nobody suspected.
+1. **The RELEASED-POINTER DETECTOR — this is the tree-wide sweep.** Inside
+   `RtDiffReportBytes`, **zero adoption cost, covers all ~170 sites the moment it runs.**
+   Fires only when all three hold: the same slot holds a different pointer on each side;
+   the side the DLL ran on points at a block whose `{len,rc}` header at `[-8]` reads
+   `{0,0}`; ours points at a live one. Reports as **HARNESS DEFECT, explicitly not a port
+   defect**, and says in its own message not to exclude the bytes.
+   It carries a **positive AND negative self-test that run automatically**, for a reason
+   worth copying: the detector's only natural control is `SetValueInt` on tutorials 1-3,
+   **which disappears the moment lane N lands the fix** — leaving an instrument that
+   cannot distinguish "nothing is wrong" from "I stopped working". So it builds a
+   synthetic pair that IS the defect and one that is NOT, and prints `ALIVE` or
+   `*** BROKEN — its silence means NOTHING ***` on the first byte comparison of every run.
+2. **`BANISHED_RT_DIFF_INVERT=1`** — run the DLL's body FIRST on the scratch. ⚠️ **Lane M
+   WITHDREW its own "one-flag change to the replay macro" claim: THERE IS NO REPLAY
+   MACRO.** The ours-then-theirs ordering lives inside each hand-written body, so no
+   change to `RT_DIFF_BYTES` can reorder them. It ships as an opt-in macro pair
+   (`RT_DIFF_REPLAY_PRE`/`_POST`), ~2 lines per site, off by default, arming code logging
+   and FLUSHING the site name **before** the original is called so a crash names its own
+   function. **No site has adopted it, so today INVERT is a NO-OP and sweeping on it would
+   measure nothing** — `calls=0`-reads-as-clean in a third costume. It is the ESCALATION
+   applied to what the detector names, not the sweep.
 2. **A runtime assert** — before replaying, walk the scratch for heap pointers; after our
    body runs, check whether any now addresses a block whose `{length, refcount}` header at
    `[-8]` reads zero. Name the function and abort. This converts "someone must remember
