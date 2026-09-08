@@ -142,6 +142,13 @@ namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 // registry behaves the same as one that falls through to the DLL.
 namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane MOD)
 
+// Wave 9 lane ENC: the two IO::Encoding factories (slots 3 and 4 of the shared
+// vtable 0x1801554a8, both UNEXPORTED) and the two BinaryReader/BinaryWriter
+// constructors they call. Its own switch because it is the first lane to make
+// the shared Encoding vtable partly FUNCTIONAL rather than merely minted, and
+// an A/B on it isolates the save/load header path from every other IO row.
+extern int RtIoEncodingRegister();          // encoding.cpp (lane ENC)
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -166,5 +173,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_CSOPEN"))      n += RtIoCompressedStreamOpenRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG3"))        n += RtIoPackageFileReadRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
+    if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
