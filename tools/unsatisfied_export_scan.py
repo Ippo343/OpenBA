@@ -56,7 +56,17 @@ SCAN_DIRS = ["runtime", "standalone", "engine", "code", "dx11"]
 # A mangled MSVC name: starts with ? and has no spaces.
 NAME = r'"(\?[^"\s]{4,})"'
 DOOR = re.compile(
-    r'(RT_EXPORT_ONCE|RT_ORIGINAL_ONCE|ResolveExportRaw|ResolveExport|RtOriginal)'
+    # WAVE 9 LANE SYS2, 2026-09-08: RT_DATA_SLOT was MISSING from this list, and
+    # the omission was not cosmetic -- it silently SHRANK the denominator. This
+    # lane converted one `ResolveExport("??_7Thread@System@@6B@")` to
+    # `RT_DATA_SLOT(void*, "??_7Thread@System@@6B@")` and the scan's total went
+    # 789 -> 788 with no symbol having been satisfied by anything. A change that
+    # makes a door SAFER must not be able to make it INVISIBLE to the instrument
+    # that counts doors; that is the shape of
+    # reference_documenting_a_check_can_delete_it.md, one tool over. Same macro
+    # family as RT_EXPORT_ONCE (both are RtResolveCached with a literal name),
+    # so it belongs here and always did.
+    r'(RT_EXPORT_ONCE|RT_DATA_SLOT|RT_ORIGINAL_ONCE|ResolveExportRaw|ResolveExport|RtOriginal)'
     r'\s*(?:<[^;{}]*?>)?\s*\([^;{}]*?' + NAME,
     re.S)
 REG = re.compile(r'RegisterRuntimeExport\s*\(\s*"([^"]+)"')

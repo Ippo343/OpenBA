@@ -1553,6 +1553,23 @@ Immediately above it in `standalone_error.log`:
 and the next virtual call on the zeroed object executes address 0. **The wall is the
 `IO::PackageFile` class.**
 
+> **CORRECTION (lane PKG2, `271ebb5`) — the two sentences above are wrong about the
+> mechanism, and the error is kept visible because it is easy to repeat.** This is **not**
+> a virtual call and no vtable is involved. `RAX=0`, `RCX=RDX=` the fresh 0xF0 block,
+> `RIP=0`: it is
+> `RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block)` called through
+> a **null function pointer**. The object read as all-zero because nothing had run on it
+> yet — not because a vtable was missing.
+>
+> A null call whose first argument is a freshly allocated block is INDISTINGUISHABLE from
+> a VCALL-of-0 in the register file: `this` points at plausible zeroed memory and `RIP`
+> is 0 either way. The two diagnoses send you to different places — "the vtable was never
+> installed" sends you hunting a mint row, "the function pointer was null" sends you to
+> the resolve. **The `[RtResolve] MISS` line above the dump is what actually names the
+> fault**, and the crash handler's own label is a guess it is not entitled to make.
+>
+> The conclusion (the wall is `IO::PackageFile`) was right; the reasoning was not.
+
 ### The surface is now BOUNDED: 43 symbols
 
 The boot no longer dies in the name-resolution phase — it clears `FileSystem::Startup`,
@@ -1565,6 +1582,132 @@ more.
 Two of the 43 are the handoff's lead #1: `?Startup@Device@Video@@` and `?Shutdown@` are
 one-instruction JMP thunks onto `PlatformStartup`/`PlatformShutdown`, so one port closes
 both rows plus the unsatisfied call in our own `Engine::Startup`.
+
+### The ADDRESS-door census: 62 doors no name-based instrument can see
+
+Attempt 13's wall was the first that was not a missing name, so it implied a census
+nobody had run: every `ResolveAddr(Module::Runtime, 0x...)` in `runtime/`, `code/`,
+`engine/`, `standalone/` and `dx11/`, minus every address anything registers.
+
+| | |
+|---|---|
+| by-address call sites | 172 |
+| literal `RegisterRuntimeAddr(0x...)` | 508 |
+| mint-registered (table-driven) | 507 |
+| **unregistered** | **62** |
+
+**The first run of this scan said 94, and it was wrong in the same way as everything else
+this wave.** It counted registrations by grepping a LITERAL `RegisterRuntimeAddr(0x...)`,
+and the mint does not spell its addresses at the call site — it walks three generated
+tables and registers each row through a variable (`rt_data_mint.cpp:578/583/588`). All
+507 minted addresses were invisible, so 32 registered doors were reported unregistered.
+Corrected in `4ef55b6`. That is the FOURTH time this project has paid for the same
+defect (Wave 4 lane D's `kName*` constants, the dx11 resolver, the macro doors, now the
+mint tables), which is enough to promote it to a rule:
+
+> **An instrument that greps for a literal is blind to the same fact spelled through a
+> variable, and the blindness never announces itself.**
+
+**This is a WATCH LIST, not a defect list.** An unregistered door is only fatal if it is
+REACHED with the DLL absent. `standalone/allocator_lock.cpp` prints "could not resolve"
+and stands down, which is correct and was never the wall. Each row needs the call site
+read — the same triage the unregistered dispatch slots got.
+
+Concentrations, and how they were routed:
+
+| n | file | routed to |
+|---|---|---|
+| 22 | `engine/funcs/engine_funcs.cpp` | split below |
+| 7 | `runtime/src/graphics/scene.cpp` | lane GFX2 |
+| 5 | `runtime/src/input/input.cpp` | lane SYS2 (owns `?Update@Device@Input@@`) |
+| 5 | `runtime/src/picking/scene.cpp` | unrouted |
+| 4 | `runtime/src/io/filesystem_packages.cpp` | **lane PKG2 — the wall's own file** |
+| 4 | `standalone/filename_runtime_hook.cpp` | lane SYS2 (owns `?FindOrLoad@`) |
+
+The four in `filesystem_packages.cpp` — `0x18007eefc`, `0x180008340` (a tree free),
+`0x1800264a0` (a sort), `0x180025a80` (a BST insert) — sit inside `LoadPackages`, which
+is where attempt 14 dies. They are the likeliest rungs after `??0PackageFile@IO@@`, and
+they are Collection internals: an AVL rebalance written blind silently corrupts a tree.
+
+The 22 in `engine_funcs.cpp` are not one thing. Reading each site split them cleanly:
+
+- **Video Context lifecycle (2)** — `fn_VideoCtx_Ctor` `0x1800f1820`, `fn_VideoCtx_Delete`
+  `0x180018500`. The neighbouring `fn_VideoCtx_Dtor` goes by NAME
+  (`??1Context@Video@@`), so the lifecycle reaches the DLL through two different doors
+  and **all three are null at cutover**. Independent corroboration that the
+  `CreateVideoContext` cluster is the right scope. → lane VID.
+- **Dialog lifecycle (4)** — `fn_DialogInstance_Ctor` `0x180114870`, `fn_TabElement_AddTab`,
+  `fn_DialogInstance_AddControllerTab`, `fn_DialogInstance_AddController6`. The
+  DialogInstance **constructor** goes by address, so it never appeared on any name-based
+  list even though the dtor did. A dialog built through a null ctor fails exactly as
+  attempt 14 does: an all-zero object whose first virtual call jumps to 0. → lane UIC.
+- **The mods cluster (11)** — `ModEntry` copy-ctor/assign/dtor, `fn_Map_Insert`,
+  `fn_ModArrayCopy`, and `Modification` GetCount/GetMod/Swap/Enable/RefreshList/SaveList.
+  The mods menu is a live default-on feature, so this is running surface, not
+  speculative. → **lane MOD**, dispatched off this finding alone.
+- **`fn_ParseCommand` / `fn_ParseValue`** (`0x1800c4a00`, `0x1800c4930`) — consistent with
+  the standing note that `?ParseCommand@` goes live the moment anything passes a
+  non-empty command line. Unrouted, low priority while nothing does.
+- **`g_pLoader` data (2)** (`0x1801fe7c0`, `0x1801fe7e0`) and `0x18006f330` — unrouted.
+  The two `g_pLoader` slots are DATA the mint does not cover; check them before the next
+  cutover attempt.
+
+### SEVEN blind instruments in one session — and the rule they all share
+
+The eight-lane session found blind spots in seven separate measuring tools. They are not
+seven unrelated bugs. Five are the SAME defect:
+
+| # | instrument | blind to | cost |
+|---|---|---|---|
+| 1 | `runtime_census.py` `called` | the `RT_EXPORT_ONCE` / `RT_DATA_SLOT` macro doors | listed `?SetupDirectories@` and `?LoadPackages@` as **ports with no caller** while the boot was dying on them |
+| 2 | the address-door census (mine) | the mint's table-driven `RegisterRuntimeAddr((uintptr_t)v.dllVa, …)` | reported **94 unregistered doors when the true figure was 62** — committed while measuring the same class of defect |
+| 3 | `unsatisfied_export_scan.py` | `RT_DATA_SLOT` | true denominator is **812, not 789** — 23 names invisible |
+| 4 | `port_bypass_audit.py` `ADDR_SITE` | a named constant operand (`MainLoopAddr::CreateVideoContext`) | **20 sites tree-wide**, and it hid a real defect: an exported function reached through the address door |
+| 5 | `rawdoor_audit.py` `diff_only_fn_depth` | a one-line aggregate initialiser's closing brace | reported guarded `RT_ORIGINAL_ONCE` calls as UNGUARDED-CALL |
+
+> **A GREP FOR A LITERAL IS A LOWER BOUND, AND IT NEVER SAYS SO.** Five separate tools
+> here have reported a confident number that was simply smaller than reality, because the
+> same fact can be spelled through a variable, a named constant, a macro or a generated
+> table. Before quoting any grep-based census, ask whether its operand can be spelled
+> indirectly — and check the count against an independent source.
+
+The other two are a different and nastier family — **instruments whose output cannot
+falsify them:**
+
+| # | instrument | defect |
+|---|---|---|
+| 6 | the `Factory::Startup` self-check | its `theirs=` side was `snprintf(b, "chain=%d nodes=%d", chain, chain)` — **a constructed expectation formatted to look like a measurement of retail.** It runs no DLL body at all |
+| 7 | `RT_DIFF_SHADOW` | emits its strings **only on a mismatch**, so a population description carried inside one is invisible on exactly the runs where you would want it |
+
+Number 6 cost real work: it reported `ours=nodes=415 theirs=nodes=416`, lane UIC read it
+the only way it can be read — retail gets 416, we lose an insert — and passed a false
+divergence to another lane. The `416` on the "theirs" side was `chain` printed twice.
+Both are now fixed; the self-check prints `EXPECTED (no DLL run): nodes==chain==N`.
+
+> **If a control is only visible when the test fails, it is not a control** (lane UIC).
+> And a check whose expected side is true by construction is not a check.
+
+The open question underneath #6 is now answered EMPIRICALLY rather than asserted:
+`ReportKeyCollisions()` walks the chain and NAMES any two `BaseTypeInfo` sharing a
+`TypeNameCRC`, distinguishing a hash collision (one type unreachable by id) from the same
+name registered twice — and says explicitly that if no duplicate exists, the shortfall IS
+a lost insert and must not be dismissed.
+
+### Two more rules the lanes paid for
+
+**A family found by a caller-driven survey is bounded BELOW, not above** (lane UIC). Lane
+D found eleven `Array<T>::~Array` addresses; lane UIF found a twelfth and wrote "there
+are twelve"; lane UIC found the thirteenth and fourteenth inside `?AddController@`. A J1
+address is invisible to a caller-driven survey until something in our tree calls it, so
+"there are N" was never a count — it was a lower bound wearing a count's clothes.
+
+**A row can be a dead pointer AND a live dependency at once** (lane MOD). Five of the
+eleven `fn_*` pointers in the Modification cluster are resolved and never called — but
+two of those ADDRESSES are live through a different door (`0x180010110` from
+`loops.cpp:681` on every world load, `0x18002a090` from `persistence_registry_win.cpp:266`
+on every boot). The census keys on the address, so the address grep alone over-reports
+urgent ports and the identifier grep alone misses the deep copy that runs on every load.
+Neither view is sufficient on its own.
 
 ### The `dirAlias` finding — a local that is written, passed, released and NEVER READ
 

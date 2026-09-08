@@ -161,6 +161,16 @@
 // `CreateVideoContext`, this lane picks up that port automatically. That is
 // goal.cpp's stated position and it is the right one for code.
 //
+// WITH ONE CORRECTION (Wave 9 lane VID2). "Registry-aware" is not the same as
+// "visible". An address door names nothing, so a dependency resolved that way
+// is counted by NO instrument — not the residue census, not
+// `unsatisfied_export_scan.py`, not the rawdoor or bypass audits. Where the
+// callee HAS an export name, resolve it by name; the registry-awareness is
+// identical (`ResolveExport` checks the port registry first too) and the row
+// becomes countable. `CreateVideoContext` moved for exactly that reason, and
+// `??1Context@Video@@` / the deleting operator (lines below) keep their address
+// doors only because lane VID2 registered BOTH doors for them.
+//
 // DATA dependencies go through `ResolveExportRaw` (GetProcAddress), which is
 // deliberately NOT registry-aware. `ResolveAddr(Module::Runtime, addr)` checks
 // the port registry FIRST (reference_resolveaddr_consults_port_registry_first.md),
@@ -363,7 +373,10 @@ extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) 
 // `ExternalFactory` AVL tree once per id (0x1800be9d0), release each object
 // through a vtable slot, and destroy the `Video::Context`. Not one of its seven
 // internal callees is ported. `OnVideoRestart` (0x1800dc3b0) opens by calling
-// `CreateVideoContext`, which is itself unported and unexported. Porting either
+// `CreateVideoContext` — unported, but EXPORTED as
+// `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ`, ordinal 2139; the
+// "unexported" half of this sentence was wrong and is corrected at its call
+// site below (Wave 9 lane VID2). Porting either
 // would relocate 17 nulls rather than remove any, which is the shape lane Z's
 // triage rule exists to refuse; both are DECLINED with that evidence, and the
 // full sizing is in docs/runtime_port/WAVE9_LANE_VID.md.
@@ -493,32 +506,46 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     *reinterpret_cast<void**>(device + MainLoopAddr::DeviceRestartFuncSlot) =
         reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoRestart_static);
 
-    // ⛔ KNOWN, UNFIXED CUTOVER NULL — Wave 9 lane VID, NOT this lane's row.
+    // ⛔ KNOWN, UNFIXED CUTOVER NULL — but it now has a NAME. (Wave 9 lane VID2.)
     //
-    // `Engine::MainLoop::CreateVideoContext` (0x1800dd500) is unported and
-    // UNEXPORTED, so this `ResolveAddr` returns 0 with the DLL absent and the
-    // call below is an EXEC-of-0 on the BOOT path — earlier and harder than the
-    // two video-callback stores repaired above, and reported by no name-based
-    // instrument for the same reason they were not: there is no name here.
+    // *** THE "UNEXPORTED" HALF OF LANE VID'S NOTE WAS WRONG. ***
+    // `Engine::MainLoop::CreateVideoContext` IS exported:
+    // `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ`, 0x1800dd500, ordinal 2139,
+    // read straight out of the shipped export directory with pefile. It is
+    // unported, which is the part that matters, but it was never nameless.
     //
-    // Deliberately left as a faithful call rather than guarded. A guard would
-    // leave `MainLoop::_context` null and move the fault to whichever of the
-    // ~90 `Video::Context` call sites touches it first, which is strictly
-    // harder to diagnose than a VEH `EXEC-of-0` whose return address names this
-    // line. The fix is the port, not a check.
+    // That mattered more than a footnote. Resolved by ADDRESS this was a
+    // NAMELESS EXEC-of-0 on the boot path — invisible to
+    // `unsatisfied_export_scan.py`, to `BANISHED_RT_STRICT`'s residue census and
+    // to every rawdoor/bypass audit, exactly the blind spot lane VID itself
+    // documented twenty lines above for the two video-callback stores, hit a
+    // second time in the same function. Resolved by NAME it is a row every
+    // instrument can count, and at cutover it announces itself as
+    // `[RtResolve] MISS "?CreateVideoContext@MainLoop@Engine@@AEAAXXZ"` before
+    // the fault, the way `??0PackageFile@IO@@` did on attempt 14.
     //
-    // The port is small and fully reversed: `if (_context) { ~Context; free; }`,
-    // take the allocator lock (`MemoryAllocator::_singleton + 0x640`), allocate
-    // 0x2168 bytes aligned 8 through 0x1800c6e60, drop the lock, and on success
+    // Still a faithful unguarded call, for lane VID's reason, which stands: a
+    // guard would leave `MainLoop::_context` null and move the fault to
+    // whichever of the ~90 `Video::Context` call sites touches it first.
+    //
+    // WHAT ACTUALLY BLOCKS THE PORT, measured rather than inherited. The body
+    // itself is nine lines: `if (_context) { ~Context; operator delete; }`, take
+    // the allocator lock, `MemAlloc(0x2168, 8)`, drop the lock, and on success
     // run `??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z`
     // (0x1800f1820) with (Device::_singleton, 0x800000, 0x400000, 0x100000,
-    // nullptr). What blocks it is the two `Video::Context` lifecycle holdbacks
-    // in runtime/src/video/context.cpp §"WHAT STAYS IN THE DLL" — the ctor
-    // allocates five sub-objects the dtor later frees — plus the allocator's
-    // own NO-GO (WAVE2_ALLOCATOR.md). It needs the lane that owns those, not a
-    // bolt-on here.
-    reinterpret_cast<VoidThisFn>(
-        ResolveAddr(Module::Runtime, MainLoopAddr::CreateVideoContext))(self);
+    // nullptr). Two of its three callees ARE now ported —
+    // `??1Context@Video@@` and the deleting operator, both in
+    // runtime/src/video/context_lifecycle.cpp (lane VID2), address doors
+    // included. The allocator NO-GO it also cited is discharged: attempt 14's
+    // `RegisterAllocatorAddresses()` arms 0x1800c6e60/0x1800c7a50 and friends.
+    //
+    // What is left is the CTOR, and its blocker is one function:
+    // `?AssignConstants@Context@Video@@AEAAXXZ` (0x1800ef3d0, ordinal 1629) is
+    // **1975 instructions** — 20 `?AddConstant@ConstantBuffer@Video@@` calls,
+    // 75 `?Set@String@System@@` calls and 104 `MemFree`s building the shader
+    // constant-name table. That is a lane, not a slot. See
+    // docs/runtime_port/WAVE9_LANE_VID2.md §"Not ported".
+    RT_EXPORT_ONCE(VoidThisFn, "?CreateVideoContext@MainLoop@Engine@@AEAAXXZ")(self);
 
     if (rt_diff_on__) {
         SecToTicksFn secToTicks =

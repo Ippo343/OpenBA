@@ -198,6 +198,54 @@ REPO = os.path.dirname(HERE)
 ADDR_SITE = re.compile(
     r"Resolve(?:Addr\(\s*Module::Runtime\s*,|RuntimeRaw\()\s*(0x[0-9a-fA-F]+)\s*\)")
 
+# THE SAME OPERAND, SPELLED AS A NAME -- the blind spot lane VID2 found.
+#
+# ADDR_SITE requires a HEX LITERAL, so `ResolveAddr(Module::Runtime,
+# MainLoopAddr::CreateVideoContext)` was invisible to this checker, and that is
+# what hid a real defect: the site was reaching an EXPORTED function
+# (?CreateVideoContext@MainLoop@Engine@@, ord 2139) through the address door,
+# and the audit whose whole job is to notice that could not see the line at all.
+# 20 such sites tree-wide, 11 of them named constants.
+#
+# This is the FIFTH instrument on this project blind to a fact spelled through a
+# variable rather than a literal (runtime_census.py's kName* constants, its dx11
+# resolver, its macro doors, the address-door census's own mint tables, now
+# this). Enough repetitions to state the rule where the next tool author will
+# read it: A GREP FOR A LITERAL IS A LOWER BOUND, AND IT NEVER SAYS SO.
+#
+# Resolving the name is best-effort by design. When it cannot be resolved the
+# site is reported as SYMBOLIC-UNRESOLVED rather than dropped -- a checker that
+# returns nothing when it cannot check is exactly how this project got here.
+ADDR_SITE_SYMBOLIC = re.compile(
+    r"Resolve(?:Addr\(\s*Module::Runtime\s*,|RuntimeRaw\()\s*"
+    r"(?!0x)([A-Za-z_][A-Za-z0-9_:]*)\s*\)")
+
+# `constexpr uintptr_t CreateVideoContext = 0x18...;` and the const/static
+# spellings, with or without a namespace qualifier at the use site.
+ADDR_CONST_DEF = re.compile(
+    r"\b(?:static\s+)?(?:constexpr|const)\s+(?:uintptr_t|unsigned\s+long\s+long|uint64_t)\s+"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(0x[0-9a-fA-F]+)")
+
+
+def collect_addr_constants(texts):
+    """Map every `constexpr uintptr_t NAME = 0x...` in the tree to its value.
+
+    Keyed by the BARE name, because use sites qualify them (`MainLoopAddr::X`)
+    and definitions do not. A name defined twice with DIFFERENT values is
+    ambiguous and is dropped rather than guessed at -- reporting the site as
+    SYMBOLIC-UNRESOLVED is honest; picking one of two values is not.
+    """
+    seen, ambiguous = {}, set()
+    for text in texts:
+        for m in ADDR_CONST_DEF.finditer(text):
+            name, val = m.group(1), int(m.group(2), 16)
+            if name in seen and seen[name] != val:
+                ambiguous.add(name)
+            seen[name] = val
+    for name in ambiguous:
+        seen.pop(name, None)
+    return seen
+
 
 def load_census():
     """Import runtime_census.py as a module and reuse its scanner.
@@ -631,17 +679,41 @@ def main():
     detoured_names = {k for k in scan["detoured"] if not isinstance(k, int)}
     fallbacks = guarded_fallback_sites()
 
-    rows = []
+    # Read every source ONCE, so the symbolic-operand pass below can resolve a
+    # constant defined in a different file from the site that uses it (which is
+    # the normal case -- the addresses live in a header).
+    sources = {}
     for path in census.iter_sources():
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
         try:
-            text = open(path, encoding="utf-8", errors="replace").read()
+            sources[rel] = census.strip_comments(
+                open(path, encoding="utf-8", errors="replace").read())
         except OSError:
             continue
-        text = census.strip_comments(text)
-        for m in ADDR_SITE.finditer(text):
-            addr = int(m.group(1), 16)
-            line = text.count("\n", 0, m.start()) + 1
+    addr_consts = collect_addr_constants(sources.values())
+
+    rows = []
+    for rel, text in sources.items():
+        # Hex-literal sites and named-constant sites are classified identically
+        # once the operand is resolved; only the way the address is spelled
+        # differs, and that must not change the verdict.
+        sites = [(m.start(), int(m.group(1), 16), False)
+                 for m in ADDR_SITE.finditer(text)]
+        for m in ADDR_SITE_SYMBOLIC.finditer(text):
+            sym = m.group(1).split("::")[-1]
+            if sym in addr_consts:
+                sites.append((m.start(), addr_consts[sym], False))
+            else:
+                sites.append((m.start(), -1, True))
+
+        for start, addr, unresolved in sorted(sites):
+            line = text.count("\n", 0, start) + 1
+            if unresolved:
+                # Loud, not dropped. This is a real address door whose operand
+                # this tool could not follow; a silent omission here is the
+                # exact failure the symbolic pass was added to fix.
+                rows.append(("SYMBOLIC-UNRESOLVED", rel, line, "?", ""))
+                continue
             name = exports.get(addr, "")
             if (rel, line) in fallbacks:
                 verdict = "GUARDED-FALLBACK"   # dead; resolve_fallback_audit owns it
