@@ -141,6 +141,24 @@ constexpr int kMouseOffset         = 0x1098;
 constexpr int kMouseInputCount     = 0x0D;  // 13
 constexpr int kMouseClippingOffset = 0x11D0;
 
+// +0x11F0  bool _hasFocus — added by Wave 9 lane IOA, which ported
+// `PlatformUpdate` (0x1800e2130) and needed the second half of its guard.
+// Pinned by FOUR independent writers, all found by a byte-pattern search for
+// `C6 ?? F0 11 00 00 ??` (`MOV byte ptr [reg+0x11F0], imm8`) over the whole
+// image — there are exactly four and no others, and no non-immediate writer
+// (`88 ?? F0 11 00 00` returns nothing):
+//
+//   0x1800e1436  Input::Device::Device        (ctor)
+//   0x1800e17db  Input::Device::OnLostFocusMessage  -> 0, then PlatformUpdate
+//   0x1800e180b  Input::Device::OnFocusMessage      -> 1, then PlatformUpdate
+//   0x1800e1832  Input::Device::PlatformConstruct
+//
+// The two message handlers are what name it: WM_KILLFOCUS clears it,
+// WM_SETFOCUS sets it, and each then re-runs `PlatformUpdate` so the cursor
+// clip follows the window's focus. NOT a DirectInput field — nothing in this
+// range is (see the block comment in runtime/src/input/input_win.cpp).
+constexpr int kHasFocusOffset      = 0x11F0;
+
 static_assert(kJoystickCount * kJoystickStride == kKeyboardOffset,
               "joystick block must exactly fill [0, keyboard)");
 static_assert(kKeyboardOffset + kKeyboardInputCount * (int)sizeof(State) == kMouseOffset,
