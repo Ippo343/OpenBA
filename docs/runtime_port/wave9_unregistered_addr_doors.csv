@@ -13,7 +13,6 @@ address,call_sites,files
 0x180011460,1,engine/funcs/engine_funcs.cpp:1717
 0x180018500,3,engine/funcs/engine_funcs.cpp:1625 | runtime/src/engine/engine.cpp:592 | runtime/src/video/context.cpp:991
 0x18001e540,1,code/Game/Game/weather_particle_draw.cpp:130
-0x18001f470,1,runtime/src/graphics/scene.cpp:254
 0x180023060,1,runtime/src/input/input.cpp:245
 0x180023130,1,runtime/src/input/input.cpp:137
 0x180023170,1,runtime/src/input/input.cpp:247
@@ -33,11 +32,6 @@ address,call_sites,files
 0x18005f090,1,runtime/src/graphics/scene.cpp:311
 0x18005f1f0,1,runtime/src/graphics/scene.cpp:329
 0x18006f330,1,engine/funcs/engine_funcs.cpp:3200
-0x1800724d0,1,runtime/src/picking/scene.cpp:295
-0x180072950,1,runtime/src/picking/scene.cpp:305
-0x18007af70,1,runtime/src/picking/scene.cpp:286
-0x18007b390,1,runtime/src/picking/scene.cpp:315
-0x18007b6d0,1,runtime/src/picking/scene.cpp:336
 0x18007eefc,1,runtime/src/io/filesystem_packages.cpp:415
 0x1800a7520,1,runtime/src/input/input.cpp:615
 0x1800a9aa0,1,standalone/filename_runtime_hook.cpp:671

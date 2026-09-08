@@ -244,10 +244,21 @@ void RtFreeLocked(void* ignoredThis, void* p) {
 // Volume::Box transform — retail 0x18001f470, the only callee of
 // Geometry::Clean's bounds branch. Converts the Transform to a Transform3, then
 // builds the world-space AABB of the local box the standard center/half-extent
-// way (`center' = M*center + t`, `half' = |M| * half`). Left in the DLL because
-// it is a float-exact routine whose rounding this lane has no independent way
-// to verify, and re-deriving it would put an unverifiable divergence source in
-// the middle of the one Geometry body with a full replay oracle.
+// way (`center' = M*center + t`, `half' = |M| * half`).
+//
+// *** THIS NO LONGER REACHES THE DLL (Wave 9 lane PICK, 2026-09-08). ***
+// This comment used to say "left in the DLL because it is a float-exact routine
+// whose rounding this lane has no independent way to verify". That premise is
+// gone: the Picking grid needs the same body (0x180125bc0 calls it for every
+// mesh node) and so lane PICK ported it in runtime/src/picking/scene_grid.cpp
+// and registered 0x18001f470 there. `ResolveAddr` consults the port registry
+// FIRST, so this forwarder now reaches that port, unchanged.
+//
+// The verification this lane said it could not do exists there: a BITWISE
+// 48-case sweep against the shipped body over off-axis and non-normalised
+// rotations and boxes whose extent terms nearly cancel, plus a moved-term
+// negative control (scene_grid_probe.cpp, SweepFloatBodies). Tolerance zero.
+// ONE registration, in that file: do not add a second here.
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
 float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
     using Fn = float* (*)(float*, const Transform*, const float*);
