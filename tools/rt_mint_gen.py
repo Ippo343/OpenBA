@@ -459,6 +459,46 @@ def main():
             errors.append(f"{sym}: EXTRA_VTABLES names a symbol the DLL does not export")
         elif all(sym != d[0] for d in data_syms):
             data_syms.append((sym, "Engine", rva, "mint:" + why))
+    # ---- CLOSURE: a minted vtable DRAGS IN ITS OWN ?_typeInfo@ -------------
+    # The rule above is "mint what our SOURCE names". That is the right rule for
+    # everything a port calls by name, and it is BLIND BY CONSTRUCTION to a
+    # symbol that only the MINTED VTABLE'S OWN SLOTS read: our ported TypeName
+    # and Type bodies fetch `?_typeInfo@X@Y@@`, and no source file anywhere
+    # spells that name as a literal. So the generator minted 47 vtables while
+    # leaving eleven of their type infos null -- including `Base@Object` and
+    # `Internal@Object`, the roots of the whole reflection chain.
+    #
+    # Lane Z found ONE of the eleven (DialogInstance, 0x1801faac0) by reading two
+    # vtable slots and asking what they pointed at. Adding that one row by hand
+    # was the obvious move and the wrong one: the gap is DERIVABLE, so it is
+    # derived here instead. If a class's vtable is minted and the DLL exports a
+    # BaseTypeInfo for that class, that BaseTypeInfo is minted too -- and any
+    # vtable added later brings its own along automatically.
+    minted_classes = {d[0][len("??_7"):-len("@@6B@")] for d in data_syms
+                      if d[0] and d[0].startswith("??_7") and d[0].endswith("@@6B@")}
+    if not minted_classes:
+        errors.append("vtable closure: parsed ZERO class names out of the minted "
+                      "vtables -- the name slice is wrong, not the tree")
+    have_ti = {d[0] for d in data_syms if d[0]}
+    closure_added = []
+    for cls in sorted(minted_classes):
+        pref = "?_typeInfo@" + cls + "@@"
+        for sym in sorted(n for n in by_name if n.startswith(pref)):
+            if sym in have_ti:
+                continue
+            rva = by_name[sym]
+            if section_of(rva) == ".text":
+                continue
+            data_syms.append((sym, "vtable-closure", rva,
+                              "read by the minted ??_7" + cls + "@@6B@"))
+            have_ti.add(sym)
+            closure_added.append((sym, cls))
+    if closure_added:
+        print("  vtable closure: +%d BaseTypeInfo pulled in by a minted vtable"
+              % len(closure_added))
+        for sym, cls in closure_added:
+            print("      %s   (??_7%s@@6B@)" % (sym, cls))
+
     data_syms.sort(key=lambda d: (d[0] or "", d[2]))
 
     # ---- the construction sweep (see find_crt_init_table) -------------------
