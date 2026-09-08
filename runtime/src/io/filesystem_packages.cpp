@@ -343,6 +343,7 @@ namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream
 namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }  // rung 4b-iii
 namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe.cpp)
 namespace RtIo { void RtIo_BinaryWriterProbe(); }    // lane ENC-2 (binary_writer_probe.cpp)
+namespace RtIo { void RtIo_SerializeFamilyProbe(); }  // lane SERIAL (serialize_family_probe.cpp)
 namespace RtUi { void RtUi_DialogSettingsProbe(); }   // lane ENC-2 (dialog_settings_probe.cpp)
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
@@ -964,6 +965,12 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // Lane ENC-2. Runs immediately after the factory probe and for the
         // same reason -- it builds whole BinaryWriter records, which allocate.
         RtIo::RtIo_BinaryWriterProbe();
+        // Lane SERIAL. Unlike every probe above it, this one ALLOCATES NOTHING
+        // -- its stream and its codec are local structs with hand-built vtables
+        // -- so it has no allocator-liveness requirement and could run anywhere
+        // on the boot path. It sits here only so the whole IO probe set reports
+        // from one place and in a predictable order.
+        RtIo::RtIo_SerializeFamilyProbe();
         // Lane ENC-2 bodies 5-6. Runs here for the same allocator reason and
         // because it needs the BinaryWriter tail above it to be real.
         RtUi::RtUi_DialogSettingsProbe();
