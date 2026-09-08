@@ -614,17 +614,53 @@ void RtDataMintShadowReport(const char* phase) {
                                         "minted slot must never hold" : "");
             }
         }
-        // Slot COUNT. The generator proved every count either by adjacency to
-        // the next exported symbol or by the qword past the end not being a
-        // pointer; re-check the second half live, because a count that is too
-        // short mints a table shorter than the class's real vtable and the
-        // missing slots dispatch into whatever follows in .rdata.
-        void* tail = dll[v.slotCount];
-        if (DllContains(tail)) {
-            ++sizeSuspect;
-            printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots but the qword "
-                   "after the last one (%p) is a DLL pointer — the real table may "
-                   "be longer [%s]\n", v.symbol, v.slotCount, tail, v.sizeProof);
+        // Slot COUNT.  A count that is too short mints a table shorter than the
+        // class's real vtable, and the missing slots dispatch into whatever
+        // follows in .rdata.  The generator proved each count one of two ways,
+        // and the live re-check MUST match the proof it is re-checking:
+        //
+        //   adjacency  - the table ends where the next exported vtable begins.
+        //                Re-check the ADDRESS: &dll[slotCount] must be exactly
+        //                that neighbour's address.  (Until Wave 9 this arm ran
+        //                the non-adjacency test below instead, which asks
+        //                whether the qword past the end is a DLL pointer.  For
+        //                an adjacency-proved table that qword IS the neighbour's
+        //                slot 0, so the test was true BY CONSTRUCTION and fired
+        //                on all 23 such vtables - a permanent red FAIL over zero
+        //                defects.  All 23 were confirmed correct offline:
+        //                gap-to-next-export == our minted count, every one.)
+        //   otherwise  - nothing exported follows, so fall back to asking whether
+        //                the qword past the end even looks like a DLL pointer.
+        //
+        // gap > slotCount is deliberately NOT a defect: .rdata padding between
+        // two vtables is legal, so a larger gap is inconclusive rather than
+        // short.  gap < slotCount IS one - we minted past the neighbour.
+        const char* adj = (v.sizeProof && !strncmp(v.sizeProof, "adjacent-export:", 16))
+                              ? v.sizeProof + 16 : nullptr;
+        if (adj) {
+            void* nextVt = DllExport(adj);
+            void* end    = (void*)&dll[v.slotCount];
+            if (!nextVt) {
+                ++sizeSuspect;
+                printf("[RtMintShadow] SIZE SUSPECT %s: size proof names %s, which is "
+                       "NOT exported - the proof cannot be re-checked\n",
+                       v.symbol, adj);
+            } else if (end > nextVt) {
+                ++sizeSuspect;
+                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots, which runs %lld "
+                       "qwords PAST %s - the table is too long\n",
+                       v.symbol, v.slotCount,
+                       (long long)(((char*)end - (char*)nextVt) / 8), adj);
+            }
+        } else {
+            void* tail = dll[v.slotCount];
+            if (DllContains(tail)) {
+                ++sizeSuspect;
+                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots but the qword "
+                       "after the last one (%p) is a DLL pointer - the real table may "
+                       "be longer [%s]\n", v.symbol, v.slotCount, tail,
+                       v.sizeProof ? v.sizeProof : "no size proof");
+            }
         }
     }
 
