@@ -844,20 +844,26 @@ void RtMath_Transform_Serialize(Transform* self, void* serializer /* io::Seriali
 // retail 0x18001aff0
 // ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
 //
-// NOT PORTED — skipped, per instructions, rather than guessed.
-// The call is `Math::Transform::Lerp(this+0x1c /*self*/, retval, this /*t*/)`:
-// only ONE Transform operand (at +0x1c) plus a bare Scalar (at +0x00) reach
-// Transform::Lerp, with no second Transform argument visible at this call
-// site. That means either (a) Transform::Lerp is a 1-argument blend against
-// state implicit in InterpolatedState<Transform> beyond the +0x1c field, or
-// (b) the "previous" value lives at some OTHER offset this call site does not
-// reveal. Neither Transform::Lerp's own address nor InterpolatedState<T>'s
-// layout is pinned by any decompiled ctor in this wave's function list, and
-// guessing the class shape here is exactly the kind of wrong-guess PLAN.md
-// §4.3 risk 4 warns against for the unnamed pool. Left for a wave that also
-// covers Graphics::InterpolatedState<T> (needs its ctor and at least one
-// other instantiation to cross-check the layout) and Math::Transform::Lerp
-// itself (retail address not yet found — not among this file's exports).
+// PORTED 2026-09-08 by Wave 9 lane GFX, in
+// runtime/src/graphics/wave9_lane_gfx.cpp — together with its callee
+// Math::Transform::Lerp (0x18001d690, exported as ordinal 3193).
+//
+// THIS NOTE WAS WRONG AND IS KEPT ONLY TO SAY SO. Wave 1 read the call site as
+// "only ONE Transform operand (at +0x1c) plus a bare Scalar (at +0x00) … no
+// second Transform argument visible at this call site", and deferred on that
+// basis. The second Transform IS visible — it is the `MOV R8,RCX` at
+// 0x18001aff9, which passes `this` itself (i.e. the +0x00 half) as
+// Transform::Lerp's `to`:
+//
+//     MOV R9,R8  /  MOV R8,RCX  /  ADD RCX,0x1c  /  MOV RBX,RDX
+//     CALL 0x18001d690
+//
+// Nor was Transform::Lerp's address unfindable: it is the CALL target, and
+// `pefile` on the shipped DLL confirms the export
+// `?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z` at 0x18001d690.
+// The layout worry was real at the time (Wave 6 lane E pinned
+// InterpolatedState<Transform> at 0x38 afterwards) — the ARGUMENT reading was
+// not, and it is the half that survived four waves unchallenged.
 // ============================================================================
 
 // ============================================================================

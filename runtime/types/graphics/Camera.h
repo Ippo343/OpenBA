@@ -93,11 +93,41 @@ struct RendererDrawable {
 };
 static_assert(sizeof(RendererDrawable) == 0x10, "Renderer drawable entry is 0x10");
 
-// One entry of a draw group's per-pass item lists. NOT pinned by this lane:
-// Renderer::AddDrawItem (0x1801057b0) builds a 0x38-byte stack record and hands
-// it to an array-grow helper whose element stride lane F did not read, and
-// AddDrawItem is HELD BACK (see WAVE6_LANE_F.md), so nothing here depends on it.
-struct RendererDrawItem;
+// One entry of a draw group's per-pass item lists, stride 0x38.
+//
+// WAVE 9 LANE GFX PINNED THIS. Lane F left it an opaque forward declaration
+// ("an array-grow helper whose element stride lane F did not read"); the stride
+// IS readable — the helper is 0x180063680 and it is the `Array<T>::Resize`
+// instantiated for THIS element type, with `IMUL RCX,RCX,0x38` for the byte
+// size and a seven-qword unrolled copy loop. 0x38 it is, and every field below
+// is a store Renderer::AddDrawItem (0x1801057b0) makes into the stack record it
+// hands that helper.
+//
+// TWO GAPS ARE REAL AND MUST STAY: AddDrawItem never writes `_pad24` (the four
+// bytes between the int at +0x20 and the pointer at +0x28) or `_pad34` (the
+// tail padding). The helper copies all seven qwords regardless, so retail
+// stores UNINITIALISED STACK BYTES into the array at those two offsets on every
+// append. A port must not zero them — and an oracle must not compare them
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+struct RendererDrawItem {
+    const void* geometry;   // +0x00  the Geometry* argument
+    const void* material;   // +0x08  MaterialInstance::material (+0x28), by value
+    const void* instance;   // +0x10  the MaterialInstance* argument
+    uint16_t    flags;      // +0x18  0x8000 when the 7th argument != 1.0f, OR'd
+                            //        with the 4th argument (a 16-bit OR)
+    uint16_t    arg5;       // +0x1a  the 5th argument
+    float       sortKey;    // +0x1c  the 6th argument
+    int32_t     arg8;       // +0x20  the 8th argument
+    int32_t     _pad24;     // +0x24  NEVER WRITTEN — see the banner above
+    const void* userData;   // +0x28  the 9th argument
+    uint32_t    arg10;      // +0x30  the 10th argument
+    int32_t     _pad34;     // +0x34  NEVER WRITTEN
+};
+static_assert(sizeof(RendererDrawItem) == 0x38, "Renderer draw item is 0x38");
+static_assert(offsetof(RendererDrawItem, flags)    == 0x18, "drawItem::flags @ +0x18");
+static_assert(offsetof(RendererDrawItem, sortKey)  == 0x1c, "drawItem::sortKey @ +0x1c");
+static_assert(offsetof(RendererDrawItem, userData) == 0x28, "drawItem::userData @ +0x28");
+static_assert(offsetof(RendererDrawItem, arg10)    == 0x30, "drawItem::arg10 @ +0x30");
 
 // One draw group, stride 0x1f0. Pinned by GetCullCamera (0x180017f90),
 // GetShader (0x180018010), AddDrawItem (0x1801057b0, which indexes

@@ -132,18 +132,41 @@ float SmoothNoise(const PerlinNoise* self, int32_t x, int32_t y) {
 //                                   int offsetX, int offsetY)   retail 0x180108c70
 // ??0PerlinNoise@Utility@@QEAA@MMHH@Z
 // ----------------------------------------------------------------------------
-// NOT in this lane's function list (see PerlinNoise.h's banner: the wave's
-// function table names only Generate for this class in wave8_lanes.txt's
-// call surface, and the ctor is reproduced here only as the plain four-store
-// body it is — no registration, since a caller that needs a NEW PerlinNoise
-// is out of this lane's scope and no oracle would be possible for a ctor
-// this lane does not own to compare (the Wave 5 SaveLoad ctor's ordering
-// argument does not transfer to a class with no singleton to publish).
-// Left here, unregistered, purely as the derivation this header's comment
-// promises. If a future lane needs to construct one, this is correct.
+// WAVE 9 LANE GFX, 2026-09-08 — NOW REGISTERED.
+//
+// Wave 8 lane E wrote this body and deliberately left it unregistered ("no
+// registration, since a caller that needs a NEW PerlinNoise is out of this
+// lane's scope"). Cutover boot attempt 06 says otherwise: this mangled name is
+// one of the 61 that resolved to NOTHING, `engine/funcs/engine_funcs.cpp:3493`
+// resolves it as `fn_PerlinNoise_Ctor`, and the residue census caught it live
+// (docs/runtime_port/wave9_residue_tutorial3.txt). Left unregistered it is a
+// null function pointer waiting to be called by the terrain generator.
+//
+// The body is unchanged. It is verified fresh against the retail bytes at
+// 0x180108c70 — seven instructions, all four stores and no others:
+//
+//     MOV   EAX,[RSP+0x28]        ; 4th argument, from its home slot
+//     MOVSS [RCX],XMM1            ; +0x00 = 1st (float)
+//     MOVSS [RCX+0x4],XMM2        ; +0x04 = 2nd (float)
+//     MOV   [RCX+0xc],EAX         ; +0x0c = 4th (int)
+//     MOV   RAX,RCX               ; return `this`
+//     MOV   [RCX+0x8],R9D         ; +0x08 = 3rd (int)
+//     RET
+//
+// NO ORACLE, AND NONE IS NEEDED OR POSSIBLE: there is no state to compare
+// against — a scratch replay would compare four stores to four stores of the
+// same four argument registers, which is true by construction and would prove
+// nothing (reference_recheck_must_match_its_own_proof.md). The verification
+// here is the instruction listing above, which is total: every store the
+// shipped body makes is in the list, so a field this port missed would be a
+// field that is not in the disassembly.
+//
+// The one thing this does NOT verify is the FIELD NAMES; those are still the
+// usage inference PerlinNoise.h documents. A wrong name would not change a
+// single emitted byte.
 // ============================================================================
-[[maybe_unused]] static PerlinNoise* PerlinNoise_Ctor(PerlinNoise* self, float persistence, float octaves,
-                                      int32_t offsetX, int32_t offsetY) {
+PerlinNoise* RtUtility_PerlinNoise_Ctor(PerlinNoise* self, float persistence, float octaves,
+                                        int32_t offsetX, int32_t offsetY) {
     self->_persistence = persistence;
     self->_octaves     = octaves;
     self->_offsetX     = offsetX;
@@ -233,5 +256,9 @@ int RtUtilityRegister() {
     RegisterRuntimeExport("?Generate@PerlinNoise@Utility@@QEBAMMM@Z",
                           (void*)&RtUtility_PerlinNoise_Generate); ++n;
     RegisterRuntimeAddr(0x1801089b0, (void*)&RtUtility_PerlinNoise_Generate);
+    // Wave 9 lane GFX — see the banner on the ctor above.
+    RegisterRuntimeExport("??0PerlinNoise@Utility@@QEAA@MMHH@Z",
+                          (void*)&RtUtility_PerlinNoise_Ctor); ++n;
+    RegisterRuntimeAddr(0x180108c70, (void*)&RtUtility_PerlinNoise_Ctor);
     return n;
 }

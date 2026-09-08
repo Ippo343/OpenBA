@@ -63,16 +63,28 @@ static_assert(sizeof(ExternalPtr) == 8, "Object::ExternalPtr must be 8 bytes");
 // (`*(base+0x1c+k) = *(base+k)` for k in 0..6, decompiled at the tail of the
 // loop). So the element is exactly two adjacent 0x1c-byte Transforms.
 //
-// WHICH HALF IS "CURRENT" IS NOT PINNED BY THIS LANE. Both halves always hold
-// the same value in every write lane E ported, and MeshInstance::GetNodeToWorld
-// (0x180016a40) reads the FIRST one. `Graphics::InterpolatedState<T>::Lerp` is
-// the function that would settle it and PLAN §4.2 wave 1 deferred it for want
-// of a layout — it is still deferred. The members are therefore named by
-// position, not by role; do not read `_state[0]` as "current" without proving
-// it. Lane G (Animation) is the lane that should close this.
+// WHICH HALF IS WHICH — SETTLED BY WAVE 9 LANE GFX, 2026-09-08. Lane E left
+// this open ("do not read `_state[0]` as current without proving it") and named
+// `InterpolatedState<T>::Lerp` as the function that would settle it. That
+// function is 0x18001aff0, eleven instructions, and it settles it:
+//
+//     MOV R9,R8        ; R9  = the Scalar& argument (t)
+//     MOV R8,RCX       ; R8  = this + 0x00        -> Transform::Lerp's `to`
+//     ADD RCX,0x1c     ; RCX = this + 0x1c        -> Transform::Lerp's `this`
+//     MOV RBX,RDX      ; RDX = the hidden return slot
+//     CALL 0x18001d690 ; Math::Transform::Lerp(from, ret, to, t)
+//
+// `Math::Transform::Lerp` (0x18001d690, exported as ord 3193) computes
+// `from + t*(to - from)` on the translation and `Quaternion::Lerp(from, to, t)`
+// on the rotation — `this` is the FROM end and the argument is the TO end,
+// pinned by the SUBSS/MULSS/ADDSS order at 0x18001d6d8..0x18001d6fa. So the
+// interpolation runs FROM `_state[1]` (+0x1c) TO `_state[0]` (+0x00): +0x00 is
+// the value the sim just produced (CURRENT) and +0x1c is the one it replaced
+// (PREVIOUS), which is the ordinary render-interpolation arrangement and agrees
+// with GetNodeToWorld reading the first one.
 // ============================================================================
 struct InterpolatedTransform {
-    Transform _state[2];
+    Transform _state[2];   // [0] = +0x00 CURRENT, [1] = +0x1c PREVIOUS
 };
 static_assert(sizeof(InterpolatedTransform) == 0x38,
               "InterpolatedState<Transform> must be 0x38 bytes");
