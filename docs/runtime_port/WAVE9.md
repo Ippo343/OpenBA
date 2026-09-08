@@ -837,6 +837,53 @@ for all 31 rows and classify each. **The shadow may already show this** — a ro
 `DLL=WRITTEN` but `minted=zero` at EXIT is exactly a category-(c) candidate, and that data is
 in a report already read.
 
+### `IO::Encoding` UNBLOCKED — a vtable can be minted by ADDRESS — lane C2, `c77b26f`
+
+**"Unexported therefore unmintable" was half wrong.** A vtable needs CONTENTS and an ADDRESS,
+not a name, and `RegisterRuntimeAddr` / `ResolveAddr(Module::Runtime, x)` key on exactly
+that. `0x1801554a8` is now minted with `symbol == nullptr`, **5 slots**, and the count
+carries the *stronger* of the two proofs — the table ends **exactly** where
+`??_7BinaryFileStream@IO@@6B@` begins, so the live adjacency re-check (`7d25f9a`) checks the
+same half of the proof here as everywhere else. It is a table **head**, not an interior:
+`0x180155488..0x1801554a0` are four `_purecall` slots of the abstract base.
+
+⚠️ **MINTING IS ENABLING, NOT SUFFICIENT** — stated by the lane rather than left to be
+discovered. All five slot targets are unexported `.text` internals and **none is ported**, so
+all five mint as **NAMED TRAPS**. That converts the cutover failure from *stamping NULL and
+taking an EXEC-of-0 several frames from the cause* into *a trap naming the vtable and slot*.
+A better failure, not the absence of one. **It does remove the stated reason the two ctors
+could not be ported:** `??0CompressedStream` (`0x1800aa3d0`) and `??0MemoryStream`
+(`0x1800ae710`) are **both exported** and are now ordinary port work — returned to lane W.
+
+**FIVE consumers, not two:** `??0CompressedStream`, `??0MemoryStream`, `??0BinaryFileStream`,
+`UserInterface::SaveAllSettings`, `DialogInstance::OnOpened` — all stamping it at `+0x00` of a
+fresh heap object that then goes to `stream+0x10`, the identical seven-instruction shape at
+all five sites. Porting the two ctors leaves the other three trapping.
+
+**THE GENERAL FORM — 30 sites, now 0 uncovered.** This is the round-5 bug one door over:
+`RegisterRuntimeExport` covers only NAME-asking callers, and **30 sites in this tree ask for
+exported DATA by ADDRESS**. The mint now registers **both doors for every row**: 27 are a
+minted row's base; **2 are an INTERIOR FIELD of `?_loader`** (`+0x08` runFlags, `+0x28`
+hFinished, read by `engine_funcs.cpp`) and are aliased explicitly, since exact-match
+registration does not cover an offset; **1 is an unexported `.data` static with no row at
+all** — `0x1801fc6d0`, `IO::Modification`'s `HMODULE`, `FreeLibrary`'d at shutdown — now
+minted.
+
+**Census blind spot, fourth distinct shape:** the two ctors are ABSENT FROM THE CENSUS even
+though our ported `CompressedMemoryStream` ctor calls them — it reaches them through
+`RT_EXPORT_ONCE`, **a macro**.
+
+**Predicted deltas, written BEFORE the run** (baseline 437 slots / 47 vtables / 165 fields /
+0/0/0, clean both phases): vtables **47→48**, ground-truth **437→442**, storage rows
+**30→31**, minted-from-our-code **unchanged** (all 5 new slots are traps), `purecall`
+unchanged, `BaseTypeInfo` **165**, MISMATCH/suspects/absent **0**, plus a new line
+`carried by ADDRESS : 1 row(s)`. **A move anywhere else is a finding, not noise.**
+
+⚠️ **LIMIT, stated rather than glossed:** the address-door registration **only executes under
+`BANISHED_RT_MINT=1`**, which is cutover-only, so **no shadow run exercises it**. Its evidence
+is the static 30-of-30 coverage table plus one map insert per row. **Do not read the next
+clean shadow run as having proved it.**
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
