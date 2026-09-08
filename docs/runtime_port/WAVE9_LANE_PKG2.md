@@ -2323,3 +2323,22 @@ requires.
 ## 90. Next predicted fault site
 
 Unchanged: `LoadPackages` stops at the `ReadPackfile` call.
+
+---
+
+# Continued in [WAVE9_LANE_PKG3.md](WAVE9_LANE_PKG3.md)
+
+Lane PKG3 picked up the handover in §88 and landed the transcription.
+It answers both of §87's open reads (the entry record is **offset at +0x08,
+size at +0x0c**, and the `SetSize` count is `_size + 1`), corrects four items
+in this decode -- most importantly that **the `+0xAC` read is ONE BYTE, not
+four** -- and closes all five of §78's registered-but-uncalled addresses.
+
+`?ReadPackfile@` is PORTED: 4 packages, 23,933 entries, `divergences=0`, two
+negative controls that both fire, and a full new game booted and simulated on
+top of the packages it mounts.
+
+**§81's coverage prediction was right and §72's flag is one-sided too:** every
+shipped `.pkg` is compressed and format-version > 2, so **the whole UTF-16 half
+of the function and the uncompressed default arm have never executed.** See
+WAVE9_LANE_PKG3.md §98 before reading its green run as coverage.
