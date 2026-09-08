@@ -113,6 +113,57 @@ script asks its own question -- "is the name one we have ported?" -- and combine
 the two. The fix at a flagged site is `RT_EXPORT_ONCE`, the port-registry twin of
 `RT_ORIGINAL_ONCE` added to `runtime/funcs/rt_port.h` for exactly this.
 
+THE BLIND SPOT THAT WAS MEASURED, AND CLOSED (Wave 9 lane H)
+============================================================
+
+Until 2026-09-07 "is the resolved pointer CALLED?" meant "is the resolve
+immediately applied to an argument list on this same line?". That is one
+spelling of a call and it is not the common one. The common one is the
+accessor:
+
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@…");
+    release(&tmp);                     // <- the call, a statement later
+
+`runtime/src/system/value_types.cpp` held THREE live-path `String::Release`
+bypasses. **This script reported ONE** -- the immediate-call spelling. The other
+two classified `OK-RESOLVE-ONLY`, a verdict that is correct for a pointer that
+is only stored and wrong the moment it is called. Two more, `widgets_input.cpp`'s
+`StringToInteger()` / `RealNumberEditElementSetValue()` accessors, were the same
+shape and were reported by no checker at all. All five were found by hand-grepping
+a mangled name.
+
+`rawdoor_audit.py` now follows the assignment target through the brace-matched
+enclosing function, so `called` means "reached on a live path" by either
+spelling, and `OK-RESOLVE-ONLY` now carries the evidence for its verdict (which
+local, in which function, with no unguarded use). `--self-test` proves it against
+the known answer: `tools/fixtures/bypass_value_types_before.cpp` is that file as
+it stood, and the hardened classifier reports 3/3 where the old one reported 1.
+
+A SECOND hole fell out of the cross-check below: the macro sweep read mangled
+names from the resolve's own LINE, so a site whose name sits on a continuation
+line -- the normal formatting here --
+
+    RtOriginal<Box*(*)(const Box*, Box*, const Vector3*)>(
+        "?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z")(self, &theirs, p);
+
+had no name to match and was `continue`d past without any verdict at all. That
+was **76 sites absent from a checker printing a clean pass** (361 -> 437). Names
+are statement-scoped now.
+
+`--by-name`: THE CROSS-CHECK THAT CANNOT BE DEFEATED BY PARSING
+==============================================================
+
+For every mangled name we have REGISTERED, grep the whole tree for that literal
+and report every raw-door spelling of it. No verdicts -- a grep cannot tell an
+oracle site from a bypass -- but it is a strict superset of the parser's
+population, and comparing the two answers the question the parser cannot answer
+about itself: *is the population the whole population?* It is what found the
+`widgets_input.cpp` pair by hand and what found the 76 above. It exits non-zero
+when it sees a raw-door statement the parser did not, and the count is printed
+whether or not it is zero. **Run it after every port that LANDS**, not after
+every edit: a site is correct when written and becomes a bypass when a different
+lane ports its name, with nothing in that file changing.
+
 **How the classification is paired, and its one honest limit.** The gate is looked
 for in the ENCLOSING FUNCTION's body, brace-matched — not in a fixed line window.
 A window is what let a twelve-line comment silently delete a site from
@@ -124,13 +175,16 @@ this small (9 sites at the time of writing) every one is meant to be read.
 
 USAGE
     tools/ghidra_mcp/.venv/Scripts/python.exe tools/port_bypass_audit.py
-    ... --all       list every site and its verdict, not just bypasses
-    ... --csv PATH  write every site to CSV
-    ... --quiet     exit code only
+    ... --all        list every site and its verdict, not just bypasses
+    ... --by-name    the grep cross-check (see above); use this at the gate
+    ... --self-test  prove the classifier against the known-answer fixture
+    ... --csv PATH   write every site to CSV
+    ... --quiet      exit code only
 
 EXIT CODES
     0  no ported function is reached by address
-    1  at least one bypass
+    1  at least one bypass, or --by-name saw a raw-door statement the parser
+       did not
     2  the shipped DLL is not there to map addresses onto names (the same
        refusal-to-answer as runtime_census.py: with no export directory this
        script cannot tell a bypass from a header-only template call, and a
@@ -231,17 +285,6 @@ DATA_FN_WORDS = ("vtable", "singleton", "typeinfo", "dataexport", "slot")
 NAME_CONST = re.compile(
     r'\b(?:static\s+)?(?:const|constexpr)\s+char\s*\*\s*(?:const\s+)?'
     r'([A-Za-z_]\w*)\s*(?:\[\])?\s*=\s*"((?:[^"\\]|\\.)*)"')
-# Any `name(args) {` that is not a control statement. NOT anchored to the start
-# of a line: `extern "C" void RtAudio_Scene_SerializeTraceProbe(void*) {` is a
-# function definition too, and a start-anchored pattern missed it -- which made
-# two save-trace probes classify as BYPASS in this script's first run, exactly
-# the "your first number will be too big" failure. A lambda cannot match: `](…)`
-# has no name character before the paren.
-FN_DEF = re.compile(r"\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*"
-                    r"(?:const\s*)?(?:noexcept\s*)?\{")
-NOT_A_FN = {"if", "for", "while", "switch", "catch", "return", "sizeof", "do"}
-
-
 def enclosing_function(text, pos):
     """(name, body) of the brace-matched function definition containing `pos`.
 
@@ -249,25 +292,14 @@ def enclosing_function(text, pos):
     docstring: a window's answer changes when someone adds a comment. The
     INNERMOST containing definition wins, so a helper defined inside a namespace
     block is attributed to the helper.
+
+    The implementation lives in `rawdoor_audit` and is imported rather than
+    copied: that module's deferred-call pass has to agree with this one about
+    where a function begins, and two copies of a brace matcher is how this
+    project gets a checker that disagrees with its own gate.
     """
-    best = None
-    for m in FN_DEF.finditer(text, 0, pos):
-        if m.group(1) in NOT_A_FN:
-            continue
-        open_brace = text.rindex("{", m.start(), m.end())
-        depth, i, n = 0, open_brace, len(text)
-        while i < n:
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            i += 1
-        if open_brace < pos < i:
-            if best is None or open_brace > best[0]:
-                best = (open_brace, m.group(1), text[open_brace:i])
-    return (best[1], best[2]) if best else ("", "")
+    name, body, _start = load_rawdoor().enclosing_function(text, pos)
+    return name, body
 
 
 def sweep_name_door(census, ported_names):
@@ -313,15 +345,21 @@ def sweep_name_door(census, ported_names):
     return rows
 
 
+_RAWDOOR = None
+
+
 def load_rawdoor():
-    spec = importlib.util.spec_from_file_location(
-        "rawdoor_audit", os.path.join(HERE, "rawdoor_audit.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    global _RAWDOOR
+    if _RAWDOOR is None:
+        spec = importlib.util.spec_from_file_location(
+            "rawdoor_audit", os.path.join(HERE, "rawdoor_audit.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _RAWDOOR = mod
+    return _RAWDOOR
 
 
-def sweep_macro_door(census, ported_names):
+def sweep_macro_door(census, ported_names, paths=None):
     """RT_ORIGINAL_ONCE / RtOriginal<> sites naming a function we have ported.
 
     The guard bit and the allowlist come from tools/rawdoor_audit.py, which owns
@@ -332,7 +370,7 @@ def sweep_macro_door(census, ported_names):
     rd = load_rawdoor()
     targets = registered_targets(census)
     rows = []
-    for path in rd.walk(REPO):
+    for path in (rd.walk(REPO) if paths is None else paths):
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
         fs = rd.scan(path)
         if fs.error:
@@ -343,7 +381,19 @@ def sweep_macro_door(census, ported_names):
         except OSError:
             continue
         consts = {m.group(1): m.group(2) for m in NAME_CONST.finditer(text)}
-        for (line, guarded, called, names, code) in fs.all_sites:
+        for site in fs.sites:
+            line, guarded, names, code = (site["line"], site["guarded"],
+                                          site["names"], site["text"])
+            # THE HOLE THIS CLOSES.  `called` used to mean "the resolve is
+            # IMMEDIATELY applied to an argument list on this line" -- one
+            # spelling, and not the common one.  A resolve stored in a local and
+            # called a statement later classified OK-RESOLVE-ONLY, a verdict
+            # that is right for a pointer that is only stored and wrong the
+            # moment it is called.  rawdoor_audit now follows the assignment
+            # target through the brace-matched enclosing function, so `called`
+            # here means "reached on a live path", by either spelling.
+            live = site["deferred_live"]
+            called = site["called"] or bool(live)
             if not RAW_MACRO.search(code):
                 continue          # the direct door, already swept above
             cand = [n for n in names if n.startswith("?")]
@@ -367,11 +417,13 @@ def sweep_macro_door(census, ported_names):
                 # LANE V'S DISTINCTION, and it is the whole rule here: storing
                 # the pointer outside a guard is harmless, CALLING outside one is
                 # not. `?IsEffectPlaying` looks identical to the two real defects
-                # at a glance and only the presence of an argument list after the
-                # resolve tells them apart. rawdoor_audit computes that bit; a
-                # resolve-only line is left to its own call site, which this loop
-                # sees separately.
-                v, why = "OK-RESOLVE-ONLY", "pointer stored, not called here"
+                # at a glance -- the difference is that every call through its
+                # local is inside a guard, which is now CHECKED (rawdoor_audit's
+                # deferred pass), not assumed from the absence of an argument
+                # list on the resolve's own line.
+                v, why = ("OK-RESOLVE-ONLY",
+                          "pointer stored; no unguarded use of `%s` in %s"
+                          % (site.get("target") or "it", fn or "this function"))
             elif targets.get(hit[0]) == fn:
                 # The port IS this function, so ResolveExport would call itself.
                 v, why = "OK-DELEGATING", ("this port's body IS a call to the DLL "
@@ -385,9 +437,131 @@ def sweep_macro_door(census, ported_names):
             elif any(w in fn.lower() for w in ORACLE_FN_WORDS):
                 v, why = "OK-ORACLE", "oracle fn name"
             else:
-                v, why = "BYPASS", "live path"
+                if live:
+                    u = live[0]
+                    why = ("live path -- `%s` %s at %s:%d, outside every guard"
+                           % (site.get("target"), u["kind"], rel, u["line"]))
+                else:
+                    why = "live path"
+                v = "BYPASS"
             rows.append((v, rel, line, fn, hit[0], why))
     return rows
+
+
+# --- the belt-and-braces cross-check ----------------------------------------
+#
+# Everything above parses. This does not, and that is the point: it takes the
+# set of mangled names we have REGISTERED and greps the tree for each literal,
+# reporting every raw-door spelling of it. It is a strict superset of the
+# parser's population and cannot be defeated by a shape the parser has not been
+# taught -- which is exactly how `widgets_input.cpp`'s two accessor bypasses
+# were found, by hand, after the parser reported the file clean.
+#
+# It is not a replacement for the parser (it has no verdicts -- an oracle site
+# and a bypass look identical to a grep). It is the control that says whether
+# the parser's population is the whole population. Read it whenever a port
+# lands.
+RAW_TOKEN = re.compile(r"ResolveExportRaw|ResolveRuntimeRaw|ResolveOrdinalRaw|"
+                       r"RT_ORIGINAL_ONCE|RtOriginal\s*<")
+
+
+def sweep_by_name(census, ported_names, covered):
+    """Every raw-door STATEMENT mentioning a name we have ported.
+
+    Pairing is by STATEMENT (back to the previous `;`/`{`/`}`, forward to the
+    next `;`), never by a line window: an `RT_ORIGINAL_ONCE` whose mangled name
+    sits on a continuation line is the normal formatting in this tree, and a
+    window is what a comment moves.
+
+    Comments are stripped first. A policy comment containing a worked example of
+    a mangled symbol made `export_name_audit.py` report a fabricated 663rd
+    phantom; this tool's own docstring quotes several mangled names and would do
+    the same to itself.
+    """
+    rd = load_rawdoor()
+    rows = []
+    for path in rd.walk(REPO):
+        rel = os.path.relpath(path, REPO).replace(os.sep, "/")
+        if rel in RESOLVER_FILES:
+            continue
+        try:
+            text = census.strip_comments(
+                open(path, encoding="utf-8", errors="replace").read())
+        except OSError:
+            continue
+        # `k…` constants holding a mangled name count as a spelling of it.
+        aliases = {}
+        for m in NAME_CONST.finditer(text):
+            if m.group(2) in ported_names:
+                aliases[m.group(1)] = m.group(2)
+        needles = [(n, n) for n in ported_names if n in text]
+        needles += [(a, n) for a, n in aliases.items()]
+        for needle, name in needles:
+            for m in re.finditer(re.escape(needle), text):
+                lo = max(text.rfind(c, 0, m.start()) for c in ";{}") + 1
+                hi = text.find(";", m.end())
+                hi = len(text) if hi < 0 else hi
+                door = RAW_TOKEN.search(text[lo:hi])
+                if not door:
+                    continue
+                # Report the line of the RAW DOOR, not of the name literal. The
+                # normal formatting in this tree puts the mangled name on a
+                # continuation line, so reporting the literal's line made 79
+                # sites the parser HAD seen read as "PARSER MISSED" -- the first
+                # number being too big, again, and this time a fabricated
+                # disagreement between two checkers rather than a real one.
+                line = text.count("\n", 0, lo + door.start()) + 1
+                rows.append((rel, line, name,
+                             "seen by the parser" if (rel, line) in covered
+                             else "PARSER MISSED THIS SITE"))
+    # One row per (file, line, name): a statement spanning several lines is one
+    # site, and a constant plus its literal must not double-count.
+    return sorted(set(rows))
+
+
+def run_self_test(census, ported_names):
+    """The fixture with the KNOWN ANSWER.
+
+    `tools/fixtures/bypass_value_types_before.cpp` is `value_types.cpp` as it
+    stood at 955f78a~1, with three live-path `String::Release` bypasses. The
+    pre-hardening classifier found one. This asserts the hardened one finds all
+    three -- and, on the tree, that all three are gone.
+    """
+    fx = os.path.join(HERE, "fixtures", "bypass_value_types_before.cpp")
+    if not os.path.isfile(fx):
+        print("SELF-TEST CANNOT RUN -- missing %s" % fx, file=sys.stderr)
+        return 2
+    rows = sweep_macro_door(census, ported_names, paths=[fx])
+    rel = os.path.relpath(fx, REPO).replace(os.sep, "/")
+    bad = sorted(r[2] for r in rows
+                 if r[0] == "BYPASS" and "Release@String" in r[4])
+    print("fixture %s: %d raw-door sites naming a ported function, "
+          "%d BYPASS on String::Release at lines %s"
+          % (rel, len(rows), len(bad), bad))
+    for r in rows:
+        if r[0] == "BYPASS":
+            print("  %-8s :%d  (in %s)  %s\n      [%s]"
+                  % (r[0], r[2], r[3], r[4], r[5]))
+    ok = True
+    if bad != [330, 349, 403]:
+        print("SELF-TEST FAILED -- expected BYPASS at fixture lines "
+              "[330, 349, 403] (the accessor shape at :330/:349 is what the old "
+              "classifier missed); got %s. The matcher is broken, and a clean "
+              "tree proves nothing until this passes." % bad, file=sys.stderr)
+        ok = False
+
+    live = [r for r in sweep_macro_door(census, ported_names)
+            if r[0] == "BYPASS"
+            and r[1] == "runtime/src/system/value_types.cpp"]
+    if live:
+        print("SELF-TEST FAILED -- the repaired value_types.cpp sites are "
+              "bypasses again: %s" % live, file=sys.stderr)
+        ok = False
+    if not ok:
+        return 2
+    print("SELF-TEST OK -- 3/3 found on the known-answer fixture "
+          "(the old classifier found 1), 0 in the repaired tree.")
+    return 0
 
 
 def main():
@@ -396,12 +570,19 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--csv")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--by-name", action="store_true",
+                    help="the grep cross-check: every raw-door spelling of every "
+                         "REGISTERED mangled name, parsed or not")
+    ap.add_argument("--self-test", action="store_true",
+                    help="prove the classifier on the known-answer fixture")
     args = ap.parse_args()
 
     census = load_census()
     exports = census.load_export_addrs()   # exits 2 if it cannot answer
     scan = census.scan()
     ported_names = set(scan["ported_exports"])
+    if args.self_test:
+        return run_self_test(census, ported_names)
     ported_addrs = set(scan["ported_addrs"])
     detoured = {k for k in scan["detoured"] if isinstance(k, int)}
     detoured_names = {k for k in scan["detoured"] if not isinstance(k, int)}
@@ -480,7 +661,22 @@ def main():
                 continue
             print("  %-16s %s:%d  (in %s)" % (verdict, rel, line, fn or "?"))
             print("      %s   [%s]" % (name or "(name not a literal)", why))
-    return 1 if (bad or name_bad) else 0
+
+    missed = []
+    if args.by_name:
+        covered = {(r[1], r[2]) for r in name_rows}
+        byname = sweep_by_name(census, ported_names, covered)
+        missed = [r for r in byname if r[3] != "seen by the parser"]
+        print()
+        print("BY-NAME cross-check: %d ported names; %d raw-door statements "
+              "mention one; %d of those the parser did NOT see"
+              % (len(ported_names), len(byname), len(missed)))
+        for rel, line, name, note in byname:
+            if note == "seen by the parser" and not args.all:
+                continue
+            print("  %-22s %s:%d" % (note, rel, line))
+            print("      %s" % name)
+    return 1 if (bad or name_bad or missed) else 0
 
 
 if __name__ == "__main__":
