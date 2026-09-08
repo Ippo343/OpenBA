@@ -500,6 +500,42 @@ header labelled the two children **backwards** while its code was correct. Corre
 family that has now paid three times for exactly this confusion, a comment contradicting
 its own code and its four siblings is the next mix-up waiting to happen.
 
+### ⛔ TWO CUTOVER BLOCKERS the clean cells did not show — lane W, 2026-09-08
+
+Lane W executed its nine ports across four cells: **0 divergences in 0 sites** every time
+(319/31.9M, 324/32.0M, 353/37.4M, 344/16.1M), zero-byte crash log. The findings are in what
+`calls=` and the BRANCH counters said, not in the divergence column.
+
+**1. THE BRANCH CUTOVER TAKES FIRST IS THE ONLY ONE NEVER EXECUTED.**
+`ListLink[first-in-list]` and `ListUnlink[list-emptied]` are `calls=0` in **every cell for
+all three buffer classes** — 31 construct calls all *appended*, 10 destruct calls all
+*unlinked*. **This is structural, not luck:** the DLL's own constructors never reach our
+ports, so its lists are never empty by the time ours run, and our 31 calls are only the
+ones from our own code. **At cutover the mint owns the three list heads, they start NULL,
+and every construct is ours — so the FIRST BUFFER THE RENDERER BUILDS takes the one branch
+never compared against retail.** The oracle that would close it mutates the live global list
+the DLL's `RecreateDynamic` walks, so it was not built while holding the directory.
+*Generalise this question: any branch reachable only when OUR side owns a structure from
+empty is unreachable on every DLL-present run, and therefore unverifiable by construction.*
+
+**2. THE `IO::Encoding` BLOCKER IS MEASURED LIVE ON BOTH SAVE AND LOAD.**
+`CompressedMemoryStream::CompressedMemoryStream` is `calls=1` in the save cell **and** the
+load cell, and its first two statements resolve `??0CompressedStream` and `??0MemoryStream`
+— **both unported and unminted**. So **at cutover the first save and the first load each
+call through NULL before doing any work.** It cannot be closed by porting: the shared
+encoding vtable at `0x1801554a8` has **no exported name and no row the mint can carry**.
+
+**Two ports have ZERO CALLERS anywhere and are reported UNVERIFIED, NOT CLEAN:**
+`{Index,Vertex}Buffer::PlatformDestruct` never register a site in any cell — their only
+callers are the unported `~IndexBuffer`/`~VertexBuffer`. The shared body is verified 10× via
+`ImageBuffer` and the link offsets 10× each via the construct siblings, but **the
+composition is unproved**.
+
+**A defect in the lane's own probe, kept on the record:** the first branch counter read
+**exactly INVERTED**, because `RtDiffReport` does not register a site, so "report if taken,
+register if not" printed only the branches that NEVER ran — which reads like neither branch
+ran. **A coverage instrument that is itself wrong reads as coverage.**
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
