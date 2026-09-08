@@ -803,3 +803,161 @@ that column as execution coverage would be exactly backwards.
 `*_win.cpp`; lane FS already models `FileInfo` and already calls both through
 `RT_EXPORT_ONCE`, so their signatures are settled. Then rung 4, `ReadPackfile` itself,
 which is now a transcription onto two verified layers.
+
+---
+
+# Rung 3 — `FileSystem::OpenFile` / `ReadFile`
+
+## 26. Ported (rung 3)
+
+`runtime/src/io/filesystem_openfile_win.cpp`, own kill switch `BANISHED_RT_OPENFILE`.
+It is a `_win.cpp` because `PlatformOpenFile` is `CreateFileW` / `GetFileSize` /
+`SetFilePointer` / `::ReadFile` — PLAN §4.1 keeps `<windows.h>` out of the
+portable half.
+
+| symbol | addr | size | door |
+|---|---|---|---|
+| `?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z` | `0x1800ac880` | 264 | name + addr |
+| `?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z` | `0x1800ace00` | 90 | name + addr |
+| `?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z` | `0x1800adce0` | — | name + addr |
+| `?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ` | `0x180025400` | — | name + addr |
+| `FileInfo::FileInfo(const FileInfo&)` | `0x18000c110` | — | addr only (unexported) |
+
+Rung 3 is the layer that makes `ReadPackfile` reachable at all: once packages are
+mounted, `OpenFile` is how **every** resource in the game is named, and `ReadFile`
+is the recursion that turns a packed handle back into a read of the containing
+`.pkg`. It has the widest blast radius of anything this lane has landed, which is
+why it gets its own switch the integrator can remove in isolation.
+
+### The two transcriptions worth naming
+
+**`ReadFile`'s discriminator is UNSIGNED.** Retail tests
+`(uint32_t)fi->handle > 0xFFFFFFFDu`, which is `handle == -1 || handle == -2` —
+"no file" or "loose file" — in one compare. Read as a signed test it inverts.
+
+**The pack index is the TOP BYTE, not a shift.** `handle` is
+`(packIndex << 24) | fileIndex`; retail recovers the index with a byte load of
+`((uint8_t*)&fi->handle)[3]`, not `>> 24`, so it is inherently unsigned and the
+port spells it the same way.
+
+## 27. A disagreement with lane FS's `FileInfo`, and three proofs
+
+Lane FS's `FileInfo` (previously duplicated at namespace scope in
+`filesystem_setupdirs_win.cpp`) declares `+0x08` as a `uint64_t size`. **That is
+wrong**, and it makes `+0x0C` — the read cursor — invisible. The corrected layout
+now lives once, in `runtime/types/io/FileSystem.h`:
+
+```
++0x00 int32 handle       -1 none, -2 loose, else (packIndex<<24)|fileIndex
++0x04 int32 _unk04       never initialised by OpenFile
++0x08 int32 size
++0x0C int32 cursor       READ POSITION, advanced by ReadFile
++0x10 int32 baseOffset
++0x14 int32 _pad14       not copied by the copy ctor
++0x18 int64 winHandle
++0x20 String _name0
++0x28 String _name1
+```
+
+Three independent proofs, all from disassembly:
+
+1. `ReadFile` **adds to `[rcx+0x0C]` and stores back a 32-bit value** — a field
+   inside a 64-bit `size` cannot be separately incremented.
+2. `PlatformOpenFile` stores `GetFileSize`'s 32-bit `EAX` into `+0x08` with a
+   `MOV DWORD`, and separately zeroes `+0x0C`.
+3. The **copy ctor at `0x18000c110` copies `+0x14` nowhere** — it moves
+   `+0x00/+0x04`, `+0x08/+0x0C`, `+0x10` and `+0x18` and skips `+0x14`. A
+   `uint64_t` at `+0x08` cannot produce that pattern.
+
+**Nothing broke from the old layout only because its single reader casts to
+`uint32_t` on a little-endian machine**, which happens to read the right half.
+Any code that had written a size, or read the cursor, would have been wrong.
+This is `reference_never_written_needs_by_whom` in a new dress: the field was
+"never observed wrong" by a reader that could not observe it.
+
+## 28. The oracle (rung 3)
+
+`runtime/src/io/filesystem_openfile_probe.cpp`, run from the tail of
+`LoadPackages` — the earliest point where an `OpenFile` of a **packed** name can
+succeed at all, because the packfile index is what the loops above just built.
+
+Lockstep, per lane PICK's rule: ours and theirs are opened side by side and
+compared **after every single read**, not once at the end.
+
+Compared: `handle`, `size`, `cursor`, `baseOffset`, handle **validity**, and
+every byte read.
+
+**Deliberately NOT compared, and why** (`reference_oracle_must_not_compare_unwritten_bytes`):
+- `winHandle` — two opens of one file get two different `HANDLE`s *by
+  construction*. Comparing them would fail 100% of loose opens and say nothing.
+  Handle **validity** is compared instead, which is the property that matters.
+- `+0x04` — retail's own uninitialised stack, copied out by `OpenFile`. Comparing
+  it would be comparing bytes neither side wrote.
+
+**Effectiveness control**: the run must produce a PACKED open (the BST hit plus
+the `ReadFile` recursion), a LOOSE open (`CreateFileW`), **and** a MISS (the `-1`
+return). Any one at zero makes the verdict `no divergence, but a PATH READS ZERO`,
+not a pass. This lane got an effectiveness control wrong twice in rung 2, both
+times while printing PASS; this one counts the three *outcomes* of the function,
+which is the thing that cannot be satisfied by an early return.
+
+### Result (run `of1`, identity gate OK: `21 / rung3 4`)
+
+```
+[OpenFile] lockstep probe: 8 opens (packed=5 loose=2 miss=1), 24 reads, 71471 bytes
+           -- identical on handle, size, cursor, baseOffset, handle validity and every byte read
+[RtDiff] ==== 313 sites, 1281624 calls, 1 divergences in 1 sites ====
+```
+
+All three control paths non-zero. The single divergence is
+`Object::Factory::Startup [probe, not diffable] chain=416 nodes=415`, already
+proved **pre-existing** by this lane's `BANISHED_RT_PKG2=0` A/B in §15b — it is
+lane SYS2's, not rung 3's.
+
+## 29. Audits
+
+- `export_name_audit.py` — 663 names, 1 phantom, and it is the pre-existing
+  `?_singleton@…` in `runtime/funcs/rt_resolve_cache.cpp`. None of rung 3's four
+  names is phantom.
+- `port_bypass_audit.py` — **0 bypasses on both doors.** The probe's raw doors
+  are classified `OK-PROBE` / `OK-ORACLE` and carry a *local* `RtDiffEnabled()`
+  guard, because that checker's guard analysis is per-site.
+- `unsatisfied_export_scan.py` set-diff, **137 → 135**:
+  - REMOVED: `?OpenFile@FileSystem@IO@@…`, `?ReadFile@FileSystem@IO@@…`
+  - ADDED: **none.**
+
+  `PlatformOpenFile` and `GetFileInfo` were not in the residue list — nothing
+  outside a diff guard was asking for them — so porting them removes no name but
+  costs none either.
+
+## 30. What rung 3 adds to the cutover bill — one address, not two
+
+The name residue scan is name-only and cannot see address doors. Rung 3 opens two,
+and only one of them is new:
+
+| addr | what | status |
+|---|---|---|
+| `0x18007eefc` | the CRT `_stricmp` | **already a shared blocker** — `filesystem_packages.cpp`, `filesystem_find_win.cpp` and `saveload.cpp` all name it. Rung 3 adds a caller, not a blocker. |
+| `0x18000c200` | `FileInfo::operator=` | **NEW cutover blocker.** Unexported, unported; at cutover `ResolveAddr` returns null and this is a null call. |
+
+Deliberately not ported, and listed so it is not mistaken for an oversight:
+`?CloseFile@FileSystem@IO@@` (`0x1800accc0`, ord 1726) — the teardown half. The
+probe closes through the shipped one on both sides, so it is compared on neither;
+it belongs to whoever takes the teardown, not to rung 3.
+
+Running total of this lane's named cutover blockers: `SetWindow`'s GROW path and
+`?CompressWindow@` (rung 2), plus `0x18000c200` (rung 3).
+
+## 31. Next predicted fault site
+
+With rung 3 in, the DLL-less boot should get **past** `LoadPackages` and its
+`OpenFile` of the first packed resource. The next thing to fail is, in order of
+likelihood:
+
+1. **`0x18000c200` `FileInfo::operator=`** — a null call, from *inside* our own
+   `OpenFile`. Cheap to close and it is rung 4's first job.
+2. **`?ReadPackfile@`** itself (`0x1800b46b0`) — rung 4. Everything below it is
+   now ported and verified, so it is a transcription onto three known-good
+   layers rather than an excavation.
+3. **`?CloseFile@FileSystem@IO@@`** — whoever opens must close; the first
+   teardown after a successful open will find it.

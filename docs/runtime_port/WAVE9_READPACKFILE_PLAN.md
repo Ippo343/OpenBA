@@ -187,13 +187,28 @@ compare at every offset. Read-only, non-destructive, and the corpus is 172 MB.
    block-by-block decompressor carrying state between blocks is precisely where that
    happens. Also lane PICK.
 
-### Rung 3 — `FileSystem::OpenFile` + `ReadFile`
+### Rung 3 — `FileSystem::OpenFile` + `ReadFile` — **DONE AND MEASURED, lane PKG2 iteration 4**
 
-264 + 90. Win32, so `*_win.cpp` per PLAN §4.1. Lane FS already models `FileInfo` (it
-sized it from `OpenFile`'s own stack initialisation) and already calls both through
-`RT_EXPORT_ONCE`, so their signatures are settled.
+264 + 90, plus `PlatformOpenFile`, `PackageFile::GetFileInfo` and the unexported
+`FileInfo` copy ctor. `runtime/src/io/filesystem_openfile_win.cpp`, switch
+`BANISHED_RT_OPENFILE`. Full write-up: `WAVE9_LANE_PKG2.md` §26-31.
 
-Oracle: open a known file both ways and compare the `FileInfo` and the bytes. Cheap.
+Result: 8 opens (packed=5 loose=2 miss=1), 24 reads, 71,471 bytes, **identical** on
+handle, size, cursor, baseOffset, handle validity and every byte; all three
+effectiveness paths non-zero; residue 137 → 135 with **nothing added**; both audits
+clean.
+
+**The plan's premise here was wrong in one place, and it mattered.** "Lane FS already
+models `FileInfo` … so their signatures are settled" — lane FS's `+0x08` is a
+`uint64_t size`, which is wrong and hides `+0x0C`, the read cursor. Three disassembly
+proofs are in §27. The corrected struct now lives once, in
+`runtime/types/io/FileSystem.h`; the duplicate at namespace scope in
+`filesystem_setupdirs_win.cpp` is gone. Nothing had broken only because the old
+layout's single reader casts to `uint32_t`.
+
+Rung 3's cutover cost is **one** new address door, `0x18000c200`
+(`FileInfo::operator=`, unexported). `_stricmp` at `0x18007eefc` was already a shared
+blocker; this rung adds a caller, not a blocker.
 
 ### Rung 4 — `ReadPackfile` itself
 

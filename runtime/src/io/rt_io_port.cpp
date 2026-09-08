@@ -106,6 +106,12 @@ extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
 // (a CompressedMemoryStream is how saves are written), so the integrator must be
 // able to take exactly it out without disturbing Wave 4's stream ports.
 extern int RtIoCompressedStreamReadRegister(); // compressed_stream_read.cpp (lane PKG2)
+// Wave 9 lane PKG2 rung 3: FileSystem::OpenFile / ReadFile / PlatformOpenFile
+// + PackageFile::GetFileInfo. Own switch: OpenFile is how EVERY resource in the
+// game is reached once packages are mounted, so it has the widest blast radius
+// of anything this lane has landed and the integrator must be able to remove
+// exactly it.
+extern int RtIoFileSystemOpenFileRegister();  // filesystem_openfile_win.cpp (lane PKG2)
 namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
@@ -135,6 +141,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
     if (RtWaveEnabled("BANISHED_RT_CSREAD"))      n += RtIoCompressedStreamReadRegister();
+    if (RtWaveEnabled("BANISHED_RT_OPENFILE"))    n += RtIoFileSystemOpenFileRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

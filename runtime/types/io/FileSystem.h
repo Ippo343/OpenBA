@@ -158,6 +158,63 @@ static_assert(offsetof(PackageFileView, entries)    == 0xB0,
 static_assert(offsetof(PackageFileView, entryCount) == 0xB8,
               "LoadPackages 0x1800ab889: `MOV EAX,dword ptr [RCX+0xb8]`");
 
+// ---- IO::FileSystem::FileInfo ---------------------------------------------
+// Moved here from runtime/src/io/filesystem_setupdirs_win.cpp by Wave 9 lane
+// PKG2 rung 3, because a second translation unit now needs it and two
+// namespace-scope `RtIO::FileInfo` definitions with different members would be
+// a silent ODR violation rather than a compile error.
+//
+// **AND ONE FIELD IS CORRECTED IN THE MOVE.** Lane FS modelled +0x08 as a
+// `uint64_t size`, which was a reasonable reading of the one instruction it had
+// (`MOV qword [RBP-0x28],R15` zeroes +0x08 and +0x0C together). It is two
+// separate dwords, and three independent sites say so:
+//
+//   * `?ReadFile@FileSystem@IO@@` reads +0x0C as a READ CURSOR and advances it
+//     (`ADD dword [RDI+0xc],ESI` at 0x1800ace87, and again at 0x1800acf37);
+//   * `?OpenFile@FileSystem@IO@@` writes +0x08 and +0x0C from two different
+//     values in the same breath — `MOV [RDI+8],R9D` (the entry SIZE) then
+//     `MOV [RDI+0xc],ECX` (the cursor, 0) at 0x1800acb94/98;
+//   * the FileInfo COPY CTOR (0x18000c110) copies +0x00, +0x04, +0x08, +0x0C
+//     and +0x10 as five separate DWORD moves.
+//
+// Nothing broke while it was wrong: lane FS's only reader is
+// `static_cast<int>(static_cast<uint32_t>(fi.size))`, which takes the low dword
+// and so happened to be right. It would not have stayed right for anyone who
+// used the field as a size on a file opened from inside a package, where +0x0C
+// is a live cursor rather than zero.
+struct FileInfo {
+    // +0x00 — WHAT KIND OF FILE THIS IS, and it is not a plain handle:
+    //   -1  nothing opened
+    //   -2  a LOOSE file; the real Win32 HANDLE is at +0x18
+    //   otherwise a PACKED file, encoded as `(packIndex << 24) | fileIndex`
+    //     (OpenFile 0x1800ac9c5: `MOV R8D,[RBX+8] ; SHL R8D,0x18 ; OR R8D,[RBX+0xc]`).
+    // ReadFile discriminates with `CMP dword [RDX],-3 ; JA loose`, i.e. unsigned
+    // -- so -1 and -2 both take the loose path -- and recovers the pack index as
+    // the TOP BYTE (`MOVZX R10D,byte [RDX+3]`).
+    int32_t  handle;
+    int32_t  _unk04;      // +0x04 — never initialised by OpenFile; see the note
+                          //         in filesystem_openfile_win.cpp on why the
+                          //         oracle must exclude it.
+    int32_t  size;        // +0x08 — byte size of the file or of the pack entry
+    int32_t  cursor;      // +0x0C — READ POSITION, advanced by ReadFile
+    int32_t  baseOffset;  // +0x10 — a pack entry's offset within the .pkg; 0 for loose
+    int32_t  _pad14;      // +0x14 — not copied by the copy ctor
+    int64_t  winHandle;   // +0x18 — the Win32 HANDLE, -1 when there is none
+    RtSystem::String _name0;   // +0x20 — a Filename (the copy ctor is ??0Filename@)
+    RtSystem::String _name1;   // +0x28
+};
+static_assert(sizeof(FileInfo) == 0x30, "FileInfo is 0x30 bytes (OpenFile's frame)");
+static_assert(offsetof(FileInfo, size)       == 0x08,
+              "OpenFile 0x1800acb94: `MOV dword ptr [RDI+0x8],R9D` (the entry size)");
+static_assert(offsetof(FileInfo, cursor)     == 0x0C,
+              "ReadFile 0x1800ace87: `ADD dword ptr [RDI+0xc],ESI`");
+static_assert(offsetof(FileInfo, baseOffset) == 0x10,
+              "OpenFile 0x1800acb9b: `MOV dword ptr [RDI+0x10],EDX` (the entry offset)");
+static_assert(offsetof(FileInfo, winHandle)  == 0x18,
+              "PlatformOpenFile 0x1800adddd: `MOV qword ptr [RBX+0x18],RAX` (CreateFileW)");
+static_assert(offsetof(FileInfo, _name0)     == 0x20, "OpenFile: MOV [RBP-0x10],0");
+static_assert(offsetof(FileInfo, _name1)     == 0x28, "OpenFile: MOV [RBP-0x8],0");
+
 // ---- IO::FileSystem --------------------------------------------------------
 // Full-size fields at +0x00/+0x08 are RtSystem::String, NOT RtSystem::Filename:
 // retail casts the pointer at the call site (`(Filename*)(this+8)`), it never

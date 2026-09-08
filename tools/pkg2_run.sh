@@ -48,6 +48,12 @@ LABEL="${1:?usage: pkg2_run.sh <label> -- ENV=VAL ...}"; shift
 # went stale.
 WANT=$(grep -c 'RegisterRuntimeExport(' runtime/src/io/package_file.cpp)
 echo "[pkg2] expecting IO::PackageFile banner to read $WANT (derived from source)"
+# Rung 3 gets its OWN banner in the gate. The rung-1 banner only proves the exe
+# is from this LANE; it says nothing about whether it is from this ITERATION,
+# and rung 3 is exactly the kind of addition an unrebuilt exe would silently
+# lack while still passing the old gate.
+WANT3=$(grep -c 'RegisterRuntimeExport(' runtime/src/io/filesystem_openfile_win.cpp)
+echo "[pkg2] expecting rung-3 banner to read $WANT3 (derived from source)"
 
 mkdir -p "$OUT"
 
@@ -70,10 +76,11 @@ cp "$GD/standalone_crash.log" "$OUT/${LABEL}_crash.log" 2>/dev/null
 
 GOT=$(grep -oE 'IO::PackageFile \(lane PKG2\): [0-9]+' "$OUT/${LABEL}_debug.log" 2>/dev/null \
       | grep -oE '[0-9]+$')
-if [ "${GOT:-none}" = "$WANT" ]; then
-    echo "[pkg2] IDENTITY OK -- the exe that RAN is this lane's ($GOT exports)"
+GOT3=$(grep -oE 'open/read \(lane PKG2 rung 3\): [0-9]+' "$OUT/${LABEL}_debug.log" 2>/dev/null       | grep -oE '[0-9]+$')
+if [ "${GOT:-none}" = "$WANT" ] && [ "${GOT3:-none}" = "$WANT3" ]; then
+    echo "[pkg2] IDENTITY OK -- the exe that RAN is this lane's ($GOT / rung3 $GOT3 exports)"
     exit 0
 fi
-echo "[pkg2] IDENTITY FAILED: banner read '${GOT:-absent}', wanted '$WANT'."
+echo "[pkg2] IDENTITY FAILED: banners read '${GOT:-absent}'/'${GOT3:-absent}', wanted '$WANT'/'$WANT3'."
 echo "[pkg2] The run measured something else. DISCARD IT."
 exit 1
