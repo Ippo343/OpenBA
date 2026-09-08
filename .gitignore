@@ -54,3 +54,8 @@ captures/
 perf/results/
 standalone/build-perf/
 standalone/build-og/
+
+# libm bit-exactness probe binaries (source is checked in; rebuild with the
+# command in the header of tools/libm_probe/sweep.cpp)
+tools/libm_probe/*.exe
+tools/libm_probe/full_sweep.txt

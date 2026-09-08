@@ -271,6 +271,31 @@ sa-stress: standalone-perf
 sa-stress-debug: sa-deploy
 	tools/stress_run.sh --no-build --debug $(STRESS_ARGS)
 
+# ------------------------------------------------------------------
+# libm bit-exactness sweep (Wave 9 lane L)
+# ------------------------------------------------------------------
+# runtime/src/crt/msvc_libm.cpp is a port of Runtime-x64.dll's own statically
+# linked MSVC CRT sqrtf/sinf/cosf/atan2f/powf. `make libm-sweep` rebuilds the
+# oracle and compares the port against those five bodies at their retail
+# addresses on raw bit patterns, with a branch-coverage effectiveness control
+# and a negative control. It needs the DLL present; it exits non-zero on any
+# divergence AND on a negative control that finds nothing (which would mean the
+# sweep is comparing the DLL against itself).
+#   --quick skips the exhaustive sin/cos band (seconds instead of minutes).
+LIBM_SWEEP_FLAGS = -std=c++17 -O2 -DMSVC_LIBM_COVERAGE -Iruntime/src/crt
+.PHONY: libm-sweep
+libm-sweep:
+	$(CXX) $(LIBM_SWEEP_FLAGS) tools/libm_probe/sweep.cpp \
+	    runtime/src/crt/msvc_libm.cpp -o tools/libm_probe/sweep.exe
+	tools/libm_probe/sweep.exe $(LIBM_SWEEP_ARGS)
+
+# Re-extract the coefficient tables from the shipped DLL. Only needed if the
+# table header is ever suspected of drift; the header is checked in.
+.PHONY: libm-tables
+libm-tables:
+	tools/ghidra_mcp/.venv/Scripts/python.exe tools/extract_crt_tables.py \
+	    > runtime/src/crt/msvc_libm_tables.h
+
 # Include auto-generated header dependency files
 -include $(SA_OBJECTS:.o=.d)
 

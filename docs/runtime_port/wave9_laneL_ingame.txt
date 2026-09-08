@@ -1,0 +1,15 @@
+/tmp/run_port.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 267 sites, 29586428 calls, 0 divergences in 0 sites ====
+/tmp/run_port.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=3835       divergences=0
+/tmp/run_port.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=43429      divergences=0
+/tmp/run_port.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          divergences=0
+/tmp/run_std.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 267 sites, 29799839 calls, 125 divergences in 2 sites ====
+/tmp/run_std.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=3839       divergences=27
+/tmp/run_std.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=46875      divergences=98
+/tmp/run_std.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          divergences=0
+/tmp/run_dll.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 271 sites, 28719661 calls, 0 divergences in 0 sites ====
+/tmp/run_dll.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=3837       divergences=0
+/tmp/run_dll.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=42949      divergences=0
+/tmp/run_dll.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          divergences=0
+/tmp/run_save9.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 292 sites, 51513160 calls, 0 divergences in 0 sites ====
+/tmp/run_save9.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=2892       divergences=0
+/tmp/run_save9.txt:C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=322172     divergences=0
