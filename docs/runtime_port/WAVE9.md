@@ -1244,6 +1244,89 @@ keyed on name, and ten-odd callees. It takes the allocator lock directly
 (`?_singleton@MemoryAllocator@System@@` at `0x1801fc718`, `+0x640`, through the
 dispatch slots at `0x18014b390` / `0x18014b388`).
 
+### FIFTH CENSUS BLIND SPOT, and it cannot see the wall the boot is dying on
+
+Found by lane OBJ2 (2026-09-08) because its own `ported` count refused to move after
+an unconditional, literal registration. Independently re-measured by the integrator,
+and the honest number is **larger** than the lane's.
+
+`tools/runtime_census.py` spells its `called` door as
+
+    RE_EXPORT = re.compile(r'ResolveExport(?:Raw)?\s*\(\s*(?=")')
+
+a **literal** `ResolveExport(` only. It therefore cannot see `RT_EXPORT_ONCE` or
+`RT_DATA_SLOT`, both of which expand to `RtResolveCached`. Measured over
+`runtime/ code/ standalone/ engine/ dx11/`:
+
+| door | distinct names | invisible to the census |
+|---|--:|--:|
+| `RT_EXPORT_ONCE` + `RT_DATA_SLOT` — **live, dies at cutover** | 162 | **113** |
+| `RT_ORIGINAL_ONCE` — oracle-only, correctly NOT a cutover dependency | 130 | 13 |
+
+**So `called` understates the cutover denominator by 113, not by 106.** The split
+matters and the lane's single figure blurred it: 13 of the invisible names are the
+oracle door, which *should* be excluded, so quoting one number would have overstated
+the real gap while understating the live one.
+
+**The detail that makes this urgent rather than tidy:
+`?SetupDirectories@FileSystem@IO@@` and `?LoadPackages@FileSystem@IO@@` are both in
+the invisible set.** Those are the symbols attempts 09-11 faulted on. The census has
+been unable to see the wall the entire time it has been quoted as
+"the honest denominator... what has to work for reimpl-x64.exe to boot without the
+DLL". Nineteen of the 113 are on the FileSystem/Factory bring-up alone, including
+every ctor and dtor of the four singletons `Engine::Startup` constructs.
+
+**Concentration:** 53 of the 113 sites are in `runtime/src/engine/engine_lifecycle.cpp`
+— which is precisely the `Engine::Startup` queue this whole wave exists to get
+through. The blind spot is not spread thinly; it is aimed at the wave's own target.
+
+**NOT FIXED YET, deliberately.** Lane OBJ2 declined to change the tool mid-wave
+because moving a shared denominator invalidates every other lane's before/after, and
+that was the right call. Lane PKG is in flight and takes its own before/after from
+this tool. The fix — teach the `called` scan the two macro spellings — lands as one
+commit, with one owner, once PKG reports; and the commit must state the
+discontinuity so no one diffs a number across it. Same law as
+`reference_documenting_a_check_can_delete_it`: **diff the denominator across a
+change, and never silently move it.**
+
+### Scoring the round's predictions
+
+| lane | prediction | outcome |
+|---|---|---|
+| ENG | no movement before FS lands | ✅ attempt 10 unchanged |
+| FS | `?LoadPackages@`, in `RtIo_FileSystem_Startup`, offset > `+0x55`, depth unchanged | ✅ **4 for 4** at `+0x140` |
+| OBJ2 | no movement; still `?SetupDirectories@`, same frame | ❌ **falsified** — attempt 11 advanced to `LoadPackages`, because lane FS landed on the same tip. The lane named this dependency itself; its *conditional* secondary (EXEC-of-0 inside `RtObject_Factory_Startup` at the `Set` insert, frame moving DOWN, preceded by a named diagnostic) is untested because `LoadPackages` comes first |
+
+A falsified prediction that names its own dependency is worth more than a vague one
+that survives; OBJ2's was falsified by an event it explicitly flagged.
+
+### Three corrections the lanes made to EARLIER lanes' triage
+
+1. **`?Startup@Device@Video@@` (0x1800f7270) and `?Shutdown@` (0x1800f7280) are
+   one-instruction `JMP` thunks** onto `PlatformStartup` (0x1800f8260) /
+   `PlatformShutdown` (0x1800f83f0). Lane VID declined them as "not boot path"; the
+   same body IS on the boot path under the other name — our own ported
+   `Engine::Startup` calls `?PlatformStartup@Device@Video@@` at
+   `engine_lifecycle.cpp:719`, and it is unsatisfied. **One port closes three rows.**
+   Two of VID's three stated blockers are also stale: `?SetText@Error@System@@` is
+   ported (`error.cpp:286`), and `CreateVideoInterface` (0x1800f7930) contains no
+   `LoadLibrary` — that belongs to `InitializeInterfaces`, whose slots
+   `standalone/video_interface.cpp` already owns.
+2. **Wave 4's `ReadSettings`/`WriteSettings` holdback was HALF wrong.** Its
+   load-bearing reason was "**both** mutate the real registry". False for
+   `ReadSettings`: its only ADVAPI32 calls are `RegEnumValueW` and
+   `RegQueryValueExW`, both pure reads. `RegSetValueExW`/`RegDeleteKeyW` appear only
+   in `WriteSettings`. One verdict was reached for a pair that needed two.
+   `WriteSettings` stays held back on narrowed grounds (Shutdown path, not boot) —
+   and lane BOOT2 found retail passes **value** names from `RegEnumValueW` to the
+   **subkey** deleter `RegDeleteKeyW`, so its stale-settings cleanup is a no-op.
+3. **`CreateVideoContext` (0x1800dd500): both blockers stale.** The allocator NO-GO
+   is discharged (gate row E, met 2026-09-08 — the heap is ours before `GameMain`),
+   and the ctor's "our code allocates what the DLL's dtor frees" argument **inverts
+   at cutover**: with no DLL there is no such dtor, and leaving the ctor unported
+   means the allocation never happens at all. It is a cluster, not a row:
+   `CreateVideoContext` + `Context` ctor + dtor + `operator delete`.
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
