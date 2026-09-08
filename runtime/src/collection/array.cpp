@@ -800,6 +800,39 @@ J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
 // stride" conclusion covers it unchanged and one body still serves them all.
 J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*>
 
+// WAVE 9 LANE UIC, 2026-09-08 — THE THIRTEENTH AND FOURTEENTH. Lane UIF's note
+// above says "there are twelve"; there are at least fourteen, and its own
+// mechanism explains why: a J1 address is invisible to the survey until
+// something in our tree calls it. These two surfaced from the OTHER direction —
+// from reading `?AddController@DialogInstance@UI@@` (0x180113470), which the
+// integrator's unregistered-address-door census flagged, and where they appear
+// as two of the five "unexported internals" WAVE9_LANE_UIF.md row 10 declined
+// `?CreateInstance@ElementDescription@` on. They are not opaque internals. They
+// are this.
+//
+// SAME BODY, established the same way and with the same numbers:
+// tools/uic_bytediff.py compares all 115 bytes against 0x180033960 and resolves
+// every differing byte back to the absolute operand it encodes.
+//   0x180009460 — 10 differences, at offsets 40,41 61,62 72,73 77,78 87,88
+//   0x180039440 — 11 differences, at offsets 39,40 60,61 71,72 76,77,78 86,87
+//                 (byte-for-byte the same diff-set lane UIF reports for
+//                  0x180037240, which is corroboration that the reference and
+//                  the method are both unchanged)
+// ZERO differences outside a displacement in either, and all five relocatable
+// operands resolve to the same four absolutes (0x1801fc718 twice, 0x18014b390,
+// 0x1800c6c00, 0x18014b388).
+//
+// A NOTE ON THE MEASUREMENT ITSELF, because it nearly went the other way. The
+// first version of uic_bytediff.py carried a HARDCODED offset table for those
+// five fields, decoded four bytes one position off for one of them, and printed
+// "*** MISMATCH *** -> 0x1917d29b4" — a confident, specific, wrong refutation,
+// for the REFERENCE body, which is registered and known good. Locating the
+// fields by instruction pattern instead is what produced the numbers above.
+// (reference_recheck_must_match_its_own_proof.md: a check whose own decode is
+// wrong reads as a finding about the subject.)
+J1_ENTRY(180009460)   // UI:          reached from ?AddController@DialogInstance@ 0x18011363f
+J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance@ 0x180113649
+
 #undef J1_ENTRY
 
 // --- J3: the two-argument form, `SetSize(this, int n)` ----------------------
@@ -894,6 +927,15 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180073bb0, (void*)&RtColl_ArrayDtor_180073bb0);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
     RegisterRuntimeAddr(0x180037240, (void*)&RtColl_ArrayDtor_180037240);
+    // Wave 9 lane UIC: the thirteenth and fourteenth — see the byte-diff note
+    // at the J1_ENTRY block. NOT reached from our tree yet: they are registered
+    // ahead of the caller (?AddController@DialogInstance@) so that whoever
+    // ports it does not have to rediscover them. An address with no caller
+    // reports calls=0 and is NOT verified by that
+    // (reference_uncalled_port_is_not_verified.md); the evidence here is the
+    // byte identity, and it is stated as such.
+    RegisterRuntimeAddr(0x180009460, (void*)&RtColl_ArrayDtor_180009460);
+    RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
@@ -920,6 +962,14 @@ void RtCollectionPortInit() {
         RegisterRuntimeAddr(0x180051390, (void*)&RtColl_ArraySetSize_180051390);
         RegisterRuntimeAddr(0x180061480, (void*)&RtColl_ArraySetSizeFill_180061480);
     }
+
+    // ---- Wave 9 lane UIC: Collection::LinkedList's three helpers -----------
+    // In their own file with their own kill switch (BANISHED_RT_LINKEDLIST) —
+    // see runtime/src/collection/linkedlist.cpp for why that separation is
+    // deliberate rather than tidiness. Called from here because this is the
+    // Collection namespace's one init hook.
+    extern int RtCollLinkedListRegister();
+    RtCollLinkedListRegister();
 
     // ARM the probe rather than running it. It runs on the first call into any
     // entry point above, because at THIS moment the DLL's MemoryAllocator is

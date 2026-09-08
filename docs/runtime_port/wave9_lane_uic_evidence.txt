@@ -1,0 +1,47 @@
+Wave 9 lane UIC -- diff-oracle evidence, DLL PRESENT, base 29cfaa2, 2026-09-08
+
+Full logs were copied out of the shared game directory immediately after each
+run (six lanes share one directory) and are NOT committed -- ~400 KB each.
+These are the lines this lane's claims rest on, read from the RAW log rather
+than a tail (reference_truncated_tool_output_manufactures_calls_zero.md).
+
+A  BANISHED_AUTOSTART=1     PAUSEMENU=600  PAUSEMENU_QUIT=120
+C  BANISHED_AUTOTUTORIAL=1  PAUSEMENU=6000 PAUSEMENU_QUIT=600  (115 s)
+E  as C, after the AdjustUpperLeft sweep was changed to report PER CASE
+
+== cell uicA ==
+[RtDiff]   Collection::FreeLocked(0x180009c30)              calls=0          worked=8          divergences=0
+[RtDiff]   Collection::FreeLocked(0x180009c30)              calls=0          worked=7          divergences=0
+[RtDiff]   Collection::FreeLocked(0x180009c30)              calls=0          worked=8          divergences=0
+   diff sites in summary: 1165
+   non-zero divergences anywhere in the run:
+     [RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+     [RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+     [RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+
+== cell uicC ==
+[RtDiff]   UI::DialogInstance::SetUpperLeft                 calls=0          worked=1          divergences=0
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=1          worked=1          divergences=0
+[RtDiff]   Collection::FreeLocked(0x180009c30)              calls=0          worked=4          divergences=0
+   diff sites in summary: 409
+   non-zero divergences anywhere in the run:
+     [RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+
+== cell uicE ==
+[RtDiff]   UI::DialogInstance::SetUpperLeft                 calls=0          worked=1          divergences=0
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=14         worked=1          divergences=0
+[RtDiff]   Collection::FreeLocked(0x180009c30)              calls=0          worked=4          divergences=0
+   diff sites in summary: 411
+   non-zero divergences anywhere in the run:
+     [RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          worked=?          divergences=1
+
+NOTE on the one non-zero divergence: it is NOT this lane's. It is lane OBJ2's
+own postcondition probe at runtime/src/object/type_system.cpp:1008 asserting
+nodes == chain, and it reports chain=416 nodes=415 badCrc=0 -- one BaseTypeInfo
+in the chain did not become a node in the factory tree. Reported to the
+integrator; see WAVE9_LANE_UIC.md section 6.6.
+
+NOTE on absent sites: RT_DIFF_BEGIN registers a site on FIRST ENTRY, so a port
+that does not appear in the summary at all was called ZERO times. CreateElement,
+BringDialogToFront and the two LinkedList helpers are absent from every cell and
+are therefore NOT VERIFIED (reference_uncalled_port_is_not_verified.md).
