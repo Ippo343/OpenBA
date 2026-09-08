@@ -91,6 +91,23 @@ extern int RtIoFileSystemPackagesRegister(); // filesystem_packages.cpp (lane PK
 // removed them together with lane PKG would confound two very different
 // blast radii.
 extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FIND)
+// Wave 9 lane PKG2: IO::PackageFile — the constructor lane PKG's LoadPackages
+// dies on (attempt 14), plus the class's twenty leaf accessors. Own switch for
+// the same reason as the rows above, and one more that is specific to this
+// file: the constructor is the ONLY row on the boot path, and the other twenty
+// are exercised only by a probe. If the boot regresses, BANISHED_RT_PKG2=0
+// removes both halves; if the probe is the problem, it is already gated on the
+// diff harness and a normal run does not run it.
+extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
+
+// Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
+// GetModification, Enable, Swap, SaveList) plus the unexported Mod-entry
+// lifecycle triple and the container internals it reaches. Its own switch
+// because the whole cluster was found by the ADDRESS-door census rather than by
+// a name-based instrument, so an A/B on it answers a question no other lane's
+// kill switch can: whether a by-address door that resolves through the port
+// registry behaves the same as one that falls through to the DLL.
+namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane MOD)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -108,5 +125,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
     if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
+    if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
+    if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

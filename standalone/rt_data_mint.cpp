@@ -612,6 +612,29 @@ void RtDataMintInit() {
     MintVtables();
     MintTypeInfos();
     MintStorage();
+
+    // REGISTRATION MUST PRECEDE CONSTRUCTION. Found by Wave 9 lane SYS2 while
+    // chasing ??_7Thread@System@@6B@, which read as an unminted vtable and was
+    // nothing of the kind -- the mint has always carried that row.
+    //
+    // MintConstructedStatics() reproduces the three statics the DLL's CRT builds
+    // at load, and ConstructLoader() among them CONSTRUCTS A System::Thread. That
+    // constructor resolves ??_7Thread@System@@6B@. With RegisterMintedData() still
+    // to come, the resolve missed, and the call site cached the null in a plain
+    // function-local static -- so the symbol stayed null for the life of the
+    // process even though the mint published it microseconds later. The port was
+    // correct, the mint was correct, and the ORDER was wrong.
+    //
+    // Registering first is safe: RegisterMintedData only publishes pointers to
+    // storage and vtables that MintStorage/MintVtables have already laid out, and
+    // it constructs nothing. Doing it here is what lets the three constructors
+    // below resolve minted symbols at all. (MintConstructedStatics still has to
+    // follow MintStorage, which memsets the block -- that ordering is unchanged.)
+    //
+    // Note the two [RtMint] log lines now appear in the opposite order: the
+    // "registered N by name" line precedes "constructed N of the M statics".
+    if (EnvOn("BANISHED_RT_MINT")) RegisterMintedData();
+
     MintConstructedStatics();   // after MintStorage: it memsets the block
 
     printf("[RtMint] minted %d vtables (%d slots: %d ported, %d unported-trap, "
@@ -624,7 +647,7 @@ void RtDataMintInit() {
            EnvOn("BANISHED_RT_MINT") ? "ON (BANISHED_RT_MINT=1)"
                                      : "off (set BANISHED_RT_MINT=1 to go live)");
 
-    if (EnvOn("BANISHED_RT_MINT")) RegisterMintedData();
+    // RegisterMintedData() has already run, above MintConstructedStatics().
     if (EnvOn("BANISHED_RT_MINT_SHADOW")) RtDataMintShadowReport("init");
 }
 
