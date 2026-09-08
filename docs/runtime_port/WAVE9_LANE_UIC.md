@@ -7,9 +7,10 @@ belong to those four classes (`docs/runtime_port/wave9_attempt14_unresolved.txt`
 
 **Ported 3 of the 11, plus 6 enabling bodies. Declined 8 with the unsatisfied callee
 that decides each.** Built, deployed and run under the diff oracle with the DLL
-present: **one port has a real oracle and 14 comparisons at 0 divergences; three more
-are live but have no oracle by construction; four are registered and NEVER CALLED, and
-are therefore NOT VERIFIED.** The numbers and what they do and do not show are §6.
+present: **one port has a real oracle — 14 comparisons at 0 divergences, with a negative
+control that takes it to 13 of 14 on demand; three more are live but have no oracle by
+construction; four are registered and NEVER CALLED, and are therefore NOT VERIFIED.**
+The numbers and what they do and do not show are §6.
 
 Everything here follows directly from [WAVE9_LANE_UIF.md](WAVE9_LANE_UIF.md), which
 sized all eleven of these rows in Ghidra and declined all eleven with a depth table.
@@ -24,7 +25,7 @@ That table was the work order; this lane is its §8 "next moves", executed.
 | 1 | `?CreateElement@Dialog@UI@@…` | 0x180112ed0 | 1888 | replay | **NO — 0 calls** |
 | 2 | `?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z` | 0x180114a60 | 3997 | none (by construction) | yes, `worked=1` |
 | 3 | `?BringDialogToFront@UserInterface@UI@@…` | 0x180120440 | 1672 | none (by construction) | **NO — 0 calls** |
-| E1 | `?AdjustUpperLeft@Element@UI@@QEAAXHH@Z` | 0x180115840 | 1596 | **invertibility + sweep** | yes, **calls=14** |
+| E1 | `?AdjustUpperLeft@Element@UI@@QEAAXHH@Z` | 0x180115840 | 1596 | **invertibility + 14-case sweep, negative control 13/14** | yes, **calls=14, div=0** |
 | E2 | `Collection::LinkedList::Remove` | 0x18007a010 | — | none | **NO — 0 calls** |
 | E3 | `Collection::LinkedList::NewNode` | 0x180032750 | — | none | **NO — 0 calls** |
 | E4 | allocator-lock `Free` wrapper | 0x180009c30 | — | delegation | yes, `worked=4..8` |
@@ -281,6 +282,7 @@ construction. Both facts are stated so the "+3" is not read as the whole effect.
 | `port_bypass_audit.py` (address door) | 214 sites, **BYPASS=0**, ADDR-REGISTERED=34 |
 | `port_bypass_audit.py --by-name` | 430 sites, **BYPASS=0**; 674 ported names / 418 statements / **0 unseen** |
 | `rawdoor_audit.py` | 503 sites, **0 UNGUARDED-CALL**, 37 DEFERRED-CALL |
+| `rawdoor_audit.py` **after merging the integration tip** | 521 sites, **1 UNGUARDED-CALL**, 38 DEFERRED — and it is NOT mine: `runtime/src/io/package_file.cpp:426`, which arrived with lane PKG2's `271ebb5`. Flagged rather than left for the integrator to find. |
 | `abi_retslot_audit.py` | **0 suspicious** of 48 by-value-returning exports |
 | `export_name_audit.py` | 662 names, 1 not in the DLL — `"?_singleton@..."`, a doc-comment placeholder in `runtime/funcs/rt_resolve_cache.cpp:8`, pre-existing and not a real name |
 | `runtime_census.py` UI | 151 called / 110 ported / 72.8% → **152 / 114 / 75.0%** |
@@ -363,16 +365,64 @@ Two instrument details that were got wrong first and are worth carrying:
 * **An effectiveness control.** `worked=` counts cases that moved something, so a
   population of `(0,0)`s cannot read as a pass.
 
-**Result: `calls=14  divergences=0`, on a real live element subtree.**
+**Result: `calls=14  divergences=0`, on a real live element subtree of 80 nodes.**
+
+### 6.4.1 The negative control — and the hole it found IN THE ORACLE
+
+`BANISHED_RT_ADJUSTUL_NEGCTL=<mode>` injects a defect of a shape a real port would
+plausibly have: `noborder` (skip the border chain — the single most likely mistake,
+because the border is a LOOP at the bottom of the body rather than an obvious recursive
+call), `nochild`, `swap`, `once`.
+
+**The first control run came back RED, and with the WRONG NUMBER, which is the more
+useful of the two facts.** `noborder` should have failed all thirteen non-zero cases.
+It failed exactly **ten**:
+
+```
+[RtDiff] DIVERGENCE UI::Element::AdjustUpperLeft  call #2
+         ours=ours(1,0) then theirs(-1,0) over 80 nodes: 3 off
+[RtDiff]   UI::Element::AdjustUpperLeft   calls=14  worked=1  divergences=10
+```
+
+The three non-zero cases that passed were `(0,-1)`, `(-1,-1)` and `(-1,1)` — **the exact
+inverses of cases that ran earlier in the sweep.** A case that leaves residue leaves it
+for the NEXT case, whose comparison is against the same original snapshot, so a later
+case can CANCEL an earlier case's error and report clean. That is a defect inside the
+ORACLE, not inside the port: the sweep claimed its cases were independent and they were
+not.
+
+Fixed by re-snapshotting before each case and writing the snapshot back after it
+(`AdjustRestore`), which costs n integer stores. Re-run under the game-directory lock,
+both cells in one acquisition, each gated on an identity line only this build emits:
+
+| cell | env | result |
+|---|---|---|
+| `uicNEG2` | `BANISHED_RT_ADJUSTUL_NEGCTL=noborder` | `calls=14 worked=1 **divergences=13**` |
+| `uicOK2` | (none) | `calls=14 worked=1 **divergences=0**` |
+
+**13 of 14, and the one that passes is `(0,0)`** — vacuous by design and labelled as
+such. The oracle is now shown capable of failing, on demand, on a defect of the right
+shape, and the clean result is a measurement rather than a claim.
+
+Worth stating as a rule rather than an anecdote: **the negative control's VALUE was not
+that it went red. It was that it went red by the wrong amount.** A control that had
+simply reported "divergences > 0, good" would have licensed a sweep with an unsound
+cancellation hole in it. Counting what the control SHOULD have caught, and noticing it
+caught three fewer, is what found the bug.
+
+### 6.4.2 The identity gate
+
+Six lanes share one game directory and an advisory lock only binds lanes that call it.
+An on-disk md5 says which exe is on disk when you look, not which one ran. The gate used
+here is a line **only this build can emit**: the diff site `UI::Element::AdjustUpperLeft`
+does not exist in any other lane's binary, so its presence in a run's OWN log proves the
+binary. `tools/uic_locked_run.sh` discards a run whose log lacks it rather than
+interpreting it. This matters most for the negative control: **had it come back green,
+the first hypothesis would have to be "I measured someone else's binary", not "my
+control is broken"** — and without an identity line those are indistinguishable.
 
 ### 6.5 What I could not verify — stated plainly
 
-* **The negative control has not been run.** `BANISHED_RT_ADJUSTUL_NEGCTL=swap|noborder|
-  nochild|once` injects a defect of a shape a real port would plausibly have (the
-  `noborder` one especially — the border chain is a LOOP at the bottom of the body rather
-  than an obvious recursive call). Until it is shown going red on demand, "14 checks,
-  0 divergences" is not yet falsifiable. It needs one ~2-minute run. **The integrator's
-  exclusive-window hold on the game directory landed before I could take it.**
 * **`?CreateElement@`'s replay oracle has never executed** (§6.3). Its inline strcmp is
   the single riskiest construct in the lane and it is currently unexercised.
   Mounted `.pkm` mods give the named-template scan a population of distinct names for
@@ -390,21 +440,40 @@ Two instrument details that were got wrong first and are worth carrying:
 * **Nothing here was run with the DLL absent.** Six lanes share one game directory and
   the integrator owns the cutover attempts; the ⛔ in my brief was respected.
 
-### 6.6 A live divergence that is NOT mine, reported because it is red now
+### 6.6 A live divergence that is NOT mine — and MY FIRST READING OF IT WAS WRONG
 
-Every cell I ran shows exactly one non-zero divergence, and it is another lane's:
+Every cell shows exactly one non-zero divergence, lane OBJ2's:
 
 ```
 [RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1
          ours=chain=416 nodes=415 badCrc=0   theirs=chain=416 nodes=416 badCrc=0
 ```
 
-That is lane OBJ2's own postcondition probe in
-`runtime/src/object/type_system.cpp:1008`, asserting `nodes == chain`. **`chain=416` but
-`nodes=415`**: one `BaseTypeInfo` in the chain did not end up as a node in the factory's
-tree. `badCrc=0`, so the CRCs are fine — it is an insertion that did not happen, or two
-entries collapsing onto one key. Off-by-one, live on the integration branch, in every
-cell. Flagging it rather than leaving it in a log nobody diffs.
+I reported this to the integrator as "retail's tree has 416 nodes and ours loses an
+insert". **That is wrong, and the way it is wrong is worth more than the observation.**
+
+**The `theirs=` side of that line is not a measurement of retail.** The site runs no DLL
+body at all — it is a self-check on our own result — and the second string is built as
+`snprintf(b, "chain=%d nodes=%d badCrc=0", chain, chain)`. The `416` on the "theirs" side
+is just `chain` printed twice: **the line's own assumption restated in the column where a
+reader expects independent evidence.** The correct reading is only that our tree has 415
+nodes for a 416-entry chain, and the report says nothing whatever about retail.
+
+That is `reference_recheck_must_match_its_own_proof.md` — an expected side that is true
+by construction — and it is the SAME CLASS as two other things this lane hit:
+
+* my own sweep reporting fourteen comparisons as `calls=1` (§6.4), and
+* `RT_DIFF_SHADOW` emitting its strings only on a mismatch, so a population description
+  carried inside it is invisible on exactly the runs where someone would want it (§2.1).
+
+All three are one rule: **if a control is only visible when the test fails, or its
+expected side is computed from its actual side, it is not a control.** The integrator has
+since fixed the string to read `EXPECTED (no DLL run): nodes==chain==N` so it cannot be
+misread again, and added a key-collision reporter that distinguishes a CRC collision from
+a lost insert — the underlying 415-vs-416 question is real and still open.
+
+Recorded here with my wrong reading intact rather than quietly corrected, because the
+instrument earned the misreading and the next person will make it too.
 
 ---
 
@@ -493,17 +562,15 @@ Stated so it can be wrong.
 
 ## 9. Next moves in this cluster, in the order I would take them
 
-1. **Run the negative control** (§6.5). Cheapest thing on this list and the lane is not
-   closed without it.
-2. **Get `?CreateElement@` a population** — mounted mods, or a tutorial cell that
+1. **Get `?CreateElement@` a population** — mounted mods, or a tutorial cell that
    actually reaches an image step. Its strcmp is the riskiest code I wrote.
-3. **The J2 array-destructor pair** (`0x180039360`, `0x180039280`, plus
+2. **The J2 array-destructor pair** (`0x180039360`, `0x180039280`, plus
    `0x180039640` / `0x180039580`) — closes `?CreateInstance@ElementDescription@` AND
    unblocks `?AddController@DialogInstance@`, which is the gate on the ctor the
    integrator flagged. Best leverage left.
-4. **`SaveSettings@DialogInstance` (0x180114240)** as its own lane, with the Encoding
+3. **`SaveSettings@DialogInstance` (0x180114240)** as its own lane, with the Encoding
    offsets from `runtime/src/io/rt_io_port.cpp`'s warning block in hand. Closes
    `?OnClosed@`.
-5. **The `SpriteContext` internals** (`Flush` 0x18011ba40, `AddSpriteDraw` 0x18011c890) —
+4. **The `SpriteContext` internals** (`Flush` 0x18011ba40, `AddSpriteDraw` 0x18011c890) —
    lane UIF's count still stands: four rows behind two functions, including my
    `?Draw@UserInterface@`.

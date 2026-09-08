@@ -1611,6 +1611,29 @@ size_t AdjustCompare(size_t n) {
     }
     return bad;
 }
+
+// Write the snapshot back. WITHOUT THIS THE SWEEP IS UNSOUND, and the negative
+// control is what proved it rather than reasoning.
+//
+// `BANISHED_RT_ADJUSTUL_NEGCTL=noborder` should have failed all 13 non-zero
+// cases; it failed exactly 10. The four that passed were `(0,0)` — vacuous, as
+// designed — plus `(0,-1)`, `(-1,-1)` and `(-1,1)`, and those three are the
+// exact inverses of cases that ran earlier in the sweep. A case that leaves
+// residue leaves it for the NEXT case, whose comparison is against the same
+// original snapshot, so a later case can CANCEL an earlier case's error and
+// report clean. That is a defect hiding inside the oracle, not inside the port.
+//
+// Restoring after every case makes the cases independent, which is what the
+// sweep claimed to be all along. Cheap: n integer stores.
+void AdjustRestore(size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        const AdjustSnap& s = g_adjustSnap[i];
+        s.e->_layoutLeft   = s.l;
+        s.e->_layoutTop    = s.t;
+        s.e->_layoutRight  = s.r;
+        s.e->_layoutBottom = s.b;
+    }
+}
 }  // namespace
 
 void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
@@ -1662,9 +1685,11 @@ void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
     // literal number of invertibility checks performed.
     size_t effective = 0;
     auto oneCase = [&](int32_t cdx, int32_t cdy) -> size_t {
+        AdjustSnapshot(self);          // re-read: cases must be independent
         AdjustUpperLeftImpl(self, cdx, cdy);
         theirs(self, -cdx, -cdy);
         const size_t off = AdjustCompare(n);
+        AdjustRestore(n);              // and leave no residue for the next case
         if (cdx != 0 || cdy != 0) ++effective;
         char a[192], b[192];
         std::snprintf(a, sizeof(a),
