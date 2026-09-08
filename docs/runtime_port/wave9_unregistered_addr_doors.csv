@@ -39,10 +39,8 @@ address,call_sites,files
 0x18007b390,1,runtime/src/picking/scene.cpp:315
 0x18007b6d0,1,runtime/src/picking/scene.cpp:336
 0x18007eefc,1,runtime/src/io/filesystem_packages.cpp:415
-0x18009e070,1,code/Game/Game/scenario.cpp:78
 0x1800a7520,1,runtime/src/input/input.cpp:615
 0x1800a9aa0,1,standalone/filename_runtime_hook.cpp:671
-0x1800aa780,1,standalone/filename_runtime_hook.cpp:680
 0x1800aeab0,1,engine/funcs/engine_funcs.cpp:3139
 0x1800aeb20,1,engine/funcs/engine_funcs.cpp:3137
 0x1800af5f0,1,engine/funcs/engine_funcs.cpp:3141
@@ -55,41 +53,11 @@ address,call_sites,files
 0x1800dd3c0,1,code/Game/Game/game_main.cpp:176
 0x1800f16e0,2,runtime/src/engine/engine.cpp:590 | runtime/src/video/context.cpp:993
 0x1800f1820,2,engine/funcs/engine_funcs.cpp:1621 | runtime/src/video/context.cpp:990
-0x180100f20,1,standalone/scene_watch.cpp:401
 0x1801133b0,1,engine/funcs/engine_funcs.cpp:2974
 0x180113470,1,engine/funcs/engine_funcs.cpp:2977
 0x180114870,1,engine/funcs/engine_funcs.cpp:2869
 0x1801189f0,1,runtime/src/ui/widgets_input.cpp:219
-0x180154bf0,1,runtime/src/graphics/animation.cpp:156
-0x180154e60,1,runtime/src/graphics/scene.cpp:175
-0x180155040,1,runtime/src/graphics/animation.cpp:168
-0x1801550e0,1,runtime/src/graphics/animation.cpp:164
-0x180155130,1,runtime/src/graphics/animation.cpp:160
-0x1801554a8,1,runtime/src/io/compressedstream.cpp:800
 0x180155860,1,runtime/src/engine/singleton_ctors.cpp:444
-0x180156d70,1,code/Game/Player/tool_base_toolui.cpp:139
 0x180157c60,1,runtime/src/engine/singleton_ctors.cpp:732
-0x1801fa190,1,runtime/src/ui/widgets_input.cpp:162
-0x1801faa88,1,engine/funcs/engine_funcs.cpp:1700
-0x1801fc678,3,runtime/src/application/rt_application_port.cpp:50 | runtime/types/application/Application.h:41 | standalone/address_registry.cpp:1537
-0x1801fc6a8,3,code/Game/Game/filesystem_setup.cpp:113 | code/Game/Game/filesystem_setup.cpp:190 | standalone/filename_runtime_hook.cpp:104
-0x1801fc6b0,2,runtime/src/engine/singleton_ctors.cpp:144 | standalone/reg_mods.cpp:99
-0x1801fc6b8,1,engine/funcs/engine_funcs.cpp:1733
-0x1801fc6c8,1,engine/funcs/engine_funcs.cpp:1674
-0x1801fc6d0,2,code/Game/Game/game_main.cpp:358 | runtime/src/engine/engine_lifecycle.cpp:911
-0x1801fc6e0,5,code/Game/Game/game_main.cpp:506 | standalone/main.cpp:575 | standalone/main.cpp:604 | standalone/main.cpp:912 | standalone/main.cpp:985
-0x1801fc6e8,1,standalone/address_registry.cpp:1545
-0x1801fc718,4,code/Game/Game/game_main.cpp:599 | engine/funcs/engine_funcs.cpp:1629 | standalone/main.cpp:977 | standalone/resolve_standalone.cpp:395
-0x1801fc720,2,code/Game/Game/game_main.cpp:487 | runtime/src/system/error.cpp:53
-0x1801fe720,1,engine/funcs/engine_funcs.cpp:1545
-0x1801fe728,1,engine/funcs/engine_funcs.cpp:1546
-0x1801fe730,1,engine/funcs/engine_funcs.cpp:1547
-0x1801fe738,1,engine/funcs/engine_funcs.cpp:1548
-0x1801fe758,1,engine/funcs/engine_funcs.cpp:2708
-0x1801fe77c,1,code/Game/Component/particlecomponent.cpp:995
-0x1801fe7a0,2,engine/funcs/engine_funcs.cpp:2730 | standalone/main.cpp:1075
-0x1801fe7a8,7,dx11/src/buffers.cpp:152 | dx11/src/dx11_backend_access.h:101 | dx11/src/renderstatedata.cpp:315 | engine/funcs/engine_funcs.cpp:1635 | runtime/src/graphics/renderer.cpp:245 | standalone/main.cpp:1073 | standalone/main.cpp:1400
-0x1801fe7b0,1,runtime/src/graphics/animation.cpp:179
-0x1801fe7b8,2,engine/funcs/engine_funcs.cpp:3722 | standalone/rt_data_mint.cpp:567
 0x1801fe7c0,1,engine/funcs/engine_funcs.cpp:3723
 0x1801fe7e0,1,engine/funcs/engine_funcs.cpp:3724
