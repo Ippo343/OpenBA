@@ -3074,7 +3074,14 @@ extern fn_Game_SpawnResources_t fn_Game_SpawnResources;
 // Game_TriggerDisasterByType (0x140060110) — REPLACED with Game_TriggerDisasterByType_Impl (Phase H)
 // See inline Game_TriggerDisasterByType_Impl() near end of this file.
 // Old fn_* pointer kept for backward compat; callers should use Game_TriggerDisasterByType_Impl().
-typedef void (*fn_Game_TriggerDisasterByType_t)(int type);
+// ABI FIX (lane RETSLOT): this is a __thiscall member, so the type goes in
+// EDX, not RCX. All three retail call sites emit `MOV EDX,<type>; CALL`
+// (0x140060e3e XOR EDX,EDX / 0x140060e4b MOV EDX,1 / 0x140060e5b MOV EDX,2)
+// and the body reads param_2 and never param_1. The old one-argument form
+// passed the type in RCX and left EDX garbage. LATENT: nothing calls this
+// pointer today (the live path is Game_TriggerDisasterByType_Impl below),
+// which is why it survived -- fixed before something starts calling it.
+typedef void (*fn_Game_TriggerDisasterByType_t)(void* game, int type);
 extern fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType;
 
 // Game_DestroyAllRawMaterials (0x140060000) — destroys all loose raw material entities
