@@ -214,9 +214,22 @@ void      RtSystem_Filename_AdjustDelimiters(Filename* self);                  /
 // ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ           0x180006250
 // A member returning by value: RCX = this, RDX = the hidden return slot.
 // ?FindNext@ExternalFactory@Object@@ …                           0x1800be9d0
-RtSystem::Filename* RtObject_External_GetPath(const void* self, RtSystem::Filename* ret);
-const void* RtObject_ExternalFactory_FindNext(const void* self, uint32_t typeId,
-                                              const void* prev);
+//
+// These two live in `namespace RtObject` and take that namespace's OWN class
+// types. Declaring them here with `const void*` compiled and then failed to
+// LINK, which is the good outcome: a `void*` redeclaration that happened to
+// mangle the same way would have been an ODR violation nobody would ever see.
+// Both types are forward-declared and never completed -- this file passes the
+// pointers straight through and reads nothing out of either.
+namespace RtObject {
+struct External;
+struct ExternalFactory;
+RtSystem::Filename* RtObject_External_GetPath(const External* self,
+                                              RtSystem::Filename* ret);
+const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
+                                                  uint32_t typeId,
+                                                  const External* prev);
+}  // namespace RtObject
 
 // ============================================================================
 // 0x180034440 — elem-destroy(String), stride 0x18, one String at +0x10
@@ -481,21 +494,23 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
         reinterpret_cast<rtcoll::ArrayHdr*>(&self->_videoResources);
 
     // ---- 3. collect the live resources of those ten classes ------------------
-    void* const factory = *ExternalFactorySlot();
+    const RtObject::ExternalFactory* const factory =
+        static_cast<const RtObject::ExternalFactory*>(*ExternalFactorySlot());
     const uint32_t externalTypeId = TypeIdExternal();
 
     for (int i = 0; i < 10; ++i) {
         const uint32_t wanted = *(reinterpret_cast<const uint32_t*>(types._data) + i);
 
-        const void* e = RtObject_ExternalFactory_FindNext(factory, externalTypeId, nullptr);
+        const RtObject::External* e =
+            RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, nullptr);
         while (e != nullptr) {
             if (CallGetTypeId(e) == wanted) {
                 RtSystem::Filename fromGetPath = { nullptr };
-                RtObject_External_GetPath(e, &fromGetPath);
+                RtObject::RtObject_External_GetPath(e, &fromGetPath);
 
                 VideoResource rec;
                 rec.typeId = static_cast<int32_t>(CallGetTypeId(e));
-                rec.object = const_cast<void*>(e);
+                rec.object = const_cast<RtObject::External*>(e);
                 // retail zeroes the slot first and then adopts, which for a
                 // freshly zeroed slot is exactly AdoptInline and nothing else.
                 rec.path.data = nullptr;
@@ -509,7 +524,7 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
                 RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&rec.path));
                 RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&fromGetPath));
             }
-            e = RtObject_ExternalFactory_FindNext(factory, externalTypeId, e);
+            e = RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, e);
         }
     }
 
