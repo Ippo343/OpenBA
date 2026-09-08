@@ -1949,6 +1949,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     RtDiffSummary();
+    // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
+    // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
+    // own section 11.3 mis-read, so the branch split is printed next to it.
+    { extern void RtUiSpriteContextFlushReport(); RtUiSpriteContextFlushReport(); }
     // Wave 9 lane ENG: did Engine::Engine's ctor / Startup / dtor / Shutdown
     // actually RUN? Each executes at most once per process, so the diff
     // harness's divergences= column says nothing on its own; this is the
