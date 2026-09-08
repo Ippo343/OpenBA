@@ -611,11 +611,34 @@ the **drain path ran 1,633 times** — once per changed scissor, since
 its cause is the opposite of the one predicted: not "never called" but
 **"called 1,633 times and always took the branch the oracle does not cover."**
 
+**STATE IT POSITIVELY, because the negative form is what gets misread:
+`FlushDeferred`'s drain is LIVE ON ANY PATH THAT CHANGES THE SCISSOR, not
+dormant.** `SetScissor`'s changed branch calls it unconditionally, so any UI
+that moves a clip rect drains the deferred batch. Anyone re-costing this row
+later should start from that model and not from the deferred-font reading.
+
 The lane had warned the integrator, in the abstract, that a `calls=0` is
 ambiguous between "not exercised" and "not covered" — and then mis-diagnosed a
 concrete instance of that ambiguity in its own port, on the basis of a
 plausible reading of `_deferring` rather than a measurement. **A branch's
 frequency is not deducible from what the branch appears to be for.**
+
+### 11.3b `calls=0` has FOUR meanings and only one of them is harmless
+
+Recorded by the integrator from this lane's miss, and repeated here because
+this document is where someone will meet it:
+
+1. never called (genuinely unexercised)
+2. never registered, or the wrong build was measured
+3. a raw resolve missed and the oracle skipped silently
+4. **called every time, and always down the branch the oracle does not cover**
+
+Only (1) is "no coverage to worry about". **(4) is a body fully live in
+production and entirely unverified**, and in a summary it is indistinguishable
+from (1). `calls=0` beside a NON-ZERO `worked=` is the loudest available signal
+that an oracle is aimed at a branch the code does not take — this lane produced
+exactly that pattern twice in one run (`FlushDeferred` 0/1633, `AddLine`
+0/6532) and read it correctly only after measuring.
 
 ### 11.4 The ledger: verified vs merely executed
 

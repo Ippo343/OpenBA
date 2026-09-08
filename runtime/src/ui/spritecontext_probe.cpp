@@ -561,7 +561,26 @@ void RtUiSpriteContextProbe() {
            "caller can reach it): SetScissor's changed-rect branch, FlushDeferred's "
            "drain path, and AddLine's sheet-REBIND path -- all three call Flush "
            "(0x18011ba40), which derefs the device global at 0x1801fe7a8 before it "
-           "reads anything we own. FlushDeferred reporting calls=0 in a gameplay run "
-           "is EXPECTED, not dead: _deferring is retail's deferred-font path and "
-           "nothing on the boot path sets it.\n");
+           "reads anything we own.\n");
+
+    // *** THIS LINE USED TO ASSERT SOMETHING FALSE, AND IT WAS MEASURED FALSE. ***
+    // It said: "FlushDeferred reporting calls=0 in a gameplay run is EXPECTED,
+    // not dead: _deferring is retail's deferred-font path and nothing on the
+    // boot path sets it."
+    //
+    // The live minimap cell (BANISHED_TOOL_HARNESS=utility, 2026-09-08) measured
+    // `FlushDeferred calls=0 worked=1633`. `_deferring` was set on EVERY call and
+    // the DRAIN RAN 1,633 TIMES -- once per changed scissor, because SetScissor's
+    // changed branch calls FlushDeferred. So the drain is LIVE ON ANY PATH THAT
+    // CHANGES THE SCISSOR, not dormant, and the `calls=0` meant the opposite of
+    // what was predicted: not "never called" but "called every time and always
+    // down the branch this oracle does not cover".
+    //
+    // Left as a correction rather than a deletion: a probe that once printed a
+    // false reassurance should say so where it printed it.
+    printf("[SpriteCtxProbe] READ calls=0 CAREFULLY. For FlushDeferred it does NOT "
+           "mean dormant -- measured live, the drain runs once per CHANGED SCISSOR "
+           "(calls=0 worked=1633 in the minimap cell), i.e. fully live and entirely "
+           "uncovered by this probe. A calls=0 beside a NON-ZERO worked= means the "
+           "oracle is aimed at a branch the code does not take.\n");
 }
