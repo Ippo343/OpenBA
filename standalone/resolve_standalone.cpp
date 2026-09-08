@@ -453,10 +453,41 @@ bool ResolveInit() {
         // Try LoadLibrary — in standalone mode we load it ourselves
         g_modules[1].handle = LoadLibraryA(g_modules[1].name);
     }
-    if (!g_modules[1].handle) return false;
+    if (!g_modules[1].handle) {
+        // WAVE 9 LANE G, the CONTROLLED CUTOVER BOOT.
+        //
+        // Normally a missing Runtime-x64.dll is fatal and main.cpp exits here.
+        // That is correct for every ordinary run -- but it makes the ONE
+        // experiment we cannot otherwise perform useless: with the DLL moved
+        // aside the process would die BEFORE RuntimePortInit, before the mint
+        // registers anything, and before a single ported body runs.  The
+        // attempt would learn nothing and read as "cutover fails", which is not
+        // a finding (lane C2, WAVE9_CUTOVER_BOOT_RUNBOOK.md).
+        //
+        // BANISHED_RT_NO_DLL=1 lets boot CONTINUE with a null Runtime handle so
+        // the process gets far enough to say WHERE it dies.  That answers the
+        // one question static analysis cannot: the ORDER in which the missing
+        // pieces are actually reached.  Everything downstream already copes
+        // with a null handle by design -- DllExport/DllAddr return null,
+        // ResolveExportRawImpl returns null, and the mint shadow prints a
+        // DLL=ABSENT banner.
+        //
+        // It is OFF by default and changes nothing when unset: an ordinary run
+        // still takes the fatal exit above.
+        const char* noDll = getenv("BANISHED_RT_NO_DLL");
+        if (!noDll || noDll[0] == '0' || noDll[0] == 'f' || noDll[0] == 'F') return false;
+        fprintf(stderr,
+                "[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll "
+                "ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED "
+                "outcome and its location is the result.  See "
+                "docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md\n");
+        g_modules[1].runtimeBase = 0;
+        g_modules[1].delta = 0;
+    } else {
     g_modules[1].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[1].handle);
     g_modules[1].delta = static_cast<intptr_t>(g_modules[1].runtimeBase)
                        - static_cast<intptr_t>(g_modules[1].preferredBase);
+    }
 
     // VideoDX11-x64.dll: never loaded. Our own vtables and our ports of the
     // two exports replace it entirely, and InstallVideoInterfacePrefill stops
