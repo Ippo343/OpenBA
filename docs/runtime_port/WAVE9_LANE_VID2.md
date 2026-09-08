@@ -825,3 +825,261 @@ degrade them to a logged no-op).
    remain and any claim that the renderer is cutover-ready is still refuted.
 4. If the boot instead faults inside `Video::Context`'s constructor, that is
    §P7's chain and is expected, not a regression from this lane.
+
+---
+
+# Phase 3 — the ConstantBuffer / AssignConstants half of the Context chain
+
+Tasking: take the sequence `ConstantBuffer -> AssignConstants -> Context ctor ->
+CreateVideoContext`, with the 45 shader-constant strings named as the real risk
+and a plan for them demanded before the port.
+
+Landed: `405554d` (ConstantBuffer + the lifted literal table) and `4285c41`
+(AssignConstants + its two-pass oracle). **Not landed: the Context ctor and
+CreateVideoContext** — scoped in §Q6 below with a measured closure, and stopped
+deliberately rather than half-done.
+
+## Q1. The string plan, stated before the port and then implemented
+
+A mistyped constant NAME is a shader parameter that silently never binds: it
+does not crash, does not diverge, and has no oracle short of a rendering diff.
+The project already paid for the general form of that mistake in the CRT lane,
+where `sin` and `cos` use DIFFERENT bit patterns for the same term and lifting
+the coefficients as raw bits was the only thing that caught it. The standing
+rule is that literals are lifted as bytes, never retyped. The plan applied that
+rule to the names, with four independent checks:
+
+1. **`tools/extract_shader_constants.py`** reads the shipped PE with `pefile`
+   and matches RAW BYTES — `LEA r64,[rip+disp32]` as
+   `48/4C 8D modrm(mod=00,rm=101) disp32` — with no disassembler and no Ghidra
+   in the loop, so a listing's typo cannot be inherited. **76 references, 45
+   distinct.**
+2. The function's END is **derived, not guessed**: the next EXPORTED address
+   above the start, read from the export directory. The first version guessed
+   `0x1800f0000` and found **16 of 45 while reporting nothing wrong** — 1,975
+   instructions do not fit in 0xc30 bytes. A tool that silently under-reads is
+   the exact failure this file exists to prevent.
+3. An **independent count** (a regex over the Ghidra text) gives the same 76/45.
+4. `--verify` re-extracts and diffs the committed `.inc`: 0 mismatches. And
+   **`RtVideoShaderConstantsVerify()` re-checks every literal against the bytes
+   at its recorded RVA in the LOADED DLL at every startup**, so a typo
+   introduced by a later hand-edit fails loudly instead of unbinding a
+   parameter. With the DLL absent it skips — which is exactly when our copy is
+   the only copy. Live: `[ShaderLit] 45 lifted literals checked against the
+   loaded Runtime-x64.dll, 0 mismatches`.
+
+The recovered layout, for the record:
+
+| buffer | Context offset | prefix / name | constants |
+|---|---|---|---|
+| pixel     | +0x02e0 | `pc_` / `PixelConstants`     | texelSize, fogColor, lightColor, ambientColor, userPosition |
+| material  | +0x0298 | `mc_` / `MaterialConstants`  | materialConstant0..3 |
+| global    | +0x1f78 | `gc_` / `GlobalConstants`    | worldToProjection, worldToCamera, cameraPosition, userPosition, time, fog, fogColor |
+| instance  | +0x1fc0 | `ic_` / `InstanceConstants`  | inverseScale, color |
+| light     | +0x2098 | `lc_` / `LightConstants`     | color, ambientColor, position, nearPlane, radius, texelSize, textureProjection, shadowProjection0..3 |
+| transform | +0x2050 | `tc_` / `TransformConstants` | `Format("transform[%i]", 52)`, size 208 |
+| bone      | +0x2008 | `bc_` / `BoneConstants`      | `bones[51]`, size 204 |
+
+Sizes are in **float4 registers**, not bytes: a `float4x4` is 4.
+
+## Q2. Eleven of the thirty-one rows are INLINED
+
+This is the finding that decides whether the port is correct.
+`?AssignConstants@` makes **20** `AddConstant` calls, and a port transcribed
+from those 20 calls would be wrong in a way nothing reports:
+
+* MSVC inlined **three whole `BeginConstants` bodies** (pixel, material,
+  global). The two String assignments, the five scalar stores and the array
+  clear appear in line; the only thing left of the call is its TAIL,
+  `LEA RCX,[buf+0x28] ; CALL 0x18001cab0`. Without recognising that tell, the
+  extractor reported four Begins for seven buffers and folded three buffers'
+  literals into one row — a table that reads perfectly plausible.
+* It inlined **eight whole `AddConstant` bodies** (5 pixel, 4 material, 2
+  global), each building the element on the stack and calling `0x180053510`
+  directly. Three inlined Begins plus eight inlined Adds = **11 of 31 rows**.
+
+So the port declares **31** constants across **7** buffers, and the extraction
+of the inlined rows is what makes that number reachable at all.
+
+`tools/extract_assign_constants.py --events` now recovers the whole structure
+from bytes: every call to the six functions the table is built from, every
+out-of-line size (`MOV R9D,imm`), every INLINED size
+(`MOV qword [RBP-0x79],imm`), the BeginConstants scalars, the two bool stack
+arguments, the `LEA rXX,[R15+disp]` that says which buffer each call acts on,
+and the reads that carry the slot chain. Its `AddConstant` count is asserted at
+20 so a scan that under-reads fails instead of shipping a short table.
+
+**A defect that survived one round:** the scan began as a linear sweep,
+advancing by each matched instruction's length. One false `B8..BF` byte inside
+another instruction's displacement desynchronised the walk, which then stepped
+OVER the first four `BeginConstants` calls — and the AddConstant count still
+came out right, so nothing complained. It now PEEKS and always advances by one
+byte, which cannot desynchronise.
+
+## Q3. Two facts that a careful reader still gets wrong
+
+1. **The buffer offsets inside `Video::Context` are not in declaration order**:
+   `+0x0298 mc_ · +0x02e0 pc_ · +0x1f78 gc_ · +0x1fc0 ic_ · +0x2008 bc_ ·
+   +0x2050 tc_ · +0x2098 lc_`. The last one is the trap: MSVC emits
+   `ADD R15,0x2008` and then `MOV RCX,R15`, which reads like `this` and would
+   have built the bone buffer over the top of the Context header.
+2. **The slot chain.** Each buffer's `+0x14` is the register slot it binds to:
+   `slot = prev->companion ? prev->companion->vtbl[3]() : prev->+0x14 + 1`,
+   chaining `pc_ -> mc_` and `gc_ -> ic_ -> lc_ -> tc_ -> bc_`; `pc_` and `gc_`
+   start their own chains at 0. During construction every companion is null, so
+   the arithmetic branch is the live one.
+
+Also recovered: `?EndConstants@ConstantBuffer@Video@@QEAAXH@Z` takes an int it
+**never reads** (`MOV RDX,[RCX+0x40]` is its first instruction), and one tail
+call site passes `0xcc0` in EDX while the other passes nothing at all.
+`EndConstants` and `PlatformCreate` are the SAME BODY emitted twice, differing
+only in the return.
+
+## Q4. Three defects in this lane's own phase-3 commit, found by the inlining
+
+The inlined bodies write their operands to named offsets in the open, which
+settles labelling the out-of-line bodies cannot. They showed the first commit
+had the two Strings **backwards in three places**:
+
+* `ConstantBuffer` `kName`/`kPrefix` — `+0x00` is the PREFIX (`"pc_"`), `+0x08`
+  the NAME (`"PixelConstants"`), so the signature is
+  `BeginConstants(this, name, prefix, …)`.
+* `Entry` `name`/`typeName` — `+0x00` is the CONSTANT NAME, `+0x08` the TYPE.
+* The release-order comment in `AddConstant`, and — a real behaviour change once
+  the labels moved — the order of the two adopts in the resize's copy loop.
+
+The STORES were always right — arg2 to `+0x08`, arg3 to `+0x00` — so nothing
+misbehaved. **A label that lies about which of two identically-shaped fields is
+which is how the NEXT reader introduces a real defect.** Fourth correction:
+`Entry+0x10` is a count of float4 registers, not bytes.
+
+## Q5. The oracle, and why it needed a second pass
+
+`AssignConstants` has no caller in our tree (the ctor is the next link and is
+not ported), so a boot run reports `calls=0` and proves nothing. It is however a
+**pure function of a zeroed object**: no arguments, reads only the Context it is
+handed, and every companion it consults is null in a fresh one. So the probe
+drives it directly — two zeroed Contexts in `.bss`, ours into one and the
+SHIPPED body into the other, compared **field by field**, never `memcmp`,
+because the two sides hold different heap pointers for equal strings and a byte
+compare would fail 100% of the time for a reason unrelated to the port.
+
+```
+[AssignConst] buffers=7 entries=31 mismatches=0
+[AssignConst] effectiveness (on THEIRS): buffersNamed=7 entriesMade=31 offsetsAssigned=24
+[AssignConst] branches INSIDE the ported bodies: slot-virtual=0 slot-arith=5 end-companion=0 end-arith=7
+[AssignConst] negative-controls: scalar=CAUGHT string=CAUGHT
+```
+
+**That green covered half the function.** `slot-virtual=0` and
+`end-companion=0` say the virtual halves of the slot chain and of
+`EndConstants`/`PlatformCreate` were never entered — and nothing in a boot run
+would enter them either, because a companion only exists after the backend has
+made one and `AssignConstants` runs before that. Waiting for those branches
+means waiting forever. So pass 2 **drives** them: a four-slot fake companion on
+all seven buffers on both sides, its answers derived from its own tag rather
+than a call counter, so they cannot depend on which run happens first.
+
+```
+[AssignConst] pass2 (fake companion on all 7): mismatches=0
+[AssignConst] pass2 effectiveness (on THEIRS): companion-end-calls=7 companion-slot-calls=5
+[AssignConst] pass2 branches: slot-virtual=5 slot-arith=0 end-companion=7 end-arith=0
+[AssignConst] pass2 negative-control (slot from the fake): CAUGHT
+```
+
+Both branches of both decisions are covered — 5+0 / 0+5 and 7+0 / 0+7 — and all
+four negative controls fire.
+
+**A defect in the PROBE, not the port.** It first ran from `RtVideoPortInit` and
+crashed inside the DLL's `MemAlloc` with `[REDZONE-DUMP] no allocator
+singleton`: at `RuntimePortInit` time the MemoryAllocator is constructed but not
+STARTED. That is the same fact lane Q recorded for the Device probe, in a
+comment eight lines above the code I wrote. It now rides the same
+self-scheduled hook at the top of `Video::Device::PlatformStartup`. One
+symbolized stack frame separated "the port crashes" from "the probe is in the
+wrong place".
+
+Deliberate deviations, both in MSVC's temporary handling:
+
+1. Retail keeps all 22 of `lc_`'s String temporaries alive at once and frees
+   them in one run of 22 `MemFree`s; we free each pair after its call. Same
+   refcounts, same object, different transient heap peak and free order.
+2. The 11 inlined rows are emitted as calls to the ported out-of-line bodies.
+   Exact, not approximate: the inlined code is the same body, and the one
+   textual difference (`INC [buf+0x1c]` vs `ADD [buf+0x1c],size`) is the same
+   operation at the sizes involved — **checked, not assumed**: the two inlined
+   size-4 rows do emit `ADD dword [RSI+0x1c],4`.
+
+## Q6. NOT DONE: the Context ctor and CreateVideoContext, with a measured closure
+
+`??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z` (0x1800f1820,
+ord 125, 1,584 bytes / ~400 instructions) and
+`?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` (0x1800dd500, ord 2139, 224
+bytes). The closure was counted rather than guessed, and it is **much better
+than phase 1's note suggested** — most of it is already ported:
+
+| callee | status |
+|---|---|
+| `0x1800f57e0` `?PlatformConstruct@VertexBuffer@Video@@` | PORTED (buffers.cpp) |
+| `0x1800f3680` `?PlatformConstruct@IndexBuffer@Video@@`  | PORTED (buffers.cpp) |
+| `0x1800f4320` `?PlatformConstruct@RenderBuffer@Video@@` | PORTED |
+| `0x18001f2e0` `??2RenderBuffer@Video@@`                 | PORTED |
+| `0x18001e910` `??2ImageBuffer@Video@@`                  | PORTED |
+| `0x1800f2580` `??0ImageBuffer@Video@@`                  | PORTED |
+| `0x1800f3f10` `?Create@RenderBuffer@Video@@`            | PORTED (device.cpp) |
+| `0x180011640` locking `operator new`                    | PORTED (phase 1 uses it) |
+| `0x1800881b0`                                           | known to the tree (device_startup.cpp, filesystem) |
+| `0x1800ef3d0` `?AssignConstants@`                       | **PORTED, this phase** |
+| `0x180053730 / 840 / 8b0 / 920`                         | **UNPORTED, unexported** — four Array-family fills, siblings of the `0x180053510` this lane just did |
+
+**So the ctor's remaining new work is four small unexported helpers, not eleven
+bodies.** What actually blocks it is not size, it is VERIFICATION: the ctor
+makes seven `CALL [RAX+0x58]` virtual calls on a real `Video::Device` plus
+`[RAX+0x48]`, `[RAX+0x08]` and `[RAX+0x10]` on the backend, so the
+synthetic-subject trick that made `AssignConstants` verifiable does not carry
+over. A lane taking it should decide the oracle FIRST — either a device-level
+fake (the shape lane Audio needed) or a live in-boot A/B on
+`BANISHED_RT_VIDCONSTBUF` — before writing a body.
+
+## Q7. Audits, unmoved denominators and set-diffs
+
+Both commits, before and after:
+
+* `unsatisfied_export_scan`: **841 doors / 134 unsatisfied / 131 outside a
+  guard — UNMOVED and set-identical.** Honest reading: nothing in our source
+  resolves `?BeginConstants@`, `?AddConstant@`, `?EndConstants@`,
+  `?PlatformCreate@` or `?AssignConstants@` by name — only the DLL's own
+  `AssignConstants` and the unported Context ctor do — so satisfying them cannot
+  move this denominator. **It moves when the ctor lands, not before.**
+* `port_bypass_audit`: **0 bypasses on both doors, before and after.** The
+  address door goes 269 → 273 sites; of the four added, one is `0x1800ef3d0`
+  (ADDR-REGISTERED) and two are `0x1800c7a50`/`0x1800c7ad0`, MemAlloc/MemFree by
+  address — the established house pattern from `309c015`, already spelled this
+  way in `collection/array.cpp` and `application/message_callbacks.cpp`.
+
+Both verification runs were taken under `tools/game_dir_lock.sh acquire lane-VID`
+and gated on `[LaneVID2] identity: device_startup.cpp built …` read out of the
+run's own log, with the deployed md5 checked before and after. Exit 0, empty
+crash log, and the earlier lane probes unregressed: `[VidCfg] cases=19
+mismatches=0 negative-control=CAUGHT`, `[SetAvl] steps=65 mismatches=0` with
+both controls CAUGHT.
+
+## Q8. Falsifiable predictions, and the predicted fault site
+
+1. **Predicted fault site: `??0Context@Video@@` (0x1800f1820).** With
+   `ConstantBuffer` and `AssignConstants` ported but the ctor not, a DLL-less
+   boot that gets past `PlatformStartup` will die at the ctor — either as a null
+   call through the resolve door, or, if the ctor is reached by address, inside
+   one of the four unported `0x180053730..920` fills. It will NOT die inside
+   `AssignConstants`.
+2. `?AssignConstants@Context@Video@@AEAAXXZ` will not appear in
+   `BANISHED_RT_STRICT`'s residue once the ctor is ported and calls it by name;
+   until then it appears in neither list, because nothing asks for it.
+3. If a future rendering change makes a shader parameter silently stop binding,
+   `[ShaderLit] … 0 mismatches` at startup rules OUT a mistyped constant name as
+   the cause. If that line ever reports a non-zero count, the fix is to re-run
+   `tools/extract_shader_constants.py --emit`, never to hand-edit the `.inc`.
+4. The `slot-virtual` / `end-companion` branches will read 0 in every boot run
+   for as long as `AssignConstants` is called only from the ctor. A future
+   report that shows them non-zero means something is re-running
+   `AssignConstants` after the device is up, which retail never does.

@@ -186,6 +186,14 @@ void ReleaseStringNoTidy(void** field) {
 // here — the same reading `reference_read_the_callee_before_holding_back_on_an_arg.md`
 // records for FUN_180023060.
 // ---------------------------------------------------------------------------
+// *** NO LONGER FILE-LOCAL. *** Phase 1 said "nothing outside this file reaches
+// them", which was true only while this file was the tree's only
+// `Video::ConstantBuffer` code. Phase 3 found both under the class itself:
+// `?BeginConstants@` (0x1800eed10) TAIL-JUMPS to 0x18001cab0, and the
+// `Array<ConstantEntry>` resize at 0x180053510 calls 0x18001cfc0. So both now
+// have real callers and both are registered at their addresses — by
+// constant_buffer.cpp, which owns the registration because that is where the
+// callers live.
 void StringPairDestroy(void* /*unused*/, void* data, int32_t count) {
     if (count <= 0) return;
     uint8_t* e = static_cast<uint8_t*>(data);
@@ -215,6 +223,17 @@ void StringPairArrayDtor(void* arr) {
 }
 
 }  // namespace
+
+// The two above, exported for constant_buffer.cpp to call and to register. Thin
+// forwarders rather than moved bodies, so this file keeps the transcription and
+// the commentary that goes with it, and there is exactly ONE implementation of
+// each (a second copy is how two ports of one address drift apart).
+extern "C" void RtVideo_ConstEntryArrayDestroy(void* unused, void* data, int32_t count) {
+    StringPairDestroy(unused, data, count);
+}
+extern "C" void RtVideo_ConstEntryArrayDtor(void* arr) {
+    StringPairArrayDtor(arr);
+}
 
 // ============================================================================
 // ??1ConstantBuffer@Video@@QEAA@XZ — retail 0x1800eeee0, ordinal 558

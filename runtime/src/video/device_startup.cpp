@@ -620,6 +620,7 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
 // ids are 5 (WM_SIZE) and 0x232 (WM_EXITSIZEMOVE).
 // ============================================================================
 extern "C" void RtVideoDeviceStartupProbeMaybeRun();
+extern "C" void RtVideoAssignConstantsProbeMaybeRun();   // constant_buffer.cpp
 
 extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // Self-scheduled probe (lane Q's pattern, and the same reason): it
@@ -630,6 +631,12 @@ extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // It runs BEFORE this function reads anything, and it borrows and restores
     // the Video::Configuration singleton slot. No-op unless armed.
     RtVideoDeviceStartupProbeMaybeRun();
+    // Phase 3's AssignConstants oracle rides the same hook for exactly the same
+    // reason: it allocates ~124 Strings, and at RuntimePortInit() time the
+    // allocator singleton is constructed but not STARTED. Running it there
+    // faulted inside the DLL's MemAlloc with "no allocator singleton" in the
+    // redzone dump -- a defect in the PROBE's placement, not in the port.
+    RtVideoAssignConstantsProbeMaybeRun();
 
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
     self->windowHandle = *reinterpret_cast<void**>(*AppSlot());
