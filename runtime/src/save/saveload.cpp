@@ -78,6 +78,7 @@
 #include <cstdint>
 #include "../system/timer.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
@@ -217,6 +218,22 @@ void ReleaseStringSlot(const char** slot) {
     }
 }
 
+// ---- ~SaveLoad reachability counter (Wave 9 lane SYS2) ---------------------
+// ~SaveLoad has no oracle (see its banner), so the ONE thing that CAN be
+// measured about it is whether it runs at all. `calls=0` on a diffed port is
+// this project's canonical "green line over dead code"
+// (reference_uncalled_port_is_not_verified.md); a destructor gets the same
+// treatment for the same reason, just without the comparison half.
+// BANISHED_SAVELOAD_DTOR_TRACE=1.
+int g_saveLoadDtorCalls = 0;
+bool RtSaveDtorTrace() {
+    static const int on = []() {
+        const char* e = std::getenv("BANISHED_SAVELOAD_DTOR_TRACE");
+        return (e && *e && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }();
+    return on != 0;
+}
+
 // ---- scratch-copy diff helper ----------------------------------------------
 // `ours` and `theirs` are 0x90-byte private copies of the live object; neither
 // call is allowed to allocate, free, or touch anything outside its own copy.
@@ -293,18 +310,187 @@ SaveLoad* RtSave_SaveLoad_Ctor(SaveLoad* self) {
 // Save::SaveLoad::~SaveLoad()           retail 0x1800c3c90   ordinal 666
 // ??1SaveLoad@Save@@QEAA@XZ
 // ----------------------------------------------------------------------------
-// HELD BACK — see the file banner. Not registered. Left here as a decompiled
-// note so the next reader does not have to redo the work:
+// WAVE 9 LANE SYS2, 2026-09-08 — PORTED. The Wave 5 holdback above it is
+// preserved here in full because two of its three sentences were true and one
+// was NOT, and which is which is the reason this got ported:
 //
-//   _singleton = nullptr;
-//   ReleaseStringSlot(&_saveName);                       // +0x70
-//   FUN_1800329c0(&_savesData);                          // Array<SaveInfo> dtor,
-//        which calls the un-exported FUN_1800c3f40 on each 0x58-byte element
-//        and then locked-frees the buffer
-//   if (_buffer30) FUN_180006a10(_buffer30);             // an un-exported second
-//        copy of MemFree, identical to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-//   ReleaseStringSlot(&_string20);                       // +0x20
+//   "No oracle is possible (it frees)"           -- STILL TRUE, see ORACLE.
+//   "a wrong port corrupts the heap silently"    -- STILL TRUE.
+//   "the object is a process-lifetime singleton
+//    so it is unlikely ever to run"              -- **FALSE, and measurably so.**
+//
+// The third is what made the holdback look cheap, and it does not survive a
+// grep. `??1SaveLoad@Save@@QEAA@XZ` has FOUR live call sites in this tree, all
+// through `fn_SaveLoad_Dtor`, and every one of them is followed by a
+// `fn_MemFreeStatic` of the same pointer — i.e. these are real deletes of a
+// heap object, not a process-exit formality:
+//
+//   code/Game/Dialog/mainmenudialog.cpp:218  MainMenuDialog_ReturnToMenu, the
+//   code/Game/Dialog/mainmenudialog.cpp:226    no-game and in-game branches
+//   code/Game/Game/gameupdateloop.cpp:3140   GameUpdateLoop::Shutdown
+//   code/Game/Tutorial/tutorialui.cpp:81     tutorial teardown
+//
+// Quit-to-menu runs this. So at cutover it is not a symbol that "might" be
+// asked for -- attempt 14 recorded it as asked
+// (wave9_attempt14_error.txt line 32), and with the DLL gone the resolve is
+// NULL and `fn_SaveLoad_Dtor(saveLoad)` is a call through zero on the way back
+// to the main menu.
+//
+// THE FULL RETAIL CHAIN, disassembled at all five addresses on 2026-09-08:
+//
+//   ~SaveLoad                0x1800c3c90   this file, below
+//     -> FUN_1800329c0       0x1800329c0   Array<SaveInfo>::~Array, stride 0x58
+//          -> FUN_1800c3f40  0x1800c3f40   ~SaveInfo (per element)
+//               -> FUN_1800331f0 0x1800331f0  Array<ModInfo>::~Array, stride 0x20
+//                    -> FUN_1800341e0 0x1800341e0  destroy N ModInfo in place
+//
+// FUN_1800341e0 releases the String at ModInfo+0x08 and THEN the one at +0x00,
+// in that order, 0x20 bytes at a time — an independent confirmation of the
+// ModInfo layout this file's own header pins from CheckMod.
+//
+// FOUR SaveInfo OFFSETS THIS DESTRUCTOR PINS THAT THE HEADER CALLS UNMODELLED.
+// runtime/types/save/SaveLoad.h deliberately declines to name +0x10..+0x37 and
+// +0x40..+0x47, on the grounds that only UpdateList/LoadMetaData write them and
+// naming from a guess is what PLAN §6 step 8 forbids. That stands — this port
+// does NOT rename them. It reaches them as raw displacements, with what the
+// destructor proves about each and nothing more:
+//
+//   +0x10  a System::String slot          (released with the refcount idiom)
+//   +0x18  a pointer to a POLYMORPHIC object; retail calls vtable slot 0 with
+//          EDX=1, i.e. the scalar DELETING destructor
+//   +0x28  a raw heap block               (?MemFree@ static)
+//   +0x40  an int32 ownership flag: BOTH +0x18 and +0x28 are torn down only
+//          when it is >= 0. A negative value means "this SaveInfo does not own
+//          them", the same -1-is-empty convention Sprite::index uses at +0x08.
+//
+// ORACLE: NONE, and that is a property of the function, not of this lane's
+// effort. Everything it does is a free. "Call ours, call theirs, compare"
+// double-frees every block in the object, and there is no scratch-copy form
+// either: a 0x90-byte copy of the live SaveLoad aliases the SAME strings and
+// the SAME array buffer, so running the DLL's body on the copy destroys the
+// real object's heap before ours is allowed to run. What backs it instead:
+//
+//   1. Byte-for-byte transcription of all five bodies, disassembled (not
+//      decompiled — reference_ghidra_c_output_vs_disassembly.md).
+//   2. Every free routed through the SAME `MemFree()` accessor the rest of
+//      this file already uses, so the heap stays whole-ours
+//      (WAVE9.md §3). Retail's array-buffer frees are written out as
+//      Lock(alloc+0x640); ?Free@(alloc, p); Unlock() -- which is what
+//      ?MemFree@MemoryAllocator@System@@SAXPEAX@Z IS, and this file's
+//      `MemFree` resolves to our port of exactly that.
+//   3. The live path: quitting to the menu runs it, under the allocator
+//      watchdog, and a wrong free surfaces there rather than nowhere.
+//
+// It is registered because at cutover the alternative to an unverifiable port
+// is not "the DLL's body", it is a null call.
 // ============================================================================
+
+// FUN_1800341e0 — destroy `count` ModInfo elements in place, stride 0x20.
+// Note the ORDER: +0x08 (path) first, then +0x00 (name). Retail's loop bails
+// immediately when count <= 0 (the TEST/JLE is the first instruction, ahead of
+// the prologue).
+static void ModInfoRange_Destroy(RtSave::ModInfo* base, int32_t count) {
+    if (count <= 0) return;
+    for (int32_t i = 0; i < count; ++i) {
+        ReleaseStringSlot(&base->path);
+        ReleaseStringSlot(&base->name);
+        ++base;
+    }
+}
+
+// The 0x10-byte Collection::Array header both ~Array bodies below operate on:
+// _data at +0x00, _size at +0x08, _capacity at +0x0c. Retail's RCX at
+// 0x1800331f0 is `saveInfo + 0x48` and at 0x1800329c0 it is `saveLoad + 0x50`
+// -- the ARRAY, not the object that contains it, which is why these take the
+// array address and not the parent. Getting that wrong would be an ABI
+// mismatch invisible until the registered address is called.
+struct RtArrayHeader {
+    void*   data;
+    int32_t size;
+    int32_t capacity;
+};
+
+// FUN_1800331f0 — Collection::Array<ModInfo>::~Array.
+// The two trailing stores are ONE qword each: [arr+0] = 0 clears _data, and
+// [arr+8] = 0 clears _size and _capacity together, which is why this writes
+// eight bytes rather than two ints.
+static void ArrayModInfo_Dtor(RtArrayHeader* arr) {
+    ModInfoRange_Destroy(reinterpret_cast<RtSave::ModInfo*>(arr->data), arr->size);
+    if (arr->data) MemFree(arr->data);
+    arr->data = nullptr;
+    arr->size = 0;
+    arr->capacity = 0;
+}
+
+// FUN_1800c3f40 — ~SaveInfo.
+// The +0x18 branch tests the pointer, then the +0x40 flag, then the pointer
+// AGAIN (0x1800c3f65 TEST RCX,RCX). The second test is redundant in the bytes
+// too; it is transcribed as written rather than folded, because a "simplified"
+// guard is how a faithful port stops being one.
+static void SaveInfo_Dtor(RtSave::SaveInfo* info) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(info);
+
+    void* owned = *reinterpret_cast<void**>(p + 0x18);
+    const int32_t ownFlag = *reinterpret_cast<const int32_t*>(p + 0x40);
+    if (owned != nullptr && ownFlag >= 0 && owned != nullptr) {
+        // MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]  -- scalar deleting dtor.
+        using DeletingDtorFn = void* (*)(void*, unsigned int);
+        void** vtable = *reinterpret_cast<void***>(owned);
+        reinterpret_cast<DeletingDtorFn>(vtable[0])(owned, 1u);
+    }
+
+    void* block = *reinterpret_cast<void**>(p + 0x28);
+    if (block != nullptr && ownFlag >= 0) MemFree(block);
+
+    ArrayModInfo_Dtor(reinterpret_cast<RtArrayHeader*>(p + 0x48));
+
+    // +0x38, reached in retail as [RBX+0x30]+0x8 -- the LEA RAX,[RBX+0x30] is
+    // the address of an inlined Pair/String pair, not a separate object.
+    ReleaseStringSlot(&info->name);
+    ReleaseStringSlot(reinterpret_cast<const char**>(p + 0x10));
+}
+
+// FUN_1800329c0 — Collection::Array<SaveInfo>::~Array, stride 0x58.
+// `_size` is read ONCE into EAX before the loop and used as the trip count, so
+// an element destructor that changed the array's size (none does) would not be
+// observed. Transcribed with the same single read.
+static void ArraySaveInfo_Dtor(RtArrayHeader* arr) {
+    RtSave::SaveInfo* e = reinterpret_cast<RtSave::SaveInfo*>(arr->data);
+    const int32_t size = arr->size;
+    if (size > 0) {
+        for (int32_t i = 0; i < size; ++i) { SaveInfo_Dtor(e); ++e; }
+    }
+    if (arr->data) MemFree(arr->data);
+    arr->data = nullptr;
+    arr->size = 0;
+    arr->capacity = 0;
+}
+
+void RtSave_SaveLoad_Dtor(SaveLoad* self) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+
+    // MOV qword ptr [0x1801fc6f0],0x0 -- unconditional, and it happens FIRST,
+    // before anything can fault. Retail clears the singleton even when `this`
+    // is not the singleton; that is what the bytes do.
+    if (SaveLoad** slot = SaveLoadSingletonSlot()) *slot = nullptr;
+
+    ReleaseStringSlot(reinterpret_cast<const char**>(p + 0x70));
+    ArraySaveInfo_Dtor(reinterpret_cast<RtArrayHeader*>(p + 0x50));
+
+    // FUN_180006a10, the un-exported second copy of MemFree
+    // (runtime/src/engine/engine_lifecycle.cpp:262 records it as "MemFree
+    // verbatim"). Routed through the same accessor, not the raw address.
+    void* buffer30 = *reinterpret_cast<void**>(p + 0x30);
+    if (buffer30) MemFree(buffer30);
+
+    ReleaseStringSlot(reinterpret_cast<const char**>(p + 0x20));
+
+    if (RtSaveDtorTrace()) {
+        std::fprintf(stderr, "[SaveLoadDtor] ran on %p (call #%d)\n",
+                     (void*)self, ++g_saveLoadDtorCalls);
+        std::fflush(stderr);
+    }
+}
 
 // ============================================================================
 // Save::SaveLoad::GetOperation() const  retail 0x1800c3c80   ordinal 2826
@@ -890,6 +1076,26 @@ int RtSaveLoadRegister() {
     RegisterRuntimeExport("??0SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Ctor); ++n;
     RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
     RegisterRuntimeExport("??1SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Dtor); ++n;
+    // WAVE 9 LANE SYS2. `QEAA`, the NON-VIRTUAL spelling -- SaveLoad has no
+    // vtable (the header proves it: the ctor writes an int at +0x00 and the
+    // DLL exports no ??_7SaveLoad@Save@@6B@), so `UEAA` here would be a
+    // phantom name resolving NULL in silence
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md, which cost this
+    // project a skipped ~Internal on every teardown). Verified present in the
+    // shipped export table with pefile before this line was written:
+    // 0x1800c3c90, ordinal 666.
+    RegisterRuntimeExport("??1SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800c3c90, (void*)&RtSave_SaveLoad_Dtor);
+    // The three un-exported bodies the chain calls. Nothing in this tree
+    // reaches them by address TODAY, so these are not closing a live bypass --
+    // they are there so that the day something does (a ported UpdateList or
+    // LoadMetaData, which are the only other writers of these arrays), it
+    // reaches our transcription and not a null. A faithful port that calls DLL
+    // internals by address grows the cutover surface; owning the internals
+    // instead is the version of that which shrinks it.
+    RegisterRuntimeAddr(0x1800329c0, (void*)&ArraySaveInfo_Dtor);
+    RegisterRuntimeAddr(0x1800c3f40, (void*)&SaveInfo_Dtor);
+    RegisterRuntimeAddr(0x1800331f0, (void*)&ArrayModInfo_Dtor);
     RegisterRuntimeExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z", (void*)&RtSave_SaveLoad_CheckMod); ++n;
     // Wave 8 lane E: engine_funcs.cpp's ResolveExport call for CheckMod was a
     // phantom-name typo (QEAAHHI, not this real QEBAHHH) that had been dead

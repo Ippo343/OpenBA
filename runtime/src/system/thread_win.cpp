@@ -123,9 +123,23 @@ void RtSystem_CriticalSection_Unlock(CriticalSection* self) {
 // The DLL's own base vtable (??_7Thread@System@@6B@, a real PE export at
 // 0x180155f20 — slot 0 _purecall, slot 1 OnCompleted), used AS-IS and never
 // reimplemented, for the reasons in the file banner.
+//
+// WAVE 9 LANE SYS2: this used to be `static void* v = ResolveExport(...)`, a
+// plain function-local static — the exact defect attempt 14 fixed for the
+// allocator's three by-address call sites, one file over. The Thread ctor runs
+// DURING RuntimePortInit (ConstructLoader, from a singleton ctor), which is
+// BEFORE RtDataMintInit() ever builds the minted table. At cutover the first
+// call therefore froze a NULL in for the life of the process, and attempt 14's
+// log shows it as the very first `[RtUnresolved]` line of the whole run —
+// line 6, above every other symbol, before the mint had a chance to exist.
+//
+// The mint DOES carry this row (rt_data_mint_tables.inc, `kVSlots42`, 2 slots:
+// _purecall + ?OnCompleted@Thread@System@@UEAAXXZ), so the row was never
+// missing — only unreachable through a cache that had already answered. Going
+// through RT_DATA_SLOT (RtResolveCached: cache a hit, RETRY a miss, name it
+// once) is the whole fix.
 static void* RtSystemThreadVftable() {
-    static void* v = ResolveExport("??_7Thread@System@@6B@");
-    return v;
+    return RT_DATA_SLOT(void*, "??_7Thread@System@@6B@");
 }
 
 // The worker entry point. Asked for BY NAME through the PORT-AWARE resolver, so
@@ -139,10 +153,14 @@ static void* RtSystemThreadVftable() {
 // would have been the port-bypass defect in its purest form — the port
 // registered, the census counting it, and the DLL's body still the one every
 // thread in the process actually runs.
+//
+// WAVE 9 LANE SYS2: same freeze hazard as the vtable above, and worse in one
+// respect — this one has a PORT (RtSystem_Thread_ThreadFunc, below), so a null
+// or pre-registration answer frozen here is a bypassed port, not just a miss.
+// RT_EXPORT_ONCE retries a miss.
 static unsigned(__stdcall* RtSystemThreadFunc())(void*) {
     using Fn = unsigned(__stdcall*)(void*);
-    static Fn f = reinterpret_cast<Fn>(ResolveExport("?ThreadFunc@Thread@System@@CAIPEAX@Z"));
-    return f;
+    return RT_EXPORT_ONCE(Fn, "?ThreadFunc@Thread@System@@CAIPEAX@Z");
 }
 
 // The DLL's OWN _beginthreadex (its statically-linked CRT's, not MinGW/UCRT's
