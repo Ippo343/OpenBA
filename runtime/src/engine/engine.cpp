@@ -365,9 +365,29 @@ extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) 
 // nothing else). They are installed into `Video::Device` at +0x50 / +0x58 and
 // invoked by `dx11/src/contextdata.cpp`'s Present-failure path.
 //
-// WHY THIS IS A THUNK AND NOT A PORT OF THE MEMBERS. `MainLoop::OnVideoError`
+// WHY THIS WAS A THUNK AND NOT A PORT OF THE MEMBERS — SUPERSEDED 2026-09-08 by
+// Wave 9 lane VIDL, which ports both members in
+// runtime/src/engine/mainloop_video.cpp. THREE CLAIMS BELOW ARE WRONG and are
+// corrected here in place (PLAN §6 step 8) rather than deleted, because each
+// one was load-bearing for a decline that stood for two waves:
+//
+//   1. "ten UNEXPORTED .data globals" — all ten are EXPORTED DATA
+//      (`?_typeInfo@…@@0VBaseTypeInfo@Object@@A`, ordinals 4853..4926, read out
+//      of the shipped export directory with pefile). That matters: an
+//      unexported global can only be reached by address, an exported one is a
+//      NAME the scanners and the mint generator can both see.
+//   2. "Not one of its seven internal callees is ported" — it has EIGHT
+//      distinct direct callees and SEVEN OF THEM WERE ALREADY OURS when this
+//      sentence was written. The one that was not is
+//      `Array<VideoResource>::SetSize` (0x18004f620), now ported.
+//   3. "Porting either would relocate 17 nulls rather than remove any" — the
+//      real residue was ONE Array instantiation for `OnVideoError` (which
+//      therefore closes with zero new doors) and three NAMED exports for
+//      `OnVideoRestart`. Wrong by roughly a factor of three.
+//
+// The original text follows. `MainLoop::OnVideoError`
 // (0x1800dc5e0) is ~250 instructions that build a `Collection::Array<int>` of
-// ten resource TYPE IDS read from ten unexported `.data` globals
+// ten resource TYPE IDS read from ten `.data` globals
 // (0x1801fa548, 0x1801fa698, 0x1801fa580, 0x1801fa5f0, 0x1801fa660,
 // 0x1801fa5b8, 0x1801f99b0, 0x1801fa708, 0x1801f9a90, 0x1801f99e8), walk the
 // `ExternalFactory` AVL tree once per id (0x1800be9d0), release each object
@@ -698,8 +718,11 @@ int RtEngineCoreRegister() {
     //
     // DELIBERATELY ABSENT -- see the holdback sections in the banner:
     //   ?Run@MainLoop@Engine@@…              0x1800dd3c0  no oracle, kills the run
-    //   ?OnVideoError@MainLoop@Engine@@…     0x1800dc5e0  needs a detour
-    //   ?OnVideoRestart@MainLoop@Engine@@…   0x1800dc3b0  needs a detour
+    //   (?OnVideoError@ and ?OnVideoRestart@ are NO LONGER absent — Wave 9 lane
+    //    VIDL registers both from runtime/src/engine/mainloop_video.cpp. They
+    //    are not registered HERE because a duplicate registration is
+    //    last-binding-wins and would silently make one of the two bodies dead
+    //    code; see reference_grep_for_the_port_before_writing_it.md.)
     //   ?_singleton@MainLoop@Engine@@1PE…    0x1801fe750  DATA symbol, nothing to port
     return n;
 }

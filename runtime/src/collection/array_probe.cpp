@@ -619,6 +619,14 @@ const Target kJ3NonTrivial[] = {
     { 0x180004e30, &rtcoll::kSpec_Sprite38,   3, 0 },
     { 0x180051390, &rtcoll::kSpec_EffectSlot, 2, 0 },
     { 0x180061480, &rtcoll::kSpec_StringExt,  3, 0 },
+    // WAVE 9 LANE VIDL — Engine: MainLoop::_videoResources, the array
+    // OnVideoError fills and OnVideoRestart drains. Its spec is defined in
+    // runtime/src/engine/mainloop_video.cpp (see array_internal.h). Added here
+    // because a shadow oracle at the live call site can only check that the
+    // header came out self-consistent; this row is what compares our body
+    // against the SHIPPED one byte for byte, including the +0x04..+0x07 window
+    // that neither side writes.
+    { 0x18004f620, &rtcoll::kSpec_VideoResource, 3, 0 },
 };
 
 }  // namespace
