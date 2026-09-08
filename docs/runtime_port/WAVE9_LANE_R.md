@@ -336,6 +336,13 @@ findings under 450 rows that are correct by construction. What they leave behind
 is a *live* `RtOriginal` returning null at cutover — a different question
 (the raw-residue verdict list), and not this lane's today.
 
+> **SUPERSEDED IN ROUND 3, and this paragraph is left standing as the record of a
+> wrong scoping decision.** "Oracle machinery by definition" is true of the macro
+> and false of nine of its call sites, which were reaching ported functions on live
+> paths. The scope came from the lane brief and the reasoning was the brief's; what
+> this lane owes the reader is that it did not test the premise before accepting it.
+> See "Round 3" below.
+
 ### The two, and why the first one is the best kind of finding
 
 * **`runtime/src/object/internal.cpp:126` `RandomRand`.** Its own comment says
@@ -444,12 +451,15 @@ is what will execute it. Saying so is the point of this paragraph.
 `MeshInstance::UpdateHierarchy` had been running the DLL's copy on every node of
 every model ever since.
 
-**The root cause is a missing spelling, not carelessness.** Every one of these
-sites reached for `RT_ORIGINAL_ONCE` while correctly worrying about
-`GetProcAddress` cost (`reference_rtoriginal_is_getprocaddress.md`, 5.6 points of
-sim time) - it was the only *cached* form the tree offered. `RT_EXPORT_ONCE`
-(`runtime/funcs/rt_port.h`) is now its port-registry twin, so the right thing is as
-cheap to write as the wrong one.
+**The root cause is a missing spelling, not carelessness** - and that reframing is
+worth more than the thirteen conversions. Every one of these sites reached for
+`RT_ORIGINAL_ONCE` while correctly worrying about `GetProcAddress` cost
+(`reference_rtoriginal_is_getprocaddress.md`, 5.6 points of sim time): it was the
+only *cached* form the tree offered, so thirteen apparently separate lapses are one
+absent primitive. `RT_EXPORT_ONCE` (`runtime/funcs/rt_port.h`) is now its
+port-registry twin, which makes the right thing as cheap to write as the wrong one.
+**Without it the class regrows**, because the pressure that produced all thirteen -
+do not pay `GetProcAddress` on a hot path - is still there and still correct.
 
 One conversion was deliberately **not** made, and the contrast is worth keeping:
 `Audio::Configuration::Save`'s readback shadow still uses `RT_ORIGINAL_ONCE` while
@@ -491,13 +501,19 @@ distinctions that take the answer from 12 to 0 without an allowlist:
 
 **And the checker immediately earned its keep.** Re-run after another lane's ports
 landed, it flagged **two new bypasses that no edit of mine created**:
-`Timer::SecondsToTicks` and `TicksToSeconds` in `engine/loops.cpp`. Both were
-UNPORTED when that file was written - so raw and non-raw reached the same body and
-the choice was purely about `GetProcAddress` cost, with a paragraph of comment
-saying so. **Another lane porting them turned those two lines into port bypasses
-with nothing in that file changing.** Both converted. This is the argument for the
-checker over any amount of manual sweeping: the defect can be created by a commit
-somewhere else entirely.
+`Timer::SecondsToTicks` and `TicksToSeconds` in `engine/loops.cpp`. **Both lines
+were CORRECT WHEN WRITTEN.** Both names were unported then, so raw and non-raw
+reached the same body and the choice was purely about `GetProcAddress` cost - with
+a paragraph of comment explaining exactly that reasoning. **Another lane porting
+those two functions turned both lines into port bypasses, with nothing in that file
+changing.** Both converted.
+
+That is the argument for the checker over any amount of manual sweeping, and it is
+stronger than "a sweep might miss one": **a sweep cannot catch this by
+construction.** There is no edit to review, no diff to read, and no author who did
+anything wrong. The defect is created by a commit somewhere else entirely, and only
+something that re-derives the ported set and re-asks the question can see it. Run
+`port_bypass_audit.py` after every landing, not after every edit.
 
 ### Measured - and this time the effect is visible in the numbers
 
