@@ -594,3 +594,30 @@ they probably are.
    test for the whole instrument**, and it expires as soon as lane N lands the fix — so run it
    before, not after.
 3. Then the full matrix, for the tree-wide list of sites nobody suspected.
+
+### What the detector CANNOT see — read this before treating a clean sweep as a result
+
+It is a floor, not a ceiling, in three specific ways. None of them is hypothetical; each falls
+out of how the instrument works.
+
+1. **It only looks inside the compared byte range, and that range is a LOWER BOUND.**
+   `widgets_input.cpp`'s own header says so: `sizeof(OurStruct)` is a lower bound on the true
+   retail object, "so the oracle proves everything IN that range and is silent about anything
+   past it". A released pointer parked past that boundary is invisible to the detector for
+   exactly the same reason it is invisible to `RT_DIFF_BYTES`. Finding 1 was catchable only
+   because `+0xd0` happens to fall inside `sizeof(NumberElement)` = 0xE0; `TextElement`'s cached
+   text pointer at **+0xf8 does not**.
+2. **It needs the two sides to DIFFER.** If our body releases a buffer and the DLL's body then
+   reallocates into the same address — likely, since it is the block that was just freed — both
+   sides hold the same pointer, nothing differs, and the detector never runs. Finding 1's own
+   data shows that recycling happening one call later.
+3. **It knows exactly one header convention**, the `{length, refcount}` dwords at `[-8]` that a
+   `System::String` uses. A refcounted object with a different header, or a released non-string
+   allocation, reads as ordinary memory.
+
+So a clean detector run means **"no site of the shape it can see"**, which is the same
+sentence `port_bypass_audit.py`'s gate row already carries, and for the same reason: a checker
+that cannot follow the thing it is chasing must say what it did not look at. The two live
+mitigations are the self-test (proving it can still fire at all) and INVERT (which needs no
+difference and no header convention — it just corrupts the heap and crashes, in the function
+that did it).
