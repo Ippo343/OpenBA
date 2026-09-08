@@ -126,6 +126,16 @@ extern const ArraySpec kSpec_GraphSeries; // 0x1800417d0   NON-TRIVIAL
 // only place it gets driven at all.
 extern const ArraySpec kSpec_PkgEntry;    // 0x1800298f0   NON-TRIVIAL
 
+// Wave 9 lane VIDL. DEFINED IN runtime/src/engine/mainloop_video.cpp, not in
+// array.cpp — the only spec in this table that lives outside the Collection
+// port. It is declared here for one reason: so array_probe.cpp can drive
+// `Array<MainLoop::VideoResource>::SetSize` (0x18004f620) against the SHIPPED
+// body through the same machinery as the other sixteen. Its element assign
+// calls System::Filename's copy ctor and its destroy is the 0x180034440 entry
+// point that lane registers, so the spec sits next to them rather than next to
+// this declaration.
+extern const ArraySpec kSpec_VideoResource;  // 0x18004f620   NON-TRIVIAL
+
 }  // namespace rtcoll
 
 // Runs the synthetic-subject replay probe. Driven by rtcoll::g_probePending —
