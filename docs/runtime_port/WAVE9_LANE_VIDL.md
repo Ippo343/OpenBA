@@ -146,6 +146,29 @@ see, so regenerating picks them up: **BaseTypeInfo rows 46 → 53**.
 Had the port shipped without the regeneration it would have moved `unsatisfied`
 by **+7** and closed nothing — a strictly worse tree than not porting at all.
 
+### 3.1 RE-CHECKED AGAINST THE CURRENT TIPS — all eleven covered, and my rows are now redundant
+
+Lane TYPE has since minted **every** exported `?_typeInfo@` (104 of them),
+closing attempt 20's wall, which it found by the failure mode this section
+predicted: `Factory::Startup` crashing on a SINGLE unminted `?_typeInfo@`. So
+this section's finding and TYPE's are the same finding from two directions.
+
+Re-checked at four commits rather than trusting this morning's number:
+
+| tip | `_typeInfo` rows | of MY eleven, missing |
+|---|---|---|
+| `133e32a` (this branch) | 53 | **none** |
+| `798bfd3` | 104 | **none** |
+| `be75284` | 104 | **none** |
+| `b381bb8` | 104 | **none** |
+
+**TYPE's 104 is a strict superset of my 53**, so my seven added rows are
+REDUNDANT at any current tip, not contradictory. The two commits touch the same
+generated file and WILL conflict on merge; the resolution is to take TYPE's
+side, or equivalently re-run `tools/rt_mint_gen.py` on the merged tree. Nothing
+of this lane's is lost either way — the mint rows were never the deliverable,
+they were the thing that had to be true for the deliverable to work at cutover.
+
 **A second number this lane got wrong and corrected:** the port banner said
 *six* until the generator said *seven*. Six was counted off the table by eye.
 The correction is left visible in the source.
@@ -283,6 +306,56 @@ held in between.** Two of this lane's `game_dir_lock.sh acquire` calls won the
 lock and then EXITED, leaving it held by a lane that was not using it, while a
 separate contender spun against it. Acquire and use in ONE script.
 
+### 4.2.3 THE FIRST EXE WAS CONTAMINATED. It was re-measured clean, and nothing moved.
+
+After reporting, a `git status` of this worktree — run *correctly*, see below —
+found **lane GFXD's files in it**: `runtime/src/graphics/wave9_lane_gfxd.cpp`
+(58,963 bytes) untracked, plus 14 uncommitted lines in `rt_graphics_port.cpp`
+and 15 in `scene.cpp`. The Makefile globs `runtime/src/*/*.cpp`, so
+`wave9_lane_gfxd.o` (62,711 bytes, 16:26) **was linked into the exe measured at
+17:16**, and that run's own log carries
+`[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered`.
+
+Nothing of GFXD's reached this branch — `git diff --stat 085782d 133e32a` is
+exactly the nine files in §7, which is the plumbing-commit recipe doing the job
+it is mandated for. But **the binary was not reproducible from this branch
+alone**, so the numbers were re-taken.
+
+The strays were PRESERVED to a scratchpad (lane PLAT's precedent — a stray may
+be the only copy) and not deleted, the worktree was restored to the tip, and
+the exe was rebuilt: md5 `139233a979033694b9c0dbacab14c884`, against the
+contaminated `99155c623fea84a26493308653fe8ac8`. **Different binaries**, so the
+contamination was real and in the output, not just on disk.
+
+Clean re-run, same environment, same seed:
+
+| | contaminated (17:16) | CLEAN (17:24) |
+|---|---|---|
+| my identity line | present | **present** |
+| **GFXD identity line** | **present** | **ABSENT** |
+| `OnVideoError` | calls=1 divergences=0 | **calls=1 divergences=0** |
+| `OnVideoRestart` | calls=1 divergences=0 | **calls=1 divergences=0** |
+| `SetSize @0x18004f620` | calls=995 divergences=0 | **calls=995 divergences=0** |
+| probe | 195 comparisons, 0 mismatches | **195, 0** |
+| effectiveness / neg control | 178/195 · 17/162 | **178/195 · 17/162** |
+| `[RtResolve]` | 0 misses | **0 misses** |
+| tree-wide sites | 537 | **535** |
+| crash log | 0 bytes | **0 bytes** |
+
+**Nothing moved except the site count**, which fell by exactly GFXD's two — an
+internal consistency check on the claim that the only difference was GFXD.
+`calls=995` was the number most at risk (it is the count of live video/graphics
+`Object::External`s at frame 400, and GFXD registers `Renderer::Reset` /
+`AddScene` / the `Camera` ctors), and it did not move. The archived evidence log
+is the CLEAN run.
+
+**The `git status` that found this was itself the second attempt.** The first
+exported `GIT_DIR` and `GIT_WORK_TREE` by hand, which compares the SHARED
+repository's HEAD against this worktree and reports the entire branch difference
+as local modification — several hundred bogus `M` lines that hid the four real
+ones. A worktree's own `.git` file already points at the right gitdir; overriding
+it makes the tool answer a different question, confidently.
+
 Three controls, all of which fired:
 
 * **EFFECTIVENESS** — 178 of 195 comparisons changed something. A green run
@@ -409,13 +482,31 @@ and +0x08 only) fails there and nowhere else.
    `_capacity` is stale from the first, which is the one field retail
    deliberately does not clear.
 
+8b2. **A neighbour's code was linked into the FIRST exe measured.** Caught,
+   re-measured clean, nothing moved (§4.2.3) — but it happened, and the only
+   reason it was caught is a `git status` run after the lane had already
+   reported. Anything measured in this session that was not re-taken on a
+   verified-clean tree should be treated as carrying the same risk.
+
 8c. **All three sites report `worked=?`, not a number.** They do not declare
    did-work to the diff harness, so their branch coverage is UNKNOWN rather
    than measured. `calls=` plus the `[DeviceLost] … COMPLETE` line is what
    establishes that the bodies ran; nothing establishes which arms inside them
    were taken.
 
-9. **The census's own blind spots apply here as everywhere.** The
+9. **The forced-device-lost driver reaches the NOTIFY-AND-RECREATE half only,
+   and that does NOT bind either of these bodies.** `BANISHED_FORCE_DEVICE_LOST`
+   substitutes `DXGI_ERROR_DEVICE_RESET`, which is one of the two values that
+   SKIP `GetDeviceRemovedReason`, so the reason-query path is unexercised by
+   construction (lane ENGIO's own limit). Checked rather than assumed:
+   **neither `OnVideoError` nor `OnVideoRestart` references
+   `GetDeviceRemovedReason`, `DXGI_ERROR_DEVICE_REMOVED`, or any `hr` at all** —
+   grep of `mainloop_video.cpp` returns nothing. That branch lives entirely in
+   `dx11/src/contextdata.cpp`, which is not this lane's. So the limit is real
+   for the DRIVER and vacuous for these two ports; it is recorded here so the
+   next reader does not have to re-derive that.
+
+10. **The census's own blind spots apply here as everywhere.** The
    `unsatisfied_export_scan` output names two resolves that go through a wrapper
    with a non-literal argument and are invisible to it, and `addr_door_audit`
    reports 15 non-literal call sites and 8 non-literal registrations invisible
