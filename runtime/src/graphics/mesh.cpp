@@ -329,8 +329,8 @@ void* RtObjectExternalVtable() {
 // (0x1801fe7b0). GetNodeToWorld and RootAnimationOffset index the instanced
 // pose pool through it.
 void* RtAnimationManager() {
-    static void** slot = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@AnimationManager@Graphics@@0PEAV12@EA"));
+    void** slot = RT_DATA_SLOT(void**,
+        "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
     return slot ? *slot : nullptr;
 }
 

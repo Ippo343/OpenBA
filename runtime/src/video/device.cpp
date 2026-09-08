@@ -117,22 +117,29 @@ constexpr const char* kConfigurationSave        = "?Save@Configuration@Video@@QE
 constexpr const char* kGetDefaultResolution     = "?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z";
 
 // ---- The three singletons these bodies read --------------------------------
-// Resolved through ResolveExportRaw (the DLL's export table) because they are
-// DATA symbols: the registry holds function redirections only, and nothing has
-// registered — or can register — a data slot before cutover.
+// Exported DATA symbols: the export address IS the pointer slot.
+//
+// The comment here used to say these went through ResolveExportRaw "because the
+// registry holds function redirections only, and nothing has registered — or
+// can register — a data slot before cutover." Both halves were wrong by Wave 9.
+// The code called ResolveExport, not Raw; and RegisterRuntimeExport is a plain
+// name->pointer map that does not care whether the pointer is code or data, so
+// a data slot CAN be registered and cutover is exactly when it must be. Going
+// through ResolveExport is therefore right, and RT_DATA_SLOT makes the late
+// registration reachable by refusing to cache a null.
 Device** DeviceSingletonSlot() {
-    static Device** p = reinterpret_cast<Device**>(
-        ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
+    Device** p = RT_DATA_SLOT(Device**,
+        "?_singleton@Device@Video@@0PEAV12@EA");
     return p;
 }
 Configuration** ConfigSingletonSlot() {
-    static Configuration** p = reinterpret_cast<Configuration**>(
-        ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA"));
+    Configuration** p = RT_DATA_SLOT(Configuration**,
+        "?_singleton@Configuration@Video@@0PEAV12@EA");
     return p;
 }
 void** PersistenceSingletonSlot() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
+    void** p = RT_DATA_SLOT(void**,
+        "?_singleton@Persistence@IO@@0PEAV12@EA");
     return p;
 }
 

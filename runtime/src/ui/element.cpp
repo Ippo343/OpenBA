@@ -261,20 +261,21 @@ void* ElementVTable() {
 // The two Object::BaseTypeInfo statics SetOffsets reads. Their FIRST DWORD is
 // the type id; retail loads it as `MOV EDX,[0x1801f9d68]`.
 uint32_t ClipRegionTypeId() {
-    static const uint32_t* p = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A");
     return p ? *p : 0u;
 }
 uint32_t ScrollTypeId() {
-    static const uint32_t* p = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A");
     return p ? *p : 0u;
 }
 
 // Video::Device::_singleton (exported, 0x1801fe7a8). GetPaddedSize reads the
 // screen size out of the pointed-to Device at +0x04 / +0x08.
 void* VideoDeviceSingleton() {
-    static void** p = reinterpret_cast<void**>(ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
+    void** p = RT_DATA_SLOT(void**,
+        "?_singleton@Device@Video@@0PEAV12@EA");
     return p ? *p : nullptr;
 }
 

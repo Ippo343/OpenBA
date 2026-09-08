@@ -32,6 +32,7 @@
 #include <cmath>
 #include <atomic>
 #include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
+#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -243,8 +244,8 @@ static void LoadUIMaterial_Step3(uint8_t* p) {
 
     // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
     // resolve Graphics::Material's BaseTypeInfo from the Runtime export).
-    static const uint32_t* s_matTypeInfo = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* s_matTypeInfo = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A");
     bool isMat = false;
     if (mat && s_matTypeInfo && fn_IsDerivedFrom)
         isMat = fn_IsDerivedFrom(mat, *s_matTypeInfo);
@@ -276,8 +277,8 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 
     // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
     // Runtime (the exe .rdata slot 0x140151ef0 that retail reads is unfilled in SA).
-    static const uint32_t* s_extListTypeInfo = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A"));
+    const uint32_t* s_extListTypeInfo = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
     bool isList = false;
     if (list && s_extListTypeInfo && fn_IsDerivedFrom)
         isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
@@ -350,8 +351,8 @@ static void LoadDiseaseList_Step1(uint8_t* p) {
 
     // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
     // exe .rdata slot retail reads is unfilled in standalone).
-    static const uint32_t* s_extListTypeInfo = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A"));
+    const uint32_t* s_extListTypeInfo = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
     bool isList = false;
     if (list && s_extListTypeInfo && fn_IsDerivedFrom)
         isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);

@@ -285,8 +285,8 @@ RtEngine::MainLoop* MainLoopSingleton() {
 // UI::Dialog's BaseTypeInfo. Both Load bodies read its FIRST DWORD as the type
 // id (`MOV EDX,[0x1801faa88]`), exactly as element.cpp reads its two.
 uint32_t DialogTypeId() {
-    static const uint32_t* p = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A"));
+    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
+        "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A");
     return p ? *p : 0u;
 }
 

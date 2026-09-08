@@ -1,255 +1,272 @@
-# Wave 9 — Lane H: hardening the bypass checker, and what it could not see
+# Wave 9, lane H — "caches a null forever" is a class, not a bug
 
-**Question the lane answers:** `tools/port_bypass_audit.py` is the only instrument
-in this project that can see a **port bypass** — a function that is ported,
-registered, counted by the census and reported clean by the diff oracle, while the
-process runs the DLL's body. It reported a clean tree. **Was that "no bypasses" or
-"none of the shape I can see"?**
+2026-09-08, `wave/upgrade-path-complete`. **Source only. Nothing was built, deployed or run**
+— lane N holds the game directory. Every file passes
+`g++ -std=c++17 -fsyntax-only -Wall -Wextra` (a syntax check, not a build).
 
-It was the second. Two blind spots, both measured, both now closed, and the second
-one was not in the brief — it fell out of the cross-check.
+Follows [WAVE9_LANE_E3.md](WAVE9_LANE_E3.md) §8, where `?_singleton@MemoryAllocator` turned
+out to be one instance of an idiom rather than one bug. The scope was: enumerate the class
+properly, convert it, prove the conversion changes nothing *today*, and find any site whose
+null is load-bearing before sweeping.
+
+---
+
+## 1. The defect, restated precisely
+
+```cpp
+static T* p = reinterpret_cast<T*>(ResolveExport("?_singleton@..."));
+return p;
+```
+
+**The first caller fixes the answer for the whole process.** A miss caches null, and a
+registration that lands later — which is exactly how cutover mints the exported DATA the DLL
+used to provide — can never be picked up. Nothing says which symbol was missing: the consumer
+either swallows the null behind an `if` and silently does nothing, or dereferences it several
+frames away where the fault address names nothing.
+
+The correct form already existed in the tree (`runtime/src/object/internal.cpp:143`,
+`runtime/src/object/type_system.cpp:65` — `if (!g_x) g_x = Resolve(...)`), so nothing here is
+invented, only applied. And the property that makes this lane worth spending: **the retry form
+is behaviour-identical while the DLL answers**, so unlike every other cutover repair it is
+verifiable before cutover rather than on the day no instrument survives.
+
+---
+
+## 2. The enumeration — and the denominator I was working from was wrong
+
+`tools/resolve_cache_audit.py` (new). It joins physical lines into logical **statements**
+before matching, because an earlier census tool in this project silently missed multi-line
+constructs (`reference_census_three_blind_spots.md`) and most of these resolves span two or
+three lines.
+
+My first pass reported **206** frozen sites and I nearly reported that number. It was wrong,
+and wrong in the most dangerous direction: **`RT_ORIGINAL_ONCE` and `RT_EXPORT_ONCE` are
+macros that manufacture this exact idiom**, and their 282 call sites contain no
+`ResolveExport(` text at all, so the tool could not see a single one of them. The audit now
+counts the macro spellings too. Real population:
+
+| bucket | what it means | before |
+|---|---|---:|
+| **FROZEN** | a null is cached for the life of the process | **481** |
+| RETRY | re-resolves on a miss; the correct form | 79 |
+| DIRECT | not cached | 1015 |
+| | **total doors** | **1575** |
+
+The 481 splits as: 212 `RT_ORIGINAL_ONCE`, 64 `RT_EXPORT_ONCE`, 139 hand-rolled
+code/address, 40 hand-rolled `??_7` vtable, **26 hand-rolled exported DATA**.
+
+`ResolveAddr(Module::Exe, …)` is deliberately excluded throughout: the exe does not go away
+at cutover, so those doors do not change their answer.
+
+### Severity is not uniform, and it is not a matter of taste
+
+| kind | what a cached null does | count |
+|---|---|---:|
+| exported **DATA** (`?_singleton@`, `?_typeInfo@`) | swallowed by an `if`, or dereferenced in another subsystem. **Silent, and far from its cause.** | 26 |
+| `??_7` vtable | stamped into an object; dies as **EXEC-of-0** at the first virtual call, and the VEH handler names the detour | 40 |
+| code / function pointer | **EXEC-of-0** at the call | 139 + 64 |
+| `RT_ORIGINAL_ONCE` | the oracle door — see §6, it is frozen **by design** | 212 |
+
+So the swallowing subclass the brief asked for is the **26 DATA sites**, and it is now
+enumerated rather than sampled. My earlier "I checked 4 of 22 and found 3" undercounted the
+population and overcounted my confidence; the real membership is below.
+
+### The 26, ranked by how early cutover executes them
+
+Tier 1 is provable, tiers 2 and 3 are the order `Engine::Startup` brings subsystems up and
+should be read as approximate.
+
+| tier | symbol | sites |
+|---|---|---|
+| **1 — first, before anything else can allocate** | `?_singleton@MemoryAllocator@System@@` | `runtime/src/system/allocator.cpp:647` |
+| 2 — inside `Engine::Startup` | `?_singleton@Device@Video@@` (×3), `?_singleton@Configuration@Video@@` (×2), `?_singleton@Persistence@IO@@` (×3), `?_singleton@Device@Input@@`, `?_singleton@Device@Audio@@`, `?_singleton@MainLoop@Engine@@` | `video/device.cpp:123,128,133`, `video/buffers.cpp:111,115`, `ui/element.cpp:276`, `input/input.cpp:93,588,616`, `audio/audio.cpp:875`, `engine/engine.cpp:200,209` |
+| 3 — first frames / first load | `?_singleton@FileSystem@IO@@` (×3), `?_singleton@AchievementManager@Achievement@@`, `?_singleton@AnimationManager@Graphics@@`, and six `?_typeInfo@…` | `achievement/achievement_manager.cpp:264,274,281`, `graphics/mesh.cpp:331`, `achievement/goal.cpp:167`, `engine/loops.cpp:287`, `ui/element.cpp:263,268`, `code/Game/Game/gameupdateloop*.cpp` (×4), `standalone/achievement_probe.cpp:310` |
+
+Tier 1 is worst not because its consequence is worse but because it happens **first**: it
+fails before any other subsystem gets a chance to fail more loudly, and its fault is a read of
+`null + 0x640` inside `MemAlloc` with nothing naming `_singleton`.
+
+---
+
+## 3. What changed
+
+**One helper, two macro bodies, 26 call sites.**
+
+`runtime/funcs/rt_resolve_cache.cpp` (new) — `RtResolveCached(mangled, &cache)`:
+
+* a **hit** is cached and returned on every later call, so the steady-state cost is one plain
+  load and there is no `GetProcAddress` in the hot path — which matters, because two of those
+  in `System::Time` once cost 5.6 points of sim time
+  (`reference_rtoriginal_is_getprocaddress.md`);
+* a **miss** is not cached. The next call retries, so a late registration is picked up;
+* a miss is **named once and counted**. `RtResolveMissCount()` / `RtResolveMissSummary()`.
+
+`runtime/funcs/rt_port.h`:
+
+* `RT_EXPORT_ONCE` now goes through the helper. **That one edit moves 64 call sites**, none of
+  which needed touching.
+* new `RT_DATA_SLOT(T, MANGLED)` for exported data slots.
+* `RT_ORIGINAL_ONCE` deliberately unchanged — see §6.
+
+The 26 DATA sites become uniform three-liners:
+
+```cpp
+ MemoryAllocator** SingletonSlot() {
+-    static MemoryAllocator** slot = reinterpret_cast<MemoryAllocator**>(
+-        ResolveExport("?_singleton@MemoryAllocator@System@@0PEAV12@EA"));
++    MemoryAllocator** slot = RT_DATA_SLOT(MemoryAllocator**,
++        "?_singleton@MemoryAllocator@System@@0PEAV12@EA");
+     return slot;
+ }
+```
+
+`standalone/main.cpp` gains one line: `RtResolveMissSummary()` beside `RtDiffSummary()`.
+
+**Also corrected, a stale comment that was wrong in both halves.**
+`runtime/src/video/device.cpp:120` said these singletons went through `ResolveExportRaw`
+"because the registry holds function redirections only, and nothing has registered — or can
+register — a data slot before cutover." The code called `ResolveExport`, not Raw; and
+`RegisterRuntimeExport` is a plain name→pointer map that does not care whether the pointer is
+code or data, so a data slot **can** be registered and cutover is exactly when it must be.
+That comment, left standing, would have argued a future reader out of lane C2's mint.
+
+### Interaction with lane C2
+
+This lane and C2's are two halves of one repair and they only work together. C2 mints
+`_singleton` as real storage via `RegisterRuntimeExport`; that registration is **only
+reachable** because `ResolveExport` is registry-first and these sites now retry instead of
+having frozen a null before C2's registration ran. Neither half is sufficient alone.
+
+---
+
+## 4. Proving it changes nothing — the denominator, before and after
+
+A converted site contains no `ResolveExport(` text, so it would **vanish** from the first
+version of the audit — and a site vanishing reads exactly like a clean pass. That has happened
+twice in this wave (`reference_documenting_a_check_can_delete_it.md`). The audit therefore
+counts the macro spellings, so a conversion is a bucket **move**:
+
+```
+BEFORE (clean worktree at HEAD, same tool):  FROZEN=417  RETRY=143  DIRECT=1015  doors=1575
+AFTER  (working tree):                       FROZEN=391  RETRY=169  DIRECT=1016  doors=1576
+```
+
+Every unit accounted for:
+
+* FROZEN −26 / RETRY +26 — the 26 hand-rolled DATA conversions;
+* DIRECT +1, doors +1 — `rt_resolve_cache.cpp`'s own `ResolveExport` call, the one door this
+  lane adds;
+* nothing else moved, and **nothing disappeared**.
+
+**The tool cannot show the macro edit, and I am not going to let the numbers imply it did
+nothing.** It keys on the macro *spelling*, and the spelling did not change — only the
+contract behind it. So the 64 `RT_EXPORT_ONCE` sites are counted RETRY in *both* columns even
+though they were frozen-in-fact before this lane. Contract-level, the true movement is:
 
 | | before | after |
+|---|---:|---:|
+| frozen **in fact** | **481** | **391** |
+| retry in fact | 79 | 169 |
+
+**90 sites left the frozen class: 26 by hand, 64 by one macro edit.**
+
+Reconciling the audit against grep, because they disagree and the difference matters: grep
+finds 218 lines containing `RT_ORIGINAL_ONCE(`; the audit finds 212 sites. The gap is 5
+comment-only lines plus one statement at `runtime/src/engine/loops.cpp:828` carrying two uses.
+212 + 5 + 1 = 218. The audit counts **statements**, which is what "a site" means here; grep
+counts lines. Stated because an unexplained six-unit gap in an audit is how the last two
+tool defects in this wave looked.
+
+### The live measurement — prepared, NOT taken
+
+The point of this lane is that it is verifiable today. That verification needs the directory,
+which lane N holds, so it is specified here and owed:
+
+```bash
+mingw32-make standalone-debug && mingw32-make sa-deploy
+tools/rt_run.sh h1 -- BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1 \
+                      BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=60
+tools/rt_run.sh h2 -- BANISHED_RT_DIFF=1 BANISHED_AUTOLOAD=Save9 \
+                      BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=60
+BANISHED_RT_DIFF=1 tools/stress_run.sh --debug --frames 1500
+```
+
+Pass conditions:
+
+1. `[RtResolve] 0 misses — every cached resolve in this run found its symbol.` **A single
+   `[RtResolve] MISS` line means a converted site is resolving to null today**, which the old
+   frozen form would have hidden. Finding one would be a result, not a failure of the lane.
+2. The `[RtDiff] ==== N sites, M calls, D divergences ====` totals match a same-binary run
+   with the conversion reverted. **State the site count as well as the divergence count** —
+   sites appearing or disappearing is the signal, and a matching `divergences=0` over a
+   different denominator proves nothing.
+3. Boot reaches gameplay and the achievement census is unchanged.
+
+There is no negative control to design here: the conversion is not a measurement, it is a
+behaviour change whose claim is "nothing changed". The falsifier is condition 2's denominator.
+
+---
+
+## 5. What this does NOT fix — a second defect class from the same root, live TODAY
+
+`if (!cache) cache = Resolve(...)` still freezes a **non-null** answer. So a site whose first
+call happens **before `RuntimePortInit()`** captures the DLL's address permanently and bypasses
+a port registered afterwards — the port-bypass defect
+(`reference_bypassed_port_needs_a_source_checker.md`), frozen in, and it is a live bug today
+rather than a cutover one.
+
+Retry does not touch it, because retry only re-resolves a null. Anyone reading "frozen → retry"
+as a fix for early snapshotting will be wrong. The real fix is ordering (resolve after
+`RuntimePortInit`) or not caching at all, and it needs its own lane and its own audit — the
+audit's DIRECT bucket (1016) and its ordering are exactly the material.
+
+---
+
+## 6. Requirement 4 — is any null here load-bearing?
+
+Lane V2 found one raw door that must never be converted (`RemoveGraphs` **is** the registered
+port of its own name, so resolving through the registry would return itself and recurse to
+stack death). Checked for the equivalent before sweeping:
+
+**`RT_ORIGINAL_ONCE` is the load-bearing case, and it is 212 sites.** It is the *oracle* door:
+`ResolveExportRaw`, deliberately registry-blind, whose entire job is to reach the **shipped**
+body. Converting it to the retry helper would (a) route it through `ResolveExport` and make
+every oracle compare ours against ours, and (b) at cutover retry a `GetProcAddress` against an
+absent module on every call. WAVE9.md §2 already says these call sites must be **compiled
+out**, not made to return null. Left untouched, deliberately.
+
+**Self-resolve candidates: 3, all checked, none recursive.** The audit's `--selfres` mode
+lists names that are both resolved (non-Raw) and registered — 455 tree-wide, which is the
+design, since that is how our call sites reach our ports. Narrowing to *the same file doing
+both*, which is the `RemoveGraphs` shape, leaves three:
+
+| site | resolves | recurses? |
 |---|---|---|
-| NAME-door sites the classifier gave a verdict to | 361 | **437** |
-| …of which `OK-RESOLVE-ONLY` (asserted, no evidence) | 8 | **5** (each now naming the local it checked) |
-| Bypasses found on the known-answer fixture | **1 of 3** | **3 of 3** |
-| Raw-door statements the `--by-name` grep sees that the parser does not | (no such mode) | **0 of 378** |
-| `rawdoor_audit.py --self-test` | **FAILS** (exit 2) | passes, with a positive control |
-| New bypasses in the tree as it stands | — | **0** |
+| `runtime/src/engine/loops.cpp:947` | `?Load@Loader@Engine@@…` | **no** — a different function in the file registers it; documented as intentional |
+| `runtime/src/ui/widgets_input.cpp:194` | `?SetValue@NumberEditElement@UI@@…` | **no** — the ported `NumberEditElement_SetValue` (`:316`) does not call the accessor; only `:438/:454/:537`, other functions, do |
+| `runtime/src/system/thread_win.cpp:142` | `?ThreadFunc@Thread@System@@…` | **no** — `RtSystem_Thread_ThreadFunc` (`:284`) does not call it; only the ctor at `:168` does, which is the intent |
+
+None of the three is in the conversion set (all are CODE, not DATA). **No load-bearing null
+was found in the 26 converted sites.**
 
 ---
 
-## 1. Blind spot one: `called` meant "on this line"
+## 7. Files, and the do-not-touch list
 
-`rawdoor_audit.py` computed, per raw-door site, whether the resolve was
-*immediately* applied to an argument list:
+Touched: `runtime/funcs/rt_resolve_cache.cpp` (new), `tools/resolve_cache_audit.py` (new),
+`runtime/funcs/rt_port.h`, and the 14 files holding the 26 sites, plus one line in
+`standalone/main.cpp`.
 
-```c
-RT_ORIGINAL_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);   // seen
-```
+Not touched, as instructed: anything in the WorkComponent / work-scheduler family (none of the
+26 is in it), `standalone/rt_data_mint*.*` (lane C2's), and `BANISHED_RT_ALLOC` was not armed
+and not set.
 
-`port_bypass_audit.py` consumed that bit and, when it was false, returned
-**`OK-RESOLVE-ONLY` — "pointer stored, not called here"**. That verdict is correct
-for a pointer that is genuinely only stored. It is wrong the moment the pointer is
-called, and the calling shape is the *common* one:
+## 8. Carried forward, belonging to no current lane
 
-```c
-ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
-release(&dateStr);          // <- a separate statement
-release(&timeStr);
-```
-
-`runtime/src/system/value_types.cpp` held **three** live-path `String::Release`
-bypasses. The audit reported **one**. Two more of the same shape
-(`widgets_input.cpp`'s `StringToInteger()` and `RealNumberEditElementSetValue()`
-accessors, where the pointer escapes by `return`) were reported by no checker at
-all. All five were found by a human grepping a mangled name.
-
-**The fix.** `rawdoor_audit.scan()` gained a second pass. When a raw resolve is
-assigned to something, the target is followed through the **brace-matched
-enclosing function** and every later use is recorded — `call`, `escape-return`,
-`escape-arg` — each with the guard state of *its own* line. Pairing is by
-assignment target and enclosing function, **never by a line window**: a window is
-what let a twelve-line comment delete a site from `resolve_fallback_audit.py`
-(166 → 162, reading as a clean pass), and the positive fixture deliberately puts a
-long comment between the resolve and the call so that cannot come back silently.
-
-`port_bypass_audit` now treats "immediate call **or** unguarded later use" as
-called. `OK-RESOLVE-ONLY` survives only where it is *checked*, and now prints its
-evidence:
-
-```
-OK-RESOLVE-ONLY  runtime/src/audio/audio.cpp:840  (in RtAudio_Scene_StopEffect)
-    ?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z
-    [pointer stored; no unguarded use of `isPlaying` in RtAudio_Scene_StopEffect]
-```
-
-That is lane V's `?IsEffectPlaying` distinction — resolve-outside-guard harmless,
-call-outside-guard fatal — **verified** rather than inferred from the absence of an
-argument list. Of the eight old `OK-RESOLVE-ONLY` rows, three are these genuine
-ones; four were the `IO::Serializer` ctor/dtor/`GetVersion`/`GetEncoding` ports
-whose body *is* a call to the DLL under their own registered name (`OK-DELEGATING`,
-a cutover row, not a bypass) and one is the `!g_portOn` fallback arm
-(`OK-PORT-OFF`). All five had been getting the right *exit code* for the wrong
-*reason*.
-
-### The proof, on the known answer
-
-Two independent demonstrations, because "it now finds three" is only meaningful
-against a version that found one.
-
-**a. Same tree, same census, only the checker changes.** `git archive 955f78a~1`
-into a scratch snapshot, plus the one `RegisterRuntimeExport` line that 955f78a
-added for `?Release@String@System@@AEAAXXZ` — i.e. exactly the state in which the
-three bypasses existed. Denominator identical in both runs (364 sites), so this is
-not a population change:
-
-```
-OLD tools:  BYPASS=1   OK-RESOLVE-ONLY=10
-  BYPASS          runtime/src/system/value_types.cpp:387
-  OK-RESOLVE-ONLY runtime/src/system/value_types.cpp:314   <-- the miss
-  OK-RESOLVE-ONLY runtime/src/system/value_types.cpp:333   <-- the miss
-
-NEW tools:  BYPASS=3
-  BYPASS runtime/src/system/value_types.cpp:314  [`release` call at :315, outside every guard]
-  BYPASS runtime/src/system/value_types.cpp:333  [`release` call at :356, outside every guard]
-  BYPASS runtime/src/system/value_types.cpp:387
-```
-
-**b. A committed fixture, so it stays proved.**
-`tools/fixtures/bypass_value_types_before.cpp` is that file verbatim, and
-`port_bypass_audit.py --self-test` asserts the hardened classifier reports BYPASS
-at exactly its lines 330 / 349 / 403 **and** that the repaired tree reports none.
-If either half stops holding, the self-test exits 2.
-
----
-
-## 2. Blind spot two, which was not in the brief: 76 sites with **no verdict at all**
-
-The `--by-name` cross-check (§3) was built to be a superset, and its first run
-reported **79 raw-door statements the parser had not seen**. Expect your first
-number to be too big: 3 of the 79 were an artefact of my own reporting — I printed
-the line of the *name literal* while the parser records the line of the *door*, so
-identical sites read as a disagreement. Fixed, and the remaining **76 were real**.
-
-The macro sweep read mangled names from the resolve's **own line**. The normal
-formatting in this tree puts the name on the next one:
-
-```c
-RtOriginal<Box*(*)(const Box*, Box*, const Vector3*)>(
-    "?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z")(self, &theirs, p);
-```
-
-With no name on the door's line the site had no candidate, and the loop
-`continue`d past it — **not** classified `OK-` anything, simply absent. The
-population was 361 when it should have been 437. Every one of the three comment
-incidents this wave presented the same way: a clean pass over a silently smaller
-denominator.
-
-Names are statement-scoped now, bounded at the **next** raw door in the same
-statement so that
-
-```c
-VerifyDtorThunk(&sDtor, "??1DialogController@UI@@UEAA@XZ",
-                ResolveExportRaw("??_7DialogController@UI@@6B@"),
-                ResolveExportRaw("??1Internal@Object@@UEAA@XZ"));
-```
-
-does not attribute the three names to each other. All 76 recovered sites classify
-`OK-ORACLE` / `OK-DATA` — **none is a bypass** — but they were being counted as
-scanned while receiving no verdict, and that is the failure mode, not the verdict.
-
----
-
-## 3. `--by-name`: the cross-check that cannot be defeated by parsing
-
-For every mangled name we have **registered**, grep the tree for that literal and
-report every raw-door spelling of it. Pairing is by **statement** (back to the
-previous `;`/`{`/`}`, forward to the next `;`), not by a line window. Comments are
-stripped first — a policy comment containing a worked example of a mangled symbol
-made `export_name_audit.py` report a fabricated 663rd phantom, and this tool's own
-docstring quotes several.
-
-It has no verdicts; a grep cannot tell an oracle site from a bypass. What it
-answers is the question the parser cannot answer about itself: **is the parser's
-population the whole population?** It is a mode of the existing tool, not a fourth
-overlapping script, and it exits non-zero when it sees a statement the parser did
-not.
-
-```
-BY-NAME cross-check: 573 ported names; 378 raw-door statements mention one;
-                     0 of those the parser did NOT see
-```
-
-**Run it after every port that LANDS, not after every edit.** A site is correct
-when written and becomes a bypass when a *different* lane ports its name, with
-nothing in that file changing — `Timer::SecondsToTicks` did exactly that.
-
----
-
-## 4. The self-test now has an effectiveness control
-
-`rawdoor_audit.py --self-test` **was failing, correctly**: it asserted the checker
-still found the two defects lane V discovered, and both have since been repaired.
-
-Inverting those two to "assert clean" and stopping there would have produced a
-test that passes just as happily when the matcher is broken — the tautology the
-brief warned about, and the same shape as every incident this wave has paid for.
-So the self-test now has three legs, and the tree assertion is only one of them:
-
-| leg | fixture | asserts |
-|---|---|---|
-| **effectiveness control** | `tools/fixtures/rawdoor_positive.cpp` | 3 shapes MUST still be reported: the immediate call, the accessor (`release` called a statement later, across a long comment), and the static accessor that escapes by `return` — the two the old classifier could not see |
-| **false-positive control** | `tools/fixtures/rawdoor_negative.cpp` | 0 reported: a correctly guarded oracle call; `?IsEffectPlaying`'s resolve-outside-guard-with-all-calls-inside; and a pointer only *compared* (`probe == nullptr`), so `==` is not read as a store |
-| regression | the tree | the two repaired lane V sites are still clean |
-
-```
-positive fixture: 3 sites, 1 UNGUARDED-CALL, 2 DEFERRED-CALL
-negative fixture: 3 sites, 0 UNGUARDED-CALL, 0 DEFERRED-CALL
-tree:           550 sites, 27 UNGUARDED-CALL, 74 DEFERRED-CALL
-SELF-TEST OK
-```
-
-`port_bypass_audit.py --self-test` is the same idea against the known-answer
-fixture of §1.
-
----
-
-## 5. `DEFERRED-CALL` is counted everywhere and gates nowhere — deliberately
-
-The deferred pass finds **74** rows in the tree. Lane V refused to gate on bare
-resolves because ~450 of them are how all of `runtime/` reaches its **unported**
-neighbours, and burying a real finding is the failure this checker exists to
-prevent. That reasoning still holds for the *cutover-null* question. It does not
-hold for the *port-bypass* question, where "the name is PORTED" is the
-discriminator — so:
-
-* `rawdoor_audit.py` prints the DEFERRED-CALL count in **every** summary line
-  (there is no invocation that reports zero without reporting what zero was out
-  of), lists them under `--deferred`, and fails on them only under
-  `--strict-deferred`. Its exit-1 gate is still UNGUARDED-CALL alone, unchanged at
-  **27**, so this lane cannot have moved that number.
-* `port_bypass_audit.py` consumes `FileScan.sites` and gates on exactly the ported
-  subset. That is where a deferred call becomes a **BYPASS**.
-
-Spot-checking the 74: they are vtable/singleton accessors returning a slot pointer
-(`goal.cpp`, `engine.cpp`), the `array_probe` / `deleting_dtor_probe` harnesses,
-and `companion_data.cpp`'s twelve DX11 companions — unported neighbours to a row,
-which is why `port_bypass_audit` classifies them `OK-DATA` / `OK-UNPORTED` rather
-than flagging them.
-
-## 6. Verdicts that must NOT be flagged — preserved, with their evidence
-
-* `Audio::Configuration::Save`'s readback stays `RT_ORIGINAL_ONCE` on purpose:
-  **the write is the work, the readback is the ORACLE.** Converting it would make
-  the audit greener and destroy the oracle, because ours-writes/ours-reads agrees
-  with itself.
-* `GraphElement::RemoveGraphs` and the four `IO::Serializer` entry points are
-  `OK-DELEGATING`: the port's body **is** a call to the DLL under its own
-  registered name, so `ResolveExport` would recurse into itself. A cutover row,
-  not a bypass. (Four of these were reaching that right answer by the wrong route
-  — `OK-RESOLVE-ONLY` — until this lane.)
-* The `!g_portOn` fallback arm is `OK-PORT-OFF`.
-
-## 7. One incident of my own, recorded because it is the wave's own lesson
-
-Writing `\b` into a **non-raw** Python string is how lane R's name-door checker
-went 4 → 20 → 2. I did it again, by a different route: a heredoc collapsed `\\b`
-to a literal `0x08` backspace in three regexes — including `FN_DEF`, the one that
-finds the enclosing function, i.e. the exact failure that makes every site report
-"no enclosing function" and read as BYPASS. It was caught before a single number
-was produced, by `cat -A` on the written file rather than by reading back what I
-thought I had typed. **`\b` is a valid Python escape and raises no warning; `\w`
-next to it does.** Edit tools, not heredocs, for anything containing a backslash.
-
----
-
-## What lane H did NOT do
-
-`docs/runtime_port/WAVE9.md`'s pre-cutover gate row for `port_bypass_audit.py`
-still carries the caveat *"Until the checker follows a local across a statement, 0
-means 'none of the shape it can see'"*. That is now false, and the row should gain
-`--by-name` as part of the gate command. The file was dirty from another lane
-while this one ran, so the edit is left to the integrator rather than merged
-blind.
+* **WAVE9_LANE_E2.md §5.2** — the allocator's `Shutdown`, `~MemoryAllocator`, `operator=`,
+  `GetAllocationSize`, `GetAllocatedSize`, `Get`: never exercised by the shadow, gate step 4.
+* **WAVE9_LANE_E2.md §5.3** — the 5% `sim ms/iteration` gate, three runs per config on the
+  perf exe (`reference_one_perf_run_cannot_resolve_the_gate.md`), gate step 4.
+* **§5 above** — early-snapshot port bypass, a live defect class needing its own lane.
+* **The allocator is READY TO ARM AND IS NOT ARMED.** Nothing in this lane changes that; the
+  decision is the wave lead's and has not been made.
