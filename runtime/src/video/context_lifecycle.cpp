@@ -469,7 +469,19 @@ struct ClearSnapshot {
     int32_t  strides[RtVideo::kVertexBufferSlots];
 };
 
+// *** THE memset IS NOT TIDINESS. *** `ClearSnapshot` has four bytes of
+// padding after the three uint32s (the `void*` array that follows needs 8-byte
+// alignment), and `SameSnapshot` memcmps the whole struct. Without this the
+// comparison reads bytes NOTHING EVER WRITES, which is exactly
+// reference_oracle_must_not_compare_unwritten_bytes.md -- and it bit this probe
+// on its first run: `cleared` came back 512 out of 512 cases when seed 0 builds
+// an all-null Context that ClearResources provably cannot change, so the
+// EFFECTIVENESS CONTROL was reporting stack garbage rather than work. The
+// mismatch column was unaffected only by luck (the two long-lived snapshots
+// happened to share their padding), which is the whole reason a control that
+// can be satisfied by noise is worse than no control.
 void Capture(const Context* c, ClearSnapshot* s) {
+    std::memset(s, 0, sizeof(*s));
     s->dirty       = c->_dirty;
     s->imageDirty  = c->_imageBufferDirty;
     s->vertexDirty = c->_vertexBufferDirty;
@@ -523,7 +535,7 @@ extern "C" void RtVideoContextLifecycleProbe() {
     static Context ours;
     static Context refs;
 
-    int cases = 0, mismatches = 0, cleared = 0;
+    int cases = 0, mismatches = 0, cleared = 0, theirsCleared = 0;
     ClearSnapshot so, st;
 
     for (unsigned seed = 0; seed < 512u; ++seed) {
@@ -539,7 +551,13 @@ extern "C" void RtVideoContextLifecycleProbe() {
         Capture(&ours, &so);
         Capture(&refs, &st);
         ++cases;
-        if (!SameSnapshot(before, so)) ++cleared;     // EFFECTIVENESS control
+        // EFFECTIVENESS control, measured on BOTH sides. `theirsCleared` is the
+        // authoritative count because it is produced by the shipped body, which
+        // this lane did not write; `cleared` must equal it, and if it does not
+        // the two implementations disagree about WHETHER to act even in cases
+        // where they agree about the resulting state.
+        if (!SameSnapshot(before, so)) ++cleared;
+        if (!SameSnapshot(before, st)) ++theirsCleared;
         if (!SameSnapshot(so, st)) {
             if (mismatches < 4) {
                 std::printf("[CtxClear] MISMATCH seed=%u  ours dirty=%08x/%08x/%08x  "
@@ -584,12 +602,20 @@ extern "C" void RtVideoContextLifecycleProbe() {
         negativeCaught = !SameSnapshot(so, st);
     }
 
-    std::printf("[CtxClear] cases=%d mismatches=%d cleared=%d(effectiveness) "
-                "negative-control=%s\n",
-                cases, mismatches, cleared, negativeCaught ? "CAUGHT" : "*** MISSED ***");
+    std::printf("[CtxClear] cases=%d mismatches=%d cleared=%d theirsCleared=%d "
+                "(effectiveness) negative-control=%s\n",
+                cases, mismatches, cleared, theirsCleared,
+                negativeCaught ? "CAUGHT" : "*** MISSED ***");
     if (cleared == 0)
         std::printf("[CtxClear] *** cleared=0: every case was a no-op, this sweep "
                     "verified NOTHING ***\n");
+    if (cleared != theirsCleared)
+        std::printf("[CtxClear] *** cleared != theirsCleared: the two bodies disagree "
+                    "about WHEN to act, not just about the result ***\n");
+    if (cleared == cases)
+        std::printf("[CtxClear] *** cleared == cases: seed 0 builds an all-null Context "
+                    "that neither body can change, so this figure is an artefact -- "
+                    "check Capture's memset ***\n");
     if (!negativeCaught)
         std::printf("[CtxClear] *** the negative control was NOT caught: the comparison "
                     "does not read the dirty masks, so the sweep above is void ***\n");
