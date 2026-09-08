@@ -89,7 +89,8 @@ struct PathCounters {
     uint64_t stackEmpty;          // a GetPathStack* call on a 0-deep stack
     uint64_t stackNonEmpty;
     uint64_t hitPackfile;         // found through the GATED ExistsInPackfile
-    uint64_t hitAttributes;       // found through GetFileAttributesW
+    uint64_t attrProbeEntered;    // the GetFileAttributesW arm was REACHED
+    uint64_t hitAttributes;       // ... and it said the file exists
     uint64_t hitPackfileRetry;    // found through the UNGATED second probe
     uint64_t notFound;            // all three probes missed
     uint64_t appendedIdentifier;  // the R9B == true tail
