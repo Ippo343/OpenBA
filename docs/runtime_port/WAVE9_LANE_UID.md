@@ -352,3 +352,134 @@ them as guarded (UNGUARDED-CALL stays 0).
    `UserInterface::Update` (lane UIF rows 1 and 4) together.
 4. **`?Frame@MainLoop@Engine@@` (0x1800dd100) + `~UserInterface` (0x180120b90)**
    are what `ShowDialog` is really waiting on. Both are other lanes' classes.
+
+---
+
+## 8. Addendum — the three `DialogInstance` ADDRESS doors, and a re-run under the fixed audit
+
+Added after the lane's first commit (`7e3726f`), in response to three follow-ups
+from the integrator. Recorded as a **follow-up commit, never an amend**.
+
+### 8.1 Provenance and worktree
+
+* Worktree: `C:\code\GIT\untitled_rev_eng_project\.claude\worktrees\lane-uid-089e6eb4`
+  — **private, created by this session**, not the shared `lane-addr` checkout.
+* Branch `wave9/lane-uid`, tip `7e3726f`, **parent `fd30180`** — verified before
+  and after committing.
+* `git diff --stat fd30180 wave9/lane-uid` contains **only this lane's six
+  files**; no neighbour's work is in it.
+
+### 8.2 All three doors are LIVE CODE, not prose — checked by reading them
+
+The integrator's warning about `addr_door_audit.py` matching comments was worth
+acting on: `engine/funcs/engine_funcs.cpp` mentions two of these addresses in a
+comment block at lines **2964 and 2966**, which is exactly the shape that
+produced 25 phantom "call sites" tree-wide. The live sites are elsewhere:
+
+| address | line | verdict |
+|---|---|---|
+| `0x180114870` | `engine_funcs.cpp:2869` | **live** — `fn_DialogInstance_Ctor = …ResolveAddr(Module::Runtime, 0x180114870));` |
+| `0x1801133b0` | `engine_funcs.cpp:2974` | **live** — inside `if (!fn_DialogInstance_AddControllerTab)` |
+| `0x180113470` | `engine_funcs.cpp:2977` | **live** — inside `if (!fn_DialogInstance_AddController6)` |
+
+The fixed audit agrees: all three appear in its 13-row `--csv` UNREGISTERED set
+at those three line numbers, and the comment rows at 2964/2966 are gone.
+
+### 8.3 DECISION: all three DECLINED, with the closure measured
+
+Measured by disassembling each body and checking every direct callee against
+the tree's registrations. `(unreg)` = no `RegisterRuntimeAddr`/`RegisterRuntimeExport` anywhere.
+
+**`?AddController@…@InternalPtr<Element>@…` — 0x1801133b0, ord 1542 — the near miss.**
+
+Callees: `0x1800c0390` `IsDerivedFrom` **(ours)**, `0x180076370` **(unreg)**,
+and two virtual dispatches. So it is a **depth-1 row**, and the one blocker is
+small:
+
+> **`0x180076370` is a THIRD MSVC instantiation of `Collection::Array<T=8>::SetSize(int, const T& fill)`** — the same template the tree already ports twice (`ArrayPtrSetSizeFill` = FUN_18002ffa0 in `runtime/src/object/internal.cpp:213`, and `0x18007a0d0` for the 16-byte element). Transcribing it side by side, it is `ArrayPtrSetSizeFill` **plus one dead `*slot = 0` store before the real one** (`MOV [RDX],R11` at `0x180076406`, immediately overwritten at `0x18007640c`) — the same dead-store-kept shape `0x180032750` has. It is ~30 lines of already-understood code.
+
+**I still declined it, and the reason is not depth.** `0x1801133fb` is
+`CALL qword ptr [RCX + 0x20]` — the Object::Factory creator's vtable slot 4 —
+and **its arity is undetermined**: `RDX`, `R8` and `R9` are all live with
+leftovers from the AVL search at the call, so a port that passes one argument
+and a port that passes four are both consistent with the call site. That is
+lane UIF row 11's rule verbatim (*"declining an unidentified vtable slot is
+cheaper than guessing one"*), and it is the same hazard
+`reference_hidden_retslot_wild_write.md` is about. Resolving it means reading
+the creator implementations, which belong to `Object::Factory`, not here.
+
+Two facts a future port of this row **must** keep, recorded because both look
+like bugs:
+* **A missing type id is a retail HARD FAULT.** When the AVL search falls off
+  the end, `0x1801133f4` sets `RAX = 0` and `0x1801133f7` immediately does
+  `MOV RCX,[RAX+0x10]` — a read of address `0x10`.
+* **A failed `IsDerivedFrom` is also a hard fault.** `CMOVNZ RDI,RBX` at
+  `0x18011341e` leaves `RDI = 0`, and the next instruction writes
+  `[RDI+0x10]`. Retail asserts the factory returns a `DialogController`.
+  Neither may be "fixed" with a null check.
+
+**`?AddController@…@ExternalPtr<ElementDescription>@…,String&` — 0x180113470, ord 1541.**
+Four unsatisfied callees of its own — `0x1800c98a0`, `0x180039360`,
+`0x180039280`, `0x180006b80` — plus a tail `CALL 0x1801133b0` that inherits the
+row above and its blocker. `0x180039360` / `0x180039280` are the **two "J2"
+array destructors** lane UIC named as the remaining blockers of
+`?CreateInstance@ElementDescription@`; they gate both rows, so whoever ports
+them closes two things at once.
+
+*(On the integrator's warning that the two overloads differ only in argument
+count: counted against the mangled names, ord 1542 is 5 arguments
+`(uint, Base*, ExternalPtr<Config>, InternalPtr<Element>)` and ord 1541 is 6,
+`(uint, Base*, ExternalPtr<Config>, ExternalPtr<ElementDescription>, String const&)`.
+`engine_funcs.cpp` already binds them to two different typedefs,
+`fn_DialogInstance_AddControllerTab` and `fn_DialogInstance_AddController6`,
+and the six-argument one is the phantom-mangling casualty WAVE7_LANE_B.md §5
+documents — so the trap is live in this exact pair and the existing typedefs
+are the right side of it.)*
+
+**`??0DialogInstance@UI@@` — 0x180114870, ord 147 — the constructor.**
+Its **last call is `CALL 0x180113470`** (`0x180114a27`), so it inherits row
+1541's entire closure, and adds `0x1800031f0` **(unreg)** and a virtual
+`CALL [RAX+0x40]`. Its first call is `0x1800bfd10` `??0Internal@Object@@`,
+registered **only inside the gated `BANISHED_RT_OBJECT_TABLE` tier** — the same
+coupling this lane's destructor already carries and documents.
+
+### 8.4 On "a dtor whose ctor still runs shipped bytes is a layout risk"
+
+Taken seriously and answered rather than waved off. **It is not a risk created
+by this port**, for three reasons:
+
+1. The layout is not inferred at either end — `runtime/types/ui/DialogInstance.h`
+   `static_assert`s every offset the destructor touches, and Wave 7 built it from
+   the constructor's own disassembly.
+2. **The shape check corroborates it against the shipped bytes**: the destructor's
+   `_children` displacement decoded out of retail's instruction stream is `+0x38`,
+   which is what the header says. That is retail's own constructor and our
+   destructor agreeing on a field, measured, not assumed.
+3. Wave 7 §3's "two implementations, one live object" argument applies unchanged.
+   At cutover BOTH must be ours — but that is a constructor lane, which is what
+   §8.3 declines, not a hazard the destructor introduces.
+
+The genuine risk in the pair is the opposite direction and is already recorded:
+if `BANISHED_RT_OBJECT_TABLE` is armed at cutover and Wave 3's `~Internal` is
+wrong, this destructor delivers that to every dialog (§4 limit 3).
+
+### 8.5 Gate numbers re-run under the FIXED `addr_door_audit`
+
+**§6's address-door row was produced by the OLD audit** (the one with no notion
+of a comment). Re-taken with the fixed script, `git show f5dbeb8:tools/addr_door_audit.py`,
+both states measured in this worktree — base by `git checkout fd30180 -- <the three files>`,
+then restored:
+
+| `addr_door_audit` | before | after | Δ |
+|---|---:|---:|---|
+| **fixed** (`f5dbeb8`) call sites | 270 | 271 | +1 |
+| **fixed** distinct addresses | 192 | 193 | +1 |
+| **fixed** registered addresses | 1188 | 1191 | +3 |
+| **fixed UNREGISTERED** | **13** | **13** | **0** |
+| *old (for comparison)* | *295 / 198 / 1186 / 16* | *297 / 200 / 1189 / 16* | *— / 16 flat* |
+
+**Both versions give the same verdict on this change: one door closed, zero
+opened, UNREGISTERED flat.** The denominators moved a lot between tool versions
+and not at all because of this port — which is the distinction
+`reference_bypassed_port_needs_a_source_checker.md` exists to keep visible. All
+other gate figures in §6 are unaffected by the audit fix (different tools).
