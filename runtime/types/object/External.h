@@ -197,6 +197,48 @@ static_assert(offsetof(ReferenceSet::Node, parent) == 0x10, "reference node pare
 static_assert(offsetof(ReferenceSet::Node, left)   == 0x18, "reference node left @ +0x18");
 static_assert(offsetof(ReferenceSet::Node, right)  == 0x20, "reference node right @ +0x20");
 
+// ============================================================
+// Object::ExternalFactory's PATH STACK — +0x30/+0x38, PINNED BY WAVE 9 LANE
+// RRES. This block used to read `_opaque30 / _opaque38 — NOT PINNED`, and that
+// gap was the stated blocker for `ExpandRelativePath` in both WAVE9_LANE_RES.md
+// §5 and WAVE9_LANE_FNHOOK.md §4.3.
+//
+// It is a plain `Collection::Array<PathStackEntry>` — _data +0x30, _size +0x38,
+// _capacity +0x3c — and three bodies pin it independently:
+//
+//   ?GetPathStackFilename@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ
+//   (0x1800bcf60):
+//       CMP dword ptr [RCX + 0x38],0      ; the SIZE, read as an int32
+//       JNZ ...                            ; empty stack -> return a null Filename
+//       MOV EAX,dword ptr [RCX + 0x38]
+//       DEC EAX ; MOVSXD RDX,EAX ; SHL RDX,0x4   ; index (size-1) * 0x10
+//       ADD RDX,0x8                              ; ... + 8  <-- the SECOND field
+//       ADD RDX,qword ptr [RCX + 0x30]           ; ... + _data
+//       CALL 0x1800067d0                         ; Filename copy ctor
+//
+//   ?GetPathStackDirectory@...@ (0x1800bcfd0) is the SAME body without the
+//   `ADD RDX,0x8`, so the FIRST field is the directory.
+//
+//   ?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z (0x1800bd0e0)
+//   builds a 0x10-byte local out of two ADJACENT stack slots — [RBP-0x18] takes
+//   a `Filename` copy of GetPathDirectory(path) and [RBP-0x10] takes
+//   `GetPathFilename(path,true) + "." + GetPathExtension(path)` — and hands
+//   `&[RBP-0x18]` to 0x18002e220 with RCX = `this + 0x30` and EDX = size + 1.
+//   That is `Array<PathStackEntry>::Resize(size+1, entry)`, and it fixes the
+//   stride at 0x10 and the field order from the WRITE side.
+//
+// So the entry is two Filenames, directory first. The two halves are read by
+// separate accessors, so it is spelled as a struct rather than Filename[2].
+// ============================================================
+struct PathStackEntry {
+    Filename directory;  // +0x00 — GetPathStackDirectory copies this out
+    Filename filename;   // +0x08 — GetPathStackFilename copies this out
+};
+static_assert(sizeof(PathStackEntry) == 0x10,
+              "the path-stack stride is 0x10 (SHL RDX,0x4 in both accessors)");
+static_assert(offsetof(PathStackEntry, filename) == 0x08,
+              "GetPathStackFilename's extra `ADD RDX,0x8`");
+
 struct ExternalFactory {
     int32_t      _cleanBitIndex;         // +0x00
     uint32_t     _cleanBitMask;          // +0x04 — see the note above
@@ -204,14 +246,18 @@ struct ExternalFactory {
     int32_t      _pad0c;                 // +0x0c
     ResourceSet  _resources;             // +0x10
     ReferenceSet _references;            // +0x20
-    uint64_t     _opaque30;              // +0x30 — NOT PINNED
-    uint64_t     _opaque38;              // +0x38 — NOT PINNED
+    // +0x30 _data, +0x38 _size, +0x3c _capacity. The constructor's two zeroed
+    // qwords at +0x30/+0x38 are exactly this container's three fields.
+    Collection::Array<PathStackEntry> _pathStack;
     bool         _referenceModeEnabled;  // +0x40
     bool         _loadEnabled;           // +0x41
     bool         _simpleLoadEnabled;     // +0x42
 };
 static_assert(offsetof(ExternalFactory, _resources)            == 0x10, "_resources @ +0x10");
 static_assert(offsetof(ExternalFactory, _references)           == 0x20, "_references @ +0x20");
+static_assert(offsetof(ExternalFactory, _pathStack)            == 0x30, "_pathStack @ +0x30");
+static_assert(offsetof(ExternalFactory, _pathStack) + offsetof(Collection::Array<PathStackEntry>, _size)
+              == 0x38, "path-stack SIZE @ +0x38 (GetPathStack*'s `CMP dword [RCX+0x38],0`)");
 static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == 0x40, "_referenceMode @ +0x40");
 static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEnabled @ +0x41");
 static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simpleLoad @ +0x42");

@@ -35,6 +35,7 @@ extern int RtObjectTypeSystemRegister();   // type_system.cpp   (lane A)
 extern int RtObjectInternalRegister();     // internal.cpp      (lane B)
 extern int RtObjectExternalRegister();     // external.cpp      (lane C)
 extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
+extern int RtObjectExternalPathRegister(); // external_path_win.cpp (Wave 9 lane RRES)
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -50,5 +51,11 @@ void RtObjectPortInit() {
     // own switch so the twelve unexported Set doors can be A/B'd on their own.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESSET"))
         n += RtObjectExternalSetRegister();
+    // Wave 9 lane RRES: the path half of the same class -- ExpandRelativePath,
+    // the two path-stack readers, and Filename::GetPathExtension. Same nesting
+    // and the same reason as lane RES's switch above: it is ExternalFactory
+    // state, and BANISHED_RT_RESPATH=0 A/Bs the four doors on their own.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESPATH"))
+        n += RtObjectExternalPathRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
