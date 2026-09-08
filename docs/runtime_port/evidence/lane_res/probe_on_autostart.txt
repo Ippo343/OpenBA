@@ -1,0 +1,8 @@
+[ResSet] registered 13 doors (12 Set bodies + Clean by name and address, resource-tree-instantiation=0x18002xxx, probe=ARMED)
+[RtPort] Object: 39 exports registered
+[ResSet] LOCKSTEP PROBE -- 77 steps, 0 shape/payload mismatches, 0 parent-linkage failures
+[ResSet]   find: hits=49 misses=1 disagreements=0
+[ResSet]   effectiveness (branches taken INSIDE the ported bodies): root=1 L=35 R=19 eq=2 | cmp </=/> = 529/138/253 | nullKey search/node = 8/2 | rot L/R = 26/39  pre L/R = 7/11 | retraceIters=365 | erase 0/1/2 = 10/2/8  predSplice=5 rootSplice=0
+[ResSet]   negative controls: 4 of 4 FIRED
+[ResSet]   VERDICT: PASS -- 77 lockstep steps, every watched branch taken, every negative control fired.
+[ResSet] Clean: visited=5683 evicted=913 bitCleared=5683 arrayGrow=7 cleanBit=5 generation=1

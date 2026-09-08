@@ -34,6 +34,7 @@
 extern int RtObjectTypeSystemRegister();   // type_system.cpp   (lane A)
 extern int RtObjectInternalRegister();     // internal.cpp      (lane B)
 extern int RtObjectExternalRegister();     // external.cpp      (lane C)
+extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -44,5 +45,10 @@ void RtObjectPortInit() {
     if (RtWaveEnabled("BANISHED_RT_TYPESYS"))  n += RtObjectTypeSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_INTERNAL")) n += RtObjectInternalRegister();
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL")) n += RtObjectExternalRegister();
+    // Wave 9 lane RES: the resource tree's own Set bodies, plus Clean. Nested
+    // under BANISHED_RT_EXTERNAL because it is the same class's state, with its
+    // own switch so the twelve unexported Set doors can be A/B'd on their own.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESSET"))
+        n += RtObjectExternalSetRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
