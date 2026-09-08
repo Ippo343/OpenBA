@@ -328,9 +328,38 @@ void Assign18(uint8_t* d, const uint8_t* s) {
         reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
 }
 
+// WAVE 9 LANE UIF — 0x180078520 / 0x1800783d0, Array<UI::SpriteDraw>, stride
+// 0x28. The copy at 0x1800785c2..0x1800785e4 is FIVE plain qword moves at
+// +0x00, +0x08, +0x10, +0x18 and +0x20: no zero-first store, no refcount, so
+// the assign arm is a pure byte copy covering the whole 0x28-byte element.
+void Assign28(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 5; ++k)
+        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
+}
+
 void InitZero8(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
 // 0x18007b960's `else` arm is `MOV dword ptr [RDX],0xffffffff`.
 void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
+// WAVE 9 LANE UIF — the default (no-fill) arm of Array<UI::SpriteDraw>, read
+// out of 0x1800783d0 at 0x18007847b..0x180078494. SIX stores, and what they
+// DO NOT cover is the load-bearing part:
+//     MOV [RAX],RBP        +0x00 qword = 0   sheet
+//     MOV [RAX+0x8],RBP    +0x08 qword = 0   spriteIndex, x1
+//     MOV [RAX+0x10],RBP   +0x10 qword = 0   y1, x2
+//     MOV [RAX+0x18],EBP   +0x18 dword = 0   y2
+//     MOV [RAX+0x20],EBP   +0x20 dword = 0   color
+//     MOV [RAX+0x24],BPL   +0x24 byte  = 0   isLine
+// so +0x1c..+0x1f (`rotation`) and +0x24+1..+0x27 (the tail padding) are
+// NEVER WRITTEN by this arm. That is the retail default-constructed
+// UI::SpriteDraw: every member zeroed except a float that has no initialiser.
+void InitSpriteDraw(uint8_t* d) {
+    reinterpret_cast<uint64_t*>(d)[0] = 0;   // +0x00
+    reinterpret_cast<uint64_t*>(d)[1] = 0;   // +0x08
+    reinterpret_cast<uint64_t*>(d)[2] = 0;   // +0x10
+    *reinterpret_cast<uint32_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x20) = 0;
+    d[0x24] = 0;
+}
 // 0x180059140's `else` arm, the identity Math::Transform:
 //   [d+0x00] = 0 (qword)  [d+0x08] = 0 (dword)
 //   [d+0x0c] = 0x3f800000 (qword: 1.0f at +0x0c, 0 at +0x10)
@@ -861,6 +890,30 @@ const ArraySpec kSpec_Fill4 = {                   // 0x180023830  Array<uint32>
 
 const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
     "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// WAVE 9 LANE UIF — Array<UI::SpriteDraw>, the sprite batch behind
+// SpriteContext::AddSpriteDraw (append, 0x180078520) and
+// SpriteContext::FlushDeferred (clear, 0x1800783d0). stride 0x28, align 8
+// (`MOV EDX,0x8` at 0x18007857b and 0x18007841b in the two bodies).
+//
+// ASSIGN arm covers the whole element (five qwords) -> no unwritten window.
+// INIT arm leaves TWO holes, +0x1c..+0x1f and +0x25..+0x27 (see
+// InitSpriteDraw). `ArraySpec` carries ONE window per arm, so only the first
+// is expressible here. That is NOT a live oracle risk for either registration
+// below and this is why, stated rather than assumed: the init arm runs only
+// for elements in [oldSize, newSize) when the caller passed NO fill, and
+//   * 0x180078520 is the three-argument form — every grown element takes the
+//     ASSIGN arm, so the init arm is unreachable through it;
+//   * 0x1800783d0 has newSize folded to the constant 0, so it never grows at
+//     all and the init arm is unreachable through it too.
+// The +0x25..+0x27 hole is recorded here for whoever registers a two-argument
+// Array<SpriteDraw>::SetSize, which would be the first caller that can reach
+// it (reference_never_written_needs_by_whom.md: the extent belongs to the ARM,
+// not to the type). The same one-window limit is already filed against
+// kSpec_Sprite38 above.
+const ArraySpec kSpec_SpriteDraw = {              // 0x180078520, 0x1800783d0
+    "Array<UI::SpriteDraw>", 0x28, 8, &Assign28, &InitSpriteDraw, nullptr, true,
+    0, 0, 0x1c, 0x20, 0, 0 };
 
 // --- the non-trivial three --------------------------------------------------
 // *** OPEN, filed by Wave 9 lane D2 2026-09-07: this row's unwritten window is
@@ -1409,6 +1462,13 @@ J3_ENTRY3(1800417d0, kSpec_GraphSeries) // UI:       GraphElement::_graphs    (+
 // exactly the drift this parameterisation exists to prevent. Its oracle is the
 // graphics grid probe, whose append arm drives it against the shipped body.
 J3_ENTRY3(18005fb00, kSpec_Node18)      // Graphics: Array<Scene::Node>
+// WAVE 9 LANE UIF — the UI sprite batch. Registered HERE for the same reason
+// lane GFX3 gave for 0x18005fb00: it is a member of this family, and a private
+// second copy of SetSizeCore in the UI tree is the drift this parameterisation
+// exists to prevent. Its only caller is SpriteContext::AddSpriteDraw
+// (0x18011c890, ported in runtime/src/ui/spritecontext.cpp), which appends one
+// element by passing `size + 1` and a pointer to the record.
+J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 
 #undef J3_ENTRY3
 
@@ -1423,6 +1483,39 @@ Site g_j3_18007b960 = { { "Collection::Array::SetSize(10000,-1) @0x18007b960", 0
 void RtColl_ArraySetSize_18007b960(void* a) {
     SetSizeCore(static_cast<ArrayHdr*>(a), 10000, nullptr, &kSpec_I32Neg1,
                 &g_j3_18007b960);
+}
+
+// WAVE 9 LANE UIF — 0x1800783d0 is `Array<UI::SpriteDraw>::SetSize(0)`, the
+// SAME one-argument shape as 0x18007b960 above with the new size folded to the
+// constant 0. It is NOT a member of the J1 `~Array` family, and reading it as
+// one would be a live defect rather than a harmless mislabel — so the
+// distinction is spelled out here rather than left to the name:
+//
+//   ~Array (J1) FREES the buffer unconditionally. This body does not free at
+//   all. Its epilogue is `CMP RSI,[RBX] / JZ return` at 0x1800784a1, where RSI
+//   is the data pointer captured on entry and [RBX] the current one. Nothing
+//   between them can reallocate when the new size is 0 (the grow branch is
+//   `CMP [RCX+0xc],0 / JGE skip`, and capacity is never negative), so the two
+//   are always equal and the MemFree at 0x1800784d2 is UNREACHABLE. The
+//   element loop at 0x180078441 is unreachable for the same reason — its guard
+//   is `TEST EAX,EAX / JNS`, and EAX is the old size, which is > 0 on every
+//   path that gets there.
+//
+//   So the whole observable effect is `_size = 0`, capacity and buffer kept.
+//   That is exactly what SpriteContext::FlushDeferred (0x18011c6a0) wants: it
+//   drains the deferred batch every scissor change and would thrash the heap
+//   if this freed. Registering the J1 body here instead would free a buffer
+//   retail keeps and hand the next AddSpriteDraw a dangling pointer.
+//
+// SetSizeCore is still the right implementation, not a hand-written `_size=0`:
+// it reproduces the same unreachable branches for the same reasons, so if the
+// reasoning above is ever wrong the two disagree under the diff oracle instead
+// of agreeing by construction.
+Site g_j3_1800783d0 = { { "Collection::Array<SpriteDraw>::SetSize(0) @0x1800783d0", 0, 0, false, false },
+                        0x1800783d0 };
+void RtColl_ArraySetSize_1800783d0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw,
+                &g_j3_1800783d0);
 }
 
 }  // namespace rtcoll
@@ -1540,6 +1633,9 @@ void RtCollectionPortInit() {
 
     // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
     RegisterRuntimeAddr(0x18001cdf0, (void*)&RtColl_I32ArrayAssign_18001cdf0);
+    // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
+    RegisterRuntimeAddr(0x180078520, (void*)&RtColl_ArraySetSizeFill_180078520);
+    RegisterRuntimeAddr(0x1800783d0, (void*)&RtColl_ArraySetSize_1800783d0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two

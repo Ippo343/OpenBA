@@ -1,65 +1,250 @@
 #pragma once
-// UI::SpriteContext -- binary-compatible struct definition (PARTIAL, UNPORTED).
-// Runtime-x64.dll class. Full sizeof NOT proven -- see the hold-back note.
+// ============================================================================
+// runtime/types/ui/SpriteContext.h — binary layout for UI::SpriteContext and
+//                                     UI::SpriteDraw
+// ============================================================================
 //
-// Decompiled from (Wave 7 lane F, 2026-09-07, Runtime-x64.dll, image base
-// 0x180000000), to support the hold-back argument in
-// docs/runtime_port/WAVE7_LANE_F.md -- NONE of SpriteContext's methods are
-// ported by this lane. This header exists because the brief asks this lane
-// to own it, and because the next reader who reconsiders AddLine/SetScissor
-// should not have to re-read the disassembly from zero.
+// Started by Wave 7 lane F as an evidence note behind a hold-back. Rewritten by
+// WAVE 9 LANE UIF (2026-09-08), which ported three of the class's exports and
+// two of its internals, so the offsets below are now LOAD-BEARING and carry
+// static_asserts instead of prose. The per-function write-up, the door
+// arithmetic and everything this lane declined are in
+// docs/runtime_port/WAVE9_LANE_UIF2.md.
 //
-//   AddLine:              0x18011cbe0 (?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z)
-//   SetScissor(Viewport): 0x18011d050 (?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z)
-//   SetScissor(4 ints):   0x18011d010 (?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z)
-//                         -- a two-line forwarder into the Viewport overload.
+// PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 //
-// WHY NEITHER IS PORTED (see WAVE7_LANE_F.md §2 for the full argument):
-// both reach unexported, unreversed internal helpers -- `Flush`,
-// `FlushDeferredFonts`, `AddSpriteDraw`, `SpriteCapture::AddScissor` -- that
-// submit into the LIVE Video::Context / GPU vertex buffer this SpriteContext
-// wraps, not into memory the object itself owns. A scratch copy of the
-// SpriteContext object does not isolate a replay: the copy's Video::Context
-// pointer (see +0x30 below) still points at the one live context, so calling
-// the DLL's body on a "scratch" object would submit a second, real, visible
-// draw. That is a materially different hazard from Wave 7 lane F's other
-// mutators (SpriteSheet::AddSpriteInfo's shared-string refcount, which only
-// leaks memory) and is why this class is held back rather than diffed.
+// Retail addresses (Runtime-x64.dll, image base 0x180000000):
+//   AddLine                0x18011cbe0  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z
+//   SetScissor(Viewport)   0x18011d050  ?SetScissor@…@QEAA?AVViewport@Video@@AEBV34@@Z
+//   SetScissor(4 ints)     0x18011d010  ?SetScissor@…@QEAA?AVViewport@Video@@HHHH@Z
+//   AddSpriteDraw          0x18011c890  (internal, no export in either build)
+//   FlushDeferred          0x18011c6a0  (internal, no export in either build)
+//   Flush                  0x18011ba40  (internal — NOT PORTED, see below)
+//   Begin                  0x18011d2b0  (internal — NOT PORTED, see below)
 //
-// FIELDS THIS LANE HAPPENED TO READ WHILE MAKING THAT ARGUMENT (not a survey,
-// not asserted with static_assert -- nothing here is load-bearing for a port):
+// ---------------------------------------------------------------------------
+// SIZE: at least 0x88. NOT PROVEN EXACTLY, and this header says so.
+// ---------------------------------------------------------------------------
+// Unlike UI::UserInterface, whose 0x128 is a literal in a MemoryAllocator
+// call, SpriteContext is never heap-allocated in any body this lane read: it
+// is a LOCAL of UI::UserInterface::Draw (0x180121890), built at `RBP-0x80` and
+// destroyed inline at the end of the same frame. A stack local's size is not
+// spelled out anywhere in the instruction stream.
 //
-//   +0x00  float     -- a pixels-per-point-style scale; SetScissor divides
-//                        incoming ints by it and multiplies outgoing ones,
-//                        so it is applied going IN and undone going OUT.
-//   +0x08  SpriteSheet* -- "current sheet" cursor; AddLine calls Flush(this)
-//                        and rebinds it whenever a line's sheet differs from
-//                        the cursor, i.e. sprite batches are grouped by sheet.
-//   +0x20  int32 x, +0x24 int32 y, +0x28 int32 w, +0x2C int32 h -- the
-//                        current scissor rect, in the post-scale (device)
-//                        space. SetScissor reads and overwrites all four.
-//   +0x30  pointer -- dereferenced twice as `*(*(this+0x30)+0x28)+0x10/+0x14`
-//                        to read a width/height pair inside SetScissor's
-//                        SpriteCapture branch; almost certainly the bound
-//                        Video::RenderBuffer or a Video::Context, not
-//                        reversed further because this lane does not port
-//                        through it.
-//   +0x80  SpriteCapture* -- null when no screenshot/capture UI is active;
-//                        AddScissor is called on it only when non-null.
+// What IS proven is a lower bound of 0x88: Begin (0x18011d2b0) stores a qword
+// at `[RCX+0x80]` (0x18011d2eb), so the object extends at least to 0x88.
+// `_size` below is therefore declared as that lower bound, and the
+// static_assert asserts the bound rather than pretending to an exact sizeof.
+// NOTHING IN THE PORT ALLOCATES ONE, so the bound is sufficient: our three
+// ported bodies and two ported internals only ever receive a pointer to an
+// object retail itself built.
 //
-// AddLine's SpriteDraw record, built on the caller's stack and handed to the
-// unexported `AddSpriteDraw(SpriteContext*, SpriteDraw*)` -- reversed only
-// far enough to show it copies the Sprite by value (2 qwords) and none of it
-// is needed further because AddSpriteDraw itself is out of scope:
-//   +0x00..0x0B  Sprite (2 qwords, see Sprite.h)   -- wait, see note below
-//   +0x0C        int32 flags (0 for AddLine)
-//   +0x10        int32 x1
-//   +0x14        int32 y1  (param_2 in AddLine's mangled order, i.e. AddLine's
-//                            SECOND coordinate pair, not necessarily "x2,y2")
-//   +0x18        int32 x2
-//   +0x1C        uint8  flags2 (1 for AddLine)
-//   ...          uint32 color
-// This record layout is approximate (recovered from local stack-slot writes,
-// not from a struct definition) and is not asserted; it is here only to
-// support "AddLine reaches an internal, unreversed helper", the claim the
-// hold-back rests on.
+// ---------------------------------------------------------------------------
+// THE CLASS IS NOT POLYMORPHIC.
+// ---------------------------------------------------------------------------
+// Read out of the shipped bytes, not inferred from the absent `??_7`: Begin's
+// first store to the object is `MOV [RCX+0x80],RBX` and its second is
+// `MOV [RCX+0x78],R9`; the +0x00 slot is written later, and it is written with
+// `MOVSS [RDI],XMM6` (0x18011d393) — a FLOAT, not a vtable pointer. Every
+// export of the class is `QEAA`, none `UEAA`.
+//
+// ---------------------------------------------------------------------------
+// FIELD EVIDENCE
+// ---------------------------------------------------------------------------
+//   off    field                proven by                              retail
+//   0x00   _scale               MOVSS XMM2,[RCX] then DIVSS in          0x18011d06e
+//                               SetScissor and MULSS on the way out;
+//                               Begin writes it from the float
+//                               argument (`MOVSS [RDI],XMM6`)           0x18011d393
+//   0x08   _currentSheet        AddLine compares the incoming sprite's  0x18011cc14
+//                               sheet against [RCX+8] and calls Flush
+//                               when they differ; FlushDeferred does
+//                               the same per deferred record           0x18011c6d4
+//   0x10   _draws               AddSpriteDraw appends with
+//                               `LEA RCX,[RDI+0x10]` and passes
+//                               `[RDI+0x18] + 1` as the new size        0x18011c9a6
+//   0x20   _scissorX            SetScissor compares/overwrites all      0x18011d0c1
+//   0x24   _scissorY            four; AddSpriteDraw culls against       0x18011d165
+//   0x28   _scissorW            them scaled by _scale                   0x18011c92f
+//   0x2c   _scissorH
+//   0x30   _context             SetScissor reads `*(*(this+0x30)+0x28)` 0x18011d10d
+//                               for the render target's w/h; Draw
+//                               stores its Video::Context& there        0x180121cc8
+//   0x38   _deferring           FlushDeferred returns immediately when  0x18011c6a6
+//                               it is 0
+//   0x40   _deferred            FlushDeferred walks it with size at     0x18011c6ba
+//                               +0x48 and clears it through
+//                               Array<SpriteDraw>::SetSize(0)           0x18011c72a
+//   0x78   _clipRegion          AddSpriteDraw reads four ints through   0x18011c8b0
+//                               it as {x, y, w, h}; Begin stores the
+//                               4th argument there, and Draw passes
+//                               `&UserInterface::_captureViewport`      0x180121cf3
+//   0x80   _spriteCapture       Begin stores the 3rd argument;          0x18011d2eb
+//                               AddSpriteDraw and SetScissor both
+//                               call into it only when non-null        0x18011c89a
+//
+// THREE MORE ARRAYS, deliberately left opaque. UserInterface::Draw's epilogue
+// frees FOUR buffers belonging to this object — at +0x10, +0x40, +0x58 and
+// +0x68 (0x180122242, 0x18012228f, 0x1801222dc, 0x180122329, each zeroing the
+// pointer and the qword after it). The first two are `_draws` and `_deferred`
+// above. The other two, and the plain qword at +0x50, are NOT modelled: no
+// body this lane ported reads them, and inventing a layout we have not proven
+// is how a shared struct corrupts silently (PLAN §4.3 risk 1).
+//
+// ---------------------------------------------------------------------------
+// WHAT IS STILL HELD BACK, AND WHY THE WAVE 7 ARGUMENT ONLY HALF SURVIVED
+// ---------------------------------------------------------------------------
+// Wave 7 lane F held the whole class back with one argument: these methods
+// "submit into the LIVE Video::Context / GPU vertex buffer", so a scratch copy
+// of the object does not isolate a replay — the copy's `_context` still points
+// at the one live context, and calling the DLL's body on it would submit a
+// second, real, visible draw.
+//
+// THAT ARGUMENT IS CORRECT, AND IT IS AN ARGUMENT ABOUT `Flush`, NOT ABOUT THE
+// THREE EXPORTS. Re-checked instruction by instruction for Wave 9
+// (reference_holdback_blockers_are_stale_check_them_first.md — three stated
+// blockers dissolved on re-checking in one session):
+//
+//   * `Flush` (0x18011ba40) is the only body in the class that touches the GPU.
+//     It maps the vertex buffer through `_context`'s device vtable
+//     (`CALL [RAX+0x70]` / `[RAX+0x78]` at 0x18011bc06 / 0x18011c5e3), memmoves
+//     transformed vertices into it, and advances the write cursor. It is NOT
+//     ported and NOT replayable, and the Wave 7 sentence is about it.
+//   * `AddLine`, both `SetScissor`s, `AddSpriteDraw` and `FlushDeferred` do NOT
+//     touch the GPU. They mutate the object's own scissor ints and its own
+//     `Array<SpriteDraw>` batch, and they CALL `Flush`. That makes them
+//     unreplayable for a different and much narrower reason — a second call
+//     would append the record twice — but it does not make them unportable,
+//     and the batch they build is ordinary memory this port owns end to end.
+//
+// So the class is no longer held back; `Flush` and `Begin` are. See the lane
+// doc for the door arithmetic that decision produces.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+
+#include "../collection/Collection.h"
+
+namespace UI {
+
+// ============================================================
+// UI::SpriteDraw — one queued sprite/line, stride 0x28.
+//
+// The stride is proven three times over: `ADD R15,0x28` in Flush's batch walk
+// (0x18011c5a1) and in Draw's element walk (0x180121faf), and the `LEA
+// RCX,[RAX+RAX*4] / SHL RCX,3` (== *0x28) index arithmetic in both
+// Array<SpriteDraw> instantiations (0x180078573, 0x180078439).
+//
+// The FIELDS are read out of the two writers and the one reader agreeing:
+//   * AddLine (0x18011cbe0) builds a record on its own stack at RSP+0x20 and
+//     writes +0x00,+0x08,+0x0c,+0x10,+0x14,+0x18,+0x1c,+0x20,+0x24;
+//   * UserInterface::Draw (0x180121890) builds the same record at RSP+0x28 for
+//     the fullscreen fade and for the mouse cursor, writing the same offsets;
+//   * AddSpriteDraw (0x18011c890) reads +0x0c/+0x14 as the X pair and
+//     +0x10/+0x18 as the Y pair when it culls against the clip region, and
+//     hands +0x00/+0x08 to SpriteCapture as a UI::Sprite.
+//
+// The x/y interleave is the one thing easy to get backwards, so it is nailed
+// to a single instruction pair: 0x18011c8ac loads +0x0c and compares it
+// against `clip.x`, and 0x18011c8c7 loads +0x10 and compares it against
+// `clip.y`. +0x0c and +0x10 are therefore NOT a pair — they are the first
+// coordinate of each axis.
+// ============================================================
+struct SpriteDraw {
+    void*    sheet;         // +0x00  ExternalPtr<SpriteSheet>, the batch key
+    int32_t  spriteIndex;   // +0x08  -1 is the empty sprite, never 0
+    int32_t  x1;            // +0x0c
+    int32_t  y1;            // +0x10
+    int32_t  x2;            // +0x14
+    int32_t  y2;            // +0x18
+    float    rotation;      // +0x1c  0.0f selects the axis-aligned fast path
+                            //        in both Flush and AddSpriteDraw
+    uint32_t color;         // +0x20  ARGB, 0xffffffff is "untinted"
+    uint8_t  isLine;        // +0x24  1 from AddLine, 0 from every other writer
+    uint8_t  _pad25[3];     // +0x25  never written by the default-init arm
+};
+static_assert(sizeof(SpriteDraw) == 0x28, "SpriteDraw stride is 0x28");
+static_assert(offsetof(SpriteDraw, sheet)       == 0x00, "sheet at +0x00");
+static_assert(offsetof(SpriteDraw, spriteIndex) == 0x08, "spriteIndex at +0x08");
+static_assert(offsetof(SpriteDraw, x1)          == 0x0c, "x1 at +0x0c");
+static_assert(offsetof(SpriteDraw, y1)          == 0x10, "y1 at +0x10");
+static_assert(offsetof(SpriteDraw, x2)          == 0x14, "x2 at +0x14");
+static_assert(offsetof(SpriteDraw, y2)          == 0x18, "y2 at +0x18");
+static_assert(offsetof(SpriteDraw, rotation)    == 0x1c, "rotation at +0x1c");
+static_assert(offsetof(SpriteDraw, color)       == 0x20, "color at +0x20");
+static_assert(offsetof(SpriteDraw, isLine)      == 0x24, "isLine at +0x24");
+
+// ============================================================
+// The clip region AddSpriteDraw culls against, 4 ints at SpriteContext+0x78.
+//
+// It is a Video::Viewport, spelled out here rather than included because
+// UserInterface::Draw passes `&UserInterface::_captureViewport`, which
+// runtime/types/ui/UserInterface.h deliberately models as 0x10 opaque bytes.
+// The member ORDER is {x, y, w, h} and not {left, top, right, bottom}, proven
+// by AddSpriteDraw ADDING +0x08 to +0x00 and +0x0c to +0x04 to obtain the
+// far edges (0x18011c8bf, 0x18011c8de) — a left/top/right/bottom region would
+// not need the addition.
+// ============================================================
+struct ClipRect {
+    int32_t x;   // +0x00
+    int32_t y;   // +0x04
+    int32_t w;   // +0x08
+    int32_t h;   // +0x0c
+};
+static_assert(sizeof(ClipRect) == 0x10, "ClipRect is 4 ints");
+
+// ============================================================
+// UI::SpriteContext — >= 0x88 bytes, no vtable.
+// ============================================================
+struct SpriteContext {
+    float   _scale;                              // +0x00
+    uint8_t _pad04[4];                           // +0x04
+    void*   _currentSheet;                       // +0x08
+
+    // The batch being accumulated for `_currentSheet`. Flush drains it.
+    Collection::Array<SpriteDraw> _draws;        // +0x10, 0x10 bytes
+
+    // Device-space scissor. SetScissor divides the incoming (point-space)
+    // rect by _scale on the way in and multiplies the outgoing one by _scale
+    // on the way out — see the port for the ONE branch where it does not.
+    int32_t _scissorX;                           // +0x20
+    int32_t _scissorY;                           // +0x24
+    int32_t _scissorW;                           // +0x28
+    int32_t _scissorH;                           // +0x2c
+
+    void*   _context;                            // +0x30  Video::Context*
+    uint8_t _deferring;                          // +0x38
+    uint8_t _pad39[7];                           // +0x39
+
+    // Records queued while _deferring is set — retail's deferred font pass.
+    Collection::Array<SpriteDraw> _deferred;     // +0x40, 0x10 bytes
+
+    uint8_t _opaque50[0x28];                     // +0x50 .. +0x77, see header
+
+    const ClipRect* _clipRegion;                 // +0x78
+    void*           _spriteCapture;              // +0x80  UI::SpriteCapture*, may be null
+};
+
+static_assert(offsetof(SpriteContext, _scale)         == 0x00, "_scale at +0x00");
+static_assert(offsetof(SpriteContext, _currentSheet)  == 0x08, "_currentSheet at +0x08");
+static_assert(offsetof(SpriteContext, _draws)         == 0x10, "_draws at +0x10");
+static_assert(offsetof(SpriteContext, _scissorX)      == 0x20, "_scissorX at +0x20");
+static_assert(offsetof(SpriteContext, _scissorY)      == 0x24, "_scissorY at +0x24");
+static_assert(offsetof(SpriteContext, _scissorW)      == 0x28, "_scissorW at +0x28");
+static_assert(offsetof(SpriteContext, _scissorH)      == 0x2c, "_scissorH at +0x2c");
+static_assert(offsetof(SpriteContext, _context)       == 0x30, "_context at +0x30");
+static_assert(offsetof(SpriteContext, _deferring)     == 0x38, "_deferring at +0x38");
+static_assert(offsetof(SpriteContext, _deferred)      == 0x40, "_deferred at +0x40");
+static_assert(offsetof(SpriteContext, _clipRegion)    == 0x78, "_clipRegion at +0x78");
+static_assert(offsetof(SpriteContext, _spriteCapture) == 0x80, "_spriteCapture at +0x80");
+
+// A LOWER BOUND, not a sizeof — see the header's SIZE section. Begin's store
+// at [this+0x80] is what pins it.
+static_assert(sizeof(SpriteContext) >= 0x88,
+              "SpriteContext extends at least to +0x88 (Begin's store at +0x80)");
+
+static_assert(sizeof(Collection::Array<SpriteDraw>) == 0x10,
+              "Array<T> is data/size/capacity = 0x10");
+
+} // namespace UI
