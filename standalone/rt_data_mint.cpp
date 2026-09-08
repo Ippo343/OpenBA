@@ -37,6 +37,7 @@
 #include "resolve.h"
 #include "rt_data_mint.h"
 #include "../runtime/types/object/TypeInfo.h"
+#include "../runtime/types/system/Thread.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -90,6 +91,13 @@ struct RtMintStorage {
     unsigned int       size;
     void*              storage;
     const char*        note;
+    // Non-null when the DLL's CRT CONSTRUCTS this static at load: the address
+    // of the initialiser that does it. Section flags cannot tell you this --
+    // every one of these is BSS in the file either way -- so the generator
+    // reads the DLL's .CRT$XC array and sweeps it. A row with a ctorInit that
+    // rt_data_mint.cpp does not reproduce is a build-time error in the
+    // generator, not a silent zeroed mint.
+    const char*        ctorInit;
 };
 
 // ============================================================
@@ -132,6 +140,10 @@ static_assert(offsetof(RtObject::BaseTypeInfo, fileExtension) == 0x18, "BaseType
 static_assert(offsetof(RtObject::BaseTypeInfo, factoryFn) == 0x20, "BaseTypeInfo::factoryFn");
 static_assert(offsetof(RtObject::BaseTypeInfo, inPlaceFactoryFn) == 0x28, "BaseTypeInfo::inPlaceFactoryFn");
 static_assert(offsetof(RtObject::BaseTypeInfo, next) == 0x30, "BaseTypeInfo::next");
+// ConstructLoader writes Loader::_loop at +0x30 by hand. That offset is only
+// correct while the Thread base is exactly 0x30 bytes.
+static_assert(sizeof(System::Thread) == 0x30,
+              "Engine::Loader::_loop is at +0x30 because the Thread base is 0x30");
 
 // ============================================================
 // Trap bodies
@@ -347,6 +359,102 @@ static void MintTypeInfos() {
     }
 }
 
+// ============================================================
+// Constructed statics
+//
+// The sweep behind this (tools/rt_mint_gen.py, find_crt_init_table +
+// scan_ctor_refs) reads the DLL's own .CRT$XC array -- 106 initialisers -- and
+// asks, per exported DATA symbol, whether any of them writes it. That is the
+// only honest way to answer "is this really just BSS": the section flags say
+// BSS for a constructed object too, and a file-based harvest can never see the
+// difference. Result, all 81 swept:
+//
+//   * 14 ?_typeInfo@ + ?_firstTypeInfo@ -- constructed, and MintTypeInfos()
+//     already reproduces them.
+//   * ?_loader@LoaderLoop@Engine@@ -- constructed by ONE initialiser
+//     (0x180148fe0), reproduced here.
+//   * ?_rng@Particle@Graphics@@ -- NOT constructed by anything. This corrects
+//     lane C2's own first-pass claim that it needed a seed: retail never seeds
+//     it, so the mint's zeroed storage is exactly the loaded DLL's state, and
+//     ADDING a seed would be the divergence. See WAVE9_LANE_C2.md.
+//   * every singleton and every other .data static -- not constructed.
+//
+// Gated, because constructing ?_loader starts a real OS thread and three
+// events. Off in an ordinary run; BANISHED_RT_MINT_CTOR=1 runs the
+// constructions WITHOUT registering the mint, so the shadow check can compare
+// what we built against the DLL's live object while both exist.
+// ============================================================
+static void* g_loaderStorage = nullptr;
+
+static void RtMintLoaderTeardown() {
+    // Retail's own atexit (0x18014a580) is ??1Thread with the Thread vtable
+    // restamped first -- which is precisely what our ported dtor does.
+    typedef void (*ThreadDtorFn)(void*);
+    ThreadDtorFn dtor = (ThreadDtorFn)RtPortLookupExport("??1Thread@System@@QEAA@XZ");
+    if (dtor && g_loaderStorage) dtor(g_loaderStorage);
+    g_loaderStorage = nullptr;
+}
+
+// FUN_180148fe0, transcribed:
+//     System::Thread::Thread(&_loader, 0x40000);   // 256 KB stack
+//     _loader.vtable = ??_7Loader@Engine@@6B@;
+//     _loader._loop  = nullptr;                    // +0x30
+//     atexit(FUN_18014a580);
+static bool ConstructLoader(const RtMintStorage& s) {
+    typedef void* (*ThreadCtorFn)(void*, unsigned int);
+    ThreadCtorFn ctor = (ThreadCtorFn)RtPortLookupExport("??0Thread@System@@QEAA@I@Z");
+    if (!ctor) {
+        fprintf(stderr, "[RtMint] CANNOT construct %s: ??0Thread@System@@QEAA@I@Z "
+                        "is not ported. Left zeroed -- its vtable is NULL.\n", s.symbol);
+        return false;
+    }
+    void** vt = nullptr;
+    for (int i = 0; i < kVtableCount; ++i)
+        if (strcmp(kMintVtables[i].symbol, "??_7Loader@Engine@@6B@") == 0)
+            vt = kMintVtables[i].table;
+    if (!vt) {
+        fprintf(stderr, "[RtMint] CANNOT construct %s: ??_7Loader@Engine@@6B@ was "
+                        "not minted.\n", s.symbol);
+        return false;
+    }
+    ctor(s.storage, 0x40000);
+    *(void**)s.storage = (void*)vt;                       // +0x00
+    *(int*)((char*)s.storage + 0x30) = 0;                 // Loader::_loop
+    g_loaderStorage = s.storage;
+    atexit(&RtMintLoaderTeardown);
+    return true;
+}
+
+static int g_constructed = 0;
+
+static void MintConstructedStatics() {
+    if (!(EnvOn("BANISHED_RT_MINT") || EnvOn("BANISHED_RT_MINT_CTOR"))) return;
+    for (int i = 0; i < kStorageCount; ++i) {
+        const RtMintStorage& s = kMintStorage[i];
+        if (!s.ctorInit) continue;
+        if (strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
+            ++g_constructed;              // MintTypeInfos() already built it
+        } else if (strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
+            if (ConstructLoader(s)) ++g_constructed;
+        } else {
+            // Unreachable via the generator, which refuses to emit an
+            // unhandled ctorInit. Kept because "unreachable" is exactly the
+            // claim this project has learned not to trust.
+            fprintf(stderr, "[RtMint] FATAL: %s is CONSTRUCTED by the DLL at %s and "
+                            "nothing here reproduces it; zeroed storage would "
+                            "silently differ from the loaded DLL.\n",
+                    s.symbol, s.ctorInit);
+            fflush(stderr);
+            abort();
+        }
+    }
+    int owed = 0;
+    for (int i = 0; i < kStorageCount; ++i)
+        if (kMintStorage[i].ctorInit) ++owed;
+    printf("[RtMint] constructed %d of the %d statics the DLL's CRT builds at load\n",
+           g_constructed, owed);
+}
+
 static void MintStorage() {
     // Nothing to copy. Every one of these 28 symbols is BSS in the DLL — the
     // harvest read b'' from all of them — so "minting" is owning zeroed bytes
@@ -384,6 +492,7 @@ void RtDataMintInit() {
     MintVtables();
     MintTypeInfos();
     MintStorage();
+    MintConstructedStatics();   // after MintStorage: it memsets the block
 
     printf("[RtMint] minted %d vtables (%d slots: %d ported, %d unported-trap, "
            "%d purecall-trap), %d BaseTypeInfo, %d storage symbols (%zu bytes)\n",
@@ -571,7 +680,7 @@ void RtDataMintShadowReport(const char* phase) {
     }
 
     // ---- storage ----------------------------------------------------------
-    int live = 0, dead = 0, ourNonZero = 0;
+    int live = 0, dead = 0, ourNonZero = 0, shapeChecked = 0, shapeBad = 0;
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
         void** dll = (void**)DllExport(s.symbol);
@@ -588,10 +697,38 @@ void RtDataMintShadowReport(const char* phase) {
             if (((unsigned char*)s.storage)[b]) { mineLive = true; break; }
         if (dllLive) ++live; else ++dead;
         if (mineLive) ++ourNonZero;
-        printf("[RtMintShadow] storage %-52s %2u bytes  DLL=%s  minted=%s  (%s)\n",
+        printf("[RtMintShadow] storage %-52s %2u bytes  DLL=%s  minted=%s  ctor=%s  (%s)\n",
                s.symbol, s.size, dllLive ? "WRITTEN" : "still zero",
-               mineLive ? "written" : "zero", s.note);
+               mineLive ? "written" : "zero",
+               s.ctorInit ? s.ctorInit : "none (plain BSS)", s.note);
+
+        // For a CONSTRUCTED static there IS something to compare, and it is
+        // not the values: our vtable pointer, our HANDLEs and the DLL's are
+        // different numbers by construction. What must agree is the SHAPE --
+        // which qwords the constructor leaves non-null. That is what catches
+        // the failure that matters (our ctor not creating the handles, or
+        // leaving the vtable null), and it is honest about being weaker than
+        // a value comparison. Only meaningful once the ctors have actually
+        // run, i.e. under BANISHED_RT_MINT_CTOR / BANISHED_RT_MINT.
+        if (s.ctorInit && g_constructed > 0 && s.size >= 8) {
+            unsigned words = s.size / 8, differ = 0;
+            for (unsigned k = 0; k < words; ++k) {
+                bool a = ((unsigned long long*)dll)[k] != 0;
+                bool b = ((unsigned long long*)s.storage)[k] != 0;
+                if (a != b) {
+                    ++differ;
+                    printf("[RtMintShadow]   SHAPE %s +0x%02x: DLL %s, minted %s\n",
+                           s.symbol, k * 8, a ? "set" : "null", b ? "set" : "null");
+                }
+            }
+            ++shapeChecked;
+            if (differ) ++shapeBad;
+        }
     }
+
+    int ctorOwed = 0;
+    for (int i = 0; i < kStorageCount; ++i)
+        if (kMintStorage[i].ctorInit) ++ctorOwed;
 
     // ---- the summary, with its effectiveness control ----------------------
     printf("\n[RtMintShadow] ---- summary (phase=%s) ----\n", phase);
@@ -611,6 +748,9 @@ void RtDataMintShadowReport(const char* phase) {
     printf("[RtMintShadow] storage            : %d symbols, %d written by the DLL, "
            "%d still zero, %d of ours written (contents NOT compared: BSS)\n",
            kStorageCount, live, dead, ourNonZero);
+    printf("[RtMintShadow] constructed statics: %d of %d built (shape compared on %d, "
+           "%d SHAPE MISMATCH)   [BANISHED_RT_MINT_CTOR=1 to build them]\n",
+           g_constructed, ctorOwed, shapeChecked, shapeBad);
     printf("[RtMintShadow] symbols absent from the DLL: %d\n", absent);
 
     if (ours == 0) {
@@ -623,7 +763,7 @@ void RtDataMintShadowReport(const char* phase) {
                "[RtMintShadow] code; the remaining %d are lane B's worklist.\n",
                ours, ours + g_counts.unportedTraps, g_counts.unportedTraps);
     }
-    const int bad = groundBad + oursBad + tiBad + sizeSuspect + absent;
+    const int bad = groundBad + oursBad + tiBad + sizeSuspect + absent + shapeBad;
     printf("[RtMintShadow] ==== %s: %d problem(s) ====\n\n",
            bad ? "FAIL" : "clean", bad);
     fflush(stdout);

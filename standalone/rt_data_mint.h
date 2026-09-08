@@ -3,8 +3,9 @@
 // standalone/rt_data_mint.h — Wave 9 lane C2: the minted exported DATA
 // ============================================================================
 //
-// Waves 1-8 ported FUNCTIONS. The 70 exported DATA symbols in Runtime-x64.dll
-// that our tree consumes cannot be ported: a `??_7` vtable, a `?_singleton@`
+// Waves 1-8 ported FUNCTIONS. The exported DATA symbols in Runtime-x64.dll that
+// our tree consumes cannot be ported (the count moves as other lanes land
+// ports -- see WAVE9_LANE_C2.md section 1): a `??_7` vtable, a `?_singleton@`
 // pointer, a `?_typeInfo@` BaseTypeInfo and the ten other exported `.data`
 // statics have no body to reimplement. They have to be MINTED — storage we
 // own, laid out so that every ported and every not-yet-ported consumer agrees.

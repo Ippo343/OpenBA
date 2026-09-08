@@ -77,15 +77,22 @@ OUT = os.path.join(REPO, "standalone", "rt_data_mint_tables.inc")
 #                         exactly 56 bytes.
 #   System::Random  2500  runtime/types/system/Value.h (static_assert)
 #
-# THESE TWO ARE OBJECTS, NOT SCALARS, and that is not a size footnote. Both are
-# BSS in the file, but the DLL's CRT runs their constructors at load: Loader's
-# ctor stores ??_7Loader@Engine@@6B@ into +0x00 (UpdateLoop.h) and Random's
-# seeds 624 words of MT19937 state. Minting zeroed storage for them reproduces
-# the FILE, not the loaded DLL — at cutover something has to run those two
-# constructors or the first virtual call on _loader dispatches through a null
-# vtable and Particle's _rng returns zeros forever. Recorded in the `note`
-# field and in WAVE9_LANE_C2.md; no other storage symbol has this problem
-# (singletons are pointers written on first use).
+# THESE TWO ARE OBJECTS, NOT SCALARS -- and only ONE of them is constructed.
+# Both are BSS in the file, which is all a file-based harvest can see, so this
+# lane first assumed both needed a constructor at cutover. The .CRT$XC sweep
+# (find_crt_init_table below) settled it against the DLL's own initialiser
+# array instead of against a guess:
+#
+#   _loader  IS constructed, by exactly one initialiser (0x180148fe0): Thread
+#            ctor with a 256 KB stack, then the Loader vtable at +0x00, then
+#            _loop = 0. Reproduced by ConstructLoader().
+#   _rng     is NOT constructed by anything. Retail never seeds it: the
+#            inlined Rand() in Particle::Update calls NextGroup() when index
+#            is 0, and NextGroup (0x1800c7dd0) is a pure twist with no seeding
+#            path. The shipped DLL runs Particle's generator from an all-zero
+#            MT19937 state. Zeroed storage is therefore EXACTLY faithful, and
+#            adding a seed would be the divergence -- do not "fix" it.
+
 # The one CRT trap that appears as a vtable slot. Named by Ghidra
 # (get_function_by_address at 0x18007ec28 -> "_purecall"); its decompile is the
 # stock MSVC pure-virtual-call handler. A slot pointing here is a pure virtual
@@ -96,8 +103,8 @@ KNOWN_INTERNAL_THUNKS = {
 }
 
 EXTRA_SIZES = {
-    "?_loader@LoaderLoop@Engine@@1VLoader@2@A": (0x38, "Engine::Loader OBJECT — NEEDS A CTOR AT STARTUP, zeroed storage is not enough"),
-    "?_rng@Particle@Graphics@@1VRandom@System@@A": (2500, "System::Random OBJECT (MT19937) — NEEDS A CTOR AT STARTUP to seed mt[]"),
+    "?_loader@LoaderLoop@Engine@@1VLoader@2@A": (0x38, "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()"),
+    "?_rng@Particle@Graphics@@1VRandom@System@@A": (2500, "System::Random OBJECT (MT19937), NEVER SEEDED by retail — zeroed IS faithful"),
     "?_frameIndex@ParticleInstance@Graphics@@1HA": (4, "int"),
     "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA": (1, "bool"),
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA": (8, "BaseTypeInfo* — head of the reflection chain"),
@@ -107,6 +114,85 @@ EXTRA_SIZES = {
     "?_systemTicksPerSecond@Timer@System@@0_JA": (8, "int64"),
     "?_ticksPerSecond@Timer@System@@0_JA": (8, "int64"),
 }
+
+# Vtables the census CANNOT see, because the only thing that needs them is this
+# mint. ??_7Loader@Engine@@6B@ is referenced by exactly one thing in the whole
+# process: the CRT initialiser that constructs ?_loader@LoaderLoop@Engine@@,
+# which stamps it at +0x00. Our tree never resolves it, so it is absent from the
+# census's `called` set -- and the moment we reproduce that construction (see
+# KNOWN_CTORS) we become its consumer. Lane C2's own instance of "porting grows
+# the cutover surface".
+EXTRA_VTABLES = {
+    "??_7Loader@Engine@@6B@":
+        "stamped by the ?_loader construction; no other consumer exists",
+}
+
+# Storage symbols the DLL's CRT CONSTRUCTS at load, and where the construction
+# lives on our side. A symbol that the sweep finds a constructor for and that is
+# NOT listed here is new work: the generator refuses rather than emitting a
+# symbol that would be minted as zeroed bytes and silently differ from the
+# loaded DLL.
+KNOWN_CTORS = {
+    "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA":
+        "MintTypeInfos() — head of our own BaseTypeInfo chain",
+    "?_loader@LoaderLoop@Engine@@1VLoader@2@A":
+        "MintConstructedStatics() — Thread ctor + Loader vtable + _loop=0",
+}
+
+
+def find_crt_init_table(pe, ib, text, rdata):
+    """The DLL's .CRT$XC initialiser array: the ground truth for what is
+    CONSTRUCTED at load, as opposed to what merely lives in a writable section.
+
+    Section flags cannot answer this — every one of these statics is BSS in the
+    file whether or not a constructor runs over it at load. The array is found
+    structurally: a run of qwords in .rdata that all point into .text, bounded
+    by a zero qword at each end, strictly increasing, and long. Vtable regions
+    also produce long runs of .text pointers, so `strictly increasing` and the
+    zero terminators are what separate the two; the result is asserted to be
+    unique.
+    """
+    ta, tb = text
+    ra, rb = rdata
+    data = pe.get_data(ra, rb - ra)
+    runs, cur = [], []
+    for off in range(0, len(data) - 8, 8):
+        qw = int.from_bytes(data[off:off + 8], "little")
+        if qw and ta <= qw - ib < tb:
+            cur.append(qw)
+        else:
+            if len(cur) >= 16:
+                runs.append(cur)
+            cur = []
+    if len(cur) >= 16:
+        runs.append(cur)
+    cand = [r for r in runs if all(r[i] < r[i + 1] for i in range(len(r) - 1))]
+    if len(cand) != 1:
+        raise SystemExit(f"CRT initialiser table: expected exactly one "
+                         f"zero-bounded increasing run, found {len(cand)}")
+    return cand[0]
+
+
+def scan_ctor_refs(pe, ib, inits, targets):
+    """target VA -> [initialiser VAs that reference it].
+
+    Each initialiser is tiny (~0x70 bytes) and reaches its static through a
+    rip-relative displacement. Rather than disassemble, every 4-byte window is
+    tried as a disp32 against the known target set: a false positive would have
+    to be a random 4 bytes landing on one of ~80 specific addresses, and every
+    hit this produced was confirmed against Ghidra's own xrefs.
+    """
+    hits = {}
+    bounds = [(inits[i], inits[i + 1] if i + 1 < len(inits) else inits[i] + 0x70)
+              for i in range(len(inits))]
+    for start, end in bounds:
+        b = pe.get_data(start - ib, end - start)
+        for o in range(0, len(b) - 4):
+            disp = int.from_bytes(b[o:o + 4], "little", signed=True)
+            t = start + o + 4 + disp
+            if t in targets:
+                hits.setdefault(t, set()).add(start)
+    return {k: sorted(v) for k, v in hits.items()}
 
 
 def run_census(csv_path):
@@ -148,6 +234,15 @@ def main():
                  s.VirtualAddress + max(s.Misc_VirtualSize, s.SizeOfRawData))
                 for s in pe.sections]
 
+    secs_text = secs_rdata = None
+    for name, lo, hi in sections:
+        if name == ".text":
+            secs_text = (lo, hi)
+        elif name == ".rdata":
+            secs_rdata = (lo, hi)
+    if not secs_text or not secs_rdata:
+        raise SystemExit("Runtime-x64.dll has no .text/.rdata?")
+
     def section_of(rva):
         for name, a, b in sections:
             if a <= rva < b:
@@ -175,7 +270,18 @@ def main():
         if rva is None or section_of(rva) == ".text":
             continue
         data_syms.append((row["key"], row["namespace"], rva, row.get("callers", "")))
+    for sym, why in EXTRA_VTABLES.items():
+        rva = by_name.get(sym)
+        if rva is None:
+            errors.append(f"{sym}: EXTRA_VTABLES names a symbol the DLL does not export")
+        elif all(sym != d[0] for d in data_syms):
+            data_syms.append((sym, "Engine", rva, "mint:" + why))
     data_syms.sort()
+
+    # ---- the construction sweep (see find_crt_init_table) -------------------
+    inits = find_crt_init_table(pe, ib, secs_text, secs_rdata)
+    ctor_of = scan_ctor_refs(pe, ib, inits,
+                             {ib + rva for _s, _n, rva, _c in data_syms})
 
     # The harvest, keyed for cross-checking only. Slots first, then typeinfo.
     harvest_slots = {}      # (symbol, index) -> target VA
@@ -279,6 +385,11 @@ def main():
                     errors.append(f"{sym}.{k_here}: harvest {h[k_there]!r} != "
                                   f"DLL {t[k_here]!r}")
         typeinfos.append(t)
+    for t in typeinfos:
+        if t["va"] not in ctor_of:
+            errors.append(f"{t['symbol']}: NOT built by any CRT initialiser — "
+                          f"every BaseTypeInfo is supposed to be, so either the "
+                          f"sweep is broken or this one is built somewhere else")
     typeinfos.sort(key=lambda t: t["symbol"])
 
     # ---- storage: everything else in the exported-DATA set -----------------
@@ -296,8 +407,17 @@ def main():
             errors.append(f"{sym}: exported DATA in {section_of(rva)} with no known "
                           f"size — add it to EXTRA_SIZES with the header that pins it")
             continue
+        ctor = ctor_of.get(ib + rva, [])
+        if ctor and sym not in KNOWN_CTORS:
+            errors.append(
+                f"{sym}: the DLL CONSTRUCTS this at load (initialiser "
+                f"{hex(ctor[0])}) and nothing in rt_data_mint.cpp reproduces it. "
+                f"Minting it as zeroed storage would silently differ from the "
+                f"loaded DLL — add it to KNOWN_CTORS and implement it.")
         storage.append({"symbol": sym, "va": ib + rva, "size": size,
-                        "note": note, "namespace": ns})
+                        "note": note, "namespace": ns,
+                        "ctor": (hex(ctor[0]) + (f" (+{len(ctor)-1} more)" if len(ctor) > 1 else ""))
+                                if ctor else ""})
     storage.sort(key=lambda s: s["symbol"])
 
     if errors:
@@ -380,7 +500,7 @@ def main():
     w("static RtMintStorage kMintStorage[] = {")
     for s, so in zip(storage, offsets):
         w(f"    {{ {cstr(s['symbol'])}, {s['va']:#x}ull, {s['size']}, "
-          f"&kStorageBytes[{so}], {cstr(s['note'])} }},")
+          f"&kStorageBytes[{so}], {cstr(s['note'])}, {cstr(s['ctor'] or None)} }},")
     w("};")
     w("")
 
@@ -392,6 +512,9 @@ def main():
           f"{sum(1 for v in vtables if v['proof'].startswith('adjacent'))} count-proved by adjacency, "
           f"{sum(1 for v in vtables if v['proof'] == 'tail-not-a-pointer')} by tail probe)")
     print(f"  typeinfo   {len(typeinfos):3d}")
+    print(f"  crt init   {len(inits):3d} initialisers; {len(ctor_of)} of the exported "
+          f"DATA symbols are CONSTRUCTED at load "
+          f"({sum(1 for s in storage if s['ctor'])} storage + {len(typeinfos)} BaseTypeInfo)")
     print(f"  storage    {len(storage):3d}  ({total} bytes; "
           f"{sum(1 for s in storage if s['symbol'].startswith('?_singleton@'))} singletons, "
           f"{sum(1 for s in storage if not s['symbol'].startswith('?_singleton@'))} other .data statics)")

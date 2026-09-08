@@ -5,22 +5,25 @@ Follows [WAVE9_LANE_C.md](WAVE9_LANE_C.md) (the round-1 harvest) and
 `pefile` against the shipped DLL, and a `-fsyntax-only` check of every file
 written. The integrator owns the build.
 
-**All counts in this document are as of 2026-09-07, round 3, census
+**All counts in this document are as of 2026-09-07, round 4, census
 843 called / 585 ported.** Read §1 before comparing them with any other
-document's — the number is supposed to move.
+document's — the number is supposed to move, and §2 is what settles which of
+those symbols are merely storage and which the DLL actually constructs.
 
 **Delivered**
 
 | File | What it is |
 |---|---|
 | `tools/rt_mint_gen.py` | Generator. **Runs `runtime_census.py` itself**, decodes the DLL, cross-checks the round-1 harvest, emits the tables. |
-| `standalone/rt_data_mint_tables.inc` | Generated. 38 vtables (313 slots), 14 `BaseTypeInfo`, 28 storage symbols. |
-| `standalone/rt_data_mint.{h,cpp}` | The mint: runtime fill, named traps, the type chain, and the shadow check. |
-| `standalone/resolve{.h,_standalone.cpp}` | `RtPortLookupExport` / `RtPortLookupAddr` — residue-free registry queries (§4). |
+| `standalone/rt_data_mint_tables.inc` | Generated. 39 vtables (315 slots), 14 `BaseTypeInfo`, 28 storage symbols, and the load-time-construction verdict for each. |
+| `standalone/rt_data_mint.{h,cpp}` | The mint: runtime fill, named traps, the type chain, the `?_loader` construction, and the shadow check. |
+| `standalone/resolve{.h,_standalone.cpp}` | `RtPortLookupExport` / `RtPortLookupAddr` — residue-free registry queries (§5). |
 | `standalone/main.cpp` | One line: a second shadow pass at exit. |
 
-Registration is **off by default**. `BANISHED_RT_MINT=1` makes the minted data
-live; nothing else in the tree changes behaviour.
+Registration is **off by default**, and so is construction. `BANISHED_RT_MINT=1`
+makes the minted data live; `BANISHED_RT_MINT_CTOR=1` runs the load-time
+constructions without registering; `BANISHED_RT_MINT_SHADOW=1` reports. With
+none of them set nothing in the tree changes behaviour.
 
 ---
 
@@ -30,7 +33,8 @@ live; nothing else in the tree changes behaviour.
 |---|--:|---|
 | Round 1 (harvest, `wave9_data_harvest.csv`) | 60 | 28 `??_7` + 18 `?_singleton@` + 14 `?_typeInfo@`, filtered by **name prefix** |
 | This lane, first pass | 70 | same set re-derived by **PE section** — +10 `.data` statics with ordinary names |
-| This lane, round 3 | **80** | +10 `??_7*Data@Video` vtables **that our tree did not reference until lane B2 ported the twelve companion classes** |
+| This lane, round 3 | 80 | +10 `??_7*Data@Video` vtables **that our tree did not reference until lane B2 ported the twelve companion classes** |
+| This lane, round 4 | **81** | +`??_7Loader@Engine@@6B@`, which nothing in the process references except the constructor this lane just reproduced (§2) |
 
 **"60" was never the DLL's total.** It is the DLL data our tree *asks for*, at
 the moment it was measured. Porting grows that set: a ported class references
@@ -62,14 +66,108 @@ because one of them is load-bearing:
 | `?_errorString@Error@System@@0PADA` | 8 | `char*`, not a buffer — the 8192-byte gap to the next export is other, unexported statics. |
 | `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA` | 1 | already consumed by `code/Game/Component/citizenai_executor.cpp` |
 | `?_frameIndex@ParticleInstance@Graphics@@1HA` | 4 | |
-| `?_loader@LoaderLoop@Engine@@1VLoader@2@A` | 56 | an `Engine::Loader` **object** — §6.1 |
-| `?_rng@Particle@Graphics@@1VRandom@System@@A` | 2500 | a `System::Random` **object** — §6.1 |
+| `?_loader@LoaderLoop@Engine@@1VLoader@2@A` | 56 | an `Engine::Loader` **object**, and the one storage symbol the DLL CONSTRUCTS at load — §2 |
+| `?_rng@Particle@Graphics@@1VRandom@System@@A` | 2500 | a `System::Random` **object** — never constructed, never seeded; see §2 |
 
 `_loader`'s size is corroborated twice: `static_assert(sizeof(Loader) == 0x38)`
 in `runtime/types/engine/UpdateLoop.h`, and the DLL's export table puts the next
 symbol exactly 56 bytes later.
 
-## 2. `_purecall` — 110 slots across 26 of the 38 vtables
+## 2. What the DLL CONSTRUCTS at load — swept against its own `.CRT$XC` array
+
+A file-based harvest cannot answer "is this really just storage". Every one of
+these statics is BSS in the file whether or not a constructor runs over it at
+load, so section flags and file bytes both say the same thing about a plain
+`int` and about a live `Thread` with four kernel handles. **The DLL's own CRT
+initialiser array is the ground truth**, and `tools/rt_mint_gen.py` now reads
+it on every run (`find_crt_init_table` + `scan_ctor_refs`):
+
+* The array is located structurally — a run of qwords in `.rdata` that all
+  point into `.text`, bounded by a zero qword at each end, strictly increasing.
+  Vtable regions also produce long runs of `.text` pointers, so "strictly
+  increasing" plus the zero terminators is what separates them; the generator
+  asserts the candidate is **unique** and refuses to guess. Result: **106
+  initialisers**, at `0x1801477b0`–`0x18014a510`.
+* Every initialiser is then scanned for a rip-relative reference to any symbol
+  in the mint's set. Every hit was cross-checked against Ghidra's own xrefs;
+  there were no false positives.
+
+**Result, all 81 symbols swept — 17 are constructed at load:**
+
+| Symbol(s) | Initialiser | Disposition |
+|---|---|---|
+| the 14 `?_typeInfo@` | one each | Already reproduced by `MintTypeInfos()`. Every one of the 14 is constructed — a **positive control**: the generator fails if any `BaseTypeInfo` turns out *not* to be, because that would mean the sweep is broken rather than that the type is special. |
+| `?_firstTypeInfo@BaseTypeInfo@Object@@` | 104 of the 106 | The chain head, head-inserted by each `BaseTypeInfo` ctor. Reproduced by our own chain (§5). |
+| `?_loader@LoaderLoop@Engine@@` | `0x180148fe0`, one | **Implemented**, see below. |
+| everything else — all 18 singletons, all 39 vtables, the other 8 `.data` statics | none | Plain storage. Zeroed bytes are faithful. |
+
+### `?_rng@Particle@Graphics@@` needs NO constructor — my own earlier claim was wrong
+
+Round 3's report listed `_rng` beside `_loader` as needing a constructor "or it
+returns zeros forever". **The sweep disproves it, and the reasoning behind the
+original claim was backwards.** `_rng` is referenced by no CRT initialiser at
+all (confirmed twice: this scan, and Ghidra's xrefs to `0x1801fe7f0`, which show
+only reads and writes from `Particle::Update` and `SetParticle`). Retail never
+seeds it. The inlined `Rand()` in `Particle::Update` calls
+`?NextGroup@Random@System@@AEAAXXZ` (`0x1800c7dd0`) when `index == 0`, and
+NextGroup is a pure MT19937 twist with **no seeding path** — an all-zero state
+twists to an all-zero state.
+
+So the shipped DLL runs `Graphics::Particle`'s generator from an unseeded,
+all-zero MT19937. **Our zeroed mint is exactly faithful, and adding a seed
+would BE the divergence.** Nobody should "fix" this later; the note is carried
+in `EXTRA_SIZES` next to the size so it is read at the point of temptation.
+
+This is the same shape as `reference_oracle_must_not_compare_unwritten_bytes.md`
+one level up: the question was not "what should this value be" but "who writes
+it", and the answer was nobody.
+
+### `?_loader@LoaderLoop@Engine@@` — implemented
+
+`FUN_180148fe0`, transcribed and reproduced by `ConstructLoader()`:
+
+```
+System::Thread::Thread(&_loader, 0x40000);   // 256 KB stack — ported, ??0Thread@System@@QEAA@I@Z
+_loader.vtable = ??_7Loader@Engine@@6B@;     // +0x00
+_loader._loop  = nullptr;                    // +0x30  (static_assert sizeof(Thread)==0x30)
+atexit(...);                                 // retail's teardown IS ??1Thread with the
+                                             // Thread vtable restamped — our ported dtor
+```
+
+Two things fell out of implementing it:
+
+1. **It added a 39th vtable to this lane.** `??_7Loader@Engine@@6B@` is in no
+   census: the only thing in the entire process that references it is the
+   initialiser that stamps it, so our tree never resolved it — until this
+   construction made us its consumer. It is now minted via an explicit
+   `EXTRA_VTABLES` entry with that reason written down. Lane C2's own instance
+   of "porting grows the cutover surface", found inside a single function.
+   Its 2 slots are `?Run@Loader@Engine@@UEAAXXZ` and (inherited, not
+   overridden) `?OnCompleted@Thread@System@@UEAAXXZ`; **neither is ported**, so
+   both are traps. That is still strictly better than the null vtable zeroed
+   storage would have given: after cutover the loading thread says *which*
+   method is missing instead of dispatching through address zero.
+2. **`??_7Thread@System@@6B@`'s shape is now explained.** Thread's 2-slot
+   vtable is `[_purecall, OnCompleted]` because `Run` is pure virtual in
+   `Thread`; `Loader` overrides `Run` and inherits `OnCompleted`. Porting the
+   single function `?OnCompleted@Thread@System@@UEAAXXZ` fills a slot in **two**
+   vtables.
+
+**Constructing is gated**, because it starts a real OS thread and three events:
+`BANISHED_RT_MINT=1` (cutover) or `BANISHED_RT_MINT_CTOR=1` (build the objects
+without registering the mint, so the shadow check can compare ours against the
+DLL's live one while both exist).
+
+### The durable part
+
+The sweep is not a one-off answer written into a document. It runs inside the
+generator, and a storage symbol that is constructed but has no entry in
+`KNOWN_CTORS` is a **hard failure**: the generator refuses to emit rather than
+produce a symbol that would be minted as zeroed bytes and silently differ from
+the loaded DLL. If a later lane's port pulls in another constructed static —
+and §1 says it will — the next regeneration says so by name.
+
+## 3. `_purecall` — 110 slots across 26 of the 39 vtables
 
 Lane C reported "30 duplicate slots across 10 vtables". That counts **fold-group
 duplicates** (10 groups, 40 slots, minus one representative each). The number
@@ -85,24 +183,24 @@ vtables** — because in those ten, *every slot except slot 0 is `_purecall`*
 (`ContextData` and `DeviceData` are 19 of 20 each). This is all in lane B's
 favour: 110 slots are not functions anyone has to port.
 
-## 3. Slot counts: verified two independent ways, zero suspects
+## 4. Slot counts: verified two independent ways, zero suspects
 
 A minted vtable that is one slot short does not fail to link — it dispatches
 whatever follows in `.rdata`. So every count is re-established:
 
-* **23 of 38 by adjacency** — the last slot ends exactly where the next
+* **23 of 39 by adjacency** — the last slot ends exactly where the next
   exported symbol begins. Exact, no inference. (All ten new `*Data` vtables are
   in this group; they are packed contiguously.)
-* **15 of 38 by tail probe** — the qword one past the last slot is not a valid
+* **16 of 39 by tail probe** — the qword one past the last slot is not a valid
   address anywhere in the DLL image, so the decode stopped on its own and not
   at the bound.
 * **0 suspect.** The generator refuses to emit a table whose count it cannot
   establish either way, and the shadow check re-runs the tail probe live.
 
-## 4. How the mint works, and why the tables are filled at runtime
+## 5. How the mint works, and why the tables are filled at runtime
 
 The obvious design — bake `&OurGeometryClean` into a generated table — is wrong
-here: **not one of the 38 vtables can be completely filled today** (§5), so a
+here: **not one of the 39 vtables can be completely filled today** (§6), so a
 baked table would need regenerating after every lane-B port, and every
 regeneration is a chance to bake a stale address.
 
@@ -148,7 +246,7 @@ registry queries that answer "is this ported" without falling through to the
 DLL and without recording anything. Anything that wants to *inspect* the
 registry rather than call through it should use them.
 
-## 5. Per-symbol status
+## 6. Per-symbol status
 
 ### The highest-leverage finding: slot 0 is `??_G`, not `??1`
 
@@ -183,10 +281,10 @@ available in the whole lane, and nothing else in this document comes close.
 | `??_7DeviceData@Video@@6B@` | `0x180058b10` | 20 | 19 |
 
 The same shape holds more weakly elsewhere: slot 0 is an unnamed deleting
-destructor in **36 of the 38** vtables (`Thread@System` is `_purecall`;
+destructor in **36 of the 39** vtables (`Thread@System` is `_purecall`;
 `ImageBufferData`/`RenderStateData` are in the table above).
 
-### Vtables — 38 minted, 0 complete
+### Vtables — 39 minted, 0 complete
 
 "ported" is what the registry holds today; it rises on its own as lane B lands
 ports. "trap" is lane B's remaining worklist for that class.
@@ -203,6 +301,7 @@ ports. "trap" is lane B's remaining worklist for that class.
 | `??_7RenderBufferData@Video@@6B@` | 4 | 0 | 1 | 3 |
 | `??_7RenderStateData@Video@@6B@` | 3 | 0 | 1 | 2 |
 | `??_7Thread@System@@6B@` | 2 | 0 | 1 | 1 |
+| `??_7Loader@Engine@@6B@` | 2 | 0 | 2 | 0 |
 | `??_7VertexBufferData@Video@@6B@` | 7 | 0 | 1 | 6 |
 | `??_7VertexLayoutData@Video@@6B@` | 3 | 0 | 1 | 2 |
 | `??_7VertexProgramData@Video@@6B@` | 3 | 0 | 1 | 2 |
@@ -231,7 +330,7 @@ ports. "trap" is lane B's remaining worklist for that class.
 | `??_7DialogLoaderLoopT@Engine@@6B@` | 13 | 2 | 10 | 1 |
 | `??_7DialogController@UI@@6B@` | 11 | 1 | 10 | 0 |
 | `??_7LoaderLoop@Engine@@6B@` | 12 | 0 | 12 | 0 |
-| **total** | **313** | **32** | **171** | **110** |
+| **total** | **315** | **32** | **173** | **110** |
 
 Minting a table with unfilled slots does not contradict "do not mint a vtable
 whose slots you cannot fill" — it is that rule applied per slot instead of per
@@ -257,21 +356,22 @@ type whose factory is a trap cannot be constructed at all. Types:
 
 ### Storage — 28 minted (18 singletons + 10 `.data` statics)
 
-Zeroed, 16-byte-aligned storage. Contents never compared against the DLL (§7).
-Two need more than storage — §6.1.
+Zeroed, 16-byte-aligned storage. Contents never compared against the DLL (§8).
+One of the 28 — `?_loader@LoaderLoop@Engine@@` — needs more than storage and
+gets it (§2); the other 27 are plain BSS, proved so by the `.CRT$XC` sweep
+rather than assumed from their section.
 
-## 6. Deferred, blocked, and what is *not* covered
+## 7. Deferred, blocked, and what is *not* covered
 
-1. **`?_loader@LoaderLoop` and `?_rng@Particle` need a CONSTRUCTOR at startup,
-   not just storage.** Both are BSS in the *file*, which is all the harvest can
-   see, but the DLL's CRT runs their constructors at load: `Loader`'s stores
-   `??_7Loader@Engine@@6B@` into `+0x00`, `Random`'s seeds 624 words of MT19937
-   state. Minting zeroed bytes reproduces the file, not the loaded DLL. After
-   cutover the first virtual call on `_loader` dispatches through a null vtable
-   and `Particle::_rng` returns zeros forever. **Open — needs an owner.** No
-   other storage symbol has this shape (singletons are pointers written on
-   first use).
-2. **The twelve `??_G` deleting-destructor thunks** (§5) — blocked on lane B,
+1. **CLOSED — the load-time construction question, both halves.** `?_loader`
+   is constructed and now reproduced; `?_rng` is not constructed by anything
+   and zeroed storage is exactly faithful. Neither is open. See §2, including
+   the correction to this lane's own earlier claim about `_rng`. What the
+   `_loader` construction leaves open is *its vtable's two slots*:
+   `?Run@Loader@Engine@@UEAAXXZ` and `?OnCompleted@Thread@System@@UEAAXXZ` are
+   unported, so the loading thread would trap after cutover rather than run.
+   Blocked on lane B; `OnCompleted` is worth two slots (§2).
+2. **The twelve `??_G` deleting-destructor thunks** (§6) — blocked on lane B,
    and the cheapest 12 complete vtables in the wave.
 3. **The 28 factory pointers** — blocked on lane B porting `CreateNewObject` /
    `CreateInPlaceObject` for the 14 types.
@@ -290,11 +390,12 @@ Two need more than storage — §6.1.
    wave is a flag flip, not new code — but it must not be flipped before the
    DLL goes.
 7. **The set will grow again.** Every class a later lane completes can add
-   vtables here (§1). Re-run the generator before closing the wave; it re-runs
-   the census for you and will fail loudly on any new exported `.data` static
-   whose size nobody has pinned.
+   vtables here (§1) — and, as `_loader` showed, so can this lane's own work.
+   Re-run the generator before closing the wave; it re-runs the census for you
+   and fails loudly on any new exported `.data` static whose size nobody has
+   pinned, and on any newly-constructed static nothing reproduces (§2).
 
-## 7. The shadow check — what it compares, and what it refuses to
+## 8. The shadow check — what it compares, and what it refuses to
 
 `BANISHED_RT_MINT_SHADOW=1`. Runs twice: at `RtDataMintInit` (`phase=init`) and
 at process exit from `standalone/main.cpp` (`phase=exit`), because which
@@ -306,11 +407,12 @@ the DLL.
 | | |
 |---|---|
 | every vtable's exported address | vs the recorded VA |
-| all 313 slots, live | DLL's qword vs the recorded target |
+| all 315 slots, live | DLL's qword vs the recorded target |
 | every filled slot | ours == the registry's port of *that same function*, and **≠ the DLL's address** |
 | slot count, live | the qword past the last slot must not be a DLL pointer |
 | `BaseTypeInfo` `name`/`parentName`/`fileExtension` | by `strcmp`, not by pointer |
 | `BaseTypeInfo` `factoryFn`/`inPlaceFactoryFn` | DLL's vs the recorded VA |
+| a CONSTRUCTED static's **non-null word shape** | ours vs the DLL's live object, qword by qword |
 
 **Deliberately not compared**
 
@@ -318,11 +420,17 @@ the DLL.
   function's address, a different number by construction. A byte comparison
   fails on exactly the slots that represent progress and passes on the ones
   that do not. The comparison that means something is the *mapping*.
-* **Any storage symbol's contents.** All 28 are BSS the DLL only writes at
+* **Any storage symbol's VALUES.** All 28 are BSS the DLL only writes at
   runtime — comparing them is
   `reference_oracle_must_not_compare_unwritten_bytes.md` verbatim, returning
   100% green or 100% red while meaning neither. The report prints instead which
-  of the 28 each side has actually written.
+  of the 28 each side has actually written. For the one CONSTRUCTED static
+  there *is* something to compare, and it is still not the values: our vtable
+  pointer and our HANDLEs are different numbers from the DLL's by construction.
+  What must agree is the **shape** — which qwords the constructor leaves
+  non-null. That is weaker than a value comparison and says so, but it catches
+  the failure that actually matters (a ctor that leaves the handles or the
+  vtable null).
 * **`BaseTypeInfo::next`.** The DLL's is built by its static-init order, ours by
   ours; they cannot agree and a mismatch would be noise.
 * **`BaseTypeInfo::typeId` after `Factory::Startup`.** Startup overwrites the
@@ -332,7 +440,7 @@ the DLL.
 **Effectiveness control.** The summary separates *ground truth* comparisons
 (recorded vs DLL — these prove the harvest, not the port) from *minted from OUR
 ported code* (the only number that measures the port). If the second is zero it
-says so in four lines of asterisks, because 313 green ground-truth rows with
+says so in four lines of asterisks, because 315 green ground-truth rows with
 none of our own code in the tables would otherwise read as a finished lane.
 
 ### Expected result, to be checked against the run
@@ -342,26 +450,33 @@ informative — most likely another lane landing ports between now and the run,
 which should move `minted from OUR` **up** and `traps` down by the same amount:
 
 ```
-[RtMint] minted 38 vtables (313 slots: 32 ported, 171 unported-trap, 110 purecall-trap),
+[RtMint] minted 39 vtables (315 slots: 32 ported, 173 unported-trap, 110 purecall-trap),
          14 BaseTypeInfo, 28 storage symbols (2992 bytes)
-[RtMint] 0 of 38 vtables are COMPLETE ...
-[RtMintShadow] ground truth       : 313 slot comparisons vs the live DLL, 0 MISMATCH
+[RtMint] 0 of 39 vtables are COMPLETE ...
+[RtMint] constructed 2 of the 2 statics the DLL's CRT builds at load     [only with _CTOR=1]
+[RtMintShadow] ground truth       : 315 slot comparisons vs the live DLL, 0 MISMATCH
 [RtMintShadow] minted from OUR    : 32 slots, 0 MISMATCH
-[RtMintShadow] minted as traps    : 281 (110 purecall by design, 171 not yet ported)
-[RtMintShadow] complete vtables   : 0 of 38
+[RtMintShadow] minted as traps    : 283 (110 purecall by design, 173 not yet ported)
+[RtMintShadow] complete vtables   : 0 of 39
 [RtMintShadow] slot-count suspects: 0
 [RtMintShadow] BaseTypeInfo       : 70 field comparisons, 0 MISMATCH, 14 typeId INFO (phase=exit)
 [RtMintShadow] storage            : 28 symbols, <n> written by the DLL, ...
+[RtMintShadow] constructed statics: 2 of 2 built (shape compared on 1, 0 SHAPE MISMATCH)
 [RtMintShadow] symbols absent from the DLL: 0
 [RtMintShadow] ==== clean: 0 problem(s) ====
 ```
+
+Without `BANISHED_RT_MINT_CTOR=1` the constructed line reads `0 of 2 built` and
+the shape comparison is skipped — that is not a failure, it is the default. The
+shape row is only meaningful with the DLL present, so it belongs in the
+pre-cutover gate checklist and is now in it.
 
 **Any non-zero `MISMATCH`, `slot-count suspects` or `absent` is a real finding**
 and the run should be treated as failed. `typeId INFO` at `phase=exit` is
 expected (14 of them); at `phase=init` it should be 0, and 14 there would mean
 `Factory::Startup` ran before `RuntimePortInit`, which would be news.
 
-## 8. How to run it
+## 9. How to run it
 
 No new build target; the files are picked up by `standalone/*.cpp`.
 
@@ -370,9 +485,20 @@ BANISHED_RT_MINT_SHADOW=1 mingw32-make sa-run
 grep -E "^\[RtMint" "C:/GOG Games/Banished/standalone_debug.log"
 ```
 
-`BANISHED_RT_MINT_SHADOW=1` is the only variable needed. **Do not set
-`BANISHED_RT_MINT=1`** — that registers the minted data over the DLL's and is
-for cutover only (§6.6).
+`BANISHED_RT_MINT_SHADOW=1` alone gives the mapping check. Add
+`BANISHED_RT_MINT_CTOR=1` for the constructed-statics gate:
+
+```bash
+BANISHED_RT_MINT_CTOR=1 BANISHED_RT_MINT_SHADOW=1 mingw32-make sa-run
+```
+
+That builds `?_loader` for real — a suspended-then-resumed OS thread and three
+events, exactly as the DLL's initialiser does — and compares its shape with the
+DLL's live one. It does **not** register anything, so nothing else in the
+process changes.
+
+**Do not set `BANISHED_RT_MINT=1`** — that registers the minted data over the
+DLL's and is for cutover only (§7.6).
 
 Regenerating the tables (do this whenever another lane lands ports, and before
 the wave closes):
