@@ -1723,6 +1723,68 @@ CTX measured seven Wave 6 `Context` setters that have zero live callers only
 because they are reached by a direct near-JMP the registry cannot redirect from
 inside `MainLoop::Draw`, and they all go live at once when that side is ported.
 
+### Attempt 20: THE FAILURE BECOMES OURS — 27 unresolved names down to 17, and the fault moves INSIDE our own code
+
+Tip `9f7d6d9` (all eight farmed lanes plus the PKG3 oracle fix), exe md5
+`d3c02467b450d328d21038da71384009`, verified byte-identical to a build of that
+commit made in a dedicated verification worktree — not inherited from whatever a
+previous lane had left deployed, which is how a cutover result gets attributed to
+the wrong binary.
+
+| | attempt 19 | attempt 20 |
+|---|---|---|
+| dies at | `Engine::Startup +0x338` | `Engine::Startup +0x3a3` |
+| failure | null `CALL RAX` on an unresolved symbol | **our own ported code faults** |
+| `[RtUnresolved]` names | 27 | **17** |
+
+Ten names closed by the eight lanes: `RefreshList@Modification`,
+`??1DialogInstance`, `Clean@ExternalFactory`, `Update@Device@Input`, the three
+widget setters, `AddLine@SpriteContext` and both `SetScissor` overloads.
+
+**THE FAILURE CHANGED CLASS AGAIN, AND THIS TIME IN THE DIRECTION THAT MATTERS.**
+Every previous wall was a symbol nobody had ported — the boot reached a hole and
+fell through it. This one is a fault *inside a body we wrote*:
+
+```
+ACCESS_VIOLATION   Fault: READ of 0x0000000000000028
+RAX=8  RBX=8  RDX=8
+#0  FactoryStartupRun(FactorySet*) + 0x1b6
+#1  RtObject_Factory_Startup + 0xb0
+#2  RtEngine_Engine_Startup + 0x3a3
+```
+
+**And the port is almost certainly RIGHT.** `type_system.cpp`'s pass 2 carries a
+comment that predicts this exact crash, written when the body was transcribed:
+
+> `FAITHFUL: LEA RBP,[RCX+8] on a null RCX. … a parentName naming an
+> unregistered type yields (TypeRecord*)8 and faults on the next line, exactly as
+> retail does.`
+
+`p` is null because the descend found no node for `parentId`; `parentRec` becomes
+8; the next line reads `+0x20` off it — `0x28`. The registers agree exactly. So
+**a type's `parentName` names a type that is not in the chain, and only at
+cutover** — with the DLL present the same path works. Retail's unguarded deref is
+load-bearing: it relies on every named parent being registered, so a guard would
+skip the behaviour rather than restore it. The job is to find who failed to
+supply the type, not to defend the deref.
+
+Prime suspect, and it is a recorded failure of the same subsystem: the mint
+generator **mints what our SOURCE names and is blind to what its own minted
+vtables READ** — ten `BaseTypeInfo` once came out null, including the two roots
+of the reflection chain. A minted type whose `parentName` names something nothing
+registers produces precisely this. Farmed to lane TYPE.
+
+**Do not chase `chain=416 nodes=415` while looking at this.** Lane COLL settled
+it: `AutoSaveDialog` is registered TWICE and the duplicate arm correctly returns
+the existing node without incrementing. `ReportKeyCollisions()` names it.
+
+Expected-at-cutover and now correctly worded, after lane ENGIO found the old
+message was wrong: `[VideoInterface]` no longer claims a DX9 fallback that cannot
+happen with no Runtime to load VideoDX11 — it says instead that **something must
+call `VideoInterfaceFillDx11Slot()` from the ported `InitializeInterfaces`,
+because nothing else fills the slot.** That is a real cutover gap the old wording
+had hidden, and I had read the old line and moved on.
+
 ### Attempt 19: THE BOOT NAMES ITS OWN REMAINING SURFACE — 27 symbols, and only ONE is reached
 
 Tip `fd30180` (lanes GFX3 + FNHOOK + COLL merged). Exe md5 `1cef3ae7…`, DLL renamed
