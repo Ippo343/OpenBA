@@ -1,7 +1,7 @@
-unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have neither a port nor a mint entry
-  of those, 148 have at least one site OUTSIDE a diff guard:
+unsatisfied_export_scan: 831 distinct names resolved through a door; 148 have neither a port nor a mint entry
+  of those, 145 have at least one site OUTSIDE a diff guard:
 
-  ??0Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:384
+  ??0Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:417
   ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ                                                code/Game/Game/w2_takescreenshot.cpp:148
   ??0Geometry@Graphics@@QEAA@AEBV01@@Z                                                     runtime/src/graphics/mesh.cpp:227
   ??0RenderBuffer@Video@@QEAA@XZ                                                           code/Game/Game/minimap_paint.cpp:101
@@ -10,12 +10,11 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ??1AchievementManager@Achievement@@QEAA@XZ                                               runtime/src/engine/engine_lifecycle.cpp:937
   ??1Application@0@QEAA@XZ                                                                 runtime/src/engine/engine_lifecycle.cpp:977
   ??1CompressedStream@IO@@UEAA@XZ                                                          runtime/src/io/compressedstream.cpp:331
-  ??1Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:461
+  ??1Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:494
   ??1Configuration@Audio@@QEAA@XZ                                                          runtime/src/engine/engine_lifecycle.cpp:960
   ??1Configuration@Input@@QEAA@XZ                                                          runtime/src/engine/engine_lifecycle.cpp:949
   ??1Configuration@System@@QEAA@XZ                                                         runtime/src/engine/engine_lifecycle.cpp:981
   ??1Configuration@Video@@QEAA@XZ                                                          runtime/src/engine/engine_lifecycle.cpp:968
-  ??1Context@Video@@QEAA@XZ                                                                engine/funcs/engine_funcs.cpp:1623
   ??1Device@Video@@QEAA@XZ                                                                 runtime/src/engine/engine_lifecycle.cpp:964
   ??1DialogInstance@UI@@UEAA@XZ                                                            engine/funcs/engine_funcs.cpp:1757
   ??1ExternalFactory@Object@@QEAA@XZ                                                       runtime/src/engine/engine_lifecycle.cpp:993
@@ -26,7 +25,6 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ??1Modification@IO@@QEAA@XZ                                                              runtime/src/engine/engine_lifecycle.cpp:997
   ??1Persistence@IO@@QEAA@XZ                                                               runtime/src/engine/engine_lifecycle.cpp:1001
   ??1RenderBuffer@Video@@QEAA@XZ                                                           code/Game/Game/minimap_paint.cpp:103
-  ??1SaveLoad@Save@@QEAA@XZ                                                                engine/funcs/engine_funcs.cpp:2178
   ??1Stream@Audio@@QEAA@XZ                                                                 runtime/src/engine/engine_lifecycle.cpp:955
   ??1UserInterface@UI@@QEAA@XZ                                                             code/Game/Game/gameupdateloop.cpp:3029
   ?AddGraph@GraphElement@UI@@QEAAXI@Z                                                      engine/funcs/engine_funcs.cpp:3262
@@ -37,17 +35,17 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ                                      standalone/reg_unreg_lane3.cpp:154  (+1 more)
   ?CacheText@TextElement@UI@@AEAAXXZ                                                       runtime/src/ui/widgets_layout.cpp:102
   ?Clean@ExternalFactory@Object@@QEAAXXZ                                                   runtime/src/engine/loops.cpp:192  (+1 more)
-  ?ClearResources@Context@Video@@QEAAXXZ                                                   engine/funcs/engine_funcs.cpp:1570
   ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z       engine/funcs/engine_funcs.cpp:1607
   ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z                                        runtime/src/io/filesystem_packages.cpp:599  (+1 more)
   ?Commit@CompressedStream@IO@@QEAAXXZ                                                     runtime/src/io/compressedstream.cpp:327  (+1 more)
-  ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z                                          runtime/src/system/compression.cpp:335  (+1 more)
+  ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z                                          runtime/src/system/compression.cpp:368  (+1 more)
   ?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z                                      runtime/src/io/compressedstream.cpp:356
   ?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@W4Usage@45@  code/Game/Game/w2_takescreenshot.cpp:150
   ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@                            engine/funcs/engine_funcs.cpp:1959
   ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@                    standalone/address_registry.cpp:1414
   ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@                                      runtime/src/achievement/achievement_manager.cpp:188
   ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z      standalone/address_registry.cpp:1115
+  ?CreateVideoContext@MainLoop@Engine@@AEAAXXZ                                             runtime/src/engine/engine.cpp:548
   ?DateAsString@DateTime@System@@QEBA?AVString@2@XZ                                        runtime/src/system/value_types.cpp:347
   ?Display@Error@System@@SAXXZ                                                             runtime/src/system/allocator.cpp:146
   ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z            engine/funcs/engine_funcs.cpp:3599  (+1 more)
@@ -72,8 +70,8 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ?Inverse@Matrix@Math@@QEBA?AV12@XZ                                                       runtime/src/video/context.cpp:352
   ?IsActive@SpinnerElement@UI@@QEBA_NXZ                                                    engine/funcs/engine_funcs.cpp:1926
   ?LoadResources@UpdateLoop@Engine@@QEAAXXZ                                                engine/funcs/engine_funcs.cpp:1706
-  ?OnVideoError@MainLoop@Engine@@QEAAXXZ                                                   runtime/src/engine/engine.cpp:412  (+1 more)
-  ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ                                                 runtime/src/engine/engine.cpp:420  (+1 more)
+  ?OnVideoError@MainLoop@Engine@@QEAAXXZ                                                   runtime/src/engine/engine.cpp:425  (+1 more)
+  ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ                                                 runtime/src/engine/engine.cpp:433  (+1 more)
   ?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z                                        runtime/src/io/compressedstream.cpp:391
   ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z                      runtime/src/io/filesystem_setupdirs_win.cpp:384
   ?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z                          runtime/src/system/configuration.cpp:245
@@ -99,7 +97,6 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ                                    runtime/src/graphics/mesh.cpp:255
   ?SaveAllSettings@UserInterface@UI@@QEAAXXZ                                               code/Game/Game/gameupdateloop_serialize.cpp:157
   ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z                    code/Game/Game/w2_takescreenshot.cpp:165
-  ?SaveList@Modification@IO@@QEAAXXZ                                                       runtime/src/engine/engine_lifecycle.cpp:919
   ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z                                engine/funcs/engine_funcs.cpp:3889
   ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z                         code/Game/Game/gameupdateloop_serialize.cpp:163
   ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z                             standalone/address_registry.cpp:1360
@@ -143,11 +140,11 @@ unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have ne
   ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z             engine/funcs/engine_funcs.cpp:2299  (+1 more)
   ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z                                       runtime/src/engine/loops.cpp:212  (+1 more)
   ?UpdateContainers@TabElement@UI@@AEAAXXZ                                                 runtime/src/ui/widgets_layout.cpp:109
-  ?UpdateDelete@SaveLoad@Save@@QEAAXXZ                                                     runtime/src/save/saveload.cpp:699
-  ?UpdateList@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:687
-  ?UpdateLoad@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:690
-  ?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ                                               runtime/src/save/saveload.cpp:693
-  ?UpdateSave@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:696
+  ?UpdateDelete@SaveLoad@Save@@QEAAXXZ                                                     runtime/src/save/saveload.cpp:885
+  ?UpdateList@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:873
+  ?UpdateLoad@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:876
+  ?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ                                               runtime/src/save/saveload.cpp:879
+  ?UpdateSave@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:882
   ?WriteSettings@Persistence@IO@@QEBAXXZ                                                   runtime/src/engine/engine_lifecycle.cpp:922  (+1 more)
 
   BLIND SPOT, measured not assumed: 2 resolves go through a wrapper taking a non-literal argument and are invisible to this scan.

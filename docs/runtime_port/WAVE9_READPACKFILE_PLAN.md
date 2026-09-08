@@ -145,8 +145,24 @@ source stream, with two `Collection::Array` grow loops inlined (stride 8 at +0x4
 `SetWindow` by a direct relative `CALL` and will never enter our port. So until rung 3
 lands, nothing calls these. The oracle is a **dual-stream probe**: open the same real
 `.pkg` twice, drive one stream through our ports and the other through the DLL's, and
-compare the bytes returned at every offset. Read-only, non-destructive, and the corpus is
-172 MB. That is a strong oracle and it is available as soon as rung 2 is written.
+compare at every offset. Read-only, non-destructive, and the corpus is 172 MB.
+
+**Two hard requirements on that oracle, both learned elsewhere and both live here.**
+
+1. **Compare the STREAM STATE, not only the bytes returned.** `CompressedStream` carries
+   `position` (+0x1c), `activeWindow` (+0x20), the window array at +0x30/+0x38 and
+   per-window use counts. A body can return identical bytes and leave the object in a
+   different place — and the next `Read` then diverges for reasons the previous comparison
+   said were fine. Lane PICK's general form: *if the result is observed only through a
+   lossy transform, the oracle is blind to everything the transform discards.* Comparing
+   returned bytes alone **is** that transform here. Rung 1 was exempt only because
+   `Decompress` is `static` and its cursor is a local with nothing to compare against;
+   rung 2 has no such excuse.
+2. **Compare in LOCKSTEP, not at the end.** Apply each read to both streams and compare
+   immediately, rather than running each to completion and comparing once. A defect that
+   cancels out compares equal at the end while every intermediate state differed, and a
+   block-by-block decompressor carrying state between blocks is precisely where that
+   happens. Also lane PICK.
 
 ### Rung 3 — `FileSystem::OpenFile` + `ReadFile`
 

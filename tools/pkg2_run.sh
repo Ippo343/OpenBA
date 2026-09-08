@@ -1,61 +1,79 @@
 #!/usr/bin/env bash
-# tools/pkg2_run.sh — Wave 9 lane PKG2's contention-safe deploy+run+capture.
+# =============================================================================
+# tools/pkg2_run.sh -- Wave 9 lane PKG2's deploy+run+capture, under the game lock
+# =============================================================================
 #
-# WHY: six lanes deploy to the one shared game directory. This lane lost two
-# measurements to a concurrent lane replacing reimpl-x64.exe between the copy
-# and the launch — once silently (the logs were overwritten after the run) and
-# once visibly (the run reported another lane's registration counts). Doing the
-# deploy, the launch and the log copy in one process, with an identity check on
-# BOTH ends, is the only shape that survives.
+# WHY: six lanes deploy the same reimpl-x64.exe into the one shared game
+# directory and write the same logs there. This lane lost three measurements to
+# that -- once the logs were overwritten after a good run, twice the exe itself
+# was replaced between the copy and the launch (one of those runs reported
+# another lane's registration count and would have been believed).
 #
-# The identity check is the registration count, not the build timestamp: the
-# `[Standalone] Build:` line comes from __DATE__/__TIME__ in a ccache-reused
-# object and is stale by design.
+# TWO INDEPENDENT PROTECTIONS, because each catches what the other cannot:
 #
-# USAGE: tools/pkg2_run.sh <label> <expected-IO-count> -- VAR=VAL ...
+#  1. tools/game_dir_lock.sh, held across deploy AND run AND the log copy.
+#     Releasing before copying the logs out reintroduces the race. The lock is
+#     ADVISORY -- it only works if every lane takes it -- which is exactly why
+#     protection 2 still exists.
+#
+#  2. A post-hoc identity check on the LOG, not on the disk. An md5 of the
+#     deployed file tells you what is on disk when you look, not what ran; only
+#     the log the process itself wrote can tell you that.
+#
+#     The gate keys on a LANE-OWNED banner, not on a shared total. The first
+#     version matched `[RtPort] IO: 77 exports registered` -- then lane MOD
+#     landed IO::Modification on the same RtIoPortInit, the IO total moved, and
+#     that gate would have failed a perfectly good run. A shared total changes
+#     whenever any other lane lands in the same namespace; the banner
+#     `[RtPort]   IO::PackageFile (lane PKG2): N exports registered` changes only
+#     when this lane's own file changes.
+#
+# The package set is recorded next to the identity, because for this lane the
+# INPUT is as much part of the measurement as the binary: a .pkm appearing in
+# WinData changes what LoadPackages mounts even when the exe is right, and the
+# lock explicitly does not protect WinData.
+#
+# USAGE: tools/pkg2_run.sh <label> -- VAR=VAL ...
+# =============================================================================
 set -u
+
 OUT=docs/runtime_port/wave9_lane_pkg2
-GD="${BANISHED_DIR:-C:/GOG Games/Banished}"
-LABEL="${1:?label}"; shift
-WANT="${1:?expected IO export count}"; shift
+GD="${BANISHED_GAME_DIR:-C:/GOG Games/Banished}"
+LANE=lane-PKG2
+LABEL="${1:?usage: pkg2_run.sh <label> -- ENV=VAL ...}"; shift
 [ "${1:-}" = "--" ] && shift
 
-MINE=$(md5sum standalone/build/reimpl-x64.exe | cut -d' ' -f1)
+# The expected banner count is derived from THIS build's own source, never
+# carried forward as a literal -- a hardcoded number is how the previous gate
+# went stale.
+WANT=$(grep -c 'RegisterRuntimeExport(' runtime/src/io/package_file.cpp)
+echo "[pkg2] expecting IO::PackageFile banner to read $WANT (derived from source)"
+
 mkdir -p "$OUT"
 
-for attempt in 1 2 3 4 5; do
-    # Wait for whoever holds the exe to finish.
-    while tasklist 2>/dev/null | grep -qi reimpl-x64; do sleep 6; done
+bash tools/game_dir_lock.sh acquire "$LANE" 900 || {
+    echo "[pkg2] could not acquire the game-directory lock"; exit 1; }
+trap 'bash tools/game_dir_lock.sh release "$LANE"' EXIT
 
-    if ! cp standalone/build/reimpl-x64.exe "$GD/reimpl-x64.exe" 2>/dev/null; then
-        echo "attempt $attempt: exe busy at copy time, retrying"
-        sleep 5; continue
-    fi
+cp standalone/build/reimpl-x64.exe "$GD/reimpl-x64.exe" || {
+    echo "[pkg2] deploy failed (exe busy?) -- another lane may not be taking the lock"
+    exit 1; }
 
-    NOW=$(md5sum "$GD/reimpl-x64.exe" | cut -d' ' -f1)
-    if [ "$NOW" != "$MINE" ]; then
-        echo "attempt $attempt: CLOBBERED between copy and launch, retrying"
-        sleep 5; continue
-    fi
+echo "[pkg2] pkg set = $(ls "$GD/WinData/" 2>/dev/null | grep -E '\.pkg$|\.pkm$' | tr '\n' ' ')"
 
-    # The package set is part of this lane's input, so it is recorded next to
-    # the binary identity — a .pkm appearing in WinData changes what
-    # LoadPackages mounts even when the binary is right.
-    echo "attempt $attempt: pkg set = $(ls "$GD/WinData/" 2>/dev/null | grep -E '\.pkg$|\.pkm$' | tr '\n' ' ')"
+tools/rt_run.sh "$LABEL" --timeout 600 -- "$@" > "$OUT/rt_run_${LABEL}_stdout.txt" 2>&1
 
-    tools/rt_run.sh "$LABEL" --timeout 600 -- "$@" > "$OUT/rt_run_${LABEL}_stdout.txt" 2>&1
-    cp "$GD/standalone_error.log" "$OUT/${LABEL}_error.log" 2>/dev/null
-    cp "$GD/standalone_debug.log" "$OUT/${LABEL}_debug.log" 2>/dev/null
-    cp "$GD/standalone_crash.log" "$OUT/${LABEL}_crash.log" 2>/dev/null
+# Copy the evidence out BEFORE the trap releases the lock.
+cp "$GD/standalone_error.log" "$OUT/${LABEL}_error.log" 2>/dev/null
+cp "$GD/standalone_debug.log" "$OUT/${LABEL}_debug.log" 2>/dev/null
+cp "$GD/standalone_crash.log" "$OUT/${LABEL}_crash.log" 2>/dev/null
 
-    GOT=$(grep -m1 -oE "IO: [0-9]+ exports" "$OUT/${LABEL}_debug.log" 2>/dev/null | grep -oE '[0-9]+')
-    echo "attempt $attempt: IO=$GOT (want $WANT)"
-    if [ "$GOT" = "$WANT" ]; then
-        echo "IDENTITY OK on attempt $attempt"
-        exit 0
-    fi
-    echo "attempt $attempt: ran ANOTHER LANE'S EXE — discarding and retrying"
-    sleep 5
-done
-echo "pkg2_run: gave up after 5 attempts; contention too high"
+GOT=$(grep -oE 'IO::PackageFile \(lane PKG2\): [0-9]+' "$OUT/${LABEL}_debug.log" 2>/dev/null \
+      | grep -oE '[0-9]+$')
+if [ "${GOT:-none}" = "$WANT" ]; then
+    echo "[pkg2] IDENTITY OK -- the exe that RAN is this lane's ($GOT exports)"
+    exit 0
+fi
+echo "[pkg2] IDENTITY FAILED: banner read '${GOT:-absent}', wanted '$WANT'."
+echo "[pkg2] The run measured something else. DISCARD IT."
 exit 1

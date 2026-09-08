@@ -503,6 +503,74 @@ carry a different version, a non-default `+0x70` priority and non-empty
 name/author/description — exactly the uniform fields. That needs the mods **enabled**, not
 merely present.
 
+## 15b. Reproduced under the game lock, and one finding the second run added
+
+Re-run after merging the integration tip, this time under `tools/game_dir_lock.sh`
+(it waited 90s for `lane-PICK`, then held the lock across deploy, run **and** the log
+copy). Identity verified from the log, not the disk.
+
+```
+[RtPort]   IO::PackageFile (lane PKG2): 21 exports registered
+[RtDiff] System::Compression::Decompress  calls=177  worked=137  divergences=0
+[PKG2/Compression] probe: 177 cases, round-trip ok=137 bad=0 (compressor declined 0)
+[PKG2/Compression] branch coverage: literal=39880 matchShort=55926 matchExtended=9211
+                   | failLiteral=3 failMatchDst=5 failMatchSrc=32 -- ALL SIX BRANCHES COVERED
+[PKG2/Compression] read-cursor exits (ours only, NOT compared -- sp is a local):
+                   exact=137 overshoot=0
+```
+
+**The identity gate had to change, and the reason is worth keeping.** The first version
+matched `[RtPort] IO: 77 exports registered`. Lane MOD then landed `IO::Modification` on
+the same `RtIoPortInit`, the IO total moved, and that gate would have **failed a perfectly
+good run**. A shared total changes whenever any other lane lands in the same namespace, so
+it is the wrong thing to key an identity check on. The gate now keys on a lane-owned
+banner that changes only when this lane's own file changes, and `tools/pkg2_run.sh`
+**derives the expected number from the source** rather than carrying a literal forward.
+
+**`literal` moved 39879 → 39880 and `matchShort` 55927 → 55926 between the two runs.** Not
+noise to wave away: the corpus is sliding windows over the *loaded* Runtime image, which
+is ASLR-relocated, so relocated pointer bytes differ run to run. The corpus is
+deliberately not bit-identical across runs, which adds variety rather than costing
+determinism — and `divergences=0` reproduced across both.
+
+### The read-cursor instrumentation, and the honest reading of it
+
+Added in response to lane PICK's finding that an oracle observing its result only through
+a lossy transform is blind to whatever the transform discards. The decompressor's
+analogue is comparing output bytes while ignoring **where the decode left the stream**.
+
+For *this* function the hazard does not apply, and the reason is specific rather than
+reassuring: `sp` is a **local**. `Decompress` is `static`, owns no object, and its only
+observable outputs are the returned length and the destination bytes — both compared, and
+the destination compared over the **whole `dstCap`** rather than the prefix the return
+value claims, so a body returning the right length while writing a different amount fails.
+There is no cursor field, no checksum, no end-of-block state to miss.
+
+It is counted anyway, and **the count says the overshoot exit is UNCOVERED**: `exact=137,
+overshoot=0`. By this lane's own rule a zero bucket is reported as uncovered rather than
+averaged into a pass. The explanation is benign and checkable — `Compress` emits whole
+tokens, so a well-formed stream always lands the cursor exactly on `srcEnd`, and the 40
+malformed cases all returned 0 before reaching the exit at all. So the overshoot landing
+is reachable only from a malformed stream that nonetheless decodes to completion, which
+this corpus does not contain. It is not a distinct code path (same loop test, different
+landing), so this is a gap in the *report*, not in the verification — but "the corpus
+never exercised it" and "it cannot happen" are different claims and only one of them is
+supported.
+
+**At rung 2 this stops being academic.** `CompressedStream` carries `position` (+0x1c),
+`activeWindow` (+0x20) and per-window use counts; there, comparing returned bytes alone
+*is* the lossy transform, and the oracle must compare the object's state too. Lane PICK's
+second lesson — compare **in lockstep**, step by step, rather than running each subject to
+completion and comparing once, because a defect that cancels out compares equal at the end
+while every intermediate state differed — applies to rung 2 for the same reason: a
+`CompressedStream` decodes block by block and carries state between blocks. Both are
+recorded in [WAVE9_READPACKFILE_PLAN.md](WAVE9_READPACKFILE_PLAN.md) as requirements on
+rung 2's oracle rather than as advice.
+
+Neither lesson changes rung 1's verdict: a single `Decompress` call is one indivisible
+operation with no state carried across calls, and the round-trip check is an independent
+second opinion that a compensating defect would also have to satisfy.
+
 ## 16b. Accounting for iteration 2 — including a +3 that is mine
 
 | `unsatisfied_export_scan.py` | it.1 after | it.2 after |
@@ -532,6 +600,13 @@ literal-adjacency regex). The sites are marked `RT_RAW_OK`, which is the convent
 that die with the oracle"); `unsatisfied_export_scan.py` does not honour it yet. **Flagged
 for the tool's owner rather than worked around** — and the marker means a future reader
 greps one string instead of re-deriving the argument.
+
+**Those three rows are a delta measured on this branch before merging the integration
+tip**, which is the only way to isolate this lane's own contribution. After merging
+`7421209` the absolute numbers are different (831 doors / 148 unsatisfied / 145 outside a
+guard) because four other lanes landed in between — that movement is theirs, not this
+lane's, and quoting the post-merge figure as "my after" would silently credit or blame
+this lane for it.
 
 Also unchanged and clean: `port_bypass_audit.py` **0 bypasses** on both doors,
 `export_name_audit.py` 1 miss (the pre-existing doc-string false positive), and the run

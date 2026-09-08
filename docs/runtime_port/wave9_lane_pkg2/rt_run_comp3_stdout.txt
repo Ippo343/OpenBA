@@ -1,280 +1,289 @@
-== rt_run[comp2] exe stamp: 2026-09-08 09:47:44.987283300 -0400
-== rt_run[comp2] exited rc=0 after 5s
+== rt_run[comp3] exe stamp: 2026-09-08 09:56:18.518711300 -0400
+== rt_run[comp3] exited rc=0 after 5s
 -- crash log --
 (none)
 -- runtime port lines --
 C:/GOG Games/Banished/standalone_error.log:[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[0] @00007ff6a2a80e60 = Video::Context::Clear[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[1] @00007ff6a2a80ea0 = Video::Context::DrawIndexed[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[2] @00007ff6a2a80ee0 = Video::Context::GetMaxDynamicInstances[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[3] @00007ff6a2a80f20 = Video::Context::BeginVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[4] @00007ff6a2a80f60 = Video::Context::EndVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[5] @00007ff6a2a80fa0 = Video::Context::BeginIndexedVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[6] @00007ff6a2a80fe0 = Video::Context::EndIndexedVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[7] @00007ff6a2a81020 = Video::Context::BeginInstancedIndexedVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[8] @00007ff6a2a81060 = Video::Context::EndInstancedIndexedVertices[slot]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[9] @00007ff6a2a7e620 = UI::Element::ComputeLayout[thunk]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[10] @00007ff6a2a7e660 = UI::Element::Draw[thunk]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[11] @00007ff6a2a7e020 = UI::DialogInstance::OnUpdateLayout[shape]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[12] @00007ff6a2a7e060 = UI::DialogInstance::OnUpdate[shape]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[13] @00007ff6a2a7e0a0 = UI::DialogInstance::OnElementEvent[shape]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[14] @00007ff6a2a7e0e0 = UI::DialogController::~DialogController[shape]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[15] @00007ff6a2a78f40 = Wave9X::System::MemoryAllocator::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[16] @00007ff6a2a78f80 = Wave9X::IO::Modification::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[17] @00007ff6a2a78fc0 = Wave9X::Object::Factory::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[18] @00007ff6a2a79000 = Wave9X::Object::ExternalFactory::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[19] @00007ff6a2a79040 = Wave9X::IO::FileSystem::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[20] @00007ff6a2a79080 = Wave9X::Video::Configuration::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[21] @00007ff6a2a790c0 = Wave9X::Input::Device::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[22] @00007ff6a2a79100 = Wave9X::Input::Configuration::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[23] @00007ff6a2a79140 = Wave9X::Audio::Configuration::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[24] @00007ff6a2a79180 = Wave9X::Application::Application::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[25] @00007ff6a2a791c0 = Wave9X::Video::Device::ctor(type=0)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[26] @00007ff6a2a79200 = Wave9X::Video::Device::ctor(type=1, must NOT publish)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[27] @00007ff6a2a79240 = Wave9X::Object::InternalFactory::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[28] @00007ff6a2a7cde0 = Object::BaseTypeInfo::BaseTypeInfo
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[29] @00007ff6a2a78b40 = Engine::Engine::Engine
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[30] @00007ff6a2a78bc0 = Engine::Engine::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[31] @00007ff6a2a7d540 = System::Configuration::SetCommandLine
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[32] @00007ff6a2a7aec0 = IO::FileSystem::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[33] @00007ff6a2a7ae80 = IO::FileSystem::SetupDirectories
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[34] @00007ff6a2a7ae40 = IO::FileSystem::GetRootDirectory
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[35] @00007ff6a2a7dca0 = System::WideString::Set
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[36] @00007ff6a2a7dce0 = System::WideString::AsUTF8
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[37] @00007ff6a2a7d6c0 = System::Filename::GetPathDirectory
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[38] @00007ff6a2a7d8c0 = System::String::SubString
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[39] @00007ff6a2a7d7c0 = System::operator+(String,char*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[40] @00007ff6a2a7dd20 = System::WideString::ctor(String)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[41] @00007ff6a2a7d700 = System::Configuration::GetPlatformName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[42] @00007ff6a2a7d740 = System::Configuration::GetBuildName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[43] @00007ff6a2a7d780 = System::operator+(String,String)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[44] @00007ff6a2a7ae00 = IO::FileSystem::LoadPackages
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[45] @00007ff6a2a7adc0 = IO::FileSystem::ClosePackages
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[46] @00007ff6a2a7ad40 = IO::FileSystem::GetPackDirectory
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[47] @00007ff6a2a7ad00 = IO::FileSystem::FindFiles
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[48] @00007ff6a2a7ac40 = Collection::Array<Filename>::SetSize @0x180026880
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[49] @00007ff6a2a7af40 = IO::PackageFile::PackageFile
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[50] @00007ff6a2a7ad80 = IO::PackageFile::GetFileName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[51] @00007ff6a2a7af80 = IO::PackageFile::Construct
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[52] @00007ff6a2a7afc0 = IO::PackageFile::Type
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[53] @00007ff6a2a7b000 = IO::PackageFile::TypeId
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[54] @00007ff6a2a7b040 = IO::PackageFile::TypeName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[55] @00007ff6a2a7b080 = IO::PackageFile::GetFileVersion
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[56] @00007ff6a2a7b0c0 = IO::PackageFile::Compile
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[57] @00007ff6a2a7b100 = IO::PackageFile::GetName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[58] @00007ff6a2a7b140 = IO::PackageFile::GetAuthor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[59] @00007ff6a2a7b180 = IO::PackageFile::GetDescription
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[60] @00007ff6a2a7b1c0 = IO::PackageFile::GetVersion
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[61] @00007ff6a2a7b200 = IO::PackageFile::GetUserVersion
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[62] @00007ff6a2a7b240 = IO::PackageFile::GetPlatform
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[63] @00007ff6a2a7b280 = IO::PackageFile::GetPriority
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[64] @00007ff6a2a7b300 = IO::PackageFile::GetCRC
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[65] @00007ff6a2a7b3c0 = IO::PackageFile::CanOverride
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[66] @00007ff6a2a7b340 = IO::PackageFile::GetIconWidth
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[67] @00007ff6a2a7b380 = IO::PackageFile::GetIconHeight
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[68] @00007ff6a2a7b2c0 = IO::PackageFile::GetFileCount
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[69] @00007ff6a2a7b400 = IO::PackageFile::GetFileSize
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[70] @00007ff6a2a7b440 = IO::PackageFile::GetFileOffset
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[71] @00007ff6a2a7d500 = System::Compression::Decompress
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[72] @00007ff6a2a7b640 = IO::Persistence::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[73] @00007ff6a2a7b600 = IO::Persistence::ReadSettings
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[74] @00007ff6a2a7b5c0 = IO::Registry::Registry(const char*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[75] @00007ff6a2a7af00 = IO::FileSystem::GetSaveDirectory
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[76] @00007ff6a2a7ce20 = Object::Factory::Startup [probe, not diffable]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=chain=416 nodes=416 badCrc=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[77] @00007ff6a2a812e0 = Video::Configuration::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[78] @00007ff6a2a7b480 = IO::Persistence::Get(int&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[79] @00007ff6a2a7b4c0 = IO::Persistence::Get(bool&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[80] @00007ff6a2a80660 = Video::DeviceData::DeviceData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[81] @00007ff6a2a80a60 = Video::Device::DisplayMode::DisplayMode
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[82] @00007ff6a2a80aa0 = Video::Device::DisplayMode::~DisplayMode
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[83] @00007ff6a2a808e0 = Video::DeviceData::~DeviceData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[84] @00007ff6a2a77e40 = Audio::Configuration::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[85] @00007ff6a2a7a6c0 = Input::Configuration::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[86] @00007ff6a2a7a680 = Input::Configuration::Load
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[87] @00007ff6a2a7a780 = Input::KeyMap::Load
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[88] @00007ff6a2a81120 = Video::Device::GetMultisampleModeCount
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[89] @00007ff6a2a81160 = Video::Device::IsMultisampleModeSupported
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[90] @00007ff6a2a77640 = Achievement::Goal::Goal
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[91] @00007ff6a2a78ac0 = Engine::MainLoop::MainLoop
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[92] @00007ff6a2a805a0 = Video::ConstantBufferData::ConstantBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[93] @00007ff6a2a80620 = Video::ContextData::ContextData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[94] @00007ff6a2a80520 = Video::VertexBufferData::VertexBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[95] @00007ff6a2a80560 = Video::IndexBufferData::IndexBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[96] @00007ff6a2a803a0 = Video::RenderBufferData::RenderBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[97] @00007ff6a2a805e0 = Video::ImageBufferData::ImageBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[98] @00007ff6a2a7e6a0 = UI::Sprite::Sprite()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[99] @00007ff6a2a7a280 = Input::KeyMap::ClearAll
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[100] @00007ff6a2a7a340 = Input::KeyMap::RegisterInput
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[101] @00007ff6a2a7cd20 = Object::Factory::GetTypeIdFromName
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[102] @00007ff6a2a7cce0 = Object::Base::IsDerivedFrom
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[103] @00007ff6a2a803e0 = Video::VideoProgramData::VideoProgramData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[104] @00007ff6a2a804e0 = Video::VertexLayoutData::VertexLayoutData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[105] @00007ff6a2a804a0 = Video::VertexProgramData::VertexProgramData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[106] @00007ff6a2a80460 = Video::PixelProgramData::PixelProgramData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[107] @00007ff6a2a80420 = Video::RenderStateData::RenderStateData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[108] @00007ff6a2a7f860 = Video::ImageBuffer::Width
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[109] @00007ff6a2a7f8a0 = Video::ImageBuffer::Height
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[110] @00007ff6a2a7f9e0 = Video::ImageBuffer::IsGenerated
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[111] @00007ff6a2a7fa60 = Video::ImageBuffer::IsRendered
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[112] @00007ff6a2a7f920 = Video::ImageBuffer::IsCompressed
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[113] @00007ff6a2a7f8e0 = Video::ImageBuffer::GetLevelCount
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[114] @00007ff6a2a7f960 = Video::ImageBuffer::IsDepthBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[115] @00007ff6a2a7fa20 = Video::ImageBuffer::IsRenderBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[116] @00007ff6a2a7e6e0 = UI::Sprite::Sprite(sheet,name)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[117] @00007ff6a2a78d80 = Engine::DialogLoopT::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[118] @00007ff6a2a7ebe0 = UI::UserInterface::UserInterface
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[119] @00007ff6a2a7da60 = Timer::SecondsToTicks
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[120] @00007ff6a2a78e80 = Engine::DialogLoaderLoopT::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[121] @00007ff6a2a78ec0 = Engine::DialogLoaderLoopT::Load
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[122] @00007ff6a2a78d00 = Engine::LoaderLoop::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[123] @00007ff6a2a78d40 = Engine::Loader::Load
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[124] @00007ff6a2a7bba0 = IO::Serializer::Serializer(Stream&,int)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[125] @00007ff6a2a7b7e0 = IO::Serializer::Serialize(int&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[126] @00007ff6a2a7b6a0 = IO::Serializer::Serialize(bool&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[127] @00007ff6a2a7c960 = Object::ExternalFactory::Find
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[128] @00007ff6a2a7d680 = System::Filename::GetPathIdentifer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[129] @00007ff6a2a7bbe0 = IO::Serializer::~Serializer [not diffable]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[130] @00007ff6a2a7bb60 = IO::Serializer::GetEncoding
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[131] @00007ff6a2a7c920 = Object::ExternalFactory::IsReferenceModeEnabled
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[132] @00007ff6a2a7cda0 = Object::Type::Serialize [not diffable]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[133] @00007ff6a2a7b860 = IO::Serializer::Serialize(float&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[134] @00007ff6a2a7bae0 = IO::Serializer::SerializeBytes
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[135] @00007ff6a2a7c660 = Math::Vector3::FromYawPitch
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[136] @00007ff6a2a7d840 = System::String::operator==(char*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[137] @00007ff6a2a7bb20 = IO::Serializer::GetVersion
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[138] @00007ff6a2a79280 = Graphics::AnimationEvent::AnimationEvent()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[139] @00007ff6a2a7baa0 = IO::Serializer::Serialize(n,float*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[140] @00007ff6a2a77580 = Achievement::Achievement::ctor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[141] @00007ff6a2a775c0 = Achievement::Achievement::GetFileVersion
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[142] @00007ff6a2a78a80 = Engine::MainLoop::SetNextLoop
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[143] @00007ff6a2a78f00 = Engine::DialogLoaderLoopT::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[144] @00007ff6a2a7cb20 = Object::InternalBasePtr::InternalBasePtr(Internal*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[145] @00007ff6a2a7dde0 = UI::DialogInstance::FindElement
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[146] @00007ff6a2a7e220 = UI::Element::FindElement
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[147] @00007ff6a2a78700 = Collection::Array::SetSize @0x18007a0d0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[148] @00007ff6a2a7eda0 = UI::UserInterface::SetFullscreenFadeSprite
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[149] @00007ff6a2a7ed60 = UI::UserInterface::SetFullscreenFade
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[150] @00007ff6a2a80ca0 = Video::Context::SetRenderBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[151] @00007ff6a2a80be0 = Video::Context::SetViewport
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[152] @00007ff6a2a809a0 = Video::VertexBuffer::Lock
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[153] @00007ff6a2a809e0 = Video::VertexBuffer::Unlock
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[154] @00007ff6a2a80c60 = Video::Context::SetVertexBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[155] @00007ff6a2a80a20 = Video::ConstantBuffer::Bind
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[156] @00007ff6a2a7db60 = System::Random::Rand(uint)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[157] @00007ff6a2a7bc60 = Math::Transform::Transform()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[158] @00007ff6a2a7c120 = Math::Transform3::Identity()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[159] @00007ff6a2a81460 = Volume::Frustum::Frustum (near,far,fovX,fovY)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[160] @00007ff6a2a79a00 = Graphics::Camera::Camera
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[161] @00007ff6a2a799c0 = Graphics::Camera::SetFrustum
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[162] @00007ff6a2a815e0 = Volume::Frustum::Projection
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[163] @00007ff6a2a7bda0 = Math::Matrix::operator*(const Matrix&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[164] @00007ff6a2a79cc0 = Graphics::Geometry::Geometry()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[165] @00007ff6a2a80260 = Video::VertexBuffer::VertexBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[166] @00007ff6a2a80060 = Video::VertexBuffer::PlatformConstruct
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[167] @00007ff6a2a800a0 = Video::VertexBuffer::PlatformConstruct[branch:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[168] @00007ff6a2a800e0 = Video::VertexBuffer::PlatformConstruct[branch:appended]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[169] @00007ff6a2a807e0 = Video::VertexBufferData::~VertexBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[170] @00007ff6a2a7fc60 = Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[171] @00007ff6a2a7fca0 = Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[172] @00007ff6a2a80220 = Video::IndexBuffer::IndexBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[173] @00007ff6a2a7fea0 = Video::IndexBuffer::PlatformConstruct
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[174] @00007ff6a2a7fee0 = Video::IndexBuffer::PlatformConstruct[branch:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[175] @00007ff6a2a7ff20 = Video::IndexBuffer::PlatformConstruct[branch:appended]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[176] @00007ff6a2a80820 = Video::IndexBufferData::~IndexBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[177] @00007ff6a2a7fbe0 = Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[178] @00007ff6a2a7fc20 = Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[179] @00007ff6a2a7b9e0 = IO::Serializer::Serialize(n,ushort*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[180] @00007ff6a2a80320 = Video::VertexBuffer::Create
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[181] @00007ff6a2a80360 = Video::VertexBuffer::Set
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[182] @00007ff6a2a802a0 = Video::IndexBuffer::Create
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[183] @00007ff6a2a802e0 = Video::IndexBuffer::Set
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[184] @00007ff6a2a7b9a0 = IO::Serializer::Serialize(n,short*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[185] @00007ff6a2a7b960 = IO::Serializer::Serialize(n,uchar*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[186] @00007ff6a2a7b720 = IO::Serializer::Serialize(uchar&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[187] @00007ff6a2a7ba20 = IO::Serializer::Serialize(n,int*)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[188] @00007ff6a2a7f820 = Video::ImageBuffer::ImageBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[189] @00007ff6a2a7fce0 = Video::ImageBuffer::PlatformConstruct
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[190] @00007ff6a2a7fd20 = Video::ImageBuffer::PlatformConstruct[branch:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[191] @00007ff6a2a7fd60 = Video::ImageBuffer::PlatformConstruct[branch:appended]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[192] @00007ff6a2a7fb60 = Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[193] @00007ff6a2a7fba0 = Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[194] @00007ff6a2a7fb20 = Video::ImageBuffer::Create
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[195] @00007ff6a2a7faa0 = Video::ImageBuffer::CopyToTexture
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[196] @00007ff6a2a7f9a0 = Video::ImageBuffer::IsDynamic
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[197] @00007ff6a2a7c8e0 = Object::External::GetPath
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[198] @00007ff6a2a7b820 = IO::Serializer::Serialize(uint&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[199] @00007ff6a2a79b00 = Graphics::Renderer::Renderer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[200] @00007ff6a2a79fc0 = Graphics::Scene::Scene()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[201] @00007ff6a2a79700 = Graphics::MeshInstance::MeshInstance()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[202] @00007ff6a2a79680 = Graphics::MeshInstance::SetMesh
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[203] @00007ff6a2a79600 = Graphics::MeshInstance::UpdateHierarchy
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[204] @00007ff6a2a7a0c0 = Graphics::Scene::AddGlobalObject
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[205] @00007ff6a2a7c1e0 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[206] @00007ff6a2a79d80 = Graphics::Geometry::SetTransform
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[207] @00007ff6a2a794c0 = Graphics::GraphicsMesh::GetMaterialList
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[208] @00007ff6a2a79640 = Graphics::MeshInstance::SetMaterialInstance
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[209] @00007ff6a2a7a040 = Graphics::Scene::AddObject
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[210] @00007ff6a2a7bfe0 = Math::Quaternion::operator*(const Quaternion&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[211] @00007ff6a2a7daa0 = Timer::TicksToSeconds
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[212] @00007ff6a2a79480 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[213] @00007ff6a2a7f4a0 = UI::ImageElement::SetRotation
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[214] @00007ff6a2a78dc0 = Engine::DialogLoopT::Load
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[215] @00007ff6a2a7d0c0 = Save::SaveLoad::SaveLoad
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[216] @00007ff6a2a78e00 = Engine::DialogLoopT::Startup
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[217] @00007ff6a2a7e3a0 = UI::Element::SetElementId
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[218] @00007ff6a2a7ede0 = UI::UserInterface::AddDialog
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[219] @00007ff6a2a7d9c0 = System::String::Release [no oracle: mutates a shared refcount]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[220] @00007ff6a2a7ee60 = UI::UserInterface::SetCursor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[221] @00007ff6a2a7fae0 = Video::ImageBuffer::CopyFromTexture
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[222] @00007ff6a2a7eea0 = UI::UserInterface::EnableCursor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[223] @00007ff6a2a77c80 = Audio::Scene::PlayEffect
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[224] @00007ff6a2a7d340 = Save::SaveLoad::Update [shadow]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[225] @00007ff6a2a7c2a0 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[226] @00007ff6a2a7c260 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[227] @00007ff6a2a7c220 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[228] @00007ff6a2a7c860 = Math::Transform::AsTransform3
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[229] @00007ff6a2a7bee0 = Math::Transform::AsMatrix()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[230] @00007ff6a2a79a40 = Graphics::Camera::SetCameraToWorld
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[231] @00007ff6a2a79440 = Graphics::ParticleInstance::IncrementInstanceIndex
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[232] @00007ff6a2a7a140 = Graphics::Scene::Clean
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[233] @00007ff6a2a79e40 = Graphics::Geometry::Clean
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[234] @00007ff6a2a78040 = Audio::Device::Update
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[235] @00007ff6a2a78e40 = Engine::DialogLoopT::Update[time]
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[236] @00007ff6a2a80ba0 = Video::Context::SetFog
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[237] @00007ff6a2a79b80 = Graphics::Renderer::GetCullCamera
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[238] @00007ff6a2a7bd20 = Math::Transform3::Transform3(const Transform3&)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[239] @00007ff6a2a79ec0 = Graphics::Geometry::GetTransform
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[240] @00007ff6a2a7bf60 = Math::Transform::Inverse()
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[241] @00007ff6a2a79ac0 = Graphics::Camera::GetFrustum
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[242] @00007ff6a2a814e0 = Volume::Frustum::operator*(Transform3)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[243] @00007ff6a2a81520 = Volume::Frustum::Contains
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[244] @00007ff6a2a7a240 = Graphics::Renderer::AddDrawItem
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[245] @00007ff6a2a79bc0 = Graphics::Renderer::GetShader
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[246] @00007ff6a2a7a200 = Graphics::MaterialInstance::RenderTextures
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[247] @00007ff6a2a7a1c0 = Graphics::InterpolatedState<Transform>::Lerp
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[248] @00007ff6a2a7a180 = Math::Transform::Lerp
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[249] @00007ff6a2a7c820 = Math::Quaternion::Lerp
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[250] @00007ff6a2a80d20 = Video::Context::SetTransform
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[251] @00007ff6a2a80ae0 = Video::Context::SetColor
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[252] @00007ff6a2a80c20 = Video::Context::SetImageBuffer
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[253] @00007ff6a2a80920 = Video::IndexBuffer::Lock
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[254] @00007ff6a2a80960 = Video::IndexBuffer::Unlock
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[255] @00007ff6a2a779c0 = Application::Application::Quit
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[256] @00007ff6a2a7b500 = IO::Persistence::Set(int)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[257] @00007ff6a2a7b540 = IO::Persistence::Set(bool)
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[258] @00007ff6a2a78b00 = Engine::MainLoop::~MainLoop
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[259] @00007ff6a2a808a0 = Video::ContextData::~ContextData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[260] @00007ff6a2a806a0 = Video::RenderBufferData::~RenderBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[261] @00007ff6a2a80860 = Video::ConstantBufferData::~ConstantBufferData
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[262] @00007ff6a2a781c0 = Collection::Array::~Array @0x180033a40
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[263] @00007ff6a2a78180 = Collection::Array::~Array @0x180033960
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[264] @00007ff6a2a788c0 = Collection::Array::~Array(+elem) @0x180033880
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[265] @00007ff6a2a7a640 = Input::Configuration::Save
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[266] @00007ff6a2a77e00 = Audio::Configuration::Save
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[267] @00007ff6a2a812a0 = Video::Configuration::Save
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[268] @00007ff6a2a78b80 = Engine::Engine::~Engine
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 269 sites, 1285982 calls, 1 divergences in 1 sites ====
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[0] @00007ff7720e3fa0 = Video::Context::Clear[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[1] @00007ff7720e3fe0 = Video::Context::DrawIndexed[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[2] @00007ff7720e4020 = Video::Context::GetMaxDynamicInstances[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[3] @00007ff7720e4060 = Video::Context::BeginVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[4] @00007ff7720e40a0 = Video::Context::EndVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[5] @00007ff7720e40e0 = Video::Context::BeginIndexedVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[6] @00007ff7720e4120 = Video::Context::EndIndexedVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[7] @00007ff7720e4160 = Video::Context::BeginInstancedIndexedVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[8] @00007ff7720e41a0 = Video::Context::EndInstancedIndexedVertices[slot]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[9] @00007ff7720e1760 = UI::Element::ComputeLayout[thunk]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[10] @00007ff7720e17a0 = UI::Element::Draw[thunk]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[11] @00007ff7720e1160 = UI::DialogInstance::OnUpdateLayout[shape]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[12] @00007ff7720e11a0 = UI::DialogInstance::OnUpdate[shape]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[13] @00007ff7720e11e0 = UI::DialogInstance::OnElementEvent[shape]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[14] @00007ff7720e1220 = UI::DialogController::~DialogController[shape]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[15] @00007ff7720dbf40 = Wave9X::System::MemoryAllocator::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[16] @00007ff7720dbf80 = Wave9X::IO::Modification::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[17] @00007ff7720dbfc0 = Wave9X::Object::Factory::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[18] @00007ff7720dc000 = Wave9X::Object::ExternalFactory::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[19] @00007ff7720dc040 = Wave9X::IO::FileSystem::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[20] @00007ff7720dc080 = Wave9X::Video::Configuration::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[21] @00007ff7720dc0c0 = Wave9X::Input::Device::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[22] @00007ff7720dc100 = Wave9X::Input::Configuration::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[23] @00007ff7720dc140 = Wave9X::Audio::Configuration::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[24] @00007ff7720dc180 = Wave9X::Application::Application::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[25] @00007ff7720dc1c0 = Wave9X::Video::Device::ctor(type=0)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[26] @00007ff7720dc200 = Wave9X::Video::Device::ctor(type=1, must NOT publish)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[27] @00007ff7720dc240 = Wave9X::Object::InternalFactory::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[28] @00007ff7720dff20 = Object::BaseTypeInfo::BaseTypeInfo
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[29] @00007ff7720dbb40 = Engine::Engine::Engine
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[30] @00007ff7720dbbc0 = Engine::Engine::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[31] @00007ff7720e0680 = System::Configuration::SetCommandLine
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[32] @00007ff7720ddec0 = IO::FileSystem::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[33] @00007ff7720dde80 = IO::FileSystem::SetupDirectories
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[34] @00007ff7720dde40 = IO::FileSystem::GetRootDirectory
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[35] @00007ff7720e0de0 = System::WideString::Set
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[36] @00007ff7720e0e20 = System::WideString::AsUTF8
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[37] @00007ff7720e0800 = System::Filename::GetPathDirectory
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[38] @00007ff7720e0a00 = System::String::SubString
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[39] @00007ff7720e0900 = System::operator+(String,char*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[40] @00007ff7720e0e60 = System::WideString::ctor(String)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[41] @00007ff7720e0840 = System::Configuration::GetPlatformName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[42] @00007ff7720e0880 = System::Configuration::GetBuildName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[43] @00007ff7720e08c0 = System::operator+(String,String)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[44] @00007ff7720dde00 = IO::FileSystem::LoadPackages
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[45] @00007ff7720dddc0 = IO::FileSystem::ClosePackages
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[46] @00007ff7720ddd40 = IO::FileSystem::GetPackDirectory
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[47] @00007ff7720ddd00 = IO::FileSystem::FindFiles
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[48] @00007ff7720ddc40 = Collection::Array<Filename>::SetSize @0x180026880
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[49] @00007ff7720de080 = IO::PackageFile::PackageFile
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[50] @00007ff7720ddd80 = IO::PackageFile::GetFileName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[51] @00007ff7720de0c0 = IO::PackageFile::Construct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[52] @00007ff7720de100 = IO::PackageFile::Type
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[53] @00007ff7720de140 = IO::PackageFile::TypeId
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[54] @00007ff7720de180 = IO::PackageFile::TypeName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[55] @00007ff7720de1c0 = IO::PackageFile::GetFileVersion
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[56] @00007ff7720de200 = IO::PackageFile::Compile
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[57] @00007ff7720de240 = IO::PackageFile::GetName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[58] @00007ff7720de280 = IO::PackageFile::GetAuthor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[59] @00007ff7720de2c0 = IO::PackageFile::GetDescription
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[60] @00007ff7720de300 = IO::PackageFile::GetVersion
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[61] @00007ff7720de340 = IO::PackageFile::GetUserVersion
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[62] @00007ff7720de380 = IO::PackageFile::GetPlatform
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[63] @00007ff7720de3c0 = IO::PackageFile::GetPriority
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[64] @00007ff7720de440 = IO::PackageFile::GetCRC
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[65] @00007ff7720de500 = IO::PackageFile::CanOverride
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[66] @00007ff7720de480 = IO::PackageFile::GetIconWidth
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[67] @00007ff7720de4c0 = IO::PackageFile::GetIconHeight
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[68] @00007ff7720de400 = IO::PackageFile::GetFileCount
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[69] @00007ff7720de540 = IO::PackageFile::GetFileSize
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[70] @00007ff7720de580 = IO::PackageFile::GetFileOffset
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[71] @00007ff7720e0640 = System::Compression::Decompress
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[72] @00007ff7720de780 = IO::Persistence::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[73] @00007ff7720de740 = IO::Persistence::ReadSettings
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[74] @00007ff7720de700 = IO::Registry::Registry(const char*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[75] @00007ff7720ddf00 = IO::FileSystem::GetSaveDirectory
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[76] @00007ff7720dff60 = Object::Factory::Startup [probe, not diffable]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[77] @00007ff7720e4460 = Video::Configuration::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[78] @00007ff7720de5c0 = IO::Persistence::Get(int&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[79] @00007ff7720de600 = IO::Persistence::Get(bool&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[80] @00007ff7720e37a0 = Video::DeviceData::DeviceData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[81] @00007ff7720e3ba0 = Video::Device::DisplayMode::DisplayMode
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[82] @00007ff7720e3be0 = Video::Device::DisplayMode::~DisplayMode
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[83] @00007ff7720e3a20 = Video::DeviceData::~DeviceData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[84] @00007ff7720dae40 = Audio::Configuration::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[85] @00007ff7720dd6c0 = Input::Configuration::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[86] @00007ff7720dd680 = Input::Configuration::Load
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[87] @00007ff7720dd780 = Input::KeyMap::Load
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[88] @00007ff7720e42a0 = Video::Device::GetMultisampleModeCount
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[89] @00007ff7720e42e0 = Video::Device::IsMultisampleModeSupported
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[90] @00007ff7720da640 = Achievement::Goal::Goal
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[91] @00007ff7720dbac0 = Engine::MainLoop::MainLoop
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[92] @00007ff7720e36e0 = Video::ConstantBufferData::ConstantBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[93] @00007ff7720e3760 = Video::ContextData::ContextData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[94] @00007ff7720e3660 = Video::VertexBufferData::VertexBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[95] @00007ff7720e36a0 = Video::IndexBufferData::IndexBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[96] @00007ff7720e34e0 = Video::RenderBufferData::RenderBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[97] @00007ff7720e3720 = Video::ImageBufferData::ImageBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[98] @00007ff7720e17e0 = UI::Sprite::Sprite()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[99] @00007ff7720dd280 = Input::KeyMap::ClearAll
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[100] @00007ff7720dd340 = Input::KeyMap::RegisterInput
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[101] @00007ff7720dfe60 = Object::Factory::GetTypeIdFromName
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[102] @00007ff7720dfe20 = Object::Base::IsDerivedFrom
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[103] @00007ff7720e3520 = Video::VideoProgramData::VideoProgramData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[104] @00007ff7720e3620 = Video::VertexLayoutData::VertexLayoutData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[105] @00007ff7720e35e0 = Video::VertexProgramData::VertexProgramData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[106] @00007ff7720e35a0 = Video::PixelProgramData::PixelProgramData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[107] @00007ff7720e3560 = Video::RenderStateData::RenderStateData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[108] @00007ff7720e29a0 = Video::ImageBuffer::Width
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[109] @00007ff7720e29e0 = Video::ImageBuffer::Height
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[110] @00007ff7720e2b20 = Video::ImageBuffer::IsGenerated
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[111] @00007ff7720e2ba0 = Video::ImageBuffer::IsRendered
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[112] @00007ff7720e2a60 = Video::ImageBuffer::IsCompressed
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[113] @00007ff7720e2a20 = Video::ImageBuffer::GetLevelCount
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[114] @00007ff7720e2aa0 = Video::ImageBuffer::IsDepthBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[115] @00007ff7720e2b60 = Video::ImageBuffer::IsRenderBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[116] @00007ff7720e1820 = UI::Sprite::Sprite(sheet,name)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[117] @00007ff7720dbd80 = Engine::DialogLoopT::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[118] @00007ff7720e1d20 = UI::UserInterface::UserInterface
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[119] @00007ff7720e0ba0 = Timer::SecondsToTicks
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[120] @00007ff7720dbe80 = Engine::DialogLoaderLoopT::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[121] @00007ff7720dbec0 = Engine::DialogLoaderLoopT::Load
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[122] @00007ff7720dbd00 = Engine::LoaderLoop::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[123] @00007ff7720dbd40 = Engine::Loader::Load
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[124] @00007ff7720dece0 = IO::Serializer::Serializer(Stream&,int)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[125] @00007ff7720de920 = IO::Serializer::Serialize(int&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[126] @00007ff7720de7e0 = IO::Serializer::Serialize(bool&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[127] @00007ff7720dfaa0 = Object::ExternalFactory::Find
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[128] @00007ff7720e07c0 = System::Filename::GetPathIdentifer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[129] @00007ff7720ded20 = IO::Serializer::~Serializer [not diffable]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[130] @00007ff7720deca0 = IO::Serializer::GetEncoding
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[131] @00007ff7720dfa60 = Object::ExternalFactory::IsReferenceModeEnabled
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[132] @00007ff7720dfee0 = Object::Type::Serialize [not diffable]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[133] @00007ff7720de9a0 = IO::Serializer::Serialize(float&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[134] @00007ff7720dec20 = IO::Serializer::SerializeBytes
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[135] @00007ff7720df7a0 = Math::Vector3::FromYawPitch
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[136] @00007ff7720e0980 = System::String::operator==(char*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[137] @00007ff7720dec60 = IO::Serializer::GetVersion
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[138] @00007ff7720dc280 = Graphics::AnimationEvent::AnimationEvent()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[139] @00007ff7720debe0 = IO::Serializer::Serialize(n,float*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[140] @00007ff7720da580 = Achievement::Achievement::ctor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[141] @00007ff7720da5c0 = Achievement::Achievement::GetFileVersion
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[142] @00007ff7720dba80 = Engine::MainLoop::SetNextLoop
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[143] @00007ff7720dbf00 = Engine::DialogLoaderLoopT::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[144] @00007ff7720dfc60 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[145] @00007ff7720e0f20 = UI::DialogInstance::FindElement
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[146] @00007ff7720e1360 = UI::Element::FindElement
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[147] @00007ff7720db700 = Collection::Array::SetSize @0x18007a0d0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[148] @00007ff7720e1ee0 = UI::UserInterface::SetFullscreenFadeSprite
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[149] @00007ff7720e1ea0 = UI::UserInterface::SetFullscreenFade
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[150] @00007ff7720e3de0 = Video::Context::SetRenderBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[151] @00007ff7720e3d20 = Video::Context::SetViewport
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[152] @00007ff7720e3ae0 = Video::VertexBuffer::Lock
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[153] @00007ff7720e3b20 = Video::VertexBuffer::Unlock
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[154] @00007ff7720e3da0 = Video::Context::SetVertexBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[155] @00007ff7720e3b60 = Video::ConstantBuffer::Bind
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[156] @00007ff7720e0ca0 = System::Random::Rand(uint)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[157] @00007ff7720deda0 = Math::Transform::Transform()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[158] @00007ff7720df260 = Math::Transform3::Identity()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[159] @00007ff7720e45e0 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[160] @00007ff7720dca00 = Graphics::Camera::Camera
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[161] @00007ff7720dc9c0 = Graphics::Camera::SetFrustum
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[162] @00007ff7720e4760 = Volume::Frustum::Projection
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[163] @00007ff7720deee0 = Math::Matrix::operator*(const Matrix&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[164] @00007ff7720dccc0 = Graphics::Geometry::Geometry()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[165] @00007ff7720e33a0 = Video::VertexBuffer::VertexBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[166] @00007ff7720e31a0 = Video::VertexBuffer::PlatformConstruct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[167] @00007ff7720e31e0 = Video::VertexBuffer::PlatformConstruct[branch:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[168] @00007ff7720e3220 = Video::VertexBuffer::PlatformConstruct[branch:appended]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[169] @00007ff7720e3920 = Video::VertexBufferData::~VertexBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[170] @00007ff7720e2da0 = Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[171] @00007ff7720e2de0 = Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[172] @00007ff7720e3360 = Video::IndexBuffer::IndexBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[173] @00007ff7720e2fe0 = Video::IndexBuffer::PlatformConstruct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[174] @00007ff7720e3020 = Video::IndexBuffer::PlatformConstruct[branch:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[175] @00007ff7720e3060 = Video::IndexBuffer::PlatformConstruct[branch:appended]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[176] @00007ff7720e3960 = Video::IndexBufferData::~IndexBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[177] @00007ff7720e2d20 = Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[178] @00007ff7720e2d60 = Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[179] @00007ff7720deb20 = IO::Serializer::Serialize(n,ushort*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[180] @00007ff7720e3460 = Video::VertexBuffer::Create
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[181] @00007ff7720e34a0 = Video::VertexBuffer::Set
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[182] @00007ff7720e33e0 = Video::IndexBuffer::Create
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[183] @00007ff7720e3420 = Video::IndexBuffer::Set
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[184] @00007ff7720deae0 = IO::Serializer::Serialize(n,short*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[185] @00007ff7720deaa0 = IO::Serializer::Serialize(n,uchar*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[186] @00007ff7720de860 = IO::Serializer::Serialize(uchar&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[187] @00007ff7720deb60 = IO::Serializer::Serialize(n,int*)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[188] @00007ff7720e2960 = Video::ImageBuffer::ImageBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[189] @00007ff7720e2e20 = Video::ImageBuffer::PlatformConstruct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[190] @00007ff7720e2e60 = Video::ImageBuffer::PlatformConstruct[branch:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[191] @00007ff7720e2ea0 = Video::ImageBuffer::PlatformConstruct[branch:appended]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[192] @00007ff7720e2ca0 = Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[193] @00007ff7720e2ce0 = Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[194] @00007ff7720e2c60 = Video::ImageBuffer::Create
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[195] @00007ff7720e2be0 = Video::ImageBuffer::CopyToTexture
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[196] @00007ff7720e2ae0 = Video::ImageBuffer::IsDynamic
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[197] @00007ff7720dfa20 = Object::External::GetPath
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[198] @00007ff7720de960 = IO::Serializer::Serialize(uint&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[199] @00007ff7720dcb00 = Graphics::Renderer::Renderer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[200] @00007ff7720dcfc0 = Graphics::Scene::Scene()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[201] @00007ff7720dc700 = Graphics::MeshInstance::MeshInstance()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[202] @00007ff7720dc680 = Graphics::MeshInstance::SetMesh
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[203] @00007ff7720dc600 = Graphics::MeshInstance::UpdateHierarchy
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[204] @00007ff7720dd0c0 = Graphics::Scene::AddGlobalObject
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[205] @00007ff7720df320 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[206] @00007ff7720dcd80 = Graphics::Geometry::SetTransform
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[207] @00007ff7720dc4c0 = Graphics::GraphicsMesh::GetMaterialList
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[208] @00007ff7720dc640 = Graphics::MeshInstance::SetMaterialInstance
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[209] @00007ff7720dd040 = Graphics::Scene::AddObject
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[210] @00007ff7720df120 = Math::Quaternion::operator*(const Quaternion&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[211] @00007ff7720e0be0 = Timer::TicksToSeconds
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[212] @00007ff7720dc480 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[213] @00007ff7720e25e0 = UI::ImageElement::SetRotation
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[214] @00007ff7720dbdc0 = Engine::DialogLoopT::Load
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[215] @00007ff7720e0200 = Save::SaveLoad::SaveLoad
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[216] @00007ff7720dbe00 = Engine::DialogLoopT::Startup
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[217] @00007ff7720e14e0 = UI::Element::SetElementId
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[218] @00007ff7720e1f20 = UI::UserInterface::AddDialog
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[219] @00007ff7720e0b00 = System::String::Release [no oracle: mutates a shared refcount]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[220] @00007ff7720e1fa0 = UI::UserInterface::SetCursor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[221] @00007ff7720e2c20 = Video::ImageBuffer::CopyFromTexture
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[222] @00007ff7720e1fe0 = UI::UserInterface::EnableCursor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[223] @00007ff7720dac80 = Audio::Scene::PlayEffect
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[224] @00007ff7720e0480 = Save::SaveLoad::Update [shadow]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[225] @00007ff7720df3e0 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[226] @00007ff7720df3a0 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[227] @00007ff7720df360 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[228] @00007ff7720df9a0 = Math::Transform::AsTransform3
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[229] @00007ff7720df020 = Math::Transform::AsMatrix()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[230] @00007ff7720dca40 = Graphics::Camera::SetCameraToWorld
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[231] @00007ff7720dc440 = Graphics::ParticleInstance::IncrementInstanceIndex
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[232] @00007ff7720dd140 = Graphics::Scene::Clean
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[233] @00007ff7720dce40 = Graphics::Geometry::Clean
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[234] @00007ff7720db040 = Audio::Device::Update
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[235] @00007ff7720dbe40 = Engine::DialogLoopT::Update[time]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[236] @00007ff7720e3ce0 = Video::Context::SetFog
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[237] @00007ff7720dcb80 = Graphics::Renderer::GetCullCamera
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[238] @00007ff7720dee60 = Math::Transform3::Transform3(const Transform3&)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[239] @00007ff7720dcec0 = Graphics::Geometry::GetTransform
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[240] @00007ff7720df0a0 = Math::Transform::Inverse()
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[241] @00007ff7720dcac0 = Graphics::Camera::GetFrustum
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[242] @00007ff7720e4660 = Volume::Frustum::operator*(Transform3)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[243] @00007ff7720e46a0 = Volume::Frustum::Contains
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[244] @00007ff7720dd240 = Graphics::Renderer::AddDrawItem
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[245] @00007ff7720dcbc0 = Graphics::Renderer::GetShader
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[246] @00007ff7720dd200 = Graphics::MaterialInstance::RenderTextures
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[247] @00007ff7720dd1c0 = Graphics::InterpolatedState<Transform>::Lerp
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[248] @00007ff7720dd180 = Math::Transform::Lerp
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[249] @00007ff7720df960 = Math::Quaternion::Lerp
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[250] @00007ff7720e3e60 = Video::Context::SetTransform
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[251] @00007ff7720e3c20 = Video::Context::SetColor
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[252] @00007ff7720e3d60 = Video::Context::SetImageBuffer
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[253] @00007ff7720e3a60 = Video::IndexBuffer::Lock
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[254] @00007ff7720e3aa0 = Video::IndexBuffer::Unlock
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[255] @00007ff7720da9c0 = Application::Application::Quit
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[256] @00007ff7720de640 = IO::Persistence::Set(int)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[257] @00007ff7720de680 = IO::Persistence::Set(bool)
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[258] @00007ff7720dbb00 = Engine::MainLoop::~MainLoop
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[259] @00007ff7720e39e0 = Video::ContextData::~ContextData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[260] @00007ff7720e3260 = Video::VertexBuffer::PlatformDestruct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[261] @00007ff7720e32a0 = Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[262] @00007ff7720e32e0 = Video::VertexBuffer::PlatformDestruct[branch:unlinked]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[263] @00007ff7720e3320 = Video::VertexBuffer::PlatformDestruct[branch:list-emptied]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[264] @00007ff7720e30a0 = Video::IndexBuffer::PlatformDestruct
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[265] @00007ff7720e30e0 = Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[266] @00007ff7720e3120 = Video::IndexBuffer::PlatformDestruct[branch:unlinked]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[267] @00007ff7720e3160 = Video::IndexBuffer::PlatformDestruct[branch:list-emptied]
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[268] @00007ff7720e37e0 = Video::RenderBufferData::~RenderBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[269] @00007ff7720e39a0 = Video::ConstantBufferData::~ConstantBufferData
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[270] @00007ff7720db1c0 = Collection::Array::~Array @0x180033a40
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[271] @00007ff7720db180 = Collection::Array::~Array @0x180033960
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[272] @00007ff7720db8c0 = Collection::Array::~Array(+elem) @0x180033880
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[273] @00007ff7720dd640 = Input::Configuration::Save
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[274] @00007ff7720dae00 = Audio::Configuration::Save
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[275] @00007ff7720e4420 = Video::Configuration::Save
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[276] @00007ff7720de040 = IO::Modification::SaveList
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] site[277] @00007ff7720dbb80 = Engine::Engine::~Engine
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== 278 sites, 1216795 calls, 1 divergences in 1 sites ====
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::Clear[slot]                      calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::DrawIndexed[slot]                calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::GetMaxDynamicInstances[slot]     calls=1          worked=?          divergences=0
@@ -377,7 +386,7 @@ C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Sprite::Sprite()      
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Input::KeyMap::ClearAll                          calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Input::KeyMap::RegisterInput                     calls=50         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::Factory::GetTypeIdFromName               calls=13         worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::Base::IsDerivedFrom                      calls=1227       worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::Base::IsDerivedFrom                      calls=1220       worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VideoProgramData::VideoProgramData        calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexLayoutData::VertexLayoutData        calls=16         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexProgramData::VertexProgramData      calls=26         worked=?          divergences=0
@@ -410,7 +419,7 @@ C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::ExternalFactory::I
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Object::Type::Serialize [not diffable]           calls=292        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Serializer::Serialize(float&)                calls=2354       worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Serializer::SerializeBytes                   calls=10131      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=463        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Vector3::FromYawPitch                      calls=462        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   System::String::operator==(char*)                calls=526        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Serializer::GetVersion                       calls=557        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::AnimationEvent::AnimationEvent()       calls=10         worked=?          divergences=0
@@ -425,20 +434,20 @@ C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::Element::FindElement  
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Collection::Array::SetSize @0x18007a0d0          calls=5          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::UserInterface::SetFullscreenFadeSprite       calls=3          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   UI::UserInterface::SetFullscreenFade             calls=8          worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetRenderBuffer                  calls=351        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetViewport                      calls=351        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::Lock                        calls=22981      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::Unlock                      calls=22981      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetVertexBuffer                  calls=39056      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::ConstantBuffer::Bind                      calls=58545      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetRenderBuffer                  calls=353        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetViewport                      calls=353        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::Lock                        calls=13210      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::Unlock                      calls=13210      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetVertexBuffer                  calls=34154      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::ConstantBuffer::Bind                      calls=47928      worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   System::Random::Rand(uint)                       calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Transform()                     calls=2          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform3::Identity()                     calls=2          worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=139        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=138        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::Camera                         calls=2          worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::SetFrustum                     calls=139        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Projection                      calls=139        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=139        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::SetFrustum                     calls=138        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Projection                      calls=138        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=138        worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Geometry::Geometry()                   calls=15658      worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::VertexBuffer                calls=2          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::PlatformConstruct           calls=2          worked=?          divergences=0
@@ -503,38 +512,46 @@ C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Save::SaveLoad::Update [sh
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromLookAt(const Vector3&, const Vector3&) calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::FromDirection(const Vector3&, const Vector3&) calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&) calls=61         worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::AsTransform3                    calls=472        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::AsMatrix()                      calls=33261      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::AsTransform3                    calls=469        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::AsMatrix()                      calls=30797      worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::SetCameraToWorld               calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::ParticleInstance::IncrementInstanceIndex calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Scene::Clean                           calls=61         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Geometry::Clean                        calls=2          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Audio::Device::Update                            calls=61         worked=0          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Engine::DialogLoopT::Update[time]                calls=61         worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetFog                           calls=137        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::GetCullCamera                calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Geometry::GetTransform                 calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Inverse()                       calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::GetFrustum                     calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=822        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Contains                        calls=299482     worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::AddDrawItem                  calls=32789      worked=32789      divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::GetShader                    calls=411        worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MaterialInstance::RenderTextures       calls=0          worked=959        divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::InterpolatedState<Transform>::Lerp     calls=32789      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Lerp                            calls=32789      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::Lerp                           calls=32789      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetTransform                     calls=32789      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetColor                         calls=32789      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetImageBuffer                   calls=16759      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::Lock                         calls=21820      worked=?          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::Unlock                       calls=21820      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetFog                           calls=136        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::GetCullCamera                calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Geometry::GetTransform                 calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Inverse()                       calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Camera::GetFrustum                     calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=816        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Volume::Frustum::Contains                        calls=297296     worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::AddDrawItem                  calls=30328      worked=30328      divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::Renderer::GetShader                    calls=408        worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::MaterialInstance::RenderTextures       calls=0          worked=952        divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Graphics::InterpolatedState<Transform>::Lerp     calls=30328      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Transform::Lerp                            calls=30328      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Math::Quaternion::Lerp                           calls=30328      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetTransform                     calls=30328      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetColor                         calls=30328      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Context::SetImageBuffer                   calls=21623      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::Lock                         calls=12048      worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::Unlock                       calls=12048      worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Persistence::Set(int)                        calls=29         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Persistence::Set(bool)                       calls=12         worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Engine::MainLoop::~MainLoop                      calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::ContextData::~ContextData                 calls=1          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::PlatformDestruct            calls=2          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:unlinked] calls=2          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:list-emptied] calls=0          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::PlatformDestruct             calls=1          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:unlinked] calls=1          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:list-emptied] calls=0          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::RenderBufferData::~RenderBufferData       calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::ConstantBufferData::~ConstantBufferData   calls=7          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Collection::Array::~Array @0x180033a40           calls=1          worked=?          divergences=0
@@ -543,8 +560,9 @@ C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Collection::Array::~Array(
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Input::Configuration::Save                       calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Audio::Configuration::Save                       calls=1          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Video::Configuration::Save                       calls=1          worked=?          divergences=0
+C:/GOG Games/Banished/standalone_error.log:[RtDiff]   IO::Modification::SaveList                       calls=0          worked=?          divergences=0
 C:/GOG Games/Banished/standalone_error.log:[RtDiff]   Engine::Engine::~Engine                          calls=1          worked=1          divergences=0
-C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== did-work: 52114 calls did work across 65 declaring sites; 204 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+C:/GOG Games/Banished/standalone_error.log:[RtDiff] ==== did-work: 49646 calls did work across 65 declaring sites; 213 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::String: 22 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::Filename: 11 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::WideString: 7 exports registered
@@ -557,14 +575,16 @@ C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedMemoryStream
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO::Persistence: 5/7 exports registered (ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem/Modification: 6 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem find/exists: 3 exports registered
-C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO: 77 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::PackageFile (lane PKG2): 21 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::Modification (lane MOD): 5 exports + 14 addresses
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO: 82 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
 C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement: 36 exports registered
-C:/GOG Games/Banished/standalone_debug.log:[RtPort] Save: 15 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Save: 16 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Picking: 9 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 27 exports registered
-C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video: 102 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video: 107 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Graphics: 64 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI widgets(layout): 22 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI: 114 exports registered
@@ -577,6 +597,6 @@ C:/GOG Games/Banished/standalone_debug.log:[RtPort] Input: 19 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Application: 5 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Utility: 2 exports registered
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
-C:/GOG Games/Banished/standalone_debug.log:[RtPort] runtime registry: 690 exports, 522 addrs, 2 ordinals
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] runtime registry: 701 exports, 553 addrs, 2 ordinals
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Wave9 lane X probe: 13 subjects executed, 12 published their singleton, control caught 12 of 12 corruptions -- expected 13 / 12 / 12 of 12: PASS
 C:/GOG Games/Banished/standalone_debug.log:[RtPort] Wave9 lane X: IO::Persistence and Audio::Device are REGISTERED but NOT probed -- their base ctor starts a suspended worker thread (see their banners in singleton_ctors.cpp)

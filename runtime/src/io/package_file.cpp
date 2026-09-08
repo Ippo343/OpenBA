@@ -929,5 +929,18 @@ int RtIoPackageFileRegister() {
     //   ?GetFileInfo@ 0x180025400 / ?GetIconData@ / ?GetPreviewData@
     //   the ToolKit half: WritePackfile, ExtractPackFile, BuildPackageFile,
     //   AreResourcesEqual, BuildFileSet, ClosePackFile, copy ctor, operator=
+
+    // A LANE-OWNED IDENTITY MARKER, and it exists because the obvious gate broke.
+    // This lane verifies "the exe that RAN is mine" by grepping the log rather
+    // than trusting an on-disk md5 (which tells you what is on disk when you
+    // look, not what ran). The first version of that gate matched
+    // `[RtPort] IO: 77 exports registered` -- and lane MOD then landed
+    // IO::Modification on the same RtIoPortInit, which moves the IO total and
+    // would have made the gate fire falsely on a perfectly good run.
+    //
+    // A shared TOTAL is the wrong thing to key an identity check on: it changes
+    // whenever any other lane lands in the same namespace. This line changes only
+    // when THIS file changes, so the gate keys on it instead.
+    printf("[RtPort]   IO::PackageFile (lane PKG2): %d exports registered\n", n);
     return n;
 }

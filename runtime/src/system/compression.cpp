@@ -183,6 +183,10 @@ struct CompressionBranchCounts {
     int64_t failLiteral   = 0;   // op + n > dstEnd
     int64_t failMatchDst  = 0;   // op + 2 + len > dstEnd
     int64_t failMatchSrc  = 0;   // mp < dst
+    // How each successful decode LEFT THE READ CURSOR — see the note on the
+    // lossy-transform hazard below.
+    int64_t exitExact     = 0;   // sp landed exactly on srcEnd
+    int64_t exitOvershoot = 0;   // sp landed PAST srcEnd (a run straddled the end)
 };
 static CompressionBranchCounts* g_branch = nullptr;
 
@@ -251,6 +255,35 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
         }
     } while (sp < srcEnd);                              // 1800c4727  JC (unsigned)
 
+    // THE READ CURSOR, and why it is counted here and not compared.
+    //
+    // Lane PICK's finding generalises to: if a result is observed only through a
+    // lossy transform, the oracle is blind to everything the transform discards.
+    // The decompressor's analogue is comparing the output bytes while ignoring
+    // where the decode LEFT THE STREAM — two bodies can emit identical bytes and
+    // stop at different source positions.
+    //
+    // For THIS function that hazard does not apply, and the reason is worth
+    // stating rather than assuming: `sp` is a LOCAL. Decompress is `static`, it
+    // owns no object, and its only observable outputs are the returned length and
+    // the destination bytes. Both are compared, and the destination is compared
+    // OVER THE WHOLE dstCap rather than the prefix the return value claims — so a
+    // body that returned the right length while writing a different amount fails.
+    // There is no cursor field, no checksum and no end-of-block state to miss.
+    //
+    // It is counted anyway, because "the corpus never exercised the overshoot
+    // exit" and "the overshoot exit does not exist" look identical in a report
+    // that prints neither. A literal run may straddle srcEnd, so an exact landing
+    // is not guaranteed and both outcomes are real.
+    //
+    // AT RUNG 2 THIS BECOMES LOAD-BEARING. CompressedStream carries `position`
+    // (+0x1c), `activeWindow` (+0x20) and per-window use counts; there, comparing
+    // returned bytes alone IS the lossy transform, and the oracle must compare
+    // the object's state too. Recorded in WAVE9_READPACKFILE_PLAN.md.
+    if (g_branch) {
+        if (sp == srcEnd) ++g_branch->exitExact;
+        else              ++g_branch->exitOvershoot;
+    }
     return static_cast<int>(op - dstBase);              // 1800c472d
 }
 
@@ -475,6 +508,13 @@ void RtSystem_CompressionProbe() {
                 (long long)counts.failMatchDst, (long long)counts.failMatchSrc,
                 allCovered ? "ALL SIX BRANCHES COVERED"
                            : "*** A BRANCH READS ZERO -- NOT a full verification ***");
+    // Printed but NOT compared, and labelled as such so nobody reads it as a
+    // verified term: the read cursor is a local this function discards, so there
+    // is nothing on the DLL's side to compare it against. See the note at the
+    // return site for why that is sound here and why it will not be at rung 2.
+    std::printf("[PKG2/Compression] read-cursor exits (ours only, NOT compared -- "
+                "sp is a local): exact=%lld overshoot=%lld\n",
+                (long long)counts.exitExact, (long long)counts.exitOvershoot);
 }
 
 }  // namespace RtSystem
