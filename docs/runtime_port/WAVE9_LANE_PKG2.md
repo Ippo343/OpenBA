@@ -2018,3 +2018,110 @@ lands. If any is still unreached, §72's branch is the first thing to suspect:
 Unchanged until 4c-ii lands: `LoadPackages` stops at the `ReadPackfile` call.
 After it, the first thing that can fail is `0x1800298f0`, the entry insert — the
 only unported body left in the listing.
+
+---
+
+# Rung 4c-ii (part 2) — the complete destination map, and retail over-reads its own stack on every packfile string
+
+## 75. Every `Read` destination, resolved
+
+`R13` is `this` (the `PackageFile`). Each inlined `Read` is preceded by
+`MOV ESI,<count>` and `LEA R14,<dest>`, so the sequence reduces to a table —
+the transcription's working sheet:
+
+| site | count | destination |
+|---|---|---|
+| `1800b486e` | 4 | `[RBP-0x10]` — the version word |
+| `1800b48ff` | 4 | `[RBP+0x18b0]` — first field of the conditional block |
+| `1800b497e` .. `1800b4cc0` | 4 each | `this+0x68, +0x6c, +0x70, +0x74, +0xac, +0xa8, +0x78, +0x7c` |
+| `1800b4d30` | — | `Array<int32>::SetSize(this+0x80, n)` then a **real `CALL Read`** of `n*4` |
+| `1800b4d71` | 4 | `this+0x90` |
+| `1800b4dea` | — | `Array<bool>::SetSize(this+0x98, n)` then a **real `CALL Read`** |
+| `1800b4e2e` | 4 | `[RBP+0x18b8]` — a string LENGTH |
+| `1800b4eb3` | len | `[RBP+0x860]` — the string BYTES |
+
+then four more length/bytes pairs in the same shape, and the entry loop.
+
+The two `SetSize` sites use a **real `CALL 0x1800aa780`** rather than an inlined
+copy — retail inlined `Read` 25 times and left 2 as calls to the same body. A
+small extra confirmation that substituting a call for the inlined form (§68) is
+legitimate rather than convenient.
+
+## 76. `len` bytes are read and `2 * len` are decoded — and that is retail's, not a misreading
+
+Every string group does this:
+
+```
+Read(&cms, 4, &len);
+Read(&cms, len, buf);            // len BYTES into buf at [RBP+0x860]
+end = buf + 2*len;               // LEA EAX,[R15+R15*1] — TWICE what was read
+```
+
+I stopped on this rather than guess, and then resolved it by reading the
+decoder. `0x1800c9fc0` is a five-way jump table on its 5th argument; entry **1**
+is nine instructions:
+
+```
+MOVZX EAX,[RDX]  ;  MOVZX ECX,[RDX+1]  ;  SHL ECX,8  ;  OR ECX,EAX
+MOV EAX,2        ;  MOV [R9],ECX       ;  RET
+```
+
+**UTF-16LE, two bytes per codepoint, `end` is accepted and completely ignored,
+returns 2.** So the loop `while (src < end) src += decode(...)` runs exactly
+`len` iterations and consumes `2 * len` bytes — **`len` bytes more than were
+ever read into the buffer.**
+
+**This is a real over-read in the shipped DLL**, and the port reproduces it. The
+project's standing rule applies exactly: retail is not wrong to be fixed, it is
+behaviour to be reproduced. Reading `2*len` instead, or clamping `end` to
+`buf + len`, would both be "corrections" that change what the function returns.
+
+What stops it being catastrophic is downstream, and is worth knowing:
+
+* the re-encode loop **caps the output at `0x800` bytes** (`CMP ESI,0x800; JG`),
+* the result is **NUL-terminated and then `strlen`-ed** (`1800b4fce`..`1800b4feb`)
+  before `String::SetLength`,
+
+so the decoded string ends at the first zero codepoint. The real characters come
+first; the excess is stale stack that almost always begins with a zero. "Almost
+always" is doing real work in that sentence — it is retail's own fragility, now
+documented rather than inherited silently.
+
+### The consequence for 4c's oracle, which is the important part
+
+Ours and theirs will decode from **two different stack buffers with different
+stale contents.** Any packfile string whose real data does not terminate within
+the `len` bytes actually read can therefore differ between the two sides
+**legitimately** — retail's own output is stack-dependent there.
+
+So the 4c oracle must compare the decoded strings **only up to the terminator**,
+and must say that the region past it is excluded because retail reads
+uninitialised memory there. That is the same class of exclusion as rung 3's
+`winHandle` and 4b-iii's `+0x0c..+0x0f`, and had I not read the decoder I would
+have compared it, seen an intermittent mismatch, and had every reason to blame
+the port.
+
+## 77. Everything else about the transcription is ready
+
+* Every callee is ported (4c-ii part 1 closed the last one).
+* The `Read` collapse is proved legitimate two ways (§68 and §75).
+* Every destination is mapped (§75).
+* The string groups' full shape is now understood end to end (§76).
+* `Commit` is proved dead (§70).
+* The conditional metadata branch is identified as the false-green risk (§72).
+
+What remains is writing it: the five string groups and the entry-directory loop,
+against the map above.
+
+## 78. Registered-but-uncalled: FIVE
+
+`0x180029510`, `0x180029630`, `0x180024d70`, `0x180024c10`, `0x1800298f0`.
+All reachable only from `ReadPackfile` or `Open`; all close, or become a corpus
+finding, in the run where the transcription first executes. `0x180029630`
+remains the first suspect if the conditional block is one-sided — §75 places it
+inside that block.
+
+## 79. Next predicted fault site
+
+Unchanged: `LoadPackages` stops at the `ReadPackfile` call, and will until the
+transcription lands.
