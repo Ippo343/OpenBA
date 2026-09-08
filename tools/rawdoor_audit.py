@@ -112,30 +112,61 @@ EARLY_OUT = re.compile(r'\bif\s*\(\s*!\s*RtDiffEnabled\s*\(\s*\)\s*\)\s*return')
 #
 # The two DEFECTS lane V found are deliberately NOT here: see KNOWN below.
 ALLOWLIST = {
-    'runtime/funcs/rt_port.h:99':
-        'the RT_ORIGINAL_ONCE macro DEFINITION, not a call site',
-    'runtime/src/io/serializer.cpp:223':
-        'RT_SER_SCALAR macro definition; its expansion is the !g_portOn fallback, '
-        'which IS a real dependency and is tracked as its own residue row',
-    'runtime/src/io/serializer.cpp:239':
-        'RT_SER_ARRAY macro definition; same as above',
-    'runtime/src/system/value_types.cpp:93':
-        'RtDiffRandomShadow(); all four callers (value_types.cpp:138,152,165,180) '
-        'wrap it in if (rt_diff_on__)',
-    'runtime/src/picking/scene.cpp:718':
-        'DiffScratchScene(); its only caller (picking/scene.cpp:794) is inside '
-        'if (rt_diff_on__)',
-    'runtime/src/ui/dialog.cpp:600':
-        'guarded by if (diffThisCall), a local set from rt_diff_on__',
-    'runtime/src/ui/element.cpp:875':  'guarded by if (replay.copy); ReplayGuard '
-        '(element.cpp:329) leaves copy null unless rt_diff_on__',
-    'runtime/src/ui/element.cpp:887':  'ReplayGuard, as element.cpp:875',
-    'runtime/src/ui/element.cpp:910':  'ReplayGuard, as element.cpp:875',
-    'runtime/src/ui/element.cpp:983':  'ReplayGuard, as element.cpp:875',
-    'runtime/src/ui/element.cpp:1011': 'ReplayGuard, as element.cpp:875',
-    'runtime/src/ui/element.cpp:1069': 'ReplayGuard, as element.cpp:875',
-    'runtime/src/ui/element.cpp:1128': 'ReplayGuard, as element.cpp:875',
+    'runtime/funcs/rt_port.h':
+        {'#define RT_ORIGINAL_ONCE(Fn, MANGLED) ([]() -> Fn {':
+         'the RT_ORIGINAL_ONCE macro DEFINITION, not a call site'},
+    'runtime/src/io/serializer.cpp':
+        {'Orig orig__ = RT_ORIGINAL_ONCE(Orig, MANGLED);':
+         'RT_SER_SCALAR / RT_SER_ARRAY macro definitions (two sites, identical '
+         'text); each expansion is the !g_portOn fallback, which IS a real '
+         'dependency and is tracked as its own residue row'},
+    'runtime/src/ui/dialog.cpp':
+        {'RT_ORIGINAL_ONCE(StopTimerFn, kStopTimer)(shadow, id);':
+         'guarded by if (diffThisCall), a local set from rt_diff_on__'},
+    'runtime/src/ui/element.cpp': {
+        'RT_ORIGINAL_ONCE(Fn, kHide)(replay.copy, hide);':
+            'guarded by if (replay.copy); ReplayGuard leaves copy null unless '
+            'rt_diff_on__',
+        'RT_ORIGINAL_ONCE(Fn, kSetElementId)(replay.copy, id);': 'ReplayGuard',
+        'RT_ORIGINAL_ONCE(Fn, kSetFlags)(replay.copy, on, off);': 'ReplayGuard',
+        'RT_ORIGINAL_ONCE(Fn, kSetNeedsCalc)(replay.copy);': 'ReplayGuard',
+        'RT_ORIGINAL_ONCE(Fn, kSetPadding)(replay.copy, left, right, top, bottom);':
+            'ReplayGuard',
+        'RT_ORIGINAL_ONCE(Fn, kSetToolTip)(replay.copy, tip);': 'ReplayGuard',
+        'RT_ORIGINAL_ONCE(Fn, kSetUserData)(replay.copy, userData);': 'ReplayGuard',
+    },
 }
+
+# Every (file, text) pair the run actually suppressed.  An entry that suppresses
+# NOTHING is reported as STALE and fails the audit.
+#
+# This exists because the allowlist used to be keyed by LINE NUMBER, and on
+# 2026-09-08 EVERY ONE of its thirteen entries had drifted -- rt_port.h:99 was
+# at :133, dialog.cpp:600 at :742, all seven element.cpp rows off by one.  The
+# allowlist had been suppressing NOTHING for an unknown number of runs, and the
+# "8 known false positives" the gate row quotes were raw findings re-dismissed
+# by hand every time.  A key that decays with edits ABOVE the site is the same
+# defect as the fixed-line comparison window this wave has already been bitten
+# by twice; the fix is not just a better key but making decay VISIBLE.
+_ALLOW_HITS = set()
+
+
+def allowlisted(rel, text):
+    """True if this site is allowlisted, keyed on its own normalised TEXT."""
+    entry = ALLOWLIST.get(rel)
+    if not entry:
+        return False
+    norm = ' '.join(text.split())
+    for pat in entry:
+        if norm.startswith(pat):
+            _ALLOW_HITS.add((rel, pat))
+            return True
+    return False
+
+
+def stale_allowlist_entries():
+    return sorted((rel, pat) for rel, pats in ALLOWLIST.items() for pat in pats
+                  if (rel, pat) not in _ALLOW_HITS)
 
 # The two sites lane V found by hand.  Both have since been REPAIRED (the call
 # moved inside `if (rt_diff_on__)`), so --self-test now asserts they are CLEAN.
@@ -515,11 +546,11 @@ def audit(paths, root_dir):
             continue
         total += len(fs.all_sites)
         for n, names, text in fs.findings:
-            if '%s:%d' % (rel, n) in ALLOWLIST:
+            if allowlisted(rel, text):
                 continue
             findings.append((rel, n, names, text))
         for row in fs.deferred:
-            if '%s:%d' % (rel, row['line']) in ALLOWLIST:
+            if allowlisted(rel, row['text']):
                 continue
             deferred.append((rel, row))
     return errors, findings, deferred, total
@@ -634,6 +665,16 @@ def main(argv):
     # zero was out of.
     print('rawdoor_audit: %d raw-door sites scanned, %d UNGUARDED-CALL, '
           '%d DEFERRED-CALL' % (total_sites, len(findings), len(deferred)))
+
+    # An entry that suppressed nothing is a finding about the CHECKER.
+    stale = stale_allowlist_entries()
+    if stale:
+        print('STALE ALLOWLIST -- %d entr%s suppressed NOTHING this run:'
+              % (len(stale), 'y' if len(stale) == 1 else 'ies'), file=sys.stderr)
+        for rel, pat in stale:
+            print('  %s :: %s' % (rel, pat[:90]), file=sys.stderr)
+        print('The site moved, changed or was removed.  Re-verify it and update '
+              'the entry -- do not delete it to make this quiet.', file=sys.stderr)
     for rel, n, names, text in findings:
         print('UNGUARDED-CALL %s:%d' % (rel, n))
         for nm in names:
@@ -658,7 +699,7 @@ def main(argv):
             for nm in row['names']:
                 print('    symbol: %s' % nm)
 
-    if findings:
+    if findings or stale:
         return 1
     return 1 if (strict and deferred) else 0
 
