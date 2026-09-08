@@ -19,6 +19,8 @@
 // ============================================================================
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "../../funcs/rt_port.h"
 
 extern int RtVideoContextRegister();   // context.cpp  (lane A)
@@ -26,6 +28,8 @@ extern int RtVideoDeviceRegister();    // device.cpp   (lane B)
 extern int RtVideoBuffersRegister();   // buffers.cpp  (lane C)
 extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
 extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
+extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
+extern "C" void RtVideoContextLifecycleProbe();
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -38,5 +42,15 @@ void RtVideoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_VIDBUFFERS")) n += RtVideoBuffersRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDCOMPANION")) n += RtVideoCompanionRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDDYNAMIC"))   n += RtVideoDynamicResourcesRegister();
+    // Wave 9 lane VID2. The probe runs only when BANISHED_RT_CTXCLEAR_PROBE is
+    // set: it makes 513 calls into the shipped ?ClearResources@ and is a
+    // verification step, not boot work. It allocates nothing (two .bss
+    // Contexts), so it is safe at this point in boot, but it is still opt-in.
+    if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
+        n += RtVideoContextLifecycleRegister();
+        const char* probe = std::getenv("BANISHED_RT_CTXCLEAR_PROBE");
+        if (probe && *probe && std::strcmp(probe, "0") != 0)
+            RtVideoContextLifecycleProbe();
+    }
     printf("[RtPort] Video: %d exports registered\n", n);
 }
