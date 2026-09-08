@@ -36,10 +36,31 @@ struct PackfileIndexNode {
     const char*        key;        // +0x00 — dataDir-relative path, case-insensitive
     uint32_t           packIndex;  // +0x08 — low dword of the packed pair
     uint32_t           fileIndex;  // +0x0C — high dword; unread by GetPackfileId
-    uint64_t           _unused10;  // +0x10 — touched by none of the three walks
+    // +0x10 CORRECTED 2026-09-08 (Wave 9 lane COLL). It is the AVL PARENT
+    //       pointer, not an unused field: 0x180008840 writes it
+    //       (`MOV [RSI+0x10],RDI` with RDI == the parent) and the retrace
+    //       0x180025e10 reads it (`MOV RSI,[RAX+0x10]`) to walk to the root.
+    //       "Touched by none of the three walks" was true of the three READ
+    //       walks lane PKG had, and false of the tree — the mirror of
+    //       reference_never_written_needs_by_whom.md: a field is untouched BY
+    //       SOMEBODY, never in general.
+    PackfileIndexNode* parent;     // +0x10
     PackfileIndexNode* left;       // +0x18
     PackfileIndexNode* right;      // +0x20
+    // +0x28/+0x2a MEASURED 2026-09-08. The node is a full AVL node, not a plain
+    //       BST node: 0x180025e10 writes a SIGNED 16-bit balance at +0x28 and a
+    //       16-bit height at +0x2a, and 0x180008840 zeroes both with one dword
+    //       store. sizeof is 0x30 (0x180008520: `MOV EDX,0x30 / LEA
+    //       R8D,[RDX-0x28]` -> Allocate(0x30, align 8)) — the same node
+    //       header runtime/src/collection/set_avl.h describes.
+    int16_t            balance;    // +0x28
+    int16_t            height;     // +0x2a
+    uint32_t           _pad2c;     // +0x2c
 };
+static_assert(sizeof(PackfileIndexNode) == 0x30,
+              "0x180008520 allocates 0x30 bytes, align 8");
+static_assert(offsetof(PackfileIndexNode, parent) == 0x10,
+              "0x180008840 MOV [RSI+0x10],RDI");
 static_assert(offsetof(PackfileIndexNode, packIndex) == 0x08,
               "GetPackfileId 0x1800ab050: `*(uint*)(puVar5 + 1)` on the found node");
 static_assert(offsetof(PackfileIndexNode, left)  == 0x18,
