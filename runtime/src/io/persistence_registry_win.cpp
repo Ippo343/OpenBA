@@ -245,16 +245,26 @@ typedef void  (*ReadSettingsFn)(Persistence* self);
 // this way and this file follows rather than inventing a second spelling.
 using WideStringHandle = String;
 
+// NEITHER of these is null-checked, deliberately. With the DLL present
+// `ResolveAddr` hands back a real address and the check would be dead; with the
+// DLL absent it hands back 0 and the check would turn "no port for Map_Clear /
+// Map_Insert yet" into SILENCE — ReadSettings would return having loaded no
+// settings at all, and the first symptom would be a wrong default somewhere
+// else entirely. Left unguarded so it dies as EXEC-of-0 with the VEH handler
+// naming this frame, which is the loud failure WAVE9.md asks for and the same
+// reasoning rt_port.h gives for RT_DATA_SLOT. (Contrast the guard in
+// persistence_startup.cpp: that one is over a DATA SLOT whose absence is a real
+// standalone-vs-retail difference, not over a call whose absence is a defect.)
 void MapClear(void* self) {
     static MapClearFn fn = reinterpret_cast<MapClearFn>(
         ResolveAddr(Module::Runtime, 0x18000f7d0));
-    if (fn) fn(self);
+    fn(self);
 }
 
 void MapInsert(void* map, void** outNode, const String* key, const String* value) {
     static MapInsertFn fn = reinterpret_cast<MapInsertFn>(
         ResolveAddr(Module::Runtime, 0x18002a090));
-    if (fn) fn(map, outNode, key, value);
+    fn(map, outNode, key, value);
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the
@@ -359,18 +369,21 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
 
     // 0x1800b954b: String::Format(&tmp, "Software\\%s\\%s", company, product),
     // then String::operator= inlined at 0x1800b9553. Format is real varargs, so
-    // it is a plain typedef rather than an RT_EXPORT_ONCE constrained Fn — the
-    // same exception persistence.cpp makes, but through the PORT-AWARE door,
-    // because at cutover the shipped Format is not there to call.
+    // RT_EXPORT_ONCE's non-variadic `Fn` will not hold it — the same exception
+    // persistence.cpp makes. It still goes through RtResolveCached rather than a
+    // bare `static FormatFn = ResolveExport(...)`, so it keeps that macro's
+    // never-cache-a-null contract: a resolve that misses is named and retried
+    // instead of being frozen by whichever caller happened to run first
+    // (rt_port.h, "Resolve-and-cache that NEVER caches a null"). Unguarded, for
+    // the reason given above MapClear.
     using FormatFn = String* (*)(String* ret, const char* fmt, ...);
-    static FormatFn format = reinterpret_cast<FormatFn>(
-        ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ"));
+    static void* formatSlot = nullptr;
+    FormatFn format = reinterpret_cast<FormatFn>(
+        RtResolveCached("?Format@String@System@@SA?AV12@PEBDZZ", &formatSlot));
     String tmp;
     tmp.data = nullptr;
-    if (format) {
-        format(&tmp, RtIo::kRegistryPathFormat,
-               RtIo::kRegistryCompanyName, RtIo::kRegistryProductName);
-    }
+    format(&tmp, RtIo::kRegistryPathFormat,
+           RtIo::kRegistryCompanyName, RtIo::kRegistryProductName);
     // The leading equality test is retail's self-assignment guard (see
     // persistence_startup.cpp's banner for why it must not be tidied away).
     if (self->path.data != tmp.data) {
