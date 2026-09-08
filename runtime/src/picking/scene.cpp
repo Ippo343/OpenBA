@@ -771,6 +771,16 @@ namespace {
 // Lazily constructed by the DLL's own ctor, so the oracle never depends on the
 // port under test. Diff-mode only.
 Scene* DiffScratchScene() {
+    // Guard the helper ITSELF, not just its callers.  Every caller today is a
+    // diff path and the comment above says so -- but that invariant lives in
+    // several places, and the RtOriginal below is the RAW door: an unguarded
+    // call is a live cross-DLL call on an ordinary run and a call through NULL
+    // once Runtime-x64.dll is gone.  Identical to the repair made to
+    // RtDiffRandomShadow in value_types.cpp, and rawdoor_audit recognises this
+    // early-out as a guard (its diff_only_fn_depth idiom) where it cannot
+    // recognise one living in the CALLER.
+    if (!RtDiffEnabled()) return nullptr;
+
     static Scene* scratch = nullptr;
     if (!scratch) {
         static Scene storage;
