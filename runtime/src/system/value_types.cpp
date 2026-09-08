@@ -306,12 +306,25 @@ struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
 // releases both temporaries. DateAsString/TimeAsString are themselves
 // exported (0x1800c56a0 / 0x1800c55b0), so `this` (DateTime) never needs a
 // layout here — it is only ever handed straight through to them.
+// WAVE 9 LANE V2, 2026-09-07: every raw door in the three functions below is
+// now RT_EXPORT_ONCE. None of them was an oracle -- they are the work these
+// bodies do -- and two things were wrong with the raw spelling:
+//   * `?Release@String@System@@AEAAXXZ` HAS BEEN PORTED (lane B3,
+//     string.cpp:1113). All three of its uses here were live-path port
+//     BYPASSES; port_bypass_audit.py named exactly these three. Nothing in
+//     this file changed to cause that -- the port landed elsewhere, which is
+//     why that gate says re-run after every LANDING, not after every edit.
+//   * DateAsString / TimeAsString are unported, but the raw door is
+//     ResolveExportRaw, which returns NULL once Runtime-x64.dll is absent. A
+//     null call at cutover is a crash; a registry miss is a named row.
+// RT_EXPORT_ONCE also removes a GetProcAddress per call, which bare RtOriginal
+// was paying on every one of these.
 StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     using SubStringFn = StrSlot*(*)(const void*, StrSlot*);
     StrSlot dateStr{};
-    RtOriginal<SubStringFn>("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
+    RT_EXPORT_ONCE(SubStringFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
     StrSlot timeStr{};
-    RtOriginal<SubStringFn>("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
+    RT_EXPORT_ONCE(SubStringFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
 
     // RT_EXPORT_ONCE: String::Format is ported (string.cpp), and bare RtOriginal is
     // GetProcAddress on every call as well as a port bypass.
@@ -320,7 +333,7 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
         ret, "%s %s", static_cast<const char*>(dateStr.p), static_cast<const char*>(timeStr.p));
 
     using ReleaseFn = void(*)(StrSlot*);
-    ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");   // PORTED (string.cpp)
     release(&dateStr);
     release(&timeStr);
     return ret;
@@ -339,7 +352,7 @@ StrSlot* RtSystem_Configuration_CurrentBuildId(StrSlot* ret) {
     using SetFn = void(*)(StrSlot*, const char*);
     SetFn set = RT_EXPORT_ONCE(SetFn, "?Set@String@System@@QEAAXPEBD@Z");   // ported
     using ReleaseFn = void(*)(StrSlot*);
-    ReleaseFn release = RtOriginal<ReleaseFn>("?Release@String@System@@AEAAXXZ");
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");   // PORTED (string.cpp)
 
     StrSlot dateStr{};
     set(&dateStr, "Sep 10 2017");  // 0x180155c50 -- the DLL's own __DATE__-style literal
@@ -391,9 +404,10 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
     }
 
     using OpAppendFn = StrSlot*(*)(StrSlot*, StrSlot*, const char*);
+    using ReleaseFn  = void(*)(StrSlot*);
     StrSlot tmp{};
     RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
-    RtOriginal<void(*)(StrSlot*)>("?Release@String@System@@AEAAXXZ")(&tmp);
+    RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);   // PORTED (string.cpp)
     return ret;
 }
 

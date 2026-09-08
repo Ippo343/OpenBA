@@ -127,22 +127,35 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
     RT_DIFF_BEGIN("IO::FileSystem::Exists");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
-    // RT_ORIGINAL_ONCE, not bare RtOriginal: these two calls are on the NORMAL
-    // path, not inside a diff guard, and RtOriginal is GetProcAddress -- an
-    // export-table binary search by string under the loader lock on EVERY call.
-    // Two of them in the body of a function the quicksave path calls per file
-    // is the Wave 2 perf-gate defect exactly (WAVE3_LANE_P.md): it cost 5.6
-    // points of sim time from inside System::Time and was invisible to both
-    // profilers because it lands in ntdll self time.
+    // RT_EXPORT_ONCE, not bare RtOriginal and not RT_ORIGINAL_ONCE.
+    //
+    // The _ONCE half is the original reason and still holds: these two calls
+    // are on the NORMAL path, not inside a diff guard, and bare RtOriginal is
+    // GetProcAddress -- an export-table binary search by string under the
+    // loader lock on EVERY call. Two of them in the body of a function the
+    // quicksave path calls per file is the Wave 2 perf-gate defect exactly
+    // (WAVE3_LANE_P.md): it cost 5.6 points of sim time from inside
+    // System::Time and was invisible to both profilers because it lands in
+    // ntdll self time.
+    //
+    // WAVE 9 LANE V2, 2026-09-07 changed only the DOOR. These two calls ARE
+    // Exists's logic, so they are a REAL DEPENDENCY, and the raw door resolves
+    // to NULL with Runtime-x64.dll absent. Note rawdoor_audit did NOT report
+    // these: its resolve-and-call regex is per-line and here the argument list
+    // opens on the following line. Found by a paren-matching re-scan, not by
+    // the checker.
+    //
+    // The diff line below stays on RtOriginal deliberately -- it is the oracle,
+    // it must reach the SHIPPED body, and it only evaluates under the guard.
     bool ours;
     if (fs->existsInPackfileGate != 0 &&
-        RT_ORIGINAL_ONCE(fn_Exists_t,
+        RT_EXPORT_ONCE(fn_Exists_t,
             "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(fs, path)) {
         ours = true;
     } else if (fs->platformExistsGate == 0) {
         ours = false;
     } else {
-        ours = RT_ORIGINAL_ONCE(fn_Exists_t,
+        ours = RT_EXPORT_ONCE(fn_Exists_t,
             "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(fs, path);
     }
 
