@@ -232,3 +232,12 @@ void RtObjectDeletingDtorPortInit();  // runtime/src/object/ -- Wave 9 lane K
 // bodies before cutover -- runs at the end of it and only when the diff harness
 // is on.
 void RtSingletonCtorsPortInit();      // runtime/src/engine/ -- Wave 9 lane X
+// Lane X's oracle, and the ONLY thing that executes those fourteen bodies
+// before cutover (their callers are Engine::Engine and Engine::Startup, inside
+// the DLL). Called from RuntimePortInit() AFTER RtDataMintInit(), never from
+// RtSingletonCtorsPortInit(): the probe resolves all fourteen `?_singleton@...`
+// names through RT_DATA_SLOT, which caches a hit, so probing before the mint
+// would freeze those caches on the DLL's .data and make every ported ctor
+// publish into the wrong storage on a minted run. No-ops unless the diff
+// harness is on.
+void RtLaneXSingletonCtorProbe();     // runtime/src/engine/ -- Wave 9 lane X

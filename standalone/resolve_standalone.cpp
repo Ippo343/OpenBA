@@ -368,8 +368,6 @@ void RuntimePortInit() {
     // now — anything registered later stays a trap until the next run.
     // Minting allocates and fills; it does not register anything unless
     // BANISHED_RT_MINT=1. See standalone/rt_data_mint.h.
-    RtDataMintInit();
-
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.
     RuntimeRegistryStats st = GetRuntimeRegistryStats();
@@ -382,6 +380,25 @@ void RuntimePortInit() {
     // Anything recorded BEFORE this line resolved against a partly-built one,
     // and if its call site caches, it is frozen on the pre-registration answer.
     RtResolveMarkPortInitDone();
+
+    // Wave 9 lane X's oracle. LAST, after the mint AND after the mark above,
+    // and both halves of that placement are deliberate.
+    //
+    //  * After RtDataMintInit(): its REGISTRATIONS ran earlier (the mint needs
+    //    them to rank a storage row), but the probe RESOLVES all fourteen
+    //    `?_singleton@...` names through a caching door, and those are the very
+    //    caches the ported constructors publish through. Probing before the
+    //    mint would freeze them on the DLL's .data, so on a minted run every
+    //    one of the fourteen would write the copy nothing reads -- the exact
+    //    failure lane X exists to close.
+    //  * After RtResolveMarkPortInitDone(): with every registration done, the
+    //    answers it caches are final, so they are not "early" in the sense lane
+    //    H's recorder means and do not belong in that report. Placing it before
+    //    the mark put twelve rows of this lane's own harness into a diagnostic
+    //    other lanes read.
+    //
+    // No-ops unless BANISHED_RT_DIFF is on.
+    RtLaneXSingletonCtorProbe();
 }
 
 // ============================================================
