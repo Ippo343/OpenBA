@@ -111,5 +111,34 @@ void RtVideoPortInit() {
         if (probe && *probe && std::strcmp(probe, "0") != 0)
             RtVideoContextLifecycleProbe();
     }
+    // Wave 9 lane EVM: the plugin-loading half of the
+    // EnumerateVideoModes chain. InitializeInterfaces is the body
+    // standalone/video_interface.cpp has been asking for in writing since
+    // lane ENGIO -- it is the only thing that fills the DX11 slot once the
+    // detour cannot exist.
+    // ONE switch for the whole lane, so the cutover-residue set-diff can be
+    // taken with the SAME BINARY one flag apart rather than against a rebuild.
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
+        extern int RtVideoInterfacesRegister();
+        n += RtVideoInterfacesRegister();
+    }
+
+    // Wave 9 lane EVM: the two introsort instantiations
+    // EnumerateVideoModes runs over the enumerated tree, plus their two
+    // small-range passes and the DisplayMode deep swap. ADDRESSES ONLY --
+    // none of the five is exported in either build.
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
+        extern int RtVideoModeSortRegister();
+        const int sorts = RtVideoModeSortRegister();
+        printf("[LaneEVM] mode/refresh sort addresses registered=%d\n", sorts);
+    }
+
+    // Wave 9 lane EVM: attempt 22's wall itself. Registered AFTER the two
+    // blocks above, because its body calls both of them.
+    if (RtWaveEnabled("BANISHED_RT_EVM")) {
+        extern int RtVideoEnumerateModesRegister();
+        n += RtVideoEnumerateModesRegister();
+    }
+
     printf("[RtPort] Video: %d exports registered\n", n);
 }

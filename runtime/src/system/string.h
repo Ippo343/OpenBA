@@ -47,4 +47,13 @@ String* RtSystem_String_Assign(String* self, const String* rhs);                
 String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs);
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs);
 
+// ??YString@System@@QEAA?AV01@PEBD@Z  retail 0x1800c9120 -- MEMBER operator+=,
+// so `this` is RCX and the hidden return slot is RDX. The returned String is a
+// COPY the caller normally discards; every caller must still release it, which
+// is why the signature exposes it rather than hiding it.
+// Declared here by Wave 9 lane EVM, which needs it for
+// Video::Device::GetDLLForInterface. The body has been in string.cpp since
+// Wave 2 and was simply never visible to another translation unit.
+String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* rhs);
+
 }  // namespace RtSystem
