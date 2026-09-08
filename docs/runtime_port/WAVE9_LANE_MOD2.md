@@ -341,6 +341,68 @@ this file is spelled out.
 The `internal` census coverage falling 88.7% -> 88.0% is the same three
 addresses appearing in the `called` column without a port.
 
+### RE-MEASURED WITH THE FIXED `addr_door_audit.py`
+
+Every number above came from the audit **as it stood at `fd30180`**, which had
+no notion of a comment: it matched `ResolveAddr` / `RegisterRuntimeAddr` text
+inside comment blocks and string literals and counted them as live call sites.
+Lane ADDR fixed that (merge `a6c509f` on the integration branch, +80 lines), and
+the team lead's instruction was to re-run and say which version produced which
+numbers. Re-run from THIS worktree with `pwd` verified in the same command --
+the tool's `ROOTS` are relative, so running one checkout's copy from another
+checkout's directory measures the directory, not the checkout:
+
+```
+                                    old tool (fd30180)     fixed tool (a6c509f)
+                                   before  after  delta    before  after  delta
+by-address call sites                295    312    +17      270    287    +17
+distinct addresses                   198    212    +14      192    206    +14
+registered addresses                1186   1194     +8     1186   1194     +8
+UNREGISTERED                          16     18     +2       15     17     +2
+non-literal call sites (blind spot)   77     79     +2       15     15      0
+```
+
+**Every delta this lane is judged on is identical under both tools**, and the
+fixed tool's "before" of 15 matches the figure the lead independently quotes for
+the clean tree. What the fix changes is the ABSOLUTE level (25 of the old 295
+"call sites" were prose) and the size of the tool's own blind spot, which
+collapses 77 -> 15.
+
+The last row is worth its own sentence. Under the old tool this lane appeared to
+push **two more sites into the blind spot**; under the fixed tool it pushes
+**none**, because the two "non-literal" sites it was blamed for were comment
+text, not code. The literalisation described above is what makes the real number
+zero -- every by-address door in this file is visible to the instrument.
+
+**The `--csv` check the lead asked for passes.** `0x1800af5f0` no longer appears
+in the unregistered list; the only rows this file contributes are the three
+declined ones, at named lines:
+
+```
+0x1800b4540,1,runtime/src/io/modification_refresh.cpp:769
+0x1800accc0,1,runtime/src/io/modification_refresh.cpp:781
+0x180028760,1,runtime/src/io/modification_refresh.cpp:793
+```
+
+`engine/funcs/engine_funcs.cpp`'s concentration drops from 9 to 8 with the fixed
+tool and from 10 to 9 with the old one -- the same one address leaving, which is
+RefreshList's.
+
+### TWO PREMISES HANDED TO THIS LANE, BOTH CHECKED
+
+The lead asked that neither be built on unverified.
+
+* **"`engine_funcs.cpp:3141` is a live address door, not prose."** TRUE.
+  `git show fd30180:engine/funcs/engine_funcs.cpp` lines 3140-3141 read
+  `fn_Modification_RefreshList = reinterpret_cast<...>(ResolveAddr(Module::Runtime, 0x1800af5f0));`
+  It also survives the comment stripper, which is the independent second check.
+* **"`RefreshList` may already have a ported body nobody registered."** FALSE
+  here, checked before writing anything. `git grep -n RefreshList fd30180 --
+  runtime/ standalone/ code/ engine/` returns comments, one typedef
+  (`engine_funcs.h:2595`), the resolve site, and two call sites -- no body. The
+  shortcut that turned another lane into a one-line change does not apply; this
+  address genuinely had nothing behind it.
+
 ---
 
 ## 7. A DEFECT FOUND IN ANOTHER LANE'S ORACLE — `ReadPackfile` at `+0x90`
