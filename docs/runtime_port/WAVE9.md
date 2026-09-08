@@ -1652,6 +1652,63 @@ The 22 in `engine_funcs.cpp` are not one thing. Reading each site split them cle
   The two `g_pLoader` slots are DATA the mint does not cover; check them before the next
   cutover attempt.
 
+### SEVEN blind instruments in one session — and the rule they all share
+
+The eight-lane session found blind spots in seven separate measuring tools. They are not
+seven unrelated bugs. Five are the SAME defect:
+
+| # | instrument | blind to | cost |
+|---|---|---|---|
+| 1 | `runtime_census.py` `called` | the `RT_EXPORT_ONCE` / `RT_DATA_SLOT` macro doors | listed `?SetupDirectories@` and `?LoadPackages@` as **ports with no caller** while the boot was dying on them |
+| 2 | the address-door census (mine) | the mint's table-driven `RegisterRuntimeAddr((uintptr_t)v.dllVa, …)` | reported **94 unregistered doors when the true figure was 62** — committed while measuring the same class of defect |
+| 3 | `unsatisfied_export_scan.py` | `RT_DATA_SLOT` | true denominator is **812, not 789** — 23 names invisible |
+| 4 | `port_bypass_audit.py` `ADDR_SITE` | a named constant operand (`MainLoopAddr::CreateVideoContext`) | **20 sites tree-wide**, and it hid a real defect: an exported function reached through the address door |
+| 5 | `rawdoor_audit.py` `diff_only_fn_depth` | a one-line aggregate initialiser's closing brace | reported guarded `RT_ORIGINAL_ONCE` calls as UNGUARDED-CALL |
+
+> **A GREP FOR A LITERAL IS A LOWER BOUND, AND IT NEVER SAYS SO.** Five separate tools
+> here have reported a confident number that was simply smaller than reality, because the
+> same fact can be spelled through a variable, a named constant, a macro or a generated
+> table. Before quoting any grep-based census, ask whether its operand can be spelled
+> indirectly — and check the count against an independent source.
+
+The other two are a different and nastier family — **instruments whose output cannot
+falsify them:**
+
+| # | instrument | defect |
+|---|---|---|
+| 6 | the `Factory::Startup` self-check | its `theirs=` side was `snprintf(b, "chain=%d nodes=%d", chain, chain)` — **a constructed expectation formatted to look like a measurement of retail.** It runs no DLL body at all |
+| 7 | `RT_DIFF_SHADOW` | emits its strings **only on a mismatch**, so a population description carried inside one is invisible on exactly the runs where you would want it |
+
+Number 6 cost real work: it reported `ours=nodes=415 theirs=nodes=416`, lane UIC read it
+the only way it can be read — retail gets 416, we lose an insert — and passed a false
+divergence to another lane. The `416` on the "theirs" side was `chain` printed twice.
+Both are now fixed; the self-check prints `EXPECTED (no DLL run): nodes==chain==N`.
+
+> **If a control is only visible when the test fails, it is not a control** (lane UIC).
+> And a check whose expected side is true by construction is not a check.
+
+The open question underneath #6 is now answered EMPIRICALLY rather than asserted:
+`ReportKeyCollisions()` walks the chain and NAMES any two `BaseTypeInfo` sharing a
+`TypeNameCRC`, distinguishing a hash collision (one type unreachable by id) from the same
+name registered twice — and says explicitly that if no duplicate exists, the shortfall IS
+a lost insert and must not be dismissed.
+
+### Two more rules the lanes paid for
+
+**A family found by a caller-driven survey is bounded BELOW, not above** (lane UIC). Lane
+D found eleven `Array<T>::~Array` addresses; lane UIF found a twelfth and wrote "there
+are twelve"; lane UIC found the thirteenth and fourteenth inside `?AddController@`. A J1
+address is invisible to a caller-driven survey until something in our tree calls it, so
+"there are N" was never a count — it was a lower bound wearing a count's clothes.
+
+**A row can be a dead pointer AND a live dependency at once** (lane MOD). Five of the
+eleven `fn_*` pointers in the Modification cluster are resolved and never called — but
+two of those ADDRESSES are live through a different door (`0x180010110` from
+`loops.cpp:681` on every world load, `0x18002a090` from `persistence_registry_win.cpp:266`
+on every boot). The census keys on the address, so the address grep alone over-reports
+urgent ports and the identifier grep alone misses the deep copy that runs on every load.
+Neither view is sufficient on its own.
+
 ### The `dirAlias` finding — a local that is written, passed, released and NEVER READ
 
 Lane FIND found that `FindFiles`' `dirAlias` at `[RSP+0x58]` is built, handed to
