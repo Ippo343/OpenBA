@@ -621,6 +621,7 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
 // ============================================================================
 extern "C" void RtVideoDeviceStartupProbeMaybeRun();
 extern "C" void RtVideoAssignConstantsProbeMaybeRun();   // constant_buffer.cpp
+extern "C" void RtVideoContextCtorProbeMaybeRun();       // context_ctor.cpp
 
 extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // Self-scheduled probe (lane Q's pattern, and the same reason): it
@@ -637,6 +638,7 @@ extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // faulted inside the DLL's MemAlloc with "no allocator singleton" in the
     // redzone dump -- a defect in the PROBE's placement, not in the port.
     RtVideoAssignConstantsProbeMaybeRun();
+    RtVideoContextCtorProbeMaybeRun();
 
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
     self->windowHandle = *reinterpret_cast<void**>(*AppSlot());

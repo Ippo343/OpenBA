@@ -685,6 +685,14 @@ int RtVideoContextLifecycleRegister() {
     RegisterRuntimeAddr(0x1800eeee0, (void*)&Video_ConstantBuffer_Dtor);
     RegisterRuntimeAddr(0x1800f4400, (void*)&Video_RenderBuffer_PlatformDestruct);
     RegisterRuntimeAddr(0x18001f360, (void*)&Video_RenderBuffer_OperatorDelete);
+    // Bound by NAME as well as by address since Wave 9 phase 4. It was
+    // address-only for three phases and nothing noticed, because nothing in the
+    // tree asked for `??3Context@Video@@SAXPEAX@Z` by name until
+    // CreateVideoContext was ported; the name door then fell straight through
+    // to the DLL while the address door was ours. An exported symbol with a
+    // port needs BOTH doors, not whichever one its first caller happened to use.
+    RegisterRuntimeExport("??3Context@Video@@SAXPEAX@Z",
+                          (void*)&Video_Context_OperatorDelete); ++n;
     RegisterRuntimeAddr(0x180018500, (void*)&Video_Context_OperatorDelete);
     RegisterRuntimeAddr(0x180006a10, (void*)&Video_Buffer_OperatorDelete);
 
