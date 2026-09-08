@@ -1867,3 +1867,154 @@ reaches them, and I will report any that stay unreached as a corpus finding.
 Predicted fault site is unchanged right up until it lands: `LoadPackages` stops
 at the `ReadPackfile` call. I will take the three-way split if the transcription
 wants it and say so rather than force one commit.
+
+---
+
+# Rung 4c (part 1) — `ReadPackfile` decoded, and it is smaller than 1,864 instructions
+
+## 67. Why this is a decode commit and not the port
+
+`ReadPackfile` is all-or-nothing: it cannot be half-registered, so unlike every
+previous rung there is no way to land part of it and measure. That makes the
+transcription the single riskiest edit this lane will make, and it makes the
+*decode* worth committing on its own — it is what de-risks the transcription,
+and it contains findings that stand whether or not the port follows immediately.
+
+I am taking the split the integrator authorised, and saying where: **4c-i is the
+structure, 4c-ii is the transcription.** What follows is a complete control-flow
+decode with every callee resolved.
+
+## 68. The 25 inlined `Read`s collapse to 25 CALLS — this is the finding
+
+The repeated `SetWindow` + `memcpy` pair I identified in §34 is confirmed as the
+inlined body of `?Read@CompressedStream@IO@@`, and the inlined loop is exactly
+the one rung 2 ported:
+
+```
+loop:
+  if (!SetWindow(cs, position)) break;            // 0x1800a9aa0 — rung 2
+  Window* w   = &cs->windowData[cs->activeWindow];
+  int take    = count;
+  if (cs->position + count > w->end) take = w->end - cs->position;
+  memcpy(dst, w->buffer + (cs->position - w->start), take);
+  dst += take;  cs->position += take;  count -= take;
+  if (count > 0) goto loop;
+```
+
+**MSVC inlined it; the port does not have to.** Each of the ~25 sites becomes one
+call to `RtIo_CompressedStream_Read`. That is not a paraphrase — it is the same
+body, reached by a call instead of a copy — and it removes ~1,200 of the 1,864
+instructions from the transcription along with 25 chances to mistype an offset.
+
+**Two things make that substitution safe, and both were checked:**
+
+* The inlined copies **discard the return value**. On `SetWindow` failure retail
+  breaks out and leaves the rest of the destination unwritten, then carries on;
+  ignoring `Read`'s `bool` reproduces exactly that.
+* The stack offsets prove the object identity: `[RSP+0x5c]`, `[RSP+0x60]` and
+  `[RSP+0x70]` against a `CompressedStream` at `[RSP+0x40]` are `+0x1c`
+  `position`, `+0x20` `activeWindow` and `+0x30` `windowData`. A **sixth**
+  independent agreement with `Stream.h`.
+
+## 69. A fifth confirmation of `FileInfo+0x0C`, from a seek
+
+At `0x1800b47b1` the header word is read, its top bit is extracted and cleared
+(`BT`/`BTR EDX,0x1f`), and the remainder is stored to **`[RDI+0x0c]`** — then,
+**only when the handle is `-1` or `-2`** (`CMP [RDI],-0x3; JBE` skips otherwise,
+i.e. only the loose-file case), `SetFilePointer(winHandle, thatSameValue, NULL,
+FILE_BEGIN)`.
+
+So retail **seeks by writing the field directly** and mirrors it into the OS
+handle only when there is one. That field can only be the read cursor, and it is
+at `+0x0C`. Lane FS's `uint64_t size` at `+0x08` would have swallowed it.
+
+Also confirmed here: `this->_fileInfo` is at **`PackageFile+0xC0`**, the same
+offset lane PKG's `ClosePackages` hands to `CloseFile`.
+
+## 70. `Commit` is PROVABLY dead on the read path
+
+§61 argued from the call graph that `Commit` is write-path-only. The guard says
+so outright:
+
+```
+1800b6023: CMP dword ptr [RBP + -0x78],0
+1800b6027: JLE skip
+1800b6029: CMP dword ptr [RSP + 0x48],1      ; cs->direction (+0x08)
+1800b602e: JNZ skip
+1800b6030: LEA RCX,[RSP + 0x40]
+1800b6035: CALL 0x1800a9ee0                  ; Commit
+```
+
+`direction == 1` is the write direction, and `?Open@CompressedStream@IO@@` — the
+body this lane ported in 4b-iii — **sets `direction = 0`**. On the read path this
+call is unreachable. The deferral of `Commit` + `CompressWindow` is now proved
+rather than argued.
+
+## 71. The rest of the structure
+
+```
+save fs->[0x19]; fs->[0x19] = 1              // a re-entrancy flag, restored at 1800b4792
+FileInfo tmp = OpenFile(fs, filename);        // rung 3
+this->_fileInfo(+0xC0) = tmp;                 // rung 4a — FileInfo::operator=
+release tmp's two Filenames
+restore fs->[0x19]
+if (this->_fileInfo.handle == -1) return false;
+
+ReadFile(fs, &_fileInfo, 4, &hdr);            // rung 3
+compressed = (hdr >> 31) & 1;  hdr &= 0x7fffffff;
+_fileInfo.cursor = hdr;                       // the seek, §69
+if (handle is -1 or -2) SetFilePointer(winHandle, hdr, NULL, FILE_BEGIN);
+
+ReadFile(fs, &_fileInfo, 4, &blobLen);
+blob = MemAlloc(blobLen, 4);                  // lane E
+ReadFile(fs, &_fileInfo, blobLen, blob);
+
+CompressedMemoryStream cms;                   // ONE object, §48
+  CompressedStream::CompressedStream(&cms);   // lane W
+  cms.vptr = 0x180155560;
+  MemoryStream::MemoryStream(&cms.memoryStream);   // lane W
+  cms.memoryStream = { data: blob, size: blobLen, cursor: 0 };
+  CompressedStream::Open(&cms, &cms.memoryStream, 1);   // 4b-iii
+
+Read(&cms, 4, &version);                      // rung 2
+if (compressed) { ~20 more Reads: the metadata block }   // SKIPPED when the
+                                                          // header sign bit is 0
+  ... two Array::SetSize (0x180029510 int32, 0x180029630 bool)  // 4b-i
+  ... five {Read len; Read bytes; decode; SetLength; memcpy; MemFree} groups
+      for name / author / description / two more strings
+Array<int32>::SetSize (0x180029510)           // 4b-i
+entry loop: Read fields; build a Filename; AdjustDelimiters x3;
+            PackageFile entry insert (0x1800298f0)
+if (dirCount > 0 && cs->direction == 1) Commit(&cms);   // DEAD, §70
+cms.memoryStream.Close();                     // slot 7, a bare RET — 4b-ii
+MemFree(blob);
+~CompressedMemoryStream(&cms);                // lane W
+return true;
+```
+
+**Every callee is ported.** The one body still unported anywhere in this listing
+is `0x1800298f0`, the entry insert (114 instructions) — which §34 listed and
+which I had not re-checked since. It is 4c-ii's only new port.
+
+## 72. A branch the 4c corpus must cover
+
+The metadata block is **conditional on the header's sign bit** (`CMP R15D,0x1;
+JL 0x1800b5b25` at `0x1800b48f0`). An uncompressed packfile skips ~1,000
+instructions of it entirely. So a 4c oracle that only ever sees the shipped
+`.pkg` files may exercise one side of that branch and report green — the same
+effectiveness trap this lane has now hit three times. The corpus must establish
+which way the retail packfiles go and, if they are all one way, say so rather
+than imply coverage.
+
+## 73. Registered-but-uncalled: the four are all reachable from here
+
+All four appear in §71's listing — `0x180029510` twice, `0x180029630` once,
+`0x180024d70` and `0x180024c10` via `Open`. So the loop should close when 4c-ii
+lands. If any is still unreached, §72's branch is the first thing to suspect:
+`0x180029630` in particular sits inside the conditional metadata block.
+
+## 74. Next predicted fault site
+
+Unchanged until 4c-ii lands: `LoadPackages` stops at the `ReadPackfile` call.
+After it, the first thing that can fail is `0x1800298f0`, the entry insert — the
+only unported body left in the listing.
