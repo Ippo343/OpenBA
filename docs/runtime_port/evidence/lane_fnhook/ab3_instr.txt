@@ -1,0 +1,16 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=00000256bebd0000, wrapper=00007ff70fe296f4)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=00000256bebe0000, wrapper=00007ff70fe2989e)
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=00000256becf0000, 17-byte patch)
+[FNHook] detoured Filename::~Filename @00007ffcafad6980 (tramp=00000256bed00000, 18-byte patch)
+[FNHook] detoured Filename::operator= @00007ffcafad6770 (tramp=00000256bed10000, 13-byte patch)
+[FNHook] detoured Filename::operator=(Filename) @00007ffcafad7d40 (tramp=00000256bed20000, 20-byte patch)
+[FNHook] detoured Filename(String&) @00007ffcafad67d0 (tramp=00000256bed30000, 19-byte patch)
+[FNHook] installed (abort=0 maxEvents=80 target-resolution=RAW) — watching Runtime-internal Filename refcount UAF
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=00000256bed40000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=00000256bed50000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=00000256bed40000 External::Load=00000256bed50000 (recursive CS, target-resolution=RAW)
+[FNHook] detoured CompressedStream::Read @00007ffcafb7a780 (tramp=00000256bed60000, 15-byte patch)
+[ReadGuard] installed: Read=patched SetWindow=00007ffcafb79aa0 (BANISHED_READ_GUARD)
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=184656
+[ResLoad] census: FindOrLoad=22599 External::Load=5686
+[ReadGuard] census: Read=104046916

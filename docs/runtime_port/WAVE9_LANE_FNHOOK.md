@@ -184,6 +184,22 @@ Every changed target sits behind an opt-in env gate, so a default run is unchang
 variance in a world build), same world, same clean exit, empty crash log. **The five
 newly-live detours cost the default path nothing because they are not on it.**
 
+### The third run: the `allocator_lock` switch confirmed
+
+The A/B above was measured before `allocator_lock.cpp` was converted, so a third
+window (`ab_fnhook/evidence3`, `docs/runtime_port/evidence/lane_fnhook/ab3_*.txt`) ran the
+final exe under both configurations. The two lines that had to survive the switch do:
+
+```
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=…)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=…)
+```
+
+The census reproduces (`Read=104,046,916` vs `104,069,297`; `Filename(String)=184,656` vs
+`184,642`) and `External::Load=5,686` is **identical across all four instrumented runs**,
+which is a useful determinism marker for anyone measuring this path later. World built,
+clean exit, empty crash log in both.
+
 ### Lock discipline
 
 Both A/B pairs ran inside one `tools/game_dir_lock.sh acquire lane-FNHOOK 900` window each,
@@ -358,6 +374,7 @@ correction to the instrument's view, not a port.
 | A/B run, `FNHOOK`+`READ_GUARD` | 5 detours dead → live; identity line `target-resolution=RAW` read from the run's own log |
 | effectiveness census | `Read=104,069,297`, `Filename(String)=184,642`, three structural zeroes explained |
 | default-flags control | byte-for-byte same behaviour, `External::Load=5686` both runs, empty crash log |
+| `allocator_lock` after the switch | both patches still install (3rd window) |
 | world build | reached in every run (`BuildTerrain EXIT`, 154 `startTown` lines), clean self-quit |
 
 ## 6. Files touched

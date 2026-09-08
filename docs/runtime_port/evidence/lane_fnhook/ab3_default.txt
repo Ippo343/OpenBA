@@ -1,0 +1,9 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001d8bf4d0000, wrapper=00007ff70fe296f4)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001d8bf4e0000, wrapper=00007ff70fe2989e)
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=000001d8bf4f0000, 17-byte patch)
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=000001d8bf670000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=000001d8bf680000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=000001d8bf670000 External::Load=000001d8bf680000 (recursive CS, target-resolution=RAW)
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=0
+[ResLoad] census: FindOrLoad=22591 External::Load=5686
+[ReadGuard] census: Read=0
