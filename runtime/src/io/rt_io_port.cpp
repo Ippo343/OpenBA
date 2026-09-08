@@ -149,6 +149,12 @@ namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane M
 // an A/B on it isolates the save/load header path from every other IO row.
 extern int RtIoEncodingRegister();          // encoding.cpp (lane ENC)
 
+// Wave 9 lane ENC-2: the four BinaryWriter bodies SaveSettings dispatches into
+// on the write path (two Serialize slots, the back-patching destructor, and the
+// unexported deleting destructor at vtable slot 0). Separate switch from ENC so
+// the framing tail can be A/B tested without turning the factories off.
+extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -174,5 +180,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PKG3"))        n += RtIoPackageFileReadRegister();
     if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
     if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
+    if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

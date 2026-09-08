@@ -30,6 +30,11 @@ extern int RtUiWidgetsInRegister();   // widgets_input.cpp   (lane D)
 extern int RtUiWidgetsLayRegister();  // widgets_layout.cpp  (lane E)
 extern int RtUiSpriteRegister();      // sprite.cpp          (lane F)
 
+// Wave 9 lane ENC-2: ?SaveSettings@DialogInstance@ and ?OnClosed@DialogInstance@,
+// the row lanes Z, UIC and UID each declined. Own switch so the settings
+// round-trip can be turned off without disturbing the rest of the UI port.
+extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -42,5 +47,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIWIDGETSIN"))  n += RtUiWidgetsInRegister();
     if (RtWaveEnabled("BANISHED_RT_UIWIDGETSLAY")) n += RtUiWidgetsLayRegister();
     if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }

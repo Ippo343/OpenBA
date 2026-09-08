@@ -852,26 +852,28 @@ extern "C" const char* RtUiDialogInstance_TypeName(const void* /*self*/) {
         DialogInstanceTypeInfo() + kBaseTypeInfoName);
 }
 
-// ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269 — DECLINED
+// ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269
 //
-// The fourth virtual that site asks for, and it is NOT ported, because porting
-// it would MOVE the cutover row rather than close it (WAVE9.md, "porting a
-// function can GROW the cutover surface"). Its body is:
+// PORTED — Wave 9 lane ENC-2, in runtime/src/ui/dialog_settings.cpp alongside
+// ?SaveSettings@DialogInstance@. The DECLINED note that stood here was right to
+// decline and WRONG about the size of the job, in a way worth recording:
 //
-//     18011533d  CALL 0x180114240        ; ?SaveSettings@DialogInstance@UI@@QEAAXXZ
-//     ... then walk _controllers (+0x78, count +0x80) calling each
-//         controller's vtable slot +0x30 ...
+//   it said "it becomes a one-function job the moment ?SaveSettings@ lands".
 //
-// `SaveSettings` is 507 bytes, is itself exported (ordinal 3613) and is NOT
-// ported by any wave. A port of `OnClosed` would therefore resolve one name at
-// cutover and immediately request another that resolves to null — the same null
-// call, one frame deeper and under a different name. It becomes a one-function
-// job the moment `?SaveSettings@` lands.
+// It does not. SaveSettings builds a BinaryWriter and then dispatches into it,
+// so it needs FOUR more bodies that were themselves unported minted traps --
+// the two scalar Serialize slots (+0x98, +0xa0), the back-patching destructor
+// ??1BinaryWriter, and BinaryWriter's unexported deleting destructor at slot 0.
+// Those landed first, in runtime/src/io/binary_writer.cpp. The row was six
+// functions, not one, and counting it as one is the same underestimate that
+// made lane ENC four functions instead of the two it was scoped for.
 //
-// (The controller loop's slot +0x30 is a fifth `DialogController` vtable slot
-// not yet in runtime/types/ui/DialogInstance.h's enum, which lists +0x10, +0x38,
-// +0x40 and +0x48. Recorded here rather than added to that header, because a
-// slot pinned by ONE unported caller is not yet evidence of a name.)
+// The controller loop's slot +0x30 that this note flagged as unnamed is now
+// named by the EXPORT TABLE rather than by a caller: ??_7DialogController@UI@@6B@
+// (0x1801565f0) was read byte-wise and slot +0x30 is
+// ?OnClosed@DialogController@UI@@UEAAXXZ (0x1800cd290), with +0x50
+// ?OnSerializeSettings@DialogController@UI@@ (0x1800cd250). Both are in
+// dialog_settings.cpp's header with the evidence.
 
 // ============================================================================
 // UI::DialogInstance — const accessors

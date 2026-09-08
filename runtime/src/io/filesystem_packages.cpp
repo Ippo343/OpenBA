@@ -342,6 +342,8 @@ namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
 namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream_probe.cpp)
 namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }  // rung 4b-iii
 namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe.cpp)
+namespace RtIo { void RtIo_BinaryWriterProbe(); }    // lane ENC-2 (binary_writer_probe.cpp)
+namespace RtUi { void RtUi_DialogSettingsProbe(); }   // lane ENC-2 (dialog_settings_probe.cpp)
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
 namespace RtSystem { void RtSystem_CompressionProbe(); }
@@ -959,6 +961,12 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // index -- its streams are its own -- so this is simply the earliest
         // point on the boot path where it can run at all.
         RtIo::RtIo_EncodingProbe();
+        // Lane ENC-2. Runs immediately after the factory probe and for the
+        // same reason -- it builds whole BinaryWriter records, which allocate.
+        RtIo::RtIo_BinaryWriterProbe();
+        // Lane ENC-2 bodies 5-6. Runs here for the same allocator reason and
+        // because it needs the BinaryWriter tail above it to be real.
+        RtUi::RtUi_DialogSettingsProbe();
     }
 }
 
