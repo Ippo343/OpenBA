@@ -52,13 +52,43 @@ namespace RtApplication {
 // known rather than guess. No sizeof() assertion: the object's true extent
 // past +0x28 was never observed by any function this lane ported.
 struct Application {
-    uint8_t _unknown00[0x10];  // +0x00 qword, ctor-zeroed; +0x08 qword, ctor's 2nd arg. Not read by this lane.
-    uint8_t _stateLow;         // +0x10  low byte of the ctor's word store (0x00). Not read by this lane.
-    uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1 (not paused at construction).
-    uint8_t _unknown12[0x16];  // +0x12..+0x27  +0x18 (qword) and +0x20 (dword) proven zeroed by the ctor; rest unproven.
-    uint8_t _quitRequested;    // +0x28  Quit() sets 1; PlatformUpdate() reads it and calls PostQuitMessage(0).
+    // +0x00  THE MAIN WINDOW HANDLE. Named by Wave 9 lane VID2:
+    // `?PlatformStartup@Device@Video@@AEAA_NXZ` opens with
+    //     MOV RAX,[0x1801fc678] ; MOV RDX,[RAX] ; MOV [RCX+0x90],RDX
+    // i.e. it copies `*(void**)Application::_singleton` into
+    // `Video::Device::windowHandle` (+0x90), which runtime/types/video/Device.h
+    // already documented from the other side as "HWND, copied from
+    // Application::_singleton[0] by Startup". Two independent bodies, same
+    // conclusion. The ctor zeroes it; something later in bring-up fills it.
+    void*   _windowHandle;     // +0x00
+    uint8_t _unknown08[0x08];  // +0x08  the ctor's 2nd argument. Not read by any port.
+    uint8_t _stateLow;         // +0x10  low byte of the ctor's word store (0x00). Not read.
+    uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1.
+    uint8_t _unknown12[0x06];  // +0x12..+0x17  unproven.
+
+    // +0x18  THE MESSAGE-CALLBACK SET. Named by Wave 9 lane VID2 from
+    // `?RegisterMessageCallback@Application@1@…` (0x18009fa60), which does
+    // `LEA RDI,[RCX+0x18]` and then treats RDI as a `Collection::Set` — root at
+    // +0x00, count at +0x08 (`INC dword ptr [RDI+8]`, and the erase decrements
+    // the same dword at 0x18000abae). `?UnregisterMessageCallback@` (0x18009fa20)
+    // and `?PlatformShutdown@Device@Video@@` (0x1800f83f0) descend the same tree
+    // from the same offset. That is exactly the "+0x18 (qword) and +0x20 (dword)
+    // proven zeroed by the ctor" range this comment used to leave unnamed — the
+    // ctor is zero-initialising an empty Set.
+    //
+    // The element is {unsigned message; int (*)(HWND, unsigned, WPARAM, LPARAM)}.
+    // Declared as raw storage rather than as `rtsetavl::Set` so this header
+    // stays free of runtime/src/ includes; the two layouts are asserted against
+    // each other in runtime/src/application/message_callbacks.cpp.
+    void*   _messageCallbackRoot;   // +0x18  Set::root
+    int32_t _messageCallbackCount;  // +0x20  Set::count
+    int32_t _unknown24;            // +0x24  unproven.
+    uint8_t _quitRequested;        // +0x28  Quit() sets 1; PlatformUpdate() reads it.
 };
-static_assert(offsetof(Application, _running)       == 0x11, "Application._running @ 0x11");
-static_assert(offsetof(Application, _quitRequested) == 0x28, "Application._quitRequested @ 0x28");
+static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
+static_assert(offsetof(Application, _running)              == 0x11, "Application._running @ 0x11");
+static_assert(offsetof(Application, _messageCallbackRoot)  == 0x18, "Application._messageCallbackRoot @ 0x18");
+static_assert(offsetof(Application, _messageCallbackCount) == 0x20, "Application._messageCallbackCount @ 0x20");
+static_assert(offsetof(Application, _quitRequested)        == 0x28, "Application._quitRequested @ 0x28");
 
 }  // namespace RtApplication

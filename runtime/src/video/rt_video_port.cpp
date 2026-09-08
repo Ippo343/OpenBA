@@ -30,6 +30,7 @@ extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
 extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
 extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
 extern "C" void RtVideoContextLifecycleProbe();
+extern "C" void RtVideoDeviceStartupProbeArm(bool on);  // device_startup_probe.cpp
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -46,6 +47,18 @@ void RtVideoPortInit() {
     // set: it makes 513 calls into the shipped ?ClearResources@ and is a
     // verification step, not boot work. It allocates nothing (two .bss
     // Contexts), so it is safe at this point in boot, but it is still opt-in.
+    // Wave 9 lane VID2: the Device startup cluster. `?PlatformStartup@` is the
+    // next cutover boot wall after the IO chain — Engine::Startup calls it at
+    // engine_lifecycle.cpp:719 and a null there ends the boot with
+    // g_startupFailAt == 11.
+    if (RtWaveEnabled("BANISHED_RT_VIDDEVSTART")) {
+        extern int RtVideoDeviceStartupRegister();
+        n += RtVideoDeviceStartupRegister();
+        // Armed, not run — it allocates. It self-schedules at the top of
+        // PlatformStartup, which is the first moment the allocator is live.
+        const char* dp = std::getenv("BANISHED_RT_VIDDEVSTART_PROBE");
+        RtVideoDeviceStartupProbeArm(dp && *dp && std::strcmp(dp, "0") != 0);
+    }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();
         const char* probe = std::getenv("BANISHED_RT_CTXCLEAR_PROBE");

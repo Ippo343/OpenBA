@@ -51,5 +51,14 @@ void RtApplicationPortInit() {
     // this exact address, read directly and confirmed against the ctor's own
     // `MOV qword ptr [0x1801fc678],RCX` store — no change needed here.
 
+    // Wave 9 lane VID2: the message-callback Set. These two are the recorded
+    // blocker for ?PlatformStartup@Device@Video@@ (the next cutover boot wall
+    // after the IO chain) AND two of the seventeen unsatisfied rows in
+    // dx11/src/devicedata.cpp's all-or-nothing import table.
+    if (RtWaveEnabled("BANISHED_RT_APPMSGCB")) {
+        extern int RtApplicationMessageCallbacksRegister();
+        n += RtApplicationMessageCallbacksRegister();
+    }
+
     printf("[RtPort] Application: %d exports registered\n", n);
 }
