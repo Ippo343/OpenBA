@@ -659,10 +659,24 @@ void RtGraphicsSunLightProbeCtor() {
     Graphics_SunLight_Ctor(reinterpret_cast<SunLight*>(oursNode));
     uint8_t oursCopy[0x108];
     std::memcpy(oursCopy, oursNode, sizeof(oursCopy));
-    const ImageScalars oursImg =
+    ImageScalars oursImg =
         ReadImageScalars(reinterpret_cast<SunLight*>(oursNode)->_depthTarget);
     Graphics_SunLight_Dtor(reinterpret_cast<SunLight*>(oursNode));
-    void* const headAfterOurs = (head != nullptr) ? *head : nullptr;
+    void* headAfterOurs = (head != nullptr) ? *head : nullptr;
+    // NEGATIVE CONTROL, part 2. The first version perturbed only the object-field
+    // copy, and the run proved it: [PROBE:object fields] went RED while
+    // [PROBE:depth-target Create tuple] and [PROBE:_firstRenderBuffer restored]
+    // stayed green — i.e. two of the four probes were still indistinguishable
+    // from probes that compare nothing. Perturbing all three inputs is what makes
+    // the control cover every site it is supposed to cover.
+    // Braceless on purpose: see the note on the three RtDiffSite objects above —
+    // ANY brace pair that returns to the function body's depth clears
+    // rawdoor_audit.py's `diff_only_fn_depth` and re-flags this function's two
+    // RT_ORIGINAL_ONCE calls as UNGUARDED-CALL. Writing this as a `{ ... }` block
+    // did exactly that, and it is worth one comment to stop the next edit
+    // reintroducing it.
+    if (SunProbeNegative()) oursImg.width += 1;
+    if (SunProbeNegative()) headAfterOurs = static_cast<uint8_t*>(headAfterOurs) + 8;
 
     // ---- THEIRS ----------------------------------------------------------
     std::memset(theirsNode, 0, sizeof(theirsNode));

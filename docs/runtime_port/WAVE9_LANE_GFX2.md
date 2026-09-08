@@ -22,7 +22,7 @@ Lane FS counted six lanes hitting this; this is the seventh. It is a harness def
 | # | Symbol | Retail | Verdict |
 |---|---|---|---|
 | 1 | `??0SunLight@Graphics@@QEAA@XZ` | `0x1801081f0` | **PORTED — closes the row** (§3, §4) |
-| 2 | `?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z` | `0x180107f10` | **PORTED — closes the row**, 2,557 diffed calls, 0 divergences (§3) |
+| 2 | `?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z` | `0x180107f10` | **PORTED — closes the row**, 1,786 diffed calls, 0 divergences (§3) |
 | 3 | `?Draw@Renderer@Graphics@@…` | `0x180104bb0` | **DECLINED — blocker re-checked and still live** (§6.1) |
 | 4 | `?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ` | `0x1801033e0` | **DECLINED — blocker re-checked and still live** (§6.2) |
 | 5 | `?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z` | `0x1800fc240` | **DECLINED — blocker re-checked and still live** (§6.3) |
@@ -83,7 +83,7 @@ being transcribed:
 (`rt_data_mint_tables.inc`, `0x1801fe790`) and already read PORT-AWARE by lane VID, so
 our linkage and lane VID's walkers agree on ONE list on both sides of the cutover.
 
-### Measured (run `gfx2b`, §5)
+### Measured (run `gfx2P`, §9)
 
 ```
 Video::RenderBuffer::PlatformConstruct                        calls=3   divergences=0
@@ -166,12 +166,12 @@ If a rebuild branch ever ran the diff is **REFUSED**, on its own site, not faked
 would destroy and rebuild GPU resources a second time and "compare" two different objects.
 
 ```
-Graphics::SunLight::Set                                   calls=2557  worked=2557  divergences=0
+Graphics::SunLight::Set                                   calls=1786  worked=1786  divergences=0
 Graphics::SunLight::Set[branch:build-colour-target, DEAD] calls=0
 Graphics::SunLight::Set[branch:drop-colour-target, DEAD]  calls=0
 ```
 
-`worked=2557` of `calls=2557` is the effectiveness control
+`worked=1786` of `calls=1786` is the effectiveness control
 (`reference_probe_needs_an_effectiveness_control.md`): every one of those calls did the
 eleven copies and was compared, none took a vacuous early-out. The two `calls=0` rows are
 the *measured* form of the unreachability claim in §3.1 rather than an assertion.
@@ -215,11 +215,17 @@ false only ONE image buffer is built, not two.
 
 What is compared, once per process, under `BANISHED_RT_DIFF` only:
 
-| Site | What it compares | Result |
-|---|---|---|
-| `[PROBE:object fields, ours vs shipped]` | the whole 0x108 object except `+0xEC` and the three pointer VALUES (reduced to a null/non-null verdict) — so Geometry's own ctor output, the bounds the SetBounds tail rewrites, `_dirtyFlags`, `_materialTypeFlags` and the eleven scalars are all in | `calls=1 divergences=0` |
-| `[PROBE:depth-target Create tuple, ours vs shipped]` | the depth target's ten scalar fields `+0x20..+0x44` (w, h, dimension, kind, format, flags, addressU/V/W, filter) — **this is what actually verifies the eleven-argument `ImageBuffer::Create` tuple**, the most error-prone thing this port transcribes. Every one of the ten is written by ImageBuffer's ctor or by Create, so none is an unwritten byte | `calls=1 divergences=0` |
-| `[PROBE:_firstRenderBuffer restored by each dtor]` | the global list head at entry vs after ours' teardown vs after theirs' | `calls=1 divergences=0` |
+| Site | What it compares | Result | Under `=neg` |
+|---|---|---|---|
+| `[PROBE:object fields, ours vs shipped]` | the whole 0x108 object except `+0xEC` and the three pointer VALUES (reduced to a null/non-null verdict) — so Geometry's own ctor output, the bounds the SetBounds tail rewrites, `_dirtyFlags`, `_materialTypeFlags` and the eleven scalars are all in | `calls=1 divergences=0` | **RED** |
+| `[PROBE:depth-target Create tuple, ours vs shipped]` | the depth target's ten scalar fields `+0x20..+0x44` (w, h, dimension, kind, format, flags, addressU/V/W, filter) — **this is what actually verifies the eleven-argument `ImageBuffer::Create` tuple**, the most error-prone thing this port transcribes. Every one of the ten is written by ImageBuffer's ctor or by Create, so none is an unwritten byte | `calls=1 divergences=0` | **RED** |
+| `[PROBE:_firstRenderBuffer restored by each dtor]` | the global list head at entry vs after ours' teardown vs after theirs' | `calls=1 divergences=0` | **RED** |
+
+Every comparison in this lane is **bitwise with tolerance zero** — `RT_DIFF_BYTES` over
+the 44 bytes for `Set`, `memcmp` over the object and over the ten `ImageBuffer` scalars
+for the probe. Nothing here observes a float through an integer cast, a quantiser or a
+threshold, so the hole lane PICK found in its grid comparison (a 1-ULP AABB error
+swallowed by `(int)(f * invCellSize)`) does not exist in this oracle.
 
 Branch coverage from the same run:
 
@@ -371,7 +377,7 @@ delta is this lane's and not another lane's.
 | `tools/unsatisfied_export_scan.py` | 789 names through a door; **149** unsatisfied; **146** with a site outside a diff guard | 795 names; **147**; **144** |
 | … set-diff on the 146/144 | — | **CLOSED 2:** `??0SunLight@Graphics@@QEAA@XZ`, `?Set@SunLight@Graphics@@…`. **NEW 0.** |
 | `tools/rawdoor_audit.py` | 501 sites, **0 UNGUARDED-CALL**, 36 DEFERRED-CALL | 506 sites, **0**, 36 |
-| `tools/port_bypass_audit.py` ADDRESS door | 209 sites, **0** reach an already-ported fn; ADDR-REGISTERED 33, DETOURED 3, GUARDED-FALLBACK 1, NO-EXPORT 96, UNPORTED 76 | 209 sites, **0**; all five counts unchanged |
+| `tools/port_bypass_audit.py` ADDRESS door | 209 sites, **0** reach an already-ported fn; ADDR-REGISTERED 33, DETOURED 3, GUARDED-FALLBACK 1, NO-EXPORT 96, UNPORTED 76 | 209 sites, **0**; GUARDED-FALLBACK **1 -> 4**, NO-EXPORT **96 -> 93**, the other three unchanged. That shift is entirely the §7 change: three of the eight `static Fn fn = ...` sites now read `if (!fn) fn = ...`, which the audit classifies as a guarded fallback rather than a bare no-export call. No site moved into or out of BYPASS. |
 | … NAME door | 429 raw-door sites, **0 BYPASS** on a live path | 434 sites, **0** |
 | … by-name cross-check | 670 ported names / 417 raw-door statements / **0** the parser missed | 675 / 422 / **0** |
 | `tools/export_name_audit.py` | 662 names, 1 not in the DLL (`?_singleton@...`, a prose ellipsis in `rt_resolve_cache.cpp:8`) | 665 names, the **same 1** |
@@ -394,61 +400,67 @@ just created.** That is the accounting lane FIND asked for and it earned its kee
 
 ---
 
-## 9. Provenance of the measurements — six lanes, one game directory
+## 9. Provenance — six lanes, one game directory, and a run that lied
 
-Every number in §2, §3 and §4 comes from ONE run, label **`gfx2b`**, taken at 09:34 local,
-**before** the integrator's deploy hold and before lane MOD's `.pkm` window (which the
-integrator has since retracted as a non-hazard anyway — `FindFiles`' pattern is the literal
-`*.pkg` and `.pkm` only arrive from the registry).
+Every number in §2, §3 and §4 comes from a matched PAIR of runs on the **same binary**,
+`md5 b56517fce2624704806fb4f56d35db4d`, taken under `tools/game_dir_lock.sh` held as
+`lane-GFX2`:
 
-The provenance matters because the FIRST attempt at this measurement was **void and looked
-clean**: `rt_run.sh` reported a normal exit and a full `[RtDiff]` summary with 0
-divergences, and **not one of this lane's sites was in it**, because another lane
-overwrote `reimpl-x64.exe` between my `cp` and `rt_run`'s launch. A tail of that summary
-reads exactly like a passing run.
+| Run | Config | This lane's result | Whole run |
+|---|---|---|---|
+| `gfx2P` | `BANISHED_RT_DIFF=1` | every site **0 divergences** | 409 sites, 15,940,158 calls, **1** divergence in 1 site |
+| `gfx2N` | `+ BANISHED_RT_SUNLIGHT_PROBE=neg BANISHED_RT_EMPTYLIST_PROBE=neg` | all **five** probe sites RED (this lane's three plus lane W's two for RenderBuffer) | 409 sites, 18,472,756 calls, **12** divergences in 12 sites |
 
-`gfx2b` is guarded by `.lane_tmp/run.sh`, which refuses to launch if another
-`reimpl-x64.exe` is running, fails on a `cp` that returns "Device or resource busy",
-compares the deployed md5 to the build's **before and after** the run, and declares the
-run VOID if this lane's own sites are absent from the copied log. `gfx2b`:
-`mine == deployed == post == 347d2b79ff43b1c8001ca297425e4fac`.
+A control and a measurement on the same binary is the pair this project asks for: the
+green run cannot be a probe that compares nothing, because the red run proves the same
+probes fire.
 
-Three further hazards were observed and are worth recording, because they defeat a naive
-"check the mtime" rule:
+### The negative control had to be extended once, and the first version proved it
 
-1. **`cp` can fail while the md5 check still passes**, because the previous deploy of the
-   same exe is still in place. The copy must be checked for success, not just the hash.
-2. **Windows locks a running image**, so a successful overwrite proves the other lane's
-   process had *already exited* — which is what pins the race to the window between `cp`
-   and launch rather than during the run.
-3. **`rt_run.sh` deletes the three logs at start and kills by IMAGE NAME on timeout**, so
-   a lane starting its run can wipe another lane's logs and kill another lane's process
-   mid-measurement. Two of this lane's attempts died that way (25 s exits with a 100-line
-   log).
+Version 1 perturbed only the object-field copy. It went RED on `[PROBE:object fields]` and
+on lane W's two RenderBuffer probes — and left `[PROBE:depth-target Create tuple]` and
+`[PROBE:_firstRenderBuffer restored]` GREEN. Those two were therefore still
+indistinguishable from probes that compare nothing, in the very run that was supposed to
+establish that they are not. Version 2 perturbs all three inputs and all four go RED.
+**A negative control that does not perturb every site it is supposed to cover is a partial
+control that reads like a complete one.**
 
-**The one divergence in the `gfx2b` summary is not this lane's.**
+### The first attempt at this measurement was VOID and looked clean
+
+`rt_run.sh` reported a normal exit and a full `[RtDiff]` summary with 0 divergences, and
+**not one of this lane's sites was in it** — another lane had overwritten
+`reimpl-x64.exe` between the `cp` and the launch. A tail of that summary reads exactly
+like a passing run. Four hazards were observed, and they defeat a naive "check the mtime"
+or even "check the md5" rule:
+
+1. **The on-disk md5 says which exe is on disk when you look, not which exe ran.** The
+   acceptance test that works is an **identity line emitted by this build alone, read out
+   of the run's own log**. Ours is the SunLight branch-site name containing the literal
+   `xor al,al;ret`; `.lane_tmp/run.sh` VOIDs the run if it is absent. Both runs above
+   passed that gate.
+2. **`cp` can fail while an md5 check still passes**, because the previous deploy of the
+   same exe is still in place ("Device or resource busy" happened twice here). The copy
+   must be checked for success.
+3. **Windows locks a running image**, so a successful overwrite proves the other lane's
+   process had *already exited* — which pins the race to the window between `cp` and
+   launch rather than during the run.
+4. **`rt_run.sh` deletes the three logs at start and kills by IMAGE NAME on timeout**, so
+   a lane starting its run wipes another lane's logs and kills another lane's process
+   mid-measurement. Two attempts here died that way (25 s exits, 100-line logs).
+
+Logs are copied out of the game directory **before** the lock is released.
+
+**The one divergence in `gfx2P` is not this lane's.**
 `Object::Factory::Startup [probe, not diffable]  ours=chain=416 nodes=415  theirs=chain=416 nodes=416`
-appears identically in the void first run, on a different lane's binary. Whole-run totals:
-**405 sites, 17,526,994 calls, 1 divergence in 1 site**, and that site is somebody else's
-probe being off by one.
+— somebody else's probe off by one. It appears identically in the void first run, on a
+different lane's binary, which is what identifies it as pre-existing.
 
 ---
 
 ## 10. What this lane could NOT verify — stated, not buried
 
-* **The negative control for the ctor probe was not run.** `BANISHED_RT_SUNLIGHT_PROBE=neg`
-  (and `BANISHED_RT_EMPTYLIST_PROBE=neg`) perturb one byte of OUR result so a run can show
-  the probes going RED. Three attempts were clobbered by concurrent lanes and the fourth
-  fell inside the integrator's deploy hold. **Without it, "0 divergences" on the three
-  PROBE sites cannot be distinguished from a probe that compares nothing**
-  (`reference_probe_needs_an_effectiveness_control.md`), and this lane does not claim
-  otherwise. The control is one command and is the first thing to run on the next free
-  window:
-  `bash .lane_tmp/run.sh neg BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_RT_SUNLIGHT_PROBE=neg BANISHED_RT_EMPTYLIST_PROBE=neg BANISHED_PAUSEMENU=300 BANISHED_PAUSEMENU_QUIT=60`
-  The `Set` oracle needs no such control: it is an ordinary `RT_DIFF_BYTES` replay and its
-  `worked=2557 of calls=2557` already says every call did real work.
-* **The ctor's own `RT_DIFF_BEGIN` site reports `calls=3` with a description, not a
-  comparison.** The comparison lives on the three PROBE sites. A late edit made the site
+* **The ctor's own `RT_DIFF_BEGIN` site reports `calls=3 worked=3` with a description, not
+  a comparison.** The comparison lives on the three PROBE sites. A late edit made the site
   report rather than print `calls=0`, because `calls=0` on a registered port is this
   project's standard read for "unverified" — but the number is entry count, and the doc
   says so here rather than letting the summary imply three verified constructions.
