@@ -16,6 +16,7 @@ those symbols are merely storage and which the DLL actually constructs.
 |---|---|
 | `tools/rt_mint_gen.py` | Generator. **Runs `runtime_census.py` itself**, decodes the DLL, cross-checks the round-1 harvest, emits the tables. |
 | `standalone/rt_data_mint_tables.inc` | Generated. 46 vtables (429 slots), 33 `BaseTypeInfo`, 28 storage symbols, and the load-time-construction verdict for each. |
+| `tools/rt_mint_writer_audit.py` | The writer gate (4). Enumerates who writes each storage row; exits 2 while any row would be zero forever at cutover. |
 | `tools/rt_data_door_audit.py` | The door gate (§3). Exits 2 while any minted DATA symbol is read through a raw door. |
 | 18 source files | The door fix: 57 sites moved from `ResolveExportRaw` to `ResolveExport`, 3 marked `RT_RAW_OK`. |
 | `standalone/rt_data_mint.{h,cpp}` | The mint: runtime fill, named traps, the type chain, the `?_loader` construction, and the shadow check. |
@@ -359,7 +360,137 @@ integrator fixed in `7d25f9a` can re-check the same half of the proof), 4 by the
 tail probe — and all 19 new `BaseTypeInfo` pass the CRT-constructed positive
 control (§2).
 
-## 4. `_purecall` — 113 slots across 27 of the 46 vtables
+## 4. Minted storage with NO WRITER — 25 of 32 rows are cutover nulls
+
+Found by lane M on `?_singleton@Modification@IO@@` and, independently, by lane
+E3 on `?_singleton@MemoryAllocator@System@@`. Two instances from two directions
+is a class, and this is its enumeration — **not a sample**.
+
+**The failure.** The mint gives each storage row zeroed bytes it owns and
+registers them, so after cutover `ResolveExport` / `ResolveAddr` return OUR
+storage. That is only safe if something WRITES the row. Three ways it can
+happen, and only three:
+
+| | |
+|---|---|
+| **(a)** | a CRT initialiser we reproduce (`MintConstructedStatics`) |
+| **(b)** | a PORTED function that writes the slot as retail's does |
+| **(c)** | nothing — **zero forever, and a null deref on first boot** |
+
+**It cannot be caught by any run we can do beforehand.** The mint only registers
+under `BANISHED_RT_MINT=1`, which is cutover-only, so today every writer still
+writes the DLL's copy and every row looks alive. This is exactly the category
+the wave exists to find early.
+
+### The tool, and its negative control
+
+`tools/rt_mint_writer_audit.py` scans the DLL's `.text` for rip-relative stores
+whose target lands inside a minted row, attributes each to its containing
+function, and cross-references the census for whether that function is ported.
+
+A store form the scanner does not decode produces a **missing writer**, i.e. a
+FALSE (c) — the dangerous direction. So it carries a negative control: **17
+store sites for 9 symbols, read independently out of Ghidra's own xref
+database**, checked on every run; if the byte scan cannot reproduce them it
+refuses to report. The control earned its place immediately — it caught the
+scanner missing `FF 05` (`INC dword [rip+d32]`), which is how
+`ParticleInstance::_frameIndex` is written: **incremented, never assigned**, so
+a store-only scan called it unwritten.
+
+Attribution went wrong once too, in the same direction. Nearest-preceding-export
+credited `??0Scene@Picking@@` — a PORTED function — with the writes to
+`_firstTypeInfo`, `_loader` and `_rng`, because the CRT initialisers are
+unexported and merely sit after it in address order. That moves rows from (c)
+into (b), hiding the bug. `.pdata` was the obvious fix and is **not usable**:
+6,045 entries that do not cover frame-less leaf functions, so `??0BaseTypeInfo`'s
+own store falls outside every range and the row loses its real writer — an error
+in the same dangerous direction. The initialiser array is exact and is the only
+place the misattribution occurs, so stores inside it are carved out by address.
+
+### The enumeration — all 32 rows
+
+| | symbol | writer(s) in the DLL |
+|---|---|---|
+| **(a)** | `?_firstTypeInfo@BaseTypeInfo@Object@@` | CRT initialiser + `??0BaseTypeInfo` **(ported)** |
+| **(a)** | `?_loader@LoaderLoop@Engine@@` | CRT initialiser `0x180148fe0` |
+| **(a)** | `?_rng@Particle@Graphics@@` | CRT initialiser `0x180149650` |
+| **(b)** | `?_frameIndex@ParticleInstance@Graphics@@` | `ParticleInstance::IncrementInstanceIndex` **(ported)** |
+| **(b)** | `?_singleton@AnimationManager@Graphics@@` | `AnimationManager` ctor/dtor **(ported)** |
+| **(b)** | `?_singleton@MainLoop@Engine@@` | `MainLoop` ctor **(ported)** |
+| **(b)** | `?_singleton@SaveLoad@Save@@` | `SaveLoad` ctor **(ported)** |
+| **(c)** | `?_singleton@MemoryAllocator@System@@` | `MemoryAllocator` ctor/dtor, `~Engine` |
+| **(c)** | `?_singleton@Modification@IO@@` | `Modification` ctor/dtor, `Engine::Startup`/`Shutdown`, `DialogLoopT` ctor |
+| **(c)** | `?_singleton@Factory@Object@@` | `Factory` ctor, `Engine::Startup` |
+| **(c)** | `?_singleton@ExternalFactory@Object@@` | `ExternalFactory` ctor, `Engine::Startup` |
+| **(c)** | `?_singleton@InternalFactory@Object@@` | `InternalFactory` ctor |
+| **(c)** | `?_singleton@FileSystem@IO@@` | `FileSystem` ctor, `Engine::Startup` |
+| **(c)** | `?_singleton@Persistence@IO@@` | `Persistence` ctor |
+| **(c)** | `?_singleton@AchievementManager@Achievement@@` | ctor/dtor, `Engine::Startup`/`Shutdown` |
+| **(c)** | `?_singleton@Application@1@` | `Application` ctor, `Engine::Startup` |
+| **(c)** | `?_singleton@Configuration@Audio@@` | ctor/dtor, `Engine::Startup`/`Shutdown`, `PlatformConfigure` |
+| **(c)** | `?_singleton@Configuration@Input@@` | same shape |
+| **(c)** | `?_singleton@Configuration@Video@@` | same shape |
+| **(c)** | `?_singleton@Device@Audio@@` | `Audio::Device` ctor |
+| **(c)** | `?_singleton@Device@Input@@` | `Input::Device` ctor |
+| **(c)** | `?_singleton@Device@Video@@` | `Video::Device` ctor/dtor |
+| **(c)** | `?_firstBuffer@IndexBuffer@Video@@` | `IndexBuffer::PlatformConstruct` / `PlatformDestruct` |
+| **(c)** | `?_firstBuffer@VertexBuffer@Video@@` | `VertexBuffer::PlatformConstruct` / `PlatformDestruct` |
+| **(c)** | `?_firstSurface@ImageBuffer@Video@@` | `ImageBuffer::PlatformConstruct` / `PlatformDestruct` |
+| **(c)** | `?_rootOnlyUpdates@MeshInstance@Graphics@@` | `MeshInstance::EnableRootOnlyUpdates` |
+| **(c)** | `?_ticksPerSecond@Timer@System@@` | `Timer::Startup`, `Engine::Startup` |
+| **(c)** | `?_secondsPerTick@Timer@System@@` | `Timer::Startup`, `Engine::Startup` |
+| **(c)** | `?_systemTicksPerSecond@Timer@System@@` | `Timer::PlatformStartup` |
+| **(c)** | `(unexported @0x1801fc6d0)` | `Engine::Shutdown`, `Factory::Shutdown`, `Factory::UnloadCompilers` |
+| **(?)** | `?_errorString@Error@System@@` | **no writer found anywhere** — corroborated: Ghidra's xrefs find none either |
+| **(?)** | `?_systemInitialTick@Timer@System@@` | **no writer found anywhere** |
+
+**(a) 3 · (b) 4 · (c) 23 · (?) 2 — 25 of 32 rows are zero forever at cutover.**
+Lane M found one of them and lane E3 found another; the class is 25 wide.
+
+### What closes each
+
+* **The 23 in (c) are almost all "the writer is a ctor nobody has ported yet."**
+  Those objects must be constructed by *someone* after cutover, so the port is
+  needed regardless — what this enumeration adds is that **the port must also
+  write the singleton**, and a port that forgets produces exactly the silent
+  null lane E3 hit (`if (slot) *slot = self` skipping without a word). So the
+  disposition is *port the writer*, with the singleton write named as an
+  acceptance criterion rather than assumed.
+* **`Timer`'s three** may already be covered in spirit — lane B3 ported `Timer`
+  and owns the storage behind its statics; they appear here because the DLL's
+  writers (`Timer::Startup` / `PlatformStartup`) are not registered. Worth
+  confirming with lane B3 rather than double-fixing.
+* **The two `(?)` rows** need a decision, not a port: nothing writes them, so
+  either they are genuinely dead after cutover (in which case zeroed storage is
+  correct and should say so) or their writer is in a store form the scan and
+  Ghidra both miss. `?_errorString` is corroborated by Ghidra finding no write
+  either, which makes "dead" the likely answer for it.
+* **The four in (b) were verified by reading our ports**, not inferred from the
+  census: `SaveLoad_CtorLogic` (`if (slot) *slot = self`), the
+  `AnimationManager` ctor (`RtAnimMgrSingletonSlot()`), the `MainLoop` ctor
+  (`*MainLoopSingletonSlot() = self`) and the two `RtFrameIndexSlot()` writes.
+  All four reach the slot through the port-aware door, so after cutover they
+  write OUR storage — which is what makes them (b) rather than (c).
+
+### Can the shadow SEE this? Not yet — and the obvious reading is wrong
+
+The proposal was that a row showing `DLL=WRITTEN` but `minted=zero` at exit is a
+category-(c) candidate. **It is not, and why matters more than the row.** With
+the mint unregistered — which is every run we can do — a ported writer (b) and
+an unported writer (c) both write *the DLL's* copy and leave ours zero. The two
+categories are indistinguishable in that report by construction. The recorded
+run's `23 written by the DLL / 3 of ours` is therefore a **superset** that
+contains every (b) as well: it flags 25-ish rows and localises none.
+
+What the shadow line *does* prove is narrower and still useful: which rows get
+written **at all** on a given route. A row that is `DLL=still zero` at exit is
+one nothing wrote on that route — necessary, not sufficient.
+
+So no, this class was not visible in a report we both read. What was visible was
+a superset with no discriminating power. The discriminator is static: who writes
+the slot, and is that writer ours.
+
+## 5. `_purecall` — 113 slots across 27 of the 46 vtables
 
 Lane C reported "30 duplicate slots across 10 vtables". That counts **fold-group
 duplicates** (10 groups, 40 slots, minus one representative each). The number
@@ -375,7 +506,7 @@ vtables** — because in those ten, *every slot except slot 0 is `_purecall`*
 (`ContextData` and `DeviceData` are 19 of 20 each). This is all in lane B's
 favour: 113 slots are not functions anyone has to port.
 
-## 5. Slot counts: verified two independent ways, zero suspects
+## 6. Slot counts: verified two independent ways, zero suspects
 
 A minted vtable that is one slot short does not fail to link — it dispatches
 whatever follows in `.rdata`. So every count is re-established:
@@ -389,7 +520,7 @@ whatever follows in `.rdata`. So every count is re-established:
 * **0 suspect.** The generator refuses to emit a table whose count it cannot
   establish either way, and the shadow check re-runs the tail probe live.
 
-## 6. How the mint works, and why the tables are filled at runtime
+## 7. How the mint works, and why the tables are filled at runtime
 
 The obvious design — bake `&OurGeometryClean` into a generated table — is wrong
 here: **not one of the 46 vtables could be completely filled when this was written** (§7), so a
@@ -438,7 +569,7 @@ registry queries that answer "is this ported" without falling through to the
 DLL and without recording anything. Anything that wants to *inspect* the
 registry rather than call through it should use them.
 
-## 7. Per-symbol status
+## 8. Per-symbol status
 
 ### The highest-leverage finding: slot 0 is `??_G`, not `??1`
 
@@ -572,7 +703,7 @@ One of the 28 — `?_loader@LoaderLoop@Engine@@` — needs more than storage and
 gets it (§2); the other 27 are plain BSS, proved so by the `.CRT$XC` sweep
 rather than assumed from their section.
 
-## 8. Deferred, blocked, and what is *not* covered
+## 9. Deferred, blocked, and what is *not* covered
 
 1. **CLOSED — the load-time construction question, both halves.** BOTH
    `?_loader` and `?_rng` are constructed at load, and both are now reproduced
@@ -603,13 +734,17 @@ rather than assumed from their section.
    while our callers get ours, empty. It is wired now so the last commit of the
    wave is a flag flip, not new code — but it must not be flipped before the
    DLL goes.
-7. **The set will grow again.** Every class a later lane completes can add
+7. **25 of the 32 storage rows have no writer that survives cutover** (4).
+   Not this lane's to port, but it IS this lane's to track: a ported ctor that
+   forgets to write its singleton reproduces the same null. `rt_mint_writer_audit.py`
+   exits 2 until the list is empty, so it is a standing gate rather than a note.
+8. **The set will grow again.** Every class a later lane completes can add
    vtables here (§1) — and, as `_loader` showed, so can this lane's own work.
    Re-run the generator before closing the wave; it re-runs the census for you
    and fails loudly on any new exported `.data` static whose size nobody has
    pinned, and on any newly-constructed static nothing reproduces (§2).
 
-## 9. The shadow check — what it compares, and what it refuses to
+## 10. The shadow check — what it compares, and what it refuses to
 
 `BANISHED_RT_MINT_SHADOW=1`. Runs twice: at `RtDataMintInit` (`phase=init`) and
 at process exit from `standalone/main.cpp` (`phase=exit`), because which
@@ -768,10 +903,16 @@ are exact even where an absolute count is ambiguous):
 A move anywhere else is unintended and should be treated as a finding, not as
 noise.
 
+**Round 7 (the writer enumeration) predicts NO shadow movement at all.** It adds
+a tool and a document section; it changes no minted row, no slot and no
+registration. Expected: 442 slots / 48 vtables / 165 `BaseTypeInfo` fields /
+32 storage rows / 0 MISMATCH / 0 suspects / 0 absent, clean at both phases —
+identical to round 6. Any movement is a finding.
+
 **Any non-zero `MISMATCH`, `slot-count suspects` or `absent` is a real finding**
 and a run showing one should be treated as failed.
 
-## 10. How to run it
+## 11. How to run it
 
 No new build target; the files are picked up by `standalone/*.cpp`.
 
