@@ -379,6 +379,31 @@ void RuntimePortInit() {
     // Wave 9 lane H: everything resolved from here on sees the full registry.
     // Anything recorded BEFORE this line resolved against a partly-built one,
     // and if its call site caches, it is frozen on the pre-registration answer.
+    // WAVE 9: BUILD AND REGISTER THE MINTED DATA.
+    //
+    // Restored 2026-09-08.  Lane X's probe-reordering commit (4a60ccf) DELETED
+    // this call while adding comments that refer to it, so the mint stopped
+    // initialising entirely: no vtable, no BaseTypeInfo and no storage row was
+    // ever built or registered.
+    //
+    // Nothing on an ordinary run could see that.  The mint REGISTERS nothing
+    // unless BANISHED_RT_MINT=1 and its shadow only PRINTS under
+    // BANISHED_RT_MINT_SHADOW=1, and lane X's verification cell set neither --
+    // so a green BANISHED_RT_DIFF run was entirely consistent with the mint
+    // being absent.  The FIRST controlled DLL-absent boot found it immediately:
+    // ResolveAddr(Module::Runtime, 0x1801fc718) returned null and
+    // engine_funcs.cpp:1623 dereferenced it, because
+    // ?_singleton@MemoryAllocator@System@@ is a minted row that was never
+    // registered.
+    //
+    // Placement, per lane X's own reasoning which the comments below preserve:
+    // AFTER every *PortInit() above, because the mint reads the port registry
+    // to decide a storage row's verdict; BEFORE RtResolveMarkPortInitDone() and
+    // before lane X's probe, because the probe resolves the fourteen
+    // ?_singleton@ names through a CACHING door and those are the very caches
+    // the ported constructors publish through.
+    RtDataMintInit();
+
     RtResolveMarkPortInitDone();
 
     // Wave 9 lane X's oracle. LAST, after the mint AND after the mark above,
