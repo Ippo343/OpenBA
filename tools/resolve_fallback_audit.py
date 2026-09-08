@@ -188,7 +188,39 @@ def find_sites(root="."):
             base = target.split(".")[-1].split(">")[-1].split("::")[-1]
 
             # TRAP 1: the primary must assign the SAME target.
-            back = " ".join(x.strip() for x in lines[max(0, s - 40):s])
+            #
+            # *** THE LOOKBACK MUST STOP AT A FUNCTION BOUNDARY. *** Wave 9 lane
+            # GFX3 found this producing WRONG-ADDRESS rows that were pure
+            # artefacts: it paired `?AsMatrix@Transform@Math@@` from one
+            # forwarder with `0x18005e5e0` (GridAdd) in a LATER one, and
+            # `?SetText@EditElement@UI@@` with `0x1800c7ad0` (MemFree). Both read
+            # as a serious defect -- "a wrong address in a fallback" is exactly
+            # what this tool exists to find -- and neither was real.
+            #
+            # Two compounding causes, both fixed here:
+            #   * the window was 40 RAW lines, so COMMENTS ate it. Nine lines of
+            #     comment moved a primary out of range and silently changed a
+            #     row's classification -- the same shape as
+            #     reference_documenting_a_check_can_delete_it, where adding a
+            #     comment deleted a call site from a checker's fixed window.
+            #   * every forwarder in this tree names its local `fn`, so pairing
+            #     on a bare identifier matches ACROSS function boundaries by
+            #     construction.
+            #
+            # A `}` in column 0 ends a function in this codebase, so the walk
+            # stops there. Comment-only lines are skipped rather than counted,
+            # so documenting a call site can no longer change its verdict.
+            back_lines = []
+            k = s - 1
+            while k >= 0 and len(back_lines) < 40:
+                raw = lines[k]
+                if raw[:1] == "}":
+                    break                      # previous function ends here
+                t = raw.strip()
+                if t and not t.startswith("//"):
+                    back_lines.append(t)
+                k -= 1
+            back = " ".join(reversed(back_lines))
             kind = name = None
             for am in re.finditer(re.escape(base) + r"\s*=\s*(.{0,200}?);", back):
                 nm = RESOLVE_NAME.search(am.group(1))
