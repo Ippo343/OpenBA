@@ -352,6 +352,14 @@ void RuntimePortInit() {
     // registrations it makes.
     RtObjectDeletingDtorPortInit();  // Wave 9: deleting destructors (lane K)
 
+    // Wave 9 lane X: the fourteen constructors that publish a `?_singleton@...`
+    // DATA export. Here, between lane K and the mint, for two reasons. It must
+    // be BEFORE RtDataMintInit() because the mint's verdict for a storage row
+    // depends on whether its writer is registered. And it is AFTER every other
+    // wave because its probe calls our OWN ??0Random@System@@QEAA@XZ through
+    // the port-aware door, which only reaches the port once Wave 2 has run.
+    RtSingletonCtorsPortInit();  // Wave 9: singleton constructors (lane X)
+
     // Wave 9 lane C2: mint the exported DATA symbols (??_7 vtables,
     // BaseTypeInfo, singletons and the other .data statics -- the count is a
     // moving target, see WAVE9_LANE_C2.md). AFTER every *_PortInit() above,

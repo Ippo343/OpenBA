@@ -219,3 +219,16 @@ void RtCollectionDestroyPortInit();  // runtime/src/collection/ -- Wave 9 lane D
 // destructor registered by a LATER init would be invisible to the probe. It
 // must run BEFORE RtDataMintInit(), which is what fills the 37 slots.
 void RtObjectDeletingDtorPortInit();  // runtime/src/object/ -- Wave 9 lane K
+// Wave 9 lane X. The fourteen constructors that publish a `?_singleton@...`
+// DATA export -- lane C2's tier-1 rows, where the mint would otherwise hand out
+// zeroed storage nothing ever writes. Cross-namespace on purpose: what the
+// fourteen share is the ACCEPTANCE CRITERION (the ctor must write its singleton
+// through the port-aware door), not a namespace.
+//
+// It must run BEFORE RtDataMintInit(), which reads the port registry to decide
+// what each minted row is worth, and it may run after the other waves: nothing
+// in our tree calls any of these constructors today, so its registrations
+// change no live call site. Its probe -- the only thing that executes these
+// bodies before cutover -- runs at the end of it and only when the diff harness
+// is on.
+void RtSingletonCtorsPortInit();      // runtime/src/engine/ -- Wave 9 lane X
