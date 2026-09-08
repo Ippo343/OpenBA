@@ -684,6 +684,24 @@ void Neg(const char* what, const void* ours, const void* theirs, size_t n,
     std::printf("[GfxdProbe] NEGATIVE CONTROL DID NOT FIRE: %s\n", what);
 }
 
+// The other half of the kHoleArrayHdr exclusion: assert each side kept the
+// buffer it was given. `slots` are byte offsets of Array `_data` fields.
+void PointersHeld(const char* what, const void* post, const void* pre,
+                  const size_t* slots, int n) {
+    const uint8_t* a = static_cast<const uint8_t*>(post);
+    const uint8_t* b = static_cast<const uint8_t*>(pre);
+    ++g_cmp;
+    for (int i = 0; i < n; ++i) {
+        if (std::memcmp(a + slots[i], b + slots[i], 8) != 0) {
+            ++g_bad;
+            std::printf("[GfxdProbe] BUFFER RELEASED: %s reallocated or freed "
+                        "the buffer at +0x%zx -- retail reuses it\n",
+                        what, slots[i]);
+            return;
+        }
+    }
+}
+
 void Seed(void* p, size_t n, uint32_t salt) {
     uint8_t* b = static_cast<uint8_t*>(p);
     for (size_t i = 0; i < n; ++i)
@@ -740,6 +758,29 @@ const Hole kHoleCamCopy[]  = { {0xd5, 0xd8} };
 const Hole kHoleCamInit[]  = { {0x61, 0x64}, {0xd5, 0xd8} };
 const Hole kHoleEntAssign[]= { {0xe5, 0xe8}, {0xfc, 0x100} };
 const Hole kHoleEntInit[]  = { {0x71, 0x74}, {0xe5, 0xe8}, {0xfc, 0x100} };
+
+// ---------------------------------------------------------------------------
+// THE _data POINTER IS NOT COMPARABLE BETWEEN THE TWO SUBJECTS, and the first
+// live run of this probe proved it the hard way: five "MISMATCH" lines, every
+// one at the +0x00 of an Array header, every one a pointer whose low bytes
+// differed (ours=0xa0 theirs=0xf0). The port was never in question -- the
+// INSTRUMENT was. Ours and theirs are handed DIFFERENT buffers on purpose, so
+// their `_data` fields differ by construction and comparing them is the
+// "compare two independent allocations" mistake this project has already paid
+// for once (reference_oracle_must_snapshot_aliased_inputs.md is the mirror
+// image; phase 2's AddScene arm had the exclusion from the start and phase 1's
+// header arms did not).
+//
+// Excluding those eight bytes would leave a blind spot exactly where a real
+// defect could hide -- a port that FREED and reallocated the buffer would then
+// pass. So they are not merely excluded: `PointersHeld` turns them into a
+// STRONGER assertion than the cross-comparison they replace. Each side's
+// post-state `_data` is compared against ITS OWN pre-run value, which is the
+// actual invariant of SetSize(0) on a non-negative capacity: retail reuses the
+// buffer, it does not release it (`CMP old,[a] / JZ return`, no Free on the
+// path). A port that reallocated would fail this where it passed the memcmp.
+const Hole kHoleArrayHdr[] = { {0x00, 0x08} };                    // a bare header
+const Hole kHoleRenderer[] = { {0x00, 0x08}, {0x10, 0x18}, {0x20, 0x28} };
 
 // ---- subject storage -------------------------------------------------------
 // Static and 16-byte aligned. Static is what keeps phase 1 allocation-free; the
@@ -809,6 +850,22 @@ alignas(16) uint8_t g_snapDrw[kNd * 0x10];
 alignas(16) uint8_t g_snapItm[kNg * 3 * kNi * 0x38];
 alignas(16) uint8_t g_snapRnd[0x50];
 
+// The `_data` slot of each of the kNg groups' three per-pass Array headers,
+// at group*0x1f0 + 0x1c0 + pass*0x10. Built once; used both as the exclusion
+// list for the cross-comparison and as the slot list for PointersHeld.
+constexpr int kNGroupHoles = kNg * 3;
+Hole   kGroupHoles[kNGroupHoles];
+size_t kGroupSlots[kNGroupHoles];
+
+void BuildGroupHoles() {
+    for (int g = 0; g < kNg; ++g)
+        for (int p = 0; p < 3; ++p) {
+            const uint32_t off = static_cast<uint32_t>(g * 0x1f0 + 0x1c0 + p * 0x10);
+            kGroupHoles[g * 3 + p] = Hole{ off, off + 8 };
+            kGroupSlots[g * 3 + p] = off;
+        }
+}
+
 }  // namespace
 
 // ============================================================================
@@ -817,6 +874,8 @@ alignas(16) uint8_t g_snapRnd[0x50];
 namespace {
 
 void Phase1() {
+    BuildGroupHoles();
+
     // ---- arm A: Camera copy constructor -----------------------------------
     {
         alignas(16) uint8_t src[0xd8], a[0xd8], b[0xd8], snap[0xd8];
@@ -890,7 +949,9 @@ void Phase1() {
         g_dll.drawZero(hdrB);
 
         Cmp("Array<Drawable>::SetSize(0) 0x180062c40 header", hdrA, hdrB, snapH,
-            0x10, Changes);
+            0x10, Changes, kHoleArrayHdr, 1);
+        static const size_t kSlot0[] = { 0 };
+        PointersHeld("Array<Drawable>::SetSize(0) ours", hdrA, snapH, kSlot0, 1);
         Cmp("Array<Drawable>::SetSize(0) 0x180062c40 element buffer",
             g_drw[0], g_drw[1], g_snapDrw, sizeof(g_drw[0]), Untouched);
     }
@@ -910,7 +971,9 @@ void Phase1() {
         g_dll.sceneZero(hdrB);
 
         Cmp("Array<SceneEntry>::SetSize(0) 0x180062ae0 header", hdrA, hdrB, snapH,
-            0x10, Changes);
+            0x10, Changes, kHoleArrayHdr, 1);
+        static const size_t kSlot0e[] = { 0 };
+        PointersHeld("Array<SceneEntry>::SetSize(0) ours", hdrA, snapH, kSlot0e, 1);
         // This one MUST change: the destroy clears every entry's +0x100..+0x10f,
         // and BuildEntries leaves the size/capacity half seeded so the clear is
         // observable. See BuildEntries.
@@ -930,7 +993,9 @@ void Phase1() {
             g_dll.groupClear(g_grp[1] + g * 0x1f0);
         }
         Cmp("DrawGroup pass-clear 0x1800626a0", g_grp[0], g_grp[1], g_snapGrp,
-            sizeof(g_grp[0]), Changes);
+            sizeof(g_grp[0]), Changes, kGroupHoles, kNGroupHoles);
+        PointersHeld("DrawGroup pass-clear ours", g_grp[0], g_snapGrp,
+                     kGroupSlots, kNGroupHoles);
         Cmp("DrawGroup pass-clear item buffers", g_itm[0], g_itm[1], g_snapItm,
             sizeof(g_itm[0]), Untouched);
     }
@@ -955,11 +1020,13 @@ void Phase1() {
         g_dll.reset(g_rnd[1]);
 
         Cmp("Renderer::Reset 0x180105110 object", g_rnd[0], g_rnd[1], g_snapRnd,
-            sizeof(g_rnd[0]), Changes);
+            sizeof(g_rnd[0]), Changes, kHoleRenderer, 3);
+        static const size_t kRndSlots[] = { 0x00, 0x10, 0x20 };
+        PointersHeld("Renderer::Reset ours", g_rnd[0], g_snapRnd, kRndSlots, 3);
         Cmp("Renderer::Reset scene buffer", g_ent[0], g_ent[1], g_snapEnt,
             sizeof(g_ent[0]), Changes);
         Cmp("Renderer::Reset group buffer", g_grp[0], g_grp[1], g_snapGrp,
-            sizeof(g_grp[0]), Changes);
+            sizeof(g_grp[0]), Changes, kGroupHoles, kNGroupHoles);
         // Reset empties the drawable HEADER and leaves the elements alone.
         Cmp("Renderer::Reset drawable buffer", g_drw[0], g_drw[1], g_snapDrw,
             sizeof(g_drw[0]), Untouched);
