@@ -28,7 +28,19 @@
 //          the pointer into the hidden return slot; ++refcount; }` — a plain
 //          ref-counted read of a String field, nothing else.
 //
-// Offsets 0x08..0x8F are UNKNOWN. ReadSettings/WriteSettings construct their
+//   +0x08  int32 element count of that same set. Added 2026-09-08 by Wave 9
+//          lane BOOT2, which read `Map_Clear` (retail 0x18000f7d0, an unnamed
+//          DLL internal, the first thing `ReadSettings` calls with `this` in
+//          RCX). After it has recursively destroyed the tree it writes BOTH
+//          roots of the container's state and nothing else:
+//              XOR EAX,EAX
+//              MOV qword ptr [RBX],RAX        ; +0x00 root  = null
+//              MOV dword ptr [RBX+0x8],EAX    ; +0x08 count = 0   <-- a DWORD
+//          The 8-vs-4 byte split is the evidence for the width; the empty-tree
+//          arm at 0x18000f824 writes the identical pair. Nothing this lane
+//          read pins +0x0C.
+//
+// Offsets 0x0C..0x8F are UNKNOWN. ReadSettings/WriteSettings construct their
 // own `Registry` helper object on the STACK (`Registry::Registry(&local, 0)`),
 // not through a field of `this`, so whatever else lives in that gap is not
 // evidenced by any function this lane read. Held-back functions (see the wave
@@ -43,10 +55,13 @@
 namespace RtIo {
 
 struct Persistence {
-    void*            settingsMapRoot;  // +0x00 — Set<Pair<String,String>> root
-    uint8_t          _unknown[0x88];   // +0x08 .. +0x8F — NOT pinned, NOT modeled
-    RtSystem::String savePath;         // +0x90
+    void*            settingsMapRoot;   // +0x00 — Set<Pair<String,String>> root
+    int32_t          settingsMapCount;  // +0x08 — see below (Wave 9 lane BOOT2)
+    uint8_t          _unknown[0x84];    // +0x0C .. +0x8F — NOT pinned, NOT modeled
+    RtSystem::String savePath;          // +0x90
 };
+static_assert(offsetof(Persistence, settingsMapCount) == 0x08,
+              "Set<Pair<String,String>>::_count must sit at +0x08 (Map_Clear, retail 0x18000f7d0)");
 static_assert(offsetof(Persistence, savePath) == 0x90,
               "IO::Persistence::_savePath must sit at +0x90 (GetSavePath, retail 0x180007ad0)");
 

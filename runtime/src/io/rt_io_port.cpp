@@ -17,6 +17,9 @@
 //   BANISHED_RT_STREAM=0        ... just the Stream family        (lane B)
 //   BANISHED_RT_PERSISTENCE=0   ... just Persistence + Registry   (lane C)
 //   BANISHED_RT_FILESYSTEM=0    ... just FileSystem + Modification(lane D)
+//   BANISHED_RT_FSSTARTUP=0     ... just FileSystem::Startup       (lane ENG)
+//   BANISHED_RT_PERSSTARTUP=0   ... just Persistence::Startup      (lane ENG)
+//   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -58,6 +61,13 @@ extern int RtIoFileSystemStartupRegister();  // filesystem_startup.cpp (lane ENG
 // Wave 9 lane ENG, iteration 3. Engine::Startup step 4. Own switch, own file,
 // same reasoning as the row above.
 extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane ENG)
+// Wave 9 lane BOOT2. IO::Persistence::ReadSettings + IO::Registry's ctor — the
+// registry READ half of Engine::Startup step 4, i.e. the first thing lane ENG's
+// Persistence::Startup calls. Own switch for the same reason as the two rows
+// above: it is on the process's single boot path, and it is also the first port
+// in this tree that reads the player's real Windows registry, so the integrator
+// must be able to take it out on its own. WriteSettings is NOT in it.
+extern int RtIoPersistenceRegistryRegister(); // persistence_registry_win.cpp (lane BOOT2)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -71,5 +81,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
+    if (RtWaveEnabled("BANISHED_RT_REGREAD"))     n += RtIoPersistenceRegistryRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
