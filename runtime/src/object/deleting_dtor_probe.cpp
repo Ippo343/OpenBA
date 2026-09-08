@@ -124,9 +124,9 @@ uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace rtdtor {
 
-void* DeletingDtorCore(void* self, unsigned flags, int i);
-bool  DtorIsPorted(int i);
+bool   DtorIsPorted(int i);
 DtorFn RawDtor(int i);
+DtorFn NormalDtor(int i);
 void* DeletingDtorCoreWith(void* self, unsigned flags, int i, DtorFn dtor);
 
 namespace {
@@ -235,7 +235,8 @@ bool RunOne(int i, const Case& c, bool iso, bool wrong) {
     void* oursRet;
     if (wrong)     oursRet = WrongEnvelope(g_blockA + 8, c.flags, i);
     else if (iso)  oursRet = DeletingDtorCoreWith(g_blockA + 8, c.flags, i, RawDtor(i));
-    else           oursRet = DeletingDtorCore(g_blockA + 8, c.flags, i);
+    else           oursRet = DeletingDtorCoreWith(g_blockA + 8, c.flags, i,
+                                                 NormalDtor(i));
     void* theirsRet = theirs(g_blockB + 8, c.flags);
 
     const long long oursOff = reinterpret_cast<uint8_t*>(oursRet) - (g_blockA + 8);
@@ -331,8 +332,15 @@ void Run(bool allocatingPhase) {
     for (int k = 0; k < nSubjects; ++k) {
         const int i = subjects[k];
         for (int c = 0; c < kCaseCount; ++c) {
-            if (kCases[c].allocating != allocatingPhase) continue;
-            if (kCases[c].allocating && !all) { ++g_skippedAllocating; continue; }
+            if (kCases[c].allocating != allocatingPhase) {
+                // Counted HERE, in the static phase, because the allocating
+                // phase does not run at all today -- a skip counter that only
+                // increments inside the thing being skipped stays at zero and
+                // says nothing.
+                if (!allocatingPhase && kCases[c].allocating && !all)
+                    ++g_skippedAllocating;
+                continue;
+            }
             RunOne(i, kCases[c], false, false);
             if (neg && (kCases[c].flags & 2u)) {
                 ++g_negRun;

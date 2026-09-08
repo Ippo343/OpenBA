@@ -186,6 +186,17 @@ def parse_table():
 def main():
     img = load()
     rows = parse_table()
+    # NEGATIVE CONTROL. `--neg` perturbs one row -- the element size of
+    # 0x180058b10, chosen because 0x10 is the most common value in the table and
+    # a checker that silently normalised sizes would hide it -- and the run MUST
+    # go red. A verifier that reports 37 OK without ever having been shown a
+    # wrong row is a verifier nobody has tested.
+    neg = "--neg" in sys.argv
+    if neg:
+        rows = [(a, d, (s + 8) if a == 0x180058B10 else s, n)
+                for a, d, s, n in rows]
+        print("NEGATIVE CONTROL: 0x180058b10's element size perturbed 0x10 -> 0x18;")
+        print("this run MUST report exactly 1 problem.")
     print("rows in deleting_dtor.cpp: %d" % len(rows))
     bad = 0
     if len(rows) != 37:
@@ -245,6 +256,13 @@ def main():
     print("")
     print("call-the-dtor (K1): %d    restamp-inline (K2/K3): %d" % (k1, k2))
     print("problems: %d" % bad)
+    if neg:
+        if bad == 1:
+            print("NEGATIVE CONTROL PASSED: the perturbed row was caught.")
+            return 0
+        print("*** NEGATIVE CONTROL FAILED: a wrong element size produced %d "
+              "problems, not 1. This checker does not check. ***" % bad)
+        return 1
     return 1 if bad else 0
 
 

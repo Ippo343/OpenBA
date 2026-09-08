@@ -687,26 +687,157 @@ void StringArray_DestroyRange(String* p, int n) {
 // the highest @n used, an Array<String> of that many entries is built from the
 // C-string varargs, and FormatParamList does the substitution.
 //
-// FormatParamCount (0x1800c8d20) and FormatParamList (0x1800c8dc0) are NOT in
-// this lane's scope and are left on the DLL. Both are pure functions over the
-// same refcounted representation this file reproduces exactly, so calling them
-// is safe; porting FormatParamList unasked would have meant transcribing
-// another hidden-return-slot function whose R8 argument Ghidra also drops.
+// FormatParamCount (0x1800c8d20) and FormatParamList (0x1800c8dc0) were left on
+// the DLL by Wave 2 as out of lane scope. **Wave 9 lane B3 ported both** (below,
+// after this function) — they are two of WAVE9_LANE_V.md's REAL DEPENDENCY rows
+// and the two calls here were the raw-door sites that made them so. The
+// warning in the paragraph this replaced was accurate and was the reason to be
+// careful rather than to stop: FormatParamList IS a hidden-return-slot function
+// whose R8 argument Ghidra drops, so it was transcribed from the listing at
+// 0x1800c8dc0..0x1800c9017 instruction by instruction and not from decompiled C.
+// ============================================================
+// Wave 9 lane B3 - the four System::String exports left on the DLL
+// ============================================================
+// All four are WAVE9_LANE_V.md REAL DEPENDENCY rows. Two are pure and get a
+// full differential oracle; Release mutates a refcount and gets a shadow with
+// the reason stated; FormatParamList allocates a fresh result from const
+// inputs and so replays cleanly, exactly like SubString above.
+
+// ?FormatParamCount@String@System@@SAHPEBD@Z  retail 0x1800c8d20
+//
+// Returns the HIGHEST parameter index used in `fmt`, where a parameter is the
+// two characters `@` followed by an ASCII digit, and `@1` is index 1 -- so the
+// answer is `digit - '0'`, computed by retail as `(int)(signed char)d - 0x2f`
+// against a `- 0x30` range check. It is a MAXIMUM, not a count of occurrences:
+// `"@2 @2"` answers 2 and `"@2"` alone also answers 2, which is why the
+// StringArray FormatIndexed sizes from it can legitimately have holes.
+//
+// Retail's loop bound is the SECOND character's: a format ending in a bare `@`
+// is not a parameter, because the `i + 1 >= len` test (0x1800c8d77
+// `CMP R9D,R8D / JGE`) skips the case. `fmt == nullptr` returns 0 before the
+// strlen.
+int RtSystem_String_FormatParamCount(const char* fmt) {
+    RT_DIFF_BEGIN("System::String::FormatParamCount");
+    int result = 0;
+    if (fmt != nullptr) {
+        int len = 0;
+        while (fmt[len] != '\0') ++len;
+        for (int i = 0; i < len; ++i) {
+            if (fmt[i] != '@' || i + 1 >= len) continue;
+            const unsigned char d = static_cast<unsigned char>(fmt[i + 1]);
+            if (static_cast<unsigned char>(d - '0') > 9u) continue;
+            const int index = static_cast<int>(static_cast<signed char>(d)) - 0x2f;
+            if (index > result) result = index;
+        }
+    }
+    using Fn = int (*)(const char*);
+    RT_DIFF_SCALAR(result, RtOriginal<Fn>("?FormatParamCount@String@System@@SAHPEBD@Z")(fmt));
+    return result;
+}
+
+// ?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z  retail 0x1800c8dc0
+//
+// ABI: RCX = hidden return slot, RDX = `fmt`, R8 = `params` (an ARRAY of
+// String indexed by the digit -- NOT a single String*, despite the `PEBV12@`
+// spelling). Ghidra drops R8 entirely; the array indexing is visible only in
+// the listing, at 0x1800c8efa `MOV RCX,[RBP+0x58]` (the home slot R8 was
+// spilled to at entry) followed by `LEA R8,[RCX + RAX*0x8]`.
+//
+// The body walks `fmt` and appends alternately: the literal run since the last
+// substitution, then `params[digit]`. It appends with `operator+=`
+// (0x1800c8a90) and takes literal runs with `SubString` (0x1800c9230), both of
+// which this file already ports.
+//
+// TWO DETAILS THAT ARE NOT SIMPLIFICATIONS:
+//  * retail takes a REFCOUNTED COPY of `fmt` at entry (`work`, [RBP+0x50],
+//    `INC [RAX-0x4]` at 0x1800c8e0a) and calls SubString on the copy while
+//    reading characters out of `fmt` itself. Same buffer, so the characters
+//    cannot differ -- but the AddRef and its matching Release at 0x1800c8fe0
+//    are real refcount traffic, and a port that skipped them would leave a
+//    different refcount behind and the next Release would free at the wrong
+//    time.
+//  * the literal-run guard is `if (i > 0)` on the ABSOLUTE index, not
+//    `i > segStart` (0x1800c8e6d `TEST ESI,ESI / JLE`). For adjacent
+//    parameters (`"@1@2"`) that produces `SubString(segStart, i-1)` with
+//    `end < start`, i.e. a zero-length append, rather than skipping the append.
+//    Transcribed as written.
+String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const String* params) {
+    RT_DIFF_BEGIN("System::String::FormatParamList");
+
+    String work{nullptr};
+    RtString_AdoptInline(&work, fmt->data);          // refcounted copy of fmt
+    ret->data = nullptr;
+
+    const int len = (work.data != nullptr) ? StringLength(work.data) : 0;
+    int segStart = 0;                                 // R8D
+    int i = 0;                                        // RDI / ESI
+    while (i < len) {
+        const char* base = fmt->data;
+        const bool isParam = base[i] == '@' && (i + 1) < len &&
+                             base[i + 1] >= '0' && base[i + 1] <= '9';
+        if (!isParam) { ++i; continue; }
+
+        if (i > 0) {
+            String lit{nullptr}, discard{nullptr};
+            RtSystem_String_SubString(&work, &lit, segStart, i - 1);
+            RtSystem_String_AppendAssign(ret, &discard, &lit);
+            RtString_ReleaseInline(&discard);
+            RtString_ReleaseInline(&lit);
+        }
+
+        const int digit = static_cast<int>(static_cast<signed char>(fmt->data[i + 1])) - '0';
+        String discard{nullptr};
+        RtSystem_String_AppendAssign(ret, &discard, &params[digit]);
+        RtString_ReleaseInline(&discard);
+
+        i += 2;
+        segStart = i;
+    }
+
+    if (segStart != i) {                              // trailing literal run
+        String lit{nullptr}, discard{nullptr};
+        RtSystem_String_SubString(&work, &lit, segStart, i - 1);
+        RtSystem_String_AppendAssign(ret, &discard, &lit);
+        RtString_ReleaseInline(&discard);
+        RtString_ReleaseInline(&lit);
+    }
+
+    RtString_ReleaseInline(&work);
+
+    // A real oracle: both inputs are const and our body's only net effect on
+    // them is an AddRef/Release pair that cancels, so the shipped body can be
+    // replayed on the same `fmt`/`params` into an independent result. Guarded
+    // against `ret` aliasing an input for the same reason SubString above is
+    // (reference_oracle_must_snapshot_aliased_inputs.md): if it ever did, ours
+    // would have destroyed the input before theirs ran and the oracle would
+    // manufacture a divergence rather than find one.
+    if (rt_diff_on__ && ret != fmt && ret != params) {
+        String theirs{nullptr};
+        RtOriginal<String* (*)(String*, const String*, const String*)>(
+            "?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z")(&theirs, fmt, params);
+        const bool equal =
+            ((ret->data == nullptr) == (theirs.data == nullptr)) &&
+            (ret->data == nullptr ||
+             (StringLength(ret->data) == StringLength(theirs.data) &&
+              std::strcmp(ret->data, theirs.data) == 0));
+        RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
+                       theirs.data ? theirs.data : "(null)");
+        RtString_ReleaseInline(&theirs);
+    }
+    return ret;
+}
+
 String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
     if (fmt == nullptr) {
         ret->data = nullptr;
         return ret;
     }
 
-    using ParamCountFn = int (*)(const char*);
-    using ParamListFn  = String* (*)(String*, const String*, const String*);
-
-    // RT_ORIGINAL_ONCE: this is a normal-run path, not a diff guard, so a bare
-    // RtOriginal would GetProcAddress on every formatted string. Same defect
-    // shape as the System::Time one Wave 3 lane P root-caused; not separately
-    // measured (String is near-inert in the stress town) but the same fix.
-    const int paramCount =
-        RT_ORIGINAL_ONCE(ParamCountFn, "?FormatParamCount@String@System@@SAHPEBD@Z")(fmt);
+    // Called DIRECTLY now that both are ported below — not through
+    // RT_ORIGINAL_ONCE (which would be a port bypass and a GetProcAddress) and
+    // not through RT_EXPORT_ONCE either, since the callee is in this same
+    // translation unit and needs no resolution at all.
+    const int paramCount = RtSystem_String_FormatParamCount(fmt);
 
     if (paramCount == 0) {
         ret->data = nullptr;
@@ -731,15 +862,72 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
 
     String fmtStr{nullptr};
     RtSystem_String_Set(&fmtStr, fmt);
-    RT_ORIGINAL_ONCE(ParamListFn,
-                     "?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z")(
-        ret, &fmtStr, params.data);
+    RtSystem_String_FormatParamList(ret, &fmtStr, params.data);
     RtString_ReleaseInline(&fmtStr);
 
     StringArray_DestroyRange(params.data, params.count);
     if (params.data != nullptr)
         RtMemFree(params.data);
     return ret;
+}
+
+// ?Release@String@System@@AEAAXXZ  retail 0x1800c9870
+//
+// The private release primitive, byte-for-byte the sequence String.h documents
+// and RtString_ReleaseInline already implements -- including the asymmetry that
+// the freeing branch leaves `data - 8` in the object while the sharing branch
+// nulls it. This export is those same eleven instructions; it is registered so
+// that the name is not missing at cutover, and so our callers stop reaching the
+// DLL for a routine this file has had all along.
+//
+// NO ORACLE, and the reason is intrinsic rather than a gap in the harness: the
+// refcount lives in the one shared block, so running the shipped body after
+// ours would decrement a second time and free a live string. There is nothing
+// to snapshot and restore -- a second String object referring to the same block
+// IS the same counter. The shadow below is our own post-condition (the object
+// is either nulled or holds block-8), which is a weaker claim than a diff and
+// is labelled as one.
+void RtSystem_String_Release(String* self) {
+    RT_DIFF_BEGIN("System::String::Release [no oracle: mutates a shared refcount]");
+    char* before = self->data;
+    RtString_ReleaseInline(self);
+    const bool ok = (before == nullptr) ? (self->data == nullptr)
+                                        : (self->data == nullptr || self->data == before - 8);
+    RT_DIFF_SHADOW(ok, "released", "not diffable");
+}
+
+// ?ToInteger@String@System@@SAHPEBD@Z  retail 0x18003f620
+//
+// A hand-rolled atoi over `int`: skip ' ' and '\t', one optional '+'/'-', then
+// digits accumulated as `v = v*10 + (c - '0')` -- retail spells that
+// `EDX = c + 2*(5*EDX - 24)` (0x18003f664..0x18003f670), which is the same
+// value.
+//
+// The digit test is `CMP AL,0x30 / JL` and `CMP AL,0x39 / JG` on a byte loaded
+// with MOVZX and compared SIGNED, so any byte >= 0x80 reads as negative and
+// ends the number. Reproduced with a signed char rather than an isdigit(), so a
+// UTF-8 continuation byte terminates it the same way it does in the DLL.
+//
+// No overflow handling and no errno: past INT_MAX retail simply wraps, and so
+// do we.
+int RtSystem_String_ToInteger(const char* s) {
+    RT_DIFF_BEGIN("System::String::ToInteger");
+    int result = 0;
+    if (s != nullptr) {
+        const char* p = s;
+        while (*p == ' ' || *p == '\t') ++p;
+        int sign = 1;
+        if (*p == '-') { sign = -1; ++p; }
+        else if (*p == '+') { ++p; }
+        while (static_cast<signed char>(*p) >= '0' && static_cast<signed char>(*p) <= '9') {
+            result = result * 10 + (static_cast<int>(static_cast<signed char>(*p)) - '0');
+            ++p;
+        }
+        result *= sign;
+    }
+    using Fn = int (*)(const char*);
+    RT_DIFF_SCALAR(result, RtOriginal<Fn>("?ToInteger@String@System@@SAHPEBD@Z")(s));
+    return result;
 }
 
 // ============================================================
@@ -920,6 +1108,13 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
     RegisterRuntimeExport("?SubString@String@System@@QEBA?AV12@HH@Z", (void*)&RtSystem_String_SubString); ++n;
     RegisterRuntimeExport("?ToFloat@String@System@@SAMPEBD@Z",      (void*)&RtSystem_String_ToFloat); ++n;
+    // Wave 9 lane B3 -- the four raw-door rows.
+    RegisterRuntimeExport("?ToInteger@String@System@@SAHPEBD@Z",    (void*)&RtSystem_String_ToInteger); ++n;
+    RegisterRuntimeExport("?Release@String@System@@AEAAXXZ",        (void*)&RtSystem_String_Release); ++n;
+    RegisterRuntimeExport("?FormatParamCount@String@System@@SAHPEBD@Z",
+                          (void*)&RtSystem_String_FormatParamCount); ++n;
+    RegisterRuntimeExport("?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z",
+                          (void*)&RtSystem_String_FormatParamList); ++n;
     RegisterRuntimeExport("?Format@String@System@@SA?AV12@PEBDZZ",  (void*)&RtSystem_String_Format); ++n;
     RegisterRuntimeExport("?FormatIndexed@String@System@@SA?AV12@PEBDZZ",
                           (void*)&RtSystem_String_FormatIndexed); ++n;

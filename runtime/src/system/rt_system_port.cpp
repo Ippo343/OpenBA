@@ -12,6 +12,12 @@
 //   BANISHED_RT_FILENAME=0 ... just System::Filename
 //   BANISHED_RT_VALUE=0    ... Random / Time / DateTime / Color / Configuration
 //   BANISHED_RT_THREAD=0   ... CriticalSection / Thread
+//   BANISHED_RT_TIMER=0    ... System::Timer (Wave 9 lane B3). Note that the
+//                              port also OWNS the five Timer data exports
+//                              (runtime/src/system/timer.h); turning the
+//                              registrations off does NOT send those data
+//                              reads back to the DLL, because our storage
+//                              holds the same constants either way.
 //   BANISHED_RT_ALLOC=1    ... MemoryAllocator: OPT-IN, see allocator.cpp.
 //                              Never default-on: registering MemAlloc without a
 //                              detour means we allocate and the DLL frees.
@@ -24,6 +30,7 @@ extern int RtSystemStringRegister();      // string.cpp
 extern int RtSystemFilenameRegister();    // filename.cpp
 extern int RtSystemValueRegister();       // value_types.cpp
 extern int RtSystemThreadRegister();      // thread_win.cpp
+extern int RtSystemTimerRegister();       // timer.cpp  (Wave 9 lane B3)
 extern int RtSystemAllocatorRegister();   // allocator.cpp
 
 void RtSystemPortInit() {
@@ -36,6 +43,7 @@ void RtSystemPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FILENAME")) n += RtSystemFilenameRegister();
     if (RtWaveEnabled("BANISHED_RT_VALUE"))    n += RtSystemValueRegister();
     if (RtWaveEnabled("BANISHED_RT_THREAD"))   n += RtSystemThreadRegister();
+    if (RtWaveEnabled("BANISHED_RT_TIMER"))    n += RtSystemTimerRegister();
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)

@@ -348,37 +348,27 @@ void EhVectorDtor(uint8_t* base, uint32_t elemSize, int count, DtorFn dtor) {
 void* DeletingDtorCoreWith(void* self, unsigned flags, int i, DtorFn dtor) {
     uint8_t* p = static_cast<uint8_t*>(self);
     const DelDtorSpec& s = kSpecs[i];
-    int n = -1;
 
-    void* ret;
+    // NOTE: the diff site is reported by the WRAPPER below, not here. The probe
+    // drives this body directly and its traffic must not reach the registry:
+    // `calls=` is this lane's cutover-readiness signal, and a probe that
+    // inflated it would manufacture the very number it exists to let someone
+    // read (reference_truncated_tool_output_manufactures_calls_zero.md is the
+    // same shape -- a tool inventing the signal it is there to measure).
     if (flags & 2u) {
         // `delete[]`: the count sits in the eight-byte cookie the array form of
         // operator new placed BEFORE the first element, and everything from
         // here on is expressed against the BLOCK, not against `this`.
-        n = *reinterpret_cast<const int32_t*>(p - 8);
+        const int n = *reinterpret_cast<const int32_t*>(p - 8);
         EhVectorDtor(p, s.elemSize, n, dtor);
         if (flags & 1u) MemFree(p - 8);
-        ret = p - 8;
-    } else {
-        dtor(p);
-        if (flags & 1u) MemFree(p);
-        ret = p;
+        return p - 8;
     }
-
-    if (RtDiffEnabled()) {
-        Site& st = g_sites[i];
-        if (!st.d.name) st.d.name = s.name;
-        RtDiffRegister(&st.d);
-        char desc[160];
-        std::snprintf(desc, sizeof(desc),
-                      "%s flags=%u %s destroyed=%d freed=%d",
-                      s.name, flags, (flags & 2u) ? "array" : "scalar",
-                      (flags & 2u) ? (n > 0 ? n : 0) : 1,
-                      (flags & 1u) ? 1 : 0);
-        RtDiffReport(&st.d, true, desc, desc);
-    }
-    return ret;
+    dtor(p);
+    if (flags & 1u) MemFree(p);
+    return p;
 }
+
 
 // Armed at init only when BANISHED_RT_DELDTOR_PROBE=all; see the probe's
 // "WHEN IT RUNS". Nothing calls a deleting destructor before cutover, so this
@@ -395,8 +385,27 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
         ProbeRunAllocating();
         g_allocProbeRunning = false;
     }
-    return DeletingDtorCoreWith(self, flags, i, Dtor(i));
+    // Read the array count BEFORE the body runs: on the array path the block is
+    // freed, so afterwards the cookie is either gone or reused.
+    const int n = (flags & 2u)
+        ? *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(self) - 8) : 1;
+    void* ret = DeletingDtorCoreWith(self, flags, i, Dtor(i));
+    if (RtDiffEnabled()) {
+        Site& st = g_sites[i];
+        if (!st.d.name) st.d.name = kSpecs[i].name;
+        RtDiffRegister(&st.d);
+        char desc[160];
+        std::snprintf(desc, sizeof(desc), "%s flags=%u %s destroyed=%d freed=%d",
+                      kSpecs[i].name, flags, (flags & 2u) ? "array" : "scalar",
+                      n > 0 ? n : 0, (flags & 1u) ? 1 : 0);
+        RtDiffReport(&st.d, true, desc, desc);
+    }
+    return ret;
 }
+
+// The probe's "normal" door: the same destructor the live path uses, without
+// the diff reporting the wrapper adds.
+DtorFn NormalDtor(int i) { return Dtor(i); }
 
 // Whether row `i`'s destructor resolves to OUR port or to the DLL. Reported by
 // the probe so a red line names the right lane.

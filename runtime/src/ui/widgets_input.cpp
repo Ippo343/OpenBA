@@ -129,9 +129,12 @@ uint32_t NumberEditElementTypeId() {
 // static). Takes the raw char* a System::String IS at the ABI level in this
 // engine (see EditElement.h), not a String object.
 using ToIntegerFn = int (*)(const char*);
+// ResolveExport, not ResolveExportRaw, since Wave 9 lane B3: String::ToInteger
+// is now ported (runtime/src/system/string.cpp) and the raw door would walk
+// past it into the DLL -- the port-bypass shape WAVE9_LANE_V.md §1c catalogues.
 ToIntegerFn StringToInteger() {
     static ToIntegerFn fn = reinterpret_cast<ToIntegerFn>(
-        ResolveExportRaw("?ToInteger@String@System@@SAHPEBD@Z"));
+        ResolveExport("?ToInteger@String@System@@SAHPEBD@Z"));
     return fn;
 }
 

@@ -231,29 +231,38 @@ void RtSystem_Random_Serialize(Random* self, void* serializer) {
 // ============================================================
 
 // ??0Time@System@@QEAA@M@Z  retail 0x1800078c0
-// Delegates to Timer::SecondsToTicks (Timer is out of this lane's scope; its
-// _secondsPerTick is a runtime QPC-derived global, not a constant we can
-// hardcode). Not diffed: both "ours" and "theirs" would call the identical
-// DLL export, so there is nothing independent to compare.
+// Delegates to Timer::SecondsToTicks. Not diffed here: the delegation is one
+// call and the arithmetic it delegates to now carries its OWN diff site
+// (runtime/src/system/timer.cpp), so diffing it again would count the same
+// comparison twice under a second name.
+//
+// **RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE, since Wave 9 lane B3.** The
+// paragraph this replaced said Timer was out of scope because
+// `_secondsPerTick` is "a runtime QPC-derived global, not a constant we can
+// hardcode". Reading Timer::Startup's disassembly shows that is not so — it is
+// the constant 1e-6, written by a store, with no QPC anywhere in it — and
+// System::Timer is now ported. Leaving RT_ORIGINAL_ONCE here would have made
+// the hottest value type in the engine a port bypass on the day the port
+// landed, which is the exact shape WAVE9_LANE_V.md §1c catalogues.
 Time* RtSystem_Time_Ctor(Time* self, float seconds) {
     using SecondsToTicksFn = int64_t(*)(float);
-    // RT_ORIGINAL_ONCE, not RtOriginal: this body runs on every Update(const
-    // Time&). Resolving per call put a GetProcAddress under the loader lock on
-    // the engine's hottest value type and cost 5.6 points of sim time -- most
-    // of the Wave 2 perf-gate breach, and invisible to both profilers because
-    // it lands in ntdll self time. See docs/runtime_port/WAVE3_LANE_P.md.
-    self->ticks = RT_ORIGINAL_ONCE(SecondsToTicksFn,
-                                   "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+    // Resolved ONCE per call site either way: this body runs on every
+    // Update(const Time&), and resolving per call put a GetProcAddress under
+    // the loader lock on the engine's hottest value type -- 5.6 points of sim
+    // time, most of the Wave 2 perf-gate breach, and invisible to both
+    // profilers because it lands in ntdll self time
+    // (reference_rtoriginal_is_getprocaddress.md, WAVE3_LANE_P.md).
+    self->ticks = RT_EXPORT_ONCE(SecondsToTicksFn,
+                                 "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
     return self;
 }
 
 // ?AsSeconds@Time@System@@QEBAMXZ  retail 0x180007900 — same delegation, same
-// "nothing independent to compare" reasoning.
+// RT_EXPORT_ONCE reasoning as the ctor above.
 float RtSystem_Time_AsSeconds(const Time* self) {
     using TicksToSecondsFn = float(*)(int64_t);
-    // Cached for the same reason as the ctor above.
-    return RT_ORIGINAL_ONCE(TicksToSecondsFn,
-                            "?TicksToSeconds@Timer@System@@SAM_J@Z")(self->ticks);
+    return RT_EXPORT_ONCE(TicksToSecondsFn,
+                          "?TicksToSeconds@Timer@System@@SAM_J@Z")(self->ticks);
 }
 
 // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740

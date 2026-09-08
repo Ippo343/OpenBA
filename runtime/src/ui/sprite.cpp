@@ -111,6 +111,7 @@
 #include "../../types/ui/StringTable.h"
 #include "../../types/ui/String.h"
 #include "../../types/system/String.h"
+#include "../system/string.h"   // RtString_StrCompare, for GetIndexFromName
 
 // ----------------------------------------------------------------------------
 // Module / ResolveAddr / ResolveExport, forward-declared rather than pulled in
@@ -567,18 +568,62 @@ void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int inde
     return retval;
 }
 
+// ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z  retail 0x180002470
+//
+// Wave 9 lane B3. WAVE7_LANE_F left this on the DLL as out of scope; it is one
+// of WAVE9_LANE_V.md's REAL DEPENDENCY rows (this file, :581 and :629), so at
+// cutover the two call sites below would be calls through null.
+//
+// A linear scan of the table's `StringTableTextEntry` array (stride 0x10, data
+// at +0x20, count at +0x28 — StringTable.h), comparing `entry.name` against
+// `key`. Two details from the listing that a paraphrase loses:
+//
+//  * retail pre-checks the STORED LENGTHS (`name[-8]` vs `key[-8]`, with a
+//    null string counting as length 0) and skips the strcmp entirely when they
+//    differ — 0x18000249f..0x1800024b6. Same shortcut String::operator== uses.
+//  * once the lengths agree, a table entry whose name is null OR whose length
+//    is zero MATCHES IMMEDIATELY (0x1800024b8..0x1800024c2), without looking at
+//    the key at all. Since the lengths already agree, the key is empty too, so
+//    the answer is right — but it means an empty key finds the first empty
+//    slot rather than failing, and that is retail's behaviour, not a shortcut
+//    introduced here.
+//
+// Returns -1 when nothing matches.
+int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
+    RT_DIFF_BEGIN("UI::StringTable::GetIndexFromName");
+
+    const auto* self = static_cast<const uint8_t*>(selfRaw);
+    const auto* entries = *reinterpret_cast<StringTableTextEntry* const*>(
+        self + StringTableOffsets::kData);
+    const int count = *reinterpret_cast<const int32_t*>(self + StringTableOffsets::kCount);
+    const char* key = *static_cast<const char* const*>(keyRaw);
+    const int keyLen = (key != nullptr) ? RtSystem::StringLength(key) : 0;
+
+    int result = -1;
+    for (int i = 0; i < count; ++i) {
+        const char* name = entries[i].name;
+        const int nameLen = (name != nullptr) ? RtSystem::StringLength(name) : 0;
+        if (nameLen != keyLen) continue;
+        if (name == nullptr || nameLen == 0) { result = i; break; }
+        if (key == nullptr) continue;                 // retail: ECX = key+1, non-zero
+        if (RtSystem::RtString_StrCompare(name, key) == 0) { result = i; break; }
+    }
+
+    // Fully diffable: `this` and the key are both const and nothing here
+    // allocates, so the shipped body can be run on the identical inputs.
+    using Fn = int (*)(const void*, const void*);
+    RT_DIFF_SCALAR(result, RtOriginal<Fn>(
+        "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z")(selfRaw, keyRaw));
+    return result;
+}
+
 // StringTable::GetText(String const& key) const — retail 0x1800025b0. A
 // two-line forwarder in retail: `GetText(this, retval, GetIndexFromName(key))`.
-// GetIndexFromName (0x180002470) is NOT in this lane's scope (not one of the
-// 23 functions Wave 7 lane F owns); it is a pure read with no side effects,
-// so calling the DLL's own copy here — rather than porting a function this
-// lane was not asked to own — costs nothing and stays correct if a later
-// wave ports it differently.
 void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void* keyStrPtr) {
     RT_DIFF_BEGIN("UI::StringTable::GetText(String const&)");
-    using IdxFn = int (*)(const void*, const void*);
-    const int index = RT_ORIGINAL_ONCE(
-        IdxFn, "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z")(selfRaw, keyStrPtr);
+    // Direct call, not RT_ORIGINAL_ONCE: GetIndexFromName is ported above, in
+    // this same translation unit.
+    const int index = RtUi_StringTable_GetIndexFromName(selfRaw, keyStrPtr);
     RtUi_StringTable_GetText_Index(selfRaw, retval, index);
 
     if (rt_diff_on__) {
@@ -624,10 +669,8 @@ void* RtUi_UIString_CtorByName(void* retval, uint64_t stringTablePtr, const void
     auto* self = static_cast<UIString*>(retval);
     self->table = reinterpret_cast<void*>(stringTablePtr);
     if (stringTablePtr != 0) {
-        using IdxFn = int (*)(const void*, const void*);
-        self->index = RT_ORIGINAL_ONCE(
-            IdxFn, "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z")(
-                reinterpret_cast<const void*>(stringTablePtr), nameStrPtr);
+        self->index = RtUi_StringTable_GetIndexFromName(
+            reinterpret_cast<const void*>(stringTablePtr), nameStrPtr);
     } else {
         self->index = -1;
     }
@@ -725,6 +768,9 @@ int RtUiSpriteRegister() {
     RegisterRuntimeExport("?GetCount@StringTable@UI@@QEBAHXZ", (void*)&RtUi_StringTable_GetCount); ++n;
     RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z",
                           (void*)&RtUi_StringTable_GetText_Index); ++n;
+    // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md §1b).
+    RegisterRuntimeExport("?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z",
+                          (void*)&RtUi_StringTable_GetIndexFromName); ++n;
     RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z",
                           (void*)&RtUi_StringTable_GetText_Key); ++n;
 
