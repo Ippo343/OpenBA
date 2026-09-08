@@ -2246,3 +2246,110 @@ actual DLL-less boot** (what the boot path really touches) and this **mint-wall
 prediction** (what it would touch if it got further). The first is exact and
 narrow; the second is broad and an upper bound. Neither alone is the gate, and
 the static export scan is neither.
+
+---
+
+## Attempt 22: PLAT'S PREDICTION HOLDS — the boot crosses `Engine::Startup` to `+0x62B`, and the wall is a plain unported export
+
+Tip `b381bb8` (lanes PLAT, GFXD, RRES, UIW2 merged, plus the mint-wall tooling
+and the RETSLOT ABI fix). Exe md5 `169d380785900fceac2714aa40840d0b`, verified
+equal built-vs-deployed. DLL renamed to `.absent`, **restored and verified
+immediately after** (`no .absent left behind`). Logs copied out before the lock
+was released.
+
+### The ladder moved
+
+| attempt | fault site | wall |
+|---|---|---|
+| 19 | `Engine::Startup +0x338` | null call, 27 unresolved names |
+| 20 | `Engine::Startup +0x3a3` | our own code faulted, 17 unresolved |
+| 21 | `engine_lifecycle.cpp:638` | `?PlatformStartup@Application@1@AEAA_NXZ`, `EXEC of 0` |
+| **22** | **`Engine::Startup +0x62B`** | **`?EnumerateVideoModes@Device@Video@@QEAA_NXZ`** |
+
+**Lane PLAT wrote its §8 prediction before the run: `Engine::Startup` would pass
+fail-points 6/11/12/13 and stop at whatever the next unported export is, rather
+than at `EXEC of 0` in `engine_lifecycle.cpp:638`. IT HELD.** None of PLAT's four
+`PlatformStartup` members appears anywhere in the residue. PLAT also named the
+two places to look first if the prediction failed — its `WindowProc`, and
+`DirectInput8Create` receiving the exe's module handle — and **neither is
+implicated**: the stack is `Engine::Startup +0x62B` ← `Game::RunGameMain +0x25D`
+← `WinMain +0x20C`, still inside startup, before any message pumping or input
+initialisation.
+
+### TWO DIAGNOSTIC FIELDS POINTED ELSEWHERE AND BOTH ARE STRUCTURALLY INCAPABLE OF BEING RIGHT
+
+This is the transferable part of the attempt, because both fields look
+authoritative in a log.
+
+**1. The crash handler said `VCALL-of-0`** on an object whose first `0x40` bytes
+are all zero:
+
+```
+Fault: EXEC of 0000000000000000
+VCALL-of-0: this=000002a6403382a8 vtable=0000000000000000
+```
+
+That is the handler's **heuristic**, reading `[RCX]` and reporting what it finds.
+It cannot distinguish a virtual call through a null vtable from an ordinary call
+through a null function pointer whose `RCX` happens to hold a zeroed object. Here
+it was the latter.
+
+**2. `[RtUnresolved]` said `asked by 00007ff664585925`** — which symbolises to
+**`RtResolveCached` itself**. The "asked by" field records the **reporting site,
+not the call site**, so it can never name the caller. Every `[RtUnresolved]` line
+in every run has this property.
+
+**What actually settled it was the disassembly**, and it took three steps:
+
+```
+1402d8f8c:  call  1402d874a <...Engine_Startup...UlvE19_clEv>   ; resolver lambda 19
+1402d8f91:  mov   0x208(%rbp),%rdx
+1402d8f98:  mov   %rdx,%rcx
+1402d8f9b:  call  *%rax                                          ; <-- faults, RAX = 0
+1402d8f9d:                                                       ; <-- crash return address
+```
+
+`RCX == RDX == [rbp+0x208]`, which matches the crash dump's `RCX=RDX=0x2a6403382a8`
+exactly. Lambda 19 loads a name string from `0x14050b000`, and reading that
+address out of `.rdata` gives the answer directly:
+
+```
+14050b000  3f456e75 6d657261 74655669 64656f4d   ?EnumerateVideoM
+14050b010  6f646573 40446576 69636540 56696465   odes@Device@Vide
+14050b020  6f404051 4541415f 4e585a00            o@@QEAA_NXZ.
+```
+
+**Take the wall from the binary, not from the log's own hint.** The log named the
+right symbol on its last line — `[RtResolve] MISS "?EnumerateVideoModes@..." ->
+NULL` — but "last line before the crash" is a correlation, and the two fields
+that look like causation both point at the resolver.
+
+### The wall
+
+`?EnumerateVideoModes@Device@Video@@QEAA_NXZ` — **ordinal 2319 at
+`0x1800f8610`**, verified against the shipped export directory rather than
+assumed. A **plain export**: no `AEAA`-means-private trap, no unexported
+internal. An ordinary port.
+
+### Two further cutover gaps the run named itself, both real and neither the wall
+
+```
+[VideoInterface] *** DETOUR FAILED *** Video::Device::InitializeInterfaces
+    (0x1800F79F0) could not be resolved.
+[VideoInterface]   With the DLL ABSENT (cutover) it means something MUST call
+    VideoInterfaceFillDx11Slot() from the ported InitializeInterfaces --
+    nothing else fills the slot, and nothing loads VideoDX9 either.
+
+[FNHook] could not resolve ExternalFactory::FindOrLoad
+[FNHook] could not resolve External::Load
+[ResLoad] serialized: FindOrLoad=0000000000000000 External::Load=0000000000000000
+```
+
+The second is lane RRES's ground and is **live confirmation of why that lane's
+deliverable had to be stated as a call-graph fact**: the census was flat for its
+four ported bodies, while the cutover boot shows exactly why the row matters.
+
+### Residue
+
+**17 distinct `[RtUnresolved]` names**, unchanged in count from attempts 20/21 but
+not in content — PLAT's three are gone. `Registry: 1617 registered, 21 stubs hit`.
