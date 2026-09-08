@@ -110,7 +110,7 @@
 // across the merged tree; tools/addr_door_audit.py reports SHADOWED addresses.
 //
 // ---------------------------------------------------------------------------
-// 4. THE TEN `_typeInfo` GLOBALS, AND WHY SIX ARE NOT IN THE MINT
+// 4. THE ELEVEN `_typeInfo` GLOBALS, AND WHY SEVEN WERE NOT IN THE MINT
 // ---------------------------------------------------------------------------
 // `OnVideoError` opens by building a `Collection::Array<int>` of ten resource
 // type ids, each read as the FIRST DWORD of an `Object::BaseTypeInfo` static.
@@ -134,14 +134,19 @@
 //
 // THE CAUSE IS NOT A DEFECT IN THE MINT. tools/rt_mint_gen.py does not read a
 // frozen list: it shells out to tools/runtime_census.py and mints the DLL data
-// OUR TREE REFERENCES. Nothing referenced these six, so nothing minted them.
+// OUR TREE REFERENCES. Nothing referenced these seven, so nothing minted them.
 // This port references all eleven through `RT_DATA_SLOT`, which the census DOES
 // see (RE_MACRO_DOOR, added after the blind spot in
 // reference_census_cannot_see_the_macro_doors.md), so REGENERATING THE MINT
-// AFTER THIS PORT ADDS THE SIX ROWS. That regeneration is part of this lane's
+// AFTER THIS PORT ADDS THE SEVEN ROWS. That regeneration is part of this lane's
 // commit and its before/after is in the lane doc — a port that referenced them
-// and left the mint alone would have moved `unsatisfied` by +6 and closed
-// nothing.
+// and left the mint alone would have moved `unsatisfied` by +7 and closed
+// nothing. Measured, not predicted: BaseTypeInfo rows 46 -> 53 on this tree.
+//
+// THIS BANNER SAID SIX UNTIL THE REGENERATION SAID SEVEN. The six was written
+// by counting the table above by eye and it was wrong by one -- the exact
+// failure this wave keeps finding, a number nobody re-measured. The
+// generator's own output is the source of the seven.
 //
 // This is reference_porting_can_grow_the_cutover_surface.md a fourth time in
 // Wave 9, and the generator's own banner predicts it.
