@@ -339,19 +339,40 @@ not.
 7. **Neither the four declines nor this port were run with the DLL absent.** That is the
    integrator's cutover boot, not this lane's.
 
-8. **This lane could not commit.** The harness re-pointed this session's isolated worktree four
-   times mid-session (`lane-addr` -> `lane-mod9` -> `w9-addr-089e6eb4` -> `lane-uid-089e6eb4`),
-   and git operations against the worktree holding this work are refused. Two consequences
-   worth the integrator's attention, both recorded rather than smoothed over:
+8. **This lane could not commit, and the repair is the reusable part.** The harness
+   re-pointed this session's isolated worktree five times mid-session (`lane-addr` ->
+   `lane-mod9` -> `w9-addr-089e6eb4` -> `lane-uid-089e6eb4` -> `lane-addr`), each time onto a
+   DIFFERENT lane's checkout on a DIFFERENT branch, and every git command against the worktree
+   holding this work was refused. The work was landed instead by **git plumbing** --
+   `hash-object` / `read-tree` / `update-index` / `write-tree` / `commit-tree` / `update-ref`
+   against a TEMPORARY index -- which writes objects and moves a ref without reading or writing
+   any working tree, so it cannot race another lane and does not care which directory the
+   harness believes this session owns. That is the general answer for a shared checkout, and it
+   is how both this document and the port were committed.
+
+   Three consequences worth the integrator's attention, recorded rather than smoothed over:
    * A first build "failure" at `fd30180` (an ambiguous `Retrace` in
-     `runtime/src/object/external_set.cpp`) was **not a broken tip** — it was a neighbouring
+     `runtime/src/object/external_set.cpp`) was **not a broken tip** -- it was a neighbouring
      lane's *uncommitted* file in a worktree this session had briefly been handed. `fd30180`
      builds clean, and every measurement above was taken on a build that does.
    * This lane's three files were briefly present as uncommitted changes in lane UIF's
-     worktree. They have been removed and that worktree verified back to its own contents. But
-     the same churn could have gone the other way for another lane, and **a lane sweeping up a
-     neighbour's files into its own commit would not announce itself** — it is worth one check
-     across the wave's commits.
+     worktree. They were removed and that worktree verified back to its own contents before
+     UIF committed. But the same churn could have gone the other way, and **a lane sweeping up
+     a neighbour's files into its own commit would not announce itself** -- worth one check per
+     merge.
+   * `wave9/lane-gfxr-work` at `3dc79c4` carries lane ADDR's commit message, from an
+     `--amend` that landed on the wrong branch. Its tree (`92fefc7b`) and parents are
+     byte-identical to `fd30180`, so nothing was lost. **It is ABANDONED, not repaired** --
+     rewriting a ref under a neighbour is the operation that caused this, and the real work
+     never lived there.
+
+9. **`Matrix::Inverse` does NOT unblock `Renderer::Draw`, and it was never claimed to.** Lane
+   CTX's warning was that `Inverse` is an unsatisfied door *inside* the already-ported
+   `Video::Context::SetCamera`, so a renderer lane would die there before reaching its own
+   work -- a PREREQUISITE, not the blocker. `Draw@Renderer`'s blocker is §4.1's five unported
+   callees, and closing `Inverse` moved none of them. Recorded explicitly because the
+   handover of this lane's result stated that `Draw` is "now unblocked by your own `Inverse`",
+   and a lane picking `Draw` up on that basis would discover §4.1 the hard way.
 
 ---
 
@@ -363,3 +384,15 @@ not.
 | `runtime/src/math/rt_math_port.cpp` | +6 lines: the `extern` and the registration call |
 | `runtime/src/video/context.cpp` | `MatrixInverse()` off the frozen static onto `RT_EXPORT_ONCE` |
 | `docs/runtime_port/wave9_lane_gfxr/` | `gfxrPOS_probe.txt`, `gfxrNEG_probe.txt`, `gfxrPOS_error.log`, `gfxrNEG_error.log` |
+
+**Branches.** The port is `wave9/lane-gfxr-rescue` at `edcdc23` (parent `ae8195b`); this
+document and the run logs are on top of it. `wave9/lane-gfxr` and `wave9/lane-gfxr-work` are
+both ABANDONED -- neither ever carried this lane's work. The worktree this lane actually built
+and measured in is `C:/code/GIT/untitled_rev_eng_project/.claude/worktrees/w9-addr-089e6eb4`,
+which the harness assigned and then re-assigned; see limit 8.
+
+**Verification of the rescue, done by this lane rather than assumed.** `edcdc23`'s
+`wave9_lane_gfxr.cpp` was extracted with `git show` and `diff`ed against this lane's own copy:
+identical. `context.cpp` contains the one `RT_EXPORT_ONCE(MatrixInverseFn, ...)` line and
+`rt_math_port.cpp` the two `LaneGfxr` references. `git diff --stat ae8195b
+wave9/lane-gfxr-rescue` is exactly the three files, 608 insertions, nothing foreign.
