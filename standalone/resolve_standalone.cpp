@@ -12,6 +12,7 @@
 #include <cstring>
 #include <string>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
@@ -792,6 +793,47 @@ void* ResolveExport(const char* mangled_name) {
     return fn;
 }
 
+// ---- The ORDINAL door's bridge into the NAME registry ---------------------
+// Wave 9, cutover attempt 07. `Device::Lock`/`Unlock` were PORTED (lane VID,
+// registered by name and by address) and the residue list STILL carried
+// `ord:3214` / `ord:4462` as null. The reason is structural and applies to
+// every ordinal site, not to those two: `ResolveOrdinal` consulted only
+// `RtOrdinalReg()`, a registry of its own, so a port registered by NAME is
+// INVISIBLE to an ordinal caller. Registered, census-counted, audit-clean, and
+// still null at cutover.
+//
+// Two lanes were each right and the combination was wrong: one identified the
+// ordinals as Lock/Unlock and handed them on unported; the other ported those
+// names and predicted they would leave the residue list. Neither could see the
+// door between them.
+//
+// Fixed here rather than by asking every lane to also call
+// RegisterRuntimeOrdinal, because that is a rule people forget exactly once and
+// the failure is silent. The ordinal->name map is a LINK-TIME CONSTANT read out
+// of the shipped export directory, so it still works with the DLL absent, which
+// is the only moment it matters.
+namespace {
+struct OrdinalName { uint16_t ordinal; const char* mangled; };
+
+// Every ordinal this tree passes to ResolveOrdinal, with the name the shipped
+// export directory gives it. Verified against Runtime-x64.dll with pefile.
+const OrdinalName kOrdinalNames[] = {
+    {  443, "??0Thread@System@@QEAA@I@Z" },
+    {  798, "??2GroupDescription@UI@@SAPEAX_KPEAX@Z" },
+    { 2990, "?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z" },
+    { 2991, "?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z" },
+    { 3089, "?IsA@Base@Object@@QEBA_NI@Z" },
+    { 3214, "?Lock@Device@Video@@QEAAXXZ" },
+    { 4462, "?Unlock@Device@Video@@QEAAXXZ" },
+};
+
+const char* MangledForOrdinal(uint16_t ordinal) {
+    for (const OrdinalName& o : kOrdinalNames)
+        if (o.ordinal == ordinal) return o.mangled;
+    return nullptr;
+}
+}  // namespace
+
 void* ResolveOrdinal(uint16_t ordinal) {
     if (RtPortEnabled()) {
         auto& reg = RtOrdinalReg();
@@ -799,6 +841,27 @@ void* ResolveOrdinal(uint16_t ordinal) {
         if (it != reg.end()) {
             g_rtHits++;
             return it->second;
+        }
+        // Not registered by ordinal -- try the NAME this ordinal denotes.
+        if (const char* mangled = MangledForOrdinal(ordinal)) {
+            auto& nreg = RtExportReg();
+            auto nit = nreg.find(mangled);
+            if (nit != nreg.end()) {
+                g_rtHits++;
+                return nit->second;
+            }
+        } else {
+            // An ordinal with no table row cannot reach the name registry, so a
+            // port of that function would be silently bypassed here. Say so
+            // ONCE rather than letting it pass as an ordinary DLL call.
+            static std::set<uint16_t> warned;
+            if (warned.insert(ordinal).second) {
+                fprintf(stderr,
+                        "[RtResolve] ordinal %u has no kOrdinalNames row -- a "
+                        "PORT of this function registered by name would be "
+                        "INVISIBLE here. Add the row (resolve_standalone.cpp).\n",
+                        ordinal);
+            }
         }
     }
     void* caller = _ReturnAddress();
