@@ -1652,6 +1652,34 @@ The 22 in `engine_funcs.cpp` are not one thing. Reading each site split them cle
   The two `g_pLoader` slots are DATA the mint does not cover; check them before the next
   cutover attempt.
 
+### Attempt 15: the eight-lane wave lands, and the rung moves within the same frame
+
+Eight lanes merged (PKG2, VID2, UIC, UIW, GFX2, SYS2, MOD, PICK). Coverage 69.4% →
+**72.6%**, unregistered address doors 62 → 44, `UNGUARDED-CALL` 3 → **0**, port bypasses
+0 on both doors.
+
+```
+#3 RtEngine_Engine_Startup      +0x22C
+#2 RtIo_FileSystem_Startup
+#1 RtIo_FileSystem_LoadPackages +0x1BA     <- attempt 14 died at +0x184
+   [RtResolve] MISS "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z"
+```
+
+**Lane PKG2 predicted this exactly** — "expect the frame to stay in
+`RtIo_FileSystem_LoadPackages` with the fault moving forward from the ctor call to the
+`ReadPackfile` call". Symbol, frame and direction: 3 for 3. That is the fourth
+consecutive rung where a lane's prediction held.
+
+**The crash handler mislabelled it as `VCALL-of-0` again** — and this time the object
+even *has* a vtable (a minted one, at `reimpl-x64.exe + 0x745E40`), which makes the wrong
+label far more persuasive than it was at attempt 14. It is still a null CALL:
+`RCX` = the `PackageFile`, `RDX` = the `Filename`, `RIP` = 0. The `[RtResolve] MISS` line
+is again the thing that names the fault. The three null slots visible in the vtable dump
+(`+0x48`, `+0x50`, `+0x58`) are a red herring — nothing called them.
+
+That the object now carries a correctly minted vtable is itself the measurement that lane
+PKG2's constructor port works at cutover.
+
 ### SEVEN blind instruments in one session — and the rule they all share
 
 The eight-lane session found blind spots in seven separate measuring tools. They are not
