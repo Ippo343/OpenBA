@@ -7,6 +7,10 @@
 //   BANISHED_RT_GFXMESH=0    ... just MeshInstance/GraphicsMesh/EdgeMesh (lane E)
 //   BANISHED_RT_GFXRENDER=0  ... just Camera/Renderer/SunLight/Material* (lane F)
 //   BANISHED_RT_GFXANIM=0    ... just Animation*/Particle*/FrameCopy     (lane G)
+//   BANISHED_RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
+//                                InterpolatedState<Transform>::Lerp,
+//                                MaterialInstance::RenderTextures,
+//                                Renderer::AddDrawItem)
 // ============================================================================
 
 #include <cstdio>
@@ -16,6 +20,7 @@ extern int RtGraphicsSceneRegister();     // scene.cpp     (lane D)
 extern int RtGraphicsMeshRegister();      // mesh.cpp      (lane E)
 extern int RtGraphicsRendererRegister();  // renderer.cpp  (lane F)
 extern int RtGraphicsAnimationRegister(); // animation.cpp (lane G)
+extern int RtGraphicsWave9GfxRegister();  // wave9_lane_gfx.cpp (Wave 9 lane GFX)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -27,5 +32,6 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFXMESH"))   n += RtGraphicsMeshRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXRENDER")) n += RtGraphicsRendererRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXANIM"))   n += RtGraphicsAnimationRegister();
+    if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
     printf("[RtPort] Graphics: %d exports registered\n", n);
 }
