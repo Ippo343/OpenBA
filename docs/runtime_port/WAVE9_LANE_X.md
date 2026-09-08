@@ -87,11 +87,13 @@ The probe is therefore the lane's **effectiveness control**, and it prints one:
          control caught C of R corruptions
 ```
 
-* `subjects executed` — expected **14** (12 classes + the Video::Device
-  negative-control call + the Application call), i.e. `calls=1` per RtDiff site.
-* `published their singleton` — expected **12** (every probed subject except the
-  deliberate `type=1` case, which must NOT publish).
-* `control caught C of R` — **C must equal R** (expected 13). The control flips
+* `subjects executed` — expected **13**: the 12 probed classes of §1 plus the
+  extra Video::Device `type=1` negative-control call. `calls=1` per RtDiff site,
+  and 13 is the whole of this lane's live coverage.
+* `published their singleton` — expected **12**: every probed subject except the
+  deliberate `type=1` case, which must NOT publish.
+* `control caught C of R` — **C must equal R** (expected **12 of 12**; the
+  `type=1` site has no byte compare, so it runs no corruption). The control flips
   one byte of our copy after each compare and asserts the *same* memcmp reports a
   difference. Without it, a memcmp over two identically 0xCD-filled buffers is
   exactly the shape that passes when a size or a pointer is wrong.
