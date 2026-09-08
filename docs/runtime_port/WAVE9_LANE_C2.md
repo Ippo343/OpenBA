@@ -70,7 +70,7 @@ because one of them is load-bearing:
 | `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA` | 1 | already consumed by `code/Game/Component/citizenai_executor.cpp` |
 | `?_frameIndex@ParticleInstance@Graphics@@1HA` | 4 | |
 | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` | 56 | an `Engine::Loader` **object**, and the one storage symbol the DLL CONSTRUCTS at load — §2 |
-| `?_rng@Particle@Graphics@@1VRandom@System@@A` | 2500 | a `System::Random` **object** — never constructed, never seeded; see §2 |
+| `?_rng@Particle@Graphics@@1VRandom@System@@A` | 2500 | a `System::Random` **object**, CONSTRUCTED at load — MT19937 seeded from `time()`; see §2 |
 
 `_loader`'s size is corroborated twice: `static_assert(sizeof(Loader) == 0x38)`
 in `runtime/types/engine/UpdateLoop.h`, and the DLL's export table puts the next
@@ -498,10 +498,13 @@ rather than assumed from their section.
 
 ## 8. Deferred, blocked, and what is *not* covered
 
-1. **CLOSED — the load-time construction question, both halves.** `?_loader`
-   is constructed and now reproduced; `?_rng` is not constructed by anything
-   and zeroed storage is exactly faithful. Neither is open. See §2, including
-   the correction to this lane's own earlier claim about `_rng`. What the
+1. **CLOSED — the load-time construction question, both halves.** BOTH
+   `?_loader` and `?_rng` are constructed at load, and both are now reproduced
+   (`ConstructLoader`, `ConstructParticleRng`). The intermediate claim that
+   `_rng` needed nothing was wrong and is corrected in §2, with the evidence
+   that settled it. The `_rng` seed is `time()`-derived, so its VALUE need not
+   match retail and a mismatch there is not a defect — but seeding at all is
+   mandatory. What the
    `_loader` construction leaves open is *its vtable's two slots*:
    `?Run@Loader@Engine@@UEAAXXZ` and `?OnCompleted@Thread@System@@UEAAXXZ` are
    unported, so the loading thread would trap after cutover rather than run.
@@ -582,50 +585,92 @@ none of our own code in the tables would otherwise read as a finished lane.
 
 Predicted from the registry at census 843/585, so a difference is itself
 informative — most likely another lane landing ports between now and the run,
-which should move `minted from OUR` **up** and `traps` down by the same amount:
+which should move `minted from OUR` **up** and `traps` down by the same amount.
+
+### RECORDED RESULT — 2026-09-08, exe stamp `2026-09-08 00:17:23`
+
+`tools/rt_run.sh mintshadow --timeout 300 -- BANISHED_AUTOSTART=1
+BANISHED_RT_MINT_SHADOW=1 BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120
+BANISHED_PAUSEMENU_BUTTON=6` — **rc=0 after 30s, no crash log**, and BOTH phase
+summaries printed (the shutdown crash lane M saw in the stress cell did not
+appear on this route; a shutdown crash would have eaten the `phase=exit`
+summary).
 
 ```
-[RtMint] minted 46 vtables (429 slots), 33 BaseTypeInfo, 28 storage symbols (2992 bytes)
+[RtMint] minted 46 vtables (429 slots: 78 ported, 238 unported-trap, 113 purecall-trap),
+         33 BaseTypeInfo, 28 storage symbols (2992 bytes)
+[RtMint] 14 of 46 vtables are COMPLETE; registration is off
 [RtMintShadow] ground truth       : 429 slot comparisons vs the live DLL, 0 MISMATCH
-[RtMintShadow] minted from OUR    : <n> slots, 0 MISMATCH
+[RtMintShadow] minted from OUR    : 78 slots, 0 MISMATCH
+[RtMintShadow] minted as traps    : 351 (113 purecall by design, 238 not yet ported)
+[RtMintShadow] complete vtables   : 14 of 46
 [RtMintShadow] slot-count suspects: 0
-[RtMintShadow] BaseTypeInfo       : 165 field comparisons, 0 MISMATCH, 33 typeId INFO (phase=exit)
-[RtMintShadow] storage            : 28 symbols, ...
-[RtMintShadow] constructed statics: 2 of 2 built (shape compared on 1, 0 SHAPE MISMATCH)
+[RtMintShadow] BaseTypeInfo       : 165 field comparisons, 0 MISMATCH,
+                                    0 typeId INFO (init) / 33 (exit)
+[RtMintShadow] storage            : 28 symbols, 3 written by the DLL (init) / 23 (exit)
+[RtMintShadow] constructed statics: 0 of 2 built   [gated off; _CTOR=1 to build]
 [RtMintShadow] symbols absent from the DLL: 0
-[RtMintShadow] ==== clean: 0 problem(s) ====
+[RtMintShadow] ==== clean: 0 problem(s) ====      at BOTH phase=init and phase=exit
 ```
 
-**The deltas are what to check, not the absolutes.** Against the last recorded
-run (315 ground-truth / 71 ours / 70 BaseTypeInfo fields / 0 suspects / 0 absent
-/ 14 of 39 complete / clean at both phases), this round should move exactly:
+Every predicted delta landed exactly:
 
-| | from | to | why |
-|---|--:|--:|---|
-| ground-truth slot comparisons | 315 | **429** | +7 vtables, +114 slots |
-| `BaseTypeInfo` field comparisons | 70 | **165** | 14 -> 33 types, 5 fields each |
-| vtables | 39 | **46** | §3 |
-| minted from OUR code | 71 | **71 + whatever the 7 new vtables already have ported** | offline estimate says +7; see the caveat below |
-| slot-count suspects / absent / MISMATCH | 0 | **0** | must not move |
-| complete vtables | 14 | at least 14 | the 7 new ones are not complete |
+| | predicted | measured |
+|---|--:|--:|
+| ground-truth slot comparisons | 315 -> 429 | **429**, 0 MISMATCH |
+| `BaseTypeInfo` field comparisons | 70 -> 165 | **165**, 0 MISMATCH |
+| vtables | 39 -> 46 | **46** |
+| minted from OUR code | 71 + ~7 | **78** |
+| suspects / absent / MISMATCH | 0 | **0** |
+| complete vtables | at least 14 | **14 of 46** |
+| `typeId INFO` | 0 at init, 33 at exit | **0 / 33** |
 
-**Caveat on the "minted from OUR" figure**: the offline estimate in this
-document undercounts it. It reads the census, and the census does not list a
-port registered by ADDRESS that no resolve site asks for — which is exactly what
-the twelve `??_G` thunks are, since the only thing that reaches them is the
-minted vtable itself. `RtPortLookupAddr` finds them at runtime, so the run's
-number is the true one and is higher than any number computed here. That is why
-the recorded run says 71 where this document's arithmetic says 39.
+The `typeId` split is the `Factory::Startup` ordering predicted in this section
+and now observed: at `RuntimePortInit` the DLL's own `BaseTypeInfo` objects
+still carry the ctor sentinel, and by exit all 33 hold real CRCs while ours
+still hold the sentinel — expected, reported as `INFO`, never counted.
 
-Without `BANISHED_RT_MINT_CTOR=1` the constructed line reads `0 of 2 built` and
-the shape comparison is skipped — that is not a failure, it is the default. The
-shape row is only meaningful with the DLL present, so it belongs in the
-pre-cutover gate checklist and is now in it.
+**Caveat on the "minted from OUR" figure, now confirmed by measurement**: this
+document's offline arithmetic said 39; the run says 78. The census does not
+list a port registered by ADDRESS that no resolve site asks for — exactly the
+twelve `??_G` thunks, which nothing reaches except the minted vtable itself.
+`RtPortLookupAddr` finds them at runtime. Any figure computed here is a floor.
+
+### And what the run FOUND
+
+The run was not just a pass. Its storage-liveness line said
+`?_rng@Particle@Graphics@@ DLL=WRITTEN` at `phase=init`, which contradicted
+§2's claim that nothing constructs it — and §2 was wrong. See §2 for the
+correction, the offset evidence that settled it, the initialiser
+(`0x180149650`, `_time64`-seeded MT19937), and the sweep fix. **A verification
+run that only confirms what you predicted has told you less than one that
+does both.**
+
+### RECORDED RESULT — the construction gate, same day, exe stamp `00:24:27`
+
+`... BANISHED_RT_MINT_CTOR=1 BANISHED_RT_MINT_SHADOW=1 ...` — **rc=0, no crash**,
+and with the constructions actually run:
+
+```
+[RtMint] constructed 3 of the 3 statics the DLL's CRT builds at load
+[RtMintShadow] constructed statics: 3 of 3 built (shape compared on 3, 0 SHAPE MISMATCH, 0 SHAPE-INFO)   phase=init
+[RtMintShadow] constructed statics: 3 of 3 built (shape compared on 3, 0 SHAPE MISMATCH, 1 SHAPE-INFO)   phase=exit
+[RtMintShadow]   SHAPE-INFO ?_loader@LoaderLoop@Engine@@1VLoader@2@A +0x30: DLL set, minted null
+[RtMintShadow]   FIRST-NONZERO ?_rng...: DLL byte +0x4 = 01 8e 9f 6a ...   (init, index 0)
+storage ?_loader...  DLL=WRITTEN  minted=written
+storage ?_rng...     DLL=WRITTEN  minted=written
+```
+
+All the mapping-gate numbers above held unchanged in this run
+(429/0, 78/0, 165/0, 0 suspects, 0 absent, clean at both phases).
+
+The single `SHAPE-INFO` is `Loader::_loop` at `+0x30`: retail's `LoaderLoop`
+stores the loop it is loading there, and nothing hands OUR minted Loader a
+loop, so it stays null. Informational by construction, not a mismatch — and
+the reason the shape check has an INFO category at all.
 
 **Any non-zero `MISMATCH`, `slot-count suspects` or `absent` is a real finding**
-and the run should be treated as failed. `typeId INFO` at `phase=exit` is
-expected (14 of them); at `phase=init` it should be 0, and 14 there would mean
-`Factory::Startup` ran before `RuntimePortInit`, which would be news.
+and a run showing one should be treated as failed.
 
 ## 10. How to run it
 

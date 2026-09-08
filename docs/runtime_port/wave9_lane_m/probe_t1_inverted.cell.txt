@@ -1,0 +1,417 @@
+########## CELL probe_t1_inverted ##########
+== rt_run[probe_t1_inverted] exe stamp: 2026-09-08 00:19:37.801581900 -0400
+== rt_run[probe_t1_inverted] exited rc=3 after 15s
+--- harness trace ---
+[AutoStart] AUTOTUTORIAL ENABLED — will click Tutorial after 60 menu frames, then load entry #1
+[AutoStart] AUTOTUTORIAL sequence fired — driver done
+[AutoStart] menu settled (mainMenu=000001f4000f1cc0) — injecting Tutorial click
+[AutoStart] tutorial list ready (4 entries) — selecting #1 and injecting Load click
+[PauseMenu] ENABLED - open at frame 900, click id=6 60 frames later
+[PauseMenu] new world 000001f40169ca38 at frame 1 - rearmed
+--- NumElemProbe (COMPLETE) ---
+[NumElemProbe] WORK call=1 worked=1
+[NumElemProbe] #1 self=000001f401fa95e8 value=4 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401fa96e0 | OURS mode=0 int=4 q0xd0=000001f401fa96e0 | THEIRS mode=0 int=4 q0xd0=000001f4021c9460
+[NumElemProbe]   diff +0xd0..+0xd3 (4 bytes) ours=e096fa01 theirs=60941c02
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000a000000010000006e756d62657259656172005928170254
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=02000000010000002b34002f2030202f200000000000000008000000000000000b000000010000003232202f2030202f
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=2 worked=2
+[NumElemProbe] #2 self=000001f4021c6720 value=39 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f4021c6050 | OURS mode=0 int=39 q0xd0=000001f4021c6050 | THEIRS mode=0 int=39 q0xd0=000001f401fa96e0
+[NumElemProbe]   diff +0xd0..+0xd3 (4 bytes) ours=50601c02 theirs=e096fa01
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=00000000000000003339006765536e6f20000000000000003a00000000100000b06080a8fc7f00008c7b0000b1b56e12
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=03000000010000002b3339000000000008000000000000000a000000010000006e756d62657259656172005928170254
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=3 worked=3
+[NumElemProbe] #3 self=000001f401faa498 value=272 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401faa590 | OURS mode=0 int=272 q0xd0=000001f401faa590 | THEIRS mode=0 int=272 q0xd0=000001f4021c6050
+[NumElemProbe]   diff +0xd0..+0xd3 (4 bytes) ours=90a5fa01 theirs=50601c02
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000a000000010000006e756d626572576f6f64004223016a84
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=04000000010000002b32373200536e6f20000000000000003a00000000000000b06080a8fc7f00008c7b0000b1b56e12
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=4 worked=4
+[NumElemProbe] #4 self=000001f401fab838 value=157 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401fab930 | OURS mode=0 int=157 q0xd0=000001f401fab930 | THEIRS mode=0 int=157 q0xd0=000001f401faa590
+[NumElemProbe]   diff +0xd0..+0xd1 (2 bytes) ours=30b9 theirs=90a5
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000b000000010000006e756d62657253746f6e6500c7004438
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=04000000010000002b3135370000000008000000000000000a000000010000006e756d626572576f6f64004223016a84
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=5 worked=5
+[NumElemProbe] #5 self=000001f401facbd8 value=88 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401faccd0 | OURS mode=0 int=88 q0xd0=000001f401faccd0 | THEIRS mode=0 int=88 q0xd0=000001f401fab930
+[NumElemProbe]   diff +0xd0..+0xd1 (2 bytes) ours=d0cc theirs=30b9
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000a000000010000006e756d62657249726f6e00b783fb0050
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=03000000010000002b3838000000000008000000000000000b000000010000006e756d62657253746f6e6500c7004438
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=6 worked=6
+[NumElemProbe] #6 self=000001f40193b5c0 value=126 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f40193b6b8 | OURS mode=0 int=126 q0xd0=000001f40193b6b8 | THEIRS mode=0 int=126 q0xd0=000001f401faccd0
+[NumElemProbe]   diff +0xd0..+0xd2 (3 bytes) ours=b8b693 theirs=d0ccfa
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000b000000010000006e756d626572546f6f6c7300005bcfd3
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=04000000010000002b3132360000000008000000000000000a000000010000006e756d62657249726f6e00b783fb0050
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=7 worked=7
+[NumElemProbe] #7 self=000001f401faa990 value=360 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401faaa88 | OURS mode=0 int=360 q0xd0=000001f401faaa88 | THEIRS mode=0 int=360 q0xd0=000001f40193b6b8
+[NumElemProbe]   diff +0xd0..+0xd2 (3 bytes) ours=88aafa theirs=b8b693
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000e000000010000006e756d62657246697265576f6f64003f
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=04000000010000002b3336300000000008000000000000000b000000010000006e756d626572546f6f6c7300005bcfd3
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=8 worked=8
+[NumElemProbe] #8 self=000001f401faae68 value=4655 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401faaf60 | OURS mode=0 int=4655 q0xd0=000001f401faaf60 | THEIRS mode=0 int=4655 q0xd0=000001f401faaa88
+[NumElemProbe]   diff +0xd0..+0xd1 (2 bytes) ours=60af theirs=88aa
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000a000000010000006e756d626572466f6f640003043d6e6f
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=05000000010000002b3436353500000008000000000000000e000000010000006e756d62657246697265576f6f64003f
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=13 worked=9
+[NumElemProbe] #9 self=000001f401fac700 value=42 | BEFORE mode=0 int=0 float=0x0p+0 q0xd0=000001f401fac7f8 | OURS mode=0 int=42 q0xd0=000001f401fac7f8 | THEIRS mode=0 int=42 q0xd0=000001f401faaf60
+[NumElemProbe]   diff +0xd0..+0xd1 (2 bytes) ours=f8c7 theirs=60af
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=0000000000000000180000000000000008000000001000000d000000010000006e756d62657254657874696c65006f24
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=03000000010000002b3432000000000008000000000000000a000000010000006e756d626572466f6f640003043d6e6f
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+[NumElemProbe] WORK call=7282 worked=10
+[NumElemProbe] #10 self=000001f4021c6720 value=40 | BEFORE mode=0 int=39 float=0x0p+0 q0xd0=000001f4021c6050 | OURS mode=0 int=40 q0xd0=000001f4023be560 | THEIRS mode=0 int=40 q0xd0=000001f4021f2e70
+[NumElemProbe]   diff +0xd0..+0xd2 (3 bytes) ours=60e53b theirs=702e1f
+[NumElemProbe]   +0xd0 target bytes  ours[-8..40]=020000000100000034300000000000006a23000000000000a8d23002f401000060d53002f401000018d83002f4010000
+[NumElemProbe]   +0xd0 target bytes theirs[-8..40]=03000000010000002b343000000000001200000000000000c027fe74f77f0000a27b0000126795400000000000000000
+[NumElemProbe]   +0xd0 payload identical(0..40)=NO  header identical(-8..0)=NO
+--- RtDiff (COMPLETE, untruncated) ---
+[RtDiff] ON — every diffed port also runs the original and compares. Slower by design; do not benchmark this.
+[RtDiff] site[0] @00007ff774fec580 = Video::Context::Clear[slot]
+[RtDiff] site[1] @00007ff774fec5a0 = Video::Context::DrawIndexed[slot]
+[RtDiff] site[2] @00007ff774fec5c0 = Video::Context::GetMaxDynamicInstances[slot]
+[RtDiff] site[3] @00007ff774fec5e0 = Video::Context::BeginVertices[slot]
+[RtDiff] site[4] @00007ff774fec600 = Video::Context::EndVertices[slot]
+[RtDiff] site[5] @00007ff774fec620 = Video::Context::BeginIndexedVertices[slot]
+[RtDiff] site[6] @00007ff774fec640 = Video::Context::EndIndexedVertices[slot]
+[RtDiff] site[7] @00007ff774fec660 = Video::Context::BeginInstancedIndexedVertices[slot]
+[RtDiff] site[8] @00007ff774fec680 = Video::Context::EndInstancedIndexedVertices[slot]
+[RtDiff] site[9] @00007ff774feb540 = UI::Element::ComputeLayout[thunk]
+[RtDiff] site[10] @00007ff774feb560 = UI::Element::Draw[thunk]
+[RtDiff] site[11] @00007ff774feb260 = UI::DialogInstance::OnUpdateLayout[shape]
+[RtDiff] site[12] @00007ff774feb280 = UI::DialogInstance::OnUpdate[shape]
+[RtDiff] site[13] @00007ff774feb2a0 = UI::DialogInstance::OnElementEvent[shape]
+[RtDiff] site[14] @00007ff774feb2c0 = UI::DialogController::~DialogController[shape]
+[RtDiff] site[15] @00007ff774feaac0 = Object::BaseTypeInfo::BaseTypeInfo
+[RtDiff] site[16] @00007ff774fec180 = Video::DeviceData::DeviceData
+[RtDiff] site[17] @00007ff774feae80 = System::operator+(String,String)
+[RtDiff] site[18] @00007ff774feaea0 = System::operator+(String,char*)
+[RtDiff] site[19] @00007ff774fec380 = Video::Device::DisplayMode::DisplayMode
+[RtDiff] site[20] @00007ff774fec3a0 = Video::Device::DisplayMode::~DisplayMode
+[RtDiff] site[21] @00007ff774fec2c0 = Video::DeviceData::~DeviceData
+[RtDiff] site[22] @00007ff774fec6e0 = Video::Device::GetMultisampleModeCount
+[RtDiff] site[23] @00007ff774fec700 = Video::Device::IsMultisampleModeSupported
+[RtDiff] site[24] @00007ff774fe8380 = Achievement::Goal::Goal
+[RtDiff] site[25] @00007ff774fe91c0 = Engine::MainLoop::MainLoop
+[RtDiff] site[26] @00007ff774fec120 = Video::ConstantBufferData::ConstantBufferData
+[RtDiff] site[27] @00007ff774fec160 = Video::ContextData::ContextData
+[RtDiff] site[28] @00007ff774fec0e0 = Video::VertexBufferData::VertexBufferData
+[RtDiff] site[29] @00007ff774fec100 = Video::IndexBufferData::IndexBufferData
+[RtDiff] site[30] @00007ff774fec020 = Video::RenderBufferData::RenderBufferData
+[RtDiff] site[31] @00007ff774fec140 = Video::ImageBufferData::ImageBufferData
+[RtDiff] site[32] @00007ff774feb580 = UI::Sprite::Sprite()
+[RtDiff] site[33] @00007ff774fe9b00 = Input::KeyMap::ClearAll
+[RtDiff] site[34] @00007ff774fe9b60 = Input::KeyMap::RegisterInput
+[RtDiff] site[35] @00007ff774feaa60 = Object::Factory::GetTypeIdFromName
+[RtDiff] site[36] @00007ff774feaa40 = Object::Base::IsDerivedFrom
+[RtDiff] site[37] @00007ff774fec040 = Video::VideoProgramData::VideoProgramData
+[RtDiff] site[38] @00007ff774fec0c0 = Video::VertexLayoutData::VertexLayoutData
+[RtDiff] site[39] @00007ff774fec0a0 = Video::VertexProgramData::VertexProgramData
+[RtDiff] site[40] @00007ff774fec080 = Video::PixelProgramData::PixelProgramData
+[RtDiff] site[41] @00007ff774fec060 = Video::RenderStateData::RenderStateData
+[RtDiff] site[42] @00007ff774febde0 = Video::ImageBuffer::Width
+[RtDiff] site[43] @00007ff774febe00 = Video::ImageBuffer::Height
+[RtDiff] site[44] @00007ff774febea0 = Video::ImageBuffer::IsGenerated
+[RtDiff] site[45] @00007ff774febee0 = Video::ImageBuffer::IsRendered
+[RtDiff] site[46] @00007ff774febe40 = Video::ImageBuffer::IsCompressed
+[RtDiff] site[47] @00007ff774febe20 = Video::ImageBuffer::GetLevelCount
+[RtDiff] site[48] @00007ff774febe60 = Video::ImageBuffer::IsDepthBuffer
+[RtDiff] site[49] @00007ff774febec0 = Video::ImageBuffer::IsRenderBuffer
+[RtDiff] site[50] @00007ff774feb5a0 = UI::Sprite::Sprite(sheet,name)
+[RtDiff] site[51] @00007ff774fe9e80 = IO::Persistence::Get(int&)
+[RtDiff] site[52] @00007ff774fe9ea0 = IO::Persistence::Get(bool&)
+[RtDiff] site[53] @00007ff774fe92a0 = Engine::DialogLoopT::ctor
+[RtDiff] site[54] @00007ff774feb820 = UI::UserInterface::UserInterface
+[RtDiff] site[55] @00007ff774feb000 = Timer::SecondsToTicks
+[RtDiff] site[56] @00007ff774fe9320 = Engine::DialogLoaderLoopT::ctor
+[RtDiff] site[57] @00007ff774fe9340 = Engine::DialogLoaderLoopT::Load
+[RtDiff] site[58] @00007ff774fe9260 = Engine::LoaderLoop::ctor
+[RtDiff] site[59] @00007ff774fe9280 = Engine::Loader::Load
+[RtDiff] site[60] @00007ff774fea1c0 = IO::Serializer::Serializer(Stream&,int)
+[RtDiff] site[61] @00007ff774fe9fe0 = IO::Serializer::Serialize(int&)
+[RtDiff] site[62] @00007ff774fe9f40 = IO::Serializer::Serialize(bool&)
+[RtDiff] site[63] @00007ff774fea880 = Object::ExternalFactory::Find
+[RtDiff] site[64] @00007ff774feae60 = System::Filename::GetPathIdentifer
+[RtDiff] site[65] @00007ff774fea1e0 = IO::Serializer::~Serializer [not diffable]
+[RtDiff] site[66] @00007ff774fea1a0 = IO::Serializer::GetEncoding
+[RtDiff] site[67] @00007ff774fea860 = Object::ExternalFactory::IsReferenceModeEnabled
+[RtDiff] site[68] @00007ff774feaaa0 = Object::Type::Serialize [not diffable]
+[RtDiff] site[69] @00007ff774fea020 = IO::Serializer::Serialize(float&)
+[RtDiff] site[70] @00007ff774fea160 = IO::Serializer::SerializeBytes
+[RtDiff] site[71] @00007ff774fea720 = Math::Vector3::FromYawPitch
+[RtDiff] site[72] @00007ff774feaee0 = System::String::operator==(char*)
+[RtDiff] site[73] @00007ff774feaf20 = System::String::SubString
+[RtDiff] site[74] @00007ff774fea180 = IO::Serializer::GetVersion
+[RtDiff] site[75] @00007ff774fe9380 = Graphics::AnimationEvent::AnimationEvent()
+[RtDiff] site[76] @00007ff774fea140 = IO::Serializer::Serialize(n,float*)
+[RtDiff] site[77] @00007ff774fe8320 = Achievement::Achievement::ctor
+[RtDiff] site[78] @00007ff774fe8340 = Achievement::Achievement::GetFileVersion
+[RtDiff] site[79] @00007ff774fe91a0 = Engine::MainLoop::SetNextLoop
+[RtDiff] site[80] @00007ff774fe9360 = Engine::DialogLoaderLoopT::Startup
+[RtDiff] site[81] @00007ff774fea960 = Object::InternalBasePtr::InternalBasePtr(Internal*)
+[RtDiff] site[82] @00007ff774feb160 = UI::DialogInstance::FindElement
+[RtDiff] site[83] @00007ff774feb360 = UI::Element::FindElement
+[RtDiff] site[84] @00007ff774fe8e20 = Collection::Array::SetSize @0x18007a0d0
+[RtDiff] site[85] @00007ff774feb900 = UI::UserInterface::SetFullscreenFadeSprite
+[RtDiff] site[86] @00007ff774feb8e0 = UI::UserInterface::SetFullscreenFade
+[RtDiff] site[87] @00007ff774fec4a0 = Video::Context::SetRenderBuffer
+[RtDiff] site[88] @00007ff774fec440 = Video::Context::SetViewport
+[RtDiff] site[89] @00007ff774fec320 = Video::VertexBuffer::Lock
+[RtDiff] site[90] @00007ff774fec340 = Video::VertexBuffer::Unlock
+[RtDiff] site[91] @00007ff774fec480 = Video::Context::SetVertexBuffer
+[RtDiff] site[92] @00007ff774fec360 = Video::ConstantBuffer::Bind
+[RtDiff] site[93] @00007ff774feb080 = System::Random::Rand(uint)
+[RtDiff] site[94] @00007ff774fea220 = Math::Transform::Transform()
+[RtDiff] site[95] @00007ff774fea480 = Math::Transform3::Identity()
+[RtDiff] site[96] @00007ff774fec860 = Volume::Frustum::Frustum (near,far,fovX,fovY)
+[RtDiff] site[97] @00007ff774fe9740 = Graphics::Camera::Camera
+[RtDiff] site[98] @00007ff774fe9720 = Graphics::Camera::SetFrustum
+[RtDiff] site[99] @00007ff774fec920 = Volume::Frustum::Projection
+[RtDiff] site[100] @00007ff774fea2c0 = Math::Matrix::operator*(const Matrix&)
+[RtDiff] site[101] @00007ff774fe98a0 = Graphics::Geometry::Geometry()
+[RtDiff] site[102] @00007ff774febf80 = Video::VertexBuffer::VertexBuffer
+[RtDiff] site[103] @00007ff774febf60 = Video::IndexBuffer::IndexBuffer
+[RtDiff] site[104] @00007ff774fea0e0 = IO::Serializer::Serialize(n,ushort*)
+[RtDiff] site[105] @00007ff774febfe0 = Video::VertexBuffer::Create
+[RtDiff] site[106] @00007ff774fec000 = Video::VertexBuffer::Set
+[RtDiff] site[107] @00007ff774febfa0 = Video::IndexBuffer::Create
+[RtDiff] site[108] @00007ff774febfc0 = Video::IndexBuffer::Set
+[RtDiff] site[109] @00007ff774fea0c0 = IO::Serializer::Serialize(n,short*)
+[RtDiff] site[110] @00007ff774fea0a0 = IO::Serializer::Serialize(n,uchar*)
+[RtDiff] site[111] @00007ff774fe9f80 = IO::Serializer::Serialize(uchar&)
+[RtDiff] site[112] @00007ff774fea100 = IO::Serializer::Serialize(n,int*)
+[RtDiff] site[113] @00007ff774febdc0 = Video::ImageBuffer::ImageBuffer
+[RtDiff] site[114] @00007ff774febf40 = Video::ImageBuffer::Create
+[RtDiff] site[115] @00007ff774febf00 = Video::ImageBuffer::CopyToTexture
+[RtDiff] site[116] @00007ff774febe80 = Video::ImageBuffer::IsDynamic
+[RtDiff] site[117] @00007ff774fea840 = Object::External::GetPath
+[RtDiff] site[118] @00007ff774fea000 = IO::Serializer::Serialize(uint&)
+[RtDiff] site[119] @00007ff774fe97c0 = Graphics::Renderer::Renderer
+[RtDiff] site[120] @00007ff774fe9a20 = Graphics::Scene::Scene()
+[RtDiff] site[121] @00007ff774fe95c0 = Graphics::MeshInstance::MeshInstance()
+[RtDiff] site[122] @00007ff774fe9580 = Graphics::MeshInstance::SetMesh
+[RtDiff] site[123] @00007ff774fe9540 = Graphics::MeshInstance::UpdateHierarchy
+[RtDiff] site[124] @00007ff774fe9aa0 = Graphics::Scene::AddGlobalObject
+[RtDiff] site[125] @00007ff774fea4e0 = Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)
+[RtDiff] site[126] @00007ff774fe9900 = Graphics::Geometry::SetTransform
+[RtDiff] site[127] @00007ff774fe94a0 = Graphics::GraphicsMesh::GetMaterialList
+[RtDiff] site[128] @00007ff774fe9560 = Graphics::MeshInstance::SetMaterialInstance
+[RtDiff] site[129] @00007ff774fe9a60 = Graphics::Scene::AddObject
+[RtDiff] site[130] @00007ff774fea3e0 = Math::Quaternion::operator*(const Quaternion&)
+[RtDiff] site[131] @00007ff774feb020 = Timer::TicksToSeconds
+[RtDiff] site[132] @00007ff774fe9480 = Graphics::ParticleSystemInstance::ParticleSystemInstance()
+[RtDiff] site[133] @00007ff774febc20 = UI::ImageElement::SetRotation
+[RtDiff] site[134] @00007ff774fe92c0 = Engine::DialogLoopT::Load
+[RtDiff] site[135] @00007ff774feac00 = Save::SaveLoad::SaveLoad
+[RtDiff] site[136] @00007ff774fe92e0 = Engine::DialogLoopT::Startup
+[RtDiff] site[137] @00007ff774feb420 = UI::Element::SetElementId
+[RtDiff] site[138] @00007ff774feafa0 = System::String::Release [no oracle: mutates a shared refcount]
+[RtDiff] site[139] @00007ff774febf20 = Video::ImageBuffer::CopyFromTexture
+[RtDiff] site[140] @00007ff774fe86a0 = Audio::Scene::PlayEffect
+[RtDiff] site[141] @00007ff774fead40 = Save::SaveLoad::Update [shadow]
+[RtDiff] site[142] @00007ff774fea540 = Math::Transform::FromLookAt(const Vector3&, const Vector3&)
+[RtDiff] site[143] @00007ff774fea520 = Math::Transform::FromDirection(const Vector3&, const Vector3&)
+[RtDiff] site[144] @00007ff774fea500 = Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)
+[RtDiff] site[145] @00007ff774fea820 = Math::Transform::AsTransform3
+[RtDiff] site[146] @00007ff774fea360 = Math::Transform::AsMatrix()
+[RtDiff] site[147] @00007ff774fe9760 = Graphics::Camera::SetCameraToWorld
+[RtDiff] site[148] @00007ff774fe9460 = Graphics::ParticleInstance::IncrementInstanceIndex
+[RtDiff] site[149] @00007ff774fe9ae0 = Graphics::Scene::Clean
+[RtDiff] site[150] @00007ff774fe9960 = Graphics::Geometry::Clean
+[RtDiff] site[151] @00007ff774fe9300 = Engine::DialogLoopT::Update[time]
+[RtDiff] site[152] @00007ff774fec420 = Video::Context::SetFog
+[RtDiff] site[153] @00007ff774fe9800 = Graphics::Renderer::GetCullCamera
+[RtDiff] site[154] @00007ff774fea280 = Math::Transform3::Transform3(const Transform3&)
+[RtDiff] site[155] @00007ff774fe99a0 = Graphics::Geometry::GetTransform
+[RtDiff] site[156] @00007ff774fea3a0 = Math::Transform::Inverse()
+[RtDiff] site[157] @00007ff774fe97a0 = Graphics::Camera::GetFrustum
+[RtDiff] site[158] @00007ff774fec8a0 = Volume::Frustum::operator*(Transform3)
+[RtDiff] site[159] @00007ff774fec8c0 = Volume::Frustum::Contains
+[RtDiff] site[160] @00007ff774fe9820 = Graphics::Renderer::GetShader
+[RtDiff] site[161] @00007ff774fec4e0 = Video::Context::SetTransform
+[RtDiff] site[162] @00007ff774fec3c0 = Video::Context::SetColor
+[RtDiff] site[163] @00007ff774fec460 = Video::Context::SetImageBuffer
+[RtDiff] site[164] @00007ff774fec2e0 = Video::IndexBuffer::Lock
+[RtDiff] site[165] @00007ff774fec300 = Video::IndexBuffer::Unlock
+[RtDiff] site[166] @00007ff774fe82c0 = Achievement::AchievementManager::SetAchievements
+[RtDiff] site[167] @00007ff774fe8b20 = Collection::Array::SetSize @0x180008ff0
+[RtDiff] site[168] @00007ff774fe8aa0 = Collection::Array::SetSize @0x180008b90
+[RtDiff] site[169] @00007ff774fe8100 = Achievement::AchievementManager::GetAchievementCount
+[RtDiff] site[170] @00007ff774fea900 = Object::ExternalList::GetResourceCount
+[RtDiff] site[171] @00007ff774feb1e0 = UI::Dialog::GetTemplate
+[RtDiff] site[172] @00007ff774feb440 = UI::Element::SetFlagsOnOff
+[RtDiff] site[173] @00007ff774fe8220 = Achievement::Achievement::GetSpriteName
+[RtDiff] site[174] @00007ff774febc40 = UI::ImageElement::SetSprite
+[RtDiff] site[175] @00007ff774fe81e0 = Achievement::Achievement::GetTitle
+[RtDiff] site[176] @00007ff774feb7a0 = UI::String::String(table,name)
+[RtDiff] site[177] @00007ff774feb740 = UI::StringTable::GetIndexFromName
+[RtDiff] site[178] @00007ff774fe8200 = Achievement::Achievement::GetDescription
+[RtDiff] site[179] @00007ff774feaca0 = Save::SaveLoad::SetOperation
+[RtDiff] site[180] @00007ff774fead00 = Save::SaveLoad::SetSaveName
+[RtDiff] site[181] @00007ff774fe9f00 = IO::Persistence::GetSavePath
+[RtDiff] site[182] @00007ff774fe9de0 = IO::FileSystem::GetDataDirectory
+[RtDiff] site[183] @00007ff774feac20 = Save::SaveLoad::GetOperation
+[RtDiff] site[184] @00007ff774feac80 = Save::SaveLoad::GetSaveState
+[RtDiff] site[185] @00007ff774fe9200 = Engine::UpdateLoop::ctor
+[RtDiff] site[186] @00007ff774fe9400 = Graphics::Particle::Particle()
+[RtDiff] site[187] @00007ff774feb220 = UI::ElementDescription::ctor
+[RtDiff] site[188] @00007ff774feb240 = UI::ElementDescription::GetFileVersion
+[RtDiff] site[189] @00007ff774feb040 = System::Random::Random(uint)
+[RtDiff] site[190] @00007ff774feaae0 = Picking::Scene::Scene()
+[RtDiff] site[191] @00007ff774fe8e60 = Collection::Array::SetSize(10000,-1) @0x18007b960
+[RtDiff] site[192] @00007ff774feb060 = System::Random::Rand
+[RtDiff] site[193] @00007ff774fe93c0 = Graphics::AnimationManager::AnimationManager()
+[RtDiff] site[194] @00007ff774fe82a0 = Achievement::AchievementManager::SetEventHandler
+[RtDiff] site[195] @00007ff774fe9d00 = IO::CompressedMemoryStream::CompressedMemoryStream
+[RtDiff] site[196] @00007ff774fe9da0 = IO::CompressedMemoryStream::GetMemoryStream
+[RtDiff] site[197] @00007ff774feadc0 = Save::SavedState::Retrieve
+[RtDiff] site[198] @00007ff774fe9d60 = IO::CompressedMemoryStream::Open
+[RtDiff] site[199] @00007ff774fea8c0 = Object::ExternalFactory::GetPathForReferenceId
+[RtDiff] site[200] @00007ff774fe83c0 = Achievement::GoalInstance::GoalInstance
+[RtDiff] site[201] @00007ff774fe8720 = Audio::Scene::Serialize
+[RtDiff] site[202] @00007ff774fe8c20 = Collection::Array::SetSize @0x180051390
+[RtDiff] site[203] @00007ff774fe9fa0 = IO::Serializer::Serialize(short&)
+[RtDiff] site[204] @00007ff774fea080 = IO::Serializer::Serialize(n,bool*)
+[RtDiff] site[205] @00007ff774fe9fc0 = IO::Serializer::Serialize(ushort&)
+[RtDiff] site[206] @00007ff774fe9f60 = IO::Serializer::Serialize(schar&)
+[RtDiff] site[207] @00007ff774feaa20 = Object::Base::IsA
+[RtDiff] site[208] @00007ff774fea8a0 = Object::ExternalFactory::GetReferenceId
+[RtDiff] site[209] @00007ff774fea7c0 = Math::Vector3::NormalizeWithMag
+[RtDiff] site[210] @00007ff774feb0e0 = System::Random::RandFloatTol
+[RtDiff] site[211] @00007ff774fea460 = Math::Transform::Identity()
+[RtDiff] site[212] @00007ff774fe9980 = Graphics::Geometry::SetBounds
+[RtDiff] site[213] @00007ff774fea120 = IO::Serializer::Serialize(n,uint*)
+[RtDiff] site[214] @00007ff774fe94c0 = Graphics::GraphicsMesh::GetNodeIndexFromName
+[RtDiff] site[215] @00007ff774fe9500 = Graphics::MeshInstance::GetNodeToWorld
+[RtDiff] site[216] @00007ff774feaec0 = System::String::operator==(String)
+[RtDiff] site[217] @00007ff774fea580 = Math::Transform::operator*(const Transform&)
+[RtDiff] site[218] @00007ff774fea400 = Math::Quaternion::Rotate(const Vector3&)
+[RtDiff] site[219] @00007ff774feaba0 = Picking::Scene::AddMesh
+[RtDiff] site[220] @00007ff774fe8ba0 = Collection::Array::SetSize @0x180059140
+[RtDiff] site[221] @00007ff774fe8a20 = Collection::Array::~Array @0x1800739e0
+[RtDiff] site[222] @00007ff774fe9d80 = IO::CompressedMemoryStream::Close
+[RtDiff] site[223] @00007ff774fe9d20 = IO::CompressedMemoryStream::~CompressedMemoryStream
+[RtDiff] site[224] @00007ff774fead80 = Save::SavedState::~SavedState [no oracle]
+[RtDiff] site[225] @00007ff774fe8240 = Achievement::AchievementInstance::ctor
+[RtDiff] site[226] @00007ff774fe8260 = Achievement::AchievementInstance::SetAchievement
+[RtDiff] site[227] @00007ff774fe9160 = Collection::Array::operator= @0x180003970
+[RtDiff] site[228] @00007ff774fe8780 = Audio::Scene::Pause
+[RtDiff] site[229] @00007ff774fea8e0 = Object::ExternalFactory::FindNext
+[RtDiff] site[230] @00007ff774fea920 = Object::ExternalList::Find
+[RtDiff] site[231] @00007ff774feb460 = UI::Element::SetName
+[RtDiff] site[232] @00007ff774feb500 = UI::Element::SetUserData
+[RtDiff] site[233] @00007ff774feb4c0 = UI::Element::SetToolTip
+[RtDiff] site[234] @00007ff774feb340 = UI::Element::ChildCount
+[RtDiff] site[235] @00007ff774feb320 = UI::Element::Child
+[RtDiff] site[236] @00007ff774feb5e0 = UI::Sprite::IsValid()
+[RtDiff] site[237] @00007ff774feb860 = UI::UserInterface::GetFirstDialog
+[RtDiff] site[238] @00007ff774feb880 = UI::UserInterface::PausesGame
+[RtDiff] site[239] @00007ff774fe94e0 = Graphics::MeshInstance::IsAnimating
+[RtDiff] site[240] @00007ff774fe9520 = Graphics::MeshInstance::RootAnimationOffset
+[RtDiff] site[241] @00007ff774fea260 = Math::Transform::operator=(const Transform&)
+[RtDiff] site[242] @00007ff774feabe0 = Picking::Scene::Intersect
+[RtDiff] site[243] @00007ff774fea240 = Math::Transform::Transform(const Transform&)
+[RtDiff] site[244] @00007ff774feab80 = Picking::Scene::SetTransform
+[RtDiff] site[245] @00007ff774fea6a0 = Math::Vector2::Normalize
+[RtDiff] site[246] @00007ff774fea740 = Math::Vector3::Heading
+[RtDiff] site[247] @00007ff774fea700 = Math::Vector3::Dot
+[RtDiff] site[248] @00007ff774feb0c0 = System::Random::RandFloat
+[RtDiff] site[249] @00007ff774fea560 = Math::Transform::operator*(const Vector3&)
+[RtDiff] site[250] @00007ff774febda0 = Utility::PerlinNoise::Generate
+[RtDiff] site[251] @00007ff774fe8280 = Achievement::AchievementInstance::Update
+[RtDiff] site[252] @00007ff774fe81a0 = Achievement::AchievementInstance::IsMet
+[RtDiff] site[253] @00007ff774fe81c0 = Achievement::AchievementInstance::HasFailed
+[RtDiff] site[254] @00007ff774fe8300 = Achievement::AchievementManager::Update
+[RtDiff] site[255] @00007ff774fe8660 = Audio::Scene::IsEffectPlaying
+[RtDiff] site[256] @00007ff774febae0 = UI::NumberElement::SetValueInt
+[RtDiff] DIVERGENCE UI::NumberElement::SetValueInt  call #1  ours=+0xd0: e0 96 fa 01 f4 01 00 00  theirs=+0xd0: 60 94 1c 02 f4 01 00 00
+[RtDiff] DIVERGENCE UI::NumberElement::SetValueInt  call #2  ours=+0xd0: 50 60 1c 02 f4 01 00 00  theirs=+0xd0: e0 96 fa 01 f4 01 00 00
+[RtDiff] DIVERGENCE UI::NumberElement::SetValueInt  call #3  ours=+0xd0: 90 a5 fa 01 f4 01 00 00  theirs=+0xd0: 50 60 1c 02 f4 01 00 00
+[RtDiff] UI::NumberElement::SetValueInt: further divergences counted only
+[RtDiff] site[257] @00007ff774feb4a0 = UI::Element::SetPadding
+[RtDiff] site[258] @00007ff774fe9c00 = Input::KeyMap::Pressed
+[RtDiff] site[259] @00007ff774fe9be0 = Input::KeyMap::GetValue
+[RtDiff] site[260] @00007ff774feaa80 = Object::Factory::CreateObject
+[RtDiff] site[261] @00007ff774fec400 = Video::Context::SetTime
+[RtDiff] site[262] @00007ff774fec3e0 = Video::Context::SetInverseScale
+[RtDiff] site[263] @00007ff774fea380 = Math::Transform3::AsMatrix()
+[RtDiff] site[264] @00007ff774fec500 = Video::Context::SetCamera
+[RtDiff] site[265] @00007ff774feb140 = UI::DialogInstance::GetController
+[RtDiff] site[266] @00007ff774feb120 = UI::DialogInstance::GetRoot
+[RtDiff] site[267] @00007ff774feb200 = UI::DialogController::GetContainer
+[RtDiff] site[268] @00007ff774feb840 = UI::UserInterface::GetAddDialogCount
+[RtDiff] site[269] @00007ff774feb7e0 = UI::String::IsValid()
+[RtDiff] site[270] @00007ff774febd80 = UI::Element::RemoveChildren [no oracle: destroys its children]
+[RtDiff] site[271] @00007ff774fe8be0 = Collection::Array::SetSize @0x1800764c0
+[RtDiff] site[272] @00007ff774feb300 = UI::Element::AddChild
+[RtDiff] site[273] @00007ff774fe8de0 = Collection::Array::SetSize @0x180076900
+[RtDiff] site[274] @00007ff774fe84e0 = Achievement::GoalList::AreGoalsMetExcept
+[RtDiff] site[275] @00007ff774fe8500 = Achievement::GoalInstance::Update
+[RtDiff] site[276] @00007ff774febc60 = UI::ImageElement::SetWidthHeight
+[RtDiff] site[277] @00007ff774feb480 = UI::Element::SetNeedsSizeCalc
+[RtDiff] site[278] @00007ff774febc00 = UI::ImageElement::GetSprite
+[RtDiff] site[279] @00007ff774feb600 = UI::Sprite::Width()
+[RtDiff] site[280] @00007ff774fe95a0 = Graphics::MeshInstance::PlayAnimation
+[RtDiff] site[281] @00007ff774fea600 = Math::Vector2::Dot
+[RtDiff] site[282] @00007ff774feb100 = System::Random::RandTol
+[RtDiff] site[283] @00007ff774fe9a80 = Graphics::Scene::RemoveObject
+[RtDiff] site[284] @00007ff774fe8ce0 = Collection::Array::SetSize @0x180023830
+[RtDiff] site[285] @00007ff774fe9920 = Graphics::Geometry::Attach
+[RtDiff] site[286] @00007ff774fe8ca0 = Collection::Array::SetSize @0x18001f990
+[RtDiff] site[287] @00007ff774fe9600 = Graphics::MeshInstance::~MeshInstance
+[RtDiff] site[288] @00007ff774fe98c0 = Graphics::Geometry::~Geometry()
+[RtDiff] site[289] @00007ff774fe8820 = Collection::Array::~Array @0x18001bf50
+--- crash ---
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ffca87774ea
+RAX=0000000000000008 RCX=000001FEFFA35109 RDX=000001F3023FB150 RBX=0000000000000000
+RBP=0000000000000020 RSI=0000002B0C9FE5C8 RDI=000001FFFFFFFFFF R8 =0000002B0C9FEFC0
+R9 =000001F4029C6047 R10=00003FFFFFFFFFFF R11=000001F4021C6048 R12=0000002B0C9FE5D0
+RIP=00007FFCA87774EA RSP=0000002B0C9FE358
+Module:    Runtime-x64.dll + 0xC74EA  (base=00007ffca86b0000)
+Fault: WRITE of 000001f3023fb150
+Registry: 1618 registered, 56 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=0000002b0c9fefc0 ranges=000001f4776a0000 cnt=1
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] bucket 8: free block @000001f4021c6040 has CORRUPTED forward link qword=ffffffff00235108 off=-4292652792 -> next=000001f3023fb150 (out of range)
+[REDZONE-DUMP]   clobbered free block body: tag=0000200000000008 +8=ffffffff00235108 +10=6f6e53003237322b +18=0000000000000020 +20=000010000000003a
+[REDZONE-DUMP]   OVERFLOWER block @000001f4021c6018 tag=000000000000000a size=40 (payload 32):
+[REDZONE-HEAP]   overflower user+0 (vtable?) = 0x0000000100000011 (not in a module)
+[REDZONE-DUMP]     user+0x00 = 0000000100000011  '........'
+[REDZONE-DUMP]     user+0x08 = 61655770756f7267  'groupWea'
+[REDZONE-DUMP]     user+0x10 = 6e6f634972656874  'therIcon'
+[REDZONE-DUMP]     user+0x18 = 000001f402240073  's.$.....'
+Stack trace:
+  #0  Runtime-x64.dll        + 0xC74EA     (RIP=00007FFCA87774EA RSP=0000002B0C9FE358)
+  #1  Runtime-x64.dll        + 0xC6F08     (RIP=00007FFCA8776F08 RSP=0000002B0C9FE360)
+  #2  reimpl-x64.exe         + 0x31C544    (RIP=00007FF774F1C544 RSP=0000002B0C9FE3B0)
+  #3  Runtime-x64.dll        + 0xC82A2     (RIP=00007FFCA87782A2 RSP=0000002B0C9FE420)
+  #4  Runtime-x64.dll        + 0xC9664     (RIP=00007FFCA8779664 RSP=0000002B0C9FE460)
+  #5  Runtime-x64.dll        + 0xC8ACF     (RIP=00007FFCA8778ACF RSP=0000002B0C9FE490)
+  #6  Runtime-x64.dll        + 0xC8F0E     (RIP=00007FFCA8778F0E RSP=0000002B0C9FE4D0)
+  #7  Runtime-x64.dll        + 0x11ECD1    (RIP=00007FFCA87CECD1 RSP=0000002B0C9FE560)
+  #8  reimpl-x64.exe         + 0x2FD5CC    (RIP=00007FF774EFD5CC RSP=0000002B0C9FE5C0)
+  #9  reimpl-x64.exe         + 0x2FF0DA    (RIP=00007FF774EFF0DA RSP=0000002B0C9FE600)
+  #10 reimpl-x64.exe         + 0x156DEA    (RIP=00007FF774D56DEA RSP=0000002B0C9FE640)
+  #11 Runtime-x64.dll        + 0x1153CE    (RIP=00007FFCA87C53CE RSP=0000002B0C9FE7A0)
+  #12 Runtime-x64.dll        + 0x113DB2    (RIP=00007FFCA87C3DB2 RSP=0000002B0C9FE7D0)
+  #13 Runtime-x64.dll        + 0x121615    (RIP=00007FFCA87D1615 RSP=0000002B0C9FE850)
+  #14 reimpl-x64.exe         + 0x19F49C    (RIP=00007FF774D9F49C RSP=0000002B0C9FE940)
+  #15 Runtime-x64.dll        + 0xDD08A     (RIP=00007FFCA878D08A RSP=0000002B0C9FEE60)
+  #16 Runtime-x64.dll        + 0xDD293     (RIP=00007FFCA878D293 RSP=0000002B0C9FEE90)
+  #17 Runtime-x64.dll        + 0xDD486     (RIP=00007FFCA878D486 RSP=0000002B0C9FEF20)
+  #18 reimpl-x64.exe         + 0x19BDBE    (RIP=00007FF774D9BDBE RSP=0000002B0C9FEF50)
+  #19 reimpl-x64.exe         + 0x3337F3    (RIP=00007FF774F337F3 RSP=0000002B0C9FF7A0)
+  #20 reimpl-x64.exe         + 0x12EE      (RIP=00007FF774C012EE RSP=0000002B0C9FF7F0)
+  #21 reimpl-x64.exe         + 0x13E6      (RIP=00007FF774C013E6 RSP=0000002B0C9FF840)
+  #22 KERNEL32.DLL           + 0x17374     (RIP=00007FFCF90B7374 RSP=0000002B0C9FF870)
+  #23 ntdll.dll              + 0x4CC91     (RIP=00007FFCF9E3CC91 RSP=0000002B0C9FF8A0)
+=== END CRASH ===
+

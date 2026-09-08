@@ -776,9 +776,11 @@ void RtDataMintShadowReport(const char* phase) {
         // WHERE the first non-zero byte is, not just whether there is one.
         // "DLL=WRITTEN" on a 2500-byte object says nothing about WHAT was
         // written: a live MT19937 state and one stray byte 2000 bytes in look
-        // identical. Lane C2's claim that Particle::_rng is never seeded is
-        // exactly the kind of statement that boolean cannot check, so the
-        // offset is reported for anything bigger than a pointer.
+        // identical. Lane C2's claim that Particle::_rng is never seeded was
+        // exactly the kind of statement that boolean cannot check -- and it was
+        // this print, added after the boolean raised the question, that showed
+        // the first non-zero byte at +0x04 with index still 0 and refuted it.
+        // Reported for anything bigger than a pointer.
         bool dllLive = false;
         unsigned dllFirst = 0;
         for (unsigned b = 0; b < s.size; ++b)

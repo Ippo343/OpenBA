@@ -19,16 +19,24 @@ divergences or crashes that are findings, not paperwork.**
 
 | | |
 |---|---|
-| exe | `C:/GOG Games/Banished/reimpl-x64.exe`, **2026-09-07 23:29:48 -0400**, 24,319,533 bytes |
+| first exe | `C:/GOG Games/Banished/reimpl-x64.exe`, **2026-09-07 23:29:48 -0400**, 24,319,533 bytes — the whole matrix table below |
 | built by | `mingw32-make sa-deploy` at that timestamp; the build was a **no-op link+copy** — `find code engine runtime standalone dx11 -newer <exe>` was empty before it and after it |
-| tree | `f53f887`, plus the uncommitted in-flight edits of other lanes (`deleting_dtor.cpp`, `thread_win.cpp`, `timer.cpp`, `value_types.cpp`, `widgets_input.cpp`, `widgets_layout.cpp`, `emit_deleting_dtor_cpp.py`, `WAVE9_LANE_K.md`) |
-| every cell | `tools/rt_matrix_cell.sh` (new, this lane) → `tools/rt_run.sh`, which prints the exe stamp it is about to measure. **All 22 runs report the same stamp.** |
+| tree | those edits were uncommitted when the exe was built and were committed unchanged as **`c3bcdcf`** while this lane was running, so the measured binary IS reproducible from git after all |
+| second exe | **2026-09-08 00:20:42**, built from the tree at `513ba03` (with `standalone/rt_data_mint.cpp` in flight from another lane). Six cells were re-run on it — see "Reproduced on a second binary" below |
+| every cell | `tools/rt_matrix_cell.sh` (new, this lane) → `tools/rt_run.sh`, which prints the exe stamp it is about to measure, and every archived `.cell.txt` carries that line. **Each run's stamp was checked against the exe it was meant to measure**; the matrix table below is entirely the first exe, the re-run set entirely the second. |
 
-`reference_lane_edits_after_report_invalidate_the_measurement.md` applies to this lane in the
-other direction: the working tree was **dirty with four other lanes' live edits when this exe
-was built.** The measurements are of that exe, not of `f53f887`. If any of those lanes lands a
-change to a ported body, **these cells must be re-run** — and the two menu crashes below are
-the reason to take that seriously rather than as boilerplate.
+`reference_lane_edits_after_report_invalidate_the_measurement.md` applied to this lane in the
+other direction: the tree was **dirty with four other lanes' live edits when the first exe was
+built**, so the first pass measured something git could not name. That resolved itself — those
+files were committed unchanged as `c3bcdcf` mid-lane — and the matrix was then **re-run on a
+second, independently built binary from a later tree**, which is a stronger result than either
+run alone.
+
+**Reproduced on a second binary (`2026-09-08 00:20:42`, tree `513ba03`):** menu 181 sites /
+1,090,230 calls / 0; gameplay 314 / 29,587,258 / 0; save-load 336 / 54,409,563 / 0; tutorial 0
+328 / 8,944,664 / 0; tutorials 1/2/3 **9 / 16 / 10 divergences** in the same single site over the
+same 12,896 calls. Every clean cell stayed clean and the one divergence reproduced across two
+binaries and two trees.
 
 ## The matrix
 
@@ -42,9 +50,9 @@ the reason to take that seriously rather than as boilerplate.
 | **gameplay** (control) | `AUTOSTART=1 PAUSEMENU=900 PAUSEMENU_QUIT=120` | 314 | 29,257,059 | **0** | **fires: 100 in 2 sites** |
 | **save / load** | `AUTOLOAD=Save9 PAUSEMENU=900 PAUSEMENU_QUIT=60 PAUSEMENU_BUTTON=6` | 335 | 54,382,522 | **0** | **fires: 53 in 2 sites** |
 | **tutorial 0** | `AUTOTUTORIAL=1` + pause-menu quit | 328 | 8,803,537 | **0** | not run (see note) |
-| **tutorial 1** | `AUTOTUTORIAL=01` + pause-menu quit | 335 | 10,323,700 | **9 in 1 site** | **fires: 58 in 3 sites** (48 libm + the same 10) |
-| **tutorial 2** | `AUTOTUTORIAL=02` + pause-menu quit | 332 | 10,760,566 | **17 in 1 site** | not run |
-| **tutorial 3** | `AUTOTUTORIAL=03` + pause-menu quit | 318 | 8,562,636 | **10 in 1 site** | not run |
+| **tutorial 1** | `AUTOTUTORIAL=01` + pause-menu quit | 335 | 10,323,700 | **9 in 1 site** — Finding 1, SETTLED | **fires: 58 in 3 sites** (48 libm + the same 10) |
+| **tutorial 2** | `AUTOTUTORIAL=02` + pause-menu quit | 332 | 10,760,566 | **17 in 1 site** — Finding 1 | not run |
+| **tutorial 3** | `AUTOTUTORIAL=03` + pause-menu quit | 318 | 8,562,636 | **10 in 1 site** — Finding 1 | not run |
 | **stress** run 1 | `STRESS=1 STRESS_FRAMES=1200` | 352 | 108,914,263 | **90 in 1 site** | **fires: 84 in 3 sites** |
 | **stress** run 2 | same | 353 | 108,708,284 | **0** | |
 | **stress** run 3 | same | — | — | — CRASHED at shutdown | |
@@ -57,7 +65,7 @@ the reason to take that seriously rather than as boilerplate.
 | **world teardown → menu** | `PAUSEMENU_BUTTON=5` | — | — | — **NOT DRIVEABLE** | |
 
 Six cells recorded clean: **main menu, gameplay, save/load, tutorial 0, Achievements menu, Mods
-menu**. Nothing else.
+menu**. Nothing else. Four of those six were re-run on the second binary and stayed clean.
 
 ### `calls=` was read, not just `divergences=`
 
@@ -90,7 +98,129 @@ five rather than inherit the gap.
 
 ---
 
-## Finding 1 — `UI::NumberElement::SetValueInt` diverges on tutorials 1, 2 and 3
+## Finding 1 — `UI::NumberElement::SetValueInt` — INVESTIGATED AND SETTLED: the ORACLE is wrong, the port is correct, and the harness is corrupting the DLL's heap
+
+**Read this section, not the summary above, for the disposition.** The paragraphs after it are
+the first-pass reasoning from the byte report alone; they reached the right verdict for a partly
+wrong reason and are kept because the correction is the point. What follows is measured.
+
+**Reproduced on a second, independently built binary** (`2026-09-08 00:20:42`, current tree):
+tutorials 1/2/3 give 9/16/10 divergences over exactly 12,896 calls, against the 9/17/10 measured
+on the `2026-09-07 23:29:48` exe. Tutorial 0, gameplay, save/load, menu and stress remain at 0 —
+and in those cells the site is **never registered**, i.e. the function is never called there.
+That is the `calls=0`-reads-as-clean trap in its purest form and it is exactly why the
+gameplay-only result previously in WAVE9.md was never evidence about this function.
+
+### The effectiveness control settles "which inputs diverge"
+
+A temporary probe (env-gated, `BANISHED_NUMELEM_PROBE`, since reverted — `widgets_input.cpp` is
+byte-identical to HEAD) counted how many of the 12,896 calls actually reach `CacheText` rather
+than taking the unchanged-value early-out:
+
+```
+WORK lines: 10          divergence blocks: 10
+[NumElemProbe] WORK call=8    worked=8
+[NumElemProbe] WORK call=13   worked=9
+[NumElemProbe] WORK call=6892 worked=10
+```
+
+**Exactly 10 calls did work, and exactly those 10 diverged. 1:1, no exceptions.** So the
+divergence is **not** value- or state-dependent: it is 100% of the calls that touch the
+refcounted cached string, and 0% of the 12,886 that do not. The varying count across tutorials
+(9/16/10) is simply how many resource counters changed value in those 900 frames — not a
+mysterious input class. Without this control, "10 in 12,896" reads as a rare defect hiding in a
+specific input; with it, it reads as a structural property of the oracle.
+
+### What the two objects actually contain
+
+The probe dumped the input, the entry state, **every** differing range (not just the first byte,
+which is all `RT_DIFF_BYTES` reports), and the bytes each side's `+0xd0` pointer points at:
+
+```
+#1 self=…c08a94a8 value=4 | BEFORE mode=0 int=0 q0xd0=…c08a95a0
+                          | OURS   mode=0 int=4 q0xd0=…c0acf2b0
+                          | THEIRS mode=0 int=4 q0xd0=…c08a95a0
+   diff +0xd0..+0xd2 (3 bytes)          <-- the ONLY difference in the whole object
+   ours[-8..40]   = 01000000 01000000 "4"           <-- len 1, refcount 1, the text for value=4
+   theirs[-8..40] = 00000000 00000000 …"numberYear" <-- a ZEROED header: a FREED block
+```
+
+Every one of the ten is that shape. `_mode` and `_intValue` agree on all ten. The **only**
+difference anywhere in the object is the `+0xd0` pointer, and:
+
+* **ours points at a live block holding the correctly formatted text** — `"4"` for 4, `"39"` for
+  39, then `"272"`, `"157"`, `"88"`, `"126"`, `"360"`, `"4655"`, `"42"`, `"40"`. Every one
+  matches its input.
+* **theirs points at the entry-state pointer, unchanged, whose 8-byte header is now all zeros**
+  — a freed block. Retail did not "compute a different answer"; retail was handed a buffer our
+  call had already released, and left the stale pointer in place.
+
+So the side the oracle calls `theirs` is the side holding the wrong data, and it holds it
+*because of the oracle*. **This gate, as written, penalises the correct body.**
+
+### The order-inversion control: it does not just move the divergence, it corrupts the heap
+
+The sharpest version of the sequence trap check the lead asked for: run the DLL's body **first**,
+on the replay, before ours touches `self`. Everything else identical.
+
+**The run crashes**, inside the Runtime allocator, with the free list corrupted:
+
+```
+ACCESS_VIOLATION  WRITE of 000001f3023fb150   Runtime-x64.dll + 0xC74EA
+[REDZONE-DUMP] bucket 8: free block @…021c6040 has CORRUPTED forward link
+                 qword=ffffffff00235108 -> next=…023fb150 (out of range)
+[REDZONE-DUMP]   clobbered free block body: … +10=6f6e53003237322b …
+```
+
+`6f6e53003237322b` is `+272\0Sno` — **`"272"`, the input of diverging call #3.** The number text
+one of the two `CacheText` calls formatted is sitting *inside a block that is already on the free
+list*. That is the mechanism, caught in the act, with the diverging call's own digits as the
+signature.
+
+### Verdict
+
+`RtUi_NumberElement_SetValueInt` is **correct**. The oracle around it is **unsound**, and it is
+unsound in the exact way this file's own header block forbids — `widgets_input.cpp` lines 53-58,
+written by the lane that ported it:
+
+> **NOT done this way: anything that swaps a REFCOUNTED pointer** (a shared string, a shared
+> allocation). Replaying the original there would decrement/increment the SAME refcount a second
+> time — wrong regardless of whether the first decrement freed it — which is exactly why
+> `EditElement::SetText` is a documented NO-ORACLE port rather than a prefix-replay one.
+
+`NumberElement::SetValueInt` calls `NumberElementCacheText()` (the DLL's private
+`0x1801189f0`), which manages precisely such a refcounted string. It was prefix-replayed anyway.
+The rule was written down and did not reach the function next to it — the same shape as
+`BANISHED_AUTOQUIT` producing the same wrong conclusion six waves apart.
+
+**Recommended disposition**, for the owner of `widgets_input.cpp` (this lane did not apply it —
+making a diverging cell go green is not a matrix lane's call, and it needs its own written
+justification in WAVE7_LANE_D.md §5 beside `EditElement::SetText`):
+
+* `NumberElement::SetValueInt` **and** `SetValueFloat` (identical shape, same `CacheText` call,
+  currently silent only because the float setter is not called on these routes) become
+  **NO-ORACLE ports**, like `EditElement::SetText`, with the reason recorded.
+* Excluding `+0xd0..+0xd7` from the byte compare would be **wrong**: it would make the audit
+  green while leaving the double-release — and therefore the heap corruption demonstrated above —
+  in place on every diff run.
+* Anything else in the tree that prefix-replays a body reaching `CacheText` or any other
+  refcounted-string swap is the same defect. `NumberEditElement::SetMinMax` calls
+  `RealNumberEditElementSetValue()` and is worth reading first.
+
+**Two leads checked and closed.** (a) `UI::NumberEditElement::SetValue`, landed in `c3bcdcf`
+with its fixed-signature `System::String::Format` call, is a plausible neighbour but not
+implicated: the diverging path runs through the DLL's own `CacheText` at `0x1801189f0`, and the
+text our side produces is correct for all ten inputs, so no shared formatting helper is
+misbehaving. (b) The first-pass reasoning below argued that "the only code writing `+0xd0` in
+either branch is byte-identical DLL code". **That was wrong**: the probe shows retail leaves
+`+0xd0` untouched and only our call replaces it. The verdict survives, but by the measurement
+above, not by that argument.
+
+---
+
+### First-pass reasoning, kept for the correction
+
+## Finding 1 (first pass) — `UI::NumberElement::SetValueInt` diverges on tutorials 1, 2 and 3
 
 **Reproducible and deterministic.** Three runs of tutorial 1 gave 9, 10 and 10 divergences over
 **exactly 12,896 calls each time**; tutorials 2 and 3 give 17 and 10 over the same 12,896. It
@@ -297,7 +427,9 @@ flagged for three live-path `String::Release` bypasses).
 > 328/8,803,537; Achievements menu 195/1,660,606; Mods menu 182/2,213,462), each with
 > `divergences=0` and, for menu/gameplay/save-load, a `BANISHED_RT_LIBM=std` negative control
 > that fires. **NOT MET:** tutorials 1-3 diverge in `UI::NumberElement::SetValueInt` (an oracle
-> defect that double-releases a refcounted buffer — Finding 1); the stress route diverged in
+> defect: the port is CORRECT and the prefix replay double-manages a refcounted buffer, proved
+> by an effectiveness control (10 of 12,896 calls do work, all 10 diverge) and an order-inversion
+> control that CORRUPTS THE DLL'S FREE LIST — Finding 1); the stress route diverged in
 > `Picking::Scene::Intersect` in 1 run of 4, input-dependently (Finding 2); one stress run died
 > at shutdown in the allocator and lost its report (Finding 3); the Goals and Mods-row menu
 > routes crash independently of the oracle (Finding 4); and **the save WRITE path has no cell
