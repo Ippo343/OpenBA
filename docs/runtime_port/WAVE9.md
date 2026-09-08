@@ -1327,6 +1327,69 @@ that survives; OBJ2's was falsified by an event it explicitly flagged.
    means the allocation never happens at all. It is a cluster, not a row:
    `CreateVideoContext` + `Context` ctor + dtor + `operator delete`.
 
+### Cutover attempt 12 -- the port EXECUTES, and the frame moved DOWN into it
+
+Lane PKG's `LoadPackages` merged (`aa5e494`). Attempt 12, exe stamp
+`2026-09-08 08:29`:
+
+```
+#0  ???                              EXEC of 0
+#1  RtIo_FileSystem_LoadPackages  +0x111     <-- NEW FRAME, our port is running
+#2  RtIo_FileSystem_Startup       +0x140     <-- was #1 in attempt 11
+#3  RtEngine_Engine_Startup       +0x22C
+```
+
+`[RtUnresolved] ?FindFiles@FileSystem@IO@@QEBAX...` — the row lane PKG named in its
+own commit title as the one it exposes.
+
+**The two attempts corroborate each other, which is worth more than either alone.**
+Attempt 11 faulted AT `RtIo_FileSystem_Startup +0x140`; attempt 12 shows that same
+`+0x140` as a live CALLER one frame up. So `+0x140` was the `LoadPackages` call site,
+and the row genuinely closed rather than being skipped or short-circuited. A port that
+merely returned early would have left the frame count unchanged.
+
+The ladder is now three consecutive rungs where the fault moved to the symbol the
+previous lane named in advance: `SetupDirectories` -> `LoadPackages` -> `FindFiles`.
+
+### ⛔ TWO NULL DOORS UPSTREAM OF EVERYTHING -- lane PKG, and they outrank the row
+
+Lane PKG re-derived the `ExistsInPackfile` holdback it inherited and it **lands the
+other way**, for a reason that generalises:
+
+- Lane FS declined it because the packfile gate at `FileSystem+0x18` is 0. **True
+  inside `SetupDirectories`, and SPENT the moment `Startup` sets that byte to 1** —
+  which it does before `LoadPackages`.
+- From that instant **every `Exists()` takes the packfile arm first**. `?Exists@` is
+  already ported (`filesystem.cpp:151`) and reaches `?ExistsInPackfile@` (0x1800ab180,
+  ord 2322) **and** `?PlatformExists@` (0x1800adc70, ord 3378) through live
+  `RT_EXPORT_ONCE` doors **with nothing behind either**.
+
+That is two null calls at cutover on a path essentially everything takes, and **no
+instrument reports them**: a satisfied-looking port-aware door is exactly what
+`rawdoor_audit` and `port_bypass_audit` are built to pass. They are found only by
+`unsatisfied_export_scan.py`'s question — "does this name have a port OR a mint entry"
+— which is the one the gate rows keep proving is the *sufficient* condition while the
+door audits prove only the necessary one.
+
+**A holdback can be correct where it was written and spent two functions later.** Lane
+FS's was not stale by drift and not wrong when made; the state it depended on is
+deliberately changed by the code in between. Re-derive an inherited blocker against
+the state at YOUR call site, not the state at the site it was written for.
+
+### The row was SIZED WRONG in my brief, and the lane said so
+
+`LoadPackages` is **430 instructions, not ~300**. My brief read the two array-growth
+loops as writing to two different arrays; they both append to the **same** array at
+`+0x20` and differ only in the source they read. It also omitted a third loop (the
+path -> `{packIndex, fileIndex}` index build) and the sort entirely. Recorded because
+an integrator's sketch of a row becomes the lane's starting frame, and a wrong one
+costs the lane its first pass.
+
+**Third independent witness to the census defect.** Lane PKG's `ported` count did not
+move and IO stayed 37/55 despite four `RegisterRuntimeExport` calls, for the same
+reason lane OBJ2's did not: the literal `ResolveExport(` door cannot see
+`RT_EXPORT_ONCE`. Measured at 113 live names in `6a0d360`.
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
