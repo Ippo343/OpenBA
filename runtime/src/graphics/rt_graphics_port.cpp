@@ -33,6 +33,7 @@ extern int RtGraphicsAnimationRegister(); // animation.cpp (lane G)
 extern int RtGraphicsWave9GfxRegister();  // wave9_lane_gfx.cpp (Wave 9 lane GFX)
 extern int RtGraphicsSunLightRegister();  // sunlight.cpp (Wave 9 lane GFX2)
 extern int RtGraphicsGridRegister();      // scene_grid.cpp (Wave 9 lane GFX3)
+extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GFXD)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -46,6 +47,15 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFXANIM"))   n += RtGraphicsAnimationRegister();
     if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXSUN"))   n += RtGraphicsSunLightRegister();
+
+    // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
+    // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
+    // constructors, and the seven unexported Collection::Array
+    // instantiations underneath them. Registered but INERT -- no door in
+    // the tree resolves any of them today, so this changes nothing in a
+    // live run. Its oracle is its own probe, behind BANISHED_RT_GFXD_PROBE.
+    int gfxd = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 
     int grid = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXGRID")) {
@@ -62,4 +72,8 @@ void RtGraphicsPortInit() {
     // works when six lanes share one game directory (the on-disk md5 says which
     // exe is on disk, not which one ran).
     printf("[RtPort] Graphics: %d exports + %d grid addresses registered\n", n, grid);
+    // Lane GFXD's own identity line. A run log has to carry a line only
+    // THIS build emits: the on-disk md5 says which exe is on disk, not
+    // which one ran, and six lanes share one game directory.
+    printf("[RtPort] Wave 9 lane GFXD: %d exports + 11 addresses registered\n", gfxd);
 }

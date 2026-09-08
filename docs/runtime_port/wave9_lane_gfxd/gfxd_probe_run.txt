@@ -1,0 +1,12 @@
+[GfxdProbe] phase1: comparisons=17 mismatches=0 vacuous=0 changedBytes=786 negControls=3 fired=3 skipped=0
+[GfxdProbe] phase1: PASS
+[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered
+[GfxdProbe] phase2: comparisons=23 mismatches=0 vacuous=0 changedBytes=1039 negControls=4 fired=4 skipped=0
+[GfxdProbe] phase2: PASS
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[BootState] RUNNING (Engine::Startup returned at 1s)
+[AutoStart] menu settled (mainMenu=00000217800f1c98) — injecting New Game click
+[AutoStart] NewGameDialog ready (self=0000021781698d40) — injecting Start click (buttonOk)
+[AutoStart] sequence fired — new-game transition queued; driver done
+== exe md5 as deployed and run: ccca0e6cae2a54f7a6c49ac9f4dc2c6e
+ccca0e6cae2a54f7a6c49ac9f4dc2c6e *C:/GOG Games/Banished/reimpl-x64.exe
