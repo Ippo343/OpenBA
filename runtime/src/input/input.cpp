@@ -38,6 +38,15 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
 extern void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value);
 
+// Wave 9 lane INPUT: the lockstep oracle for the five `Collection::Set` AVL
+// bodies this file reaches by address (runtime/src/collection/set_avl_e24.cpp).
+// SELF-SCHEDULED on the first real RegisterInput rather than run from
+// RtInputPortInit: the probe allocates, and at port-init time the allocator has
+// been constructed but not started — a probe that allocates from a *PortInit
+// faults on a null `_singleton` at +0x640 (lane PKG2). The first RegisterInput
+// call is provably safe because the caller is itself about to allocate a node.
+extern "C" void RtCollectionSetAvlE24ProbeMaybeRun();
+
 namespace {
 
 // ============================================================================
@@ -192,7 +201,9 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
     RT_DIFF_SHADOW(true, "matching slots cleared", "same (self-check)");
 }
 
-// ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z  retail 0x1800a7e70  ord 3712
+// ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z  retail 0x1800a7e70  ord 3529
+// (this line said "ord 3712" until Wave 9 lane INPUT re-read the export
+// directory with pefile: 3529 is the ordinal, 3712 is not this symbol.)
 //
 // UNBLOCKED 2026-09-07. Wave 8 lane D held this back because it could not pin
 // the first argument of the node allocator FUN_180023060. Reading the CALLEE
@@ -241,6 +252,7 @@ using SetRebalanceFn  = void (*)(void* setPtr, BindingNode** parentSlot);
 void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
                                   int32_t inputId, const char* name, bool exclusive) {
     RT_DIFF_BEGIN("Input::KeyMap::RegisterInput");
+    RtCollectionSetAvlE24ProbeMaybeRun();   // no-op unless BANISHED_RT_SETAVL24_PROBE=1
     static auto allocNode = reinterpret_cast<SetAllocNodeFn>(
         ResolveAddr(Module::Runtime, 0x180023060));
     static auto rebalance = reinterpret_cast<SetRebalanceFn>(
@@ -249,6 +261,23 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
     auto* km = static_cast<KeyMap*>(self);
     auto* root = static_cast<BindingNode*>(km->_root);
     const uint8_t key = static_cast<uint8_t>(id);
+
+    // ---- the oracle's PRE-state, and why this line exists --------------------
+    // `GetIdForDeviceInput` returns the FIRST in-order match for a
+    // (device, inputId) pair, so "the walk finds OUR id" is only the right
+    // expectation when that pair was not ALREADY bound to a lower id. Two
+    // actions bound to the same physical key is a legitimate state, and this
+    // oracle asserted `found == key` unconditionally from Wave 8.5 until Wave 9
+    // lane INPUT's lockstep probe fired it twice on a population containing two
+    // such pairs. The port was correct both times; the ORACLE was wrong.
+    // Recorded here rather than only in the wave doc, per PLAN §6 step 8.
+    int32_t preFound = -1;
+    if (rt_diff_on__) {
+        using PairFn = int32_t (*)(const void*, int32_t, int32_t);
+        if (auto f = reinterpret_cast<PairFn>(
+                ResolveExportRaw("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z")))
+            preFound = f(km, device, inputId);
+    }
 
     // 1. Already registered? Retail's first descent (0x1800a7e90) tracks no
     //    parent and leaves the root in RBX untouched, which is what the
@@ -323,11 +352,22 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
         int32_t i0 = ok ? theirInput(km, id, 0) : 0;
         int32_t d1 = ok ? theirDevice(km, id, 1) : 0;
         int32_t found = ok ? theirFind(km, device, inputId) : -1;
+        // The pair may already belong to another id. `GetIdForDeviceInput` is an
+        // IN-ORDER walk returning the FIRST match, so after our insert the
+        // answer is whichever of the two ids sorts lower in the tree's UNSIGNED
+        // byte order — which is not necessarily the pre-existing one. Getting
+        // this half-right (expecting `preFound` unconditionally) still fired on
+        // the id that sorts BEFORE the incumbent; the run that found it is in
+        // docs/runtime_port/WAVE9_LANE_INPUT.md.
+        const int32_t expectFound =
+            (preFound >= 0 && static_cast<uint8_t>(preFound) < key)
+                ? preFound
+                : static_cast<int32_t>(key);
         ok = ok
           && d0 == static_cast<int32_t>(static_cast<int8_t>(device))
           && i0 == static_cast<int32_t>(static_cast<uint8_t>(inputId))
           && d1 == -1                                   // slot 1 unbound (0xFF)
-          && found == static_cast<int32_t>(key)         // reachable by a FULL tree walk
+          && found == expectFound                       // reachable by a FULL tree walk
           && km->_count == countBefore + 1;
 
         char a[176], b[112];
@@ -336,7 +376,7 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
                       (int)d0, (int)i0, (int)d1, (int)found, (int)km->_count);
         std::snprintf(b, sizeof(b), "dev0=%d in0=%d dev1=-1 walkFound=%d count=%d",
                       (int)static_cast<int8_t>(device), (int)static_cast<uint8_t>(inputId),
-                      (int)key, (int)countBefore + 1);
+                      (int)expectFound, (int)countBefore + 1);
         RT_DIFF_SHADOW(ok, a, b);
     }
 }

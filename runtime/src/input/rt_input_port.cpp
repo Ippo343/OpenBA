@@ -11,6 +11,8 @@
 // ============================================================================
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "../../funcs/rt_port.h"
 
 extern int RtInputRegister();     // input.cpp
@@ -26,6 +28,17 @@ extern int RtInputKeyMapLoadRegister();  // keymap_load.cpp
 // IOA's KeyMap::Load was the last piece). Its own switch because it is on the
 // process's single boot path.
 extern int RtInputConfigStartupRegister();  // input_config_startup.cpp
+// Wave 9 lane INPUT: Input::KeyMap::Save (0x1800a7520) and the unexported
+// KeyMap deleting destructor (0x180053440) — the last two by-address doors the
+// Input cluster left open.
+extern int RtInputKeyMapSaveRegister();     // keymap_save.cpp
+// Wave 9 lane INPUT: the five unexported `Collection::Set` AVL bodies for the
+// 0x18-byte element instantiation (0x180023060/130/170/570/6a0). They live in
+// runtime/src/collection/ because they are element-type-agnostic within that
+// instantiation, but they are registered HERE because Input::KeyMap is their
+// only caller in our tree today and this is the switch that governs it.
+extern int RtCollectionSetAvlE24Register();       // collection/set_avl_e24.cpp
+extern "C" void RtCollectionSetAvlE24ProbeArm(bool on);
 
 void RtInputPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_INPUT")) {
@@ -36,5 +49,17 @@ void RtInputPortInit() {
     n += RtInputWinRegister();
     n += RtInputKeyMapLoadRegister();
     if (RtWaveEnabled("BANISHED_RT_INPUTCFGSTART")) n += RtInputConfigStartupRegister();
-    printf("[RtPort] Input: %d exports registered\n", n);
+    n += RtInputKeyMapSaveRegister();
+    const int avl = RtCollectionSetAvlE24Register();
+    n += avl;
+
+    const char* p = std::getenv("BANISHED_RT_SETAVL24_PROBE");
+    RtCollectionSetAvlE24ProbeArm(p && *p && std::strcmp(p, "0") != 0);
+
+    // The identity line this lane gates its runs on. `tools/game_dir_lock.sh`
+    // is advisory and six lanes were running when this landed: the on-disk md5
+    // says which exe is on disk, not which one RAN, so the acceptance test is a
+    // string only this build emits, read out of the run's own log.
+    printf("[RtPort] Input: %d exports registered (lane INPUT: +2 KeyMap doors, "
+           "+%d Set<E24> AVL addresses)\n", n, avl);
 }
