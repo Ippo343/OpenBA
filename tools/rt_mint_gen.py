@@ -118,6 +118,21 @@ EXTRA_SIZES = {
     "?_systemInitialTick@Timer@System@@0_JA": (8, "int64"),
     "?_systemTicksPerSecond@Timer@System@@0_JA": (8, "int64"),
     "?_ticksPerSecond@Timer@System@@0_JA": (8, "int64"),
+    # Wave 9, 2026-09-08. Three more the cutover boot reached for. Each size is
+    # read off the MANGLED SUFFIX, which encodes the type -- not guessed from
+    # neighbouring symbols, and not inferred from what the code does with it:
+    #   NA        double            -> 8
+    #   _NA       bool              -> 1
+    #   PEAV12@EA pointer-to-class  -> 8
+    "?_systemSecondsPerTick@Timer@System@@0NA":
+        (8, "double -- the QPF reciprocal; sibling of ?_secondsPerTick above"),
+    "?_hideDisplay@Error@System@@0_NA":
+        (1, "bool -- suppresses the Error message box"),
+    # Lane VID established this one exists after WAVE6_LANE_B.md §2.4 said it had
+    # no export: it is ordinal 4787 at 0x1801fe790, and lane C2 minted its three
+    # siblings (_firstSurface / the two _firstBuffer heads, above) and skipped it.
+    "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA":
+        (8, "RenderBuffer* -- head of the live-render-buffer list"),
     # Wave 9 lane W: the three class-static heads of the intrusive live-object
     # lists Video::{Image,Index,Vertex}Buffer::Platform{Construct,Destruct}
     # maintain. Each is one pointer; the size is pinned by
