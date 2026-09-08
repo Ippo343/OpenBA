@@ -468,6 +468,99 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
 // the DISASSEMBLY: retail dereferences `this` and `src` unguarded in every one
 // of them, and so does this port.
 
+// ============================================================================
+// ??0WideString@System@@QEAA@PEBD@Z                        retail 0x1800cb110
+//                                                   ord 514, Wave 9 lane PLAT
+// ============================================================================
+// The SAME two-pass UTF-8 -> UTF-16 body as the `const String&` constructor
+// above, differing in exactly one thing: the source extent comes from an
+// INLINE strlen of a raw `const char*` (0x1800cb132..0x1800cb14a and again at
+// 0x1800cb1c3..0x1800cb1d9) instead of from String's stored length.
+//
+// Retail walks the source twice for its extent — once for the first pass's
+// `end` and once again before the second pass. The two walks are transcribed
+// separately rather than folded, for the same reason `Set` keeps its re-walk:
+// folding them would silently change behaviour if a caller ever mutated `src`
+// in between, and this is a transcription.
+//
+// NOT NULL-TOLERANT. Retail's first act after zeroing `this->data` is
+// `CMP byte ptr [RDX],BPL` — an unguarded load of `src[0]`. Kept unguarded.
+//
+// WHY THIS LANE NEEDED IT: `?PlatformStartup@Application@1@AEAA_NXZ`
+// (0x18009fc10) opens with `LEA RDX,[0x180154858] ; CALL 0x1800cb110`, i.e.
+// `WideString className("Banished")`, and the resulting buffer is the window
+// class name it hands to RegisterClassW and CreateWindowExW. Wave 9 lane FS
+// ported four of this class's constructors and left this one, because nothing
+// in the tree called it then.
+WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
+    RT_DIFF_BEGIN("System::WideString::ctor(const char*)");
+
+    self->data = nullptr;
+
+    // 0x1800cb132: the first inline strlen. `R8D` counts, `RSI = RDX + count`.
+    int srcLen = 0;
+    while (src[srcLen] != 0) ++srcLen;
+
+    const uint8_t* const p   = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* const end = p + static_cast<size_t>(srcLen);
+
+    int totalBytes = 0;
+    for (const uint8_t* q = p; q < end;) {
+        int32_t cp = -1;
+        q += Utf8DecodeOne(q, end, &cp);
+        if (cp >= 0) {
+            uint8_t scratch[4];
+            totalBytes += Utf16EncodeOne(cp, scratch);
+        }
+    }
+
+    // 0x1800cb1ab: `SAR EAX,1` — the accumulator is in BYTES, the length handed
+    // to SetLength is in CHARACTERS.
+    const int chars = totalBytes >> 1;
+    RtSystem_WideString_SetLength(self, chars);
+
+    // 0x1800cb1c3: retail's SECOND inline strlen, over the ORIGINAL pointer.
+    int srcLen2 = 0;
+    while (src[srcLen2] != 0) ++srcLen2;
+
+    const uint8_t* const r    = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* const rend = r + static_cast<size_t>(srcLen2);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(self->data);
+    uint8_t*       out  = base;
+    int            written = 0;
+    for (const uint8_t* q = r; q < rend;) {
+        int32_t cp = -1;
+        q += Utf8DecodeOne(q, rend, &cp);
+        if (cp < 0) continue;
+        uint8_t scratch[4];
+        const int m = Utf16EncodeOne(cp, scratch);
+        written += m;
+        if (written > totalBytes) continue;   // 0x1800cb236  CMP R15D,R14D ; JG
+        if (base == nullptr)      continue;   // 0x1800cb23b  TEST R12,R12  ; JZ
+        if (m <= 0)               continue;   // 0x1800cb243  TEST EAX,EAX  ; JLE
+        std::memcpy(out, scratch, static_cast<size_t>(m));
+        out += m;
+    }
+    self->data[chars] = 0;                    // 0x1800cb275
+
+    if (rt_diff_on__) {
+        WideString theirs{nullptr};
+        RtOriginal<WideString* (*)(WideString*, const char*)>(
+            "??0WideString@System@@QEAA@PEBD@Z")(&theirs, src);
+        const bool equal = SameWide(self->data, theirs.data);
+        char a[96], b[96];
+        std::snprintf(a, sizeof(a), "chars=%d", WideLength(self->data));
+        std::snprintf(b, sizeof(b), "chars=%d", WideLength(theirs.data));
+        RT_DIFF_SHADOW(equal, a, b);
+        // The effectiveness control: a call that produced NO characters cannot
+        // distinguish a correct port from one that never wrote anything, so
+        // `worked=` counts only the calls that actually converted something.
+        RT_DIFF_WORK(chars > 0);
+        WideReleaseInline(&theirs);
+    }
+    return self;
+}
+
 // ??0WideString@System@@QEAA@PEB_W@Z                       retail 0x18000a6e0
 // `this->data = 0; Set(this, src);` and nothing else — eight instructions.
 WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src) {
@@ -521,6 +614,12 @@ int RtSystemWideStringRegister() {
                           (void*)&RtSystem_WideString_Dtor); ++n;
     RegisterRuntimeExport("?StrLength@WideString@System@@SAHPEB_W@Z",
                           (void*)&RtSystem_WideString_StrLength); ++n;
+    // Wave 9 lane PLAT: the fifth constructor. Verified against the shipped
+    // export directory with pefile (ordinal 514, 0x1800cb110) before the body
+    // was written — reference_resolveexport_phantom_names.md.
+    RegisterRuntimeExport("??0WideString@System@@QEAA@PEBD@Z",
+                          (void*)&RtSystem_WideString_CtorFromChars); ++n;
+    RegisterRuntimeAddr(0x1800cb110, (void*)&RtSystem_WideString_CtorFromChars);
 
     // The same four by address. dx11/src/devicedata.cpp reaches WideString
     // through the exe's OWN dispatch slots and its own resolver door, and this

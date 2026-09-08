@@ -209,14 +209,24 @@ int RtInputWinRegister() {
                           (void*)&RtInput_Device_EnableMouseClipping);
     RegisterRuntimeAddr(0x1800e1780, (void*)&RtInput_Device_EnableMouseClipping); ++n;
 
-    // PlatformUpdate (0x1800E2130) is NOT registered by name — it has no
-    // mangled export in either the retail or the profile DLL (checked against
-    // the export directory with pefile before writing a line of this file).
-    // The ADDRESS is registered so that any ResolveAddr(Module::Runtime,
-    // 0x1800E2130) caller on OUR side reaches ours. It does NOT redirect the
-    // tail-jump inside the DLL's own `Input::Device::Update` (0x1800E1490),
-    // which is still on the DLL — an internal jump needs a detour, not a
-    // registration, and this lane did not install one.
+    // PlatformUpdate (0x1800E2130). CORRECTED BY WAVE 9 LANE PLAT: this block
+    // used to say the function "has no mangled export in either the retail or
+    // the profile DLL". That was WRONG, and it was wrong in the direction that
+    // costs a live door — it IS exported, as
+    // `?PlatformUpdate@Device@Input@@AEAAXXZ`, ordinal 3411 at 0x1800E2130 in
+    // retail and ordinal 3564 at 0x1800E27B0 in the profile build. Both were
+    // re-checked with pefile against both files. It is the `AEAA` trap:
+    // PRIVATE, and this DLL exports its private members
+    // (reference_aeaa_means_private_not_unexported.md). While the name was
+    // unregistered every by-NAME resolve of it fell through to the DLL —
+    // including the three Input message callbacks, whose only body IS a call to
+    // this function.
+    //
+    // Neither registration redirects the tail-jump inside the DLL's own
+    // `Input::Device::Update` (0x1800E1490); an internal jump needs a detour,
+    // not a registration, and no lane has installed one.
+    RegisterRuntimeExport("?PlatformUpdate@Device@Input@@AEAAXXZ",
+                          (void*)&Device_PlatformUpdate); ++n;
     RegisterRuntimeAddr(0x1800e2130, (void*)&Device_PlatformUpdate);
     return n;
 }

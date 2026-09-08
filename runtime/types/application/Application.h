@@ -61,7 +61,18 @@ struct Application {
     // Application::_singleton[0] by Startup". Two independent bodies, same
     // conclusion. The ctor zeroes it; something later in bring-up fills it.
     void*   _windowHandle;     // +0x00
-    uint8_t _unknown08[0x08];  // +0x08  the ctor's 2nd argument. Not read by any port.
+    // +0x08  THE PLATFORM HANDLE (HINSTANCE). The ctor's 2nd argument, stored
+    // by `MOV qword ptr [RCX+0x8],RDX` above. Named by Wave 9 lane PLAT:
+    // `?PlatformStartup@Application@1@AEAA_NXZ` (0x18009fc10) loads it TWICE —
+    //     18009fc59: MOV RAX,[RDI+0x8]  -> WNDCLASSW::hInstance
+    //     18009fcb0: MOV RAX,[RDI+0x8]  -> CreateWindowExW's hInstance argument
+    // and both uses are HINSTANCE-shaped. `Engine::Startup` passes
+    // `this->_platformHandle` into the ctor (engine_lifecycle.cpp:635), which
+    // is the module handle WinMain received, so the two sides agree.
+    //
+    // Declared `void*` rather than `HINSTANCE`: PLAN §4.1 decision 1 keeps
+    // <windows.h> out of every header under runtime/.
+    void*   _platformHandle;   // +0x08
     uint8_t _stateLow;         // +0x10  low byte of the ctor's word store (0x00). Not read.
     uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1.
     uint8_t _unknown12[0x06];  // +0x12..+0x17  unproven.
@@ -86,6 +97,7 @@ struct Application {
     uint8_t _quitRequested;        // +0x28  Quit() sets 1; PlatformUpdate() reads it.
 };
 static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
+static_assert(offsetof(Application, _platformHandle)       == 0x08, "Application._platformHandle @ 0x08");
 static_assert(offsetof(Application, _running)              == 0x11, "Application._running @ 0x11");
 static_assert(offsetof(Application, _messageCallbackRoot)  == 0x18, "Application._messageCallbackRoot @ 0x18");
 static_assert(offsetof(Application, _messageCallbackCount) == 0x20, "Application._messageCallbackCount @ 0x20");
