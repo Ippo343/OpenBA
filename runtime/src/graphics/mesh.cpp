@@ -229,9 +229,27 @@ GeometryCopyCtorFn RtGeometryCopyCtor() {
 GeometryDtorFn RtGeometryDtor() {
     return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
 }
+// RT_EXPORT_ONCE (Wave 9 lane W, 2026-09-08). `Geometry::SetBounds` HAS BEEN
+// PORTED since Wave 6 lane D — scene.cpp:1750 registers
+// RtGraphics_Geometry_SetBounds under this exact mangled name — and this is the
+// WORK of EdgeMeshInstance::SetMesh (mesh.cpp:1678), not an oracle readback. On
+// the raw door it was a live-path port BYPASS: our own registered, diffed body
+// sat unreached while every EdgeMeshInstance built its bounds through the DLL,
+// and at cutover ResolveExportRaw is GetProcAddress on a module that is gone.
+//
+// tools/port_bypass_audit.py --by-name could NOT see this one and still cannot.
+// It reported OK-RESOLVE-ONLY: the accessor stores the pointer and RETURNS it,
+// so the brace-matched enclosing function that the classifier follows is this
+// four-line accessor, in which the pointer is indeed never called. The call is
+// in the CALLER, one frame out. That is the same accessor shape lane V had to
+// read by hand for all eleven of its raw-door rows, and it is a THIRD face of
+// the blind spot WAVE9.md's bypass row records as closed — the fix there was to
+// follow the assignment target through the enclosing function, which is exactly
+// what a resolve-and-return escapes. Do not read that gate's 0 as covering this
+// family until the audit follows a returned pointer to its callers.
 GeometrySetBoundsFn RtGeometrySetBounds() {
-    return RT_ORIGINAL_ONCE(GeometrySetBoundsFn,
-                            "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
+    return RT_EXPORT_ONCE(GeometrySetBoundsFn,
+                          "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
 }
 AnimResetFn RtAnimReset() {
     return RT_ORIGINAL_ONCE(AnimResetFn, "?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ");
@@ -248,12 +266,22 @@ QuatRotateFn RtQuatRotate() {
 }
 
 // Video buffer platform constructors, called eight times by EdgeMesh's ctor.
+//
+// RT_EXPORT_ONCE (Wave 9 lane W, 2026-09-08). BOTH NAMES ARE NOW PORTED —
+// runtime/src/video/buffers.cpp registers them, together with the four other
+// Platform{Construct,Destruct} bodies — so on the raw door these two became
+// live-path port BYPASSES the moment that landed, with nothing in THIS file
+// changing. That is the hazard WAVE9.md's bypass row states in as many words
+// ("re-run after every LANDING, not after every edit"), and it was caught here
+// by the audit's own denominator moving: `ported names 573 -> 579` and
+// `OK-RESOLVE-ONLY 4 -> 11`, the +7 being these two plus five siblings that
+// only acquired a verdict because their name became a ported one.
 typedef void (*BufferPlatformCtorFn)(void* self);
 BufferPlatformCtorFn RtVertexBufferPlatformCtor() {
-    return RT_ORIGINAL_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ");
+    return RT_EXPORT_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ");
 }
 BufferPlatformCtorFn RtIndexBufferPlatformCtor() {
-    return RT_ORIGINAL_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ");
+    return RT_EXPORT_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ");
 }
 
 // The vtables the ctors stamp. All four are REAL EXPORTED SYMBOLS in the

@@ -1,0 +1,144 @@
+unsatisfied_export_scan: 719 distinct names resolved through a door; 141 have neither a port nor a mint entry
+  of those, 138 have at least one site OUTSIDE a diff guard:
+
+  ??0CompressedStream@IO@@QEAA@XZ                                                          runtime/src/io/compressedstream.cpp:205
+  ??0Engine@0@QEAA@PEAX@Z                                                                  code/Game/Game/game_main.cpp:161
+  ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ                                                code/Game/Game/w2_takescreenshot.cpp:148
+  ??0Geometry@Graphics@@QEAA@AEBV01@@Z                                                     runtime/src/graphics/mesh.cpp:227
+  ??0MemoryStream@IO@@QEAA@XZ                                                              runtime/src/io/compressedstream.cpp:207
+  ??0PerlinNoise@Utility@@QEAA@MMHH@Z                                                      engine/funcs/engine_funcs.cpp:3452
+  ??0RenderBuffer@Video@@QEAA@XZ                                                           code/Game/Game/minimap_paint.cpp:101
+  ??0SunLight@Graphics@@QEAA@XZ                                                            engine/funcs/engine_funcs.cpp:3550
+  ??1CompressedStream@IO@@UEAA@XZ                                                          runtime/src/io/compressedstream.cpp:331
+  ??1Context@Video@@QEAA@XZ                                                                engine/funcs/engine_funcs.cpp:1617
+  ??1DialogInstance@UI@@UEAA@XZ                                                            engine/funcs/engine_funcs.cpp:1751
+  ??1Element@UI@@UEAA@XZ                                                                   standalone/address_registry.cpp:1119
+  ??1ElementDescription@UI@@UEAA@XZ                                                        standalone/address_registry.cpp:1111
+  ??1Engine@0@QEAA@XZ                                                                      code/Game/Game/game_main.cpp:163
+  ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ                                                code/Game/Game/w2_takescreenshot.cpp:149
+  ??1RenderBuffer@Video@@QEAA@XZ                                                           code/Game/Game/minimap_paint.cpp:103
+  ??1SaveLoad@Save@@QEAA@XZ                                                                engine/funcs/engine_funcs.cpp:2172
+  ??1UserInterface@UI@@QEAA@XZ                                                             code/Game/Game/gameupdateloop.cpp:2987
+  ?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z         engine/funcs/engine_funcs.cpp:2485
+  ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z  engine/funcs/engine_funcs.cpp:4788
+  ?AddGraph@GraphElement@UI@@QEAAXI@Z                                                      engine/funcs/engine_funcs.cpp:3221
+  ?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z                                                engine/funcs/engine_funcs.cpp:3223
+  ?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z                    engine/funcs/engine_funcs.cpp:1840
+  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z                                     standalone/address_registry.cpp:1092
+  ?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@              code/Game/Component/pickingcomponent.cpp:171
+  ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@ engine/funcs/engine_funcs.cpp:2897
+  ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ                                      standalone/reg_unreg_lane3.cpp:154  (+1 more)
+  ?CacheText@TextElement@UI@@AEAAXXZ                                                       runtime/src/ui/widgets_layout.cpp:102
+  ?Clean@ExternalFactory@Object@@QEAAXXZ                                                   runtime/src/engine/loops.cpp:192  (+1 more)
+  ?ClearResources@Context@Video@@QEAAXXZ                                                   engine/funcs/engine_funcs.cpp:1564
+  ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z       engine/funcs/engine_funcs.cpp:1601
+  ?Commit@CompressedStream@IO@@QEAAXXZ                                                     runtime/src/io/compressedstream.cpp:327  (+1 more)
+  ?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z                                      runtime/src/io/compressedstream.cpp:356
+  ?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@W4Usage@45@  code/Game/Game/w2_takescreenshot.cpp:150
+  ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@                            engine/funcs/engine_funcs.cpp:1953
+  ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@                    standalone/address_registry.cpp:1414
+  ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@                                      runtime/src/achievement/achievement_manager.cpp:188
+  ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z      standalone/address_registry.cpp:1115
+  ?DateAsString@DateTime@System@@QEBA?AVString@2@XZ                                        runtime/src/system/value_types.cpp:347
+  ?Display@Error@System@@SAXXZ                                                             runtime/src/system/allocator.cpp:129
+  ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z            engine/funcs/engine_funcs.cpp:3558  (+1 more)
+  ?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@ code/Game/Game/gameupdateloop.cpp:644
+  ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z                                       engine/funcs/engine_funcs.cpp:1588
+  ?EnableCursor@UserInterface@UI@@QEAAX_N@Z                                                engine/funcs/engine_funcs.cpp:3950
+  ?EnableMouseClipping@Device@Input@@QEAAX_N@Z                                             engine/funcs/engine_funcs.cpp:3909
+  ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z                           runtime/src/io/filesystem.cpp:152
+  ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System code/Game/Game/gameupdateloop.cpp:662
+  ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ                                                 engine/funcs/engine_funcs.cpp:2531
+  ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z           runtime/src/engine/loops.cpp:181  (+2 more)
+  ?FreeChannelPlatform@Device@Audio@@AEAAXH@Z                                              engine/funcs/engine_funcs.cpp:1556
+  ?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z                     code/Game/Game/w2_takescreenshot.cpp:153
+  ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2 runtime/src/ui/element.cpp:222
+  ?GetCurrentItem@ComboElement@UI@@QEBAHXZ                                                 engine/funcs/engine_funcs.cpp:1849
+  ?GetItemCount@ComboElement@UI@@QEBAHXZ                                                   engine/funcs/engine_funcs.cpp:1846
+  ?GetItemData@ComboElement@UI@@QEBAPEAXH@Z                                                engine/funcs/engine_funcs.cpp:1852
+  ?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance standalone/address_registry.cpp:1354  (+1 more)
+  ?GetMaxValue@SpinnerElement@UI@@QEBAHXZ                                                  engine/funcs/engine_funcs.cpp:1914
+  ?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAV                                     runtime/src/io/compressedstream.cpp:466
+  ?GetValue@NumberEditElement@UI@@QEBAHXZ                                                  engine/funcs/engine_funcs.cpp:1891
+  ?GetValue@SpinnerElement@UI@@QEBAHXZ                                                     engine/funcs/engine_funcs.cpp:1911
+  ?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@                          runtime/src/achievement/achievement_manager.cpp:201
+  ?Inverse@Matrix@Math@@QEBA?AV12@XZ                                                       runtime/src/video/context.cpp:352
+  ?IsActive@SpinnerElement@UI@@QEBA_NXZ                                                    engine/funcs/engine_funcs.cpp:1920
+  ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@ engine/funcs/engine_funcs.cpp:4808  (+1 more)
+  ?Load@KeyMap@Input@@QEAAXXZ                                                              engine/funcs/engine_funcs.cpp:3994
+  ?LoadResources@UpdateLoop@Engine@@QEAAXXZ                                                engine/funcs/engine_funcs.cpp:1700
+  ?OnVideoError@MainLoop@Engine@@QEAAXXZ                                                   engine/funcs/engine_funcs.cpp:3930
+  ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ                                                 engine/funcs/engine_funcs.cpp:3932
+  ?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z                                        runtime/src/io/compressedstream.cpp:391
+  ?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z                          code/Game/Game/gameupdateloop_serialize.cpp:161
+  ?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z           runtime/src/object/internal.cpp:624
+  ?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z                             runtime/src/io/filesystem.cpp:158
+  ?Play@UserInterface@UI@@QEAAXH@Z                                                         engine/funcs/engine_funcs.cpp:2228
+  ?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@O runtime/src/graphics/mesh.cpp:258
+  ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Obj code/Game/Action/action_base_movedeps.cpp:97
+  ?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ                                runtime/src/achievement/achievement_manager.cpp:171
+  ?ReadSettings@Persistence@IO@@QEAAXXZ                                                    engine/funcs/engine_funcs.cpp:3905
+  ?RecreateDynamic@Device@Video@@QEAAXXZ                                                   engine/funcs/engine_funcs.cpp:3919
+  ?RefreshList@Modification@IO@@QEAAXXZ                                                    runtime/src/engine/loops.cpp:197
+  ?ReleaseDynamic@Device@Video@@QEAAXXZ                                                    engine/funcs/engine_funcs.cpp:3921
+  ?RemoveAllItems@ComboElement@UI@@QEAAXXZ                                                 engine/funcs/engine_funcs.cpp:1855
+  ?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ                                    runtime/src/graphics/mesh.cpp:255
+  ?SaveAllSettings@UserInterface@UI@@QEAAXXZ                                               code/Game/Game/gameupdateloop_serialize.cpp:157
+  ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z                    code/Game/Game/w2_takescreenshot.cpp:165
+  ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z                                engine/funcs/engine_funcs.cpp:3848
+  ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z                         code/Game/Game/gameupdateloop_serialize.cpp:163
+  ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z                             standalone/address_registry.cpp:1360
+  ?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z                  code/Game/Game/gameupdateloop_serialize.cpp:151
+  ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1 engine/funcs/engine_funcs.cpp:3018
+  ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z                         engine/funcs/engine_funcs.cpp:3552
+  ?SetAchievement@AchievementInstance@Achievement@@QEAAX                                   code/Game/Game/gameupdateloop_load.cpp:71
+  ?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z                             runtime/src/achievement/achievement_manager.cpp:176
+  ?SetActiveRadio@RadioElement@UI@@QEAAXH@Z                                                engine/funcs/engine_funcs.cpp:2489
+  ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z                                                engine/funcs/engine_funcs.cpp:1843
+  ?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z                                            engine/funcs/engine_funcs.cpp:1865
+  ?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z                 engine/funcs/engine_funcs.cpp:3467
+  ?SetElementId@SpinnerElement@UI@@QEAAXH@Z                                                engine/funcs/engine_funcs.cpp:1902
+  ?SetIncrement@SpinnerElement@UI@@QEAAXH@Z                                                engine/funcs/engine_funcs.cpp:1917
+  ?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graph standalone/address_registry.cpp:1356  (+1 more)
+  ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object engine/funcs/engine_funcs.cpp:3020
+  ?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z                                            engine/funcs/engine_funcs.cpp:1862
+  ?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@PEA engine/funcs/engine_funcs.cpp:3022
+  ?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z  standalone/address_registry.cpp:1348  (+2 more)
+  ?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z                                               engine/funcs/engine_funcs.cpp:1888
+  ?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z                                                  engine/funcs/engine_funcs.cpp:1908
+  ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z                              engine/funcs/engine_funcs.cpp:2278
+  ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z                engine/funcs/engine_funcs.cpp:1859
+  ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z                           standalone/address_registry.cpp:1096  (+1 more)
+  ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z                              standalone/address_registry.cpp:1094  (+1 more)
+  ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z                                      runtime/src/ui/widgets_input.cpp:169  (+2 more)
+  ?SetText@Error@System@@SAXPEBD_N@Z                                                       runtime/src/system/allocator.cpp:128
+  ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z                                             engine/funcs/engine_funcs.cpp:2891
+  ?SetValue@NumberElement@UI@@QEAAXH@Z                                                     engine/funcs/engine_funcs.cpp:1895
+  ?SetValue@NumberElement@UI@@QEAAXM@Z                                                     engine/funcs/engine_funcs.cpp:1898
+  ?SetValue@SpinnerElement@UI@@QEAAXH@Z                                                    engine/funcs/engine_funcs.cpp:1905
+  ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z                            code/Game/Player/tool_base_tilerender.cpp:100
+  ?SetupFileSystem@Modification@IO@@QEAAXXZ                                                runtime/src/engine/loops.cpp:202
+  ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z        engine/funcs/engine_funcs.cpp:3972
+  ?Shutdown@Device@Video@@QEAAXXZ                                                          engine/funcs/engine_funcs.cpp:3923
+  ?Shutdown@Engine@1@QEAAXXZ                                                               code/Game/Game/game_main.cpp:167
+  ?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z                                    code/Game/Dialog/autosavedialog.cpp:47
+  ?Startup@Device@Video@@QEAA_NXZ                                                          engine/funcs/engine_funcs.cpp:3917
+  ?Startup@Engine@1@QEAAIPEBDII_N@Z                                                        code/Game/Game/game_main.cpp:165
+  ?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z                                          runtime/src/audio/audio.cpp:878
+  ?StrCompare@String@System@@SAHPEBD0@Z                                                    runtime/src/ui/element.cpp:190
+  ?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ                                        runtime/src/system/value_types.cpp:349
+  ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z                            standalone/address_registry.cpp:1526
+  ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z                                           engine/funcs/engine_funcs.cpp:1552
+  ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z                                           engine/funcs/engine_funcs.cpp:1548
+  ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z             engine/funcs/engine_funcs.cpp:2293  (+1 more)
+  ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z                                       runtime/src/engine/loops.cpp:212  (+1 more)
+  ?UpdateContainers@TabElement@UI@@AEAAXXZ                                                 runtime/src/ui/widgets_layout.cpp:109
+  ?UpdateDelete@SaveLoad@Save@@QEAAXXZ                                                     runtime/src/save/saveload.cpp:699
+  ?UpdateList@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:687
+  ?UpdateLoad@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:690
+  ?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ                                               runtime/src/save/saveload.cpp:693
+  ?UpdateSave@SaveLoad@Save@@QEAAXXZ                                                       runtime/src/save/saveload.cpp:696
+  ?WriteSettings@Persistence@IO@@QEBAXXZ                                                   engine/funcs/engine_funcs.cpp:3903
+
+  BLIND SPOT, measured not assumed: 2 resolves go through a wrapper taking a non-literal argument and are invisible to this scan.
+  Reachability is NOT established here -- 'outside a diff guard' is a structural property, not 'a run executed it'.

@@ -76,6 +76,7 @@
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../io/save_trace.h"                 // Wave 9 lane S
+#include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -428,17 +429,134 @@ uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soun
 }
 
 // ============================================================================
+// int Audio::Scene::FindFree3DEffect(ExternalPtr<SoundEffect>, const Time&,
+//                                    const Vector3&) const
+// retail 0x1800deae0, ordinal 2352 — Wave 9 lane W.
+//
+// WHY IT IS PORTED NOW, AND WHY THE HOLDBACK REASON BELOW IT DID NOT SURVIVE
+// READING THE BODY. PlayEffect3D's comment (immediately below) says this helper
+// "dereferences Audio::SoundEffect internals (a class this lane does not own)"
+// and calls into retail for that one sub-decision. Wave 9 lane V then read the
+// row as REAL DEPENDENCY (MIGRATED): the door moved to RT_EXPORT_ONCE, but with
+// no port and no mint entry `ResolveExport` falls through to
+// `ResolveExportRawImpl` and returns null, so at cutover PlayEffect3D calls
+// through null on the first positional sound the game plays.
+//
+// The stated blocker is smaller than it sounds, which is the shape
+// reference_holdback_blockers_are_stale_check_them_first.md is about. The
+// SoundEffect "internals" this function touches are exactly TWO scalars:
+//
+//     +0x20  float    the 3D cutoff radius   (MOVSS XMM3,[RDX+0x20])
+//     +0x28  int64_t  the reuse window, divided by 20.0f  (MOV RAX,[RDX+0x28])
+//
+// Two field offsets are not a class layout, and nothing else about SoundEffect
+// is read, written, or dispatched through. There is no vtable call, no
+// allocation, and no store of any kind: this is a PURE CONST READER over the
+// Scene's own 4096-entry effect table, which is why it gets a FULL call-both
+// oracle rather than a shadow. Same shape as
+// reference_const_reader_needs_a_caller_not_a_human.md.
+//
+// TRANSCRIBED FROM THE DISASSEMBLY, not the decompiler's C, for three reasons
+// the C got wrong or would have got wrong
+// (reference_ghidra_c_output_vs_disassembly.md):
+//
+//  * Ghidra prints the free-slot test as `pfVar2[9] == 0.0`, a FLOAT compare of
+//    +0x24. The instruction is `CMP dword ptr [RCX+0x24],0` — an INTEGER
+//    compare of `EffectSlot::idTag`. A float compare there would read
+//    0x80000000 (a valid tag) as -0.0f and equal to zero.
+//  * The distance sum's ASSOCIATION is observable in float: retail computes
+//    `(dy*dy + dx*dx) + dz*dz`, in that order (XMM2 holds dy², XMM1 dx², XMM0
+//    dz²; ADDSS XMM2,XMM1 then ADDSS XMM2,XMM0). Any other grouping can differ
+//    in the last bit and flip the radius test at the boundary.
+//  * Both COMISS tests are spelled so the NaN case matches the FLAGS, not C's
+//    default. `JNC` after `COMISS d2,rr` takes the body when CF==1, which is
+//    `d2 < rr` OR UNORDERED — hence `!(d2 >= rr)` rather than `d2 < rr`. The
+//    earlier `JBE` takes the body only when ordered-and-strictly-greater, which
+//    IS plain `>`.
+//
+// The 20.0f divisor is 0x41A00000 lifted from 0x180161700, not a decimal
+// retyped (reference_crt_coefficients_must_be_lifted_not_retyped.md); it is
+// exactly representable, so the two spellings agree here, and the bits are
+// recorded so a future edit cannot quietly change that.
+//
+// ORACLE: FULL. No stores, no allocation, no callee — call ours, call theirs on
+// the same unmodified inputs, compare the returned int. `calls=` therefore
+// counts real work: a zero means no positional sound was played, not agreement.
+// ============================================================================
+int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
+                                       const Time* time, const Vector3* pos) {
+    RT_DIFF_BEGIN("Audio::Scene::FindFree3DEffect");
+    const auto* self = static_cast<const Scene*>(selfPtr);
+
+    // The reuse window, in ticks. Retail seeds it from Scene::time — which is a
+    // tick count — and only replaces it when the effect declares a longer one.
+    int64_t window = self->time;
+    const uint8_t* effect = reinterpret_cast<const uint8_t*>(soundRef);
+    const int64_t declared = *reinterpret_cast<const int64_t*>(effect + 0x28);
+    if (declared != 0) {
+        const float kTwenty = 20.0f;                 // 0x41A00000 @ 0x180161700
+        const float seconds = static_cast<float>(declared) / kTwenty;
+        if (seconds > static_cast<float>(window))    // COMISS/JBE: ordered, strictly greater
+            window = static_cast<int64_t>(static_cast<double>(seconds) /
+                                          RtSystem::TimerSecondsPerTick());
+    }
+
+    const float radius = *reinterpret_cast<const float*>(effect + 0x20);
+    const float radiusSq = radius * radius;
+
+    const EffectSlot* slot = self->effects._data;
+    int32_t firstFree = -1;
+    int32_t ours = -1;
+    bool early = false;
+    for (int32_t i = 0; i < 0x1000; ++i, ++slot) {
+        if (firstFree < 0 && slot->idTag == 0)
+            firstFree = i;
+        if (slot->soundEffectRef == soundRef) {
+            const float dx = pos->x - slot->posX;
+            const float dy = pos->y - slot->posY;
+            const float dz = pos->z - slot->posZ;
+            const float d2 = (dy * dy + dx * dx) + dz * dz;   // retail's association
+            if (!(d2 >= radiusSq)) {                          // COMISS/JNC: CF==1, NaN included
+                int64_t dt = slot->startTime - time->ticks;
+                if (dt < 0) dt = -dt;
+                if (dt < window) { ours = -1; early = true; break; }
+            }
+        }
+    }
+    if (!early)
+        ours = firstFree;
+
+    if (rt_diff_on__) {
+        // Pure: nothing above wrote anything, so theirs sees byte-identical
+        // inputs and needs no snapshot. That is a property of THIS function,
+        // checked instruction by instruction, not assumed —
+        // reference_oracle_must_snapshot_aliased_inputs.md is the cost of
+        // assuming it.
+        using Fn = int32_t (*)(const void*, uint64_t, const Time*, const Vector3*);
+        const int32_t theirs = RT_ORIGINAL_ONCE(Fn,
+            "?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z"
+            )(self, soundRef, time, pos);
+        RT_DIFF_SCALAR(ours, theirs);
+    }
+    return ours;
+}
+
+// ============================================================================
 // uint Audio::Scene::PlayEffect3D(ExternalPtr<SoundEffect> soundRef,
 //     Scene::SoundType type, const Time& time, const Vector3& pos)
-// retail 0x1800deeb0. Delegates slot SELECTION to the DLL's own
-// FindFree3DEffect (retail 0x1800deae0/ord 2352): that helper dereferences
-// Audio::SoundEffect internals (a class this lane does not own — none of
-// SoundBuffer/SoundEffect/Stream is in this wave, WAVE8.md §2) to decide
-// whether an existing slot for the same soundRef is close enough in time to
-// reuse. Calling into retail for that ONE sub-decision, then performing the
-// WRITE into our own EffectSlot table ourselves, is the same "call the DLL
-// for what you don't own" pattern this project uses throughout (e.g.
-// MemAlloc/MemFree above) rather than guessing SoundEffect's layout.
+// retail 0x1800deeb0. Delegates slot SELECTION to FindFree3DEffect (retail
+// 0x1800deae0/ord 2352).
+//
+// WAVE 9 LANE W, 2026-09-08 — this comment used to end here saying that helper
+// "dereferences Audio::SoundEffect internals (a class this lane does not own
+// — none of SoundBuffer/SoundEffect/Stream is in this wave, WAVE8.md §2)", and
+// that calling into retail for that ONE sub-decision was the same "call the DLL
+// for what you don't own" pattern used elsewhere. That was true while the DLL
+// existed and is FALSE at cutover, where the call is through null. It is now
+// PORTED, immediately above, and the blocker did not survive reading the body:
+// the SoundEffect "internals" are two scalars at +0x20 and +0x28, and the
+// function makes no store of any kind. RT_EXPORT_ONCE below therefore now
+// reaches our own body rather than falling through to a null.
 // SHADOW oracle (mutates the slot; verified via read-only FindEffect3D after).
 // ============================================================================
 uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t soundType,
@@ -1093,6 +1211,12 @@ int RtAudioSceneRegister() {
     RegisterRuntimeExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z", (void*)&RtAudio_Scene_GetEmitterCount); ++n;
     RegisterRuntimeExport("?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z", (void*)&RtAudio_Scene_IsEffectPlaying); ++n;
     RegisterRuntimeExport("?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z", (void*)&RtAudio_Scene_FindEffect3D); ++n;
+    // Wave 9 lane W. Registered under the name AND the address: PlayEffect3D
+    // reaches it by name through RT_EXPORT_ONCE, and registering the address
+    // too keeps any ResolveAddr caller (engine_funcs.cpp's fallback shape) off
+    // the DLL as well -- port_bypass_audit.py's ADDRESS door.
+    RegisterRuntimeExport("?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z", (void*)&RtAudio_Scene_FindFree3DEffect); ++n;
+    RegisterRuntimeAddr(0x1800deae0, (void*)&RtAudio_Scene_FindFree3DEffect);
     // PlayEffect: register under BOTH the real (QEAA) mangled name AND the
     // retail address, per WAVE8.md §4 — engine_funcs.cpp's own address
     // fallback (0x1800def60) must land on OUR port too, not just the name.
