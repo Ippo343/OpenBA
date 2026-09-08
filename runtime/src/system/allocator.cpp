@@ -764,6 +764,32 @@ uint64_t g_shadowFreeUnmapped = 0; // Free arrived for a pointer we never mapped
 // asks for them; they exist to prove the oracle can fail.
 bool g_shadowNegCtlMinBin = false;
 bool g_shadowNegCtlSize   = false;
+bool g_shadowNegCtlGrow   = false;
+
+// ---------------------------------------------------------------------------
+// ARENA-GROWTH COVERAGE (Wave 9 lane E3)
+// ---------------------------------------------------------------------------
+// WAVE9_LANE_E2.md §5.1: 12,750,873 shadowed operations ran with `ranges=1` on
+// every cell, so `AddNewMemoryRange` called from inside `Allocate`, the
+// range-table realloc-and-copy, the multi-range scans and every `rangeIndex!=0`
+// comparison were UNEXERCISED. `divergences=0` over a path that never ran is
+// the `calls=0`-reads-as-clean shape.
+//
+// These three count what actually happened rather than what was attempted, and
+// are derived from state DELTAS observed in the shadow layer — nothing is added
+// to the ported bodies, which stay byte-faithful:
+//
+//   grow       replica rangeCount increased during an Allocate  (the growth
+//              path ran; the arming call is excluded by construction, it
+//              happens before the first comparison)
+//   tableCopy  replica rangeCapacity increased from a NON-ZERO capacity, i.e.
+//              ExpandMemoryRangeTable's `oldCap != 0` branch: the memcpy of the
+//              old table AND the release of it. Capacity goes 0->2->4->6, so
+//              this needs a THIRD range, not a second.
+//   crossRange comparisons whose block landed in a range with index > 0.
+uint64_t g_shadowGrow       = 0;
+uint64_t g_shadowTableCopy  = 0;
+uint64_t g_shadowCrossRange = 0;
 
 // LINEAR PROBING WITH BACKWARD-SHIFT DELETION (Knuth 6.4 algorithm R).
 //
@@ -875,9 +901,26 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
     //            GEOMETRY half (rangeIndex, offsetWithinRange), which is the
     //            term that actually proves the allocator's placement logic, and
     //            which no counter perturbation can reach.
+    //   grow   — (lane E3) enlarge every range AFTER the first by one page.
+    //            Fires the GROWTH half and NOTHING ELSE: range 0 is created
+    //            below at retail's exact size before the perturbation is
+    //            applied, so the replica is byte-identical until the first
+    //            Allocate-driven AddNewMemoryRange — at which point
+    //            `totalReserved` differs by 0x1000 on that very call and can
+    //            never converge back (AddNewMemoryRange only ever adds to it),
+    //            and `rangeIndex`/`offsetWithinRange` follow once the longer
+    //            range 1 fills one allocation later than theirs.
+    //
+    //            It is deliberately SILENT when the growth path does not run.
+    //            A green `=grow` run therefore means one of two things and the
+    //            `grow=` counter is what tells them apart: grow=0 means the
+    //            cell never reached the path (the run proves nothing), grow>0
+    //            with divergences=0 means the ORACLE IS BLIND to growth and
+    //            every green growth run must be thrown away.
     if (const char* nc = getenv("BANISHED_RT_ALLOC_SHADOW_NEGCTL")) {
         if (nc[0] == 'm') { g_shadowNegCtlMinBin = true; g_shadow.minBin = 0xbe; }
         else if (nc[0] == 's') { g_shadowNegCtlSize = true; }
+        else if (nc[0] == 'g') { g_shadowNegCtlGrow = true; }
         fprintf(stderr, "[RtAllocShadow] NEGATIVE CONTROL ACTIVE (%s) — this run is "
                         "REQUIRED to go red; a clean result here invalidates every "
                         "other run.\n", nc);
@@ -889,6 +932,10 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
     g_shadow.maxTotalSize = maxTotalMB << 20;
     g_shadow.pageSize = g_plat.pageSize();
     if (!rtalloc::AddNewMemoryRange(&g_shadow, 0)) return false;
+
+    // AFTER range 0 exists, so range 0 matches retail byte for byte and only
+    // the growth path can ever notice. See the `grow` note above.
+    if (g_shadowNegCtlGrow) g_shadow.minRangeSize += 0x1000;
 
     g_shadowArmed = true;
     fprintf(stderr, "[RtAllocShadow] armed (min=%lluMB max=%lluMB)\n",
@@ -906,28 +953,48 @@ extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
 
     uint64_t reqSize = size;
     if (g_shadowNegCtlSize && (g_shadowCalls % 100000) == 99999) reqSize = size + 8;
+
+    // Growth coverage is measured as a state DELTA across the replica's own
+    // Allocate, so nothing is added to the ported bodies.
+    const int32_t preRanges = g_shadow.rangeCount;
+    const int32_t preCap    = g_shadow.rangeCapacity;
+
     void* ours = rtalloc::Allocate(&g_shadow, reqSize, align);
+
+    if (g_shadow.rangeCount   > preRanges) g_shadowGrow++;
+    if (g_shadow.rangeCapacity > preCap && preCap != 0) g_shadowTableCopy++;
+
     ShadowMapInsert(theirs, ours);
     g_shadowCalls++;
 
     int ti, oi; uint64_t to, oo;
     RangeCoords(theirSelf, theirs, &ti, &to);
     RangeCoords(&g_shadow, ours,   &oi, &oo);
+    if (oi > 0) g_shadowCrossRange++;
 
+    // rangeCount and totalReserved joined the tuple in lane E3. Without them a
+    // growth that happened at a DIFFERENT allocation, or reserved a DIFFERENT
+    // number of bytes, is only caught indirectly and only once a later
+    // allocation happens to land in the wrong range. They are the two fields
+    // AddNewMemoryRange writes that nothing else in the tuple observes.
     const bool equal = (ti == oi) && (to == oo) &&
                        (g_shadow.allocCount    == theirSelf->allocCount) &&
                        (g_shadow.freeTagCount  == theirSelf->freeTagCount) &&
                        (g_shadow.allocatedBytes== theirSelf->allocatedBytes) &&
-                       (g_shadow.minBin        == theirSelf->minBin);
+                       (g_shadow.minBin        == theirSelf->minBin) &&
+                       (g_shadow.rangeCount    == theirSelf->rangeCount) &&
+                       (g_shadow.totalReserved == theirSelf->totalReserved);
     if (!equal) g_shadowDivergences++;
 
-    char a[128], b[128];
-    std::snprintf(a, sizeof(a), "r%d+0x%llx live=%d free=%d bytes=%lld bin=%d",
+    char a[160], b[160];
+    std::snprintf(a, sizeof(a), "r%d+0x%llx live=%d free=%d bytes=%lld bin=%d nr=%d res=%llu",
                   oi, (unsigned long long)oo, g_shadow.allocCount, g_shadow.freeTagCount,
-                  (long long)g_shadow.allocatedBytes, g_shadow.minBin);
-    std::snprintf(b, sizeof(b), "r%d+0x%llx live=%d free=%d bytes=%lld bin=%d",
+                  (long long)g_shadow.allocatedBytes, g_shadow.minBin,
+                  g_shadow.rangeCount, (unsigned long long)g_shadow.totalReserved);
+    std::snprintf(b, sizeof(b), "r%d+0x%llx live=%d free=%d bytes=%lld bin=%d nr=%d res=%llu",
                   ti, (unsigned long long)to, theirSelf->allocCount, theirSelf->freeTagCount,
-                  (long long)theirSelf->allocatedBytes, theirSelf->minBin);
+                  (long long)theirSelf->allocatedBytes, theirSelf->minBin,
+                  theirSelf->rangeCount, (unsigned long long)theirSelf->totalReserved);
     RT_DIFF_SHADOW(equal, a, b);
 }
 
@@ -946,16 +1013,20 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
     const bool equal = (g_shadow.allocCount     == theirSelf->allocCount) &&
                        (g_shadow.freeTagCount   == theirSelf->freeTagCount) &&
                        (g_shadow.allocatedBytes == theirSelf->allocatedBytes) &&
-                       (g_shadow.minBin         == theirSelf->minBin);
+                       (g_shadow.minBin         == theirSelf->minBin) &&
+                       (g_shadow.rangeCount     == theirSelf->rangeCount) &&
+                       (g_shadow.totalReserved  == theirSelf->totalReserved);
     if (!equal) g_shadowDivergences++;
 
-    char a[128], b[128];
-    std::snprintf(a, sizeof(a), "live=%d free=%d bytes=%lld bin=%d",
+    char a[160], b[160];
+    std::snprintf(a, sizeof(a), "live=%d free=%d bytes=%lld bin=%d nr=%d res=%llu",
                   g_shadow.allocCount, g_shadow.freeTagCount,
-                  (long long)g_shadow.allocatedBytes, g_shadow.minBin);
-    std::snprintf(b, sizeof(b), "live=%d free=%d bytes=%lld bin=%d",
+                  (long long)g_shadow.allocatedBytes, g_shadow.minBin,
+                  g_shadow.rangeCount, (unsigned long long)g_shadow.totalReserved);
+    std::snprintf(b, sizeof(b), "live=%d free=%d bytes=%lld bin=%d nr=%d res=%llu",
                   theirSelf->allocCount, theirSelf->freeTagCount,
-                  (long long)theirSelf->allocatedBytes, theirSelf->minBin);
+                  (long long)theirSelf->allocatedBytes, theirSelf->minBin,
+                  theirSelf->rangeCount, (unsigned long long)theirSelf->totalReserved);
     RT_DIFF_SHADOW(equal, a, b);
 }
 
@@ -975,6 +1046,21 @@ extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences) {
 extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved) {
     if (ranges)   *ranges   = g_shadow.rangeCount;
     if (reserved) *reserved = g_shadow.totalReserved;
+}
+
+// EFFECTIVENESS CONTROL for the arena-growth cell (lane E3). These count what
+// the growth path actually DID, not how many requests were made at it:
+//   grow > 0        the second range was created from inside Allocate
+//   tableCopy > 0   ExpandMemoryRangeTable's memcpy+release branch ran (needs a
+//                   THIRD range: capacity goes 0->2->4)
+//   crossRange > 0  allocations were compared in a range with index != 0
+// A growth cell whose `grow` is 0 measured nothing about growth however many
+// millions of operations it compared.
+extern "C" void RtAllocShadowGrowth(uint64_t* grow, uint64_t* tableCopy,
+                                    uint64_t* crossRange) {
+    if (grow)       *grow       = g_shadowGrow;
+    if (tableCopy)  *tableCopy  = g_shadowTableCopy;
+    if (crossRange) *crossRange = g_shadowCrossRange;
 }
 
 extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped) {
