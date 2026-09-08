@@ -301,6 +301,11 @@ namespace RtIO {
 // Wave 9 lane PKG2's accessor sweep, defined in package_file.cpp. Called from
 // LoadPackages' tail inside the diff guard — see the comment at the call site.
 void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
+}  // namespace RtIO
+// Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
+// called from the same place — see the call site at the tail of LoadPackages.
+namespace RtSystem { void RtSystem_CompressionProbe(); }
+namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
@@ -852,6 +857,15 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // and a normal run must not pay for it. Declared here rather than in a
         // header because it is one symbol used at one site.
         RtIo_PackageFile_SweepProbe(self);
+
+        // Wave 9 lane PKG2 iteration 2. Same reasoning, one level down: the
+        // Compression probe builds a System::Compression through the DLL's ctor,
+        // which ALLOCATES. It cannot run from RtSystemPortInit, where the
+        // allocator singleton at 0x1801fc718 is still null (a first draft did,
+        // and crashed writing to 0x648 with nothing in the dump naming it).
+        // Here the heap is provably live — the body above allocated a 0xF0
+        // PackageFile per package to get this far.
+        RtSystem::RtSystem_CompressionProbe();
     }
 }
 

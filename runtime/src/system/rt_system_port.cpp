@@ -56,6 +56,14 @@ extern int RtSystemErrorRegister();          // error.cpp (lane ENG)
 // run rather than bisecting five files.
 extern int RtSystemWideStringRegister();       // widestring.cpp     (lane FS)
 extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
+// Wave 9 lane PKG2 iteration 2: System::Compression::Decompress — the BOTTOM of
+// the ?ReadPackfile@ stack (docs/runtime_port/WAVE9_READPACKFILE_PLAN.md). It
+// lives in System rather than IO because that is its namespace, but it is
+// PackageFile work: it is the function that decodes every byte of every package
+// the game loads. Its own switch, because a defect here is silent wrong data
+// rather than a crash and the integrator must be able to remove exactly it.
+extern int RtSystemCompressionRegister();      // compression.cpp    (lane PKG2)
+namespace RtSystem { void RtSystem_CompressionProbe(); }
 
 void RtSystemPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SYSTEM")) {
@@ -74,6 +82,21 @@ void RtSystemPortInit() {
         n += RtSystemWideStringRegister();
         n += RtSystemSetupDirHelpersRegister();
     }
+    if (RtWaveEnabled("BANISHED_RT_COMPRESSION")) n += RtSystemCompressionRegister();
+    // NOTE: RtSystem_CompressionProbe() is NOT called here, and the first draft
+    // of this lane calling it here is a defect the run found rather than
+    // reasoning did. **RtSystemPortInit runs before System::MemoryAllocator has
+    // published its singleton.** The probe builds a System::Compression through
+    // the DLL's ctor, that ctor takes the allocator lock at
+    // `[0x1801fc718] + 0x640`, and with the singleton still null that is a WRITE
+    // to 0x648 — an ACCESS_VIOLATION whose top frame is inside ntdll and whose
+    // only clue is `[REDZONE-DUMP] no allocator singleton`. Nothing in the crash
+    // names the probe. The probe now runs from LoadPackages' tail
+    // (runtime/src/io/filesystem_packages.cpp), which is a point the heap is
+    // provably live because the surrounding body allocates.
+    //
+    // The RULE, for the next lane that adds one: a probe that ALLOCATES cannot
+    // run from a *PortInit. Registration is fine there; execution is not.
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)
