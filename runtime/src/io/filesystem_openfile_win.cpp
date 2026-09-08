@@ -147,11 +147,23 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
+// Lane String's port, forward-declared rather than pulled in from a header,
+// because that lane publishes none and this lane does not edit another lane's
+// files to add one. Signature copied verbatim from its definition
+// (runtime/src/system/filename.cpp:177) and from the identical declaration in
+// filesystem_find_win.cpp, which is the file the linker will check it against.
+// Called DIRECTLY rather than through a door: it is already ported, so a door
+// here would only be a way to reach the shipped copy by accident.
+namespace RtSystem {
+void RtSystem_Filename_AdjustDelimiters(Filename* self);
+}  // namespace RtSystem
+
 namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
+using RtSystem::RtSystem_Filename_AdjustDelimiters;
 
 namespace {
 
@@ -181,13 +193,10 @@ int PathStrICmp(const char* a, const char* b) {
     return fn(a, b);
 }
 
-// FileInfo::operator= (0x18000c200), unexported. PlatformOpenFile uses it to
-// reset the caller's FileInfo to an empty one before opening.
-FileInfo* FileInfoAssign(FileInfo* dst, const FileInfo* src) {
-    static FileInfoAssignFn fn =
-        reinterpret_cast<FileInfoAssignFn>(ResolveAddr(Module::Runtime, 0x18000c200));
-    return fn(dst, src);
-}
+// FileInfo::operator= is now PORTED (rung 4, below) -- it used to be reached
+// here by ResolveAddr(0x18000c200), which was rung 3's one new cutover blocker.
+// The typedef stays because the probe still needs a raw door to the shipped
+// body to diff against.
 
 inline int32_t StrLenOf(const char* data) {
     // retail: `if (p) len = [p-8] else len = 0` — the String block's length word.
@@ -231,6 +240,76 @@ extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) 
 }
 
 // ============================================================================
+// FileInfo::operator=(const FileInfo&)                       retail 0x18000c200
+// ============================================================================
+// Rung 3 named this as its ONE new cutover blocker: unexported, unported, and
+// called from inside our own PlatformOpenFile, so at cutover ResolveAddr would
+// hand back null and our port would die on a null call. 61 instructions.
+//
+// It also supplies a FOURTH independent proof of the FileInfo layout rung 3
+// corrected: the field moves are +0x00, +0x04, +0x08, +0x0C, +0x10 and the
+// QWORD at +0x18 -- and +0x14 is skipped, exactly as in the copy ctor. A
+// `uint64_t size` at +0x08 cannot produce two separate DWORD moves at +0x08 and
+// +0x0C.
+//
+// The two Filename members are refcounted Strings assigned with the release/
+// adopt idiom, and there are three details a paraphrase gets wrong:
+//
+//   1. SELF-ASSIGNMENT OF THE BUFFER SHORT-CIRCUITS. `CMP RAX,[RDX+0x20]; JZ`
+//      jumps past BOTH the release and the retain -- not just the release. Doing
+//      release-then-retain on a shared buffer would drop the count to zero and
+//      free a string both sides still point at.
+//   2. THE ADOPT IS UNCONDITIONAL, THE INCREMENT IS NOT. Retail stores theirs
+//      into our slot whatever it is, and only then tests it for the `INC`. This
+//      is why RtString_AdoptInline is NOT used here: it skips the store when the
+//      source is null, which would leave our slot holding the DANGLING `data - 8`
+//      that the freeing branch of the release deliberately leaves behind.
+//   3. AdjustDelimiters RUNS ON BOTH PATHS. `LEA RCX,[RSI+0x20]; CALL` sits at
+//      the merge point that the self-assignment JZ targets, so it runs even when
+//      nothing was copied.
+extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
+    RT_DIFF_BEGIN("IO::FileSystem::FileInfo::operator=");
+
+    dst->handle     = src->handle;       // 18000c217
+    dst->_unk04     = src->_unk04;       // 18000c21c
+    dst->size       = src->size;         // 18000c222
+    dst->cursor     = src->cursor;       // 18000c228
+    dst->baseOffset = src->baseOffset;   // 18000c22e
+    dst->winHandle  = src->winHandle;    // 18000c235  (+0x14 is NOT copied)
+
+    // --- _name0 --------------------------------------------------- 18000c239
+    if (dst->_name0.data != src->_name0.data) {          // 18000c23d/241
+        RtString_ReleaseInline(&dst->_name0);            // 18000c243..c267
+        dst->_name0.data = src->_name0.data;             // 18000c269/26d
+        if (dst->_name0.data)                            // 18000c271
+            ++RtSystem::StringRefCount(dst->_name0.data);// 18000c276
+    }
+    RtSystem_Filename_AdjustDelimiters(
+        reinterpret_cast<Filename*>(&dst->_name0));      // 18000c279/27d
+
+    // --- _name1 --------------------------------------------------- 18000c282
+    if (dst->_name1.data != src->_name1.data) {          // 18000c286/28a
+        RtString_ReleaseInline(&dst->_name1);            // 18000c28c..c2b0
+        dst->_name1.data = src->_name1.data;             // 18000c2b2/2b6
+        if (dst->_name1.data)                            // 18000c2ba
+            ++RtSystem::StringRefCount(dst->_name1.data);// 18000c2bf
+    }
+    RtSystem_Filename_AdjustDelimiters(
+        reinterpret_cast<Filename*>(&dst->_name1));      // 18000c2c2/2c6
+
+    // No replay oracle, for the same reason as the copy ctor: the adopt half
+    // AddRefs, so running the shipped body a second time on the same pair would
+    // leave two extra references on every call. The lockstep probe compares
+    // whole FileInfos produced through this path, and rung 4's probe below adds
+    // a dedicated comparison with the buffer-identity and null cases forced.
+    RT_DIFF_SHADOW(dst->handle == src->handle && dst->cursor == src->cursor,
+                   "assigned 5 dwords + qword + 2 refcounted Filenames",
+                   "SHADOW ONLY (AddRefs; verified by the rung-4 assign probe)");
+    RT_DIFF_WORK(true);
+    return dst;                          // 18000c2d0
+}
+
+// ============================================================================
 // ?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ  retail 0x180025400
 // ============================================================================
 // `return FileInfo(this->_fileInfo)`, where `_fileInfo` is the PackageFile's own
@@ -271,7 +350,7 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
     blank._unk04     = 0;                // retail leaves this whatever the stack
     blank._pad14     = 0;                // held; see §4 — zeroed here only so the
                                          // value we copy out is defined.
-    FileInfoAssign(fi, &blank);          // 1800add3f
+    RtIo_FileInfo_Assign(fi, &blank);    // 1800add3f
     RtString_ReleaseInline(&blank._name1);  // 1800add45 — reverse order
     RtString_ReleaseInline(&blank._name0);  // 1800add75
 
@@ -502,15 +581,15 @@ int RtIoFileSystemOpenFileRegister() {
                           (void*)&RtIo_PackageFile_GetFileInfo); ++n;
     RegisterRuntimeAddr(0x180025400, (void*)&RtIo_PackageFile_GetFileInfo);
 
-    // The FileInfo copy ctor is UNEXPORTED, so it gets the address door only —
-    // the same shape as lane Q's Collection helpers.
+    // The FileInfo copy ctor and operator= are UNEXPORTED, so they get the
+    // address door only — the same shape as lane Q's Collection helpers.
     RegisterRuntimeAddr(0x18000c110, (void*)&RtIo_FileInfo_CopyCtor);
+    RegisterRuntimeAddr(0x18000c200, (void*)&RtIo_FileInfo_Assign);   // rung 4
 
     printf("[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): %d exports registered\n", n);
 
     // DELIBERATELY ABSENT — §5.
     //   ?CloseFile@FileSystem@IO@@   0x1800accc0  ord 1726   (the teardown half)
-    //   FUN_18000c200  FileInfo::operator=   (called by address, named above)
     //   FUN_18007eefc  the CRT _stricmp      (called by address; this rung ADDS
     //                  a second live caller of it — see the census note)
     return n;

@@ -303,6 +303,8 @@ namespace RtIO {
 void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
 // Lane PKG2 rung 3's lockstep probe (filesystem_openfile_probe.cpp).
 void RtIo_FileSystemOpenFileProbe(const FileSystem* fs);
+// Rung 4's operator= oracle (same file).
+void RtIo_FileInfoAssignProbe();
 }  // namespace RtIO
 // Lane PKG2 rung 2's lockstep probe (compressed_stream_probe.cpp). It lives in
 // `RtIo`, not `RtIO`: the tree carries BOTH spellings — runtime/types/io/Stream.h
@@ -887,6 +889,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // the loops above just built -- this is the earliest point in the
         // process where an OpenFile of a packed name can succeed at all.
         RtIo_FileSystemOpenFileProbe(self);
+        RtIo_FileInfoAssignProbe();
     }
 }
 

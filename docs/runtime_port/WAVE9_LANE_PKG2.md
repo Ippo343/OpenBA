@@ -961,3 +961,149 @@ likelihood:
    layers rather than an excavation.
 3. **`?CloseFile@FileSystem@IO@@`** — whoever opens must close; the first
    teardown after a successful open will find it.
+
+---
+
+# Rung 4a — `FileInfo::operator=`, and what `ReadPackfile` actually needs
+
+## 32. `FileInfo::operator=` is ported — rung 3's one blocker is closed
+
+`0x18000c200`, 61 instructions, unexported, so it gets the address door only
+(`RegisterRuntimeAddr(0x18000c200, …)`). `addr_door_audit.py` moved **44 → 43
+UNREGISTERED**, which is the blocker closing and nothing else moving.
+
+It also supplies a **fourth independent proof** of rung 3's `FileInfo`
+correction: the moves are `+0x00`, `+0x04`, `+0x08`, `+0x0C`, `+0x10` and the
+QWORD at `+0x18`, and `+0x14` is skipped — the same shape as the copy ctor. Two
+separate DWORD moves at `+0x08` and `+0x0C` cannot come from a `uint64_t` at
+`+0x08`.
+
+### Three details a paraphrase gets wrong
+
+1. **The self-assignment short-circuit skips the retain as well as the release.**
+   `CMP RAX,[RDX+0x20]; JZ` jumps past both. Release-then-retain on a shared
+   buffer drops the count to zero and frees a string both sides still hold.
+2. **The adopt is unconditional; only the increment is guarded.** Retail stores
+   the source pointer whatever it is, and only then tests it for the `INC`.
+   This is why `RtString_AdoptInline` is **not** reused here — it skips the
+   store when the source is null, which would leave the destination holding the
+   dangling `data - 8` that the freeing branch of the release deliberately
+   leaves behind.
+3. **`AdjustDelimiters` runs on both paths.** `LEA RCX,[RSI+0x20]; CALL` sits at
+   the merge point the short-circuit jumps to, so it runs even when nothing was
+   copied.
+
+`AdjustDelimiters` is called **directly** (lane String's port), not through a
+door: it is already ported, so a door here would only be a way to reach the
+shipped copy by accident.
+
+## 33. The oracle, and why rung 3's corpus was not enough
+
+The only `operator=` call site rung 3 exercises is `PlatformOpenFile`'s "reset
+to blank", where the destination's `Filename`s are **always already null**. That
+site alone leaves the release path, the short-circuit and the AddRef entirely
+unentered — while reporting green. Precisely the effectiveness failure this lane
+hit twice in rung 2. So rung 4 **drives** the branches instead of waiting for
+them:
+
+| case | setup | branch proved |
+|---|---|---|
+| 1 | distinct buffers, dst refcount 2 | release takes the **sharing** branch |
+| 2 | distinct buffers, dst refcount 1 | release takes the **freeing** branch |
+| 3 | **same buffer** both sides | the short-circuit (a naive port frees a live string here) |
+| 4 | **null source** | the store is unconditional (`AdoptInline` would skip it) |
+
+Compared as **state, not just result**: all six scalars including `cursor`,
+`+0x14`, buffer **identity** (adopted, never copied), and — the half pointer
+equality cannot see — the **refcount** of every buffer involved. A missing
+AddRef leaves the pointers identical and only the refcount wrong.
+
+Ours and theirs get two **independent but identical** pairs, because `operator=`
+destroys its destination (`reference_oracle_must_snapshot_aliased_inputs`); one
+shared destination would have ours overwrite what theirs was about to read.
+
+The probe **skips and says so** when `0x18000c200` resolves null, rather than
+reporting a pass over zero comparisons — that is the state it will be in after
+cutover.
+
+### Result (run `as1`, identity gate OK)
+
+```
+[Assign] operator= probe: 4 cases (freeing=1 sharing=1 shortCircuit=1 nullSrc=1)
+         -- identical on all 6 scalars, +0x14, buffer identity and refcount
+[OpenFile] lockstep probe: 8 opens (packed=5 loose=2 miss=1), 24 reads, 71471 bytes -- identical
+[RtDiff] ==== 315 sites, 1275525 calls, 1 divergences in 1 sites ====
+```
+
+All four branches non-zero. The one divergence is the pre-existing
+`Object::Factory::Startup chain=416`. Audits: `port_bypass_audit` 0 on both
+doors; `export_name_audit` 1 phantom, the pre-existing `?_singleton@`.
+
+## 34. `ReadPackfile` — it IS a transcription, and it is still too big for one rung
+
+I said in the rung-3 report that `ReadPackfile` would be a transcription onto
+verified layers. **That holds, and I can now show it rather than assert it.**
+Its complete call set, mapped against the tree:
+
+| callee | what | status |
+|---|---|---|
+| `0x1800a9aa0` | `CompressedStream::SetWindow` | **PORTED — rung 2** |
+| `0x1800aa780` | `CompressedStream::Read` | **PORTED — rung 2** |
+| `0x1800ac880` | `FileSystem::OpenFile` | **PORTED — rung 3** |
+| `0x1800ace00` | `FileSystem::ReadFile` | **PORTED — rung 3** |
+| `0x18000c200` | `FileInfo::operator=` | **PORTED — rung 4a** |
+| `0x1800c7a50` / `0x1800c7ad0` | `MemAlloc` / `MemFree` | PORTED — lane E |
+| `0x1800c8220` | `String::SetLength` | PORTED — lane String |
+| `0x1800c6970` | `Filename::AdjustDelimiters` | PORTED — lane String |
+| `0x1800c9fc0` / `0x1800c9b60` | UTF decode / encode | known, `string.cpp` |
+| `0x18008a290` | CRT `memcpy` | `std::memcpy` is byte-faithful |
+| `0x180095060` | `__chkstk` (the `_alloca(0x8020)`) | known — rung 2 |
+| `0x1800aa3d0` / `0x1800aa560` | `CompressedStream` ctor / `Open` | pinned in `Stream.h`, **unported** |
+| `0x1800ae710` | `MemoryStream` ctor | pinned in `Stream.h`, **unported** |
+| `0x1800a9560` | `~CompressedStream` (40 insns) | **unported** |
+| `0x1800a9ee0` | stream window flush/release (88 insns) | **unported** |
+| `0x180029510` / `0x180029630` | `Array<T>::Resize` variants (67 / 65) | **unported** |
+| `0x1800298f0` | `PackageFile` entry insert (114) | **unported** |
+| `[RAX+0x38]` @ `0x1800b6042` | a **virtual** call, vtable slot 7 | needs the slot pinned |
+| `[0x18014b0f0]` @ `0x1800b47e3` | an import | needs identifying |
+
+**The repeated `SetWindow` + `memcpy` pair appears ~25 times** — that is exactly
+the inlined `CompressedStream::Read` I predicted in the decomposition, and both
+halves of it are already ported. So there is no excavation left in the *hot*
+part of the function.
+
+**But the arithmetic is against doing it in one rung**: 1,864 instructions of
+`ReadPackfile` itself, plus ~370 instructions of new helper ports (the two
+`Array::Resize`, the entry insert, `~CompressedStream`, `0x1800a9ee0`), plus a
+vtable slot and an import still to pin. Taking the coordinator at their word
+that *"the decomposition has earned the right to grow another rung"*, I am
+splitting rather than pushing through:
+
+* **Rung 4b — the substrate.** The five unported helpers above, plus pinning
+  slot 7 and the import. Each is small and independently oracle-able; the two
+  `Array::Resize` bodies are almost certainly lane Q's `Collection::Array`
+  already and may cost nothing but a registration.
+* **Rung 4c — `ReadPackfile` itself**, in the three pieces the plan already
+  named: the file-header read, the metadata block (~25 inlined `Read`s plus the
+  `SetLength` traffic), and the entry directory.
+
+Landing 4a now is what matters for the ladder, because it is the piece that was
+blocking the layer already landed: without it, our own `OpenFile` calls a null
+at cutover.
+
+## 35. Next predicted fault site
+
+Rung 4a does **not** move the ladder on its own, and I do not want that
+overstated — `LoadPackages` will still stop at the `ReadPackfile` call. What 4a
+changes is that the layer beneath it is now null-free: rungs 2, 3 and 4a
+together mean every callee `ReadPackfile` makes on its hot path resolves to one
+of our own bodies.
+
+Predicted order from here:
+
+1. **`ReadPackfile` (`0x1800b46b0`)** — unchanged, and now the *only* thing
+   between `LoadPackages` and a mounted package.
+2. **`0x1800aa560` `CompressedStream::Open`** — the first call `ReadPackfile`
+   makes that is still unported, so rung 4b's first target.
+3. **`?CloseFile@FileSystem@IO@@`** — still deliberately out of scope, still the
+   first teardown after a successful open.
