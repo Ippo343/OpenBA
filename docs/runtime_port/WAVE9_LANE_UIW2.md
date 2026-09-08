@@ -25,6 +25,15 @@ checked **before** any body was written
 
 ## 1. The closure set-diff — the number that decides whether this lane helped
 
+> **READ SECTION 8d FIRST FOR THE AUTHORITATIVE NUMBERS.** The table in this
+> section was produced by the PRE-FIX `addr_door_audit.py` against base
+> `fd30180`, before the integrator fixed that tool to stop matching
+> `ResolveAddr` text inside COMMENTS (its denominators moved 295->270 sites
+> and 198->192 distinct on an unchanged tree). It is kept as recorded rather
+> than retconned, because the phantom-name finding in 1a is a fact about how
+> this lane was measured. Section 8d re-measures parts 1 AND 2 with the fixed
+> tools against the current integration base `f5dbeb8`.
+
 Measured on two trees identical except for this lane's 564 inserted lines: a
 copy of `fd30180`'s `runtime/ code/ engine/ standalone/ dx11/ tools/` with and
 without the change. **Both halves were re-measured on the clean `fd30180`
@@ -422,14 +431,29 @@ will emit the wrong thing.
    proves `TextParamSlot`/`TextParamCount` address what
    `runtime/types/ui/TextElement.h` says they address. It cannot detect a wrong
    value in that header. If `kParamArrayData`/`kParamCount` are wrong, the test
-   passes and the port is wrong — and **there is an open contradiction on exactly
-   these offsets**: `TextElement.h` and `NumberElement.h` both carry lane M's
-   note that probing `NumberElement::SetValueInt` showed `+0xD0` holding a
-   refcounted `String` data pointer rather than an int32 size. Both readings
-   cannot be right for the same offset. This lane's three subjects are
-   `TextElement`s (the type-id cast proves it at runtime), so the call-site
-   derivation is the applicable one — but **the contradiction is unresolved and
-   this lane did not resolve it.**
+   passes and the port is wrong.
+
+   > **CORRECTION, made when this lane re-based onto `f5dbeb8`.** An earlier
+   > draft of this limit said the `+0xD0` disagreement between `TextElement.h`
+   > (int32 `size`) and `NumberElement.h` (an owning refcounted `String` data
+   > pointer) was **an open contradiction this lane did not resolve**. That was
+   > written against `fd30180` and it is **stale**: `NumberElement.h` on the
+   > integration branch already carries lane N's resolution, from the
+   > disassembly — **`UI::NumberElement` is not a `UI::TextElement`.** Its ctor
+   > (0x180118C70) calls the `UI::Element` base ctor at 0x180115E50, not
+   > TextElement's, and it has its own private `CacheText` at 0x1801189F0
+   > distinct from `TextElement::CacheText` at 0x18011EC10. Two different
+   > classes, one offset, both headers right.
+   >
+   > Part 2 of this lane (§8) is an **independent confirmation** of that
+   > verdict, arrived at before the header was read: `CacheText@NumberElement`
+   > decrements `[p-4]`, frees `p-8` and stores a new pointer at
+   > `NumberElement+0xD0` — behaviour that is only coherent if that qword is an
+   > owning `String`. This lane's three §2b/§2c subjects are `TextElement`s (the
+   > type-id cast proves it at runtime), so `TextElement.h`'s call-site-derived
+   > table is the applicable one for them. **The limit that remains is the
+   > narrow one:** the self-test cannot detect a wrong value in the header it
+   > checks against.
 
 3. **The `ProgressElement` null-deref is untested against a real failing case.**
    It is proven from the listing that retail dereferences a possibly-null child;
@@ -463,3 +487,203 @@ will emit the wrong thing.
    registrations invisible to both halves. A clean set-diff means "no change of
    the shape these tools can see" — the same sentence
    `port_bypass_audit.py`'s gate row carries.
+
+---
+
+## 8. PART 2 — two unregistered ADDRESS doors, closed by porting
+
+Added after the integrator's triage of the 16 remaining unregistered address
+doors named three in this cluster. **Two of the three were in this lane's own
+file**, at what were then lines 220 and 232 of `runtime/src/ui/widgets_input.cpp`.
+
+| Address | Symbol | Ord | Verdict |
+|---|---|---|---|
+| `0x1801189f0` | `?CacheText@NumberElement@UI@@AEAAXXZ` | 1679 | **PORTED**, registered name + address |
+| `0x18003ffe0` | `??9String@System@@QEBA_NAEBV01@@Z` | 1290 | **PORTED**, registered name + address, not counted in the UI tally |
+| `0x1800da130` | `?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@…@Z` | 1589 | **DECLINED** — §8c |
+
+Both taken doors were verified as **live code, not prose**, before anything was
+written — the integrator's warning that `addr_door_audit.py` had been matching
+`ResolveAddr` text inside comments applies to exactly this kind of hand-off.
+Both sit inside function bodies (`static … = ResolveAddr(Module::Runtime, …)`),
+and both are now **deleted**, not converted.
+
+### 8a. The reason they were address doors is a COMMENT THAT WAS WRONG
+
+The old source text said `0x1801189f0` was "an unexported private helper", and
+that for `0x18003ffe0` "neither showed up as an exported mangled name in this
+lane's pefile check". Re-run against the shipped export directory, 2026-09-08,
+**all three are exported** — the ordinals in the table above are that query's
+output.
+
+`AEAA` means **private, not unexported**. This DLL exports its private members;
+that is precisely why `?CacheText@TextElement@UI@@AEAAXXZ`, twelve lines away in
+the same file, resolves by name and works. **A private method and an unexported
+one look identical in a decompiler and are not the same thing in an export
+table**, and a comment recording the confusion is what kept two symbols in the
+worst-failing door class for two waves.
+
+This is the same defect as §3's `?_typeInfo@` finding, arriving from a different
+direction: **an address door on a symbol that has a perfectly good name,
+protected from review by a comment asserting that it does not.** Worth a sweep
+of its own — the pattern is a `ResolveAddr` whose justification is the words
+"unexported" or "not exported", and this file alone had three (the two here plus
+`NumberEditElementTypeId()`, §3).
+
+Neither door was **converted** to a name door. A converted door on an unported
+symbol only changes which list it prints in
+(`reference_converting_a_door_is_not_satisfying_it.md`). Both are ported, so the
+door closes rather than moves.
+
+### 8b. What the two bodies are, and the one REAL oracle in this lane
+
+**`System::String::operator!=` (0x18003ffe0)** is retail's `operator==` inlined
+and negated, twice over (`SETZ / TEST / SETZ`):
+
+```
+lenA = a ? a[-2] : 0                        0x18003ffe6-0x18003fff5
+lenB = b ? b[-2] : 0                        0x18003fff7-0x180040005
+if (lenA != lenB)       equal = false       0x18004000b / 0x18004000d
+else if (!a || lenA==0) equal = true        0x18004001a, 0x18004001f
+else                    equal = StrCompare(a,b) == 0     0x180040024
+return !equal
+```
+
+The "both empty" shortcut tests only `a`, never `b`. That asymmetry is retail's
+and is preserved: it is reachable only when the two lengths already agree, so a
+null `b` there necessarily has length 0 and the answer is the same — but the
+instruction that would test `b` does not exist, and a port that adds it is not
+this function.
+
+**It carries the only true differential oracle in this lane.** The function is
+PURE — it reads two Strings, allocates nothing, mutates nothing — so the shipped
+body can be called on the same two arguments and the two booleans compared with
+`RT_DIFF_SCALAR`. Everything else this lane touched ends in a refcount swap and
+could not be diffed at all (§4). Its `RT_DIFF_WORK` counts only calls that
+**reached the byte compare** (equal non-zero lengths); every other path is
+decided by the lengths alone, so a run where that counter stays 0 has exercised
+none of `StrCompare`, which is the half that can be wrong.
+
+**`NumberElement::CacheText` (0x1801189f0)** formats the live half of the tagged
+union into the owning refcounted `String` at `+0xD0`:
+
+```
+mode == 0 : Format(&tmp, _showSign ? "%+i"   : "%i",   _intValue)
+mode != 0 : Format(&tmp, _showSign ? "%+.2f" : "%.2f", (double)_floatValue)
+_cachedText = tmp;      // retail's INLINED String::operator=
+release(tmp)
+```
+
+The four literals were read out of the DLL's `.rdata` with `read_memory`
+(`0x180159144` `"%+i"`, `0x180154848` `"%i"`, `0x180159148` `"%+.2f"`,
+`0x180159150` `"%.2f"`) and match the table `NumberElement.h` already carries.
+They are transcribed as C string literals: a function's own string constants are
+part of the function, and resolving them would have opened **four new `.data`
+doors to close one code door** — precisely
+`reference_porting_can_grow_the_cutover_surface.md`.
+
+Two ABI details that are easy to get wrong here:
+
+* The float branch passes a **double**. Retail's `CVTPS2PD XMM2,XMM2` then
+  `MOVQ R8,XMM2` sets both the integer register and the matching XMM for
+  argument 3, which is what the Microsoft x64 ABI requires of a variadic float
+  and is invisible if only the `MOVQ` is read. Passing a `float` would not
+  reproduce it.
+* `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) is **our** ported body,
+  so this is an ordinary C++ call and carries none of the cross-toolchain
+  MSVC-variadic risk Wave 7 lane D held `NumberEditElement::SetValue` back for.
+
+**ZERO NEW DOORS in either body.** `RtString_StrCompare`,
+`RtString_ReleaseInline`, `RtSystem_String_Assign` and `RtSystem_String_Format`
+are all reached as plain C++ calls into our own ported code.
+
+**The `CacheText` oracle is a REDIRECTED REPLAY, and it is real.** The body swaps
+a refcounted pointer, so a naive replay would run the acquire/release twice on
+one live string — the trap declined everywhere else in this lane. The way out is
+`dialog.cpp`'s `?StopTimer@` pattern: copy the object, **repoint the copy's
+owning field at null** so the shipped body allocates its own buffer and can never
+touch ours, run both, and compare the two formatted **payloads** (not the
+pointers — the two sides allocate separately by construction, so comparing
+addresses would fail 100% of calls and read as a catastrophic port). The
+scratch's string is released immediately after, so the diff leaks nothing.
+
+**A trap this oracle had to step around, recorded because it is a live defect in
+a shared header.** The scratch must be **0xE8** bytes — `CreateNewObject`
+(0x18004a910) calls `Allocate(_singleton, 0xE8, 8)` — but `sizeof(NumberElement)`
+is still **0xE0**, because `NumberElement.h` documents the 0xE8 size in prose and
+**its struct was never widened**. `NumberElement.h` also records what a 0xE0
+replay buffer did the last time: the DLL's `CacheText` read `+0xE0`, the
+`_showSign` byte, off the end of the stack object and chose its format string
+from garbage. That is *this* function. The port therefore uses an asserted
+`kNumberElementTrueSize = 0xE8` rather than `sizeof`, and does **not** widen the
+shared struct — adding trailing padding to a binary-compatible type mid-wave is a
+change every other lane would inherit without asking for it. **The header should
+be widened, by whoever owns it, with a `static_assert(sizeof(...) == 0xE8)`.**
+
+### 8c. DECLINED — `?AddTab@TabElement@UI@@` (0x1800da130)
+
+143 instructions, a 0xC0-byte frame, seven callee-saved registers, and it
+**returns `InternalPtr<Element>` by value** — so there is a hidden return slot
+between `this` and its first visible argument, and it takes two more by-value
+class parameters (`ExternalPtr<ElementDescription>` ×2) that MSVC passes
+indirectly. It allocates. Its door is `engine/funcs/engine_funcs.cpp:2971`, not
+this lane's file.
+
+Declined on scope, not on difficulty: it is a different file, a different
+argument-shape hazard family, and it wants the `abi_retslot_audit` treatment on
+its own rather than as a rider. **It is exported (ord 1589)**, so whoever owns
+`engine_funcs.cpp` can at minimum turn that silent address door into a NAMED one
+— which converts a null call at cutover into a visible `[RtUnresolved]` row. That
+is a strictly smaller change than porting it and is worth doing even if the port
+waits.
+
+### 8d. Closure, PART 1 AND PART 2 TOGETHER, on the CURRENT integration base
+
+**Re-measured from scratch against `f5dbeb8`** — which matters twice over: it is
+the base the integrator asked for, and it carries the **FIXED**
+`addr_door_audit.py` (the one that no longer counts `ResolveAddr` text inside
+comments; its denominators moved 295→270 sites and 198→192 distinct on the base
+alone). **All numbers below are the fixed tool's.** The §1 table was produced by
+the PRE-FIX tool against `fd30180` and is left as it was recorded rather than
+retconned.
+
+| Audit (from `f5dbeb8/tools/`) | base `f5dbeb8` | after (parts 1+2) | delta |
+|---|---|---|---|
+| `addr_door_audit.py` | 270 sites, 192 distinct, **15 UNREGISTERED**, 1187 registered | 268, 190, **13**, 1193 | **−2 UNREGISTERED**, −2 sites, −2 distinct, +6 registered |
+| `unsatisfied_export_scan.py` | 848 doors, 128 unsat, **125 outside a diff guard** | 852, 125, **122** | **−3 outside-guard**; CLOSED 3, OPENED 0 |
+| `port_bypass_audit.py` | 334 address / **0**, 480 name / **0** | 332 / **0**, 482 / **0** | 0 bypasses both doors |
+| `rawdoor_audit.py` | 610 sites, **0 UNGUARDED-CALL** | 612, **0** | +2 sites, both guarded oracles |
+| `abi_retslot_audit.py` | 0 suspicious of 48 | **byte-identical** | 0 |
+| `detour_target_audit.py` | clean | **byte-identical** | 0 |
+| `export_name_audit.py` | 670 names, 1 not in the DLL (pre-existing) | **byte-identical** | 0 |
+| `resolve_cache_audit.py` | 442 FROZEN | **byte-identical** | 0 |
+| `runtime_census.py` | UI 153/118 77.1%; System 97/73 75.3%; TOTAL 1003/772 **77.0%** | UI 154/121 78.6%; System 96/73 76.0%; TOTAL 1003/775 **77.3%** | +3 ported |
+
+**ONE DENOMINATOR SHRANK AND IT IS NOT A TOOL BUG — but it is named rather than
+buried,** because a shrinking denominator has faked a clean pass in this project
+twice. `runtime_census.py`'s System `called` went **97 → 96**. Cause: `called`
+counts symbols our tree resolves through a door, and this lane **deleted** the
+only live door for `??9String@System@@` (its `ResolveAddr`). The symbol left the
+work list because the work was done, which is the one legitimate reason a
+denominator may shrink. `addr_door_audit`'s 270→268 and 192→190 are the same
+event seen from the other side.
+
+**Both new bodies land in the census's "Ports with no caller in our tree" list**
+(86 exports/178 addresses → 88/181). That is intended and is not evidence of dead
+code: their callers are the two forwarders in the same translation unit, calling
+them as C++. What the census means by "no caller" is "no *door* in our tree
+resolves them" — which is exactly the state deleting the doors was meant to
+produce. It is still `reference_uncalled_port_is_not_verified.md` territory for
+the purpose of §7 limit 1: **neither body has executed.**
+
+`??9String@System@@` is registered under both doors but **not counted** in the UI
+tally — it is a `System` symbol living temporarily in a UI file. Leaving it
+unregistered was tried first and rejected **on the measurement**: without the
+registration, the oracle's own `RT_ORIGINAL_ONCE` spelling appears in
+`unsatisfied_export_scan.py` as an unsatisfied name (harmless — inside a diff
+guard, compiled out at cutover — but it is still a ported body reachable through
+neither door, which is how `?RemoveChildren@Element@UI@@` became the tree's only
+address-door bypass). **For whoever ports `System::String` next: grep for that
+registration before writing a second body, and MOVE it rather than adding a
+second binding** — a duplicate registration is last-binding-wins and silently
+makes one of the two dead code.
