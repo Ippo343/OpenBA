@@ -39,13 +39,58 @@
 //   - LabelElement.h          : an older "TextElement base (0xC0..0xFF)" table
 //                               that TextElement.h already says was never
 //                               cross-checked
-// The observed 8-byte owning pointer fits none of the three. Nothing has been
-// changed here on the strength of one function's behaviour — a written-extent
-// fact belongs to a WRITER, not to a type
-// (reference_never_written_needs_by_whom.md) — but ANY lane that mints a
-// NumberElement vtable or constructs one of these at cutover must resolve this
-// first: a field documented as padding that actually owns an allocation is how
-// a ctor ships a leak or a double free.
+//
+// *** THE DISAGREEMENT IS RESOLVED. Wave 9 lane N, from the DISASSEMBLY. ***
+// It was never a contradiction: **UI::NumberElement is NOT a UI::TextElement.**
+// Its default ctor (0x180118C70) calls the UI::Element base ctor at
+// 0x180115E50 — not TextElement's — and then writes its own fields starting at
+// +0xC0; and it has its OWN private CacheText at 0x1801189F0, distinct from
+// TextElement::CacheText at 0x18011EC10. So TextElement.h's call-site-derived
+// table and this header's owning pointer are statements about TWO DIFFERENT
+// CLASSES that happen to share an offset, and both are right.
+// **TextElement.h is deliberately NOT edited**, for exactly the reason lane M
+// gives above: a written-extent fact belongs to a WRITER, not to an offset
+// (reference_never_written_needs_by_whom.md), and one function's behaviour on a
+// NumberElement is no authority over TextElement's call sites.
+//
+// The layout below is now complete and static-evidenced. Lane M's warning to
+// any lane that MINTS one of these still stands and is now answerable: the
+// object is 0xE8 bytes and its dtor releases exactly one thing, +0xD0.
+//
+//   +0xC0  Font* _font        ComputeSize (0x180119000) loads it into RCX for
+//                             the text-measure call 0x180116C70 and then reads
+//                             its +0x50/+0x54; Draw (0x1801191E0) does the same.
+//   +0xC8  int32 _mode        GetNumberType (0x18004A9C0) is
+//                             `mov eax,[rcx+0xc8]; ret`.
+//   +0xD0  char* _cachedText  the owning refcounted System::String lane M
+//                             measured. CacheText (0x1801189F0) assigns into it
+//                             with retail's inlined String::operator= — release
+//                             the old (`dec [p-4]`; on zero `p -= 8`, MemFree),
+//                             store the new, `inc [p-4]`. The DTOR
+//                             (0x180118CE0) runs that same release on it AND
+//                             NOTHING ELSE, which is the second, independent
+//                             proof of ownership. ComputeSize reads the LENGTH
+//                             at [p-8]; Draw passes `&this->_cachedText` as a
+//                             System::String& (`lea r8,[rbx+0xd0]`).
+//                             Block layout: runtime/types/system/String.h.
+//   +0xD8  int32 _intValue    GetIntValue   (0x18004A9A0).
+//   +0xDC  float _floatValue  GetFloatValue (0x18004A9B0).
+//   +0xE0  bool  _showSign    CacheText's format-string select:
+//                             _showSign ? "%+i" : "%i" (mode 0),
+//                             _showSign ? "%+.2f" : "%.2f" (mode 1) — the four
+//                             literals are at 0x180159144 / 0x180154848 /
+//                             0x180159148 / 0x180159150. Written as a BYTE by
+//                             the ctor (`mov [rbx+0xe0],al`).
+//   +0xE1..+0xE7             tail padding to the aligned object size.
+//
+// SIZE 0xE8, from CreateNewObject (0x18004A910), which calls
+// MemoryAllocator::Allocate(_singleton, **0xE8**, 8) and then the default ctor.
+// The old struct was 0xE0 — EIGHT BYTES SHORT — and that was a second harness
+// defect on top of Finding 1: the oracle's stack `replay` object was 0xE0 bytes
+// while the DLL's CacheText READS +0xE0 on it, so the replay was choosing its
+// format string from a garbage stack byte. That replay is gone now (both
+// setters are NO-ORACLE ports, widgets_input.cpp), so the out-of-bounds read
+// went with it; the size is recorded because it is the object's true size.
 // ============================================================================
 
 #include <cstdint>

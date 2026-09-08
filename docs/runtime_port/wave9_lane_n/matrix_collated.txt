@@ -1,0 +1,98 @@
+########## menu_only ##########
+=== cell=laneN_menu_only rc=0 ===
+== rt_run[laneN_menu_only] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_menu_only] exited rc=0 after 5s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 181 sites, 1135302 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 181 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## gameplay ##########
+=== cell=laneN_gameplay rc=0 ===
+== rt_run[laneN_gameplay] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_gameplay] exited rc=0 after 40s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 314 sites, 29056603 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 314 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## saveload ##########
+=== cell=laneN_saveload rc=0 ===
+== rt_run[laneN_saveload] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_saveload] exited rc=0 after 30s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 336 sites, 54147680 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 336 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## tutorial0 ##########
+=== cell=laneN_tutorial0 rc=0 ===
+== rt_run[laneN_tutorial0] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_tutorial0] exited rc=0 after 20s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 328 sites, 8782302 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 328 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## tutorial02 ##########
+=== cell=laneN_tutorial02 rc=0 ===
+== rt_run[laneN_tutorial02] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_tutorial02] exited rc=0 after 20s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 332 sites, 10669257 calls, 17 divergences in 1 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 332 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+[RtDiff] ==== 1 sites hit the RELEASED-POINTER detector. These are HARNESS defects, NOT port defects: the oracle handed the DLL's body a pointer our body had already released. Make each a NO-ORACLE port; do not exclude the bytes. ====
+--- sites with divergences>0 ---
+########## tutorial03 ##########
+=== cell=laneN_tutorial03 rc=0 ===
+== rt_run[laneN_tutorial03] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_tutorial03] exited rc=0 after 20s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 318 sites, 8436900 calls, 10 divergences in 1 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 318 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+[RtDiff] ==== 1 sites hit the RELEASED-POINTER detector. These are HARNESS defects, NOT port defects: the oracle handed the DLL's body a pointer our body had already released. Make each a NO-ORACLE port; do not exclude the bytes. ====
+--- sites with divergences>0 ---
+########## menus_ach ##########
+=== cell=laneN_menus_ach rc=0 ===
+== rt_run[laneN_menus_ach] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_menus_ach] exited rc=0 after 5s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 195 sites, 1654433 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 195 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## menus_mods ##########
+=== cell=laneN_menus_mods rc=0 ===
+== rt_run[laneN_menus_mods] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_menus_mods] exited rc=0 after 5s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 182 sites, 2394576 calls, 0 divergences in 0 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 182 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+(none)
+########## stress ##########
+=== cell=laneN_stress rc=0 ===
+== rt_run[laneN_stress] exe stamp: 2026-09-08 00:43:02.109002400 -0400
+== rt_run[laneN_stress] exited rc=0 after 60s
+--- RtDiff summary (raw, untruncated) ---
+[RtDiff] ==== 353 sites, 108976521 calls, 1 divergences in 1 sites ====
+[RtDiff] ==== did-work: 0 calls did work across 0 declaring sites; 353 sites have NOT declared (their coverage is UNKNOWN, not zero) ====
+--- sites with divergences>0 ---
+[RtDiff]   Picking::Scene::Intersect                        calls=23654      worked=?          divergences=1
+
+================ COLLATED: released-pointer detector, ALL CELLS ================
+--- gameplay.err.log self-test-ALIVE=0
+--- menu_only.err.log self-test-ALIVE=0
+--- menus_ach.err.log self-test-ALIVE=0
+--- menus_mods.err.log self-test-ALIVE=0
+--- saveload.err.log self-test-ALIVE=0
+--- stress.err.log self-test-ALIVE=0
+--- tut01_acceptance.err.log self-test-ALIVE=1
+      UI::NumberElement::SetValueInt
+--- tutorial0.err.log self-test-ALIVE=0
+--- tutorial02.err.log self-test-ALIVE=1
+      UI::NumberElement::SetValueInt
+--- tutorial03.err.log self-test-ALIVE=1
+      UI::NumberElement::SetValueInt
+================ DISTINCT SITES ACROSS THE WHOLE MATRIX ================
+UI::NumberElement::SetValueInt

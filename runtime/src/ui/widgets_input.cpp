@@ -57,6 +57,43 @@
 //      why `EditElement::SetText` is a documented NO-ORACLE port rather than
 //      a prefix-replay one (WAVE7_LANE_D.md §5).
 //
+//      *** THAT RULE WAS BROKEN IN THREE PLACES IN THIS FILE, and Wave 9
+//      lanes M and N found it the expensive way — the oracle handed the DLL a
+//      pointer our own call had already released, on every diff run of
+//      tutorials 1-3. The three were
+//      NumberElement::SetValue (both overloads), which reach the private
+//      NumberElement::CacheText, and NumberEditElement::SetMinMax, which
+//      reaches EditElement::SetText. All three are now NO-ORACLE ports; the
+//      full evidence is in the block above RtUi_NumberElement_SetValueInt and
+//      in docs/runtime_port/WAVE9_LANE_N.md. The rule was broken because
+//      NumberElement.h called the owning pointer at +0xD0 "padding, not
+//      reversed by this lane" — a layout gap is not a documentation problem
+//      when an oracle decision is taken from the header.
+//
+//      THE SWEEP (lane N, 2026-09-08). Every prefix replay in this file and in
+//      the rest of runtime/src was re-checked against ONE criterion: does the
+//      replayed body release or reassign an owning refcounted pointer that is
+//      COPIED INTO the scratch? Reaching such a pointer through a shared
+//      pointer to a LIVE object is safe — the refcounts stay correct and the
+//      work is merely done twice (the idempotency argument this block already
+//      makes). Holding a COPY of the pointer is not: ours may already have
+//      freed it. Results:
+//        * SpinnerElement::SetMinMax / SetValue — SAFE. They reach the
+//          refcounted `_text` through `_children._data[0]`, a live child, not
+//          through a copied field. SpinnerElement itself is {Element, int}.
+//        * SpinnerElement::SetElementId / SetIncrement, RadioElement::
+//          SetActiveRadio, ProgressElement::SetMax / SetCurrent — SAFE. No
+//          refcounted field is released by any of those bodies.
+//        * Element's ReplayGuard family (element.cpp) — SAFE; the two bodies
+//          that DO touch a refcounted string (SetName, SetToolTipString) were
+//          already shadow oracles with the same reasoning.
+//        * widgets_layout.cpp's TextElement::SetParameter / SetText — already
+//          NO-ORACLE, naming CacheText's refcount management as the reason.
+//        * sprite.cpp's replay* family — already balances its extra reference
+//          with ReleaseStringRef.
+//      Nothing else in runtime/src prefix-replays an object that owns a
+//      System::String. The three fixed here were the whole set.
+//
 //      sizeof(OurStruct) is a LOWER BOUND on the true retail object (this
 //      lane has not reversed every byte of any of its eight classes), so the
 //      oracle proves everything IN that range and is silent about anything
@@ -480,32 +517,96 @@ int RtUi_NumberEditElement_GetValue(NumberEditElement* self) {
 // ---- ?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z  0x1800d4b70 ---------------
 // Same shape as SpinnerElement::SetMinMax, minus the child indirection:
 // write min/max on `self` directly, then re-clamp through the REAL SetValue.
+//
+// NO REPLAY ORACLE (Wave 9 lane N; see the block above NumberElement::SetValue
+// for the whole argument and the evidence). SpinnerElement::SetMinMax reaches
+// the refcounted string through a pointer to a LIVE CHILD, which stays valid;
+// this one reaches `EditElement::_text` at +0xC8, which is INSIDE the copied
+// object, so the replay would hold the pointer our own SetValue had just
+// released. Never observed, because this export is not called anywhere in lane
+// M's 10-cell matrix (`calls=` never even registered a site) — a latent heap
+// hazard, removed rather than left armed for the first caller to find.
+// The site stays registered so RtDiffSummary() still lists the function.
 void RtUi_NumberEditElement_SetMinMax(NumberEditElement* self, int minVal, int maxVal) {
-    RT_DIFF_BEGIN("UI::NumberEditElement::SetMinMax");
-    NumberEditElement replay;
-    std::memcpy(&replay, self, sizeof(NumberEditElement));
+    RT_DIFF_BEGIN("UI::NumberEditElement::SetMinMax [no oracle: replay would double-release _text]");
+    (void)rt_diff_on__;
 
     self->_min = minVal;
     self->_max = maxVal;
     int clamped = StringToInteger()(self->base._text);
     RealNumberEditElementSetValue()(self, clamped);
-
-    if (rt_diff_on__) {
-        using Fn = void (*)(NumberEditElement*, int, int);
-        RT_ORIGINAL_ONCE(Fn, kNumEditSetMinMax)(&replay, minVal, maxVal);
-        RT_DIFF_BYTES(self, &replay, sizeof(NumberEditElement));
-    }
 }
 
 // ============================================================================
 // NumberElement — 2/2 ported
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// BOTH NumberElement SETTERS ARE NO-ORACLE PORTS (Wave 9, lane M's Finding 1;
+// applied here by lane N). They were prefix-replayed until 2026-09-08, and
+// that replay was CORRUPTING THE HEAP it was measuring.
+//
+// WHY. Both bodies end in the DLL's own private NumberElement::CacheText
+// (0x1801189F0), which REPLACES the refcounted System::String at +0xD0 with
+// retail's inlined String::operator=: release the old (`dec [p-4]`; on zero
+// `p -= 8`, MemFree), store the new, `inc [p-4]`. The struct called that field
+// padding until this lane read the disassembly, which is the only reason it
+// was ever prefix-replayed at all — the rule against it was already written in
+// this file's own header block (lines 53-58) by the lane that ported it, and
+// the sibling lanes applied it: widgets_layout.cpp's two TextElement bodies
+// and element.cpp's SetName/SetToolTipString are all NO-ORACLE for exactly
+// this reason.
+//
+// `memcpy(&replay, self, ...)` is a SHALLOW copy, so `replay`'s +0xD0 was the
+// SAME buffer `self` held. Ours ran CacheText on `self` and released that
+// buffer; theirs then ran CacheText on `replay` from the pointer we had just
+// released. **Stated narrowly, because that is what was measured:** in the
+// SHIPPED order the oracle hands the DLL's own body a DANGLING POINTER — a
+// use-after-free on every call that re-formats text. Whether retail then frees
+// that block a SECOND time in the shipped order is NOT established; no
+// shipped-order run crashed. Allocator free-list corruption was demonstrated
+// only under the order-inversion control below.
+//
+// THE EVIDENCE (lane M, measured, not argued):
+//   * effectiveness control: of 12,896 calls, exactly the 10 that reached
+//     CacheText diverged — 1:1, 100% of the calls that touch the string and
+//     0% of the 12,886 that take the unchanged-value early-out. The varying
+//     9/16/10 across cells is just how many counters changed in 900 frames.
+//   * ours pointed at a live block (len=1, rc=1, "4" for value 4, correct for
+//     all ten inputs); theirs pointed at a block whose header was all zeros —
+//     freed. Retail did not compute a different answer; it was handed a buffer
+//     our call had already released.
+//   * the order-inversion control did not merely move the divergence, it
+//     CRASHED: ACCESS_VIOLATION in the Runtime allocator, "bucket 8: free
+//     block has CORRUPTED forward link", with the clobbered free-block body
+//     reading 6f6e53003237322b = "+272\0Sno" — "272" being the input of the
+//     third diverging call. Caught in the act, with its own digits.
+//
+// WHY NOT AN EXCLUSION OF +0xD0..+0xD7. It would make the cell green while
+// leaving the double release — and therefore the heap corruption — in place on
+// every diff run, and it would hide a real future defect in the field. The
+// inverse of reference_oracle_must_not_compare_unwritten_bytes.md: here BOTH
+// sides write, through the same DLL body, and what they write is an address.
+//
+// WHY NOT A DEEP COPY / SNAPSHOT-RESTORE either. A prefix replay of any body
+// that reaches CacheText is unsound in PRINCIPLE, not merely badly
+// implemented: the field is a reference into globally shared refcounted state
+// that no per-object snapshot isolates.
+//
+// WHAT IS LOST. These two functions now have no cross-implementation check, on
+// the same terms as UI::EditElement::SetText (WAVE7_LANE_D.md §5):
+// correctness rests on matching the disassembly instruction for instruction.
+// It does — 0x180118D50 and 0x180118DB0 are transcribed field for field below,
+// including retail's `ucomiss`/`jp` NaN behaviour in the float guard (an
+// unordered compare falls through to the write, which `!(a == b)` reproduces).
+// The sites stay REGISTERED so both functions still appear in RtDiffSummary()
+// rather than silently vanishing from the audit.
+// ---------------------------------------------------------------------------
+
 // ---- ?SetValue@NumberElement@UI@@QEAAXH@Z  0x180118d50 ---------------------
 void RtUi_NumberElement_SetValueInt(NumberElement* self, int value) {
-    RT_DIFF_BEGIN("UI::NumberElement::SetValueInt");
-    NumberElement replay;
-    std::memcpy(&replay, self, sizeof(NumberElement));
+    RT_DIFF_BEGIN("UI::NumberElement::SetValueInt [no oracle: CacheText owns a refcounted String]");
+    (void)rt_diff_on__;   // registered for visibility; no oracle call below.
 
     if (!(self->_mode == 0 && self->_intValue == value)) {
         self->_intValue = value;
@@ -514,19 +615,12 @@ void RtUi_NumberElement_SetValueInt(NumberElement* self, int value) {
         MarkNeedsSizeCalcUpToRoot(&self->base);
         NumberElementCacheText()(self);
     }
-
-    if (rt_diff_on__) {
-        using Fn = void (*)(NumberElement*, int);
-        RT_ORIGINAL_ONCE(Fn, kNumberSetValueInt)(&replay, value);
-        RT_DIFF_BYTES(self, &replay, sizeof(NumberElement));
-    }
 }
 
 // ---- ?SetValue@NumberElement@UI@@QEAAXM@Z  0x180118db0 ---------------------
 void RtUi_NumberElement_SetValueFloat(NumberElement* self, float value) {
-    RT_DIFF_BEGIN("UI::NumberElement::SetValueFloat");
-    NumberElement replay;
-    std::memcpy(&replay, self, sizeof(NumberElement));
+    RT_DIFF_BEGIN("UI::NumberElement::SetValueFloat [no oracle: CacheText owns a refcounted String]");
+    (void)rt_diff_on__;   // registered for visibility; no oracle call below.
 
     if (!(self->_mode == 1 && self->_floatValue == value)) {
         self->_floatValue = value;
@@ -534,12 +628,6 @@ void RtUi_NumberElement_SetValueFloat(NumberElement* self, float value) {
         self->_mode = 1;
         MarkNeedsSizeCalcUpToRoot(&self->base);
         NumberElementCacheText()(self);
-    }
-
-    if (rt_diff_on__) {
-        using Fn = void (*)(NumberElement*, float);
-        RT_ORIGINAL_ONCE(Fn, kNumberSetValueFloat)(&replay, value);
-        RT_DIFF_BYTES(self, &replay, sizeof(NumberElement));
     }
 }
 
