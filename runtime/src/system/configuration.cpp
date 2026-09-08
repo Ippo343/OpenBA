@@ -110,6 +110,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
+// RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the
+// three already-ported String primitives the two Parse bodies below need.
+// Spelled "./string.h" rather than "string.h": this file lives in the same
+// directory as that header, and the unqualified form would also shadow the C
+// library's <string.h> for anything included after it.
+#include "./string.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -296,6 +302,224 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
 }
 
 // ============================================================================
+// 0x1800c4a00 / 0x1800c4930 — ParseCommand and ParseValue.  Wave 9 lane ADDR.
+// ============================================================================
+// The banner's §2 listed these two as DELIBERATELY ABSENT and named them as the
+// next fault at cutover for anyone who launches with an argument. They are
+// closed here.
+//
+//   ?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  ord 3310
+//   ?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z    ord 3311
+//
+// Both names re-verified against Runtime-x64.dll's export directory with
+// pefile before a line was written, and both addresses confirmed to be the
+// export directory's own entries for those ordinals rather than a nearby label.
+//
+// ---------------------------------------------------------------------------
+// THE SIGNATURE: `CA` STATICS RETURNING `String` BY VALUE
+// ---------------------------------------------------------------------------
+// `CA` is a private STATIC member, so there is no `this`. The return type is
+// `?AVString@2@` — a class BY VALUE — so MSVC passes a hidden return slot as
+// the first argument and returns that same pointer in RAX:
+//
+//     RCX = String* ret        (caller-allocated, uninitialised)
+//     RDX = int*    pos        (the `AEAH`, an int&)
+//     R8  = const String* src  (the `AEBV32@`)
+//     RAX = ret                (0x1800c49df / 0x1800c4b36: MOV RAX,R14)
+//
+// The return type below is `String*` and the body returns `ret` for exactly
+// that reason. Declaring it `void` would compile and would even work for every
+// caller in this tree (all of them discard the result), but it would stop
+// setting RAX — and a hidden return slot a signature omits is the wild-write
+// shape reference_hidden_retslot_wild_write.md records. The two typedefs
+// already in the tree (engine_funcs.h:323/329 and `ParseFn` above) both model
+// the slot correctly, so nothing had to be corrected.
+//
+// ---------------------------------------------------------------------------
+// THREE DETAILS THAT ARE FAITHFUL AND MUST NOT BE "FIXED"
+// ---------------------------------------------------------------------------
+// 1. `GetLength` IS RE-CALLED ON EVERY ITERATION. Retail reloads it inside each
+//    loop (0x1800c4989, 0x1800c49b9, ...) rather than hoisting it. Reproduced
+//    literally. It cannot change under us — nothing here writes `src` — so this
+//    is about shape, not behaviour, and hoisting it would be the first step of
+//    a rewrite rather than a port.
+//
+// 2. THE `src[i]` READS AT 0x1800c4a92 AND 0x1800c4b08 ARE UNGUARDED, and that
+//    is CORRECT, not a missing bounds check. Both can run with `i == length`.
+//    A System::String's buffer is `length + 1` bytes with a NUL written by
+//    every producer (types/system/String.h), so `src[length]` is a legal read
+//    of '\0' — which is neither '/' nor ' ' nor ':', so both tests fall the
+//    right way. A guard here would not "make it safe", it would change the
+//    result at end-of-string. CLAUDE.md's rule applies directly: retail's
+//    unguarded deref is load-bearing.
+//
+// 3. THE EMPTY RETURN WRITES A NULL `data` DIRECTLY. At 0x1800c4a98 retail
+//    stores RBP (which is 0) into [R14] and jumps to the epilogue — it does NOT
+//    call a String constructor. Reproduced as `ret->data = nullptr`. A port
+//    that default-constructs a String here would allocate a 9-byte block retail
+//    never allocates, and `SetCommandLine` above would then release a block
+//    that on the retail path never existed.
+//
+// ---------------------------------------------------------------------------
+// DEPENDENCIES: BOTH ARE ALREADY PORTED, SO THIS CLOSES DOORS WITHOUT OPENING
+// ---------------------------------------------------------------------------
+//   ?GetLength@String@System@@QEBAHXZ        0x1800063c0 ord 2750 — string.cpp
+//   ?SubString@String@System@@QEBA?AV12@HH@Z 0x1800c9230 ord 4124 — string.cpp,
+//       registered by NAME and by ADDRESS (string.cpp:1143 / :1183)
+// They are called here as our own C++ functions, so no new resolve door of
+// either kind is created. Measured: this closes 2 ADDRESS doors
+// (engine_funcs.cpp:1727/1729) and 2 NAME doors (the two RT_EXPORT_ONCE sites
+// in SetCommandLine above) and opens ZERO.
+//
+// `SubString`'s end index is INCLUSIVE (setupdir_helpers.cpp:68 records the
+// same trap), which is why both bodies pass `pos - 1` / `end - 1`, not `pos`.
+// ============================================================================
+
+namespace {
+
+// Retail's blank test, inlined at four sites across the two functions.
+inline bool IsBlank(char c) { return c == ' ' || c == '\t'; }
+
+// The oracle's verdict for a returned String. Compares the two `data` pointers
+// as STRINGS, never as pointers — they are separate allocations by
+// construction — and compares only bytes both sides actually wrote: the length
+// and `length` characters. The NUL and the refcount are excluded, which is
+// what reference_oracle_must_not_compare_unwritten_bytes.md is about.
+bool SameString(const String* a, const String* b) {
+    if ((a->data == nullptr) != (b->data == nullptr)) return false;
+    if (a->data == nullptr) return true;
+    const int la = RtSystem::RtString_GetLength(a);
+    const int lb = RtSystem::RtString_GetLength(b);
+    if (la != lb) return false;
+    for (int i = 0; i < la; ++i)
+        if (a->data[i] != b->data[i]) return false;
+    return true;
+}
+
+}  // namespace
+
+// ?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  0x1800c4930
+//
+// Skip blanks, then take the run up to the next blank.
+extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
+                                                     const String* src) {
+    RT_DIFF_BEGIN("System::Configuration::ParseValue");
+    const int posIn = *pos;
+
+    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+        ++*pos;
+
+    const int start = *pos;                                  // 0x1800c4992
+
+    while (*pos < RtSystem::RtString_GetLength(src) && !IsBlank(src->data[*pos]))
+        ++*pos;
+
+    RtSystem::RtSystem_String_SubString(src, ret, start, *pos - 1);   // inclusive
+
+    // ORACLE. Pure in the only sense that matters: given `src` and an input
+    // `pos` it writes a fresh String and a new `pos` and touches no process
+    // state, so it is exactly replayable. `pos` is an ALIASED in/out parameter,
+    // so the original is replayed from the SNAPSHOT `posIn`, never from the
+    // value our body just advanced
+    // (reference_oracle_must_snapshot_aliased_inputs.md).
+    if (rt_diff_on__) {
+        int theirPos = posIn;
+        String theirRet;
+        theirRet.data = nullptr;
+        RT_ORIGINAL_ONCE(ParseFn,
+            "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
+                &theirRet, &theirPos, src);
+
+        const bool eq = (theirPos == *pos) && SameString(ret, &theirRet);
+        // The verdict is TWO terms, so both are printed on either outcome and
+        // the failing one is readable without a second run
+        // (reference_shadow_predicate_must_name_its_failing_term.md).
+        char ours[192], theirs[192];
+        std::snprintf(ours, sizeof(ours), "pos=%d str=\"%.80s\"",
+                      *pos, ret->data ? ret->data : "(null)");
+        std::snprintf(theirs, sizeof(theirs), "pos=%d str=\"%.80s\"",
+                      theirPos, theirRet.data ? theirRet.data : "(null)");
+        RT_DIFF_SHADOW(eq, ours, theirs);
+
+        // The oracle's String is a real allocation on the DLL's heap. Release
+        // it through the same inlined idiom retail uses, or the diff run leaks
+        // one block per call.
+        RtSystem::RtString_ReleaseInline(&theirRet);
+    }
+
+    // EFFECTIVENESS CONTROL: how many calls actually consumed input. A run
+    // whose ParseValue rows are all `work=0` has proved nothing, however green
+    // (reference_probe_needs_an_effectiveness_control.md).
+    RT_DIFF_WORK(*pos != posIn);
+    return ret;
+}
+
+// ?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  0x1800c4a00
+//
+// Skip blanks, scan to '/', and if there is one take the run after it up to a
+// blank or ':'. If there is no '/', return an empty String.
+extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
+                                                       const String* src) {
+    RT_DIFF_BEGIN("System::Configuration::ParseCommand");
+    const int posIn = *pos;
+
+    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+        ++*pos;
+
+    while (*pos < RtSystem::RtString_GetLength(src) && src->data[*pos] != '/')
+        ++*pos;
+
+    // 0x1800c4a92. Unguarded by design — detail 2 above. When the scan ran off
+    // the end this reads the NUL, which is not '/', so the empty return is
+    // taken, which is precisely what retail does.
+    if (src->data[*pos] != '/') {
+        ret->data = nullptr;                                 // detail 3
+        RT_DIFF_WORK(false);
+        return ret;
+    }
+    ++*pos;                                                  // step over the '/'
+
+    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+        ++*pos;
+
+    const int start = *pos;                                  // 0x1800c4ad2
+
+    while (*pos < RtSystem::RtString_GetLength(src) &&
+           src->data[*pos] != ' ' && src->data[*pos] != ':')
+        ++*pos;
+
+    // 0x1800c4b02. `end` is where the run stopped. The DELIMITER is CONSUMED
+    // (pos = end + 1) but is NOT part of the returned string. Reading
+    // src->data[end] is the second unguarded read of detail 2.
+    const int end = *pos;
+    if (src->data[end] == ' ' || src->data[end] == ':')
+        *pos = end + 1;
+
+    RtSystem::RtSystem_String_SubString(src, ret, start, end - 1);   // inclusive
+
+    if (rt_diff_on__) {
+        int theirPos = posIn;
+        String theirRet;
+        theirRet.data = nullptr;
+        RT_ORIGINAL_ONCE(ParseFn,
+            "?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
+                &theirRet, &theirPos, src);
+
+        const bool eq = (theirPos == *pos) && SameString(ret, &theirRet);
+        char ours[192], theirs[192];
+        std::snprintf(ours, sizeof(ours), "pos=%d str=\"%.80s\"",
+                      *pos, ret->data ? ret->data : "(null)");
+        std::snprintf(theirs, sizeof(theirs), "pos=%d str=\"%.80s\"",
+                      theirPos, theirRet.data ? theirRet.data : "(null)");
+        RT_DIFF_SHADOW(eq, ours, theirs);
+        RtSystem::RtString_ReleaseInline(&theirRet);
+    }
+
+    RT_DIFF_WORK(*pos != posIn);
+    return ret;
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Every mangled name is ONE literal on ONE line, so runtime_census.py and
@@ -309,9 +533,19 @@ int RtSystemConfigurationRegister() {
     // No export name in either build -- address only.
     RegisterRuntimeAddr(0x18002ace0, (void*)&RtSystem_ConfigMap_Find);
 
+    // CLOSED 2026-09-08 by Wave 9 lane ADDR. Both by NAME (the two
+    // RT_EXPORT_ONCE sites in SetCommandLine above) and by ADDRESS
+    // (engine_funcs.cpp:1727 and :1729, which the address-door census listed as
+    // unregistered). BOTH DOORS, ALWAYS -- registering only the name would
+    // leave those two ResolveAddr sites resolving to null at cutover, which is
+    // the shape reference_by_address_door_dies_at_cutover.md records.
+    RegisterRuntimeExport("?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z", (void*)&RtSystem_Configuration_ParseCommand); ++n;
+    RegisterRuntimeAddr(0x1800c4a00, (void*)&RtSystem_Configuration_ParseCommand);
+
+    RegisterRuntimeExport("?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z", (void*)&RtSystem_Configuration_ParseValue); ++n;
+    RegisterRuntimeAddr(0x1800c4930, (void*)&RtSystem_Configuration_ParseValue);
+
     // DELIBERATELY ABSENT, with reasons in the banner:
-    //   ?ParseCommand@Configuration@System@@CA…  0x1800c4a00  ord 3310  (109 instrs)
-    //   ?ParseValue@Configuration@System@@CA…    0x1800c4930  ord 3311  (62 instrs)
     //   (unexported) the map insert              0x18002a090  -> 0x18002a170
     //       -> node alloc 0x18000f970, rebalance 0x18002a310 : a red-black
     //          insert, a Collection lane's work.
