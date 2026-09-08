@@ -453,6 +453,187 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 }
 
 // ============================================================================
+// WAVE 9 LANE UIW — two more element types, both read out of their own bodies
+// ============================================================================
+//
+// These exist because four cutover residue rows in UI (`ComboElement::AddItem`,
+// `ComboElement::RemoveAllItems`, `GraphElement::AddGraph`,
+// `RadioElement::FindCheckBoxes`) reach seven `Collection::Array` instantiations
+// that no lane owned. Three of the seven turned out to be exact clones of specs
+// this file already had; the two below are new, and the seventh is `~Array`.
+//
+// ---------------------------------------------------------------------------
+// 1. Array<System::String>, 0x180034860
+// ---------------------------------------------------------------------------
+// The assign, read at 0x1800348fc..0x180034916 (NOT from decompiled C — the
+// null-source arm is a branch Ghidra's C folds away):
+//
+//     MOV [R8],R15          ; dst = 0, unconditionally, FIRST
+//     MOV RCX,[RAX]         ; src value
+//     TEST RCX,RCX / JZ done
+//     MOV [R8],RCX
+//     INC dword ptr [RCX-4] ; System::String's refcount at str-4
+//
+// The unconditional `dst = 0` before the test is why a null source leaves the
+// destination NULL rather than untouched: the whole 8-byte stride is written on
+// both arms, so there is no unwritten window.
+void AssignStringRef(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    void* str = sp[0];
+    if (str) {
+        dp[0] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+}
+
+// The destroy-range 0x180034860 calls on both its realloc arm (0x18003492e) and
+// its SHRINK arm (0x18003497d) — the second is why this element type needs a
+// `destroy` at all, since kSpec_Fill8's instantiations have no shrink branch.
+//
+// *** IT IS ALREADY PORTED, AND THIS LANE'S FIRST DRAFT DID NOT KNOW THAT. ***
+// 0x180011010 is `kD_Str_08` in runtime/src/collection/array_destroy.cpp — one
+// of the eight helpers that file ports but deliberately leaves UNREGISTERED,
+// with the note "Register it the day a caller appears". This lane is that
+// caller (here, and again from 0x180029a80 whenever `TextElement::
+// SetParameterCount` lands), so the B_ENTRY line and the registration were
+// added there rather than a second body being written here.
+//
+// The first draft of this file DID write that second body, and also registered
+// 0x180010ab0 — which array_destroy.cpp already registers as a J2 entry point.
+// That is a SHADOWED ADDRESS: two registrations of the same address, one of them
+// dead code, the failure `tools/dispatch_slot_map.py --check` reports for the
+// exe side and nothing reports for this one. It surfaced only because a diff run
+// printed `Collection::Array::~Array(+elem) @0x180010ab0` — a site name this
+// lane had not written. **Before porting a Collection helper, grep the address:
+// array.cpp and array_destroy.cpp are two files and one namespace.**
+//
+// Called by ADDRESS for the same reason DestroyStringExt above is: the
+// registered body is in another translation unit and the registry is the door
+// every other caller uses.
+void DestroyStringRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;               // cache a hit, retry a miss
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180011010));
+    fn(ignoredThis, base, count);
+}
+
+// ---------------------------------------------------------------------------
+// 2. Array<GraphSeries>, 0x1800417d0  (stride 0x18)
+// ---------------------------------------------------------------------------
+// The stride is `LEA RAX,[RAX+RAX*2]; SHL RCX,3` = capacity * 24, align 8. A
+// GraphSeries is {uint32 color; uint32 hole; Collection::Array<int32> points},
+// with the nested Array at +0x08 — the same +0x08 `GraphElement::AddGraphPoint`
+// (widgets_layout.cpp) already appends into, which is independent confirmation
+// of the layout from a body this lane did not read.
+//
+// The assign, read at 0x180041890..0x1800418b1:
+//     MOV EAX,[RDX] / MOV [RCX],EAX     ; the colour dword, +0x00..+0x03
+//     ADD RCX,8
+//     MOV [RCX],R8                      ; +0x08 = 0   (R8 is zero here)
+//     MOV [RCX+8],0                     ; +0x10 = 0
+//     ADD RDX,8
+//     CALL 0x18001cdf0                  ; Array<int32>::operator=(dst+8, src+8)
+//
+// **+0x04..+0x07 IS NEVER WRITTEN BY EITHER ARM.** The colour is one dword, not
+// a qword, and the nested Array starts at +0x08. That hole is declared in the
+// spec's assign window below, because an oracle that compares bytes neither
+// side writes fails 100% of calls and reads like a catastrophic port defect
+// (reference_oracle_must_not_compare_unwritten_bytes.md, four such gaps in
+// Wave 6).
+//
+// The destination's nested Array header is ZEROED BEFORE the operator= runs,
+// and that is load-bearing rather than tidiness: on the realloc arm the
+// destination is raw MemAlloc memory, and `operator=` starts by destroying the
+// destination (it calls ~Array first). Handing it garbage would free a garbage
+// pointer.
+// `Collection::Array<int32_t>::operator=`, retail 0x18001cdf0. Unexported, so
+// it is registered by ADDRESS below. It is the assign arm of the GraphSeries
+// spec and has no other caller in our tree.
+//
+// Retail, 0x18001cdf0..0x18001ce7b:
+//     if (dst == src) return dst;                 // CMP RCX,RDX / JZ
+//     ~Array(dst);                                // CALL 0x18001c750  (OURS)
+//     n   = src->_size;
+//     old = dst->_size;                           // ZERO — the dtor just ran
+//     dst->_size = n;
+//     if (n > dst->_capacity) {
+//         dst->_capacity = n;
+//         if (n == old + 1 && old != 0) dst->_capacity = n * 3;
+//         dst->_data = MemAlloc((int64)dst->_capacity * 4, 4);
+//     }
+//     for (i = 0; i < dst->_size; ++i) {          // bound RE-READ every pass
+//         p = dst->_data + i*4;                   // base RE-READ every pass
+//         if (p == 0) continue;
+//         *p = *(int32_t*)(src->_data + i*4);     // src base RE-READ too
+//     }
+//     return dst;                                 // RAX = dst
+//
+// THE `old` TREBLE BRANCH IS DEAD IN RETAIL AND IS KEPT ANYWAY. `old` is read
+// AFTER the destructor has zeroed `_size`, so it is always 0 and the `* 3`
+// growth arm can never be taken here. Deleting it would be a correct-looking
+// simplification of a body whose whole value is being the same instructions —
+// and this project has been burned by exactly that shape
+// (docs/runtime_port/WAVE9.md's `dirAlias` finding: a local that looks dead and
+// is not). It is transcribed, with this note, rather than folded away.
+//
+// The `~Array` goes through ResolveAddr rather than calling ArrayDtorImpl
+// directly, so the 0x18001c750 site's own `calls=` counts it and so the door is
+// the same one every other by-address caller of that address uses.
+void* RtColl_I32ArrayAssign(uint8_t* dstRaw, const uint8_t* srcRaw) {
+    ArrayHdr* dst = reinterpret_cast<ArrayHdr*>(dstRaw);
+    const ArrayHdr* src = reinterpret_cast<const ArrayHdr*>(srcRaw);
+    if (dst == src) return dst;
+
+    using DtorFn = void* (*)(void*);
+    static DtorFn dtor = nullptr;            // cache a hit, retry a miss
+    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18001c750));
+    dtor(dst);
+
+    const int32_t n   = src->_size;
+    const int32_t old = dst->_size;          // always 0 here — see above
+    dst->_size = n;
+    if (n > dst->_capacity) {
+        dst->_capacity = n;
+        if (n == static_cast<int32_t>(old + 1) && old != 0)
+            dst->_capacity = static_cast<int32_t>(n * 3);
+        dst->_data = static_cast<uint8_t*>(
+            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 4, 4));
+    }
+    for (int32_t i = 0; i < dst->_size; ++i) {
+        uint8_t* p = dst->_data + static_cast<int64_t>(i) * 4;
+        if (p == nullptr) continue;
+        *reinterpret_cast<int32_t*>(p) =
+            *reinterpret_cast<const int32_t*>(src->_data + static_cast<int64_t>(i) * 4);
+    }
+    return dst;
+}
+
+void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d) = *reinterpret_cast<const uint32_t*>(s);
+    /* +0x04 .. +0x07 deliberately untouched — retail does not write them */
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    RtColl_I32ArrayAssign(d + 8, s + 8);
+}
+
+// 0x1800419b0, the destroy-range for the same element — and, exactly like
+// 0x180011010 above, ALREADY PORTED in array_destroy.cpp as `kD_InnerArr_18`
+// ("Array @+0x008, stride 0x018"), and left unregistered there for want of a
+// caller. This lane supplies the caller; the A_ENTRY line and the registration
+// were added in that file. Retail iterates the records at stride 0x18 and, for
+// the nested Array at record+8, runs the same free-and-zero `~Array` runs.
+//
+// Reached by address so the registry is the door, as above.
+void DestroyGraphSeriesRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800419b0));
+    fn(ignoredThis, base, count);
+}
+
+// ============================================================================
 // The per-address specs.
 //
 // Every row was read out of that address's own disassembly. `stride` is the
@@ -568,6 +749,31 @@ const ArraySpec kSpec_StringExt = {               // 0x180061480
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
+
+// --- WAVE 9 LANE UIW's two ------------------------------------------------
+//
+// NO WINDOW EITHER ARM. AssignStringRef's unconditional `dst = 0` before the
+// null test means both arms write all 8 bytes; there is no init arm.
+// SEED ZEROS the whole stride: the assign dereferences the source pointer
+// (`INC [RAX-4]`) and the destroy dereferences and frees the destination's.
+const ArraySpec kSpec_StringRef = {               // 0x180034860
+    "Array<System::String>", 8, 8, &AssignStringRef, nullptr,
+    &DestroyStringRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// ASSIGN WINDOW +0x04..+0x07: the colour is ONE dword and the nested Array
+// starts at +0x08, so four bytes of every element are never written by anybody.
+// There is no init arm (the only caller, GraphElement::AddGraph, passes a fill).
+// SEED ZEROS +0x08..+0x17: the nested Array header is destroyed (its buffer
+// freed) by the assign's `operator=` before being overwritten.
+const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
+    "Array<GraphSeries>", 0x18, 8, &AssignGraphSeries, nullptr,
+    &DestroyGraphSeriesRange, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x18 };
 
 // ============================================================================
 // Live instrumentation.
@@ -799,8 +1005,53 @@ J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
 // same immediates, same targets, so the "no parameters at all, not even a
 // stride" conclusion covers it unchanged and one body still serves them all.
 J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*>
+// WAVE 9 LANE UIW, 2026-09-08 — THE THIRTEENTH AND FOURTEENTH ADDRESSES, both
+// reached by `?RemoveAllItems@ComboElement@UI@@` (0x180075120): its second and
+// third calls, on `_sprites` (+0xf8) and `_userData` (+0x108).
+//
+// Same byte-level claim as the twelfth, made the same way and not by eye. Both
+// were read with `read_memory` over all 115 bytes and compared against
+// 0x180033960. 0x180037310 differs at exactly eleven offsets and 0x180024aa0 at
+// exactly fifteen; EVERY differing byte in both lies inside one of the five
+// relocated operands (the disp32 of `MOV RBX,[rip]`, `CALL [rip]`,
+// `MOV RCX,[rip]`, the `CALL rel32`, and the second `CALL [rip]`), and all five
+// resolve in BOTH bodies to the same absolute targets the J1 note above pins:
+// 0x1801fc718, 0x18014b390, 0x1801fc718, 0x1800c6c00, 0x18014b388. Outside
+// those five windows the three bodies are byte-for-byte equal.
+J1_ENTRY(180037310)   // UI:          ComboElement::_sprites  (+0xf8)
+J1_ENTRY(180024aa0)   // UI:          ComboElement::_userData (+0x108)
 
 #undef J1_ENTRY
+
+// 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
+Site g_uiw_18001cdf0 = { { "Collection::Array<int32>::operator= @0x18001cdf0",
+                           0, 0, false, false }, 0x18001cdf0 };
+void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
+    ProbeGate();
+    void* r = RtColl_I32ArrayAssign(static_cast<uint8_t*>(dst),
+                                    static_cast<const uint8_t*>(src));
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_uiw_18001cdf0.d);
+        // INDEPENDENT of the rule this body implements: it compares the copied
+        // buffer against the SOURCE, which this function did not write. It is
+        // silent when dst == src (retail's early return) and when the size is
+        // zero, so the `worked` flag distinguishes "entered" from "did work"
+        // (reference_probe_needs_an_effectiveness_control.md).
+        const ArrayHdr* d = static_cast<const ArrayHdr*>(dst);
+        const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
+        if (dst != src && d->_size > 0) {
+            const size_t n = static_cast<size_t>(d->_size) * 4;
+            const bool ok = (d->_size == s->_size) &&
+                            std::memcmp(d->_data, s->_data, n) == 0;
+            char ours[96], theirs[96];
+            std::snprintf(ours,   sizeof(ours),   "copied %d int32", d->_size);
+            std::snprintf(theirs, sizeof(theirs), "source %d int32", s->_size);
+            RtDiffReport(&g_uiw_18001cdf0.d, ok, ours, theirs);
+        }
+    }
+    return r;
+}
+
 
 // --- J3: the two-argument form, `SetSize(this, int n)` ----------------------
 #define J3_ENTRY2(ADDR, SPEC)                                                 \
@@ -837,6 +1088,25 @@ J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
 J3_ENTRY3(180061480, kSpec_StringExt)   // Graphics: Material's {String*,ExternalPtr} [NON-TRIVIAL]
 J3_ENTRY3(180076900, kSpec_Fill8Z)      // UI:       Element::AddChild's child array
 J3_ENTRY3(18007a0d0, kSpec_Fill8Z)      // Engine:   the dialog pending-list push
+// WAVE 9 LANE UIW, 2026-09-08 — five more three-argument instantiations, all
+// reached from the UI cutover residue. THREE OF THE FIVE ARE EXACT CLONES of
+// specs already above, and that is a claim read out of each body, not assumed
+// from the element type:
+//   0x180024fe0  ComboElement::_userData  — SHL RCX,3 / MOV EDX,8 / plain
+//                `MOV RAX,[src]; MOV [dst],RAX`. No zero-first store, so
+//                Assign8, not Assign8Z: kSpec_Fill8, same as 0x18001f990.
+//   0x18004bfc0  ComboElement::_sprites   — SHL RCX,4 / MOV EDX,8 / two qword
+//                copies. kSpec_Fill16, same as MainLoop's two push sites.
+//   0x180048fe0  RadioElement::_checkBoxes — SHL RCX,3 / MOV EDX,8 / `MOV
+//                [dst],R11(=0)` THEN `MOV RAX,[src]; MOV [dst],RAX`. The
+//                zero-first store is the smart-pointer element's operator=,
+//                so kSpec_Fill8Z, same as Element::AddChild's own array.
+// The other two carry the new specs above.
+J3_ENTRY3(180024fe0, kSpec_Fill8)       // UI:       ComboElement::_userData  (+0x108)
+J3_ENTRY3(18004bfc0, kSpec_Fill16)      // UI:       ComboElement::_sprites   (+0xf8)
+J3_ENTRY3(180048fe0, kSpec_Fill8Z)      // UI:       RadioElement::_checkBoxes(+0xc0)
+J3_ENTRY3(180034860, kSpec_StringRef)   // UI:       ComboElement::_strings   (+0xe8) [NON-TRIVIAL]
+J3_ENTRY3(1800417d0, kSpec_GraphSeries) // UI:       GraphElement::_graphs    (+0xf0) [NON-TRIVIAL]
 
 #undef J3_ENTRY3
 
@@ -894,6 +1164,10 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180073bb0, (void*)&RtColl_ArrayDtor_180073bb0);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
     RegisterRuntimeAddr(0x180037240, (void*)&RtColl_ArrayDtor_180037240);
+    // Wave 9 lane UIW: thirteenth and fourteenth, reached by
+    // ?RemoveAllItems@ComboElement@UI@@.
+    RegisterRuntimeAddr(0x180037310, (void*)&RtColl_ArrayDtor_180037310);
+    RegisterRuntimeAddr(0x180024aa0, (void*)&RtColl_ArrayDtor_180024aa0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
@@ -909,6 +1183,32 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18004f8e0, (void*)&RtColl_ArraySetSizeFill_18004f8e0);
     RegisterRuntimeAddr(0x180076900, (void*)&RtColl_ArraySetSizeFill_180076900);
     RegisterRuntimeAddr(0x18007a0d0, (void*)&RtColl_ArraySetSizeFill_18007a0d0);
+    // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
+    RegisterRuntimeAddr(0x180024fe0, (void*)&RtColl_ArraySetSizeFill_180024fe0);
+    RegisterRuntimeAddr(0x18004bfc0, (void*)&RtColl_ArraySetSizeFill_18004bfc0);
+    RegisterRuntimeAddr(0x180048fe0, (void*)&RtColl_ArraySetSizeFill_180048fe0);
+    // The two NON-TRIVIAL ones are registered HERE, unconditionally, and NOT
+    // behind BANISHED_RT_ARRAY_NONTRIVIAL. That switch exists because its three
+    // members call unexported per-element helpers BY ADDRESS INTO THE DLL, so
+    // turning them off returns three whole element types to retail. These two
+    // do not: every element operation they use — AssignStringRef,
+    // DestroyStringRange, AssignGraphSeries, DestroyGraphSeriesRange and the
+    // `Array<int32>::operator=` underneath — is ours (the two destroy-ranges
+    // live in array_destroy.cpp and are reached through the registry). Putting
+    // them behind that switch would mean flipping it left
+    // `ComboElement::AddItem`, `RemoveAllItems` and `GraphElement::AddGraph`
+    // calling a null address after cutover, which is a worse failure than the
+    // one the switch exists to make cheap to bisect.
+    RegisterRuntimeAddr(0x180034860, (void*)&RtColl_ArraySetSizeFill_180034860);
+    RegisterRuntimeAddr(0x1800417d0, (void*)&RtColl_ArraySetSizeFill_1800417d0);
+
+    // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
+    RegisterRuntimeAddr(0x18001cdf0, (void*)&RtColl_I32ArrayAssign_18001cdf0);
+    // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
+    // three belong to runtime/src/collection/array_destroy.cpp, which already
+    // registered 0x180010ab0 and, in this same commit, registers the other two
+    // now that a caller exists. Registering them here as well would SHADOW that
+    // file's bodies with a second copy — see the note above DestroyStringRange.
 
     // ---- J3: SetSize, NON-TRIVIAL elements ---------------------------------
     // Separately switchable because these three are the only ones that call

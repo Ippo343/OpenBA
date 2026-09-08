@@ -836,6 +836,101 @@ void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
     RT_DIFF_WORK(true);
 }
 
+// ============================================================================
+// ?AddGraph@GraphElement@UI@@QEAAXI@Z  retail 0x180040620  (WAVE 9 LANE UIW)
+// ============================================================================
+//
+// Held back twice: by Wave 7 lane E ("no oracle, and GraphSeries not reversed")
+// and again by Wave 9 lane UIF ("calls 0x1800417d0, an UNEXPORTED internal that
+// no lane has ported — porting it would MOVE the row one frame deeper"). Lane
+// UIF's verdict was right on its evidence and the fix was to go get that frame:
+// **0x1800417d0 is now ported** (runtime/src/collection/array.cpp,
+// `kSpec_GraphSeries`), together with the two helpers it needs
+// (`Array<int32>::operator=` 0x18001cdf0 and the destroy-range 0x1800419b0).
+// With those three landed this row closes rather than relocating a null.
+//
+// THE BODY, 0x180040620..0x18004068b:
+//
+//     AddGraph(this, uint32 colour):
+//         old = (int64)this->_graphs._size;      ; MOVSXD from [RCX+0xf8]
+//         uint8_t tmp[0x18];                     ; at [RSP+0x28]
+//         *(uint64*)(tmp+0x08) = 0;              ; the nested Array header,
+//         *(uint64*)(tmp+0x10) = 0;              ;   zeroed; tmp+0..7 is NOT
+//         0x1800417d0(&this->_graphs, _graphs._size + 1, tmp);
+//         0x18001c750(tmp + 8);                  ; ~Array on the temp
+//         this->_graphs._data[old].colour = colour;
+//
+// THREE THINGS WORTH THE INK:
+//
+//  1. **`tmp + 0x00 .. 0x07` IS DELIBERATELY UNINITIALISED.** Retail's fill
+//     lives at `[RSP+0x28]` — the shadow-space slot — and only `[RSP+0x30]` and
+//     `[RSP+0x38]` are zeroed. So the colour dword copied into the new element
+//     by the assign is whatever the stack held, and the LAST line of the
+//     function overwrites it with the real `colour`. Nothing observable depends
+//     on those bytes; they are left uninitialised here rather than zeroed
+//     because zeroing them would be a different instruction sequence for a
+//     value that is dead either way, and a reader who found a `= {}` here would
+//     reasonably conclude retail initialised it.
+//  2. **The temp's nested Array IS destroyed afterwards, and it is empty.**
+//     `Array<int32>::operator=` copies FROM the temp INTO the new element, so
+//     the temp still owns nothing; the `~Array` is the compiler's RAII teardown
+//     of a local that was never grown. It is reproduced because it is a real
+//     call retail makes, through an address that is already ours (0x18001c750,
+//     a registered J1 row) — dropping it would be the `dirAlias` mistake
+//     (WAVE9.md: a local written, passed, released and never read is a
+//     side-effect carrier until proven otherwise). Here it IS provably inert,
+//     and it is kept anyway, because "provably inert" cost a paragraph to
+//     establish and costs one call to honour.
+//  3. **`old` IS TAKEN BEFORE THE APPEND AND SIGN-EXTENDED.** `MOVSXD RDI,
+//     [RCX+0xf8]` — Ghidra's C prints that as a zero extension and doing so
+//     caused three Wave 6 defects including a crash
+//     (reference_ghidra_c_output_vs_disassembly.md). The final store indexes
+//     `_data + old*0x18` with no bounds check, exactly as retail does.
+//
+// NO ORACLE, for the same reason as AddGraphPoint above: a replay APPENDS A
+// SECOND SERIES and reallocates the array, so it is a second side effect and
+// not a comparison. The shadow is an INDEPENDENT post-condition — the array
+// grew by exactly one and the new element carries the colour the CALLER passed,
+// which is a value this body did not derive from its own rule.
+void GraphElement_AddGraph(void* self, uint32_t colour) {
+    RT_DIFF_BEGIN("UI::GraphElement::AddGraph [no oracle: appends a series]");
+
+    uint8_t* graphs = B(self, GRE::kGraphsData);          // &_graphs, the Array header
+    const int64_t old = *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount));  // MOVSXD
+
+    uint8_t tmp[0x18];
+    // tmp[0x00..0x07] intentionally left uninitialised — see (1) above.
+    *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
+
+    using SetSizeFn = void (*)(void*, int32_t, const void*);
+    static SetSizeFn setSize = nullptr;                   // cache a hit, retry a miss
+    if (!setSize)
+        setSize = reinterpret_cast<SetSizeFn>(ResolveAddr(Module::Runtime, 0x1800417d0));
+    setSize(graphs, *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)) + 1, tmp);
+
+    using DtorFn = void* (*)(void*);
+    static DtorFn dtor = nullptr;
+    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18001c750));
+    dtor(tmp + 8);
+
+    uint8_t* data = *reinterpret_cast<uint8_t**>(graphs);
+    *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;
+
+    if (rt_diff_on__) {
+        const int32_t now = *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount));
+        const bool ok = (now == static_cast<int32_t>(old) + 1) &&
+                        (*reinterpret_cast<uint32_t*>(data + old * 0x18) == colour);
+        char oursDesc[96], theirsDesc[96];
+        std::snprintf(oursDesc,   sizeof(oursDesc),   "size=%d colour=0x%08x", now,
+                      *reinterpret_cast<uint32_t*>(data + old * 0x18));
+        std::snprintf(theirsDesc, sizeof(theirsDesc), "size=%d colour=0x%08x",
+                      static_cast<int32_t>(old) + 1, colour);
+        RT_DIFF_SHADOW(ok, oursDesc, theirsDesc);
+        RT_DIFF_WORK(true);
+    }
+}
+
 // ============================================================
 // UI::Element::RemoveChildren  retail 0x180115570  (Wave 9 lane B3)
 // ============================================================
@@ -954,11 +1049,15 @@ int RtUiWidgetsLayRegister() {
     RegisterRuntimeExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z",
                           (void*)&GraphElement_AddGraphPoint); ++n;
     RegisterRuntimeAddr(0x180040690, (void*)&GraphElement_AddGraphPoint);
-    // ?AddGraph@GraphElement@UI@@... -- STILL HELD BACK (WAVE7_LANE_E.md sec2),
-    // and lane UIF re-checked the reason rather than inheriting it: AddGraph
-    // calls 0x1800417d0, an UNEXPORTED internal that no lane has ported. So
-    // porting it would MOVE the cutover row one frame deeper instead of closing
-    // it, which is the admission test this wave runs. See WAVE9_LANE_UIF.md.
+    // WAVE 9 LANE UIW: the hold-back above is spent. Lane UIF declined this row
+    // because 0x1800417d0 was an unported unexported internal and porting
+    // AddGraph would have moved the cutover row one frame deeper. That frame is
+    // now ours -- 0x1800417d0 (kSpec_GraphSeries), 0x18001cdf0 and 0x1800419b0
+    // are all registered in runtime/src/collection/array.cpp -- so the row
+    // closes. See docs/runtime_port/WAVE9_LANE_UIW.md.
+    RegisterRuntimeExport("?AddGraph@GraphElement@UI@@QEAAXI@Z",
+                          (void*)&GraphElement_AddGraph); ++n;
+    RegisterRuntimeAddr(0x180040620, (void*)&GraphElement_AddGraph);
 
     printf("[RtPort] UI widgets(layout): %d exports registered\n", n);
     return n;

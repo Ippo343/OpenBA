@@ -446,7 +446,30 @@ namespace rtcoll {
 //     0x180074100 kD_InnerArr_48    0x18005bce0 kD_InnerArr3_48
 //     0x180011010 kD_Str_08         0x180014a40 kD_Str_48
 //     0x180034440 kD_Str_18         0x18005c550 DestroyNestedPair
+//
+// *** WAVE 9 LANE UIW, 2026-09-08 — TWO OF THE EIGHT NOW HAVE A CALLER, and
+// the note above says exactly what to do about it: "Register it the day a
+// caller appears." Taken up literally, one line each, no re-derivation. ***
+//
+//   0x1800419b0 (kD_InnerArr_18) — the shrink/realloc destroy arm of
+//       `Array<GraphSeries>::SetSize` (0x1800417d0), ported this commit in
+//       array.cpp as `kSpec_GraphSeries` to close
+//       `?AddGraph@GraphElement@UI@@`.
+//   0x180011010 (kD_Str_08) — the same arm of `Array<System::String>::SetSize`
+//       (0x180034860), ported this commit as `kSpec_StringRef` to close
+//       `?AddItem@ComboElement@UI@@`. It will get a SECOND caller the day
+//       0x180029a80 (the two-argument sibling, `TextElement::
+//       SetParameterCount`'s) lands.
+//
+// This is the good outcome of a mistake worth recording. Lane UIW's first draft
+// wrote its OWN body for both of these and registered 0x180010ab0 as well —
+// which this file already registers as a J2 entry — producing a shadowed
+// address and two live copies of one function. It surfaced only because a diff
+// run printed a site name (`…~Array(+elem) @0x180010ab0`) that lane had not
+// written. **array.cpp and array_destroy.cpp are two files and one namespace;
+// grep the address across both before porting a Collection helper.**
 A_ENTRY(180052110, kD_InnerArr_40)    // Audio::EffectSlot array (NOT Audio-gated — see banner)
+A_ENTRY(1800419b0, kD_InnerArr_18)    // UI: GraphElement::_graphs, the nested point Array
 
 #undef A_ENTRY
 
@@ -463,6 +486,7 @@ A_ENTRY(180052110, kD_InnerArr_40)    // Audio::EffectSlot array (NOT Audio-gate
 
 B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSpec_StringExt
 B_ENTRY(1800059e0, kD_Str2_38)        // SpriteSheet's 0x38 entry — lane Q's kSpec_Sprite38
+B_ENTRY(180011010, kD_Str_08)         // UI: ComboElement::_strings — lane UIW's kSpec_StringRef
 
 #undef B_ENTRY
 
@@ -798,6 +822,11 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x180052110, (void*)&RtColl_DestroyInner_180052110);
     RegisterRuntimeAddr(0x180005930, (void*)&RtColl_DestroyStrings_180005930);
     RegisterRuntimeAddr(0x1800059e0, (void*)&RtColl_DestroyStrings_1800059e0);
+    // Wave 9 lane UIW: two more of "the eight", now that array.cpp's
+    // kSpec_GraphSeries and kSpec_StringRef reach them by address. See the note
+    // above the A_ENTRY block.
+    RegisterRuntimeAddr(0x1800419b0, (void*)&RtColl_DestroyInner_1800419b0);
+    RegisterRuntimeAddr(0x180011010, (void*)&RtColl_DestroyStrings_180011010);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that
