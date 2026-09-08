@@ -181,6 +181,27 @@ EXTRA_VTABLES_BY_ADDR = {
         "??0BinaryFileStream and by UserInterface::SaveAllSettings and "
         "DialogInstance::OnOpened. Count proved by adjacency: it ends exactly "
         "where ??_7BinaryFileStream@IO@@6B@ begins.",
+
+    # --- Wave 9 lane SAVE2 -------------------------------------------------
+    # Both harvested by that lane and handed to the integrator because the mint
+    # has ONE owner (reference_census_cannot_see_the_macro_doors: a shared
+    # instrument is fixed by one owner in one commit). Contents and the count
+    # proof are in docs/runtime_port/WAVE9_LANE_SAVE2.md section 7.
+    0x180155860:
+        "IO::Persistence vtable, 2 slots, UNEXPORTED. slot 0 = 0x1800b7260 "
+        "(Persistence's override of Thread's pure virtual), slot 1 = "
+        "?OnCompleted@Thread@System@@UEAAXXZ inherited unchanged. Count proved "
+        "TWO ways: slot 2 onward is ASCII .rdata text (\"true\", \"Shining Rock "
+        "Software LLC\", \"Software\\%s\\%s\"), which the generator's own "
+        "'not a valid address inside the image' test rejects; and it matches "
+        "??_7Thread@System@@6B@, which is 2 slots -- a 2-slot subclass vtable "
+        "overriding slot 0 and inheriting slot 1 is exactly what that implies.",
+
+    0x180157c60:
+        "Audio::Device per-record vtable, 7 slots, UNEXPORTED. Stamped at +0x00 "
+        "of each of 64 0x20-byte records at Device+0xa98. All seven bodies lie "
+        "inside 0x1800501c0..0x180050240 and none is exported. Count proved by "
+        "the same not-an-image-address test on slot 7.",
 }
 
 # Unexported .data statics our tree reads BY ADDRESS. Same argument as above.
