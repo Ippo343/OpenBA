@@ -8,7 +8,7 @@ that only the shipped DLL's presence makes visible.
 |---|---|
 | **1** — `UI::NumberElement::SetValueInt` diverges on tutorials 1-3 | **CLOSED.** An ORACLE defect, diagnosed by lane M and FIXED here: the two `NumberElement` setters and `NumberEditElement::SetMinMax` are now NO-ORACLE ports. Layout corrected: `+0xD0` is an owning refcounted `System::String` and the object is **0xE8** bytes, not 0xE0. |
 | **2** — `Picking::Scene::Intersect` diverges on the stress route | **CLOSED, and it was a REAL PORT DEFECT.** A moved term: the inverse transform's translation was folded into `localOy`/`localOz` FIRST instead of added LAST. Fixed and proved on a deterministic 244,824-ray repro — 21 divergences -> 0 with the denominator unchanged, and a negative control that fires at 7,520/7,536. |
-| **3** — intermittent shutdown crash in the allocator | **REPRODUCED and re-characterised; writer NOT found.** Lane M's arithmetic is corrected here: it is a small integer written over a pointer's LOW half, not a decremented boundary tag. |
+| **3** — intermittent shutdown crash | **REPRODUCED 4x and RE-CHARACTERISED; the missing erase NOT found.** Two corrections to what was recorded: the arithmetic (a small integer over a pointer's LOW half, not a decremented boundary tag) and, more importantly, the **stack** — symbolized with `nm` it is the WorkComponent task-cleanup path, not a tutorial tree through `TreeNodeFree`. It is a stale BST link to a freed-and-reused node. |
 
 ---
 
@@ -487,17 +487,17 @@ down elsewhere in this project and would send the next reader looking for the wr
 
 ### Reproduced
 
-| | lane M | lane N |
-|---|---|---|
-| exe | 2026-09-07 23:29:48 | 2026-09-08 00:37:17 |
-| rate | 1 of 4 stress runs | 1 of 3 stress-route runs |
-| fault | READ of `000001d9fffffffa` | READ of `000001d600000022` |
-| faulting module | `Runtime-x64.dll + 0xC6C5F` (the DLL allocator) | `reimpl-x64.exe + 0x5E7D` |
-| redzone | no tag corruption, forward links intact | **identical wording** |
+| run | exe | fault | the bad qword |
+|---|---|---|---|
+| lane M, stress 3 of 4 | 2026-09-07 23:29:48 | READ of `000001d9fffffffa` (= ptr-8) | `0x000001DA_00000002` |
+| lane N | 2026-09-08 00:37:17 | READ of `000001d600000022` | `0x000001D6_00000022` |
+| lane N, big sweep | 2026-09-08 00:50:34 | READ of `ffffffffffffffff` | `RAX=0x40000000_7FFCE0A1` |
+| lane N, merged-tree verify | 2026-09-08 00:57:50 | READ of `000001ab00000002` | `0x000001AB_00000002` |
 
-Both land in free-block bookkeeping with intact tags and intact forward links, which puts the
-corruption in a **prev link or a bucket head** — i.e. a write into a block *after* it was freed,
-not a mis-sized allocation.
+Four occurrences in roughly nine stress-route runs. Three of the four are the same shape — a
+**valid heap high dword with a small integer in the low dword**, and twice that integer is
+literally `2`. `[REDZONE-DUMP]` says the same thing every time: no tag corruption, free-list
+forward links intact.
 
 ### Why it matters beyond the crash
 
@@ -506,17 +506,71 @@ printed after `Game::RunGameMain` returns (`standalone/main.cpp:1895`). So it **
 a recorded cell into no cell at all**, and does it in a run that looked successful. It is a
 verification blocker, not only a bug.
 
-### Not found
+### THE STACK IS NOT WHERE LANE M'S SYMBOLIZATION PUT IT
 
-The writer. `tools/abi_retslot_audit.py` is clean (0 suspicious of 48 by-value-returning exports),
-so the hidden-return-slot family is not it. `TreeNodeFree_2ce60` was checked against retail
-0x14002CE60 instruction by instruction and is faithful, and the node layout it walks is confirmed
-by the node copy-constructor at 0x14002CEB0 (`+0x00` key, `+0x08`/`+0x10` sub-tree {root,count},
-`+0x18` parent, `+0x20`/`+0x28` children, `+0x30` int32) — so the "one free routine, two node
-layouts" family is not it either.
+Lane M reported the path as
+`GameUpdateLoop_Shutdown → Tutorial_Dtor_f8ff0 → TreeNodeFree_2ce60 → MemFree → FreeLocked`,
+i.e. a tutorial tree being freed through the allocator. **On a crash lane N reproduced and
+symbolized against its own binary with `nm`, it is not that path at all.** Every frame below,
+`nm`-resolved against `standalone/build/reimpl-x64.exe` at image base 0x140000000:
 
-**Reproduced, characterised, writer not found.** Per CLAUDE.md this is not to be closed with a
-null check: the freed block is being written by something, and a guard at the free site would move
-the crash rather than fix it. The open experiment is a stress A/B with `BANISHED_RT_DIFF` unset
-against set — the oracle itself performs use-after-free *writes* on some routes (Finding 1 is one),
-so whether the crash rate depends on the oracle is the cheapest next discriminator.
+```
+exe+0x345FB0  WinMain +0x20c
+exe+0x1A731E  Game::RunGameMain +0xe6e
+exe+0x1AEB4A  GameUpdateLoop_Shutdown +0x2f6
+exe+0x1B9A1E  EntityList_Shutdown_c3d30 +0x104
+exe+0x5F69    ActHunt_MarkEntityRemoval_c2ea0 +0x209
+exe+0x1178FB  WorkComponent_OnRemoveVSlot +0x18
+exe+0x11743F  WorkComponent_OnRemove_CancelWork +0xfe
+exe+0x117746  WorkComponent_RegisterWorkSlot +0x181
+exe+0x47A6    ActCt_TaskCleanup_8e30 +0x2bf     <-- FAULT
+```
+
+`GameUpdateLoop_Shutdown` is common to both readings and is presumably what made the tutorial
+guess plausible; nothing below it matches. This is the **WorkComponent work-slot / task-cleanup**
+path, not a tutorial tree and not `TreeNodeFree`. Lane M did not have a symbol table for the
+frames it named, and its reading should not be carried forward.
+
+### What the fault actually is: a stale BST link to a freed-and-reused node
+
+`ActCt_TaskCleanup_8e30` (`code/Game/Action/action_base_complete.cpp:188`) walks intrusive BSTs by
+reading a node's key with `int key = *task;` and descending through child links at `+0x10`/`+0x18`
+/`+0x20`. **The faulting address IS the node pointer** — `READ of 000001ab00000002` with
+`RAX = 000001AB00000002` — so a child link in one of those trees held `{low dword = 2, high dword
+= this run's heap prefix}`.
+
+That is not a pointer anything computed. It is what you read out of a block that **was freed and
+handed to a new owner**, whose first fields are now a small integer and something else — while the
+tree still links to it. Everything else agrees with that reading: the allocator's tags are intact,
+its free-list forward links are intact, and the value's high half is a *valid* heap prefix. It is
+also exactly the family of `reference_workarea_bst_bad_entry.md`, which closed a teardown hang and
+an `IsA` EXEC crash in this same Work family and ends with the instruction *"ask what should have
+ERASED an entry before what WROTE it"* — and `CheckPtr` is a bare `RET` in every shipped build, so
+nothing validates the handle on the way through.
+
+Reaching it during **entity teardown** is the aggravating condition: `EntityList_Shutdown` is
+removing entities while `RegisterWorkSlot` looks the citizen's id back up in the task manager's
+trees (`s_fn_CitizenAI_8e30(gameWorld+0x118, key)`, `workcomponent.cpp:310`), so a node an earlier
+teardown step freed can still be linked.
+
+### Not found, and not guessed
+
+The erase that should have happened. `tools/abi_retslot_audit.py` is clean (0 suspicious of 48
+by-value-returning exports), so the hidden-return-slot family is not it; and
+`TreeNodeFree_2ce60`, which lane M's reading implicated, was checked against retail 0x14002CE60
+instruction by instruction and is faithful — its node layout is confirmed by the node
+copy-constructor at 0x14002CEB0 (`+0x00` key, `+0x08`/`+0x10` sub-tree {root,count}, `+0x18`
+parent, `+0x20`/`+0x28` children, `+0x30` int32) — so the "one free routine, two node layouts"
+family is not it either. Both of those are now eliminated rather than merely unexamined.
+
+**Reproduced (4 times in ~9 stress-route runs), stack symbolized, mechanism characterised, the
+missing erase not identified.** Per CLAUDE.md it is not to be closed with a null check on the
+child link: the tree is linking to a dead node, and a guard at the read would hide that while
+leaving the dangling link. The next step is to find which teardown step frees a task/work node
+without removing it from the `taskMgr+0x30` and `taskMgr+0x40..` trees — the same question, in the
+same subsystem, that `reference_workarea_bst_bad_entry.md` answered once already.
+
+**It is also a verification blocker, and that has now bitten this lane directly:** the merged-tree
+confirmation run below produced its `[PickSweep]` line and then died at shutdown, so it has **no
+`[RtDiff]` summary at all** despite the sweep having completed cleanly. A cell can be destroyed
+after it has succeeded.
