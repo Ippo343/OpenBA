@@ -1449,6 +1449,82 @@ which is exactly why they are dangerous: invisible to the census, satisfied-look
 the raw-door and bypass audits, and null at cutover. **Three instruments blind to the
 same two symbols.**
 
+### Attempt 13: the boot LEAVES the name-resolution phase, and the failure changes CLASS
+
+Lane FIND merged (`5a34d07`): `?ExistsInPackfile@`, `?PlatformExists@` and
+`?FindFiles@` all CLOSE, plus two unexported `Array<Filename>` helpers.
+`unsatisfied_export_scan` **152 -> 149** unsatisfied, 149 -> 146 with a live site,
+**denominator unmoved at 789** and a set-diff showing exactly three names removed and
+nothing added. That accounting — unmoved total plus set-diff — is what makes "+3
+closed" a measurement rather than a claim, and it is the standard the other lanes
+should copy.
+
+Attempt 13 runs **eight frames deeper than attempt 12** and no longer dies on a
+missing name:
+
+```
+#9 RtEngine_Engine_Startup            +0x22C
+#8 RtIo_FileSystem_Startup            +0x140
+#7 RtIo_FileSystem_LoadPackages       +0x111   <- attempt 12 died HERE
+#6 RtIo_FileSystem_FindFiles          +0x92
+#5 FindFilesImpl                      +0x18F
+#4 AppendFilename                     +0x2D
+#3 RtColl_ArraySetSizeFill_180026880  +0x39
+#2 rtcoll::SetSizeCore                +0x181
+#1 rtcoll::MemAlloc                   +0x81    <- EXEC of 0
+```
+
+**A/B control, run and passed exactly:** `BANISHED_RT_FIND=0` on the same binary puts
+the fault back on `?FindFiles@` at `RtIo_FileSystem_LoadPackages +0x111` — attempt
+12's exact site. Second consecutive rung where the kill switch restores the previous
+rung's fault precisely.
+
+### ⛔ THE NEW WALL IS NOT A MISSING NAME -- it is the ALLOCATOR, reached BY ADDRESS
+
+```
+[AllocLock] could not resolve Allocate (0x1800c6e60)
+[AllocLock] could not resolve Free (0x1800c6c00)
+[REDZONE-DUMP] no allocator singleton
+```
+
+Every rung so far has been "symbol X has no port". This one is different in kind:
+`?Allocate@MemoryAllocator@System@@` and `?Free@` are reached **by ADDRESS**
+(`0x1800c6e60` / `0x1800c6c00`) by the Collection array code that lane PKG and lane
+FIND both call, and with the DLL gone there is nothing at those addresses and nothing
+registered for them. So `rtcoll::MemAlloc` calls a null pointer eight frames below
+anything that names an allocator.
+
+**This partly CORRECTS gate row E's recorded prediction.** Row E predicted the
+allocator would fail silently at cutover because
+`?_singleton@MemoryAllocator@System@@0PEAV12@EA` is "unminted exported data, nothing in
+the tree mints it", faulting on `null+0x640`. **The singleton IS minted** —
+`rt_data_mint_tables.inc:1572`, `0x1801fc718`, 8 bytes. The prediction that the
+allocator breaks at cutover was right; the *mechanism* named was not. The live
+mechanism is the unregistered by-address entry points, which no name-based instrument
+can see because **the call site never mentions a name at all** — the deepest form of
+the door problem this wave keeps rediscovering.
+
+`[RtAllocSwap]` already states the intended design ("the composed stubs, which take
+the allocator CS at self+0x640"), so the gap is registration, not design.
+
+**NEXT ACTION for whoever picks this up: register the allocator's own entry points by
+address** so by-address callers reach our port, then re-run. That is a smaller job than
+any rung since attempt 08, and it is the last thing standing between the boot and
+whatever comes after `FileSystem::Startup`.
+
+### The `dirAlias` finding — a local that is written, passed, released and NEVER READ
+
+Lane FIND found that `FindFiles`' `dirAlias` at `[RSP+0x58]` is built, handed to
+`AdjustDelimiters`, released, and never read again. **It is not dead code.**
+`AdjustDelimiters`' first phase rewrites `/` to `\` **in place, through the
+refcount-shared buffer**, so the local exists solely for its side effect on a string
+somebody else is holding.
+
+That is precisely the shape a careful reimplementation deletes as obviously dead. Worth
+carrying as a rule rather than a note: **a local that is written, passed to a helper,
+released, and never read is a SIDE-EFFECT CARRIER until proven otherwise** — check
+whether the helper mutates through a shared buffer before dropping it.
+
 ## Lane A's work list: the 32 wave-3-to-8 holdbacks, triaged
 
 Produced by the fix wave (see [WAVE8_5.md](WAVE8_5.md)), which also closed four of them and
