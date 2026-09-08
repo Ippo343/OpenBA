@@ -262,6 +262,27 @@ the two orders apart.
 | `port_bypass_audit.py` name door | 0 bypasses | **0 bypasses** |
 | `port_bypass_audit.py` address door | 0 bypasses | **0 bypasses** |
 | `export_name_audit.py` | 1 known placeholder | 1 known placeholder |
+| `runtime_census.py` Video ported | 105 (derived) | **107 measured** (of 142 called) |
+
+The 105 is a *derivation*, not a second measurement, and is marked as such: this
+lane's three commits add exactly two `RegisterRuntimeExport` literals and touch
+no other registration, so `107 − 2` is arithmetic on the one number that was
+measured. Do not quote it as an independent reading.
+
+
+The census is a third, independent confirmation that these were the right two
+rows rather than a lane's own choice: `docs/runtime_port/census_20260907_prewave9.csv`
+already carried them, unported, with `dx11/src/contextdata.cpp` named as the
+caller —
+
+```
+export,?BindResources@Context@Video@@AEAAXXZ,Video,0,0,dx11/src/contextdata.cpp
+export,?BindTextures@Context@Video@@AEAAXXZ,Video,0,0,dx11/src/contextdata.cpp
+```
+
+— which is the same finding as §1 arrived at from the disassembly, sitting in a
+CSV since before Wave 9 opened.
+
 
 The two added doors are the probe's own `ResolveExportRaw` lookups, and both are
 **satisfied** (by this port), which is why the unsatisfied count did not move.
