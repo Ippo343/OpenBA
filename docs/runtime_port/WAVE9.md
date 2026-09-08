@@ -895,7 +895,7 @@ census. **All 32 rows, enumerated, not sampled:**
 | **(a)** reproduced CRT ctor | 3 — `_firstTypeInfo`, `_loader`, `_rng` |
 | **(b)** a PORTED writer | 4 — `_frameIndex`, `AnimationManager`, `MainLoop`, `SaveLoad` |
 | **(c)** writer exists, NOT ported → **zero forever** | **23** |
-| **(?)** no writer found at all | **2** — `?_errorString`, `?_systemInitialTick` |
+| **(?)** no writer found at all | **1** — `?_errorString`. ⚠️ **`?_systemInitialTick` IS SOLVED, 2026-09-08: the writer is `Timer::PlatformStartup`, reached from `Engine::Startup`.** It was found by a crash, not a search — lane ENG's ported `Engine::Startup` replaced the shipped one without calling `PlatformStartup`, so `_systemInitialTick` and `_systemTicksPerSecond` stayed at the mint's zero and `MainLoop::Run +0x39` (`IDIV [0x1801fe730]`) divided by zero. **Nothing could have found this writer until something ported `Engine::Startup` and then divided by the result** — a global written by nobody is invisible until something reads it in anger. Note the same `IDIV` runs against our own minted zero at cutover, so this was never a DLL-present-only defect. The general rule: **a port that replaces a shipped function must reproduce its SIDE EFFECTS, not just its return value**, including side effects nobody has attributed to it. |
 
 `Modification` and `MemoryAllocator` — found independently by two lanes from two directions —
 are two of the 23. The four (b) rows were verified **by reading our ports**, not by trusting
