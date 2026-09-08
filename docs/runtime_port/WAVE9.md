@@ -1007,6 +1007,51 @@ still had to be recorded first *because their instruments die* — that reasonin
 and every one of them is now recorded. What the DLL-absent boot adds is the reachability
 ordering that no instrument on this side of the cutover can produce.
 
+### ⚠️ DIAGNOSTICS ARE SPLIT ACROSS TWO STREAMS — an absence check on one is not an absence
+
+Lane E, 2026-09-08, after an absence check of mine nearly produced a false refutation of a
+correct diagnosis.
+
+| Prefix | Stream | File |
+|---|---|---|
+| `[RtPort]` | **stdout** (`printf`) | `standalone_debug.log` |
+| `[RtDiff]`, `[RtAllocShadow]`, `[RtResolve]`, `[RtResolveEarly]`, `[AllocLock]`, `[RtUnresolved]`, `[RtResidue]` | **stderr** | `standalone_error.log` |
+
+**So "grep the error log" is right for most of this project's diagnostics and SILENTLY WRONG
+for `[RtPort]`.** A falsifiable criterion that names "the log" without naming the stream is
+not falsifiable — it will report absent whenever the line it seeks is on the other side.
+**Name both streams in any pass/fail criterion, and grep both.**
+
+This is the same failure shape the wave has hit in five checkers — reading a subset of the
+evidence and treating absence in the subset as absence in fact.
+
+### The allocator could not arm: an ORDERING DEADLOCK, found before the run
+
+Lane E, checking its own wiring rather than executing E4-b:
+
+* Lane E had moved `InstallAllocatorLock()` / `InstallFreeLock()` to **before**
+  `RuntimePortInit()` — correctly; it fixed the silent-lock-loss trap in §7.2.
+* So by the time `RtSystemAllocatorRegister()` runs, the prologues **are** patched,
+  `FindPatchedPrologue()` returns `"MemoryAllocator::Allocate (0x1800c6e60)"`, and it refuses.
+* The retire step, `AllocatorLockRetireForPort()`, lives **inside** `RtAllocSwapInstall`,
+  which is only reached **after the guard passes**.
+
+**THE GUARD PREVENTS US FROM EVER REACHING THE THING THAT WOULD SATISFY IT.** E4-b would have
+failed on it. The guard's actual intent is *"refuse if a FOREIGN patch owns these
+prologues"* — and ours is not foreign, we know how to retire it. Fix: **retire first, then
+guard**, so anything still patched afterwards is genuinely foreign and the refusal stands.
+Done with a third seam (`RtSystemAllocatorSetLockRetirer`) rather than by weakening the
+guard, because *enforced in code rather than by convention* is the property that makes the
+atomicity claim worth anything.
+
+**At cutover this is sidestepped by construction:** with no DLL, `InstallAllocatorLock()`
+cannot resolve `0x1800c6e60`, logs `could not resolve Allocate` and returns false, so there
+is no patch to detour over. The critical section is not lost — it **moves**, from the
+prologue patch to the composed stubs bound to `?Allocate@`/`?Free@`. That is why the cutover
+path is a **different** path and not a weaker one: the detour exists solely to redirect the
+DLL's own internal rel32 callers, and with no DLL there are none, so registering the exports
+IS the complete swap and atomicity has nothing left to protect.
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
