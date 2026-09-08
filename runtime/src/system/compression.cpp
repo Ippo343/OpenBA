@@ -170,6 +170,12 @@ namespace RtSystem {
 // Branch counters. Null on every normal call — the probe points this at its own
 // storage for the duration of the sweep, so the shipped path pays one
 // predictable null test and nothing else.
+// The first three count branches ENTERED, not branches that succeeded — all
+// three are incremented before that branch's bounds checks, so
+// `literalRun + matchShort + matchExtended` is the total control bytes decoded
+// and the three fail counters are a disjoint tally of how those entries ended.
+// Counting entries for two of them and successes for the third would make the
+// printed line quietly incomparable across buckets.
 struct CompressionBranchCounts {
     int64_t literalRun    = 0;   // c < 0x20
     int64_t matchShort    = 0;   // c >= 0x20, len != 7
@@ -201,12 +207,12 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
         const uint32_t c = *sp++;                       // 1800c4680
         if (c < 0x20u) {                                // 1800c468a  JNC -> match
             // ---- literal run -------------------------------------------
+            if (g_branch) ++g_branch->literalRun;
             uint32_t n = c + 1u;                        // 1800c468c
             if (op + n > dstEnd) {                      // 1800c4696  JA
                 if (g_branch) ++g_branch->failLiteral;
                 return 0;
             }
-            if (g_branch) ++g_branch->literalRun;
             do {                                        // 1800c46a0
                 *op++ = *sp++;
             } while (--n);
@@ -368,6 +374,13 @@ void RtSystem_CompressionProbe() {
     // the DLL's own ctor: this lane ports the DECODER, not the encoder, and a
     // hand-built object would be an unverified assumption in the oracle itself.
     void* compression[1] = { nullptr };
+    // RT_RAW_OK: probe-only. This whole function early-returns unless
+    // RtDiffEnabled(), so the three Compression doors below are unreachable in
+    // any run that is not the diff harness -- and unreachable at cutover, where
+    // the harness is compiled out. tools/unsatisfied_export_scan.py cannot see a
+    // function-level early return as a guard and lists them as live; that is a
+    // known limit of the scan, recorded rather than worked around, and the marker
+    // is the same one tools/rt_data_door_audit.py already honours.
     RT_ORIGINAL_ONCE(CompressionCtorFn, "??0Compression@System@@QEAA@XZ")(compression);
 
     // Static, for the same reason as the oracle's scratch: no allocator traffic

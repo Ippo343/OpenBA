@@ -377,3 +377,177 @@ fault moves forward from the constructor call to the `ReadPackfile` call, with
   `RT_DATA_SLOT` stored a null at `[this+0]`;
 * a fault naming `?CloseFile@` or `FUN_180008340` would mean the boot got **past**
   `ReadPackfile`, which would be good news and would mean §8's ordering is wrong.
+
+---
+
+# Iteration 2 — `ReadPackfile` decomposed, and its bottom rung ported
+
+Full dependency reading and sub-lane order: **[WAVE9_READPACKFILE_PLAN.md](WAVE9_READPACKFILE_PLAN.md)**.
+
+## 12. The verdict on `ReadPackfile`
+
+**It should not be ported as one body, and not because of its size — it should not be
+ported first at all.** Six of its callees are unported and one of them decides every byte
+of every package the game loads.
+
+`0x1800b46b0` measures **1,864 instructions**, the largest single body of the wave. But it
+is not 1,864 instructions of novel logic: `?Read@CompressedStream@IO@@` is 51 instructions
+of `SetWindow` + bounds + `memcpy`, and **MSVC inlined it at ~25 sites**. That is where the
+byte count went. The distinct logic is a header/directory parser standing on an
+`IO::CompressedStream` read path nothing in this tree has ported.
+
+Two findings worth having regardless of who takes the rest:
+
+* **`0x18008a290` is the CRT `memcpy`** — jump table under 16 bytes, `REP MOVSB` under the
+  ERMSB bit at `0x1801fc65c`, `MOVNTI` above 4 KB. A pure byte copy, so `std::memcpy` is
+  byte-faithful. **Not** a lane-L-shaped CRT port; do not spend a lane on it.
+* **`Compression::Decompress` is a bespoke LZ77/LZSS codec — no zlib, no LZ4, no library.**
+  Stated loudly because "the package format is compressed" invites the opposite assumption
+  and would send a lane hunting for a library that is not there.
+
+## 13. Rung 1 ported: `?Decompress@Compression@System@@SAHPEBXIPEAXI@Z`
+
+`0x1800c4660`, ord 2150, 72 instructions. `runtime/src/system/compression.cpp`,
+`BANISHED_RT_COMPRESSION=0`.
+
+```
+[RtDiff] System::Compression::Decompress   calls=177  worked=137  divergences=0
+[PKG2/Compression] probe: 177 cases, round-trip ok=137 bad=0 (compressor declined 0)
+[PKG2/Compression] branch coverage: literal=39879 matchShort=55927 matchExtended=9211
+                   | failLiteral=3 failMatchDst=5 failMatchSrc=32 -- ALL SIX BRANCHES COVERED
+```
+
+**105,017 control bytes decoded, 0 divergences, every branch entered.**
+
+Four things in the codec that are load-bearing and easy to get wrong:
+
+1. **The match copy must be byte-at-a-time.** `mp` and `op` overlap whenever the distance
+   is less than the length, and each byte is read *after* the previous was written — the
+   RLE idiom every LZ77 depends on. A `memcpy`/`memmove` here compiles, runs, and differs
+   for exactly the inputs that compress best.
+2. Total copied is `2 + len` (two unrolled bytes, then `do { } while (--len)`), which is
+   why the bound is `op + 2 + len` and the minimum match is 3.
+3. **The loop is a do-while: `srcLen == 0` still reads one control byte.** Retail has no
+   test before the first iteration. Left unguarded and faithful.
+4. `mp < dst` is an **unsigned** compare (`JC`, not `JL`) — `mp` is computed by subtraction
+   and can wrap below the buffer.
+
+**Why this rung went first: it has the best oracle in the stack.**
+`?Compress@Compression@System@@` (`0x1800c4230`, ord 1749) is exported, so the probe
+compresses a real buffer with the DLL's own encoder and decompresses it with both
+implementations. Three independent checks — ours == theirs on the return value and every
+byte; **ours round-trips to the original input**, which does not involve the DLL's decoder
+at all, so a shared misreading of the format cannot pass it; and the three failure exits
+agree. The encoder is deliberately **not** ported: porting the thing that generates your
+test inputs is how a shared misreading passes its own test.
+
+`worked=137` against `calls=177` is the effectiveness control working: the 40 non-working
+cases are the deliberately malformed and tight-`dstCap` inputs, which return 0 by design.
+A codec probe is exactly where a uniform population hides — feed it garbage and nearly
+every case returns 0 from the same bounds check, and thousands of agreeing zeroes read as
+thorough. The three failure buckets are small (3/5/32) but non-zero **because they were
+driven on purpose**, which is the difference between a covered branch and a lucky one.
+
+## 14. A defect the run found that reasoning did not
+
+The first draft called the probe from `RtSystemPortInit()`. It crashed:
+
+```
+Fault: WRITE of 0000000000000648      RCX=0000000000000640
+#1  Runtime-x64.dll + 0xC41D8         (inside ??0Compression@System@@)
+[REDZONE-DUMP] no allocator singleton
+```
+
+**`RtSystemPortInit` runs before `System::MemoryAllocator` has published its singleton.**
+The probe builds a `System::Compression` through the DLL's ctor; that ctor takes the
+allocator lock at `[0x1801fc718] + 0x640`; with the singleton still null that is a write
+to `0x648`. The top frame is inside ntdll and **nothing in the crash names the probe** —
+the only clue is the `no allocator singleton` line the dump prints anyway.
+
+The rule, for the next lane that adds one: **a probe that allocates cannot run from a
+`*PortInit`. Registration is fine there; execution is not.** The probe now runs from
+`LoadPackages`' tail, a point the heap is provably live because the surrounding body
+allocated a 0xF0 `PackageFile` per package to get there.
+
+## 15. Contention, again — and a tool for it
+
+Two more measurements were lost to the shared game directory: one where a concurrent lane
+replaced `reimpl-x64.exe` between the copy and the launch (the run reported `IO: 56`,
+another lane's count), and one where the logs were overwritten after the run.
+
+`tools/pkg2_run.sh` now does deploy + launch + log copy in one process with an identity
+check on **both** ends: the md5 is re-checked after the copy and before the launch, and the
+run is **discarded and retried** unless `[RtPort] IO: N exports registered` matches the
+expected count. It also records the **package set** next to the binary identity, because
+for this lane the input set is as much part of the measurement as the exe — a `.pkm`
+appearing in `WinData` changes what `LoadPackages` mounts even when the binary is right.
+Expected counts after this iteration: **IO = 77, System = 84.**
+
+## 16. The `.pkm` question, answered
+
+Asked whether two `.pkm` copied into `WinData/` would give `ReadPackfile` coverage the
+4-package baseline misses. **Not as framed, and the correction matters:**
+
+* A `.pkm` is **not a different code path**. `LoadPackages`' two loops call the *same*
+  `ReadPackfile`; delta-packing is a property of the content, not a second parser.
+* **Presence in `WinData/` alone changes nothing.** `FindFiles`' pattern is the literal
+  `*.pkg` (five bytes at `0x1801556f0`), so LOOP 1 never matches a `.pkm`. One reaches
+  `ReadPackfile` only through LOOP 2, from `userPackFilenames` (+0x30), which the mods
+  system populates from the registry. Measured: the baseline reported exactly 4 packages
+  while both `.pkm` were sitting in `WinData`.
+
+What *would* help at rung 4 is a **population** argument, and a good one: the accessor
+sweep measured `?GetVersion@` and `?GetPlatform@` returning **one distinct value across all
+four base packages**, and four identical values is not a verification. A mod package should
+carry a different version, a non-default `+0x70` priority and non-empty
+name/author/description — exactly the uniform fields. That needs the mods **enabled**, not
+merely present.
+
+## 16b. Accounting for iteration 2 — including a +3 that is mine
+
+| `unsatisfied_export_scan.py` | it.1 after | it.2 after |
+|---|---|---|
+| distinct names resolved through a door | 798 | 802 |
+| neither a port nor a mint entry | 148 | 151 |
+| ...at least one site outside a diff guard | 145 | **148** |
+
+**The +3 is this iteration's own probe, and it is named rather than buried.** Set diff:
+
+```
+JOINED: ??0Compression@System@@QEAA@XZ
+        ??1Compression@System@@QEAA@XZ
+        ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z
+LEFT:   (nothing — ?Decompress@ was never on the list, having had no door before)
+```
+
+All three are reached **only** from `RtSystem_CompressionProbe()`, whose first statement is
+`if (!RtDiffEnabled()) return;`. They are unreachable in any run that is not the diff
+harness, and unreachable at cutover where the harness is compiled out. **The scan cannot
+see a function-level early return as a guard** — it recognises the structural
+`rt_diff_on__` form only — so it lists them as live.
+
+That is the second blind spot this lane has hit in the same tool (iteration 1's was the
+literal-adjacency regex). The sites are marked `RT_RAW_OK`, which is the convention
+`tools/rt_data_door_audit.py` already honours for exactly this case ("oracle-only reads
+that die with the oracle"); `unsatisfied_export_scan.py` does not honour it yet. **Flagged
+for the tool's owner rather than worked around** — and the marker means a future reader
+greps one string instead of re-deriving the argument.
+
+Also unchanged and clean: `port_bypass_audit.py` **0 bypasses** on both doors,
+`export_name_audit.py` 1 miss (the pre-existing doc-string false positive), and the run
+carries **no crash** and no new divergence — the only one is `Object::Factory::Startup`,
+which iteration 1's A/B proved pre-existing and which the integrator has since fixed at
+`da5093e`, after this branch's base.
+
+## 17. What is still open
+
+* **Rungs 2–4** — the `CompressedStream` read path (~544 instructions, layout already fully
+  modelled in `runtime/types/io/Stream.h` by Wave 4), `FileSystem::OpenFile`/`ReadFile`,
+  then `ReadPackfile` itself. Each has an oracle named in the plan. Rung 2 needs one
+  **built** (a dual-stream probe over the same `.pkg`), because `RegisterRuntimeExport`
+  does not redirect the DLL's own internal `CALL`s — there is no free caller until rung 3.
+* **`ReadPackfile` now has an oracle it did not have before this lane**: it is replayable
+  onto a *second, freshly constructed* `PackageFile`, because iteration 1 ported and proved
+  the constructor byte-exact.
+* **Which normal-play action triggers the second `LoadPackages`** (and so `0x180008340`,
+  the tree free) is still unconfirmed. A mods reload is the candidate; it was not verified.

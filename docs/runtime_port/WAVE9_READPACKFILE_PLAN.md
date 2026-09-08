@@ -96,9 +96,23 @@ The ordering constraint is not aesthetic. `ReadPackfile` opens a file, wraps it 
 would be 1,864 instructions standing on six null calls — the same anti-pattern lane PKG2
 already declined for `~PackageFile`, one level up.
 
-### Rung 1 — `Compression::Decompress` — **DONE, lane PKG2 iteration 2**
+### Rung 1 — `Compression::Decompress` — **DONE AND MEASURED, lane PKG2 iteration 2**
 
 `runtime/src/system/compression.cpp`, `BANISHED_RT_COMPRESSION=0`.
+
+```
+[RtDiff] System::Compression::Decompress   calls=177  worked=137  divergences=0
+[PKG2/Compression] probe: 177 cases, round-trip ok=137 bad=0 (compressor declined 0)
+[PKG2/Compression] branch coverage: literal=39879 matchShort=55927 matchExtended=9211
+                   | failLiteral=3 failMatchDst=5 failMatchSrc=32 -- ALL SIX BRANCHES COVERED
+```
+
+**105,017 control bytes decoded, 0 divergences, and every branch of the codec entered.**
+`worked=137` against `calls=177` is the effectiveness control working as intended: the 40
+non-working cases are the deliberately malformed and tight-buffer inputs, which return 0
+by design and must not be counted as coverage. The three failure buckets are small (3/5/32)
+but non-zero *because they were driven on purpose* — that is the difference between a
+covered branch and a lucky one.
 
 The bottom of the stack, and the highest-consequence function in it: a defect here is not
 a crash, it is silently wrong resource data. 72 instructions, pure, no state.

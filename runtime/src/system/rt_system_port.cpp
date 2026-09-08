@@ -82,13 +82,21 @@ void RtSystemPortInit() {
         n += RtSystemWideStringRegister();
         n += RtSystemSetupDirHelpersRegister();
     }
-    if (RtWaveEnabled("BANISHED_RT_COMPRESSION")) {
-        n += RtSystemCompressionRegister();
-        // The probe must run AFTER the registration: it drives our port through
-        // the same entry point a real caller would, so arming it first would
-        // measure the DLL. It no-ops unless the diff harness is on.
-        RtSystem::RtSystem_CompressionProbe();
-    }
+    if (RtWaveEnabled("BANISHED_RT_COMPRESSION")) n += RtSystemCompressionRegister();
+    // NOTE: RtSystem_CompressionProbe() is NOT called here, and the first draft
+    // of this lane calling it here is a defect the run found rather than
+    // reasoning did. **RtSystemPortInit runs before System::MemoryAllocator has
+    // published its singleton.** The probe builds a System::Compression through
+    // the DLL's ctor, that ctor takes the allocator lock at
+    // `[0x1801fc718] + 0x640`, and with the singleton still null that is a WRITE
+    // to 0x648 — an ACCESS_VIOLATION whose top frame is inside ntdll and whose
+    // only clue is `[REDZONE-DUMP] no allocator singleton`. Nothing in the crash
+    // names the probe. The probe now runs from LoadPackages' tail
+    // (runtime/src/io/filesystem_packages.cpp), which is a point the heap is
+    // provably live because the surrounding body allocates.
+    //
+    // The RULE, for the next lane that adds one: a probe that ALLOCATES cannot
+    // run from a *PortInit. Registration is fine there; execution is not.
     // Opt-in, not a kill switch: absent env means OFF.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
       if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)

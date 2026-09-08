@@ -1,0 +1,990 @@
+[Standalone] Banished Reimplementation - Standalone EXE
+[Standalone] Build: Sep  8 2026 09:16:22
+[StartupInfo] dwFlags=0x00000100 USESHOWWINDOW=0 wShowWindow=0 (SW_HIDE)
+[Stall] Initialize: freq=10000000 Hz boot=13461690373169
+[RenderDoc] renderdoc.dll not loaded — running without graphics debugger. Launch reimpl-x64.exe via RenderDoc's UI to enable in-app capture.
+[VideoReg AT-BOOT]   VideoSettings      = "false" (type 1)
+[VideoReg AT-BOOT]   VideoInterface     = "1" (type 1)
+[VideoReg AT-BOOT]   VideoFullscreen    = "false" (type 1)
+[VideoReg AT-BOOT]   VideoWidth         = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoHeight        = "1440" (type 1)
+[VideoReg AT-BOOT]   VideoWindowX       = "2497" (type 1)
+[VideoReg AT-BOOT]   VideoWindowY       = "27" (type 1)
+[VideoReg AT-BOOT]   VideoWindowWidth   = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoWindowHeight  = "1377" (type 1)
+[BootTime] registry probe + harness guard               +    3.11ms   (t=    3.11ms)
+[Standalone] Resolving DLLs...
+[BootTime] (pre ResolveInit)                            +    0.21ms   (t=    3.32ms)
+[Resolve-Standalone] Standalone-EXE: base=0x7ff6a2660000 preferred=0x140000000 delta=+0
+[Resolve-Standalone] Runtime-x64.dll: base=0x7ffcaa7d0000 preferred=0x180000000 delta=+140716726353920
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Resolve-Standalone] Address registry: 4 entries
+[BootTime] ResolveInit (LoadLibrary Runtime+DX11)       +    1.86ms   (t=    5.18ms)
+[Standalone] Hooked Runtime-x64.dll!user32!MessageBoxW (real=00007ffcf93892a0)
+[BootTime] HookRuntimeMessageBoxW                       +    0.41ms   (t=    5.59ms)
+[WinTrace] hooked Runtime!user32!SetWindowPos (real=00007ffcf93459c0)
+[WinTrace] hooked Runtime!user32!ShowWindow (real=00007ffcf9345a20)
+[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): 32 exports registered
+[RtMathPortInit] Wave 9 lane P: 2 exports registered (Quaternion::Lerp, Transform::AsTransform3)
+[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)
+[RtPort]   System::String: 22 exports registered
+[RtPort]   System::Filename: 11 exports registered
+[RtPort]   System::WideString: 7 exports registered
+[RtPort]   Wave9 lane FS helpers: 3 exports registered
+[RtPort] System: 84 exports registered
+[RtPort]   Object::Internal: 7 exports registered
+[RtPort]   External: 12 exports (Clean/FindOrLoad/SerializeReferenceTable/SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)
+[RtPort] Object: 26 exports registered
+[RtIO/Serializer] 22 exports registered, all 22 retail bodies verified (ReaderWriter vtable slots match the DLL's own tail-jumps)
+[RtPort]   IO::CompressedMemoryStream: 10 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+[RtPort] IO::Persistence: 5/7 exports registered (ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)
+[RtPort]   IO::FileSystem/Modification: 6 exports registered
+[RtPort]   IO::FileSystem find/exists: 3 exports registered
+[RtPort] IO: 77 exports registered
+[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+[RtPort] Achievement: 36 exports registered
+[RtPort] Save: 15 exports registered
+[RtPort] Picking: 9 exports registered
+[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 27 exports registered
+[RtPort] Video: 102 exports registered
+[RtPort] Graphics: 64 exports registered
+[RtPort] UI widgets(layout): 22 exports registered
+[RtPort] UI: 114 exports registered
+[RtPort]   Engine loop family (lane A): 12 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (3 held back: 2 detour-required + Run, plus _singleton which is DATA -- see WAVE8_LANE_B.md)
+[RtPort]   Engine lifecycle (lane ENG): 8 exports registered (ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, calls=0 by construction -- see WAVE9_LANE_ENG.md)
+[RtPort] Engine: 23 exports registered
+[RtPort] Audio: 22 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+[RtPort] Input: 19 exports registered
+[RtPort] Application: 5 exports registered
+[RtPort] Utility: 2 exports registered
+[RtDelDtor] 37 deleting destructors registered (one body, 37 rows); ~Class resolves lazily
+[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
+[RtPort] runtime registry: 690 exports, 522 addrs, 2 ordinals
+[RtMint] seeded 2 storage row(s) with a known constant value
+[RtMint] minted 50 vtables (460 slots: 95 ported, 252 unported-trap, 113 purecall-trap), 46 BaseTypeInfo, 38 storage symbols (11328 bytes)
+[RtMint] 14 of 50 vtables are COMPLETE (every non-purecall slot is our port); registration is off (set BANISHED_RT_MINT=1 to go live)
+[RtPort] Wave9 lane X probe: 13 subjects executed, 12 published their singleton, control caught 12 of 12 corruptions -- expected 13 / 12 / 12 of 12: PASS
+[RtPort] Wave9 lane X: IO::Persistence and Audio::Device are REGISTERED but NOT probed -- their base ctor starts a suspended worker thread (see their banners in singleton_ctors.cpp)
+[BootTime] RuntimePortInit                              +   15.11ms   (t=   20.70ms)
+[Standalone] Initializing address registry...
+[AddressRegistry] 1618 addresses registered
+[BootTime] AddressRegistryInit                          +    1.15ms   (t=   21.85ms)
+[Standalone] Resolving engine functions...
+[EngineFuncs] Player/Tool APIs resolved:
+  SceneAddObject            = 00007ff6a293d6d2
+  SceneRemoveObject         = 00007ff6a293da04
+  Transform_FromYawPitch    = 00007ff6a2955889
+  Geometry_SetTransform     = 00007ff6a293afa1
+  MeshInstance_UpdateHier   = 00007ff6a293470f
+  TileRender                = 00007ff6a28a2a10
+  TileValidityCheck         = 00007ff6a28985d0
+  FencedPlacementParams     = 00007ff6a289475d
+  HighlightRemove           = 00007ff6a2702520
+[EngineFuncs] MenuDLT static-mesh + particle helpers:
+  Scene::AddObject              = 00007ff6a293d6d2
+  GraphicsMesh::GetMaterialList = 00007ff6a2933de6
+  MeshInstance::SetMatInstance  = 00007ff6a2934d07
+  ParticleSystemInstance::Ctor  = 00007ff6a2932dad
+  ParticleInstance::IncrementInstanceIndex = 00007ff6a2932c93
+  Particle::Ctor                = 00007ff6a2932698
+[EngineFuncs] Timer globals:
+  _ticksPerSecond       @ 00007ffcaa9ce720 = 0
+  _secondsPerTick       @ 00007ffcaa9ce728 = 0.000000
+  _systemTicksPerSecond @ 00007ffcaa9ce730 = 0
+  _systemInitialTick    @ 00007ffcaa9ce738 = 0
+[EngineFuncs] Functions:
+  Input::Device::Update     = 00007ffcaa8b1490
+  Audio::Device::Update     = 00007ff6a291f5be
+  Audio::FreeChannel        = 00007ff6a291f40b
+  App::PlatformUpdate       = 00007ff6a291b73e
+  VideoCtx::ClearResources  = 00007ffcaa8c2090
+  VideoCtx::Reset           = 00007ff6a298d3cb
+  Loader::Load              = 00007ff6a292d6da
+  App::SleepThread          = 00007ff6a291b844
+  UI::Update                = 00007ffcaa8f13c0
+  UI::Draw                  = 00007ffcaa8f1890
+  UI::CloseDialog           = 00007ffcaa8f0f20
+  DynArrayPush              = 00007ff6a2920b26
+  String::Set               = 00007ff6a296e025
+  String::Format            = 00007ff6a296ead5
+  String::~String           = 00007ff6a296df9d
+  String::String()          = 00007ff6a296df17
+  String::String(cstr)      = 00007ff6a296df30
+  String::String(copy)      = 00007ff6a296df65
+  PostDrawPush              = 00007ff6a2920a26
+  PostUpdatePush            = 00007ff6a2920a66
+  VideoCtx::Ctor            = 00007ffcaa8c1820
+  VideoCtx::Dtor            = 00007ffcaa8c16e0
+  VideoCtx::Delete          = 00007ffcaa7e8500
+  MemAlloc                  = 00007ffcaa896e60
+  MemAllocSingleton         = 0000000000000000
+  VideoDevice::_singleton   = 00007ffcaa9ce7a8 -> 0000000000000000
+  ExtFactory::_singleton    = 00007ffcaa9cc6c8 -> 0000000000000000
+  ExtFactory::FindOrLoad    = 00007ffcaa88f320
+  ExtFactory::Clean         = 00007ffcaa88e310
+  IsDerivedFrom             = 00007ff6a290ac6c
+  ExternalTypeId            = 00007ffcaa9caa88 -> 0xffffffff
+  Filename::AdjustDelimiters= 00007ff6a296c466
+  UpdateLoop::LoadResources = 00007ffcaa8ad7d0
+  ListCleanup               = 00007ff6a2921472
+  ModEntry::CopyCtor        = 00007ffcaa7e01e0
+  ModEntry::Assign          = 00007ffcaa7f6ef0
+  ModEntry::Dtor            = 00007ffcaa7e1460
+  Map::Find                 = 00007ff6a296b264
+  Map::Insert               = 00007ffcaa7fa090
+  ParseCommand              = 00007ffcaa894a00
+  ParseValue                = 00007ffcaa894930
+  Persistence::_singleton   = 00007ffcaa9cc6b8 -> 0000000000000000
+  Persistence::SetBool      = 00007ff6a294c39f
+  Persistence::SetInt       = 00007ff6a294c141
+  Filename::GetPathFilename = 00007ff6a296c795
+  ModArrayCopy              = 00007ffcaa7e0110
+[EngineFuncs] UI infrastructure:
+  DialogController::~Dtor   = 00007ff6a29752a3
+  MemFreeStatic             = 00007ffcaa897ad0
+  FindElement               = 00007ff6a2977ad1
+  TextElement::SetParameter = 00007ff6a298321a
+  Element::GetUserData      = 00007ff6a29786df
+  InternalBasePtr::Ctor     = 00007ff6a295bdc8
+  KeyMap::GetInputForId     = 00007ff6a2940897
+  KeyMap::GetDeviceForId    = 00007ff6a29406f1
+[EngineFuncs] Phase A1 — UI Widget Functions:
+  Elem::SetFlagsOnOff       = 00007ff6a2978b61
+  Elem::SetElementId        = 00007ff6a2978a01
+  Elem::SetName             = 00007ff6a2978c63
+  Elem::SetToolTip          = 00007ff6a2979331
+  Elem::Child               = 00007ff6a2977589
+  Elem::ChildCount          = 00007ff6a2977725
+  Elem::FindElementType     = 00007ff6a2977d3d
+  DI::FindElement           = 00007ff6a2974661
+  DI::GetController         = 00007ff6a29744b3
+  DI::FindElementType       = 00007ff6a29747a5
+  DI::SetFlagsOnOff         = 00007ff6a29748e7
+  Combo::AddItem            = 00007ffcaa8450b0
+  Combo::SetCurrentItem     = 00007ffcaa8e2540
+  Combo::GetItemCount       = 00007ff6a298083b
+  Combo::GetCurrentItem     = 00007ff6a29806dd
+  Combo::RemoveAllItems     = 00007ffcaa845120
+  Progress::SetTextParam    = 00007ffcaa8e9b30
+  Progress::SetMaxValue     = 00007ff6a298112d
+  Progress::SetCurValue     = 00007ff6a2981299
+  Table::SetSize            = 00007ff6a2982091
+  Table::SetChild(3)        = 00007ff6a2981fa5
+  NumEdit::SetValue         = 00007ff6a297fb23
+  NumElem::SetValue(int)    = 00007ff6a2980c5f
+  Spinner::SetElementId     = 00007ff6a2980113
+  Image::SetSprite          = 00007ff6a2982779
+  Label::SetSprite          = 00007ff6a2982fa3
+  Text::SetText             = 00007ff6a29832a9
+[EngineFuncs] Phase A2 — Type IDs:
+  ComponentDescription      = 00007ff6a2da3c2c -> 0x0
+  DestroyComponent          = 00007ff6a2da38e8 -> 0x0
+  MeshInstanceComponent     = 00007ff6a2da3894 -> 0x0
+[EngineFuncs] Phase A3 — Singletons:
+  GameWorld                 = 00007ff6a2ceb2a8 -> 0000000000000000
+  KeyMap (container)        = 00007ff6a2ceb2a0 -> 0000000000000000
+  KeyMap (object exref)     = 00000175bb0332d0 -> 00007ff6a2a81d20
+  EngineSingleton           = 00007ffcaa9ce750 -> 0000000000000000
+[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):
+  MapComponent              = 00007ff6a2da3884 -> 0x0
+  CemeteryComponent         = 00007ff6a2da3c04 -> 0x0
+[EngineFuncs] Video::ImageBuffer:
+  ImageBuffer::Ctor         = 00007ff6a2985d77
+  ImageBuffer::Dtor         = 00007ff6a2985ef1
+  ImageBuffer::CopyToTex    = 00007ff6a2986d67
+  ImageBuffer::CopyFromTex  = 00007ff6a2986e0b
+[EngineFuncs] Globals:
+  _loader                   = 00007ffcaa9ce7b8
+  _loader.m_flags           = 00007ffcaa9ce7c0 -> 0x0
+  _loader.m_completionEvent = 00007ffcaa9ce7e0 -> 00000000000001e0
+  App::_singleton           = 00007ffcaa9cc678 -> 0000000000000000
+[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved
+[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, Game_SpawnResources_Impl now available as inline replacements
+[EngineFuncs] Phase I: Work class helpers resolved
+[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved
+[EngineFuncs] Achievement Goal support resolved
+  Goal::~Goal         = 00007ff6a2919565
+  Goal::Goal()        = 00007ff6a291946d
+  Goal::Serialize     = 00007ff6a291aef9
+  GoalInst::~GoalInst = 00007ff6a2919861
+  GoalInst::Persist   = 00007ff6a291b161
+  IBP::Serialize      = 00007ff6a295c26e
+  IsRunning           = 00007ff6a292d40b
+[EngineFuncs] Phase K: Tutorial goal helpers resolved
+  FindUIElementByPath   = 00007ff6a28a661b
+  ObjectInternal::Ctor  = 00007ffcaa88fd10
+  TutorialTreeInsert    = 00007ff6a28ab97a
+  TutorialStepExecute   = 00007ff6a28ad452
+  TypeId_FTGoal         = 00007ff6a2da3c40
+  SingletonExref_151a80 = 00000175bb02db50
+  TutInstVtable         = 0000000000000000
+[EngineFuncs] Phase L: ComponentEntity deps resolved
+  TypeId_ComponentBase  = 00007ff6a2da3774
+  ExeArrayResizeFill    = 00007ff6a290b675
+[EngineFuncs] Phase L2: CitizenBehavior deps resolved
+  CountResources = 00007ff6a27f130e
+  CollectStats   = 00007ff6a27f1f14
+[EngineFuncs] EntityList deps resolved:
+  IBPTreeInsert       = 00007ff6a290401b
+  IBPTreeRemove       = 00007ff6a29041cd
+  Time::Serialize     = 00007ff6a2971ad5
+  BucketTreeSerialize = 00007ff6a2817705
+[EngineFuncs] Path sub-functions resolved
+  NotificationEvent = 00007ff6a28027fc
+[EngineFuncs] CitizenBehavior Find deps resolved
+  PathDistance       = 00007ff6a290754e
+  AssignHousing      = 00007ff6a26edf3c
+[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved
+  Struct60B_Resize        = 00007ff6a283670e
+  Struct60B_CopyCtor      = 00007ff6a2836733
+  Struct60B_DtorRange     = 00007ff6a2836759
+  Struct60B_SubCopyS14    = 00007ff6a283678a
+  Struct60B_SubCopyS02    = 00007ff6a28367c8
+[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved
+  Array_Resize_Stride02       = 00007ff6a283568b
+  Array_Resize_Stride16A      = 00007ff6a28356bc
+  Array_Resize_ArrayOfArrays  = 00007ff6a2835959
+  Array_Resize_Stride16B      = 00007ff6a28356ed
+  Array_Resize_Stride04       = 00007ff6a283571e
+[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved
+  Geometry_Init           = 00007ff6a2830010
+  Graphics_Geometry_Ctor  = 00007ff6a293a5b7
+  Video_VertexBuffer_Ctor = 00007ff6a2988ce6
+  Video_IndexBuffer_Ctor  = 00007ff6a2988c4b
+  Transform_SerializeWrap = 00007ff6a28302a2
+  Math_Transform_Serial   = 00007ff6a29562c2
+  Math_Vector3_Serial     = 00007ff6a2958063
+  Math_Vector4_Serial     = 00007ff6a2958167
+  System_Color_Serial     = 00007ff6a2971b2a
+  Serializer_Float        = 00007ff6a2950ffb
+  Array_Resize_S20/S08/S14= 00007ff6a2830739 / 00007ff6a283076a / 00007ff6a283098b
+  Array_Serialize_S20     = 00007ff6a2830c11
+  ExtArr GraphicsMesh/Part= 00007ff6a2831494 / 00007ff6a283150b
+  ExtPtr Mesh/Weather     = 00007ff6a2831c62 / 00007ff6a2831cd1
+  Serializer_GetEncoding  = 00007ff6a2952477
+  Serializer_Serialize_U  = 00007ff6a2950e71
+  EFactory_IsRefModeEn    = 00007ff6a295a6b9
+  EFactory_GetReferenceId = 00007ff6a295a9d3
+  EFactory_GetPathForRef  = 00007ff6a295aafa
+  Filename_AssignOp       = 00007ff6a296c1ef
+  TypeInfo Mesh/Particle  = 00000175bb01f400 / 00000175bb01f380
+  TypeId Weather          = 00007ff6a2a825f8
+  ExtPtr_Typed_7140       = 00007ff6a2832572
+  TypeInfo MaterialInst   = 00000175bb01f1c0
+[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved
+  Struct60B_Serialize             = 00007ff6a28375d1
+  Array_Serialize_Ext_MatInstance = 00007ff6a2837601
+[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved
+  TradeWork_sub_c1e0      = 00007ff6a2834740
+  TradeWork_FUN_ac880     = 00007ff6a283475f
+  TradeWork_helper_e270   = 00007ff6a28347a4
+  Geometry_ChunkUpdate    = 00007ff6a28347df
+[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved
+  TradeWork_sub_c780      = 00007ff6a2835198
+[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved
+  TradeWork_impl_04d0     = 00007ff6a281f26b
+  TradeWork_impl_f1a0     = 00007ff6a281f292
+  Ser slot SerInt_AC8     = 00007ff6a2950ce7
+  Ser slot SerByte_410    = 00007ff6a2950849
+  Ser slot SerFloat_A60   = 00007ff6a2950ffb
+  Ser slot SerUShortArr   = 00007ff6a2951991
+  Ser slot SerSizedRaw_3F8= 00007ff6a29517f5
+  Ser slot SerSizedRaw_400= 00007ff6a2951659
+  Ser slot SerByteArr_618 = 00007ff6a2952001
+[EngineFuncs] M3.5 Geometry vtable draw primitives resolved
+  Renderer_GetCullCamera   = 00007ff6a2938b34
+  Renderer_AddDrawItem     = 00007ff6a293f462
+  Renderer_GetShader       = 00007ff6a2938c1f
+  Camera_GetFrustum        = 00007ff6a293884e
+  Frustum_Contains         = 00007ff6a2992be8
+  Frustum_MulTransform3    = 00007ff6a2992acc
+  Geometry_GetTransform    = 00007ff6a293c366
+  Transform_Inverse        = 00007ff6a2954764
+  Transform_AsMatrix       = 00007ff6a295430f
+  Transform3_Copy_Ctor     = 00007ff6a29538cc
+  Vector3_FromFloats_Ctor  = 00007ff6a295743a
+  InterpState_Trans_Lerp   = 00007ff6a293f1e8
+  Context_SetTransform     = 00007ff6a298cf7f
+  Context_SetColor         = 00007ff6a298c07f
+  Context_SetVertexBuffer  = 00007ff6a298cb05
+  Context_SetImageBuffer   = 00007ff6a298c977
+  Context_BeginIndexedVtx  = 00007ff6a298ddc4
+  Context_EndIndexedVtx    = 00007ff6a298de0a
+  Context_DrawIndexed      = 00007ff6a298dca4
+  Geometry_UpdateAttached  = 00007ff6a293b790
+  Geometry_GetSubTransform = 00007ff6a293c5d1
+  Geometry_GetInstanceTr   = 00007ff6a293c842
+  Geometry_SetSharedInst   = 00007ff6a293cc0a
+  Geometry_Clean           = 00007ff6a293bb2c
+[RuntimeFuncs] Init (no internal function pointers yet)
+[BootTime] EngineFuncsInit + RuntimeFuncsInit           +   23.70ms   (t=   45.55ms)
+[Dx11Funcs] VideoDX11-x64.dll not loaded — nothing resolved
+[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables. VideoDX11-x64.dll is not required.
+[Dx11Seam]   DeviceData          -> 00007ff6a2cea0c8 (20 slots)
+[Dx11Seam]   ContextData         -> 00007ff6a2cea170 (20 slots)
+[Dx11Seam]   ImageBufferData     -> 00007ff6a2cea218 (7 slots)
+[Dx11Seam]   ConstantBufferData  -> 00007ff6a2cea2c0 (4 slots)
+[Dx11Seam]   IndexBufferData     -> 00007ff6a2cea368 (7 slots)
+[Dx11Seam]   VertexBufferData    -> 00007ff6a2cea410 (7 slots)
+[Dx11Seam]   VertexLayoutData    -> 00007ff6a2cea4b8 (3 slots)
+[Dx11Seam]   VertexProgramData   -> 00007ff6a2cea560 (3 slots)
+[Dx11Seam]   PixelProgramData    -> 00007ff6a2cea608 (3 slots)
+[Dx11Seam]   RenderStateData     -> 00007ff6a2cea6b0 (3 slots)
+[Dx11Seam]   VideoProgramData    -> 00007ff6a2cea758 (3 slots)
+[Dx11Seam]   RenderBufferData    -> 00007ff6a2cea800 (4 slots)
+[BootTime] Dx11FuncsInit + seam + prefill               +    2.47ms   (t=   48.02ms)
+[BootTime] redzone/alloc-lock/diagnostic installers     +    0.93ms   (t=   48.94ms)
+[Probe BEFORE InvokeAllRegistrations] _firstTypeInfo @ 0x7ffcaa9cc6e0, head=00007ffcaa9caf20
+[Probe BEFORE InvokeAllRegistrations]   #0   name=PickingMesh                      parent=External
+[Probe BEFORE InvokeAllRegistrations]   #1   name=TextElement                      parent=Element
+[Probe BEFORE InvokeAllRegistrations]   #2   name=TextDescription                  parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #2 TextDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations]   #3   name=TableElement                     parent=Element
+[Probe BEFORE InvokeAllRegistrations]   #4   name=TableDescription                 parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #14 ImageDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #16 GroupDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #19 ElementDescription parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #21 Dialog parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #57 RibbonDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #85 AnimatedImageDescription parent=ImageDescription
+[Probe BEFORE InvokeAllRegistrations] Total: 104 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (before)                   +    2.60ms   (t=   51.55ms)
+[Standalone] Invoking factory registrations...
+[FactoryReg] Registered 312 types into Runtime _firstTypeInfo
+[BootTime] Object::InvokeAllRegistrations               +    0.68ms   (t=   52.23ms)
+[Probe AFTER InvokeAllRegistrations] _firstTypeInfo @ 0x7ffcaa9cc6e0, head=00007ff6a2cae9a0
+[Probe AFTER InvokeAllRegistrations]   #0   name=TradeWork                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #1   name=TendArea                         parent=Work
+[Probe AFTER InvokeAllRegistrations]   #2   name=PlantOrchard                     parent=Work
+[Probe AFTER InvokeAllRegistrations]   #3   name=PlantArea                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #4   name=Pickup                           parent=Work
+[Probe AFTER InvokeAllRegistrations] FOUND #314 TextDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #326 ImageDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #328 GroupDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #331 ElementDescription parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #333 Dialog parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #369 RibbonDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #397 AnimatedImageDescription parent=ImageDescription
+[Probe AFTER InvokeAllRegistrations] Total: 416 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (after)                    +    2.40ms   (t=   54.63ms)
+[Standalone] Window-message hook installed (focus diag)
+[BootTime] WndMsgHook + AutoStart::Init                 +    0.44ms   (t=   55.06ms)
+[Standalone] Init complete.
+
+[Standalone] === INIT SUCCESS ===
+[AddressRegistry] 1618 addresses registered
+[Standalone] Coverage: 1618 / 582 exe addresses registered (278.0%)
+
+[Standalone] === ENTERING GameMain ===
+[GameMain] Engine ctor          = 00007ff6a292946d
+[GameMain] Engine dtor          = 00007ff6a29298e9
+[GameMain] Engine::Startup      = 00007ff6a292a082
+[GameMain] Engine::Shutdown     = 00007ff6a292b1bd
+[GameMain] Constructing Engine (storage=0000004ec8dff020)...
+[GameMain] Engine constructed.
+[BootTime] Init() -> RunGameMain entry + Engine ctor    +    1.48ms   (t=   56.54ms)
+[GameMain] Engine::Startup(cmdLine=00000175bafa5a46, 512, 0, false)...
+[PKG2] ctor effectiveness: ours wrote 213/240 bytes, theirs wrote 213/240 (the 27 untouched are +0x78,+0x7c,+0x90,+0xad..af,+0xc4,+0xd4)
+[PKG2] sweep: 4 packages, 5836 entries; per-entry accessors got 5836 calls each. Distinct values across packages: version=1 platform=1 priority=>=2
+[PKG2/Compression] probe: 177 cases, round-trip ok=137 bad=0 (compressor declined 0)
+[PKG2/Compression] branch coverage: literal=39879 matchShort=55927 matchExtended=9211 | failLiteral=3 failMatchDst=5 failMatchSrc=32 -- ALL SIX BRANCHES COVERED
+[BOOT2 ReadSettings] entries=145 count_field=145 first=""
+[Standalone] Swapped window class background brush from 0000000000000006 to BLACK_BRUSH (0000000000900011) on engine hwnd=0000000000520490
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000520490 w=0 l=4ec8dfe630
+[WndMsg] WM_SIZE               hwnd=0000000000f70746 type=0 0x0
+[VideoInterface] DX11 slot pre-filled on Device 00000175bd2f8238: module=00007ff6a2660000 GetDeviceName=00007ff6a299d202 CreateDeviceData=00007ff6a299d0c3 — Runtime will not LoadLibrary VideoDX11-x64.dll
+[BootTime]   DX11 CreateDevice: entry                   +  384.59ms   (t=  441.13ms)
+[BootTime]   DX11 DXGI factory + adapter + output enum  +    0.24ms   (t=  441.37ms)
+[BootWindow] armed: Configuration+0x42 set, hwnd=0000000000520490 stays hidden until the splash presents a frame
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 w=0 l=4ec8dfe930
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 2497,27 2576x1416 flags=0x30
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 w=0 l=4ec8dfe930
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000520490 w=0 l=4ec8dfe480
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000f70746 w=0 l=4ec8dfe930
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000520490 w=0 l=4ec8dfe930
+[WndMsg] WM_SIZE               hwnd=0000000000520490 type=0 2560x1377
+[BootTime]   DX11 AdjustDisplay (window sized)          +    1.64ms   (t=  443.01ms)
+[BootTime]   DX11 D3D11CreateDevice                     +   67.50ms   (t=  510.51ms)
+[BootTime]   DX11 swapchain + color/depth buffers       +    1.14ms   (t=  511.65ms)
+[GameMain] Engine::Startup returned 1
+[BootTime] Engine::Startup                              +  112.05ms   (t=  623.70ms)
+[GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId
+[GameMain]   typeId=0x4C6DC97E name=TradeWork
+[GameMain]   typeId=0x32010680 name=TendArea
+[GameMain]   typeId=0x071AE7EA name=PlantOrchard
+[GameMain]   typeId=0x91867ABF name=PlantArea
+[GameMain]   typeId=0x25D5C240 name=Pickup
+[GameMain]   typeId=0xD94735D5 name=PastureWork
+[GameMain]   typeId=0xB1EBC2E8 name=MarketWork
+[GameMain]   typeId=0x75232D30 name=LocationWork
+[GameMain]   typeId=0x00A5F817 name=HuntWork
+[GameMain]   typeId=0xD7F30414 name=HerbalistWork
+[BootTime] post-Startup typeinfo dump + typeId globals  +    1.89ms   (t=  625.59ms)
+[GameMain] MainLoop ctor      = 00007ff6a292889a
+[GameMain] MainLoop dtor      = 00007ff6a2928ce5
+[GameMain] MemAlloc/Free      = 00007ffcaa896e60 / 00007ffcaa897ad0
+[GameMain] MemAllocSingleton (fresh) = 0000004ec8dff020
+
+[Standalone] === Running factory self-tests ===
+
+[SelfTest StatGoal] start
+[SelfTest StatGoal]   refreshed g_pMemAllocSingleton = 0000004ec8dff020
+[SelfTest StatGoal]   found entry @ 00007ff6a2ca5200 (factoryFn=00007ff6a287049e, parent=Goal)
+[SelfTest StatGoal]   factory returned 00000175bd2f9560
+[SelfTest StatGoal]   vtable OK (00007ff6a2a75680)
+[SelfTest StatGoal] PASS (sizeof=128, 9 fields verified)
+
+[VideoProbe] Configuration::_singleton = 00000175bd2f66e8
+[VideoProbe]   +0x04 interface = 1 (VideoDX11)
+[VideoProbe]   +0x08 adapter   = 0
+[VideoProbe]   +0x0c width     = 2560
+[VideoProbe]   +0x10 height    = 1440
+[VideoProbe]   +0x00 settings  = 1  (true => launcher dialog next boot)
+[VideoProbe]   +0x14 windowX   = 2497
+[VideoProbe]   +0x18 windowY   = 27
+[VideoProbe]   +0x1c windowW   = 2560
+[VideoProbe]   +0x20 windowH   = 1377
+[VideoProbe]   +0x40 fullscreen= 0  +0x41 vsync=0  +0x42 skipShow=1
+[VideoProbe] Device::_singleton        = 00000175bd2f8238
+[VideoProbe]   +0x48  interface count = 2
+[VideoProbe]   +0xf8  active idx  = 1
+[VideoProbe]   +0x100 active DeviceData = 00000175bd2f9310
+[VideoProbe]   slot0 DX9:  HMOD=00007ffce61a0000 GetName=00007ffce61a1230 Create=00007ffce61a11c0
+[VideoProbe]   slot1 DX11: HMOD=00007ff6a2660000 GetName=00007ff6a299d202 Create=00007ff6a299d0c3
+[VideoProbe]   slot2 GL:   HMOD=0000000000000000
+[VideoProbe]   active DeviceData vtable = 00007ff6a2cea0c8
+[VideoProbe]   active vtable lives in: reimpl-x64.exe
+[SwapProbe AFTER_ENGINE_STARTUP] sc=00000175de73cbe0 vt=00007ffcf5d0a000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetFullscreenState hr=0x00000000 fs=0 output=0000000000000000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetDesc hr=0x00000000 Windowed=1 2560x1377 fmt=87 BufferCount=2 SwapEffect=0 Flags=0x2
+[SwapProbe AFTER_ENGINE_STARTUP]   hwnd=0000000000520490 visible=0 iconic=0 client=2560x1377 window=2497,27 2576x1416
+[Standalone] Boot mode: borderless/windowed
+[BootTime] RunStartupSelfTests + video probes           +   16.26ms   (t=  641.85ms)
+[GameMain] MainLoop alloc = 00000175bd2f95e8
+[GameMain] MainLoop constructed.
+[GameMain] Game alloc      = 00000175bd2fa2a8
+[BootTime] MainLoop ctor + Game ctor                    +    2.91ms   (t=  644.76ms)
+[GameMain] Game_Ctor done; KeyMap singleton -> 00000175bd2fa2a8
+[GameMain] InputConfig=00000175bd2ecd68  -> KeyMap=00000175bd2facc8
+[InputBindings] Populating KeyMap 00000175bd2facc8 with 50 default bindings...
+[InputBindings] Done — 50 bindings + Load applied.
+[InputBindings] StringTable typeId = 3224705508
+[InputBindings]   'Dialog/StringTable.rsc:gameKeys' -> 00000175bd301b80
+[InputBindings]   'Dialog/StringTable.rsc:keyNames' -> 00000175bd301cb8
+[InputBindings]   'Dialog/StringTable.rsc:globalNames' -> 00000175bd3044c0
+[InputBindings] Game container input tables: gameKeys=00000175bd301b80 keyNames=00000175bd301cb8 globalNames=00000175bd3044c0
+[BootTime] input bindings + name tables                 +    2.80ms   (t=  647.56ms)
+[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> 00000175bd304610 (KeyMap+0xa0)
+[SpriteSheetLoad] Sprite("White") -> sheet=00000175bd304610 idx=0 (KeyMap+0xa8)
+[SpriteSheetLoad] Sprite("SaveLoadEmpty") -> sheet=00000175bd304610 idx=211 (KeyMap+0xb8)
+[BootTime] SpriteSheet.rsc load                         +   47.24ms   (t=  694.80ms)
+[GameMain] Settings alloc  = 00000175bd3046a8
+[GameMain] MenuDLT alloc = 00000175bd343270 (vtable=00007ff6a2a82260)
+[BootTime] settings alloc + MenuDLT alloc               +    1.47ms   (t=  696.27ms)
+[BootTime] MenuDialogLoopT_Ctor                         +    0.63ms   (t=  696.90ms)
+[GameMain] MenuDLT ctor done, vtable=00007ff6a2a82260
+[GameMain] LoadingDLT alloc = 00000175bd311b70 (vtable=00007ff6a2a84f80)
+[GameMain] LoadingDLT ctor done, vtable=00007ff6a2a84f80, next=00000175bd343270, delay=0.50s
+[GameMain] ShiningRockDLT alloc = 00000175bd343e78 (vtable=00007ff6a2a84f80)
+[GameMain] ShiningRockDLT ctor done, vtable=00007ff6a2a84f80, next=00000175bd311b70, delay=2.00s
+[BootTime] splash DLT ctors                             +    1.59ms   (t=  698.50ms)
+[GameMain] pre-loading ShiningRock.rsc
+[GameMain] pre-loading Loading.rsc
+[BootTime] splash .rsc preloads (ShiningRock + Loading) +   51.49ms   (t=  749.98ms)
+[GameMain] arming ChunkedSceneLoader for MenuDLT (runs behind the splash, not during boot)
+[ChunkedSceneLoader] Arm: self=00000175bd343270 — LoadSceneA1 deferred until the splash is on screen
+[GameMain] InnerLL alloc = 00000175bd346b60
+[GameMain] InnerLL ctor done, vtable=00007ff6a2a82100, next=00000175bd343e78
+[GameMain] OuterLL alloc = 00000175bd312a90
+[GameMain] OuterLL ctor done, vtable=00007ff6a2a82160, next=00000175bd346b60
+[GameMain] Calling MainLoop::Run with OuterLL top loop = 00000175bd312a90...
+[Stall] BEGIN OuterLL::Startup @ t=751.65ms
+[OuterLL::Startup] self=00000175bd312a90 next=00000175bd346b60 loader=00007ffcaa9ce7b8 fn=00007ff6a292d6da
+[OuterLL::Startup] Loader::Load returned
+[EngineLoader] waiting for loader thread to finish (sync)...
+[FactoryReg] ResolveTypeIdByNameLazy("StringTable") = 0xc03519e4
+[Profession] InitFuncs: SerCtor=00007ff6a295260d SerDtor=00007ff6a2952b7f SerInt=00007ff6a2950ce7 SerBool=00007ff6a2950535 SerFloat=00007ff6a2950ffb
+[Profession] InitFuncs: StrSer=00007ff6a296f865 StrDtor=00007ff6a296df9d ExtPtrSer=00007ff6a2831d14 ExtPtrSer2=00007ff6a2831d14
+[FactoryReg] ResolveTypeIdByNameLazy("Tutorial") = 0x12e38b5a
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialStep") = 0xc9f8e694
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialSetup") = 0x7de7ba1b
+[FactoryReg] ResolveTypeIdByNameLazy("Dialog") = 0x4fcc106b
+[TutorialSetupRestrictPlayer] SerializeInt=00007ff6a2950ce7 StringSerialize=00007ff6a296f865
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialGoal") = 0x310de117
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialImage") = 0x00305aa7
+[FactoryReg] ResolveTypeIdByNameLazy("ElementDescription") = 0x42f6a818
+[FactoryReg] ResolveTypeIdByNameLazy("Toolbar") = 0xc9dd0172
+[FactoryReg] ResolveTypeIdByNameLazy("MapGenerator") = 0xca06d4fd
+[FactoryReg] ResolveTypeIdByNameLazy("TerrainGenerator") = 0xefc2f724
+[FactoryReg] ResolveTypeIdByNameLazy("ClimateGenerator") = 0x14c14555
+[TutorialSetupCamera] SerializeInt=00007ff6a2950ce7
+[InnerLL::Load] self=00000175bd346b60 (skipping PlacementTool init)
+[EngineLoader] loader thread finished
+[Stall] END   OuterLL::Startup                         duration=587.06ms (t=1338.71ms)
+[Stall] gap=1339.00ms (>16ms threshold) — was "(boot)" now "OuterLL::Update" t=1339.00ms
+[OuterLL::Update] self=00000175bd312a90 time=00000175bd2f9630 next=00000175bd346b60 mainLoop=00000175bd2f95e8 -> transition
+[OuterLL::Shutdown] self=00000175bd312a90
+[OuterLL::Destroy] self=00000175bd312a90 flags=1
+[Stall] BEGIN InnerLL::Startup @ t=1339.94ms
+[InnerLL::Startup] self=00000175bd346b60 next=00000175bd343e78 loader=00007ffcaa9ce7b8 fn=00007ff6a292d6da
+[InnerLL::Startup] Loader::Load returned
+[EngineLoader] waiting for loader thread to finish (sync)...
+[SplashDLT::Load] self=00000175bd343e78 m_dialogExternal(before)=00000175bd327ef0
+[SplashDLT::Load] m_dialogExternal(after)=00000175bd327ef0
+[EngineLoader] loader thread finished
+[Stall] END   InnerLL::Startup                         duration=1.94ms (t=1341.89ms)
+[InnerLL::Update] self=00000175bd346b60 time=00000175bd2f9630 next=00000175bd343e78 mainLoop=00000175bd2f95e8 -> transition
+[InnerLL::Update] self=00000175bd346b60 time=00000175bd2f9630 next=00000175bd343e78 mainLoop=00000175bd2f95e8 -> transition
+[InnerLL::Shutdown] self=00000175bd346b60
+[InnerLL::Destroy] self=00000175bd346b60 flags=1
+[Stall] BEGIN SplashDLT::Stub_Startup @ t=1342.98ms
+[SplashDLT::Startup] self=00000175bd343e78 next=00000175bd311b70 m_dialogExternal(before)=00000175bd327ef0
+[Stall] BEGIN SplashDLT fn_DialogLoaderLoopT_Startup @ t=1343.37ms
+[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup (creates dialog + pushes to UI; Runtime Loader::Load is kicked but ignored)
+[SplashDLT::CreateDialog] self=00000175bd343e78 retPtr=0000004ec8dfed80 rsc=00000175bd327ef0 -> LoaderDialog_FromSplashDLT
+[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, m_dialogInstance=00000175bda222a8
+[Stall] END   SplashDLT fn_DialogLoaderLoopT_Startup   duration=2.01ms (t=1345.38ms)
+[SplashDLT::Load] self=00000175bd311b70 m_dialogExternal(before)=00000175bd312758
+[UIFade::EnsureFadeSprite] ui=00000175bd343ed8 sheet=00000175bd304610 idx=0 (KeyMap+0xa8 src=00000175bd304610,0)
+[UIFade::TriggerReveal] ui=00000175bd343ed8 color=0xff000000 alpha=1.000 rate=-1.000
+[Stall] END   SplashDLT::Stub_Startup                  duration=3.76ms (t=1346.74ms)
+[SplashDLT::Update] self=00000175bd343e78 first-tick dt=16666 (16.67ms)
+[SplashDLT::Load] m_dialogExternal(after)=00000175bd312758
+[SplashDLT::Draw] self=00000175bd343e78 frameAlpha=0.000000 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.933 rate=-1.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Draw] self=00000175bd343e78 frameAlpha=0.433637 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.867 rate=-1.000 sheet=00000175bd304610 idx=0
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 w=0 l=4ec8dfee00
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 0,0 0x0 flags=0x43
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 w=0 l=4ec8dfee00
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000f70746 w=0 l=4ec8dfee00
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 0,0 0x0 flags=0x3
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 w=0 l=4ec8dfee00
+[WndMsg] WM_ACTIVATEAPP       hwnd=0000000000f70746 w=1 l=0
+[WndMsg] WM_ACTIVATEAPP       hwnd=0000000000520490 w=1 l=0
+[WndMsg] WM_NCACTIVATE        hwnd=0000000000520490 w=0 l=0
+[WndMsg] WM_ACTIVATE          hwnd=0000000000520490 w=1 l=0
+[WndMsg] WM_SIZE               hwnd=00000000004812d6 type=0 0x0
+[WndMsg] WM_SIZE               hwnd=000000000099135e type=0 0x0
+[WndMsg] WM_SETFOCUS          hwnd=0000000000520490 w=0 l=0
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000520490 w=0 l=4ec8dfee00
+[WndMsg] WM_SIZE               hwnd=0000000000520490 type=0 2560x1377
+[BootWindow] revealing hwnd=0000000000520490 (first splash frame presented)
+[BootTime]   BootWindow reveal  <== WINDOW NOW VISIBLE  +  640.63ms   (t= 1390.61ms)
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000520490 w=0 l=4ec8dfedd0
+[SplashDLT::Draw] self=00000175bd343e78 frameAlpha=0.053402 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.733 rate=-1.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.667 rate=-1.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.600 rate=-1.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Update] self=00000175bd343e78 reveal-alpha=0.47 -> running deferred ChunkedSceneLoader init
+[ChunkedSceneLoader] Init: self=00000175bd343270 — running LoadSceneA1 (small allocs + MenuScene.rsc load)
+[Stall] BEGIN ChunkedSceneLoader::Init LoadSceneA1 @ t=1469.45ms
+[MenuScene::Factory] allocated 00000175bda22cc0 (size=0x208)
+[MenuScene::Slot5_Serialize] standalone Geometry-deserialize path (self=00000175bda22cc0 stream=0000004ec8dfe990)
+[sub_c1e0] entry self=00000175bda22ed0 gridSize=768 chunkSize=32 chunksPerSide=24 vertsPerSide=33 vertsPerChunk=1089 totalVbSize=10036224 (0x992400) createOk=1
+[sub_c1e0] VB after Create: q0=ffffff0000992400 q1=00000175bd3d2c60 q2=00000175bda23030 q3=00000175bd2cb440
+[sub_c1e0] VertexBufferData @00000175bd3d2c60: vtable=00007ff6a2cea410 q1=00000175bda22fd0 q2=0000017631e69fb8
+[sub_c1e0] chunk(0,0) scratch v0: x=-384 y=-384 h=1737 w3=255 uvU=0 uvV=0 n_xyzpad=8b 81 fe 00  Set->1  byteOff=0 byteSz=17424
+[sub_c1e0] cell loop complete; first Set returned 1
+[sub_c1e0] IB Set returned 1 (idxBytes=12288 quadsPerChunk=1024)
+[sub_c780] post-ctor img=00000175bd9dfc50:
+    +0x00..0x18 vtbl=00007ffcaa924fc0 q1=0000000000000000 q2=0000000000000000 q3=0000000000000000
+    +0x20..0x40 (params)= 0000000000000000 0000000200000000 0000000000000000 0000000000000000
+    +0x40..0x60 = 0000000100000000 0000000000000000 00000175bd2fa110 00000175bd9dfa38
+    +0x60 (ImageBufferData) = 00000175bda39788
+[sub_c780] post-Create img=00000175bd9dfc50 createOk=1 width=768:
+    +0x20..0x40 (params)= 0000030000000300 0000000200000000 0000000000000005 0000000100000001
+    +0x40..0x60 = 0000000200000001 0000000000000000 00000175bd2fa110 00000175bd9dfa38
+    +0x60 (ImageBufferData) = 00000175bda39788
+[sub_c780] CopyToTexture(img=00000175bd9dfc50, bytes=00000175bddce2a8, w=768, h=768)
+    first 16 bytes: 29 05 ee 00 2c a4 c7 00  30 ff 9f 00 34 ff 99 00
+[sub_c780] DONE img=00000175bd9dfc50 — final +0x60=00000175bda39788
+[MenuScene::Slot5_Serialize] camera Transform deserialized: pos=(0.33, 0.12, -0.32) qrot=(0.879, -21.859, -53.043, 42.954) +0x1c=(-53.32,-15.76,0.00) +0x28=-16159.84 +0x2c=-41.36 +0x30=65.00
+[MenuScene::Slot5_Serialize] particles deserialized: count58=123 (elem array) count68=2 (resource exrefs)
+[MenuScene::Slot5_Serialize] atmosphere deserialized: amb=0xff595966 sun=0xffcbb799 sky=0xffbfbfdd fogStart=90.00 fogEnd=225.00 fogDensity=0.950 sunInt=120.00 ambInt=61.64 vec4_at_1b4=(0.000,0.000,0.000,0.000) (arr30 count=15533 arr40 count=105)
+[MenuDLT::LoadScene] loaded MenuScene variant 9 at 00000175bda22cc0
+[MenuDLT::LoadSceneA1] OK: renderer=00000175be192108 gScene=00000175be192160 sunLight=00000175bda22738 transform=00000175bda228f8 mainMesh=00000175bda22a10 sceneGeom=00000175bda22ed0 staticMeshCount=15533
+[Stall] END   ChunkedSceneLoader::Init LoadSceneA1     duration=139.07ms (t=1608.52ms)
+[MenuDLT::PhaseB] MenuScene+0x38=15533 (arr30 elems) +0x48=105 (arr40 GraphicsMesh count)
+[ChunkedSceneLoader] Init: ready — PhaseB has 15533 elements to process (chunked across Update ticks)
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1609.22ms
+[ChunkedSceneLoader] Tick #1: processed=500 cumProgress=500/15533 (3.2%) chunkDur=3.00ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=3.38ms (t=1612.60ms)
+[SplashDLT::Update] self=00000175bd343e78 reveal-alpha=0.47 -> kicking deferred load of next=00000175bd311b70 (gameLoop=0, threaded=0)
+[AsyncLoader] running load synchronously on caller thread (default — avoids non-thread-safe-allocator race; set BANISHED_ASYNC_LOAD=1 for the old worker thread)
+[AsyncLoader] worker thread loop=00000175bd311b70 Load=00007ff6a29fd873 — start (t=1628.17ms)
+[SplashDLT::Load] self=00000175bd311b70 m_dialogExternal(before)=00000175bd312758
+[SplashDLT::Load] m_dialogExternal(after)=00000175bd312758
+[AsyncLoader] worker thread loop=00000175bd311b70 — done (t=1629.23ms, duration=1.06ms)
+[SplashDLT::Update] self=00000175bd343e78 tick=1 elapsed=133328 delay=2000000
+[Stall] gap=161.03ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1629.65ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1629.99ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.95ms (t=1631.94ms)
+[SplashDLT::Update] self=00000175bd343e78 tick=2 elapsed=149994 delay=2000000
+[Stall] gap=17.14ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1647.13ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1647.44ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.94ms (t=1649.38ms)
+[SplashDLT::Update] self=00000175bd343e78 tick=3 elapsed=166660 delay=2000000
+[Stall] gap=17.21ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1664.65ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1664.96ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.89ms (t=1666.85ms)
+[Stall] gap=16.50ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1681.46ms
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.267 rate=-1.000 sheet=00000175bd304610 idx=0
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1682.03ms
+[ChunkedSceneLoader] Tick #5: processed=500 cumProgress=2500/15533 (16.1%) chunkDur=1.99ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.39ms (t=1684.42ms)
+[Stall] gap=17.58ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1699.61ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1699.93ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.14ms (t=1702.07ms)
+[Stall] gap=17.20ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1717.12ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1717.46ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.03ms (t=1719.49ms)
+[Stall] gap=16.66ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1734.12ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1734.44ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.15ms (t=1736.59ms)
+[Stall] gap=17.20ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1751.64ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1752.12ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.97ms (t=1754.08ms)
+[Stall] gap=17.21ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1769.16ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1769.48ms
+[ChunkedSceneLoader] Tick #10: processed=500 cumProgress=5000/15533 (32.2%) chunkDur=1.88ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.28ms (t=1771.76ms)
+[Stall] gap=17.21ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1786.68ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1787.00ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.20ms (t=1789.20ms)
+[Stall] gap=16.71ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1803.70ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1804.27ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.84ms (t=1806.11ms)
+[Stall] gap=16.45ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1820.72ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1821.30ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.94ms (t=1823.24ms)
+[Stall] gap=16.42ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1837.72ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1838.04ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.11ms (t=1840.15ms)
+[Stall] gap=17.28ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1855.32ms
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1855.88ms
+[ChunkedSceneLoader] Tick #15: processed=500 cumProgress=7500/15533 (48.3%) chunkDur=1.90ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.32ms (t=1858.20ms)
+[Stall] gap=17.46ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1873.34ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1873.96ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.10ms (t=1876.05ms)
+[Stall] gap=16.38ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1890.33ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1890.65ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.12ms (t=1892.76ms)
+[Stall] gap=16.71ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1907.35ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1907.97ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.12ms (t=1910.09ms)
+[Stall] gap=16.38ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1924.35ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1924.66ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.13ms (t=1926.79ms)
+[Stall] gap=16.70ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1941.36ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1941.74ms
+[ChunkedSceneLoader] Tick #20: processed=500 cumProgress=10000/15533 (64.4%) chunkDur=1.85ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.25ms (t=1943.99ms)
+[Stall] gap=16.65ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1958.38ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1958.69ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.03ms (t=1960.72ms)
+[Stall] gap=16.72ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1975.41ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1975.72ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.05ms (t=1977.77ms)
+[Stall] gap=17.24ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=1992.95ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=1993.44ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.97ms (t=1995.41ms)
+[Stall] gap=16.58ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2010.02ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2010.34ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.07ms (t=2012.41ms)
+[Stall] gap=16.73ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2027.07ms
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2028.18ms
+[ChunkedSceneLoader] Tick #25: processed=500 cumProgress=12500/15533 (80.5%) chunkDur=1.80ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.23ms (t=2030.41ms)
+[Stall] gap=17.41ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2045.58ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2046.20ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.88ms (t=2048.09ms)
+[Stall] gap=16.38ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2062.58ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2062.89ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.83ms (t=2064.72ms)
+[Stall] gap=16.25ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2079.14ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2079.62ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.85ms (t=2081.48ms)
+[Stall] gap=17.04ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2096.66ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2097.00ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.92ms (t=2098.93ms)
+[Stall] gap=16.92ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Update" t=2113.92ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2114.21ms
+[ChunkedSceneLoader] Tick #30: processed=500 cumProgress=15000/15533 (96.6%) chunkDur=1.73ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.15ms (t=2116.36ms)
+[Stall] gap=16.75ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2130.67ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2131.01ms
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=1.92ms (t=2132.92ms)
+[Stall] gap=16.24ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Update" t=2147.23ms
+[Stall] BEGIN SplashDLT ChunkedSceneLoader::Tick @ t=2147.51ms
+[MenuDLT::PhaseB] static meshes: added=15533/15533 wired=15533 skipped(badIdx)=0 (18014 material slots)
+[ChunkedSceneLoader] Tick #32: processed=33 cumProgress=15533/15533 (100.0%) chunkDur=0.45ms
+[Stall] BEGIN ChunkedSceneLoader::Tick LoadSceneA3 @ t=2148.40ms
+[MenuDLT::PhaseC] particles: added=123/123
+[Stall] END   ChunkedSceneLoader::Tick LoadSceneA3     duration=0.82ms (t=2149.23ms)
+[ChunkedSceneLoader] DONE: ticks=32 sumChunkMs=58.50 maxChunkMs=3.00 initToDoneMs=679.02 (PhaseB 15533 elements)
+[Stall] END   SplashDLT ChunkedSceneLoader::Tick       duration=2.22ms (t=2149.73ms)
+[Stall] gap=16.99ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=2164.23ms
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Update] self=00000175bd343e78 tick=50 elapsed=949962 delay=2000000
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Update] self=00000175bd343e78 tick=100 elapsed=1783262 delay=2000000
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::TriggerFadeIn] ui=00000175bd343ed8 color=0xff000000 alpha=0.000 rate=1.000
+[SplashDLT::Update] self=00000175bd343e78 kicked fade-out-to-black, waiting for alpha=1
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.000 rate=1.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd343ed8 alpha=0.467 rate=1.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Update] self=00000175bd343e78 elapsed=2266576 delay=2000000 fade-alpha=1.000 -> transition next=00000175bd311b70
+[SplashDLT::Shutdown] self=00000175bd343e78
+[SplashDLT::Destroy] self=00000175bd343e78 flags=1
+[Stall] BEGIN SplashDLT::Stub_Startup @ t=3765.07ms
+[SplashDLT::Startup] self=00000175bd311b70 next=00000175bd343270 m_dialogExternal(before)=00000175bd312758
+[Stall] BEGIN SplashDLT fn_DialogLoaderLoopT_Startup @ t=3765.48ms
+[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup (creates dialog + pushes to UI; Runtime Loader::Load is kicked but ignored)
+[SplashDLT::CreateDialog] self=00000175bd311b70 retPtr=0000004ec8dfed80 rsc=00000175bd312758 -> LoaderDialog_FromSplashDLT
+[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, m_dialogInstance=00000175bd343e78
+[Stall] END   SplashDLT fn_DialogLoaderLoopT_Startup   duration=1.12ms (t=3766.60ms)
+[UIFade::EnsureFadeSprite] ui=00000175bd311bd0 sheet=00000175bd304610 idx=0 (KeyMap+0xa8 src=00000175bd304610,0)
+[UIFade::TriggerReveal] ui=00000175bd311bd0 color=0xff000000 alpha=1.000 rate=-1.000
+[Stall] END   SplashDLT::Stub_Startup                  duration=2.31ms (t=3767.38ms)
+[Stall] gap=17.57ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Update" t=3767.60ms
+[SplashDLT::Update] self=00000175bd311b70 first-tick dt=16666 (16.67ms)
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.933 rate=-1.000 sheet=00000175bd304610 idx=0
+[MenuDLT::Load] self=00000175bd343270 m_dialogExternal(before)=0000000000000000
+[MenuDLT::Load] m_dialogExternal(after)=00000175be847340 (PhaseA deferred to Startup)
+[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> 00000175be8a7b40 (self+0xb88)
+[SplashDLT::Update] self=00000175bd311b70 reveal-alpha=0.47 -> kicking deferred load of next=00000175bd343270 (gameLoop=0, threaded=0)
+[AsyncLoader] running load synchronously on caller thread (default — avoids non-thread-safe-allocator race; set BANISHED_ASYNC_LOAD=1 for the old worker thread)
+[AsyncLoader] worker thread loop=00000175bd343270 Load=00007ff6a29bf46a — start (t=3884.84ms)
+[MenuDLT::Load] self=00000175bd343270 m_dialogExternal(before)=00000175be847340
+[MenuDLT::Load] m_dialogExternal(after)=00000175be847340 (PhaseA deferred to Startup)
+[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> 00000175be8a7b40 (self+0xb88)
+[AsyncLoader] worker thread loop=00000175bd343270 — done (t=3885.69ms, duration=0.84ms)
+[Stall] gap=16.68ms (>16ms threshold) — was "SplashDLT::Update" now "SplashDLT::Draw" t=3885.91ms
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.267 rate=-1.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::TriggerFadeIn] ui=00000175bd311bd0 color=0xff000000 alpha=0.000 rate=1.000
+[SplashDLT::Update] self=00000175bd311b70 kicked fade-out-to-black, waiting for alpha=1
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.200 rate=1.000 sheet=00000175bd304610 idx=0
+[UIFade::SplashDLT::Draw] ui=00000175bd311bd0 alpha=0.733 rate=1.000 sheet=00000175bd304610 idx=0
+[SplashDLT::Update] self=00000175bd311b70 elapsed=766636 delay=500000 fade-alpha=1.000 -> transition next=00000175bd343270
+[SplashDLT::Shutdown] self=00000175bd311b70
+[SplashDLT::Destroy] self=00000175bd311b70 flags=1
+[Stall] BEGIN MenuDLT::Stub_Startup @ t=4512.43ms
+[MenuDLT::Startup] menu SaveLoad created at +0xb70 = 00000175bd311b70
+[MenuDLT::Startup] self=00000175bd343270 remainder=1605219550704 m_dialogExternal=00000175be847340
+[MenuDLT::Startup] scene already populated by Loading splash ChunkedSceneLoader (menuScene=00000175bda22cc0) — skipping LoadScene_PhaseA
+[Stall] BEGIN MenuDLT fn_DialogLoopT_Startup @ t=4513.64ms
+[MenuDLT::CreateDialog] self=00000175bd343270 retPtr=0000004ec8dfedc0 rsc=00000175be847340 -> MainMenuDialog_FromMenuDLT
+[MainMenuDialog::Setup] self=00000175bd311c08 assigning button element IDs
+[Setup]   buttonNew            -> id= 0 (elem=00000175bd3120a0)
+[Setup]   buttonResume         -> NOT FOUND
+[Setup]   buttonLoad           -> id= 2 (elem=00000175be83f440)
+[Setup]   buttonSave           -> NOT FOUND
+[Setup]   buttonOptions        -> id= 4 (elem=00000175be8435c8)
+[Setup]   buttonMenu           -> NOT FOUND
+[Setup]   buttonQuit           -> id= 6 (elem=00000175be845ec8)
+[Setup]   buttonAchievement    -> id= 8 (elem=00000175be841ce8)
+[Setup]   buttonScenario       -> NOT FOUND
+[Setup]   buttonGoal           -> NOT FOUND
+[Setup]   buttonMap            -> NOT FOUND
+[Setup]   buttonTutorial       -> id=12 (elem=00000175be840868)
+[Setup]   buttonMod            -> id= 7 (elem=00000175be844a48)
+[BuildId] childDI=00000175be8912a0 textElem=00000175be8917f8
+[BuildId] child dialog attached, version + build id set
+[Stall] END   MenuDLT fn_DialogLoopT_Startup           duration=3.78ms (t=4517.42ms)
+[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=00000175bd311c08
+[CursorLoad] Cursor/Arrow.rsc:cursor          -> 00000175bd3cf1d8 (KeyMap+0x28)
+[CursorLoad] Cursor/Hand.rsc:cursor           -> 00000175bd3d2210 (KeyMap+0x30)
+[CursorLoad] Cursor/Hourglass.rsc:cursor      -> 00000175bd3d2078 (KeyMap+0x38)
+[CursorLoad] Cursor/Move.rsc:cursor           -> 00000175bd3d2858 (KeyMap+0x40)
+[CursorLoad] Cursor/Query.rsc:cursor          -> 00000175bd3a2a58 (KeyMap+0x48)
+[CursorLoad] Cursor/Place.rsc:cursor          -> 00000175bd3cf210 (KeyMap+0x50)
+[UISoundLoad] Audio/UI/AlertEffect.rsc           -> 00000175bda2f578 (KeyMap+0x58)
+[UISoundLoad] Audio/UI/ButtonDownEffect.rsc      -> 00000175bda2f5c8 (KeyMap+0x60)
+[UISoundLoad] Audio/UI/ButtonUpEffect.rsc        -> 00000175bda30208 (KeyMap+0x68)
+[UISoundLoad] Audio/UI/BeginDragEffect.rsc       -> 00000175bda31660 (KeyMap+0x70)
+[UISoundLoad] Audio/UI/EndDragEffect.rsc         -> 00000175bd3cb9e8 (KeyMap+0x78)
+[UISoundLoad] Audio/UI/PlacementMoveEffect.rsc   -> 00000175bd3cc528 (KeyMap+0x80)
+[UISoundLoad] Audio/UI/PlacementThunkEffect.rsc  -> 00000175bd3cc660 (KeyMap+0x88)
+[UISoundLoad] Audio/UI/PlacementErrorEffect.rsc  -> 00000175bd3cd190 (KeyMap+0x90)
+[UISoundLoad] Audio/UI/WarningEffect.rsc         -> 00000175bd3cba38 (KeyMap+0x98)
+[MenuDLT::Startup] UI::SetCursor(ui=00000175bd3432b0, arrow=00000175bd3cf1d8)
+[MenuDLT::Startup] UI::EnableCursor(true) called on ui=00000175bd3432b0
+[UIFade::EnsureFadeSprite] ui=00000175bd3432b0 sheet=00000175bd304610 idx=0 (KeyMap+0xa8 src=00000175bd304610,0)
+[UIFade::TriggerReveal] ui=00000175bd3432b0 color=0xff000000 alpha=1.000 rate=-1.000
+[MenuDLT::StartMusic] PlayEffect(scene=00000175bd343da0 music=00000175be8a7b40 chan=2) -> handle=1024
+[MenuDLT::BindUISounds] ui=00000175bd3432b0 beginDrag=00000175bda31660 endDrag=00000175bd3cb9e8 btnDown=00000175bda2f5c8 btnUp=00000175bda30208 alert=00000175bda2f578
+[Stall] END   MenuDLT::Stub_Startup                    duration=11.40ms (t=4523.84ms)
+[Stall] gap=26.82ms (>16ms threshold) — was "SplashDLT::Update" now "MenuDLT::Update" t=4524.06ms
+[MenuDLT::Update] self=00000175bd343270 time=00000175bd2f9630 tick=1 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=1 animYaw=0.187 yaw=-16157.841 pitch=-41.364 dist=65.000 target=(-53.32,-15.76,0.00) eye=(-20.58,-51.92,42.95) camPos=(0.33,0.13,-0.34)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=00000175bd343da0) tick=1
+[MenuDLT::TickAudio] tick=0 audioDevice=00000175bd2fcc90 time=00000175bd2f9630 -> Audio::Device::Update
+[MenuDLT::Draw] self=00000175bd343270 frameAlpha=0.042602 mainLoop=00000175bd2f95e8 ctx=00000175bd2ff138 ui=00000175bd3432b0 menuScene=00000175bda22cc0
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.933 rate=-1.000 sheet=00000175bd304610 idx=0
+[GeomDraw_CollectDraw] first call self=00000175bda22ed0 renderer=00000175be192108
+[GeomDraw_ItemDraw] first call self=00000175bda22ed0 ctx=00000175bd2ff138 alpha=0.042602 key=0x24a
+[MenuDLT::Update] self=00000175bd343270 time=00000175bd2f9630 tick=2 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=2 animYaw=0.375 yaw=-16157.841 pitch=-41.364 dist=65.000 target=(-53.32,-15.76,0.00) eye=(-20.58,-51.92,42.95) camPos=(0.33,0.13,-0.34)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=00000175bd343da0) tick=2
+[MenuDLT::TickAudio] tick=1 audioDevice=00000175bd2fcc90 time=00000175bd2f9630 -> Audio::Device::Update
+[MenuDLT::Update] self=00000175bd343270 time=00000175bd2f9630 tick=3 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=3 animYaw=0.562 yaw=-16157.841 pitch=-41.364 dist=65.000 target=(-53.32,-15.76,0.00) eye=(-20.58,-51.92,42.95) camPos=(0.33,0.13,-0.34)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=00000175bd343da0) tick=3
+[MenuDLT::TickAudio] tick=2 audioDevice=00000175bd2fcc90 time=00000175bd2f9630 -> Audio::Device::Update
+[MenuDLT::Draw] self=00000175bd343270 frameAlpha=0.482179 mainLoop=00000175bd2f95e8 ctx=00000175bd2ff138 ui=00000175bd3432b0 menuScene=00000175bda22cc0
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.800 rate=-1.000 sheet=00000175bd304610 idx=0
+[MenuDLT::Draw] self=00000175bd343270 frameAlpha=0.910656 mainLoop=00000175bd2f95e8 ctx=00000175bd2ff138 ui=00000175bd3432b0 menuScene=00000175bda22cc0
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.800 rate=-1.000 sheet=00000175bd304610 idx=0
+[MenuDLT::Update] self=00000175bd343270 time=00000175bd2f9630 tick=4 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=4 animYaw=0.750 yaw=-16157.841 pitch=-41.364 dist=65.000 target=(-53.32,-15.76,0.00) eye=(-20.58,-51.92,42.95) camPos=(0.33,0.13,-0.34)
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.733 rate=-1.000 sheet=00000175bd304610 idx=0
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.733 rate=-1.000 sheet=00000175bd304610 idx=0
+[MenuDLT::UpdateCamera] frame=5 animYaw=0.937 yaw=-16157.841 pitch=-41.364 dist=65.000 target=(-53.32,-15.76,0.00) eye=(-20.58,-51.92,42.95) camPos=(0.33,0.13,-0.34)
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.000 rate=-1.000 sheet=00000175bd304610 idx=0
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[UIFade::MenuDLT::Draw] ui=00000175bd3432b0 alpha=0.000 rate=0.000 sheet=00000175bd304610 idx=0
+[MainMenuDialog::OnCommand] self=00000175bd311c08 msg=0x12 id=6
+[MainMenuDialog::OnCommand] Quit: fn_App_Quit=00007ff6a291b605 g_pAppSingleton=00007ffcaa9cc678 *g=00000175bd2f5f78
+[MainMenuDialog::OnCommand] -> App::Quit
+[MenuDLT::Shutdown] self=00000175bd343270
+[MenuDLT::Destroy] self=00000175bd343270 flags=1
+[GameMain] MainLoop::Run returned (top loop destroyed by Run; inner loops leak — Update stub returns false on first tick before transitioning)
+[GameMain] Settings freed.
+[GameMain] Game freed.
+[GameMain] MainLoop destroyed + freed.
+[Shutdown] partial Engine::Shutdown (steps 1-13)
+[Shutdown] window on entry: iconic=0 showCmd=1 client=2560x1377
+[Shutdown] VideoSettings <- false (clean run) (engine+0x6f0=1)
+[Shutdown] window before Video::Configuration::Save: iconic=0 showCmd=1 client=2560x1377
+[Shutdown] Video::Configuration to persist: window 2560x1377 at 2497,27 fullscreen=0 mode 2560x1440
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 0,0 0x0 flags=0x97
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000520490 w=0 l=4ec8dfed80
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000520490 w=0 l=4ec8dfed80
+[Shutdown] Persistence::WriteSettings done
+[Shutdown] done
+[GameMain] Destroying Engine...
+[GameMain] Engine destroyed.
+[Standalone] === GameMain returned 0 ===
+[RtEngineLife] ctor=1 startup=1 (failAt=0) dtor=1 shutdown=0 (phase1 steps=0)
+[RtEngineLife] Engine::Shutdown ran 0 times -- STRUCTURAL, not a regression: game_main.cpp calls ShutdownEngineStaged() instead. That port is UNVERIFIED.
+
+[Dx11Seam] === slot table ===
+[Dx11Seam] DeviceData          @ 00007ff6a2cea0c8 (20 slots, was 0x180018bb0)
+[Dx11Seam]     slot  0  OURS     DeviceData::~DeviceData (scalar deleting)
+[Dx11Seam]     slot  1  OURS     DeviceData::EnumerateInterfaces
+[Dx11Seam]     slot  2  OURS     DeviceData::CreateDevice
+[Dx11Seam]     slot  3  OURS     DeviceData::Shutdown
+[Dx11Seam]     slot  4  OURS     DeviceData::Stub4 (void)
+[Dx11Seam]     slot  5  OURS     DeviceData::Stub5 (0.0f)
+[Dx11Seam]     slot  6  OURS     DeviceData::Stub6 (false)
+[Dx11Seam]     slot  7  OURS     DeviceData::Stub7 (true)
+[Dx11Seam]     slot  8  OURS     DeviceData::SetImageBuffer (HCURSOR)
+[Dx11Seam]     slot  9  OURS     DeviceData::CreateContextData
+[Dx11Seam]     slot 10  OURS     DeviceData::CreateImageBufferData
+[Dx11Seam]     slot 11  OURS     DeviceData::CreateConstantBufferData
+[Dx11Seam]     slot 12  OURS     DeviceData::CreateIndexBufferData
+[Dx11Seam]     slot 13  OURS     DeviceData::CreateVertexBufferData
+[Dx11Seam]     slot 14  OURS     DeviceData::CreateVertexLayoutData
+[Dx11Seam]     slot 15  OURS     DeviceData::CreateVertexProgramData
+[Dx11Seam]     slot 16  OURS     DeviceData::CreatePixelProgramData
+[Dx11Seam]     slot 17  OURS     DeviceData::CreateRenderStateData
+[Dx11Seam]     slot 18  OURS     DeviceData::CreateVideoProgramData
+[Dx11Seam]     slot 19  OURS     DeviceData::CreateRenderBufferData
+[Dx11Seam] ContextData         @ 00007ff6a2cea170 (20 slots, was 0x1800186f0)
+[Dx11Seam]     slot  0  OURS     ContextData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     ContextData::BeginCommands
+[Dx11Seam]     slot  2  OURS     ContextData::EndCommands
+[Dx11Seam]     slot  3  OURS     ContextData::Finish
+[Dx11Seam]     slot  4  OURS     ContextData::Clear
+[Dx11Seam]     slot  5  OURS     ContextData::BindRenderBuffer
+[Dx11Seam]     slot  6  OURS     ContextData::BindViewport
+[Dx11Seam]     slot  7  OURS     ContextData::BindScissor
+[Dx11Seam]     slot  8  OURS     ContextData::BindTransforms
+[Dx11Seam]     slot  9  OURS     ContextData::BindTextureNone
+[Dx11Seam]     slot 10  OURS     ContextData::BindIndexNone
+[Dx11Seam]     slot 11  OURS     ContextData::BindVertexNone
+[Dx11Seam]     slot 12  OURS     ContextData::DrawIndexed
+[Dx11Seam]     slot 13  OURS     ContextData::GetMaxDynamicInstances (52)
+[Dx11Seam]     slot 14  OURS     ContextData::BeginVertices
+[Dx11Seam]     slot 15  OURS     ContextData::EndVertices
+[Dx11Seam]     slot 16  OURS     ContextData::BeginIndexedVertices
+[Dx11Seam]     slot 17  OURS     ContextData::EndIndexedVertices (= slot 19)
+[Dx11Seam]     slot 18  OURS     ContextData::BeginInstancedIndexedVertices
+[Dx11Seam]     slot 19  OURS     ContextData::EndInstancedIndexedVertices
+[Dx11Seam] ImageBufferData     @ 00007ff6a2cea218 (7 slots, was 0x180018790)
+[Dx11Seam]     slot  0  OURS     ImageBufferData::~ImageBufferData (deleting)
+[Dx11Seam]     slot  1  OURS     ImageBufferData::AttachColorBuffer
+[Dx11Seam]     slot  2  OURS     ImageBufferData::AttachDepthBuffer
+[Dx11Seam]     slot  3  OURS     ImageBufferData::Create
+[Dx11Seam]     slot  4  OURS     ImageBufferData::Bind
+[Dx11Seam]     slot  5  OURS     ImageBufferData::Update
+[Dx11Seam]     slot  6  OURS     ImageBufferData::Read
+[Dx11Seam] ConstantBufferData  @ 00007ff6a2cea2c0 (4 slots, was 0x1800185d0)
+[Dx11Seam]     slot  0  OURS     ConstantBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     ConstantBufferData::Create
+[Dx11Seam]     slot  2  OURS     ConstantBufferData::Bind
+[Dx11Seam]     slot  3  OURS     ConstantBufferData::SlotIndex+1
+[Dx11Seam] IndexBufferData     @ 00007ff6a2cea368 (7 slots, was 0x1800187c8)
+[Dx11Seam]     slot  0  OURS     IndexBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     IndexBufferData::Create
+[Dx11Seam]     slot  2  OURS     IndexBufferData::SetData
+[Dx11Seam]     slot  3  OURS     IndexBufferData::Lock (shared)
+[Dx11Seam]     slot  4  OURS     IndexBufferData::Unlock (shared)
+[Dx11Seam]     slot  5  OURS     IndexBufferData::Bind
+[Dx11Seam]     slot  6  OURS     IndexBufferData::Serialize
+[Dx11Seam] VertexBufferData    @ 00007ff6a2cea410 (7 slots, was 0x180018830)
+[Dx11Seam]     slot  0  OURS     VertexBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     VertexBufferData::Create
+[Dx11Seam]     slot  2  OURS     VertexBufferData::SetData
+[Dx11Seam]     slot  3  OURS     VertexBufferData::Lock (shared)
+[Dx11Seam]     slot  4  OURS     VertexBufferData::Unlock (shared)
+[Dx11Seam]     slot  5  OURS     VertexBufferData::Bind
+[Dx11Seam]     slot  6  OURS     VertexBufferData::Serialize
+[Dx11Seam] VertexLayoutData    @ 00007ff6a2cea4b8 (3 slots, was 0x180018878)
+[Dx11Seam]     slot  0  OURS     VertexLayoutData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VertexLayoutData::Bind
+[Dx11Seam]     slot  2  OURS     VertexLayoutData::PlatformCreate
+[Dx11Seam] VertexProgramData   @ 00007ff6a2cea560 (3 slots, was 0x180018890)
+[Dx11Seam]     slot  0  OURS     VertexProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VertexProgramData::PlatformCreate
+[Dx11Seam]     slot  2  OURS     VertexProgramData::Bind
+[Dx11Seam] PixelProgramData    @ 00007ff6a2cea608 (3 slots, was 0x180018800)
+[Dx11Seam]     slot  0  OURS     PixelProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     PixelProgramData::PlatformCreate
+[Dx11Seam]     slot  2  OURS     PixelProgramData::Bind
+[Dx11Seam] RenderStateData     @ 00007ff6a2cea6b0 (3 slots, was 0x180018818)
+[Dx11Seam]     slot  0  OURS     RenderStateData::~RenderStateData
+[Dx11Seam]     slot  1  OURS     RenderStateData::Create
+[Dx11Seam]     slot  2  OURS     RenderStateData::Bind
+[Dx11Seam] VideoProgramData    @ 00007ff6a2cea758 (3 slots, was 0x1800185a8)
+[Dx11Seam]     slot  0  OURS     VideoProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VideoProgramData::Stub1 (true)
+[Dx11Seam]     slot  2  OURS     VideoProgramData::Stub2 (void)
+[Dx11Seam] RenderBufferData    @ 00007ff6a2cea800 (4 slots, was 0x180018588)
+[Dx11Seam]     slot  0  OURS     RenderBufferData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     RenderBufferData::Stub1 (true)
+[Dx11Seam]     slot  2  OURS     RenderBufferData::Bind
+[Dx11Seam]     slot  3  OURS     RenderBufferData::Resolve
+[Dx11Seam] fallbacks to shipped code: 0 (expected 0)

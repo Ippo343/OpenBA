@@ -1,6 +1,7 @@
-unsatisfied_export_scan: 798 distinct names resolved through a door; 148 have neither a port nor a mint entry
-  of those, 145 have at least one site OUTSIDE a diff guard:
+unsatisfied_export_scan: 802 distinct names resolved through a door; 151 have neither a port nor a mint entry
+  of those, 148 have at least one site OUTSIDE a diff guard:
 
+  ??0Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:384
   ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ                                                code/Game/Game/w2_takescreenshot.cpp:148
   ??0Geometry@Graphics@@QEAA@AEBV01@@Z                                                     runtime/src/graphics/mesh.cpp:227
   ??0RenderBuffer@Video@@QEAA@XZ                                                           code/Game/Game/minimap_paint.cpp:101
@@ -9,6 +10,7 @@ unsatisfied_export_scan: 798 distinct names resolved through a door; 148 have ne
   ??1AchievementManager@Achievement@@QEAA@XZ                                               runtime/src/engine/engine_lifecycle.cpp:937
   ??1Application@0@QEAA@XZ                                                                 runtime/src/engine/engine_lifecycle.cpp:977
   ??1CompressedStream@IO@@UEAA@XZ                                                          runtime/src/io/compressedstream.cpp:331
+  ??1Compression@System@@QEAA@XZ                                                           runtime/src/system/compression.cpp:461
   ??1Configuration@Audio@@QEAA@XZ                                                          runtime/src/engine/engine_lifecycle.cpp:960
   ??1Configuration@Input@@QEAA@XZ                                                          runtime/src/engine/engine_lifecycle.cpp:949
   ??1Configuration@System@@QEAA@XZ                                                         runtime/src/engine/engine_lifecycle.cpp:981
@@ -37,8 +39,9 @@ unsatisfied_export_scan: 798 distinct names resolved through a door; 148 have ne
   ?Clean@ExternalFactory@Object@@QEAAXXZ                                                   runtime/src/engine/loops.cpp:192  (+1 more)
   ?ClearResources@Context@Video@@QEAAXXZ                                                   engine/funcs/engine_funcs.cpp:1570
   ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z       engine/funcs/engine_funcs.cpp:1607
-  ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z                                        runtime/src/io/filesystem_packages.cpp:594  (+1 more)
+  ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z                                        runtime/src/io/filesystem_packages.cpp:599  (+1 more)
   ?Commit@CompressedStream@IO@@QEAAXXZ                                                     runtime/src/io/compressedstream.cpp:327  (+1 more)
+  ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z                                          runtime/src/system/compression.cpp:335  (+1 more)
   ?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z                                      runtime/src/io/compressedstream.cpp:356
   ?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@W4Usage@45@  code/Game/Game/w2_takescreenshot.cpp:150
   ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@                            engine/funcs/engine_funcs.cpp:1959
@@ -89,7 +92,7 @@ unsatisfied_export_scan: 798 distinct names resolved through a door; 148 have ne
   ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Obj code/Game/Action/action_base_movedeps.cpp:97
   ?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ                                runtime/src/achievement/achievement_manager.cpp:171
   ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z                                   runtime/src/io/filesystem_setupdirs_win.cpp:395
-  ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z                              runtime/src/io/filesystem_packages.cpp:720  (+1 more)
+  ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z                              runtime/src/io/filesystem_packages.cpp:725  (+1 more)
   ?RefreshList@Modification@IO@@QEAAXXZ                                                    runtime/src/engine/engine_lifecycle.cpp:605  (+1 more)
   ?RemoveAll@AchievementManager@Achievement@@QEAAXXZ                                       runtime/src/engine/engine_lifecycle.cpp:842
   ?RemoveAllItems@ComboElement@UI@@QEAAXXZ                                                 engine/funcs/engine_funcs.cpp:1861
