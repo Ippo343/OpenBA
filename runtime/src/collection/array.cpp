@@ -136,6 +136,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // Wave 9 lane VID2 — the Collection::Set AVL probe's arming hook. Declared at
 // file scope because `extern "C"` cannot appear inside a function body.
 extern "C" void RtCollectionSetAvlProbeArm(bool on);
+extern "C" void RtCollectionSetClearProbeArm(bool on);
 
 namespace rtcoll {
 
@@ -1457,6 +1458,22 @@ void RtCollectionPortInit() {
         const char* p = std::getenv("BANISHED_RT_SETAVL_PROBE");
         RtCollectionSetAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
         std::printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
+    }
+
+    // Wave 9 lane SAVE2: Collection::Set<Pair<String,String>>::Clear and its
+    // two helpers (0x18000f7d0 / 0x18000f890 / 0x18000fa90). Same reasoning
+    // again — this is the Collection namespace's one init hook. They are the
+    // boot-path door under the ported IO::Persistence::ReadSettings; see
+    // runtime/src/collection/set_clear.cpp and docs/runtime_port/WAVE9_LANE_SAVE2.md.
+    if (RtWaveEnabled("BANISHED_RT_SETCLEAR")) {
+        extern int RtCollectionSetClearRegister();
+        const int setClear = RtCollectionSetClearRegister();
+        // Armed, not run — the probe allocates, and a probe that allocates
+        // cannot run from a *PortInit (lane PKG2's null+0x640). It
+        // self-schedules on the first real call into Clear.
+        const char* pc = std::getenv("BANISHED_RT_SETCLEAR_PROBE");
+        RtCollectionSetClearProbeArm(pc && *pc && std::strcmp(pc, "0") != 0);
+        std::printf("[RtPort]   Collection::Set Clear: %d addresses registered\n", setClear);
     }
 
     // ARM the probe rather than running it. It runs on the first call into any

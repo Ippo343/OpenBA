@@ -124,10 +124,18 @@ void ResolvePtrs() {
     s_SetTransform     = reinterpret_cast<CtxSetTransform_t>(
         ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
 
+    // WAVE 9 LANE SAVE2: the Matrix column ctor moved UP into the name group.
+    // It was in the by-address group below under "no verified mangled name to
+    // hand" -- but 0x18001e540 IS exported, as
+    // ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z (checked with pefile against the
+    // shipped export table). It is now ported (runtime/src/math/transform.cpp),
+    // and an address door here would have walked straight past that port into
+    // the DLL, which is the defect tools/port_bypass_audit.py exists to catch.
+    s_MatrixCtor      = reinterpret_cast<MatrixCtor_t>(
+        ResolveExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z"));
+
     // Functions resolved by pinned Runtime-x64.dll address (no verified mangled
     // name to hand); ResolveAddr(Module::Runtime, ...) applies ASLR delta.
-    s_MatrixCtor      = reinterpret_cast<MatrixCtor_t>(
-        ResolveAddr(Module::Runtime, 0x18001e540));
     s_SetInverseScale = reinterpret_cast<CtxSetInverseScale_t>(
         ResolveAddr(Module::Runtime, 0x18001a880));
     s_GetMaxDynInst   = reinterpret_cast<CtxGetMaxDynInst_t>(

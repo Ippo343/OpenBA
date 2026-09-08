@@ -3,11 +3,18 @@
 // runtime/src/collection/array_destroy_internal.h — Wave 9 lane D2
 // ============================================================================
 //
-// Only two files include this: array_destroy.cpp and its probe. It exists so
-// the probe drives the SAME bodies and the SAME DestroySpec rows the registered
-// entry points drive. A probe that re-derived either would be testing a copy of
-// the port rather than the port — the same reason lane Q's array_internal.h
-// exists, and the reason both files are one header thick.
+// It exists so the probe drives the SAME bodies and the SAME DestroySpec rows
+// the registered entry points drive. A probe that re-derived either would be
+// testing a copy of the port rather than the port — the same reason lane Q's
+// array_internal.h exists, and the reason both files are one header thick.
+//
+// THREE files include it, not the two this comment used to claim
+// (WAVE 9 LANE SAVE2, corrected in place per PLAN §6 step 8):
+// array_destroy.cpp, array_destroy_probe.cpp, and set_clear.cpp — the last for
+// `ReleaseStringsCore` alone, because retail's `~Pair<String,String>` at
+// 0x18000fa90 IS Body B with one element and the offsets {0x08, 0x00}. That is
+// the reuse this header was written to make possible, so the third includer is
+// the rule working, not an exception to it.
 //
 // The commentary — which address each row was read out of, why Body B's two
 // arms leave the slot holding different things, and why 0x18001c8c0 is Body A

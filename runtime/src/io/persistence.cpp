@@ -325,7 +325,13 @@ int RtIoPersistenceRegister() {
     RegisterRuntimeAddr(0x1800b8380, (void*)&RtIo_Persistence_SetBool);
     RegisterRuntimeAddr(0x180007ad0, (void*)&RtIo_Persistence_GetSavePath);
 
-    printf("[RtPort] IO::Persistence: %d/7 exports registered "
-           "(ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)\n", n);
+    // CORRECTED 2026-09-08 (Wave 9 lanes BOOT2 and SAVE2). This line used to
+    // read "(ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)".
+    // BOTH are ported now, in persistence_registry_win.cpp, and neither was
+    // ever counted by this `n` -- so the message named a holdback that had
+    // stopped being one AND attributed it to the wrong denominator.
+    printf("[RtPort] IO::Persistence: %d/7 exports registered here; "
+           "ReadSettings + WriteSettings + Registry::Registry are registered by "
+           "persistence_registry_win.cpp\n", n);
     return n;
 }

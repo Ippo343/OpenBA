@@ -526,6 +526,56 @@ Vector3* RtMath_Transform3_Rotate(const Transform3* self, Vector3* ret, const Ve
 }
 
 // ============================================================================
+// Math::Matrix::Matrix(const Vector4& c0, const Vector4& c1,
+//                      const Vector4& c2, const Vector4& c3)
+// ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z        retail 0x18001e540
+// ----------------------------------------------------------------------------
+// WAVE 9 LANE SAVE2. Wave 1 ported every Matrix operator but not this ctor,
+// because nothing in runtime/ calls it — the one caller in the whole tree is
+// `code/Game/Game/weather_particle_draw.cpp`, which reached it BY ADDRESS
+// (`ResolveAddr(Module::Runtime, 0x18001e540)`) under a comment saying there
+// was "no verified mangled name to hand". There is: the name above is in the
+// shipped export table at that exact RVA, checked with pefile before this line
+// was written (reference_resolveexport_phantom_names.md).
+//
+// ctor ABI (transform.cpp's banner): `this` IS the target, so there is no
+// hidden return slot — RCX=this, RDX=c0, R8=c1, R9=c2, and the FOURTH column
+// arrives ON THE STACK. Retail reads it as `MOV RAX,[RSP+0x28]`, i.e. the
+// first slot past the 32-byte shadow space, which is the fifth argument
+// counting `this`. Getting that wrong is the "a pointer param typed int is
+// only wrong from the 5th arg on" defect this project has already paid for.
+//
+// 39 instructions, all MOV: four 16-byte column copies done as four DWORD
+// loads and four DWORD stores each, columns written in order 0,1,2,3 into
+// +0x00 / +0x10 / +0x20 / +0x30. RAX = `this` at the RET.
+//
+// ORACLE: FULL DIFF over the whole 64-byte object into a private scratch —
+// the body is a pure copy with no shared state, so running the shipped one on
+// a second Matrix is free of side effects (contrast ~SaveLoad, whose every
+// statement is a free).
+// ============================================================================
+Matrix* RtMath_Matrix_CtorColumns(Matrix* self, const Vector4* c0, const Vector4* c1,
+                                  const Vector4* c2, const Vector4* c3) {
+    RT_DIFF_BEGIN("Math::Matrix::Matrix(4 x const Vector4&)");
+    std::memcpy(&self->m[0],  c0, 16);
+    std::memcpy(&self->m[4],  c1, 16);
+    std::memcpy(&self->m[8],  c2, 16);
+    std::memcpy(&self->m[12], c3, 16);
+    if (rt_diff_on__) {
+        // 0xCD-filled, not zeroed: a byte NEITHER side writes must not compare
+        // equal by accident (reference_oracle_must_not_compare_unwritten_bytes.md).
+        Matrix theirs;
+        std::memset(&theirs, 0xCD, sizeof(theirs));
+        typedef void (*OrigFn)(Matrix*, const Vector4*, const Vector4*,
+                               const Vector4*, const Vector4*);
+        RtOriginal<OrigFn>("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z")(
+            &theirs, c0, c1, c2, c3);
+        RT_DIFF_BYTES(self, &theirs, sizeof(Matrix));
+    }
+    return self;   // retail leaves `this` in RAX
+}
+
+// ============================================================================
 // Math::Matrix::Identity()  -- static, struct return: RCX=hidden ret
 // retail 0x18002c030  ?Identity@Matrix@Math@@SA?AV12@XZ
 // ============================================================================
@@ -966,6 +1016,51 @@ Transform* RtMath_Transform_MulTransform(const Transform* self, Transform* ret, 
 }
 
 // ============================================================================
+// The Matrix column ctor's sweep — WAVE 9 LANE SAVE2
+// ----------------------------------------------------------------------------
+// WHY A SWEEP AND NOT THE LIVE SITE. The one caller in the tree is
+// `code/Game/Game/weather_particle_draw.cpp`, and a full autostart-to-pause-menu
+// run reached it ZERO times: the port's RT_DIFF site never registered, which is
+// `calls=0` over a green line — this project's canonical unverified port
+// (reference_uncalled_port_is_not_verified.md). A sweep is what turns that into
+// a number.
+//
+// It runs from the registration hook, which is safe here for a reason that does
+// NOT generalise (lane PKG2's null+0x640): this body allocates nothing, touches
+// no singleton and calls nothing but the shipped DLL's own copy of itself.
+//
+// The corpus deliberately includes negative zero, denormals and both infinities
+// — a pure 16-dword copy cannot mangle them, and that is the point: if any of
+// them came back different the port would be doing arithmetic it must not do.
+// 24 quadruples, tolerance ZERO, compared over the whole 64-byte object.
+// ============================================================================
+static void RtMathMatrixCtorSweep() {
+    if (!RtDiffEnabled()) return;
+    static const uint32_t kBits[] = {
+        0x00000000u, 0x80000000u, 0x3f800000u, 0xbf800000u, 0x7f800000u,
+        0xff800000u, 0x00000001u, 0x007fffffu, 0x4b7fffffu, 0xcb7fffffu,
+        0x3eaaaaabu, 0x40490fdbu,
+    };
+    constexpr int kN = static_cast<int>(sizeof(kBits) / sizeof(kBits[0]));
+    int cases = 0;
+    for (int q = 0; q < 24; ++q) {
+        Vector4 c[4];
+        float* f = &c[0].x;
+        for (int i = 0; i < 16; ++i) {
+            const uint32_t b = kBits[(q * 16 + i * 5 + i) % kN];
+            std::memcpy(&f[i], &b, 4);
+        }
+        Matrix ours;
+        RtMath_Matrix_CtorColumns(&ours, &c[0], &c[1], &c[2], &c[3]);
+        ++cases;
+    }
+    std::fprintf(stderr, "[RtMathTransform] Matrix column-ctor sweep: %d cases "
+                         "(each self-compared against the shipped body; read the "
+                         "RtDiff line for Math::Matrix::Matrix(4 x const "
+                         "Vector4&) for the verdict)\n", cases);
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 void RtMathTransformRegister() {
@@ -992,6 +1087,12 @@ void RtMathTransformRegister() {
     RegisterRuntimeExport("?FromYawPitch@Quaternion@Math@@SA?AV12@AEBVScalar@2@0@Z", (void*)&RtMath_Quaternion_FromYawPitch); ++count;
     RegisterRuntimeExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z", (void*)&RtMath_Transform_FromYawPitchOffset); ++count;
     RegisterRuntimeExport("?Identity@Matrix@Math@@SA?AV12@XZ", (void*)&RtMath_Matrix_Identity); ++count;
+    RegisterRuntimeExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z", (void*)&RtMath_Matrix_CtorColumns); ++count;
+    // Second door onto the SAME body. weather_particle_draw.cpp now asks by
+    // name, but the address stays registered so that any future by-address
+    // caller reaches the port instead of walking past it into the DLL --
+    // the defect tools/port_bypass_audit.py exists to catch.
+    RegisterRuntimeAddr(0x18001e540, (void*)&RtMath_Matrix_CtorColumns);
     RegisterRuntimeExport("?Identity@Transform@Math@@SA?AV12@XZ", (void*)&RtMath_Transform_Identity); ++count;
     RegisterRuntimeExport("?Identity@Transform3@Math@@SA?AV12@XZ", (void*)&RtMath_Transform3_Identity); ++count;
     RegisterRuntimeExport("?Inverse@Transform@Math@@QEBA?AV12@XZ", (void*)&RtMath_Transform_Inverse); ++count;
@@ -1008,4 +1109,7 @@ void RtMathTransformRegister() {
     RegisterRuntimeExport("?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z", (void*)&RtMath_Transform_FromDirection); ++count;
 
     fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
+
+    // AFTER the registrations, so the sweep drives the REGISTERED body.
+    RtMathMatrixCtorSweep();
 }
