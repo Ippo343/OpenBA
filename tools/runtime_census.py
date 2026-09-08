@@ -77,6 +77,45 @@ def concat_literal(text, pos):
 
 
 RE_EXPORT = re.compile(r'ResolveExport(?:Raw)?\s*\(\s*(?=")')
+
+# THE MACRO DOORS -- the fifth blind spot, and the most expensive one this
+# script has had. `called` matched a LITERAL `ResolveExport(` only, so the two
+# macros in runtime/funcs/rt_port.h were invisible:
+#
+#   RT_EXPORT_ONCE(FnType, "?Mangled@...")   -- name is the SECOND argument
+#   RT_DATA_SLOT(T,        "?Mangled@...")   -- name is the SECOND argument
+#   RtResolveCached("?Mangled@...", &cache)  -- name is the FIRST argument
+#
+# All three end in RtResolveCached and are therefore live cutover dependencies
+# in exactly the sense this column exists to count. 113 of them were unseen --
+# including `?SetupDirectories@FileSystem@IO@@` and `?LoadPackages@FileSystem@IO@@`,
+# the two symbols the DLL-less boot spent attempts 09 through 12 dying on. The
+# census could not see the wall it was being used to look for.
+#
+# The two macros take a TYPE as their first argument, which can itself contain
+# commas inside angle brackets or a function-pointer parameter list, so the name
+# is found by scanning for the first string literal rather than by splitting on
+# commas.
+RE_MACRO_DOOR = re.compile(r'\b(?:RT_EXPORT_ONCE|RT_DATA_SLOT)\s*\(')
+RE_RESOLVE_CACHED = re.compile(r'\bRtResolveCached\s*\(\s*(?=")')
+
+
+def first_literal_after(text, pos, limit=400):
+    """Position of the first `"` within `limit` chars of `pos`, or None.
+
+    Used for the two macro doors, whose first argument is a TYPE that may
+    contain commas (`Collection::Array<A, B>`, a function-pointer signature).
+    Splitting on commas would pick the wrong argument; the name is simply the
+    first string literal in the call, so find that.
+    """
+    stop = min(len(text), pos + limit)
+    i = text.find('"', pos)
+    if i == -1 or i >= stop:
+        return None
+    # A `)` before the literal means the call had no string argument at all.
+    if ')' in text[pos:i]:
+        return None
+    return i
 RE_ORDINAL = re.compile(r'ResolveOrdinal(?:Raw)?\s*\(\s*(\d+)')
 RE_ADDR = re.compile(r'ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)')
 RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
@@ -442,6 +481,20 @@ def scan():
         text = strip_comments(text)
 
         for m in RE_EXPORT.finditer(text):
+            name = concat_literal(text, m.end())
+            if name:
+                called_exports.setdefault(name, set()).add(rel)
+        # The macro doors (RT_EXPORT_ONCE / RT_DATA_SLOT / RtResolveCached).
+        # These are live cutover dependencies exactly as ResolveExport is; see
+        # RE_MACRO_DOOR above for what their invisibility cost.
+        for m in RE_MACRO_DOOR.finditer(text):
+            lit = first_literal_after(text, m.end())
+            if lit is None:
+                continue
+            name = concat_literal(text, lit)
+            if name:
+                called_exports.setdefault(name, set()).add(rel)
+        for m in RE_RESOLVE_CACHED.finditer(text):
             name = concat_literal(text, m.end())
             if name:
                 called_exports.setdefault(name, set()).add(rel)
