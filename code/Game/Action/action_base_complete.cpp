@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "scene_watch.h"
+#include "hw_watch.h"      // HwWatch_Arm — BANISHED_WSWATCH writer hunt (Finding 3)
 #include <windows.h>
 
 static bool ACT_Trace() {
@@ -287,6 +288,107 @@ static void WsProbeNote(unsigned long long* counter, const char* what,
 // teardown fault this probe exists to diagnose — see the note there.
 extern "C" void WorkSchedProbe_Report() { WsProbeReport(); }
 
+namespace {
+// ---------------------------------------------------------------------------
+// BANISHED_WSWATCH — find the WRITER of Finding 3's half-overwritten pointer.
+// ---------------------------------------------------------------------------
+// Established, on crashing runs: the engine heap is intact at teardown entry and
+// corrupt by the fault, so the write happens DURING the teardown cascade; the
+// victim is one instruction (`int k = *e` in step 4's entry walk); and the value
+// is a live pointer whose LOW DWORD has been replaced by a small integer
+// (0x…_00000002, 0x…_00000022) with the high half equal to that run's heap
+// prefix. A hardware write watchpoint therefore only has to cover teardown.
+//
+// This does two things, both env-gated and behaviour-preserving until it trips:
+//
+//  (1) VALIDATE the bucket's whole inner tree at the top of step 4, BEFORE any
+//      dereference, and name the SLOT — the address of the field holding the bad
+//      pointer — plus its structural identity (which bucket, which node, which of
+//      root/+0x18/+0x20). Structural identity is what makes a second run able to
+//      arm the same slot, since addresses move run to run.
+//  (2) ARM a debug register on that slot's low dword on first detection, exactly
+//      as entitylist.cpp:498 does for the TreeGuard victim, whose comment records
+//      that the same victim got re-corrupted on later passes and that arming after
+//      the first detection caught the next store with its RIP. If this victim is
+//      likewise re-written, the watchpoint names the writer outright.
+//
+// A slot is judged corrupt only on the observed shape — a non-zero high half with
+// a tiny low half, or a pointer far too small to be heap. A plain null child is
+// normal and is not reported.
+// ---------------------------------------------------------------------------
+bool WsWatchOn() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_WSWATCH");
+        on = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return on == 1;
+}
+bool WsPtrLooksCorrupt(uint64_t v) {
+    if (v == 0) return false;                       // an absent child is normal
+    if (v < 0x10000ULL) return true;                // far too small to be heap
+    const uint32_t lo = static_cast<uint32_t>(v);
+    const uint32_t hi = static_cast<uint32_t>(v >> 32);
+    if (hi != 0 && lo < 0x10000u) return true;      // *** the observed shape ***
+    if ((v & 7ULL) != 0) return true;               // node blocks are 8-aligned
+    return false;
+}
+unsigned long long s_wsWatchFound = 0;
+bool s_wsWatchArmed = false;
+
+// Report one bad slot and, once, arm a debug register on its low dword.
+void WsWatchReportSlot(void* slotAddr, uint64_t val, const void* bucket,
+                       uint64_t bucketKey, const void* owningNode, const char* field,
+                       int taskIdx) {
+    ++s_wsWatchFound;
+    std::fprintf(stderr,
+        "[WSWatch] *** CORRUPT LINK *** slot=%p holds 0x%016llx (low dword=0x%x) "
+        "| field=%s owningNode=%p bucket=%p bucketKey=0x%llx | 8e30 call #%llu taskIdx=%d\n",
+        slotAddr, (unsigned long long)val, (unsigned)(uint32_t)val,
+        field, owningNode, bucket, (unsigned long long)bucketKey, s_wsCalls, taskIdx);
+    std::fflush(stderr);
+    if (!s_wsWatchArmed) {
+        s_wsWatchArmed = true;
+        HwWatch_Arm(slotAddr, 4, "Finding3: work-scheduler bucket inner-tree link low dword");
+        std::fprintf(stderr, "[WSWatch] armed a write watchpoint on %p (4 bytes) — if this "
+                             "victim is written again the handler names the writer\n", slotAddr);
+        std::fflush(stderr);
+    }
+}
+
+// Walk the whole inner tree (bounded), checking every link before following it.
+// Returns true when a corrupt link was found.
+bool WsWatchScanInner(void* bucket, uint64_t bucketKey, int taskIdx) {
+    uint8_t* b = reinterpret_cast<uint8_t*>(bucket);
+    uint64_t rootVal = *reinterpret_cast<uint64_t*>(b + 0x08);
+    if (WsPtrLooksCorrupt(rootVal)) {
+        WsWatchReportSlot(b + 0x08, rootVal, bucket, bucketKey, bucket, "bucket+0x08 (inner root)", taskIdx);
+        return true;
+    }
+    // Iterative DFS with an explicit bound: a corrupt tree must never become a hang.
+    void*  stack[256];
+    int    sp = 0;
+    if (rootVal) stack[sp++] = reinterpret_cast<void*>(rootVal);
+    int visited = 0;
+    bool bad = false;
+    while (sp > 0 && ++visited < 4096) {
+        uint8_t* n = reinterpret_cast<uint8_t*>(stack[--sp]);
+        for (int k = 0; k < 2; ++k) {
+            const size_t off = k ? 0x20 : 0x18;
+            uint64_t c = *reinterpret_cast<uint64_t*>(n + off);
+            if (WsPtrLooksCorrupt(c)) {
+                WsWatchReportSlot(n + off, c, bucket, bucketKey, n,
+                                  k ? "node+0x20 (greater)" : "node+0x18 (lesser)", taskIdx);
+                bad = true;
+                continue;   // do not follow it
+            }
+            if (c && sp < 256) stack[sp++] = reinterpret_cast<void*>(c);
+        }
+    }
+    return bad;
+}
+}  // namespace
+
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     Ensure8e30();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
@@ -384,7 +486,16 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
                                       "(retail would fault)",
                         taskIdx, keyPtr ? *keyPtr : 0);
 
-        if (node != nullptr) {
+        // BANISHED_WSWATCH: check every link in this bucket's inner tree BEFORE the
+        // walk below dereferences one. Skipping the walk on a bad tree is a change
+        // of behaviour, so it happens only under the env gate — the point is to keep
+        // the process alive past the first detection, because the victim being
+        // re-written is what lets the armed watchpoint name the writer.
+        bool wsTreeBad = false;
+        if (node != nullptr && WsWatchOn())
+            wsTreeBad = WsWatchScanInner(node, keyPtr ? *keyPtr : 0, taskIdx);
+
+        if (node != nullptr && !wsTreeBad) {
             // entry sub-BST rooted at node[1] (node+0x8); key compared against taskIdx.
             int* e = reinterpret_cast<int*>(node[1]);
             void* entryTreeOwner = reinterpret_cast<void*>(node + 1);  // node+0x8
