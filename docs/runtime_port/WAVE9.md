@@ -536,6 +536,47 @@ composition is unproved**.
 register if not" printed only the branches that NEVER ran — which reads like neither branch
 ran. **A coverage instrument that is itself wrong reads as coverage.**
 
+### ⛔ "Caches a null forever on the first call" is a CLASS of ~22 — lane E3, 2026-09-08
+
+`SingletonSlot` is **not one function**. Under `runtime/` + `dx11/` + `engine/` there are
+**111 function-local statics caching a Runtime resolve**; narrowed to the ones resolving
+exported DATA (`?_singleton@`, `?_typeInfo@`, `?_firstTypeInfo@`) — the symbols that stop
+existing at cutover — **~57 sites covering at least 14 distinct singletons** (MemoryAllocator,
+IO::FileSystem, IO::Persistence, Object::Factory, Object::InternalFactory,
+Achievement::AchievementManager, Audio::Device, Video::Device, Video::Configuration,
+Input::Device, Input::Configuration, Engine::MainLoop, Graphics::AnimationManager,
+Save::SaveLoad) plus ~10 `_typeInfo`s. That matches this document's own census of 17 + 14
+among the 319 unported.
+
+| Form | Count | Behaviour on a null |
+|---|---:|---|
+| function-local `static` — **FROZEN** | **22** | the first caller fixes the answer **for the process**; a later registration cannot repair it |
+| `if (!g_x) g_x = Resolve(...)` — **RETRY** | 5 | re-resolves each call; a registration that lands later still works |
+
+**The correct form is ALREADY IN THE TREE** — `runtime/src/object/internal.cpp:143` and
+`runtime/src/object/type_system.cpp:65`. Nothing needs inventing; it needs applying to the
+other 22.
+
+**Severity splits by DISTANCE FROM THE CAUSE, not by count:**
+* 33 of the 34 single-line frozen statics resolve `??_7` vtables. A cached null there is
+  stamped into an object and dies as **EXEC-of-0 at the first virtual call** — loud, and the
+  VEH handler already names it.
+* The dangerous subclass is **data slot + a guard that swallows the null**. Confirmed at
+  three sites so far: `?_singleton@MemoryAllocator`, `?_singleton@Device@Audio`
+  (`audio.cpp:879`, `return slot ? *slot : nullptr;`), and the `video/device.cpp:123` pair
+  pending a caller check. **Only 4 of 22 were checked — that membership is a FLOOR.**
+
+`_singleton@MemoryAllocator` ranks worst because **cutover executes it FIRST**: it fails
+before any other subsystem gets a chance to fail more loudly, and `null+0x640` names nothing.
+
+**The property that makes this fixable now:** the retry form is **behaviour-identical while
+the DLL answers**, so unlike the mint and unlike every other cutover repair, this one is
+**verifiable TODAY** rather than on the day no instrument survives.
+
+**Also recorded as gate-step-4 items belonging to no current lane:** §5.2
+(`Shutdown`/dtor/`operator=`/accessors) and §5.3 (the 5% perf gate, three runs per config on
+the perf exe). **The allocator is READY TO ARM AND IS NOT ARMED.**
+
 ### Build/measurement provenance — the standing rule and its limit
 
 **Only the lane holding the game directory builds, and it quotes the exe stamp in every
