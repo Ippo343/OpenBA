@@ -553,8 +553,13 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     // it. Kept inside the loop for that reason and not hoisted.
     {
         uint8_t* const sl = static_cast<uint8_t*>(*SaveLoadSlot());
-        const int n = *reinterpret_cast<const int32_t*>(sl + 0x58);
-        for (int i = 0; i < n; ++i) {
+        // The COUNT is re-read every iteration, not hoisted: 0x1800dcc62 is
+        // `CMP EDI, dword ptr [R14+0x58]` INSIDE the loop, and so is the base
+        // load at 0x1800dcc30. Both matter, because the scalar-deleting
+        // destructor called below is arbitrary code that can shrink the array
+        // or move its buffer. Hoisting either would be a port that is correct
+        // only while that destructor happens to be well-behaved.
+        for (int i = 0; i < *reinterpret_cast<const int32_t*>(sl + 0x58); ++i) {
             uint8_t* const base  = *reinterpret_cast<uint8_t**>(sl + 0x50);
             uint8_t* const entry = base + static_cast<int64_t>(i) * 0x58;
             uint8_t* const obj   = *reinterpret_cast<uint8_t**>(entry + 0x18);
