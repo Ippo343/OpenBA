@@ -149,10 +149,15 @@ static void EnsureResolved() {
     // which does not exist: a constructor mangles as "??0", so the real export is
     // "??0Time@System@@QEAA@M@Z" (ordinal 443) — the spelling every other caller in
     // the tree already uses. The lookup always failed and fell through to
-    // ResolveOrdinal(0x031e) = 798 = "??2GroupElement@UI@@SAPEAX_K@Z"
-    // (UI::GroupElement::operator new), so every "construct a Time" call was really
-    // an operator-new whose size argument was the out-pointer — it never wrote the
-    // out value. Both Time consumers in this file therefore read back 0:
+    // ResolveOrdinal(0x031e) = 798, which this comment used to name as
+    // "??2GroupElement@UI@@SAPEAX_K@Z". [NAME CORRECTED 2026-09-08] The shipped
+    // export directory says ordinal 798 is
+    // "??2GroupDescription@UI@@SAPEAX_KPEAX@Z" — a different CLASS and a
+    // different SIGNATURE: `SAPEAX_KPEAX` is operator new(size_t, void*), the
+    // PLACEMENT form, not the plain `SAPEAX_K`. The story below is unchanged and
+    // in fact stronger for it: placement new RETURNS its second argument and
+    // writes nothing at all, so every "construct a Time" call was an operator-new
+    // that could not possibly have written the out value. Both Time consumers in this file therefore read back 0:
     //   * pathInterval == 0  -> the 300 s path-graph branch ran EVERY tick
     //   * statsTimer never re-armed from 0x1401721fc (75 s) -> CollectStats ran
     //     EVERY tick, pushing ~70 samples/tick into the unbounded town-hall graph
