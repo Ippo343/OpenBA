@@ -182,26 +182,58 @@ of the identity check.
 Rule 2: a lane that closes 3 doors and opens 4 has gone backwards, so the count is a
 **set-diff**, not a before/after against an older tree.
 
-The worktree this lane ran in carried **other lanes' uncommitted work** (see §6), so
-absolute totals are not attributable. The measurement below is therefore *my three files in
-versus out of the same tree*, taken minutes apart:
+**RE-MEASURED 2026-09-08 after the team lead reported that `tools/addr_door_audit.py` had no
+notion of a comment and was counting prose as call sites.** Both halves below come from:
+
+* a **clean private worktree** (`.claude/worktrees/res-089e6eb4`) checked out at this
+  lane's own commit `83a77dc`, containing no other lane's work;
+* **`tools/addr_door_audit.py` as merged at `f5dbeb8`** (the fixed version from lane ADDR),
+  used for BOTH halves. The other four instruments are the versions at `fd30180`.
+
+The measurement is *my three source files present versus absent in that one tree*.
 
 | instrument | without lane RES | with lane RES | delta |
 |---|---:|---:|---|
-| `addr_door_audit` by-address call sites | 301 | 304 | +3 |
-| `addr_door_audit` **distinct addresses** | 204 | 204 | **0 — no new address door** |
-| `addr_door_audit` registered addresses | 1190 | 1203 | **+13** |
-| `addr_door_audit` **UNREGISTERED** | 19 | 19 | **0** |
-| `unsatisfied_export_scan` names with no port and no mint | 126 | 125 | **−1 (`?Clean@ExternalFactory@Object@@`)** |
+| `addr_door_audit` by-address call sites | 270 | 273 | +3 |
+| `addr_door_audit` **distinct addresses** | 192 | 192 | **0 — no new address door** |
+| `addr_door_audit` registered addresses | 1186 | 1199 | **+13** |
+| `addr_door_audit` **UNREGISTERED** | 15 | 15 | **0** |
+| `unsatisfied_export_scan` names with no port and no mint | 129 | 128 | **−1 (`?Clean@ExternalFactory@Object@@`)** |
 | `port_bypass_audit` bypasses, both doors | 0 | 0 | 0 |
-| `port_bypass_audit` ADDR-REGISTERED | 64 | 64 | 0 |
-| `port_bypass_audit` NO-EXPORT | 165 | 169 | +4 |
-| `port_bypass_audit` UNPORTED | 96 | 98 | +2 |
-| `rawdoor_audit` UNGUARDED-CALL | 0 | 0 | **0** |
+| `port_bypass_audit` ADDR-REGISTERED | 62 | 62 | 0 |
+| `port_bypass_audit` NO-EXPORT | 163 | 167 | +4 |
+| `port_bypass_audit` UNPORTED | 93 | 95 | +2 |
+| `rawdoor_audit` sites / UNGUARDED-CALL | 607 / **0** | 611 / **0** | +4 / **0** |
 | `detour_target_audit` | clean | clean | clean |
 
+### The tool fix changed the baselines and did not change a single delta
+
+This lane first published the same table measured with the OLD tool on a CONTAMINATED
+tree. Both defects are real and both were corrected, and the comparison is worth keeping:
+
+| | old tool, dirty tree | fixed tool, clean tree |
+|---|---:|---:|
+| by-address call sites (without / with) | 301 / 304 | 270 / 273 |
+| distinct addresses | 204 / 204 | 192 / 192 |
+| registered addresses | 1190 / 1203 | 1186 / 1199 |
+| UNREGISTERED | 19 / 19 | 15 / 15 |
+| unsatisfied names | 126 / 125 | 129 / 128 |
+
+**Every delta is bit-for-bit identical across the two measurements: +3, 0, +13, 0, −1.**
+Only the absolutes moved. That is not luck — it is the property a within-tree set-diff
+has and a before/after against an older tree does not: **both halves ran through the same
+tool on the same tree minutes apart, so a defect in the tool and a contaminant in the tree
+both appear on both sides and cancel.** The team lead's warning was specifically about
+mixing versions across the two halves, which is exactly the mistake this shape cannot make.
+
+It is still worth the re-run, for a reason the numbers show: had this lane reported a
+before/after against `fd30180` instead, the tool fix alone would have manufactured a
+25-site, 6-address, 1-UNREGISTERED "improvement" that nobody did any work for.
+
 `runtime_census.py` after: **4632 total / 1013 called / 782 ported / 77.2% of called
-covered**; Object 191 / 50 / 30 / 60.0%.
+covered**; Object 191 / 50 / 30 / 60.0%. **That figure came from the dirty tree and is NOT
+corrected here** — it is an absolute, so it does not cancel, and the integrator should
+re-take it on the merged tip.
 
 **The +6 that are not regressions, named rather than waved past:**
 
@@ -218,7 +250,7 @@ covered**; Object 191 / 50 / 30 / 60.0%.
   already stand in.
 
 Net for the cutover gate: **one exported name and thirteen address doors closed, zero
-opened, `distinct addresses` unchanged at 204.**
+opened, `distinct addresses` unchanged at 192.**
 
 ---
 
@@ -310,16 +342,22 @@ would be work whose result cannot be used until step 6 above.
 
 ## 6. HONEST LIMITS
 
-1. **The exe I measured contains other lanes' uncommitted work.** The worktree this session
-   was placed in carried modifications to `runtime/src/object/internal.cpp` (lane UID),
+1. **The exe I measured contains other lanes' uncommitted work; the DOOR NUMBERS DO NOT.**
+   The worktree this session was first placed in was shared with several other lanes and
+   carried live edits to `runtime/src/object/internal.cpp` (lane UID),
    `runtime/src/collection/array.cpp`, `runtime/src/input/input_win.cpp`,
    `runtime/src/math/rt_math_port.cpp`, `runtime/src/ui/dialog.cpp`,
-   `runtime/src/video/context.cpp`, `runtime/types/ui/SpriteContext.h`, and two untracked
-   files from other lanes. **None of it was staged or committed by me.** Every number in §2
-   and §3 is a *within-tree* comparison (probe on/off, files in/out) taken minutes apart on
-   that same contaminated tree, so the contamination cancels. Absolute totals quoted from
-   `runtime_census.py` do **not** cancel and should be re-taken by the integrator on a clean
-   merge.
+   `runtime/src/video/context.cpp` and `runtime/types/ui/SpriteContext.h`, and its branch was
+   reassigned under this session three times. **None of it was staged or committed here** —
+   the commit was built with git plumbing against a temporary index and contains exactly
+   seven files. §3 was subsequently **re-measured in a clean private worktree** at this
+   lane's own commit, so the door numbers are uncontaminated. **§2's runtime numbers were
+   NOT re-measured** and still come from an exe built in the shared tree: the lockstep
+   result is a comparison between two implementations inside one process and is unaffected
+   by what else is linked in, but `Clean`'s `visited=5683 / evicted=913` counts depend on
+   how many resources that particular build loaded and should be treated as indicative.
+   The `runtime_census.py` absolutes in §3 are likewise uncorrected.
+
 2. **Two of the twelve bodies have no ours-vs-theirs comparison at all.** `ArrayResize`
    (`0x18002dff0`) and `ArrayDestroyRange` (`0x18002e3d0`) are reached only from `Clean`,
    and `Clean` has no replay. Their only evidence is (a) transcription from the
