@@ -4,17 +4,24 @@ Branch `wave9/lane-uiw2`, cut from `fd30180`. Date 2026-09-08.
 
 Assignment: five symbols.
 
-| # | Symbol | Retail | Ord | Verdict |
-|---|---|---|---|---|
-| 1 | `?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z` | `0x1800d6ca0` | 3936 | **PORTED** |
-| 2 | `?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z` | `0x180119b30` | 3946 | **PORTED** |
-| 3 | `?SetCurrentItem@ComboElement@UI@@QEAAXH@Z` | `0x180112540` | 3853 | **PORTED** |
-| 4 | `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z` | `0x180115ad0` | 2004 | **DECLINED** — §5 |
-| 5 | `?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z` | `0x180116b00` | 3687 | **DECLINED** — §6 |
+| # | Symbol | Retail | Ord | Verdict | Verified? (§9) |
+|---|---|---|---|---|---|
+| 1 | `?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z` | `0x1800d6ca0` | 3936 | **PORTED** | **VERIFIED** 1202/1202, 0 div |
+| 2 | `?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z` | `0x180119b30` | 3946 | **PORTED** | **UNVERIFIED**, route known |
+| 3 | `?SetCurrentItem@ComboElement@UI@@QEAAXH@Z` | `0x180112540` | 3853 | **PORTED** | verified, THIN (4/4) |
+| 4 | `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z` | `0x180115ad0` | 2004 | **DECLINED** — §5 | n/a |
+| 5 | `?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z` | `0x180116b00` | 3687 | **DECLINED** — §6 | n/a |
 
-Plus one dependency ported to keep the closure positive:
+Plus three dependencies ported to keep the closure positive (§2c, §8):
 
-| — | `ComboElement::UpdateText` (private, **unexported**) | `0x180112180` | — | **PORTED**, address-only |
+| — | Symbol | Retail | Ord | Verdict | Verified? (§9) |
+|---|---|---|---|---|---|
+| — | `ComboElement::UpdateText` (private, **unexported**) | `0x180112180` | — | **PORTED**, address-only | verified, THIN (4/4) |
+| — | `?CacheText@NumberElement@UI@@AEAAXXZ` | `0x1801189f0` | 1679 | **PORTED**, name + address | **UNVERIFIED** — §9c |
+| — | `??9String@System@@QEBA_NAEBV01@@Z` | `0x18003ffe0` | 1290 | **PORTED**, name + address | **weakly verified** (1 real compare) |
+
+**§9 is the verification record and it contains a prediction this document got
+WRONG.** Read it before quoting anything here as done.
 
 All five addresses and ordinals are `pefile` output against the shipped export
 directory of `C:\GOG Games\Banished\Runtime-x64.dll`, not Ghidra's, and were
@@ -391,6 +398,15 @@ will emit the wrong thing.
 
 ## 7. HONEST LIMITS
 
+> ⚠ **LIMIT 1 IS SUPERSEDED — SEE SECTION 9.** The integrator ran the lane after
+> this section was written. Four cells exist now, four of the six bodies have
+> real `calls=`/`worked=` figures, and one is fully verified at 1202/1202.
+> Limit 1 is left standing rather than rewritten, because the reason it existed
+> — a lane that cannot run its own ports has not verified them — is exactly what
+> §9 had to be written to discharge, and because its "what the integrator should
+> do" list is what produced §9's numbers. **The limits that did NOT expire, and
+> the one prediction in this document that turned out to be WRONG, are in §9.**
+
 1. **NO RUN HAPPENED, AND SO `calls=` IS UNMEASURED FOR ALL FOUR BODIES.** This
    is the largest limit and it is not a small one: the brief's rule 5 says a port
    with no caller reports clean, and **these four have exactly the
@@ -687,3 +703,140 @@ address-door bypass). **For whoever ports `System::String` next: grep for that
 registration before writing a second body, and MOVE it rather than adding a
 second binding** — a duplicate registration is last-binding-wins and silently
 makes one of the two dead code.
+
+---
+
+## 9. THE RUNS — what actually executed, and one prediction that was WRONG
+
+§7 limit 1 said this lane had never run and that `calls=` was unmeasured. The
+integrator ran it. This section replaces the guesswork with numbers, records the
+one claim in this document that the runs falsified, and hands on a finding about
+the exe that a `calls=0` chase turned up by accident.
+
+### 9a. Final standing
+
+Diff harness on, DLL present, integration tips `442eea6` and `bfb3863`.
+
+| Body | calls | worked | divergences | Status |
+|---|---:|---:|---:|---|
+| `UI::SliderElement::SetParameter` | **1202** | **1202** | 0 | **VERIFIED** |
+| `UI::ComboElement::SetCurrentItem` | 4 | 4 | 0 | verified, THIN |
+| `UI::ComboElement::UpdateText` | 4 | 4 | 0 | verified, THIN |
+| `System::String::operator!=` | 4 | **1** | 0 | **weakly verified** — one real comparison |
+| `UI::ProgressElement::SetProgressTextParameter` | — | — | — | **UNVERIFIED**, route known |
+| `UI::NumberElement::CacheText` | — | — | — | **UNVERIFIED**, open question at its caller — §9c |
+
+`[UIW2 self-test] ALIVE` in every cell, with the 4-byte-stride negative control
+reported as FIRED. That line is what made the rest of the table legible: every
+other `calls=0` in the wave is ambiguous between *not exercised*, *not
+registered*, *raw resolve missed* and *wrong build*; with the self-test present,
+these are ambiguous between exactly one of those.
+
+**The 1202 came from a harness this lane did not have to write.**
+`SliderElement::SetParameter` has **two call sites in the entire tree**, both in
+`pastureui.cpp` (`:217`, `:222`, in `PastureUI_Slot7`), so no front-end route
+reaches it and it was on its way to being recorded as permanently unverified.
+`standalone/tool_harness.cpp:1220-1330` is a purpose-built PastureUI driver —
+`BANISHED_TOOL_HARNESS=pasturefull` plus `BANISHED_PASTUREPANEL_SELECT=<idx>` —
+and one cell took the body from UNVERIFIED to the best-covered thing in the lane.
+`worked=1202/1202` because those two calls are unconditional and back to back.
+**Before deciding a body has no route, grep the harness directory.**
+
+### 9b. `String::operator!=` — why `worked=` is the only column worth reading
+
+Two cells, and they are the argument for the did-work counter in one line:
+
+```
+gameplay cell   calls=2  worked=0   <- divergences=0 is worth NOTHING here
+pasture cell    calls=4  worked=1   <- one real comparison
+```
+
+`worked` counts only calls that reached `StrCompare`, which needs **equal,
+non-zero lengths**; every other path is decided by the lengths alone. So the
+first cell entered the function twice and never executed the half that can be
+wrong. **A `divergences=0` on that line reads as a pass and is not one.**
+
+The `calls=4 worked=1` split is fully accounted for rather than assumed: the only
+consumer is `RtUi_EditElement_SetText`, which calls this once at its top, and the
+driver is `newgamedialog.cpp:229` — the random town-name generation in
+`NewGameDialog_Slot4`, reached on every autostart cell. The first `SetText` is
+empty → name, so `lenA == 0` early-outs before `StrCompare`; the rest differ in
+length; one pair happened to match. **To raise it, a `SetText` is needed where
+old and new have the same non-zero length** — `mapparamsdialog.cpp:339`'s
+re-randomise path over an existing name is the cheapest.
+
+### 9c. ⛔ A PREDICTION IN THIS DOCUMENT WAS WRONG, AND IT WAS AN UNCHECKED ASSERTION
+
+When the integrator asked why `NumberElement::CacheText` never declared, this
+lane answered that it *"should be well exercised; it's on both `SetValue`
+paths."* **That was wrong, and it was wrong in a way this document has no excuse
+for: it was asserted without checking that our port is on the status bar's
+path.** The lane pre-committed to three outcomes before the evidence arrived and
+this is the one that obliges the miss to be recorded, so it is recorded.
+
+What the runs actually show: `UI::NumberElement::SetValueInt` **never declared a
+site**, in either a 720-frame gameplay cell or the pasture cell — and
+`RtDiffRegister` declares on first entry, before any early-out, so absence means
+never entered, not entered-and-silent. `CacheText` is reached only when a
+`SetValue` changes a value, so its absence is inherited from a caller that never
+ran.
+
+**The reason is now known, and it is not in this lane.** See §9d. Knowing the
+reason does not retire the miss: the assertion was made before the check.
+
+**What remains genuinely open for `CacheText`:** its **float** branch has never
+executed anywhere. That is where `_showSign` selects `"%+.2f"` vs `"%.2f"` and
+where the variadic `double` argument lives — the two things most likely to be
+wrong, and the ones no integer call touches. `BANISHED_DEBUG_PANEL` is the probe:
+`debugui.cpp`'s `numFPS` plus the two `SetValueFloat` sites (`numFrameMS`,
+`numTotalMS`) change every frame by construction, so they cannot all early-out.
+
+### 9d. AN EXE-SIDE GAP FOUND BY ACCIDENT: `StatusBarUI` IS DEAD CODE
+
+Chasing the `SetValueInt` zero turned up something larger than the question.
+
+**`code/Game/Dialog/statusbarui.cpp` is fully reimplemented and nothing
+registers it.** The file documents the retail vtable at exe `0x14015d810` and the
+three slots it fills —
+
+```
++0x28 (idx5)  0x14007a3d0  element discovery   -> StatusBarUI_Draw
++0x38 (idx7)  0x1400798d0  full stats refresh  -> StatusBarUI_Startup
++0x48 (idx9)  0x14007a3a0  status-icon click   -> StatusBarUI_OnRemove
+```
+
+— and there is **no `RegisterExeAddr` and no vtable array for any of them**.
+`StatusBarUI_Startup`, the full stats refresh, owns **all 15**
+`fn_NumberElement_SetValueInt` call sites (year, temperature, wood, stone, iron,
+tools, firewood, food, herbs). It never executes, on any route. That accounts for
+both zeros without implicating this lane's ports at all.
+
+**It is the same shape as the half-registered `Array<8>::SetSize` lane UID found
+earlier the same day, one level up:** there a *body* existed with no
+registration; here an entire *dialog* does.
+
+**How it was checked matters.** A grep for the class-name string `StatusBarUI`
+finds nothing, but a grep for a class-name string is precisely the blindness this
+project has paid for repeatedly — so it was re-checked **by symbol**:
+`StatusBarUI_Startup`, `StatusBarUI_Draw`, `StatusBarUI_OnRemove`, `W_Refresh`,
+`W_OnUpdate`, `W_Setup` — **six symbols, zero references outside their own
+file**. Same answer, arrived at a way that could have disagreed.
+
+### 9e. A FALSIFIABLE PREDICTION, left standing so it can fail
+
+`BANISHED_AUTOTUTORIAL=1` with the diff harness has not been run. **This lane
+predicts `SetValueInt` will show `calls=0` there too**, because the same
+unregistered `statusbarui.cpp` owns the status bar on that route.
+
+**If instead it shows a large `calls=`, this prediction is wrong and something
+other than `statusbarui.cpp` drives `SetValueInt`** — which is the thing to find,
+and which matters beyond this lane: `runtime/types/ui/NumberElement.h` records
+lane M measuring **12,896** calls at that site *"on the tutorial routes"*, and
+WAVE9.md's column is a **max across the matrix**. Reproducing that figure is what
+keeps lane M's Finding 1 standing; failing to reproduce it anywhere would put a
+question mark over the measurement Finding 1 was derived from.
+
+Recorded here rather than in a message so that whoever runs it can mark this
+paragraph right or wrong. Comparing a max-over-cells against a single cell and
+calling the difference a regression was a mistake this lane and the integrator
+both nearly made, and the guard against it is that the prediction names the cell.
