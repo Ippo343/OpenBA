@@ -436,7 +436,17 @@ static bool ConstructLoader(const RtMintStorage& s) {
     }
     void** vt = nullptr;
     for (int i = 0; i < kVtableCount; ++i)
-        if (strcmp(kMintVtables[i].symbol, "??_7Loader@Engine@@6B@") == 0)
+        // `symbol &&` is NOT optional: a vtable row carried by ADDRESS has a
+        // NULL symbol by design (lane C2, c77b26f -- the IO::Encoding table at
+        // 0x1801554a8 is unexported, so contents+address is all it has).  This
+        // was the tree's ONLY unguarded strcmp on a .symbol field; every other
+        // site in this file already wrote `s.symbol && strcmp(...)`.  The
+        // second controlled DLL-absent boot faulted here in ucrtbase with
+        // RCX=0, and nothing before it could: this path runs only under
+        // BANISHED_RT_MINT / _MINT_CTOR, and the last such run predated the
+        // first null-symbol row.
+        if (kMintVtables[i].symbol &&
+            strcmp(kMintVtables[i].symbol, "??_7Loader@Engine@@6B@") == 0)
             vt = kMintVtables[i].table;
     if (!vt) {
         fprintf(stderr, "[RtMint] CANNOT construct %s: ??_7Loader@Engine@@6B@ was "

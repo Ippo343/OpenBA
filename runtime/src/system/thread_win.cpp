@@ -71,6 +71,7 @@
 #include <cstdio>
 
 #include <windows.h>
+#include <process.h>   // _beginthreadex, the CRT routine 0x18007fbfc is a copy of
 
 using System::CriticalSection;
 using System::Thread;
@@ -149,7 +150,25 @@ static unsigned(__stdcall* RtSystemThreadFunc())(void*) {
 // 0x18007fbfc, confirmed as the ctor's CALL target in the disassembly.
 using BeginThreadExFn = uintptr_t(__cdecl*)(void*, unsigned, unsigned(__stdcall*)(void*), void*, unsigned, unsigned*);
 static BeginThreadExFn RtDllBeginThreadEx() {
-    static BeginThreadExFn f = reinterpret_cast<BeginThreadExFn>(ResolveRuntimeRaw(0x18007fbfc));
+    // 0x18007fbfc is the DLL's OWN copy of the CRT's _beginthreadex -- a
+    // statically-linked MSVC CRT routine, not engine code.  Resolving it by
+    // address made this a REAL DEPENDENCY on the raw door (lane V's row
+    // "CRT: addr:0x18007fbfc"), and the THIRD controlled DLL-absent boot died
+    // exactly here: ResolveRuntimeRaw returns null with the module gone and the
+    // call is an EXEC of 0, inside ConstructLoader -> Thread ctor, on the boot
+    // path.
+    //
+    // Our own CRT provides the identical routine, so prefer it and keep the
+    // DLL's only as a fallback while the DLL is present.  This is NOT a
+    // behavioural change: both are _beginthreadex with the same contract, and
+    // retail's call site passes CREATE_SUSPENDED for the reason documented
+    // below.  It is the difference between a boot and a null call at cutover.
+    static BeginThreadExFn f = []() -> BeginThreadExFn {
+        BeginThreadExFn dll =
+            reinterpret_cast<BeginThreadExFn>(ResolveRuntimeRaw(0x18007fbfc));
+        if (dll) return dll;
+        return reinterpret_cast<BeginThreadExFn>(&_beginthreadex);
+    }();
     return f;
 }
 
