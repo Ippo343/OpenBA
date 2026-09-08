@@ -521,14 +521,16 @@ BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
 // The `if (!Startup(factory)) { g_startupFailAt = 5; return 0; }` at
 // engine_lifecycle.cpp:612 therefore has a branch retail can never take.
 //
-// DEPENDENCY THIS PORT DOES **NOT** CLOSE — see the report and
-// reference_porting_can_grow_the_cutover_surface.md. The Set insert at
-// 0x180030140 is unexported and UNPORTED, and this body calls it through the
-// port-aware address door, which means:
-//     THIS PORT DOES NOT CLOSE THE ROW AT CUTOVER. With the DLL absent,
-//     ResolveAddr(Module::Runtime, 0x180030140) is null and the call is
-//     EXEC-of-0 inside RtObject_Factory_Startup.
-// The chain that has to land first is five more unexported bodies:
+// DEPENDENCY THIS PORT DID NOT CLOSE — ***CLOSED 2026-09-08 BY WAVE 9 LANE
+// COLL.*** The Set insert at 0x180030140 and its whole chain are now ported in
+// runtime/src/collection/avl_trees.cpp and registered by address, so this body
+// reaches OUR insert through the same port-aware door with no edit here and
+// THIS ROW NOW CLOSES AT CUTOVER. The diagnostic below is kept: it is the
+// early-warning for a registration that failed to arm, not dead code.
+//
+// The chain, as this file predicted it, and what it actually turned out to be
+// (kept side by side because the prediction was good and the two corrections
+// are worth having):
 //     0x180030140  Set::Insert wrapper (builds the Pair, calls the core,
 //                  destroys the temp Array)      ~25 instrs
 //     0x180030380  insert core: BST descend + node alloc + retrace   ~50
