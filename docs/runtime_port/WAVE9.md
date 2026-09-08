@@ -1229,7 +1229,7 @@ named the falsifier in advance: a frame moving *down* would have meant
 the symbol name.** The faulting object's `this[+0x18] = 0x101` — that is the packfile
 gate lane FS documented (`??0FileSystem` writes `0x100`; `Startup` sets the low byte
 only AFTER `SetupDirectories` returns). And `this[+0x00]` points at a buffer holding
-`C:\GOG Gamesesource\`, a path `SetupDirectories` built. Two independent
+`C:\GOG Games\resource\`, a path `SetupDirectories` built. Two independent
 confirmations that the row closed.
 
 **⚠️ A lane FS holdback is now STALE BY DESIGN.** It declined `ExistsInPackfile`
