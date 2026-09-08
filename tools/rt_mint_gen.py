@@ -113,7 +113,15 @@ EXTRA_SIZES = {
     "?_frameIndex@ParticleInstance@Graphics@@1HA": (4, "int"),
     "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA": (1, "bool"),
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA": (8, "BaseTypeInfo* — head of the reflection chain"),
-    "?_errorString@Error@System@@0PADA": (8, "char*"),
+    # Wave 9 integrator, 2026-09-08. NOT 8 bytes, and the mangled suffix LIES:
+    # MSVC encodes a static `char buf[N]` data member as PAD (pointer-to-char),
+    # indistinguishable from a real `char*`. The DISASSEMBLY settles it --
+    # ?SetText@Error@System@@ (0x1800c5fa0) does LEA RBP,[0x1801fc720] (the
+    # address IS the buffer, not a slot holding one) and carries capacity
+    # 0x2000 in EDI through StrAppend/StrCopy. Minted at 8 this overruns
+    # kStorageBytes by 8KB on the first cutover SetText.
+    "?_errorString@Error@System@@0PADA":
+        (0x2000, "char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's array-as-pointer encoding, see ?SetText@ 0x1800c5fa0"),
     "?_secondsPerTick@Timer@System@@0NA": (8, "double"),
     "?_systemInitialTick@Timer@System@@0_JA": (8, "int64"),
     "?_systemTicksPerSecond@Timer@System@@0_JA": (8, "int64"),
@@ -128,6 +136,10 @@ EXTRA_SIZES = {
         (8, "double -- the QPF reciprocal; sibling of ?_secondsPerTick above"),
     "?_hideDisplay@Error@System@@0_NA":
         (1, "bool -- suppresses the Error message box"),
+    # Its sibling, ordinal 4818 at 0x1801fc70a -- WRITTEN by ?SetText@ (both arms,
+    # 0x1800c6026 and 0x1800c603b) and READ by ?Display@ at 0x1800c63d1.
+    "?_stopApplication@Error@System@@0_NA":
+        (1, "bool -- Display() aborts the process when this is set"),
     # Lane VID established this one exists after WAVE6_LANE_B.md §2.4 said it had
     # no export: it is ordinal 4787 at 0x1801fe790, and lane C2 minted its three
     # siblings (_firstSurface / the two _firstBuffer heads, above) and skipped it.
