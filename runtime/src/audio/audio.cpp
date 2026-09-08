@@ -93,19 +93,31 @@ using RtAudio::EmitterInstance;
 namespace {
 
 // ----------------------------------------------------------------------------
-// Dependencies out of this lane's scope, fetched from the SHIPPED DLL through
-// RtOriginal/ResolveExportRaw — never through ResolveExport (rt_port.h: doing
-// so would hand back our own port once registered, and any diff would compare
-// ours to ours). Same pattern as runtime/src/save/saveload.cpp §"Dependencies".
+// Dependencies out of this lane's scope.
+//
+// WAVE 9 LANE V2, 2026-09-07: these two were RT_ORIGINAL_ONCE, with the reason
+// "never through ResolveExport, or a diff would compare ours to ours". That
+// reason is right for an ORACLE and wrong for these: nothing diffs MemAlloc /
+// MemFree here, they are the allocation the ported bodies actually perform, so
+// they are a REAL DEPENDENCY and belong on the port door. The raw door is
+// ResolveExportRaw, which returns NULL the moment Runtime-x64.dll is absent —
+// i.e. a null call at cutover, not a degradation (rawdoor_audit.py).
+//
+// RT_EXPORT_ONCE keeps the one-resolve-per-call-site caching that made
+// RT_ORIGINAL_ONCE attractive here in the first place
+// (reference_rtoriginal_is_getprocaddress.md) and routes through the registry,
+// so when `BANISHED_RT_ALLOC` arms the allocator port these allocate on the
+// same heap as the ~20 `code/` sites that already resolve these two names with
+// ResolveExport. A heap cannot be half-ours (WAVE9.md sec3).
 // ----------------------------------------------------------------------------
 using MemAllocFn = void* (*)(uint64_t size, int align);
 using MemFreeFn  = void  (*)(void* p);
 
 void* MemAlloc(uint64_t size, int align) {
-    return RT_ORIGINAL_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
+    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
 }
 void MemFree(void* p) {
-    RT_ORIGINAL_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
 // System::Timer::_secondsPerTick and Time helpers are not needed by anything
@@ -436,7 +448,7 @@ uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t so
     uint32_t handle = 0;
     if (soundRef != 0) {
         using FindFreeFn = int32_t (*)(void*, uint64_t, const Time*, const Vector3*);
-        int32_t idx = RT_ORIGINAL_ONCE(FindFreeFn,
+        int32_t idx = RT_EXPORT_ONCE(FindFreeFn,
             "?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z"
             )(self, soundRef, time, pos);
         if (idx >= 0) {
@@ -745,7 +757,7 @@ static void ReleasePlatformChannels(Scene* self, uint32_t chOffsetBytes, bool cl
         auto* ch = reinterpret_cast<Channel*>(base + chOffsetBytes);
         void* p = ch->platformChannel[b];
         if (!p) continue;
-        RT_ORIGINAL_ONCE(AudioDeviceStopFn,
+        RT_EXPORT_ONCE(AudioDeviceStopFn,
             "?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z")(device, p);
         if (clearSlots) {
             base = reinterpret_cast<uint8_t*>(self->channels._data);

@@ -128,11 +128,27 @@ using RtIo::Stream;
 
 namespace {
 
-// ---- The DLL entry points these shims forward to ---------------------------
-// Every one is looked up ONCE per call site through RT_ORIGINAL_ONCE.
-// ResolveExportRaw is GetProcAddress (rt_port.h): a bare RtOriginal in a body
+// ---- The entry points these shims forward to -------------------------------
+// Every one is looked up ONCE per call site. ResolveExportRaw/ResolveExport is
+// GetProcAddress / a registry probe (rt_port.h): a bare RtOriginal in a body
 // cost Wave 2 five points of sim time. These are cold paths — a save happens
 // once every few minutes — but the rule is the rule.
+//
+// WAVE 9 LANE V2, 2026-09-07: the ORACLE sites (the scratch-object ctor/dtor
+// at 235/263, both inside `if (rt_diff_on__)`) stay on RT_ORIGINAL_ONCE — that
+// is the whole point of them. The sites the LIVE bodies execute — the base and
+// member constructors, the two base destructors, and Commit — are REAL
+// DEPENDENCIES and moved to RT_EXPORT_ONCE. None of them names the symbol its
+// own enclosing port registers (CompressedMemoryStream's ctor/dtor call
+// CompressedStream's and MemoryStream's), so there is no self-recursion.
+// The Create / Open pair below were NOT among rawdoor_audit's findings and are
+// converted anyway: the resolve and its argument list are on separate SOURCE
+// LINES, and the checker's immediate-call regex is per-line. They are the same
+// live-body real dependency as the rest, found by reading the file rather than
+// by the checker — a clean run is a floor, not a ceiling.
+// Raw here would be a NULL call the instant Runtime-x64.dll is absent; through
+// the registry it is instead a named unresolved import if the neighbour is
+// still unported at cutover, which is a work-list row rather than a crash.
 
 using CtorFn      = void*(*)(void*);          // ctor, returns `this` in RAX
 using DtorFn      = void (*)(void*);
@@ -186,9 +202,9 @@ extern "C" CompressedMemoryStream*
 RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
     RT_DIFF_BEGIN("IO::CompressedMemoryStream::CompressedMemoryStream");
 
-    RT_ORIGINAL_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&self->base);
+    RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&self->base);
     *reinterpret_cast<const void**>(self) = VtblCompressedMemoryStream();
-    RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&self->memoryStream);
+    RT_EXPORT_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&self->memoryStream);
 
     // ---- FULL ORACLE ------------------------------------------------------
     // Construction is the one member of this family that CAN be diffed against
@@ -308,11 +324,11 @@ extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
     // Inlined CompressedStream::Close(): flush the pending windows if this
     // stream was written to at all. headerSize is Array<Header>::_size at +0x48.
     if (self->base.headerSize > 0 && self->base.base.direction == 1)
-        RT_ORIGINAL_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
+        RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
 
     CallStreamCloseVirtual(&self->memoryStream);
-    RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&self->memoryStream);
-    RT_ORIGINAL_ONCE(DtorFn, "??1CompressedStream@IO@@UEAA@XZ")(&self->base);
+    RT_EXPORT_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&self->memoryStream);
+    RT_EXPORT_ONCE(DtorFn, "??1CompressedStream@IO@@UEAA@XZ")(&self->base);
 
     // ---- PARTIAL (shadow) --------------------------------------------------
     // A destructor cannot be diffed by running both: the second run would free
@@ -337,7 +353,7 @@ extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
 extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self) {
     RT_DIFF_BEGIN("IO::CompressedMemoryStream::Create");
 
-    const bool ok = RT_ORIGINAL_ONCE(
+    const bool ok = RT_EXPORT_ONCE(
         CsCreateFn, "?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
         &self->base, &self->memoryStream, 2);
 
@@ -372,7 +388,7 @@ extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self)
 extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
     RT_DIFF_BEGIN("IO::CompressedMemoryStream::Open");
 
-    const bool ok = RT_ORIGINAL_ONCE(
+    const bool ok = RT_EXPORT_ONCE(
         CsCreateFn, "?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
         &self->base, &self->memoryStream, 1);
 
@@ -410,7 +426,7 @@ extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) 
     const bool committed =
         self->base.headerSize > 0 && self->base.base.direction == 1;
     if (committed)
-        RT_ORIGINAL_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
+        RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
 
     CallStreamCloseVirtual(&self->memoryStream);
 

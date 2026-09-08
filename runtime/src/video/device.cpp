@@ -244,13 +244,26 @@ namespace {
 // the shape Wave 5 lane D used for Picking::Scene's internals and Wave 4 lane C
 // used for Map_Find / Map_Insert.
 //
-// RtOriginal (not ResolveExport) on purpose: this is the DLL's implementation,
-// unaffected by whether some later wave registers a port of it, which keeps
-// this lane's oracle comparing like with like.
+// WAVE 9 LANE V2, 2026-09-07 — the door was wrong and the stated reason for it
+// does not survive being checked. It read "RtOriginal (not ResolveExport) on
+// purpose: this is the DLL's implementation, unaffected by whether some later
+// wave registers a port of it, which keeps this lane's oracle comparing like
+// with like." But this helper has exactly ONE caller
+// (ValidateConfigurationBody's resolution fallback), and that caller is the
+// LIVE ported body, not the oracle — so it is a REAL DEPENDENCY, and pinning it
+// to the DLL was pinning the live path, not an oracle. If a later wave ports
+// GetDefaultResolution, the live path SHOULD pick that up; the diff harness
+// further down still calls retail's ValidateConfiguration whole, which is where
+// like-for-like actually comes from.
+//
+// The concrete hazard is cutover: ResolveExportRaw returns NULL with
+// Runtime-x64.dll absent, so raw here is a null call on the fallback path.
+// GetDefaultResolution is unported today, so nothing about which body runs
+// changes with this edit.
 // ----------------------------------------------------------------------------
 int CallGetDefaultResolution(const Device* self, const Adapter* adapter) {
     using Fn = int (*)(const Device*, const Adapter*);
-    return RT_ORIGINAL_ONCE(Fn, kGetDefaultResolution)(self, adapter);
+    return RT_EXPORT_ONCE(Fn, kGetDefaultResolution)(self, adapter);
 }
 
 void ValidateConfigurationBody(const Device* self,

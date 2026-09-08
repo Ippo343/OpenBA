@@ -66,15 +66,22 @@ inline void WalkDirty(void* self) {
         DirtyFlags(node, kDirtyFlags) |= kDirtyBit;
 }
 
-// ---- Retail helpers this lane calls through rather than reimplements -------
+// ---- Helpers this lane calls through rather than reimplements --------------
 //
 // Each is either a genuine DLL export (resolved by mangled name, safe to call
-// on any run because RT_ORIGINAL_ONCE/ResolveExportRaw costs a GetProcAddress
-// only once per call site -- reference_rtoriginal_is_getprocaddress.md), or an
-// internal, unexported Collection::Array<T> template instantiation (resolved
-// by address, same idiom runtime/src/graphics/scene.cpp already uses for the
-// same reason: these are not exported at all, so RtOriginal/ResolveExportRaw
-// cannot reach them).
+// on any run because RT_EXPORT_ONCE resolves only once per call site --
+// reference_rtoriginal_is_getprocaddress.md), or an internal, unexported
+// Collection::Array<T> template instantiation (resolved by address, same idiom
+// runtime/src/graphics/scene.cpp already uses for the same reason: these are
+// not exported at all, so ResolveExport/ResolveExportRaw cannot reach them).
+//
+// WAVE 9 LANE V2, 2026-09-07: the four export-by-name helpers below moved from
+// RT_ORIGINAL_ONCE to RT_EXPORT_ONCE. Every one of them is a REAL DEPENDENCY
+// -- the ported bodies call them to do work, not to compare against -- and the
+// raw door is ResolveExportRaw, which returns NULL with Runtime-x64.dll absent.
+// `?MemFree@…` in particular is already registered by the allocator port, so
+// raw meant this file could free on a different heap from the ~20 code/ sites
+// that resolve the same name through ResolveExport.
 
 // ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) -- PORTED by Wave 9 lane B3
 // as Element_RemoveChildren, near the end of this namespace. Wave 7 left it on
@@ -92,14 +99,14 @@ void RtRemoveChildren(void* self);
 // primitives are lane F's).
 void RtTextElementCacheText(void* self) {
     using Fn = void (*)(void*);
-    RT_ORIGINAL_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
+    RT_EXPORT_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
 }
 
 // ?UpdateContainers@TabElement@UI@@AEAAXXZ (0x1800d9710) -- private but
 // exported. Recomputes which child page is visible; not reversed by this lane.
 void RtTabElementUpdateContainers(void* self) {
     using Fn = void (*)(void*);
-    RT_ORIGINAL_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
+    RT_EXPORT_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
 }
 
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
@@ -112,7 +119,7 @@ void RtStringAssign(void* self, const void* other) {
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
 void RtMemFree(void* p) {
     using Fn = void (*)(void*);
-    RT_ORIGINAL_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
 // Collection::Array<int32_t>::SetSize -- retail 0x18002fea0. Not exported (a
@@ -737,10 +744,29 @@ void GraphElement_RemoveGraphs(void* self) {
     // count reads back as zero -- it cannot detect a wrong `kGraphsData`
     // offset the way GetRowCount's true replay would, because a wrong offset
     // reading garbage that happens to be zero would still pass.
+    //
+    // WAVE 9 LANE V2, 2026-09-07 — ORACLE-ONLY, and it had ESCAPED ITS GUARD.
+    // The RT_ORIGINAL_ONCE call below sat between RT_DIFF_BEGIN and
+    // RT_DIFF_SCALAR, so it ran on EVERY call on a normal, non-diffing run:
+    // a live cross-DLL call into retail's RemoveGraphs, and a call through
+    // NULL the moment Runtime-x64.dll is absent. It is the third instance of
+    // exactly the shape lane V found twice by hand and rawdoor_audit.py was
+    // written to catch. Now inside `if (rt_diff_on__)` with the comparison it
+    // exists to feed.
+    //
+    // It stays on the RAW door and MUST NOT become RT_EXPORT_ONCE: this
+    // function IS the registered port of `?RemoveGraphs@GraphElement@UI@@…`
+    // (see the registration below), so resolving that name through the port
+    // registry would resolve to THIS function and recurse until the stack
+    // dies. An oracle for a port of X is the one case where the raw door is
+    // the only correct door — which is also why it is compiled out at cutover
+    // rather than converted.
     RT_DIFF_BEGIN("UI::GraphElement::RemoveGraphs");
-    using Fn = void (*)(void*);
-    RT_ORIGINAL_ONCE(Fn, "?RemoveGraphs@GraphElement@UI@@QEAAXXZ")(self);
-    RT_DIFF_SCALAR(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)), 0);
+    if (rt_diff_on__) {
+        using Fn = void (*)(void*);
+        RT_ORIGINAL_ONCE(Fn, "?RemoveGraphs@GraphElement@UI@@QEAAXXZ")(self);
+        RT_DIFF_SCALAR(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)), 0);
+    }
 }
 
 // ============================================================

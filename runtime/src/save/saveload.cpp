@@ -121,11 +121,23 @@ using AdjustDelimsFn     = void  (*)(String* self);
 using MemStreamOpenFn    = bool  (*)(MemoryStream* self, int size);
 using SaveLoadVoidFn     = void  (*)(SaveLoad* self);
 
+// WAVE 9 LANE V2, 2026-09-07 — reason 1 above is WITHDRAWN for these two, and
+// reason 2 is preserved. "A lane's job is to be correct standing alone against
+// the DLL" was the right rule for eight waves and stops being available at
+// cutover: with Runtime-x64.dll absent, ResolveExportRaw returns NULL and a
+// raw-door call on a live path is a null call, not a fallback. MemAlloc and
+// MemFree are not oracles here — they are the allocation this file performs —
+// so they are REAL DEPENDENCIES and go through the port registry.
+// RT_EXPORT_ONCE keeps reason 2's per-call-site caching exactly
+// (reference_rtoriginal_is_getprocaddress.md), and it puts this file on the
+// same heap as the ~20 code/ sites that already resolve these two names with
+// ResolveExport, which is what WAVE9.md sec3 means by "a heap cannot be
+// half-ours".
 void* MemAlloc(uint64_t size, int align) {
-    return RT_ORIGINAL_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
+    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
 }
 void MemFree(void* p) {
-    RT_ORIGINAL_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
 // ---- DLL data symbols ------------------------------------------------------
@@ -567,7 +579,7 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
 
     // full = GetDataDirectory() + mod->path,  then AdjustDelimiters(full)
     String dataDir{};
-    RT_ORIGINAL_ONCE(GetDataDirectoryFn,
+    RT_EXPORT_ONCE(GetDataDirectoryFn,
                      "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
         FileSystemSingleton(), &dataDir);
     String joined{};
@@ -643,9 +655,16 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
 // comparisons transcribed from a decompile — plus the end-to-end evidence that
 // a save still saves and a load still loads.
 //
-// The five targets are resolved through RT_ORIGINAL_ONCE, NOT ResolveExport:
-// they are unported, and this is a per-frame path, so a GetProcAddress in the
-// body would be the Wave 2 perf defect again.
+// The five targets are resolved through RT_EXPORT_ONCE — the port registry,
+// cached once per call site. WAVE 9 LANE V2, 2026-09-07 corrects this: the
+// paragraph used to say RT_ORIGINAL_ONCE "NOT ResolveExport", on the grounds
+// that the five are unported and a bare ResolveExport per frame would be the
+// Wave 2 perf defect again. The perf half is right and RT_EXPORT_ONCE keeps it
+// (one resolve per call site, then a static). The door half is wrong: this
+// dispatch IS the work of Update, not an oracle, so it is a REAL DEPENDENCY.
+// On the raw door it is a call through NULL the moment the DLL is absent; on
+// the port door it picks up a port of any of the five the day one lands, and
+// until then it is a named unresolved import at cutover instead of a crash.
 // ============================================================================
 void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
     RT_DIFF_BEGIN("Save::SaveLoad::Update [shadow]");
@@ -660,19 +679,19 @@ void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
 
     switch (self->_operation) {
     case RtSave::kOpList:
-        RT_ORIGINAL_ONCE(SaveLoadVoidFn, "?UpdateList@SaveLoad@Save@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(SaveLoadVoidFn, "?UpdateList@SaveLoad@Save@@QEAAXXZ")(self);
         break;
     case RtSave::kOpLoad:
-        RT_ORIGINAL_ONCE(SaveLoadVoidFn, "?UpdateLoad@SaveLoad@Save@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(SaveLoadVoidFn, "?UpdateLoad@SaveLoad@Save@@QEAAXXZ")(self);
         break;
     case RtSave::kOpLoadFromFile:
-        RT_ORIGINAL_ONCE(SaveLoadVoidFn, "?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(SaveLoadVoidFn, "?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ")(self);
         break;
     case RtSave::kOpSave:
-        RT_ORIGINAL_ONCE(SaveLoadVoidFn, "?UpdateSave@SaveLoad@Save@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(SaveLoadVoidFn, "?UpdateSave@SaveLoad@Save@@QEAAXXZ")(self);
         break;
     case RtSave::kOpDelete:
-        RT_ORIGINAL_ONCE(SaveLoadVoidFn, "?UpdateDelete@SaveLoad@Save@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(SaveLoadVoidFn, "?UpdateDelete@SaveLoad@Save@@QEAAXXZ")(self);
         break;
     default:
         break;
@@ -805,7 +824,7 @@ void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
 
     MemoryStream preState = *stream;   // captured before ours mutates the stream
 
-    RT_ORIGINAL_ONCE(MemStreamOpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(
+    RT_EXPORT_ONCE(MemStreamOpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(
         stream, static_cast<int>(self->_size));
     std::memcpy(stream->data, self->_data, self->_size);
 

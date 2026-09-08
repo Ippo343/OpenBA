@@ -113,24 +113,33 @@ bool SameFilenameText(const Filename* a, const Filename* b) {
 }
 
 // The body, independent of the `this` FileSystem pointer (see header note).
-// Every RtOriginal here is RT_ORIGINAL_ONCE: these run on the NORMAL path, not
-// inside a diff guard, and bare RtOriginal is GetProcAddress on every call
-// (WAVE3_LANE_P.md, the Wave 2 perf-gate defect).
+//
+// WAVE 9 LANE V2, 2026-09-07: all three are RT_EXPORT_ONCE, not
+// RT_ORIGINAL_ONCE. The observation that made them RT_ORIGINAL_ONCE is still
+// true and is the reason they are not bare RtOriginal — these run on the NORMAL
+// path and RtOriginal is GetProcAddress on every call (WAVE3_LANE_P.md, the
+// Wave 2 perf-gate defect) — but the DOOR was wrong: they are the work this
+// function does, not an oracle, so they are REAL DEPENDENCIES and belong on the
+// port registry. ResolveExportRaw returns NULL with the DLL absent, which makes
+// each of these a null call at cutover rather than a named unresolved import.
+// None of the three is ported today, so this changes nothing about which body
+// runs; it changes what happens when one of them IS ported, and what the
+// cutover failure looks like if none ever is.
 void ComputeSaveDirectory(Filename* ret) {
     wchar_t buf[264];
     const HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, buf);
     if (hr != S_OK) {
-        RT_ORIGINAL_ONCE(fn_ErrorSetText_t, kNameErrorSetText)(
+        RT_EXPORT_ONCE(fn_ErrorSetText_t, kNameErrorSetText)(
             "FileSystem: Unable to retrive the Documents folder for saving!", true);
         ret->data = nullptr;
         return;
     }
 
     WideStringHandle ws{nullptr};
-    RT_ORIGINAL_ONCE(fn_WideStringSet_t, kNameWideStringSet)(&ws, buf);
+    RT_EXPORT_ONCE(fn_WideStringSet_t, kNameWideStringSet)(&ws, buf);
 
     String utf8{nullptr};
-    RT_ORIGINAL_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8);
+    RT_EXPORT_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8);
 
     String formatted{nullptr};
     RtSystem::RtSystem_String_Format(&formatted, "%s\\%s\\",

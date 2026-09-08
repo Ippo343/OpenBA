@@ -312,12 +312,25 @@ struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
 // releases both temporaries. DateAsString/TimeAsString are themselves
 // exported (0x1800c56a0 / 0x1800c55b0), so `this` (DateTime) never needs a
 // layout here — it is only ever handed straight through to them.
+// WAVE 9 LANE V2, 2026-09-07: every raw door in the three functions below is
+// now RT_EXPORT_ONCE. None of them was an oracle -- they are the work these
+// bodies do -- and two things were wrong with the raw spelling:
+//   * `?Release@String@System@@AEAAXXZ` HAS BEEN PORTED (lane B3,
+//     string.cpp:1113). All three of its uses here were live-path port
+//     BYPASSES; port_bypass_audit.py named exactly these three. Nothing in
+//     this file changed to cause that -- the port landed elsewhere, which is
+//     why that gate says re-run after every LANDING, not after every edit.
+//   * DateAsString / TimeAsString are unported, but the raw door is
+//     ResolveExportRaw, which returns NULL once Runtime-x64.dll is absent. A
+//     null call at cutover is a crash; a registry miss is a named row.
+// RT_EXPORT_ONCE also removes a GetProcAddress per call, which bare RtOriginal
+// was paying on every one of these.
 StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     using SubStringFn = StrSlot*(*)(const void*, StrSlot*);
     StrSlot dateStr{};
-    RtOriginal<SubStringFn>("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
+    RT_EXPORT_ONCE(SubStringFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
     StrSlot timeStr{};
-    RtOriginal<SubStringFn>("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
+    RT_EXPORT_ONCE(SubStringFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
 
     // RT_EXPORT_ONCE: String::Format is ported (string.cpp), and bare RtOriginal is
     // GetProcAddress on every call as well as a port bypass.
@@ -415,6 +428,7 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
     }
 
     using OpAppendFn = StrSlot*(*)(StrSlot*, StrSlot*, const char*);
+    using ReleaseFn  = void(*)(StrSlot*);
     StrSlot tmp{};
     RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
     // RT_EXPORT_ONCE, not RtOriginal: String::Release is PORTED (Wave 9 lane B3), and
