@@ -38,6 +38,17 @@
 
 namespace UI { namespace TextElementOffsets {
 
+// *** kParamCount CONTRADICTED BY MEASUREMENT on a NumberElement. Wave 9 lane M. ***
+// Probing UI::NumberElement::SetValueInt on the tutorial routes shows the eight
+// bytes at +0xD0 holding an OWNING, REFCOUNTED System::String data pointer (a
+// heap address with a {length, refcount} header at [-8], payload = the formatted
+// number), not an int32 size followed by an int32 capacity. Both readings cannot
+// be right for the same offset. This header's offsets are the ones derived from
+// call sites (0x18011e9b0) and are LEFT AS THEY ARE -- a NumberElement is not
+// necessarily laid out like the TextElement this table was read from, and
+// nothing here has been re-derived. NumberElement.h carries the same note and
+// the evidence is in docs/runtime_port/WAVE9_LANE_M.md Finding 1. Resolve this
+// before any lane mints or constructs either class at cutover.
 constexpr int kParamArrayData = 0xC8;  // Collection::Array<System::String>.data -- TextElement's own field
 constexpr int kParamCount     = 0xD0;  // Collection::Array<System::String>.size (int32_t) -- TextElement's own field
 constexpr int kParamCapacity  = 0xD4;  // Collection::Array<System::String>.capacity (int32_t) -- inferred from the Array<T> shape, not read by either ported function

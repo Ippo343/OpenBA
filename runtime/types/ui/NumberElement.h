@@ -20,6 +20,32 @@
 //
 // The gap +0xC0..+0xC7 (TextElement's own leading field, e.g. its display
 // System::String) and +0xCC..+0xD7 are not reversed by this lane.
+//
+// *** +0xD0 IS NOT PADDING. Wave 9 lane M, MEASURED. ***
+// `_pad_cc_d8` covers +0xCC..+0xD7, and the eight bytes at +0xD0 inside it hold
+// an OWNING, REFCOUNTED System::String data pointer — a live heap address with
+// a {length, refcount} header at [-8]. Measured by probing every divergence of
+// UI::NumberElement::SetValueInt on the tutorial routes: after the call, that
+// qword points at a freshly allocated block whose header reads len/rc and whose
+// payload is the formatted number ("4" for value 4, "272" for 272, and so on
+// for all ten observed calls). See docs/runtime_port/WAVE9_LANE_M.md Finding 1.
+//
+// THREE HEADERS IN THIS DIRECTORY DISAGREE ABOUT THESE BYTES, and that
+// disagreement is its own defect, recorded here rather than silently resolved:
+//   - THIS header             : +0xCC..+0xD7 unreversed padding
+//   - TextElement.h           : +0xC8 Array<System::String>.data, +0xD0 its
+//                               int32 `size`, +0xD4 its int32 `capacity`
+//                               (derived from call sites at 0x18011e9b0)
+//   - LabelElement.h          : an older "TextElement base (0xC0..0xFF)" table
+//                               that TextElement.h already says was never
+//                               cross-checked
+// The observed 8-byte owning pointer fits none of the three. Nothing has been
+// changed here on the strength of one function's behaviour — a written-extent
+// fact belongs to a WRITER, not to a type
+// (reference_never_written_needs_by_whom.md) — but ANY lane that mints a
+// NumberElement vtable or constructs one of these at cutover must resolve this
+// first: a field documented as padding that actually owns an allocation is how
+// a ctor ships a leak or a double free.
 // ============================================================================
 
 #include <cstdint>
