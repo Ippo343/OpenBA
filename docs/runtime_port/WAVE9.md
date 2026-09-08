@@ -291,8 +291,21 @@ up.**
 Three mechanisms to make the rule enforceable rather than remembered (lane M building
 1-3, source-only):
 
-1. **The RELEASED-POINTER DETECTOR — this is the tree-wide sweep.** Inside
-   `RtDiffReportBytes`, **zero adoption cost, covers all ~170 sites the moment it runs.**
+1. **The RELEASED-POINTER DETECTOR.** ⛔ **IT IS NOT A TREE-WIDE SWEEP — lane N, 2026-09-08.**
+   It is called from inside `RtDiffReportBytes` **AFTER the `memcmp(...) == 0` early
+   return**, so it only ever examines comparisons that **already differ** — and so does
+   its self-test. In the 10-cell matrix, **7 cells printed NO self-test line at all**
+   (`menu_only`, `gameplay`, `saveload`, `tutorial0`, `menus_ach`, `menus_mods`, `stress`
+   — every cell with 0 byte-compare divergences), so the detector never executed and by
+   its own contract **their silence means nothing**. The 3 that printed `ALIVE` are
+   exactly the 3 with a byte divergence.
+   **This is a FOURTH blind spot and it is CIRCULAR with limit 2 below**: a released
+   pointer is invisible when the two sides do not differ (allocator recycling), and the
+   detector only looks when they DO. **The matrix therefore swept ONE site, not 170**
+   (`UI::NumberElement::SetValueInt`, the already-known defect). **This must not close a
+   gate row.** For a real sweep the detector has to move ABOVE the memcmp early-return,
+   running on every byte compare — a cost question, but the only way it sees the
+   recycling case. Original claim, now falsified:
    Fires only when all three hold: the same slot holds a different pointer on each side;
    the side the DLL ran on points at a block whose `{len,rc}` header at `[-8]` reads
    `{0,0}`; ours points at a live one. Reports as **HARNESS DEFECT, explicitly not a port
@@ -317,6 +330,35 @@ Three mechanisms to make the rule enforceable rather than remembered (lane M bui
    `[-8]` reads zero. Name the function and abort. This converts "someone must remember
    `widgets_input.cpp` lines 53-58" into a self-reporting harness.
 3. **A DID-WORK counter** beside `calls=`, so a site cannot look covered on early-outs.
+
+### `Picking::Scene::Intersect` — QUANTIFIED, and one claim WITHDRAWN
+
+Lane N, 2026-09-08. **Reproduced a THIRD time on a clean `921eb23` tree with the lane's
+own fixture PARKED**, so it is not an artifact of the instrument: `stress` call #18548,
+`p.z` ours `0.091594696` vs theirs `0.0915985107`, `x` and `y` bit-identical, normal
+identical.
+
+**Δz is EXACTLY 2^-18 = 3.814697e-6 in ALL THREE independent observations** (lane M's,
+lane N's at `-0.2141`, and this one at `+0.0916`). 2^-18 is one ULP of a float in
+`[32,64)` — the magnitude of `p.x ≈ 41.3-41.9`, which is also the magnitude of `hitT` for
+these rays. So **`hitT` differs by EXACTLY ONE ULP**, `z` inherits it, and `x` survives
+bit-identical because `Δ(hitT·dir.x)` usually rounds away. **Rate: 1 in 23,654 calls.**
+Our own binary disassembles to plain `mulss`/`addss` at the hit block — **no FMA
+contraction** — so the `outPos` arithmetic is not the difference; `hitT` itself is.
+
+⛔ **WITHDRAWN by lane N:** its earlier statement that the green negative control was
+*"evidence against the association hypothesis"*. **It was UNDERPOWERED.** The control had
+**525 hits** against an effect rate of **1 in 23,654** — expected occurrences **0.02**. It
+says nothing about the hypothesis either way; it only proves the fixture cannot detect a
+rare effect at that sample size. The green result remains a real fixture defect (a control
+must fire on the geometry it is run on), but the inference drawn from it was wrong and is
+not to be carried forward. **A control that cannot fail and a control that is merely too
+small look identical from the outside — both come back green.**
+
+The decisive experiment is now specifiable rather than a guess: a sweep large enough for a
+**stable, countable divergence rate** (>100k hitting rays, ~4-10 expected divergences),
+then A/B each candidate association in the local-space ray transform and keep the one that
+takes the count to zero.
 
 ### The released-pointer detector is a FLOOR — how to read a clean sweep
 
