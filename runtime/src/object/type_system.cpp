@@ -860,6 +860,56 @@ int CompareTrees(FactorySet* theirs, FactorySet* ours, ProbeStats* st, bool verb
 bool g_probeArmed = false;
 bool g_probeRan   = false;
 
+// ---------------------------------------------------------------------------
+// Why `nodes != chain` is an ANSWER, not an alarm
+// ---------------------------------------------------------------------------
+// The probe used to print "pass 1 did not insert what it walked" whenever the
+// tree held fewer nodes than the BaseTypeInfo chain. Wave 9 lane SYS2 reported
+// the resulting `chain=416 nodes=415` as an unowned divergence, and lane PKG2
+// independently confirmed it reproduces on a control exe. It is neither a
+// divergence nor a defect in pass 1.
+//
+// Pass 1 has NO skip: every chain entry gets a `setInsert` call, and the key IS
+// `TypeNameCRC(info->name)`. A Set holds one node per KEY, so 416 inserts
+// landing 415 nodes means two entries share a key -- and retail's Startup runs
+// the identical loop into the identical Set, so retail's tree is 415 too. The
+// old message accused our port of losing an insert it never lost.
+//
+// What the collision DOES mean is worth naming rather than shrugging at: in a
+// CRC-keyed type registry, one of the two colliding types is unreachable by id.
+// So instead of an alarm, print WHICH types collide and let the reader judge.
+// Two distinct names sharing a CRC is a hash collision; the same name twice is
+// a type registered twice, which is a different (and more interesting) fact.
+void ReportKeyCollisions(int chain, int nodes) {
+    std::printf("[FactoryStartupProbe] chain=%d nodes=%d — the Set holds one "
+                "node per KEY, so %d entr%s share a key with an earlier one. "
+                "Pass 1 inserted all %d; retail's identical loop into its "
+                "identical Set produces the same %d. Naming the collisions:\n",
+                chain, nodes, chain - nodes, (chain - nodes) == 1 ? "y" : "ies",
+                chain, nodes);
+
+    int reported = 0;
+    for (BaseTypeInfo* a = *g_firstTypeInfo; a && reported < 20; a = a->next) {
+        for (BaseTypeInfo* b = *g_firstTypeInfo; b && b != a; b = b->next) {
+            if (TypeNameCRC(a->name) != TypeNameCRC(b->name)) continue;
+            const char* an = a->name ? a->name : "(unnamed)";
+            const char* bn = b->name ? b->name : "(unnamed)";
+            const bool sameName = a->name && b->name && strcmp(an, bn) == 0;
+            std::printf("[FactoryStartupProbe]   key 0x%08X  %-28s  %-28s  %s\n",
+                        TypeNameCRC(a->name), bn, an,
+                        sameName ? "SAME NAME — this type is registered TWICE"
+                                 : "distinct names — a CRC COLLISION, and one "
+                                   "of the two is unreachable by type id");
+            ++reported;
+            break;                      // one report per later duplicate
+        }
+    }
+    if (reported == 0)
+        std::printf("[FactoryStartupProbe]   none found — so the shortfall is "
+                    "NOT a duplicate key, and pass 1 really did lose an insert. "
+                    "That IS a defect; do not dismiss it.\n");
+}
+
 // The kill switch, BANISHED_RT_FACTORY_STARTUP=0, set once at registration.
 //
 // It is spelled as a `!g_portOn` fallback INSIDE the body rather than as an
@@ -911,10 +961,11 @@ void FactoryStartupProbe() {
     // reference_probe_needs_an_effectiveness_control.md: 64 green comparisons
     // where zero did any work read exactly like a pass. Say so out loud when
     // an arm never ran, rather than letting `mismatches=0` speak for it.
-    if (st.nodes == 0 || st.nodes != chain)
-        std::printf("[FactoryStartupProbe] VACUOUS: nodes=%d but the chain has "
-                    "%d entries — pass 1 did not insert what it walked\n",
-                    st.nodes, chain);
+    if (st.nodes == 0)
+        std::printf("[FactoryStartupProbe] VACUOUS: nodes=0 — pass 1 inserted "
+                    "nothing, so every comparison below is empty\n");
+    else if (st.nodes != chain)
+        ReportKeyCollisions(chain, st.nodes);
     if (st.withParent == 0)
         std::printf("[FactoryStartupProbe] VACUOUS: pass 2's parent arm never "
                     "ran — every comparison below it is untested\n");
