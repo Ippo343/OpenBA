@@ -99,6 +99,12 @@ struct RtMintStorage {
     // rt_data_mint.cpp does not reproduce is a build-time error in the
     // generator, not a silent zeroed mint.
     const char*        ctorInit;
+    // A KNOWN CORRECT INITIAL VALUE, for a row whose retail writer stores a
+    // compile-time constant. The third disposition for a row with no surviving
+    // writer -- see EXTRA_INIT in tools/rt_mint_gen.py -- and the only one that
+    // needs no port at all.
+    const unsigned char* init;
+    unsigned             initLen;
 };
 
 // ============================================================
@@ -524,14 +530,21 @@ static void MintStorage() {
     // and letting the existing writer fill them. kStorageBytes is a static
     // array and therefore already zero; this loop exists to say so, and to
     // seed the one entry that has a non-null initial value in OUR world.
+    int seeded = 0;
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
         memset(s.storage, 0, s.size);
+        if (s.init && s.initLen && s.initLen <= s.size) {
+            memcpy(s.storage, s.init, s.initLen);
+            ++seeded;
+        }
         // ?_firstTypeInfo@ is the head of the reflection chain. In the DLL it
         // is filled by static initialisers; ours is filled by MintTypeInfos.
         if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
             *(RtObject::BaseTypeInfo**)s.storage = g_mintTypeInfoHead;
     }
+    if (seeded)
+        printf("[RtMint] seeded %d storage row(s) with a known constant value\n", seeded);
 }
 
 // Registration. OFF unless BANISHED_RT_MINT=1, and it must stay off until

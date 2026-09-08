@@ -360,7 +360,7 @@ integrator fixed in `7d25f9a` can re-check the same half of the proof), 4 by the
 tail probe — and all 19 new `BaseTypeInfo` pass the CRT-constructed positive
 control (§2).
 
-## 4. Minted storage with NO WRITER — 25 of 32 rows are cutover nulls
+## 4. Minted storage with NO WRITER — 23 open rows, 14 of them boot-path
 
 Found by lane M on `?_singleton@Modification@IO@@` and, independently, by lane
 E3 on `?_singleton@MemoryAllocator@System@@`. Two instances from two directions
@@ -444,7 +444,7 @@ place the misattribution occurs, so stores inside it are carved out by address.
 | **(?)** | `?_errorString@Error@System@@` | **no writer found anywhere** — corroborated: Ghidra's xrefs find none either |
 | **(?)** | `?_systemInitialTick@Timer@System@@` | **no writer found anywhere** |
 
-**(a) 3 · (b) 4 · (c) 23 · (?) 2 — 25 of 32 rows are zero forever at cutover.**
+**(a) 3 · (s) 2 · (b) 4 · (c) 21 · (?) 2.** Ranked by reachability below: **14 are boot-path null derefs, 1 is route-specific, and 8 are benign.**
 Lane M found one of them and lane E3 found another; the class is 25 wide.
 
 ### What closes each
@@ -471,6 +471,114 @@ Lane M found one of them and lane E3 found another; the class is 25 wide.
   (`*MainLoopSingletonSlot() = self`) and the two `RtFrameIndexSlot()` writes.
   All four reach the slot through the port-aware door, so after cutover they
   write OUR storage — which is what makes them (b) rather than (c).
+
+### Reachability, ranked — 14 of the 23 are boot-path, 8 are benign
+
+"25 rows are a null deref" was the right alarm and the wrong count: **a null
+singleton nothing dereferences is not a crash, and for several of these rows
+zero is the CORRECT value.** Ranked by evidence — who reads the slot in our
+tree, and is that reader on a path we know executes — not by intuition.
+
+Two rows left the list entirely: `Timer::_ticksPerSecond` and
+`_secondsPerTick` are now **seeded with retail's own constants** (see
+`EXTRA_INIT`), so the tally is (a) 3 · **(s) 2** · (b) 4 · (c) 21 · (?) 2.
+
+#### Tier 1 — BOOT PATH, real null deref (14)
+
+Every one is read by a ported body that runs before or during the first frame.
+
+| symbol | reader, and why it is boot |
+|---|---|
+| `?_singleton@MemoryAllocator@System@@` | nothing can allocate before it — lane E3's finding |
+| `?_singleton@Modification@IO@@` | `loops.cpp:265`, reached from `RtEngine_Loader_Load` (registered `0x1800dc050`) — lane M's finding |
+| `?_singleton@Factory@Object@@` | `type_system.cpp:69`, `external.cpp:674` — every type lookup |
+| `?_singleton@ExternalFactory@Object@@` | `loops.cpp:257`, the `_loadEnabled` flag `Loader::Run` holds across a load |
+| `?_singleton@InternalFactory@Object@@` | `internal.cpp:147`, `gameupdateloop_serialize.cpp:187` — entity creation |
+| `?_singleton@FileSystem@IO@@` | `gameupdateloop.cpp:1428`, `saveload.cpp:169`, `achievement_manager.cpp:283` — nothing loads without it |
+| `?_singleton@Persistence@IO@@` | `input.cpp:591/619`, `audio.cpp:640/683`, `device.cpp:135` — settings, read at startup |
+| `?_singleton@Device@Video@@` | 11 sites: `engine.cpp:211`, `element.cpp:278`, `buffers.cpp:113`, dx11 |
+| `?_singleton@Configuration@Video@@` | `buffers.cpp:118`, `device.cpp:137`, `dx11/src/contextdata.cpp:244` |
+| `?_singleton@Application@1@` | `dx11/src/devicedata.cpp:275` — the DX11 backend's import table |
+| `?_singleton@Device@Input@@` | `input.cpp:95`, `engine_funcs.cpp:2262` |
+| `?_singleton@Configuration@Input@@` | `engine_funcs.cpp:3896` |
+| `?_singleton@Device@Audio@@` | `audio.cpp:880` |
+| `?_singleton@Configuration@Audio@@` | `engine_funcs.cpp:2702` |
+
+**Disposition for all 14: port the writer, with the singleton write as a named
+acceptance criterion.** Every writer is that class's own constructor, which has
+to be ported anyway for the object to exist at all — the criterion is the part
+that is easy to leave out, and leaving it out reproduces lane E3's silent skip
+exactly.
+
+**What cannot be established statically**: the ORDER in which these are first
+dereferenced, and therefore which one a first cutover boot hits first. Each row
+above has a reader on a known-executing path, but "known-executing" comes from
+where the reader lives, not from an observed sequence. That is a real limit and
+it argues for a controlled first cutover boot — one that expects to fail, reads
+the crash address, fixes one row and repeats — rather than more analysis.
+
+#### Tier 2 — route-specific (1)
+
+| symbol | route |
+|---|---|
+| `?_singleton@AchievementManager@Achievement@@` | achievements/goals UI and the save path (`gameupdateloop_serialize.cpp:189`) |
+
+A boot that never opens those menus and never saves will not touch it. Same
+disposition, lower urgency.
+
+#### Tier 3 — BENIGN: zero is the correct initial value (5)
+
+These are not nulls waiting to be dereferenced; they are **empty**, which is
+what retail's BSS gives them too.
+
+| symbol | why zero is right |
+|---|---|
+| `?_firstSurface@ImageBuffer@Video@@` | a LIST HEAD — zero is an empty list. `buffers.cpp`'s own comment already says "at cutover the mint owns the bytes and the walkers are ours" |
+| `?_firstBuffer@IndexBuffer@Video@@` | same |
+| `?_firstBuffer@VertexBuffer@Video@@` | same |
+| `?_rootOnlyUpdates@MeshInstance@Graphics@@` | a `bool` flag; `false` is retail's initial value |
+| `(unexported @0x1801fc6d0)` | `IO::Modification`'s `HMODULE`, read at `game_main.cpp:358` **inside an `if`** — a null is handled, and it is a shutdown path |
+
+The residual risk here is functional, not a crash: if the writer
+(`PlatformConstruct`/`PlatformDestruct`) is never ported, the list stays empty
+and nothing is tracked. Worth knowing, but it is not what blocks lane G.
+
+#### Tier 4 — BENIGN: read only by diagnostics (3)
+
+| symbol | only reader |
+|---|---|
+| `?_errorString@Error@System@@` | `game_main.cpp:481`, a dump on `Engine::Startup` FAILURE. **Nothing writes it anywhere** — corroborated: Ghidra's xrefs find no write either. |
+| `?_systemInitialTick@Timer@System@@` | `engine_funcs.cpp:3700`, a `printf`, pointer-guarded |
+| `?_systemTicksPerSecond@Timer@System@@` | `engine_funcs.cpp:3698`, same `printf` |
+
+**Disposition, written down as a decision rather than left as an unknown:**
+zeroed storage is CORRECT for all three. `_errorString` is dead after cutover —
+no writer exists in the shipped DLL, so retail's own readers see whatever the
+CRT left, and a diagnostic that prints an empty string is the faithful outcome.
+The two Timer statics are read only by a guarded diagnostic `printf`; their
+real consumers go through lane B3's ported `Timer`, which owns its own globals.
+
+#### Why the two seeded rows were not left in tier 1
+
+`_ticksPerSecond` and `_secondsPerTick` looked like tier-4 Timer statics and are
+not. `engine/funcs/engine_funcs.cpp:1539-1542` reads all four Timer statics by
+ADDRESS into `g_Timer_*`, and `*g_Timer_secondsPerTick` is then **divided by**
+in `splash_loop_stubs.cpp`, `dialogloaderloop.cpp`, `menudialogloopt_stubs.cpp`
+and three gameplay components. Zeroed storage there is not a null deref — it is
+a **divide by 0.0** producing inf/NaN with no crash and no symptom, on the
+splash and menu path. Retail writes both as compile-time constants
+(`1000000`, `1.0/1000000.0`), so they are minted with those values directly.
+
+#### Handover to lane B3
+
+Not double-fixed on purpose. `runtime/src/system/timer.cpp` owns its OWN globals
+(`g_ticksPerSecond`, `g_secondsPerTick`) initialised to the same constants, and
+does not write the minted rows. So there are two copies of the same two numbers
+after cutover, both correct. The tidy resolution is for `engine_funcs.cpp` to
+call lane B3's accessors (`RtSystem::TimerTicksPerSecond()`,
+`TimerSecondsPerTick()`) instead of reading the DLL statics by address — at
+which point the seeded rows become unread and could be dropped. That is B3's
+call, not this lane's, which is why the seed is in place meanwhile.
 
 ### Can the shadow SEE this? Not yet — and the obvious reading is wrong
 
@@ -903,7 +1011,11 @@ are exact even where an absolute count is ambiguous):
 A move anywhere else is unintended and should be treated as a finding, not as
 noise.
 
-**Round 7 (the writer enumeration) predicts NO shadow movement at all.** It adds
+**Round 7 (the writer enumeration + the two seeded Timer constants) predicts
+ONE moving number**: `storage ... N of ours written` rises by **2** at both
+phases, because `MintStorage` now seeds `_ticksPerSecond` and `_secondsPerTick`
+with retail's constants on every run, registered or not. Everything else is
+unchanged: It adds
 a tool and a document section; it changes no minted row, no slot and no
 registration. Expected: 442 slots / 48 vtables / 165 `BaseTypeInfo` fields /
 32 storage rows / 0 MISMATCH / 0 suspects / 0 absent, clean at both phases —

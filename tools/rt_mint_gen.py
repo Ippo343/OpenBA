@@ -162,6 +162,35 @@ EXTRA_STORAGE_BY_ADDR = {
                      "code/Game/Game/game_main.cpp FreeLibrary's it at shutdown"),
 }
 
+# Storage rows whose CORRECT INITIAL VALUE IS KNOWABLE, minted directly.
+#
+# The third disposition for a row with no surviving writer, alongside
+# "reproduce the ctor" and "port the writer". It applies only where retail's
+# writer stores a COMPILE-TIME CONSTANT, so there is a right answer to copy
+# rather than a computation to reproduce.
+#
+# Both entries below are read straight out of retail's Timer::Startup by lane
+# B3, which transcribed the same two stores into runtime/src/system/timer.cpp's
+# own globals:
+#     MOV  [0x1801fe720], 1000000        ; _ticksPerSecond
+#     MOVSD [0x1801fe728], 1.0/1000000.0 ; _secondsPerTick
+# They are BOOT-PATH rows: engine/funcs/engine_funcs.cpp reads all four Timer
+# statics by ADDRESS into g_Timer_*, and *g_Timer_secondsPerTick is then
+# DIVIDED BY in the splash loop, the dialog loader loop, the menu loop and three
+# gameplay components. Zeroed storage there is not a null deref, it is a divide
+# by 0.0 that yields inf/NaN with no crash -- so this pair is worth closing by
+# value rather than waiting for a port.
+#
+# The other two Timer statics are NOT here on purpose: _systemTicksPerSecond and
+# _systemInitialTick come from QueryPerformanceFrequency/Counter at
+# PlatformStartup, so they have no constant to copy and need their writer.
+EXTRA_INIT = {
+    0x1801fe720: (bytes.fromhex("40420f0000000000"),
+                  "Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)"),
+    0x1801fe728: (bytes.fromhex("8dedb5a0f7c6b03e"),
+                  "Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)"),
+}
+
 EXTRA_VTABLES = {
     "??_7Loader@Engine@@6B@":
         "stamped by the ?_loader construction; no other consumer exists",
@@ -591,8 +620,9 @@ def main():
                 f"{hex(ctor[0])}) and nothing in rt_data_mint.cpp reproduces it. "
                 f"Minting it as zeroed storage would silently differ from the "
                 f"loaded DLL — add it to KNOWN_CTORS and implement it.")
+        init = EXTRA_INIT.get(ib + rva)
         storage.append({"symbol": sym, "va": ib + rva, "size": size,
-                        "note": note, "namespace": ns,
+                        "note": note, "namespace": ns, "init": init,
                         "ctor": (hex(ctor[0]) + (f" (+{len(ctor)-1} more)" if len(ctor) > 1 else ""))
                                 if ctor else ""})
     storage.sort(key=lambda s: (s["symbol"] or "", s["va"]))
@@ -674,10 +704,17 @@ def main():
         off += s["size"]
     total = (off + 15) & ~15
     w(f"alignas(16) static unsigned char kStorageBytes[{total}];  // one block, zero-initialised")
+    for i, (s, so) in enumerate(zip(storage, offsets)):
+        if s["init"]:
+            blob, why = s["init"]
+            w(f"static const unsigned char kInit{i}[] = {{ "
+              + ", ".join(f"0x{b:02x}" for b in blob) + f" }};  // {why}")
     w("static RtMintStorage kMintStorage[] = {")
-    for s, so in zip(storage, offsets):
+    for i, (s, so) in enumerate(zip(storage, offsets)):
+        init = f"kInit{i}, {len(s['init'][0])}" if s["init"] else "nullptr, 0"
         w(f"    {{ {cstr(s['symbol'])}, {s['va']:#x}ull, {s['size']}, "
-          f"&kStorageBytes[{so}], {cstr(s['note'])}, {cstr(s['ctor'] or None)} }},")
+          f"&kStorageBytes[{so}], {cstr(s['note'])}, {cstr(s['ctor'] or None)}, "
+          f"{init} }},")
     w("};")
     w("")
 

@@ -186,11 +186,12 @@ def main():
     text_inc = open(TABLES, encoding="utf-8").read()
     for m in re.finditer(
             r'\{ (nullptr|"[^"]*"), (0x[0-9a-f]+)ull, (\d+), &kStorageBytes\[\d+\], '
-            r'"[^"]*", (nullptr|"[^"]*") \}', text_inc):
+            r'"[^"]*", (nullptr|"[^"]*"), (nullptr|kInit\d+), (\d+) \}', text_inc):
         sym = None if m.group(1) == "nullptr" else m.group(1).strip('"')
         rows.append({"sym": sym, "va": int(m.group(2), 16),
                      "size": int(m.group(3)),
-                     "ctor": m.group(4) != "nullptr"})
+                     "ctor": m.group(4) != "nullptr",
+                     "seeded": m.group(5) != "nullptr"})
     if not rows:
         print("no storage rows parsed — has the table format changed?", file=sys.stderr)
         return 3
@@ -240,7 +241,7 @@ def main():
         for row in csv.DictReader(f):
             ported[row["key"]] = row["ported"] == "1"
 
-    cat = {"a": [], "b": [], "c": [], "?": []}
+    cat = {"a": [], "s": [], "b": [], "c": [], "?": []}
     print(f"\n{len(rows)} minted storage rows\n")
     for r in sorted(rows, key=lambda x: (x["sym"] or "", x["va"])):
         w = writers[r["va"]]
@@ -248,6 +249,8 @@ def main():
         any_ported = [k for k in named if ported.get(k)]
         if r["ctor"]:
             c = "a"
+        elif r["seeded"]:
+            c = "s"
         elif any_ported:
             c = "b"
         elif w:
@@ -265,6 +268,7 @@ def main():
                   f"unexported internal site(s)")
 
     print(f"\n(a) reproduced CRT ctor : {len(cat['a'])}")
+    print(f"(s) seeded with a known constant value: {len(cat[chr(115)])}")
     print(f"(b) a PORTED writer     : {len(cat['b'])}")
     print(f"(c) writer exists but is NOT ported -> ZERO FOREVER at cutover: "
           f"{len(cat['c'])}")
